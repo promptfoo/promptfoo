@@ -81,7 +81,10 @@ export class ScriptCompletionProvider implements ApiProvider {
       logger.warn(`Could not find any valid files in the command: ${this.scriptPath}`);
     }
 
-    const cacheKey = `exec:${this.scriptPath}:${fileHashes.join(':')}:${prompt}:${JSON.stringify(this.options)}`;
+    const cacheKey = `exec:${crypto
+      .createHash('sha256')
+      .update(JSON.stringify([this.scriptPath, fileHashes, prompt, this.options]))
+      .digest('hex')}`;
 
     let cachedResult;
     if (fileHashes.length > 0 && isCacheEnabled()) {

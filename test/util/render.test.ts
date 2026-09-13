@@ -80,7 +80,11 @@ it('renders getter-backed config and labels without replacing the provider', asy
 });
 
 it.each(['plain', 'getter'])('re-renders a reused %s provider from its templates', (kind) => {
-  const config = { headers: { target: '{{ env.TARGET }}' }, transform: (value: string) => value };
+  const config = {
+    headers: { target: '{{ env.TARGET }}' },
+    maintainContext: true,
+    transform: (value: string) => value,
+  };
   const provider = {
     ...(kind === 'plain' ? { config } : {}),
     label: '{{ env.LABEL }}',
@@ -95,7 +99,9 @@ it.each(['plain', 'getter'])('re-renders a reused %s provider from its templates
     expect(provider.config?.headers.target).toBe(value);
     expect(provider.config?.transform).toBe(config.transform);
     expect(provider.label).toBe(value);
+    provider.config!.maintainContext = false;
   }
+  expect(provider.config?.maintainContext).toBe(false);
   provider.config!.headers.target = 'explicit override';
   renderEnvOnlyInObject(provider, { TARGET: 'third', LABEL: 'third' });
   expect(provider.config?.headers.target).toBe('explicit override');

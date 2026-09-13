@@ -326,6 +326,27 @@ describe('RubyProvider', () => {
   });
 
   describe('caching', () => {
+    it('keeps environment values private while separating cached results', async () => {
+      mockIsCacheEnabled.mockReturnValue(true);
+      const cache = {
+        get: vi.fn().mockResolvedValue(JSON.stringify({ output: 'cached' })),
+        set: vi.fn(),
+      };
+      mockGetCache.mockResolvedValue(cache as never);
+      for (const value of ['cache-private-first', 'cache-private-second', 'cache-private-first']) {
+        const provider = new RubyProvider('script.rb', {
+          config: { basePath: '/absolute/path/to' },
+          env: { OPENAI_API_KEY: value },
+        });
+        await provider.callApi('unchanged prompt');
+      }
+      const keys = cache.get.mock.calls.map(([key]) => key);
+      expect(keys).toHaveLength(3);
+      expect(keys[0]).not.toBe(keys[1]);
+      expect(keys[0]).toBe(keys[2]);
+      expect(JSON.stringify(keys)).not.toContain('cache-private-');
+    });
+
     it('should use cached result when available', async () => {
       const provider = new RubyProvider('script.rb');
       mockIsCacheEnabled.mockReturnValue(true);
@@ -337,9 +358,7 @@ describe('RubyProvider', () => {
 
       const result = await provider.callApi('test prompt');
 
-      expect(mockCache.get).toHaveBeenCalledWith(
-        expect.stringContaining('ruby:script.rb:default:call_api:'),
-      );
+      expect(mockCache.get).toHaveBeenCalledWith(expect.stringContaining('ruby:default:call_api:'));
       expect(mockRunRuby).not.toHaveBeenCalled();
       expect(result).toEqual({ output: 'cached result', cached: true });
     });
@@ -357,7 +376,7 @@ describe('RubyProvider', () => {
       await provider.callApi('test prompt');
 
       expect(mockCache.set).toHaveBeenCalledWith(
-        expect.stringContaining('ruby:script.rb:default:call_api:'),
+        expect.stringContaining('ruby:default:call_api:'),
         '{"output":"new result"}',
       );
     });
@@ -510,9 +529,7 @@ describe('RubyProvider', () => {
         cached: false,
       });
       expect(mockCache.set).toHaveBeenCalledWith(
-        expect.stringMatching(
-          /^ruby:script\.rb:default:call_api:[a-f0-9]{64}:test prompt:undefined:undefined$/,
-        ),
+        expect.stringMatching(/^ruby:default:call_api:[a-f0-9]{64}$/),
         '{"output":"fresh result"}',
       );
     });

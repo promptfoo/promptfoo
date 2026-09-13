@@ -14,15 +14,29 @@ const providerTemplates = new WeakMap<
   { source: Pick<ApiProvider, 'config' | 'label'>; rendered: Pick<ApiProvider, 'config' | 'label'> }
 >();
 
-function snapshotProviderTemplate<T>(value: T): T {
+function snapshotProviderTemplate<T>(
+  value: T,
+  previous?: { rendered: unknown; source: unknown },
+): T {
+  if (previous && isDeepStrictEqual(value, previous.rendered)) {
+    return previous.source as T;
+  }
   if (!value || typeof value !== 'object' || isApiProvider(value)) {
     return value;
   }
+  const childTemplate = (key: string, item: unknown) =>
+    snapshotProviderTemplate(
+      item,
+      previous && {
+        rendered: (previous.rendered as Record<string, unknown> | undefined)?.[key],
+        source: (previous.source as Record<string, unknown> | undefined)?.[key],
+      },
+    );
   return (
     Array.isArray(value)
-      ? value.map(snapshotProviderTemplate)
+      ? value.map((item, index) => childTemplate(String(index), item))
       : Object.fromEntries(
-          Object.entries(value).map(([key, item]) => [key, snapshotProviderTemplate(item)]),
+          Object.entries(value).map(([key, item]) => [key, childTemplate(key, item)]),
         )
   ) as T;
 }
@@ -66,9 +80,10 @@ export function renderEnvOnlyInObject<T>(
       providerTemplates.set(obj, templates);
     }
     for (const key of ['config', 'label'] as const) {
-      if (!isDeepStrictEqual(obj[key], templates.rendered[key])) {
-        templates.source[key] = snapshotProviderTemplate(obj[key]);
-      }
+      templates.source[key] = snapshotProviderTemplate(obj[key], {
+        rendered: templates.rendered[key],
+        source: templates.source[key],
+      });
       if (templates.source[key] !== undefined) {
         const rendered = renderEnvOnlyInObject(templates.source[key], envOverrides, replaceBase);
         if (!isDeepStrictEqual(rendered, obj[key]) && !Reflect.set(obj, key, rendered)) {

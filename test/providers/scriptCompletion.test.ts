@@ -290,6 +290,30 @@ describe('ScriptCompletionProvider', () => {
     await expect(provider.callApi('test prompt')).rejects.toThrow(utf8Error);
   });
 
+  it('keeps environment values private while separating cached results', async () => {
+    createHashMock.mockImplementation(
+      (await vi.importActual<typeof import('crypto')>('crypto')).createHash,
+    );
+    vi.mocked(cacheModule.isCacheEnabled).mockReturnValue(true);
+    const cache = {
+      get: vi.fn().mockResolvedValue(JSON.stringify({ output: 'cached' })),
+      set: vi.fn(),
+    };
+    vi.mocked(cacheModule.getCache).mockResolvedValue(cache as never);
+    for (const value of ['cache-private-first', 'cache-private-second', 'cache-private-first']) {
+      const provider = new ScriptCompletionProvider('node script.js', {
+        config: {},
+        env: { OPENAI_API_KEY: value },
+      });
+      await provider.callApi('unchanged prompt');
+    }
+    const keys = cache.get.mock.calls.map(([key]) => key);
+    expect(keys).toHaveLength(3);
+    expect(keys[0]).not.toBe(keys[1]);
+    expect(keys[0]).toBe(keys[2]);
+    expect(JSON.stringify(keys)).not.toContain('cache-private-');
+  });
+
   it('should use cache when available', async () => {
     const cachedResult = { output: 'cached result' };
     const mockCache = {
@@ -315,9 +339,7 @@ describe('ScriptCompletionProvider', () => {
     const result = await provider.callApi('test prompt');
     expect(result.cached).toBe(true);
     expect(result).toEqual({ ...cachedResult, cached: true });
-    expect(mockCache.get).toHaveBeenCalledWith(
-      'exec:node script.js:mock hash:mock hash:test prompt:undefined',
-    );
+    expect(mockCache.get).toHaveBeenCalledWith('exec:mock hash');
     expect(execFile).not.toHaveBeenCalled();
   });
 

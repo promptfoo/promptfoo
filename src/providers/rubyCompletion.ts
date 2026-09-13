@@ -256,9 +256,9 @@ export class RubyProvider implements ApiProvider {
     const fileHash = sha256(await fs.readFile(absPath, 'utf-8'));
 
     // Create cache key including the function name to ensure different functions don't share caches
-    const cacheKey = `ruby:${this.scriptPath}:${this.functionName || 'default'}:${apiType}:${fileHash}:${prompt}:${safeJsonStringify(
-      this.options,
-    )}:${safeJsonStringify(context?.vars)}`;
+    const cacheKey = `ruby:${this.functionName || 'default'}:${apiType}:${sha256(
+      safeJsonStringify([this.scriptPath, fileHash, prompt, this.options, context?.vars]) as string,
+    )}`;
     logger.debug(`RubyProvider cache key: ${cacheKey}`);
 
     const cache = await getCache();
@@ -301,11 +301,8 @@ export class RubyProvider implements ApiProvider {
         sanitizedContext,
       );
 
-      logger.debug(
-        `Running ruby script ${absPath} with scriptPath ${this.scriptPath} and args: ${safeJsonStringify(args)}`,
-      );
-
       const functionName = this.functionName || apiType;
+      logger.debug('Running Ruby script', { scriptPath: absPath, functionName });
       const result = await runRuby(absPath, functionName, args, {
         rubyExecutable: this.config.rubyExecutable,
       });

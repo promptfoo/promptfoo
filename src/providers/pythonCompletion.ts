@@ -9,7 +9,6 @@ import { PythonWorkerPool } from '../python/workerPool';
 import { sha256 } from '../util/createHash';
 import { processConfigFileReferences } from '../util/fileReference';
 import { parsePathOrGlob } from '../util/index';
-import { safeJsonStringify } from '../util/json';
 import { getFileSourceHash } from '../util/sourceHash';
 import { providerRegistry } from './providerRegistry';
 import { sanitizeScriptContext } from './scriptContext';
@@ -337,9 +336,9 @@ export class PythonProvider implements ApiProvider {
     const fileHash = sha256(await fs.readFile(absPath, 'utf-8'));
 
     // Create cache key including the function name to ensure different functions don't share caches
-    const cacheKey = `python:${this.scriptPath}:${this.functionName || 'default'}:${apiType}:${fileHash}:${prompt}:${JSON.stringify(
-      this.options,
-    )}:${JSON.stringify(context?.vars)}`;
+    const cacheKey = `python:${this.functionName || 'default'}:${apiType}:${sha256(
+      JSON.stringify([this.scriptPath, fileHash, prompt, this.options, context?.vars]),
+    )}`;
     logger.debug(`PythonProvider cache key: ${cacheKey}`);
 
     const cache = await getCache();
@@ -382,11 +381,11 @@ export class PythonProvider implements ApiProvider {
         sanitizedContext,
       );
 
-      logger.debug(
-        `Executing python script ${absPath} via worker pool with args: ${safeJsonStringify(args)}`,
-      );
-
       const functionName = this.functionName || apiType;
+      logger.debug('Executing Python script via worker pool', {
+        scriptPath: absPath,
+        functionName,
+      });
       // Use worker pool instead of runPython
       const result = await this.pool!.execute(functionName, args);
 

@@ -359,6 +359,27 @@ describe('GolangProvider', () => {
   });
 
   describe('caching', () => {
+    it('keeps environment values private while separating cached results', async () => {
+      mockIsCacheEnabled.mockReturnValue(true);
+      const cache = {
+        get: vi.fn().mockResolvedValue(JSON.stringify({ output: 'cached' })),
+        set: vi.fn(),
+      };
+      mockGetCache.mockResolvedValue(cache as never);
+      for (const value of ['cache-private-first', 'cache-private-second', 'cache-private-first']) {
+        const provider = new GolangProvider('script.go', {
+          config: { basePath: '/absolute/path/to' },
+          env: { OPENAI_API_KEY: value },
+        });
+        await provider.callApi('unchanged prompt');
+      }
+      const keys = cache.get.mock.calls.map(([key]) => key);
+      expect(keys).toHaveLength(3);
+      expect(keys[0]).not.toBe(keys[1]);
+      expect(keys[0]).toBe(keys[2]);
+      expect(JSON.stringify(keys)).not.toContain('cache-private-');
+    });
+
     it('should use cached result when available', async () => {
       const provider = new GolangProvider('script.go', {
         config: { basePath: '/absolute/path/to' },

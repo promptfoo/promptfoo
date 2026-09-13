@@ -57,7 +57,7 @@ describe('MCPProvider', () => {
     await provider.getAvailableTools();
     expect(MCPClient).toHaveBeenCalledTimes(2);
     for (const [config] of vi.mocked(MCPClient).mock.calls) {
-      expect(config.basePath).toBe('/config/first');
+      expect(config.basePath).toBe(path.resolve('/config/first'));
     }
   });
 

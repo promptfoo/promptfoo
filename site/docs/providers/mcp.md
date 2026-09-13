@@ -62,7 +62,7 @@ with and a per-server entry wins on conflict.
 
 Relative `server.path` values resolve from the configuration directory, including preconstructed providers nested in JavaScript test, assertion, and scenario configuration. An explicit provider `basePath` takes precedence.
 
-Reused provider instances retain their environment templates for later evaluations. Nested instances join the evaluation's cleanup scope, so their connections close before the next run. Use separate provider instances for concurrent evaluations with different connection settings.
+Reused provider instances retain their environment templates for later evaluations, including when a provider updates unrelated runtime configuration. Nested instances join the evaluation's cleanup scope, so their connections close before the next run. Use separate provider instances for concurrent evaluations with different connection settings.
 
 Keep secrets out of the config file. `{{ env.VAR }}` placeholders are resolved from the
 environment when the provider loads, so the config stays committable while the credential comes

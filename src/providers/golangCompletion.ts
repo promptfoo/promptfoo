@@ -83,9 +83,16 @@ export class GolangProvider implements ApiProvider {
     logger.debug(`Found module root at ${moduleRoot}`);
     logger.debug(`Computing file hash for script ${absPath}`);
     const fileHash = sha256(await fs.readFile(absPath, 'utf-8'));
-    const cacheKey = `golang:${this.scriptPath}:${apiType}:${fileHash}:${prompt}:${JSON.stringify(
-      this.options,
-    )}:${JSON.stringify(context?.vars)}`;
+    const cacheKey = `golang:${apiType}:${sha256(
+      JSON.stringify([
+        this.scriptPath,
+        this.functionName,
+        fileHash,
+        prompt,
+        this.options,
+        context?.vars,
+      ]),
+    )}`;
     const cache = await getCache();
     let cachedResult;
 
@@ -108,10 +115,8 @@ export class GolangProvider implements ApiProvider {
 
       const args =
         apiType === 'call_api' ? [prompt, this.options, context] : [prompt, this.options];
-      logger.debug(
-        `Running Golang script ${absPath} with scriptPath ${this.scriptPath} and args: ${safeJsonStringify(args)}`,
-      );
       const functionName = this.functionName || apiType;
+      logger.debug('Running Go script', { scriptPath: absPath, functionName });
 
       let tempDir: string | undefined;
       try {
