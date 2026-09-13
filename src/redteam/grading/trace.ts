@@ -18,19 +18,39 @@ function toolCallKey(span: TraceData['spans'][number]): string | undefined {
   if (!id) {
     return undefined;
   }
-  const input = TOOL_ARGUMENT_ATTRIBUTE_KEYS.map((key) => attributes?.[key]).find(
-    (value) => value !== undefined,
-  );
-  const output = TOOL_RESULT_ATTRIBUTE_KEYS.map((key) => attributes?.[key]).find(
-    (value) => value != null,
-  );
   return JSON.stringify([
     id,
     getToolNameFromAttributes(attributes),
-    ...[input, output].map((value) => (typeof value === 'string' ? value : JSON.stringify(value))),
     // Native SDK metadata may omit the outcome while the trace marks the call incomplete.
     attributes?.['tool.incomplete'] === true ? 0 : span.statusCode,
   ]);
+}
+
+function completeToolSpan(
+  traced: TraceData['spans'][number],
+  native: TraceData['spans'][number],
+): TraceData['spans'][number] | undefined {
+  const attributes = { ...traced.attributes };
+  for (const keys of [TOOL_ARGUMENT_ATTRIBUTE_KEYS, TOOL_RESULT_ATTRIBUTE_KEYS]) {
+    const [partial, complete] = [traced, native].map((span) => {
+      const value = keys.map((key) => span.attributes?.[key]).find((value) => value != null);
+      return typeof value === 'string' ? value : JSON.stringify(value);
+    });
+    if (partial === complete) {
+      continue;
+    }
+    // Claude tool spans cap bodies at 4 KiB; the native receipt retains the full body.
+    const suffix = '... [truncated]';
+    if (!partial?.endsWith(suffix) || !complete?.startsWith(partial.slice(0, -suffix.length))) {
+      return undefined;
+    }
+    for (const key of keys) {
+      if (attributes[key] != null) {
+        attributes[key] = complete;
+      }
+    }
+  }
+  return { ...traced, attributes };
 }
 
 export function getGradingTrace(
@@ -63,35 +83,49 @@ export function getGradingTrace(
       });
     }
     if (calls.length) {
-      const tracedCalls = new Set(trace?.spans.map(toolCallKey));
+      const spans = [...(trace?.spans ?? [])];
+      const tracedCalls = new Map<string, number[]>();
+      spans.forEach((span, index) => {
+        const key = toolCallKey(span);
+        if (key !== undefined) {
+          const indices = tracedCalls.get(key) ?? [];
+          indices.push(index);
+          tracedCalls.set(key, indices);
+        }
+      });
+      const nativeSpans = calls
+        .map((call, index) => ({
+          spanId: `provider-tool-${index}`,
+          name: 'tool.call',
+          startTime: index,
+          statusCode:
+            call.is_error || call.error || call.isError
+              ? 2
+              : call.output !== undefined || call.result !== undefined
+                ? 1
+                : 0,
+          attributes: {
+            'gen_ai.tool.call.id': call.id ?? call.toolCallId ?? call.tool_call_id,
+            'tool.name': call.name ?? call.function?.name,
+            'tool.arguments': call.input ?? call.arguments ?? call.function?.arguments,
+            'tool.output': call.output ?? call.result,
+          },
+        }))
+        .filter((span) => {
+          const key = toolCallKey(span);
+          for (const index of key === undefined ? [] : (tracedCalls.get(key) ?? [])) {
+            const completed = completeToolSpan(spans[index], span);
+            if (completed) {
+              spans[index] = completed;
+              return false;
+            }
+          }
+          return true;
+        });
       trace = {
         ...trace,
         traceId: trace?.traceId ?? 'provider-tools',
-        spans: [
-          ...(trace?.spans ?? []),
-          ...calls
-            .map((call, index) => ({
-              spanId: `provider-tool-${index}`,
-              name: 'tool.call',
-              startTime: index,
-              statusCode:
-                call.is_error || call.error || call.isError
-                  ? 2
-                  : call.output !== undefined || call.result !== undefined
-                    ? 1
-                    : 0,
-              attributes: {
-                'gen_ai.tool.call.id': call.id ?? call.toolCallId ?? call.tool_call_id,
-                'tool.name': call.name ?? call.function?.name,
-                'tool.arguments': call.input ?? call.arguments ?? call.function?.arguments,
-                'tool.output': call.output ?? call.result,
-              },
-            }))
-            .filter((span) => {
-              const key = toolCallKey(span);
-              return key === undefined || !tracedCalls.has(key);
-            }),
-        ],
+        spans: [...spans, ...nativeSpans],
       };
     }
   }

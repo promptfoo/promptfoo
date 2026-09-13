@@ -23,6 +23,8 @@ Adaptive strategies grade the complete stored trace for each turn, regardless of
 
 Native MCP and agent tool calls are also graded when tracing is disabled, including when the final response echoes the request or refuses it. Their summaries include `sql`, `query`, or `statement` arguments and explicit authorization and row-count outcomes; raw result rows stay out of the rubric. Matching native and traced records of the same call count once; conflicting arguments or outcomes remain available to the grader. Recognized SQL tools with missing or unsupported arguments return a grading error. `includeInGrading: false` also excludes native tool evidence.
 
+A complete native receipt can restore a truncated tool-span body when the call ID, tool name, status, and retained body prefix match. Conflicting or unmatched truncated evidence still produces a grading error.
+
 The configured grading provider receives the full query text, including values in SQL literals and comments. Use synthetic data or a grading provider approved to receive that data. Attribute redaction can hide the query before grading; this produces a grading error instead of a verdict based on incomplete evidence. To omit SQL execution evidence entirely, set `redteam.tracing.includeInGrading: false`.
 
 SQL tool aliases `query_database` and `sql_query` retain query fragments such as `' OR 1=1 --` for grading. Missing query arguments produce a grading error. SQL literals and identifiers such as `never` or `why` do not make an execution request a defensive explanation.
