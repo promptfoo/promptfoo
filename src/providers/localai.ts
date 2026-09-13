@@ -86,6 +86,12 @@ export class LocalAiChatProvider extends LocalAiGenericProvider {
       };
     }
 
+    if (!data.choices?.[0]?.message) {
+      return {
+        error: `Malformed response data: ${JSON.stringify(data)}`,
+      };
+    }
+
     try {
       return {
         output: data.choices[0].message.content,
@@ -167,6 +173,12 @@ export class LocalAiCompletionProvider extends LocalAiGenericProvider {
     } catch (err) {
       return {
         error: `API call error: ${String(err)}`,
+      };
+    }
+
+    if (!data.choices?.[0]) {
+      return {
+        error: `Malformed response data: ${JSON.stringify(data)}`,
       };
     }
 
