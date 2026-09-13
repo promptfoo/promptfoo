@@ -1,12 +1,49 @@
 import { z } from 'zod';
 
+// Mirrors the 50 MiB runtime blob limit without introducing a contracts -> runtime dependency.
+const BLOB_MAX_BASE64_SIZE = 69_905_068;
+
 // Shared regex for SHA-256 blob hashes
-const BLOB_HASH_REGEX = /^[a-f0-9]{64}$/i;
+// Keep these flag-free: OpenAPI patterns do not support JavaScript regex flags.
+const BLOB_HASH_REGEX = /^[A-Fa-f0-9]{64}$/;
+const MIME_TYPE_REGEX = /^[A-Za-z0-9!#$&^_.+-]+\/[A-Za-z0-9!#$&^_.+-]+$/;
+
+// POST /api/blobs
+
+export const UploadBlobRequestSchema = z.object({
+  data: z.string().min(1).max(BLOB_MAX_BASE64_SIZE),
+  mimeType: z.string().max(255).regex(MIME_TYPE_REGEX, 'Invalid MIME type'),
+  context: z.object({
+    evalId: z.string().min(1),
+    testIdx: z.number().int().nonnegative().optional(),
+    promptIdx: z.number().int().nonnegative().optional(),
+    location: z.string().max(512).optional(),
+    kind: z.string().max(64).optional(),
+  }),
+});
+
+export const UploadBlobResponseSchema = z.object({
+  ref: z.object({
+    uri: z.string(),
+    hash: z.string().regex(BLOB_HASH_REGEX, 'Invalid blob hash'),
+    mimeType: z.string(),
+    sizeBytes: z.number().nonnegative(),
+    provider: z.string(),
+  }),
+  deduplicated: z.boolean(),
+});
+
+export type UploadBlobRequest = z.infer<typeof UploadBlobRequestSchema>;
+export type UploadBlobResponse = z.infer<typeof UploadBlobResponseSchema>;
 
 // GET /api/blobs/:hash
 
 export const GetBlobParamsSchema = z.object({
   hash: z.string().regex(BLOB_HASH_REGEX, 'Invalid blob hash'),
+});
+
+export const GetBlobQuerySchema = z.object({
+  evalId: z.string().min(1),
 });
 
 export const BlobBinaryResponseSchema = z.instanceof(Uint8Array);
@@ -97,8 +134,13 @@ export type MediaLibraryEvalsResponse = z.infer<typeof MediaLibraryEvalsResponse
 
 /** Grouped schemas for server-side validation. */
 export const BlobsSchemas = {
+  Upload: {
+    Request: UploadBlobRequestSchema,
+    Response: UploadBlobResponseSchema,
+  },
   Get: {
     Params: GetBlobParamsSchema,
+    Query: GetBlobQuerySchema,
     BinaryResponse: BlobBinaryResponseSchema,
   },
   Library: {

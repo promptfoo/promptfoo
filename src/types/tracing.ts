@@ -7,6 +7,10 @@ export interface TraceSpan {
   attributes?: Record<string, any>;
   statusCode?: number;
   statusMessage?: string;
+  status?: {
+    code: number | 'unset' | 'ok' | 'error';
+    message?: string;
+  };
 }
 
 export interface TraceData {

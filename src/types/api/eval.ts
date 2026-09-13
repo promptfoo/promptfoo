@@ -232,6 +232,84 @@ export const AddResultsRequestSchema = z.array(
 export type AddResultsParams = z.infer<typeof AddResultsParamsSchema>;
 export type AddResultsRequest = z.infer<typeof AddResultsRequestSchema>;
 
+// POST /api/eval/:id/traces
+
+export const AddTracesParamsSchema = EvalIdParamSchema;
+
+export const MAX_TRACES_PER_APPEND_REQUEST = 1_000;
+export const MAX_SPANS_PER_TRACE = 10_000;
+export const MAX_SPANS_PER_APPEND_REQUEST = 20_000;
+const MAX_TRACE_IDENTIFIER_LENGTH = 512;
+const MAX_TRACE_NAME_LENGTH = 4_096;
+const MAX_TRACE_RECORD_LENGTH = 1_000_000;
+const MAX_TRACE_REQUEST_LENGTH = 8 * 1024 * 1024;
+
+function serializedLengthWithin(limit: number) {
+  return (value: Record<string, unknown> | unknown[]) => {
+    try {
+      return JSON.stringify(value).length <= limit;
+    } catch {
+      return false;
+    }
+  };
+}
+
+const TraceSpanRequestSchema = z
+  .object({
+    // Empty legacy span IDs/names have historically been storable and must remain shareable.
+    spanId: z.string().max(MAX_TRACE_IDENTIFIER_LENGTH),
+    parentSpanId: z.string().max(MAX_TRACE_IDENTIFIER_LENGTH).optional(),
+    name: z.string().max(MAX_TRACE_NAME_LENGTH),
+    startTime: z.number().finite(),
+    endTime: z.number().finite().optional(),
+    attributes: z.record(z.string(), z.unknown()).optional(),
+    status: z
+      .object({
+        code: z.union([z.enum(['unset', 'ok', 'error']), z.number().int().min(0).max(2)]),
+        message: z.string().optional(),
+      })
+      .optional(),
+    statusCode: z.number().int().min(0).max(2).optional(),
+    statusMessage: z.string().optional(),
+  })
+  .passthrough()
+  .refine(serializedLengthWithin(MAX_TRACE_RECORD_LENGTH), 'Span is too large');
+
+export const AddTracesRequestSchema = z
+  .array(
+    z
+      .object({
+        traceId: z.string().min(1).max(MAX_TRACE_IDENTIFIER_LENGTH),
+        evaluationId: z.string().min(1),
+        // Empty legacy test-case IDs have historically been storable and must remain shareable.
+        testCaseId: z.string(),
+        metadata: z.record(z.string(), z.unknown()).optional(),
+        spans: z.array(TraceSpanRequestSchema).max(MAX_SPANS_PER_TRACE),
+      })
+      .passthrough()
+      .refine(
+        (trace) => serializedLengthWithin(MAX_TRACE_RECORD_LENGTH)({ ...trace, spans: undefined }),
+        'Trace fields are too large',
+      ),
+  )
+  .max(MAX_TRACES_PER_APPEND_REQUEST)
+  .refine(serializedLengthWithin(MAX_TRACE_REQUEST_LENGTH), 'Trace request is too large')
+  .superRefine((traces, ctx) => {
+    const spanCount = traces.reduce((total, trace) => total + trace.spans.length, 0);
+    if (spanCount > MAX_SPANS_PER_APPEND_REQUEST) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: `Request contains more than ${MAX_SPANS_PER_APPEND_REQUEST} spans`,
+      });
+    }
+  })
+  .describe(
+    `Accepts at most ${MAX_TRACES_PER_APPEND_REQUEST} traces, ${MAX_SPANS_PER_TRACE} spans per trace, and ${MAX_SPANS_PER_APPEND_REQUEST} spans total. Trace fields outside spans and each complete span must serialize to at most ${MAX_TRACE_RECORD_LENGTH} characters. The complete request must serialize to at most ${MAX_TRACE_REQUEST_LENGTH} characters.`,
+  );
+
+export type AddTracesParams = z.infer<typeof AddTracesParamsSchema>;
+export type AddTracesRequest = z.infer<typeof AddTracesRequestSchema>;
+
 // POST /api/eval/replay
 
 export const ReplayRequestSchema = z.object({
@@ -375,6 +453,10 @@ export const EvalSchemas = {
   AddResults: {
     Params: AddResultsParamsSchema,
     Request: AddResultsRequestSchema,
+  },
+  AddTraces: {
+    Params: AddTracesParamsSchema,
+    Request: AddTracesRequestSchema,
   },
   Replay: {
     Request: ReplayRequestSchema,

@@ -138,6 +138,14 @@ Self-hosted sharing doesn't require `promptfoo auth login` when these environmen
 
 :::
 
+:::note
+
+Trace data is transferred to self-hosted servers out-of-band after the eval is uploaded. Older servers may not support the trace or blob endpoints. The eval and result rows still share, but unsupported traces and media that depend on those endpoints are omitted and the client prints warnings. With the default self-hosted setting, result-linked blobs are inlined and remain available; if `PROMPTFOO_SHARE_INLINE_BLOBS=false`, result-linked media also requires the blob endpoint.
+
+:::
+
+Blob downloads require `GET /api/blobs/<hash>?evalId=<id>`, and the blob must have a reference in that evaluation. Custom clients should use the media URL returned by the media-library endpoint.
+
 ### Troubleshooting Upload Issues
 
 #### Handling "413 Request Entity Too Large" Errors
@@ -164,10 +172,11 @@ For multi-tenant environments, reducing the chunk size on the client is usually 
 
 ## Disabling Sharing
 
-To disable sharing completely, use any of the controls below. These controls prevent both the
-eval snapshot and referenced media/blob data from being uploaded to a sharing destination. Media
-blobs are still stored locally, so they remain available in the local viewer and are included if
-you later run an explicit `promptfoo share` command.
+The controls below prevent both the eval snapshot and referenced media/blob data from being
+uploaded automatically. Media blobs are still stored locally and remain available in the local
+viewer. Evals created with `--no-share` or `sharing: false` can still be shared later with an
+explicit `promptfoo share` command. `PROMPTFOO_DISABLE_SHARING=true` also blocks manual sharing,
+so unset it before running `promptfoo share`.
 
 ### Disable for One Eval
 

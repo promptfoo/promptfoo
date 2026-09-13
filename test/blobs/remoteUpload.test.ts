@@ -133,4 +133,35 @@ describe('remote blob upload', () => {
       }),
     );
   });
+  it('posts blobs to an explicit self-hosted target without Cloud configuration', async () => {
+    vi.mocked(isLoggedIntoCloud).mockReturnValue(false);
+
+    await uploadBlobRemote(
+      Buffer.from('trace-image'),
+      'image/png',
+      {
+        evalId: 'remote-eval',
+        location: 'share',
+        promptIdx: 3,
+        testIdx: 2,
+      },
+      {
+        url: 'https://self-hosted.example/api/blobs',
+        authHeaders: { 'X-Share-Token': 'secret' },
+      },
+    );
+
+    expect(fetchWithProxy).toHaveBeenCalledWith(
+      'https://self-hosted.example/api/blobs',
+      expect.objectContaining({
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-Share-Token': 'secret',
+        },
+        body: expect.stringContaining('dHJhY2UtaW1hZ2U='),
+      }),
+    );
+    expect(cloudConfig.getApiHost).not.toHaveBeenCalled();
+  });
 });
