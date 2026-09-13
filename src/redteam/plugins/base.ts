@@ -459,7 +459,7 @@ function appendAllowedEntities(
   if (hasCanonicalBlock || !Array.isArray(entities) || !entities.length) {
     return rubric;
   }
-  const block = `<AllowedEntities>\n${entities.map((entity) => `<Entity>${String(entity)}</Entity>`).join('\n')}\n</AllowedEntities>`;
+  const block = `<AllowedEntities>\n${entities.map((entity) => `<Entity>${escapeRubricText(String(entity))}</Entity>`).join('\n')}\n</AllowedEntities>`;
   return rubric.includes(block) ? rubric : `${rubric}\n\n${block}`;
 }
 

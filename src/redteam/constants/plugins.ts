@@ -519,7 +519,7 @@ export const REMOTE_ONLY_PLUGIN_IDS = [
   ...FINANCIAL_PLUGINS,
   ...PHARMACY_PLUGINS,
   ...INSURANCE_PLUGINS,
-  ...ECOMMERCE_PLUGINS,
+  'ecommerce:pci-dss',
   ...TELECOM_PLUGINS,
   ...REALESTATE_PLUGINS,
 ] as const;

@@ -10,7 +10,6 @@ import {
   selectSemanticWarmStartFamilies,
 } from './selection';
 
-import type { SemanticFrontierSummary } from '../../types/semanticFrontierDiagnostics';
 import type { AttackCandidate, AttackFamily, AttackPlan, AttackSignature } from './types';
 
 export type SemanticFrontierConfig = SemanticBandSelectionConfig & {
@@ -55,6 +54,9 @@ export abstract class PortfolioRedteamPluginBase extends RedteamPluginBase {
   protected getPortfolioGenerationFallbackReason(): string | undefined {
     if (this.config.examples?.length) {
       return 'custom examples may specify attacks outside the built-in semantic families';
+    }
+    if (this.config.modifiers?.testGenerationInstructions) {
+      return 'custom generation instructions may specify attacks outside the built-in semantic families';
     }
 
     const language = this.config.language ?? this.config.modifiers?.language;
@@ -306,7 +308,7 @@ export abstract class PortfolioRedteamPluginBase extends RedteamPluginBase {
     selected: readonly AttackCandidate[],
     config: SemanticFrontierConfig,
     requestedCount: number,
-  ): SemanticFrontierSummary {
+  ) {
     const observedPredicates = new Set(
       selected.flatMap((candidate) =>
         Object.entries(candidate.signature.predicates)
