@@ -35,7 +35,7 @@ const replaceText = async (
 
 describe('CustomTargetConfiguration', () => {
   it.each(
-    ['llamafile', 'vllm', 'text-generation-webui'].flatMap((type) =>
+    (['llamafile', 'vllm', 'text-generation-webui'] as const).flatMap((type) =>
       ['false', null].map((value) => ({ type, value })),
     ),
   )(
