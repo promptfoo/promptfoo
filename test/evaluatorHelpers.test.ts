@@ -1790,6 +1790,9 @@ describe('evaluatorHelpers', () => {
     it.each([
       ['heic', 'image/heic'],
       ['heif', 'image/heif'],
+      ['avif', 'image/avif'],
+      ['tif', 'image/tiff'],
+      ['tiff', 'image/tiff'],
     ])('should generate a data URL for %s images', async (extension, mimeType) => {
       const prompt = toPrompt('Test prompt with image: {{image}}');
       const renderedPrompt = await renderPrompt(prompt, {

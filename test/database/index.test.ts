@@ -17,7 +17,7 @@ import {
 import { getEnvBool } from '../../src/envars';
 import logger from '../../src/logger';
 import { getConfigDirectoryPath } from '../../src/util/config/manage';
-import { mockProcessEnv } from '../util/utils';
+import { createDeferred, mockProcessEnv } from '../util/utils';
 
 import type { LockRecoveryProbeResult } from './fixtures/lockRecoveryProbe';
 import type { WalCheckpointProbeResult } from './fixtures/walCheckpointProbe';
@@ -616,26 +616,87 @@ describe('database', () => {
       ).resolves.toEqual([{ id: 'inner' }, { id: 'outer' }]);
     });
 
-    it('does not deadlock when a transaction callback calls root db.* helpers', async () => {
+    it('rejects root calls without aborting the active transaction', async () => {
       const db = await getDb();
-      await db.run('CREATE TABLE root_call_inside_tx_test (id INTEGER PRIMARY KEY, val TEXT)');
+      await db.run('CREATE TABLE root_call_inside_tx_test (id INTEGER PRIMARY KEY)');
+
+      await db.transaction(async (tx) => {
+        await tx.run('INSERT INTO root_call_inside_tx_test VALUES (1)');
+        await expect(db.all('SELECT 1')).rejects.toMatchObject({
+          cause: expect.objectContaining({
+            message: expect.stringContaining('transaction handle'),
+          }),
+        });
+        await expect(
+          db.run('INSERT INTO root_call_inside_tx_test VALUES (2)'),
+        ).rejects.toMatchObject({
+          cause: expect.objectContaining({
+            message: expect.stringContaining('transaction handle'),
+          }),
+        });
+        await expect(tx.all('SELECT id FROM root_call_inside_tx_test')).resolves.toEqual([
+          { id: 1 },
+        ]);
+      });
+      await expect(db.all('SELECT id FROM root_call_inside_tx_test')).resolves.toEqual([{ id: 1 }]);
+    });
+
+    it('rolls back when an uncaught root call rejects inside a transaction', async () => {
+      const db = await getDb();
+      await db.run('CREATE TABLE root_call_rollback_test (id INTEGER PRIMARY KEY)');
 
       await expect(
-        Promise.race([
-          db.transaction(async (tx) => {
-            await tx.run("INSERT INTO root_call_inside_tx_test (id, val) VALUES (1, 'in-tx')");
-            const rows = await db.all<{ value: number }>('SELECT 1 AS value');
-            expect(rows[0]?.value).toBe(1);
-          }),
-          new Promise((_, reject) => {
-            setTimeout(
-              () => reject(new Error('root db call inside transaction deadlocked')),
-              1_000,
-            );
-          }),
-        ]),
-      ).resolves.toBeUndefined();
+        db.transaction(async (tx) => {
+          await tx.run('INSERT INTO root_call_rollback_test VALUES (1)');
+          await db.run('INSERT INTO root_call_rollback_test VALUES (2)');
+        }),
+      ).rejects.toMatchObject({
+        cause: expect.objectContaining({ message: expect.stringContaining('transaction handle') }),
+      });
+      await db.run('INSERT INTO root_call_rollback_test VALUES (3)');
+      await expect(db.all('SELECT id FROM root_call_rollback_test')).resolves.toEqual([{ id: 3 }]);
     });
+
+    it.each(['commit', 'rollback'])(
+      'expires inherited transaction contexts after %s',
+      async (outcome) => {
+        const db = await getDb();
+        await db.run('CREATE TABLE deferred_transaction_test (id INTEGER PRIMARY KEY)');
+        const { promise: released, resolve: release } = createDeferred<void>();
+        let followup: Promise<void> | undefined;
+
+        const outer = db.transaction(async (tx) => {
+          await tx.run('INSERT INTO deferred_transaction_test VALUES (1)');
+          // This promise retains the callback's async context after the callback settles.
+          followup = (async () => {
+            await released;
+            await db.run('INSERT INTO deferred_transaction_test VALUES (2)');
+            await db.transaction(async (laterTx) => {
+              await laterTx.run('INSERT INTO deferred_transaction_test VALUES (3)');
+            });
+          })();
+          if (outcome === 'rollback') {
+            throw new Error('Rollback requested');
+          }
+        });
+        try {
+          if (outcome === 'rollback') {
+            await expect(outer).rejects.toThrow('Rollback requested');
+          } else {
+            await outer;
+          }
+        } finally {
+          release();
+        }
+
+        await expect(followup).resolves.toBeUndefined();
+        await expect(
+          db.all('SELECT id FROM deferred_transaction_test ORDER BY id'),
+        ).resolves.toEqual(
+          outcome === 'commit' ? [{ id: 1 }, { id: 2 }, { id: 3 }] : [{ id: 2 }, { id: 3 }],
+        );
+      },
+    );
 
     it('should enforce foreign keys inside top-level transactions', async () => {
       const db = await getDb();
@@ -826,7 +887,9 @@ describe('database', () => {
           mode,
         );
 
-        expect(result.firstError).toMatch(/SQLITE_BUSY|SQLITE_LOCKED/);
+        expect(result.firstError).toMatch(
+          mode === 'root-in-transaction' ? /transaction handle/ : /SQLITE_BUSY|SQLITE_LOCKED/,
+        );
         expect(result.followupError).toBeNull();
         expect(result.followupRowsAffected).toBe(1);
         expect(result.callbackCalls).toBe(callbackCalls);
