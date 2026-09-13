@@ -337,10 +337,22 @@ function renderConfigEnvTemplatesInScope<T extends { env?: Record<string, string
 
 export async function readConfig(configPath: string): Promise<UnifiedConfig> {
   const config = await cliState.withEnv(undefined, () => readConfigInScope(configPath));
-  const providers = Array.isArray(config.providers) ? config.providers : [config.providers];
-  for (const provider of providers) {
-    if (isApiProvider(provider)) {
-      provider.setConfigBasePath?.(path.dirname(path.resolve(configPath)));
+  const basePath = path.dirname(path.resolve(configPath));
+  const pending: unknown[] = [config];
+  const seen = new Set<object>();
+  while (pending.length) {
+    const value = pending.pop();
+    if (!value || typeof value !== 'object' || seen.has(value)) {
+      continue;
+    }
+    seen.add(value);
+    if (isApiProvider(value)) {
+      value.setConfigBasePath?.(basePath);
+      await loadApiProviders([value]);
+    } else {
+      for (const child of Object.values(value)) {
+        pending.push(child);
+      }
     }
   }
   return config;

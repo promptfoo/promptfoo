@@ -65,7 +65,9 @@ describe('MCPProvider', () => {
     const provider = new MCPProvider({ config: { enabled: true, basePath: '/explicit' } });
     provider.setConfigBasePath('/config');
     await provider.getAvailableTools();
-    expect(MCPClient).toHaveBeenCalledWith(expect.objectContaining({ basePath: '/explicit' }));
+    expect(MCPClient).toHaveBeenCalledWith(
+      expect.objectContaining({ basePath: path.resolve('/explicit') }),
+    );
   });
 
   it('loads the response transform from the current configuration', async () => {

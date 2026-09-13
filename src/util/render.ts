@@ -2,11 +2,30 @@ import { isDeepStrictEqual } from 'node:util';
 
 import { getEnvBool } from '../envars';
 import logger from '../logger';
-import { isApiProvider } from '../types/providers';
+import { type ApiProvider, isApiProvider } from '../types/providers';
 import { getNunjucksEngine } from './templates';
 
 import type { VarValue } from '../types';
 import type { EnvOverrides } from '../types/env';
+
+// Cached JavaScript configs reuse instances across evaluations with different environments.
+const providerTemplates = new WeakMap<
+  ApiProvider,
+  { source: Pick<ApiProvider, 'config' | 'label'>; rendered: Pick<ApiProvider, 'config' | 'label'> }
+>();
+
+function snapshotProviderTemplate<T>(value: T): T {
+  if (!value || typeof value !== 'object' || isApiProvider(value)) {
+    return value;
+  }
+  return (
+    Array.isArray(value)
+      ? value.map(snapshotProviderTemplate)
+      : Object.fromEntries(
+          Object.entries(value).map(([key, item]) => [key, snapshotProviderTemplate(item)]),
+        )
+  ) as T;
+}
 
 /**
  * Renders ONLY environment variable templates in an object, leaving all other templates untouched.
@@ -41,9 +60,17 @@ export function renderEnvOnlyInObject<T>(
   }
 
   if (isApiProvider(obj)) {
+    let templates = providerTemplates.get(obj);
+    if (!templates) {
+      templates = { source: {}, rendered: {} };
+      providerTemplates.set(obj, templates);
+    }
     for (const key of ['config', 'label'] as const) {
-      if (obj[key] !== undefined) {
-        const rendered = renderEnvOnlyInObject(obj[key], envOverrides, replaceBase);
+      if (!isDeepStrictEqual(obj[key], templates.rendered[key])) {
+        templates.source[key] = snapshotProviderTemplate(obj[key]);
+      }
+      if (templates.source[key] !== undefined) {
+        const rendered = renderEnvOnlyInObject(templates.source[key], envOverrides, replaceBase);
         if (!isDeepStrictEqual(rendered, obj[key]) && !Reflect.set(obj, key, rendered)) {
           if (key === 'config') {
             // Wrappers can expose a mutable backing config through a getter.
@@ -58,6 +85,7 @@ export function renderEnvOnlyInObject<T>(
           }
         }
       }
+      templates.rendered[key] = snapshotProviderTemplate(obj[key]);
     }
     return obj;
   }

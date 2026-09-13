@@ -79,6 +79,29 @@ it('renders getter-backed config and labels without replacing the provider', asy
   expect(await provider.callApi()).toEqual({ output: 'fixture|rendered' });
 });
 
+it.each(['plain', 'getter'])('re-renders a reused %s provider from its templates', (kind) => {
+  const config = { headers: { target: '{{ env.TARGET }}' }, transform: (value: string) => value };
+  const provider = {
+    ...(kind === 'plain' ? { config } : {}),
+    label: '{{ env.LABEL }}',
+    id: () => 'reused',
+    callApi: async () => ({ output: 'ok' }),
+  };
+  if (kind === 'getter') {
+    Object.defineProperty(provider, 'config', { get: () => config });
+  }
+  for (const value of ['first', 'second']) {
+    expect(renderEnvOnlyInObject(provider, { TARGET: value, LABEL: value })).toBe(provider);
+    expect(provider.config?.headers.target).toBe(value);
+    expect(provider.config?.transform).toBe(config.transform);
+    expect(provider.label).toBe(value);
+  }
+  provider.config!.headers.target = 'explicit override';
+  renderEnvOnlyInObject(provider, { TARGET: 'third', LABEL: 'third' });
+  expect(provider.config?.headers.target).toBe('explicit override');
+  expect(provider.label).toBe('third');
+});
+
 describe('renderVarsInObject', () => {
   beforeEach(() => {
     mockProcessEnv({ PROMPTFOO_DISABLE_TEMPLATING: undefined });
