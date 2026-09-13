@@ -33,7 +33,7 @@ vi.mock('../../src/tracing/genaiTracer', () => ({
 let fixture: string;
 let fixtureEvents: Array<Record<string, any>>;
 const prompt = 'Reply with exactly MUSE_CODE_SMOKE_OK.';
-const sessionId = '11111111-1111-4111-8111-111111111111';
+const sessionId = '01a065ac-39e7-7093-9f03-8be39ac634b2';
 const executableName = (name: string) => `${name}${process.platform === 'win32' ? '.exe' : ''}`;
 
 function createChild(pid: number) {
@@ -1234,30 +1234,53 @@ describe('MuseCodeProvider', () => {
   });
 
   it('prevents overlapping calls on an explicit session and permits reuse after completion', async () => {
-    onSpawn = () => {};
-    const instance = provider({ config: { session_id: sessionId, working_dir: testDir } });
-    const first = instance.callApi(prompt);
-    await started.promise;
-    expect((await instance.callApi('overlap')).error).toContain('already in use');
+    const instance = provider({
+      config: {
+        working_dir: testDir,
+        no_session_log: false,
+        muse_path: path.join(binDir, executableName('muse')),
+      },
+    });
+    expect((await instance.callApi(prompt)).error).toBeUndefined();
     expect(spawn).toHaveBeenCalledTimes(1);
-    const args = vi.mocked(spawn).mock.calls[0][1]!;
+    onSpawn = () => {};
+    const first = instance.callApi(prompt, {
+      prompt: { raw: prompt, label: 'prompt', config: { session_id: sessionId } },
+      vars: {},
+    });
+    await vi.waitFor(() => expect(spawn).toHaveBeenCalledTimes(2));
+    expect(
+      (
+        await instance.callApi('overlap', {
+          prompt: { raw: 'overlap', label: 'overlap', config: { session_id: sessionId } },
+          vars: {},
+        })
+      ).error,
+    ).toContain('already in use');
+    expect(spawn).toHaveBeenCalledTimes(2);
+    const args = vi.mocked(spawn).mock.calls[1][1]!;
     expect(args).toEqual(expect.arrayContaining(['--session-id', sessionId]));
     expect(args).not.toContain('--no-session-log');
-    children[0].stdout.write(fixture);
-    children[0].close();
+    children[1].stdout.write(fixture);
+    children[1].close();
     await first;
     onSpawn = (child) => {
       child.stdout.write(fixture);
       child.close();
     };
     expect((await instance.callApi(prompt)).error).toBeUndefined();
-    expect(spawn).toHaveBeenCalledTimes(2);
+    expect(spawn).toHaveBeenCalledTimes(3);
   });
 
   it('redacts credentials from earlier runs when a session is reused', async () => {
     const firstKey = 'first-session-secret';
     const instance = provider({
-      config: { session_id: sessionId, working_dir: testDir, apiKey: firstKey },
+      config: {
+        working_dir: testDir,
+        no_session_log: false,
+        muse_path: path.join(binDir, executableName('muse')),
+        apiKey: firstKey,
+      },
     });
     onSpawn = (child) => {
       child.stdout.write(fixture);
@@ -1272,7 +1295,11 @@ describe('MuseCodeProvider', () => {
       child.close();
     };
     const response = await instance.callApi(prompt, {
-      prompt: { raw: prompt, label: 'prompt', config: { apiKey: 'second-session-secret' } },
+      prompt: {
+        raw: prompt,
+        label: 'prompt',
+        config: { session_id: sessionId, apiKey: 'second-session-secret' },
+      },
       vars: {},
     });
 
@@ -1282,7 +1309,12 @@ describe('MuseCodeProvider', () => {
   it('retains credentials for a session ID returned by Muse', async () => {
     const firstKey = 'first-generated-session-secret';
     const instance = provider({
-      config: { working_dir: testDir, no_session_log: false, apiKey: firstKey },
+      config: {
+        working_dir: testDir,
+        no_session_log: false,
+        muse_path: path.join(binDir, executableName('muse')),
+        apiKey: firstKey,
+      },
     });
     onSpawn = (child) => {
       child.stdout.write(fixture);
@@ -1308,30 +1340,34 @@ describe('MuseCodeProvider', () => {
     expect(response.raw).toBeUndefined();
   });
 
-  it('omits raw history when a durable session is resumed by a new provider', async () => {
-    const events = structuredClone(fixtureEvents);
-    events.at(-1)!.payload.details = 'first-process-secret';
-    onSpawn = (child) => {
-      child.stdout.write(events.map((event) => JSON.stringify(event)).join('\n'));
-      child.close();
-    };
-
+  it('rejects a durable session whose credential history is unknown', async () => {
     const response = await provider({
       config: { session_id: sessionId, working_dir: testDir, apiKey: 'second-process-secret' },
     }).callApi(prompt);
 
-    expect(response.raw).toBeUndefined();
+    expect(response.error).toContain('can only resume a session started by this provider instance');
+    expect(spawn).not.toHaveBeenCalled();
   });
 
   it('locks upper- and lowercase spellings of the same session UUID', async () => {
-    const id = 'abcdefab-cdef-4abc-8def-abcdefabcdef';
-    onSpawn = (child) => {
-      if (child !== children[0]) {
-        child.close();
-      }
-    };
-    const instance = provider({ config: { session_id: id.toUpperCase(), working_dir: testDir } });
-    const first = instance.callApi(prompt);
+    const id = sessionId;
+    const instance = provider({
+      config: {
+        working_dir: testDir,
+        no_session_log: false,
+        muse_path: path.join(binDir, executableName('muse')),
+      },
+    });
+    await instance.callApi(prompt);
+    onSpawn = () => {};
+    const first = instance.callApi(prompt, {
+      prompt: {
+        raw: prompt,
+        label: 'prompt',
+        config: { session_id: id.toUpperCase() },
+      },
+      vars: {},
+    });
     await started.promise;
     const overlap = instance.callApi('overlap', {
       prompt: { raw: 'overlap', label: 'overlap', config: { session_id: id } },
@@ -1339,10 +1375,10 @@ describe('MuseCodeProvider', () => {
     });
     const result = await overlap;
     expect(result.error).toContain('already in use');
-    expect(spawn).toHaveBeenCalledTimes(1);
-    expect(vi.mocked(spawn).mock.calls[0][1]).toEqual(expect.arrayContaining(['--session-id', id]));
-    children[0].stdout.write(fixture);
-    children[0].close();
+    await vi.waitFor(() => expect(spawn).toHaveBeenCalledTimes(2));
+    expect(vi.mocked(spawn).mock.calls[1][1]).toEqual(expect.arrayContaining(['--session-id', id]));
+    children[1].stdout.write(fixture);
+    children[1].close();
     await first;
   });
 

@@ -69,7 +69,7 @@ Use `muse-code:<model>` or `config.model` to select a model, for example `muse-c
 | `disable_sandbox`             | boolean | Disable native sandboxing and file-tool confinement. Omit to keep Muse Code's sandbox policy.                   |
 | `trust_workspace`             | boolean | Load project rules, skills, and hooks for this run. Does not disable the sandbox.                               |
 | `no_foreign_personal_context` | boolean | Exclude personal rules and skills imported from other coding agents.                                            |
-| `session_id`                  | string  | Resume a specific UUID. Requires `working_dir` and retained session logs.                                       |
+| `session_id`                  | string  | Resume a UUID returned earlier by the same provider instance. Requires `working_dir` and retained session logs. |
 | `no_session_log`              | boolean | Disable Muse's retained session state. Defaults to true for new sessions and false with `session_id`.           |
 | `max_model_steps`             | number  | Positive limit on the model steps in a run.                                                                     |
 | `timeout_ms`                  | number  | Process timeout in milliseconds. Defaults to `300000` (5 minutes).                                              |
@@ -92,7 +92,7 @@ The child receives a small environment containing OS paths, locale, XDG director
 
 Every call starts a fresh Muse Code process and session by default. Promptfoo does not cache responses because agent tools, local settings, and workspace state can change between calls.
 
-To continue an existing session, set `session_id`, the same `working_dir`, and `evaluateOptions.maxConcurrency: 1`. Concurrent calls to the same explicit session on one provider instance are rejected to prevent overlapping turns. Use an explicit `working_dir` and `no_session_log: false` on an initial run if you want to retain its session for later use. Promptfoo removes its temporary prompt files and terminates the CLI, including its process group on POSIX systems. It leaves Muse Code's retained sessions and user workspaces intact.
+To continue a session returned by this provider instance, set `session_id`, the same `working_dir`, and `evaluateOptions.maxConcurrency: 1`. Promptfoo rejects session IDs whose earlier credential history is unavailable, because it could not redact secrets recalled from that history. Concurrent calls to the same explicit session are rejected to prevent overlapping turns. Use an explicit `working_dir` and `no_session_log: false` on an initial run if you want to retain its session for later use. Promptfoo removes its temporary prompt files and terminates the CLI, including its process group on POSIX systems. It leaves Muse Code's retained sessions and user workspaces intact.
 
 If output pipes remain open after termination, Promptfoo closes them after a one-second cleanup grace period and returns an error.
 

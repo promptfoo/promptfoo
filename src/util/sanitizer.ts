@@ -392,7 +392,8 @@ function isCredentialName(name: string): boolean {
 function isCredentialValue(value: string): boolean {
   return (
     /^(?:gh[pousr]_|github_pat_)[a-zA-Z0-9_]+$/.test(value) ||
-    /^(?:key|pat|secret|token)-[a-zA-Z0-9_-]{8,}$/i.test(value) ||
+    /^(?:key|pat|secret|token)-(?=[a-zA-Z0-9_-]*\d)[a-zA-Z0-9_-]{8,}$/i.test(value) ||
+    /^eyJ[a-zA-Z0-9_-]+\.[a-zA-Z0-9_-]+\.[a-zA-Z0-9_-]+$/.test(value) ||
     (/^(?:sk-|key-|AKIA|AIza|Bearer\s|Basic\s)/i.test(value) && looksLikeSecret(value))
   );
 }
@@ -517,7 +518,7 @@ function collectWebhookPathCredentials(
     const segments = pathname.split('/').filter(Boolean);
     const prefix = segments.map((part) => decodeFormComponent(part) ?? part);
     for (const [index, part] of prefix.entries()) {
-      if (isCredentialValue(part) || looksLikeSecret(part)) {
+      if (isCredentialValue(part)) {
         addCredential(segments[index]);
       }
     }

@@ -285,10 +285,8 @@ function redactCredentials(
   response: ProviderResponse,
   credentials: string[],
   historicalCredentials: string[] = [],
-  stripRaw = false,
 ): ProviderResponse {
   const shouldStripRaw =
-    stripRaw ||
     getEnvBool('PROMPTFOO_STRIP_PROMPT_TEXT', false) ||
     getEnvBool('PROMPTFOO_STRIP_RESPONSE_OUTPUT', false);
   if (!credentials.length) {
@@ -442,6 +440,9 @@ export class MuseCodeProvider implements ApiProvider {
       if (config.session_id && !config.working_dir) {
         throw new Error('session_id requires working_dir to keep the session workspace stable');
       }
+      if (config.session_id && !this.sessionCredentials.has(config.session_id)) {
+        throw new Error('session_id can only resume a session started by this provider instance');
+      }
     } catch (error) {
       return {
         error: `Invalid Muse Code config: ${error instanceof Error ? error.message : String(error)}`,
@@ -539,8 +540,6 @@ export class MuseCodeProvider implements ApiProvider {
     let tempDir: string | undefined;
     const env = this.buildEnv(config);
     const currentCredentials = collectEnvCredentials(env, config.base_url);
-    const unknownSessionHistory =
-      config.session_id !== undefined && !this.sessionCredentials.has(config.session_id);
     const historicalCredentials = config.session_id
       ? [...(this.sessionCredentials.get(config.session_id) ?? new Set())]
       : [];
@@ -580,7 +579,7 @@ export class MuseCodeProvider implements ApiProvider {
       if (config.session_id) {
         this.sessionCredentials.set(config.session_id, new Set(credentials));
       }
-      return redactCredentials(response, credentials, historicalCredentials, unknownSessionHistory);
+      return redactCredentials(response, credentials, historicalCredentials);
     } catch (error) {
       return redactCredentials(
         {

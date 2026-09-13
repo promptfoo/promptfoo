@@ -275,6 +275,7 @@ describe('sanitizeObject', () => {
     ['base_url', 'https://example.test/v1?api_key=short-secret'],
     ['base_url', 'https://example.test/v1?cursor=sk-abcdefghijklmnopqrstuvwxyz'],
     ['base_url', 'https://example.test/v1/token-deadbeef1234'],
+    ['base_url', 'https://example.test/v1/eyJheader.payload.signature'],
     ['baseUrl', 'https://example.test/v1?github_pat=short-secret'],
     ['base_url', 'https://{{ env.HOST }}/v1?github_pat=short-secret'],
     ['base_url', 'https://example.test/v1#api_key=short-secret'],
@@ -289,8 +290,11 @@ describe('sanitizeObject', () => {
     expect(sanitizeObject({ [key]: value })).toEqual({ [key]: '[REDACTED]' });
   });
 
-  it('preserves a base_url without credentials', () => {
-    const baseUrl = 'https://example.test/v1?model=muse-code&region=us-east-1';
+  it.each([
+    'https://example.test/v1?model=muse-code&region=us-east-1',
+    'https://example.test/oauth/token-exchange',
+    'https://example.test/token-endpoint/key-management/secret-rotation',
+  ])('preserves a base_url without credentials: %s', (baseUrl) => {
     expect(sanitizeObject({ base_url: baseUrl })).toEqual({ base_url: baseUrl });
   });
 
