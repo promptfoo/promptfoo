@@ -595,20 +595,16 @@ describe('package manifests', () => {
     }
   });
 
-  it('keeps the Linux Rollup binary optional and aligned with the lockfile', () => {
+  it('keeps standalone Rollup platform binaries out of the runtime package', () => {
     const packageJson = readPackageJson<PackageManifest>('package.json');
     const packageLock = readPackageJson<PackageLockManifest>('package-lock.json');
     const binaryName = '@rollup/rollup-linux-x64-gnu';
-    const binaryRange = packageJson.optionalDependencies?.[binaryName];
-    const binaryPackage = packageLock.packages[`node_modules/${binaryName}`];
 
-    expect(binaryRange).toBeDefined();
-    expect(minVersion(binaryRange!)?.compare('4.63.1')).toBeGreaterThanOrEqual(0);
     expect(packageJson.dependencies?.[binaryName]).toBeUndefined();
+    expect(packageJson.optionalDependencies?.[binaryName]).toBeUndefined();
     expect(packageLock.packages[''].dependencies?.[binaryName]).toBeUndefined();
-    expect(packageLock.packages[''].optionalDependencies?.[binaryName]).toBe(binaryRange);
-    expect(binaryPackage.optional).toBe(true);
-    expect(satisfies(binaryPackage.version!, binaryRange!)).toBe(true);
+    expect(packageLock.packages[''].optionalDependencies?.[binaryName]).toBeUndefined();
+    expect(packageLock.packages[`node_modules/${binaryName}`]).toBeUndefined();
   });
 
   it('keeps Anthropic SDK manifests, lock entries, and optional binaries aligned', () => {
@@ -752,40 +748,50 @@ describe('package manifests', () => {
     ).toBeGreaterThanOrEqual(0);
   });
 
-  it('keeps native SWC packages optional and aligned across root and docs manifests', () => {
+  it('keeps SWC owned by docs tooling with matching optional native binaries', () => {
     const rootPackageJson = readPackageJson<PackageManifest>('package.json');
     const sitePackageJson = readPackageJson<PackageManifest>('site/package.json');
-    const packageLock = readPackageJson<{
-      packages: Record<
-        string,
-        PackageManifest & {
-          version?: string;
-        }
-      >;
-    }>('package-lock.json');
+    const packageLock =
+      readPackageJson<
+        PackageLockManifest<
+          PackageManifest & { version?: string; dev?: boolean; optional?: boolean }
+        >
+      >('package-lock.json');
+    const swcRange = sitePackageJson.devDependencies?.['@swc/core'];
+    const swc = packageLock.packages['node_modules/@swc/core'];
+
+    // Keep the floor that includes the fix for the historical Alpine native crash.
+    expect(swcRange).toBeDefined();
+    expect(minVersion(swcRange!)?.compare('1.16.1')).toBeGreaterThanOrEqual(0);
+    expect(packageLock.packages.site.devDependencies?.['@swc/core']).toBe(swcRange);
+    expect(swc?.version).toBeDefined();
+    expect(satisfies(swc.version!, swcRange!)).toBe(true);
+    expect(swc.dev).toBe(true);
 
     for (const dependencyName of SWC_PACKAGE_NAMES) {
-      const optionalRange = rootPackageJson.optionalDependencies?.[dependencyName];
-
-      expect(optionalRange, `${dependencyName} must stay optional`).toBeDefined();
-      expect(minVersion(optionalRange!)?.compare('1.16.1')).toBeGreaterThanOrEqual(0);
       expect(rootPackageJson.dependencies?.[dependencyName]).toBeUndefined();
+      expect(rootPackageJson.optionalDependencies?.[dependencyName]).toBeUndefined();
       expect(packageLock.packages[''].dependencies?.[dependencyName]).toBeUndefined();
-      expect(packageLock.packages[''].optionalDependencies?.[dependencyName]).toBe(optionalRange);
-      expect(packageLock.packages[`node_modules/${dependencyName}`].version).toBeDefined();
-      expect(
-        minVersion(packageLock.packages[`node_modules/${dependencyName}`].version!)?.compare(
-          '1.16.1',
-        ),
-      ).toBeGreaterThanOrEqual(0);
+      expect(packageLock.packages[''].optionalDependencies?.[dependencyName]).toBeUndefined();
     }
 
-    expect(sitePackageJson.devDependencies?.['@swc/core']).toBe(
-      rootPackageJson.optionalDependencies?.['@swc/core'],
+    // The SWC wrapper owns the entire platform set, including platforms never
+    // explicitly listed at the root. Do not replace it with a partial binary list.
+    expect(Object.keys(swc.optionalDependencies ?? {})).toEqual(
+      expect.arrayContaining([
+        ...SWC_PACKAGE_NAMES.filter((name) => name !== '@swc/core'),
+        '@swc/core-linux-arm64-gnu',
+        '@swc/core-linux-arm64-musl',
+      ]),
     );
-    expect(packageLock.packages.site.devDependencies?.['@swc/core']).toBe(
-      sitePackageJson.devDependencies?.['@swc/core'],
-    );
+    for (const [dependencyName, nativeVersion] of Object.entries(swc.optionalDependencies ?? {})) {
+      const native = packageLock.packages[`node_modules/${dependencyName}`];
+      expect(native?.version, `${dependencyName} must have a locked version`).toBeDefined();
+      expect(nativeVersion).toBe(swc.version);
+      expect(native.version).toBe(swc.version);
+      expect(native.dev).toBe(true);
+      expect(native.optional).toBe(true);
+    }
   });
 
   it('keeps the patched Hono request parser optional and aligned across manifests', () => {
