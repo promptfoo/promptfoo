@@ -164,6 +164,44 @@ describe('coverage ratchets', () => {
     expect(result.checkedFiles[0].file).toBe(file);
   });
 
+  it.each(['ts', 'tsx'])(
+    'excludes frontend .browser.%s tests from source coverage',
+    (extension) => {
+      const file = `src/app/src/tests/browser-mode/new.browser.${extension}`;
+      const result = evaluateCoverageRatchets({
+        changedFiles: [{ path: file, status: 'A' }],
+        coverageMap: { [file]: coverageFile(file, { statements: { covered: 0, total: 6 } }) },
+        repoRoot,
+        report: frontendReport,
+      });
+      expect(result.checkedFiles).toEqual([]);
+      expect(result.failures).toEqual([]);
+    },
+  );
+
+  it.each([
+    ['src/logger.browser.ts', 'A', 'backend'],
+    ['src/util/createHash.browser.ts', 'A', 'backend'],
+    ['src/app/src/components/NewThing.tsx', 'A', 'frontend'],
+    ['src/app/src/tests/support.ts', 'M', 'frontend'],
+    ['src/app/src/tests/browser-mode/support.ts', 'M', 'frontend'],
+  ])('preserves production and support coverage for %s', (file, status, reportName) => {
+    const result = evaluateCoverageRatchets({
+      changedFiles: [{ path: file, status }],
+      coverageMap: { [file]: coverageFile(file, { statements: { covered: 0, total: 6 } }) },
+      repoRoot,
+      report: reportName === 'backend' ? backendReport : frontendReport,
+    });
+    expect(result.checkedFiles).toHaveLength(1);
+    expect(result.failures).toEqual([
+      {
+        file,
+        reason: status === 'A' ? 'new source file' : 'critical path',
+        message: expect.stringContaining('lines 0.00% < 80%'),
+      },
+    ]);
+  });
+
   it('parses added, modified, and renamed files from git name-status output', () => {
     expect(
       parseChangedFileList(

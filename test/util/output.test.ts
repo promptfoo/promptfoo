@@ -1,22 +1,41 @@
 import * as fsPromises from 'fs/promises';
 import * as path from 'path';
 
+import { parse as parseCsv } from 'csv-parse/sync';
 import { XMLParser } from 'fast-xml-parser';
 import * as yaml from 'js-yaml';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { getDb } from '../../src/database/index';
 import * as googleSheets from '../../src/googleSheets';
+import { parseImportFile } from '../../src/importers/parse';
 import logger from '../../src/logger';
 import Eval from '../../src/models/eval';
+import { EchoProvider } from '../../src/providers/echo';
 import { getTraceStore } from '../../src/tracing/store';
-import { type EvaluateResult, ResultFailureReason } from '../../src/types/index';
+import {
+  type EvaluateResult,
+  type EvaluateSummaryV3,
+  type OutputFile,
+  ResultFailureReason,
+} from '../../src/types/index';
 import { createJunitXml } from '../../src/util/junit';
+import { accumulateNamedMetric } from '../../src/util/namedMetrics';
 import {
   createOutputMetadata,
   warnOnDegradedJsonlRecovery,
   writeMultipleOutputs,
   writeOutput,
 } from '../../src/util/output';
+import {
+  createCompletedPrompt,
+  createEvaluateResult,
+  createEvaluateSummaryV2,
+  createEvaluateTable,
+  createEvaluateTableOutput,
+  createEvaluateTableRow,
+  createPromptMetrics,
+} from '../factories/eval';
+import { createGradingResult } from '../factories/gradingResult';
 import { mockConsole, mockProcessEnv } from './utils';
 
 vi.mock('../../src/database', () => ({
@@ -47,6 +66,103 @@ const mockFileHandle = vi.hoisted(() => ({
 const JSONL_TEMP_DIRECTORY = '/tmp/promptfoo-jsonl-test';
 const JSONL_BACKUP_PATH = path.join(JSONL_TEMP_DIRECTORY, 'backup.jsonl');
 const JSONL_REPLACEMENT_PATH = path.join(JSONL_TEMP_DIRECTORY, 'replacement.jsonl');
+
+function createLegacyV2Summary() {
+  return {
+    version: 2,
+    timestamp: '2026-01-01T00:00:00.000Z',
+    results: [],
+    stats: { successes: 1, failures: 0, errors: 0, tokenUsage: {} },
+    table: {
+      head: {
+        prompts: [
+          {
+            display: 'head-prompt-display-secret',
+            raw: 'head-prompt-secret {{safe}}',
+            label: 'head-prompt-label-secret',
+            provider: 'provider',
+            config: {
+              apiKey: 'head-prompt-api-key-secret',
+              temperature: 0.1,
+            },
+          },
+        ],
+        vars: ['apiKey', 'safe', 'config'],
+      },
+      body: [
+        {
+          description: '',
+          testIdx: 0,
+          vars: [
+            'row-api-key-secret',
+            'keep-row',
+            '{"apiKey":"nested-row-api-key-secret","safe":"keep-nested"}',
+          ],
+          test: {
+            vars: {
+              apiKey: 'test-api-key-secret',
+              safe: 'keep-me',
+              config: { apiKey: 'nested-row-api-key-secret', safe: 'keep-nested' },
+            },
+          },
+          outputs: [
+            {
+              id: 'o1',
+              pass: true,
+              failureReason: 0,
+              score: 1,
+              cost: 0,
+              latencyMs: 1,
+              namedScores: {},
+              text: 'response-text-secret',
+              prompt: 'rendered-prompt-secret',
+              provider: 'provider',
+              vars: {
+                apiKey: 'output-api-key-secret',
+                safe: 'keep-output',
+                config: { apiKey: 'nested-output-api-key-secret', safe: 'keep-nested-output' },
+              },
+              testCase: {
+                vars: {
+                  apiKey: 'test-api-key-secret',
+                  safe: 'keep-me',
+                  config: { apiKey: 'nested-row-api-key-secret', safe: 'keep-nested' },
+                },
+              },
+              response: {
+                audio: { data: 'response-audio-secret' },
+                images: [{ data: 'response-image-secret' }],
+                output: 'response-output-secret',
+                prompt: 'provider-prompt-secret',
+                video: { url: 'response-video-secret' },
+                metadata: {
+                  blobUris: ['promptfoo://blob/secret-media'],
+                  headers: {
+                    'x-request-id': 'legacy_should_not_persist',
+                    'x-safe-debug': 'keep-legacy',
+                  },
+                  http: {
+                    status: 200,
+                    statusText: 'OK',
+                    headers: { 'set-cookie': 'session=secret' },
+                    requestHeaders: {
+                      authorization: 'Bearer sk-should-not-persist',
+                      'api-key': 'azure-api-key-should-not-persist',
+                      'x-safe-debug': 'keep-me',
+                    },
+                  },
+                },
+              },
+              audio: { data: 'audio-output-secret' },
+              video: { url: 'video-output-secret' },
+              images: [{ data: 'image-output-secret' }],
+            },
+          ],
+        },
+      ],
+    },
+  };
+}
 
 vi.mock('fs/promises', () => ({
   readFile: vi.fn(),
@@ -161,6 +277,285 @@ describe('writeOutput', () => {
     expect(fsPromises.open).toHaveBeenCalledWith(outputPath, 'w');
     expect(mockFileHandle.write).toHaveBeenCalled(); // Headers written
     expect(mockFileHandle.close).toHaveBeenCalled();
+  });
+
+  describe.each(['csv', 'sheets'] as const)('artifact boundary %s', (format) => {
+    it.each(['none', 'prompt', 'output', 'vars', 'grading', 'metadata', 'all'])(
+      'honors independent scoped %s flags over ambient flags while preserving table accounting',
+      async (flag) => {
+        const strips = (category: string) => flag === 'all' || flag === category;
+        const prompt = createCompletedPrompt('table header canary', {
+          provider: 'echo',
+          metrics: createPromptMetrics({
+            namedScores: { quality: 0.5 },
+            namedScoresCount: { quality: 1 },
+          }),
+        });
+        const eval_ = new Eval(
+          { redteam: { plugins: [], strategies: [] } },
+          { prompts: [prompt], vars: ['subject'] },
+        );
+        for (let testIdx = 0; testIdx < 2; testIdx++) {
+          await eval_.addResult(
+            createEvaluateResult({
+              testIdx,
+              prompt,
+              vars: { subject: 'table variable canary' },
+              testCase: {
+                vars: { subject: 'table variable canary' },
+                description: `Row ${testIdx}`,
+              },
+              response: { output: 'table output canary' },
+              metadata: {
+                redteamHistory: [{ prompt: 'csv history prompt', output: 'csv history output' }],
+              },
+              gradingResult: createGradingResult({ reason: 'table grade canary' }),
+              score: 0.5,
+              namedScores: { quality: 0.5 },
+            }),
+          );
+        }
+        // Force two actual model batches without changing their contents.
+        const fetchBatches = eval_.fetchResultsBatched.bind(eval_);
+        vi.spyOn(eval_, 'fetchResultsBatched').mockImplementation(() => fetchBatches(1));
+        if (format === 'sheets') {
+          eval_.oldResults = {
+            ...createLegacyV2Summary(),
+            results: [],
+            table: await eval_.getTable(),
+          } as unknown as NonNullable<Eval['oldResults']>;
+        }
+        const before = structuredClone({
+          prompts: eval_.prompts,
+          rows: eval_.results.map((r) => r.testCase),
+          table: eval_.oldResults?.table,
+        });
+        eval_.config.env = {
+          PROMPTFOO_STRIP_PROMPT_TEXT: String(strips('prompt')),
+          PROMPTFOO_STRIP_RESPONSE_OUTPUT: String(strips('output')),
+          PROMPTFOO_STRIP_TEST_VARS: String(strips('vars')),
+          PROMPTFOO_STRIP_GRADING_RESULT: String(strips('grading')),
+          PROMPTFOO_STRIP_METADATA: String(strips('metadata')),
+        };
+        const restore = mockProcessEnv(
+          Object.fromEntries(
+            Object.entries(eval_.config.env).map(([key, value]) => [key, String(value !== 'true')]),
+          ),
+        );
+        try {
+          await writeOutput(
+            format === 'csv' ? 'boundary.csv' : 'https://docs.google.com/spreadsheets/d/fixture',
+            eval_,
+            null,
+          );
+          const data =
+            format === 'csv'
+              ? mockFileHandle.write.mock.calls.map(([chunk]) => chunk).join('')
+              : JSON.stringify(vi.mocked(googleSheets.writeCsvToGoogleSheet).mock.calls[0][0]);
+          for (const [category, canary] of [
+            ['prompt', 'table header canary'],
+            ['vars', 'table variable canary'],
+            ['output', 'table output canary'],
+            ['grading', 'table grade canary'],
+          ]) {
+            expect(data.includes(canary)).toBe(!strips(category));
+          }
+          if (format === 'csv') {
+            const rows = parseCsv(data) as string[][];
+            expect(rows).toHaveLength(3);
+            expect(rows[0]).toContain('Metric: quality');
+            expect(rows[1][rows[0].indexOf('Metric: quality')]).toBe('0.50');
+            expect(rows[1][rows[0].indexOf('Status')]).toBe('PASS');
+            expect(data.includes('csv history prompt')).toBe(
+              !strips('prompt') && !strips('metadata'),
+            );
+            expect(data.includes('csv history output')).toBe(
+              !strips('output') && !strips('metadata'),
+            );
+            expect(mockFileHandle.close).toHaveBeenCalledOnce();
+          } else {
+            const rows = vi.mocked(googleSheets.writeCsvToGoogleSheet).mock.calls[0][0];
+            expect(rows).toHaveLength(2);
+            expect(data).toContain('quality: 0.50');
+            expect(data).toContain('[PASS]');
+          }
+          expect({
+            prompts: eval_.prompts,
+            rows: eval_.results.map((r) => r.testCase),
+            table: eval_.oldResults?.table,
+          }).toEqual(before);
+        } finally {
+          restore();
+        }
+      },
+    );
+  });
+
+  describe.each([2, 3])('scoped V%s writer projection', (version) => {
+    it.each(['none', 'prompt', 'output', 'vars', 'grading', 'metadata', 'all'])(
+      'uses one %s projection for rows, config and traces',
+      async (mode) => {
+        const strips = (category: string) => mode === 'all' || mode === category;
+        const env = {
+          PROMPTFOO_STRIP_PROMPT_TEXT: String(strips('prompt')),
+          PROMPTFOO_STRIP_RESPONSE_OUTPUT: String(strips('output')),
+          PROMPTFOO_STRIP_TEST_VARS: String(strips('vars')),
+          PROMPTFOO_STRIP_GRADING_RESULT: String(strips('grading')),
+          PROMPTFOO_STRIP_METADATA: String(strips('metadata')),
+        };
+        const restoreEnv = mockProcessEnv(
+          Object.fromEntries(Object.keys(env).map((key) => [key, 'false'])),
+        );
+        const prompt = createCompletedPrompt('writer-prompt', { label: 'writer-label' });
+        const evaluation = new Eval(
+          {
+            prompts: ['writer-prompt'],
+            tests: [{ vars: { subject: 'writer-var' } }],
+            defaultTest: { options: { prefix: 'writer-prefix', suffix: 'writer-suffix' } },
+          },
+          { prompts: [prompt], vars: ['subject'] },
+        );
+        const attributes = {
+          'promptfoo.request.body': 'writer-prompt',
+          'promptfoo.prompt.label': 'writer-label',
+          'promptfoo.response.body': 'writer-output',
+          'codex.reasoning.summary': 'writer-reasoning',
+          'codex.reasoning.summary.count': 2,
+        };
+        const trace = {
+          traceId: 'writer-trace',
+          evaluationId: evaluation.id,
+          testCaseId: 'writer-case',
+          metadata: { note: 'writer-trace-note', vars: { subject: 'writer-var' } },
+          spans: [
+            { spanId: 'writer-span', name: 'provider', startTime: 1, endTime: 2, attributes },
+          ],
+        };
+        const traceSpy = vi
+          .spyOn(getTraceStore(), 'getTracesByEvaluation')
+          .mockResolvedValue([trace]);
+        try {
+          await evaluation.addResult(
+            createEvaluateResult({
+              prompt,
+              testCase: { vars: { subject: 'writer-var' } },
+              response: {
+                output: 'writer-output',
+                tokenUsage: { total: 5, prompt: 2, completion: 3 },
+              },
+              gradingResult: createGradingResult({ reason: 'writer-grade' }),
+              metadata: { note: 'writer-metadata' },
+              score: 0.75,
+            }),
+          );
+          if (version === 2) {
+            const summary = await evaluation.toEvaluateSummary();
+            evaluation.oldResults = {
+              version: 2,
+              timestamp: summary.timestamp,
+              stats: summary.stats,
+              results: summary.results,
+              table: await evaluation.getTable(),
+            };
+          }
+          evaluation.config.env = env;
+          const before = structuredClone({
+            config: evaluation.config,
+            rows: evaluation.results,
+            legacy: evaluation.oldResults,
+            trace,
+          });
+          mockProcessEnv(
+            Object.fromEntries(
+              Object.entries(env).map(([key, value]) => [key, String(value !== 'true')]),
+            ),
+          );
+          await writeOutput('scoped-writer.json', evaluation, null);
+          const text = vi.mocked(fsPromises.writeFile).mock.calls[0][1] as string;
+          const exported = JSON.parse(text) as OutputFile;
+          const row = exported.results.results[0];
+          expect(exported.results.version).toBe(version);
+          expect(exported.results.results).toHaveLength(1);
+          expect(row.prompt.raw).toBe(strips('prompt') ? '[prompt stripped]' : 'writer-prompt');
+          expect(row.prompt.label).toBe(strips('prompt') ? '[prompt stripped]' : 'writer-label');
+          expect(row.response?.output).toBe(
+            strips('output') ? '[output stripped]' : 'writer-output',
+          );
+          expect(row.vars).toEqual(strips('vars') ? {} : { subject: 'writer-var' });
+          expect(row.gradingResult?.reason).toBe(strips('grading') ? undefined : 'writer-grade');
+          expect(row.metadata).toEqual(strips('metadata') ? {} : { note: 'writer-metadata' });
+          expect(row.score).toBe(0.75);
+          expect(row.response?.tokenUsage).toEqual({ total: 5, prompt: 2, completion: 3 });
+          expect(exported.config.prompts).toEqual([
+            strips('prompt') ? '[prompt stripped]' : 'writer-prompt',
+          ]);
+          expect((exported.config.tests as { vars?: unknown }[])[0].vars).toEqual(
+            strips('vars') ? undefined : { subject: 'writer-var' },
+          );
+          const defaultTest = exported.config.defaultTest;
+          if (!defaultTest || typeof defaultTest === 'string') {
+            throw new Error('Expected exported default test object');
+          }
+          expect(defaultTest.options?.prefix).toBe(strips('prompt') ? undefined : 'writer-prefix');
+          expect(defaultTest.options?.suffix).toBe(strips('prompt') ? undefined : 'writer-suffix');
+          expect(exported.traces![0].spans[0].attributes).toEqual({
+            ...(!strips('prompt') && {
+              'promptfoo.request.body': 'writer-prompt',
+              'promptfoo.prompt.label': 'writer-label',
+            }),
+            ...(!strips('output') && {
+              'promptfoo.response.body': 'writer-output',
+              'codex.reasoning.summary': 'writer-reasoning',
+            }),
+            'codex.reasoning.summary.count': 2,
+          });
+          if ('table' in exported.results) {
+            expect(exported.results.table.head.prompts[0].label).toBe(
+              strips('prompt') ? '[prompt stripped]' : 'writer-label',
+            );
+            expect(exported.results.table.body[0].outputs[0].text).toBe(
+              strips('output') ? '[output stripped]' : 'writer-output',
+            );
+          } else {
+            expect(exported.results.prompts[0].label).toBe(
+              strips('prompt') ? '[prompt stripped]' : 'writer-label',
+            );
+          }
+          expect(exported.traces![0].metadata).toEqual(
+            strips('metadata')
+              ? undefined
+              : {
+                  note: 'writer-trace-note',
+                  ...(!strips('vars') && { vars: { subject: 'writer-var' } }),
+                },
+          );
+          expect(exported.traces![0]).toMatchObject({
+            traceId: 'writer-trace',
+            evaluationId: evaluation.id,
+            testCaseId: 'writer-case',
+            spans: [{ spanId: 'writer-span', startTime: 1, endTime: 2 }],
+          });
+          if (version === 3) {
+            await writeOutput('scoped-writer.jsonl', evaluation, null);
+            const jsonl = vi
+              .mocked(fsPromises.appendFile)
+              .mock.calls.map(([, data]) => String(data))
+              .join('');
+            expect(jsonl.trim().split(/\r?\n/)).toHaveLength(1);
+            expect(JSON.parse(jsonl)).toEqual(row);
+          }
+          expect({
+            config: evaluation.config,
+            rows: evaluation.results,
+            legacy: evaluation.oldResults,
+            trace,
+          }).toEqual(before);
+        } finally {
+          traceSpy.mockRestore();
+          restoreEnv();
+        }
+      },
+    );
   });
 
   it('writeOutput with JSON output', async () => {
@@ -306,6 +701,953 @@ describe('writeOutput', () => {
       }
     },
   );
+
+  it.each([
+    {
+      extension: 'json',
+      parse: (value: string) => JSON.parse(value),
+    },
+    {
+      extension: 'yaml',
+      parse: (value: string) => yaml.load(value) as Record<string, any>,
+    },
+  ])(
+    'redacts credential headers and secret vars from non-persisted $extension output',
+    async ({ extension, parse }) => {
+      // A non-persisted eval (new Eval) holds raw in-memory rows; header redaction normally
+      // happens at the DB / JSONL boundary, so the file export must redact at its own boundary.
+      const eval_ = new Eval({});
+      await eval_.addResult({
+        success: true,
+        failureReason: ResultFailureReason.NONE,
+        score: 1,
+        namedScores: {},
+        latencyMs: 100,
+        provider: { id: 'provider' },
+        prompt: { raw: 'Test prompt', label: 'Test prompt' },
+        response: {
+          output: 'Test output',
+          metadata: {
+            headers: {
+              'x-request-id': 'legacy_should_not_persist',
+              'x-safe-debug': 'keep-legacy',
+            },
+            http: {
+              status: 200,
+              statusText: 'OK',
+              headers: {
+                'set-cookie': 'session=secret',
+                'x-request-id': 'req_should_not_persist',
+              },
+              requestHeaders: {
+                authorization: 'Bearer sk-should-not-persist',
+                'api-key': 'azure-api-key-should-not-persist',
+                'x-safe-debug': 'keep-me',
+              },
+            },
+          },
+        },
+        vars: { apiKey: 'sk-var-should-not-persist', safe: 'keep-me' },
+        promptIdx: 0,
+        testIdx: 0,
+        testCase: { vars: { apiKey: 'sk-var-should-not-persist', safe: 'keep-me' } },
+        promptId: 'prompt',
+      });
+
+      await writeOutput(`output.${extension}`, eval_, null);
+
+      const written = vi.mocked(fsPromises.writeFile).mock.calls[0][1] as string;
+      const parsed = parse(written);
+      const result = parsed.results.results[0];
+      expect(result.response.metadata.http.headers['set-cookie']).toBe('[REDACTED]');
+      expect(result.response.metadata.http.requestHeaders.authorization).toBe('[REDACTED]');
+      expect(result.response.metadata.http.requestHeaders['api-key']).toBe('[REDACTED]');
+      expect(result.response.metadata.http.requestHeaders['x-safe-debug']).toBe('keep-me');
+      expect(result.response.metadata.headers['x-request-id']).toBe('[REDACTED]');
+      expect(result.response.metadata.headers['x-safe-debug']).toBe('keep-legacy');
+      expect(result.vars.apiKey).toBe('[REDACTED]');
+      expect(result.vars.safe).toBe('keep-me');
+      expect(written).not.toContain('session=secret');
+      expect(written).not.toContain('sk-should-not-persist');
+      expect(written).not.toContain('azure-api-key-should-not-persist');
+      expect(written).not.toContain('sk-var-should-not-persist');
+    },
+  );
+
+  describe('non-persisted artifact contract regressions', () => {
+    function resultWithSidecars(): EvaluateResult {
+      return {
+        success: true,
+        failureReason: ResultFailureReason.NONE,
+        score: 1,
+        namedScores: {},
+        latencyMs: 1,
+        provider: { id: 'echo' },
+        prompt: { raw: 'rendered prompt', label: 'prompt label', template: 'original template' },
+        response: {
+          output: 'visible output',
+          raw: { text: 'raw output copy' },
+          providerTransformedOutput: 'transformed output copy',
+          prompt: 'actual prompt',
+          materializedVars: { question: 'materialized input' },
+          inputMaterialization: { question: 'materialization copy' },
+          metadata: { redteamFinalPrompt: 'final prompt copy', safe: 'keep metadata' },
+        },
+        metadata: { redteamFinalPrompt: 'final prompt copy', safe: 'keep result metadata' },
+        vars: { question: 'original input' },
+        testCase: { vars: { question: 'original input' } },
+        promptIdx: 0,
+        testIdx: 0,
+        promptId: 'prompt',
+      };
+    }
+
+    it('redacts response credential variants and case-normalized legacy transport copies', async () => {
+      const result = resultWithSidecars();
+      const headers = {
+        'Api-Key': 'response credential',
+        'X-API-KEY': 'second credential',
+        'x-safe': 'keep',
+      };
+      result.response!.output = { http: { headers: { 'api-key': 'user-authored output' } } };
+      result.response!.metadata = {
+        headers: { Authorization: 'transport credential', 'X-Request-ID': 'transport request' },
+        http: { status: 200, statusText: 'OK', headers },
+      };
+      result.metadata = {
+        headers: {
+          authorization: 'transport credential',
+          'x-request-id': 'user-authored different value',
+        },
+        http: { status: 200, statusText: 'OK', headers: { ...headers } },
+      };
+      result.gradingResult = {
+        pass: true,
+        score: 1,
+        reason: 'ok',
+        metadata: { http: { status: 200, statusText: 'OK', headers: { ...headers } } },
+        componentResults: [
+          {
+            pass: true,
+            score: 1,
+            reason: 'component',
+            metadata: { http: { status: 200, statusText: 'OK', headers: { ...headers } } },
+          },
+        ],
+      };
+      const original = structuredClone(result);
+      const eval_ = new Eval({});
+      await eval_.addResult(result);
+      await writeOutput('headers.json', eval_, null);
+      const output = JSON.parse(vi.mocked(fsPromises.writeFile).mock.calls[0][1] as string).results
+        .results[0];
+      for (const metadata of [
+        output.response.metadata,
+        output.metadata,
+        output.gradingResult.metadata,
+        output.gradingResult.componentResults[0].metadata,
+      ]) {
+        expect(metadata.http.headers).toEqual({
+          'Api-Key': '[REDACTED]',
+          'X-API-KEY': '[REDACTED]',
+          'x-safe': 'keep',
+        });
+      }
+      expect(output.metadata.headers.authorization).toBe('[REDACTED]');
+      expect(output.metadata.headers['x-request-id']).toBe('user-authored different value');
+      expect(output.response.output).toEqual(original.response!.output);
+      expect(result).toEqual(original);
+    });
+
+    it.each(['prompt', 'output', 'vars'] as const)(
+      'strips documented %s sidecars without changing other fields or inputs',
+      async (flag) => {
+        const restoreEnv = mockProcessEnv({
+          PROMPTFOO_STRIP_PROMPT_TEXT: String(flag === 'prompt'),
+          PROMPTFOO_STRIP_RESPONSE_OUTPUT: String(flag === 'output'),
+          PROMPTFOO_STRIP_TEST_VARS: String(flag === 'vars'),
+        });
+        try {
+          const result = resultWithSidecars();
+          const original = structuredClone(result);
+          const eval_ = new Eval({});
+          await eval_.addResult(result);
+          await writeOutput('sidecars.json', eval_, null);
+          const output = JSON.parse(vi.mocked(fsPromises.writeFile).mock.calls[0][1] as string)
+            .results.results[0];
+          if (flag === 'prompt') {
+            expect(output.prompt.template).toBe('[prompt stripped]');
+            expect(output.response.metadata.redteamFinalPrompt).toBeUndefined();
+            expect(output.metadata.redteamFinalPrompt).toBeUndefined();
+            expect(output.response.output).toBe('visible output');
+            expect(output.response.materializedVars).toEqual(original.response!.materializedVars);
+          } else if (flag === 'output') {
+            expect(output.response.raw).toBeUndefined();
+            expect(output.response.providerTransformedOutput).toBeUndefined();
+            expect(output.response.prompt).toBe('actual prompt');
+            expect(output.response.materializedVars).toEqual(original.response!.materializedVars);
+          } else {
+            expect(output.response.materializedVars).toBeUndefined();
+            expect(output.response.inputMaterialization).toBeUndefined();
+            expect(output.response.output).toBe('visible output');
+            expect(output.response.prompt).toBe('actual prompt');
+          }
+          expect(output.response.metadata.safe).toBe('keep metadata');
+          expect(output.score).toBe(1);
+          expect(result).toEqual(original);
+        } finally {
+          restoreEnv();
+        }
+      },
+    );
+
+    it('strips known prompt selectors while preserving provider IDs and unrelated config', async () => {
+      const restoreEnv = mockProcessEnv({ PROMPTFOO_STRIP_PROMPT_TEXT: 'true' });
+      try {
+        const config = {
+          providers: [
+            { id: 'echo', prompts: ['private label'], config: { prompts: ['vendor option'] } },
+          ],
+          tests: [{ prompts: ['private label'], vars: { question: 'keep vars' } }],
+          defaultTest: { prompts: ['private label'] },
+          scenarios: [
+            { config: [{ prompts: ['private label'] }], tests: [{ prompts: ['private label'] }] },
+          ],
+          providerPromptMap: { echo: ['private label'], other: 'private label' },
+        };
+        const original = structuredClone(config);
+        const eval_ = new Eval(config);
+        await writeOutput('selectors.json', eval_, null);
+        const output = JSON.parse(
+          vi.mocked(fsPromises.writeFile).mock.calls[0][1] as string,
+        ).config;
+        expect(output.providers[0]).toEqual({
+          id: 'echo',
+          prompts: ['[prompt stripped]'],
+          config: { prompts: ['vendor option'] },
+        });
+        expect(output.tests[0]).toEqual({
+          prompts: ['[prompt stripped]'],
+          vars: { question: 'keep vars' },
+        });
+        expect(output.defaultTest.prompts).toEqual(['[prompt stripped]']);
+        expect(output.scenarios[0].config[0].prompts).toEqual(['[prompt stripped]']);
+        expect(output.scenarios[0].tests[0].prompts).toEqual(['[prompt stripped]']);
+        expect(output.providerPromptMap).toEqual({
+          echo: ['[prompt stripped]'],
+          other: '[prompt stripped]',
+        });
+        expect(config).toEqual(original);
+      } finally {
+        restoreEnv();
+      }
+    });
+
+    it('preserves malformed V2 rows and cells while sanitizing adjacent valid data', async () => {
+      const summary = createLegacyV2Summary();
+      const validRow = summary.table.body[0];
+      (validRow.outputs as unknown[]) = [null, 'legacy cell', 7, validRow.outputs[0]];
+      (summary.table.body as unknown[]) = [null, 'legacy row', 7, validRow];
+      const eval_ = new Eval({});
+      vi.spyOn(eval_, 'toEvaluateSummary').mockResolvedValue(
+        summary as unknown as Awaited<ReturnType<typeof eval_.toEvaluateSummary>>,
+      );
+      await writeOutput('legacy.json', eval_, null);
+      const body = JSON.parse(vi.mocked(fsPromises.writeFile).mock.calls[0][1] as string).results
+        .table.body;
+      expect(body.slice(0, 3)).toEqual([null, 'legacy row', 7]);
+      expect(body[3].outputs.slice(0, 3)).toEqual([null, 'legacy cell', 7]);
+      expect(body[3].outputs[3].response.metadata.http.headers['set-cookie']).toBe('[REDACTED]');
+    });
+
+    it.each(['json', 'yaml'])(
+      'strips supported provider-map selectors in %s exports without changing vendor options',
+      async (format) => {
+        const restoreEnv = mockProcessEnv({ PROMPTFOO_STRIP_PROMPT_TEXT: 'true' });
+        try {
+          const config = {
+            providers: [
+              {
+                echo: {
+                  prompts: ['private map selector'],
+                  config: { prompts: ['vendor map option'], temperature: 0.2 },
+                },
+              },
+              {
+                id: 'echo',
+                prompts: ['private direct selector'],
+                config: { prompts: ['vendor direct option'] },
+              },
+            ],
+          };
+          const original = structuredClone(config);
+          const eval_ = new Eval(config);
+          await writeOutput('provider-map.' + format, eval_, null);
+          const contents = vi.mocked(fsPromises.writeFile).mock.calls[0][1] as string;
+          const output = (format === 'json' ? JSON.parse(contents) : yaml.load(contents)) as {
+            config: typeof config;
+          };
+          expect(output.config.providers).toEqual([
+            {
+              echo: {
+                prompts: ['[prompt stripped]'],
+                config: { prompts: ['vendor map option'], temperature: 0.2 },
+              },
+            },
+            {
+              id: 'echo',
+              prompts: ['[prompt stripped]'],
+              config: { prompts: ['vendor direct option'] },
+            },
+          ]);
+          expect(contents).not.toContain('private map selector');
+          expect(contents).not.toContain('private direct selector');
+          expect(config).toEqual(original);
+        } finally {
+          restoreEnv();
+        }
+      },
+    );
+
+    it.each(['json', 'yaml', 'xml'])(
+      'preserves numeric aggregate metric names through %s serialization',
+      async (format) => {
+        const metrics = createPromptMetrics();
+        for (const [metricName, metricValue, weight] of [
+          ['token', 0, 2],
+          ['password', 0.5, 3],
+          ['accuracy', 1, 0],
+        ] as const) {
+          accumulateNamedMetric(metrics, {
+            metricName,
+            metricValue,
+            gradingResult: createGradingResult({ namedScoreWeights: { [metricName]: weight } }),
+          });
+        }
+        const prompt = createCompletedPrompt('hello', {
+          metrics,
+          config: {
+            password: 'private prompt credential',
+            provider: { id: 'echo', config: { token: 'private provider credential' } },
+          },
+        });
+        const original = structuredClone(prompt);
+        const eval_ = new Eval({}, { prompts: [prompt] });
+        await eval_.addResult(
+          createEvaluateResult({
+            promptId: prompt.id,
+            namedScores: { token: 0, password: 0.5, accuracy: 1 },
+          }),
+        );
+        await writeOutput('metric-contract.' + format, eval_, null);
+        const contents = vi.mocked(fsPromises.writeFile).mock.calls[0][1] as string;
+        const parsed =
+          format === 'json'
+            ? JSON.parse(contents)
+            : format === 'yaml'
+              ? yaml.load(contents)
+              : new XMLParser().parse(contents).promptfoo;
+        const exported = format === 'xml' ? parsed.results.prompts : parsed.results.prompts[0];
+        expect(exported.metrics.namedScores).toEqual({ token: 0, password: 1.5, accuracy: 0 });
+        expect(exported.metrics.namedScoresCount).toEqual({ token: 1, password: 1, accuracy: 1 });
+        expect(exported.metrics.namedScoreWeights).toEqual({ token: 2, password: 3, accuracy: 0 });
+        expect(exported.config.password).toBe('[REDACTED]');
+        expect(exported.config.provider.config.token).toBe('[REDACTED]');
+        expect(contents).not.toContain('private prompt credential');
+        expect(contents).not.toContain('private provider credential');
+        expect(prompt).toEqual(original);
+        if (format === 'json') {
+          const imported = parseImportFile(contents).evalData as OutputFile;
+          const summary = imported.results as EvaluateSummaryV3;
+          const reopened = new Eval(imported.config, { prompts: summary.prompts });
+          for (const result of summary.results) {
+            await reopened.addResult(result);
+          }
+          expect((await reopened.getTable()).head.prompts[0].metrics).toEqual(metrics);
+          expect(summary.results[0].namedScores).toEqual({ token: 0, password: 0.5, accuracy: 1 });
+        }
+      },
+    );
+
+    it('keeps nonnumeric metric data redacted in legacy V2 prompt projections', async () => {
+      const summary = createLegacyV2Summary();
+      const prompt = Object.assign(summary.table.head.prompts[0], {
+        metrics: {
+          namedScores: {
+            token: 0,
+            password: 'private metric credential',
+            nested: { apiKey: 'nested credential' },
+          },
+          namedScoresCount: { token: 2 },
+          namedScoreWeights: { token: 0.5 },
+          password: 'private neighboring credential',
+        },
+      });
+      const original = structuredClone(prompt);
+      const originalMetrics = prompt.metrics;
+      const eval_ = new Eval({});
+      vi.spyOn(eval_, 'toEvaluateSummary').mockResolvedValue(
+        summary as unknown as Awaited<ReturnType<typeof eval_.toEvaluateSummary>>,
+      );
+      await writeOutput('legacy-metrics.json', eval_, null);
+      const parsed = JSON.parse(vi.mocked(fsPromises.writeFile).mock.calls[0][1] as string);
+      expect(parsed.results.table.head.prompts[0].metrics).toEqual({
+        namedScores: { token: 0, password: '[REDACTED]', nested: { apiKey: '[REDACTED]' } },
+        namedScoresCount: { token: 2 },
+        namedScoreWeights: { token: 0.5 },
+        password: '[REDACTED]',
+      });
+      expect(prompt.config.apiKey).toBe('head-prompt-api-key-secret');
+      expect(parsed.results.table.head.prompts[0].config.apiKey).toBe('[REDACTED]');
+      expect(prompt).toEqual(original);
+      expect(prompt.metrics).toBe(originalMetrics);
+    });
+
+    it.each(['name', 'prompt', 'query', 'question'])(
+      'preserves %s variables after prompt-only export and flag-off HTML reimport',
+      async (variable) => {
+        const realFs = await vi.importActual<typeof import('fs')>('fs');
+        vi.mocked(fsPromises.readFile).mockResolvedValue(
+          realFs.readFileSync(path.resolve(__dirname, '../../src/tableOutput.html'), 'utf8'),
+        );
+        const vars: Record<string, string> = {
+          [variable]: 'preserved user input',
+          ...(variable !== 'name' && { topic: 'safe topic' }),
+        };
+        const original = structuredClone(vars);
+        const prompt = createCompletedPrompt('Hello {{' + variable + '}}', { provider: 'echo' });
+        const eval_ = new Eval({}, { prompts: [prompt], vars: Object.keys(vars) });
+        const response = await new EchoProvider().callApi('Hello preserved user input');
+        await eval_.addResult(
+          createEvaluateResult({ prompt, promptId: prompt.id, vars, testCase: { vars }, response }),
+        );
+        const restoreStrip = mockProcessEnv({
+          PROMPTFOO_STRIP_PROMPT_TEXT: 'true',
+          PROMPTFOO_STRIP_TEST_VARS: 'false',
+        });
+        let serialized: string;
+        try {
+          await writeOutput('prompt-only.json', eval_, null);
+          serialized = vi.mocked(fsPromises.writeFile).mock.calls[0][1] as string;
+        } finally {
+          restoreStrip();
+        }
+        const restoreReopen = mockProcessEnv({
+          PROMPTFOO_STRIP_PROMPT_TEXT: undefined,
+          PROMPTFOO_STRIP_TEST_VARS: undefined,
+        });
+        try {
+          const imported = parseImportFile(serialized).evalData as OutputFile;
+          const summary = imported.results as EvaluateSummaryV3;
+          const reopened = new Eval(imported.config, {
+            prompts: summary.prompts,
+            vars: imported.vars,
+          });
+          for (const result of summary.results) {
+            await reopened.addResult(result);
+          }
+          await writeOutput('reopened.html', reopened, null);
+          const html = vi.mocked(fsPromises.writeFile).mock.calls[1][1] as string;
+          const table = await reopened.getTable();
+          expect(table.body[0].vars[table.head.vars.indexOf(variable)]).toBe(original[variable]);
+          expect(html).toContain('preserved user input');
+          expect(summary.results[0].response).not.toHaveProperty('prompt');
+          expect(summary.results[0]).toMatchObject({ success: true, score: 1, vars: original });
+          expect(summary.results[0].response?.output).toBe('Hello preserved user input');
+          expect(vars).toEqual(original);
+          expect(response).not.toHaveProperty('prompt');
+        } finally {
+          restoreReopen();
+        }
+      },
+    );
+
+    it.each([
+      {
+        name: 'output-only single variable',
+        actual: false,
+        multiple: false,
+        stripPrompt: true,
+        stripVars: false,
+      },
+      {
+        name: 'actual prompt single variable',
+        actual: true,
+        multiple: false,
+        stripPrompt: true,
+        stripVars: false,
+      },
+      {
+        name: 'output-only multiple variables',
+        actual: false,
+        multiple: true,
+        stripPrompt: true,
+        stripVars: false,
+      },
+      {
+        name: 'actual prompt multiple variables',
+        actual: true,
+        multiple: true,
+        stripPrompt: true,
+        stripVars: false,
+      },
+      {
+        name: 'independent variable stripping',
+        actual: true,
+        multiple: false,
+        stripPrompt: true,
+        stripVars: true,
+      },
+      {
+        name: 'unstripped actual prompt display',
+        actual: true,
+        multiple: false,
+        stripPrompt: false,
+        stripVars: false,
+      },
+      {
+        name: 'unstripped output-only display',
+        actual: false,
+        multiple: false,
+        stripPrompt: false,
+        stripVars: false,
+      },
+    ])(
+      'preserves HTML variable policy for $name and subsequent JSON export',
+      async ({ actual, multiple, stripPrompt, stripVars }) => {
+        const realFs = await vi.importActual<typeof import('fs')>('fs');
+        vi.mocked(fsPromises.readFile).mockResolvedValue(
+          realFs.readFileSync(path.resolve(__dirname, '../../src/tableOutput.html'), 'utf8'),
+        );
+        const restoreEnv = mockProcessEnv({
+          PROMPTFOO_STRIP_PROMPT_TEXT: String(stripPrompt),
+          PROMPTFOO_STRIP_TEST_VARS: String(stripVars),
+          PROMPTFOO_STRIP_RESPONSE_OUTPUT: 'false',
+        });
+        try {
+          const vars = {
+            question: 'keep user data',
+            ...(multiple && { topic: 'keep second variable' }),
+          };
+          const original = structuredClone(vars);
+          const eval_ = new Eval({});
+          await eval_.addPrompts([
+            {
+              id: 'prompt',
+              raw: 'private instruction {{question}}',
+              label: 'private label',
+              provider: 'echo',
+            },
+          ]);
+          eval_.setVars(Object.keys(vars));
+          await eval_.addResult({
+            success: true,
+            failureReason: ResultFailureReason.NONE,
+            score: 1,
+            namedScores: {},
+            latencyMs: 1,
+            provider: { id: 'echo' },
+            prompt: { raw: 'private instruction {{question}}', label: 'private label' },
+            response: {
+              output: 'public answer',
+              ...(actual && { prompt: 'actual provider instruction' }),
+            },
+            vars,
+            testCase: { vars },
+            promptIdx: 0,
+            testIdx: 0,
+            promptId: 'prompt',
+          });
+          const liveVars = eval_.results[0].testCase.vars;
+          const expected =
+            actual && !stripPrompt && !stripVars
+              ? { ...original, question: 'actual provider instruction' }
+              : original;
+          await writeOutput('variable-policy.html', eval_, null);
+          const html = vi.mocked(fsPromises.writeFile).mock.calls[0][1] as string;
+          expect(eval_.results[0].testCase.vars).toBe(liveVars);
+          expect(liveVars).toEqual(expected);
+          expect(vars).toEqual(original);
+          expect(html).toContain('public answer');
+          if (stripPrompt) {
+            expect(html).not.toContain('private instruction');
+            expect(html).not.toContain('actual provider instruction');
+          }
+          if (stripVars) {
+            expect(html).not.toContain('keep user data');
+          } else {
+            expect(html).toContain(expected.question);
+            if (multiple) {
+              expect(html).toContain('keep second variable');
+            }
+          }
+          await writeOutput('variable-policy.json', eval_, null);
+          const json = JSON.parse(vi.mocked(fsPromises.writeFile).mock.calls[1][1] as string);
+          expect(json.results.results[0].vars).toEqual(stripVars ? {} : expected);
+          expect(json.results.results[0].success).toBe(true);
+          expect(json.results.results[0].score).toBe(1);
+          expect(json.results.results[0].error).toBeUndefined();
+        } finally {
+          restoreEnv();
+        }
+      },
+    );
+
+    it.each([2, 3])(
+      'preserves malformed V%i aggregate prompts and redacts valid prompt config',
+      async (version) => {
+        const eval_ = new Eval({});
+        const summary = version === 2 ? createLegacyV2Summary() : await eval_.toEvaluateSummary();
+        const prompts = [
+          null,
+          'legacy prompt',
+          7,
+          { raw: 'hello', label: 'label', config: { apiKey: 'credential', temperature: 0.2 } },
+        ];
+        if ('table' in summary) {
+          (summary.table.head.prompts as unknown[]) = prompts;
+        } else {
+          (summary.prompts as unknown[]) = prompts;
+        }
+        vi.spyOn(eval_, 'toEvaluateSummary').mockResolvedValue(
+          summary as unknown as Awaited<ReturnType<typeof eval_.toEvaluateSummary>>,
+        );
+        await writeOutput('prompts.json', eval_, null);
+        const output = JSON.parse(
+          vi.mocked(fsPromises.writeFile).mock.calls[0][1] as string,
+        ).results;
+        const actual = version === 2 ? output.table.head.prompts : output.prompts;
+        expect(actual.slice(0, 3)).toEqual([null, 'legacy prompt', 7]);
+        expect(actual[3].config).toEqual({ apiKey: '[REDACTED]', temperature: 0.2 });
+      },
+    );
+
+    it('preserves generated prompt hashes without restoring credential-shaped external IDs', async () => {
+      const eval_ = new Eval({});
+      const summary = await eval_.toEvaluateSummary();
+      const prompts = [
+        { id: 'a'.repeat(64), raw: 'hello', label: 'hash prompt' },
+        { id: 'sk-' + 's'.repeat(40), raw: 'hello', label: 'external prompt' },
+      ];
+      (summary as { prompts: unknown[] }).prompts = prompts;
+      vi.spyOn(eval_, 'toEvaluateSummary').mockResolvedValue(summary);
+      await writeOutput('ids.json', eval_, null);
+      const actual = JSON.parse(vi.mocked(fsPromises.writeFile).mock.calls[0][1] as string).results
+        .prompts;
+      expect(actual[0].id).toBe(prompts[0].id);
+      expect(actual[1].id).toBe('[REDACTED]');
+      expect(prompts[1].id).toBe('sk-' + 's'.repeat(40));
+    });
+  });
+
+  it('honors prompt stripping across V3 summary prompt copies', async () => {
+    const restoreEnv = mockProcessEnv({ PROMPTFOO_STRIP_PROMPT_TEXT: 'true' });
+
+    try {
+      const eval_ = new Eval({});
+      await eval_.addPrompts([
+        {
+          id: 'a'.repeat(64),
+          display: 'summary-prompt-display-secret',
+          raw: 'summary-prompt-secret',
+          template: 'summary-template-secret',
+          label: 'summary-prompt-label-secret',
+          provider: 'provider',
+          config: { apiKey: 'summary-prompt-api-key-secret', temperature: 0.1 },
+        },
+      ]);
+      await eval_.addResult({
+        success: true,
+        failureReason: ResultFailureReason.NONE,
+        score: 1,
+        namedScores: {},
+        latencyMs: 100,
+        provider: { id: 'provider' },
+        prompt: { raw: 'summary-prompt-secret', label: 'summary-prompt-label-secret' },
+        response: { output: 'Test output' },
+        vars: {},
+        promptIdx: 0,
+        testIdx: 0,
+        testCase: {},
+        promptId: 'prompt',
+      });
+
+      await writeOutput('output.json', eval_, null);
+
+      const written = vi.mocked(fsPromises.writeFile).mock.calls[0][1] as string;
+      const summaryPrompt = JSON.parse(written).results.prompts[0];
+      expect(summaryPrompt.raw).toBe('[prompt stripped]');
+      expect(summaryPrompt.label).toBe('[prompt stripped]');
+      expect(summaryPrompt.display).toBe('[prompt stripped]');
+      expect(summaryPrompt.template).toBe('[prompt stripped]');
+      expect(summaryPrompt.id).toBe('a'.repeat(64));
+      expect(summaryPrompt.config.apiKey).toBe('[REDACTED]');
+      expect(summaryPrompt.config.temperature).toBe(0.1);
+      expect(written).not.toContain('summary-prompt-secret');
+      expect(written).not.toContain('summary-prompt-label-secret');
+      expect(written).not.toContain('summary-prompt-display-secret');
+      expect(written).not.toContain('summary-prompt-api-key-secret');
+    } finally {
+      restoreEnv();
+    }
+  });
+
+  it('honors prompt and test-var stripping in the exported config', async () => {
+    const restoreEnv = mockProcessEnv({
+      PROMPTFOO_STRIP_PROMPT_TEXT: 'true',
+      PROMPTFOO_STRIP_TEST_VARS: 'true',
+    });
+
+    try {
+      const eval_ = new Eval({
+        prompts: [
+          'inline prompt secret',
+          {
+            id: 'prompt-id',
+            raw: 'raw prompt secret',
+            label: 'prompt label secret',
+          },
+        ],
+        tests: [
+          { vars: { customer: 'test-var secret' }, assert: [{ type: 'contains', value: 'ok' }] },
+        ],
+        defaultTest: { vars: { defaultCustomer: 'default-var secret' } },
+        scenarios: [
+          {
+            config: [{ vars: { scenarioDefault: 'scenario-config secret' } }],
+            tests: [{ vars: { scenarioCustomer: 'scenario-test secret' } }],
+          },
+        ],
+      });
+
+      await writeOutput('output.json', eval_, null);
+
+      const written = vi.mocked(fsPromises.writeFile).mock.calls[0][1] as string;
+      const config = JSON.parse(written).config;
+      expect(config.prompts).toEqual([
+        '[prompt stripped]',
+        {
+          id: 'prompt-id',
+          raw: '[prompt stripped]',
+          label: '[prompt stripped]',
+        },
+      ]);
+      expect(config.tests[0].vars).toBeUndefined();
+      expect(config.defaultTest.vars).toBeUndefined();
+      expect(config.scenarios[0].config[0].vars).toBeUndefined();
+      expect(config.scenarios[0].tests[0].vars).toBeUndefined();
+      expect(written).not.toContain('inline prompt secret');
+      expect(written).not.toContain('raw prompt secret');
+      expect(written).not.toContain('prompt label secret');
+      expect(written).not.toContain('test-var secret');
+      expect(written).not.toContain('default-var secret');
+      expect(written).not.toContain('scenario-config secret');
+      expect(written).not.toContain('scenario-test secret');
+    } finally {
+      restoreEnv();
+    }
+  });
+
+  it('preserves malformed legacy summary rows instead of crashing export', async () => {
+    const eval_ = new Eval({});
+    const summary = await eval_.toEvaluateSummary();
+    (summary as { results: unknown[] }).results = [
+      null,
+      'legacy-row',
+      { success: true, response: {} },
+    ];
+    vi.spyOn(eval_, 'toEvaluateSummary').mockResolvedValue(summary);
+
+    await writeOutput('output.json', eval_, null);
+
+    const written = vi.mocked(fsPromises.writeFile).mock.calls[0][1] as string;
+    expect(JSON.parse(written).results.results).toEqual([
+      null,
+      'legacy-row',
+      expect.objectContaining({ success: true }),
+    ]);
+  });
+
+  it.each([
+    {
+      extension: 'json',
+      parse: (value: string) => JSON.parse(value),
+    },
+    {
+      extension: 'yaml',
+      parse: (value: string) => yaml.load(value) as Record<string, any>,
+    },
+  ])('projects a legacy V2 summary table on $extension export', async ({ extension, parse }) => {
+    const eval_ = new Eval({});
+    const v2Summary = createLegacyV2Summary();
+    vi.spyOn(eval_, 'toEvaluateSummary').mockResolvedValue(
+      v2Summary as unknown as Awaited<ReturnType<typeof eval_.toEvaluateSummary>>,
+    );
+
+    await writeOutput(`output.${extension}`, eval_, null);
+
+    const written = vi.mocked(fsPromises.writeFile).mock.calls[0][1] as string;
+    const parsed = parse(written);
+    const table = parsed.results.table;
+    const output = table.body[0].outputs[0];
+    expect(table.head.prompts[0].raw).toBe('head-prompt-secret {{safe}}');
+    expect(table.head.prompts[0].label).toBe('head-prompt-label-secret');
+    expect(table.head.prompts[0].config.apiKey).toBe('[REDACTED]');
+    expect(table.head.prompts[0].config.temperature).toBe(0.1);
+    expect(table.body[0].vars).toEqual([
+      '[REDACTED]',
+      'keep-row',
+      '{"apiKey":"[REDACTED]","safe":"keep-nested"}',
+    ]);
+    expect(output.response.metadata.http.headers['set-cookie']).toBe('[REDACTED]');
+    expect(output.response.metadata.http.requestHeaders.authorization).toBe('[REDACTED]');
+    expect(output.response.metadata.http.requestHeaders['api-key']).toBe('[REDACTED]');
+    expect(output.response.metadata.http.requestHeaders['x-safe-debug']).toBe('keep-me');
+    expect(output.response.metadata.headers['x-request-id']).toBe('[REDACTED]');
+    expect(output.response.metadata.headers['x-safe-debug']).toBe('keep-legacy');
+    expect(output.vars.apiKey).toBe('[REDACTED]');
+    expect(output.vars.safe).toBe('keep-output');
+    expect(output.vars.config.apiKey).toBe('[REDACTED]');
+    expect(output.vars.config.safe).toBe('keep-nested-output');
+    expect(output.testCase.vars.apiKey).toBe('[REDACTED]');
+    expect(output.testCase.vars.safe).toBe('keep-me');
+    expect(table.body[0].test.vars.apiKey).toBe('[REDACTED]');
+    expect(output.prompt).toBe('rendered-prompt-secret');
+    expect(output.text).toBe('response-text-secret');
+    expect(output.audio.data).toBe('audio-output-secret');
+    expect(output.video.url).toBe('video-output-secret');
+    expect(output.images[0].data).toBe('image-output-secret');
+    expect(written).not.toContain('session=secret');
+    expect(written).not.toContain('sk-should-not-persist');
+    expect(written).not.toContain('azure-api-key-should-not-persist');
+    expect(written).not.toContain('head-prompt-api-key-secret');
+    expect(written).not.toContain('row-api-key-secret');
+    expect(written).not.toContain('nested-row-api-key-secret');
+    expect(written).not.toContain('output-api-key-secret');
+    expect(written).not.toContain('nested-output-api-key-secret');
+    expect(written).not.toContain('test-api-key-secret');
+  });
+
+  it('honors strip flags across legacy V2 table copies', async () => {
+    const restoreEnv = mockProcessEnv({
+      PROMPTFOO_STRIP_PROMPT_TEXT: 'true',
+      PROMPTFOO_STRIP_RESPONSE_OUTPUT: 'true',
+      PROMPTFOO_STRIP_TEST_VARS: 'true',
+    });
+
+    try {
+      const eval_ = new Eval({});
+      const v2Summary = createLegacyV2Summary();
+      Object.assign(v2Summary.table.head.prompts[0], { template: 'head template copy' });
+      Object.assign(v2Summary.table.body[0].outputs[0].response, {
+        raw: 'raw output copy',
+        providerTransformedOutput: 'transformed output copy',
+        materializedVars: { question: 'materialized input' },
+        inputMaterialization: { question: 'materialization copy' },
+      });
+      Object.assign(v2Summary.table.body[0].outputs[0].response.metadata, {
+        redteamFinalPrompt: 'final prompt copy',
+      });
+      Object.assign(v2Summary.table.body[0].outputs[0], {
+        metadata: { redteamFinalPrompt: 'final prompt copy' },
+      });
+      vi.spyOn(eval_, 'toEvaluateSummary').mockResolvedValue(
+        v2Summary as unknown as Awaited<ReturnType<typeof eval_.toEvaluateSummary>>,
+      );
+
+      await writeOutput('output.json', eval_, null);
+
+      const written = vi.mocked(fsPromises.writeFile).mock.calls[0][1] as string;
+      const table = JSON.parse(written).results.table;
+      const output = table.body[0].outputs[0];
+      expect(table.head.prompts[0].raw).toBe('[prompt stripped]');
+      expect(table.head.prompts[0].label).toBe('[prompt stripped]');
+      expect(table.head.prompts[0].display).toBe('[prompt stripped]');
+      expect(table.head.prompts[0].template).toBe('[prompt stripped]');
+      expect(table.body[0].vars).toEqual(['', '', '']);
+      expect(table.body[0].test.vars).toBeUndefined();
+      expect(output.vars).toEqual({});
+      expect(output.testCase.vars).toBeUndefined();
+      expect(output.prompt).toBe('[prompt stripped]');
+      expect(output.text).toBe('[output stripped]');
+      expect(output.response.output).toBe('[output stripped]');
+      expect(output.response).not.toHaveProperty('prompt');
+      expect(output.response.audio).toBeUndefined();
+      expect(output.response.images).toBeUndefined();
+      expect(output.response.video).toBeUndefined();
+      expect(output.response.metadata.blobUris).toBeUndefined();
+      expect(output.response.raw).toBeUndefined();
+      expect(output.response.providerTransformedOutput).toBeUndefined();
+      expect(output.response.materializedVars).toBeUndefined();
+      expect(output.response.inputMaterialization).toBeUndefined();
+      expect(output.response.metadata.redteamFinalPrompt).toBeUndefined();
+      expect(output.metadata.redteamFinalPrompt).toBeUndefined();
+      expect(output.audio).toBeUndefined();
+      expect(output.video).toBeUndefined();
+      expect(output.images).toBeUndefined();
+      expect(written).not.toContain('head-prompt-secret');
+      expect(written).not.toContain('head-prompt-label-secret');
+      expect(written).not.toContain('head-prompt-display-secret');
+      expect(written).not.toContain('rendered-prompt-secret');
+      expect(written).not.toContain('response-text-secret');
+      expect(written).not.toContain('response-output-secret');
+      expect(written).not.toContain('provider-prompt-secret');
+      expect(written).not.toContain('response-audio-secret');
+      expect(written).not.toContain('response-image-secret');
+      expect(written).not.toContain('response-video-secret');
+      expect(written).not.toContain('promptfoo://blob/secret-media');
+      expect(written).not.toContain('audio-output-secret');
+      expect(written).not.toContain('video-output-secret');
+      expect(written).not.toContain('image-output-secret');
+      expect(written).not.toContain('keep-row');
+      expect(written).not.toContain('keep-output');
+    } finally {
+      restoreEnv();
+    }
+  });
+
+  it('preserves nullish and sparse legacy V2 table output cells', async () => {
+    const eval_ = new Eval({});
+    const v2Summary = createLegacyV2Summary();
+    const output = v2Summary.table.body[0].outputs[0];
+    const sparseOutputs: any[] = new Array(3);
+    sparseOutputs[0] = null;
+    sparseOutputs[2] = output;
+    v2Summary.table.body[0].outputs = sparseOutputs;
+    vi.spyOn(eval_, 'toEvaluateSummary').mockResolvedValue(
+      v2Summary as unknown as Awaited<ReturnType<typeof eval_.toEvaluateSummary>>,
+    );
+
+    await writeOutput('output.json', eval_, null);
+
+    const written = vi.mocked(fsPromises.writeFile).mock.calls[0][1] as string;
+    const outputs = JSON.parse(written).results.table.body[0].outputs;
+    expect(outputs).toHaveLength(3);
+    expect(outputs[0]).toBeNull();
+    expect(outputs[1]).toBeNull();
+    expect(outputs[2].response.metadata.http.headers['set-cookie']).toBe('[REDACTED]');
+  });
+
+  it.each([
+    { name: 'missing head', head: undefined },
+    { name: 'missing prompts', head: { vars: [] } },
+    { name: 'malformed prompts', head: { prompts: 'invalid', vars: [] } },
+  ])('tolerates a legacy V2 table with $name', async ({ head }) => {
+    const eval_ = new Eval({});
+    const v2Summary = createLegacyV2Summary();
+    (v2Summary.table as any).head = head;
+    vi.spyOn(eval_, 'toEvaluateSummary').mockResolvedValue(
+      v2Summary as unknown as Awaited<ReturnType<typeof eval_.toEvaluateSummary>>,
+    );
+
+    await writeOutput('output.json', eval_, null);
+
+    const written = vi.mocked(fsPromises.writeFile).mock.calls[0][1] as string;
+    const table = JSON.parse(written).results.table;
+    expect(table.body[0].outputs[0].response.metadata.http.headers['set-cookie']).toBe(
+      '[REDACTED]',
+    );
+  });
 
   it.each([
     {
@@ -476,39 +1818,70 @@ describe('writeOutput', () => {
     }
   });
 
-  it('omits stripped prompt and response bodies from trace span attributes', async () => {
+  it.each([
+    { prompt: false, output: false },
+    { prompt: true, output: false },
+    { prompt: false, output: true },
+    { prompt: true, output: true },
+  ])('projects trace content independently: %j', async ({ prompt, output }) => {
     const restoreEnv = mockProcessEnv({
-      PROMPTFOO_STRIP_PROMPT_TEXT: 'true',
-      PROMPTFOO_STRIP_RESPONSE_OUTPUT: 'true',
+      PROMPTFOO_STRIP_PROMPT_TEXT: String(prompt),
+      PROMPTFOO_STRIP_RESPONSE_OUTPUT: String(output),
+      PROMPTFOO_STRIP_TEST_VARS: 'false',
+      PROMPTFOO_STRIP_METADATA: 'false',
     });
-    const traceSpy = vi.spyOn(getTraceStore(), 'getTracesByEvaluation').mockResolvedValue([
-      {
-        traceId: 'trace-strip-bodies',
-        evaluationId: 'eval-strip-bodies',
-        testCaseId: 'case-strip-bodies',
-        spans: [
-          {
-            spanId: 'span-strip-bodies',
-            name: 'provider',
-            startTime: 1,
-            attributes: {
-              'promptfoo.request.body': 'trace-prompt-secret',
-              'promptfoo.response.body': 'trace-response-secret',
-              operation: 'provider-call',
-            },
-          },
-        ],
-      },
-    ]);
-
+    const attributes = {
+      'promptfoo.request.body': 'trace-prompt-secret',
+      'promptfoo.prompt.label': 'trace-label-canary',
+      'promptfoo.response.body': 'trace-response-secret',
+      'codex.reasoning.summary': 'trace-reasoning-secret',
+      'codex.reasoning.summary.count': 2,
+      operation: 'provider-call',
+    };
+    const trace = {
+      traceId: 'trace-strip-bodies',
+      evaluationId: 'eval-strip-bodies',
+      testCaseId: 'case-strip-bodies',
+      spans: [
+        {
+          spanId: 'span-strip-bodies',
+          name: 'provider',
+          startTime: 1,
+          endTime: 3,
+          attributes,
+        },
+      ],
+    };
+    const before = structuredClone(trace);
+    const traceSpy = vi.spyOn(getTraceStore(), 'getTracesByEvaluation').mockResolvedValue([trace]);
     try {
       await writeOutput('output.json', new Eval({}), null);
-
       const written = vi.mocked(fsPromises.writeFile).mock.calls[0][1] as string;
       const parsed = JSON.parse(written);
-      expect(parsed.traces[0].spans[0].attributes).toEqual({ operation: 'provider-call' });
-      expect(written).not.toContain('trace-prompt-secret');
-      expect(written).not.toContain('trace-response-secret');
+      expect(parsed.traces[0]).toMatchObject({
+        traceId: trace.traceId,
+        evaluationId: trace.evaluationId,
+        testCaseId: trace.testCaseId,
+        spans: [{ spanId: 'span-strip-bodies', name: 'provider', startTime: 1, endTime: 3 }],
+      });
+      expect(parsed.traces[0].spans[0].attributes).toEqual({
+        ...(!prompt && {
+          'promptfoo.request.body': 'trace-prompt-secret',
+          'promptfoo.prompt.label': 'trace-label-canary',
+        }),
+        ...(!output && {
+          'promptfoo.response.body': 'trace-response-secret',
+          'codex.reasoning.summary': 'trace-reasoning-secret',
+        }),
+        'codex.reasoning.summary.count': 2,
+        operation: 'provider-call',
+      });
+      expect(written.includes('trace-prompt-secret')).toBe(!prompt);
+      expect(written.includes('trace-label-canary')).toBe(!prompt);
+      expect(written.includes('trace-response-secret')).toBe(!output);
+      expect(written.includes('trace-reasoning-secret')).toBe(!output);
+      expect(trace).toEqual(before);
+      expect(trace.spans[0].attributes).toBe(attributes);
     } finally {
       traceSpy.mockRestore();
       restoreEnv();
@@ -1627,6 +3000,47 @@ describe('writeOutput', () => {
     expect(html).toContain('No rows match the current search and status filters.');
   });
 
+  it('writeOutput with HTML projects legacy table data and tolerates nullish cells', async () => {
+    const realFs = await vi.importActual<typeof import('fs')>('fs');
+    const templatePath = path.resolve(__dirname, '../../src/tableOutput.html');
+    const templateContent = realFs.readFileSync(templatePath, 'utf-8');
+    vi.mocked(fsPromises.readFile).mockResolvedValue(templateContent);
+    const restoreEnv = mockProcessEnv({
+      PROMPTFOO_STRIP_PROMPT_TEXT: 'true',
+      PROMPTFOO_STRIP_RESPONSE_OUTPUT: 'true',
+      PROMPTFOO_STRIP_TEST_VARS: 'true',
+    });
+
+    try {
+      const eval_ = new Eval({ description: 'Legacy HTML projection' });
+      const v2Summary = createLegacyV2Summary();
+      const output = v2Summary.table.body[0].outputs[0];
+      v2Summary.table.body[0].outputs = [null, output] as any[];
+      vi.spyOn(eval_, 'getTable').mockResolvedValue(
+        v2Summary.table as unknown as Awaited<ReturnType<typeof eval_.getTable>>,
+      );
+      const unusedSummary = vi
+        .spyOn(eval_, 'toEvaluateSummary')
+        .mockRejectedValue(
+          new Error('HTML must render its table without loading a second summary'),
+        );
+
+      await writeOutput('output.html', eval_, null);
+
+      expect(unusedSummary).not.toHaveBeenCalled();
+      const html = vi.mocked(fsPromises.writeFile).mock.calls[0][1] as string;
+      expect(html).toContain('[prompt stripped]');
+      expect(html).toContain('[output stripped]');
+      expect(html).toContain('Result detail - row 1, prompt 2');
+      expect(html).not.toContain('rendered-prompt-secret');
+      expect(html).not.toContain('response-text-secret');
+      expect(html).not.toContain('row-api-key-secret');
+      expect(html).not.toContain('keep-row');
+    } finally {
+      restoreEnv();
+    }
+  });
+
   it('writeOutput with HTML classifies non-error failures as failures', async () => {
     const realFs = await vi.importActual<typeof import('fs')>('fs');
     const templatePath = path.resolve(__dirname, '../../src/tableOutput.html');
@@ -1701,6 +3115,174 @@ describe('writeOutput', () => {
     expect(html).toContain('data-variable-name="input"');
     expect(html).not.toContain('<span class="detail-variable-name">');
     expect(html).toContain('appendVariableDetails(trigger);');
+  });
+
+  describe('Sheets result column preservation', () => {
+    function createSheetsEval(
+      prompts = [
+        { label: 'Alpha prompt canary', provider: 'echo' },
+        { label: 'Beta prompt canary', provider: 'echo' },
+      ],
+      vars = ['input'],
+    ) {
+      const table = createEvaluateTable({
+        head: {
+          prompts: prompts.map((prompt, index) =>
+            createCompletedPrompt(`raw prompt canary ${index}`, prompt),
+          ),
+          vars,
+        },
+        body: [0, 1].map((testIdx) =>
+          createEvaluateTableRow({
+            testIdx,
+            vars: vars.map((_, index) => `variable-${testIdx}-${index}`),
+            outputs: prompts.map((prompt, promptIdx) => {
+              const pass = promptIdx === 0;
+              const score = pass ? 0.75 : 0.25;
+              return createEvaluateTableOutput({
+                id: `cell-${testIdx}-${promptIdx}`,
+                provider: prompt.provider,
+                prompt: `raw prompt canary ${promptIdx}`,
+                pass,
+                failureReason: pass ? ResultFailureReason.NONE : ResultFailureReason.ASSERT,
+                score,
+                namedScores: { quality: score },
+                text: `output-${testIdx}-${promptIdx}`,
+                gradingResult: createGradingResult({
+                  pass,
+                  score,
+                  reason: `grade-${testIdx}-${promptIdx}`,
+                }),
+              });
+            }),
+          }),
+        ),
+      });
+      const eval_ = new Eval({});
+      eval_.oldResults = createEvaluateSummaryV2({ table });
+      return eval_;
+    }
+
+    it.each(['none', 'prompt', 'output', 'vars', 'grading', 'metadata', 'all'])(
+      'keeps both same-provider cells with independent %s stripping',
+      async (flag) => {
+        const strips = (category: string) => flag === 'all' || flag === category;
+        const eval_ = createSheetsEval();
+        const input = eval_.oldResults!;
+        const before = structuredClone(input);
+        const promptRefs = [...input.table.head.prompts];
+        const outputRefs = input.table.body.map((row) => [...row.outputs]);
+        const restore = mockProcessEnv({
+          PROMPTFOO_STRIP_PROMPT_TEXT: String(strips('prompt')),
+          PROMPTFOO_STRIP_RESPONSE_OUTPUT: String(strips('output')),
+          PROMPTFOO_STRIP_TEST_VARS: String(strips('vars')),
+          PROMPTFOO_STRIP_GRADING_RESULT: String(strips('grading')),
+          PROMPTFOO_STRIP_METADATA: String(strips('metadata')),
+        });
+        try {
+          await writeOutput('https://docs.google.com/spreadsheets/d/fixture', eval_, null);
+          const rows = vi.mocked(googleSheets.writeCsvToGoogleSheet).mock.calls[0][0];
+          const keys = Object.keys(rows[0]);
+          expect(rows).toHaveLength(2);
+          expect(keys).toEqual([
+            'input',
+            strips('prompt') ? '[echo] [prompt stripped]' : '[echo] Alpha prompt canary',
+            strips('prompt') ? '[echo] [prompt stripped] (2)' : '[echo] Beta prompt canary',
+          ]);
+          rows.forEach((row, testIdx) => {
+            expect(Object.keys(row)).toEqual(keys);
+            expect(row.input).toBe(strips('vars') ? '' : `variable-${testIdx}-0`);
+            for (let promptIdx = 0; promptIdx < 2; promptIdx++) {
+              const cell = String(row[keys[promptIdx + 1]]);
+              expect(cell).toContain(
+                promptIdx === 0 ? '[PASS] (0.75, quality: 0.75)' : '[FAIL] (0.25, quality: 0.25)',
+              );
+              expect(cell).toContain(
+                strips('output') ? '[output stripped]' : `output-${testIdx}-${promptIdx}`,
+              );
+              expect(cell.includes(`grade-${testIdx}-${promptIdx}`)).toBe(!strips('grading'));
+            }
+          });
+          if (strips('prompt')) {
+            expect(JSON.stringify(rows)).not.toContain('prompt canary');
+          }
+          expect(eval_.oldResults).toBe(input);
+          expect(input).toEqual(before);
+          input.table.head.prompts.forEach((prompt, index) =>
+            expect(prompt).toBe(promptRefs[index]),
+          );
+          input.table.body.forEach((row, rowIdx) =>
+            row.outputs.forEach((output, colIdx) =>
+              expect(output).toBe(outputRefs[rowIdx][colIdx]),
+            ),
+          );
+        } finally {
+          restore();
+        }
+      },
+    );
+
+    it.each([
+      { name: 'a single prompt', prompts: [{ label: 'Alpha', provider: 'echo' }] },
+      {
+        name: 'different providers',
+        prompts: [
+          { label: 'Alpha', provider: 'echo' },
+          { label: 'Beta', provider: 'other' },
+        ],
+      },
+    ])('preserves available projected headings for $name', async ({ prompts }) => {
+      const eval_ = createSheetsEval(prompts);
+      const restore = mockProcessEnv({
+        PROMPTFOO_STRIP_PROMPT_TEXT: 'true',
+        PROMPTFOO_STRIP_RESPONSE_OUTPUT: 'false',
+        PROMPTFOO_STRIP_TEST_VARS: 'false',
+        PROMPTFOO_STRIP_GRADING_RESULT: 'false',
+        PROMPTFOO_STRIP_METADATA: 'false',
+      });
+      try {
+        await writeOutput('https://docs.google.com/spreadsheets/d/fixture', eval_, null);
+        const rows = vi.mocked(googleSheets.writeCsvToGoogleSheet).mock.calls[0][0];
+        expect(Object.keys(rows[0])).toEqual([
+          'input',
+          ...prompts.map((prompt) => `[${prompt.provider}] [prompt stripped]`),
+        ]);
+      } finally {
+        restore();
+      }
+    });
+
+    it('keeps variable and result cells when projected names and suffixes collide', async () => {
+      const vars = [
+        '[echo] [prompt stripped]',
+        '[echo] [prompt stripped] (1)',
+        '[echo] [prompt stripped] (2)',
+      ];
+      const eval_ = createSheetsEval(undefined, vars);
+      const before = structuredClone(eval_.oldResults);
+      const restore = mockProcessEnv({
+        PROMPTFOO_STRIP_PROMPT_TEXT: 'true',
+        PROMPTFOO_STRIP_RESPONSE_OUTPUT: 'false',
+        PROMPTFOO_STRIP_TEST_VARS: 'false',
+        PROMPTFOO_STRIP_GRADING_RESULT: 'false',
+        PROMPTFOO_STRIP_METADATA: 'false',
+      });
+      try {
+        await writeOutput('https://docs.google.com/spreadsheets/d/fixture', eval_, null);
+        const rows = vi.mocked(googleSheets.writeCsvToGoogleSheet).mock.calls[0][0];
+        const keys = [...vars, '[echo] [prompt stripped] (3)', '[echo] [prompt stripped] (4)'];
+        expect(Object.keys(rows[0])).toEqual(keys);
+        rows.forEach((row, testIdx) => {
+          expect(Object.keys(row)).toEqual(keys);
+          vars.forEach((name, index) => expect(row[name]).toBe(`variable-${testIdx}-${index}`));
+          expect(row[keys[3]]).toContain(`output-${testIdx}-0`);
+          expect(row[keys[4]]).toContain(`output-${testIdx}-1`);
+        });
+        expect(eval_.oldResults).toEqual(before);
+      } finally {
+        restore();
+      }
+    });
   });
 
   it('writes output to Google Sheets', async () => {

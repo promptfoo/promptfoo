@@ -12,7 +12,6 @@ import {
   promptsTable,
   tagsTable,
 } from '../database/tables';
-import { getEnvBool } from '../envars';
 import { getAuthor } from '../globalConfig/accounts';
 import logger from '../logger';
 import { hashPrompt } from '../prompts/utils';
@@ -41,6 +40,7 @@ import { randomSequence, sha256 } from '../util/createHash';
 import { convertTestResultsToTableRow } from '../util/exportToFile/index';
 import { isNonTransientHttpStatus, NON_TRANSIENT_HTTP_STATUSES } from '../util/fetch/errors';
 import invariant from '../util/invariant';
+import { sanitizeConfigForOutput } from '../util/outputConfig';
 import { sanitizeRuntimeOptions, sanitizeTracingConfigForPersistence } from '../util/sanitizer';
 import { getCurrentTimestamp } from '../util/time';
 import {
@@ -60,8 +60,13 @@ import {
 } from './evalPerformance';
 import EvalResult, {
   getResultIndexKey,
+  getStripFlags,
   PROMPTFOO_METADATA_KEY,
   persistTraceMetadata,
+  projectTracesForOutput,
+  sanitizePromptForArtifact,
+  sanitizeResultForJsonlArtifact,
+  sanitizeTableForArtifact,
   stripTraceLinkageFromMetadata,
 } from './evalResult';
 
@@ -741,11 +746,11 @@ export default class Eval {
     return this.prompts;
   }
 
-  async getTable(): Promise<EvaluateTable> {
+  async getTable(stripFlags = getStripFlags(this.config.env)): Promise<EvaluateTable> {
     if (this.useOldResults()) {
       return this.oldResults?.table || { head: { prompts: [], vars: [] }, body: [] };
     }
-    return convertResultsToTable(await this.toResultsFile());
+    return convertResultsToTable(await this.toResultsFile(stripFlags));
   }
 
   async addResult(result: EvaluateResult) {
@@ -1428,14 +1433,20 @@ export default class Eval {
     return stats;
   }
 
-  async toEvaluateSummary(): Promise<EvaluateSummaryV3 | EvaluateSummaryV2> {
+  async toEvaluateSummary(
+    stripFlags = getStripFlags(this.config.env),
+  ): Promise<EvaluateSummaryV3 | EvaluateSummaryV2> {
     if (this.useOldResults()) {
       invariant(this.oldResults, 'Old results not found');
       return {
         version: 2,
         timestamp: new Date(this.createdAt).toISOString(),
-        results: this.oldResults.results,
-        table: this.oldResults.table,
+        results: Array.isArray(this.oldResults.results)
+          ? this.oldResults.results.map((result) =>
+              sanitizeResultForJsonlArtifact(result, stripFlags),
+            )
+          : this.oldResults.results,
+        table: sanitizeTableForArtifact(this.oldResults.table, stripFlags),
         stats: this.oldResults.stats,
       };
     }
@@ -1444,20 +1455,15 @@ export default class Eval {
     }
 
     const stats = await this.getStats();
-    const shouldStripPromptText = getEnvBool('PROMPTFOO_STRIP_PROMPT_TEXT', false);
-
-    const prompts = shouldStripPromptText
-      ? this.prompts.map((p) => ({
-          ...p,
-          raw: '[prompt stripped]',
-        }))
-      : this.prompts;
+    const prompts = this.prompts.map((prompt) =>
+      sanitizePromptForArtifact(prompt, stripFlags.shouldStripPromptText),
+    );
 
     return {
       version: 3,
       timestamp: new Date(this.createdAt).toISOString(),
       prompts,
-      results: this.results.map((r) => r.toEvaluateResult()),
+      results: this.results.map((r) => r.toEvaluateResult(stripFlags)),
       stats,
     };
   }
@@ -1507,19 +1513,24 @@ export default class Eval {
     }
   }
 
-  async toResultsFile(): Promise<ResultsFile> {
+  async toResultsFile(stripFlags = getStripFlags(this.config.env)): Promise<ResultsFile> {
     const traces = await this.getTraces();
+    const prompts = this.getPrompts();
 
     const results: ResultsFile = {
       version: this.version(),
       createdAt: new Date(this.createdAt).toISOString(),
-      results: await this.toEvaluateSummary(),
-      config: sanitizeTracingConfigForPersistence(this.config),
+      results: await this.toEvaluateSummary(stripFlags),
+      config: sanitizeConfigForOutput(this.config, stripFlags),
       author: this.author || null,
-      prompts: this.getPrompts(),
+      prompts: Array.isArray(prompts)
+        ? prompts.map((prompt) =>
+            sanitizePromptForArtifact(prompt, stripFlags.shouldStripPromptText),
+          )
+        : prompts,
       ...(this.vars.length > 0 && { vars: [...this.vars] }),
       datasetId: this.datasetId || null,
-      ...(traces.length > 0 && { traces }),
+      ...(traces.length > 0 && { traces: projectTracesForOutput(traces, stripFlags) }),
     };
 
     return results;

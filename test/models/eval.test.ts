@@ -16,15 +16,22 @@ import { getCachedResultsCount } from '../../src/models/evalPerformance';
 import EvalResult from '../../src/models/evalResult';
 import { EvalEvaluationStore } from '../../src/node/evaluationStore';
 import { TraceStore } from '../../src/tracing/store';
-import { type EvaluateResult, type Prompt, ResultFailureReason } from '../../src/types/index';
+import {
+  type EvaluateResult,
+  type Prompt,
+  ResultFailureReason,
+  type ResultsFile,
+  type TraceData,
+} from '../../src/types/index';
 import { updateResult, writeResultsToDatabase } from '../../src/util/database';
 import {
   getCachedStandaloneEvals,
   getStandaloneEvalCacheKey,
   setCachedStandaloneEvals,
 } from '../../src/util/standaloneEvalCache';
-import { createEvaluateResult } from '../factories/eval';
+import { createCompletedPrompt, createEvaluateResult } from '../factories/eval';
 import EvalFactory from '../factories/evalFactory';
+import { mockProcessEnv } from '../util/utils';
 
 vi.mock('../../src/globalConfig/accounts', async () => {
   const actual = await vi.importActual('../../src/globalConfig/accounts');
@@ -218,6 +225,209 @@ describe('evaluator', () => {
         stats: evaluation.oldResults!.stats,
       });
       expect(findResults).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('legacy output projection', () => {
+    const flagNames = [
+      'PROMPTFOO_STRIP_PROMPT_TEXT',
+      'PROMPTFOO_STRIP_RESPONSE_OUTPUT',
+      'PROMPTFOO_STRIP_TEST_VARS',
+      'PROMPTFOO_STRIP_GRADING_RESULT',
+      'PROMPTFOO_STRIP_METADATA',
+    ];
+
+    it.each([
+      { name: 'none', enabled: [] },
+      { name: 'prompt', enabled: [0] },
+      { name: 'output', enabled: [1] },
+      { name: 'vars', enabled: [2] },
+      { name: 'grading', enabled: [3] },
+      { name: 'metadata', enabled: [4] },
+      { name: 'all', enabled: [0, 1, 2, 3, 4] },
+    ])(
+      'projects direct V2 APIs with scoped $name flags without changing stored rows',
+      async ({ enabled }) => {
+        const env = Object.fromEntries(
+          flagNames.map((name, i) => [name, String(enabled.includes(i))]),
+        );
+        const restoreEnv = mockProcessEnv(
+          Object.fromEntries(flagNames.map((name, i) => [name, String(!enabled.includes(i))])),
+        );
+        try {
+          const stored = await EvalFactory.createOldResult();
+          const evaluation = (await Eval.findById(stored.id))!;
+          evaluation.config.env = env;
+          const original = evaluation.oldResults!;
+          original.results[0].metadata = { note: 'legacy-result-metadata' };
+          original.table.body[0].outputs[0].metadata = { note: 'legacy-cell-metadata' };
+          const before = structuredClone(original);
+          const summary = await evaluation.toEvaluateSummary();
+          const file = await evaluation.toResultsFile();
+          if (!('table' in summary) || !('table' in file.results)) {
+            throw new Error('Expected legacy V2 summaries');
+          }
+
+          expect(summary.version).toBe(2);
+          expect(file.results).toEqual(summary);
+          expect(summary.stats).toEqual(before.stats);
+          expect(summary.results).toHaveLength(2);
+          expect(summary.table.body).toHaveLength(1);
+          expect(summary.table.head.vars).toEqual(before.table.head.vars);
+          for (const [index, result] of summary.results.entries()) {
+            const input = before.results[index];
+            expect(result.prompt.raw).toBe(
+              enabled.includes(0) ? '[prompt stripped]' : input.prompt.raw,
+            );
+            expect(result.prompt.label).toBe(
+              enabled.includes(0) ? '[prompt stripped]' : input.prompt.label,
+            );
+            expect(result.response?.output).toBe(
+              enabled.includes(1) ? '[output stripped]' : input.response?.output,
+            );
+            expect(result.vars).toEqual(enabled.includes(2) ? {} : input.vars);
+            expect(result.gradingResult).toEqual(enabled.includes(3) ? null : input.gradingResult);
+            expect(result).toMatchObject({
+              success: input.success,
+              score: input.score,
+              latencyMs: input.latencyMs,
+              cost: input.cost,
+              response: { tokenUsage: input.response?.tokenUsage, cost: input.response?.cost },
+            });
+            const cell = summary.table.body[0].outputs[index];
+            const inputCell = before.table.body[0].outputs[index];
+            expect(cell.prompt).toBe(enabled.includes(0) ? '[prompt stripped]' : inputCell.prompt);
+            expect(cell.text).toBe(enabled.includes(1) ? '[output stripped]' : inputCell.text);
+            expect(cell.gradingResult).toEqual(
+              enabled.includes(3) ? null : inputCell.gradingResult,
+            );
+            expect(cell).toMatchObject({
+              pass: inputCell.pass,
+              score: inputCell.score,
+              cost: inputCell.cost,
+              tokenUsage: inputCell.tokenUsage,
+            });
+            for (const projectedPrompt of [
+              summary.table.head.prompts[index],
+              file.prompts![index],
+            ]) {
+              expect(projectedPrompt).toEqual({
+                ...before.table.head.prompts[index],
+                ...(enabled.includes(0) && {
+                  raw: '[prompt stripped]',
+                  label: '[prompt stripped]',
+                }),
+              });
+            }
+          }
+          expect(summary.table.body[0].vars).toEqual(
+            enabled.includes(2) ? ['', ''] : before.table.body[0].vars,
+          );
+          expect(summary.table.body[0].test.vars).toEqual(
+            enabled.includes(2) ? undefined : before.table.body[0].test.vars,
+          );
+          if (enabled.includes(2)) {
+            expect(JSON.parse(JSON.stringify(summary.table.body[0].test))).not.toHaveProperty(
+              'vars',
+            );
+          }
+          expect(summary.results[0].metadata).toEqual(
+            enabled.includes(4) ? {} : { note: 'legacy-result-metadata' },
+          );
+          expect(summary.table.body[0].outputs[0].metadata).toEqual(
+            enabled.includes(4) ? {} : { note: 'legacy-cell-metadata' },
+          );
+          expect(await evaluation.getResults()).toBe(original.results);
+          expect(evaluation.oldResults).toBe(original);
+          expect(original).toEqual(before);
+          expect(evaluation.config.env).toEqual(env);
+          expect(file.config.prompts).toEqual(
+            enabled.includes(0)
+              ? ['[prompt stripped]', '[prompt stripped]']
+              : evaluation.config.prompts,
+          );
+          const configTest = (file.config.tests as { vars?: unknown }[])[0];
+          expect(configTest.vars).toEqual(
+            enabled.includes(2) ? undefined : { language: 'French', body: 'Hello world' },
+          );
+          expect(evaluation.config.tests).toEqual(stored.config.tests);
+          expect((await Eval.findById(stored.id))!.oldResults).toEqual(stored.results);
+        } finally {
+          restoreEnv();
+        }
+      },
+    );
+
+    it.each([false, true])('projects a direct legacy primitive prompt: %s', async (strip) => {
+      const restoreEnv = mockProcessEnv(
+        Object.fromEntries(flagNames.map((name) => [name, 'false'])),
+      );
+      try {
+        const stored = await EvalFactory.createOldResult();
+        const evaluation = (await Eval.findById(stored.id))!;
+        evaluation.config.env = { PROMPTFOO_STRIP_PROMPT_TEXT: String(strip) };
+        evaluation.oldResults!.results[0].prompt = 'legacy primitive prompt' as unknown as Prompt;
+        const summary = await evaluation.toEvaluateSummary();
+        const file = await evaluation.toResultsFile();
+        expect(summary.results[0].prompt).toBe(
+          strip ? '[prompt stripped]' : 'legacy primitive prompt',
+        );
+        expect(file.results.results[0].prompt).toBe(summary.results[0].prompt);
+        expect(evaluation.oldResults!.results[0].prompt).toBe('legacy primitive prompt');
+      } finally {
+        restoreEnv();
+      }
+    });
+
+    it.each([
+      { results: undefined },
+      { results: null },
+      { results: 'legacy results' },
+      { results: [null, 'old row', 17, ['nested row']] },
+    ])('preserves malformed legacy result shapes during projection: %j', async ({ results }) => {
+      const stored = await EvalFactory.createOldResult();
+      const evaluation = (await Eval.findById(stored.id))!;
+      evaluation.config.env = Object.fromEntries(flagNames.map((name) => [name, 'true']));
+      evaluation.oldResults!.results = results as unknown as EvaluateResult[];
+      expect((await evaluation.toEvaluateSummary()).results).toEqual(results);
+      expect((await evaluation.toResultsFile()).results.results).toEqual(results);
+      expect(evaluation.oldResults!.results).toBe(results);
+    });
+
+    it.each([false, true])('preserves a non-array legacy prompt container: %s', async (strip) => {
+      const stored = await EvalFactory.createOldResult();
+      const evaluation = (await Eval.findById(stored.id))!;
+      evaluation.config.env = Object.fromEntries(flagNames.map((name) => [name, String(strip)]));
+      evaluation.oldResults!.table.head.prompts = 'legacy prompts' as unknown as NonNullable<
+        Eval['oldResults']
+      >['table']['head']['prompts'];
+      const file = await evaluation.toResultsFile();
+      expect(file.prompts).toBe('legacy prompts');
+      if (!('table' in file.results)) {
+        throw new Error('Expected a legacy table');
+      }
+      expect(file.results.table.head.prompts).toBe('legacy prompts');
+      expect(evaluation.getPrompts()).toBe('legacy prompts');
+    });
+
+    it('falls back to ambient flags only for omitted scoped keys', async () => {
+      const restoreEnv = mockProcessEnv({
+        PROMPTFOO_STRIP_PROMPT_TEXT: 'true',
+        PROMPTFOO_STRIP_RESPONSE_OUTPUT: 'true',
+        PROMPTFOO_STRIP_TEST_VARS: 'false',
+        PROMPTFOO_STRIP_GRADING_RESULT: 'false',
+        PROMPTFOO_STRIP_METADATA: 'false',
+      });
+      try {
+        const stored = await EvalFactory.createOldResult();
+        const evaluation = (await Eval.findById(stored.id))!;
+        evaluation.config.env = { PROMPTFOO_STRIP_PROMPT_TEXT: 'false' };
+        const summary = await evaluation.toEvaluateSummary();
+        expect(summary.results[0].prompt).toEqual(evaluation.oldResults!.results[0].prompt);
+        expect(summary.results[0].response?.output).toBe('[output stripped]');
+      } finally {
+        restoreEnv();
+      }
     });
   });
 
@@ -1519,6 +1729,164 @@ describe('evaluator', () => {
   });
 
   describe('toResultsFile', () => {
+    it.each([
+      { prompt: false, output: false },
+      { prompt: true, output: false },
+      { prompt: false, output: true },
+      { prompt: true, output: true },
+    ])('projects persisted trace content with scoped flags: %j', async ({ prompt, output }) => {
+      const restoreEnv = mockProcessEnv({
+        PROMPTFOO_STRIP_PROMPT_TEXT: String(!prompt),
+        PROMPTFOO_STRIP_RESPONSE_OUTPUT: String(!output),
+        PROMPTFOO_STRIP_TEST_VARS: 'false',
+        PROMPTFOO_STRIP_METADATA: 'false',
+      });
+      try {
+        const completedPrompt = createCompletedPrompt('scoped-prompt', { label: 'scoped-label' });
+        const evaluation = await Eval.create(
+          {
+            env: {
+              PROMPTFOO_STRIP_PROMPT_TEXT: String(prompt),
+              PROMPTFOO_STRIP_RESPONSE_OUTPUT: String(output),
+            },
+            prompts: ['scoped-prompt'],
+            tests: [{ vars: { subject: 'scoped-var' } }],
+            defaultTest: { options: { prefix: 'scoped-prefix', suffix: 'scoped-suffix' } },
+          },
+          [completedPrompt],
+        );
+        await evaluation.addPrompts([completedPrompt]);
+        await evaluation.addResult(
+          createEvaluateResult({
+            prompt: completedPrompt,
+            promptId: completedPrompt.id,
+            testCase: { vars: { subject: 'scoped-var' } },
+            response: {
+              output: 'scoped-output',
+              tokenUsage: { total: 5, prompt: 2, completion: 3 },
+            },
+            score: 0.75,
+            latencyMs: 13,
+            cost: 0.02,
+          }),
+        );
+        await evaluation.loadResults();
+        const sourceConfig = structuredClone(evaluation.config);
+        const sourceRows = structuredClone(evaluation.results);
+        const sourceStats = evaluation.getStats();
+        const store = new TraceStore();
+        await store.createTrace({
+          traceId: 'scoped-export-trace',
+          evaluationId: evaluation.id,
+          testCaseId: 'scoped-export-case',
+          metadata: { note: 'trace-note' },
+        });
+        const attributes = {
+          'promptfoo.request.body': 'scoped-prompt',
+          'promptfoo.prompt.label': 'scoped-label',
+          'promptfoo.response.body': 'scoped-output',
+          'codex.reasoning.summary': 'scoped-reasoning',
+          'codex.reasoning.summary.count': 3,
+          operation: 'provider-call',
+        };
+        await store.addSpans('scoped-export-trace', [
+          {
+            spanId: 'scoped-export-span',
+            name: 'provider',
+            startTime: 10,
+            endTime: 20,
+            attributes,
+          },
+        ]);
+        const before = await evaluation.getTraces();
+        const result = await evaluation.toResultsFile();
+        expect(result).toHaveProperty('traces');
+        const trace = (result as ResultsFile & { traces: TraceData[] }).traces[0];
+        expect(result.results.version).toBe(3);
+        expect(result.results.results).toHaveLength(1);
+        const exportedRow = result.results.results[0];
+        expect(exportedRow.prompt.raw).toBe(prompt ? '[prompt stripped]' : 'scoped-prompt');
+        expect(exportedRow.prompt.label).toBe(prompt ? '[prompt stripped]' : 'scoped-label');
+        expect(exportedRow.response?.output).toBe(output ? '[output stripped]' : 'scoped-output');
+        expect(exportedRow.response?.tokenUsage).toEqual({ total: 5, prompt: 2, completion: 3 });
+        expect(exportedRow).toMatchObject({ score: 0.75, latencyMs: 13, cost: 0.02 });
+        if (!('prompts' in result.results)) {
+          throw new Error('Expected V3 summary prompts');
+        }
+        expect(result.results.prompts).toEqual(result.prompts);
+        expect(result.prompts![0].label).toBe(prompt ? '[prompt stripped]' : 'scoped-label');
+        expect(result.config.prompts).toEqual([prompt ? '[prompt stripped]' : 'scoped-prompt']);
+        const defaultTest = result.config.defaultTest;
+        if (!defaultTest || typeof defaultTest === 'string') {
+          throw new Error('Expected exported default test object');
+        }
+        expect(defaultTest.options?.prefix).toBe(prompt ? undefined : 'scoped-prefix');
+        expect(defaultTest.options?.suffix).toBe(prompt ? undefined : 'scoped-suffix');
+        expect(result.config.tests).toEqual([{ vars: { subject: 'scoped-var' } }]);
+        expect(result.results.stats).toEqual(sourceStats);
+        expect(evaluation.config).toEqual(sourceConfig);
+        expect(evaluation.results).toEqual(sourceRows);
+        expect(trace).toMatchObject({
+          traceId: 'scoped-export-trace',
+          evaluationId: evaluation.id,
+          testCaseId: 'scoped-export-case',
+          metadata: { note: 'trace-note' },
+          spans: [{ spanId: 'scoped-export-span', name: 'provider', startTime: 10, endTime: 20 }],
+        });
+        expect(trace.spans[0].attributes).toEqual({
+          ...(!prompt && {
+            'promptfoo.request.body': 'scoped-prompt',
+            'promptfoo.prompt.label': 'scoped-label',
+          }),
+          ...(!output && {
+            'promptfoo.response.body': 'scoped-output',
+            'codex.reasoning.summary': 'scoped-reasoning',
+          }),
+          'codex.reasoning.summary.count': 3,
+          operation: 'provider-call',
+        });
+        expect(await evaluation.getTraces()).toEqual(before);
+        expect(before[0].spans[0].attributes).toEqual(attributes);
+      } finally {
+        restoreEnv();
+      }
+    });
+
+    it('keeps one ambient snapshot when an async read changes the environment', async () => {
+      const restoreEnv = mockProcessEnv({
+        PROMPTFOO_STRIP_PROMPT_TEXT: 'true',
+        PROMPTFOO_STRIP_RESPONSE_OUTPUT: 'true',
+        PROMPTFOO_STRIP_TEST_VARS: 'false',
+        PROMPTFOO_STRIP_GRADING_RESULT: 'false',
+        PROMPTFOO_STRIP_METADATA: 'false',
+      });
+      const prompt = createCompletedPrompt('snapshot-prompt');
+      const evaluation = new Eval({ prompts: ['snapshot-prompt'] }, { prompts: [prompt] });
+      let restoreChangedEnv: (() => void) | undefined;
+      const traceRead = vi.spyOn(evaluation, 'getTraces').mockImplementationOnce(async () => {
+        restoreChangedEnv = mockProcessEnv({
+          PROMPTFOO_STRIP_PROMPT_TEXT: 'false',
+          PROMPTFOO_STRIP_RESPONSE_OUTPUT: 'false',
+        });
+        return [];
+      });
+      try {
+        await evaluation.addResult(
+          createEvaluateResult({ prompt, response: { output: 'snapshot-output' } }),
+        );
+        const file = await evaluation.toResultsFile();
+        expect(file.prompts![0].raw).toBe('[prompt stripped]');
+        expect(file.results.results[0].prompt.raw).toBe('[prompt stripped]');
+        expect(file.results.results[0].response?.output).toBe('[output stripped]');
+        expect(file.config.prompts).toEqual(['[prompt stripped]']);
+        expect(evaluation.results[0].response?.output).toBe('snapshot-output');
+      } finally {
+        traceRead.mockRestore();
+        restoreChangedEnv?.();
+        restoreEnv();
+      }
+    });
+
     it('drops malformed trace-provider headers when exporting older evaluations', async () => {
       const evaluation = new Eval({
         tracing: {
