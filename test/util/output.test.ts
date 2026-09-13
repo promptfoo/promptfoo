@@ -666,6 +666,13 @@ describe('writeOutput', () => {
             reason: 'Expected output to contain Bob',
             assertion: { type: 'contains', value: 'Bob' },
           },
+          {
+            pass: false,
+            score: 0,
+            reason: 'Recovered fallback',
+            assertion: { type: 'equals', value: 'Goodbye' },
+            metadata: { fallbackIntermediate: true },
+          },
         ],
       },
       promptId: 'prompt-1',

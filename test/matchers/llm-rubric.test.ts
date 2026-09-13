@@ -244,6 +244,9 @@ describe('matchesLlmRubric', () => {
           metadata: {
             uploadId: 'upload-123',
             trace: { id: 'trace-456' },
+            assertionError: true,
+            graderError: true,
+            fallbackIntermediate: true,
           },
           tokenUsage: { total: 10, prompt: 5, completion: 5 },
         },

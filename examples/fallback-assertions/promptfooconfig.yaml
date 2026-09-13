@@ -1,0 +1,57 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: 'Fallback assertion example - fast check with LLM fallback'
+
+prompts:
+  - 'Answer the following question concisely: {{question}}'
+
+providers:
+  - openai:chat:gpt-5.4-mini
+
+tests:
+  - vars:
+      question: 'What is the capital of France?'
+    assert:
+      - type: javascript
+        value: |
+          const validAnswers = ['Paris', 'paris'];
+          return validAnswers.includes(output.trim());
+        fallback: next
+
+      - type: llm-rubric
+        provider: openai:chat:gpt-5.4-mini
+        value: 'The response correctly identifies Paris as the capital of France'
+
+  - vars:
+      question: 'Explain photosynthesis'
+    assert:
+      - type: contains
+        value: 'sunlight'
+        fallback: next
+
+      - type: regex
+        value: '(sun|light|photo)'
+        fallback: next
+
+      - type: llm-rubric
+        provider: openai:chat:gpt-5.4-mini
+        value: |
+          The response demonstrates understanding of photosynthesis,
+          mentioning key concepts like light energy, plants, and glucose production.
+
+  - vars:
+      question: 'What is 2+2?'
+    assert:
+      - type: contains
+        value: '4'
+
+      - type: javascript
+        value: |
+          /\b4\b/.test(output)
+        fallback: next
+
+      - type: llm-rubric
+        provider: openai:chat:gpt-5.4-mini
+        value: 'The response correctly states that 2+2=4'
+
+      - type: not-contains
+        value: '5'

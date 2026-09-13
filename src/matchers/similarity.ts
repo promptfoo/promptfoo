@@ -13,6 +13,7 @@ import {
   dotProduct,
   euclideanDistance,
   fail,
+  graderFail,
   normalizeMatcherTokenUsage,
 } from './shared';
 
@@ -42,7 +43,10 @@ function calculateSimilarityScore(
       // apply distance semantics when building the final grading result.
       return euclideanDistance(expectedEmbedding, outputEmbedding);
     default:
-      return fail(`Unsupported metric: ${metric}`, tokensUsed);
+      return {
+        ...fail(`Unsupported metric: ${metric}`, tokensUsed),
+        metadata: { assertionError: true },
+      };
   }
 }
 
@@ -114,13 +118,13 @@ async function calculateProviderSimilarity(
     );
     accumulateTokenUsage(tokensUsed, similarityResp.tokenUsage);
     if (similarityResp.error) {
-      return fail(similarityResp.error, tokensUsed);
+      return graderFail(similarityResp.error, tokensUsed);
     }
     if (similarityResp.similarity == null) {
-      return fail('Unknown error fetching similarity', tokensUsed);
+      return graderFail('Unknown error fetching similarity', tokensUsed);
     }
     if (!Number.isFinite(similarityResp.similarity)) {
-      return fail(`Invalid similarity score: ${similarityResp.similarity}`, tokensUsed);
+      return graderFail(`Invalid similarity score: ${similarityResp.similarity}`, tokensUsed);
     }
     return similarityResp.similarity;
   }
@@ -129,7 +133,7 @@ async function calculateProviderSimilarity(
     'callEmbeddingApi' in finalProvider ? finalProvider.callEmbeddingApi : undefined;
   if (typeof callEmbeddingApi !== 'function') {
     if ('callSimilarityApi' in finalProvider) {
-      return fail(
+      return graderFail(
         `Provider ${finalProvider.id()} only supports cosine similarity via callSimilarityApi`,
         tokensUsed,
       );
@@ -158,14 +162,14 @@ async function calculateProviderSimilarity(
   accumulateTokenUsage(tokensUsed, mergedUsage);
 
   if (expectedEmbedding.error || outputEmbedding.error) {
-    return fail(
+    return graderFail(
       expectedEmbedding.error || outputEmbedding.error || 'Unknown error fetching embeddings',
       tokensUsed,
     );
   }
 
   if (!expectedEmbedding.embedding || !outputEmbedding.embedding) {
-    return fail('Embedding not found', tokensUsed);
+    return graderFail('Embedding not found', tokensUsed);
   }
 
   return calculateSimilarityScore(
@@ -199,7 +203,7 @@ export async function matchesSimilarity(
         ...getRemoteGradingContext(),
       });
     } catch (error) {
-      return fail(`Could not perform remote grading: ${error}`);
+      return graderFail(`Could not perform remote grading: ${error}`);
     }
   }
 

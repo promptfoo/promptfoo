@@ -570,6 +570,7 @@ async function aggregateAssertions(
               SELECT COUNT(*)
               FROM json_each(json_extract(grading_result, '$.componentResults'))
               WHERE CAST(json_extract(json_each.value, '$.pass') AS INTEGER) = 1
+                AND json_extract(json_each.value, '$.metadata.fallbackIntermediate') IS NOT 1
             )
           ELSE 0
         END
@@ -581,6 +582,7 @@ async function aggregateAssertions(
               SELECT COUNT(*)
               FROM json_each(json_extract(grading_result, '$.componentResults'))
               WHERE CAST(json_extract(json_each.value, '$.pass') AS INTEGER) = 0
+                AND json_extract(json_each.value, '$.metadata.fallbackIntermediate') IS NOT 1
             )
           ELSE 0
         END

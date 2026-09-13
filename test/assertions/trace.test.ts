@@ -197,6 +197,7 @@ describe('trace assertions', () => {
       expect(result.pass).toBe(true);
       expect(mockTraceStore.getTrace).toHaveBeenCalledWith('test-trace-id', {
         sanitizeAttributes: false,
+        includeInternalSpans: false,
       });
     });
 
@@ -518,6 +519,7 @@ return {
       expect(result.pass).toBe(true);
       expect(mockTraceStore.getTrace).toHaveBeenCalledWith('test-trace-id', {
         sanitizeAttributes: false,
+        includeInternalSpans: false,
       });
     });
   });

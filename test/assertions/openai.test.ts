@@ -248,6 +248,7 @@ describe('OpenAI assertions', () => {
         score: 0,
         reason: 'Provider does not have functionality for checking function call.',
         assertion: functionAssertion,
+        metadata: { assertionError: true },
       });
     });
 

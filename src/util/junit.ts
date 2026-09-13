@@ -94,7 +94,11 @@ function getTestCaseName(result: JunitProjectedResult): string {
 function getFailedComponentResults(
   gradingResult: GradingResult | null | undefined,
 ): GradingResult[] {
-  return gradingResult?.componentResults?.filter((component) => !component.pass) ?? [];
+  return (
+    gradingResult?.componentResults?.filter(
+      (component) => !component.pass && !component.metadata?.fallbackIntermediate,
+    ) ?? []
+  );
 }
 
 function getAssertionLabel(gradingResult: GradingResult): string {

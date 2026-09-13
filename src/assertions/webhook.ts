@@ -36,6 +36,15 @@ export async function handleWebhook({
     }
 
     const jsonResponse = await response.json();
+    if (typeof jsonResponse?.pass !== 'boolean') {
+      throw new Error('Webhook response is missing a boolean pass verdict');
+    }
+    if (
+      jsonResponse.score !== undefined &&
+      (typeof jsonResponse.score !== 'number' || !Number.isFinite(jsonResponse.score))
+    ) {
+      throw new Error('Webhook response score must be a finite number');
+    }
     const pass = jsonResponse.pass !== inverse;
     const score =
       typeof jsonResponse.score === 'undefined'
@@ -62,6 +71,7 @@ export async function handleWebhook({
       score: 0,
       reason: `Webhook error: ${(err as Error).message}`,
       assertion,
+      metadata: { assertionError: true },
     };
   }
 }
