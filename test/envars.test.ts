@@ -153,10 +153,9 @@ describe('envars', () => {
     it('should auto-register the provider when cliState is imported', async () => {
       vi.resetModules();
 
-      const [dynEnvOverrides, dynCliState] = await Promise.all([
-        import('../src/envOverrides'),
-        import('../src/cliState'),
-      ]);
+      // Resolve pending mock cleanup before importing cliState again.
+      const dynEnvOverrides = await import('../src/envOverrides');
+      const dynCliState = await import('../src/cliState');
 
       dynCliState.default.config = { env: { OPENAI_API_KEY: 'wired-key' } };
 

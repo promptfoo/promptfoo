@@ -3,35 +3,20 @@ import fs from 'fs/promises';
 import * as os from 'os';
 import path from 'path';
 
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { generateSignature } from '../../src/providers/http';
 
-// Hoisted mock for fs.promises.stat
-const mockStat = vi.hoisted(() => vi.fn());
+const { readPkcs12 } = vi.hoisted(() => ({ readPkcs12: vi.fn() }));
 
-vi.mock('fs', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('fs')>();
-  return {
-    ...actual,
-    default: {
-      ...actual,
-      promises: {
-        ...actual.promises,
-        stat: mockStat,
-      },
-    },
-    promises: {
-      ...actual.promises,
-      stat: mockStat,
-    },
-  };
-});
+vi.mock('pem', () => ({ default: { readPkcs12 } }));
 
 describe('PFX signature paths (generateSignature)', () => {
   beforeEach(() => {
-    vi.resetModules();
-    vi.clearAllMocks();
-    mockStat.mockReset();
+    readPkcs12.mockReset();
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
   });
 
   it('throws when PFX password is missing', async () => {
@@ -49,14 +34,7 @@ describe('PFX signature paths (generateSignature)', () => {
   });
 
   it('throws when PFX file path does not exist', async () => {
-    mockStat.mockRejectedValue(new Error('ENOENT'));
-
-    vi.doMock('pem', () => ({
-      __esModule: true,
-      default: {
-        readPkcs12: (_path: string, _opts: any, cb: any) => cb(new Error('ENOENT'), null),
-      },
-    }));
+    readPkcs12.mockImplementation((_path, _opts, cb) => cb(new Error('ENOENT'), null));
 
     const signatureAuth = {
       type: 'pfx' as const,
@@ -97,12 +75,7 @@ describe('PFX signature paths (generateSignature)', () => {
   });
 
   it('throws when PFX content has wrong password', async () => {
-    vi.doMock('pem', () => ({
-      __esModule: true,
-      default: {
-        readPkcs12: (_buf: Buffer, _opts: any, cb: any) => cb(new Error('invalid password'), null),
-      },
-    }));
+    readPkcs12.mockImplementation((_buf, _opts, cb) => cb(new Error('invalid password'), null));
 
     const signatureAuth = {
       type: 'pfx' as const,
@@ -119,16 +92,12 @@ describe('PFX signature paths (generateSignature)', () => {
   });
 
   it('succeeds when PFX content yields a key', async () => {
-    vi.doMock('pem', () => ({
-      __esModule: true,
-      default: {
-        readPkcs12: (_buf: Buffer, _opts: any, cb: any) =>
-          cb(null, {
-            key: '-----BEGIN PRIVATE KEY-----\nMOCK\n-----END PRIVATE KEY-----',
-            cert: 'CERT',
-          }),
-      },
-    }));
+    readPkcs12.mockImplementation((_buf, _opts, cb) =>
+      cb(null, {
+        key: '-----BEGIN PRIVATE KEY-----\nMOCK\n-----END PRIVATE KEY-----',
+        cert: 'CERT',
+      }),
+    );
 
     // Mock crypto signing
     const update = vi.fn();
