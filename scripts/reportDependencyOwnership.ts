@@ -104,10 +104,23 @@ function takeJSDocType(source: string): string {
     return source;
   }
   let depth = 0;
+  let quote: string | undefined;
+  let escaped = false;
   for (let index = start; index < source.length; index++) {
-    if (source[index] === '{') {
+    const character = source[index];
+    if (quote) {
+      if (escaped) {
+        escaped = false;
+      } else if (character === '\\') {
+        escaped = true;
+      } else if (character === quote) {
+        quote = undefined;
+      }
+    } else if (character === "'" || character === '"') {
+      quote = character;
+    } else if (character === '{') {
       depth++;
-    } else if (source[index] === '}' && --depth === 0) {
+    } else if (character === '}' && --depth === 0) {
       return source.slice(0, index + 1);
     }
   }
@@ -140,6 +153,9 @@ function getShadowRanges(
       lexicalScopes.push([node.start, node.end]);
     },
     ForOfStatement(node) {
+      lexicalScopes.push([node.start, node.end]);
+    },
+    SwitchStatement(node) {
       lexicalScopes.push([node.start, node.end]);
     },
     FunctionDeclaration(node) {
@@ -214,6 +230,21 @@ function getShadowRanges(
     ImportDeclaration(node) {
       if (node.specifiers.some((specifier) => specifier.local.name === name)) {
         ranges.push([0, Number.POSITIVE_INFINITY]);
+      }
+    },
+    TSImportEqualsDeclaration(node) {
+      if (node.id.name === name) {
+        ranges.push([0, Number.POSITIVE_INFINITY]);
+      }
+    },
+    ClassDeclaration(node) {
+      if (node.id?.name === name) {
+        ranges.push(scopeFor(node.start, lexicalScopes));
+      }
+    },
+    ClassExpression(node) {
+      if (node.id?.name === name) {
+        ranges.push([node.start, node.end]);
       }
     },
     CatchClause(node) {
@@ -780,11 +811,14 @@ export function reportDependencyOwnership(
         } else if (
           !isModuleShadowed(node.start) &&
           node.callee.type === 'MemberExpression' &&
-          !node.callee.computed &&
           node.callee.object.type === 'Identifier' &&
           node.callee.object.name === 'module' &&
-          node.callee.property.type === 'Identifier' &&
-          node.callee.property.name === 'require'
+          ((node.callee.computed &&
+            node.callee.property.type === 'Literal' &&
+            node.callee.property.value === 'require') ||
+            (!node.callee.computed &&
+              node.callee.property.type === 'Identifier' &&
+              node.callee.property.name === 'require'))
         ) {
           load(node, node.arguments[0], 'value');
         } else if (
