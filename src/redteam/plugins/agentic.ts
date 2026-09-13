@@ -697,13 +697,9 @@ function getAgenticRuntimeVerifierSpans(
         candidate.attributes,
         candidate === span ? undefined : span.attributes,
       );
-      const candidates = payloads.flatMap((payload) => {
-        const parsed = parseEvidenceCandidates(payload);
-        // Keep failed evidence scoped even when its payload cannot be decoded.
-        return parsed.length
-          ? parsed
-          : [{ pluginId: isRecord(payload) ? payload.pluginId : undefined }];
-      });
+      const candidates = payloads.flatMap((payload) =>
+        parseEvidenceCandidates(payload, { preserveInvalid: true }),
+      );
       const scoped = candidates.map((evidence) => normalizeEvidenceForPlugin(evidence, pluginId));
       const failed =
         hasErrorStatus(candidate) || scoped.some((evidence) => evidence?.verifierFailed);

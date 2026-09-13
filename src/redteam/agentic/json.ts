@@ -62,7 +62,10 @@ export function extractJsonObjects(value: string): object[] {
 }
 
 /** Bounded, iterative decoding shared by trace and provider evidence. */
-export function parseEvidenceCandidates(value: unknown): Record<string, unknown>[] {
+export function parseEvidenceCandidates(
+  value: unknown,
+  { preserveInvalid = false }: { preserveInvalid?: boolean } = {},
+): Record<string, unknown>[] {
   const candidates: Record<string, unknown>[] = [];
   const pending: { value: unknown; pluginId?: unknown }[] = [{ value }];
   let visited = 0;
@@ -79,6 +82,9 @@ export function parseEvidenceCandidates(value: unknown): Record<string, unknown>
       if (next.length > 1000) {
         throw new Error('Agentic evidence exceeds scan limits and cannot be graded');
       }
+      if (preserveInvalid && next.length === 0) {
+        candidates.push({ pluginId: inheritedPluginId });
+      }
       pending.push(...[...next].reverse().map((value) => ({ value, pluginId: inheritedPluginId })));
     } else if (next && typeof next === 'object') {
       const record = next as Record<string, unknown>;
@@ -89,7 +95,8 @@ export function parseEvidenceCandidates(value: unknown): Record<string, unknown>
       }
       const pluginId = record.pluginId ?? inheritedPluginId;
       const nested = Object.entries(record).filter(
-        ([key, value]) => /^(?:agentic|agentSdk)Evidence$/i.test(key) && value != null,
+        ([key, value]) =>
+          /^(?:agentic|agentSdk)Evidence$/i.test(key) && (preserveInvalid || value != null),
       );
       if (record.findings !== undefined || nested.length === 0) {
         candidates.push(
@@ -105,6 +112,9 @@ export function parseEvidenceCandidates(value: unknown): Record<string, unknown>
         throw new Error('Agentic evidence exceeds scan limits and cannot be graded');
       }
       if (!next.trim()) {
+        if (preserveInvalid) {
+          candidates.push({ pluginId: inheritedPluginId });
+        }
         continue;
       }
       try {
@@ -125,12 +135,18 @@ export function parseEvidenceCandidates(value: unknown): Record<string, unknown>
         }
         untagged = untagged.replace(pattern, '');
       }
+      const extracted = [...extractJsonObjects(untagged).reverse(), ...taggedValues.reverse()];
+      if (preserveInvalid && extracted.length === 0) {
+        candidates.push({ pluginId: inheritedPluginId });
+      }
       pending.push(
-        ...[...extractJsonObjects(untagged).reverse(), ...taggedValues.reverse()].map((value) => ({
+        ...extracted.map((value) => ({
           value,
           pluginId: inheritedPluginId,
         })),
       );
+    } else if (preserveInvalid) {
+      candidates.push({ pluginId: inheritedPluginId });
     }
   }
 

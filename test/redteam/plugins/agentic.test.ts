@@ -19,6 +19,110 @@ const providerEvidenceContext = (agenticEvidence: unknown): RedteamGradingContex
 describe('Agentic redteam plugins', () => {
   it.each(
     ['guardrail', 'approval'].flatMap((kind) =>
+      ['1e6', '0x100000', '1000000.0', ' 1000000', '+1000000', '0', '18446744073709551616'].map(
+        (endTimestamp) => ({ kind, endTimestamp }),
+      ),
+    ),
+  )(
+    'rejects a malformed exact $kind end timestamp: $endTimestamp',
+    async ({ kind, endTimestamp }) => {
+      const pluginId = 'agentic:guardrail-coverage-gap';
+      const result = await getGraderById(`promptfoo:redteam:${pluginId}`)!.getResult(
+        'Update the seat.',
+        'Done.',
+        {},
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        {
+          ...providerEvidenceContext({ findings: [], pluginId }),
+          traceData: {
+            traceId: 'invalid-control-end',
+            evaluationId: 'eval',
+            testCaseId: 'case',
+            spans: [
+              {
+                spanId: 'control',
+                parentSpanId: 'route',
+                name: `${kind} update_seat`,
+                startTime: 1,
+                endTime: 2,
+                attributes: {
+                  [`${kind}.outcome`]: 'allowed',
+                  'otel.span.end_time_unix_nano': endTimestamp,
+                },
+              },
+              {
+                spanId: 'tool',
+                parentSpanId: 'route',
+                name: 'tool update_seat',
+                startTime: 3,
+                attributes: {
+                  'tool.name': 'update_seat',
+                  'otel.span.start_time_unix_nano': '3000000',
+                },
+              },
+            ],
+          },
+        },
+      );
+      expect(result.grade.pass).toBe(false);
+    },
+  );
+
+  it.each(
+    ['span', 'event'].flatMap((source) =>
+      [false, true].flatMap((active) =>
+        [null, '', true, []].map((malformed) => ({ source, active, malformed })),
+      ),
+    ),
+  )(
+    'retains a mixed malformed $source branch: active=$active value=$malformed',
+    async ({ source, active, malformed }) => {
+      const pluginId = 'agentic:approval-continuity';
+      const otherPluginId = 'agentic:tool-discovery-confusion';
+      const attributes = {
+        'agentic.plugin_id': active ? pluginId : otherPluginId,
+        'agentic.evidence_json': JSON.stringify([
+          { pluginId: otherPluginId, findings: [] },
+          malformed,
+        ]),
+      };
+      const result = await getGraderById(`promptfoo:redteam:${pluginId}`)!.getResult(
+        'Inspect the run.',
+        'Done.',
+        {},
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        {
+          ...providerEvidenceContext({ findings: [], pluginId }),
+          traceData: {
+            traceId: 'mixed-branches',
+            evaluationId: 'eval',
+            testCaseId: 'case',
+            spans: [
+              {
+                spanId: 'failed',
+                name: 'verifier',
+                startTime: 2,
+                statusCode: 2,
+                attributes: source === 'span' ? attributes : {},
+                events:
+                  source === 'event' ? [{ name: 'verifier result', timestamp: 2, attributes }] : [],
+              },
+            ],
+          },
+        },
+      );
+      expect(result.grade.pass).toBe(!active);
+    },
+  );
+
+  it.each(
+    ['guardrail', 'approval'].flatMap((kind) =>
       [undefined, 0, 2].map((endTime) => ({ kind, endTime })),
     ),
   )('requires a positive recorded end time for $kind: $endTime', async ({ kind, endTime }) => {

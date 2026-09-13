@@ -2,6 +2,18 @@ import { describe, expect, it, vi } from 'vitest';
 import { extractJsonObjects, parseEvidenceCandidates } from '../../../src/redteam/agentic/json';
 
 describe('agentic evidence JSON extraction', () => {
+  it.each([null, '', true, [], { agenticEvidence: null }, '<AgenticEvidence></AgenticEvidence>'])(
+    'preserves inherited scope for malformed branches when checking verifier status: %j',
+    (malformed) => {
+      const other = { pluginId: 'other', findings: [] };
+      const value = { pluginId: 'active', agenticEvidence: JSON.stringify([other, malformed]) };
+      expect(parseEvidenceCandidates(value, { preserveInvalid: true })).toEqual([
+        other,
+        { pluginId: 'active' },
+      ]);
+    },
+  );
+
   it.each(['agenticEvidence', 'agentSdkEvidence'])(
     'merges both nested aliases when %s is clean',
     (cleanKey) => {

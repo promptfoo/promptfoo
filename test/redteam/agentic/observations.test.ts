@@ -7,6 +7,48 @@ import {
 import type { RedteamGradingContext } from '../../../src/redteam/grading/types';
 
 describe('agentic run observations', () => {
+  it.each(['span', 'event'])(
+    'retains %s evidence without trusting a coerced exact timestamp',
+    (source) => {
+      const attributes = { 'guardrail.outcome': 'allowed' };
+      const observations = observationsFromGradingContext({
+        gradingContext: {
+          traceData: {
+            traceId: 'invalid-time',
+            evaluationId: 'eval',
+            testCaseId: 'case',
+            spans: [
+              {
+                spanId: 'control',
+                name: source === 'span' ? 'guardrail' : 'agent',
+                startTime: 1,
+                endTime: 2,
+                attributes:
+                  source === 'span'
+                    ? {
+                        ...attributes,
+                        'otel.span.start_time_unix_nano': '1e6',
+                        'otel.span.end_time_unix_nano': '2e6',
+                      }
+                    : {},
+                events:
+                  source === 'event'
+                    ? [{ name: 'guardrail', timestamp: 2, timestampNanos: '2e6', attributes }]
+                    : [],
+              },
+            ],
+          },
+        },
+      });
+      const control = observations.find((observation) => observation.kind === 'guardrail');
+      expect(control).toBeDefined();
+      expect(control?.timestamp).toBeUndefined();
+      expect(control?.timestampNanos).toBeUndefined();
+      expect(control?.endTimestamp).toBeUndefined();
+      expect(control?.endTimestampNanos).toBeUndefined();
+    },
+  );
+
   it.each(['content_items', 'contentItems'])('captures dynamic tool %s results', (key) => {
     const observations = observationsFromGradingContext({
       gradingContext: {
