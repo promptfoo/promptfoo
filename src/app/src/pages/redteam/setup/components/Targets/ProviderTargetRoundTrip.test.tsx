@@ -129,19 +129,18 @@ describe('generated target configuration round trips', () => {
     );
     const editor = screen.getByRole('textbox', { name: 'Target configuration JSON' });
     await replaceText(user, editor, JSON.stringify({ ...target.config, agentAliasId }));
-    const next = within(screen.getByTestId('page-navigation')).getByRole('button', {
-      name: /Next/,
-    });
-    await user.click(next);
+    const getNext = () =>
+      within(screen.getByTestId('page-navigation')).getByRole('button', { name: /Next/ });
+    await user.click(getNext());
 
     const expected = { ...target, config: { ...target.config, agentAliasId: 'ALIAS456' } };
     if (!valid) {
       expect(onNext).not.toHaveBeenCalled();
       expect(screen.getAllByText('Agent Alias ID is required').length).toBeGreaterThan(0);
-      expect(next).toBeDisabled();
+      expect(getNext()).toBeDisabled();
       await replaceText(user, editor, JSON.stringify(expected.config));
-      expect(next).toBeEnabled();
-      await user.click(next);
+      expect(getNext()).toBeEnabled();
+      await user.click(getNext());
     }
 
     expect(onNext).toHaveBeenCalledTimes(1);

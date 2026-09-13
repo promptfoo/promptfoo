@@ -148,8 +148,11 @@ describe('eval provider configuration round trips', () => {
       };
       if (!valid) {
         expect(useStore.getState().config.providers).toEqual([initialProvider]);
-        expect(screen.getAllByText('Agent Alias ID is required').length).toBeGreaterThan(0);
-        expect(screen.getByRole('button', { name: 'Save Changes' })).toBeDisabled();
+        const saveButton = screen.getByRole('button', { name: 'Save Changes' });
+        expect(saveButton).toBeDisabled();
+        await user.hover(saveButton.parentElement!);
+        expect(await screen.findByRole('tooltip')).toHaveTextContent('Agent Alias ID is required');
+        await user.unhover(saveButton.parentElement!);
         expect(getCallApiMock().mock.calls.filter(([path]) => path === '/eval/job')).toHaveLength(
           0,
         );
