@@ -178,6 +178,60 @@ describe('RedteamGoatProvider', () => {
     expect(provider.id()).toBe('promptfoo:redteam:goat');
   });
 
+  it.each(
+    ['coding-agent:trace-redaction', 'harness:artifact-redaction'].flatMap((pluginId) =>
+      [false, true].flatMap((unblocking) =>
+        [false, true].map((media) => [pluginId, unblocking, media] as const),
+      ),
+    ),
+  )(
+    'preserves only media failures across later clean turns: %s unblocking=%s media=%s',
+    async (pluginId, unblocking, media) => {
+      mockGrader.getResult.mockResolvedValue({ grade: { pass: true, score: 1 }, rubric: 'Clean' });
+      const unblock = vi
+        .spyOn(redteamProviderShared, 'tryUnblocking')
+        .mockResolvedValue({ success: false });
+      if (unblocking) {
+        unblock.mockResolvedValueOnce({ success: true, unblockingPrompt: 'Continue' });
+      }
+      const target = createMockTargetProvider('Clean report');
+      target.callApi.mockReset();
+      if (unblocking) {
+        target.callApi.mockResolvedValueOnce({ output: 'Clean report' });
+      }
+      target.callApi
+        .mockResolvedValueOnce(
+          media
+            ? { output: 'data:image/png;base64,PRIVATE_GOAT_MEDIA' }
+            : { error: 'PRIVATE_TRANSIENT_ERROR' },
+        )
+        .mockResolvedValue({ output: 'Clean report' });
+      try {
+        const provider = new RedteamGoatProvider({ injectVar: 'goal', maxTurns: 2 });
+        const result = await provider.callApi(
+          '',
+          createMockContext(
+            target,
+            { goal: 'Inspect report' },
+            {
+              assert: [{ type: `promptfoo:redteam:${pluginId}` }],
+              metadata: { pluginId },
+            },
+          ),
+        );
+        expect(target.callApi).toHaveBeenCalledTimes(unblocking ? 3 : 2);
+        if (media) {
+          expect(result.error).toMatch(/redaction cannot be verified/);
+        } else {
+          expect(result.error).toBeUndefined();
+        }
+        expect(JSON.stringify(result)).not.toContain('PRIVATE_');
+      } finally {
+        unblock.mockRestore();
+      }
+    },
+  );
+
   it('should throw error if injectVar is missing', () => {
     expect(() => {
       new RedteamGoatProvider({});

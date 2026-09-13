@@ -274,6 +274,7 @@ export default class GoatProvider implements ApiProvider {
 
     const redactTrace = requiresTraceRedaction(test?.assert);
     let redactionError: string | undefined;
+    let mediaRedactionFailed = false;
     if (redactTrace) {
       tracingOptions.includeInAttack = false;
     }
@@ -353,7 +354,10 @@ export default class GoatProvider implements ApiProvider {
                 unblockingResponse,
                 context,
               );
-              redactionError = unblockingResponse.error;
+              if (!mediaRedactionFailed) {
+                redactionError = unblockingResponse.error;
+              }
+              mediaRedactionFailed ||= unblockingResponse.metadata?.redactionMediaOmitted === true;
             }
 
             if (!unblockingResponse.cached && targetProvider.delay && targetProvider.delay > 0) {
@@ -632,7 +636,10 @@ export default class GoatProvider implements ApiProvider {
 
         if (redactTrace) {
           targetResponse = await externalizeResponseForRedteamHistory(targetResponse, context);
-          redactionError = targetResponse.error;
+          if (!mediaRedactionFailed) {
+            redactionError = targetResponse.error;
+          }
+          mediaRedactionFailed ||= targetResponse.metadata?.redactionMediaOmitted === true;
         }
 
         if (!targetResponse.cached && targetProvider.delay && targetProvider.delay > 0) {

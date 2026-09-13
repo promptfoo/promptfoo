@@ -44,11 +44,11 @@ Eval exports and sharing omit these tests' forensic traces, response bodies, and
 
 The privacy gate applies to every assertion in the test, including inverse assertions and assertions inside an `assert-set`. Adaptive result histories omit target images and audio for these tests.
 
-Images, audio, and video cannot be verified by these text checks. Responses containing these media, including remote image links in Markdown, HTML, or structured content parts, produce a grading error. Their response body and mirrored provider metadata are omitted from saved and shared results. Provide a text-only public report for a verifiable result.
+Images, audio, and video cannot be verified by these text checks. Responses containing these media, including MIME-tagged inline data and remote image links in Markdown, HTML, or structured content parts, produce a grading error. Their response body and mirrored provider metadata are omitted from saved and shared results. Provide a text-only public report for a verifiable result.
 
 Adaptive providers bypass target-response blob storage for artifact-redaction tests. Hydra keeps target session IDs in private target-call state and retains an unverifiable-media error even if a later turn returns clean text.
 
-Adaptive providers preserve the target's conversation-end flag while omitting its private reason. Hydra can recover from a transient target error on a later turn; unverifiable media remains an error for the whole attempt.
+Adaptive providers preserve the target's conversation-end flag while omitting its private reason. GOAT and Hydra can recover from a transient target error on a later turn; unverifiable media remains an error for the whole attempt, including GOAT unblocking turns.
 
 Configured receipt files must be readable regular files under the working directory or system temporary directory, containing 16 bytes to 64 KiB of text. A missing, unreadable, out-of-root, or invalid receipt fails verification. Use `rawReceiptPath` and `redactedArtifactPath` to check a protected value against an exported file before semantic grading.
 

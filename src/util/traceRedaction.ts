@@ -52,6 +52,9 @@ export function hasRedactionMedia(response: ProviderResponse | null | undefined)
         record.isBase64 === true ||
         (typeof record.b64_json === 'string' && record.b64_json.length > 0) ||
         (Array.isArray(record.images) && record.images.length > 0) ||
+        [record.mimeType, record.mime_type, record.media_type].some(
+          (mime) => typeof mime === 'string' && /^\s*(?:image|audio|video)\//i.test(mime),
+        ) ||
         (typeof record.type === 'string' &&
           /^(?:(?:input|output)_)?(?:image|audio|video)(?:_url)?$/.test(record.type)) ||
         record.image_url ||
