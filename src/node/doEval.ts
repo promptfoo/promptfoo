@@ -108,6 +108,7 @@ function runtimeTagsForEval(
 async function resolveReplayConfigs(
   evalRecord: Eval,
   action: 'resuming' | 'retrying errors for',
+  trackProvider?: (provider: ApiProvider) => void,
 ): Promise<Awaited<ReturnType<typeof resolveConfigs>>> {
   const providerFilterOptions = getPersistedProviderFilterOptions(
     evalRecord.runtimeOptions?.providerFilter,
@@ -134,7 +135,12 @@ async function resolveReplayConfigs(
     };
   }
 
-  const configs = await resolveConfigs(providerFilterOptions, replayConfig);
+  const configs = await resolveConfigs(
+    providerFilterOptions,
+    replayConfig,
+    undefined,
+    trackProvider,
+  );
   // The original run filtered twice: raw configs in resolveConfigs, then instantiated
   // providers by live id()/label below in doEval. Replay both stages so the resumed
   // provider set matches the original even when an instantiated id or label diverges
@@ -455,7 +461,7 @@ export async function doEval(
         testSuite,
         basePath: _basePath,
         commandLineOptions,
-      } = await resolveReplayConfigs(resumeEval, 'resuming'));
+      } = await resolveReplayConfigs(resumeEval, 'resuming', trackProvider));
       // Ensure prompts exactly match the previous run to preserve IDs and content
       if (Array.isArray(resumeEval.prompts) && resumeEval.prompts.length > 0) {
         testSuite.prompts = resumeEval.prompts.map(
@@ -512,7 +518,7 @@ export async function doEval(
         testSuite,
         basePath: _basePath,
         commandLineOptions,
-      } = await resolveReplayConfigs(resumeEval, 'retrying errors for'));
+      } = await resolveReplayConfigs(resumeEval, 'retrying errors for', trackProvider));
 
       // Ensure prompts exactly match the previous run to preserve IDs and content
       if (Array.isArray(resumeEval.prompts) && resumeEval.prompts.length > 0) {

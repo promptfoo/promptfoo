@@ -1785,6 +1785,8 @@ describe('evalCommand', () => {
       expect(resolveConfigs).toHaveBeenCalledWith(
         { filterProviders: 'selected-target' },
         resumeEval.config,
+        undefined,
+        expect.any(Function),
       );
     } finally {
       findByIdSpy.mockRestore();
@@ -1824,6 +1826,8 @@ describe('evalCommand', () => {
       expect(resolveConfigs).toHaveBeenCalledWith(
         { filterProviders: 'selected-target' },
         latestEval.config,
+        undefined,
+        expect.any(Function),
       );
       expect(deleteErrorResults).toHaveBeenCalledWith(['result-1', 'result-2']);
       expect(recalculatePromptMetrics).toHaveBeenCalledWith(latestEval);
@@ -2020,6 +2024,8 @@ describe('evalCommand', () => {
       expect(resolveConfigs).toHaveBeenCalledWith(
         { filterProviders: 'selected-target' },
         resumeEval.config,
+        undefined,
+        expect.any(Function),
       );
     } finally {
       warnSpy.mockClear();
