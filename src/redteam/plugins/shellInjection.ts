@@ -342,7 +342,6 @@ export class ShellInjectionGrader extends RedteamGraderBase {
             ...(trace.metadata?.commandToolNames ?? []),
             ...(tracing.commandToolNames ?? []),
             'bash',
-            'execute',
             'execute_command',
             'run_command',
             'run_shell',

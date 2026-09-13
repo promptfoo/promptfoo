@@ -5,6 +5,7 @@ import {
   getToolNameFromAttributes,
   SEARCH_ATTRIBUTE_KEYS,
   TOOL_ARGUMENT_ATTRIBUTE_KEYS,
+  TOOL_RESULT_ATTRIBUTE_KEYS,
 } from '../tracing/toolAttributes';
 import { matchesPattern } from './traceUtils';
 
@@ -141,11 +142,20 @@ function getTraceCommandToolNames(trace: Pick<TraceData, 'metadata'>): ReadonlyS
   return resolveCommandToolNames(configured);
 }
 
-function isCommandToolName(
+function isCommandToolCall(
   toolName: string | undefined,
   commandToolNames: ReadonlySet<string>,
+  args?: unknown,
 ): boolean {
-  return !!toolName && commandToolNames.has(toolName.trim().toLowerCase());
+  const name = toolName?.trim().toLowerCase();
+  return (
+    !!name &&
+    (commandToolNames.has(name) ||
+      (name === 'execute' &&
+        !!args &&
+        typeof args === 'object' &&
+        ['cmd', 'command', 'commands'].some((key) => key in args)))
+  );
 }
 
 function extractToolName(span: TraceSpan): string | undefined {
@@ -249,7 +259,11 @@ function extractCommand(
   }
 
   const toolArgs = getToolArgs();
-  if (isCommandToolName(toolName, commandToolNames) && toolArgs && typeof toolArgs === 'object') {
+  if (
+    isCommandToolCall(toolName, commandToolNames, toolArgs) &&
+    toolArgs &&
+    typeof toolArgs === 'object'
+  ) {
     const args = toolArgs as Record<string, unknown>;
     const commandSource =
       args.cmd === undefined
@@ -359,7 +373,7 @@ export function extractTrajectorySteps(
       const aliases = new Set<string>([span.name]);
       let args: unknown;
 
-      if (command && isCommandToolName(toolName, commandToolNames)) {
+      if (command && isCommandToolCall(toolName, commandToolNames, getToolArgs())) {
         type = 'command';
         name = command;
         aliases.add(command);
@@ -588,10 +602,7 @@ function getSqlExecutionDetails(
     return undefined;
   }
   const output = normalizeStructuredAttribute(
-    attributes['tool.output'] ??
-      attributes['tool.result'] ??
-      attributes['gen_ai.tool.call.result'] ??
-      attributes['ai.toolCall.result'],
+    TOOL_RESULT_ATTRIBUTE_KEYS.map((key) => attributes[key]).find((value) => value != null),
   );
   const result = output && typeof output === 'object' ? (output as Record<string, unknown>) : {};
   // Keep only query text and explicit outcome indicators. Rows and bind values
@@ -664,7 +675,7 @@ export function summarizeTrajectoryForJudge(
   if (options.includeCommands) {
     const commandToolNames = getTraceCommandToolNames(trace);
     for (const [index, step] of extractTrajectorySteps(trace).entries()) {
-      if (step.type === 'tool' && isCommandToolName(step.name, commandToolNames)) {
+      if (step.type === 'tool' && isCommandToolCall(step.name, commandToolNames, step.args)) {
         throw new TraceEvidenceError(
           'Shell command arguments could not be read and cannot be graded.',
         );
@@ -692,7 +703,9 @@ export function summarizeTrajectoryForJudge(
     let execution: JudgeTrajectoryStep['execution'];
     if (options.includeCommands && step.type === 'command') {
       const output = normalizeStructuredAttribute(
-        step.attributes['tool.output'] ?? step.attributes['tool.result'],
+        TOOL_RESULT_ATTRIBUTE_KEYS.map((key) => step.attributes[key]).find(
+          (value) => value != null,
+        ),
       );
       if (typeof output === 'string' && /\[REDACTED\]|<redacted>|\[TRUNCATED\]/i.test(output)) {
         throw new TraceEvidenceError('Shell execution evidence was redacted and cannot be graded.');

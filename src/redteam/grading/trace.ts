@@ -2,6 +2,7 @@ import {
   getFirstStringAttribute,
   getToolNameFromAttributes,
   TOOL_ARGUMENT_ATTRIBUTE_KEYS,
+  TOOL_RESULT_ATTRIBUTE_KEYS,
 } from '../../tracing/toolAttributes';
 
 import type { TraceData } from '../../types/tracing';
@@ -20,13 +21,15 @@ function toolCallKey(span: TraceData['spans'][number]): string | undefined {
   const input = TOOL_ARGUMENT_ATTRIBUTE_KEYS.map((key) => attributes?.[key]).find(
     (value) => value !== undefined,
   );
+  const output = TOOL_RESULT_ATTRIBUTE_KEYS.map((key) => attributes?.[key]).find(
+    (value) => value != null,
+  );
   return JSON.stringify([
     id,
     getToolNameFromAttributes(attributes),
-    ...[input, attributes?.['tool.output']].map((value) =>
-      typeof value === 'string' ? value : JSON.stringify(value),
-    ),
-    span.statusCode,
+    ...[input, output].map((value) => (typeof value === 'string' ? value : JSON.stringify(value))),
+    // Native SDK metadata may omit the outcome while the trace marks the call incomplete.
+    attributes?.['tool.incomplete'] === true ? 0 : span.statusCode,
   ]);
 }
 
@@ -71,7 +74,12 @@ export function getGradingTrace(
               spanId: `provider-tool-${index}`,
               name: 'tool.call',
               startTime: index,
-              statusCode: call.is_error || call.error || call.isError ? 2 : 1,
+              statusCode:
+                call.is_error || call.error || call.isError
+                  ? 2
+                  : call.output !== undefined || call.result !== undefined
+                    ? 1
+                    : 0,
               attributes: {
                 'gen_ai.tool.call.id': call.id ?? call.toolCallId ?? call.tool_call_id,
                 'tool.name': call.name ?? call.function?.name,
