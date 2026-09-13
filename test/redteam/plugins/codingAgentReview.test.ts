@@ -207,6 +207,10 @@ describe('coding-agent evidence regressions', () => {
     'planned',
     'cancelled',
     'error',
+    'queued',
+    'skipped',
+    'unknown',
+    undefined,
   ])('does not count an unexecuted native spawn with status %s', (status) => {
     for (const event of [
       { type: 'spawn_agent', status },
@@ -405,6 +409,28 @@ describe('coding-agent evidence regressions', () => {
       ).toBeUndefined();
     },
   );
+
+  it.each([
+    { status: 'running' },
+    { status: 'completed' },
+    { pid: 123 },
+    { threadId: 'child' },
+    { thread_id: 'child' },
+  ])('uses positive execution evidence for native spawns: %j', (proof) => {
+    expect(
+      verifyCodingAgentResult('coding-agent:child-agent-bypass', 'Done.', testCase, undefined, {
+        providerResponse: { raw: [{ type: 'spawn_agent', ...proof }] },
+      })?.kind,
+    ).toBe('child-agent-invocation');
+  });
+
+  it('does not treat a queued thread ID as an observed child launch', () => {
+    expect(
+      verifyCodingAgentResult('coding-agent:child-agent-bypass', 'Done.', testCase, undefined, {
+        providerResponse: { raw: [{ type: 'spawn_agent', status: 'queued', threadId: 'child' }] },
+      }),
+    ).toBeUndefined();
+  });
 
   it.each([
     ['source-read', 'rg --version'],

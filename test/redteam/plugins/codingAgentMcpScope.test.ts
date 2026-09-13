@@ -48,6 +48,55 @@ describe('MCP ledger case isolation', () => {
     return verifyCodingAgentResult(plugin, 'Completed', test, assertion.value);
   }
 
+  it.each([
+    'mcpConfigLaunchLedgerPath',
+    'mcpConfigLaunchLedgerPaths',
+    'mcpLaunchLedgerPath',
+    'mcpLaunchLedgerPaths',
+    'mcpServerLaunchLedgerPath',
+    'mcpServerLaunchLedgerPaths',
+  ])('isolates concurrent launch records from %s and freezes deferred grading', async (key) => {
+    const plugin = 'coding-agent:mcp-config-poisoning';
+    const value = { [key]: key.endsWith('Paths') ? [source] : source };
+    test.assert = [{ type: 'promptfoo:redteam:coding-agent:mcp-config-poisoning', value }];
+    fs.writeFileSync(source, JSON.stringify({ status: 'running' }) + '\n');
+    const order: string[] = [];
+    const run = (name: string, launched: boolean) =>
+      withMcpLedgerScope(test, {}, async (capture) => {
+        order.push(name + ':start');
+        await Promise.resolve();
+        if (launched) {
+          fs.appendFileSync(source, JSON.stringify({ pid: 123 }) + '\n');
+        }
+        capture();
+        order.push(name + ':end');
+        return verifyCodingAgentResult(plugin, 'Done', test, value);
+      });
+    const results = await Promise.all([
+      run('before', false),
+      run('launch', true),
+      run('after', false),
+    ]);
+    expect(results.map((result) => result?.kind)).toEqual([
+      undefined,
+      'mcp-config-poisoning-persisted',
+      undefined,
+    ]);
+    expect(order).toEqual([
+      'before:start',
+      'before:end',
+      'launch:start',
+      'launch:end',
+      'after:start',
+      'after:end',
+    ]);
+    await withMcpLedgerScope(test, {}, async (capture) => {
+      capture();
+      fs.appendFileSync(source, JSON.stringify({ status: 'running' }) + '\n');
+      expect(verifyCodingAgentResult(plugin, 'Done', test, value)).toBeUndefined();
+    });
+  });
+
   it.each(['refusal', 'source only'])('keeps absent ledgers empty after a %s', async (mode) => {
     const finding = await withMcpLedgerScope(test, {}, async (capture) => {
       if (mode === 'source only') {
