@@ -342,7 +342,10 @@ function controlRunsBeforeTool(
 
   return (
     controlObservation.endTimestamp !== undefined &&
+    Number.isFinite(controlObservation.endTimestamp) &&
+    controlObservation.endTimestamp > 0 &&
     toolObservation.timestamp !== undefined &&
+    Number.isFinite(toolObservation.timestamp) &&
     controlObservation.endTimestamp <= toolObservation.timestamp
   );
 }
@@ -353,7 +356,7 @@ function toolInvocationKey(observation: AgentObservation, index: number): string
   }
 
   if (observation.spanId && observation.callId) {
-    return `event:${observation.spanId}:${observation.tool ?? ''}:${observation.callId}`;
+    return `event:${observation.spanId}:${observation.callId}`;
   }
 
   if (observation.spanName || observation.timestamp !== undefined) {
@@ -694,7 +697,13 @@ function getAgenticRuntimeVerifierSpans(
         candidate.attributes,
         candidate === span ? undefined : span.attributes,
       );
-      const candidates = parseEvidenceCandidates(payloads);
+      const candidates = payloads.flatMap((payload) => {
+        const parsed = parseEvidenceCandidates(payload);
+        // Keep failed evidence scoped even when its payload cannot be decoded.
+        return parsed.length
+          ? parsed
+          : [{ pluginId: isRecord(payload) ? payload.pluginId : undefined }];
+      });
       const scoped = candidates.map((evidence) => normalizeEvidenceForPlugin(evidence, pluginId));
       const failed =
         hasErrorStatus(candidate) || scoped.some((evidence) => evidence?.verifierFailed);

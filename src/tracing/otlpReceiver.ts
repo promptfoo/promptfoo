@@ -880,6 +880,7 @@ export class OTLPReceiver {
     const attributes: Record<string, any> = {
       ...resourceAttributes,
       ...logAttributes,
+      'otel.log.record': true,
       'otel.scope.name': scopeLog.scope?.name,
       'otel.scope.version': scopeLog.scope?.version,
       'otel.log.severity_number': log.severityNumber,

@@ -2011,66 +2011,70 @@ describe('OTLPReceiver', () => {
       },
     );
 
-    it('retains untimed linked logs without inventing control ordering', async () => {
-      const now = vi.spyOn(Date, 'now').mockReturnValue(1700000000000);
-      const log = {
-        traceId: hexTraceId,
-        spanId: hexParentSpanId,
-        body: { stringValue: 'guardrail update_seat' },
-        attributes: [
-          { key: 'guardrail.outcome', value: { stringValue: 'allowed' } },
-          { key: 'otel.log.time_unix_nano', value: { stringValue: '1700000000000000000' } },
-          { key: 'otel.span.end_time_unix_nano', value: { stringValue: '1700000000000000000' } },
-        ],
-      };
-      await request(receiver.getApp())
-        .post('/v1/logs')
-        .send(makeLogsRequest([log]))
-        .expect(200);
-      now.mockReturnValue(1700000000100);
-      await request(receiver.getApp())
-        .post('/v1/logs')
-        .send(makeLogsRequest([log]))
-        .expect(200);
-      const first = persistSpans.mock.calls[0][1][0],
-        retried = persistSpans.mock.calls[1][1][0];
-      expect(first.name).toBe('guardrail update_seat');
-      expect(first.startTime).toBe(1700000000000);
-      expect(first.attributes['otel.log.time_unix_nano']).toBeUndefined();
-      expect(retried.spanId).toBe(first.spanId);
-      const pluginId = 'agentic:guardrail-coverage-gap';
-      const result = await getGraderById(`promptfoo:redteam:${pluginId}`)!.getResult(
-        'Update the seat',
-        'Done',
-        {},
-        undefined,
-        undefined,
-        undefined,
-        undefined,
-        {
-          traceData: {
-            traceId: hexTraceId,
-            evaluationId: 'eval',
-            testCaseId: 'test',
-            spans: [
-              first,
-              {
-                spanId: 'tool',
-                parentSpanId: hexParentSpanId,
-                name: 'tool update_seat',
-                startTime: 1700000000050,
-                attributes: {
-                  'tool.name': 'update_seat',
-                  'promptfoo.agentic.plugin_id': pluginId,
-                  'promptfoo.agentic.evidence_json': '{"findings":[]}',
+    it.each(['body', 'event-name'])(
+      'retains untimed linked logs after serialization: %s',
+      async (nameSource) => {
+        const now = vi.spyOn(Date, 'now').mockReturnValue(1700000000000);
+        const log = {
+          traceId: hexTraceId,
+          spanId: hexParentSpanId,
+          ...(nameSource === 'body' ? { body: { stringValue: 'guardrail update_seat' } } : {}),
+          attributes: [
+            { key: 'event.name', value: { stringValue: 'guardrail update_seat' } },
+            { key: 'guardrail.outcome', value: { stringValue: 'allowed' } },
+            { key: 'otel.log.time_unix_nano', value: { stringValue: '1700000000000000000' } },
+            { key: 'otel.span.end_time_unix_nano', value: { stringValue: '1700000000000000000' } },
+          ],
+        };
+        await request(receiver.getApp())
+          .post('/v1/logs')
+          .send(makeLogsRequest([log]))
+          .expect(200);
+        now.mockReturnValue(1700000000100);
+        await request(receiver.getApp())
+          .post('/v1/logs')
+          .send(makeLogsRequest([log]))
+          .expect(200);
+        const first = persistSpans.mock.calls[0][1][0],
+          retried = persistSpans.mock.calls[1][1][0];
+        expect(first.name).toBe('guardrail update_seat');
+        expect(first.startTime).toBe(1700000000000);
+        expect(first.attributes['otel.log.time_unix_nano']).toBeUndefined();
+        expect(retried.spanId).toBe(first.spanId);
+        const pluginId = 'agentic:guardrail-coverage-gap';
+        const result = await getGraderById(`promptfoo:redteam:${pluginId}`)!.getResult(
+          'Update the seat',
+          'Done',
+          {},
+          undefined,
+          undefined,
+          undefined,
+          undefined,
+          {
+            traceData: {
+              traceId: hexTraceId,
+              evaluationId: 'eval',
+              testCaseId: 'test',
+              spans: [
+                JSON.parse(JSON.stringify(first)),
+                {
+                  spanId: 'tool',
+                  parentSpanId: hexParentSpanId,
+                  name: 'tool update_seat',
+                  startTime: 1700000000050,
+                  attributes: {
+                    'tool.name': 'update_seat',
+                    'promptfoo.agentic.plugin_id': pluginId,
+                    'promptfoo.agentic.evidence_json': '{"findings":[]}',
+                  },
                 },
-              },
-            ],
+              ],
+            },
           },
-        },
-      );
-      expect(result.grade.pass).toBe(false);
-    });
+        );
+        expect(result.grade.pass).toBe(false);
+      },
+    );
 
     it('canonicalizes keyed OTLP attributes while retaining array value order', async () => {
       const attrs = [

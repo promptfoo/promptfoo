@@ -17,6 +17,112 @@ const providerEvidenceContext = (agenticEvidence: unknown): RedteamGradingContex
 });
 
 describe('Agentic redteam plugins', () => {
+  it.each(
+    ['guardrail', 'approval'].flatMap((kind) =>
+      [undefined, 0, 2].map((endTime) => ({ kind, endTime })),
+    ),
+  )('requires a positive recorded end time for $kind: $endTime', async ({ kind, endTime }) => {
+    const pluginId = 'agentic:guardrail-coverage-gap';
+    const result = await getGraderById(`promptfoo:redteam:${pluginId}`)!.getResult(
+      'Update the seat.',
+      'Done.',
+      {},
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      {
+        ...providerEvidenceContext({ findings: [], pluginId }),
+        traceData: {
+          traceId: 'missing-control-end',
+          evaluationId: 'eval',
+          testCaseId: 'case',
+          spans: [
+            {
+              spanId: 'control',
+              parentSpanId: 'route',
+              name: `${kind} update_seat`,
+              startTime: 1,
+              endTime,
+              attributes: {
+                [`${kind}.outcome`]: 'allowed',
+                'otel.span.end_time_unix_nano': endTime ? '2000000' : '0',
+              },
+            },
+            {
+              spanId: 'tool',
+              parentSpanId: 'route',
+              name: 'tool update_seat',
+              startTime: 3,
+              attributes: {
+                'tool.name': 'update_seat',
+                'otel.span.start_time_unix_nano': '3000000',
+              },
+            },
+          ],
+        },
+      },
+    );
+    expect(result.grade.pass).toBe(endTime === 2);
+  });
+
+  it.each(
+    ['span', 'event'].flatMap((source) =>
+      [false, true].flatMap((failed) =>
+        [false, true].map((active) => ({ source, failed, active })),
+      ),
+    ),
+  )(
+    'preserves malformed namespace evidence: $source failed=$failed active=$active',
+    async ({ source, failed, active }) => {
+      const pluginId = 'agentic:approval-continuity';
+      const otherPluginId = 'agentic:tool-discovery-confusion';
+      const attributes = {
+        'agentic.plugin_id': active ? pluginId : otherPluginId,
+        'agentic.evidence_json': '{invalid JSON',
+        'agent.sdk.plugin_id': active ? otherPluginId : pluginId,
+        'agent.sdk.evidence_json': JSON.stringify({ findings: [] }),
+      };
+      const result = await getGraderById(`promptfoo:redteam:${pluginId}`)!.getResult(
+        'Inspect the run.',
+        'Done.',
+        {},
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        {
+          ...providerEvidenceContext({ findings: [], pluginId }),
+          traceData: {
+            traceId: 'malformed-namespace',
+            evaluationId: 'eval',
+            testCaseId: 'case',
+            spans: [
+              {
+                spanId: 'clean',
+                name: 'verifier',
+                startTime: 1,
+                attributes: {
+                  'agentic.plugin_id': pluginId,
+                  'agentic.evidence_json': JSON.stringify({ findings: [] }),
+                },
+              },
+              {
+                spanId: 'failed',
+                name: 'verifier',
+                startTime: 2,
+                statusCode: failed ? 2 : 1,
+                attributes: source === 'span' ? attributes : {},
+                events:
+                  source === 'event' ? [{ name: 'verifier result', timestamp: 2, attributes }] : [],
+              },
+            ],
+          },
+        },
+      );
+      expect(result.grade.pass).toBe(!failed);
+    },
+  );
   it.each(['guardrail', 'approval'])(
     'requires matching call IDs for a %s control',
     async (kind) => {
@@ -3156,9 +3262,13 @@ describe('Agentic redteam plugins', () => {
     expect(result.grade.metadata?.deterministicFailureKind).toBe('guardrail-coverage-gap');
   });
 
-  it.each([false, true])(
-    'keeps tool event fragments together with triggered=%s',
-    async (triggered) => {
+  it.each(
+    [false, true].flatMap((triggered) =>
+      [false, true].map((withCallId) => ({ triggered, withCallId })),
+    ),
+  )(
+    'keeps tool event fragments together with triggered=$triggered callId=$withCallId',
+    async ({ triggered, withCallId }) => {
       const pluginId = 'agentic:guardrail-coverage-gap';
       const result = await getGraderById(`promptfoo:redteam:${pluginId}`)!.getResult(
         'prompt',
@@ -3193,6 +3303,7 @@ describe('Agentic redteam plugins', () => {
                       'tool.name': 'update_seat',
                       'tool.input': '{"seat":"1A"}',
                       'tool.output': '{"updated":true}',
+                      ...(withCallId ? { 'tool.call.id': 'call-1' } : {}),
                     },
                   },
                 ],
