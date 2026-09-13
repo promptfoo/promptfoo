@@ -48,7 +48,7 @@ LiteLLM provides a unified interface to 400+ LLMs. Instead of managing different
 ## Features
 
 - **Unified Interface**: Access OpenAI, Anthropic, Google, and 400+ other models through one API
-- **Chat Models**: GPT-4.1, Claude Sonnet 4.6, Gemini 2.5
+- **Chat Models**: GPT-4.1, Claude Sonnet 5, Gemini 2.5
 - **Embedding Models**: Support for similarity assertions via embedding models
 - **Simple Configuration**: One provider syntax for all models
 - **Cost Tracking**: LiteLLM proxy can track usage across providers
@@ -78,7 +78,7 @@ The example evaluates translation and creative writing tasks across three differ
 ```yaml
 providers:
   - litellm:gpt-4.1
-  - litellm:claude-sonnet-4-6
+  - litellm:claude-sonnet-5
   - litellm:gemini-2.5-pro
 
 defaultTest:

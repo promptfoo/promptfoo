@@ -27,8 +27,8 @@ cd provider-truefoundry
 
 A simple example demonstrating basic TrueFoundry usage with multiple models:
 
-- GPT-4 via OpenAI
-- Claude 3.5 Sonnet via Anthropic
+- GPT-5 via OpenAI
+- Claude Sonnet 5 via Anthropic
 - Custom metadata and logging configuration
 
 **Run the example:**
@@ -113,9 +113,9 @@ TrueFoundry provides access to models from multiple providers. Use the format `p
 ### Anthropic
 
 ```yaml
-- truefoundry:anthropic-main/claude-sonnet-4.5
-- truefoundry:anthropic-main/claude-3-5-sonnet-20241022
-- truefoundry:anthropic-main/claude-3-opus-20240229
+- truefoundry:anthropic-main/claude-opus-5
+- truefoundry:anthropic-main/claude-sonnet-5
+- truefoundry:anthropic-main/claude-haiku-4-5
 ```
 
 ### Google Gemini

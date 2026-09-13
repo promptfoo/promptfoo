@@ -10,10 +10,11 @@ providers:
       temperature: 0.7
       max_tokens: 500
 
-  - id: helicone:anthropic/claude-sonnet-4-6
+  - id: helicone:anthropic/claude-sonnet-5
     label: 'Anthropic via Helicone Gateway'
     config:
-      temperature: 0.7
+      # The gateway wrapper sends `temperature: 0` by default; Claude 5 rejects it.
+      omitDefaults: true
       max_tokens: 500
 
   - id: helicone:groq/llama-3.1-8b-instant

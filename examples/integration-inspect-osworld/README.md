@@ -23,7 +23,7 @@ You need:
 - A computer-use-capable model and API key. For the default config, export
   `OPENAI_API_KEY`. To use Anthropic instead, export `ANTHROPIC_API_KEY` and set
   `vars.model` or `providers[0].config.defaultModel` to an Inspect model such as
-  `anthropic/claude-sonnet-4-5`.
+  `anthropic/claude-sonnet-5`.
 - Disk and time for Inspect's OSWorld Docker image. The first run builds an image of roughly 8GB and can take several minutes before the sample starts.
 - Budget for a non-trivial model run. Start with one exact sample before expanding
   to a larger subset or the full suite.

@@ -5,11 +5,13 @@ prompts:
   - file://prompt.py:create_hle_prompt
 
 providers:
-  - id: anthropic:claude-sonnet-4-6
+  - id: anthropic:claude-sonnet-5
     config:
+      # Claude 4.7+ and the Claude 5 family use adaptive thinking; `effort` replaces
+      # the manual `budget_tokens` budget, which those models reject.
       thinking:
-        type: enabled
-        budget_tokens: 3000
+        type: adaptive
+      effort: high
       max_tokens: 4000
   - id: openai:o4-mini
     config:

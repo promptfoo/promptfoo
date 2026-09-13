@@ -5,11 +5,11 @@ prompts:
   - '{{question}}'
 
 providers:
-  # Anthropic Claude 4.6 Opus with web search tool
-  - id: anthropic:messages:claude-opus-4-6
+  # Anthropic Claude Opus 5 with web search tool
+  - id: anthropic:messages:claude-opus-5
     config:
       tools:
-        - type: web_search_20250305
+        - type: web_search_20260209
           name: web_search
           max_uses: 5
 

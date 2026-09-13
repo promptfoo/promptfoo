@@ -20,12 +20,11 @@ prompts:
 
 providers:
   # Claude with system prompts (via inference profile)
-  - id: bedrock:converse:us.anthropic.claude-sonnet-4-6
-    label: Claude Sonnet 4.6
+  - id: bedrock:converse:us.anthropic.claude-sonnet-5
+    label: Claude Sonnet 5
     config:
       region: us-east-1
       maxTokens: 1024
-      temperature: 0.7
 
   # Nova with system prompts
   - id: bedrock:converse:amazon.nova-pro-v1:0

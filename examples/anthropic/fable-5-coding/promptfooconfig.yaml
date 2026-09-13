@@ -1,12 +1,27 @@
 # yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
-description: Claude Fable 5 advanced coding with xhigh effort and always-on adaptive thinking
+description: Claude Fable 5.1 vs Fable 5 on advanced coding, at xhigh effort with always-on adaptive thinking
 
 prompts:
   - |
     {{task}}
 
 providers:
+  # Fable 5.1 — the current top-tier model. Same request surface as Fable 5 with
+  # one behavior difference promptfoo handles for you: 5.1 rejects forced tool
+  # use, so a `tool_choice` of type `any` or `tool` is omitted with a warning.
+  # Use `auto` or `none` instead.
+  - id: anthropic:messages:claude-fable-5-1
+    label: fable-5-1-xhigh
+    config:
+      effort: xhigh
+      # 5.1 reasons harder than Fable 5 at the same effort: on the code-generation
+      # task below it spent all 16000 tokens thinking and returned empty text
+      # (finishReason: length, reasoning_tokens: 16000). Give it real headroom.
+      max_tokens: 32000
+      stream: true # Required by the SDK above 21,333 max_tokens
+
   - id: anthropic:messages:claude-fable-5
+    label: fable-5-xhigh
     config:
       # Fable 5 always uses adaptive thinking — there is no `thinking` block to
       # set. Manual budgets (`type: enabled`) are converted to adaptive and
@@ -19,7 +34,8 @@ providers:
       # Always-on adaptive thinking consumes output tokens before any visible
       # text. Budget max_tokens generously — at xhigh effort a tight budget can
       # be spent entirely on thinking, yielding an empty response.
-      max_tokens: 16000
+      max_tokens: 32000
+      stream: true # Required by the SDK above 21,333 max_tokens
 
 tests:
   # Distributed-systems debugging with incomplete information

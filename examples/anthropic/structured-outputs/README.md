@@ -25,7 +25,7 @@ The first provider configuration shows how to extract structured data from unstr
 
 ```yaml
 providers:
-  - id: anthropic:messages:claude-sonnet-4-6
+  - id: anthropic:messages:claude-sonnet-5
     config:
       output_format:
         type: json_schema
@@ -56,7 +56,7 @@ The second provider configuration demonstrates how to ensure tool parameters exa
 
 ```yaml
 providers:
-  - id: anthropic:messages:claude-sonnet-4-6
+  - id: anthropic:messages:claude-sonnet-5
     config:
       tools:
         - name: book_demo
@@ -119,10 +119,14 @@ The example includes comprehensive tests:
 
 Structured outputs are available for:
 
-- Claude Sonnet 4.6 (`claude-sonnet-4-6`)
-- Claude Opus 4.6 (`claude-opus-4-6`)
+Structured outputs work on every current Claude model, including:
+
+- Claude Opus 5 (`claude-opus-5`) and Claude Sonnet 5 (`claude-sonnet-5`)
+- Claude Fable 5 / 5.1 (`claude-fable-5`, `claude-fable-5-1`)
+- Claude Opus 4.6–4.8 and Claude Sonnet 4.6
+- The 4.5 generation (`claude-opus-4-5`, `claude-sonnet-4-5`, `claude-haiku-4-5`)
 
 ## Learn More
 
-- [Anthropic Structured Outputs Documentation](https://docs.anthropic.com/en/docs/build-with-claude/structured-outputs)
+- [Anthropic Structured Outputs Documentation](https://platform.claude.com/docs/en/docs/build-with-claude/structured-outputs)
 - [promptfoo Anthropic Provider Documentation](/docs/providers/anthropic)

@@ -57,7 +57,8 @@ Note: Quotes around `'{{env.VAR}}'` are required in YAML to prevent parsing issu
 Use current model identifiers (see `site/docs/providers/` for full list):
 
 - OpenAI: `openai:chat:gpt-5.6`, `openai:responses:gpt-5.6-sol`, `openai:responses:gpt-5.6-terra`, `openai:responses:gpt-5.6-luna`, `openai:chat:gpt-5.4-mini`
-- Anthropic: `anthropic:messages:claude-sonnet-4-6`, `anthropic:messages:claude-haiku-4-5-20251001`
+- Anthropic: `anthropic:messages:claude-opus-5`, `anthropic:messages:claude-sonnet-5`, `anthropic:messages:claude-haiku-4-5-20251001`
+  - Claude 4.7+ and the Claude 5 family reject `temperature`/`top_p`/`top_k` and `thinking.budget_tokens`. Use `effort` (`low`–`max`) and `thinking: { type: adaptive }` instead.
 - Google: `google:gemini-3.1-pro-preview`, `google:gemini-2.5-flash`
 
 ## Guidelines
