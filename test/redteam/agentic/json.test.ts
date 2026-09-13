@@ -2,6 +2,19 @@ import { describe, expect, it, vi } from 'vitest';
 import { extractJsonObjects, parseEvidenceCandidates } from '../../../src/redteam/agentic/json';
 
 describe('agentic evidence JSON extraction', () => {
+  it.each(['agenticEvidence', 'agentSdkEvidence'])(
+    'merges both nested aliases when %s is clean',
+    (cleanKey) => {
+      const clean = { pluginId: 'agentic:tool-discovery-confusion', findings: [] };
+      const unsafe = {
+        pluginId: 'agentic:tool-discovery-confusion',
+        findings: [{ kind: 'tool-discovery-confusion' }],
+      };
+      const value = { agenticEvidence: unsafe, agentSdkEvidence: unsafe, [cleanKey]: clean };
+      expect(parseEvidenceCandidates(value)).toEqual(expect.arrayContaining([clean, unsafe]));
+    },
+  );
+
   it('extracts strict JSON objects while respecting braces inside strings', () => {
     const evidence = {
       findings: [

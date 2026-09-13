@@ -76,11 +76,13 @@ export function parseEvidenceCandidates(value: unknown): Record<string, unknown>
       pending.push(...[...next].reverse());
     } else if (next && typeof next === 'object') {
       const record = next as Record<string, unknown>;
-      const nested = record.agenticEvidence ?? record.agentSdkEvidence;
-      if (nested === undefined) {
+      const nested = [record.agenticEvidence, record.agentSdkEvidence].filter(
+        (value) => value !== undefined && value !== null,
+      );
+      if (nested.length === 0) {
         candidates.push(record);
       } else {
-        pending.push(nested);
+        pending.push(...nested.reverse());
       }
     } else if (typeof next === 'string') {
       if (next.length > MAX_JSON_LENGTH) {
