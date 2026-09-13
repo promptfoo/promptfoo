@@ -4,6 +4,38 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [0.123.1](https://github.com/promptfoo/promptfoo/compare/0.123.0...0.123.1) (2026-09-13)
+
+### Features
+
+- **providers:** update Gemini tools and media support ([#10172](https://github.com/promptfoo/promptfoo/issues/10172)) ([627bdd0](https://github.com/promptfoo/promptfoo/commit/627bdd0cb70081be0c6c6583448dbf39127a0c70))
+
+### Bug Fixes
+
+- **assertions:** bound embedded tool call parsing ([#10877](https://github.com/promptfoo/promptfoo/issues/10877)) ([78202a3](https://github.com/promptfoo/promptfoo/commit/78202a3a785655ef639658b0c0318daf628da2e5))
+- **assertions:** bound tool-call parser state ([#10887](https://github.com/promptfoo/promptfoo/issues/10887)) ([15290b4](https://github.com/promptfoo/promptfoo/commit/15290b4cd14392fbb6b12eb39c73c6663734cc4d))
+- **cli:** handle large values during result export ([#10884](https://github.com/promptfoo/promptfoo/issues/10884)) ([be798f4](https://github.com/promptfoo/promptfoo/commit/be798f4d30fc04c82c2e59ee1ff4eb6e9c0df1a3))
+- **cli:** preserve in-memory results for extensions ([#10885](https://github.com/promptfoo/promptfoo/issues/10885)) ([60483d9](https://github.com/promptfoo/promptfoo/commit/60483d94592c6fd58f5f91f7b9eaa19938e40ee6))
+- **db:** preserve shared blobs after persistence errors ([#10897](https://github.com/promptfoo/promptfoo/issues/10897)) ([3b353fb](https://github.com/promptfoo/promptfoo/commit/3b353fb8a66eba917fea723ca239e50f7d57358b))
+- **deps:** update dependency @anthropic-ai/sdk to v0.123.0 ([#10901](https://github.com/promptfoo/promptfoo/issues/10901)) ([14f7c06](https://github.com/promptfoo/promptfoo/commit/14f7c06ccceef47eb4f7e160dcf65ba97ebee8ae))
+- **deps:** update engine.io to v6.6.10 ([#10915](https://github.com/promptfoo/promptfoo/issues/10915)) ([e54a968](https://github.com/promptfoo/promptfoo/commit/e54a9686ab2e592b7c07105a2c3f93d33d9c9c6b))
+- **deps:** update opentelemetry ([#10886](https://github.com/promptfoo/promptfoo/issues/10886)) ([280bc5e](https://github.com/promptfoo/promptfoo/commit/280bc5ef72c0e79aa6ed160bd7699a74bd0f035d))
+- drain database writes and preserve provider options ([#10911](https://github.com/promptfoo/promptfoo/issues/10911)) ([32bfa9e](https://github.com/promptfoo/promptfoo/commit/32bfa9edae56d36f526ab13b6637db8dfb82c73e))
+- **eval:** keep concurrent derived metrics consistent ([#10873](https://github.com/promptfoo/promptfoo/issues/10873)) ([2a3a3bd](https://github.com/promptfoo/promptfoo/commit/2a3a3bd973f293ae0f7ccc75257672eecf6067be))
+- **eval:** preserve audio grading results and order ([#10822](https://github.com/promptfoo/promptfoo/issues/10822)) ([395d21e](https://github.com/promptfoo/promptfoo/commit/395d21e0a0cc203acd83a2ad7a774cf75b31f40b))
+- **fetch:** decode URL credentials and match Authorization case-insensitively ([#10909](https://github.com/promptfoo/promptfoo/issues/10909)) ([b8aa6ff](https://github.com/promptfoo/promptfoo/commit/b8aa6ff8270720dbfc4ce1ebaf33fe4bffeac801))
+- honor SDK options and load AVIF/TIFF images ([#10902](https://github.com/promptfoo/promptfoo/issues/10902)) ([15bba21](https://github.com/promptfoo/promptfoo/commit/15bba219d294e434d2aeb01dd9ea69c108f8b077))
+- **mcp:** accept fine-tuned model identifiers ([#10847](https://github.com/promptfoo/promptfoo/issues/10847)) ([9442129](https://github.com/promptfoo/promptfoo/commit/94421294af108de3d1d45b06de28579028e035f4))
+- **providers:** align ElevenLabs requests and audio inputs ([#10736](https://github.com/promptfoo/promptfoo/issues/10736)) ([de12341](https://github.com/promptfoo/promptfoo/commit/de123419c769d35ecb304b3a14e498b46d2e082e))
+- **providers:** forward Snowflake provider configuration ([#10878](https://github.com/promptfoo/promptfoo/issues/10878)) ([7d0bacd](https://github.com/promptfoo/promptfoo/commit/7d0bacde37051ff78ae78a2d7a6d27a5c66850f1))
+- **providers:** honor Nova Sonic inference configuration ([#10310](https://github.com/promptfoo/promptfoo/issues/10310)) ([aa2abb3](https://github.com/promptfoo/promptfoo/commit/aa2abb340161805bb5413c07d029fd8b773883e7))
+- **providers:** honor prompt Gemini tool policy over passthrough ([#10890](https://github.com/promptfoo/promptfoo/issues/10890)) ([2fd7add](https://github.com/promptfoo/promptfoo/commit/2fd7addd8ab3c27464293a83061f0c16cadf0835))
+- **providers:** preserve default MCP enablement ([#10661](https://github.com/promptfoo/promptfoo/issues/10661)) ([8a8a08b](https://github.com/promptfoo/promptfoo/commit/8a8a08b32a8cc3532a983cb12f84bc54ff20115d))
+- **providers:** preserve HTTP transform errors ([#10454](https://github.com/promptfoo/promptfoo/issues/10454)) ([a7e4ffc](https://github.com/promptfoo/promptfoo/commit/a7e4ffcdbb5352c0e573f4c04134bb75e11acc23))
+- **providers:** stop clobbering resolved TogetherAI model params ([#10846](https://github.com/promptfoo/promptfoo/issues/10846)) ([783d71f](https://github.com/promptfoo/promptfoo/commit/783d71ff922d16c70d6b3cfadcd61c6fadae8d3f))
+- **providers:** stop leaking local config into request bodies ([#10845](https://github.com/promptfoo/promptfoo/issues/10845)) ([329b748](https://github.com/promptfoo/promptfoo/commit/329b748113d64d3b1bf88651de91a1dc036fe1ad))
+- **redteam:** ground agent skill plans in application evidence ([#10903](https://github.com/promptfoo/promptfoo/issues/10903)) ([3c5429b](https://github.com/promptfoo/promptfoo/commit/3c5429b22e8124cdab5552b1b7bf7901b85a5f96))
+
 ## [0.123.0](https://github.com/promptfoo/promptfoo/compare/0.122.2...0.123.0) (2026-09-10)
 
 ### ⚠ BREAKING CHANGES
