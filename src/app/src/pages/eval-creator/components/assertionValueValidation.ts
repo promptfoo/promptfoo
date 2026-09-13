@@ -1,5 +1,7 @@
 import {
+  isNunjucksOutputExpression,
   notTrajectoryToolUsedBoundsError,
+  tokensUsedConfigError,
   traceErrorSpansConfigError,
   traceSpanCountBoundsError,
   traceSpanDurationConfigError,
@@ -7,6 +9,7 @@ import {
   trajectoryGoalSuccessTimeoutError,
   trajectoryRedactArgsError,
   trajectoryToolSequenceModeError,
+  trajectoryToolSetConfigError,
 } from '@promptfoo/contracts';
 import type { Assertion, AssertionType } from '@promptfoo/types';
 
@@ -66,6 +69,7 @@ const BASE_ASSERTION_TYPES = [
   'similar:euclidean',
   'skill-used',
   'starts-with',
+  'tokens-used',
   'tool-call-f1',
   'trace-error-spans',
   'trace-span-count',
@@ -74,6 +78,7 @@ const BASE_ASSERTION_TYPES = [
   'trajectory:step-count',
   'trajectory:tool-args-match',
   'trajectory:tool-sequence',
+  'trajectory:tool-set',
   'trajectory:tool-used',
   'webhook',
   'word-count',
@@ -156,6 +161,31 @@ export const MODEL_JUDGE_SCORE_ASSERTION_TYPES = new Set<AssertionType>([
 export const TRAJECTORY_GOAL_SUCCESS_ASSERTION_TYPES = new Set<AssertionType>([
   'trajectory:goal-success',
   'not-trajectory:goal-success',
+]);
+
+export const STRUCTURED_VALUE_ASSERTION_TYPES = new Set<AssertionType>([
+  'is-sql',
+  'contains-sql',
+  'not-is-sql',
+  'not-contains-sql',
+  'trace-span-count',
+  'trace-span-duration',
+  'not-trace-span-count',
+  'not-trace-span-duration',
+  'tokens-used',
+  'not-tokens-used',
+  'trajectory:tool-args-match',
+  'trajectory:tool-sequence',
+  'trajectory:tool-set',
+  'trajectory:step-count',
+  'trajectory:goal-success',
+  'trajectory:tool-used',
+  'not-trajectory:tool-args-match',
+  'not-trajectory:tool-sequence',
+  'not-trajectory:tool-set',
+  'not-trajectory:step-count',
+  'not-trajectory:goal-success',
+  'not-trajectory:tool-used',
 ]);
 
 const OPTIONAL_SQL_CONFIGURATION_TYPES = new Set<AssertionType>([
@@ -246,6 +276,10 @@ function hasNonBlankStringOrStringArray(value: unknown): boolean {
   return hasNonBlankString(value) || hasNonBlankStringArray(value);
 }
 
+function isRuntimeResolvedAssertionValue(value: unknown): boolean {
+  return typeof value === 'string' && (value.startsWith('file://') || value.startsWith('package:'));
+}
+
 function isRecord(value: unknown): value is Record<string, unknown> {
   return Boolean(value) && typeof value === 'object' && !Array.isArray(value);
 }
@@ -298,6 +332,23 @@ function isNonNegativeInteger(value: unknown): value is number {
   return (
     typeof value === 'number' && Number.isFinite(value) && Number.isInteger(value) && value >= 0
   );
+}
+
+function getNonNegativeIntegerRangeError(
+  value: Record<string, unknown>,
+  label: string,
+): string | undefined {
+  const { min, max } = value;
+  if (
+    (min !== undefined && !isNonNegativeInteger(min)) ||
+    (max !== undefined && !isNonNegativeInteger(max))
+  ) {
+    return `Enter ${label} as whole numbers, 0 or greater.`;
+  }
+  if (typeof min === 'number' && typeof max === 'number' && max < min) {
+    return `Maximum ${label} cannot be less than minimum ${label}.`;
+  }
+  return undefined;
 }
 
 function getTrajectoryToolSequenceSteps(value: unknown): unknown[] | undefined {
@@ -433,6 +484,9 @@ function getTraceSpanDurationValueError(value: unknown): string | undefined {
   if (!isRecord(value) || typeof value.max !== 'number' || !Number.isFinite(value.max)) {
     return 'Enter JSON with a maximum trace span duration.';
   }
+  if (value.pattern !== undefined && !hasNonBlankString(value.pattern)) {
+    return 'Enter the optional trace span name pattern as non-empty text.';
+  }
   // Shared validator enforces non-negative max, pattern, requirePresence, and the
   // percentile/method rules exactly as the runtime does.
   return traceSpanDurationConfigError(value);
@@ -457,14 +511,21 @@ function getTrajectoryToolArgsMatchValueError(value: unknown): string | undefine
 }
 
 function getTrajectoryStepCountValueError(value: unknown): string | undefined {
-  if (!isRecord(value) || (typeof value.min !== 'number' && typeof value.max !== 'number')) {
+  if (!isRecord(value) || (value.min === undefined && value.max === undefined)) {
     return 'Enter JSON with a minimum or maximum trajectory step count.';
   }
   const matcherError = getTrajectoryMatcherValueError(value, TRAJECTORY_STEP_TYPES, false);
   if (matcherError) {
     return matcherError;
   }
-  return trajectoryCountBoundsError(value, 'trajectory:step-count');
+  return trajectoryCountBoundsError(
+    {
+      ...value,
+      min: isNunjucksOutputExpression(value.min) ? 0 : value.min,
+      max: isNunjucksOutputExpression(value.max) ? Number.MAX_VALUE : value.max,
+    },
+    'trajectory:step-count',
+  );
 }
 
 function getTraceErrorSpansValueError(value: unknown): string | undefined {
@@ -477,7 +538,9 @@ function getTrajectoryToolSequenceValueError(value: unknown): string | undefined
   // The object form carries an optional mode; mirror the runtime "in_order"/"exact" check
   // (validated before steps, as the runtime resolves mode before the empty-steps guard).
   if (isRecord(value)) {
-    const modeError = trajectoryToolSequenceModeError(value);
+    const modeError = trajectoryToolSequenceModeError(
+      isNunjucksOutputExpression(value.mode) ? { ...value, mode: 'in_order' } : value,
+    );
     if (modeError) {
       return modeError;
     }
@@ -488,6 +551,42 @@ function getTrajectoryToolSequenceValueError(value: unknown): string | undefined
   }
   if (!steps.every(isUsableTrajectorySequenceStep)) {
     return 'Each trajectory tool sequence step needs a name or pattern.';
+  }
+  return undefined;
+}
+
+function getTokensUsedValueError(value: unknown): string | undefined {
+  if (!isRecord(value)) {
+    return 'Enter JSON with a minimum or maximum token budget.';
+  }
+
+  // Runtime rendering converts templated bounds to numbers before applying the shared validator.
+  // Use range-safe placeholders here so row-specific budgets remain saveable in the Eval Creator.
+  return tokensUsedConfigError({
+    ...value,
+    min: isNunjucksOutputExpression(value.min) ? 0 : value.min,
+    max: isNunjucksOutputExpression(value.max) ? Number.MAX_VALUE : value.max,
+    source: isNunjucksOutputExpression(value.source) ? 'auto' : value.source,
+  });
+}
+
+function getTrajectoryToolSetValueError(value: unknown): string | undefined {
+  const normalizedValue = isRecord(value)
+    ? {
+        ...value,
+        ...(isNunjucksOutputExpression(value.mode) && { mode: 'subset' }),
+        ...(isNunjucksOutputExpression(value.tools) && { tools: ['template'] }),
+      }
+    : value;
+  const configError = trajectoryToolSetConfigError(normalizedValue);
+  if (configError) {
+    return configError;
+  }
+  const tools = Array.isArray(normalizedValue)
+    ? normalizedValue
+    : ((normalizedValue as Record<string, unknown>).tools as unknown[]);
+  if (!tools.every(isUsableTrajectorySequenceStep)) {
+    return 'Each trajectory tool set entry needs a name or pattern.';
   }
   return undefined;
 }
@@ -507,6 +606,9 @@ function getStructuredValueError(assertion: Assertion): string | undefined {
   if (assertion.type === 'trace-span-duration' || assertion.type === 'not-trace-span-duration') {
     return getTraceSpanDurationValueError(assertion.value);
   }
+  if (assertion.type === 'tokens-used' || assertion.type === 'not-tokens-used') {
+    return getTokensUsedValueError(assertion.value);
+  }
   if (
     assertion.type === 'trajectory:tool-args-match' ||
     assertion.type === 'not-trajectory:tool-args-match'
@@ -524,6 +626,9 @@ function getStructuredValueError(assertion: Assertion): string | undefined {
     assertion.type === 'not-trajectory:tool-sequence'
   ) {
     return getTrajectoryToolSequenceValueError(assertion.value);
+  }
+  if (assertion.type === 'trajectory:tool-set' || assertion.type === 'not-trajectory:tool-set') {
+    return getTrajectoryToolSetValueError(assertion.value);
   }
   if (assertion.type === 'trace-error-spans' || assertion.type === 'not-trace-error-spans') {
     return getTraceErrorSpansValueError(assertion.value);
@@ -645,7 +750,11 @@ function getTrajectoryGoalValueError(assertion: Assertion): string | undefined {
   }
   // Goal is present; mirror the runtime check that an optional timeoutMs is a positive number.
   if (isRecord(assertion.value)) {
-    return trajectoryGoalSuccessTimeoutError(assertion.value);
+    return trajectoryGoalSuccessTimeoutError(
+      isNunjucksOutputExpression(assertion.value.timeoutMs)
+        ? { ...assertion.value, timeoutMs: 1 }
+        : assertion.value,
+    );
   }
 
   return undefined;
@@ -679,14 +788,9 @@ function getSkillCountValueError(assertion: Assertion): string | undefined {
     hasMatcherName(assertion.value)
   ) {
     const { min, max } = assertion.value;
-    if (
-      (min !== undefined && !isNonNegativeInteger(min)) ||
-      (max !== undefined && !isNonNegativeInteger(max))
-    ) {
-      return 'Enter skill count limits as whole numbers, 0 or greater.';
-    }
-    if (typeof min === 'number' && typeof max === 'number' && max < min) {
-      return 'Maximum skill count cannot be less than minimum skill count.';
+    const countError = getNonNegativeIntegerRangeError(assertion.value, 'skill count limits');
+    if (countError) {
+      return countError;
     }
     if (
       assertion.type === 'not-skill-used' &&
@@ -714,9 +818,15 @@ export function getRunnableAssertionValueError(assertion: Assertion): string | u
   if (!isSupportedAssertionType(assertion.type)) {
     return 'Select a supported assertion type before running.';
   }
+  const thresholdError = getThresholdError(assertion);
+  if (thresholdError) {
+    return thresholdError;
+  }
+  if (isRuntimeResolvedAssertionValue(assertion.value)) {
+    return undefined;
+  }
 
   return (
-    getThresholdError(assertion) ||
     getWordCountError(assertion) ||
     getStructuredValueError(assertion) ||
     getExpectedValueError(assertion)

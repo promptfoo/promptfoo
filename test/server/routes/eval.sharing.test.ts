@@ -249,6 +249,66 @@ describe('Eval Routes - Sharing behavior', () => {
     expect(evaluateArg.tests).toBe(sasUri);
   });
 
+  it('restores redacted Azure SAS tokens after stored eval tests are reordered', async () => {
+    const firstSasUri = 'az://account/container/first.yaml?sp=r&sig=first-secret';
+    const secondSasUri = 'az://account/container/second.yaml?sp=r&sig=second-secret';
+    mockedEvalFindById.mockResolvedValueOnce({
+      config: {
+        tests: [
+          { description: 'first', vars: { input: firstSasUri } },
+          { description: 'second', vars: { input: secondSasUri } },
+        ],
+      },
+    } as never);
+
+    await postJob({
+      ...minimalTestSuite,
+      tests: [
+        {
+          description: 'edited second',
+          vars: {
+            input: 'az://account/container/second.yaml?sp=r&sig=%5BREDACTED%5D',
+          },
+        },
+      ],
+      sourceEvalId: 'source-eval-id',
+    });
+
+    await vi.waitFor(() => {
+      expect(mockedEvaluateWithSource).toHaveBeenCalled();
+    });
+
+    const evaluateArg = mockedEvaluateWithSource.mock.calls[0][0] as any;
+    expect(evaluateArg.tests).toEqual([
+      {
+        description: 'edited second',
+        vars: { input: secondSasUri },
+      },
+    ]);
+  });
+
+  it('does not graft a stored SAS token into a different submitted field', async () => {
+    const redactedUri = 'az://account/container/tests.yaml?sp=r&sig=%5BREDACTED%5D';
+    mockedEvalFindById.mockResolvedValueOnce({
+      config: {
+        tests: ['az://account/container/tests.yaml?sp=r&sig=source-secret'],
+      },
+    } as never);
+
+    await postJob({
+      ...minimalTestSuite,
+      tests: [{ vars: { leak: redactedUri } }],
+      sourceEvalId: 'source-eval-id',
+    });
+
+    await vi.waitFor(() => {
+      expect(mockedEvaluateWithSource).toHaveBeenCalled();
+    });
+
+    const evaluateArg = mockedEvaluateWithSource.mock.calls[0][0] as any;
+    expect(evaluateArg.tests).toEqual([{ vars: { leak: redactedUri } }]);
+  });
+
   it('should not log the raw save body on database failure', async () => {
     mockedEvalCreate.mockRejectedValueOnce(new Error('db down'));
 

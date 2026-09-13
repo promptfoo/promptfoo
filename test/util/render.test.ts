@@ -47,6 +47,27 @@ describe('renderVarsInObject', () => {
     expect(rendered).toBe('Hello World!');
   });
 
+  it('preserves native values for full variable expressions', () => {
+    expect(
+      renderVarsInObject(
+        { limit: '{{ settings.limit }}', enabled: '{{ settings["enabled"] }}' },
+        { settings: { limit: 5, enabled: true } },
+      ),
+    ).toEqual({ limit: 5, enabled: true });
+  });
+
+  it.each([
+    ['{{ values[0] }}', 0],
+    ['{{ values[ 1 ] }}', false],
+    ['{{ values[2].items[0] }}', { count: 5 }],
+  ])('preserves native values for array expression %s', (expression, expected) => {
+    expect(
+      renderVarsInObject(expression, {
+        values: [0, false, { items: [{ count: 5 }] }],
+      }),
+    ).toEqual(expected);
+  });
+
   it('should render variables in array objects', async () => {
     const obj = ['{{ greeting }}', '{{ name }}', 42];
     const vars = { greeting: 'Hello', name: 'World' };
@@ -88,6 +109,19 @@ describe('renderVarsInObject', () => {
         array: ['array_item'],
       },
     });
+  });
+
+  it('preserves own reserved object keys without changing the output prototype', () => {
+    const obj = JSON.parse(
+      '{"__proto__":{"value":"{{ rendered }}"},"constructor":"literal"}',
+    ) as Record<string, unknown>;
+
+    const rendered = renderVarsInObject(obj, { rendered: 'safe' });
+
+    expect(Object.getPrototypeOf(rendered)).toBe(Object.prototype);
+    expect(Object.hasOwn(rendered, '__proto__')).toBe(true);
+    expect(Object.entries(rendered)).toContainEqual(['__proto__', { value: 'safe' }]);
+    expect(Object.hasOwn(rendered, 'constructor')).toBe(true);
   });
 
   it('should handle function objects by calling them with vars', async () => {

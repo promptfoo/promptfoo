@@ -341,6 +341,7 @@ describe('EvaluateTestSuiteCreator', () => {
 
   it('should successfully upload and parse a valid YAML file', async () => {
     const user = userEvent.setup();
+    useStore.getState().setConfig({ description: 'Old source config' }, 'old-source-eval');
     render(<EvaluateTestSuiteCreator />);
 
     const mockYamlContent = 'description: Test Config\nproviders:\n  - id: test-provider';
@@ -354,6 +355,7 @@ describe('EvaluateTestSuiteCreator', () => {
     });
 
     expect(useStore.getState().config.description).toBe('Test Config');
+    expect(useStore.getState().sourceEvalId).toBeUndefined();
   });
 
   it('should handle invalid YAML with error toast', async () => {
