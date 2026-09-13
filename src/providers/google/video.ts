@@ -230,9 +230,9 @@ export class GoogleVideoProvider implements ApiProvider {
     return `${AI_STUDIO_BASE_URL}/${pathSuffix}`;
   }
 
-  private async getAiStudioHeaders(config: GoogleVideoOptions): Promise<Record<string, string>> {
+  private getAiStudioHeaders(config: GoogleVideoOptions): Record<string, string> {
     const apiKey = this.getApiKey(config);
-    if (!apiKey) {
+    if (!apiKey && config.apiKeyRequired !== false) {
       throw new Error(
         'Google API key is not set. Set GOOGLE_API_KEY or GEMINI_API_KEY, or add `apiKey` to the provider config.',
       );
@@ -240,7 +240,7 @@ export class GoogleVideoProvider implements ApiProvider {
 
     return {
       'Content-Type': 'application/json',
-      'x-goog-api-key': apiKey,
+      ...(apiKey ? { 'x-goog-api-key': apiKey } : {}),
     };
   }
 
@@ -540,7 +540,7 @@ export class GoogleVideoProvider implements ApiProvider {
     }
 
     try {
-      const headers = await this.getAiStudioHeaders(config);
+      const headers = this.getAiStudioHeaders(config);
       const url = this.getAiStudioEndpoint(`models/${this.modelName}:predictLongRunning`);
 
       logger.debug('[Google Video] Creating video job', {
@@ -664,7 +664,7 @@ export class GoogleVideoProvider implements ApiProvider {
   ): Promise<{ operation?: GoogleVideoOperation; error?: string }> {
     const startTime = Date.now();
     const url = this.getAiStudioEndpoint(operationName);
-    const headers = await this.getAiStudioHeaders(config);
+    const headers = this.getAiStudioHeaders(config);
 
     logger.debug(`[Google Video] Polling operation via Google AI Studio: ${url}`);
 
@@ -773,7 +773,7 @@ export class GoogleVideoProvider implements ApiProvider {
     context?: CallApiContextParams,
   ): Promise<{ blobRef?: BlobRef; error?: string }> {
     try {
-      const headers = await this.getAiStudioHeaders(config);
+      const headers = this.getAiStudioHeaders(config);
       const response = await fetchWithTimeout(
         videoUri,
         {
@@ -857,10 +857,12 @@ export class GoogleVideoProvider implements ApiProvider {
     if (isVertexMode) {
       let projectId =
         effectiveConfig.projectId ||
-        getEnvString('GOOGLE_CLOUD_PROJECT') ||
+        this.env?.VERTEX_PROJECT_ID ||
+        getEnvString('VERTEX_PROJECT_ID') ||
+        this.env?.GOOGLE_PROJECT_ID ||
         getEnvString('GOOGLE_PROJECT_ID') ||
         this.env?.GOOGLE_CLOUD_PROJECT ||
-        this.env?.GOOGLE_PROJECT_ID;
+        getEnvString('GOOGLE_CLOUD_PROJECT');
 
       if (!projectId) {
         try {
@@ -877,9 +879,13 @@ export class GoogleVideoProvider implements ApiProvider {
         vertexai: true,
         ...(projectId ? { projectId } : {}),
       };
-    } else if (!this.getApiKey(effectiveConfig)) {
+    } else if (!this.getApiKey(effectiveConfig) && effectiveConfig.apiKeyRequired !== false) {
       try {
-        const adcProjectId = await resolveProjectId(effectiveConfig, this.env);
+        const useVertexEnv = getEnvString('GOOGLE_GENAI_USE_VERTEXAI');
+        const adcProjectId =
+          effectiveConfig.vertexai === false || useVertexEnv === 'false' || useVertexEnv === '0'
+            ? undefined
+            : await resolveProjectId(effectiveConfig, this.env);
         if (adcProjectId) {
           effectiveConfig = {
             ...effectiveConfig,

@@ -347,13 +347,17 @@ describe('GoogleVideoProvider', () => {
     it('should return error when Google AI Studio API key is missing', async () => {
       mockProcessEnv({ GOOGLE_CLOUD_PROJECT: undefined });
       mockProcessEnv({ GOOGLE_PROJECT_ID: undefined });
-      mockResolveProjectId.mockRejectedValue(new Error('No project ID found'));
-      const provider = new GoogleVideoProvider('veo-3.1-generate-preview');
+      mockResolveProjectId.mockResolvedValue('scoped-project');
+      const provider = new GoogleVideoProvider('veo-3.1-generate-preview', {
+        config: { vertexai: false },
+        env: { GOOGLE_CLOUD_PROJECT: 'scoped-project' },
+      });
 
       const result = await provider.callApi('Test prompt');
 
       expect(result.error).toContain('Google AI Studio');
       expect(result.error).toContain('GOOGLE_API_KEY');
+      expect(mockResolveProjectId).not.toHaveBeenCalled();
     });
 
     it('should return error when Vertex project ID is missing and ADC fails', async () => {
@@ -510,9 +514,14 @@ describe('GoogleVideoProvider', () => {
       );
     });
 
-    it('should create and poll Veo jobs through Google AI Studio with an API key', async () => {
+    it.each([
+      { name: 'an API key', apiKey: 'test-api-key', optOutAt: undefined },
+      { name: 'provider-level API key opt-out', apiKey: undefined, optOutAt: 'provider' },
+      { name: 'prompt-level API key opt-out', apiKey: undefined, optOutAt: 'prompt' },
+      { name: 'an API key with opt-out enabled', apiKey: 'test-api-key', optOutAt: 'provider' },
+    ])('creates, polls and downloads AI Studio video with $name', async ({ apiKey, optOutAt }) => {
       mockProcessEnv({ GOOGLE_PROJECT_ID: undefined });
-      mockProcessEnv({ GOOGLE_API_KEY: 'test-api-key' });
+      mockProcessEnv({ GOOGLE_API_KEY: apiKey });
 
       const operationName = 'models/veo-3.1-generate-preview/operations/test-op';
       const videoUri = 'https://generativelanguage.googleapis.com/v1beta/files/test-video';
@@ -551,16 +560,24 @@ describe('GoogleVideoProvider', () => {
 
       const provider = new GoogleVideoProvider('veo-3.1-generate-preview', {
         config: {
+          vertexai: false,
+          apiKeyRequired: optOutAt !== 'provider',
           pollIntervalMs: 10,
           maxPollTimeMs: 5000,
         },
       });
 
       const result = await provider.callApi('A cinematic shot of a lighthouse in a storm', {
+        prompt: {
+          raw: 'Test prompt',
+          label: 'Test prompt',
+          config: optOutAt === 'prompt' ? { apiKeyRequired: false } : undefined,
+        },
+        vars: {},
         evaluationId: 'eval-google-video-download',
         promptIdx: 9,
         testIdx: 10,
-      } as unknown as CallApiContextParams);
+      });
 
       expect(result.error).toBeUndefined();
       expect(result.metadata?.videoUri).toBe(videoUri);
@@ -578,6 +595,9 @@ describe('GoogleVideoProvider', () => {
       );
       expect(mockResolveProjectId).not.toHaveBeenCalled();
       expect(mockFetchWithTimeout).toHaveBeenCalledTimes(3);
+      for (const [, options] of mockFetchWithTimeout.mock.calls) {
+        expect(options.headers['x-goog-api-key']).toBe(apiKey);
+      }
       expect(mockFetchWithTimeout).toHaveBeenNthCalledWith(
         1,
         'https://generativelanguage.googleapis.com/v1beta/models/veo-3.1-generate-preview:predictLongRunning',
@@ -585,7 +605,6 @@ describe('GoogleVideoProvider', () => {
           method: 'POST',
           headers: expect.objectContaining({
             'Content-Type': 'application/json',
-            'x-goog-api-key': 'test-api-key',
           }),
         }),
         expect.any(Number),
@@ -599,9 +618,6 @@ describe('GoogleVideoProvider', () => {
         'https://generativelanguage.googleapis.com/v1beta/models/veo-3.1-generate-preview/operations/test-op',
         expect.objectContaining({
           method: 'GET',
-          headers: expect.objectContaining({
-            'x-goog-api-key': 'test-api-key',
-          }),
         }),
         expect.any(Number),
       );
@@ -610,9 +626,6 @@ describe('GoogleVideoProvider', () => {
         videoUri,
         expect.objectContaining({
           method: 'GET',
-          headers: expect.objectContaining({
-            'x-goog-api-key': 'test-api-key',
-          }),
         }),
         expect.any(Number),
       );
