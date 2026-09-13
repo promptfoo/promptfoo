@@ -1235,6 +1235,19 @@ describe('trajectory assertions', () => {
         'trajectory:tool-sequence assertion requires at least one expected step',
       );
     });
+
+    it('rejects non-array object steps', () => {
+      const params: AssertionParams = {
+        ...defaultParams,
+        baseType: 'trajectory:tool-sequence',
+        assertion: { type: 'trajectory:tool-sequence', value: { steps: 'search' } as any },
+        renderedValue: { steps: 'search' } as any,
+      };
+
+      expect(() => handleTrajectoryToolSequence(params)).toThrow(
+        'trajectory:tool-sequence assertion steps must be an array',
+      );
+    });
   });
 
   describe('trajectory:tool-args-match', () => {

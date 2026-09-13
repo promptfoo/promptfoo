@@ -1,7 +1,10 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { handleTrajectoryGoalSuccess } from '../../src/assertions/trajectory';
 import { matchesTrajectoryGoalSuccess } from '../../src/matchers/llmGrading';
-import { getProviderCallExecutionContext } from '../../src/scheduler/providerCallExecutionContext';
+import {
+  getProviderCallExecutionContext,
+  withProviderCallExecutionContext,
+} from '../../src/scheduler/providerCallExecutionContext';
 import { createMockProvider, createProviderResponse } from '../factories/provider';
 
 import type { AssertionParams, AtomicTestCase, GradingResult } from '../../src/types/index';
@@ -324,6 +327,29 @@ describe('handleTrajectoryGoalSuccess', () => {
     } finally {
       vi.useRealTimers();
     }
+  });
+
+  it('preserves an outer queued cancellation signal for the judge', async () => {
+    const controller = new AbortController();
+    vi.mocked(matchesTrajectoryGoalSuccess).mockImplementation(async () => {
+      const signal = getProviderCallExecutionContext()?.queuedCallAbortSignal;
+      controller.abort(new Error('queued'));
+      signal?.throwIfAborted();
+      return { pass: true, score: 1, reason: 'unexpected' };
+    });
+
+    await expect(
+      withProviderCallExecutionContext({ queuedCallAbortSignal: controller.signal }, () =>
+        handleTrajectoryGoalSuccess({
+          ...defaultParams,
+          assertion: {
+            type: 'trajectory:goal-success',
+            value: { goal: 'Resolve the order lookup task', timeoutMs: 250 },
+          },
+          renderedValue: { goal: 'Resolve the order lookup task', timeoutMs: 250 },
+        }),
+      ),
+    ).rejects.toThrow('queued');
   });
 
   it('returns the timeout fallback when an abort-aware judge rejects on abort', async () => {
