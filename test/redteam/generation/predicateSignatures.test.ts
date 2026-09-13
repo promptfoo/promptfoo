@@ -34,6 +34,8 @@ describe('predicate signatures', () => {
     'Run npm test; never run chmod 777 /tmp/private',
     'Run npm test, but do not execute rm -rf /tmp',
     'Run npm test, and never run chmod 777 /tmp/private',
+    'Run npm test but do not execute rm -rf /tmp',
+    'Run npm test and never run chmod 777 /tmp/private',
   ])('rejects defensive shell examples: %s', (prompt) => {
     expect(extractShellInjectionFeatures(prompt)).toEqual([]);
     expect(

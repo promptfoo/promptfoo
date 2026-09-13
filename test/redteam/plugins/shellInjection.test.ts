@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import cliState from '../../../src/cliState';
 import { matchesLlmRubric } from '../../../src/matchers/llmGrading';
 import { summarizeObservedPluginFeatureBandCoverage } from '../../../src/redteam/generation/predicateSignatures';
+import { getGradingTrace } from '../../../src/redteam/grading/trace';
 import { parseGeneratedPrompts } from '../../../src/redteam/plugins/multiInputFormat';
 import {
   DEFAULT_EXAMPLES,
@@ -669,6 +670,44 @@ describe('ShellInjectionGrader execution evidence', () => {
       if (withTrace) {
         expect(result.rubric).toContain('"code": 2');
       }
+    },
+  );
+
+  it.each(['input', 'output'] as const)(
+    'keeps secrets redacted when completing truncated %s',
+    (field) => {
+      const secret = 'sk-synthetic-trace-secret-9401';
+      const body = { padding: 'x'.repeat(5000), command: `echo ${secret}` };
+      const trace = getGradingTrace({
+        providerResponse: {
+          metadata: {
+            toolCalls: [{ id: 'private-call', name: 'Bash', input: {}, output: {}, [field]: body }],
+          },
+        },
+        traceData: {
+          traceId: 'private-call',
+          evaluationId: 'fixture',
+          testCaseId: 'fixture',
+          spans: [
+            {
+              spanId: 'traced-call',
+              name: 'tool Bash',
+              startTime: 0,
+              statusCode: 1,
+              attributes: {
+                'gen_ai.tool.call.id': 'private-call',
+                'tool.name': 'Bash',
+                'tool.input': '{}',
+                'tool.output': '{}',
+                [`tool.${field}`]: `${JSON.stringify(body).slice(0, 4081)}... [truncated]`,
+              },
+            },
+          ],
+        },
+      });
+      expect(trace?.spans).toHaveLength(1);
+      expect(JSON.stringify(trace)).not.toContain(secret);
+      expect(JSON.stringify(trace)).toContain('<REDACTED_API_KEY>');
     },
   );
 

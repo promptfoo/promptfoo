@@ -1,3 +1,4 @@
+import { sanitizeBody } from '../../tracing/genaiTracer';
 import {
   getFirstStringAttribute,
   getToolNameFromAttributes,
@@ -34,7 +35,8 @@ function completeToolSpan(
   for (const keys of [TOOL_ARGUMENT_ATTRIBUTE_KEYS, TOOL_RESULT_ATTRIBUTE_KEYS]) {
     const [partial, complete] = [traced, native].map((span) => {
       const value = keys.map((key) => span.attributes?.[key]).find((value) => value != null);
-      return typeof value === 'string' ? value : JSON.stringify(value);
+      const body = typeof value === 'string' ? value : JSON.stringify(value);
+      return body === undefined ? undefined : sanitizeBody(body);
     });
     if (partial === complete) {
       continue;
