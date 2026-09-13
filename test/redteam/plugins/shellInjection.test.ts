@@ -416,6 +416,7 @@ describe('ShellInjectionGrader execution evidence', () => {
     'redacted',
     'redacted-tool',
     'oversized',
+    'sanitized-secret',
     'too-many',
     'filtered',
   ])('returns an evidence error for %s mutation evidence', async (condition) => {
@@ -437,7 +438,9 @@ describe('ShellInjectionGrader execution evidence', () => {
               command:
                 condition === 'oversized'
                   ? 'rm /private/' + 'x'.repeat(401)
-                  : 'rm /private/fixture',
+                  : condition === 'sanitized-secret'
+                    ? 'echo sk-synthetic-trace-secret-9401'
+                    : 'rm /private/fixture',
             },
       result: { exitCode: 0 },
     };
@@ -673,43 +676,47 @@ describe('ShellInjectionGrader execution evidence', () => {
     },
   );
 
-  it.each(['input', 'output'] as const)(
-    'keeps secrets redacted when completing truncated %s',
-    (field) => {
-      const secret = 'sk-synthetic-trace-secret-9401';
-      const body = { padding: 'x'.repeat(5000), command: `echo ${secret}` };
-      const trace = getGradingTrace({
-        providerResponse: {
-          metadata: {
-            toolCalls: [{ id: 'private-call', name: 'Bash', input: {}, output: {}, [field]: body }],
-          },
+  it.each(
+    (['input', 'output'] as const).flatMap((field) =>
+      ['truncated', 'native-only', 'unmatched'].map((mode) => [field, mode] as const),
+    ),
+  )('keeps native %s secrets redacted with %s trace evidence', (field, mode) => {
+    const secret = 'sk-synthetic-trace-secret-9401';
+    const body = { padding: 'x'.repeat(5000), command: `echo ${secret}` };
+    const trace = getGradingTrace({
+      providerResponse: {
+        metadata: {
+          toolCalls: [{ id: 'private-call', name: 'Bash', input: {}, output: {}, [field]: body }],
         },
-        traceData: {
-          traceId: 'private-call',
-          evaluationId: 'fixture',
-          testCaseId: 'fixture',
-          spans: [
-            {
-              spanId: 'traced-call',
-              name: 'tool Bash',
-              startTime: 0,
-              statusCode: 1,
-              attributes: {
-                'gen_ai.tool.call.id': 'private-call',
-                'tool.name': 'Bash',
-                'tool.input': '{}',
-                'tool.output': '{}',
-                [`tool.${field}`]: `${JSON.stringify(body).slice(0, 4081)}... [truncated]`,
-              },
+      },
+      traceData:
+        mode === 'native-only'
+          ? undefined
+          : {
+              traceId: 'private-call',
+              evaluationId: 'fixture',
+              testCaseId: 'fixture',
+              spans: [
+                {
+                  spanId: 'traced-call',
+                  name: 'tool Bash',
+                  startTime: 0,
+                  statusCode: 1,
+                  attributes: {
+                    'gen_ai.tool.call.id': mode === 'unmatched' ? 'other-call' : 'private-call',
+                    'tool.name': 'Bash',
+                    'tool.input': '{}',
+                    'tool.output': '{}',
+                    [`tool.${field}`]: `${JSON.stringify(body).slice(0, 4081)}... [truncated]`,
+                  },
+                },
+              ],
             },
-          ],
-        },
-      });
-      expect(trace?.spans).toHaveLength(1);
-      expect(JSON.stringify(trace)).not.toContain(secret);
-      expect(JSON.stringify(trace)).toContain('<REDACTED_API_KEY>');
-    },
-  );
+    });
+    expect(trace?.spans).toHaveLength(mode === 'unmatched' ? 2 : 1);
+    expect(JSON.stringify(trace)).not.toContain(secret);
+    expect(JSON.stringify(trace)).toContain('<REDACTED_API_KEY>');
+  });
 
   it.each(['input', 'output'] as const)(
     'completes truncated traced %s from matching native evidence',

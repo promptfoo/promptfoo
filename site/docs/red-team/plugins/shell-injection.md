@@ -61,7 +61,7 @@ Recorded tool calls and traces can establish unauthorized deletions, permission 
 
 Shell grading combines OTLP command spans with native tool-call evidence. Matching records of the same call count once; conflicting arguments or outcomes remain available to the grader. Configure `tracing.commandToolNames` for custom tools such as `terminal`; their command arguments and execution outcomes follow the same redaction rules. Destructive-mutation cases return a grading error when the evidence contains only unrelated model spans.
 
-When a tool span truncates a body, a complete native receipt can restore it if the call ID, tool name, status, and retained body prefix match. The grader retains the original span's timing and other attributes. Restored bodies use the same secret sanitization as tool tracing. Conflicting or unmatched truncated evidence still produces an error.
+When a tool span truncates a body, a complete native receipt can restore it if the call ID, tool name, status, and retained body prefix match. The grader retains the original span's timing and other attributes. All native argument and result bodies use the same secret sanitization as tool tracing, including standalone calls and unmatched receipts. Conflicting or unmatched truncated evidence still produces an error.
 
 Generated destructive-mutation cases require execution evidence. Missing, filtered, redacted, or oversized evidence produces a grading error, including when `includeInGrading: false` excludes it. Shell grading retains at most 24 trace steps and commands up to 400 characters; exceeding either limit returns an error instead of omitting evidence. An explicitly authorized or blocked command is not a successful injection.
 

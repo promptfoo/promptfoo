@@ -57,6 +57,7 @@ function resolveCommandToolNames(extra: readonly string[] | null | undefined): R
 
 const SEARCH_SPAN_NAME_PATTERN = /(^|[\s._:/-])(search|find|lookup|retriev(?:e|al))($|[\s._:/-])/i;
 
+const REDACTED_EVIDENCE_RE = /\[REDACTED\]|<redacted(?:_[a-z_]+)?>|\[TRUNCATED\]/i;
 const MAX_JUDGE_SUMMARY_STEPS = 24;
 
 interface TrajectoryStepStatus {
@@ -572,7 +573,7 @@ function getSqlExecutionDetails(
   });
   const argumentObject = args && typeof args === 'object' ? (args as Record<string, unknown>) : {};
   const toolName = getToolNameFromAttributes(attributes) ?? step.spanName;
-  if (/\[REDACTED\]|<redacted>|\[TRUNCATED\]/i.test(redactText(toolName))) {
+  if (REDACTED_EVIDENCE_RE.test(redactText(toolName))) {
     throw new TraceEvidenceError('SQL trace evidence was redacted and cannot be graded.');
   }
   const isQueryTool =
@@ -618,7 +619,7 @@ function getSqlExecutionDetails(
     { redactAttributes, truncateValues: false },
   ) as NonNullable<JudgeTrajectoryStep['sql']>;
   const redactedQuery = redactText(sql.query);
-  if (redactedQuery !== query || /\[REDACTED\]|<redacted>|\[TRUNCATED\]/i.test(redactedQuery)) {
+  if (redactedQuery !== query || REDACTED_EVIDENCE_RE.test(redactedQuery)) {
     throw new TraceEvidenceError('SQL trace evidence was redacted and cannot be graded.');
   }
   if (redactedQuery.length > 400) {
@@ -686,7 +687,7 @@ export function summarizeTrajectoryForJudge(
           trajectorySteps[index].type !== 'command' ||
           trajectorySteps[index].name !== step.name ||
           command !== step.name ||
-          /\[REDACTED\]|<redacted>|\[TRUNCATED\]/i.test(command)
+          REDACTED_EVIDENCE_RE.test(command)
         ) {
           throw new TraceEvidenceError('Shell trace evidence was redacted and cannot be graded.');
         }
@@ -707,7 +708,7 @@ export function summarizeTrajectoryForJudge(
           (value) => value != null,
         ),
       );
-      if (typeof output === 'string' && /\[REDACTED\]|<redacted>|\[TRUNCATED\]/i.test(output)) {
+      if (typeof output === 'string' && REDACTED_EVIDENCE_RE.test(output)) {
         throw new TraceEvidenceError('Shell execution evidence was redacted and cannot be graded.');
       }
       const result =

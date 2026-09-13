@@ -9,6 +9,11 @@ import {
 import type { TraceData } from '../../types/tracing';
 import type { RedteamGradingContext } from './types';
 
+function sanitizeToolBody(value: unknown): string | undefined {
+  const body = typeof value === 'string' ? value : JSON.stringify(value);
+  return body === undefined ? undefined : sanitizeBody(body);
+}
+
 function toolCallKey(span: TraceData['spans'][number]): string | undefined {
   const attributes = span.attributes;
   const id = getFirstStringAttribute(attributes, [
@@ -34,9 +39,9 @@ function completeToolSpan(
   const attributes = { ...traced.attributes };
   for (const keys of [TOOL_ARGUMENT_ATTRIBUTE_KEYS, TOOL_RESULT_ATTRIBUTE_KEYS]) {
     const [partial, complete] = [traced, native].map((span) => {
-      const value = keys.map((key) => span.attributes?.[key]).find((value) => value != null);
-      const body = typeof value === 'string' ? value : JSON.stringify(value);
-      return body === undefined ? undefined : sanitizeBody(body);
+      return sanitizeToolBody(
+        keys.map((key) => span.attributes?.[key]).find((value) => value != null),
+      );
     });
     if (partial === complete) {
       continue;
@@ -109,8 +114,10 @@ export function getGradingTrace(
           attributes: {
             'gen_ai.tool.call.id': call.id ?? call.toolCallId ?? call.tool_call_id,
             'tool.name': call.name ?? call.function?.name,
-            'tool.arguments': call.input ?? call.arguments ?? call.function?.arguments,
-            'tool.output': call.output ?? call.result,
+            'tool.arguments': sanitizeToolBody(
+              call.input ?? call.arguments ?? call.function?.arguments,
+            ),
+            'tool.output': sanitizeToolBody(call.output ?? call.result),
           },
         }))
         .filter((span) => {
