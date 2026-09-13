@@ -9,6 +9,7 @@ import { getDefaultProviders } from '../../src/providers/defaults';
 import { loadApiProvider, loadApiProviders } from '../../src/providers/index';
 import { OpenAiChatCompletionProvider } from '../../src/providers/openai/chat';
 import { providerRegistry } from '../../src/providers/providerRegistry';
+import { checkCloudPermissions } from '../../src/util/cloud';
 import { loadDefaultConfig } from '../../src/util/config/default';
 import { resolveConfigs } from '../../src/util/config/load';
 import { writeMultipleOutputs } from '../../src/util/index';
@@ -335,6 +336,115 @@ describe('evaluation ownership of supplied grading providers', () => {
     watcher.handlers.clear();
     vi.resetAllMocks();
   });
+
+  it.each(['success', 'error', 'abort'] as const)(
+    'keeps a resolved shared target alive through pending setup: %s',
+    async (outcome) => {
+      const firstStarted = deferred();
+      const finishFirst = deferred();
+      const setupStarted = deferred();
+      const finishSetup = deferred();
+      const controller = new AbortController();
+      const setupError = new Error(`Pending setup ${outcome}`);
+      let closed = false;
+      const target = {
+        id: () => 'shared-pending-setup-target',
+        callApi: vi.fn(async (prompt: string) => {
+          if (prompt === 'A') {
+            firstStarted.resolve();
+            await finishFirst.promise;
+          }
+          expect(closed).toBe(false);
+          return { output: prompt };
+        }),
+        cleanup: vi.fn(() => {
+          closed = true;
+        }),
+      } satisfies ApiProvider;
+      const grader = {
+        id: () => 'borrowed-pending-setup-grader',
+        callApi: vi.fn(async () => ({
+          output: '{"pass":true,"score":1,"reason":"setup survived"}',
+        })),
+        cleanup: vi.fn(),
+      } satisfies ApiProvider;
+      const suites: TestSuite[] = ['A', 'B'].map((prompt) => ({
+        providers: [target],
+        prompts: [{ raw: prompt, label: prompt }],
+        tests: [{ assert: [{ type: 'llm-rubric', value: 'Valid answer', provider: grader }] }],
+      }));
+      vi.mocked(resolveConfigs).mockImplementation(async () => {
+        const testSuite = suites.shift();
+        if (!testSuite) {
+          throw new Error('Unexpected setup evaluation');
+        }
+        const config = { outputPath: ['pending-setup.json'] };
+        cliState.config = config;
+        return { config, testSuite, basePath: '' };
+      });
+      let cloudChecks = 0;
+      vi.mocked(checkCloudPermissions).mockImplementation(async () => {
+        if (++cloudChecks === 2) {
+          setupStarted.resolve();
+          await finishSetup.promise;
+          if (outcome === 'error') {
+            throw setupError;
+          }
+          controller.signal.throwIfAborted();
+        }
+      });
+      const pending: ReturnType<typeof doEval>[] = [];
+      const run = (abortSignal?: AbortSignal) => {
+        const result = doEval(
+          { write: false, table: false, share: false, cache: false },
+          {},
+          'pending-setup.mjs',
+          { maxConcurrency: 1, showProgressBar: false, abortSignal },
+        );
+        pending.push(result);
+        void result.catch(() => {});
+        return result;
+      };
+      try {
+        const first = run();
+        await Promise.race([
+          firstStarted.promise,
+          first.then(() => {
+            throw new Error('First evaluation skipped its target');
+          }),
+        ]);
+        const second = run(controller.signal);
+        await Promise.race([
+          setupStarted.promise,
+          second.then(() => {
+            throw new Error('Second evaluation skipped pending setup');
+          }),
+        ]);
+        finishFirst.resolve();
+        expect((await (await first).toEvaluateSummary()).stats.successes).toBe(1);
+        expect(target.cleanup).not.toHaveBeenCalled();
+        expect(closed).toBe(false);
+        if (outcome === 'abort') {
+          controller.abort(setupError);
+        }
+        finishSetup.resolve();
+        if (outcome === 'success') {
+          expect((await (await second).toEvaluateSummary()).stats.successes).toBe(1);
+          expect(target.callApi.mock.calls.map(([prompt]) => prompt)).toEqual(['A', 'B']);
+        } else {
+          await expect(second).rejects.toBe(setupError);
+          expect(target.callApi.mock.calls.map(([prompt]) => prompt)).toEqual(['A']);
+        }
+        expect(target.cleanup).toHaveBeenCalledTimes(1);
+        expect(target.cleanup).toHaveBeenCalledWith({ reason: 'evaluation-complete' });
+        expect(grader.cleanup).not.toHaveBeenCalled();
+      } finally {
+        finishFirst.resolve();
+        finishSetup.resolve();
+        await Promise.allSettled(pending);
+      }
+    },
+  );
 
   it.each(['success', 'failure'] as const)(
     'keeps public provider setup alive through another evaluator failure: %s',

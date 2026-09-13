@@ -846,23 +846,38 @@ abstract class SageMakerGenericProvider {
                   );
                 } catch {
                   // An invalid later configuration cannot validate this retained state.
-                  // Leave the current credential result/error to the SDK.
+                  // Reject a stale successful result without replacing a resolver failure.
                   return false;
                 }
               };
-              const initiallyMatched = await inputsMatch();
+              const staleInputMessage =
+                'SageMaker credential inputs changed during initialization; retry with stable inputs';
+              let inputsMatched = await inputsMatch();
               try {
+                if (!inputsMatched) {
+                  throw new Error(staleInputMessage);
+                }
                 const resolved = await credentialProvider(options);
+                inputsMatched = await inputsMatch();
+                if (!inputsMatched) {
+                  throw new Error(staleInputMessage);
+                }
                 // The default chain may return cached credentials while refreshing
                 // in the background. Its later input reads outlive this guard.
                 credentialState.passiveRefreshPossible ||=
                   !(options && 'forceRefresh' in options && options.forceRefresh) &&
                   !!credentialsTreatedAsExpired?.(resolved);
                 return resolved;
+              } catch (error) {
+                // Keep a resolver's original failure while discarding observed stale state.
+                if (inputsMatched) {
+                  inputsMatched = await inputsMatch();
+                }
+                throw error;
               } finally {
-                if (!initiallyMatched || !(await inputsMatch())) {
-                  // A lazy chain may observe newer inputs. Keep active requests owned,
-                  // but never reuse their client or credentials under the old scope.
+                if (!inputsMatched) {
+                  // Discard the observed stale identity before signing. Active requests own
+                  // their transport until the existing request cleanup releases it.
                   credentialState.reusable = false;
                   if (this.#retainedCredentials === credentialState) {
                     this.#retainedCredentials = undefined;

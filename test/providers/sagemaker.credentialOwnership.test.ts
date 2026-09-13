@@ -56,6 +56,9 @@ describe('SageMaker ownership of reusable SDK credentials', () => {
   let metadataAddress: { port: number } | undefined;
   let metadataStarted: ReturnType<typeof deferred>;
   let releaseMetadata: ReturnType<typeof deferred>;
+  let credentialsStarted: ReturnType<typeof deferred>;
+  let releaseCredentials: ReturnType<typeof deferred>;
+  let pauseCredentials: boolean;
   let firstSigned: ReturnType<typeof deferred>;
   let releaseFirst: ReturnType<typeof deferred>;
   let pending: Promise<unknown>[];
@@ -108,6 +111,9 @@ describe('SageMaker ownership of reusable SDK credentials', () => {
     });
     metadataStarted = deferred();
     releaseMetadata = deferred();
+    credentialsStarted = deferred();
+    releaseCredentials = deferred();
+    pauseCredentials = false;
     firstSigned = deferred();
     releaseFirst = deferred();
     pending = [];
@@ -125,7 +131,7 @@ describe('SageMaker ownership of reusable SDK credentials', () => {
       if (
         !metadataAddress ||
         options.hostname !== '127.0.0.1' ||
-        options.port !== metadataAddress.port
+        String(options.port) !== String(metadataAddress.port)
       ) {
         throw new Error('Unexpected HTTP in credential ownership test');
       }
@@ -139,12 +145,21 @@ describe('SageMaker ownership of reusable SDK credentials', () => {
       destroyedHandlers.add(this);
       return destroy.call(this);
     });
+    const handle = NodeHttpHandler.prototype.handle;
     vi.spyOn(NodeHttpHandler.prototype, 'handle').mockImplementation(async function (
       this: HttpHandler,
       request,
+      options,
     ) {
       expect(destroyedHandlers.has(this)).toBe(false);
       handlers.add(this);
+      if (
+        metadataAddress &&
+        request.hostname === '127.0.0.1' &&
+        request.port === metadataAddress.port
+      ) {
+        return handle.call(this, request, options);
+      }
       const call = { request, handler: this };
       if (request.hostname === 'portal.sso.eu-west-1.amazonaws.com') {
         expect(request.path).toBe('/federation/credentials');
@@ -159,7 +174,7 @@ describe('SageMaker ownership of reusable SDK credentials', () => {
         });
       }
       expect(request.hostname).toMatch(
-        /^runtime\.sagemaker\.(us-east-1|us-west-2)\.amazonaws\.com$/,
+        /^(runtime\.sagemaker\.(us-east-1|us-west-2)\.amazonaws\.com|sage-[ab]\.example)$/,
       );
       sageCalls.push(call);
       if (sageCalls.length === 1) {
@@ -172,6 +187,7 @@ describe('SageMaker ownership of reusable SDK credentials', () => {
 
   afterEach(async () => {
     releaseMetadata.resolve();
+    releaseCredentials.resolve();
     releaseFirst.resolve();
     await Promise.allSettled(pending);
     provider?.cleanup();
@@ -197,12 +213,7 @@ describe('SageMaker ownership of reusable SDK credentials', () => {
     await rm(directory, { recursive: true, force: true });
   });
 
-  it.each([
-    'credentials only',
-    'stable source',
-    'explicit keys',
-    'region during discovery',
-  ] as const)('restores east A after real defaults discovery with %s', async (mode) => {
+  async function startMetadataServer() {
     server = http.createServer(async (request, reply) => {
       metadataPaths.push(request.url!);
       if (request.url === '/latest/api/token') {
@@ -213,6 +224,21 @@ describe('SageMaker ownership of reusable SDK credentials', () => {
           await releaseMetadata.promise;
         }
         reply.end('us-east-1');
+      } else if (request.url === '/credentials/a' || request.url === '/credentials/b') {
+        if (pauseCredentials && request.url === '/credentials/a') {
+          credentialsStarted.resolve();
+          await releaseCredentials.promise;
+        }
+        const account = request.url.endsWith('/a') ? 'A' : 'B';
+        reply.setHeader('content-type', 'application/json');
+        reply.end(
+          JSON.stringify({
+            AccessKeyId: `ACCOUNT_${account}`,
+            SecretAccessKey: `synthetic-secret-${account.toLowerCase()}`,
+            Token: `synthetic-token-${account.toLowerCase()}`,
+            Expiration: new Date(Date.now() + hour).toISOString(),
+          }),
+        );
       } else {
         reply.writeHead(404).end();
       }
@@ -223,6 +249,16 @@ describe('SageMaker ownership of reusable SDK credentials', () => {
       throw new Error('No metadata loopback listener');
     }
     metadataAddress = address;
+    return address;
+  }
+
+  it.each([
+    'credentials only',
+    'stable source',
+    'explicit keys',
+    'region during discovery',
+  ] as const)('restores east A after real defaults discovery with %s', async (mode) => {
+    const address = await startMetadataServer();
     setEnvironment({
       AWS_EC2_METADATA_DISABLED: undefined,
       AWS_EC2_METADATA_SERVICE_ENDPOINT: `http://127.0.0.1:${address.port}`,
@@ -259,8 +295,8 @@ describe('SageMaker ownership of reusable SDK credentials', () => {
     );
     releaseMetadata.resolve();
     await firstSigned.promise;
-    expect(sageCalls[0].request.headers.authorization).toMatch(
-      /Credential=ACCOUNT_[AB]\/20260101\/us-east-1\/sagemaker\//,
+    expect(sageCalls[0].request.headers.authorization).toContain(
+      'Credential=ACCOUNT_A/20260101/us-east-1/sagemaker/',
     );
     setEnvironment({ AWS_REGION: 'us-west-2' });
     await expectSignedRow(
@@ -295,6 +331,92 @@ describe('SageMaker ownership of reusable SDK credentials', () => {
     // A rejected entry must not poison the retained credential chain either.
     await expectSignedRow('east A after idle', 'ACCOUNT_A', 'us-east-1');
   });
+
+  it.each(['during discovery', 'during credentials', 'stable inputs', 'abort'] as const)(
+    'keeps default-chain serving coherent after delayed resolution: %s',
+    async (mode) => {
+      const address = await startMetadataServer();
+      const credentialBase = `http://127.0.0.1:${address.port}/credentials`;
+      setEnvironment({
+        AWS_EC2_METADATA_DISABLED: undefined,
+        AWS_EC2_METADATA_SERVICE_ENDPOINT: `http://127.0.0.1:${address.port}`,
+        AWS_DEFAULTS_MODE: 'auto',
+        AWS_CONTAINER_CREDENTIALS_FULL_URI: `${credentialBase}/a`,
+        AWS_ENDPOINT_URL_SAGEMAKER_RUNTIME: 'https://sage-a.example',
+      });
+      provider = new SageMakerCompletionProvider('endpoint', { config: { modelType: 'custom' } });
+      pauseCredentials = mode === 'during credentials';
+      releaseFirst.resolve();
+      const controller = new AbortController();
+      const abortReason = new Error('Cancel delayed default-chain request');
+      const first = provider.callApi('delayed default chain', undefined, {
+        abortSignal: controller.signal,
+      });
+      pending.push(first);
+      void first.catch(() => {});
+      const unfinished = first.then(() => {
+        throw new Error('Request completed before its delayed input boundary');
+      });
+      void unfinished.catch(() => {});
+      await Promise.race([metadataStarted.promise, unfinished]);
+      if (mode === 'during credentials') {
+        releaseMetadata.resolve();
+        await Promise.race([credentialsStarted.promise, unfinished]);
+      }
+      const changed = mode === 'during discovery' || mode === 'during credentials';
+      if (changed) {
+        setEnvironment({
+          AWS_CONTAINER_CREDENTIALS_FULL_URI: `${credentialBase}/b`,
+          AWS_ENDPOINT_URL_SAGEMAKER_RUNTIME: 'https://sage-b.example',
+          AWS_REGION: 'us-west-2',
+        });
+      } else if (mode === 'abort') {
+        controller.abort(abortReason);
+      }
+      releaseMetadata.resolve();
+      releaseCredentials.resolve();
+      if (changed) {
+        await expect(first).resolves.toMatchObject({
+          error: expect.stringContaining(
+            'SageMaker credential inputs changed during initialization',
+          ),
+        });
+        expect(sageCalls).toHaveLength(0);
+        expect(metadataPaths.filter((item) => item.startsWith('/credentials/'))).toEqual(
+          mode === 'during credentials' ? ['/credentials/a'] : [],
+        );
+        expect(provider.sagemakerRuntime).toBeUndefined();
+        await expectSignedRow(
+          'fresh west B after rejected initialization',
+          'ACCOUNT_B',
+          'us-west-2',
+        );
+        expect(sageCalls.at(-1)!.request.hostname).toBe('sage-b.example');
+        expect(sageCalls.at(-1)!.request.headers['x-amz-security-token']).toBe('synthetic-token-b');
+        setEnvironment({
+          AWS_CONTAINER_CREDENTIALS_FULL_URI: `${credentialBase}/a`,
+          AWS_ENDPOINT_URL_SAGEMAKER_RUNTIME: 'https://sage-a.example',
+          AWS_REGION: 'us-east-1',
+        });
+      } else if (mode === 'abort') {
+        await expect(first).rejects.toBe(abortReason);
+        expect(sageCalls).toHaveLength(0);
+      } else {
+        await expect(first).resolves.toMatchObject({ output: 'signed response' });
+        expect(sageCalls[0].request.headers.authorization).toContain(
+          'Credential=ACCOUNT_A/20260101/us-east-1/sagemaker/',
+        );
+      }
+      await expectSignedRow('fresh east A after idle', 'ACCOUNT_A', 'us-east-1');
+      expect(sageCalls.at(-1)!.request.hostname).toBe('sage-a.example');
+      expect(sageCalls.at(-1)!.request.headers['x-amz-security-token']).toBe('synthetic-token-a');
+      if (mode === 'stable inputs') {
+        expect(metadataPaths.filter((item) => item === '/credentials/a')).toHaveLength(1);
+      }
+      expect(provider.sagemakerRuntime).toBeUndefined();
+      expect(sageCalls.every(({ handler }) => destroyedHandlers.has(handler))).toBe(true);
+    },
+  );
 
   it('retains the selected east SSO credentials after west initialization, a pool hit, and idle cleanup', async () => {
     await writeFile(
