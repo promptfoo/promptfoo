@@ -110,6 +110,7 @@ import {
   createEmptyAssertions,
   createEmptyTokenUsage,
   hasObservableTokenUsage,
+  mergeMissingGenerationTokenUsage,
 } from './util/tokenUsageUtils';
 import { TransformInputType, transform } from './util/transform';
 import type { SingleBar } from 'cli-progress';
@@ -3353,7 +3354,7 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
   fileWriters: EvaluatorResultWriter[];
   rateLimitRegistry: RateLimitRegistry | undefined;
   private generationUsageRecorded = false;
-  private recordedGenerationUsages = new Set<string>();
+  private recordedGenerationUsages = new WeakSet<object>();
   constructor(
     testSuite: TestSuite,
     store: EvaluationStore<TEvaluation, TResult>,
@@ -3369,16 +3370,6 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
       errors: 0,
       tokenUsage: createEmptyTokenUsage(),
     };
-    this.generationUsageRecorded = Boolean(
-      cliState.resume &&
-        store.prompts.some((prompt) => {
-          const usage = prompt.metrics?.tokenUsage;
-          return (
-            hasObservableTokenUsage(usage?.generation) ||
-            hasObservableTokenUsage(usage?.incurredTokenUsage?.generation)
-          );
-        }),
-    );
     this.conversations = {};
     this.registers = {};
 
@@ -3477,12 +3468,11 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
     metrics: PromptMetrics | undefined,
   ): AtomicTestCase {
     const usage = testCase.metadata?.providerTokenUsage;
-    const usageKey = usage && typeof usage === 'object' ? JSON.stringify(usage) : undefined;
-    const recorded = usageKey !== undefined && this.recordedGenerationUsages.has(usageKey);
+    const recorded = usage && typeof usage === 'object' && this.recordedGenerationUsages.has(usage);
     if (!this.generationUsageRecorded && metrics && usage && !recorded) {
       if (accumulateGenerationTokenUsage(metrics.tokenUsage, usage)) {
-        if (usageKey !== undefined) {
-          this.recordedGenerationUsages.add(usageKey);
+        if (typeof usage === 'object') {
+          this.recordedGenerationUsages.add(usage);
         }
         return testCase;
       }
@@ -3562,13 +3552,13 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
       countCachedAsRequest: (row.tokenUsage?.numRequests ?? 0) > 0,
     });
     const generationUsage = row.testCase?.metadata?.providerTokenUsage;
-    const generationUsageKey =
-      generationUsage && typeof generationUsage === 'object'
-        ? JSON.stringify(generationUsage)
-        : undefined;
     if (
       !this.generationUsageRecorded &&
-      !(generationUsageKey !== undefined && this.recordedGenerationUsages.has(generationUsageKey))
+      !(
+        generationUsage &&
+        typeof generationUsage === 'object' &&
+        this.recordedGenerationUsages.has(generationUsage)
+      )
     ) {
       accumulateGenerationTokenUsage(metrics.tokenUsage, generationUsage);
     }
@@ -4873,11 +4863,12 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
 
     const { prompts, columnsByProvider } = buildCompletedPrompts(testSuite, this.store);
 
-    if (!this.generationUsageRecorded && prompts[0]?.metrics) {
-      this.generationUsageRecorded = accumulateGenerationTokenUsage(
-        prompts[0].metrics.tokenUsage,
-        this.store.config.metadata?.generationAccounting?.tokenUsage,
-      );
+    const canonicalGenerationUsage = this.store.config.metadata?.generationAccounting?.tokenUsage;
+    if (prompts[0]?.metrics && canonicalGenerationUsage) {
+      mergeMissingGenerationTokenUsage(prompts[0].metrics.tokenUsage, canonicalGenerationUsage);
+      this.generationUsageRecorded =
+        hasObservableTokenUsage(canonicalGenerationUsage) ||
+        hasObservableTokenUsage(canonicalGenerationUsage.incurredTokenUsage);
     }
 
     await this.store.appendPrompts(prompts);

@@ -26,7 +26,10 @@ import { type SQL, sql } from 'drizzle-orm';
 import { getDb } from '../database/index';
 import logger from '../logger';
 import { ResultFailureReason } from '../types/index';
-import { accumulateGenerationTokenUsage } from './tokenUsageUtils';
+import {
+  accumulateGenerationTokenUsage,
+  mergeMissingGenerationTokenUsage,
+} from './tokenUsageUtils';
 
 import type { PromptMetrics } from '../types/index';
 
@@ -77,7 +80,11 @@ function jsonUsageRequests(column: SQL, usagePath: string, cachedResponsePath?: 
   const hasUsage = sql`(${jsonUsageTotal(column, usagePath, cachedResponsePath)} > 0
     OR EXISTS (
       SELECT 1
-      FROM json_each(json_extract(${column}, ${`${usagePath}.completionDetails`}))
+      FROM json_each(CASE
+        WHEN json_type(${column}, ${`${usagePath}.completionDetails`}) = 'object'
+          THEN json_extract(${column}, ${`${usagePath}.completionDetails`})
+        ELSE '{}'
+      END)
       WHERE CAST(value AS INTEGER) != 0
     ))`;
   const explicitlyCached = cachedResponsePath
@@ -486,15 +493,12 @@ async function calculateWithOptimizedQuery(opts: FilteredMetricsOptions): Promis
 
   // Canonical generation belongs to prompt zero, even when its result rows are filtered out.
   const recordedCanonicalUsage =
-    metrics[0] && accumulateGenerationTokenUsage(metrics[0].tokenUsage, generationTokenUsage);
+    metrics[0] && mergeMissingGenerationTokenUsage(metrics[0].tokenUsage, generationTokenUsage);
   if (!recordedCanonicalUsage) {
     for (const { prompt_idx, usage } of await getFilteredGenerationCarriers(whereSql)) {
       const metric = metrics[prompt_idx];
-      if (
-        metric &&
-        accumulateGenerationTokenUsage(metric.tokenUsage, parseGenerationCarrier(usage))
-      ) {
-        break;
+      if (metric) {
+        accumulateGenerationTokenUsage(metric.tokenUsage, parseGenerationCarrier(usage));
       }
     }
   }

@@ -294,6 +294,34 @@ describe('calculateFilteredMetrics', () => {
       expect(metrics.tokenUsage.generation).toMatchObject({ total: 7, prompt: 4, completion: 3 });
     });
 
+    it('ignores malformed legacy completion details', async () => {
+      const eval_ = await EvalFactory.create({ numResults: 0 });
+      await addTokenResult(eval_, {
+        testIdx: 0,
+        tokenUsage: { total: 10, completionDetails: 'legacy-string' as any },
+      });
+
+      const [metrics] = await eval_.getFilteredMetrics({});
+      expect(metrics.tokenUsage.total).toBe(10);
+    });
+
+    it('accumulates independent legacy generation carriers', async () => {
+      const eval_ = await EvalFactory.create({ numResults: 0 });
+      await addTokenResult(eval_, {
+        testIdx: 0,
+        tokenUsage: {},
+        generationUsage: { total: 7, numRequests: 1 },
+      });
+      await addTokenResult(eval_, {
+        testIdx: 1,
+        tokenUsage: {},
+        generationUsage: { total: 5, numRequests: 1 },
+      });
+
+      const [metrics] = await eval_.getFilteredMetrics({});
+      expect(metrics.tokenUsage.generation).toMatchObject({ total: 12, numRequests: 2 });
+    });
+
     it('should handle results without token usage', async () => {
       const eval_ = await EvalFactory.create({
         numResults: 0,

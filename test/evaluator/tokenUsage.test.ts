@@ -37,7 +37,7 @@ describeEvaluator('evaluator token usage', () => {
       tests: [
         { metadata: { providerTokenUsage: generationUsage } },
         { metadata: { providerTokenUsage: generationUsage } },
-        { metadata: { providerTokenUsage: { total: 5, prompt: 2, completion: 3 } } },
+        { metadata: { providerTokenUsage: { total: 7, prompt: 4, completion: 3 } } },
       ],
     };
     const evalRecord = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
@@ -46,8 +46,8 @@ describeEvaluator('evaluator token usage', () => {
     const results = await evalRecord.getResults();
 
     expect(evalRecord.prompts[0].metrics?.tokenUsage.generation).toMatchObject({
-      total: 12,
-      prompt: 6,
+      total: 14,
+      prompt: 8,
       completion: 6,
     });
     expect(results.filter((result) => result.testCase.metadata?.providerTokenUsage)).toHaveLength(

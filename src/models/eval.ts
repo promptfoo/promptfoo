@@ -44,10 +44,9 @@ import invariant from '../util/invariant';
 import { sanitizeRuntimeOptions, sanitizeTracingConfigForPersistence } from '../util/sanitizer';
 import { getCurrentTimestamp } from '../util/time';
 import {
-  accumulateGenerationTokenUsage,
   accumulateTokenUsage,
   createEmptyTokenUsage,
-  hasObservableTokenUsage,
+  mergeMissingGenerationTokenUsage,
 } from '../util/tokenUsageUtils';
 import {
   invalidateEvaluationCache,
@@ -1422,15 +1421,10 @@ export default class Eval {
       accumulateTokenUsage(stats.tokenUsage, prompt.metrics?.tokenUsage);
     }
 
-    if (
-      !hasObservableTokenUsage(stats.tokenUsage.generation) &&
-      !hasObservableTokenUsage(stats.tokenUsage.incurredTokenUsage?.generation)
-    ) {
-      accumulateGenerationTokenUsage(
-        stats.tokenUsage,
-        this.config.metadata?.generationAccounting?.tokenUsage,
-      );
-    }
+    mergeMissingGenerationTokenUsage(
+      stats.tokenUsage,
+      this.config.metadata?.generationAccounting?.tokenUsage,
+    );
 
     return stats;
   }

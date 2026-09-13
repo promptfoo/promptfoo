@@ -567,6 +567,36 @@ export function accumulateGenerationTokenUsage(target: TokenUsage, update: unkno
   return true;
 }
 
+/** Fill missing logical or incurred generation buckets without replaying either one. */
+export function mergeMissingGenerationTokenUsage(target: TokenUsage, update: unknown): boolean {
+  const parsed = BaseTokenUsageSchema.safeParse(update);
+  if (!parsed.success) {
+    return false;
+  }
+  const {
+    attacker: _attacker,
+    assertions: _assertions,
+    generation: _generation,
+    incurredTokenUsage,
+    ...logical
+  } = parsed.data;
+  const missingLogical =
+    !hasObservableTokenUsage(target.generation) && hasObservableTokenUsage(logical);
+  const missingIncurred =
+    target.incurredTokenUsage?.generation === undefined && incurredTokenUsage !== undefined;
+  if (missingLogical) {
+    target.generation ??= createEmptyAssertions();
+    accumulateTokenUsage(target.generation, logical);
+  }
+  if (missingIncurred) {
+    target.incurredTokenUsage ??= cloneTokenUsageBreakdown(target);
+    delete target.incurredTokenUsage.generation;
+    target.incurredTokenUsage.generation = createEmptyAssertions();
+    accumulateTokenUsage(target.incurredTokenUsage.generation, incurredTokenUsage);
+  }
+  return missingLogical || missingIncurred;
+}
+
 /**
  * Normalize token usage from a provider response into a standard TokenUsage object.
  * Provides default values for all fields if not present in the response.
