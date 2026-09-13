@@ -37,6 +37,7 @@ import {
   recalculatePromptMetrics,
 } from '../../src/node/retry';
 import { loadApiProvider } from '../../src/providers/index';
+import { providerRegistry } from '../../src/providers/providerRegistry';
 import { createShareableUrl, isSharingEnabled } from '../../src/share';
 import { generateTable } from '../../src/table';
 import {
@@ -2209,10 +2210,61 @@ describe('evalCommand', () => {
       async (_testSuite, evalRecord) => evalRecord as Eval,
     );
 
-    await doEval({ grader: 'plugin:grader' }, defaultConfig, defaultConfigPath, {});
+    providerRegistry.register(registryProvider);
+    try {
+      await doEval({ grader: 'plugin:grader' }, defaultConfig, defaultConfigPath, {});
 
-    expect(grader.cleanup).toHaveBeenCalledOnce();
-    expect(registryProvider.cleanup).not.toHaveBeenCalled();
+      expect(grader.cleanup).toHaveBeenCalledOnce();
+      expect(registryProvider.cleanup).not.toHaveBeenCalled();
+    } finally {
+      providerRegistry.unregister(registryProvider);
+    }
+  });
+
+  it('cleans up external providers that expose shutdown without registry ownership', async () => {
+    const cleanup = vi.fn();
+    const provider = {
+      id: () => 'external-provider',
+      callApi: async () => ({ output: 'ok' }),
+      cleanup,
+      shutdown: vi.fn(),
+    } as ApiProvider;
+    vi.mocked(resolveConfigs).mockImplementationOnce(async (_cmd, _config, _type, track) => {
+      track?.(provider);
+      return {
+        config: {} as UnifiedConfig,
+        testSuite: { prompts: [], providers: [provider] },
+        basePath: path.resolve('/'),
+      };
+    });
+    vi.mocked(evaluate).mockImplementationOnce(
+      async (_testSuite, evalRecord) => evalRecord as Eval,
+    );
+
+    await doEval({}, defaultConfig, defaultConfigPath, {});
+
+    expect(cleanup).toHaveBeenCalledOnce();
+  });
+
+  it('preserves configured failure exit codes when cleanup rejects', async () => {
+    const previousExitCode = process.exitCode;
+    const provider = {
+      id: () => 'cleanup-provider',
+      callApi: async () => ({ output: 'ok' }),
+      cleanup: vi.fn().mockRejectedValue(new Error('cleanup failed')),
+    } as ApiProvider;
+    vi.mocked(evaluate).mockImplementationOnce(async (_testSuite, evalRecord) => {
+      trackGradingProvider(provider);
+      process.exitCode = 42;
+      return evalRecord as Eval;
+    });
+
+    try {
+      await expect(doEval({}, defaultConfig, defaultConfigPath, {})).resolves.toBeDefined();
+      expect(process.exitCode).toBe(42);
+    } finally {
+      process.exitCode = previousExitCode;
+    }
   });
 
   it('should handle redteam config', async () => {
