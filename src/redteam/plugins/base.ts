@@ -1,5 +1,4 @@
 import dedent from 'dedent';
-import { summarizeTrajectoryForJudge } from '../../assertions/trajectoryUtils';
 import cliState from '../../cliState';
 import logger from '../../logger';
 import { matchesLlmRubric } from '../../matchers/llmGrading';
@@ -452,6 +451,7 @@ function redactTraceValue(
         redacted['[TRUNCATED]'] = '[TRUNCATED]';
         break;
       }
+      const redactedKey = redactTraceEvidence(entryKey);
       if (
         (entryKey === 'value' &&
           headerName &&
@@ -459,9 +459,9 @@ function redactTraceValue(
         isTracingCredentialHeader(entryKey, String(record[entryKey]))
       ) {
         budget.remaining--;
-        redacted[entryKey] = '[REDACTED]';
+        redacted[redactedKey] = '[REDACTED]';
       } else {
-        redacted[entryKey] = redactTraceValue(record[entryKey], entryKey, depth + 1, budget);
+        redacted[redactedKey] = redactTraceValue(record[entryKey], entryKey, depth + 1, budget);
       }
     }
     return redacted;
@@ -470,7 +470,7 @@ function redactTraceValue(
 }
 
 function redactTraceEvidence(text: string): string {
-  if (/^\s*[\[{]/.test(text)) {
+  if (text.length <= 32_000 && /^\s*[\[{]/.test(text)) {
     try {
       return truncateTraceEvidence(JSON.stringify(redactTraceValue(JSON.parse(text))), 32_000);
     } catch {
@@ -535,7 +535,7 @@ function redactTraceEvidence(text: string): string {
     )
     .replace(/\b(?:sshpass|redis-cli|sqlcmd)\b[^\r\n;&|]*/gi, redactShortPasswordFlags)
     .replace(
-      /\b(?:sk-(?:proj-|ant-)?[A-Za-z0-9_-]{20,}|gh[pousr]_[A-Za-z0-9]{36,}|github_pat_[A-Za-z0-9_]{20,}|xox[baprs]-[A-Za-z0-9-]{10,}|AKIA[A-Z0-9]{16}|AIza[A-Za-z0-9_-]{35}|(?:Bearer|Basic)\s+[^\s"'`\\]+)/gi,
+      /\b(?:sk-(?:proj-|ant-)?[A-Za-z0-9_-]{20,}|gh[pousr]_[A-Za-z0-9]{36,}|github_pat_[A-Za-z0-9_]{20,}|xox[baprs]-[A-Za-z0-9-]{10,}|AKIA[A-Z0-9]{16}|AIza[A-Za-z0-9_-]{35}|[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}|(?:Bearer|Basic)\s+[^\s"'`\\]+)/gi,
       '[REDACTED]',
     )
     .replace(
@@ -627,22 +627,11 @@ function formatTraceEvidence(gradingContext?: RedteamGradingContext): string {
   }
   const traceSummary =
     gradingContext?.traceSummary?.trim() ||
-    (gradingContext?.traceContext
-      ? formatTraceSummary(gradingContext.traceContext)
-      : gradingContext?.traceData
-        ? summarizeTrajectoryForJudge(gradingContext.traceData)
-        : '');
+    (gradingContext?.traceContext ? formatTraceSummary(gradingContext.traceContext) : '');
   const spans = gradingContext?.traceData?.spans?.length
     ? gradingContext.traceData.spans
     : (gradingContext?.traceContext?.spans ?? []);
-  const actionStep = Math.ceil(spans.length / 80);
-  const actionSpans =
-    spans.length > 96
-      ? spans.filter(
-          (_span, index) => index < 8 || index >= spans.length - 8 || index % actionStep === 0,
-        )
-      : spans;
-  const actions = actionSpans.flatMap((span) => {
+  const actions = spans.flatMap((span) => {
     const { name, attributes = {} } = span;
     const hasToolArgs = TOOL_ARGUMENT_ATTRIBUTE_KEYS.some(
       (key) => key !== 'input' && attributes[key] !== undefined,
