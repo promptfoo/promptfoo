@@ -52,13 +52,6 @@ type AgenticRuntimeEvidence = {
 
 const PLUGIN_PREFIX = 'promptfoo:redteam:';
 
-const AGENTIC_RUNTIME_PLUGIN_ID_ATTRS = [
-  'promptfoo.agentic.plugin_id',
-  'promptfoo.agent_sdk.plugin_id',
-  'agentic.plugin_id',
-  'agent.sdk.plugin_id',
-] as const;
-
 type TraceLikeSpan = {
   attributes?: Record<string, unknown>;
   events?: Array<{
@@ -247,34 +240,6 @@ function normalizePluginId(pluginId: unknown): string | undefined {
     return undefined;
   }
   return pluginId.startsWith(PLUGIN_PREFIX) ? pluginId.slice(PLUGIN_PREFIX.length) : pluginId;
-}
-
-function getAttribute(
-  attributes: Record<string, unknown> | undefined,
-  keys: readonly string[],
-): unknown {
-  if (!attributes) {
-    return undefined;
-  }
-
-  for (const key of keys) {
-    if (attributes[key] !== undefined) {
-      return attributes[key];
-    }
-  }
-
-  const lowerCaseEntries = Object.entries(attributes).map(([key, value]) => [
-    key.toLowerCase(),
-    value,
-  ]);
-  for (const key of keys) {
-    const match = lowerCaseEntries.find(([candidate]) => candidate === key.toLowerCase());
-    if (match) {
-      return match[1];
-    }
-  }
-
-  return undefined;
 }
 
 function getTraceSpans(gradingContext?: RedteamGradingContext): TraceLikeSpan[] {
@@ -635,7 +600,6 @@ function dedupeFindings(findings: AgenticRuntimeFinding[]): AgenticRuntimeFindin
 function normalizeEvidenceForPlugin(
   evidence: AgenticRuntimeEvidence | undefined,
   pluginId: AgenticRuntimePluginId | undefined,
-  inheritedPluginId?: string,
 ): AgenticRuntimeEvidence | undefined {
   if (!evidence || !pluginId) {
     return evidence;
@@ -645,7 +609,7 @@ function normalizeEvidenceForPlugin(
     : evidence.findings === undefined
       ? undefined
       : [];
-  const normalizedEvidencePluginId = normalizePluginId(evidence.pluginId ?? inheritedPluginId);
+  const normalizedEvidencePluginId = normalizePluginId(evidence.pluginId);
   const malformedMatchingFinding =
     (evidence.findings !== undefined &&
       !Array.isArray(evidence.findings) &&
@@ -712,42 +676,6 @@ function hasVerifierEvidence(
   }
 }
 
-function traceAttributesMatchPlugin(
-  attributes: Record<string, unknown> | undefined,
-  pluginId: AgenticRuntimePluginId,
-  enclosingPluginId?: string,
-  failed = false,
-): boolean {
-  if (!attributes) {
-    return false;
-  }
-
-  const inheritedPluginId =
-    normalizePluginId(getAttribute(attributes, AGENTIC_RUNTIME_PLUGIN_ID_ATTRS)) ??
-    enclosingPluginId;
-  const payloads = getTraceEvidenceValues(attributes);
-  const candidates = parseEvidenceCandidates(payloads);
-  if (
-    failed &&
-    ((candidates.length === 0 && inheritedPluginId === pluginId) ||
-      candidates.some(
-        (candidate) => (normalizePluginId(candidate.pluginId) ?? inheritedPluginId) === pluginId,
-      ) ||
-      candidates.some((candidate) =>
-        normalizeEvidenceForPlugin(candidate, pluginId, inheritedPluginId),
-      ) ||
-      (inheritedPluginId === undefined &&
-        payloads.length > 0 &&
-        (candidates.length === 0 ||
-          candidates.some((candidate) => candidate.pluginId === undefined))))
-  ) {
-    return true;
-  }
-  return candidates.some((candidate) =>
-    hasVerifierEvidence(normalizeEvidenceForPlugin(candidate, pluginId, inheritedPluginId)),
-  );
-}
-
 function getAgenticRuntimeVerifierSpans(
   spans: TraceLikeSpan[],
   pluginId: AgenticRuntimePluginId,
@@ -755,39 +683,29 @@ function getAgenticRuntimeVerifierSpans(
   return spans.flatMap((span) =>
     [
       span,
-      ...(span.events ?? [])
-        .filter(
-          (event) =>
-            getTraceEvidenceValues(event.attributes).length > 0 ||
-            getAttribute(event.attributes, AGENTIC_RUNTIME_PLUGIN_ID_ATTRS) !== undefined,
-        )
-        .map((event) => ({
-          ...span,
-          ...event,
-          attributes: event.attributes,
-          ...(hasErrorStatus(span) ? { statusCode: 2 } : {}),
-        })),
-    ]
-      .map((candidate) => {
-        const inheritedPluginId = normalizePluginId(
-          getAttribute(span.attributes, AGENTIC_RUNTIME_PLUGIN_ID_ATTRS),
-        );
-        const malformed = parseEvidenceCandidates(
-          getTraceEvidenceValues(candidate.attributes),
-        ).some(
-          (evidence) =>
-            normalizeEvidenceForPlugin(evidence, pluginId, inheritedPluginId)?.verifierFailed,
-        );
-        return malformed ? { ...candidate, statusCode: 2 } : candidate;
-      })
-      .filter((candidate) =>
-        traceAttributesMatchPlugin(
-          candidate.attributes,
-          pluginId,
-          normalizePluginId(getAttribute(span.attributes, AGENTIC_RUNTIME_PLUGIN_ID_ATTRS)),
-          hasErrorStatus(candidate),
-        ),
-      ),
+      ...(span.events ?? []).map((event) => ({
+        ...span,
+        ...event,
+        attributes: event.attributes,
+        ...(hasErrorStatus(span) ? { statusCode: 2 } : {}),
+      })),
+    ].flatMap((candidate) => {
+      const payloads = getTraceEvidenceValues(
+        candidate.attributes,
+        candidate === span ? undefined : span.attributes,
+      );
+      const candidates = parseEvidenceCandidates(payloads);
+      const scoped = candidates.map((evidence) => normalizeEvidenceForPlugin(evidence, pluginId));
+      const failed =
+        hasErrorStatus(candidate) || scoped.some((evidence) => evidence?.verifierFailed);
+      const matches =
+        scoped.some((evidence) => hasVerifierEvidence(evidence) || (failed && evidence)) ||
+        (failed &&
+          payloads.length > 0 &&
+          (candidates.length === 0 ||
+            candidates.some((evidence) => evidence.pluginId === undefined)));
+      return matches ? [failed ? { ...candidate, statusCode: 2 } : candidate] : [];
+    }),
   );
 }
 

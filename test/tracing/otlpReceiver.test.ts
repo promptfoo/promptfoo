@@ -1983,7 +1983,7 @@ describe('OTLPReceiver', () => {
       };
     }
 
-    it.each(['0', '-1', 'invalid', '1e9', '18446744073709551616', '', undefined])(
+    it.each(['0', '-1', 'invalid', '1e9', '18446744073709551616', ''])(
       'drops log controls with invalid timestamp %s',
       async (timeUnixNano) => {
         await request(receiver.getApp())
@@ -2010,6 +2010,116 @@ describe('OTLPReceiver', () => {
         expect(spans[0].name).toBe('tool update_seat');
       },
     );
+
+    it('retains untimed linked logs without inventing control ordering', async () => {
+      const now = vi.spyOn(Date, 'now').mockReturnValue(1700000000000);
+      const log = {
+        traceId: hexTraceId,
+        spanId: hexParentSpanId,
+        body: { stringValue: 'guardrail update_seat' },
+        attributes: [
+          { key: 'guardrail.outcome', value: { stringValue: 'allowed' } },
+          { key: 'otel.log.time_unix_nano', value: { stringValue: '1700000000000000000' } },
+          { key: 'otel.span.end_time_unix_nano', value: { stringValue: '1700000000000000000' } },
+        ],
+      };
+      await request(receiver.getApp())
+        .post('/v1/logs')
+        .send(makeLogsRequest([log]))
+        .expect(200);
+      now.mockReturnValue(1700000000100);
+      await request(receiver.getApp())
+        .post('/v1/logs')
+        .send(makeLogsRequest([log]))
+        .expect(200);
+      const first = persistSpans.mock.calls[0][1][0],
+        retried = persistSpans.mock.calls[1][1][0];
+      expect(first.name).toBe('guardrail update_seat');
+      expect(first.startTime).toBe(1700000000000);
+      expect(first.attributes['otel.log.time_unix_nano']).toBeUndefined();
+      expect(retried.spanId).toBe(first.spanId);
+      const pluginId = 'agentic:guardrail-coverage-gap';
+      const result = await getGraderById(`promptfoo:redteam:${pluginId}`)!.getResult(
+        'Update the seat',
+        'Done',
+        {},
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        {
+          traceData: {
+            traceId: hexTraceId,
+            evaluationId: 'eval',
+            testCaseId: 'test',
+            spans: [
+              first,
+              {
+                spanId: 'tool',
+                parentSpanId: hexParentSpanId,
+                name: 'tool update_seat',
+                startTime: 1700000000050,
+                attributes: {
+                  'tool.name': 'update_seat',
+                  'promptfoo.agentic.plugin_id': pluginId,
+                  'promptfoo.agentic.evidence_json': '{"findings":[]}',
+                },
+              },
+            ],
+          },
+        },
+      );
+      expect(result.grade.pass).toBe(false);
+    });
+
+    it('canonicalizes keyed OTLP attributes while retaining array value order', async () => {
+      const attrs = [
+        { key: 'a', value: { stringValue: 'one' } },
+        { key: 'b', value: { arrayValue: { values: [{ intValue: '1' }, { intValue: '2' }] } } },
+      ];
+      const send = (reverse: boolean, reverseValues = false) => {
+        const entries = structuredClone(attrs);
+        if (reverseValues) {
+          entries[1].value.arrayValue!.values.reverse();
+        }
+        if (reverse) {
+          entries.reverse();
+        }
+        const scope = reverse
+          ? { version: '1', name: 'scope', attributes: entries }
+          : { name: 'scope', version: '1', attributes: entries };
+        return request(receiver.getApp())
+          .post('/v1/logs')
+          .send({
+            resourceLogs: [
+              {
+                resource: { attributes: entries },
+                scopeLogs: [
+                  {
+                    scope,
+                    logRecords: [
+                      {
+                        traceId: hexTraceId,
+                        spanId: hexParentSpanId,
+                        timeUnixNano: '1700000000000000200',
+                        body: { kvlistValue: { values: entries } },
+                        attributes: entries,
+                      },
+                    ],
+                  },
+                ],
+              },
+            ],
+          })
+          .expect(200);
+      };
+      await send(false);
+      await send(true);
+      await send(false, true);
+      const ids = persistSpans.mock.calls.map((call) => call[1][0].spanId);
+      expect(ids[1]).toBe(ids[0]);
+      expect(ids[2]).not.toBe(ids[0]);
+    });
 
     it('uses the observed timestamp when the log timestamp is absent', async () => {
       await request(receiver.getApp())

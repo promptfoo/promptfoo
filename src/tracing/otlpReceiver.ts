@@ -101,6 +101,7 @@ interface OTLPScopeLogs {
   scope?: {
     name: string;
     version?: string;
+    attributes?: OTLPAttribute[];
   };
   logRecords: OTLPLogRecord[];
 }
@@ -875,9 +876,10 @@ export class OTLPReceiver {
       return null;
     }
 
+    const logAttributes = this.parseAttributes(log.attributes);
     const attributes: Record<string, any> = {
       ...resourceAttributes,
-      ...this.parseAttributes(log.attributes),
+      ...logAttributes,
       'otel.scope.name': scopeLog.scope?.name,
       'otel.scope.version': scopeLog.scope?.version,
       'otel.log.severity_number': log.severityNumber,
@@ -897,16 +899,20 @@ export class OTLPReceiver {
     }
 
     const timeNano = log.timeUnixNano ?? log.observedTimeUnixNano;
-    if (
-      typeof timeNano !== 'string' ||
-      !/^\d{1,20}$/.test(timeNano) ||
-      BigInt(timeNano) === 0n ||
-      BigInt(timeNano) > 0xffffffffffffffffn
-    ) {
-      return null;
+    delete attributes['otel.log.time_unix_nano'];
+    if (timeNano !== undefined) {
+      if (
+        typeof timeNano !== 'string' ||
+        !/^\d{1,20}$/.test(timeNano) ||
+        BigInt(timeNano) === 0n ||
+        BigInt(timeNano) > 0xffffffffffffffffn
+      ) {
+        return null;
+      }
+      attributes['otel.log.time_unix_nano'] = timeNano;
     }
-    attributes['otel.log.time_unix_nano'] = timeNano;
-    const startTime = Number(timeNano) / 1_000_000;
+    // Receipt time positions untimed logs in the UI; it is not execution-order evidence.
+    const startTime = timeNano === undefined ? Date.now() : Number(timeNano) / 1_000_000;
     const endTime = startTime + LOG_SPAN_DURATION_MS;
 
     // Log's own span_id is the span the log was emitted from, so that span
@@ -929,18 +935,31 @@ export class OTLPReceiver {
         spanId: crypto
           .createHash('sha256')
           .update(
-            JSON.stringify([
-              traceId,
-              parentSpanId,
-              timeNano,
-              log.observedTimeUnixNano,
-              scopeLog.scope,
-              log.severityNumber,
-              log.severityText,
-              bodyValue,
-              log.attributes,
-              resourceAttributes,
-            ]),
+            JSON.stringify(
+              [
+                traceId,
+                parentSpanId,
+                timeNano,
+                log.observedTimeUnixNano,
+                scopeLog.scope && {
+                  ...scopeLog.scope,
+                  attributes: this.parseAttributes(scopeLog.scope.attributes),
+                },
+                log.severityNumber,
+                log.severityText,
+                bodyValue,
+                logAttributes,
+                resourceAttributes,
+              ],
+              (_key, value) =>
+                value && typeof value === 'object' && !Array.isArray(value)
+                  ? Object.fromEntries(
+                      Object.keys(value)
+                        .sort()
+                        .map((key) => [key, value[key]]),
+                    )
+                  : value,
+            ),
           )
           .digest('hex')
           .slice(0, 16),

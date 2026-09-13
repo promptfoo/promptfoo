@@ -3600,6 +3600,102 @@ describe('Agentic redteam plugins', () => {
     expect(result.grade.metadata?.verifierStatus).toBe('missing-evidence');
   });
 
+  it.each(
+    [
+      ['promptfoo.agentic.plugin_id', 'promptfoo.agentic.finding.', 'agentic.plugin_id'],
+      [
+        'promptfoo.agent_sdk.plugin_id',
+        'promptfoo.agent_sdk.finding.',
+        'promptfoo.agentic.plugin_id',
+      ],
+      ['agentic.plugin_id', 'agentic.finding.', 'promptfoo.agentic.plugin_id'],
+      ['agentSdk.pluginId', 'agent.sdk.finding.', 'promptfoo.agentic.plugin_id'],
+      ['agenticPluginId', 'agenticFinding', 'promptfoo.agentic.plugin_id'],
+      ['agentSdkPluginId', 'agentSdkFinding', 'promptfoo.agentic.plugin_id'],
+    ].flatMap(([id, field, otherId]) =>
+      ['span', 'event'].map((source) => ({ id, field, otherId, source })),
+    ),
+  )(
+    'keeps flat finding fields with their namespace: $id $source',
+    async ({ id, field, otherId, source }) => {
+      const pluginId = 'agentic:tool-error-feedback-injection';
+      const attrs = {
+        [otherId]: 'agentic:approval-continuity',
+        [id]: pluginId,
+        [field + 'kind']: 'tool-error-feedback-injection',
+        [field + 'evidence']: 'Tool error became an instruction',
+        [field + 'location']: 'active verifier',
+      };
+      const result = await getGraderById(`promptfoo:redteam:${pluginId}`)!.getResult(
+        'prompt',
+        'Done',
+        { metadata: { purpose: 'agentic runtime app' } },
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        {
+          ...providerEvidenceContext({ pluginId, findings: [] }),
+          traceData: {
+            traceId: 'trace',
+            evaluationId: 'eval',
+            testCaseId: 'test',
+            spans: [
+              {
+                spanId: 'span',
+                name: 'verifier',
+                startTime: 1,
+                attributes: source === 'span' ? attrs : {},
+                events:
+                  source === 'event' ? [{ name: 'verifier', timestamp: 1, attributes: attrs }] : [],
+              },
+            ],
+          },
+        },
+      );
+      expect(result.grade.pass).toBe(false);
+      expect(result.grade.metadata?.deterministicFailureLocations).toContain('active verifier');
+    },
+  );
+
+  it.each(['agentic.pluginId', 'AGENTIC.PLUGIN_ID'])(
+    'rejects conflicting same-namespace IDs before trusting clean evidence: %s',
+    async (alias) => {
+      const pluginId = 'agentic:approval-continuity';
+      await expect(
+        getGraderById(`promptfoo:redteam:${pluginId}`)!.getResult(
+          'prompt',
+          'Done',
+          { metadata: { purpose: 'agentic runtime app' } },
+          undefined,
+          undefined,
+          undefined,
+          undefined,
+          {
+            ...providerEvidenceContext({ pluginId, findings: [] }),
+            traceData: {
+              traceId: 'trace',
+              evaluationId: 'eval',
+              testCaseId: 'test',
+              spans: [
+                {
+                  spanId: 'span',
+                  name: 'verifier',
+                  startTime: 1,
+                  attributes: {
+                    'agentic.plugin_id': 'agentic:handoff-context-leakage',
+                    [alias]: pluginId,
+                    'agentic.evidence_json': JSON.stringify({ findings: [] }),
+                  },
+                },
+              ],
+            },
+          },
+        ),
+      ).rejects.toThrow('conflicting plugin IDs');
+    },
+  );
+
   it('does not pass on unscoped clean Agentic evidence', async () => {
     const pluginId = 'agentic:approval-continuity';
     const grader = getGraderById(`promptfoo:redteam:${pluginId}`);

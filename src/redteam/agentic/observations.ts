@@ -72,56 +72,38 @@ export type AgentRunFinding = {
 const PLUGIN_PREFIX = 'promptfoo:redteam:';
 const TOOL_CALL_ID_ATTRIBUTES = ['gen_ai.tool.call.id', 'tool.call.id', 'tool_call_id'];
 
-const AGENTIC_RUNTIME_PLUGIN_ID_ATTRS = [
-  'promptfoo.agentic.plugin_id',
-  'promptfoo.agent_sdk.plugin_id',
-  'agentic.plugin_id',
-  'agent.sdk.plugin_id',
-  'agentic.pluginId',
-  'agentSdk.pluginId',
-  'agenticPluginId',
-  'agentSdkPluginId',
+const AGENTIC_RUNTIME_EVIDENCE_NAMESPACES = [
+  {
+    pluginIds: ['promptfoo.agentic.plugin_id'],
+    json: 'promptfoo.agentic.evidence_json',
+    finding: 'promptfoo.agentic.finding.',
+  },
+  {
+    pluginIds: ['promptfoo.agent_sdk.plugin_id'],
+    json: 'promptfoo.agent_sdk.evidence_json',
+    finding: 'promptfoo.agent_sdk.finding.',
+  },
+  {
+    pluginIds: ['agentic.plugin_id', 'agentic.pluginId'],
+    json: 'agentic.evidence_json',
+    finding: 'agentic.finding.',
+  },
+  {
+    pluginIds: ['agent.sdk.plugin_id', 'agentSdk.pluginId'],
+    json: 'agent.sdk.evidence_json',
+    finding: 'agent.sdk.finding.',
+  },
+  {
+    pluginIds: ['agenticPluginId', 'agentic.pluginId'],
+    json: 'agenticevidence',
+    finding: 'agenticfinding',
+  },
+  {
+    pluginIds: ['agentSdkPluginId', 'agentSdk.pluginId'],
+    json: 'agentsdkevidence',
+    finding: 'agentsdkfinding',
+  },
 ];
-const AGENTIC_RUNTIME_FINDING_KIND_ATTRS = [
-  'promptfoo.agentic.finding.kind',
-  'promptfoo.agent_sdk.finding.kind',
-  'agentic.finding.kind',
-  'agent.sdk.finding.kind',
-  'agenticFindingKind',
-  'agentSdkFindingKind',
-];
-const AGENTIC_RUNTIME_FINDING_LOCATION_ATTRS = [
-  'promptfoo.agentic.finding.location',
-  'promptfoo.agent_sdk.finding.location',
-  'agentic.finding.location',
-  'agent.sdk.finding.location',
-  'agenticFindingLocation',
-  'agentSdkFindingLocation',
-];
-const AGENTIC_RUNTIME_FINDING_EVIDENCE_ATTRS = [
-  'promptfoo.agentic.finding.evidence',
-  'promptfoo.agent_sdk.finding.evidence',
-  'agentic.finding.evidence',
-  'agent.sdk.finding.evidence',
-  'agenticFindingEvidence',
-  'agentSdkFindingEvidence',
-];
-const AGENTIC_RUNTIME_FINDING_SEVERITY_ATTRS = [
-  'promptfoo.agentic.finding.severity',
-  'promptfoo.agent_sdk.finding.severity',
-  'agentic.finding.severity',
-  'agent.sdk.finding.severity',
-  'agenticFindingSeverity',
-  'agentSdkFindingSeverity',
-];
-const AGENTIC_RUNTIME_EVIDENCE_JSON_ATTRS: Record<string, string[]> = {
-  'promptfoo.agentic.evidence_json': ['promptfoo.agentic.plugin_id'],
-  'promptfoo.agent_sdk.evidence_json': ['promptfoo.agent_sdk.plugin_id'],
-  'agentic.evidence_json': ['agentic.plugin_id', 'agentic.pluginId'],
-  'agent.sdk.evidence_json': ['agent.sdk.plugin_id', 'agentSdk.pluginId'],
-  agenticevidence: ['agenticPluginId', 'agentic.pluginId'],
-  agentsdkevidence: ['agentSdkPluginId', 'agentSdk.pluginId'],
-};
 
 type TraceLikeSpan = {
   attributes?: Record<string, unknown>;
@@ -434,23 +416,52 @@ function controlObservationFromSpan(
   return undefined;
 }
 
-export function getTraceEvidenceValues(attributes: Record<string, unknown> | undefined): unknown[] {
-  return Object.entries(attributes ?? {})
-    .filter(
-      ([key, value]) =>
-        value !== undefined &&
-        Object.prototype.hasOwnProperty.call(
-          AGENTIC_RUNTIME_EVIDENCE_JSON_ATTRS,
-          key.toLowerCase(),
-        ),
-    )
-    .map(([key, value]) => {
-      const pluginId = getAttribute(
-        attributes,
-        AGENTIC_RUNTIME_EVIDENCE_JSON_ATTRS[key.toLowerCase()],
-      );
-      return pluginId === undefined ? value : { pluginId, agenticEvidence: value };
-    });
+export function getTraceEvidenceValues(
+  attributes: Record<string, unknown> | undefined,
+  enclosingAttributes?: Record<string, unknown>,
+): unknown[] {
+  const entries = Object.entries(attributes ?? {});
+  const values: unknown[] = [];
+  for (const namespace of AGENTIC_RUNTIME_EVIDENCE_NAMESPACES) {
+    const idKeys = namespace.pluginIds.map((key) => key.toLowerCase());
+    const ownIds = entries.filter(
+      ([key, value]) => value !== undefined && idKeys.includes(key.toLowerCase()),
+    );
+    const json = entries.filter(
+      ([key, value]) => value !== undefined && key.toLowerCase() === namespace.json,
+    );
+    const finding = Object.fromEntries(
+      ['kind', 'location', 'evidence', 'severity'].map((field) => [
+        field,
+        getAttribute(attributes, [namespace.finding + field]),
+      ]),
+    );
+    const hasFinding = Object.values(finding).some((value) => value !== undefined);
+    if (!json.length && !hasFinding && !ownIds.length) {
+      continue;
+    }
+    const ids = ownIds.length
+      ? ownIds
+      : Object.entries(enclosingAttributes ?? {}).filter(
+          ([key, value]) => value !== undefined && idKeys.includes(key.toLowerCase()),
+        );
+    const pluginIds = [...new Set(ids.map(([, value]) => normalizePluginId(value)))];
+    if (pluginIds.length > 1) {
+      throw new Error('Agentic trace evidence has conflicting plugin IDs and cannot be graded');
+    }
+    const pluginId = pluginIds[0];
+    values.push(
+      ...json.map(([, value]) =>
+        pluginId === undefined ? value : { pluginId, agenticEvidence: value },
+      ),
+    );
+    if (hasFinding) {
+      values.push({ pluginId, findings: [finding] });
+    } else if (json.length === 0) {
+      values.push({ pluginId });
+    }
+  }
+  return values;
 }
 
 function findingObservationsFromAttributes(
@@ -458,10 +469,12 @@ function findingObservationsFromAttributes(
   location: string,
   source: AgentObservationSource,
   span?: TraceLikeSpan,
+  enclosingAttributes?: Record<string, unknown>,
 ): AgentObservation[] {
   const observations: AgentObservation[] = [];
-  const parsedEvidenceCandidates = parseEvidenceCandidates(getTraceEvidenceValues(attributes));
-  const spanPluginId = normalizePluginId(getAttribute(attributes, AGENTIC_RUNTIME_PLUGIN_ID_ATTRS));
+  const parsedEvidenceCandidates = parseEvidenceCandidates(
+    getTraceEvidenceValues(attributes, enclosingAttributes),
+  );
 
   for (const parsedEvidence of parsedEvidenceCandidates) {
     if (!Array.isArray(parsedEvidence.findings)) {
@@ -474,10 +487,7 @@ function findingObservationsFromAttributes(
         findingKind: stringifyValue(finding.kind),
         kind: 'finding',
         location: stringifyValue(finding.location) || `${location} finding ${index + 1}`,
-        pluginId:
-          normalizePluginId(finding.pluginId) ??
-          normalizePluginId(parsedEvidence.pluginId) ??
-          spanPluginId,
+        pluginId: normalizePluginId(finding.pluginId) ?? normalizePluginId(parsedEvidence.pluginId),
         parentSpanId: span?.parentSpanId,
         severity: stringifyValue(finding.severity),
         source,
@@ -488,41 +498,6 @@ function findingObservationsFromAttributes(
       });
     });
   }
-
-  const pluginId = spanPluginId;
-  if (!pluginId) {
-    return dedupeFindingObservations(observations);
-  }
-
-  const findingEvidence = stringifyValue(
-    getAttribute(attributes, AGENTIC_RUNTIME_FINDING_EVIDENCE_ATTRS),
-  );
-  const findingKind = stringifyValue(getAttribute(attributes, AGENTIC_RUNTIME_FINDING_KIND_ATTRS));
-  const findingLocation = stringifyValue(
-    getAttribute(attributes, AGENTIC_RUNTIME_FINDING_LOCATION_ATTRS),
-  );
-  const findingSeverity = stringifyValue(
-    getAttribute(attributes, AGENTIC_RUNTIME_FINDING_SEVERITY_ATTRS),
-  );
-  if (!findingEvidence && !findingKind && !findingLocation && !findingSeverity) {
-    return dedupeFindingObservations(observations);
-  }
-
-  observations.push({
-    evidence: findingEvidence,
-    fieldLocations: { evidence: location },
-    findingKind,
-    kind: 'finding',
-    location: findingLocation || location,
-    parentSpanId: span?.parentSpanId,
-    pluginId,
-    severity: findingSeverity,
-    source,
-    spanId: span?.spanId,
-    spanName: span?.name,
-    timestamp: span?.startTime,
-    text: findingEvidence,
-  });
 
   return dedupeFindingObservations(observations);
 }
@@ -628,12 +603,14 @@ function observationsFromTraceAttributes(
   baseLocation: string,
   source: AgentObservationSource,
   span?: TraceLikeSpan,
+  enclosingAttributes?: Record<string, unknown>,
 ): AgentObservation[] {
   const observations: AgentObservation[] = findingObservationsFromAttributes(
     attributes,
     baseLocation,
     source,
     span,
+    enclosingAttributes,
   );
   const spanType = stringifyValue(attributes?.['openai.agents.span_type'])?.toLowerCase();
   const dedicatedControl =
@@ -725,11 +702,12 @@ export function observationsFromTraceData(
     const startNanos = isLog
       ? logTimestamp
       : traceSpan.attributes?.['otel.span.start_time_unix_nano'];
-    const endNanos = traceSpan.attributes?.['otel.span.end_time_unix_nano'];
+    const endNanos = isLog ? startNanos : traceSpan.attributes?.['otel.span.end_time_unix_nano'];
     append(
       spanObservations.map((observation) => ({
         ...observation,
         ...(isLog && { eventId: traceSpan.spanId ?? spanLocation }),
+        ...(isLog && logTimestamp === undefined && { timestamp: undefined }),
         timestampNanos: nanosecondTimestamp(startNanos),
         endTimestampNanos: nanosecondTimestamp(endNanos),
       })),
@@ -741,16 +719,12 @@ export function observationsFromTraceData(
           ? event.timestampNanos
           : undefined;
       const eventLocation = `${spanLocation} event ${eventIndex + 1}`;
-      const inheritedPluginId = getAttribute(traceSpan.attributes, AGENTIC_RUNTIME_PLUGIN_ID_ATTRS);
       const callId =
         getAttribute(event.attributes, TOOL_CALL_ID_ATTRIBUTES) ??
         getAttribute(traceSpan.attributes, TOOL_CALL_ID_ATTRIBUTES);
       const eventSpan = {
         attributes: {
           ...(callId === undefined ? {} : { 'gen_ai.tool.call.id': callId }),
-          ...(inheritedPluginId === undefined
-            ? {}
-            : { 'promptfoo.agentic.plugin_id': inheritedPluginId }),
           ...event.attributes,
         },
         name: event.name,
@@ -773,6 +747,7 @@ export function observationsFromTraceData(
           eventLocation,
           'trace-event',
           eventSpan,
+          traceSpan.attributes,
         ).map((observation) => ({ ...observation, eventId: eventLocation, timestampNanos })),
       );
     });
