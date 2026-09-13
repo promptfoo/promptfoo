@@ -479,7 +479,7 @@ export const providerMap: ProviderFactory[] = [
       providerOptions: ProviderOptions,
       _context: LoadApiProviderContext,
     ) => {
-      const modelName = providerPath.split(':')[1];
+      const modelName = providerPath.split(':').slice(1).join(':');
       return new ClouderaAiChatCompletionProvider(modelName, {
         ...providerOptions,
         config: providerOptions.config || {},
@@ -1356,7 +1356,12 @@ export const providerMap: ProviderFactory[] = [
       providerOptions: ProviderOptions,
       _context: LoadApiProviderContext,
     ) => {
-      return new VoyageEmbeddingProvider(providerPath.split(':')[1], providerOptions);
+      return new VoyageEmbeddingProvider(
+        providerPath.split(':').slice(1).join(':'),
+        providerOptions.config,
+        providerOptions.env,
+        providerOptions.id,
+      );
     },
   },
   {

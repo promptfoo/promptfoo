@@ -104,6 +104,10 @@ export class GeminiImageProvider implements ApiProvider {
   constructor(modelName: string, options: GeminiImageOptions = {}) {
     this.modelName = modelName;
     this.config = options.config || {};
+    const id = options.id;
+    if (id) {
+      this.id = () => id;
+    }
     this.env = options.env;
   }
 
