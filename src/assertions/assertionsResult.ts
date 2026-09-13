@@ -435,6 +435,7 @@ export class AssertionsResult {
 
     if (this.failedHardError) {
       this.result.pass = false;
+      this.result.score = 0;
       this.result.reason = this.failedReason || 'Assertion validation failed';
     }
 

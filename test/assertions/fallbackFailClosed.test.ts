@@ -332,6 +332,7 @@ describe('Fallback chains fail closed on validator hard errors', () => {
       assertScoringFunction: async () => ({ pass: true, score: 1, reason: 'custom score' }),
     });
     expect(result.pass).toBe(false);
+    expect(result.score).toBe(0);
     expect(result.reason).toContain('validator unavailable');
 
     const nestedResult = await runAssertions({

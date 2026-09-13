@@ -229,6 +229,22 @@ describe('matchesContextFaithfulness', () => {
     });
   });
 
+  it('should fail before the verdict call when no statements are returned', async () => {
+    const callApiSpy = vi.spyOn(DefaultGradingProvider, 'callApi');
+    callApiSpy.mockReset();
+    callApiSpy.mockResolvedValueOnce({ output: '   ' });
+
+    await expect(
+      matchesContextFaithfulness('Query text', 'Output text', 'Context text', 0.5),
+    ).resolves.toMatchObject({
+      pass: false,
+      score: 0,
+      reason: 'Context faithfulness grader produced no statements',
+      metadata: { graderError: true },
+    });
+    expect(callApiSpy).toHaveBeenCalledTimes(1);
+  });
+
   it('should count missing final-answer verdicts as unsupported', async () => {
     const query = 'Query text';
     const output = 'Output text';

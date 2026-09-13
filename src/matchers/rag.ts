@@ -392,6 +392,9 @@ export async function matchesContextFaithfulness(
   const contextString = serializeContext(context);
 
   const statements = splitIntoSentences(resp.output);
+  if (statements.length === 0) {
+    return graderFail('Context faithfulness grader produced no statements', tokensUsed);
+  }
   promptText = await renderLlmRubricPrompt(nliPrompt, {
     ...(vars || {}),
     context: contextString,
@@ -421,31 +424,27 @@ export async function matchesContextFaithfulness(
   let verdicts = resp.output.toLowerCase().trim();
   let parsedVerdictCount = 0;
   let score = 0;
-  if (statements.length > 0) {
-    if (verdicts.includes(finalAnswer)) {
-      verdicts = verdicts.slice(verdicts.indexOf(finalAnswer) + finalAnswer.length);
-      const parsedVerdicts = verdicts
-        .split('.')
-        .filter((answer) => answer.includes('yes') || answer.includes('no'));
-      if (parsedVerdicts.length > 0) {
-        parsedVerdictCount = parsedVerdicts.length;
-        const unsupportedVerdicts = parsedVerdicts.filter(
-          (answer) => !answer.includes('yes'),
-        ).length;
-        const missingVerdicts = Math.max(0, statements.length - parsedVerdicts.length);
-        score = 1 - (unsupportedVerdicts + missingVerdicts) / statements.length;
-      }
-    } else {
-      const noVerdictCount = verdicts.split('verdict: no').length - 1;
-      const yesVerdictCount = verdicts.split('verdict: yes').length - 1;
-      if (noVerdictCount + yesVerdictCount > 0) {
-        parsedVerdictCount = noVerdictCount + yesVerdictCount;
-        const missingVerdicts = Math.max(0, statements.length - noVerdictCount - yesVerdictCount);
-        score = 1 - (noVerdictCount + missingVerdicts) / statements.length;
-      }
+  if (verdicts.includes(finalAnswer)) {
+    verdicts = verdicts.slice(verdicts.indexOf(finalAnswer) + finalAnswer.length);
+    const parsedVerdicts = verdicts
+      .split('.')
+      .filter((answer) => answer.includes('yes') || answer.includes('no'));
+    if (parsedVerdicts.length > 0) {
+      parsedVerdictCount = parsedVerdicts.length;
+      const unsupportedVerdicts = parsedVerdicts.filter((answer) => !answer.includes('yes')).length;
+      const missingVerdicts = Math.max(0, statements.length - parsedVerdicts.length);
+      score = 1 - (unsupportedVerdicts + missingVerdicts) / statements.length;
+    }
+  } else {
+    const noVerdictCount = verdicts.split('verdict: no').length - 1;
+    const yesVerdictCount = verdicts.split('verdict: yes').length - 1;
+    if (noVerdictCount + yesVerdictCount > 0) {
+      parsedVerdictCount = noVerdictCount + yesVerdictCount;
+      const missingVerdicts = Math.max(0, statements.length - noVerdictCount - yesVerdictCount);
+      score = 1 - (noVerdictCount + missingVerdicts) / statements.length;
     }
   }
-  if (statements.length > 0 && parsedVerdictCount === 0) {
+  if (parsedVerdictCount === 0) {
     return graderFail('Context faithfulness grader produced no verdicts', tokensUsed);
   }
 

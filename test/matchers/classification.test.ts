@@ -127,10 +127,13 @@ describe('matchesClassification', () => {
       }),
     };
 
-    await expect(matchesClassification(undefined, 'Sample output', 0.5, grading)).resolves.toEqual({
+    await expect(
+      matchesClassification(undefined, 'Sample output', 0.5, grading),
+    ).resolves.toMatchObject({
       pass: false,
       reason: 'No classification scores returned',
       score: 0,
+      metadata: { graderError: true },
     });
   });
 

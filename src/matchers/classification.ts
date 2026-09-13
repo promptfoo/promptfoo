@@ -35,11 +35,7 @@ export async function matchesClassification(
   if (expected === undefined) {
     const scores = Object.values(resp.classification);
     if (scores.length === 0) {
-      return {
-        pass: false,
-        score: 0,
-        reason: 'No classification scores returned',
-      };
+      return graderFail('No classification scores returned');
     }
     score = Math.max(...scores);
   } else {
