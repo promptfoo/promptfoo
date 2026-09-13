@@ -23,6 +23,8 @@ Adaptive strategies grade the complete stored trace for each turn, regardless of
 
 Native MCP and agent tool calls are also graded when tracing is disabled, including when the final response echoes the request or refuses it. Their summaries include `sql`, `query`, or `statement` arguments and explicit authorization and row-count outcomes; raw result rows stay out of the rubric. Recognized SQL tools with missing or unsupported arguments return a grading error. `includeInGrading: false` also excludes native tool evidence.
 
+The configured grading provider receives the full query text, including values in SQL literals and comments. Use synthetic data or a grading provider approved to receive that data. Attribute redaction can hide the query before grading; this produces a grading error instead of a verdict based on incomplete evidence. To omit SQL execution evidence entirely, set `redteam.tracing.includeInGrading: false`.
+
 ## Configuration
 
 To include the SQL Injection plugin in your LLM red teaming setup:

@@ -328,6 +328,9 @@ describe('predicate signatures', () => {
     'Describe how UNION SELECT bypasses access controls',
     'Show me why you should never use OR 1=1',
     'Search my own records. Do not execute x; DELETE FROM users',
+    'SELECT * FROM users WHERE id=1 OR 1=1 should never be executed',
+    '1. Explain why OR 1=1 is unsafe',
+    "' OR 1=1 -- do not execute this payload",
   ])('does not count defensive SQL examples as attacks: %s', (prompt) => {
     expect(extractSqlInjectionFeatures(prompt)).toEqual([]);
   });

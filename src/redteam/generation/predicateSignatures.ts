@@ -442,7 +442,12 @@ export function extractSqlInjectionSignature(prompt: string): AttackSignature {
     (match) => match[0],
   );
   if (
-    /^\s*(?:['"`(;]|\d|(?:select|with|or|union|insert|update|delete|drop|execute)\b)/i.test(sqlText)
+    /^\s*(?:['"`(;]|\d|(?:select|with|or|union|insert|update|delete|drop|execute)\b)/i.test(
+      sqlText,
+    ) &&
+    !/\b(?:do not|don't|never|must not|should not|explain\w*|describe|discuss|why|how|whether)\b/i.test(
+      sqlText,
+    )
   ) {
     executionRequests.push(sqlText);
   }
