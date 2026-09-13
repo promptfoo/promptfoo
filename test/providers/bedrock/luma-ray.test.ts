@@ -21,7 +21,7 @@ const mockStoreBlob = vi.hoisted(() =>
 vi.mock('@aws-sdk/client-bedrock-runtime', () => {
   return {
     BedrockRuntimeClient: vi.fn().mockImplementation(function () {
-      return { send: mockBedrockSend };
+      return { send: mockBedrockSend, destroy: vi.fn() };
     }),
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     StartAsyncInvokeCommand: vi.fn().mockImplementation(function (params: any) {
@@ -37,7 +37,7 @@ vi.mock('@aws-sdk/client-bedrock-runtime', () => {
 vi.mock('@aws-sdk/client-s3', () => {
   return {
     S3Client: vi.fn().mockImplementation(function () {
-      return { send: mockS3Send };
+      return { send: mockS3Send, destroy: vi.fn() };
     }),
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     GetObjectCommand: vi.fn().mockImplementation(function (params: any) {
@@ -247,9 +247,7 @@ describe('LumaRayVideoProvider', () => {
       const call = provider.callApi('A video', undefined, { abortSignal: controller.signal });
       await vi.waitFor(() => expect(credentials).toHaveBeenCalledOnce());
       controller.abort(new Error('cancelled credentials'));
-      await expect(call).resolves.toMatchObject({
-        error: expect.stringContaining('cancelled credentials'),
-      });
+      await expect(call).rejects.toThrow('cancelled credentials');
       expect(mockBedrockSend).not.toHaveBeenCalled();
     });
 
