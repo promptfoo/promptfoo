@@ -985,13 +985,21 @@ export function calculateOpenAIUsageCost(
 
   const usageParts = getOpenAIUsageParts(rawUsage);
   const usage = extractOpenAIBillingUsage(rawUsage);
+  if (options.cachedResponse && getModelRates(modelName, 'standard', usage.totalInputTokens)) {
+    return 0;
+  }
   const tier = normalizeServiceTier(options.serviceTier);
   const hasCustomTextCost =
     config.cost !== undefined || config.inputCost !== undefined || config.outputCost !== undefined;
+  const hasCustomAudioCost =
+    config.audioCost !== undefined ||
+    config.audioInputCost !== undefined ||
+    config.audioOutputCost !== undefined;
   const modelRates =
     (tier && getModelRates(modelName, tier, usage.totalInputTokens)) ??
-    ((!tier || (modelName === 'chat-latest' && tier !== 'standard')) && hasCustomTextCost
-      ? { text: { input: 0 } }
+    ((!tier || (modelName === 'chat-latest' && tier !== 'standard')) &&
+    (hasCustomTextCost || hasCustomAudioCost)
+      ? { text: { input: 0 }, ...(hasCustomAudioCost && { audio: { input: 0 } }) }
       : undefined);
   if (!modelRates) {
     return undefined;
@@ -1005,10 +1013,6 @@ export function calculateOpenAIUsageCost(
           text: applyRateMultiplier(modelRates.text, OPENAI_REGIONAL_PROCESSING_MULTIPLIER),
         }
       : modelRates;
-
-  if (options.cachedResponse) {
-    return 0;
-  }
 
   const { hasOutputBreakdown } = usageParts;
 

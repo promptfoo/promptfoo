@@ -886,6 +886,33 @@ describe('OpenAI billing helpers', () => {
     ).toBeUndefined();
   });
 
+  it('does not bill cached chat-latest responses with unsupported tiers', () => {
+    expect(
+      calculateOpenAIUsageCost(
+        'chat-latest',
+        {},
+        { prompt_tokens: 10, completion_tokens: 5 },
+        { cachedResponse: true, serviceTier: 'premium' },
+      ),
+    ).toBe(0);
+  });
+
+  it('uses audio overrides for chat-latest responses with unsupported tiers', () => {
+    expect(
+      calculateOpenAIUsageCost(
+        'chat-latest',
+        { audioInputCost: 0.01, audioOutputCost: 0.03 },
+        {
+          prompt_tokens: 3,
+          completion_tokens: 2,
+          prompt_tokens_details: { audio_tokens: 3 },
+          completion_tokens_details: { audio_tokens: 2 },
+        },
+        { serviceTier: 'premium' },
+      ),
+    ).toBeCloseTo(0.09, 10);
+  });
+
   it('prices audio text and audio tokens separately', () => {
     const cost = calculateOpenAIUsageCost(
       'gpt-4o-mini-audio-preview',
