@@ -452,9 +452,10 @@ function redactTraceValue(
         break;
       }
       if (
-        entryKey === 'value' &&
-        headerName &&
-        isTracingCredentialHeader(headerName, String(record[entryKey]))
+        (entryKey === 'value' &&
+          headerName &&
+          isTracingCredentialHeader(headerName, String(record[entryKey]))) ||
+        isTracingCredentialHeader(entryKey, String(record[entryKey]))
       ) {
         budget.remaining--;
         redacted[entryKey] = '[REDACTED]';
@@ -515,7 +516,7 @@ function redactTraceEvidence(text: string): string {
           : match,
     )
     .replace(/\b((?:set-)?cookie\s*:\s*)[^\s"'`\\;&|\r\n]+/gi, '$1[REDACTED]')
-    .replace(/\b(authorization\s*:\s*)[^"'`\s\\;]+/gi, '$1[REDACTED]')
+    .replace(/\b(authorization\s*:\s*)(?:(?:Bearer|Basic)\s+)?[^"'`\s\\;]+/gi, '$1[REDACTED]')
     .replace(
       /(^|\s)((?:--?(?:api[-_]?key|pass|password|proxy-pass|proxy-user|secret|token|user)|-u)(?:\s+|=))(?:"[^"]*"|'[^']*'|[^\s"'`\\;]+)/gi,
       '$1$2[REDACTED]',
@@ -537,7 +538,11 @@ function redactTraceUrl(value: string): string {
   try {
     const isAbsolute = /^https?:\/\//i.test(sanitized);
     const url = new URL(sanitized, 'https://trace.invalid');
-    if (!url.search && !url.hash) {
+    const originalPath = url.pathname;
+    if (url.hostname.toLowerCase() === 'api.telegram.org') {
+      url.pathname = url.pathname.replace(/^\/bot[^/]+/i, '/bot[REDACTED]');
+    }
+    if (!url.search && !url.hash && url.pathname === originalPath) {
       return sanitized;
     }
     if (url.search) {
