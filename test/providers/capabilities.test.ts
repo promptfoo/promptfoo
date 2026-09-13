@@ -213,6 +213,12 @@ it('preserves subclass text capability through a rate-limit object wrapper', asy
       'callApi',
     ),
   ).toBe(false);
+  expect(
+    hasProviderCapability(
+      wrapProviderWithRateLimiting(new OpenAiEmbeddingProvider('fixture'), registry),
+      'callEmbeddingApi',
+    ),
+  ).toBe(true);
   const prototypeCapabilities = Object.create({
     get promptfooCapabilities() {
       return ['callEmbeddingApi'];
