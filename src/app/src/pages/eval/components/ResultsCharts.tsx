@@ -276,6 +276,7 @@ function PassRateChart({ table }: ChartProps) {
       : 'No provider pass rates are available.';
   }, [passRates, table.head.prompts]);
 
+  // biome-ignore lint/correctness/useExhaustiveDependencies: pass rates use stable totals
   useEffect(() => {
     if (!passRateCanvasRef.current) {
       return;
@@ -317,7 +318,7 @@ function PassRateChart({ table }: ChartProps) {
         },
       },
     });
-  }, [passRates, table]);
+  }, [table]);
 
   return (
     <section role="region" aria-labelledby={titleId} aria-describedby={summaryId}>

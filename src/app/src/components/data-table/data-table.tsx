@@ -1045,7 +1045,11 @@ export function DataTable<TData, TValue = unknown>({
         >
           <table
             className="w-full print:text-black"
-            aria-rowcount={hasExplicitRowIndices ? headerRowCount + virtualizerCount : undefined}
+            aria-rowcount={
+              hasExplicitRowIndices
+                ? headerRowCount + (isPrinting ? rows.length : virtualizerCount)
+                : undefined
+            }
             style={{
               tableLayout: 'fixed',
               ...(tableMinWidth ? { minWidth: tableMinWidth } : {}),
