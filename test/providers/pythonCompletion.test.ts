@@ -10,6 +10,7 @@ import { PythonProvider } from '../../src/providers/pythonCompletion';
 import * as pythonUtils from '../../src/python/pythonUtils';
 import { getConfiguredPythonPath, getEnvInt } from '../../src/python/pythonUtils';
 import { PythonWorkerPool } from '../../src/python/workerPool';
+import { createDeferred } from '../util/utils';
 import type { Mock } from 'vitest';
 
 vi.mock('../../src/logger', () => ({
@@ -96,6 +97,43 @@ vi.mock('../../src/python/workerPool', async (importOriginal) => {
 });
 
 describe('PythonProvider', () => {
+  it.each([false, true])(
+    'rejects a different environment while initializing=%s',
+    async (duringInitialization) => {
+      const started = createDeferred<void>();
+      const ready = createDeferred<void>();
+      mockPoolInstance.initialize.mockImplementationOnce(() => {
+        started.resolve();
+        return ready.promise;
+      });
+      mockPoolInstance.execute.mockResolvedValue({ output: 'complete' });
+      const provider = new PythonProvider('script.py');
+      const first = cliState.withEnv({ SDK_PYTHON_TENANT: 'first' }, () => provider.initialize());
+      await started.promise;
+      if (!duringInitialization) {
+        ready.resolve();
+        await first;
+      }
+      const second = cliState
+        .withEnv({ SDK_PYTHON_TENANT: 'second' }, () => provider.callApi('test'))
+        .then(
+          (value) => ({ value, error: undefined }),
+          (error: Error) => ({ value: undefined, error }),
+        );
+      ready.resolve();
+      await first;
+      const result = await second;
+      expect(result.error?.message).toMatch(/separate.*environment/i);
+      expect(mockPoolInstance.execute).not.toHaveBeenCalled();
+      await cliState.withEnv({ SDK_PYTHON_TENANT: 'first' }, () => provider.callApi('test'));
+      await provider.shutdown();
+      await cliState.withEnv({ SDK_PYTHON_TENANT: 'second' }, () => provider.callApi('test'));
+      expect(mockPoolInstance.execute).toHaveBeenCalledTimes(2);
+      expect(mockPoolInstance.initialize).toHaveBeenCalledTimes(2);
+      await provider.shutdown();
+    },
+  );
+
   const mockPythonWorkerPool = vi.mocked(PythonWorkerPool);
   const mockGetCache = vi.mocked(getCache);
   const mockIsCacheEnabled = vi.mocked(isCacheEnabled);

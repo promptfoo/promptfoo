@@ -83,6 +83,7 @@ interface CliState {
 
 const maxConcurrencyContext = new AsyncLocalStorage<{ maxConcurrency: number | undefined }>();
 const envContext = new AsyncLocalStorage<{
+  basePath: { value: string | undefined };
   env: EnvOverrides | undefined;
   envFileOverrides?: EnvOverrides;
 }>();
@@ -90,9 +91,16 @@ const requestTracingConfigContext = new AsyncLocalStorage<{
   tracingConfig: NonNullable<TestSuite['tracing']>;
 }>();
 let globalMaxConcurrency: number | undefined;
+const globalBasePath: { value: string | undefined } = { value: undefined };
 let activeOtlpReceiver: ActiveOtlpReceiver | undefined;
 
 const state: CliState = {
+  get basePath() {
+    return (envContext.getStore()?.basePath ?? globalBasePath).value;
+  },
+  set basePath(value: string | undefined) {
+    (envContext.getStore()?.basePath ?? globalBasePath).value = value;
+  },
   get maxConcurrency() {
     const store = maxConcurrencyContext.getStore();
     if (store) {
@@ -119,10 +127,15 @@ const state: CliState = {
     return envContext.getStore()?.envFileOverrides;
   },
   withEnvFileOverrides<T>(env: EnvOverrides | undefined, fn: () => T): T {
-    return envContext.run({ env: undefined, envFileOverrides: env }, fn);
+    return envContext.run(
+      { basePath: { value: state.basePath }, env: undefined, envFileOverrides: env },
+      fn,
+    );
   },
   withEnv<T>(env: EnvOverrides | undefined, fn: () => T): T {
-    return envContext.run({ env, envFileOverrides: state.envFileOverrides }, fn);
+    // Config loading may resolve the path inside a nested environment scope.
+    const basePath = envContext.getStore()?.basePath ?? globalBasePath;
+    return envContext.run({ basePath, env, envFileOverrides: state.envFileOverrides }, fn);
   },
   get requestTracingConfig() {
     return requestTracingConfigContext.getStore()?.tracingConfig;

@@ -138,7 +138,7 @@ Test case indices address logical tests after scenario expansion: explicit tests
 
 Environment files configured through `commandLineOptions.envPath` are also isolated per call, including built-in providers, subprocess providers, executable prompts, and callbacks. Suite environment settings override file defaults. JavaScript target and grading callbacks receive these values through `context.env`; that property is omitted from context serialization. SDK `evaluate()` calls retain their suite environment through execution and output writing. Loading a file does not change the server process environment or copy its values into the saved configuration’s `env` settings.
 
-Providers shared by overlapping calls remain open until both calls finish. Reusing a Python provider starts a fresh worker pool after cleanup. Shared eval records redact provider credentials and TLS private keys while preserving public certificates.
+Providers shared by overlapping MCP or SDK calls remain open until both calls finish. Relative assertion files resolve against each call's configuration directory. Python provider instances keep one execution environment for their worker pool's lifetime; use separate instances for different environments. Reusing an instance after cleanup starts a fresh worker pool. Shared eval records redact provider credentials and TLS private keys while preserving public certificates.
 
 ### 2. Provider Comparison
 

@@ -22,9 +22,11 @@ describe('doEval environment files', () => {
   let tempDir: string;
   let restoreEnv: () => void;
   let previousConfig: typeof cliState.config;
+  let previousBasePath: string | undefined;
 
   beforeEach(() => {
     previousConfig = cliState.config;
+    previousBasePath = cliState.basePath;
     cliState.config = undefined;
     tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'promptfoo-do-eval-env-'));
     restoreEnv = mockProcessEnv({
@@ -37,8 +39,53 @@ describe('doEval environment files', () => {
   afterEach(() => {
     vi.resetAllMocks();
     cliState.config = previousConfig;
+    cliState.basePath = previousBasePath;
     restoreEnv();
     fs.rmSync(tempDir, { recursive: true, force: true });
+  });
+
+  it('resolves relative assertions against each concurrent config directory', async () => {
+    fs.writeFileSync(
+      path.join(tempDir, 'provider.cjs'),
+      `let arrivals=0,release;const ready=new Promise(resolve=>{release=resolve});module.exports=class{id(){return 'base-path-target'}async callApi(prompt){if(++arrivals===2)release();await ready;return{output:prompt}}}`,
+    );
+    const results = await Promise.all(
+      ['first', 'second'].map(async (name) => {
+        const directory = path.join(tempDir, name);
+        fs.mkdirSync(directory);
+        fs.writeFileSync(
+          path.join(directory, 'assertion.cjs'),
+          `module.exports = output => output === ${JSON.stringify(name)};`,
+        );
+        const config = path.join(directory, 'config.json');
+        fs.writeFileSync(
+          config,
+          JSON.stringify({
+            prompts: [name],
+            providers: ['file://../provider.cjs'],
+            tests: [{ assert: [{ type: 'javascript', value: 'file://assertion.cjs' }] }],
+          }),
+        );
+        const evaluation = await doEval(
+          {
+            config: [config],
+            write: false,
+            share: false,
+            table: false,
+            progressBar: false,
+            cache: false,
+          },
+          {},
+          undefined,
+          { eventSource: 'mcp', showProgressBar: false },
+        );
+        return (await evaluation.toEvaluateSummary()).results[0];
+      }),
+    );
+    expect(results.map((row) => ({ success: row.success, error: row.error }))).toEqual([
+      { success: true, error: undefined },
+      { success: true, error: undefined },
+    ]);
   });
 
   it.each(

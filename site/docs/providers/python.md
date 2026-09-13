@@ -524,6 +524,8 @@ export PROMPTFOO_PYTHON_WORKERS=4
 
 Note that global state is not shared across workers. If your script uses global variables for session management (common in conversational flows like red team evaluations), use `workers: 1` to ensure all requests hit the same worker.
 
+A provider instance keeps the execution environment used to initialize its worker pool. Create separate instances when concurrent evaluations use different environment values. Calls that would reuse a pool under a different environment fail with an explicit error. After the pool is shut down, the instance can initialize a new pool with the next evaluation's environment.
+
 #### Timeouts
 
 Default timeout is 5 minutes (300 seconds). Increase if needed:

@@ -1,8 +1,10 @@
+import { isDeepStrictEqual } from 'node:util';
 import fs from 'fs/promises';
 import path from 'path';
 
 import { getCache } from '../cache';
 import cliState from '../cliState';
+import { getRuntimeEnv } from '../envOverrides';
 import logger from '../logger';
 import { getConfiguredPythonPath, getEnvInt } from '../python/pythonUtils';
 import { PythonWorkerPool } from '../python/workerPool';
@@ -181,6 +183,7 @@ export class PythonProvider implements ApiProvider {
   private functionName: string | null;
   private isInitialized: boolean = false;
   private initializationPromise: Promise<void> | null = null;
+  private workerEnv?: NodeJS.ProcessEnv;
   public label: string | undefined;
   private pool: PythonWorkerPool | null = null;
 
@@ -216,6 +219,11 @@ export class PythonProvider implements ApiProvider {
    * @returns A promise that resolves when all file references have been processed
    */
   public async initialize(): Promise<void> {
+    const env = getRuntimeEnv();
+    if (this.workerEnv && !isDeepStrictEqual(this.workerEnv, env)) {
+      throw new Error('Create a separate Python provider instance for each execution environment.');
+    }
+    this.workerEnv = env;
     // If already initialized, return immediately
     if (this.isInitialized) {
       return;
@@ -258,6 +266,7 @@ export class PythonProvider implements ApiProvider {
       } catch (error) {
         // Reset the initialization promise so future calls can retry
         this.initializationPromise = null;
+        this.workerEnv = undefined;
         throw error;
       }
     })();
@@ -328,9 +337,7 @@ export class PythonProvider implements ApiProvider {
     context: CallApiContextParams | undefined,
     apiType: PythonApiType,
   ): Promise<any> {
-    if (!this.isInitialized || !this.pool) {
-      await this.initialize();
-    }
+    await this.initialize();
 
     const absPath = path.resolve(path.join(this.options?.config.basePath || '', this.scriptPath));
     logger.debug(`Computing file hash for script ${absPath}`);
@@ -406,23 +413,14 @@ export class PythonProvider implements ApiProvider {
   }
 
   async callApi(prompt: string, context?: CallApiContextParams): Promise<ProviderResponse> {
-    if (!this.isInitialized) {
-      await this.initialize();
-    }
     return this.executePythonScript(prompt, context, 'call_api');
   }
 
   async callEmbeddingApi(prompt: string): Promise<ProviderEmbeddingResponse> {
-    if (!this.isInitialized) {
-      await this.initialize();
-    }
     return this.executePythonScript(prompt, undefined, 'call_embedding_api');
   }
 
   async callClassificationApi(prompt: string): Promise<ProviderClassificationResponse> {
-    if (!this.isInitialized) {
-      await this.initialize();
-    }
     return this.executePythonScript(prompt, undefined, 'call_classification_api');
   }
 
@@ -434,5 +432,6 @@ export class PythonProvider implements ApiProvider {
     providerRegistry.unregister(this);
     this.isInitialized = false;
     this.initializationPromise = null;
+    this.workerEnv = undefined;
   }
 }

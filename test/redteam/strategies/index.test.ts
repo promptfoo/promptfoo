@@ -8,7 +8,7 @@ import { loadStrategy, validateStrategies } from '../../../src/redteam/strategie
 
 import type { RedteamStrategyObject, TestCaseWithPlugin } from '../../../src/types/index';
 
-vi.mock('../../../src/cliState');
+vi.mock('../../../src/cliState', () => ({ default: { basePath: undefined } }));
 vi.mock('../../../src/esm', async (importOriginal) => {
   return {
     ...(await importOriginal()),
