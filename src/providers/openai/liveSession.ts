@@ -72,12 +72,18 @@ const MAX_TRANSCRIPT_BYTES = 1024 * 1024;
 const MAX_TRANSCRIPT_DELTAS = 20_000;
 const MAX_AUDIO_BYTES = 32 * 1024 * 1024;
 const MAX_AUDIO_CHUNKS = 50_000;
+const MAX_PROTOCOL_ID_BYTES = 256;
 const MAX_HANDSHAKE_BODY_BYTES = 8 * 1024;
 const HANDSHAKE_BODY_TIMEOUT_MS = 2_000;
 const PENDING_WORK_ERROR =
   'GPT-Live capture window ended with backend work pending. Increase responseWindowMs.';
 const LATE_WORK_ERROR =
   'GPT-Live backend requested work after the capture window ended. Increase responseWindowMs.';
+
+function isBoundedProtocolId(value: unknown): value is string {
+  return typeof value === 'string' && Buffer.byteLength(value) <= MAX_PROTOCOL_ID_BYTES;
+}
+
 const CREDENTIAL_HEADER =
   /(?:authorization|api[-_]?key|token|secret|signature|credential|cookie|password)/i;
 const GUARDRAIL_ERROR_CODES = new Set([
@@ -581,7 +587,7 @@ export class LiveSession {
 
   private handleDelegation(event: LiveEvent): void {
     const delegation = event.delegation;
-    if (!delegation || typeof delegation.id !== 'string') {
+    if (!delegation || !isBoundedProtocolId(delegation.id)) {
       this.fail('Invalid GPT-Live delegation event.');
       return;
     }
@@ -618,10 +624,14 @@ export class LiveSession {
       return;
     }
     if (delegation.target === 'responses') {
-      this.backendTurns.set(delegation.id, {
-        id: typeof delegation.response_id === 'string' ? delegation.response_id : '',
-        calls: new Map(),
-      });
+      const turn = this.backendTurns.get(delegation.id);
+      this.backendTurns.set(
+        delegation.id,
+        turn ?? {
+          id: typeof delegation.response_id === 'string' ? delegation.response_id : '',
+          calls: new Map(),
+        },
+      );
       return;
     }
     this.backendCost = undefined;
@@ -658,7 +668,7 @@ export class LiveSession {
   private handleBackendEvent(envelope: LiveEvent): void {
     const event = envelope.event;
     const delegationId = envelope.delegation_id;
-    if (!event || typeof event.type !== 'string' || typeof delegationId !== 'string') {
+    if (!event || typeof event.type !== 'string' || !isBoundedProtocolId(delegationId)) {
       this.fail('Invalid GPT-Live Responses envelope.');
       return;
     }
@@ -668,12 +678,16 @@ export class LiveSession {
     }
     const responseLimit = 2 * resolveMaxToolIterations(this.options.config.maxToolIterations);
     if (event.type === 'response.created') {
-      if (typeof event.response?.id !== 'string') {
+      if (!isBoundedProtocolId(event.response?.id)) {
         this.fail('Invalid GPT-Live backend response.');
         return;
       }
       const turn = this.backendTurns.get(delegationId);
       if (turn?.id === event.response.id || this.finishedResponses.has(event.response.id)) {
+        return;
+      }
+      if (turn?.id) {
+        this.fail('GPT-Live backend response started before the active response completed.');
         return;
       }
       // Each accepted delegation can start one response, plus one continuation per tool call.
@@ -685,7 +699,10 @@ export class LiveSession {
       if (this.closing && !this.backendTurns.has(delegationId)) {
         this.setError(LATE_WORK_ERROR);
       }
-      this.backendTurns.set(delegationId, { id: event.response.id, calls: new Map() });
+      this.backendTurns.set(delegationId, {
+        id: event.response.id,
+        calls: turn?.calls ?? new Map(),
+      });
     } else if (event.type === 'response.output_item.done' && event.item?.type === 'function_call') {
       const turn = this.backendTurns.get(delegationId);
       if (!turn) {
@@ -821,7 +838,7 @@ export class LiveSession {
       [rawUsage.input_tokens, rawUsage.output_tokens, rawUsage.total_tokens].every(valid) &&
       (rawUsage.input_tokens_details?.cached_tokens === undefined ||
         valid(rawUsage.input_tokens_details.cached_tokens)) &&
-      (!details || Object.values(details).every(valid))
+      (!details || Object.values(details).every((value) => value === undefined || valid(value)))
         ? rawUsage
         : undefined;
     this.backendResponses.push({
@@ -1001,12 +1018,22 @@ function credentialForms(value: string): string[] {
   // HTTP drops surrounding whitespace, so a gateway echoes the trimmed value.
   const trimmed = value.trim();
   const token = trimmed.replace(/^[A-Za-z][\w-]*\s+/, '');
+  const keyValueTokens = trimmed
+    .split(/[;,]\s*/)
+    .flatMap((part) => (part.includes('=') ? [part.slice(part.indexOf('=') + 1)] : []));
   if (!/^Basic\s/i.test(trimmed)) {
-    return [trimmed, token];
+    return [trimmed, token, ...keyValueTokens];
   }
   const pair = Buffer.from(token, 'base64').toString('utf8');
   const separator = pair.indexOf(':');
-  return [trimmed, token, pair, pair.slice(0, separator), pair.slice(separator + 1)];
+  const parts = [pair, pair.slice(0, separator), pair.slice(separator + 1)];
+  const encoded = parts.map((part) =>
+    encodeURIComponent(part).replace(
+      /[!'()*]/g,
+      (char) => `%${char.charCodeAt(0).toString(16).toUpperCase()}`,
+    ),
+  );
+  return [trimmed, token, ...parts, ...encoded];
 }
 
 /** Characters that continue a credential-like token, such as base64 or URL-safe text. */

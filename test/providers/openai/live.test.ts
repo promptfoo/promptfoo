@@ -581,6 +581,15 @@ describe('OpenAiLiveProvider', () => {
     expect(JSON.stringify(response)).not.toContain('12345678');
   });
 
+  it('redacts bare values from cookie credentials', async () => {
+    const result = provider({ headers: { Cookie: 'session=gateway-secret' } }).callApi('Hi');
+    const socket = await connect();
+    start(socket);
+    apiError(socket, { code: 'gateway_error', message: 'Rejected gateway-secret' });
+    closed(socket);
+    expect((await result).error).toContain('Rejected [REDACTED]');
+  });
+
   it.each(['client', 'responses'] as const)(
     'rejects delegation outside the configured %s mode',
     async (mode) => {
@@ -643,6 +652,32 @@ describe('OpenAiLiveProvider', () => {
     }
     closed(socket);
     expect((await result).error).toContain('backend response limit');
+  });
+
+  it('rejects a second backend response before the active response completes', async () => {
+    const result = provider({
+      delegation: { type: 'responses', responses: { model: 'gpt-4.1-mini' } },
+    }).callApi('Hi');
+    const socket = await connect();
+    start(socket);
+    backend(socket, { type: 'response.created', response: { id: 'first' } });
+    backend(socket, { type: 'response.created', response: { id: 'second' } });
+    closed(socket);
+    expect((await result).error).toContain('before the active response completed');
+  });
+
+  it('rejects oversized delegation identifiers before retaining them', async () => {
+    const result = provider({
+      delegation: { type: 'responses', responses: { model: 'gpt-4.1-mini' } },
+    }).callApi('Hi');
+    const socket = await connect();
+    start(socket);
+    emit(socket, {
+      type: 'session.delegation.created',
+      delegation: { id: 'x'.repeat(257), target: 'responses' },
+    });
+    closed(socket);
+    expect((await result).error).toBe('Invalid GPT-Live delegation event.');
   });
 
   it('treats moderation interruptions as guardrail refusals without ending the capture', async () => {
@@ -1408,14 +1443,14 @@ describe('OpenAiLiveProvider', () => {
         401,
         JSON.stringify({
           error: {
-            message: `Rejected Basic ${token} (${token}) for gateway-user:gateway!secret; password gateway!secret.`,
+            message: `Rejected Basic ${token} (${token}) for gateway-user:gateway!secret; password gateway!secret/gateway%21secret.`,
           },
         }),
       ),
     );
     const response = await result;
     expect(response.error).toBe(
-      'GPT-Live WebSocket handshake failed (HTTP 401): Rejected [REDACTED] ([REDACTED]) for [REDACTED]; password [REDACTED].',
+      'GPT-Live WebSocket handshake failed (HTTP 401): Rejected [REDACTED] ([REDACTED]) for [REDACTED]; password [REDACTED]/[REDACTED].',
     );
     expect(JSON.stringify(response)).not.toMatch(/gateway!secret|gateway%21secret/);
     expect(JSON.stringify(response)).not.toContain(token);
@@ -1562,7 +1597,12 @@ describe('OpenAiLiveProvider', () => {
           id: 'priced-response',
           model: 'gpt-4.1-mini',
           output: [],
-          usage: { input_tokens: 10, output_tokens: 5, total_tokens: 15 },
+          usage: {
+            input_tokens: 10,
+            output_tokens: 5,
+            total_tokens: 15,
+            output_tokens_details: { reasoning_tokens: 0 },
+          },
         },
       });
       text(socket);
@@ -1583,6 +1623,10 @@ describe('OpenAiLiveProvider', () => {
     const socket = await connect();
     start(socket);
     backend(socket, { type: 'response.created', response: { id: 'resp_1' } });
+    emit(socket, {
+      type: 'session.delegation.created',
+      delegation: { id: 'delegation_1', target: 'responses' },
+    });
     backend(socket, {
       type: 'response.completed',
       response: {

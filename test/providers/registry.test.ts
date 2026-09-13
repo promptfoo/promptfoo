@@ -140,6 +140,18 @@ describe('Provider Registry', () => {
     },
   );
 
+  it('rejects transcription in a passthrough model override', async () => {
+    const factories = await getProviderFactories('openai:chat:gpt-4o');
+    const factory = factories.find((entry) => entry.test('openai:chat:gpt-4o'));
+    await expect(
+      factory!.create(
+        'openai:chat:gpt-4o',
+        { config: { passthrough: { model: 'gpt-live-transcribe' } } },
+        { basePath: '.', options: {} },
+      ),
+    ).rejects.toThrow('transcription session');
+  });
+
   it.each([
     'azure:live:gpt-live-1',
     'azureopenai:live:gpt-live-1',

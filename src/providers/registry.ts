@@ -1006,8 +1006,8 @@ export const providerMap: ProviderFactory[] = [
         });
       }
       const requestedApiModel = modelName || configuredModel || modelType;
+      const passthrough = providerOptions.config?.passthrough as { model?: unknown } | undefined;
       if (!['agents', 'chatkit', 'assistant'].includes(modelType)) {
-        const passthrough = providerOptions.config?.passthrough as { model?: unknown } | undefined;
         const apiHost =
           providerOptions.config?.apiHost ||
           providerOptions.env?.OPENAI_API_HOST ||
@@ -1025,8 +1025,10 @@ export const providerMap: ProviderFactory[] = [
         }
       }
       if (
-        [modelType, requestedApiModel].some(
-          (model) => model === 'gpt-live-transcribe' || model.startsWith('gpt-live-transcribe-'),
+        [modelType, requestedApiModel, passthrough?.model].some(
+          (model) =>
+            typeof model === 'string' &&
+            (model === 'gpt-live-transcribe' || model.startsWith('gpt-live-transcribe-')),
         )
       ) {
         throw new Error(
