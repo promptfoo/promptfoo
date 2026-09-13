@@ -696,7 +696,9 @@ export async function runAssertions({
     .flat();
 
   const shouldPreloadTrace =
-    !!traceId && hasTraceAwareAssertions(asserts.map(({ assertion }) => assertion));
+    !!traceId &&
+    (registry !== defaultAssertionRegistry ||
+      hasTraceAwareAssertions(asserts.map(({ assertion }) => assertion)));
   let preloadedTraceData: TraceData | null | undefined;
   if (shouldPreloadTrace && traceId) {
     try {
