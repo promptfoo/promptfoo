@@ -225,29 +225,35 @@ async function createRuntimeTestSuite(
     testSuiteConfig.defaultTest.startsWith('file://')
       ? await maybeLoadFromExternalFile(testSuiteConfig.defaultTest)
       : testSuiteConfig.defaultTest;
+  await adoptExistingTestProviders({ defaultTest });
+  const tests = await readTests(testSuiteConfig.tests);
+  await adoptExistingTestProviders({ tests });
 
   return {
     ...testSuiteConfig,
     defaultTest: defaultTest as TestSuite['defaultTest'],
     scenarios: testSuiteConfig.scenarios as Scenario[],
     providers: loadedProviders,
-    tests: await readTests(testSuiteConfig.tests),
+    tests,
     nunjucksFilters: await readFilters(testSuiteConfig.nunjucksFilters || {}),
     prompts: await processPrompts(testSuiteConfig.prompts),
   };
 }
 
-async function adoptExistingTestProviders(testSuite: TestSuite): Promise<void> {
-  const existingProviders: unknown[] = [];
+async function adoptExistingTestProviders(
+  testSuite: Partial<Pick<EvaluateTestSuite, 'providers' | 'defaultTest' | 'tests' | 'scenarios'>>,
+): Promise<void> {
+  const existingProviders: unknown[] = Array.isArray(testSuite.providers)
+    ? [...testSuite.providers]
+    : [testSuite.providers];
   for (const test of [
     testSuite.defaultTest,
-    ...(testSuite.tests ?? []),
-    ...(testSuite.scenarios ?? []).flatMap((scenario) => [
-      ...scenario.config,
-      ...(scenario.tests ?? []),
-    ]),
+    ...(Array.isArray(testSuite.tests) ? testSuite.tests : []),
+    ...(testSuite.scenarios ?? []).flatMap((scenario) =>
+      typeof scenario === 'string' ? [] : [...scenario.config, ...(scenario.tests ?? [])],
+    ),
   ]) {
-    if (!test || typeof test !== 'object') {
+    if (!test || typeof test !== 'object' || 'path' in test) {
       continue;
     }
     existingProviders.push(test.provider, test.options?.provider);
@@ -276,8 +282,6 @@ async function resolveNestedProviders(
   constructedTestSuite: TestSuite,
   providerMap: Record<string, ApiProvider>,
 ): Promise<void> {
-  await adoptExistingTestProviders(constructedTestSuite);
-
   if (typeof constructedTestSuite.defaultTest === 'object' && constructedTestSuite.defaultTest) {
     constructedTestSuite.defaultTest = cloneTestForResolve(constructedTestSuite.defaultTest);
 
@@ -357,6 +361,7 @@ export async function evaluateWithSource(
 ) {
   return providerRegistry.withScope(() =>
     cliState.withEnv(testSuite.env, async () => {
+      await adoptExistingTestProviders(testSuite);
       const { author: suiteAuthor, ...testSuiteConfig } = testSuite;
 
       if (testSuiteConfig.writeLatestResults) {

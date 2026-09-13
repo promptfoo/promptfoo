@@ -1,18 +1,92 @@
 import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
-import { runDbMigrations } from '../../src/migrate';
+import * as migrations from '../../src/migrate';
 import { evaluate } from '../../src/node/evaluate';
 import { providerRegistry } from '../../src/providers/providerRegistry';
+import * as externalFile from '../../src/util/file';
+import * as util from '../../src/util/index';
+import * as testCaseReader from '../../src/util/testCaseReader';
 import { createDeferred } from '../util/utils';
 
 import type { ApiProvider, EvaluateTestSuite, TestCase } from '../../src/types';
 
 describe('SDK provider lifecycle', () => {
   beforeAll(async () => {
-    await runDbMigrations();
+    await migrations.runDbMigrations();
   });
   afterEach(async () => {
     await providerRegistry.shutdownAll();
     vi.restoreAllMocks();
+  });
+
+  it.each(['migration', 'provider', 'default-test', 'tests', 'filters', 'prompts'])(
+    'cleans up input providers when %s setup fails',
+    async (stage) => {
+      const cleanup = vi.fn();
+      const nested: ApiProvider & { cleanup: typeof cleanup } = {
+        id: () => 'preconstructed-nested-provider',
+        callApi: vi.fn<ApiProvider['callApi']>(),
+        cleanup,
+      };
+      const suite: EvaluateTestSuite = {
+        providers: ['echo'],
+        prompts: ['ok'],
+        tests: [{ options: { provider: { text: nested } } }],
+      };
+      const missing = 'file://missing-sdk-provider-scope-fixture';
+      switch (stage) {
+        case 'migration':
+          suite.writeLatestResults = true;
+          vi.spyOn(migrations, 'runDbMigrations').mockRejectedValueOnce(
+            new Error('Migration failed'),
+          );
+          break;
+        case 'provider':
+          suite.providers = ['unknown-provider-for-scope-test'];
+          break;
+        case 'default-test':
+          suite.defaultTest = missing;
+          break;
+        case 'tests':
+          vi.spyOn(testCaseReader, 'readTests').mockRejectedValueOnce(new Error('Tests failed'));
+          break;
+        case 'filters':
+          vi.spyOn(util, 'readFilters').mockRejectedValueOnce(new Error('Filters failed'));
+          break;
+        case 'prompts':
+          suite.prompts = [missing];
+          break;
+      }
+      await expect(evaluate(suite, { cache: false })).rejects.toThrow();
+      expect(nested.callApi).not.toHaveBeenCalled();
+      expect(cleanup).toHaveBeenCalledOnce();
+    },
+  );
+
+  it('adopts providers loaded from test files before later setup fails', async () => {
+    const cleanup = vi.fn();
+    const provider = { id: () => 'test-file-provider', callApi: vi.fn(), cleanup };
+    vi.spyOn(testCaseReader, 'readTests').mockResolvedValueOnce([{ provider }]);
+    vi.spyOn(util, 'readFilters').mockRejectedValueOnce(new Error('Filters failed'));
+    await expect(
+      evaluate({ providers: ['echo'], prompts: ['ok'], tests: 'tests.yaml' }),
+    ).rejects.toThrow('Filters failed');
+    expect(cleanup).toHaveBeenCalledOnce();
+  });
+
+  it('adopts a provider from the default-test file before loading other tests', async () => {
+    const cleanup = vi.fn();
+    const provider = { id: () => 'default-test-file-provider', callApi: vi.fn(), cleanup };
+    vi.spyOn(externalFile, 'maybeLoadFromExternalFile').mockResolvedValueOnce({ provider });
+    vi.spyOn(testCaseReader, 'readTests').mockRejectedValueOnce(new Error('Tests failed'));
+    await expect(
+      evaluate({
+        providers: ['echo'],
+        prompts: ['ok'],
+        defaultTest: 'file://default-test.yaml',
+        tests: [],
+      }),
+    ).rejects.toThrow('Tests failed');
+    expect(cleanup).toHaveBeenCalledOnce();
   });
 
   it.each([
