@@ -747,6 +747,9 @@ describe('redteam validators', () => {
       it.each([
         ['recursive layer', ['layer']],
         ['mischievous user with an attack provider', ['mischievous-user', 'jailbreak:hydra']],
+        ['transform after mischievous user', ['mischievous-user', 'audio']],
+        ['multiple provider setters', ['best-of-n', 'jailbreak:hydra']],
+        ['two wrapper providers', ['best-of-n', 'authoritative-markup-injection']],
         ['media before a later transform', ['audio', 'base64']],
         ['multiple media transforms', ['audio', 'image']],
       ])('rejects %s steps', (_name, steps) => {

@@ -205,6 +205,7 @@ export const STRATEGIES_REQUIRING_REMOTE = [
   'gcg',
   'goat',
   'indirect-web-pwn',
+  'jailbreak',
   'jailbreak:composite',
   'jailbreak:goblin',
   'jailbreak:hydra',

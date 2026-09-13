@@ -42,6 +42,7 @@ describe('strategies constants', () => {
   });
 
   it('should mark hosted-only strategies as requiring remote generation', () => {
+    expect(STRATEGIES_REQUIRING_REMOTE_SET.has('jailbreak')).toBe(true);
     expect(STRATEGIES_REQUIRING_REMOTE_SET.has('authoritative-markup-injection')).toBe(true);
     expect(STRATEGIES_REQUIRING_REMOTE_SET.has('best-of-n')).toBe(true);
     expect(STRATEGIES_REQUIRING_REMOTE_SET.has('mischievous-user')).toBe(true);
