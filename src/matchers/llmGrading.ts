@@ -422,13 +422,14 @@ export async function matchesClosedQa(
 
   invariant(typeof resp.output === 'string', 'model-graded-closedqa produced malformed response');
   const verdictText = resp.output.trimEnd();
-  if (!verdictText.endsWith('Y') && !verdictText.endsWith('N')) {
+  const verdict = verdictText.match(/(?:^|\s)([YN])$/)?.[1];
+  if (!verdict) {
     return graderFail(
       `Model grader produced a malformed response:\n${resp.output}`,
       resp.tokenUsage,
     );
   }
-  const pass = verdictText.endsWith('Y');
+  const pass = verdict === 'Y';
   return {
     pass,
     score: pass ? 1 : 0,

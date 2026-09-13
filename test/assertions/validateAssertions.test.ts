@@ -349,6 +349,22 @@ describe('validateAssertions', () => {
       );
     });
 
+    it('rejects fallback on an assert-set source', () => {
+      expect(() =>
+        validateAssertions([
+          {
+            assert: [
+              {
+                type: 'assert-set',
+                fallback: 'next',
+                assert: [{ type: 'contains', value: 'ok' }],
+              } as any,
+            ],
+          },
+        ]),
+      ).toThrow(/assert-set assertions cannot be fallback chain sources/);
+    });
+
     it('rejects redteam guardrail fallback primaries', () => {
       const tests: TestCase[] = [
         {

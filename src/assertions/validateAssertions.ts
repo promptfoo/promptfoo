@@ -122,6 +122,11 @@ function parseAssertion(assertion: unknown, context: string): Assertion | Assert
   }
 
   const assertionObj = assertion as Record<string, unknown>;
+  if (assertionObj.type === 'assert-set' && assertionObj.fallback !== undefined) {
+    throw new AssertValidationError(
+      `Invalid assertion at ${context}: assert-set assertions cannot be fallback chain sources`,
+    );
+  }
   if (!('type' in assertionObj) || assertionObj.type === undefined) {
     throw new AssertValidationError(
       `Invalid assertion at ${context}:\n` +

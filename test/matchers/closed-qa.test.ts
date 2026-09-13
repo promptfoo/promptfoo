@@ -74,6 +74,18 @@ describe('matchesClosedQa', () => {
     });
   });
 
+  it('fails closed when Y is only the end of a word', async () => {
+    vi.spyOn(DefaultGradingProvider, 'callApi').mockResolvedValueOnce({
+      output: 'UNABLE TO CLASSIFY',
+      tokenUsage: { total: 10, prompt: 5, completion: 5 },
+    });
+
+    await expect(matchesClosedQa('input', 'criteria', 'output', {})).resolves.toMatchObject({
+      pass: false,
+      metadata: { graderError: true },
+    });
+  });
+
   it('should throw an error when an error occurs', async () => {
     const input = 'Input text';
     const expected = 'Expected output';
