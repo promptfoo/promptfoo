@@ -159,7 +159,7 @@ describe('OpenAiResponsesProvider HTTP metadata', () => {
         body: expect.stringContaining('"stream":true'),
       }),
       expect.any(Number),
-      'text',
+      'stream',
       true,
       undefined,
     );
