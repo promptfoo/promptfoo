@@ -24,6 +24,7 @@ import { parseXlsxFile } from './xlsx';
 import { loadYaml } from './yamlLoad';
 
 import type {
+  ApiProvider,
   CsvRow,
   ProviderOptions,
   TestCase,
@@ -428,6 +429,7 @@ export async function readTest(
   test: string | TestCaseWithVarsFile,
   basePath: string = '',
   isDefaultTest: boolean = false,
+  onProviderConstructed?: (provider: ApiProvider) => void,
 ): Promise<TestCase> {
   let testCase: TestCase;
   let effectiveBasePath = basePath;
@@ -444,13 +446,18 @@ export async function readTest(
 
   if (testCase.provider && typeof testCase.provider !== 'function') {
     // Load provider - resolve paths relative to the test case's location
+    let provider: ApiProvider | undefined;
     if (typeof testCase.provider === 'string') {
-      testCase.provider = await loadApiProvider(testCase.provider, { basePath: effectiveBasePath });
+      provider = await loadApiProvider(testCase.provider, { basePath: effectiveBasePath });
     } else if (typeof testCase.provider.id === 'string') {
-      testCase.provider = await loadApiProvider(testCase.provider.id, {
+      provider = await loadApiProvider(testCase.provider.id, {
         options: testCase.provider as ProviderOptions,
         basePath: effectiveBasePath,
       });
+    }
+    if (provider) {
+      testCase.provider = provider;
+      onProviderConstructed?.(provider);
     }
   }
 
@@ -487,6 +494,7 @@ export async function readTest(
 export async function loadTestsFromGlob(
   loadTestsGlob: string,
   basePath: string = '',
+  onProviderConstructed?: (provider: ApiProvider) => void,
 ): Promise<TestCase[]> {
   if (loadTestsGlob.startsWith('huggingface://datasets/')) {
     telemetry.record('feature_used', {
@@ -574,7 +582,7 @@ export async function loadTestsFromGlob(
         testCases = [testCases];
       }
       for (const testCase of testCases) {
-        ret.push(await readTest(testCase, path.dirname(testFile)));
+        ret.push(await readTest(testCase, path.dirname(testFile), false, onProviderConstructed));
       }
     }
   }
@@ -584,6 +592,7 @@ export async function loadTestsFromGlob(
 export async function readTests(
   tests: TestSuiteConfig['tests'],
   basePath: string = '',
+  onProviderConstructed?: (provider: ApiProvider) => void,
 ): Promise<TestCase[]> {
   const ret: TestCase[] = [];
 
@@ -593,7 +602,7 @@ export async function readTests(
     }
     // Points to a tests file with multiple test cases
     if (tests.endsWith('yaml') || tests.endsWith('yml')) {
-      return loadTestsFromGlob(tests, basePath);
+      return loadTestsFromGlob(tests, basePath, onProviderConstructed);
     }
     // Points to a tests.{csv,json,yaml,yml,py,js,ts,mjs} or Google Sheet
     return readStandaloneTestsFile(tests, basePath);
@@ -625,13 +634,20 @@ export async function readTests(
           ret.push(...(await readStandaloneTestsFile(globOrTest, basePath)));
         } else {
           // Resolve globs for other file types
-          ret.push(...(await loadTestsFromGlob(globOrTest, basePath)));
+          ret.push(...(await loadTestsFromGlob(globOrTest, basePath, onProviderConstructed)));
         }
       } else if ('path' in globOrTest) {
         ret.push(...(await readStandaloneTestsFile(globOrTest.path, basePath, globOrTest.config)));
       } else {
         // Load individual TestCase
-        ret.push(await readTest(globOrTest as TestCaseWithVarsFile, basePath));
+        ret.push(
+          await readTest(
+            globOrTest as TestCaseWithVarsFile,
+            basePath,
+            false,
+            onProviderConstructed,
+          ),
+        );
       }
     }
   } else if (tests !== undefined && tests !== null) {

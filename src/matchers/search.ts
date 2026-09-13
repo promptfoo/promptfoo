@@ -1,3 +1,4 @@
+import { trackGradingProvider } from '../cliState';
 import logger from '../logger';
 import { DEFAULT_WEB_SEARCH_PROMPT } from '../prompts/grading';
 import { DEFAULT_ANTHROPIC_MODEL } from '../providers/anthropic/defaults';
@@ -62,6 +63,7 @@ export async function matchesSearchRubric(
     // For search-rubric assertion, prefer Anthropic first (pass true)
     const webSearchProvider = await loadWebSearchProvider(true);
     if (webSearchProvider) {
+      trackGradingProvider(webSearchProvider);
       searchProvider = webSearchProvider;
     }
   }
