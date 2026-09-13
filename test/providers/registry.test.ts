@@ -16,6 +16,8 @@ import type { CometApiImageProvider } from '../../src/providers/cometapi';
 import type { LoadApiProviderContext } from '../../src/types/index';
 import type { ProviderOptions } from '../../src/types/providers';
 
+vi.mock('../../src/telemetry');
+
 vi.mock('../../src/providers/pythonCompletion', async (importOriginal) => {
   return {
     ...(await importOriginal()),
