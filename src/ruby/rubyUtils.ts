@@ -4,6 +4,7 @@ import path from 'path';
 import { promisify } from 'util';
 
 import { getEnvString } from '../envars';
+import { getRuntimeEnv } from '../envOverrides';
 import { getWrapperDir } from '../esm';
 import logger from '../logger';
 import { safeJsonStringify } from '../util/json';
@@ -341,13 +342,11 @@ export async function runRuby<T = unknown>(
     const outputPath = await writeSecureTempFile(tempDirectory, 'output.json', '');
     logger.debug('[Ruby] Running script', { scriptPath: absPath, method });
 
-    const { stdout, stderr } = await execFileAsync(rubyPath, [
-      wrapperPath,
-      absPath,
-      method,
-      tempJsonPath,
-      outputPath,
-    ]);
+    const { stdout, stderr } = await execFileAsync(
+      rubyPath,
+      [wrapperPath, absPath, method, tempJsonPath, outputPath],
+      { env: getRuntimeEnv() },
+    );
 
     if (stdout) {
       logger.debug(stdout.trim());

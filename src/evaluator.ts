@@ -1,23 +1,28 @@
+import { createHash } from 'crypto';
+import fs from 'fs';
+import path from 'path';
 import readline from 'readline';
 import { isDeepStrictEqual } from 'util';
 
 import async from 'async';
 import chalk from 'chalk';
 import cliProgress from 'cli-progress';
-import { globSync } from 'glob';
+import { globSync, hasMagic } from 'glob';
+import { load as loadYaml } from 'js-yaml';
 import { LRUCache } from 'lru-cache';
 import {
   getAssertionBaseType,
   hasTraceAwareAssertions,
-  MODEL_GRADED_ASSERTION_TYPES,
   runAssertions,
   runCompareAssertion,
 } from './assertions/index';
+import { MODEL_GRADED_ASSERTION_TYPES } from './assertions/providerTypes';
 import { extractAndStoreBinaryData } from './blobs/extractor';
 import { getCache, withCacheNamespace } from './cache';
 import cliState from './cliState';
 import { DEFAULT_MAX_CONCURRENCY, FILE_METADATA_KEY } from './constants';
 import { getEnvBool, getEnvInt, getEvalTimeoutMs, getMaxEvalTimeMs, isCI } from './envars';
+import { withRuntimeEnv } from './envOverrides';
 import { collectFileMetadata, renderPrompt, runExtensionHook } from './evaluatorHelpers';
 import logger, { globalLogCallback, setLogCallback } from './logger';
 import { selectMaxScore } from './matchers/comparison';
@@ -27,6 +32,7 @@ import { nodeEvaluatorRuntime } from './node/evaluatorRuntime';
 import { CIProgressReporter } from './progress/ciProgressReporter';
 import { maybeEmitAzureOpenAiWarning } from './providers/azure/warnings';
 import { providerRegistry } from './providers/providerRegistry';
+import { parseScriptParts } from './providers/scriptCompletion';
 import { isPromptfooSampleTarget } from './providers/shared';
 import { maybeWrapMcpProviderForRedteam } from './redteam/mcpTargetProvider';
 import { redteamProviderManager } from './redteam/providers/shared';
@@ -64,6 +70,7 @@ import {
   type AtomicTestCase,
   type CompletedPrompt,
   type EnvOverrides,
+  type EvalTestCaseSelection,
   type EvaluateResult,
   type EvaluateStats,
   type GradingResult,
@@ -73,9 +80,13 @@ import {
   ResultFailureReason,
   type RunEvalOptions,
   type TestSuite,
+  type UnifiedConfig,
 } from './types/index';
 import { type ApiProvider, isApiProvider } from './types/providers';
+import { checkCloudPermissions } from './util/cloud';
+import { buildProviderPermissionConfig } from './util/eval/providerSelection';
 import { isAbortError, isNonTransientHttpStatus } from './util/fetch/errors';
+import { parsePathOrGlob } from './util/file';
 import { filterByRange } from './util/filterRange';
 import { warnEmptyFilterRange } from './util/filterRangeWarn';
 import { loadFunction, parseFileUrl } from './util/functions/loadFunction';
@@ -96,7 +107,10 @@ import {
   isProviderAllowed,
   sanitizeProviderIdForLog,
 } from './util/provider';
+import { isProviderConfigFileReference } from './util/providerRef';
 import { promptYesNo } from './util/readline';
+import { redactSecretLeaves } from './util/sanitizer';
+import { getExecutableSourceHash, getFileSourceHash } from './util/sourceHash';
 import { analyzeTemplateReference, extractVariablesFromTemplate } from './util/templates';
 import { sleep } from './util/time';
 import { TokenUsageTracker } from './util/tokenUsage';
@@ -1096,9 +1110,14 @@ async function callActiveProvider({
               evalId: callApiContext.evaluationId,
               testIndex,
             },
-            async (context) => activeProvider.callApi(renderedPrompt, context, callApiOptions),
+            async (context) =>
+              activeProvider.callApi(
+                renderedPrompt,
+                withRuntimeEnv(context ?? callApiContext),
+                callApiOptions,
+              ),
           )
-        : activeProvider.callApi(renderedPrompt, callApiContext, callApiOptions);
+        : activeProvider.callApi(renderedPrompt, withRuntimeEnv(callApiContext), callApiOptions);
     return testSuite?.tracing
       ? cliState.withRequestTracingConfig(testSuite.tracing, invoke)
       : invoke();
@@ -2396,8 +2415,14 @@ function getDefaultTest(testSuite: TestSuite) {
   return typeof testSuite.defaultTest === 'object' ? testSuite.defaultTest : undefined;
 }
 
-function buildTestsFromSuite(testSuite: TestSuite): AtomicTestCase[] {
-  const tests = getInitialTests(testSuite);
+const DEFERRED_SCENARIO_INDEX = '__promptfoo_deferred_scenario_index';
+type DeferredScenarioTest = AtomicTestCase & { [DEFERRED_SCENARIO_INDEX]?: number };
+
+function buildTestsFromSuite(
+  testSuite: TestSuite,
+  options: { includeDefaultTest?: boolean } = {},
+): AtomicTestCase[] {
+  const tests = [...getInitialTests(testSuite)];
   if (!testSuite.scenarios?.length) {
     return tests;
   }
@@ -2406,11 +2431,337 @@ function buildTestsFromSuite(testSuite: TestSuite): AtomicTestCase[] {
   let scenarioIndex = 0;
   for (const scenario of testSuite.scenarios) {
     for (const data of scenario.config) {
-      tests.push(...buildScenarioTests(testSuite, scenario, data, scenarioIndex));
+      tests.push(
+        ...buildScenarioTests(
+          testSuite,
+          scenario,
+          data,
+          scenarioIndex,
+          options.includeDefaultTest !== false,
+        ),
+      );
       scenarioIndex++;
     }
   }
   return tests;
+}
+
+/** Logical tests before defaultTest and extension hooks mutate the selected cases. */
+export function getTestCasesForSelection(testSuite: TestSuite): AtomicTestCase[] {
+  return buildTestsFromSuite(testSuite, { includeDefaultTest: false });
+}
+
+function stableSerializeSelection(value: unknown, seen = new WeakSet<object>()): string {
+  if (value === undefined) {
+    return 'undefined';
+  }
+  if (value === null) {
+    return 'null';
+  }
+  if (typeof value === 'bigint') {
+    return JSON.stringify({ bigint: value.toString() });
+  }
+  if (typeof value === 'function') {
+    return JSON.stringify({ function: Function.prototype.toString.call(value) });
+  }
+  if (typeof value === 'symbol') {
+    return JSON.stringify({ symbol: String(value) });
+  }
+  if (typeof value !== 'object') {
+    return JSON.stringify(value) ?? String(value);
+  }
+  if (seen.has(value)) {
+    return '"[Circular]"';
+  }
+  seen.add(value);
+
+  try {
+    if (Array.isArray(value)) {
+      return `[${value.map((item) => stableSerializeSelection(item, seen)).join(',')}]`;
+    }
+    if (value instanceof Date) {
+      return JSON.stringify(value.toISOString());
+    }
+
+    const record = value as Record<string, unknown>;
+    const keys = Object.keys(record);
+    return `{${keys
+      .map((key) => `${JSON.stringify(key)}:${stableSerializeSelection(record[key], seen)}`)
+      .join(',')}}`;
+  } finally {
+    seen.delete(value);
+  }
+}
+
+function canonicalizeSelectionFingerprintValue(
+  value: unknown,
+  basePath: string,
+  seen = new WeakSet<object>(),
+  referenceKind: 'test' | 'file' | 'provider' | 'literal' = 'test',
+  providerFiles = new Set<string>(),
+): unknown {
+  const providerReference = referenceKind === 'provider';
+  if (typeof value === 'string') {
+    if (providerReference && isProviderConfigFileReference(value)) {
+      const filePath = fs.realpathSync(path.resolve(basePath, value.slice('file://'.length)));
+      if (providerFiles.has(filePath)) {
+        throw new Error(`Circular provider config: ${value}`);
+      }
+      providerFiles.add(filePath);
+      try {
+        const configs = loadYaml(fs.readFileSync(filePath, 'utf8'));
+        return {
+          reference: value,
+          sourceHash: getFileSourceHash(filePath),
+          providers: canonicalizeSelectionFingerprintValue(
+            redactSecretLeaves(configs),
+            basePath,
+            seen,
+            'provider',
+            providerFiles,
+          ),
+        };
+      } finally {
+        providerFiles.delete(filePath);
+      }
+    }
+    if (providerReference && value.startsWith('exec:')) {
+      return {
+        reference: value,
+        sourceHash: getExecutableSourceHash(parseScriptParts(value.slice(5)), basePath),
+      };
+    }
+    const providerPath = providerReference
+      ? value.match(/^(?:python|ruby|golang):(.+)$/s)?.[1]
+      : undefined;
+    const file =
+      (providerReference || referenceKind === 'file') && value.startsWith('file://')
+        ? parseFileUrl(value)
+        : providerPath || (providerReference && /\.(?:[cm]?js|ts)(?::[^/\\]+)?$/.test(value))
+          ? parsePathOrGlob(basePath, providerPath ?? value)
+          : undefined;
+    if (file && hasMagic(file.filePath, { magicalBraces: true, windowsPathsNoEscape: true })) {
+      const files = globSync(file.filePath, { cwd: basePath, windowsPathsNoEscape: true }).sort();
+      return {
+        reference: value,
+        sourceHash: files.length
+          ? createHash('sha256')
+              .update(
+                JSON.stringify(
+                  files.map((source) =>
+                    getFileSourceHash(path.resolve(basePath, source), file.functionName),
+                  ),
+                ),
+              )
+              .digest('hex')
+          : getFileSourceHash(path.resolve(basePath, file.filePath), file.functionName),
+      };
+    }
+    return file
+      ? {
+          reference: value,
+          sourceHash: getFileSourceHash(path.resolve(basePath, file.filePath), file.functionName),
+        }
+      : value;
+  }
+  if (typeof value === 'function') {
+    return { __promptfooFunction: Function.prototype.toString.call(value) };
+  }
+  if (typeof value === 'bigint') {
+    return { __promptfooBigInt: value.toString() };
+  }
+  if (typeof value === 'symbol') {
+    return { __promptfooSymbol: String(value) };
+  }
+  if (!value || typeof value !== 'object') {
+    return value;
+  }
+  if (seen.has(value)) {
+    return '[Circular]';
+  }
+  seen.add(value);
+  try {
+    if (Array.isArray(value)) {
+      return value.map((item) =>
+        canonicalizeSelectionFingerprintValue(item, basePath, seen, referenceKind, providerFiles),
+      );
+    }
+    if (value instanceof Date) {
+      return value.toISOString();
+    }
+    return Object.fromEntries(
+      Object.entries(value)
+        .filter(([, item]) => item !== undefined)
+        .map(([key, item]) => {
+          const sourceKey = providerReference
+            ? canonicalizeSelectionFingerprintValue(key, basePath, seen, 'provider', providerFiles)
+            : key;
+          const kind =
+            referenceKind === 'test'
+              ? key === 'provider' || key === 'providers'
+                ? 'provider'
+                : [
+                      'vars',
+                      'value',
+                      'assertScoringFunction',
+                      'transform',
+                      'postprocess',
+                      'transformVars',
+                      'contextTransform',
+                      'rubricPrompt',
+                    ].includes(key)
+                  ? 'file'
+                  : key === 'options' || key === 'assert'
+                    ? 'test'
+                    : 'literal'
+              : referenceKind;
+          return [
+            typeof sourceKey === 'string' ? sourceKey : JSON.stringify(sourceKey),
+            canonicalizeSelectionFingerprintValue(
+              kind === 'provider' ? redactSecretLeaves(item) : item,
+              basePath,
+              seen,
+              kind,
+              providerFiles,
+            ),
+          ];
+        }),
+    );
+  } finally {
+    seen.delete(value);
+  }
+}
+
+interface TestCaseSelectionContext {
+  basePath?: string;
+  defaultTest?: unknown;
+}
+
+function getTestCaseFingerprint(
+  testCase: unknown,
+  { basePath = '.', defaultTest }: TestCaseSelectionContext,
+): string {
+  const test = canonicalizeSelectionFingerprintValue(testCase, basePath);
+  const defaults =
+    defaultTest && typeof defaultTest === 'object' && Object.keys(defaultTest).length > 0
+      ? canonicalizeSelectionFingerprintValue(defaultTest, basePath)
+      : undefined;
+  return createHash('sha256')
+    .update(stableSerializeSelection(defaults ? { test, defaults } : test))
+    .digest('hex');
+}
+
+/** Persist selected logical tests without storing their potentially sensitive definitions. */
+export function createTestCaseSelection(
+  testCases: unknown[],
+  indices: number[],
+  context: TestCaseSelectionContext = {},
+): EvalTestCaseSelection {
+  const invalidIndices = indices.filter(
+    (index) => !Number.isSafeInteger(index) || index < 0 || index >= testCases.length,
+  );
+  if (invalidIndices.length > 0) {
+    throw new Error(
+      `Invalid test case indices: ${invalidIndices.join(', ')}. Available indices: 0-${testCases.length - 1}`,
+    );
+  }
+
+  return {
+    tests: indices.map((index) => ({
+      index,
+      fingerprint: getTestCaseFingerprint(testCases[index], context),
+    })),
+  };
+}
+
+/** Restore a persisted test selection by identity, preserving its original execution order. */
+export function restoreTestCaseSelection(
+  testCases: unknown[],
+  selection: EvalTestCaseSelection,
+  context: TestCaseSelectionContext = {},
+): number[] {
+  if (!selection || !Array.isArray(selection.tests)) {
+    throw new Error('Stored test case selection is invalid.');
+  }
+  // Distinct original indices to restore. Entries repeating the SAME original
+  // index are a deliberate repeat of one logical row and must resolve to the same
+  // restored index; entries with DISTINCT original indices — even when their
+  // content (fingerprint) is identical — are separate rows and must consume
+  // distinct restored indices one-to-one so duplicate provenance is preserved.
+  const fingerprintByOriginalIndex = new Map<number, string>();
+  const distinctOriginalIndicesByFingerprint = new Map<string, number[]>();
+  selection.tests.forEach((entry, selectionIndex) => {
+    if (
+      !Number.isSafeInteger(entry.index) ||
+      entry.index < 0 ||
+      typeof entry.fingerprint !== 'string' ||
+      entry.fingerprint.length === 0
+    ) {
+      throw new Error(`Stored test case selection entry ${selectionIndex} is invalid.`);
+    }
+    const existingFingerprint = fingerprintByOriginalIndex.get(entry.index);
+    if (existingFingerprint === undefined) {
+      fingerprintByOriginalIndex.set(entry.index, entry.fingerprint);
+      const group = distinctOriginalIndicesByFingerprint.get(entry.fingerprint) ?? [];
+      group.push(entry.index);
+      distinctOriginalIndicesByFingerprint.set(entry.fingerprint, group);
+    } else if (existingFingerprint !== entry.fingerprint) {
+      // Same original index reported with two different fingerprints is corrupt.
+      throw new Error(`Stored test case selection entry ${selectionIndex} is invalid.`);
+    }
+  });
+
+  // Candidate resolved indices per needed fingerprint, in ascending config order.
+  const candidatesByFingerprint = new Map<string, number[]>();
+  const neededFingerprints = new Set(distinctOriginalIndicesByFingerprint.keys());
+  for (let index = 0; index < testCases.length && neededFingerprints.size > 0; index++) {
+    const fingerprint = getTestCaseFingerprint(testCases[index], context);
+    if (!neededFingerprints.has(fingerprint)) {
+      continue;
+    }
+    const candidates = candidatesByFingerprint.get(fingerprint) ?? [];
+    candidates.push(index);
+    candidatesByFingerprint.set(fingerprint, candidates);
+  }
+
+  // For each fingerprint group, map its distinct original indices (ascending) to
+  // distinct candidate indices (ascending) with a monotonic, fixed-point-preferring
+  // greedy: each original index takes the earliest still-available candidate that is
+  // not before it, while reserving enough later candidates for the remaining rows.
+  const restoredByOriginalIndex = new Map<number, number>();
+  for (const [fingerprint, originalIndicesRaw] of distinctOriginalIndicesByFingerprint) {
+    const originalIndices = [...originalIndicesRaw].sort((a, b) => a - b);
+    const candidates = candidatesByFingerprint.get(fingerprint) ?? [];
+    const groupSize = originalIndices.length;
+    let position = -1;
+    for (let j = 0; j < groupSize; j++) {
+      const maxPosition = candidates.length - (groupSize - j);
+      let candidatePosition = position + 1;
+      while (
+        candidatePosition < maxPosition &&
+        candidates[candidatePosition] < originalIndices[j]
+      ) {
+        candidatePosition++;
+      }
+      if (candidatePosition >= candidates.length) {
+        // Fewer surviving rows than distinct selected rows for this fingerprint;
+        // leave the rest unassigned so the missing check below fails closed.
+        break;
+      }
+      restoredByOriginalIndex.set(originalIndices[j], candidates[candidatePosition]);
+      position = candidatePosition;
+    }
+  }
+
+  return selection.tests.map((entry, selectionIndex) => {
+    const restored = restoredByOriginalIndex.get(entry.index);
+    if (restored === undefined) {
+      throw new Error(
+        `Selected test case ${selectionIndex} (original index ${entry.index}) no longer exists in the resolved configuration. The evaluation was not changed.`,
+      );
+    }
+    return restored;
+  });
 }
 
 function getInitialTests(testSuite: TestSuite): AtomicTestCase[] {
@@ -2425,9 +2776,12 @@ function buildScenarioTests(
   scenario: NonNullable<TestSuite['scenarios']>[number],
   data: NonNullable<TestSuite['scenarios']>[number]['config'][number],
   scenarioIndex: number,
+  includeDefaultTest: boolean,
 ): AtomicTestCase[] {
   const scenarioTests = scenario.tests || [{}];
-  return scenarioTests.map((test) => mergeScenarioTest(testSuite, data, test, scenarioIndex));
+  return scenarioTests.map((test) =>
+    mergeScenarioTest(testSuite, data, test, scenarioIndex, includeDefaultTest),
+  );
 }
 
 function mergeScenarioTest(
@@ -2435,16 +2789,19 @@ function mergeScenarioTest(
   data: NonNullable<TestSuite['scenarios']>[number]['config'][number],
   test: NonNullable<TestSuite['scenarios']>[number]['tests'][number],
   scenarioIndex: number,
+  includeDefaultTest: boolean,
 ): AtomicTestCase {
-  const defaultTest = getDefaultTest(testSuite);
+  const defaultTest = includeDefaultTest ? getDefaultTest(testSuite) : undefined;
   const mergedMetadata = {
     ...(defaultTest?.metadata || {}),
     ...data.metadata,
     ...test.metadata,
   };
-  mergedMetadata.conversationId ??= `__scenario_${scenarioIndex}__`;
+  if (includeDefaultTest) {
+    mergedMetadata.conversationId ??= `__scenario_${scenarioIndex}__`;
+  }
 
-  return {
+  const mergedTest = {
     ...(defaultTest || {}),
     ...data,
     ...test,
@@ -2461,6 +2818,59 @@ function mergeScenarioTest(
     assert: [...(data.assert || []), ...(test.assert || [])],
     metadata: mergedMetadata,
   } as AtomicTestCase;
+  if (!includeDefaultTest) {
+    Object.defineProperty(mergedTest, DEFERRED_SCENARIO_INDEX, {
+      configurable: true,
+      enumerable: false,
+      value: scenarioIndex,
+    });
+  }
+  return mergedTest;
+}
+
+function cloneSelectedTestCase(testCase: AtomicTestCase): AtomicTestCase {
+  const scenarioIndex = (testCase as DeferredScenarioTest)[DEFERRED_SCENARIO_INDEX];
+  return {
+    ...testCase,
+    // Extension hooks can serialize, edit, reorder, and insert rows. Keep their scenario
+    // identity independent of contents and remove it after applying deferred defaults.
+    ...(scenarioIndex !== undefined && { [DEFERRED_SCENARIO_INDEX]: scenarioIndex }),
+  };
+}
+
+function applyDeferredScenarioDefaults(
+  testSuite: TestSuite,
+  testCase: AtomicTestCase,
+): AtomicTestCase {
+  const deferredTest = testCase as DeferredScenarioTest;
+  const scenarioIndex = deferredTest[DEFERRED_SCENARIO_INDEX];
+  if (scenarioIndex === undefined) {
+    return testCase;
+  }
+
+  const defaultTest = getDefaultTest(testSuite);
+  const metadata = {
+    ...(defaultTest?.metadata || {}),
+    ...testCase.metadata,
+  };
+  metadata.conversationId ??= `__scenario_${scenarioIndex}__`;
+
+  const mergedTest = {
+    ...(defaultTest || {}),
+    ...testCase,
+    vars: {
+      ...(defaultTest?.vars || {}),
+      ...testCase.vars,
+    },
+    options: {
+      ...(defaultTest?.options || {}),
+      ...testCase.options,
+    },
+    assert: [...(testCase.assert || [])],
+    metadata,
+  } as DeferredScenarioTest;
+  delete mergedTest[DEFERRED_SCENARIO_INDEX];
+  return mergedTest;
 }
 
 async function prepareTestVariables(
@@ -3344,6 +3754,7 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
   store: EvaluationStore<TEvaluation, TResult>;
   testSuite: TestSuite;
   options: InternalEvaluateOptions;
+  private permissionChecks = new Map<string, Promise<void>>();
   stats: EvaluateStats;
   conversations: EvalConversations;
   registers: EvalRegisters;
@@ -3570,6 +3981,27 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
     );
   }
 
+  private async checkProviderPermissions(testSuite: TestSuite, tests?: AtomicTestCase[]) {
+    if (!this.options.providerSelection) {
+      return;
+    }
+    const config = buildProviderPermissionConfig(
+      this.store.config,
+      this.options.providerSelection,
+      {
+        providers: testSuite.providers,
+        tests: tests ?? getTestCasesForSelection(testSuite),
+        defaultTest: typeof testSuite.defaultTest === 'object' ? testSuite.defaultTest : undefined,
+      },
+      this.options.configBasePath ?? cliState.basePath,
+    );
+    const key = JSON.stringify(config);
+    if (!this.permissionChecks.has(key)) {
+      this.permissionChecks.set(key, checkCloudPermissions(config as UnifiedConfig));
+    }
+    await this.permissionChecks.get(key);
+  }
+
   private async runEvalStepAfterBeforeEach(
     evalStep: RunEvalOptions,
     {
@@ -3588,6 +4020,9 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
       test: evalStep.test,
     });
     evalStep.test = beforeEachOut.test;
+    if (testSuite.extensions?.length) {
+      await this.checkProviderPermissions(testSuite, [evalStep.test]);
+    }
 
     const rows = await runEvalInternal({
       ...evalStep,
@@ -4813,10 +5248,46 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
     const rowsWithMaxScoreAssertion = new Set<number>();
 
     ensureDefaultTestForExtensions(testSuite);
+    const hasTestCaseSelection = options.testCaseSelection !== undefined;
+    if (options.testCaseIndices || hasTestCaseSelection) {
+      const unresolvedTests = getTestCasesForSelection(testSuite);
+      const selectedTestCaseIndices = hasTestCaseSelection
+        ? restoreTestCaseSelection(unresolvedTests, options.testCaseSelection!, {
+            basePath: options.configBasePath,
+            defaultTest: testSuite.defaultTest,
+          })
+        : options.testCaseIndices!;
+      const invalidIndices = selectedTestCaseIndices.filter(
+        (index) => !Number.isSafeInteger(index) || index < 0 || index >= unresolvedTests.length,
+      );
+      if (invalidIndices.length > 0) {
+        throw new Error(
+          `Invalid test case indices: ${invalidIndices.join(', ')}. Available indices: 0-${unresolvedTests.length - 1}`,
+        );
+      }
+      const selectedTests = selectedTestCaseIndices.map((index) =>
+        cloneSelectedTestCase(unresolvedTests[index]),
+      );
+      testSuite = {
+        ...testSuite,
+        tests: selectedTests,
+        scenarios: [],
+      };
+    }
     const beforeAllOut = await runExtensionHook(testSuite.extensions, 'beforeAll', {
       suite: testSuite,
     });
     testSuite = beforeAllOut.suite;
+    if ((options.testCaseIndices || hasTestCaseSelection) && testSuite.tests) {
+      testSuite = {
+        ...testSuite,
+        tests: testSuite.tests.map((testCase) =>
+          applyDeferredScenarioDefaults(testSuite, testCase as AtomicTestCase),
+        ),
+      };
+    }
+
+    await this.checkProviderPermissions(testSuite);
 
     if (!(await maybeAddGeneratedPrompts(testSuite, options))) {
       return this.store.evaluation;
@@ -4827,7 +5298,9 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
     await this.store.appendPrompts(prompts);
 
     let tests = buildTestsFromSuite(testSuite);
-    tests = filterByRange(tests, options.filterRange, warnEmptyFilterRange);
+    if (!hasTestCaseSelection) {
+      tests = filterByRange(tests, options.filterRange, warnEmptyFilterRange);
+    }
     maybeEmitAzureOpenAiWarning(testSuite, tests);
 
     const varNames = await prepareTestVariables(tests, testSuite);

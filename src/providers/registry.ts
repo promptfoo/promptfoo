@@ -6,6 +6,7 @@ import { importModule } from '../esm';
 import logger from '../logger';
 import { isJavascriptFile } from '../util/fileExtensions';
 import { isMissingPackageImportError } from '../util/packageImportErrors';
+import { getFileSourceHash } from '../util/sourceHash';
 import { A2AProvider } from './a2a';
 import { createAbliterationProvider } from './abliteration';
 import { AI21ChatCompletionProvider } from './ai21';
@@ -1502,7 +1503,9 @@ export const providerMap: ProviderFactory[] = [
         : path.join(context.basePath || process.cwd(), providerPath);
 
       const CustomApiProvider = await importModule(modulePath);
-      return new CustomApiProvider({ ...providerOptions, id: providerId });
+      const provider = new CustomApiProvider({ ...providerOptions, id: providerId });
+      provider.getSourceHash = () => getFileSourceHash(modulePath);
+      return provider;
     },
   },
   {

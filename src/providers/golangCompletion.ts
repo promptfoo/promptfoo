@@ -4,13 +4,16 @@ import os from 'os';
 import path from 'path';
 import util from 'util';
 
-import { getCache, isCacheEnabled } from '../cache';
+import { getCache } from '../cache';
+import { getRuntimeEnv } from '../envOverrides';
 import { getWrapperDir } from '../esm';
 import logger from '../logger';
 import { sha256 } from '../util/createHash';
 import { pathExists } from '../util/file';
 import { parsePathOrGlob } from '../util/index';
 import { safeJsonStringify } from '../util/json';
+import { getFileSourceHash } from '../util/sourceHash';
+import { getScriptCacheKey } from './scriptCompletion';
 
 import type {
   ApiProvider,
@@ -49,6 +52,13 @@ export class GolangProvider implements ApiProvider {
     this.config = options?.config ?? {};
   }
 
+  getSourceHash(): string {
+    return getFileSourceHash(
+      path.resolve(this.options?.config?.basePath || '', this.scriptPath),
+      this.functionName,
+    );
+  }
+
   id() {
     return `golang:${this.scriptPath}:${this.functionName || 'default'}`;
   }
@@ -74,13 +84,16 @@ export class GolangProvider implements ApiProvider {
     logger.debug(`Found module root at ${moduleRoot}`);
     logger.debug(`Computing file hash for script ${absPath}`);
     const fileHash = sha256(await fs.readFile(absPath, 'utf-8'));
-    const cacheKey = `golang:${this.scriptPath}:${apiType}:${fileHash}:${prompt}:${JSON.stringify(
-      this.options,
-    )}:${JSON.stringify(context?.vars)}`;
+    const cacheKey = getScriptCacheKey(
+      `golang:${apiType}`,
+      fileHash,
+      [this.scriptPath, this.functionName, prompt, this.options, context?.vars],
+      this.options?.env,
+    );
     const cache = await getCache();
     let cachedResult;
 
-    if (isCacheEnabled()) {
+    if (cacheKey) {
       cachedResult = (await cache.get(cacheKey)) as string;
     }
 
@@ -99,10 +112,8 @@ export class GolangProvider implements ApiProvider {
 
       const args =
         apiType === 'call_api' ? [prompt, this.options, context] : [prompt, this.options];
-      logger.debug(
-        `Running Golang script ${absPath} with scriptPath ${this.scriptPath} and args: ${safeJsonStringify(args)}`,
-      );
       const functionName = this.functionName || apiType;
+      logger.debug('Running Go script', { scriptPath: absPath, functionName });
 
       let tempDir: string | undefined;
       try {
@@ -134,8 +145,10 @@ export class GolangProvider implements ApiProvider {
         const executablePath = path.join(tempDir, 'golang_wrapper');
         const tempScriptPath = path.join(tempDir, relativeScriptPath);
         const goExecutable = this.config.goExecutable || 'go';
+        const env = getRuntimeEnv();
         const { stdout: packageJson } = await execFileAsync(goExecutable, ['list', '-json', '.'], {
           cwd: scriptDir,
+          env,
         });
         const packageInfo = JSON.parse(packageJson) as { ImportPath?: string; Name?: string };
         let buildDir = scriptDir;
@@ -161,17 +174,18 @@ export class GolangProvider implements ApiProvider {
 
         await execFileAsync(goExecutable, ['build', '-o', executablePath, ...buildFiles], {
           cwd: buildDir,
+          env,
         });
 
         const jsonArgs = safeJsonStringify(args) || '[]';
         logger.debug(`Running Go executable: ${executablePath}`);
 
         // Execute compiled binary with args (no shell escaping needed)
-        const { stdout, stderr } = await execFileAsync(executablePath, [
-          tempScriptPath,
-          functionName,
-          jsonArgs,
-        ]);
+        const { stdout, stderr } = await execFileAsync(
+          executablePath,
+          [tempScriptPath, functionName, jsonArgs],
+          { env },
+        );
         if (stderr) {
           logger.error(`Golang script stderr: ${stderr}`);
         }
@@ -179,7 +193,7 @@ export class GolangProvider implements ApiProvider {
 
         const result = JSON.parse(stdout);
 
-        if (isCacheEnabled() && !('error' in result)) {
+        if (cacheKey && !('error' in result)) {
           await cache.set(cacheKey, JSON.stringify(result));
         }
         return result;

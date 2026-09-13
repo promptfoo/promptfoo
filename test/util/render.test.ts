@@ -2,6 +2,112 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { renderEnvOnlyInObject, renderVarsInObject } from '../../src/util/render';
 import { mockProcessEnv } from './utils';
 
+it.each(['plain', 'class'])('preserves %s provider identity while rendering config', (kind) => {
+  class Provider {
+    config = { url: '{{ env.TARGET_URL }}' };
+    label = '{{ env.LABEL }}';
+    id() {
+      return 'shared';
+    }
+    async callApi() {
+      return { output: 'ok' };
+    }
+  }
+  const provider =
+    kind === 'class'
+      ? new Provider()
+      : {
+          config: { url: '{{ env.TARGET_URL }}' },
+          label: '{{ env.LABEL }}',
+          id: () => 'shared',
+          callApi: async () => ({ output: 'ok' }),
+        };
+  const rendered = renderEnvOnlyInObject(
+    { providers: [provider], description: '{{ env.LABEL }}' },
+    { LABEL: 'rendered', TARGET_URL: 'https://target.invalid' },
+  );
+  expect(rendered.providers[0]).toBe(provider);
+  expect(rendered.description).toBe('rendered');
+  expect(rendered.providers[0].config.url).toBe('https://target.invalid');
+  expect(rendered.providers[0].label).toBe('rendered');
+});
+
+it.each(['frozen', 'getter'])('preserves an already-rendered %s provider', (kind) => {
+  const config = { url: 'https://target.invalid', headers: { 'x-purpose': 'fixture' } };
+  const provider =
+    kind === 'frozen'
+      ? Object.freeze({
+          config,
+          label: 'fixture',
+          id: () => 'shared',
+          callApi: async () => ({ output: 'ok' }),
+        })
+      : {
+          get config() {
+            return config;
+          },
+          get label() {
+            return 'fixture';
+          },
+          id: () => 'shared',
+          callApi: async () => ({ output: 'ok' }),
+        };
+  expect(renderEnvOnlyInObject({ providers: [provider] }).providers[0]).toBe(provider);
+  expect(provider.config).toBe(config);
+});
+
+it('renders getter-backed config and labels without replacing the provider', async () => {
+  class Provider {
+    #config = { headers: { target: '{{ env.TARGET }}' } };
+    get config() {
+      return this.#config;
+    }
+    get label() {
+      return '{{ env.LABEL }}';
+    }
+    id() {
+      return 'getter';
+    }
+    async callApi() {
+      return { output: `${this.#config.headers.target}|${this.label}` };
+    }
+  }
+  const provider = new Provider();
+  const config = provider.config;
+  expect(renderEnvOnlyInObject(provider, { TARGET: 'fixture', LABEL: 'rendered' })).toBe(provider);
+  expect(provider.config).toBe(config);
+  expect(await provider.callApi()).toEqual({ output: 'fixture|rendered' });
+});
+
+it.each(['plain', 'getter'])('re-renders a reused %s provider from its templates', (kind) => {
+  const config = {
+    headers: { target: '{{ env.TARGET }}' },
+    maintainContext: true,
+    transform: (value: string) => value,
+  };
+  const provider = {
+    ...(kind === 'plain' ? { config } : {}),
+    label: '{{ env.LABEL }}',
+    id: () => 'reused',
+    callApi: async () => ({ output: 'ok' }),
+  };
+  if (kind === 'getter') {
+    Object.defineProperty(provider, 'config', { get: () => config });
+  }
+  for (const value of ['first', 'second']) {
+    expect(renderEnvOnlyInObject(provider, { TARGET: value, LABEL: value })).toBe(provider);
+    expect(provider.config?.headers.target).toBe(value);
+    expect(provider.config?.transform).toBe(config.transform);
+    expect(provider.label).toBe(value);
+    provider.config!.maintainContext = false;
+  }
+  expect(provider.config?.maintainContext).toBe(false);
+  provider.config!.headers.target = 'explicit override';
+  renderEnvOnlyInObject(provider, { TARGET: 'third', LABEL: 'third' });
+  expect(provider.config?.headers.target).toBe('explicit override');
+  expect(provider.label).toBe('third');
+});
+
 describe('renderVarsInObject', () => {
   beforeEach(() => {
     mockProcessEnv({ PROMPTFOO_DISABLE_TEMPLATING: undefined });

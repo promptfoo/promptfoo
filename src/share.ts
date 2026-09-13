@@ -15,9 +15,14 @@ import {
   getOrgContext,
   makeRequest as makeCloudRequest,
 } from './util/cloud';
+import { buildProviderShareConfig, omitFunctionsForShare } from './util/eval/providerSelection';
 import { fetchWithProxy } from './util/fetch/index';
 import { createBlobInlineCache, inlineBlobRefsForShare } from './util/inlineBlobsForShare';
-import { redactAzureBlobSasTokens, sanitizeTracingConfigForPersistence } from './util/sanitizer';
+import {
+  redactAzureBlobSasTokens,
+  redactSecretLeaves,
+  sanitizeTracingConfigForPersistence,
+} from './util/sanitizer';
 
 import type Eval from './models/eval';
 import type EvalResult from './models/evalResult';
@@ -138,19 +143,38 @@ async function sendEvalRecord(
   evalRecord: Eval,
   url: string,
   headers: Record<string, string>,
+  remoteConfig: Eval['config'],
 ): Promise<string> {
   // Fetch traces for the eval
   const traces = await evalRecord.getTraces();
-  const redactedConfig = redactAzureBlobSasTokens(
-    sanitizeTracingConfigForPersistence(evalRecord.config),
-  );
+  const { tracing, ...config } = sanitizeTracingConfigForPersistence(remoteConfig);
+  const redactedConfig = redactAzureBlobSasTokens({
+    ...(redactSecretLeaves(omitFunctionsForShare(config)) as typeof config),
+    ...(tracing && { tracing }),
+  });
 
   // Preserve the verified runtime team on server-issued unified configs. For
   // other configs, use the current CLI team to avoid falling back to default.
+  const {
+    configBasePath: _localConfigBasePath,
+    configEnvPaths: _localConfigEnvPaths,
+    configEnvSource: _localConfigEnvSource,
+    promptSelection: _localPromptSelection,
+    providerSelection: _localProviderSelection,
+    testCaseSelection: _localTestCaseSelection,
+    ...remoteRuntimeOptions
+  } = evalRecord.runtimeOptions ?? {};
   let evalData: Record<string, unknown> = {
     ...evalRecord,
+    prompts: evalRecord.prompts.map((prompt) => ({
+      ...prompt,
+      ...(prompt.config
+        ? { config: redactSecretLeaves(omitFunctionsForShare(prompt.config)) }
+        : {}),
+    })),
     config: redactedConfig,
     results: [],
+    runtimeOptions: evalRecord.runtimeOptions ? remoteRuntimeOptions : undefined,
     traces,
   };
   if (cloudConfig.isEnabled()) {
@@ -219,7 +243,22 @@ async function sendChunkOfResults(
   headers: Record<string, string>,
 ): Promise<ChunkSendResult> {
   const targetUrl = `${url}/${evalId}/results`;
-  const stringifiedChunk = JSON.stringify(chunk);
+  const stringifiedChunk = JSON.stringify(
+    chunk.map((result) => ({
+      ...result,
+      provider: redactSecretLeaves(omitFunctionsForShare(result.provider)),
+      testCase: redactSecretLeaves(omitFunctionsForShare(result.testCase)),
+      ...('vars' in result ? { vars: redactSecretLeaves(omitFunctionsForShare(result.vars)) } : {}),
+      ...(result.prompt?.config
+        ? {
+            prompt: {
+              ...result.prompt,
+              config: redactSecretLeaves(omitFunctionsForShare(result.prompt.config)),
+            },
+          }
+        : {}),
+    })),
+  );
   const chunkSizeBytes = Buffer.byteLength(stringifiedChunk, 'utf8');
 
   logger.debug(
@@ -422,7 +461,10 @@ async function sendChunkedResults(
   const { silent = false } = options;
   logger.debug(`Starting chunked results upload to ${url}`);
 
-  await checkCloudPermissions(evalRecord.config);
+  const remoteConfig = evalRecord.runtimeOptions?.providerSelection
+    ? buildProviderShareConfig(evalRecord.config, evalRecord.runtimeOptions.providerSelection)
+    : evalRecord.config;
+  await checkCloudPermissions(remoteConfig);
 
   // Cloud shares upload referenced blobs at share time; self-hosted shares inline blob
   // bytes into the payload instead. At most one of these caches is active.
@@ -488,7 +530,7 @@ async function sendChunkedResults(
   let evalId: string | undefined;
   try {
     // Send initial data and get eval ID
-    evalId = await sendEvalRecord(evalRecord, url, headers);
+    evalId = await sendEvalRecord(evalRecord, url, headers, remoteConfig);
     logger.debug(`Initial eval data sent successfully - ${evalId}`);
 
     // Progress callback for adaptive retry

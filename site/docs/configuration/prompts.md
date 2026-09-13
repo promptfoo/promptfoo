@@ -248,6 +248,8 @@ module.exports = async function ({ vars }) {
 
 ## Executable Scripts
 
+Resume and retry verify the executable and any file arguments against their original content hashes, including binaries and scripts too large to display. Commands are resolved using their configured working directory and `PATH`. Changing these files, or using an implementation whose contents cannot be read, requires a new evaluation.
+
 Run any script or binary to generate prompts dynamically. This lets you use your existing tooling and any programming language.
 
 Your script receives test context as JSON in the first argument and outputs the prompt to stdout.

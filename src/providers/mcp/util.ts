@@ -1,3 +1,4 @@
+import { getRuntimeEnv } from '../../envOverrides';
 import logger from '../../logger';
 import { fetchWithProxy } from '../../util/fetch/index';
 import { renderVarsInObject } from '../../util/index';
@@ -54,7 +55,7 @@ export function renderAuthVars(
   }
 
   // Use process.env as default vars if none provided
-  const renderVars = vars || (process.env as Record<string, string>);
+  const renderVars = vars || (getRuntimeEnv() as Record<string, string>);
 
   return {
     ...server,

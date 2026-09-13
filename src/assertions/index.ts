@@ -4,6 +4,7 @@ import path from 'path';
 import async from 'async';
 import cliState from '../cliState';
 import { getEnvInt } from '../envars';
+import { withRuntimeEnv } from '../envOverrides';
 import { handleConversationRelevance } from '../external/assertions/deepeval';
 import { matchesConversationRelevance } from '../external/matchers/deepeval';
 import logger from '../logger';
@@ -38,6 +39,7 @@ import {
   type VarValue,
 } from '../types/index';
 import { isJavascriptFile } from '../util/fileExtensions';
+import { parseFileUrl } from '../util/functions/loadFunction';
 import invariant from '../util/invariant';
 import { getNunjucksEngine } from '../util/templates';
 import { sleep } from '../util/time';
@@ -121,20 +123,6 @@ const DEFAULT_TRACE_FETCH_STABLE_POLLS = 2;
 const MAX_TRACE_FETCH_MAX_ATTEMPTS = 30;
 const MAX_TRACE_FETCH_RETRY_DELAY_MS = 5000;
 const MAX_TRACE_FETCH_STABLE_POLLS = 10;
-
-export const MODEL_GRADED_ASSERTION_TYPES = new Set<AssertionType>([
-  'agent-rubric',
-  'answer-relevance',
-  'context-faithfulness',
-  'context-recall',
-  'context-relevance',
-  'factuality',
-  'llm-rubric',
-  'model-graded-closedqa',
-  'model-graded-factuality',
-  'search-rubric',
-  'trajectory:goal-success',
-]);
 
 const TRACE_AWARE_ASSERTION_TYPES = new Set<AssertionType>([
   'javascript',
@@ -444,7 +432,7 @@ async function runAssertionInternal({
     });
   }
 
-  const context: AssertionValueFunctionContext = {
+  const context: AssertionValueFunctionContext = withRuntimeEnv({
     prompt,
     vars: resolvedVars,
     test,
@@ -453,7 +441,7 @@ async function runAssertionInternal({
     providerResponse,
     ...(assertion.config ? { config: structuredClone(assertion.config) } : {}),
     ...(providerResponse?.metadata && { metadata: providerResponse.metadata }),
-  };
+  });
 
   // Add trace data if traceId is available
   if (traceId && assertionMayNeedTraceContext(assertion)) {
@@ -480,17 +468,8 @@ async function runAssertionInternal({
   if (typeof renderedValue === 'string') {
     if (renderedValue.startsWith('file://')) {
       const basePath = cliState.basePath || '';
-      const fileRef = renderedValue.slice('file://'.length);
-      let filePath = fileRef;
-      let functionName: string | undefined;
-
-      if (fileRef.includes(':')) {
-        const colonIndex = fileRef.indexOf(':');
-        filePath = fileRef.slice(0, colonIndex);
-        functionName = fileRef.slice(colonIndex + 1);
-      }
-
-      filePath = path.resolve(basePath, filePath);
+      const { filePath: scriptPath, functionName } = parseFileUrl(renderedValue);
+      const filePath = path.resolve(basePath, scriptPath);
 
       if (isJavascriptFile(filePath)) {
         valueFromScript = await loadFromJavaScriptFile(filePath, functionName, [output, context]);

@@ -4,11 +4,13 @@ import * as fs from 'fs';
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import * as cacheModule from '../../src/cache';
+import cliState from '../../src/cliState';
 import {
   getFileHashes,
   parseScriptParts,
   ScriptCompletionProvider,
 } from '../../src/providers/scriptCompletion';
+import { mockProcessEnv } from '../util/utils';
 import type { MockedFunction } from 'vitest';
 
 vi.mock('child_process', async (importOriginal) => {
@@ -189,6 +191,29 @@ describe('ScriptCompletionProvider', () => {
     expect(provider.id()).toBe('exec:node script.js');
   });
 
+  it('passes file defaults to the child without changing the host environment', async () => {
+    const restore = mockProcessEnv({ PROMPTFOO_REVIEW_ENV_PROBE: 'host' });
+    vi.mocked(execFile).mockImplementation(function (_cmd, _args, options, callback) {
+      const env = (options as { env?: NodeJS.ProcessEnv }).env;
+      (callback as (error: Error | null, stdout: string, stderr: string) => void)(
+        null,
+        env?.PROMPTFOO_REVIEW_ENV_PROBE ?? 'missing',
+        '',
+      );
+      return { stdin: { end: vi.fn() } } as any;
+    });
+    try {
+      const result = await cliState.withEnvFileOverrides(
+        { PROMPTFOO_REVIEW_ENV_PROBE: 'file' },
+        () => provider.callApi('hello'),
+      );
+      expect(result.output).toBe('file');
+      expect(process.env.PROMPTFOO_REVIEW_ENV_PROBE).toBe('host');
+    } finally {
+      restore();
+    }
+  });
+
   it('should close stdin on the child process to prevent hanging', async () => {
     const stdinEnd = vi.fn();
     vi.mocked(execFile).mockImplementation(function (_cmd, _args, _options, callback) {
@@ -265,6 +290,35 @@ describe('ScriptCompletionProvider', () => {
     await expect(provider.callApi('test prompt')).rejects.toThrow(utf8Error);
   });
 
+  it('bypasses cache reads and writes when provider environment is configured', async () => {
+    createHashMock.mockImplementation(
+      (await vi.importActual<typeof import('crypto')>('crypto')).createHash,
+    );
+    vi.mocked(cacheModule.isCacheEnabled).mockReturnValue(true);
+    const cache = {
+      get: vi.fn().mockResolvedValue(JSON.stringify({ output: 'cached' })),
+      set: vi.fn(),
+    };
+    vi.mocked(cacheModule.getCache).mockResolvedValue(cache as never);
+    vi.mocked(execFile).mockImplementation(function (_cmd, _args, _options, callback) {
+      (callback as (error: Error | null, stdout: string, stderr: string) => void)(
+        null,
+        'fresh',
+        '',
+      );
+      return {} as any;
+    });
+    for (const value of ['cache-private-first', 'cache-private-second', 'cache-private-first']) {
+      const provider = new ScriptCompletionProvider('node script.js', {
+        config: {},
+        env: { OPENAI_API_KEY: value },
+      });
+      await provider.callApi('unchanged prompt');
+    }
+    expect(cache.get).not.toHaveBeenCalled();
+    expect(cache.set).not.toHaveBeenCalled();
+  });
+
   it('should use cache when available', async () => {
     const cachedResult = { output: 'cached result' };
     const mockCache = {
@@ -290,9 +344,7 @@ describe('ScriptCompletionProvider', () => {
     const result = await provider.callApi('test prompt');
     expect(result.cached).toBe(true);
     expect(result).toEqual({ ...cachedResult, cached: true });
-    expect(mockCache.get).toHaveBeenCalledWith(
-      'exec:node script.js:mock hash:mock hash:test prompt:undefined',
-    );
+    expect(mockCache.get).toHaveBeenCalledWith('exec:mock hash');
     expect(execFile).not.toHaveBeenCalled();
   });
 

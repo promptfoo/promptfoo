@@ -281,6 +281,15 @@ describe('loadFunction', () => {
 });
 
 describe('parseFileUrl', () => {
+  it.each([
+    ['archive.rb:old/check.js:transform', 'archive.rb:old/check.js', 'transform'],
+    ['archive.rb:old/check.py:validate', 'archive.rb:old/check.py', 'validate'],
+    ['archive.rb:old/check.rb:Module::method', 'archive.rb:old/check.rb', 'Module::method'],
+    ['C:\\archive.rb:old\\check.js:transform', 'C:\\archive.rb:old\\check.js', 'transform'],
+  ])('ignores Ruby-like directory names in %s', (input, filePath, functionName) => {
+    expect(parseFileUrl('file://' + input)).toEqual({ filePath, functionName });
+  });
+
   it('should parse file URL with function name', () => {
     const result = parseFileUrl('file:///path/to/file.js:functionName');
     expect(result).toEqual({

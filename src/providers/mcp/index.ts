@@ -1,5 +1,5 @@
 import logger from '../../logger';
-import { loadTransformModule } from '../transformUtils';
+import { getTransformBasePath, loadTransformModule } from '../transformUtils';
 import { MCPClient } from './client';
 import { createTransformResponse, type MCPTransformResponseContext } from './transforms';
 
@@ -19,34 +19,33 @@ interface MCPProviderOptions {
 }
 
 export class MCPProvider implements ApiProvider {
-  private mcpClient: MCPClient;
+  private mcpClient?: MCPClient;
   config: MCPConfig;
+  private readonly basePath: string;
+  private configBasePath?: string;
   private defaultArgs?: Record<string, unknown>;
-  private initializationPromise: Promise<void>;
+  private initializationPromise?: Promise<MCPClient>;
   private transformResponse: Promise<
     (
       result: unknown,
       content: string,
       context: MCPTransformResponseContext,
     ) => Promise<ProviderResponse>
-  >;
+  > = Promise.resolve(createTransformResponse(undefined));
 
   constructor(options: MCPProviderOptions = {}) {
     this.config = options.config || { enabled: true };
+    this.basePath = getTransformBasePath(this.config.basePath);
     this.defaultArgs = options.defaultArgs || {};
-
-    this.mcpClient = new MCPClient(this.config);
-    this.initializationPromise = this.initialize();
-    // Initialization starts eagerly, so mark the rejection as observed until callers await it.
-    void this.initializationPromise.catch(() => undefined);
-    this.transformResponse = loadTransformModule(
-      this.config.transformResponse || this.config.responseParser,
-    ).then(createTransformResponse);
 
     // Set id function if provided
     if (options.id) {
       this.id = () => options.id!;
     }
+  }
+
+  setConfigBasePath(basePath: string): void {
+    this.configBasePath ??= getTransformBasePath(this.config.basePath ?? basePath);
   }
 
   id(): string {
@@ -57,16 +56,24 @@ export class MCPProvider implements ApiProvider {
     return `[MCP Provider]`;
   }
 
-  private async initialize(): Promise<void> {
-    await this.mcpClient.initialize();
+  private async initialize(): Promise<MCPClient> {
+    const basePath = this.configBasePath ?? this.basePath;
+    const client = new MCPClient({ ...this.config, basePath });
+    this.mcpClient = client;
+    this.transformResponse = loadTransformModule(
+      this.config.transformResponse || this.config.responseParser,
+      basePath,
+    ).then(createTransformResponse);
+    await Promise.all([client.initialize(), this.transformResponse]);
 
     if (this.config.verbose) {
-      const tools = this.mcpClient.getAllTools();
+      const tools = client.getAllTools();
       console.log(
         'MCP Provider initialized with tools:',
         tools.map((t) => t.name),
       );
     }
+    return client;
   }
 
   async callApi(
@@ -76,7 +83,7 @@ export class MCPProvider implements ApiProvider {
   ): Promise<ProviderResponse> {
     try {
       // Ensure initialization is complete
-      await this.initializationPromise;
+      const client = await (this.initializationPromise ??= this.initialize());
 
       // Parse the prompt as JSON to extract tool call information
       let toolCallData: any;
@@ -127,7 +134,7 @@ export class MCPProvider implements ApiProvider {
       logger.debug(`MCP Provider calling tool ${toolName} with args: ${JSON.stringify(finalArgs)}`);
 
       // Call the MCP tool
-      const result = await this.mcpClient.callTool(toolName, finalArgs);
+      const result = await client.callTool(toolName, finalArgs);
 
       if (result.error) {
         return {
@@ -152,20 +159,23 @@ export class MCPProvider implements ApiProvider {
 
   async cleanup(): Promise<void> {
     try {
-      await this.mcpClient.cleanup();
+      await this.mcpClient?.cleanup();
     } catch (error) {
       logger.error(
         `Error during MCP provider cleanup: ${error instanceof Error ? error.message : String(error)}`,
       );
+    } finally {
+      this.mcpClient = undefined;
+      this.initializationPromise = undefined;
     }
   }
 
   // Method to call specific MCP tools directly
   async callTool(toolName: string, args: Record<string, unknown>): Promise<ProviderResponse> {
     try {
-      await this.initializationPromise;
+      const client = await (this.initializationPromise ??= this.initialize());
 
-      const result = await this.mcpClient.callTool(toolName, args);
+      const result = await client.callTool(toolName, args);
 
       if (result.error) {
         return {
@@ -187,9 +197,9 @@ export class MCPProvider implements ApiProvider {
 
   // Get all available tools
   async getAvailableTools() {
-    await this.initializationPromise;
+    const client = await (this.initializationPromise ??= this.initialize());
 
-    return this.mcpClient.getAllTools();
+    return client.getAllTools();
   }
 
   private async transformToolResult(
@@ -218,6 +228,6 @@ export class MCPProvider implements ApiProvider {
 
   // Get connected servers
   getConnectedServers() {
-    return this.mcpClient.connectedServers;
+    return this.mcpClient?.connectedServers ?? [];
   }
 }

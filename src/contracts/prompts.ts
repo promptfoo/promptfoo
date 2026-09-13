@@ -15,6 +15,8 @@ export interface PromptConfig {
 }
 
 export interface PromptFunctionContext {
+  /** Invocation-local environment; excluded from serialized prompt context. */
+  env?: Record<string, string | undefined>;
   vars: Record<string, VarValue>;
   config: Record<string, any>;
   provider: {
@@ -38,6 +40,7 @@ export interface PromptFunctionResult {
 
 export interface PromptFunction {
   (context: {
+    env?: Record<string, string | undefined>;
     vars: Record<string, string | any>;
     provider?: MinimalApiProvider;
   }): Promise<PromptContent | PromptFunctionResult>;
@@ -52,6 +55,8 @@ export interface Prompt {
   display?: string;
   label: string;
   function?: PromptFunction;
+  /** Digest of the executable files used to produce this prompt, for replay validation. */
+  sourceHash?: string;
 
   // These config options are merged into the provider config.
   config?: any;

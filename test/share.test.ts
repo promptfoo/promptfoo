@@ -6,6 +6,7 @@ import * as constants from '../src/constants';
 import * as envars from '../src/envars';
 import { getUserEmail } from '../src/globalConfig/accounts';
 import { cloudConfig } from '../src/globalConfig/cloud';
+import EvalResult from '../src/models/evalResult';
 import {
   createShareableModelAuditUrl,
   createShareableUrl,
@@ -15,11 +16,10 @@ import {
   isSharingEnabled,
   stripAuthFromUrl,
 } from '../src/share';
-import { makeRequest } from '../src/util/cloud';
+import { checkCloudPermissions, makeRequest } from '../src/util/cloud';
 import { inlineBlobRefsForShare } from '../src/util/inlineBlobsForShare';
 
 import type Eval from '../src/models/eval';
-import type EvalResult from '../src/models/evalResult';
 import type ModelAudit from '../src/models/modelAudit';
 
 function buildMockEval(): Partial<Eval> {
@@ -689,6 +689,153 @@ describe('createShareableUrl', () => {
       );
     });
 
+    it('uses a provider-scoped remote config for both authorization and upload', async () => {
+      vi.mocked(cloudConfig.isEnabled).mockReturnValue(true);
+      vi.mocked(cloudConfig.getAppUrl).mockReturnValue('https://app.example.com');
+      vi.mocked(cloudConfig.getApiHost).mockReturnValue('https://api.example.com');
+      vi.mocked(cloudConfig.getCurrentTeamId).mockReturnValue(undefined);
+      mockEval.config = {
+        providers: [
+          { id: 'echo', config: { apiKey: 'local-secret' } },
+          { id: 'http', config: { url: 'https://excluded.example.com' } },
+        ],
+        prompts: ['Hello'],
+      };
+      mockEval.runtimeOptions = {
+        configEnvSource: 'cli',
+        promptSelection: {
+          prompts: [{ id: 'prompt-id', fingerprint: '1'.repeat(64) }],
+        },
+        providerSelection: {
+          providers: [
+            {
+              index: 0,
+              id: 'echo',
+              label: 'selected',
+              fingerprint: '0'.repeat(64),
+            },
+          ],
+        },
+        testCaseSelection: {
+          tests: [{ index: 0, fingerprint: '2'.repeat(64) }],
+        },
+      };
+      mockEval.prompts = [
+        {
+          provider: 'echo',
+          raw: 'Hello',
+          label: 'Hello',
+          config: { apiKey: 'completed-prompt-secret', endpoint: 'https://u:p@gateway.test' },
+        },
+      ];
+      const remoteConfig = {
+        ...mockEval.config,
+        providers: [{ id: 'echo', label: 'selected' }],
+      };
+
+      mockFetch
+        .mockResolvedValueOnce({
+          ok: true,
+          json: () => Promise.resolve({ id: 'scoped-eval-id' }),
+        })
+        .mockResolvedValueOnce({
+          ok: true,
+          json: () => Promise.resolve({}),
+        });
+
+      await createShareableUrl(mockEval as Eval);
+
+      expect(checkCloudPermissions).toHaveBeenCalledWith(remoteConfig);
+      const initialRequest = mockFetch.mock.calls[0];
+      const requestBody = JSON.parse(initialRequest[1].body);
+      expect(requestBody.config.providers).toEqual([{ id: 'echo', label: 'selected' }]);
+      expect(requestBody.runtimeOptions).not.toHaveProperty('promptSelection');
+      expect(requestBody.runtimeOptions).not.toHaveProperty('providerSelection');
+      expect(requestBody.runtimeOptions).not.toHaveProperty('testCaseSelection');
+      expect(requestBody.runtimeOptions).not.toHaveProperty('configEnvSource');
+      expect(JSON.stringify(requestBody)).not.toContain('completed-prompt-secret');
+      expect(JSON.stringify(requestBody)).not.toContain('https://u:p@');
+      expect(mockEval.prompts[0].config?.apiKey).toBe('completed-prompt-secret');
+      expect(JSON.stringify(requestBody.config)).not.toContain('local-secret');
+      expect(JSON.stringify(requestBody.config)).not.toContain('excluded.example.com');
+      expect(mockEval.config.providers).toHaveLength(2);
+
+      mockEval.runtimeOptions = { promptSelection: mockEval.runtimeOptions.promptSelection };
+      mockFetch
+        .mockResolvedValueOnce({ ok: true, json: () => Promise.resolve({ id: 'full-eval-id' }) })
+        .mockResolvedValueOnce({ ok: true, json: () => Promise.resolve({}) });
+      vi.mocked(checkCloudPermissions).mockClear();
+
+      await createShareableUrl(mockEval as Eval);
+
+      expect(checkCloudPermissions).toHaveBeenCalledWith(mockEval.config);
+    });
+
+    it.each([true, false])(
+      'redacts credentials in persisted=%s result batches',
+      async (persisted) => {
+        const transform = () => 'PRIVATE_SHARED_FUNCTION_SOURCE';
+        const provider = {
+          id: 'openai:grader',
+          config: {
+            headers: { 'X-Client-Token': 'abc123', 'Content-Type': 'application/json' },
+            connectors: [{ id: 'search', user_access_token: 'connector123' }],
+            transform,
+          },
+        };
+        const result = new EvalResult({
+          id: 'result-with-grader',
+          evalId: mockEval.id!,
+          promptIdx: 0,
+          testIdx: 0,
+          gradingResult: null,
+          failureReason: 0,
+          provider,
+          testCase: {
+            vars: { input: 'Hello', apiKey: 'abc123' },
+            options: { provider, transform },
+            assert: [{ type: 'javascript', value: transform }],
+          },
+          prompt: { raw: 'Hello', label: 'Hello', config: { provider } },
+          response: { output: 'Unchanged response' },
+          score: 1,
+          success: true,
+        });
+        Object.assign(mockEval, {
+          fetchResultsBatched: vi.fn(async function* () {
+            yield [persisted ? result : result.toEvaluateResult()];
+          }),
+        });
+        mockFetch
+          .mockResolvedValueOnce({ ok: true, json: async () => ({ id: 'shared' }) })
+          .mockResolvedValueOnce({ ok: true, json: async () => ({}) });
+
+        await createShareableUrl(mockEval as Eval);
+
+        const body = mockFetch.mock.calls[1][1].body;
+        expect(body).not.toContain('abc123');
+        expect(body).not.toContain('connector123');
+        expect(JSON.stringify(mockFetch.mock.calls)).not.toContain(
+          'PRIVATE_SHARED_FUNCTION_SOURCE',
+        );
+        expect(JSON.parse(body)[0].testCase.options).not.toHaveProperty('transform');
+        expect(result.testCase.options?.transform).toBe(transform);
+        expect(JSON.parse(body)[0]).toMatchObject({
+          testCase: { vars: { input: 'Hello' } },
+          response: { output: 'Unchanged response' },
+          score: 1,
+          success: true,
+        });
+        expect(body).toContain('application/json');
+        if (!persisted) {
+          expect(JSON.parse(body)[0].vars).toEqual({ input: 'Hello', apiKey: '[REDACTED]' });
+        }
+        expect(result.testCase.vars?.apiKey).toBe('abc123');
+        expect(provider.config.headers['X-Client-Token']).toBe('abc123');
+        expect(provider.config.connectors[0].user_access_token).toBe('connector123');
+      },
+    );
+
     it('uploads local blob refs before manually sharing a previously unshared eval', async () => {
       vi.mocked(cloudConfig.isEnabled).mockReturnValue(true);
       vi.mocked(cloudConfig.getAppUrl).mockReturnValue('https://app.example.com');
@@ -910,6 +1057,50 @@ describe('createShareableUrl', () => {
           expect(requestBody).not.toContain(secret);
         }
         expect(mockEval.config.tracing?.provider?.headers?.['X-Tempo-Reader']).toBe('tiny');
+      },
+    );
+
+    it.each(
+      [false, true].flatMap((cloudEnabled) =>
+        [false, true].map((selected) => ({ cloudEnabled, selected })),
+      ),
+    )(
+      'removes TLS keys from shares, cloud: $cloudEnabled, provider selection: $selected',
+      async ({ cloudEnabled, selected }) => {
+        vi.mocked(cloudConfig.isEnabled).mockReturnValue(cloudEnabled);
+        vi.mocked(cloudConfig.getAppUrl).mockReturnValue('https://app.example.com');
+        vi.mocked(cloudConfig.getApiHost).mockReturnValue('https://api.example.com');
+        vi.mocked(cloudConfig.getCurrentTeamId).mockReturnValue('team-456');
+        mockEval.config = {
+          defaultTest: {
+            options: {
+              provider: {
+                id: 'https://target.example.com',
+                config: {
+                  tls: { key: ['fixture-private-key'], cert: 'public-cert', ca: 'public-ca' },
+                },
+              },
+            },
+          },
+        };
+        mockEval.runtimeOptions = selected
+          ? {
+              providerSelection: {
+                providers: [{ index: 0, id: 'echo', fingerprint: '0'.repeat(64) }],
+              },
+            }
+          : undefined;
+        mockFetch
+          .mockResolvedValueOnce({ ok: true, json: async () => ({ id: mockEval.id }) })
+          .mockResolvedValueOnce({ ok: true, json: async () => ({}) });
+        await createShareableUrl(mockEval as Eval);
+        const requestBody = mockFetch.mock.calls[0][1].body;
+        expect(requestBody).not.toContain('fixture-private-key');
+        expect(JSON.parse(requestBody).config.defaultTest.options.provider.config.tls).toEqual({
+          key: '[REDACTED]',
+          cert: 'public-cert',
+          ca: 'public-ca',
+        });
       },
     );
 

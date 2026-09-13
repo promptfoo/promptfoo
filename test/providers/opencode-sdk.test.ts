@@ -4,6 +4,7 @@ import path from 'path';
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { clearCache, disableCache, enableCache } from '../../src/cache';
+import { setEnvOverridesProvider } from '../../src/envOverrides';
 import logger from '../../src/logger';
 import {
   convertPermissionConfigToRuleset,
@@ -290,6 +291,31 @@ describe('OpenCodeSDKProvider', () => {
 
   describe('callApi', () => {
     describe('basic functionality', () => {
+      it('passes env-file defaults to its server below provider overrides', async () => {
+        setEnvOverridesProvider((layer) =>
+          layer === 'file'
+            ? {
+                ANTHROPIC_API_KEY: 'file-key',
+                PROMPTFOO_REVIEW_ENV_PROBE: 'file',
+              }
+            : undefined,
+        );
+        try {
+          const provider = new OpenCodeSDKProvider({ env: { ANTHROPIC_API_KEY: 'provider-key' } });
+          await provider.callApi('Test prompt');
+          expect(mockCreateOpencode).toHaveBeenCalledWith(
+            expect.objectContaining({
+              env: expect.objectContaining({
+                ANTHROPIC_API_KEY: 'provider-key',
+                PROMPTFOO_REVIEW_ENV_PROBE: 'file',
+              }),
+            }),
+          );
+        } finally {
+          setEnvOverridesProvider(undefined);
+        }
+      });
+
       it('should successfully call API with simple prompt', async () => {
         mockSessionPrompt.mockResolvedValue(
           createMockPromptResponse(

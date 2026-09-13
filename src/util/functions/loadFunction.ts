@@ -106,7 +106,7 @@ function normalizeFilePath(filePath: string): string {
  * prefixes (`C:`, `D:`, ...) are preserved in `filePath`. The `lastColonIndex
  * > 1` guard prevents splitting at a leading drive-letter colon (`file://C:`
  * with no function name) or at the empty-path edge case (`file://:fn`). Only
- * JavaScript and Python callback files support the named-export suffix, so
+ * JavaScript, Python, and Ruby callback files support the named-export suffix, so
  * colons in other valid POSIX paths remain part of the path.
  *
  * Examples:
@@ -126,6 +126,15 @@ export function parseFileUrl(fileUrl: string): { filePath: string; functionName?
   }
 
   const urlWithoutProtocol = fileUrl.slice('file://'.length);
+  const filenameStart =
+    Math.max(urlWithoutProtocol.lastIndexOf('/'), urlWithoutProtocol.lastIndexOf('\\')) + 1;
+  const rubySeparator = urlWithoutProtocol.indexOf('.rb:', filenameStart);
+  if (rubySeparator >= 0) {
+    return {
+      filePath: normalizeFilePath(urlWithoutProtocol.slice(0, rubySeparator + 3)),
+      functionName: urlWithoutProtocol.slice(rubySeparator + 4),
+    };
+  }
   const lastColonIndex = urlWithoutProtocol.lastIndexOf(':');
 
   if (lastColonIndex > 1) {

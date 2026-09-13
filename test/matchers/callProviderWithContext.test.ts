@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import cliState from '../../src/cliState';
 import { callGradingProvider, callProviderWithContext } from '../../src/matchers/providers';
 import {
   withProviderCallExecutionContext,
@@ -49,6 +50,40 @@ describe('callProviderWithContext', () => {
   afterEach(() => {
     vi.resetAllMocks();
   });
+
+  it.each([false, true])(
+    'provides a private scoped environment after tracing=%s',
+    async (tracing) => {
+      const provider = createProvider();
+      vi.mocked(provider.callApi).mockImplementation(async (_prompt, context) => {
+        await Promise.resolve();
+        expect(Object.keys(context!)).not.toContain('env');
+        expect(JSON.stringify(context)).not.toContain('private-');
+        return { output: context?.env?.PROMPTFOO_REVIEW_ENV_PROBE };
+      });
+      const outputs = await Promise.all(
+        ['first', 'second'].map((value) =>
+          cliState.withEnvFileOverrides({ PROMPTFOO_REVIEW_ENV_PROBE: 'file' }, () =>
+            cliState.withEnv({ PROMPTFOO_REVIEW_ENV_PROBE: `private-${value}` }, () => {
+              const run = () => callProviderWithContext(provider, 'grade this', 'rubric', vars);
+              return tracing
+                ? withProviderCallTracingContext(
+                    {
+                      getActiveTraceparent: () => undefined,
+                      withGraderSpan: async (_options, invoke) => invoke(),
+                      withProviderSpan: async ({ callContext }, invoke) =>
+                        invoke({ ...callContext! }),
+                    },
+                    run,
+                  )
+                : run();
+            }),
+          ),
+        ),
+      );
+      expect(outputs.map(({ output }) => output)).toEqual(['private-first', 'private-second']);
+    },
+  );
 
   it('calls the provider directly without scheduler execution context', async () => {
     const response = { output: 'direct response' };

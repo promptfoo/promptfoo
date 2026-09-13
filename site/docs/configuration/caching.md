@@ -35,7 +35,7 @@ Cache entries are stored using provider-specific composite keys that include:
 
 Cache key formats are implementation details and may change between versions.
 Sensitive request payloads and headers are hashed where possible instead of
-being embedded directly in cache keys.
+being embedded directly in cache keys. Script, Python, Ruby, and Go providers, and executable prompts, bypass caching when provider, suite, or environment-file overrides are set, or when request/configuration inputs contain credentials. Scripts can use arbitrary environment values, so omitting those values from a shared cache key could reuse another invocation's result. Other script cache keys use sorted configuration keys and source hashes.
 
 ```js
 // Provider-specific scope plus a digest of request material

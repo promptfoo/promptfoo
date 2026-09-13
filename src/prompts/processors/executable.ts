@@ -1,11 +1,16 @@
 import { execFile } from 'child_process';
 import { stat as fsStat, readFile } from 'fs/promises';
 
-import { getCache, isCacheEnabled } from '../../cache';
-import logger from '../../logger';
-import { getFileHashes, parseScriptParts } from '../../providers/scriptCompletion';
+import { getCache } from '../../cache';
+import { getRuntimeEnv } from '../../envOverrides';
+import {
+  getFileHashes,
+  getScriptCacheKey,
+  parseScriptParts,
+} from '../../providers/scriptCompletion';
 import invariant from '../../util/invariant';
 import { safeJsonStringify } from '../../util/json';
+import { getExecutableSourceHash } from '../../util/sourceHash';
 
 import type { ApiProvider, Prompt, PromptFunctionContext, VarValue } from '../../types/index';
 
@@ -48,15 +53,17 @@ export const executablePromptFunction = async (
   const scriptParts = parseScriptParts(scriptPath);
   const fileHashes = getFileHashes(scriptParts);
 
-  const cacheKey = `exec-prompt:${scriptPath}:${fileHashes.join(':')}:${safeJsonStringify(transformedContext)}`;
+  const cacheKey =
+    fileHashes.length > 0
+      ? getScriptCacheKey('exec-prompt', fileHashes, [scriptPath, transformedContext])
+      : undefined;
 
   let cachedResult;
-  if (fileHashes.length > 0 && isCacheEnabled()) {
+  if (cacheKey) {
     const cache = getCache();
     cachedResult = await cache.get(cacheKey);
 
     if (cachedResult) {
-      logger.debug(`Returning cached result for executable prompt ${scriptPath}`);
       return cachedResult as string;
     }
   }
@@ -70,14 +77,12 @@ export const executablePromptFunction = async (
 
     const options = {
       cwd: context.config?.basePath,
+      env: getRuntimeEnv(),
       timeout: context.config?.timeout || 60000, // Default 60 second timeout
     };
 
-    logger.debug(`Executing prompt script: ${command} ${scriptArgs.join(' ')}`);
-
     execFile(command, scriptArgs, options, async (error, stdout, stderr) => {
       if (error) {
-        logger.error(`Error running executable prompt ${scriptPath}: ${error.message}`);
         reject(error);
         return;
       }
@@ -85,17 +90,12 @@ export const executablePromptFunction = async (
       const standardOutput = stripText(Buffer.from(stdout).toString('utf8').trim());
       const errorOutput = stripText(Buffer.from(stderr).toString('utf8').trim());
 
-      if (errorOutput) {
-        logger.debug(`Error output from executable prompt ${scriptPath}: ${errorOutput}`);
-        if (!standardOutput) {
-          reject(new Error(errorOutput));
-          return;
-        }
+      if (errorOutput && !standardOutput) {
+        reject(new Error(errorOutput));
+        return;
       }
 
-      logger.debug(`Output from executable prompt ${scriptPath}: ${standardOutput}`);
-
-      if (fileHashes.length > 0 && isCacheEnabled()) {
+      if (cacheKey) {
         const cache = getCache();
         await cache.set(cacheKey, standardOutput);
       }
@@ -150,6 +150,7 @@ export async function processExecutableFile(
       function: (context) =>
         executablePromptFunction(filePath, { ...context, config: prompt.config }),
       config: prompt.config,
+      sourceHash: getExecutableSourceHash(scriptParts, prompt.config?.basePath),
     },
   ];
 }

@@ -1,5 +1,6 @@
 import { PythonShell } from 'python-shell';
 import { describe, expect, it, vi } from 'vitest';
+import { getRuntimeEnv, setEnvOverridesProvider } from '../../../src/envOverrides';
 import logger from '../../../src/logger';
 import {
   pythonPromptFunction,
@@ -22,6 +23,31 @@ vi.mock('../../../src/logger', () => ({
 }));
 
 describe('pythonPromptFunction', () => {
+  it('passes scoped file and suite env to legacy Python without changing the host', async () => {
+    const host = process.env.PROMPTFOO_SCOPED_PYTHON_FIXTURE;
+    setEnvOverridesProvider((layer) =>
+      layer === 'file'
+        ? { PROMPTFOO_SCOPED_PYTHON_FIXTURE: 'file' }
+        : { PROMPTFOO_SCOPED_PYTHON_FIXTURE: 'suite' },
+    );
+    vi.mocked(PythonShell.run).mockResolvedValue(['suite']);
+    try {
+      await pythonPromptFunctionLegacy('prompt.py', {
+        vars: {},
+        provider: { id: () => 'test' } as ApiProvider,
+      });
+      expect(PythonShell.run).toHaveBeenLastCalledWith(
+        'prompt.py',
+        expect.objectContaining({
+          env: expect.objectContaining({ PROMPTFOO_SCOPED_PYTHON_FIXTURE: 'suite' }),
+        }),
+      );
+      expect(process.env.PROMPTFOO_SCOPED_PYTHON_FIXTURE).toBe(host);
+    } finally {
+      setEnvOverridesProvider(undefined);
+    }
+  });
+
   interface PythonContext {
     vars: Record<string, string | object>;
     provider: ApiProvider;
@@ -71,6 +97,7 @@ describe('pythonPromptFunction', () => {
     await expect(pythonPromptFunctionLegacy(filePath, context)).resolves.toBe('mocked result');
     expect(mockPythonShellRun).toHaveBeenCalledWith(filePath, {
       mode: 'text',
+      env: getRuntimeEnv(),
       pythonPath: process.env.PROMPTFOO_PYTHON || 'python',
       args: [
         JSON.stringify({

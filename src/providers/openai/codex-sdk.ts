@@ -6,6 +6,7 @@ import { type Attributes, type Span, SpanKind, SpanStatusCode, trace } from '@op
 import dedent from 'dedent';
 import { z } from 'zod';
 import { getEnvString } from '../../envars';
+import { getRuntimeEnv } from '../../envOverrides';
 import {
   addActiveSpanRoleAttribute,
   closeTurnSpan,
@@ -471,8 +472,9 @@ function parseCodexConfig(
 
 function getMinimalProcessEnv(): Record<string, string> {
   const env: Record<string, string> = {};
+  const processEnv = getRuntimeEnv();
   for (const key of MINIMAL_CLI_ENV_KEYS) {
-    const value = process.env[key];
+    const value = processEnv[key];
     if (typeof value === 'string' && value.length > 0) {
       env[key] = value;
     }
@@ -780,7 +782,7 @@ export class OpenAICodexSDKProvider implements ApiProvider {
       Object.entries(config.cli_env ?? {}).map(([key, value]) => [key, String(value)]),
     );
     const env: Record<string, string> = {
-      ...(inheritProcessEnv ? (process.env as Record<string, string>) : getMinimalProcessEnv()),
+      ...(inheritProcessEnv ? (getRuntimeEnv() as Record<string, string>) : getMinimalProcessEnv()),
       ...cliEnv,
     };
 

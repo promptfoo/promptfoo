@@ -10,6 +10,7 @@ import { PythonProvider } from '../../src/providers/pythonCompletion';
 import * as pythonUtils from '../../src/python/pythonUtils';
 import { getConfiguredPythonPath, getEnvInt } from '../../src/python/pythonUtils';
 import { PythonWorkerPool } from '../../src/python/workerPool';
+import { createDeferred } from '../util/utils';
 import type { Mock } from 'vitest';
 
 vi.mock('../../src/logger', () => ({
@@ -96,6 +97,43 @@ vi.mock('../../src/python/workerPool', async (importOriginal) => {
 });
 
 describe('PythonProvider', () => {
+  it.each([false, true])(
+    'rejects a different environment while initializing=%s',
+    async (duringInitialization) => {
+      const started = createDeferred<void>();
+      const ready = createDeferred<void>();
+      mockPoolInstance.initialize.mockImplementationOnce(() => {
+        started.resolve();
+        return ready.promise;
+      });
+      mockPoolInstance.execute.mockResolvedValue({ output: 'complete' });
+      const provider = new PythonProvider('script.py');
+      const first = cliState.withEnv({ SDK_PYTHON_TENANT: 'first' }, () => provider.initialize());
+      await started.promise;
+      if (!duringInitialization) {
+        ready.resolve();
+        await first;
+      }
+      const second = cliState
+        .withEnv({ SDK_PYTHON_TENANT: 'second' }, () => provider.callApi('test'))
+        .then(
+          (value) => ({ value, error: undefined }),
+          (error: Error) => ({ value: undefined, error }),
+        );
+      ready.resolve();
+      await first;
+      const result = await second;
+      expect(result.error?.message).toMatch(/separate.*environment/i);
+      expect(mockPoolInstance.execute).not.toHaveBeenCalled();
+      await cliState.withEnv({ SDK_PYTHON_TENANT: 'first' }, () => provider.callApi('test'));
+      await provider.shutdown();
+      await cliState.withEnv({ SDK_PYTHON_TENANT: 'second' }, () => provider.callApi('test'));
+      expect(mockPoolInstance.execute).toHaveBeenCalledTimes(2);
+      expect(mockPoolInstance.initialize).toHaveBeenCalledTimes(2);
+      await provider.shutdown();
+    },
+  );
+
   const mockPythonWorkerPool = vi.mocked(PythonWorkerPool);
   const mockGetCache = vi.mocked(getCache);
   const mockIsCacheEnabled = vi.mocked(isCacheEnabled);
@@ -354,6 +392,25 @@ describe('PythonProvider', () => {
   });
 
   describe('caching', () => {
+    it('bypasses cache reads and writes when provider environment is configured', async () => {
+      mockIsCacheEnabled.mockReturnValue(true);
+      const cache = {
+        get: vi.fn().mockResolvedValue(JSON.stringify({ output: 'cached' })),
+        set: vi.fn(),
+      };
+      mockGetCache.mockResolvedValue(cache as never);
+      mockPoolInstance.execute.mockResolvedValue({ output: 'fresh' });
+      for (const value of ['cache-private-first', 'cache-private-second', 'cache-private-first']) {
+        const provider = new PythonProvider('script.py', {
+          config: { basePath: '/absolute/path/to' },
+          env: { OPENAI_API_KEY: value },
+        });
+        await provider.callApi('unchanged prompt');
+      }
+      expect(cache.get).not.toHaveBeenCalled();
+      expect(cache.set).not.toHaveBeenCalled();
+    });
+
     it('should use cached result when available', async () => {
       const provider = new PythonProvider('script.py');
       mockIsCacheEnabled.mockReturnValue(true);
@@ -366,7 +423,7 @@ describe('PythonProvider', () => {
       const result = await provider.callApi('test prompt');
 
       expect(mockCache.get).toHaveBeenCalledWith(
-        expect.stringContaining('python:undefined:default:call_api:'),
+        expect.stringContaining('python:default:call_api:'),
       );
       expect(mockPoolInstance.execute).not.toHaveBeenCalled();
       expect(result).toEqual({ output: 'cached result', cached: true });
@@ -385,7 +442,7 @@ describe('PythonProvider', () => {
       await provider.callApi('test prompt');
 
       expect(mockCache.set).toHaveBeenCalledWith(
-        expect.stringContaining('python:undefined:default:call_api:'),
+        expect.stringContaining('python:default:call_api:'),
         '{"output":"new result"}',
       );
     });
@@ -538,7 +595,7 @@ describe('PythonProvider', () => {
         cached: false,
       });
       expect(mockCache.set).toHaveBeenCalledWith(
-        'python:undefined:default:call_api:5633d479dfae75ba7a78914ee380fa202bd6126e7c6b7c22e3ebc9e1a6ddc871:test prompt:undefined:undefined',
+        expect.stringMatching(/^python:default:call_api:[a-f0-9]{64}$/),
         '{"output":"fresh result"}',
       );
     });
@@ -1027,6 +1084,16 @@ describe('PythonProvider', () => {
 
       // Should be unregistered
       expect((providerRegistry as any).providers.has(provider)).toBe(false);
+    });
+
+    it('reinitializes the worker pool when a provider is reused after shutdown', async () => {
+      const provider = new PythonProvider('script.py', { config: { basePath: process.cwd() } });
+      mockPoolInstance.execute.mockResolvedValue({ output: 'worker response' });
+      expect(await provider.callApi('first')).toMatchObject({ output: 'worker response' });
+      await provider.shutdown();
+      expect(await provider.callApi('second')).toMatchObject({ output: 'worker response' });
+      expect(mockPoolInstance.initialize).toHaveBeenCalledTimes(2);
+      await provider.shutdown();
     });
 
     it('should set isInitialized to false after shutdown', async () => {

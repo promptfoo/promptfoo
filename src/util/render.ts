@@ -1,9 +1,45 @@
+import { isDeepStrictEqual } from 'node:util';
+
 import { getEnvBool } from '../envars';
 import logger from '../logger';
+import { type ApiProvider, isApiProvider } from '../types/providers';
 import { getNunjucksEngine } from './templates';
 
 import type { VarValue } from '../types';
 import type { EnvOverrides } from '../types/env';
+
+// Cached JavaScript configs reuse instances across evaluations with different environments.
+const providerTemplates = new WeakMap<
+  ApiProvider,
+  { source: Pick<ApiProvider, 'config' | 'label'>; rendered: Pick<ApiProvider, 'config' | 'label'> }
+>();
+
+function snapshotProviderTemplate<T>(
+  value: T,
+  previous?: { rendered: unknown; source: unknown },
+): T {
+  if (previous && isDeepStrictEqual(value, previous.rendered)) {
+    return previous.source as T;
+  }
+  if (!value || typeof value !== 'object' || isApiProvider(value)) {
+    return value;
+  }
+  const childTemplate = (key: string, item: unknown) =>
+    snapshotProviderTemplate(
+      item,
+      previous && {
+        rendered: (previous.rendered as Record<string, unknown> | undefined)?.[key],
+        source: (previous.source as Record<string, unknown> | undefined)?.[key],
+      },
+    );
+  return (
+    Array.isArray(value)
+      ? value.map((item, index) => childTemplate(String(index), item))
+      : Object.fromEntries(
+          Object.entries(value).map(([key, item]) => [key, childTemplate(key, item)]),
+        )
+  ) as T;
+}
 
 /**
  * Renders ONLY environment variable templates in an object, leaving all other templates untouched.
@@ -34,6 +70,38 @@ export function renderEnvOnlyInObject<T>(
   replaceBase?: boolean,
 ): T {
   if (getEnvBool('PROMPTFOO_DISABLE_TEMPLATING')) {
+    return obj;
+  }
+
+  if (isApiProvider(obj)) {
+    let templates = providerTemplates.get(obj);
+    if (!templates) {
+      templates = { source: {}, rendered: {} };
+      providerTemplates.set(obj, templates);
+    }
+    for (const key of ['config', 'label'] as const) {
+      templates.source[key] = snapshotProviderTemplate(obj[key], {
+        rendered: templates.rendered[key],
+        source: templates.source[key],
+      });
+      if (templates.source[key] !== undefined) {
+        const rendered = renderEnvOnlyInObject(templates.source[key], envOverrides, replaceBase);
+        if (!isDeepStrictEqual(rendered, obj[key]) && !Reflect.set(obj, key, rendered)) {
+          if (key === 'config') {
+            // Wrappers can expose a mutable backing config through a getter.
+            Object.assign(obj.config, rendered);
+          } else {
+            Object.defineProperty(obj, key, {
+              value: rendered,
+              writable: true,
+              configurable: true,
+              enumerable: true,
+            });
+          }
+        }
+      }
+      templates.rendered[key] = snapshotProviderTemplate(obj[key]);
+    }
     return obj;
   }
 

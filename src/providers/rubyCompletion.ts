@@ -1,13 +1,14 @@
 import fs from 'fs/promises';
 import path from 'path';
 
-import { getCache, isCacheEnabled } from '../cache';
+import { getCache } from '../cache';
 import logger from '../logger';
 import { runRuby } from '../ruby/rubyUtils';
 import { sha256 } from '../util/createHash';
 import { processConfigFileReferences } from '../util/fileReference';
 import { parsePathOrGlob } from '../util/index';
-import { safeJsonStringify } from '../util/json';
+import { getFileSourceHash } from '../util/sourceHash';
+import { getScriptCacheKey } from './scriptCompletion';
 import { sanitizeScriptContext } from './scriptContext';
 
 import type {
@@ -190,6 +191,13 @@ export class RubyProvider implements ApiProvider {
     this.id = () => options?.id ?? `ruby:${this.scriptPath}:${this.functionName || 'default'}`;
   }
 
+  getSourceHash(): string {
+    return getFileSourceHash(
+      path.resolve(this.options?.config?.basePath || '', this.scriptPath),
+      this.functionName,
+    );
+  }
+
   /**
    * Process any file:// references in the configuration
    * This should be called after initialization
@@ -247,18 +255,24 @@ export class RubyProvider implements ApiProvider {
     logger.debug(`Computing file hash for script ${absPath}`);
     const fileHash = sha256(await fs.readFile(absPath, 'utf-8'));
 
-    // Create cache key including the function name to ensure different functions don't share caches
-    const cacheKey = `ruby:${this.scriptPath}:${this.functionName || 'default'}:${apiType}:${fileHash}:${prompt}:${safeJsonStringify(
-      this.options,
-    )}:${safeJsonStringify(context?.vars)}`;
+    const optionsWithProcessedConfig = {
+      ...this.options,
+      config: { ...this.options?.config, ...this.config },
+    };
+    const cacheKey = getScriptCacheKey(
+      `ruby:${this.functionName || 'default'}:${apiType}`,
+      fileHash,
+      [this.scriptPath, prompt, optionsWithProcessedConfig, context?.vars],
+      this.options?.env,
+    );
     logger.debug(`RubyProvider cache key: ${cacheKey}`);
 
     const cache = await getCache();
     let cachedResult;
-    const cacheEnabled = isCacheEnabled();
+    const cacheEnabled = cacheKey !== undefined;
     logger.debug(`RubyProvider cache enabled: ${cacheEnabled}`);
 
-    if (cacheEnabled) {
+    if (cacheKey) {
       cachedResult = await cache.get(cacheKey);
       logger.debug(`RubyProvider cache hit: ${Boolean(cachedResult)}`);
     }
@@ -276,16 +290,6 @@ export class RubyProvider implements ApiProvider {
     } else {
       const sanitizedContext = sanitizeScriptContext('RubyProvider', context);
 
-      // Create a new options object with processed file references included in the config
-      // This ensures any file:// references are replaced with their actual content
-      const optionsWithProcessedConfig = {
-        ...this.options,
-        config: {
-          ...this.options?.config,
-          ...this.config, // Merge in the processed config containing resolved file references
-        },
-      };
-
       const args = buildRubyScriptArgs(
         apiType,
         prompt,
@@ -293,11 +297,8 @@ export class RubyProvider implements ApiProvider {
         sanitizedContext,
       );
 
-      logger.debug(
-        `Running ruby script ${absPath} with scriptPath ${this.scriptPath} and args: ${safeJsonStringify(args)}`,
-      );
-
       const functionName = this.functionName || apiType;
+      logger.debug('Running Ruby script', { scriptPath: absPath, functionName });
       const result = await runRuby(absPath, functionName, args, {
         rubyExecutable: this.config.rubyExecutable,
       });
@@ -307,12 +308,12 @@ export class RubyProvider implements ApiProvider {
       // Store result in cache if enabled and no errors
       const hasError = hasRubyResultError(result);
 
-      if (isCacheEnabled() && !hasError) {
+      if (cacheKey && !hasError) {
         logger.debug(`RubyProvider caching result: ${cacheKey}`);
         await cache.set(cacheKey, JSON.stringify(result));
       } else {
         logger.debug(
-          `RubyProvider not caching result: ${isCacheEnabled() ? (hasError ? 'has error' : 'unknown reason') : 'cache disabled'}`,
+          `RubyProvider not caching result: ${hasError ? 'has error' : 'cache disabled'}`,
         );
       }
 

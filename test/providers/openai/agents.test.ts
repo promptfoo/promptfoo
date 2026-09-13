@@ -159,6 +159,7 @@ import {
   loadSandboxConfig,
   loadSessionDefinition,
 } from '../../../src/providers/openai/agents-loader';
+import { mockProcessEnv } from '../../util/utils';
 
 function resetOpenAiAgentsMocks() {
   mockRun.mockReset().mockResolvedValue({
@@ -1286,6 +1287,26 @@ describe('OpenAiAgentsProvider', () => {
     await provider.callApi('Where is my order?');
 
     expect(mockRun.mock.calls[0][2].sessionInputCallback).toBe(sessionInputCallback);
+  });
+
+  it.each(['true', 'false'])('uses provider tracing env %s over host env', async (enabled) => {
+    const restore = mockProcessEnv({
+      PROMPTFOO_TRACING_ENABLED: enabled === 'true' ? 'false' : 'true',
+    });
+    try {
+      vi.resetModules();
+      const { OpenAiAgentsProvider: IsolatedOpenAiAgentsProvider } = await import(
+        '../../../src/providers/openai/agents'
+      );
+      const provider = new IsolatedOpenAiAgentsProvider('gpt-5-mini', {
+        env: { PROMPTFOO_TRACING_ENABLED: enabled },
+        config: { agent: { name: 'Support Agent', instructions: 'Help the user.' } },
+      });
+      await provider.callApi('Where is my order?');
+      expect(addTraceProcessor).toHaveBeenCalledTimes(enabled === 'true' ? 1 : 0);
+    } finally {
+      restore();
+    }
   });
 
   it('adds the Promptfoo trace exporter without replacing existing processors', async () => {

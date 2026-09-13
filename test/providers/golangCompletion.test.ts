@@ -2,6 +2,7 @@ import fs from 'fs';
 import path from 'path';
 
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import cliState from '../../src/cliState';
 import { GolangProvider } from '../../src/providers/golangCompletion';
 
 // Hoisted mock functions
@@ -282,6 +283,17 @@ describe('GolangProvider', () => {
     }) as any);
   });
 
+  it('passes file defaults to Go tooling and the compiled provider', async () => {
+    const provider = new GolangProvider('script.go');
+    await cliState.withEnvFileOverrides({ PROMPTFOO_REVIEW_ENV_PROBE: 'file' }, () =>
+      provider.callApi('hello'),
+    );
+    expect(mockExecFile).toHaveBeenCalledTimes(3);
+    for (const call of mockExecFile.mock.calls) {
+      expect(call[2]).toMatchObject({ env: { PROMPTFOO_REVIEW_ENV_PROBE: 'file' } });
+    }
+  });
+
   describe('constructor', () => {
     it('should initialize with correct properties', () => {
       const provider = new GolangProvider('script.go', {
@@ -347,6 +359,24 @@ describe('GolangProvider', () => {
   });
 
   describe('caching', () => {
+    it('bypasses cache reads and writes when provider environment is configured', async () => {
+      mockIsCacheEnabled.mockReturnValue(true);
+      const cache = {
+        get: vi.fn().mockResolvedValue(JSON.stringify({ output: 'cached' })),
+        set: vi.fn(),
+      };
+      mockGetCache.mockResolvedValue(cache as never);
+      for (const value of ['cache-private-first', 'cache-private-second', 'cache-private-first']) {
+        const provider = new GolangProvider('script.go', {
+          config: { basePath: '/absolute/path/to' },
+          env: { OPENAI_API_KEY: value },
+        });
+        await provider.callApi('unchanged prompt');
+      }
+      expect(cache.get).not.toHaveBeenCalled();
+      expect(cache.set).not.toHaveBeenCalled();
+    });
+
     it('should use cached result when available', async () => {
       const provider = new GolangProvider('script.go', {
         config: { basePath: '/absolute/path/to' },
