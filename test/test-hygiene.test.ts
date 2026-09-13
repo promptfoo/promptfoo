@@ -100,22 +100,8 @@ const allowedSkippedTests: AllowedSkip[] = [
   {
     file: 'commands/mcp/lib/security.test.ts',
     kind: 'skipIf',
-    linePattern:
-      /^it\.skipIf\(process\.platform === 'win32'\)\('should reject paths to system directories'/,
-    reason: 'Unix system-directory assertions are platform-specific',
-  },
-  {
-    file: 'commands/mcp/lib/security.test.ts',
-    kind: 'skipIf',
-    linePattern:
-      /^it\.skipIf\(process\.platform !== 'win32'\)\('should reject Windows system directories'/,
-    reason: 'Windows system-directory assertions are platform-specific',
-  },
-  {
-    file: 'commands/mcp/lib/security.test.ts',
-    kind: 'skipIf',
     linePattern: /^it\.skipIf\(process\.platform === 'win32'\)\($/,
-    reason: 'Unix absolute-path assertions are platform-specific',
+    reason: 'Unix symlink fixtures are platform-specific',
   },
   {
     file: 'smoke/regression-0120.test.ts',

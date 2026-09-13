@@ -20,7 +20,7 @@ export function createToolResponse<T = unknown>(
     timestamp: new Date().toISOString(),
   };
 
-  if (success && data !== undefined) {
+  if (data !== undefined) {
     response.data = data;
   }
 

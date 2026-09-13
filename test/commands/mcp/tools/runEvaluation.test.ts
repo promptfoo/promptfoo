@@ -67,12 +67,31 @@ vi.mock('../../../../src/node/doEval', () => ({
 }));
 
 describe('runEvaluation tool', () => {
-  beforeEach(() => {
+  let workspace: string;
+  beforeEach(async () => {
     vi.clearAllMocks();
+    workspace = await mkdtemp(path.join(os.tmpdir(), 'mcp-eval-workspace-'));
+    vi.spyOn(process, 'cwd').mockReturnValue(workspace);
+    await writeFile(path.join(workspace, 'test.yaml'), '{}');
+    const { resolveConfigs } = await import('../../../../src/util/config/load');
+    vi.mocked(resolveConfigs)
+      .mockReset()
+      .mockResolvedValue({
+        basePath: workspace,
+        config: {},
+        testSuite: {
+          prompts: [{ label: 'test-prompt', raw: 'What is 2+2?' }],
+          providers: [
+            { id: () => 'test-provider', callApi: vi.fn(async () => ({ output: 'fixture' })) },
+          ],
+          tests: [{ vars: { input: 'test' } }],
+        },
+      });
   });
 
-  afterEach(() => {
+  afterEach(async () => {
     vi.restoreAllMocks();
+    await rm(workspace, { recursive: true, force: true });
   });
 
   it.each([false, true])(
@@ -97,7 +116,7 @@ describe('runEvaluation tool', () => {
       const advertisedMatch = schema.providerFilter.description.match(/"(anthropic:[^"]+)"/);
       expect(advertisedMatch).not.toBeNull();
       const advertisedFilter = advertisedMatch![1];
-      const tempDir = await mkdtemp(path.join(os.tmpdir(), 'mcp-provider-filter-'));
+      const tempDir = await mkdtemp(path.join(workspace, 'mcp-provider-filter-'));
       const originalState = {
         basePath: cliState.basePath,
         config: cliState.config,
@@ -324,6 +343,30 @@ describe('runEvaluation tool', () => {
   });
 
   describe('promptFilter validation', () => {
+    it('should reject config paths outside the workspace', async () => {
+      const { loadDefaultConfig } = await import('../../../../src/util/config/default');
+      const { registerRunEvaluationTool } = await import(
+        '../../../../src/commands/mcp/tools/runEvaluation'
+      );
+
+      let toolHandler: any;
+      registerRunEvaluationTool({
+        tool: vi.fn((_name, _schema, handler) => {
+          toolHandler = handler;
+        }),
+      } as any);
+
+      const result = await toolHandler({
+        configPath: path.join(path.dirname(process.cwd()), 'promptfooconfig.yaml'),
+      });
+
+      expect(result.isError).toBe(true);
+      expect(JSON.parse(result.content[0].text).error).toContain(
+        'Path must be within base directory',
+      );
+      expect(loadDefaultConfig).not.toHaveBeenCalled();
+    });
+
     it('should error on mixed numeric and non-numeric filters', async () => {
       const { registerRunEvaluationTool } = await import(
         '../../../../src/commands/mcp/tools/runEvaluation'
