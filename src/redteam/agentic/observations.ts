@@ -722,12 +722,12 @@ export function observationsFromTraceData(
       const timestampNanos = nanosecondTimestamp(event.timestampNanos);
       const eventLocation = `${spanLocation} event ${eventIndex + 1}`;
       const callId =
-        getAttribute(event.attributes, TOOL_CALL_ID_ATTRIBUTES) ??
-        getAttribute(traceSpan.attributes, TOOL_CALL_ID_ATTRIBUTES);
+        getString(getAttribute(event.attributes, TOOL_CALL_ID_ATTRIBUTES)) ??
+        getString(getAttribute(traceSpan.attributes, TOOL_CALL_ID_ATTRIBUTES));
       const eventSpan = {
         attributes: {
-          ...(callId === undefined ? {} : { 'gen_ai.tool.call.id': callId }),
           ...event.attributes,
+          ...(callId === undefined ? {} : { 'gen_ai.tool.call.id': callId }),
         },
         name: event.name,
         parentSpanId: traceSpan.parentSpanId,

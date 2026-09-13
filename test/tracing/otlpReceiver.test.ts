@@ -250,6 +250,26 @@ describe('OTLPReceiver', () => {
     expect(ids[3]).not.toBe(ids[0]);
   });
 
+  it.each([false, true])(
+    'retains repeated log records and deduplicates batch retries (timed=%s)',
+    async (timed) => {
+      const log = {
+        traceId: 'a'.repeat(32),
+        spanId: 'b'.repeat(16),
+        ...(timed && { timeUnixNano: '1700000000000000000' }),
+        body: { stringValue: 'tool update_seat' },
+      };
+      const body = { resourceLogs: [{ scopeLogs: [{ logRecords: [log, structuredClone(log)] }] }] };
+      for (let retry = 0; retry < 2; retry++) {
+        await request(receiver.getApp()).post('/v1/logs').send(body).expect(200);
+      }
+      const ids = persistSpans.mock.calls.map((call) => call[1].map((span) => span.spanId));
+      expect(ids[0]).toHaveLength(2);
+      expect(new Set(ids[0]).size).toBe(2);
+      expect(ids[1]).toEqual(ids[0]);
+    },
+  );
+
   it('preserves unrelated trace text after the redaction history reaches capacity', () => {
     const redactingReceiver = new OTLPReceiver({ redactAttributes: ['authorization'] });
     for (let index = 0; index < 1_025; index++) {

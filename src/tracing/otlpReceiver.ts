@@ -822,6 +822,7 @@ export class OTLPReceiver {
 
   private parseOTLPLogsJSONRequest(body: OTLPLogsRequest): ParsedTrace[] {
     const traces: ParsedTrace[] = [];
+    const occurrences = new Map<string, number>();
     const resourceLogs = body?.resourceLogs ?? [];
     logger.debug(`[OtlpReceiver] Parsing logs request with ${resourceLogs.length} resource logs`);
 
@@ -834,6 +835,16 @@ export class OTLPReceiver {
           try {
             const parsed = this.logRecordToParsedTrace(log, scopeLog, resourceAttributes);
             if (parsed) {
+              const id = parsed.span.spanId;
+              const occurrence = occurrences.get(id) ?? 0;
+              occurrences.set(id, occurrence + 1);
+              if (occurrence > 0) {
+                parsed.span.spanId = crypto
+                  .createHash('sha256')
+                  .update(`${id}:${occurrence}`)
+                  .digest('hex')
+                  .slice(0, 16);
+              }
               traces.push(parsed);
             }
           } catch (err) {

@@ -71,6 +71,8 @@ function scanJsonContainers(
         }
         nestedObjects.push({ start, end: index });
       }
+    } else if (tagged && starts.length === 0 && !/\s/.test(character)) {
+      malformed = true;
     }
   }
 

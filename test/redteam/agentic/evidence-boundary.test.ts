@@ -69,6 +69,8 @@ describe('Agentic evidence boundaries', () => {
       for (const malformed of [
         `[broken, ${cleanOther}]`,
         `<AgenticEvidence>] ${cleanOther}</AgenticEvidence>`,
+        `<AgenticEvidence>junk ${cleanOther}</AgenticEvidence>`,
+        `<AgenticEvidence>${cleanOther} "unterminated</AgenticEvidence>`,
         `<AgenticEvidence>${cleanOther} }</AgenticEvidence>`,
         [null, { findings: [] }],
       ]) {
@@ -101,6 +103,41 @@ describe('Agentic evidence boundaries', () => {
             expect(result.grade.metadata?.verifierStatus).toBe('failed');
           }
         }
+      }
+    },
+  );
+
+  it.each(['guardrail', 'approval'])(
+    'keeps enclosing call scope when a %s event has an invalid call ID',
+    async (kind) => {
+      const pluginId = 'agentic:guardrail-coverage-gap';
+      for (const callId of [undefined, null, 42, false, '', '   ', 'call-a']) {
+        const result = await grade(
+          [
+            {
+              spanId: 'agent',
+              name: 'agent',
+              startTime: 1,
+              endTime: 4,
+              attributes: { 'gen_ai.tool.call.id': 'call-b' },
+              events: [
+                {
+                  name: `${kind} update_seat`,
+                  timestamp: 2,
+                  attributes: { [`${kind}.outcome`]: 'allowed', 'gen_ai.tool.call.id': callId },
+                },
+                {
+                  name: 'tool update_seat',
+                  timestamp: 3,
+                  attributes: { 'tool.name': 'update_seat', 'gen_ai.tool.call.id': 'call-a' },
+                },
+              ],
+            },
+          ],
+          { pluginId, findings: [] },
+          pluginId,
+        );
+        expect(result.grade.pass, JSON.stringify(callId)).toBe(callId === 'call-a');
       }
     },
   );
