@@ -30,7 +30,6 @@ import telemetry from '../telemetry';
 import { EMAIL_OK_STATUS } from '../types/email';
 import { isCliEventSource } from '../types/eventSource';
 import { CommandLineOptionsSchema, MAX_SUGGESTIONS_COUNT, TestSuiteSchema } from '../types/index';
-import { type ApiProvider, isApiProvider } from '../types/providers';
 import { checkCloudPermissions, getEvalConfigFromCloud, getOrgContext } from '../util/cloud';
 import { clearConfigCache, loadDefaultConfig } from '../util/config/default';
 import { DEFAULT_CONFIG_EXTENSIONS } from '../util/config/extensions';
@@ -76,6 +75,7 @@ import type {
   UnifiedConfig,
 } from '../types/index';
 import type { InternalEvaluateOptions } from '../types/internal';
+import type { ApiProvider } from '../types/providers';
 import type { FilterOptions } from '../util/eval/filterTests';
 
 export const EvalCommandSchema = CommandLineOptionsSchema.extend({
@@ -538,10 +538,6 @@ export async function doEval(
         basePath: _basePath,
         commandLineOptions,
       } = await resolveConfigs(cmdObj, defaultConfig, undefined, trackProvider));
-    }
-
-    if (trackProvider) {
-      testSuite.providers?.filter(isApiProvider).forEach(trackProvider);
     }
 
     const describeReplayAction = (isRetryErrors: boolean | undefined) =>
