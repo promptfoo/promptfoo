@@ -101,6 +101,87 @@ describe('generated target configuration round trips', () => {
   const localId = 'openai:chat:tenant/served-model:Q4_K_M';
 
   it.each([
+    { routeCase: 'raw ID', id: 'AGENT123', valid: false },
+    { routeCase: 'raw ID with configured ID', id: 'AGENT123', agentId: 'CONFIG789', valid: false },
+    { routeCase: 'empty canonical path', id: 'bedrock:agents:', valid: false },
+    { routeCase: 'blank canonical path', id: 'bedrock:agents:   ', valid: false },
+    { routeCase: 'empty shorthand path', id: 'bedrock-agent:', valid: false },
+    { routeCase: 'blank shorthand path', id: 'bedrock-agent:   ', valid: false },
+    {
+      routeCase: 'blank configured override',
+      id: 'bedrock:agents:AGENT123',
+      agentId: '   ',
+      valid: false,
+    },
+    { routeCase: 'canonical path', id: 'bedrock:agents:AGENT123', valid: true },
+    { routeCase: 'shorthand path', id: 'bedrock-agent:AGENT123', valid: true },
+    {
+      routeCase: 'configured canonical ID',
+      id: 'bedrock:agents:',
+      agentId: 'CONFIG789',
+      valid: true,
+    },
+    {
+      routeCase: 'configured shorthand ID',
+      id: 'bedrock-agent:',
+      agentId: 'CONFIG789',
+      valid: true,
+    },
+    {
+      routeCase: 'configured bare canonical ID',
+      id: 'bedrock:agents',
+      agentId: 'CONFIG789',
+      valid: true,
+    },
+    {
+      routeCase: 'configured override',
+      id: 'bedrock:agents:AGENT123',
+      agentId: 'CONFIG789',
+      valid: true,
+    },
+  ])('validates Bedrock $routeCase before Next', async ({ id, agentId, valid }) => {
+    const user = userEvent.setup();
+    const original = {
+      id: 'bedrock:agents:ORIGINAL',
+      label: 'Bedrock route',
+      config: { agentAliasId: 'ALIAS456', region: 'eu-west-1', profile: 'test-profile' },
+    };
+    act(() =>
+      useRedTeamConfig.getState().setFullConfig({
+        ...useRedTeamConfig.getState().config,
+        target: original,
+        prompts: ['{{prompt}}'],
+      }),
+    );
+    const onNext = vi.fn(() => useRedTeamConfig.getState().config.target);
+    renderWithProviders(
+      <MemoryRouter>
+        <TargetConfiguration onNext={onNext} onBack={vi.fn()} />
+      </MemoryRouter>,
+    );
+    const config = { ...original.config, ...(agentId === undefined ? {} : { agentId }) };
+    await replaceText(
+      user,
+      screen.getByRole('textbox', { name: 'Target configuration JSON' }),
+      JSON.stringify(config),
+    );
+    await replaceText(user, screen.getByRole('textbox', { name: /Target ID/ }), id);
+    const next = within(screen.getByTestId('page-navigation')).getByRole('button', {
+      name: /Next/,
+    });
+    await user.click(next);
+    if (!valid) {
+      expect(next).toBeDisabled();
+      expect(onNext).not.toHaveBeenCalled();
+      return;
+    }
+    const expected = { ...original, id, config };
+    expect(onNext).toHaveBeenCalledTimes(1);
+    expect(onNext).toHaveLastReturnedWith(expected);
+    expect(useRedTeamConfig.getState().config.target).toEqual(expected);
+  });
+
+  it.each([
     { aliasCase: 'missing', agentAliasId: undefined, valid: false },
     { aliasCase: 'null', agentAliasId: null, valid: false },
     { aliasCase: 'empty', agentAliasId: '', valid: false },

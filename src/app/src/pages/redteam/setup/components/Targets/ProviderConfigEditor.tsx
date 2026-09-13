@@ -19,6 +19,7 @@ import { AGENT_FRAMEWORKS } from './consts';
 import FoundationModelConfiguration from './FoundationModelConfiguration';
 import HttpEndpointConfiguration from './HttpEndpointConfiguration';
 import {
+  isBedrockAgentProviderId,
   isLocalOpenAiProviderType,
   isOpenAiChatProviderId,
   withLocalProviderType,
@@ -523,11 +524,26 @@ function ProviderConfigEditor({
           );
         }
       }
-      if (
-        providerType === 'bedrock-agent' &&
-        (typeof provider.config?.agentAliasId !== 'string' || !provider.config.agentAliasId.trim())
-      ) {
-        errors.push('Agent Alias ID is required');
+      if (providerType === 'bedrock-agent') {
+        if (isBedrockAgentProviderId(provider.id)) {
+          const pathAgentId = provider.id
+            .split(':')
+            .slice(provider.id.startsWith('bedrock:') ? 2 : 1)
+            .join(':');
+          // Match the constructor: an explicit configured ID takes precedence.
+          const agentId = provider.config?.agentId || pathAgentId;
+          if (typeof agentId !== 'string' || !agentId.trim()) {
+            errors.push('Agent ID is required in the provider path or config.agentId');
+          }
+        } else {
+          errors.push('Bedrock agent ID must use bedrock:agents or bedrock-agent:');
+        }
+        if (
+          typeof provider.config?.agentAliasId !== 'string' ||
+          !provider.config.agentAliasId.trim()
+        ) {
+          errors.push('Agent Alias ID is required');
+        }
       }
       if (
         providerType === 'openinterpreter' &&

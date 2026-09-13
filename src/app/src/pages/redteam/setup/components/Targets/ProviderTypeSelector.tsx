@@ -516,7 +516,9 @@ export default function ProviderTypeSelector({
     }
 
     const initialConfig = getProviderInitialConfig(value);
-    if (initialConfig) {
+    if (initialConfig && provider && providerType === value) {
+      setProvider(provider, value);
+    } else if (initialConfig) {
       setProvider({ ...initialConfig, label: currentLabel }, value);
     } else if (value === 'javascript') {
       setProvider(

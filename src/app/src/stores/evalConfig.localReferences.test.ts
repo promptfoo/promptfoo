@@ -2,7 +2,7 @@ import { useRedTeamConfig } from '@app/pages/redteam/setup/hooks/useRedTeamConfi
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { useStore } from './evalConfig';
 
-import type { UnifiedConfig } from '../../../types/index';
+type EvalConfig = ReturnType<typeof useStore.getState>['config'];
 
 const locals = ['llamafile', 'vllm', 'text-generation-webui'] as const;
 const entries = ['setConfig', 'updateConfig', 'rehydrate'] as const;
@@ -121,9 +121,7 @@ describe('local credential reference persistence', () => {
           : shape === 'map'
             ? { [id]: options }
             : [{ [id]: options }];
-      useStore
-        .getState()
-        .setConfig({ ...input, providers: providers as UnifiedConfig['providers'] });
+      useStore.getState().setConfig({ ...input, providers: providers as EvalConfig['providers'] });
       expect(useStore.getState().config.env).toEqual(input.env);
       expect(persistedConfig().env).toEqual({ VISIBLE: 'ordinary' });
       expect(localStorage.getItem('promptfoo')).not.toContain('SHORT');

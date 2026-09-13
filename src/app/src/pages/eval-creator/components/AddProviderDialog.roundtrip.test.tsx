@@ -112,6 +112,86 @@ describe('eval provider configuration round trips', () => {
   });
 
   it.each([
+    { routeCase: 'raw ID', id: 'AGENT123', valid: false },
+    { routeCase: 'raw ID with configured ID', id: 'AGENT123', agentId: 'CONFIG789', valid: false },
+    { routeCase: 'empty canonical path', id: 'bedrock:agents:', valid: false },
+    { routeCase: 'blank canonical path', id: 'bedrock:agents:   ', valid: false },
+    { routeCase: 'empty shorthand path', id: 'bedrock-agent:', valid: false },
+    { routeCase: 'blank shorthand path', id: 'bedrock-agent:   ', valid: false },
+    {
+      routeCase: 'blank configured override',
+      id: 'bedrock:agents:AGENT123',
+      agentId: '   ',
+      valid: false,
+    },
+    { routeCase: 'canonical path', id: 'bedrock:agents:AGENT123', valid: true },
+    { routeCase: 'shorthand path', id: 'bedrock-agent:AGENT123', valid: true },
+    {
+      routeCase: 'configured canonical ID',
+      id: 'bedrock:agents:',
+      agentId: 'CONFIG789',
+      valid: true,
+    },
+    {
+      routeCase: 'configured shorthand ID',
+      id: 'bedrock-agent:',
+      agentId: 'CONFIG789',
+      valid: true,
+    },
+    {
+      routeCase: 'configured bare canonical ID',
+      id: 'bedrock:agents',
+      agentId: 'CONFIG789',
+      valid: true,
+    },
+    {
+      routeCase: 'configured override',
+      id: 'bedrock:agents:AGENT123',
+      agentId: 'CONFIG789',
+      valid: true,
+    },
+  ])('validates Bedrock $routeCase before Save and Run', async ({ id, agentId, valid }) => {
+    const user = userEvent.setup();
+    const original = {
+      id: 'bedrock:agents:ORIGINAL',
+      label: 'Bedrock route',
+      config: { agentAliasId: 'ALIAS456', region: 'eu-west-1', profile: 'test-profile' },
+    };
+    act(() =>
+      useStore.getState().setConfig({ providers: [original], prompts: ['Hello'], tests: [{}] }),
+    );
+    mockCallApiRoutes([
+      { method: 'POST', path: '/eval/job', response: { id: 'bedrock-route-job' } },
+    ]);
+    renderWithProviders(<EvalProviderSetup />);
+    await user.click(screen.getByRole('button', { name: 'Edit Bedrock route' }));
+    const config = { ...original.config, ...(agentId === undefined ? {} : { agentId }) };
+    await replaceText(
+      user,
+      screen.getByRole('textbox', { name: 'Provider configuration JSON' }),
+      JSON.stringify(config),
+    );
+    await replaceText(user, screen.getByRole('textbox', { name: /Target ID/ }), id);
+    await user.click(screen.getByRole('button', { name: 'Save Changes' }));
+    if (!valid) {
+      expect(screen.getByRole('button', { name: 'Save Changes' })).toBeDisabled();
+      expect(useStore.getState().config.providers).toEqual([original]);
+      expect(getCallApiMock().mock.calls.filter(([path]) => path === '/eval/job')).toHaveLength(0);
+      return;
+    }
+    const expected = { ...original, id, config };
+    expect(useStore.getState().config.providers).toEqual([expected]);
+    await user.click(screen.getByRole('button', { name: 'Edit Bedrock route' }));
+    expect(screen.getByRole('textbox', { name: /Target ID/ })).toHaveValue(id);
+    await user.click(screen.getByRole('button', { name: 'Save Changes' }));
+    expect(useStore.getState().config.providers).toEqual([expected]);
+    await user.click(screen.getByRole('button', { name: 'Run Eval' }));
+    const jobs = getCallApiMock().mock.calls.filter(([path]) => path === '/eval/job');
+    expect(jobs).toHaveLength(1);
+    expect(JSON.parse(jobs[0][1]!.body as string).providers).toEqual([expected]);
+  });
+
+  it.each([
     { aliasCase: 'missing', agentAliasId: undefined, valid: false },
     { aliasCase: 'null', agentAliasId: null, valid: false },
     { aliasCase: 'empty', agentAliasId: '', valid: false },
@@ -365,6 +445,81 @@ describe('eval provider configuration round trips', () => {
       );
     },
   );
+
+  it.each([
+    { card: 'Together AI', id: 'togetherai:tenant/private-model' },
+    { card: 'Hugging Face', id: 'huggingface:chat:tenant/private-model:host' },
+    { card: 'fal.ai', id: 'fal:image:tenant/private-image' },
+    { card: 'Cloudflare AI', id: 'cloudflare-ai:chat:@cf/tenant/private-model' },
+    { card: 'llama.cpp', id: 'llama:tenant-served-model' },
+    { card: 'Ollama', id: 'ollama:tenant-model:Q4_K_M' },
+    { card: 'Databricks', id: 'databricks:tenant-deployment' },
+    { card: 'Cerebras', id: 'cerebras:tenant-private-model' },
+    { card: 'Groq', id: 'groq:tenant-private-model' },
+  ])(
+    'restores the $card card and saved settings through reopen, reselection and Run',
+    async ({ card, id }) => {
+      const user = userEvent.setup();
+      const provider = {
+        id,
+        label: 'Configured deployment',
+        config: {
+          model: 'configured-model',
+          apiBaseUrl: 'https://private.example.test/tenant/v1',
+          apiKey: '{{ env.PRIVATE_MODEL_KEY }}',
+          temperature: 0.2,
+          passthrough: { tenant: 'tenant-A' },
+        },
+      };
+      act(() =>
+        useStore.getState().setConfig({ providers: [provider], prompts: ['Hello'], tests: [{}] }),
+      );
+      mockCallApiRoutes([
+        { method: 'POST', path: '/eval/job', response: { id: 'reopened-provider-job' } },
+      ]);
+      renderWithProviders(<EvalProviderSetup />);
+      await user.click(screen.getByRole('button', { name: 'Edit Configured deployment' }));
+      await user.click(screen.getByRole('button', { name: 'Back' }));
+      const selected = screen.getByText(card, { selector: 'p' }).closest('[role="button"]')!;
+      expect(selected).toHaveClass('border-primary');
+      await user.click(selected);
+      await user.click(screen.getByRole('button', { name: 'Save Changes' }));
+      expect(useStore.getState().config.providers).toEqual([provider]);
+      await user.click(screen.getByRole('button', { name: 'Run Eval' }));
+      const jobs = getCallApiMock().mock.calls.filter(([path]) => path === '/eval/job');
+      expect(jobs).toHaveLength(1);
+      expect(JSON.parse(jobs[0][1]!.body as string).providers).toEqual([provider]);
+    },
+  );
+
+  it('keeps an unrelated provider custom and applies defaults only after changing cards', async () => {
+    const user = userEvent.setup();
+    const original = {
+      id: 'tenant:custom-adapter',
+      label: 'Unrelated provider',
+      config: { tenant: 'keep' },
+    };
+    act(() =>
+      useStore.getState().setConfig({ providers: [original], prompts: ['Hello'], tests: [{}] }),
+    );
+    renderWithProviders(<EvalProviderSetup />);
+    await user.click(screen.getByRole('button', { name: 'Edit Unrelated provider' }));
+    await user.click(screen.getByRole('button', { name: 'Back' }));
+    expect(
+      screen.getByText('Custom Target', { selector: 'p' }).closest('[role="button"]'),
+    ).toHaveClass('border-primary');
+    await user.click(
+      screen.getByText('Together AI', { selector: 'p' }).closest('[role="button"]')!,
+    );
+    await user.click(screen.getByRole('button', { name: 'Save Changes' }));
+    expect(useStore.getState().config.providers).toEqual([
+      {
+        id: 'togetherai:meta-llama/Llama-3.3-70B-Instruct-Turbo',
+        label: original.label,
+        config: {},
+      },
+    ]);
+  });
 
   it.each(cases)(
     'keeps $label editable after saving and reopening (saved type: $keepType)',

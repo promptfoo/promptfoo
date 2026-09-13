@@ -1,5 +1,6 @@
 import { mockBrowserProperty, restoreBrowserMocks } from '@app/tests/browserMocks';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { getRuntimeRedteamConfig } from '../utils/yamlHelpers';
 import { useRedTeamConfig } from './useRedTeamConfig';
 import {
   getCurrentTargetConfigInvalidMarker,
@@ -5573,24 +5574,54 @@ describe('useRedTeamConfig', () => {
 
     it.each(
       localTypes.flatMap(({ type }) =>
-        ['false', null, 0, {}, []].map((value) => ({ type, value })),
+        ['false', '{{ env.KEY_SELECTOR }}', null, 0, {}, []].map((value) => ({ type, value })),
       ),
-    )('rejects a nonboolean live $type key selector $value on import', ({ type, value }) => {
-      const target = {
-        id: 'openai:chat:local-policy-model',
-        config: { type, useDefaultApiKey: value, temperature: 0.2 },
-      };
-      useRedTeamConfig.getState().setFullConfig({
-        ...useRedTeamConfig.getState().config,
-        target: target as unknown as Config['target'],
-      });
-      const live = useRedTeamConfig.getState().config.target;
-      expect(live.config).toMatchObject({ type, useDefaultApiKey: false, temperature: 0.2 });
-      expect(JSON.parse(window.localStorage.getItem('redTeamConfig')!).state.config.target).toEqual(
-        live,
-      );
-      expect(target.config.useDefaultApiKey).toBe(value);
-    });
+    )(
+      'isolates a nonboolean $type key selector $value through import and runtime',
+      async ({ type, value }) => {
+        const target = {
+          id: 'openai:chat:local-policy-model',
+          env: { KEY_SELECTOR: 'false', LOCAL_KEY: 'local-test-key', VISIBLE: 'ordinary' },
+          config: {
+            type,
+            useDefaultApiKey: value,
+            temperature: 0.2,
+            apiBaseUrl: 'https://local.example.test/tenant/v1',
+            apiKey: '{{ env.LOCAL_KEY }}',
+            model: 'tenant/served-model',
+          },
+        };
+        useRedTeamConfig.getState().setFullConfig({
+          ...useRedTeamConfig.getState().config,
+          target: target as unknown as Config['target'],
+        });
+        const live = useRedTeamConfig.getState().config.target;
+        const expected = {
+          ...target,
+          config: {
+            ...target.config,
+            apiKeyRequired: false,
+            useDefaultApiKey: typeof value === 'string' ? value : false,
+          },
+        };
+        expect(live).toEqual(expected);
+        const runtime = getRuntimeRedteamConfig(useRedTeamConfig.getState().config);
+        expect(runtime.targets).toEqual([
+          { ...expected, config: { ...expected.config, useDefaultApiKey: false } },
+        ]);
+        expect(useRedTeamConfig.getState().config.target).toEqual(expected);
+        const saved = window.localStorage.getItem('redTeamConfig')!;
+        expect(JSON.parse(saved).state.config.target).toEqual(expected);
+        useRedTeamConfig.setState(useRedTeamConfig.getInitialState());
+        window.localStorage.setItem('redTeamConfig', saved);
+        await useRedTeamConfig.persist.rehydrate();
+        expect(useRedTeamConfig.getState().config.target).toEqual(expected);
+        expect(getRuntimeRedteamConfig(useRedTeamConfig.getState().config).targets).toEqual(
+          runtime.targets,
+        );
+        expect(target.config.useDefaultApiKey).toBe(value);
+      },
+    );
 
     it.each(
       localTypes.flatMap(({ type }) =>

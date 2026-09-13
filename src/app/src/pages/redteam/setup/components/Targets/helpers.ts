@@ -6,6 +6,14 @@ export function isOpenAiChatProviderId(providerId?: string): boolean {
   return providerId === 'openai:chat' || providerId?.startsWith('openai:chat:') === true;
 }
 
+export function isBedrockAgentProviderId(providerId?: string): boolean {
+  return (
+    providerId === 'bedrock:agents' ||
+    providerId?.startsWith('bedrock:agents:') === true ||
+    providerId?.startsWith('bedrock-agent:') === true
+  );
+}
+
 export function isLocalOpenAiProviderType(type: unknown): type is LocalOpenAiProviderType {
   return type === 'llamafile' || type === 'vllm' || type === 'text-generation-webui';
 }
@@ -109,7 +117,7 @@ export function getProviderType(
     return 'codex-security';
   }
 
-  if (providerId.startsWith('bedrock:agents:')) {
+  if (isBedrockAgentProviderId(providerId)) {
     return 'bedrock-agent';
   }
 

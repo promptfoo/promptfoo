@@ -205,7 +205,20 @@ export function getProviderTypeFromId(
     return undefined;
   }
 
-  if (id.startsWith('openai:') || id.startsWith('bedrock:')) {
+  if (
+    [
+      'openai:',
+      'bedrock:',
+      'togetherai:',
+      'huggingface:',
+      'fal:',
+      'cloudflare-ai:',
+      'llama:',
+      'ollama:',
+      'databricks:',
+      'cerebras:',
+    ].some((prefix) => id.startsWith(prefix))
+  ) {
     return getProviderType(id, config);
   }
   if (id.startsWith('anthropic:')) {
