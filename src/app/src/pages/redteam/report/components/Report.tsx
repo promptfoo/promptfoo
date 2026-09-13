@@ -54,8 +54,13 @@ import Overview from './Overview';
 import ReportDownloadButton from './ReportDownloadButton';
 import ReportSettingsDialogButton from './ReportSettingsDialogButton';
 import RiskCategories from './RiskCategories';
+import SemanticFrontierDiagnostics from './SemanticFrontierDiagnostics';
 import StrategyStats from './StrategyStats';
-import { getPluginIdFromResult, getStrategyIdFromTest } from './shared';
+import {
+  getPluginIdFromResult,
+  getStrategyIdFromTest,
+  summarizeSemanticFrontierDiagnosticsFromResults,
+} from './shared';
 import { useReportStore } from './store';
 import TestSuites from './TestSuites';
 import ToolsDialog, { Tool } from './ToolsDialog';
@@ -351,6 +356,43 @@ const App = ({ evalId: evalIdProp, embedded, onActionsReady }: ReportProps = {})
 
     return stats;
   }, [failuresByPlugin, passesByPlugin]);
+
+  const semanticFrontierDiagnostics = useMemo(() => {
+    if (!evalData) {
+      return [];
+    }
+
+    const stored = evalData.config.metadata?.semanticFrontierDiagnostics;
+    if (
+      Array.isArray(stored) &&
+      stored.every(
+        (diagnostic) =>
+          diagnostic &&
+          typeof diagnostic.pluginId === 'string' &&
+          Number.isInteger(diagnostic.frontierCount) &&
+          diagnostic.frontierCount >= 0 &&
+          Number.isInteger(diagnostic.completeFrontierCount) &&
+          diagnostic.completeFrontierCount >= 0 &&
+          diagnostic.completeFrontierCount <= diagnostic.frontierCount &&
+          typeof diagnostic.structurallyDegraded === 'boolean' &&
+          Array.isArray(diagnostic.unreachableFeatureIds) &&
+          diagnostic.unreachableFeatureIds.every((id: unknown) => typeof id === 'string'),
+      )
+    ) {
+      return stored;
+    }
+
+    const prompts =
+      (evalData.version >= 4
+        ? evalData.prompts
+        : (evalData.results as EvaluateSummaryV2).table.head.prompts) || [];
+    const selectedPrompt = prompts[selectedPromptIndex];
+    const selectedResults = evalData.results.results.filter((result) => {
+      return !(prompts.length > 1 && selectedPrompt && result.promptIdx !== selectedPromptIndex);
+    });
+
+    return summarizeSemanticFrontierDiagnosticsFromResults(selectedResults);
+  }, [evalData, selectedPromptIndex]);
 
   const availableCategories = useMemo(() => {
     return Object.keys(categoryStats).sort();
@@ -981,6 +1023,7 @@ const App = ({ evalId: evalIdProp, embedded, onActionsReady }: ReportProps = {})
             plugins={evalData.config.redteam.plugins || []}
             vulnerabilitiesDataGridRef={vulnerabilitiesDataGridRef}
           />
+          <SemanticFrontierDiagnostics diagnostics={semanticFrontierDiagnostics} />
           <StrategyStats
             strategyStats={hasActiveFilters ? filteredStrategyStats : strategyStats}
             failuresByPlugin={hasActiveFilters ? filteredFailuresByPlugin : failuresByPlugin}

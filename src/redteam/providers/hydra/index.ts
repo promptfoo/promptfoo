@@ -692,6 +692,7 @@ export class HydraProvider implements ApiProvider {
 
         if (traceId) {
           traceContext = await fetchTraceContext(traceId, {
+            requireComplete: tracingOptions.includeInGrading,
             abortSignal: options?.abortSignal,
             earliestStartTime: iterationStart,
             includeInternalSpans: tracingOptions.includeInternalSpans,

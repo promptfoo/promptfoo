@@ -753,9 +753,12 @@ export class CrescendoProvider implements ApiProvider {
         }
         logger.debug(`[Crescendo] Continuing to round ${roundNum + 1}`);
       } catch (error) {
-        // Re-throw abort errors to properly cancel the operation
-        if (error instanceof Error && error.name === 'AbortError') {
-          logger.debug('[Crescendo] Operation aborted');
+        // Stop the strategy when cancelled or when trace evidence is incomplete
+        if (
+          error instanceof Error &&
+          ['AbortError', 'TraceLimitError', 'TraceEvidenceError'].includes(error.name)
+        ) {
+          logger.debug('[Crescendo] Operation stopped');
           throw error;
         }
         if (isRemoteMaterializationUpgradeError(error)) {
@@ -1232,6 +1235,7 @@ export class CrescendoProvider implements ApiProvider {
 
       if (traceId) {
         const traceContext = await fetchTraceContext(traceId, {
+          requireComplete: tracingOptions.includeInGrading,
           abortSignal: options?.abortSignal,
           earliestStartTime: iterationStart,
           includeInternalSpans: tracingOptions.includeInternalSpans,

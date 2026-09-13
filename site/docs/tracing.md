@@ -226,6 +226,10 @@ After running an evaluation, view traces in the web UI:
 
 ### 4. Assert on Traced Workflows
 
+The shell injection grader uses recorded command outcomes to assess unauthorized mutations even with empty stdout. Generated destructive-mutation cases require execution evidence; see the [shell injection grading contract](/docs/red-team/plugins/shell-injection.md#evaluation-criteria).
+
+The SQL injection grader also uses captured trace summaries when `redteam.tracing.enabled` is `true`. A refusal alone does not pass when a trace is available; the grader checks the recorded actions alongside the response.
+
 Once traces are flowing into Promptfoo, you can evaluate what the agent actually did, not just the final answer:
 
 ```yaml
@@ -365,6 +369,10 @@ receiver's `host`, `port`, and `acceptFormats` are fixed at first startup, so a 
 evaluation can't change them; per-evaluation `redactAttributes` and `commandToolNames`, however,
 are tracked per trace so each evaluation's traces use its own policy.
 
+The HTTP receiver redacts stored text again when later uploads reveal a sensitive value. It keeps source history for the 1,024 most recently used traces, with at most 1,000 values or 16,384 characters per trace. If a trace resumes after its history was discarded, its free-text fields are hidden. Unrelated traces remain readable. Duplicate-span retries retain redaction history after receiver restarts, and large integer values remain exact before redaction. Ingestion limits each upload and stored trace to 10,000 spans and 10 MiB, including when attribute redaction is disabled. Duplicate retries do not count as new spans, and external updates replace the previous payload when calculating the stored limit. An oversized trace is marked incomplete and cannot be graded. Adaptive strategies stop with an error when trace collection is incomplete, including when no spans remain visible after filtering. The receiver rejects only that trace from a mixed batch and reports the rejected count. External snapshots are stored atomically, so a rejected snapshot leaves earlier evidence unchanged. Split larger workloads across traces. External response limits, including streamed and paginated responses, also mark the trace incomplete and stop grading. Braintrust queries request one extra record and Langfuse follows pagination through the end to detect traces exceeding 10,000 spans. Complete grading, filtered reads, and custom redaction fetch the full bounded snapshot before applying display limits. Unfiltered external reads forward `maxSpans` to the backend; Langfuse stops pagination once that limit is met.
+
+SQL and shell redteam grading report an error when a query, command, or tool identity is hidden by redaction, including secret markers in native tool receipts and values echoed from credential attributes. Native body sanitization also masks GitHub access tokens, including classic and fine-grained personal access tokens. Unrelated spans, including span names that echo credential attributes, remain redacted without preventing grading of readable SQL evidence.
+
 For traces created by an evaluation, Promptfoo stores the evaluation's redaction and
 `commandToolNames` policy with that trace so overlapping evaluations do not change one
 another's results — each trace is redacted with its own policy, not the active receiver's.
@@ -460,7 +468,9 @@ Use environment variables for tokens, passwords, and authentication headers. Pro
 
 Set `endpoint` to Tempo's base URL, such as `https://tempo.example.com/tempo`. The URL cannot contain credentials, query parameters, or fragments because Promptfoo appends its trace lookup path to that address. Put credentials under `auth` and tenant settings in `headers` instead.
 
-Your application must carry the `traceparent` header into its own traces so Promptfoo can find the right request. Attributes you list in `tracing.otlp.http.redactAttributes` are redacted before fetched traces are saved, including matching values echoed in span names or error messages. Common credential-shaped attributes are masked when traces are displayed or exported; add them to `redactAttributes` if they must also be kept out of local storage.
+Your application must carry the `traceparent` header into its own traces so Promptfoo can find the right request. Attributes you list in `tracing.otlp.http.redactAttributes` are redacted before fetched traces are saved, including matching values echoed in any span name or error message in the fetched trace. When a redacted value contains serialized JSON, those names and messages are hidden before storage. Common credential-shaped attributes are masked when traces are displayed or exported; add them to `redactAttributes` if they must also be kept out of local storage.
+
+For trace-aware assertions, external snapshots are polled until completed spans stop changing or the five-retry limit is reached. At that limit, grading uses the latest successful snapshot, including when later polls return no spans or encounter temporary backend errors; increase `queryDelay` if your backend takes longer to ingest a trace.
 
 #### Braintrust
 
@@ -912,6 +922,13 @@ redteam:
 Span names come from your application's instrumentation, so choose patterns that match the
 names in your traces. An explicit filter can also include an operation that Promptfoo would
 otherwise leave out.
+
+Native MCP tool calls can supply the same query-only summary without tracing. Generic `sql` and `query` arguments must contain SQL-shaped text unless they belong to a recognized query tool; connection data is omitted.
+
+SQL and shell injection trace grading require `redteam.tracing.enabled: true` and honor `includeInGrading`. Shell grading combines captured spans with native tool calls, including nested `function.name` and `function.arguments` envelopes, and uses `tracing.commandToolNames` to recognize custom command tools. A generic `execute` dispatcher counts as a shell tool only when its arguments contain `cmd`, `command`, or `commands`, unless explicitly listed in `commandToolNames`. Matching native and traced call IDs count once, including supported result aliases. Incomplete calls retain their error or unknown outcome. Destructive-mutation cases require a command step; unrelated model spans do not establish execution evidence. Root tracing alone does not send query evidence to the grader. Its trace summary includes tool names,
+status codes, query text, and explicit authorization and row-count outcomes when available. All SQL and shell operations must fit within the 24-step evidence limit. Unrelated spans fill the remaining space and can be omitted. Other span and tool names are shortened to 400 characters. It omits
+free-form status messages, bound parameter values, and returned rows. Explicit `sql` tool arguments
+and `read_query` calls with string or object arguments count as database evidence; ordinary search queries do not. Query text honors `tracing.otlp.http.redactAttributes`, including values echoed in other spans' names, tool names, and SQL queries. For example, a `query` pattern removes query text from the grading summary. When nested attributes exceed the redaction limit or a redacted attribute contains serialized JSON, the summary hides derived names and query text. Grading returns an error if any query exceeds 400 characters after redaction or if more than 24 SQL queries are present. Adaptive strategies also stop on hidden or omitted SQL evidence. Later external snapshots update query text and execution outcomes when spans complete. Local SQL and shell assertion grading waits through the configured trace collection window instead of ending after two unchanged span counts. The default is six reads at 250 ms intervals; `PROMPTFOO_TRACE_FETCH_MAX_ATTEMPTS` and `PROMPTFOO_TRACE_FETCH_RETRY_DELAY_MS` control that bounded window. Adaptive grading polls local and external traces through its bounded collection window, including when early snapshots are unchanged; `maxRetries` and `retryDelayMs` control those reads.
 
 ### Strategy-Specific Configuration
 

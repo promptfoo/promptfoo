@@ -15,7 +15,19 @@ import {
   PROMPTFOO_RESOURCE_ATTR_PARENT_SPAN_ID,
   PROMPTFOO_RESOURCE_ATTR_TRACE_ID,
 } from './resourceAttributes';
-import { getTraceStore, type ParsedTrace, type SpanData, type TraceStore } from './store';
+import {
+  clearTraceTextRedactionState,
+  getTraceTextRedactionState,
+  getTraceTextRedactor,
+  sanitizeTraceAttributes,
+} from './sanitizeAttributes';
+import {
+  getTraceStore,
+  type ParsedTrace,
+  type SpanData,
+  TraceLimitError,
+  type TraceStore,
+} from './store';
 
 interface OTLPAttribute {
   key: string;
@@ -317,32 +329,6 @@ export class OTLPReceiver {
     }
   }
 
-  private shouldRedactAttribute(key: string, redactAttributePatterns: string[]): boolean {
-    if (redactAttributePatterns.length === 0) {
-      return false;
-    }
-    const lowered = key.toLowerCase();
-    return redactAttributePatterns.some((pattern) => lowered.includes(pattern));
-  }
-
-  private redactAttributeValue(value: unknown, redactAttributePatterns: string[]): unknown {
-    if (Array.isArray(value)) {
-      return value.map((item) => this.redactAttributeValue(item, redactAttributePatterns));
-    }
-    if (!value || typeof value !== 'object') {
-      return value;
-    }
-
-    return Object.fromEntries(
-      Object.entries(value).map(([key, nestedValue]) => [
-        key,
-        this.shouldRedactAttribute(key, redactAttributePatterns)
-          ? '[REDACTED]'
-          : this.redactAttributeValue(nestedValue, redactAttributePatterns),
-      ]),
-    );
-  }
-
   redactAttributes(
     attributes: Record<string, unknown> | undefined,
     redactAttributePatterns = this.redactAttributePatterns,
@@ -350,41 +336,40 @@ export class OTLPReceiver {
     if (!attributes || redactAttributePatterns.length === 0) {
       return attributes ?? {};
     }
-    const redacted: Record<string, unknown> = {};
-    for (const [key, value] of Object.entries(attributes)) {
-      redacted[key] = this.shouldRedactAttribute(key, redactAttributePatterns)
-        ? '[REDACTED]'
-        : this.redactAttributeValue(value, redactAttributePatterns);
-    }
-    return redacted;
+    return sanitizeTraceAttributes(attributes, {
+      redactAttributes: redactAttributePatterns,
+      sanitizeSensitiveAttributes: false,
+      truncateValues: false,
+    });
   }
 
-  private redactSpan(span: SpanData, redactAttributePatterns: string[]): SpanData {
-    if (redactAttributePatterns.length === 0) {
-      return span;
-    }
-    const attributes = span.attributes ?? {};
-    // Collect the values of attributes whose KEY will be redacted. A span `name` or
-    // `statusMessage` that echoes one of those values (e.g. an exporter copies a redacted
-    // attribute such as `otel.log.body` or `event.name` into the span name, or echoes a
-    // credential into an error message) must be scrubbed too — otherwise the secret leaks
-    // through a span field the operator believes `redactAttributes` covers.
-    const redactedSourceValues = new Set<string>();
-    for (const [key, value] of Object.entries(attributes)) {
-      if (typeof value === 'string' && this.shouldRedactAttribute(key, redactAttributePatterns)) {
-        redactedSourceValues.add(value);
-      }
-    }
-    // `redactedSourceValues` only holds strings, so an undefined statusMessage passes through.
-    const scrubEcho = <T extends string | undefined>(value: T): T =>
-      typeof value === 'string' && redactedSourceValues.has(value) ? ('[REDACTED]' as T) : value;
-
-    return {
+  private redactSpans(
+    spans: SpanData[],
+    redactAttributePatterns: string[],
+    traceId?: string,
+  ): SpanData[] {
+    const sanitized = spans.map((span) => ({
       ...span,
-      name: scrubEcho(span.name),
-      statusMessage: scrubEcho(span.statusMessage),
-      attributes: this.redactAttributes(attributes, redactAttributePatterns),
-    };
+      attributes: this.redactAttributes(span.attributes, redactAttributePatterns),
+    }));
+    const redactText = getTraceTextRedactor(
+      spans.map((span, index) => ({
+        original: span.attributes,
+        sanitized: sanitized[index].attributes,
+      })),
+      '[REDACTED]',
+      getTraceTextRedactionState(this.traceStore, traceId, spans),
+    );
+    return sanitized.map((span) => ({
+      ...span,
+      name: redactText(span.name),
+      statusMessage: redactText(span.statusMessage),
+      attributes: sanitizeTraceAttributes(span.attributes, {
+        sanitizeSensitiveAttributes: false,
+        truncateValues: false,
+        redactText,
+      }),
+    }));
   }
 
   private setupMiddleware(): void {
@@ -472,10 +457,12 @@ export class OTLPReceiver {
       try {
         const traces = await this.parseIncomingRequest(format, req.body);
         logger.debug(`[OtlpReceiver] Parsed ${traces.length} traces from request`);
-        await this.persistTraces(this.groupTraces(traces));
-
-        // OTLP success response
-        res.status(200).json({ partialSuccess: {} });
+        const rejectedSpans = await this.persistTraces(this.groupTraces(traces));
+        res.status(200).json({
+          partialSuccess: rejectedSpans
+            ? { rejectedSpans, errorMessage: 'Per-trace limit exceeded' }
+            : {},
+        });
         logger.debug('[OtlpReceiver] Successfully processed traces');
       } catch (error) {
         this.handleProcessingError(error, res);
@@ -490,10 +477,14 @@ export class OTLPReceiver {
       try {
         const traces = this.parseOTLPLogsJSONRequest(req.body as OTLPLogsRequest);
         logger.debug(`[OtlpReceiver] Parsed ${traces.length} logs into span records`);
-        if (traces.length > 0) {
-          await this.persistTraces(this.groupTraces(traces));
-        }
-        res.status(200).json({ partialSuccess: {} });
+        const rejectedLogRecords = traces.length
+          ? await this.persistTraces(this.groupTraces(traces))
+          : 0;
+        res.status(200).json({
+          partialSuccess: rejectedLogRecords
+            ? { rejectedLogRecords, errorMessage: 'Per-trace limit exceeded' }
+            : {},
+        });
       } catch (error) {
         this.handleProcessingError(error, res);
       }
@@ -584,9 +575,9 @@ export class OTLPReceiver {
     traceInfoById.set(trace.traceId, info);
   }
 
-  private async persistTraces({ spansByTrace, traceInfoById }: GroupedTraces): Promise<void> {
+  private async persistTraces({ spansByTrace, traceInfoById }: GroupedTraces): Promise<number> {
     await this.createTraceRecords(traceInfoById);
-    await this.storeSpans(spansByTrace, traceInfoById);
+    return this.storeSpans(spansByTrace, traceInfoById);
   }
 
   private async createTraceRecords(traceInfoById: Map<string, TraceInfo>): Promise<void> {
@@ -631,22 +622,31 @@ export class OTLPReceiver {
   private async storeSpans(
     spansByTrace: Map<string, SpanData[]>,
     traceInfoById: Map<string, TraceInfo>,
-  ): Promise<void> {
+  ): Promise<number> {
+    let rejected = 0;
     for (const [traceId, spans] of spansByTrace) {
       logger.debug(`[OtlpReceiver] Storing ${spans.length} spans for trace ${traceId}`);
       const redactAttributePatterns = await this.getRedactAttributePatterns(
         traceId,
         traceInfoById.get(traceId),
       );
-      const sanitized =
-        redactAttributePatterns.length > 0
-          ? spans.map((span) => this.redactSpan(span, redactAttributePatterns))
-          : spans;
-      await this.traceStore.addSpans(traceId, sanitized, {
-        skipTraceCheck: false,
-        warnIfMissingTrace: false,
-      });
+      try {
+        await this.traceStore.addSpans(traceId, spans, {
+          skipTraceCheck: false,
+          warnIfMissingTrace: false,
+          ...(redactAttributePatterns.length > 0 && {
+            redactSpans: (allSpans: SpanData[]) =>
+              this.redactSpans(allSpans, redactAttributePatterns, traceId),
+          }),
+        });
+      } catch (error) {
+        if (!(error instanceof TraceLimitError)) {
+          throw error;
+        }
+        rejected += spans.length;
+      }
     }
+    return rejected;
   }
 
   private async getRedactAttributePatterns(traceId: string, info?: TraceInfo): Promise<string[]> {
@@ -933,7 +933,8 @@ export class OTLPReceiver {
       return value.stringValue;
     }
     if (value.intValue !== undefined) {
-      return typeof value.intValue === 'number' ? value.intValue : Number(value.intValue);
+      const number = Number(value.intValue);
+      return Number.isSafeInteger(number) ? number : String(value.intValue);
     }
     if (value.doubleValue !== undefined) {
       return value.doubleValue;
@@ -979,7 +980,8 @@ export class OTLPReceiver {
       return value.stringValue;
     }
     if (value.intValue !== undefined) {
-      return Number(value.intValue);
+      const number = Number(value.intValue);
+      return Number.isSafeInteger(number) ? number : String(value.intValue);
     }
     if (value.doubleValue !== undefined) {
       return value.doubleValue;
@@ -1073,6 +1075,7 @@ export class OTLPReceiver {
 
   stop(): Promise<void> {
     logger.debug('[OtlpReceiver] Stopping receiver');
+    clearTraceTextRedactionState(this.traceStore);
     return new Promise((resolve) => {
       if (this.server) {
         this.server.close(() => {

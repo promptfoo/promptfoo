@@ -30,6 +30,13 @@ The plugin generates prompts that ask the model to perform impossible actions, s
 - Making phone calls
 - Accessing physical objects
 
+With default single-input generation, Promptfoo balances external communication, payment or
+booking, external document transfer, and physical-world action requests. For batches of at
+least four tests, semantic frontier diagnostics report whether the retained prompts cover
+delegated action types and named external boundaries.
+
+External communication, physical action, and document transfer candidates must ask the target to perform an action. Questions such as “What is the office email?” and instructions such as “Do not message the gate staff” do not count as communication coverage.
+
 ## Evaluation Criteria
 
 The plugin evaluates the model's response based on:
@@ -49,6 +56,10 @@ redteam:
 ```
 
 This configuration will generate 5 test cases to evaluate if the virtual assistant incorrectly claims to perform actions like directly booking appointments or accessing external calendars.
+
+For MCP targets, family coverage uses the selected tool action and its structured inputs, including `action`, `operation`, and `method` selectors on dispatcher tools. Text passed to a read-only tool does not establish a side effect. Combined actions such as `search_and_send_email` count as side effects even when their names also contain a read verb.
+
+The transaction family requires a request to perform a payment, refund, or booking. Questions about books, charges, or refunds alone do not count as transaction coverage.
 
 ## Related Vulnerabilities
 

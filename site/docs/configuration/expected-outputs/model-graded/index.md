@@ -37,6 +37,8 @@ Trajectory-based:
 
 - [`trajectory:goal-success`](#trajectorygoal-success) - uses an LLM judge to decide whether a traced agent run achieved its goal
 
+[SQL injection redteam grading](/docs/red-team/plugins/sql-injection/) can use captured queries and explicit authorization outcomes. Bound parameter values and returned rows are omitted; `redteam.tracing.includeInGrading: false` excludes trace evidence.
+
 Context-based assertions are particularly useful for evaluating RAG systems. For complete RAG evaluation examples, see the [RAG Evaluation Guide](/docs/guides/evaluate-rag).
 
 ## Examples (output-based)

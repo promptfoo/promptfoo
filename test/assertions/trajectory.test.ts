@@ -522,6 +522,352 @@ describe('trajectory utilities', () => {
     expect(steps.map((step) => step.name)).toEqual(['compose_reply', 'search_orders', 'finalize']);
   });
 
+  it.each([
+    ['run_query', { sql: 'SELECT id FROM accounts' }],
+    ['read_query', { query: 'SELECT id FROM accounts' }],
+    ['read_query', 'SELECT id FROM accounts'],
+  ])('retains SQL from %s tool arguments', (name, args) => {
+    const summary = JSON.parse(
+      summarizeTrajectoryForJudge(
+        {
+          ...mockTraceData,
+          spans: [
+            {
+              spanId: 'sql',
+              name: 'tool.call',
+              startTime: 1,
+              attributes: {
+                'tool.name': name,
+                'tool.arguments': args,
+              },
+            },
+          ],
+        },
+        { includeSql: true },
+      ),
+    );
+    expect(summary.steps[0].sql).toEqual({ query: 'SELECT id FROM accounts' });
+  });
+
+  it.each([
+    'postgresql://user:private-password@host/private',
+    { sql: 'postgresql://user:private-password@host/private' },
+    JSON.stringify({ sql: 'postgresql://user:private-password@host/private' }),
+    { query: 'postgresql://user:private-password@host/private' },
+    JSON.stringify({ query: 'postgresql://user:private-password@host/private' }),
+  ])('keeps database connection data out of SQL evidence: %j', (args) => {
+    const summary = JSON.parse(
+      summarizeTrajectoryForJudge(
+        {
+          ...mockTraceData,
+          spans: [
+            {
+              spanId: 'connection',
+              name: 'tool.call',
+              startTime: 1,
+              attributes: {
+                'tool.name': 'database',
+                'tool.arguments': args,
+              },
+            },
+          ],
+        },
+        { includeSql: true },
+      ),
+    );
+    expect(summary.steps.every((step: { sql?: unknown }) => !step.sql)).toBe(true);
+    expect(JSON.stringify(summary)).not.toContain('private-password');
+  });
+
+  it.each(['gen_ai.tool.call.result', 'ai.toolCall.result'])(
+    'retains normalized SQL outcomes from %s',
+    (key) => {
+      const summary = JSON.parse(
+        summarizeTrajectoryForJudge(
+          {
+            ...mockTraceData,
+            spans: [
+              {
+                spanId: 'sql',
+                name: 'tool.call',
+                startTime: 1,
+                attributes: {
+                  'tool.name': 'read_query',
+                  'tool.arguments': { query: 'SELECT id FROM accounts' },
+                  [key]: JSON.stringify({
+                    authorized: false,
+                    rowCount: 8,
+                    rows: ['PRIVATE_SQL_ROW'],
+                  }),
+                },
+              },
+            ],
+          },
+          { includeSql: true },
+        ),
+      );
+      expect(summary.steps[0].sql).toEqual({
+        query: 'SELECT id FROM accounts',
+        authorized: false,
+        rowCount: 8,
+      });
+      expect(JSON.stringify(summary)).not.toContain('PRIVATE_SQL_ROW');
+    },
+  );
+
+  it.each(['db.statement', 'authorization'])('redacts %s echoes from SQL span names', (key) => {
+    const secret = 'PRIVATE_QUERY_IN_SPAN_NAME';
+    const summarize = () =>
+      summarizeTrajectoryForJudge(
+        {
+          ...mockTraceData,
+          spans: [
+            {
+              spanId: 'sql',
+              name: `sql ${secret}`,
+              startTime: 1,
+              attributes: { 'tool.name': 'run_query', 'db.statement': 'SELECT 1', [key]: secret },
+            },
+          ],
+        },
+        { includeSql: true, redactAttributes: [key] },
+      );
+    if (key === 'db.statement') {
+      expect(summarize).toThrow('SQL trace evidence was redacted');
+    } else {
+      expect(summarize()).not.toContain(secret);
+    }
+  });
+
+  it('redacts protected values echoed by a different span', () => {
+    const secret = 'PRIVATE_CROSS_SPAN_SQL_RESULT';
+    const summary = summarizeTrajectoryForJudge(
+      {
+        ...mockTraceData,
+        spans: [
+          {
+            spanId: 'source',
+            name: 'sql',
+            startTime: 1,
+            attributes: {
+              'tool.name': 'run_query',
+              'db.statement': 'SELECT 1',
+              'tool.output': secret,
+            },
+          },
+          {
+            spanId: 'echo',
+            name: `process ${secret}`,
+            startTime: 2,
+            attributes: { 'tool.name': 'run_query', 'db.statement': 'SELECT 1' },
+          },
+        ],
+      },
+      { includeSql: true, redactAttributes: ['tool.output'] },
+    );
+    expect(summary).not.toContain(secret);
+    expect(summary).toContain('run_query');
+  });
+
+  it.each(['tool.name', 'command', 'search.query'])(
+    'redacts protected values echoed through %s before grading',
+    (key) => {
+      const secret = 'PRIVATE_SQL_SEMANTIC_ECHO';
+      const summarize = () =>
+        summarizeTrajectoryForJudge(
+          {
+            ...mockTraceData,
+            spans: [
+              {
+                spanId: 'source',
+                name: 'source',
+                startTime: 1,
+                attributes: { authorization: secret },
+              },
+              {
+                spanId: 'echo',
+                name: 'tool.call',
+                startTime: 2,
+                attributes: {
+                  ...(['db.statement', 'tool.arguments'].includes(key) && {
+                    'tool.name': 'run_query',
+                  }),
+                  [key]: `SELECT '${secret}'`,
+                },
+              },
+            ],
+          },
+          { includeSql: true },
+        );
+      expect(summarize()).not.toContain(secret);
+      expect(summarize()).toContain('[REDACTED]');
+    },
+  );
+
+  it.each(['db.statement', 'tool.arguments'])(
+    'rejects partially redacted SQL from %s before truncating it',
+    (key) => {
+      const secret = 'PRIVATE_QUERY_AT_TRUNCATION_BOUNDARY';
+      const query = `SELECT id FROM accounts WHERE note = '${'x'.repeat(145)}${secret}${'y'.repeat(500)}' OR 1=1`;
+      expect(() =>
+        summarizeTrajectoryForJudge(
+          {
+            ...mockTraceData,
+            spans: [
+              {
+                spanId: 'source',
+                name: 'source',
+                startTime: 1,
+                attributes: { authorization: secret },
+              },
+              {
+                spanId: 'sql',
+                name: 'tool.call',
+                startTime: 2,
+                attributes: {
+                  'tool.name': 'run_query',
+                  [key]: key === 'tool.arguments' ? { sql: query } : query,
+                },
+              },
+            ],
+          },
+          { includeSql: true },
+        ),
+      ).toThrow('SQL trace evidence was redacted');
+    },
+  );
+
+  it('rejects SQL whose middle would be omitted from the judge summary', () => {
+    const query = `SELECT id FROM accounts WHERE note = '${'x'.repeat(400)}' OR 1=1 ${' '.repeat(400)}`;
+    expect(() =>
+      summarizeTrajectoryForJudge(
+        {
+          ...mockTraceData,
+          spans: [
+            {
+              spanId: 'sql',
+              name: 'tool.call',
+              startTime: 1,
+              attributes: { 'db.statement': query },
+            },
+          ],
+        },
+        { includeSql: true },
+      ),
+    ).toThrow('SQL trace evidence exceeds');
+  });
+
+  it('omits SQL span names when redaction traversal is incomplete', () => {
+    const secret = 'PRIVATE_DEEP_SQL_NAME';
+    let nested: Record<string, unknown> = { authorization: secret };
+    for (let depth = 0; depth < 25; depth++) {
+      nested = { nested };
+    }
+    const summarize = () =>
+      summarizeTrajectoryForJudge(
+        {
+          ...mockTraceData,
+          spans: [
+            {
+              spanId: 'sql',
+              name: `sql ${secret}`,
+              startTime: 1,
+              attributes: { 'tool.name': 'run_query', ...nested },
+            },
+          ],
+        },
+        { includeSql: true, redactAttributes: ['authorization'] },
+      );
+    expect(summarize).toThrow('SQL trace evidence was redacted');
+  });
+
+  it('omits decoded private JSON values echoed in SQL span names', () => {
+    const secret = 'PRIVATE_JSON_QUERY_RESULT';
+    const summarize = () =>
+      summarizeTrajectoryForJudge(
+        {
+          ...mockTraceData,
+          spans: [
+            {
+              spanId: 'sql',
+              name: `sql returned ${secret}`,
+              startTime: 1,
+              attributes: {
+                'tool.name': 'run_query',
+                'tool.output': JSON.stringify({ rows: [secret] }),
+              },
+            },
+          ],
+        },
+        { includeSql: true, redactAttributes: ['tool.output'] },
+      );
+    expect(summarize).toThrow('SQL trace evidence was redacted');
+  });
+
+  it('omits free-form status messages from model grading', () => {
+    const summary = summarizeTrajectoryForJudge({
+      ...mockTraceData,
+      spans: [
+        {
+          spanId: 'query',
+          name: 'tool.call',
+          startTime: 1,
+          statusCode: 2,
+          statusMessage: 'Database failed for SYNTHETIC_PRIVATE_RECORD',
+          attributes: { 'tool.name': 'read_query' },
+        },
+      ],
+    });
+    expect(summary).not.toContain('SYNTHETIC_PRIVATE_RECORD');
+    expect(JSON.parse(summary).steps[0].status).toEqual({ code: 2 });
+  });
+
+  it('does not label search query arguments as SQL execution', () => {
+    const summary = JSON.parse(
+      summarizeTrajectoryForJudge(
+        {
+          ...mockTraceData,
+          spans: [
+            {
+              spanId: 'search',
+              name: 'tool.call',
+              startTime: 1,
+              attributes: {
+                'tool.name': 'search_documents',
+                'tool.arguments': { query: 'refund policy' },
+              },
+            },
+          ],
+        },
+        { includeSql: true },
+      ),
+    );
+    expect(summary.steps).toHaveLength(1);
+    expect(summary.steps[0]).not.toHaveProperty('sql');
+  });
+
+  it('redacts tool arguments before deriving command names for the judge', () => {
+    const summary = summarizeTrajectoryForJudge(
+      {
+        ...mockTraceData,
+        spans: [
+          {
+            spanId: 'command',
+            name: 'tool.call',
+            startTime: 1,
+            attributes: {
+              'tool.name': 'exec_command',
+              'tool.arguments': { command: 'echo private-credential' },
+            },
+          },
+        ],
+      },
+      { includeSql: true, redactAttributes: ['tool.arguments'] },
+    );
+    expect(summary).not.toContain('private-credential');
+    expect(JSON.parse(summary).steps).toHaveLength(1);
+  });
+
   it('compacts repeated steps and truncates long judge summaries', () => {
     const trace = {
       ...mockTraceData,
@@ -578,6 +924,112 @@ describe('trajectory utilities', () => {
       type: 'tool',
       name: 'tool_25',
     });
+  });
+
+  it.each([24, 25, 40])(
+    'retains all SQL or rejects the summary when it exceeds the budget: %s',
+    (count) => {
+      const spans = Array.from({ length: count }, (_, index) => ({
+        spanId: `sql-${index}`,
+        name: 'sql.query',
+        startTime: index,
+        attributes: {
+          'db.query.text':
+            index === 12
+              ? 'SELECT * FROM accounts WHERE id=1 OR 1=1'
+              : `SELECT * FROM account_${index}`,
+        },
+      }));
+      const summarize = () =>
+        summarizeTrajectoryForJudge({ ...mockTraceData, spans }, { includeSql: true });
+      if (count > 24) {
+        expect(summarize).toThrow('SQL trace evidence exceeds');
+        return;
+      }
+      const summary = JSON.parse(summarize());
+      expect(summary.steps).toHaveLength(count);
+      expect(summary.steps[12].sql.query).toContain('OR 1=1');
+    },
+  );
+
+  it.each([24, 25, 80])('retains a shell command among %s unrelated spans', (count) => {
+    const spans = Array.from({ length: count }, (_, index) => ({
+      spanId: `model-${index}`,
+      name: `model request ${index}`,
+      startTime: index,
+    }));
+    const summary = JSON.parse(
+      summarizeTrajectoryForJudge(
+        {
+          ...mockTraceData,
+          spans: [
+            ...spans,
+            {
+              spanId: 'command',
+              name: 'tool exec_command',
+              startTime: 12.5,
+              attributes: { 'tool.name': 'exec_command', 'tool.arguments': { cmd: 'cat .env' } },
+            },
+          ],
+        },
+        { includeCommands: true },
+      ),
+    );
+    expect(summary.steps).toContainEqual(
+      expect.objectContaining({ type: 'command', name: 'cat .env', execution: {} }),
+    );
+    expect(summary.steps.filter((step: { index?: number }) => step.index)).toHaveLength(24);
+  });
+
+  it.each([{}, { includeSql: true }, { includeCommands: true }])(
+    'bounds every emitted name with %j',
+    (options) => {
+      const name = 'tool description '.repeat(65_536);
+      const output = summarizeTrajectoryForJudge(
+        {
+          ...mockTraceData,
+          spans: [
+            {
+              spanId: 'long-tool',
+              name,
+              startTime: 1,
+              attributes: { 'tool.name': `${name} tool` },
+            },
+          ],
+        },
+        options,
+      );
+      const summary = JSON.parse(output);
+      expect(summary.steps).toHaveLength(1);
+      expect(summary.steps[0].name.length).toBeLessThanOrEqual(400);
+      expect(summary.steps[0].spanName.length).toBeLessThanOrEqual(400);
+      expect(output.length).toBeLessThan(1_500);
+    },
+  );
+
+  it('retains SQL execution between routine steps in a long trajectory', () => {
+    const spans = Array.from({ length: 40 }, (_, index) => ({
+      spanId: `step-${index}`,
+      name: `tool-${index}`,
+      startTime: index,
+      attributes:
+        index === 20
+          ? {
+              'db.query.text': 'SELECT * FROM accounts',
+              'tool.output': { authorized: false, rowCount: 10 },
+            }
+          : {},
+    }));
+    const summary = JSON.parse(
+      summarizeTrajectoryForJudge({ ...mockTraceData, spans }, { includeSql: true }),
+    );
+    expect(summary.steps).toContainEqual(
+      expect.objectContaining({
+        index: 21,
+        sql: { query: 'SELECT * FROM accounts', authorized: false, rowCount: 10 },
+      }),
+    );
+    expect(summary.steps.filter((step: { index?: number }) => step.index)).toHaveLength(24);
   });
 });
 

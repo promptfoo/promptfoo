@@ -21,6 +21,7 @@ export interface RedteamTracingOptions {
   queryDelay?: number;
   /** Evaluation-level attributes that must be redacted before span persistence. */
   redactAttributes?: string[];
+  commandToolNames?: string[];
 }
 
 export type RawTracingConfig = Partial<
@@ -68,6 +69,7 @@ function normalizeTracingOptions(
   rootTracingConfig?: {
     provider?: TraceProviderConfig;
     queryDelay?: number;
+    commandToolNames?: string[];
     otlp?: { http?: { redactAttributes?: string[] } };
   },
 ): RedteamTracingOptions {
@@ -89,6 +91,7 @@ function normalizeTracingOptions(
     provider: rootTracingConfig?.provider,
     queryDelay: rootTracingConfig?.queryDelay ?? DEFAULT_QUERY_DELAY,
     redactAttributes: rootTracingConfig?.otlp?.http?.redactAttributes,
+    commandToolNames: rootTracingConfig?.commandToolNames,
   };
 }
 
@@ -103,7 +106,9 @@ export function resolveTracingOptions({
 }): RedteamTracingOptions {
   // Read redteam-specific tracing config
   const redteamConfig = cliState.config?.redteam as Record<string, unknown> | undefined;
-  const globalConfig = (redteamConfig?.tracing as RawTracingConfig | undefined) ?? undefined;
+  const globalConfig = (cliState.requestRedteamTracingConfig ?? redteamConfig?.tracing) as
+    | RawTracingConfig
+    | undefined;
   const testConfig = (test?.metadata?.tracing as RawTracingConfig | undefined) ?? undefined;
   const metadataStrategyConfig = (
     test?.metadata?.strategyConfig as Record<string, unknown> | undefined
@@ -139,6 +144,7 @@ export function resolveTracingOptions({
     | {
         provider?: TraceProviderConfig;
         queryDelay?: number;
+        commandToolNames?: string[];
         otlp?: { http?: { redactAttributes?: string[] } };
       }
     | undefined;

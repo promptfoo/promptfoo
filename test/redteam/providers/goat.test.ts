@@ -6,6 +6,7 @@ import { afterEach, beforeEach, describe, expect, it, type Mock, vi } from 'vite
 import RedteamGoatProvider from '../../../src/redteam/providers/goat';
 import * as redteamProviderShared from '../../../src/redteam/providers/shared';
 import { getRemoteGenerationUrl } from '../../../src/redteam/remoteGeneration';
+import { TraceLimitError } from '../../../src/tracing/store';
 import * as traceContext from '../../../src/tracing/traceContext';
 import { createMockProvider } from '../../factories/provider';
 
@@ -196,6 +197,34 @@ describe('RedteamGoatProvider', () => {
 
       expect(targetProvider.callApi).toHaveBeenCalledOnce();
       expect(fetchTraceContextSpy).not.toHaveBeenCalled();
+    } finally {
+      fetchTraceContextSpy.mockRestore();
+    }
+  });
+
+  it.each([
+    new TraceLimitError(),
+    Object.assign(new Error('SQL trace evidence was filtered'), { name: 'TraceEvidenceError' }),
+  ])('stops GOAT when trace evidence is incomplete: %s', async (error) => {
+    const provider = new RedteamGoatProvider({
+      injectVar: 'goal',
+      maxTurns: 2,
+      tracing: { enabled: true },
+    });
+    const targetProvider = createMockTargetProvider('clean fallback response');
+    const context = {
+      ...createMockContext(targetProvider),
+      traceparent: '00-0123456789abcdef0123456789abcdef-0123456789abcdef-01',
+    };
+    const fetchTraceContextSpy = vi
+      .spyOn(traceContext, 'fetchTraceContext')
+      .mockRejectedValue(error);
+
+    try {
+      await expect(provider.callApi('test prompt', context)).rejects.toThrow(error);
+
+      expect(targetProvider.callApi).toHaveBeenCalledOnce();
+      expect(fetchTraceContextSpy).toHaveBeenCalledOnce();
     } finally {
       fetchTraceContextSpy.mockRestore();
     }

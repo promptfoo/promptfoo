@@ -2,7 +2,10 @@ import * as path from 'path';
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { assertionUsesTrace, runAssertion, runAssertions } from '../../src/assertions/index';
+import { handleRedteam } from '../../src/assertions/redteam';
 import cliState from '../../src/cliState';
+import { RedteamGraderBase } from '../../src/redteam/plugins/base';
+import * as indirectWebPwn from '../../src/redteam/strategies/indirectWebPwn';
 import { withProviderCallTracingContext } from '../../src/scheduler/providerCallExecutionContext';
 import { getTraceStore } from '../../src/tracing/store';
 import { mockProcessEnv } from '../util/utils';
@@ -61,6 +64,7 @@ vi.mock('../../src/python/wrapper', () => ({
 
 describe('trace assertions', () => {
   const originalBasePath = cliState.basePath;
+  const originalConfig = cliState.config;
   const originalTraceFetchEnv = {
     PROMPTFOO_TRACE_FETCH_MAX_ATTEMPTS: process.env.PROMPTFOO_TRACE_FETCH_MAX_ATTEMPTS,
     PROMPTFOO_TRACE_FETCH_RETRY_DELAY_MS: process.env.PROMPTFOO_TRACE_FETCH_RETRY_DELAY_MS,
@@ -93,8 +97,10 @@ describe('trace assertions', () => {
 
   afterEach(() => {
     cliState.basePath = originalBasePath;
+    cliState.config = originalConfig;
     restoreTraceFetchEnv();
     vi.resetAllMocks();
+    vi.restoreAllMocks();
     vi.useRealTimers();
   });
 
@@ -130,6 +136,372 @@ describe('trace assertions', () => {
       },
     ],
   };
+
+  it.each(['javascript', 'not-javascript', 'promptfoo:redteam:sql-injection'] as const)(
+    'rejects incomplete trace evidence for %s',
+    async (type) => {
+      await expect(
+        runAssertion({
+          assertion: { type, value: 'true' },
+          test: { ...mockTest, metadata: { tracing: { enabled: true } } },
+          providerResponse: mockProviderResponse,
+          traceId: 'test-trace-id',
+          traceData: { ...mockTraceData, metadata: { promptfooTraceIncomplete: 'limit exceeded' } },
+        }),
+      ).rejects.toThrow('Cannot grade incomplete trace');
+    },
+  );
+
+  it.each(['explicit', 'provider-url', 'test-url'])(
+    'preserves SQL trace evidence when adding exfil tracking from %s',
+    async (source) => {
+      const tracking = { wasExfiltrated: true, exfilCount: 1, exfilRecords: [] };
+      const check = vi.spyOn(indirectWebPwn, 'checkExfilTracking').mockResolvedValue(tracking);
+      const grade = vi.spyOn(RedteamGraderBase.prototype, 'getResult').mockResolvedValue({
+        grade: { pass: false, score: 0, reason: 'Observed execution' },
+        rubric: 'Fixture rubric',
+      });
+      await runAssertion({
+        assertion: { type: 'promptfoo:redteam:sql-injection' },
+        prompt: 'Perform the requested action.',
+        test: {
+          metadata: {
+            tracing: { enabled: true },
+            webPageUuid: 'page',
+            ...(source === 'explicit'
+              ? { evaluationId: 'eval-id' }
+              : source === 'test-url'
+                ? { webPageUrl: 'https://example.test/dynamic-pages/eval-id/page' }
+                : {}),
+          },
+        },
+        providerResponse: {
+          ...mockProviderResponse,
+          metadata:
+            source === 'provider-url'
+              ? {
+                  webPageUuid: 'page',
+                  webPageUrl: 'https://example.test/dynamic-pages/eval-id/page',
+                }
+              : {},
+        },
+        traceId: mockTraceData.traceId,
+        traceData: mockTraceData,
+      });
+      expect(check).toHaveBeenCalledWith('page', 'eval-id');
+      expect(grade.mock.calls[0]?.[7]).toMatchObject({
+        ...tracking,
+        traceData: mockTraceData,
+        traceSummary: expect.stringContaining('http.request'),
+      });
+    },
+  );
+
+  it.each(['sql-injection', 'shell-injection'] as const)(
+    'passes captured trace evidence to the %s grader',
+    async (plugin) => {
+      mockTraceStore.getTrace.mockResolvedValue(mockTraceData);
+      const grade = vi.spyOn(RedteamGraderBase.prototype, 'getResult').mockResolvedValue({
+        grade: { pass: true, score: 1, reason: 'Fixture verdict' },
+        rubric: 'Fixture rubric',
+      });
+
+      await runAssertion({
+        assertion: { type: `promptfoo:redteam:${plugin}` },
+        prompt: 'Perform the requested action.',
+        test: { metadata: { purpose: 'Fixture assistant', tracing: { enabled: true } } },
+        providerResponse: mockProviderResponse,
+        traceId: 'test-trace-id',
+      });
+
+      expect(grade).toHaveBeenCalledOnce();
+      expect(grade.mock.calls[0]?.[7]).toMatchObject({
+        traceData: mockTraceData,
+        traceSummary: expect.stringContaining('http.request'),
+      });
+    },
+  );
+
+  it.each(
+    (['sql-injection', 'shell-injection'] as const).flatMap((plugin) =>
+      ['single', 'set', 'batch'].map((mode) => ({ plugin, mode })),
+    ),
+  )(
+    'collects delayed local execution spans across the bounded window ($plugin/$mode)',
+    async ({ plugin, mode }) => {
+      mockProcessEnv({
+        PROMPTFOO_TRACE_FETCH_MAX_ATTEMPTS: '4',
+        PROMPTFOO_TRACE_FETCH_STABLE_POLLS: '2',
+      });
+      const completed = {
+        ...mockTraceData,
+        spans: [
+          ...mockTraceData.spans,
+          {
+            spanId: 'late-query',
+            name: 'db.query',
+            startTime: 1600,
+            endTime: 1700,
+            attributes:
+              plugin === 'sql-injection'
+                ? { 'db.statement': 'SELECT id FROM accounts WHERE 1=1' }
+                : { command: 'rm /private/fixture' },
+          },
+        ],
+      };
+      mockTraceStore.getTrace
+        .mockResolvedValueOnce(mockTraceData)
+        .mockResolvedValueOnce(mockTraceData)
+        .mockResolvedValue(completed);
+      const grade = vi.spyOn(RedteamGraderBase.prototype, 'getResult').mockResolvedValue({
+        grade: { pass: false, score: 0, reason: 'Injected query' },
+        rubric: 'Fixture rubric',
+      });
+      const assertion: Assertion = { type: `promptfoo:redteam:${plugin}` };
+      const test: AtomicTestCase = {
+        metadata: { purpose: 'Protect account records.', tracing: { enabled: true } },
+        assert: mode === 'set' ? [{ type: 'assert-set', assert: [assertion] }] : [assertion],
+      };
+      const params = {
+        prompt: 'Query my account.',
+        test,
+        providerResponse: mockProviderResponse,
+        traceId: 'test-trace-id',
+      };
+      if (mode === 'single') {
+        await runAssertion({ ...params, assertion });
+      } else {
+        await runAssertions(params);
+      }
+      expect(mockTraceStore.getTrace).toHaveBeenCalledTimes(4);
+      expect(grade.mock.calls[0]?.[7]?.traceData?.spans).toHaveLength(3);
+      expect(grade.mock.calls[0]?.[7]?.traceSummary).toContain(
+        plugin === 'sql-injection' ? 'SELECT id FROM accounts' : 'rm /private/fixture',
+      );
+    },
+  );
+
+  it('rejects SQL grading when a span filter excludes private evidence', async () => {
+    mockTraceStore.getTrace.mockResolvedValue({
+      ...mockTraceData,
+      spans: [
+        {
+          spanId: 'allowed',
+          name: 'allowed query',
+          startTime: 0,
+          attributes: { 'db.statement': 'SELECT public FROM records' },
+        },
+        {
+          spanId: 'private',
+          name: 'PRIVATE_SPAN_NAME',
+          startTime: 1,
+          attributes: { 'db.statement': 'SELECT PRIVATE_QUERY FROM records' },
+        },
+      ],
+    });
+    const grade = vi.spyOn(RedteamGraderBase.prototype, 'getResult').mockResolvedValue({
+      grade: { pass: true, score: 1, reason: 'Fixture verdict' },
+      rubric: 'Fixture rubric',
+    });
+    await expect(
+      runAssertion({
+        assertion: { type: 'promptfoo:redteam:sql-injection' },
+        prompt: 'Inspect records.',
+        test: {
+          metadata: {
+            purpose: 'Fixture assistant',
+            tracing: { enabled: true, spanFilter: ['allowed*'] },
+          },
+        },
+        providerResponse: mockProviderResponse,
+        traceId: 'test-trace-id',
+      }),
+    ).rejects.toThrow('SQL trace evidence was filtered');
+    expect(grade).not.toHaveBeenCalled();
+  });
+
+  it.each(['db.statement', 'db.query.text'])(
+    'rejects SQL grading when sensitive-key telemetry masks %s',
+    async (key) => {
+      const query = 'SELECT * FROM accounts WHERE owner_id = 1 OR 1=1';
+      mockTraceStore.getTrace.mockResolvedValue({
+        ...mockTraceData,
+        spans: [
+          {
+            spanId: 'query',
+            name: 'tool run_query',
+            startTime: 1,
+            attributes: { [key]: query, authorization: query },
+          },
+        ],
+      });
+      const grade = vi.spyOn(RedteamGraderBase.prototype, 'getResult').mockResolvedValue({
+        grade: { pass: true, score: 1, reason: 'Refusal' },
+        rubric: 'Fixture rubric',
+      });
+      await expect(
+        runAssertion({
+          assertion: { type: 'promptfoo:redteam:sql-injection' },
+          prompt: 'Inspect the account.',
+          test: { metadata: { purpose: 'Only return owned records.', tracing: { enabled: true } } },
+          providerResponse: { output: 'I cannot help with that.' },
+          traceId: 'test-trace-id',
+        }),
+      ).rejects.toThrow('SQL trace evidence was redacted');
+      expect(grade).not.toHaveBeenCalled();
+    },
+  );
+
+  it.each([false, true])(
+    'includes SQL outcomes without rows or bind values (redact query: %s)',
+    async (redactQuery) => {
+      if (redactQuery) {
+        cliState.config = {
+          ...originalConfig,
+          tracing: {
+            enabled: false,
+            otlp: {
+              http: {
+                enabled: false,
+                port: 4318,
+                host: '127.0.0.1',
+                acceptFormats: ['json'],
+                redactAttributes: ['query'],
+              },
+            },
+          },
+        };
+      }
+      const queries = [
+        'SELECT id FROM records WHERE owner_id = ?',
+        'SELECT id FROM records WHERE owner_id = ? OR 1=1',
+      ];
+      mockTraceStore.getTrace.mockResolvedValue({
+        ...mockTraceData,
+        spans: queries.map((query, index) => ({
+          spanId: `sql-${index}`,
+          name: 'execute_tool query_database',
+          startTime: index,
+          statusCode: 1,
+          attributes: {
+            'gen_ai.tool.name': 'query_database',
+            'tool.arguments': JSON.stringify({ query, parameters: ['PRIVATE_BIND_VALUE'] }),
+            'tool.output': JSON.stringify({
+              authorized: index === 0,
+              rowCount: index + 1,
+              rows: ['PRIVATE_ROW_DATA'],
+            }),
+            authorization: 'PRIVATE_AUTH_TOKEN',
+          },
+        })),
+      });
+      const grade = vi.spyOn(RedteamGraderBase.prototype, 'getResult').mockResolvedValue({
+        grade: { pass: false, score: 0, reason: 'Unauthorized query' },
+        rubric: 'Fixture rubric',
+      });
+      const assertion = runAssertion({
+        assertion: { type: 'promptfoo:redteam:sql-injection' },
+        prompt: 'Perform the requested action.',
+        test: {
+          metadata: {
+            purpose: 'Only return records belonging to the authenticated user.',
+            tracing: { enabled: true },
+          },
+        },
+        providerResponse: { output: 'I cannot help with that.' },
+        traceId: 'test-trace-id',
+      });
+      if (redactQuery) {
+        await expect(assertion).rejects.toThrow('SQL trace evidence was redacted');
+        expect(grade).not.toHaveBeenCalled();
+        return;
+      }
+      await assertion;
+      const summary = grade.mock.calls[0]?.[7]?.traceSummary;
+      expect(summary).toBeDefined();
+      const steps = JSON.parse(summary!).steps;
+      expect(steps).toHaveLength(2);
+      expect(steps.map((step: { sql: unknown }) => step.sql)).toEqual([
+        { query: queries[0], authorized: true, rowCount: 1 },
+        { query: queries[1], authorized: false, rowCount: 2 },
+      ]);
+      expect(summary).not.toMatch(/PRIVATE_/);
+    },
+  );
+
+  it.each([
+    ...['global', 'test', 'strategy'].flatMap((source) => [
+      { source, tracing: { enabled: true, includeInGrading: false } },
+      { source, tracing: { enabled: false, includeInGrading: true } },
+    ]),
+    { source: 'root-only', tracing: undefined },
+  ])(
+    'requires SQL grading opt-in from $source configuration: $tracing',
+    async ({ source, tracing }) => {
+      const test: AtomicTestCase = {
+        assert: [{ type: 'promptfoo:redteam:sql-injection' }],
+        metadata: {
+          purpose: 'Fixture assistant',
+          ...(source === 'test' ? { tracing } : {}),
+          ...(source === 'strategy' ? { strategyConfig: { tracing } } : {}),
+        },
+      };
+      if (source === 'global') {
+        cliState.config = { ...originalConfig, redteam: { tracing } };
+      } else if (source === 'root-only') {
+        cliState.config = { ...originalConfig, tracing: { enabled: true } };
+      }
+      mockTraceStore.getTrace.mockResolvedValue(mockTraceData);
+      const grade = vi.spyOn(RedteamGraderBase.prototype, 'getResult').mockResolvedValue({
+        grade: { pass: true, score: 1, reason: 'Fixture verdict' },
+        rubric: 'Fixture rubric',
+      });
+      await runAssertions({
+        prompt: 'Perform the requested action.',
+        test,
+        providerResponse: mockProviderResponse,
+        traceId: 'test-trace-id',
+      });
+      await runAssertion({
+        prompt: 'Perform the requested action.',
+        test,
+        assertion: { type: 'promptfoo:redteam:sql-injection' },
+        providerResponse: mockProviderResponse,
+        traceId: 'test-trace-id',
+      });
+      await handleRedteam({
+        assertion: { type: 'promptfoo:redteam:sql-injection' },
+        baseType: 'promptfoo:redteam:sql-injection',
+        assertionValueContext: {
+          prompt: 'Perform the requested action.',
+          vars: {},
+          test,
+          logProbs: [],
+          provider: undefined,
+          providerResponse: mockProviderResponse,
+          trace: mockTraceData,
+        },
+        cost: 0,
+        inverse: false,
+        latencyMs: 0,
+        logProbs: [],
+        output: 'Fixture response',
+        outputString: 'Fixture response',
+        prompt: 'Perform the requested action.',
+        provider: undefined,
+        providerResponse: mockProviderResponse,
+        renderedValue: undefined,
+        test,
+        valueFromScript: undefined,
+      });
+      expect(mockTraceStore.getTrace).not.toHaveBeenCalled();
+      expect(grade).toHaveBeenCalledTimes(3);
+      for (const call of grade.mock.calls) {
+        expect(call[7]?.traceData).toBeUndefined();
+        expect(call[7]?.traceSummary).toBeUndefined();
+      }
+    },
+  );
 
   describe('javascript assertions with trace', () => {
     it('uses the evaluation tracing context for the grader test index', async () => {

@@ -45,6 +45,41 @@ export interface TraceSpanQueryOptions extends TraceAttributeSanitizationOptions
 export interface AddSpansOptions {
   skipTraceCheck?: boolean;
   warnIfMissingTrace?: boolean;
+  updateExisting?: boolean;
+  redactSpans?: (spans: SpanData[]) => SpanData[];
+}
+
+export class TraceLimitError extends Error {
+  constructor() {
+    super('Trace redaction limit exceeded (10,000 spans or 10 MiB per trace)');
+    this.name = 'TraceLimitError';
+  }
+}
+
+function validateTracePayloadSize(
+  spans: SpanData[],
+  updateExisting: boolean,
+  storedSizes: { spanId: string; bytes: number }[] = [],
+): void {
+  const sizes = new Map(storedSizes.map((span) => [span.spanId, span.bytes]));
+  for (const span of spans) {
+    if (updateExisting || !sizes.has(span.spanId)) {
+      sizes.set(
+        span.spanId,
+        Buffer.byteLength(span.spanId) +
+          Buffer.byteLength(span.parentSpanId ?? '') +
+          Buffer.byteLength(span.name) +
+          Buffer.byteLength(JSON.stringify(span.attributes) ?? '') +
+          Buffer.byteLength(span.statusMessage ?? ''),
+      );
+    }
+  }
+  if (
+    sizes.size > 10_000 ||
+    [...sizes.values()].reduce((total, bytes) => total + bytes, 0) > 10 * 1024 * 1024
+  ) {
+    throw new TraceLimitError();
+  }
 }
 
 function serializeSpan(
@@ -215,36 +250,140 @@ export class TraceStore {
         logger.debug(`[TraceStore] Trace ${traceId} found, proceeding with span insertion`);
       }
 
-      const spanRecords = spans.map((span) => {
-        logger.debug(`[TraceStore] Preparing span ${span.spanId} (${span.name}) for insertion`);
-        return {
-          id: crypto.randomUUID(),
-          traceId,
-          spanId: span.spanId,
-          parentSpanId: span.parentSpanId,
-          name: span.name,
-          startTime: span.startTime,
-          endTime: span.endTime,
-          attributes: span.attributes,
-          statusCode: span.statusCode,
-          statusMessage: span.statusMessage,
-        };
+      // Only the store may create persisted redaction-history markers.
+      spans = spans.map((span) => {
+        if (
+          !span.attributes ||
+          !Object.prototype.hasOwnProperty.call(span.attributes, 'promptfoo.redaction.history')
+        ) {
+          return span;
+        }
+        const attributes = { ...span.attributes };
+        delete attributes['promptfoo.redaction.history'];
+        return { ...span, attributes };
       });
 
-      if (spanRecords.length === 0) {
-        return { stored: true };
-      }
+      const insertSpans = async (connection: Pick<typeof db, 'insert'>, incoming: SpanData[]) => {
+        const spanRecords = incoming.map((span) => {
+          logger.debug(`[TraceStore] Preparing span ${span.spanId} (${span.name}) for insertion`);
+          return {
+            id: crypto.randomUUID(),
+            traceId,
+            spanId: span.spanId,
+            parentSpanId: span.parentSpanId,
+            name: span.name,
+            startTime: span.startTime,
+            endTime: span.endTime,
+            attributes: span.attributes,
+            statusCode: span.statusCode,
+            statusMessage: span.statusMessage,
+          };
+        });
 
-      await db
-        .insert(spansTable)
-        .values(spanRecords)
-        .onConflictDoNothing({ target: [spansTable.traceId, spansTable.spanId] })
-        .run();
-      logger.debug(
-        `[TraceStore] Successfully added ${spanRecords.length} spans to trace ${traceId}`,
-      );
+        if (spanRecords.length === 0) {
+          return;
+        }
+
+        for (let index = 0; index < spanRecords.length; index += 500) {
+          const insert = connection
+            .insert(spansTable)
+            .values(spanRecords.slice(index, index + 500));
+          const target = [spansTable.traceId, spansTable.spanId];
+          await (options?.updateExisting
+            ? insert.onConflictDoUpdate({
+                target,
+                set: {
+                  parentSpanId: sql`excluded.parent_span_id`,
+                  name: sql`excluded.name`,
+                  startTime: sql`excluded.start_time`,
+                  endTime: sql`excluded.end_time`,
+                  attributes: sql`excluded.attributes`,
+                  statusCode: sql`excluded.status_code`,
+                  statusMessage: sql`excluded.status_message`,
+                },
+              })
+            : insert.onConflictDoNothing({ target })
+          ).run();
+        }
+      };
+
+      const redact = options?.redactSpans;
+      await db.transaction(async (tx) => {
+        const payloadBytes = sql<number>`
+            length(cast(${spansTable.spanId} as blob))
+            + coalesce(length(cast(${spansTable.parentSpanId} as blob)), 0)
+            + length(cast(${spansTable.name} as blob))
+            + coalesce(length(cast(${spansTable.attributes} as blob)), 0)
+            + coalesce(length(cast(${spansTable.statusMessage} as blob)), 0)
+          `;
+        const [size] = await tx
+          .select({
+            count: sql<number>`count(*)`,
+            bytes: sql<number>`coalesce(sum(${payloadBytes}), 0)`,
+          })
+          .from(spansTable)
+          .where(eq(spansTable.traceId, traceId));
+        // Bound each input before hydrating existing payloads, including duplicate uploads.
+        if (
+          size.count > 10_000 ||
+          spans.length > 10_000 ||
+          size.bytes > 10 * 1024 * 1024 ||
+          Buffer.byteLength(JSON.stringify(spans)) > 10 * 1024 * 1024
+        ) {
+          throw new TraceLimitError();
+        }
+        const storedSizes = await tx
+          .select({ spanId: spansTable.spanId, bytes: payloadBytes })
+          .from(spansTable)
+          .where(eq(spansTable.traceId, traceId));
+        validateTracePayloadSize(spans, options?.updateExisting ?? false, storedSizes);
+        if (!redact) {
+          await insertSpans(tx, spans);
+          return;
+        }
+        const stored = await tx.select().from(spansTable).where(eq(spansTable.traceId, traceId));
+        const existing = stored.map((span) => serializeSpan(span, false));
+        const original = [...existing, ...spans];
+        const sanitized = redact(original);
+        const redactedSpanIds = new Set(
+          sanitized
+            .filter(
+              (span, index) =>
+                JSON.stringify(span) !== JSON.stringify(original[index]) &&
+                /\[(?:REDACTED|TRUNCATED)\]/.test(JSON.stringify(span)),
+            )
+            .map((span) => span.spanId),
+        );
+        for (const span of sanitized) {
+          if (redactedSpanIds.has(span.spanId)) {
+            span.attributes = { ...span.attributes, 'promptfoo.redaction.history': '[REDACTED]' };
+          }
+        }
+        // Redaction history markers can also increase the stored payload.
+        validateTracePayloadSize(sanitized, options?.updateExisting ?? false);
+        for (const [index, previous] of existing.entries()) {
+          const span = sanitized[index];
+          if (JSON.stringify(previous) === JSON.stringify(span)) {
+            continue;
+          }
+          await tx
+            .update(spansTable)
+            .set({
+              name: span.name,
+              attributes: span.attributes,
+              statusMessage: span.statusMessage,
+            })
+            .where(eq(spansTable.id, stored[index].id))
+            .run();
+        }
+        await insertSpans(tx, sanitized.slice(existing.length));
+      });
+      logger.debug(`[TraceStore] Successfully added ${spans.length} spans to trace ${traceId}`);
       return { stored: true };
     } catch (error) {
+      if (error instanceof TraceLimitError) {
+        await this.markTraceIncomplete(traceId);
+      }
       logger.error(`[TraceStore] Failed to add spans: ${error}`);
       throw error;
     }
@@ -332,6 +471,17 @@ export class TraceStore {
       logger.error(`[TraceStore] Failed to get trace: ${error}`);
       throw error;
     }
+  }
+
+  async markTraceIncomplete(traceId: string): Promise<void> {
+    const db = await this.getDatabase();
+    await db
+      .update(tracesTable)
+      .set({
+        metadata: sql`json_set(coalesce(${tracesTable.metadata}, '{}'), '$.promptfooTraceIncomplete', 'limit exceeded')`,
+      })
+      .where(eq(tracesTable.traceId, traceId))
+      .run();
   }
 
   async getTraceMetadata(traceId: string): Promise<Record<string, any> | undefined> {

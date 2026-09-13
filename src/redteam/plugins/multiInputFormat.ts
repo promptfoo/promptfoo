@@ -202,7 +202,10 @@ function parseLegacyPrompts(lines: string[]): { __prompt: string }[] {
     if (!hasPromptMarker(line)) {
       return null;
     }
-    let prompt = removePrefix(line, 'Prompt');
+    let prompt = removePrefix(
+      line.replace(/^\s*(?:\d+[.)-]?\s*)?[-*]\s+(?=\**prompt\s*:)/i, ''),
+      'Prompt',
+    );
     prompt = cleanPrompt(prompt);
 
     if (prompt.length === 0) {
@@ -216,7 +219,7 @@ function parseLegacyPrompts(lines: string[]): { __prompt: string }[] {
   // Newlines already separate prompts; retain trailing payload semicolons and line indexes.
   const promptLines = lines.flatMap((line, lineIndex) =>
     line
-      .split(/;(?=\s*(?:\*+\s*)?(?:\d+[.)-]?\s*(?:\*+\s*)?)?Prompt\s*:)/i)
+      .split(/;(?=\s*(?:\*+\s*)?(?:\d+[.)-]?\s*)?(?:[-*]\s*)?(?:\*+\s*)?Prompt\s*:)/i)
       .map((segment) => ({ line: segment, lineIndex })),
   );
 

@@ -20,6 +20,7 @@ import {
 import { matchesSimilarity } from '../matchers/similarity';
 import { isPackagePath, loadFromPackage } from '../providers/packageParser';
 import { runPython } from '../python/pythonUtils';
+import { resolveTracingOptions } from '../redteam/providers/tracingOptions';
 import {
   getProviderCallExecutionContext,
   getProviderCallTracingContext,
@@ -158,17 +159,31 @@ export function assertionUsesTrace(assertion: AssertionOrSet): boolean {
   return TRACE_AWARE_ASSERTION_TYPES.has(getAssertionBaseType(assertion));
 }
 
-function assertionMayNeedTraceContext(assertion: AssertionOrSet): boolean {
+function isExecutionEvidenceAssertion(assertion: AssertionOrSet): boolean {
+  return (
+    assertion.type === 'promptfoo:redteam:sql-injection' ||
+    assertion.type === 'promptfoo:redteam:shell-injection'
+  );
+}
+
+function assertionMayNeedTraceContext(assertion: AssertionOrSet, test?: AtomicTestCase): boolean {
   if (assertionUsesTrace(assertion)) {
     return true;
   }
 
   if (assertion.type === 'assert-set') {
-    return assertion.assert.some(assertionMayNeedTraceContext);
+    return assertion.assert.some((child) => assertionMayNeedTraceContext(child, test));
   }
 
   if (assertion.type.startsWith('promptfoo:redteam:coding-agent:')) {
     return true;
+  }
+  if (isExecutionEvidenceAssertion(assertion)) {
+    const tracing = resolveTracingOptions({
+      strategyId: test?.metadata?.strategyId ?? 'basic',
+      test,
+    });
+    return tracing.enabled && tracing.includeInGrading;
   }
 
   return typeof assertion.value === 'string'
@@ -176,11 +191,17 @@ function assertionMayNeedTraceContext(assertion: AssertionOrSet): boolean {
     : false;
 }
 
-export function hasTraceAwareAssertions(assertions?: AssertionOrSet[]): boolean {
-  return Boolean(assertions?.some(assertionMayNeedTraceContext));
+export function hasTraceAwareAssertions(
+  assertions?: AssertionOrSet[],
+  test?: AtomicTestCase,
+): boolean {
+  return Boolean(assertions?.some((assertion) => assertionMayNeedTraceContext(assertion, test)));
 }
 
-async function loadTraceData(traceId: string): Promise<TraceData | null> {
+async function loadTraceData(
+  traceId: string,
+  waitForFullWindow = false,
+): Promise<TraceData | null> {
   const traceStore = getTraceStore();
   const maxAttempts = Math.min(
     MAX_TRACE_FETCH_MAX_ATTEMPTS,
@@ -210,7 +231,10 @@ async function loadTraceData(traceId: string): Promise<TraceData | null> {
       stableObservations = spanCount === lastSpanCount ? stableObservations + 1 : 1;
       lastSpanCount = spanCount;
 
-      if (stableObservations >= stablePolls || attempt === maxAttempts - 1) {
+      if (
+        (!waitForFullWindow && stableObservations >= stablePolls) ||
+        attempt === maxAttempts - 1
+      ) {
         return latestTrace;
       }
     } else {
@@ -456,9 +480,12 @@ async function runAssertionInternal({
   };
 
   // Add trace data if traceId is available
-  if (traceId && assertionMayNeedTraceContext(assertion)) {
+  if (traceId && assertionMayNeedTraceContext(assertion, test)) {
     try {
-      const resolvedTraceData = traceData === undefined ? await loadTraceData(traceId) : traceData;
+      const resolvedTraceData =
+        traceData === undefined
+          ? await loadTraceData(traceId, isExecutionEvidenceAssertion(assertion))
+          : traceData;
       if (resolvedTraceData) {
         context.trace = {
           traceId: resolvedTraceData.traceId,
@@ -471,6 +498,10 @@ async function runAssertionInternal({
     } catch (error) {
       logger.debug(`Failed to fetch trace data for assertion: ${error}`);
     }
+  }
+
+  if (context.trace?.metadata?.promptfooTraceIncomplete) {
+    throw new Error('Cannot grade incomplete trace: collection exceeded the per-trace limit');
   }
 
   // Render assertion values
@@ -807,11 +838,18 @@ export async function runAssertions({
     .flat();
 
   const shouldPreloadTrace =
-    !!traceId && hasTraceAwareAssertions(asserts.map(({ assertion }) => assertion));
+    !!traceId &&
+    hasTraceAwareAssertions(
+      asserts.map(({ assertion }) => assertion),
+      test,
+    );
   let preloadedTraceData: TraceData | null | undefined;
   if (shouldPreloadTrace && traceId) {
     try {
-      preloadedTraceData = await loadTraceData(traceId);
+      preloadedTraceData = await loadTraceData(
+        traceId,
+        asserts.some(({ assertion }) => isExecutionEvidenceAssertion(assertion)),
+      );
     } catch (error) {
       logger.debug(`Failed to preload trace data for assertions: ${error}`);
       preloadedTraceData = null;

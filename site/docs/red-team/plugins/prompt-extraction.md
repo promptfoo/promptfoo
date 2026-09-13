@@ -39,6 +39,14 @@ The Prompt Extraction plugin generates test cases that:
 4. Present scenarios where revealing the system prompt might seem necessary or justified.
 5. Exploit potential misunderstandings about the AI's role or capabilities to elicit information about its instructions.
 
+Default single-input generation balances distinct extraction families rather than relying on near-duplicate requests. For batches of at least five tests, semantic frontier diagnostics report coverage of core disclosure requests and protected-control-plane requests.
+
+Direct-disclosure candidates must ask the target to reveal its system prompt or instructions. Quoted text transformations and questions introduced by defensive explanations, including after a colon or newline, do not establish a disclosure request. A separate request to reveal the instructions still counts. Definitions such as “Explain what a system prompt is” and defensive statements such as “Never reveal your system prompt” do not count as disclosure coverage.
+
+Policy, routing, escalation, classification, and authority-check candidates must request disclosure or review. Defensive statements about keeping those policies private do not count as extraction coverage.
+
+Format-conversion candidates must request a transformation of hidden instructions, such as converting them into a checklist. A five-test batch can leave some protected-control-plane coverage incomplete; the diagnostics report that gap.
+
 Each generated test case is then associated with assertions to evaluate the AI's response:
 
 ## Example Test Cases

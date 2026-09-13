@@ -48,7 +48,6 @@ interface TempoTraceResponse {
   }>;
 }
 
-const MAX_SPANS = 10_000;
 const SPAN_KIND_NAMES = ['unspecified', 'internal', 'server', 'client', 'producer', 'consumer'];
 const TRACE_ID_PATTERN = /^[0-9a-f]{32}$/i;
 const BASE64_TRACE_ID_PATTERN = /^[A-Za-z0-9+/]{22}(?:==)?$/;
@@ -291,10 +290,6 @@ export class TempoProvider implements TraceProvider {
           continue;
         }
         for (const span of scopeSpan.spans) {
-          if (spans.length >= MAX_SPANS) {
-            return spans;
-          }
-
           try {
             const normalizedSpan = transformSpan(
               span,
@@ -352,7 +347,9 @@ export class TempoProvider implements TraceProvider {
     const contentLength = Number(response.headers.get('content-length'));
     if (contentLength > MAX_TRACE_RESPONSE_BYTES) {
       await releaseResponse(response, 'Tempo');
-      throw new TraceProviderError('Tempo trace exceeds the maximum response size');
+      throw new TraceProviderError('Tempo trace exceeds the maximum response size', {
+        limitExceeded: true,
+      });
     }
     const body = await readLimitedResponse(response, 'Tempo');
     const data = JSON.parse(body) as TempoTraceResponse;

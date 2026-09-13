@@ -5,11 +5,15 @@ import { join } from 'node:path';
 import { promisify } from 'node:util';
 
 import { eq } from 'drizzle-orm';
-import { beforeAll, beforeEach, describe, expect, it } from 'vitest';
+import request from 'supertest';
+import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { getDb } from '../../src/database/index';
 import { spansTable, tracesTable } from '../../src/database/tables';
 import { runDbMigrations } from '../../src/migrate';
+import { OTLPReceiver } from '../../src/tracing/otlpReceiver';
+import { TempoProvider } from '../../src/tracing/providers/tempo';
 import { TraceStore } from '../../src/tracing/store';
+import { fetchTraceContext } from '../../src/tracing/traceContext';
 import EvalFactory from '../factories/evalFactory';
 import { removeTempDir } from '../util/utils';
 
@@ -26,16 +30,344 @@ describe('TraceStore span persistence', () => {
     await db.delete(tracesTable).run();
   });
 
-  async function createTrace(traceId: string): Promise<TraceStore> {
+  async function createTrace(
+    traceId: string,
+    metadata?: Record<string, unknown>,
+  ): Promise<TraceStore> {
     const evaluation = await EvalFactory.create({ numResults: 0 });
     const traceStore = new TraceStore();
     await traceStore.createTrace({
       evaluationId: evaluation.id,
       testCaseId: `${traceId}-test`,
       traceId,
+      metadata,
     });
     return traceStore;
   }
+
+  it('rejects cumulative redaction payloads over 10 MiB before reading them into the redactor', async () => {
+    const store = await createTrace('redaction-size');
+    const redactSpans = vi.fn((spans) => spans);
+    const attributes = { payload: '界'.repeat(2 * 1024 * 1024) };
+    await store.addSpans(
+      'redaction-size',
+      [{ spanId: 'first', name: 'first', startTime: 1, attributes }],
+      { redactSpans },
+    );
+    redactSpans.mockClear();
+    await expect(
+      store.addSpans(
+        'redaction-size',
+        [{ spanId: 'second', name: 'second', startTime: 2, attributes }],
+        { redactSpans },
+      ),
+    ).rejects.toThrow('Trace redaction limit exceeded');
+    expect(redactSpans).not.toHaveBeenCalled();
+    const spans = await store.getSpans('redaction-size');
+    expect(spans.map((span) => span.spanId)).toEqual(['first']);
+  });
+
+  it('enforces cumulative payload limits without a redactor', async () => {
+    const traceId = 'unredacted-size';
+    const store = await createTrace(traceId);
+    const attributes = { payload: 'x'.repeat(6 * 1024 * 1024) };
+    await store.addSpans(traceId, [{ spanId: 'first', name: 'first', startTime: 1, attributes }]);
+    await expect(
+      store.addSpans(traceId, [{ spanId: 'second', name: 'second', startTime: 2, attributes }]),
+    ).rejects.toThrow('Trace redaction limit exceeded');
+    expect(await store.getSpans(traceId)).toHaveLength(1);
+  });
+
+  it('rejects oversized span batches without a redactor', async () => {
+    const traceId = 'unredacted-count';
+    const store = await createTrace(traceId);
+    await expect(
+      store.addSpans(
+        traceId,
+        Array.from({ length: 10_001 }, (_, index) => ({
+          spanId: String(index),
+          name: 'span',
+          startTime: 1,
+        })),
+      ),
+    ).rejects.toThrow('Trace redaction limit exceeded');
+    expect(await store.getSpans(traceId)).toHaveLength(0);
+  });
+
+  it.each([false, true])(
+    'accepts retries at the unique span cap (upsert: %s)',
+    async (updateExisting) => {
+      const traceId = 'redaction-count';
+      const store = await createTrace(traceId);
+      for (let start = 0; start < 10_000; start += 500) {
+        await store.addSpans(
+          traceId,
+          Array.from({ length: 500 }, (_, offset) => ({
+            spanId: String(start + offset),
+            name: 'original',
+            startTime: 1,
+          })),
+        );
+      }
+      await store.addSpans(traceId, [{ spanId: '0', name: 'replacement', startTime: 1 }], {
+        updateExisting,
+        redactSpans: (spans) => spans,
+      });
+      const spans = await store.getSpans(traceId);
+      expect(spans).toHaveLength(10_000);
+      expect(spans.find((span) => span.spanId === '0')?.name).toBe(
+        updateExisting ? 'replacement' : 'original',
+      );
+    },
+  );
+
+  it.each([false, true])(
+    'does not count replacement bytes twice (upsert: %s)',
+    async (updateExisting) => {
+      const traceId = 'redaction-replacement-size';
+      const store = await createTrace(traceId);
+      const original = {
+        spanId: 'same',
+        name: 'original',
+        startTime: 1,
+        attributes: { payload: '界'.repeat(2 * 1024 * 1024) },
+      };
+      await store.addSpans(traceId, [original]);
+      await store.addSpans(traceId, [{ ...original, name: 'replacement' }], {
+        updateExisting,
+        redactSpans: (spans) => spans,
+      });
+      const spans = await store.getSpans(traceId);
+      expect(spans).toHaveLength(1);
+      expect(spans[0].name).toBe(updateExisting ? 'replacement' : 'original');
+    },
+  );
+
+  it.each(['otlp-first', 'external-first'])(
+    'shares redaction history across trace ingestors (%s)',
+    async (order) => {
+      const traceId = 'c'.repeat(32);
+      await createTrace(traceId, { otlpHttpRedactAttributes: ['authorization'] });
+      const receiver = new OTLPReceiver({ acceptFormats: ['json'] });
+      const fetchTrace = vi.spyOn(TempoProvider.prototype, 'fetchTrace');
+      const providerConfig = { id: 'tempo' as const, endpoint: 'http://localhost:3200' };
+      const source = {
+        spanId: '2'.repeat(16),
+        name: 'source',
+        startTime: 1,
+        attributes: { authorization: 'PRIVATE_OTHER_INGESTOR' },
+      };
+      const bootstrap = { spanId: '1'.repeat(16), name: 'bootstrap', startTime: 1 };
+      const echo = {
+        spanId: '3'.repeat(16),
+        name: 'tool.call',
+        startTime: 1,
+        attributes: { 'db.statement': "SELECT 'PRIVATE_OTHER_INGESTOR'" },
+      };
+      const external = async (span: typeof bootstrap) => {
+        fetchTrace.mockResolvedValueOnce({ traceId, spans: [span], fetchedAt: Date.now() });
+        await fetchTraceContext(traceId, {
+          providerConfig,
+          queryDelay: 0,
+          maxRetries: 0,
+          redactAttributes: ['authorization'],
+        });
+      };
+      const otlp = async (span: typeof bootstrap & { attributes?: Record<string, string> }) => {
+        await request(receiver.getApp())
+          .post('/v1/traces')
+          .send({
+            resourceSpans: [
+              {
+                scopeSpans: [
+                  {
+                    spans: [
+                      {
+                        traceId,
+                        spanId: span.spanId,
+                        name: span.name,
+                        startTimeUnixNano: '1000000000',
+                        attributes: Object.entries(span.attributes ?? {}).map(([key, value]) => ({
+                          key,
+                          value: { stringValue: value },
+                        })),
+                      },
+                    ],
+                  },
+                ],
+              },
+            ],
+          })
+          .expect(200);
+      };
+      try {
+        const [first, second] = order === 'otlp-first' ? [otlp, external] : [external, otlp];
+        await first(bootstrap);
+        await second(source);
+        await first(echo);
+        const db = await getDb();
+        const rows = await db.select().from(spansTable).where(eq(spansTable.traceId, traceId));
+        expect(rows).toHaveLength(3);
+        expect(JSON.stringify(rows)).not.toContain('PRIVATE_OTHER_INGESTOR');
+      } finally {
+        await receiver.stop();
+        fetchTrace.mockRestore();
+      }
+    },
+  );
+
+  it.each([false, true])(
+    'refreshes completed external SQL evidence (redaction: %s)',
+    async (redact) => {
+      const traceId = 'external-update';
+      const store = await createTrace(traceId);
+      const initial = {
+        spanId: 'query',
+        name: 'query pending',
+        startTime: 1,
+        attributes: { 'db.statement': 'SELECT id FROM public_records' },
+      };
+      const completed = {
+        ...initial,
+        name: 'query completed',
+        endTime: 2,
+        statusCode: 2,
+        attributes: {
+          'db.statement': 'SELECT id FROM private_records',
+          'tool.output': { authorized: false },
+        },
+      };
+      const fetchTrace = vi.spyOn(TempoProvider.prototype, 'fetchTrace');
+      const providerConfig = { id: 'tempo' as const, endpoint: 'http://localhost:3200' };
+      try {
+        for (const span of [initial, completed]) {
+          fetchTrace.mockResolvedValueOnce({ traceId, spans: [span], fetchedAt: Date.now() });
+          await fetchTraceContext(traceId, {
+            providerConfig,
+            queryDelay: 0,
+            maxRetries: 0,
+            redactAttributes: redact ? ['authorization'] : [],
+          });
+        }
+        const spans = await store.getSpans(traceId, { sanitizeAttributes: false });
+        expect(spans).toHaveLength(1);
+        expect(spans[0]).toMatchObject(completed);
+      } finally {
+        fetchTrace.mockRestore();
+      }
+    },
+  );
+
+  it.each(['plain', 'json'])(
+    'redacts stored text when the %s source arrives in a later OTLP upload',
+    async (format) => {
+      const traceId = 'e'.repeat(32);
+      const traceStore = await createTrace(traceId, {
+        otlpHttpRedactAttributes: ['authorization'],
+      });
+      const receiver = new OTLPReceiver({
+        acceptFormats: ['json'],
+        redactAttributes: ['authorization'],
+      });
+      const secret = 'PRIVATE_REVERSE_UPLOAD_RECEIPT';
+      const send = (span: Record<string, unknown>) =>
+        request(receiver.getApp())
+          .post('/v1/traces')
+          .send({
+            resourceSpans: [
+              {
+                scopeSpans: [
+                  {
+                    spans: [
+                      { traceId, spanId: '1'.repeat(16), startTimeUnixNano: '1000000000', ...span },
+                    ],
+                  },
+                ],
+              },
+            ],
+          });
+      await send({
+        name: `echo ${secret}`,
+        status: { code: 2, message: `error ${secret}` },
+        attributes: [
+          { key: 'tool.name', value: { stringValue: `process ${secret}` } },
+          { key: 'db.statement', value: { stringValue: `SELECT '${secret}'` } },
+          {
+            key: 'tool.arguments',
+            value: { stringValue: JSON.stringify({ sql: `SELECT '${secret}'` }) },
+          },
+        ],
+      }).expect(200);
+      await send({
+        spanId: '2'.repeat(16),
+        name: 'source',
+        attributes: [
+          {
+            key: 'authorization',
+            value: { stringValue: format === 'json' ? JSON.stringify({ token: secret }) : secret },
+          },
+        ],
+      }).expect(200);
+      const db = await getDb();
+      const rows = await db.select().from(spansTable).where(eq(spansTable.traceId, traceId));
+      expect(rows).toHaveLength(2);
+      expect(JSON.stringify(rows)).not.toContain(secret);
+      expect(JSON.stringify(await traceStore.getTrace(traceId))).not.toContain(secret);
+      await receiver.stop();
+    },
+  );
+
+  it.each(['concurrent', 'restart'])(
+    'keeps stored and new text private across %s uploads',
+    async (mode) => {
+      const traceId = 'd'.repeat(32);
+      await createTrace(traceId, { otlpHttpRedactAttributes: ['authorization'] });
+      const receiver = new OTLPReceiver({ acceptFormats: ['json'] });
+      const secret = 'PRIVATE_OLD_TRACE_RECEIPT';
+      const send = (id: string, name: string, authorization?: string) =>
+        request(receiver.getApp())
+          .post('/v1/traces')
+          .send({
+            resourceSpans: [
+              {
+                scopeSpans: [
+                  {
+                    spans: [
+                      {
+                        traceId,
+                        spanId: id.repeat(16),
+                        name,
+                        startTimeUnixNano: '1000000000',
+                        attributes: authorization
+                          ? [{ key: 'authorization', value: { stringValue: authorization } }]
+                          : [],
+                      },
+                    ],
+                  },
+                ],
+              },
+            ],
+          })
+          .expect(200);
+      if (mode === 'concurrent') {
+        await send('1', `echo ${secret} OTHER_PRIVATE_VALUE`);
+        await Promise.all([
+          send('2', 'first source', secret),
+          send('3', 'second source', 'OTHER_PRIVATE_VALUE'),
+        ]);
+      } else {
+        await send('1', 'source', secret);
+        await receiver.stop();
+        await send('2', `echo ${secret}`);
+      }
+      const db = await getDb();
+      const rows = await db.select().from(spansTable).where(eq(spansTable.traceId, traceId));
+      expect(rows).toHaveLength(mode === 'concurrent' ? 3 : 2);
+      expect(JSON.stringify(rows)).not.toContain(secret);
+      expect(JSON.stringify(rows)).not.toContain('OTHER_PRIVATE_VALUE');
+      await receiver.stop();
+    },
+  );
 
   it('ignores duplicate span IDs in a single insertion', async () => {
     const traceStore = await createTrace('single-insertion');

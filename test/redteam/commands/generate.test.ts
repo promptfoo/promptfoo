@@ -19,7 +19,7 @@ import { doTargetPurposeDiscovery } from '../../../src/redteam/commands/discover
 import { doGenerateRedteam, redteamGenerateCommand } from '../../../src/redteam/commands/generate';
 import { Severity } from '../../../src/redteam/constants';
 import { extractA2AAgentCardInfo } from '../../../src/redteam/extraction/a2aAgentCard';
-import { extractMcpToolsInfo } from '../../../src/redteam/extraction/mcpTools';
+import { extractMcpTools } from '../../../src/redteam/extraction/mcpTools';
 import { MAX_MAX_CONCURRENCY, synthesize } from '../../../src/redteam/index';
 import { neverGenerateRemote } from '../../../src/redteam/remoteGeneration';
 import { PartialGenerationError, ProbeLimitExceededError } from '../../../src/redteam/types';
@@ -61,7 +61,7 @@ const { TEST_PROBE_LIMIT } = vi.hoisted(() => ({ TEST_PROBE_LIMIT: 100_000 }));
 
 function resetCommonMocks() {
   vi.mocked(extractA2AAgentCardInfo).mockReset().mockResolvedValue('');
-  vi.mocked(extractMcpToolsInfo).mockReset().mockResolvedValue('');
+  vi.mocked(extractMcpTools).mockReset().mockResolvedValue([]);
   vi.mocked(getCloudDatabaseId).mockReset();
   vi.mocked(isCloudProvider).mockReset().mockReturnValue(false);
   vi.mocked(checkEmailStatusAndMaybeExit).mockReset().mockResolvedValue('ok');
@@ -69,6 +69,8 @@ function resetCommonMocks() {
     emailNeedsValidation: false,
   });
 }
+
+beforeEach(resetCommonMocks);
 
 function mockReadFileSync(content: unknown) {
   vi.mocked(fs.readFileSync).mockImplementation(() =>
@@ -173,7 +175,7 @@ vi.mock('../../../src/util/config/load', async (importOriginal) => {
 vi.mock('../../../src/redteam/extraction/mcpTools', async (importOriginal) => {
   return {
     ...(await importOriginal()),
-    extractMcpToolsInfo: vi.fn(),
+    extractMcpTools: vi.fn(),
   };
 });
 
@@ -398,6 +400,74 @@ describe('doGenerateRedteam', () => {
     );
   });
 
+  it('should persist semantic frontier diagnostics in generated output metadata', async () => {
+    const semanticFrontierDiagnostics = [
+      {
+        completeFrontierCount: 0,
+        frontierCount: 1,
+        pluginId: 'pii:social',
+        structurallyDegraded: true,
+        unreachableFeatureIds: ['requestsRefillDates'],
+      },
+    ];
+
+    const options: RedteamCliGenerateOptions = {
+      output: 'output.yaml',
+      config: 'config.yaml',
+      cache: true,
+      defaultConfig: {},
+      write: true,
+    };
+
+    vi.mocked(fs.readFileSync).mockImplementation(function () {
+      return JSON.stringify({
+        prompts: [{ raw: 'Test prompt' }],
+        providers: [],
+        tests: [],
+      });
+    });
+
+    vi.mocked(synthesize).mockResolvedValue({
+      semanticFrontierDiagnostics,
+      testCases: [
+        {
+          vars: { input: 'Test input one' },
+          assert: [{ type: 'equals', value: 'Test output' }],
+          metadata: { pluginId: 'pii:social', strategyId: 'base64' },
+        },
+        {
+          vars: { input: 'Test input two' },
+          assert: [{ type: 'equals', value: 'Test output' }],
+          metadata: { pluginId: 'pii:social', strategyId: 'base64' },
+        },
+      ],
+      purpose: 'Test purpose',
+      entities: [],
+      injectVar: 'input',
+      failedPlugins: [],
+    });
+
+    await doGenerateRedteam(options);
+
+    expect(writePromptfooConfig).toHaveBeenCalledWith(
+      expect.objectContaining({
+        metadata: expect.objectContaining({
+          semanticFrontierDiagnostics: [
+            {
+              completeFrontierCount: 0,
+              frontierCount: 1,
+              pluginId: 'pii:social',
+              structurallyDegraded: true,
+              unreachableFeatureIds: ['requestsRefillDates'],
+            },
+          ],
+        }),
+      }),
+      'output.yaml',
+      expect.any(Array),
+    );
+  });
+
   it.each([
     ['filterProviders value', { filterProviders: 'team-a' }, { filterProviders: 'team-b' }],
     ['filterTargets value', { filterTargets: 'team-a' }, { filterTargets: 'team-b' }],
@@ -524,7 +594,7 @@ describe('doGenerateRedteam', () => {
     );
   });
 
-  it('should remove stale generation token usage when regenerated output has no current values', async () => {
+  it('should remove stale generation metadata when regenerated output has no current values', async () => {
     const options: RedteamCliGenerateOptions = {
       output: 'output.yaml',
       config: 'config.yaml',
@@ -542,6 +612,15 @@ describe('doGenerateRedteam', () => {
           prompt: 13,
           total: 20,
         },
+        semanticFrontierDiagnostics: [
+          {
+            completeFrontierCount: 0,
+            frontierCount: 1,
+            pluginId: 'pii:social',
+            structurallyDegraded: true,
+            unreachableFeatureIds: ['requestsRefillDates'],
+          },
+        ],
       },
       prompts: [{ raw: 'Test prompt' }],
       providers: [],
@@ -564,6 +643,7 @@ describe('doGenerateRedteam', () => {
 
     const generatedConfig = vi.mocked(writePromptfooConfig).mock.calls.at(-1)?.[0];
     expect(generatedConfig?.metadata).not.toHaveProperty('generationTokenUsage');
+    expect(generatedConfig?.metadata).not.toHaveProperty('semanticFrontierDiagnostics');
   });
 
   it('should write to config file when write option is true', async () => {
@@ -616,7 +696,96 @@ describe('doGenerateRedteam', () => {
     );
   });
 
-  it('should remove stale generation token usage when updating a config has no current values', async () => {
+  it.each([
+    [true, false],
+    [false, false],
+    [true, true],
+    [false, true],
+  ])(
+    'preserves prior frontier coverage when appending tests with a new frontier: %s',
+    async (hasNewFrontier, storedOnly) => {
+      const oldTest = {
+        vars: { input: 'Older generated prompt' },
+        metadata: {
+          pluginId: 'pii:social',
+          semanticFrontier: {
+            active: true,
+            complete: false,
+            minimumPortfolioSize: 1,
+            bands: {
+              pii: {
+                featureCount: 1,
+                observedFeatureCount: 0,
+                observedFeatureIds: [],
+                reachableFeatureCount: 0,
+                reachableFeatureIds: [],
+                unreachableFeatureIds: ['requestsProtectedInformation'],
+              },
+            },
+          },
+        },
+      };
+      const savedTest = storedOnly
+        ? { ...oldTest, metadata: { pluginId: 'pii:social', strategyId: 'base64' } }
+        : oldTest;
+      mockReadFileSync({
+        tests: [savedTest],
+        ...(storedOnly && {
+          metadata: {
+            semanticFrontierDiagnostics: [
+              {
+                pluginId: 'pii:social',
+                frontierCount: 1,
+                completeFrontierCount: 0,
+                structurallyDegraded: true,
+                unreachableFeatureIds: ['requestsProtectedInformation'],
+              },
+            ],
+          },
+        }),
+      });
+      vi.mocked(synthesize).mockResolvedValue({
+        semanticFrontierDiagnostics: hasNewFrontier
+          ? [
+              {
+                pluginId: 'pii:social',
+                frontierCount: 1,
+                completeFrontierCount: 1,
+                structurallyDegraded: false,
+                unreachableFeatureIds: [],
+              },
+            ]
+          : [],
+        testCases: [
+          { vars: { input: 'Current generated prompt' }, metadata: { pluginId: 'pii:social' } },
+        ],
+        purpose: 'Test purpose',
+        entities: [],
+        injectVar: 'input',
+        failedPlugins: [],
+      });
+      await doGenerateRedteam({
+        config: 'config.yaml',
+        cache: true,
+        defaultConfig: {},
+        write: true,
+      });
+      const updated = vi.mocked(writePromptfooConfig).mock.calls.at(-1)?.[0];
+      expect(updated?.tests).toHaveLength(2);
+      expect(updated?.tests).toContainEqual(savedTest);
+      expect(updated?.metadata?.semanticFrontierDiagnostics).toEqual([
+        {
+          pluginId: 'pii:social',
+          frontierCount: hasNewFrontier ? 2 : 1,
+          completeFrontierCount: hasNewFrontier ? 1 : 0,
+          structurallyDegraded: true,
+          unreachableFeatureIds: ['requestsProtectedInformation'],
+        },
+      ]);
+    },
+  );
+
+  it('should remove stale generation metadata when updating a config has no current values', async () => {
     const options: RedteamCliGenerateOptions = {
       config: 'config.yaml',
       cache: true,
@@ -627,6 +796,8 @@ describe('doGenerateRedteam', () => {
     mockReadFileSync({
       metadata: {
         generationTokenUsage: { numRequests: 2, total: 20 },
+        generationAccounting: { tokenUsage: { total: 20 } },
+        semanticFrontierDiagnostics: [{ pluginId: 'stale-plugin' }],
       },
       tests: [],
     });
@@ -647,6 +818,8 @@ describe('doGenerateRedteam', () => {
 
     const updatedConfig = vi.mocked(writePromptfooConfig).mock.calls.at(-1)?.[0];
     expect(updatedConfig?.metadata).not.toHaveProperty('generationTokenUsage');
+    expect(updatedConfig?.metadata).not.toHaveProperty('generationAccounting');
+    expect(updatedConfig?.metadata).not.toHaveProperty('semanticFrontierDiagnostics');
   });
 
   it('should write description to output file when description option is provided', async () => {
@@ -743,7 +916,7 @@ describe('doGenerateRedteam', () => {
   });
 
   it('should use purpose when no config is provided', async () => {
-    vi.mocked(extractMcpToolsInfo).mockResolvedValue('');
+    vi.mocked(extractMcpTools).mockResolvedValue([]);
 
     const options: RedteamCliGenerateOptions = {
       purpose: 'Test purpose',
@@ -778,7 +951,7 @@ describe('doGenerateRedteam', () => {
         strategies: expect.any(Array),
         targetIds: [],
         showProgressBar: true,
-        testGenerationInstructions: '',
+        testGenerationFormat: undefined,
       }),
     );
   });
@@ -1538,58 +1711,68 @@ describe('doGenerateRedteam', () => {
     );
   });
 
-  it('should enhance purpose with MCP tools information when available', async () => {
-    vi.mocked(extractMcpToolsInfo).mockResolvedValue(
-      '\nAvailable MCP tools:\n{"name":"search_companies","description":"Search companies.","inputSchema":{"type":"object","properties":{"query":{"type":"string"}}}}',
-    );
-
-    vi.mocked(configModule.resolveConfigs).mockResolvedValue({
-      basePath: '/mock/path',
-      testSuite: {
-        providers: [mockProvider],
-        prompts: [{ raw: 'Test prompt', label: 'Test prompt' }],
-        tests: [],
-        defaultTest: {
-          vars: { user_name: 'Alice' },
+  it.each([undefined, 'Only test authorization boundaries.'])(
+    'keeps MCP formatting separate from custom generation instructions: %s',
+    async (instructions) => {
+      vi.mocked(extractMcpTools).mockResolvedValue([
+        {
+          name: 'search_companies',
+          description: 'Search companies.',
+          inputSchema: { type: 'object', properties: { query: { type: 'string' } } },
         },
-      },
-      config: {
-        redteam: {
-          purpose: 'Original purpose for {{ user_name }}',
+      ]);
+
+      vi.mocked(configModule.resolveConfigs).mockResolvedValue({
+        basePath: '/mock/path',
+        testSuite: {
+          providers: [mockProvider],
+          prompts: [{ raw: 'Test prompt', label: 'Test prompt' }],
+          tests: [],
+          defaultTest: {
+            vars: { user_name: 'Alice' },
+          },
         },
-      },
-    });
+        config: {
+          redteam: {
+            purpose: 'Original purpose for {{ user_name }}',
+            testGenerationInstructions: instructions,
+          },
+        },
+      });
 
-    vi.mocked(synthesize).mockResolvedValue({
-      testCases: [],
-      purpose: 'Test purpose',
-      entities: [],
-      injectVar: 'input',
-      failedPlugins: [],
-    });
+      vi.mocked(synthesize).mockResolvedValue({
+        testCases: [],
+        purpose: 'Test purpose',
+        entities: [],
+        injectVar: 'input',
+        failedPlugins: [],
+      });
 
-    const options: RedteamCliGenerateOptions = {
-      output: 'output.yaml',
-      config: 'config.yaml',
-      cache: true,
-      defaultConfig: {},
-      write: true,
-    };
+      const options: RedteamCliGenerateOptions = {
+        output: 'output.yaml',
+        config: 'config.yaml',
+        cache: true,
+        defaultConfig: {},
+        write: true,
+      };
 
-    await doGenerateRedteam(options);
+      await doGenerateRedteam(options);
 
-    const synthesizePurpose = vi.mocked(synthesize).mock.calls[0][0].purpose;
-    expect(synthesizePurpose).toContain('Original purpose for Alice');
-    expect(synthesizePurpose).toContain('"name":"search_companies"');
-    expect(synthesizePurpose).not.toContain('{{ user_name }}');
-    expect(synthesize).toHaveBeenCalledWith(
-      expect.objectContaining({
-        testGenerationInstructions: expect.stringContaining(
-          'Generate every test case prompt as a json string',
-        ),
-      }),
-    );
-  });
+      const synthesizePurpose = vi.mocked(synthesize).mock.calls[0][0].purpose;
+      expect(synthesizePurpose).toContain('Original purpose for Alice');
+      expect(synthesizePurpose).toContain('"name":"search_companies"');
+      expect(synthesizePurpose).not.toContain('{{ user_name }}');
+      expect(vi.mocked(synthesize).mock.calls[0][0].mcpTools).toEqual(await extractMcpTools([]));
+      expect(synthesize).toHaveBeenCalledWith(
+        expect.objectContaining({
+          testGenerationFormat: expect.stringContaining(
+            'Generate every test case prompt as a json string',
+          ),
+        }),
+      );
+      expect(vi.mocked(synthesize).mock.calls[0][0].testGenerationInstructions).toBe(instructions);
+    },
+  );
 
   it('should enhance purpose with A2A Agent Card information when available', async () => {
     vi.mocked(extractA2AAgentCardInfo).mockResolvedValue(
@@ -1635,8 +1818,10 @@ describe('doGenerateRedteam', () => {
     expect(synthesizePurpose).toContain('"name":"Book flight"');
   });
 
-  it('should handle MCP tools extraction errors gracefully', async () => {
-    vi.mocked(extractMcpToolsInfo).mockRejectedValue(new Error('MCP tools extraction failed'));
+  it('stops generation when MCP tool schemas conflict', async () => {
+    vi.mocked(extractMcpTools).mockRejectedValue(
+      new Error('MCP tool search has conflicting input schemas'),
+    );
 
     vi.mocked(configModule.resolveConfigs).mockResolvedValue({
       basePath: '/mock/path',
@@ -1668,16 +1853,8 @@ describe('doGenerateRedteam', () => {
       write: true,
     };
 
-    await doGenerateRedteam(options);
-
-    expect(logger.warn).toHaveBeenCalledWith(
-      expect.stringContaining('Failed to extract MCP tools information'),
-    );
-    expect(synthesize).toHaveBeenCalledWith(
-      expect.objectContaining({
-        purpose: 'Original purpose',
-      }),
-    );
+    await expect(doGenerateRedteam(options)).rejects.toThrow('conflicting input schemas');
+    expect(synthesize).not.toHaveBeenCalled();
   });
 
   describe('header comments', () => {
@@ -3084,7 +3261,7 @@ describe('doGenerateRedteam', () => {
         config: {
           redteam: {
             numTests: 2,
-            plugins: ['harmful:hate'] as any,
+            plugins: ['pii:social'] as any,
             strategies: [],
             contexts: [
               { id: 'context1', purpose: 'Context 1 purpose', vars: { role: 'user' } },
@@ -3095,11 +3272,20 @@ describe('doGenerateRedteam', () => {
       });
 
       vi.mocked(synthesize).mockResolvedValue({
+        semanticFrontierDiagnostics: [
+          {
+            pluginId: 'pii:social',
+            frontierCount: 1,
+            completeFrontierCount: 0,
+            structurallyDegraded: true,
+            unreachableFeatureIds: ['requestsRefillDates'],
+          },
+        ],
         testCases: [
           {
             vars: { input: 'Test input' },
             assert: [{ type: 'equals', value: 'Test output' }],
-            metadata: { pluginId: 'harmful:hate' },
+            metadata: { pluginId: 'pii:social', strategyId: 'base64' },
           },
         ],
         purpose: 'Test purpose',
@@ -3117,6 +3303,24 @@ describe('doGenerateRedteam', () => {
       };
 
       await doGenerateRedteam(options);
+
+      expect(writePromptfooConfig).toHaveBeenCalledWith(
+        expect.objectContaining({
+          metadata: expect.objectContaining({
+            semanticFrontierDiagnostics: [
+              {
+                pluginId: 'pii:social',
+                frontierCount: 2,
+                completeFrontierCount: 0,
+                structurallyDegraded: true,
+                unreachableFeatureIds: ['requestsRefillDates'],
+              },
+            ],
+          }),
+        }),
+        'output.yaml',
+        expect.any(Array),
+      );
 
       // synthesize should be called once for each context
       expect(synthesize).toHaveBeenCalledTimes(2);
@@ -3409,7 +3613,7 @@ describe('doGenerateRedteam', () => {
 
     it('should use single purpose mode when no contexts are defined', async () => {
       // Reset MCP tools mock to prevent interference from other tests
-      vi.mocked(extractMcpToolsInfo).mockResolvedValue('');
+      vi.mocked(extractMcpTools).mockResolvedValue([]);
 
       vi.mocked(configModule.resolveConfigs).mockResolvedValue({
         basePath: '/mock/path',

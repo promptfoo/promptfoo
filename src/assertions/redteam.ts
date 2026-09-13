@@ -1,6 +1,7 @@
 import logger from '../logger';
 import { MULTI_INPUT_VAR } from '../redteam/constants';
 import { getGraderById } from '../redteam/graders';
+import { resolveTracingOptions } from '../redteam/providers/tracingOptions';
 import { checkExfilTracking } from '../redteam/strategies/indirectWebPwn';
 import invariant from '../util/invariant';
 import { summarizeTrajectoryForJudge } from './trajectoryUtils';
@@ -47,16 +48,30 @@ function getRedteamPrompt(prompt: string | undefined, test: AtomicTestCase): str
 }
 
 function createInitialGradingContext({
+  assertion,
   assertionValueContext,
   providerResponse,
-}: Pick<AssertionParams, 'assertionValueContext' | 'providerResponse'>): RedteamGradingContext {
+  test,
+}: Pick<
+  AssertionParams,
+  'assertion' | 'assertionValueContext' | 'providerResponse' | 'test'
+>): RedteamGradingContext {
   const gradingContext: RedteamGradingContext = {
     providerResponse,
   };
 
   if (assertionValueContext.trace) {
-    gradingContext.traceData = assertionValueContext.trace;
-    gradingContext.traceSummary = summarizeTrajectoryForJudge(assertionValueContext.trace);
+    const isSql = assertion.type === 'promptfoo:redteam:sql-injection';
+    const tracing = isSql
+      ? resolveTracingOptions({ strategyId: test.metadata?.strategyId ?? 'basic', test })
+      : undefined;
+    if (!isSql || (tracing?.enabled && tracing.includeInGrading)) {
+      const trace = assertionValueContext.trace;
+      gradingContext.traceData = trace;
+      if (!isSql) {
+        gradingContext.traceSummary = summarizeTrajectoryForJudge(trace);
+      }
+    }
   }
 
   return gradingContext;
@@ -115,7 +130,12 @@ export const handleRedteam = async ({
   // captured assertion trace data. Keep raw trace data in-process for deterministic
   // graders; pass only a compact trajectory summary into model-graded rubrics.
   // This includes exfil tracking data from indirect-web-pwn strategy
-  let gradingContext = createInitialGradingContext({ assertionValueContext, providerResponse });
+  let gradingContext = createInitialGradingContext({
+    assertion,
+    assertionValueContext,
+    providerResponse,
+    test,
+  });
   const webPageUuid =
     (providerResponse.metadata?.webPageUuid as string | undefined) ||
     (test.metadata?.webPageUuid as string | undefined);
@@ -176,6 +196,9 @@ export const handleRedteam = async ({
       },
     };
   } catch (error) {
+    if (error instanceof Error && error.name === 'TraceEvidenceError') {
+      throw error;
+    }
     // For iterative strategies, check if only SOME turns had grader errors (not all).
     // If only some failed, we can be lenient. If ALL failed, we should still ERROR.
     const redteamHistory = providerResponse.metadata?.redteamHistory as

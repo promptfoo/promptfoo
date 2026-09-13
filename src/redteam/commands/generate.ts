@@ -22,6 +22,7 @@ import { getProviderIds } from '../../providers/index';
 import { isPromptfooSampleTarget } from '../../providers/shared';
 import telemetry from '../../telemetry';
 import { EMAIL_OK_STATUS } from '../../types/email';
+import { summarizeSemanticFrontierDiagnosticsFromTests } from '../../types/semanticFrontierDiagnostics';
 import {
   checkCloudPermissions,
   getCloudDatabaseId,
@@ -56,7 +57,7 @@ import {
   type Severity,
 } from '../constants';
 import { extractA2AAgentCardInfo } from '../extraction/a2aAgentCard';
-import { extractMcpToolsInfo } from '../extraction/mcpTools';
+import { extractMcpTools } from '../extraction/mcpTools';
 import { MAX_MAX_CONCURRENCY, synthesize } from '../index';
 import { determinePolicyTypeFromId, isValidPolicyObject } from '../plugins/policy/utils';
 import { neverGenerateRemote, shouldGenerateRemote } from '../remoteGeneration';
@@ -64,7 +65,12 @@ import { getRedteamGenerationContextFromProviders } from '../remoteGenerationCon
 import { PartialGenerationError, ProbeLimitExceededError } from '../types';
 import type { Command } from 'commander';
 
-import type { ApiProvider, TestSuite, UnifiedConfig } from '../../types/index';
+import type {
+  ApiProvider,
+  SemanticFrontierDiagnostic,
+  TestSuite,
+  UnifiedConfig,
+} from '../../types/index';
 import type { TokenUsage } from '../../types/shared';
 import type {
   FailedPluginInfo,
@@ -75,6 +81,31 @@ import type {
   RedteamStrategyObject,
   SynthesizeOptions,
 } from '../types';
+
+function mergeSemanticFrontierDiagnostics(
+  diagnostics: readonly SemanticFrontierDiagnostic[],
+): SemanticFrontierDiagnostic[] {
+  const byPlugin = new Map<string, SemanticFrontierDiagnostic>();
+  for (const diagnostic of diagnostics) {
+    const previous = byPlugin.get(diagnostic.pluginId);
+    byPlugin.set(diagnostic.pluginId, {
+      ...diagnostic,
+      frontierCount: (previous?.frontierCount ?? 0) + diagnostic.frontierCount,
+      completeFrontierCount:
+        (previous?.completeFrontierCount ?? 0) + diagnostic.completeFrontierCount,
+      structurallyDegraded: Boolean(
+        previous?.structurallyDegraded || diagnostic.structurallyDegraded,
+      ),
+      unreachableFeatureIds: [
+        ...new Set([
+          ...(previous?.unreachableFeatureIds ?? []),
+          ...diagnostic.unreachableFeatureIds,
+        ]),
+      ].sort(),
+    });
+  }
+  return [...byPlugin.values()].sort((a, b) => a.pluginId.localeCompare(b.pluginId));
+}
 
 /**
  * Handles failed plugins based on strict mode.
@@ -635,7 +666,8 @@ async function doGenerateRedteamInternal(
   // Extract MCP tools information and add it after purpose templating is resolved.
   const rootPurpose = parsedConfig.data.purpose;
   let purposeDetails = '';
-  let augmentedTestGenerationInstructions = config.testGenerationInstructions ?? '';
+  let testGenerationFormat: string | undefined;
+  let mcpTools: Awaited<ReturnType<typeof extractMcpTools>> = [];
   try {
     const a2aAgentCardInfo = await extractA2AAgentCardInfo(testSuite.providers);
     if (a2aAgentCardInfo) {
@@ -649,22 +681,18 @@ async function doGenerateRedteamInternal(
       }`,
     );
   }
-  try {
-    const mcpToolsInfo = await extractMcpToolsInfo(testSuite.providers);
-    if (mcpToolsInfo) {
-      purposeDetails += mcpToolsInfo;
-      logger.info('Added MCP tools information to red team purpose');
-      augmentedTestGenerationInstructions += `\nGenerate every test case prompt as a json string encoding the tool call and parameters, and choose a specific function to call. The specific format should be: {"tool": "function_name", "args": {...}}.`;
-    }
-  } catch (error) {
-    logger.warn(
-      `Failed to extract MCP tools information: ${error instanceof Error ? error.message : String(error)}`,
-    );
+  mcpTools = await extractMcpTools(testSuite.providers);
+  if (mcpTools.length) {
+    purposeDetails +=
+      '\nAvailable MCP tools:\n' + mcpTools.map((tool) => JSON.stringify(tool)).join('\n');
+    logger.info('Added MCP tools information to red team purpose');
+    testGenerationFormat = `Generate every test case prompt as a json string encoding the tool call and parameters, and choose a specific function to call. The specific format should be: {"tool": "function_name", "args": {...}}.`;
   }
 
   // Check for contexts - if present, generate tests for each context
   const contexts = redteamConfig?.contexts;
   let redteamTests: any[] = [];
+  const contextFrontierDiagnostics: SemanticFrontierDiagnostic[] = [];
   let purpose: string;
   let entities: string[] = [];
   let finalInjectVar: string = '';
@@ -713,7 +741,9 @@ async function doGenerateRedteamInternal(
             cloudTargetDatabaseId,
             targetIds,
             showProgressBar: options.progressBar !== false,
-            testGenerationInstructions: augmentedTestGenerationInstructions,
+            testGenerationInstructions: config.testGenerationInstructions,
+            testGenerationFormat,
+            ...(mcpTools.length ? { mcpTools } : {}),
           } as SynthesizeOptions),
       );
 
@@ -722,6 +752,7 @@ async function doGenerateRedteamInternal(
         allFailedPlugins.push(...contextResult.failedPlugins);
       }
       accumulateTokenUsage(generationTokenUsage, contextResult.generationTokenUsage);
+      contextFrontierDiagnostics.push(...(contextResult.semanticFrontierDiagnostics ?? []));
       firstContextPurpose ??= contextResult.purpose;
 
       // Tag each test with context metadata and merge context vars
@@ -780,17 +811,22 @@ async function doGenerateRedteamInternal(
         cloudTargetDatabaseId,
         targetIds,
         showProgressBar: options.progressBar !== false,
-        testGenerationInstructions: augmentedTestGenerationInstructions,
+        testGenerationInstructions: config.testGenerationInstructions,
+        testGenerationFormat,
+        ...(mcpTools.length ? { mcpTools } : {}),
       } as SynthesizeOptions),
     );
 
     redteamTests = result.testCases;
+    contextFrontierDiagnostics.push(...(result.semanticFrontierDiagnostics ?? []));
     purpose = result.purpose;
     entities = result.entities;
     finalInjectVar = result.injectVar;
     failedPlugins = result.failedPlugins;
     accumulateTokenUsage(generationTokenUsage, result.generationTokenUsage);
   }
+
+  const semanticFrontierDiagnostics = mergeSemanticFrontierDiagnostics(contextFrontierDiagnostics);
 
   /**
    * Cleans up the provider after redteam generation completes.
@@ -883,12 +919,13 @@ async function doGenerateRedteamInternal(
       const existingYaml = configPath
         ? (loadYaml(await fs.readFile(configPath, 'utf8')) as Partial<UnifiedConfig>)
         : {};
-      const existingDefaultTest =
-        typeof existingYaml.defaultTest === 'object' ? existingYaml.defaultTest : {};
       const existingMetadata = { ...(existingYaml.metadata || {}) };
       delete existingMetadata.generationTokenUsage;
+      delete existingMetadata.semanticFrontierDiagnostics;
       delete existingMetadata.generation;
       delete existingMetadata.generationAccounting;
+      const existingDefaultTest =
+        typeof existingYaml.defaultTest === 'object' ? existingYaml.defaultTest : {};
       const updatedYaml: Partial<UnifiedConfig> = {
         ...existingYaml,
         ...(options.description ? { description: options.description } : {}),
@@ -908,6 +945,7 @@ async function doGenerateRedteamInternal(
             ? { configHash: await getConfigHash(configPath, options) }
             : { configHash: 'force-regenerate' }),
           ...((generationTokenUsage.numRequests ?? 0) > 0 && { generationTokenUsage }),
+          ...(semanticFrontierDiagnostics.length > 0 && { semanticFrontierDiagnostics }),
           generation,
           ...(pluginSeverityOverridesId ? { pluginSeverityOverridesId } : {}),
         },
@@ -967,17 +1005,37 @@ async function doGenerateRedteamInternal(
       if (options.description) {
         existingConfig.description = options.description;
       }
+      const savedFrontierDiagnostics = z
+        .array(
+          z.object({
+            pluginId: z.string().min(1),
+            frontierCount: z.number().int().nonnegative(),
+            completeFrontierCount: z.number().int().nonnegative(),
+            structurallyDegraded: z.boolean(),
+            unreachableFeatureIds: z.array(z.string()),
+          }),
+        )
+        .safeParse(existingConfig.metadata?.semanticFrontierDiagnostics);
+      const combinedFrontierDiagnostics = mergeSemanticFrontierDiagnostics([
+        ...(savedFrontierDiagnostics.success
+          ? savedFrontierDiagnostics.data
+          : summarizeSemanticFrontierDiagnosticsFromTests(testsArray)),
+        ...semanticFrontierDiagnostics,
+      ]);
       existingConfig.tests = [...testsArray, ...redteamTests];
       existingConfig.redteam = { ...(existingConfig.redteam || {}), ...updatedRedteamConfig };
       const existingMetadata = { ...(existingConfig.metadata || {}) };
       delete existingMetadata.generationTokenUsage;
-      delete existingMetadata.generation;
       delete existingMetadata.generationAccounting;
+      delete existingMetadata.semanticFrontierDiagnostics;
       // Add the config hash to metadata
       existingConfig.metadata = {
         ...existingMetadata,
         configHash: await getConfigHash(configPath, options),
         ...((generationTokenUsage.numRequests ?? 0) > 0 && { generationTokenUsage }),
+        ...(combinedFrontierDiagnostics.length > 0 && {
+          semanticFrontierDiagnostics: combinedFrontierDiagnostics,
+        }),
         generation,
       };
       const author = getAuthor();
@@ -1022,6 +1080,7 @@ async function doGenerateRedteamInternal(
           metadata: {
             ...((generationTokenUsage.numRequests ?? 0) > 0 ? { generationTokenUsage } : {}),
             generation,
+            ...(semanticFrontierDiagnostics.length > 0 && { semanticFrontierDiagnostics }),
           },
           tests: redteamTests,
         },
