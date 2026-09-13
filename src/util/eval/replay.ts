@@ -23,15 +23,12 @@ interface PromptSelection {
 }
 
 function getPromptFingerprint(prompt: ReplayPrompt): string {
-  // Raw JSON.stringify throws on bigint/circular prompt config and fingerprints
-  // raw credential values (so rotating a prompt-config secret would reject an
-  // otherwise-equivalent replay). Use the shared cycle/BigInt-safe canonicalizer
-  // that redacts only credential leaves while preserving semantic prompt config.
   return sha256(
     stableStringify({
       raw: prompt.raw,
       label: prompt.label,
       config: redactSecretLeaves(prompt.config),
+      ...(prompt.function && { function: prompt.function }),
       ...(prompt.sourceHash && { sourceHash: prompt.sourceHash }),
     }),
   );
@@ -136,7 +133,7 @@ export function getPromptsForReplay(
   const matchedPromptKeys = new Set<string>();
   for (const prompt of resolvedPrompts) {
     const promptId = generateIdFromPrompt(prompt);
-    const fingerprint = getPromptFingerprint(prompt);
+    const fingerprint = getPromptFingerprint({ ...prompt, function: undefined });
     const candidates = promptsById.get(promptId);
     const persistedPrompt =
       candidates?.find((candidate) => candidate.fingerprint === fingerprint) ?? candidates?.[0];

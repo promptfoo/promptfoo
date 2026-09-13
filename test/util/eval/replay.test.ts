@@ -110,6 +110,15 @@ describe('evaluation replay helpers', () => {
     );
   });
 
+  it('rejects a changed inline prompt function while preserving unchanged replay', () => {
+    const prompt = { raw: 'inline', label: 'Prompt', function: () => 'first' };
+    const selection = createPromptSelection([prompt]);
+    expect(applyPromptSelection([prompt], selection)).toEqual([prompt]);
+    expect(() =>
+      applyPromptSelection([{ ...prompt, function: () => 'second' }], selection),
+    ).toThrow('no longer exists in the resolved configuration');
+  });
+
   it('consumes duplicate prompt matches instead of replaying one prompt twice', () => {
     const duplicate = { raw: 'same', label: 'Same' };
     const selection = createPromptSelection([duplicate, { ...duplicate }]);
@@ -317,20 +326,30 @@ describe('evaluation replay helpers', () => {
     ).not.toThrow();
   });
 
-  it('replays current credentials after validating selected prompt semantics', () => {
-    const original = { raw: 'p', label: 'P', config: { apiKey: 'old-secret', temperature: 0 } };
-    const current = { ...original, config: { apiKey: 'new-secret', temperature: 0 } };
-    const selected = applyPromptSelection([current], createPromptSelection([original]));
-    const persisted = createCompletedPrompt('p', {
-      ...original,
-      id: generateIdFromPrompt(original),
-      provider: 'echo',
-    });
-    expect(getPromptsForReplay([persisted], selected)[0].config).toEqual(current.config);
-    expect(
-      getPromptsForReplay([persisted], [{ ...current, config: { temperature: 1 } }])[0].config,
-    ).toEqual(original.config);
-  });
+  it.each([undefined, async () => 'rendered'])(
+    'replays current credentials for prompt function %s',
+    (promptFunction) => {
+      const original = {
+        raw: 'p',
+        label: 'P',
+        config: { apiKey: 'old-secret', temperature: 0 },
+        ...(promptFunction && { function: promptFunction }),
+      };
+      const current = { ...original, config: { apiKey: 'new-secret', temperature: 0 } };
+      const selected = applyPromptSelection([current], createPromptSelection([original]));
+      const persisted = createCompletedPrompt('p', {
+        ...original,
+        function: undefined,
+        id: generateIdFromPrompt(original),
+        provider: 'echo',
+      });
+      expect(getPromptsForReplay([persisted], selected)[0].config).toEqual(current.config);
+      expect(getPromptsForReplay([persisted], selected)[0].function).toBe(promptFunction);
+      expect(
+        getPromptsForReplay([persisted], [{ ...current, config: { temperature: 1 } }])[0].config,
+      ).toEqual(original.config);
+    },
+  );
 
   it('keeps resolved executable prompt callbacks during replay', () => {
     const callback = async () => 'rendered';

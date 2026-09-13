@@ -893,13 +893,17 @@ describe('runEvaluation tool', () => {
       });
     });
 
-    it('should count the implicit default test in the suite summary', async () => {
+    it.each([
+      { scenarios: undefined, count: 1 },
+      { scenarios: [], count: 0 },
+    ])('counts tests with scenarios $scenarios', async ({ scenarios, count }) => {
       const { doEval } = await import('../../../../src/node/doEval');
       vi.mocked(doEval).mockImplementationOnce(
         async (_cmdObj, _defaultConfig, _defaultConfigPath, _evaluateOptions, customization) => {
           const testSuite = {
             ...createMockTestSuite(),
             tests: undefined,
+            scenarios,
           };
 
           const config = { providers: testSuite.providers };
@@ -926,8 +930,8 @@ describe('runEvaluation tool', () => {
       const payload = JSON.parse(result.content[0].text);
 
       expect(payload.data.configuration.testCases).toEqual({
-        total: 1,
-        filtered: 1,
+        total: count,
+        filtered: count,
         filters: {},
       });
     });

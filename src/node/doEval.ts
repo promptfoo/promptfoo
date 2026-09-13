@@ -690,15 +690,6 @@ async function doEvalWithEnv(
         isCliInvocation,
       );
     }
-    if (resumeEval) {
-      cliState.resume = true;
-      if (retryErrorResultIds) {
-        cliState.retryMode = true;
-        cliState._retryErrorResultIds = retryErrorResultIds;
-        cliState._retryPreexistingResultIds = retryPreexistingResultIds ?? [];
-      }
-    }
-
     // `resolveConfigs` leaves basePath empty for an auto-discovered default config
     // (`promptfoo eval` without -c) even though `defaultConfigPath` names the loaded
     // file, and for a purely in-memory default there is no file at all. Persist the
@@ -1213,9 +1204,16 @@ async function doEvalWithEnv(
       process.on('SIGINT', sigintHandler);
     }
 
-    // Run the evaluation!!!!!!
     let ret;
     try {
+      if (resumeEval) {
+        cliState.resume = true;
+        if (retryErrorResultIds) {
+          cliState.retryMode = true;
+          cliState._retryErrorResultIds = retryErrorResultIds;
+          cliState._retryPreexistingResultIds = retryPreexistingResultIds ?? [];
+        }
+      }
       const executableTestSuite = testSuite;
       const effectiveConfig = config;
       const runEvaluation = () =>
@@ -1229,17 +1227,16 @@ async function doEvalWithEnv(
         ? await runEvaluation()
         : await withCacheEnabled(cache === false ? false : undefined, runEvaluation);
 
-      // Post-evaluation cleanup for retry-errors mode
-      // SUCCESS: Now it's safe to delete the old ERROR results and recalculate metrics
-      // Skip if evaluation was paused - no point cleaning up incomplete retry
       if (retryErrors && cliState._retryErrorResultIds && !paused) {
-        const errorResultIds = cliState._retryErrorResultIds;
-        await assertErrorResultsReplaced(errorResultIds, cliState._retryPreexistingResultIds ?? []);
+        const supersededResultIds = await assertErrorResultsReplaced(
+          cliState._retryErrorResultIds,
+          cliState._retryPreexistingResultIds ?? [],
+        );
         try {
-          await deleteErrorResults(errorResultIds);
+          await deleteErrorResults(supersededResultIds);
           await recalculatePromptMetrics(ret);
           logger.debug(
-            `Cleaned up ${errorResultIds.length} old ERROR results after successful retry`,
+            `Cleaned up ${supersededResultIds.length} superseded results after successful retry`,
           );
         } catch (cleanupError) {
           // Cleanup failure is non-fatal - retry itself succeeded

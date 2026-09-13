@@ -15,6 +15,7 @@ import {
   evalCommand,
 } from '../../src/commands/eval';
 import {
+  createTestCaseSelection,
   evaluate,
   PromptSuggestionsRejectedError,
   restoreTestCaseSelection,
@@ -83,7 +84,7 @@ vi.mock('../../src/globalConfig/cloud', async (importOriginal) => {
 });
 vi.mock('../../src/migrate');
 vi.mock('../../src/node/retry', () => ({
-  assertErrorResultsReplaced: vi.fn().mockResolvedValue(undefined),
+  assertErrorResultsReplaced: vi.fn(async (ids: string[]) => ids),
   deleteErrorResults: vi.fn(),
   getAllResultIds: vi.fn().mockResolvedValue([]),
   getErrorResultIds: vi.fn(),
@@ -202,6 +203,7 @@ describe('evalCommand', () => {
     cliState.resume = false;
     cliState.retryMode = false;
     cliState._retryErrorResultIds = undefined;
+    cliState._retryPreexistingResultIds = undefined;
     chokidarMocks.handlers.clear();
     chokidarMocks.watcher.on
       .mockReset()
@@ -1882,6 +1884,11 @@ describe('evalCommand', () => {
     latestEval.runtimeOptions = { providerFilter: 'selected-target' };
     const latestSpy = vi.spyOn(Eval, 'latest').mockResolvedValueOnce(latestEval);
     vi.mocked(getErrorResultIds).mockResolvedValueOnce(['result-1', 'result-2']);
+    vi.mocked(assertErrorResultsReplaced).mockResolvedValueOnce([
+      'result-1',
+      'result-2',
+      'stale-success',
+    ]);
     vi.mocked(resolveConfigs).mockResolvedValueOnce({
       config: {} as UnifiedConfig,
       testSuite: {
@@ -1912,7 +1919,7 @@ describe('evalCommand', () => {
         undefined,
         { loadEnvFiles: true },
       );
-      expect(deleteErrorResults).toHaveBeenCalledWith(['result-1', 'result-2']);
+      expect(deleteErrorResults).toHaveBeenCalledWith(['result-1', 'result-2', 'stale-success']);
       expect(assertErrorResultsReplaced).toHaveBeenCalledWith(['result-1', 'result-2'], []);
       expect(recalculatePromptMetrics).toHaveBeenCalledWith(latestEval);
     } finally {
@@ -1953,6 +1960,54 @@ describe('evalCommand', () => {
       latestSpy.mockRestore();
     }
   });
+
+  it.each(['resume', 'retry'])(
+    'clears replay state after %s selection validation fails',
+    async (mode) => {
+      const providers = [{ id: () => 'echo', callApi: vi.fn() }];
+      const latestEval = new Eval({ providers: ['echo'], prompts: [] } as UnifiedConfig);
+      latestEval.runtimeOptions = {
+        providerSelection: createProviderSelection(providers, ['echo'], providers),
+        testCaseSelection: createTestCaseSelection([{ vars: { input: 'original' } }], [0], {
+          basePath: path.resolve('/'),
+        }),
+        testCaseIndices: [0],
+      };
+      const lookup =
+        mode === 'resume'
+          ? vi.spyOn(Eval, 'findById').mockResolvedValueOnce(latestEval)
+          : vi.spyOn(Eval, 'latest').mockResolvedValueOnce(latestEval);
+      if (mode === 'retry') {
+        vi.mocked(getErrorResultIds).mockResolvedValueOnce(['old-error']);
+      }
+      vi.mocked(resolveConfigs).mockResolvedValueOnce({
+        config: latestEval.config,
+        testSuite: { prompts: [], providers, tests: [{ vars: { input: 'changed' } }] },
+        basePath: path.resolve('/'),
+        selectedProviderConfigs: ['echo'],
+      });
+      try {
+        await expect(
+          doEval(
+            (mode === 'resume' ? { resume: 'eval-123' } : { retryErrors: true }) as Parameters<
+              typeof doEval
+            >[0],
+            defaultConfig,
+            defaultConfigPath,
+            {},
+          ),
+        ).rejects.toThrow('no longer exists');
+        expect(evaluate).not.toHaveBeenCalled();
+        expect(deleteErrorResults).not.toHaveBeenCalled();
+        expect(cliState.resume).toBe(false);
+        expect(cliState.retryMode).toBe(false);
+        expect(cliState._retryErrorResultIds).toBeUndefined();
+        expect(cliState._retryPreexistingResultIds).toBeUndefined();
+      } finally {
+        lookup.mockRestore();
+      }
+    },
+  );
 
   it('should return the latest eval when retry-errors finds no error results', async () => {
     const latestEval = new Eval({ prompts: [] } as UnifiedConfig);
