@@ -1532,6 +1532,7 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
       data.status === 'incomplete'
         ? {
             ...billedResult,
+            tokenUsage: billedResult.tokenUsage ?? getTokenUsage(data, cached),
             finishReason: incompleteReason === 'max_output_tokens' ? 'length' : incompleteReason,
             ...(incompleteReason === 'content_filter'
               ? {

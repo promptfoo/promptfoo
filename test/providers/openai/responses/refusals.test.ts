@@ -37,6 +37,7 @@ describe('OpenAiResponsesProvider refusals', () => {
       expect(result.isRefusal).toBe(true);
       expect(result.guardrails).toEqual({ flagged: true });
       expect(result.output).toBe('');
+      expect(result.tokenUsage).toMatchObject({ total: 15, prompt: 10, completion: 5 });
     });
 
     it('should handle direct refusal in message object', async () => {
