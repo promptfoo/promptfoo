@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import {
   findingsFromObservations,
   observationsFromGradingContext,
@@ -156,6 +156,59 @@ describe('agentic run observations', () => {
       ]);
     },
   );
+
+  it.each([1000, 1001])('bounds trace observations while accumulating %s spans', (count) => {
+    const read = () =>
+      observationsFromGradingContext({
+        gradingContext: {
+          traceData: {
+            traceId: 'bounded-observations',
+            evaluationId: 'fixture',
+            testCaseId: 'fixture',
+            spans: Array.from({ length: count }, (_, index) => ({
+              spanId: String(index),
+              name: 'tool',
+              startTime: index,
+              attributes: { 'tool.name': 'echo' },
+            })),
+          },
+        },
+      });
+    if (count === 1000) {
+      expect(read()).toHaveLength(count);
+    } else {
+      expect(read).toThrow('trace exceeds 1000 observations');
+    }
+  });
+
+  it.each([20000, 60])('bounds aggregate aliases before expanding %s findings each', (count) => {
+    const payload = JSON.stringify({ findings: Array.from({ length: count }, () => ({})) });
+    const alias = 'promptfoo.agentic.evidence_json';
+    const attributes = Object.fromEntries(
+      Array.from({ length: 20 }, (_, n) => [
+        [...alias].map((c, i) => (i < 5 && n & (1 << i) ? c.toUpperCase() : c)).join(''),
+        payload,
+      ]),
+    );
+    const parse = vi.spyOn(JSON, 'parse');
+    try {
+      expect(() =>
+        observationsFromGradingContext({
+          gradingContext: {
+            traceData: {
+              traceId: 'bounded-aliases',
+              evaluationId: 'fixture',
+              testCaseId: 'fixture',
+              spans: [{ spanId: 'verifier', name: 'verifier', startTime: 0, attributes }],
+            },
+          },
+        }),
+      ).toThrow(/evidence.*limit/i);
+      expect(parse.mock.calls.length).toBeLessThanOrEqual(count === 20000 ? 1 : 17);
+    } finally {
+      parse.mockRestore();
+    }
+  });
 
   it('preserves the actual finding location rather than its evidence attribute', () => {
     const observations = observationsFromGradingContext({

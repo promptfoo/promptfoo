@@ -66,16 +66,24 @@ export function parseEvidenceCandidates(value: unknown): Record<string, unknown>
   const candidates: Record<string, unknown>[] = [];
   const pending: unknown[] = [value];
   let visited = 0;
+  let findings = 0;
 
-  while (pending.length && ++visited <= 1000) {
+  while (pending.length) {
+    if (++visited > 1000) {
+      throw new Error('Agentic evidence exceeds scan limits and cannot be graded');
+    }
     const next = pending.pop();
     if (Array.isArray(next)) {
       if (next.length > 1000) {
-        return [];
+        throw new Error('Agentic evidence exceeds scan limits and cannot be graded');
       }
       pending.push(...[...next].reverse());
     } else if (next && typeof next === 'object') {
       const record = next as Record<string, unknown>;
+      findings += Array.isArray(record.findings) ? record.findings.length : 0;
+      if (findings > 1000) {
+        throw new Error('Agentic evidence exceeds scan limits and cannot be graded');
+      }
       const nested = [record.agenticEvidence, record.agentSdkEvidence].filter(
         (value) => value !== undefined && value !== null,
       );
@@ -83,7 +91,7 @@ export function parseEvidenceCandidates(value: unknown): Record<string, unknown>
       pending.push(...nested.reverse());
     } else if (typeof next === 'string') {
       if (next.length > MAX_JSON_LENGTH) {
-        return [];
+        throw new Error('Agentic evidence exceeds scan limits and cannot be graded');
       }
       if (!next.trim()) {
         continue;
@@ -110,5 +118,5 @@ export function parseEvidenceCandidates(value: unknown): Record<string, unknown>
     }
   }
 
-  return visited > 1000 ? [] : candidates;
+  return candidates;
 }

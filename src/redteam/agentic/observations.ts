@@ -448,10 +448,14 @@ function findingObservationsFromAttributes(
   span?: TraceLikeSpan,
 ): AgentObservation[] {
   const observations: AgentObservation[] = [];
-  const parsedEvidenceCandidates = Object.entries(attributes ?? {}).flatMap(([key, value]) =>
-    AGENTIC_RUNTIME_EVIDENCE_JSON_ATTRS.some((alias) => alias.toLowerCase() === key.toLowerCase())
-      ? parseEvidenceCandidates(value)
-      : [],
+  const parsedEvidenceCandidates = parseEvidenceCandidates(
+    Object.entries(attributes ?? {})
+      .filter(([key]) =>
+        AGENTIC_RUNTIME_EVIDENCE_JSON_ATTRS.some(
+          (alias) => alias.toLowerCase() === key.toLowerCase(),
+        ),
+      )
+      .map(([, value]) => value),
   );
   const spanPluginId = normalizePluginId(getAttribute(attributes, AGENTIC_RUNTIME_PLUGIN_ID_ATTRS));
 
@@ -695,6 +699,12 @@ export function observationsFromTraceData(
   }
 
   const observations: AgentObservation[] = [];
+  const append = (batch: AgentObservation[]) => {
+    if (observations.length + batch.length > 1000) {
+      throw new Error('Agentic trace exceeds 1000 observations and cannot be graded');
+    }
+    observations.push(...batch);
+  };
   traceData.spans.forEach((span, spanIndex) => {
     const traceSpan = span as TraceLikeSpan;
     const spanLocation = `trace span ${spanIndex + 1}`;
@@ -712,8 +722,8 @@ export function observationsFromTraceData(
       ? logTimestamp
       : traceSpan.attributes?.['otel.span.start_time_unix_nano'];
     const endNanos = traceSpan.attributes?.['otel.span.end_time_unix_nano'];
-    observations.push(
-      ...spanObservations.map((observation) => ({
+    append(
+      spanObservations.map((observation) => ({
         ...observation,
         ...(isLog && { eventId: traceSpan.spanId ?? spanLocation }),
         timestampNanos: nanosecondTimestamp(startNanos),
@@ -751,10 +761,10 @@ export function observationsFromTraceData(
         'trace-event',
       );
       if (eventControlObservation) {
-        observations.push({ ...eventControlObservation, eventId: eventLocation, timestampNanos });
+        append([{ ...eventControlObservation, eventId: eventLocation, timestampNanos }]);
       }
-      observations.push(
-        ...observationsFromTraceAttributes(
+      append(
+        observationsFromTraceAttributes(
           eventSpan.attributes,
           eventLocation,
           'trace-event',

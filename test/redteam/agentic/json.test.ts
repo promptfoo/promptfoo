@@ -66,7 +66,7 @@ describe('agentic evidence JSON extraction', () => {
     for (let index = 0; index < 1100; index++) {
       nested = [nested];
     }
-    expect(parseEvidenceCandidates(nested)).toEqual([]);
+    expect(() => parseEvidenceCandidates(nested)).toThrow(/evidence.*limit/i);
   });
 
   it('recovers bounded evidence after malformed text and rejects oversized input', () => {
@@ -75,16 +75,16 @@ describe('agentic evidence JSON extraction', () => {
     expect(extractJsonObjects(`log: { unfinished { second ${JSON.stringify(evidence)}`)).toEqual([
       evidence,
     ]);
-    expect(parseEvidenceCandidates(`${JSON.stringify(evidence)}${'x'.repeat(100_000)}`)).toEqual(
-      [],
-    );
-    expect(
+    expect(() =>
+      parseEvidenceCandidates(`${JSON.stringify(evidence)}${'x'.repeat(100_000)}`),
+    ).toThrow(/evidence.*limit/i);
+    expect(() =>
       parseEvidenceCandidates(
         `<AgenticEvidence>${JSON.stringify(evidence)}</AgenticEvidence>${'x'.repeat(100_000)}`,
       ),
-    ).toEqual([]);
-    expect(parseEvidenceCandidates(JSON.stringify({ findings: ['x'.repeat(100_000)] }))).toEqual(
-      [],
-    );
+    ).toThrow(/evidence.*limit/i);
+    expect(() =>
+      parseEvidenceCandidates(JSON.stringify({ findings: ['x'.repeat(100_000)] })),
+    ).toThrow(/evidence.*limit/i);
   });
 });

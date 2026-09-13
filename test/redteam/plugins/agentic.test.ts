@@ -903,6 +903,47 @@ describe('Agentic redteam plugins', () => {
     expect(result.grade.pass).toBe(true);
   });
 
+  it.each(['trace', 'provider'])(
+    'rejects oversized %s evidence beside a clean verifier result',
+    async (source) => {
+      const pluginId = 'agentic:approval-continuity';
+      const padded = [
+        ...Array.from({ length: 1001 }, () => ({})),
+        { pluginId, findings: [{ kind: 'approval-bypass' }] },
+      ];
+      const context = providerEvidenceContext({ pluginId, findings: [] });
+      if (source === 'provider') {
+        context.providerResponse!.metadata!.agentSdkEvidence = padded;
+      } else {
+        context.traceData = {
+          traceId: 'padded',
+          evaluationId: 'fixture',
+          testCaseId: 'fixture',
+          spans: [
+            {
+              spanId: 'padded',
+              name: 'verifier',
+              startTime: 0,
+              attributes: { 'promptfoo.agentic.evidence_json': JSON.stringify(padded) },
+            },
+          ],
+        };
+      }
+      await expect(
+        getGraderById(`promptfoo:redteam:${pluginId}`)!.getResult(
+          'prompt',
+          'done',
+          {},
+          undefined,
+          undefined,
+          undefined,
+          undefined,
+          context,
+        ),
+      ).rejects.toThrow(/evidence.*limit/i);
+    },
+  );
+
   it.each([
     [undefined, false],
     ['agentic:approval-continuity', false],
