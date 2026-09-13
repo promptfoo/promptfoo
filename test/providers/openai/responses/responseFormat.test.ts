@@ -374,5 +374,42 @@ describe('OpenAiResponsesProvider response formats', () => {
         });
       }).not.toThrow();
     });
+
+    it('should honor an explicit strict: false on a json_schema response format', async () => {
+      const provider = new OpenAiResponsesProvider('gpt-5.6-luna', {
+        config: {
+          apiKey: 'test-key',
+          response_format: {
+            type: 'json_schema' as const,
+            json_schema: {
+              name: 'pet',
+              strict: false,
+              schema: { type: 'object' as const, properties: { name: { type: 'string' } } },
+            },
+          },
+        },
+      });
+
+      const { body } = await provider.getOpenAiBody('Test prompt');
+
+      expect(body.text.format.strict).toBe(false);
+    });
+
+    it('should default json_schema strict to false when unspecified', async () => {
+      const provider = new OpenAiResponsesProvider('gpt-5.6-luna', {
+        config: {
+          apiKey: 'test-key',
+          response_format: {
+            type: 'json_schema' as const,
+            name: 'pet',
+            schema: { type: 'object' as const, properties: { name: { type: 'string' } } },
+          },
+        } as any,
+      });
+
+      const { body } = await provider.getOpenAiBody('Test prompt');
+
+      expect(body.text.format.strict).toBe(false);
+    });
   });
 });

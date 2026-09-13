@@ -118,7 +118,7 @@ Check [OpenAI pricing](https://developers.openai.com/api/docs/pricing) before a 
 <details>
 <summary>Aliases, snapshots, and default models</summary>
 
-Bare `openai:<model>` IDs default to Responses for GPT-5.6 and newer GPT models, including named variants and dated snapshots. For example, `openai:gpt-5.6`, `openai:gpt-5.6-luna`, and `openai:gpt-6-astra` all use Responses. Older recognized models keep their model-specific routing; other unknown names fall back to Chat Completions.
+Bare `openai:<model>` IDs default to Responses for GPT-5.6 and newer GPT models, including named variants and dated snapshots. For example, `openai:gpt-5.6`, `openai:gpt-5.6-luna`, and `openai:gpt-6-astra` all use Responses. Older recognized models keep their model-specific routing. Any unrecognized `gpt-` ID at 5.6 or newer also defaults to Responses; other unrecognized names fall back to Chat Completions.
 
 Use `openai:chat:<model>` or `openai:responses:<model>` to select the endpoint explicitly, including for a compatible gateway. Existing bare GPT-5.6 configurations with Chat-specific options should either select `openai:chat:gpt-5.6` or switch to Responses options such as `reasoning.effort` and `max_output_tokens`.
 
@@ -434,12 +434,13 @@ config:
   response_format: file://./response-format.json
 ```
 
-Use the nested `json_schema` shape above for Chat Completions or a shared configuration. Responses also accepts the flattened shape below and always sends JSON schemas with `strict: true`:
+Use the nested `json_schema` shape above for Chat Completions or a shared configuration. Chat Completions forwards `strict` as you set it and leaves it off when unset. The Responses API validates strictly unless told otherwise, so Promptfoo always sends `strict` there, using `false` when you leave it unset. Either way, a strict schema must set `additionalProperties: false` and list every property in `required`. Responses also accepts the flattened shape below:
 
 ```json title="response-format.json"
 {
   "type": "json_schema",
   "name": "ticket_category",
+  "strict": true,
   "schema": {
     "type": "object",
     "properties": {

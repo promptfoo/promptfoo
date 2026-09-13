@@ -84,12 +84,14 @@ export interface AzureCompletionOptions {
         type: 'json_schema';
         json_schema: {
           name: string;
-          strict: boolean;
+          // Optional to match `OpenAiCompletionOptions`: an unset `strict` is non-strict, and
+          // only a strict schema has to pin `additionalProperties: false`.
+          strict?: boolean;
           schema: {
             type: 'object';
             properties: Record<string, any>;
             required?: string[];
-            additionalProperties: false;
+            additionalProperties?: false;
             $defs?: Record<string, any>;
           };
         };
