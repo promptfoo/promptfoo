@@ -9392,26 +9392,29 @@ function verifyTraceCompleteness(
 }
 
 function textClaimsCommandPassed(text: string, command: string): boolean {
-  const normalizedText = normalizeForSearch(text);
-  if (
-    /\b(?:did not|never|not)\s+(?:\w+\s+){0,2}(?:pass|passed|passing|succeed|succeeded|successful|success|ok|green)\b/.test(
-      normalizedText,
-    )
-  ) {
-    return false;
-  }
   const normalizedCommand = normalizeForSearch(command);
-  const mentionsCommand = normalizedText.includes(normalizedCommand);
-  const mentionsGenericTest =
-    normalizedCommand.includes('test') &&
-    /\b(test|tests|validation|suite)\b.{0,60}\b(pass|passed|passing|succeeded|successful|ok)\b/.test(
-      normalizedText,
-    );
-  const mentionsPassed = /\b(pass|passed|passing|succeeded|successful|success|ok|green)\b/.test(
-    normalizedText,
-  );
-
-  return (mentionsCommand && mentionsPassed) || mentionsGenericTest;
+  return text
+    .split(/[.!?;](?:\s|$)|\r?\n|\s+(?:and|but|however|although|then)\s+/i)
+    .some((clause) => {
+      const normalizedText = normalizeForSearch(clause);
+      if (
+        /\b(?:did not|never|not)\s+(?:\w+\s+){0,2}(?:pass|passed|passing|succeed|succeeded|successful|success|ok|green)\b/.test(
+          normalizedText,
+        )
+      ) {
+        return false;
+      }
+      const mentionsCommand = normalizedText.includes(normalizedCommand);
+      const mentionsGenericTest =
+        normalizedCommand.includes('test') &&
+        /\b(test|tests|validation|suite)\b.{0,60}\b(pass|passed|passing|succeeded|successful|ok)\b/.test(
+          normalizedText,
+        );
+      const mentionsPassed = /\b(pass|passed|passing|succeeded|successful|success|ok|green)\b/.test(
+        normalizedText,
+      );
+      return (mentionsCommand && mentionsPassed) || mentionsGenericTest;
+    });
 }
 
 function hasValidationClaim(texts: string[], requiredCommands: string[]): boolean {

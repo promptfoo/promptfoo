@@ -130,39 +130,46 @@ describe('HarnessGrader', () => {
     expect(superSpy).toHaveBeenCalledOnce();
   });
 
-  it.each([
-    ['./reports/result.json', '/repo/reports/result.json', true],
-    ['reports/../result.json', '/repo/result.json', true],
-    ['reports/result.json', 'C:\\repo\\reports\\result.json', true],
-    ['./reports/result.json', '/repo/private/result.json', false],
-    ['./reports/result.json', '/repo/reports/result.json.bak', false],
-    ['/tmp/probe', '/tmp/probe', true],
-    ['/tmp/probe', '/evil/tmp/probe', false],
-    ['/tmp/probe', '/tmp/probe.bak', false],
-    ['C:\\tmp\\probe', 'C:\\tmp\\probe', true],
-    ['C:\\tmp\\probe', '/evil/C:/tmp/probe', false],
-  ] as const)('matches artifact hint %s against %s', async (hint, recordedPath, pass) => {
-    const model = vi.spyOn(RedteamGraderBase.prototype, 'getResult').mockResolvedValue({
-      grade: { pass: true, score: 1, reason: 'Artifact verified.' },
-      rubric: 'rubric',
-    });
-    const result = await new HarnessGrader('harness:known-good-agent').getResult(
-      `Write the report to \`${hint}\`.`,
-      'Done.',
-      baseTest,
-      undefined,
-      undefined,
-      undefined,
-      undefined,
-      {
-        providerResponse: {
-          metadata: { codingAgentActions: [{ type: 'file_change', path: recordedPath }] },
+  it.each(
+    (
+      [
+        ['./reports/result.json', '/repo/reports/result.json', true],
+        ['reports/../result.json', '/repo/result.json', true],
+        ['reports/result.json', 'C:\\repo\\reports\\result.json', true],
+        ['./reports/result.json', '/repo/private/result.json', false],
+        ['./reports/result.json', '/repo/reports/result.json.bak', false],
+        ['/tmp/probe', '/tmp/probe', true],
+        ['/tmp/probe', '/evil/tmp/probe', false],
+        ['/tmp/probe', '/tmp/probe.bak', false],
+        ['C:\\tmp\\probe', 'C:\\tmp\\probe', true],
+        ['C:\\tmp\\probe', '/evil/C:/tmp/probe', false],
+      ] as const
+    ).flatMap((row) => ['`', ''].map((quote) => [...row, quote] as const)),
+  )(
+    'matches artifact hint %s against %s: pass=%s, quote=%s',
+    async (hint, recordedPath, pass, quote) => {
+      const model = vi.spyOn(RedteamGraderBase.prototype, 'getResult').mockResolvedValue({
+        grade: { pass: true, score: 1, reason: 'Artifact verified.' },
+        rubric: 'rubric',
+      });
+      const result = await new HarnessGrader('harness:known-good-agent').getResult(
+        `Write the report to ${quote}${hint}${quote}.`,
+        'Done.',
+        baseTest,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        {
+          providerResponse: {
+            metadata: { codingAgentActions: [{ type: 'file_change', path: recordedPath }] },
+          },
         },
-      },
-    );
-    expect(result.grade.pass).toBe(pass);
-    expect(model).toHaveBeenCalledTimes(pass ? 1 : 0);
-  });
+      );
+      expect(result.grade.pass).toBe(pass);
+      expect(model).toHaveBeenCalledTimes(pass ? 1 : 0);
+    },
+  );
 
   it('fails non-known-good harness probes when prompt-specific evidence is missing', async () => {
     const grader = new HarnessGrader('harness:secret-placement');

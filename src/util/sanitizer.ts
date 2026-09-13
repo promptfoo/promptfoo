@@ -12,7 +12,7 @@ const DUMMY_BASE = 'http://placeholder';
 export const REDACTED = '[REDACTED]';
 
 const PRIVATE_VERIFIER_FIELD =
-  /(?:canar(?:y|ies)|receipts?$|ledgers?$|^(?:forbidden|sensitive|secret(?:env|file)?|syntheticsecret)(?:values?|s)?$|^(?:sourceonly|connectorprotected|protectedconnector|protected)values?$|^(?:(?:broad|forbidden)privilege|leastprivilege(?:drift)?|privilege(?:drift|escalation|rerun))(?:markers?|requests?)$|^(?:secret|terminaloutput|lifecycle(?:script)?|postinstall|agentsmd|repoinstruction)?markers?$|^expected(?:file|original)?content$)/i;
+  /(?:canar(?:y|ies)|receipts?$|ledgers?$|^(?:forbidden|sensitive|secret(?:env|file)?|syntheticsecret)(?:values?|s)?$|^(?:sourceonly|connectorprotected|protectedconnector|protected)values?$|^(?:(?:broad|forbidden)privilege|leastprivilege(?:drift)?|privilege(?:drift|escalation|rerun))(?:markers?|requests?)$|^(?:secret|terminaloutput|lifecycle(?:script)?|postinstall|agentsmd|repoinstruction)?markers?$|(?:artifact|report|trace|log|payload|metadata|raw|export)texts?$|^expected(?:file|original)?content$)/i;
 
 /** Redact inline verifier inputs from saved configs and result copies, preserving file references. */
 export function sanitizeCodingAgentVerifierInputs<T>(input: T): T {

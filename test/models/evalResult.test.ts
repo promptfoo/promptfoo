@@ -121,8 +121,13 @@ describe('EvalResult', () => {
       const secret = 'PRIVATE_TEXT_RECEIPT_8964';
       const row = createEvaluateResult({
         ...mockEvaluateResult,
-        response: { output: secret, metadata: { diagnostic: secret }, cost: 0.01 },
-        metadata: { diagnostic: secret, custom: 'retained' },
+        response: {
+          output: secret,
+          sessionId: secret,
+          metadata: { diagnostic: secret },
+          cost: 0.01,
+        },
+        metadata: { diagnostic: secret, sessionId: secret, custom: 'retained' },
         testCase: { assert: [{ type: `promptfoo:redteam:${pluginId}` as const }] },
         gradingResult: { pass: false, score: 0, reason: 'Protected receipt found.' },
       });

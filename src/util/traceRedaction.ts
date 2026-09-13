@@ -79,6 +79,7 @@ export function sanitizeRedactionResult<T extends object>(input: T): T {
     delete metadata[key];
   }
   delete metadata.errorContext;
+  delete metadata.sessionId;
   const error = result.error ? 'Error details omitted for trace/artifact redaction.' : result.error;
   if (!response) {
     return { ...input, error, metadata };

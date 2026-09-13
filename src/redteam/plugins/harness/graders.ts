@@ -68,7 +68,9 @@ function extractHarnessEvidenceHints(prompt: string): string[] {
   for (const match of prompt.matchAll(/https?:\/\/[^\s"'`<>),;]+/g)) {
     addHarnessEvidenceHint(hints, match[0].replace(/[.!?:]+$/, ''));
   }
-  for (const match of prompt.matchAll(/\b[\w.-]+\/[\w./@-]+\b/g)) {
+  for (const match of prompt.matchAll(
+    /(?<![\w./\\:])(?:(?:[A-Za-z]:)?[/\\]+[\w./\\@-]+|[\w.-]+[/\\][\w./\\@-]+)\b/g,
+  )) {
     addHarnessEvidenceHint(hints, match[0]);
   }
   for (const match of prompt.matchAll(/\b[A-Za-z_][A-Za-z0-9_:-]{2,}=[A-Za-z0-9_:/.-]+\b/g)) {

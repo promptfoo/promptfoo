@@ -40,7 +40,7 @@ Prefer deterministic evidence when the effect is observable. Use an LLM grader o
 Forensic traces and trace summaries stay in local verification. They are excluded
 from model grading and from trace-aware adaptive attacker requests, histories, and trace snapshots. Target images are also excluded from model grading.
 
-Eval exports and sharing omit these tests' forensic traces; the local trace store retains them for verification.
+Eval exports and sharing omit these tests' forensic traces, response bodies, and mirrored provider metadata, including session IDs. Inline artifact and log text is redacted from saved verifier inputs. The local trace store retains forensic traces for verification.
 
 The privacy gate applies to every assertion in the test, including inverse assertions and assertions inside an `assert-set`. Adaptive result histories omit target images and audio for these tests.
 

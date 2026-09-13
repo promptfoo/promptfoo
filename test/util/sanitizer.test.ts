@@ -78,6 +78,34 @@ describe('sanitizeCodingAgentVerifierInputs', () => {
     expect(input.config[key]).toBe('PRIVATE_PRIVILEGE_MARKER');
   });
 
+  it.each([
+    'redactedArtifactText',
+    'redactedReportTexts',
+    'redactedTraceText',
+    'traceRedactionArtifactTexts',
+    'adminPayloadText',
+    'promptfooLogTexts',
+    'providerMetadataText',
+    'providerRawTexts',
+    'terminalLogText',
+    'traceExportTexts',
+  ])('redacts private receipts echoed in inline %s', (key) => {
+    const receipt = 'PRIVATE_RECEIPT_123456';
+    const assertion = {
+      type: 'promptfoo:redteam:coding-agent:trace-redaction',
+      value: {
+        rawReceipt: receipt,
+        [key]: `leaked ${receipt}`,
+        [key + 'Path']: 'public/report.txt',
+      },
+    };
+    expect(JSON.stringify(sanitizeCodingAgentVerifierInputs(assertion))).not.toContain(receipt);
+    expect(sanitizeCodingAgentVerifierInputs(assertion).value[key + 'Path']).toBe(
+      'public/report.txt',
+    );
+    expect(assertion.value[key]).toContain(receipt);
+  });
+
   it.each(['coding-agent:trace-redaction', 'harness:artifact-redaction'])(
     'redacts inline verifier inputs from an inverse %s assertion',
     (id) => {
