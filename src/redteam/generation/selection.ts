@@ -29,7 +29,7 @@ function jaccardSimilarity(a: Set<string>, b: Set<string>): number {
     }
   }
 
-  const union = new Set([...a, ...b]).size;
+  const union = a.size + b.size - intersection;
   return union === 0 ? 0 : intersection / union;
 }
 
@@ -251,17 +251,9 @@ export function selectCoverageAwareCandidates(
 
 function getSemanticBandGain(
   candidate: AttackCandidate,
-  selected: readonly AttackCandidate[],
+  selectedPredicates: ReadonlySet<string>,
   config: SemanticBandSelectionConfig,
 ): number {
-  const selectedPredicates = new Set(
-    selected.flatMap((item) =>
-      Object.entries(item.signature.predicates)
-        .filter(([, enabled]) => enabled)
-        .map(([predicate]) => predicate),
-    ),
-  );
-
   return Object.entries(config.bands).reduce((score, [bandId, predicates]) => {
     const newlyCoveredPredicates = predicates.filter(
       (predicate) =>
@@ -270,17 +262,6 @@ function getSemanticBandGain(
 
     return score + newlyCoveredPredicates * (config.weights[bandId] ?? 1);
   }, 0);
-}
-
-function getFamilyCoverageGain(
-  candidate: AttackCandidate,
-  selected: readonly AttackCandidate[],
-): number {
-  return selected.some(
-    (item) => item.pluginId === candidate.pluginId && item.familyId === candidate.familyId,
-  )
-    ? 0
-    : 1;
 }
 
 export function selectSemanticBandAwareCandidates(
@@ -292,32 +273,46 @@ export function selectSemanticBandAwareCandidates(
     return [];
   }
 
-  const remaining = dedupeCandidatesByPrompt(candidates);
+  const remaining = dedupeCandidatesByPrompt(candidates).map((candidate) => ({
+    candidate,
+    family: JSON.stringify([candidate.pluginId, candidate.familyId]),
+    tokens: tokenize(candidate.prompt),
+    maxSimilarity: 0,
+  }));
   const selected: AttackCandidate[] = [];
+  const selectedPredicates = new Set<string>();
+  const selectedFamilies = new Set<string>();
 
   while (selected.length < requestedCount && remaining.length > 0) {
-    remaining.sort((left, right) => {
-      const semanticDelta =
-        getSemanticBandGain(right, selected, config) - getSemanticBandGain(left, selected, config);
-      if (semanticDelta !== 0) {
-        return semanticDelta;
+    let bestIndex = 0;
+    for (let index = 1; index < remaining.length; index++) {
+      const left = remaining[index];
+      const right = remaining[bestIndex];
+      const rank =
+        getSemanticBandGain(right.candidate, selectedPredicates, config) -
+          getSemanticBandGain(left.candidate, selectedPredicates, config) ||
+        Number(selectedFamilies.has(left.family)) - Number(selectedFamilies.has(right.family)) ||
+        left.maxSimilarity - right.maxSimilarity ||
+        left.candidate.prompt.localeCompare(right.candidate.prompt);
+      if (rank < 0) {
+        bestIndex = index;
       }
-
-      const familyCoverageDelta =
-        getFamilyCoverageGain(right, selected) - getFamilyCoverageGain(left, selected);
-      if (familyCoverageDelta !== 0) {
-        return familyCoverageDelta;
-      }
-
-      return compareCandidates(left, right, selected);
-    });
-
-    const next = remaining.shift();
-    if (!next) {
-      break;
     }
 
-    selected.push(next);
+    const [next] = remaining.splice(bestIndex, 1);
+    selected.push(next.candidate);
+    selectedFamilies.add(next.family);
+    for (const [predicate, enabled] of Object.entries(next.candidate.signature.predicates)) {
+      if (enabled) {
+        selectedPredicates.add(predicate);
+      }
+    }
+    for (const entry of remaining) {
+      entry.maxSimilarity = Math.max(
+        entry.maxSimilarity,
+        jaccardSimilarity(entry.tokens, next.tokens),
+      );
+    }
   }
 
   return selected;

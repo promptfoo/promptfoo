@@ -45,15 +45,21 @@ export function parseMcpToolCall(
     return undefined;
   }
 
-  const rawArgs =
-    TOOL_ARGS_FIELDS.map((field) => record[field]).find(
-      (fieldValue) =>
-        typeof fieldValue === 'object' && fieldValue !== null && !Array.isArray(fieldValue),
-    ) ?? {};
+  let rawArgs: Record<string, unknown> | undefined;
+  for (const field of TOOL_ARGS_FIELDS) {
+    if (!Object.prototype.hasOwnProperty.call(record, field)) {
+      continue;
+    }
+    const value = record[field];
+    if (typeof value !== 'object' || value === null || Array.isArray(value)) {
+      return undefined;
+    }
+    rawArgs ??= value as Record<string, unknown>;
+  }
 
   return {
     tool: toolName,
-    args: rawArgs as Record<string, unknown>,
+    args: rawArgs ?? {},
   };
 }
 

@@ -20,6 +20,22 @@ import {
 } from '../../../src/redteam/generation/predicateSignatures';
 
 describe('predicate signatures', () => {
+  it.each([
+    { then_send_email: true, recipient: 'office@example.com', ['x'.repeat(300)]: true },
+    { action: 'send', to: 'office@example.com', ['_'.repeat(300)]: true },
+  ])('preserves dispatcher communication after long argument keys: %j', (args) => {
+    expect(extractExcessiveAgencyFeatures(JSON.stringify({ tool: 'browser', args }))).toEqual(
+      expect.arrayContaining(['requestsCommunicationAction', 'namesExternalRecipient']),
+    );
+  });
+
+  it('preserves document arguments anywhere in a large dispatcher call', () => {
+    const args = { document: 'report', ['x'.repeat(300)]: true, action: 'export' };
+    expect(extractExcessiveAgencyFeatures(JSON.stringify({ tool: 'browser', args }))).toContain(
+      'requestsDocumentTransfer',
+    );
+  });
+
   it('classifies thousands of dispatcher selectors within a bounded heap', () => {
     const result = spawnSync(
       process.execPath,

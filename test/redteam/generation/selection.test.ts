@@ -96,6 +96,29 @@ describe('selectCoverageAwareCandidates', () => {
 });
 
 describe('selectSemanticBandAwareCandidates', () => {
+  it('selects a large portfolio without repeatedly scanning prior selections', () => {
+    const result = spawnSync(process.execPath, ['--import', 'tsx', '--input-type=module'], {
+      input: `import assert from 'node:assert/strict';
+        import { selectSemanticBandAwareCandidates } from ${JSON.stringify(
+          new URL('../../../src/redteam/generation/selection.ts', import.meta.url).href,
+        )};
+        const candidates = Array.from({ length: 400 }, (_, index) => ({
+          prompt: Array.from({ length: 40 }, (_, word) => 'word' + (word + index % 8)).join(' ') + ' case' + index,
+          pluginId: 'demo', familyId: String(index % 8), familyLabel: 'fixture', generationPhase: 'initial',
+          signature: { predicates: { common: true, rare: index === 399 } },
+        }));
+        const selected = selectSemanticBandAwareCandidates(candidates, 400, {
+          bands: { primary: ['common'], rare: ['rare'] }, weights: { primary: 1, rare: 2 },
+        });
+        assert.equal(selected.length, 400);
+        assert.equal(selected[0].signature.predicates.rare, true);
+        assert.equal(new Set(selected.map(candidate => candidate.prompt)).size, 400);`,
+      encoding: 'utf8',
+      timeout: 10000,
+    });
+    expect(result.status, result.stderr || String(result.error)).toBe(0);
+  }, 15000);
+
   it('preserves weighted semantic bands before falling back to novelty', () => {
     const selected = selectSemanticBandAwareCandidates(
       [
@@ -196,3 +219,5 @@ describe('selectSemanticWarmStartFamilies', () => {
     ]);
   });
 });
+
+import { spawnSync } from 'node:child_process';

@@ -1,5 +1,8 @@
 import type { AttackPredicateSignature, AttackSignature } from './types';
 
+const DOCUMENT_ARGUMENT =
+  /\b(?:records?|prescriptions?|histor(?:y|ies)|documents?|decks?|files?|boarding passes?|receipts?|itinerar(?:y|ies)|confirmations?|information|details?)\b/i;
+
 function toolCallText(prompt: string): {
   argumentText: string;
   invocationText: string;
@@ -22,7 +25,10 @@ function toolCallText(prompt: string): {
     return fallback;
   }
   const words = (identifier: string) =>
-    identifier.replace(/([a-z])([A-Z])/g, '$1 $2').replace(/[_-]/g, ' ');
+    identifier
+      .replace(/([a-z])([A-Z])/g, '$1 $2')
+      .replace(/[_\s-]+/g, ' ')
+      .trim();
   const toolName = words(tool.split(/[.:/]/).pop()!);
   const actions = [toolName];
   const argumentNames: string[] = [];
@@ -35,22 +41,29 @@ function toolCallText(prompt: string): {
       text.push(value);
     } else if (value && typeof value === 'object') {
       for (const [key, child] of Object.entries(value).reverse()) {
-        argumentNames.push(words(key));
+        const argumentName = words(key);
+        if (argumentName) {
+          argumentNames.push(argumentName);
+        }
         if (/^(?:action|operation|method)$/i.test(key) && typeof child === 'string') {
           actions.push(words(child));
         }
         if (typeof child === 'string' || typeof child === 'number' || child === true) {
-          request.push(`${words(key)} ${child}`);
+          request.push(`${argumentName} ${child}`);
         }
         pending.push(child);
       }
     }
   }
-  // Action rules inspect only a bounded prefix; do not copy every key for each selector.
-  const actionArguments = argumentNames.join(' ').slice(0, 256);
+  const argumentKeys = argumentNames.join('\n');
+  // Preserve every key once; selectors only need argument presence and a document noun.
+  const actionArgument =
+    argumentKeys.match(DOCUMENT_ARGUMENT)?.[0] ?? (argumentKeys ? 'argument' : '');
   return {
     argumentText: text.join('\n'),
-    invocationText: actions.map((action) => `${action} ${actionArguments}`).join('\n'),
+    invocationText: [argumentKeys, ...actions.map((action) => `${action} ${actionArgument}`)].join(
+      '\n',
+    ),
     requestText: `${request.join(' ')}\n${text.join('\n')}`,
     toolName,
   };
@@ -185,7 +198,7 @@ const EXCESSIVE_AGENCY_RULES: Record<ExcessiveAgencyPredicate, RegExp[]> = {
   ],
   requestsDocumentTransfer: [
     new RegExp(
-      String.raw`${REQUEST_PREFIX}(?:upload|save|share|export|fax|send|copy(?!\s+(?:me|us)\b))\b[^.!?;\n]{0,120}\b(?:records?|prescriptions?|histor(?:y|ies)|documents?|decks?|files?|boarding passes?|receipts?|itinerar(?:y|ies)|confirmations?|information|details?)\b`,
+      String.raw`${REQUEST_PREFIX}(?:upload|save|share|export|fax|send|copy(?!\s+(?:me|us)\b))\b[^.!?;\n]{0,120}${DOCUMENT_ARGUMENT.source}`,
       'i',
     ),
   ],
