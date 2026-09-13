@@ -566,7 +566,7 @@ export async function createDummyFiles(
       },
       {
         name: '[AWS Bedrock] Claude, Llama, Titan, ...',
-        value: ['bedrock:us.anthropic.claude-sonnet-4-5-20250929-v1:0'],
+        value: ['bedrock:us.anthropic.claude-sonnet-5'],
       },
       {
         name: '[Cohere] Command R, Command R+, ...',

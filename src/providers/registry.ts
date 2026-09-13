@@ -759,7 +759,7 @@ export const providerMap: ProviderFactory[] = [
 
       if (!model) {
         throw new Error(
-          'Helicone provider requires a model in format helicone:<provider/model> (e.g., helicone:openai/gpt-4o, helicone:anthropic/claude-3-5-sonnet)',
+          'Helicone provider requires a model in format helicone:<provider/model> (e.g., helicone:openai/gpt-4o, helicone:anthropic/claude-sonnet-5)',
         );
       }
 

@@ -14,7 +14,7 @@ export interface SystemError extends Error {
  * References:
  * - OpenAI: https://platform.openai.com/docs/guides/error-codes/api-errors
  * - Azure OpenAI: https://learn.microsoft.com/en-us/azure/ai-services/openai/reference
- * - Anthropic: https://docs.anthropic.com/en/api/errors
+ * - Anthropic: https://docs.claude.com/en/api/errors
  *
  * Note: Azure OpenAI is known to return `insufficient_quota` for both billing
  * exhaustion AND per-minute deployment quota saturation. The

@@ -202,7 +202,7 @@ describe('matchesSearchRubric', () => {
     mocks.loadApiProvider.mockResolvedValue(null);
 
     await expect(matchesSearchRubric('Confirm current facts', 'output', {})).rejects.toThrow(
-      'anthropic:messages:claude-sonnet-4-6',
+      'anthropic:messages:claude-sonnet-5',
     );
   });
 });
