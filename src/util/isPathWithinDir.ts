@@ -69,6 +69,8 @@ export async function isPathWithinCanonicalDir(
 
 /** Check two already-resolved paths without another filesystem lookup. */
 export function isCanonicalPathWithinDir(realTarget: string, realDir: string): boolean {
-  const prefix = realDir.endsWith(path.sep) ? realDir : `${realDir}${path.sep}`;
-  return realTarget === realDir || realTarget.startsWith(prefix);
+  const target = process.platform === 'win32' ? realTarget.toLowerCase() : realTarget;
+  const dir = process.platform === 'win32' ? realDir.toLowerCase() : realDir;
+  const prefix = dir.endsWith(path.sep) ? dir : `${dir}${path.sep}`;
+  return target === dir || target.startsWith(prefix);
 }

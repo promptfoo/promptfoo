@@ -254,27 +254,29 @@ async function loadFilePart(
 ): Promise<{ buffer: Buffer; filename: string; contentType: string }> {
   const renderedPath = renderTemplate(source.path, vars);
   const resolvedPath = resolvePath(renderedPath);
+  const requested = await fs.stat(resolvedPath, { bigint: true });
   const canonicalPath = await fs.realpath(resolvedPath);
   if (!isCanonicalPathWithinDir(canonicalPath, basePath)) {
     throw new Error(`File path escapes allowed base directory: ${renderedPath}`);
   }
+  const canonical = await fs.stat(canonicalPath, { bigint: true });
   const file = await fs.open(canonicalPath, 'r');
   try {
-    const [opened, canonical, currentBase, currentPath] = await Promise.all([
+    const [opened, currentBase] = await Promise.all([
       file.stat({ bigint: true }),
-      fs.stat(canonicalPath, { bigint: true }),
       fs.stat(basePath, { bigint: true }),
-      fs.realpath(process.platform === 'win32' ? canonicalPath : `/dev/fd/${file.fd}`),
     ]);
     if (
+      canonical.dev === 0n ||
+      canonical.ino === 0n ||
+      requested.dev !== canonical.dev ||
+      requested.ino !== canonical.ino ||
       opened.dev === 0n ||
       opened.ino === 0n ||
       opened.dev !== canonical.dev ||
       opened.ino !== canonical.ino ||
       currentBase.dev !== baseIdentity.dev ||
-      currentBase.ino !== baseIdentity.ino ||
-      currentPath !== canonicalPath ||
-      !isCanonicalPathWithinDir(currentPath, basePath)
+      currentBase.ino !== baseIdentity.ino
     ) {
       throw new Error(`File path escapes allowed base directory: ${renderedPath}`);
     }
@@ -317,6 +319,9 @@ export async function renderHttpMultipartBody(
     if (part.source.type === 'path') {
       basePath ??= await resolveCanonicalDir(cliState.basePath || process.cwd());
       baseIdentity ??= await fs.stat(basePath, { bigint: true });
+      if (baseIdentity.dev === 0n || baseIdentity.ino === 0n) {
+        throw new Error(`Directory does not have a stable identity: ${basePath}`);
+      }
       const file = await loadFilePart(part.source, vars, basePath, baseIdentity, abortSignal);
       loaded = file;
       defaultFilename = file.filename;
