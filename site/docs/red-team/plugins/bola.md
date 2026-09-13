@@ -29,7 +29,7 @@ redteam:
           - 'Sharepoint'
 ```
 
-The `targetSystems` is optional and can be used to make the test prompts more specific to the system(s) the agent has access to.
+`targetSystems` is optional and can be used to make the test prompts more specific to the systems the agent can access.
 
 ## How It Works
 

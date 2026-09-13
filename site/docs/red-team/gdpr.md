@@ -34,7 +34,7 @@ redteam:
   plugins:
     - gdpr
   strategies:
-    - jailbreak
+    - jailbreak:meta
     - jailbreak:composite
 ```
 
@@ -347,7 +347,7 @@ redteam:
   plugins:
     - gdpr
   strategies:
-    - jailbreak
+    - jailbreak:meta
     - jailbreak:composite
 ```
 
@@ -409,7 +409,7 @@ redteam:
     - iso:42001:privacy
     - owasp:llm:02
   strategies:
-    - jailbreak
+    - jailbreak:meta
     - jailbreak:composite
 ```
 

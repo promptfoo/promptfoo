@@ -1,7 +1,7 @@
 ---
 sidebar_label: Custom Strategy Scripts
 title: Custom Strategy Scripts
-description: Build custom red team strategies using JavaScript to programmatically generate, mutate, and chain sophisticated attack patterns
+description: Build custom red team strategies using JavaScript to generate and transform test cases, preserve metadata, and load your strategy from your configuration file.
 ---
 
 # Custom Strategy Scripts
@@ -16,7 +16,7 @@ This page covers **custom strategy scripts**. For the built-in **custom strategy
 
 Use it in your `promptfooconfig.yaml` like this:
 
-```yaml title="promptfooconfig.yaml"
+```yaml
 strategies:
   - id: file://custom-strategy.js
     config:

@@ -7,25 +7,20 @@ import {
   COLLECTIONS,
   DEFAULT_NUM_TESTS_PER_PLUGIN,
   DEFAULT_STRATEGIES,
-  FINANCIAL_PLUGINS,
   FOUNDATION_PLUGINS,
   FRAMEWORK_COMPLIANCE_IDS,
   GUARDRAILS_EVALUATION_PLUGINS,
-  HARM_PLUGINS,
-  INSURANCE_PLUGINS,
-  MEDICAL_PLUGINS,
-  PHARMACY_PLUGINS,
-  PII_PLUGINS,
+  PLUGIN_CATEGORIES,
   ADDITIONAL_PLUGINS as REDTEAM_ADDITIONAL_PLUGINS,
   ADDITIONAL_STRATEGIES as REDTEAM_ADDITIONAL_STRATEGIES,
   ALL_PLUGINS as REDTEAM_ALL_PLUGINS,
   DEFAULT_PLUGINS as REDTEAM_DEFAULT_PLUGINS,
   Severity,
   SeveritySchema,
-  TEEN_SAFETY_PLUGINS,
 } from '../redteam/constants';
 import { CODING_AGENT_CORE_PLUGINS, CODING_AGENT_PLUGINS } from '../redteam/constants/codingAgents';
-import { isCustomStrategy } from '../redteam/constants/strategies';
+import { isCustomStrategy, MULTI_MODAL_STRATEGIES } from '../redteam/constants/strategies';
+import { isAttackProvider } from '../redteam/shared/attackProviders';
 import { isJavascriptFile } from '../util/fileExtensions';
 import { ProviderSchema } from '../validators/providers';
 
@@ -186,16 +181,68 @@ export const strategyIdSchema = z.union([
 /**
  * Schema for individual redteam strategies
  */
-export const RedteamStrategySchema = z.union([
-  strategyIdSchema,
-  z.object({
-    id: strategyIdSchema,
-    config: z
-      .record(z.string(), z.unknown())
-      .optional()
-      .describe('Strategy-specific configuration'),
-  }),
-]);
+export const RedteamStrategySchema = z
+  .union([
+    strategyIdSchema,
+    z.object({
+      id: strategyIdSchema,
+      config: z
+        .record(z.string(), z.unknown())
+        .optional()
+        .describe('Strategy-specific configuration'),
+    }),
+  ])
+  .superRefine((strategy, ctx) => {
+    if (typeof strategy === 'string' || strategy.id !== 'layer') {
+      return;
+    }
+    const steps = strategy.config?.steps;
+    if (!Array.isArray(steps)) {
+      return;
+    }
+    const ids = steps.map((step) =>
+      typeof step === 'string' ? step : (step as { id?: unknown })?.id,
+    );
+    const attackIndexes = ids.flatMap((id, index) =>
+      typeof id === 'string' && isAttackProvider(id) ? [index] : [],
+    );
+    const indirectIndexes = ids.flatMap((id, index) => (id === 'indirect-web-pwn' ? [index] : []));
+    const indirectIndex = indirectIndexes[0] ?? -1;
+    const mediaIndexes = ids.flatMap((id, index) =>
+      typeof id === 'string' && (MULTI_MODAL_STRATEGIES as readonly string[]).includes(id)
+        ? [index]
+        : [],
+    );
+    const providerIndexes = ids.flatMap((id, index) =>
+      typeof id === 'string' &&
+      (isAttackProvider(id) ||
+        id === 'best-of-n' ||
+        id === 'authoritative-markup-injection' ||
+        id === 'mischievous-user')
+        ? [index]
+        : [],
+    );
+    const hasMischievousUser = ids.includes('mischievous-user');
+    const invalid =
+      ids.includes('layer') ||
+      attackIndexes.length > 1 ||
+      indirectIndexes.length > 1 ||
+      (ids.some((id) => typeof id === 'string' && isCustomStrategy(id)) && indirectIndex >= 0) ||
+      (indirectIndex >= 0 && attackIndexes.some((index) => index > indirectIndex)) ||
+      (hasMischievousUser && (attackIndexes.length > 0 || indirectIndex >= 0)) ||
+      providerIndexes.length > 1 ||
+      (hasMischievousUser && providerIndexes[0] !== ids.length - 1) ||
+      mediaIndexes.length > 1 ||
+      (mediaIndexes.length === 1 && mediaIndexes[0] !== ids.length - 1);
+    if (invalid) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['config', 'steps'],
+        message:
+          'Layer steps cannot recurse; use at most one attack provider before indirect-web-pwn, do not combine custom or mischievous-user with indirect-web-pwn, and use at most one final media transform',
+      });
+    }
+  });
 
 /**
  * Schema for `promptfoo redteam generate` command options
@@ -428,22 +475,11 @@ export const RedteamConfigSchema = z
       numTests: number | undefined,
       severity?: Severity,
     ) => {
-      if (id === 'foundation') {
+      const category = PLUGIN_CATEGORIES[id as keyof typeof PLUGIN_CATEGORIES];
+      if (category) {
+        expandCollection([...category], config, numTests, severity);
+      } else if (id === 'foundation') {
         expandCollection([...FOUNDATION_PLUGINS], config, numTests, severity);
-      } else if (id === 'harmful') {
-        expandCollection(Object.keys(HARM_PLUGINS), config, numTests, severity);
-      } else if (id === 'pii') {
-        expandCollection([...PII_PLUGINS], config, numTests, severity);
-      } else if (id === 'medical') {
-        expandCollection([...MEDICAL_PLUGINS], config, numTests, severity);
-      } else if (id === 'pharmacy') {
-        expandCollection([...PHARMACY_PLUGINS], config, numTests, severity);
-      } else if (id === 'insurance') {
-        expandCollection([...INSURANCE_PLUGINS], config, numTests, severity);
-      } else if (id === 'financial') {
-        expandCollection([...FINANCIAL_PLUGINS], config, numTests, severity);
-      } else if (id === 'teen-safety') {
-        expandCollection([...TEEN_SAFETY_PLUGINS], config, numTests, severity);
       } else if (id === 'default') {
         expandCollection([...REDTEAM_DEFAULT_PLUGINS], config, numTests, severity);
       } else if (id === 'guardrails-eval') {

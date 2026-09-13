@@ -18,14 +18,14 @@ The basic strategy accepts the following configuration options:
 
 Example usage:
 
-```yaml title="promptfooconfig.yaml"
+```yaml
 redteam:
   language: ['es', 'fr'] # Test in Spanish and French
   strategies:
     - id: basic
       config:
         enabled: false # Only run tests with strategies applied
-    - id: jailbreak
+    - id: jailbreak:meta
     - id: base64
 ```
 

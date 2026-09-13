@@ -57,7 +57,7 @@ redteam:
   plugins:
     - nist:ai:measure
   strategies:
-    - jailbreak
+    - jailbreak:meta
     - jailbreak-templates
 ```
 
@@ -90,7 +90,7 @@ redteam:
     - excessive-agency
     - harmful:misinformation-disinformation
   strategies:
-    - jailbreak
+    - jailbreak:meta
     - jailbreak-templates
 ```
 
@@ -161,7 +161,7 @@ redteam:
     - excessive-agency
     - harmful:misinformation-disinformation
   strategies:
-    - jailbreak
+    - jailbreak:meta
     - jailbreak-templates
 ```
 
@@ -208,7 +208,7 @@ redteam:
     - shell-injection
     - sql-injection
   strategies:
-    - jailbreak
+    - jailbreak:meta
     - jailbreak-templates
 ```
 
@@ -321,7 +321,7 @@ redteam:
     - excessive-agency
     - harmful:misinformation-disinformation
   strategies:
-    - jailbreak
+    - jailbreak:meta
     - jailbreak-templates
 ```
 
@@ -367,7 +367,7 @@ redteam:
   plugins:
     - nist:ai:measure
   strategies:
-    - jailbreak
+    - jailbreak:meta
     - jailbreak-templates
 ```
 
@@ -391,7 +391,7 @@ redteam:
     - owasp:llm
     - gdpr
   strategies:
-    - jailbreak
+    - jailbreak:meta
     - jailbreak-templates
 ```
 

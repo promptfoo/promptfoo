@@ -1,114 +1,38 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 600" style="max-width: 100%; height: auto;">
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 920 410" role="img" aria-labelledby="title desc">
+  <title id="title">Red team tracing feedback loop</title>
+  <desc id="desc">An attack prompt reaches the agent, OpenTelemetry captures internal events, trace analysis identifies the failure path, and the attacker uses that feedback on the next attempt.</desc>
   <defs>
+    <marker id="arrow" markerWidth="10" markerHeight="8" refX="9" refY="4" orient="auto"><path d="M0 0L10 4L0 8Z" fill="#64748b" /></marker>
+    <marker id="feedback" markerWidth="10" markerHeight="8" refX="9" refY="4" orient="auto"><path d="M0 0L10 4L0 8Z" fill="#15803d" /></marker>
     <style>
-      .title { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; font-size: 16px; font-weight: 600; fill: #1a202c; }
-      .label { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; font-size: 14px; fill: #2d3748; }
-      .sublabel { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; font-size: 12px; fill: #4a5568; }
-      .trace-text { font-family: 'SF Mono', Monaco, 'Courier New', monospace; font-size: 10px; fill: #2d3748; }
-      .step-number { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; font-size: 13px; font-weight: 600; fill: #fff; }
-      .arrow { fill: none; stroke: #4a5568; stroke-width: 2; marker-end: url(#arrowhead); }
-      .feedback-arrow { fill: none; stroke: #059669; stroke-width: 2.5; marker-end: url(#arrowhead-feedback); stroke-dasharray: 5,3; }
-      .box { fill: #fff; stroke: #cbd5e0; stroke-width: 2; }
-      .attacker-box { fill: #fef3c7; stroke: #f59e0b; stroke-width: 2; }
-      .agent-box { fill: #dbeafe; stroke: #3b82f6; stroke-width: 2; }
-      .trace-box { fill: #f3e8ff; stroke: #8b5cf6; stroke-width: 2; }
-      .component { fill: #f7fafc; stroke: #cbd5e0; stroke-width: 1.5; rx: 4; }
-      .trace-span { fill: #fef3e7; stroke: #f59e0b; stroke-width: 1; rx: 2; }
-      .step-circle { fill: #3b82f6; stroke: none; }
+      text { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; fill: #0f172a; }
+      .title { font-size: 24px; font-weight: 700; }
+      .heading { font-size: 17px; font-weight: 600; }
+      .body { font-size: 14px; fill: #475569; }
+      .code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 14px; fill: #334155; }
     </style>
-    <marker id="arrowhead" markerWidth="10" markerHeight="10" refX="9" refY="3" orient="auto">
-      <polygon points="0 0, 10 3, 0 6" fill="#4a5568" />
-    </marker>
-    <marker id="arrowhead-feedback" markerWidth="10" markerHeight="10" refX="9" refY="3" orient="auto">
-      <polygon points="0 0, 10 3, 0 6" fill="#059669" />
-    </marker>
   </defs>
-
-  <!-- Step 1: Attack Strategy -->
-  <rect x="50" y="70" width="180" height="100" class="attacker-box" rx="8"/>
-  <circle cx="70" cy="90" r="12" class="step-circle"/>
-  <text x="70" y="95" text-anchor="middle" class="step-number">1</text>
-  <text x="140" y="95" text-anchor="middle" class="label">Attack Strategy</text>
-  <text x="140" y="115" text-anchor="middle" class="sublabel">Generates adversarial</text>
-  <text x="140" y="130" text-anchor="middle" class="sublabel">prompts</text>
-  <text x="140" y="155" text-anchor="middle" class="trace-text" style="fill: #059669; font-weight: 600;">← Uses trace feedback</text>
-
-  <!-- Arrow: Attack to Agent -->
-  <path d="M 230 120 L 330 120" class="arrow"/>
-  <text x="280" y="110" text-anchor="middle" class="sublabel" style="font-size: 11px;">Attack Prompt</text>
-
-  <!-- Step 2: Agent System -->
-  <rect x="330" y="70" width="220" height="180" class="agent-box" rx="8"/>
-  <circle cx="350" cy="90" r="12" class="step-circle"/>
-  <text x="350" y="95" text-anchor="middle" class="step-number">2</text>
-  <text x="440" y="95" text-anchor="middle" class="label">Agent System</text>
-
-  <!-- Agent Components -->
-  <rect x="345" y="110" width="190" height="30" class="component"/>
-  <text x="350" y="130" class="sublabel">🤖 LLM Processing</text>
-
-  <rect x="345" y="145" width="190" height="30" class="component"/>
-  <text x="350" y="165" class="sublabel">🛡️ Guardrails</text>
-
-  <rect x="345" y="180" width="190" height="30" class="component"/>
-  <text x="350" y="200" class="sublabel">🔧 Tool Execution</text>
-
-  <rect x="345" y="215" width="190" height="30" class="component"/>
-  <text x="350" y="235" class="sublabel">💬 Response</text>
-
-  <!-- Trace emissions -->
-  <g opacity="0.6">
-    <path d="M 345 125 L 270 280" stroke="#8b5cf6" stroke-width="1.5" stroke-dasharray="2,2"/>
-    <path d="M 345 160 L 270 290" stroke="#8b5cf6" stroke-width="1.5" stroke-dasharray="2,2"/>
-    <path d="M 345 195 L 270 300" stroke="#8b5cf6" stroke-width="1.5" stroke-dasharray="2,2"/>
-    <circle cx="270" cy="285" r="3" fill="#8b5cf6"/>
-    <circle cx="270" cy="295" r="3" fill="#8b5cf6"/>
-    <circle cx="270" cy="305" r="3" fill="#8b5cf6"/>
-  </g>
-
-  <!-- Step 3: OTLP Traces -->
-  <rect x="50" y="270" width="430" height="150" class="trace-box" rx="8"/>
-  <circle cx="70" cy="290" r="12" class="step-circle"/>
-  <text x="70" y="295" text-anchor="middle" class="step-number">3</text>
-  <text x="265" y="295" text-anchor="middle" class="label">OpenTelemetry Traces Captured</text>
-
-  <!-- Trace spans visualization -->
-  <g transform="translate(70, 310)">
-    <rect x="0" y="0" width="390" height="18" class="trace-span"/>
-    <text x="5" y="13" class="trace-text">[120ms] guardrail.check | decision=blocked</text>
-  </g>
-  <g transform="translate(70, 333)">
-    <rect x="0" y="0" width="390" height="18" class="trace-span"/>
-    <text x="5" y="13" class="trace-text">[890ms] tool.database_query | tool=user_search</text>
-  </g>
-  <g transform="translate(70, 356)">
-    <rect x="0" y="0" width="390" height="18" class="trace-span"/>
-    <text x="5" y="13" class="trace-text">[15ms] guardrail.output_check | ERROR: Rate limit</text>
-  </g>
-  <g transform="translate(70, 379)">
-    <rect x="0" y="0" width="390" height="18" class="trace-span"/>
-    <text x="5" y="13" class="trace-text">[230ms] agent.response | model=gpt-4</text>
-  </g>
-
-  <!-- Step 4: Trace Analysis -->
-  <rect x="520" y="270" width="230" height="150" class="box" rx="8"/>
-  <circle cx="540" cy="290" r="12" class="step-circle"/>
-  <text x="540" y="295" text-anchor="middle" class="step-number">4</text>
-  <text x="635" y="295" text-anchor="middle" class="label">Trace Analysis</text>
-
-  <text x="530" y="320" class="sublabel" style="font-weight: 600;">Key Observations:</text>
-  <text x="530" y="340" class="trace-text">• Guardrail blocked output</text>
-  <text x="530" y="355" class="trace-text">• Rate limit error detected</text>
-  <text x="530" y="370" class="trace-text">• Tool: user_search called</text>
-  <text x="530" y="385" class="trace-text">• Model: gpt-4 used</text>
-  <text x="530" y="400" class="trace-text">• Total duration: 1.2s</text>
-
-  <!-- Arrow: Traces to Analysis -->
-  <path d="M 480 345 L 520 345" class="arrow"/>
-
-  <!-- Feedback Loop - arrow routes around right side to avoid overlap -->
-  <path d="M 750 345 L 770 345 Q 780 345, 780 335 L 780 50 Q 780 40, 770 40 L 150 40 Q 140 40, 140 50 L 140 70" class="feedback-arrow"/>
-
-  <!-- Feedback annotation -->
-  <text x="400" y="25" text-anchor="middle" class="sublabel" style="fill: #059669; font-weight: 600;">Trace Intelligence Feedback</text>
+  <rect width="920" height="410" fill="#ffffff" />
+  <text class="title" x="460" y="42" text-anchor="middle">Use traces to refine red team attacks</text>
+  <rect x="35" y="98" width="210" height="104" rx="10" fill="#fff7ed" stroke="#ea580c" stroke-width="2" />
+  <text class="heading" x="55" y="130">1. Attack strategy</text>
+  <text class="body" x="55" y="157">Generates the next</text>
+  <text class="body" x="55" y="179">adversarial prompt</text>
+  <path d="M245 150H290" stroke="#64748b" stroke-width="2" marker-end="url(#arrow)" />
+  <rect x="290" y="98" width="230" height="104" rx="10" fill="#eff6ff" stroke="#2563eb" stroke-width="2" />
+  <text class="heading" x="310" y="130">2. Agent system</text>
+  <text class="body" x="310" y="157">LLM, guardrails, tools,</text>
+  <text class="body" x="310" y="179">and response handling</text>
+  <path d="M520 150H565" stroke="#64748b" stroke-width="2" marker-end="url(#arrow)" />
+  <rect x="565" y="98" width="320" height="104" rx="10" fill="#f5f3ff" stroke="#7c3aed" stroke-width="2" />
+  <text class="heading" x="585" y="130">3. OpenTelemetry traces</text>
+  <text class="code" x="585" y="158">guardrail.check  decision=blocked</text>
+  <text class="code" x="585" y="182">tool.call        status=error</text>
+  <path d="M725 202V248" stroke="#64748b" stroke-width="2" marker-end="url(#arrow)" />
+  <rect x="565" y="248" width="320" height="104" rx="10" fill="#f8fafc" stroke="#94a3b8" stroke-width="2" />
+  <text class="heading" x="585" y="280">4. Trace analysis</text>
+  <text class="body" x="585" y="307">Identify which guardrail, tool, or</text>
+  <text class="body" x="585" y="329">agent step shaped the outcome</text>
+  <path d="M565 302H140V202" stroke="#15803d" stroke-width="2.5" stroke-dasharray="7 5" fill="none" marker-end="url(#feedback)" />
+  <text class="body" x="347" y="292" text-anchor="middle" fill="#15803d">Trace feedback informs the next attempt</text>
 </svg>

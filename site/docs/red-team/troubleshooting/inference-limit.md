@@ -89,7 +89,7 @@ redteam:
   # Remote generation (open-source)
   numTests: 10
   strategies:
-    - jailbreak
+    - jailbreak:meta
     - jailbreak-templates
   plugins:
     - harmful:hate

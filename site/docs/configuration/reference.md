@@ -429,7 +429,7 @@ async function extensionHook(hookName, context) {
 }
 ```
 
-For iterative red team strategies (e.g., jailbreak, tree search), the `sessionIds` array is made available in the `afterEach` hook context at:
+For iterative red team strategies (for example, `jailbreak:meta` or `jailbreak:tree`), the `sessionIds` array is made available in the `afterEach` hook context at:
 
 ```javascript
 context.result.metadata.sessionIds;
@@ -445,7 +445,7 @@ async function extensionHook(hookName, context) {
     // For regular providers - single session ID
     const sessionId = context.result.metadata.sessionId;
 
-    // For iterative providers (jailbreak, tree search) - array of session IDs
+    // For iterative providers such as jailbreak:meta or jailbreak:tree - array of session IDs
     const sessionIds = context.result.metadata.sessionIds;
     if (sessionIds && Array.isArray(sessionIds)) {
       console.log(`Jailbreak completed with ${sessionIds.length} iterations`);

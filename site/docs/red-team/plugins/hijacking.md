@@ -55,9 +55,12 @@ The plugin assesses the AI's response based on:
 
 Hijacking tests are useful when a request looks plausible enough to tempt the model into helping, even though it has no business answering. That makes them a practical check on scope discipline, not just generic refusal behavior.
 
+Use [Off-Topic](off-topic.md) for clearly unrelated requests; Hijacking focuses on adjacent requests that appear connected to the target's purpose but redirect it into a different task.
+
 ## Related Concepts
 
 - [Excessive Agency](excessive-agency.md)
+- [Off-Topic](off-topic.md)
 - [Overreliance](overreliance.md)
 - [Misinformation and Misuse](../llm-vulnerability-types.md#misinformation-and-misuse)
 - [Types of LLM vulnerabilities](/docs/red-team/llm-vulnerability-types/) - Full vulnerability and plugin directory with category mapping

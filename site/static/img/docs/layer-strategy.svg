@@ -1,0 +1,18 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 920 380" role="img" aria-labelledby="title desc">
+  <title id="title">Layer strategy modes</title>
+  <desc id="desc">Layer can apply transforms before evaluation or let one attack strategy orchestrate and apply later transforms to each turn or attempt.</desc>
+  <defs><marker id="arrow" markerWidth="10" markerHeight="8" refX="9" refY="4" orient="auto"><path d="M0 0L10 4L0 8Z" fill="#64748b" /></marker>
+    <style>text { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; fill: #0f172a; } .title { font-size: 24px; font-weight: 700; } .heading { font-size: 17px; font-weight: 600; } .body { font-size: 14px; fill: #475569; } .arrow { stroke: #64748b; stroke-width: 2; marker-end: url(#arrow); }</style>
+  </defs>
+  <rect width="920" height="380" fill="#ffffff" /><text class="title" x="460" y="42" text-anchor="middle">Two ways to compose Layer strategies</text>
+  <text class="heading" x="35" y="91">Transform chain</text><text class="body" x="35" y="113">Every step runs once before the target call.</text>
+  <rect x="35" y="135" width="160" height="66" rx="9" fill="#f8fafc" stroke="#94a3b8" stroke-width="2" /><text class="heading" x="115" y="176" text-anchor="middle">Test input</text>
+  <path class="arrow" d="M195 168H235" /><rect x="235" y="135" width="170" height="66" rx="9" fill="#eff6ff" stroke="#2563eb" stroke-width="2" /><text class="heading" x="320" y="176" text-anchor="middle">base64</text>
+  <path class="arrow" d="M405 168H445" /><rect x="445" y="135" width="170" height="66" rx="9" fill="#eff6ff" stroke="#2563eb" stroke-width="2" /><text class="heading" x="530" y="176" text-anchor="middle">rot13</text>
+  <path class="arrow" d="M615 168H655" /><rect x="655" y="135" width="230" height="66" rx="9" fill="#f0fdf4" stroke="#16a34a" stroke-width="2" /><text class="heading" x="770" y="176" text-anchor="middle">Target</text>
+  <text class="heading" x="35" y="249">Attack strategy with per-turn transforms</text><text class="body" x="35" y="271">One attack strategy orchestrates; later steps transform each turn or attempt.</text>
+  <rect x="35" y="293" width="200" height="66" rx="9" fill="#f5f3ff" stroke="#7c3aed" stroke-width="2" /><text class="heading" x="135" y="320" text-anchor="middle">Hydra, Goblin, or Meta</text><text class="body" x="135" y="343" text-anchor="middle">Orchestrates</text>
+  <path class="arrow" d="M235 326H275" /><rect x="275" y="293" width="170" height="66" rx="9" fill="#eff6ff" stroke="#2563eb" stroke-width="2" /><text class="heading" x="360" y="320" text-anchor="middle">Text transform</text><text class="body" x="360" y="343" text-anchor="middle">Each turn</text>
+  <path class="arrow" d="M445 326H485" /><rect x="485" y="293" width="170" height="66" rx="9" fill="#fff7ed" stroke="#ea580c" stroke-width="2" /><text class="heading" x="570" y="320" text-anchor="middle">audio or image</text><text class="body" x="570" y="343" text-anchor="middle">Output transform</text>
+  <path class="arrow" d="M655 326H695" /><rect x="695" y="293" width="190" height="66" rx="9" fill="#f0fdf4" stroke="#16a34a" stroke-width="2" /><text class="heading" x="790" y="334" text-anchor="middle">Target</text>
+</svg>
