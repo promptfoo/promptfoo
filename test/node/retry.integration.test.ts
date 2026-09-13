@@ -774,6 +774,20 @@ describe('retry command', () => {
           cost: 0.01,
           failureReason: ResultFailureReason.NONE,
           namedScores: { accuracy: 1 },
+          gradingResult: {
+            pass: true,
+            score: 1,
+            reason: 'fallback recovered',
+            componentResults: [
+              { pass: true, score: 1, reason: 'fallback recovered' },
+              {
+                pass: false,
+                score: 0,
+                reason: 'diagnostic primary',
+                metadata: { fallbackIntermediate: true as const },
+              },
+            ],
+          },
         },
         {
           id: `${evalRecord.id}-metric-2`,
@@ -789,8 +803,9 @@ describe('retry command', () => {
           cost: 0.02,
           failureReason: ResultFailureReason.ASSERT,
           namedScores: { accuracy: 0 },
+          gradingResult: undefined,
         },
-      ]);
+      ] satisfies (typeof evalResultsTable.$inferInsert)[]);
 
       // Recalculate metrics
       await recalculatePromptMetrics(evalRecord);
@@ -803,6 +818,8 @@ describe('retry command', () => {
       expect(evalRecord.prompts[0].metrics?.score).toBe(1);
       expect(evalRecord.prompts[0].metrics?.totalLatencyMs).toBe(300);
       expect(evalRecord.prompts[0].metrics?.cost).toBe(0.03);
+      expect(evalRecord.prompts[0].metrics?.assertPassCount).toBe(1);
+      expect(evalRecord.prompts[0].metrics?.assertFailCount).toBe(0);
     });
 
     it('should count ERROR results correctly', async () => {

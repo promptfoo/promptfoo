@@ -171,6 +171,9 @@ describe('matchesSearchRubric', () => {
         pass: false,
         score: 0,
         reason: 'Search rubric evaluation failed: search unavailable',
+        // A provider/transport outage is tagged as a grader error so fallback
+        // chains and inverse-aware callers fail closed instead of masking it.
+        metadata: { graderError: true },
       }),
     );
   });
@@ -190,6 +193,28 @@ describe('matchesSearchRubric', () => {
         reason: 'verdict includes "pass": true',
       }),
     );
+
+    vi.mocked(mocks.webSearchProvider.callApi).mockResolvedValueOnce({ output: 'no verdict' });
+    await expect(matchesSearchRubric('Confirm current facts', 'output', {})).resolves.toEqual(
+      expect.objectContaining({ pass: false, metadata: { graderError: true } }),
+    );
+
+    vi.mocked(mocks.webSearchProvider.callApi).mockResolvedValueOnce({
+      output: '{"pass": true, "score": }',
+    });
+    await expect(matchesSearchRubric('Confirm current facts', 'output', {})).resolves.toEqual(
+      expect.objectContaining({ pass: false, metadata: { graderError: true } }),
+    );
+
+    for (const output of [
+      '```json\n{"pass": false, "score": }\n```',
+      'Explanation: {"pass": true, "score": }',
+    ]) {
+      vi.mocked(mocks.webSearchProvider.callApi).mockResolvedValueOnce({ output });
+      await expect(matchesSearchRubric('Confirm current facts', 'output', {})).resolves.toEqual(
+        expect.objectContaining({ pass: false, metadata: { graderError: true } }),
+      );
+    }
   });
 
   it('throws when no web search provider can be resolved', async () => {

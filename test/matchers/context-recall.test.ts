@@ -303,7 +303,7 @@ describe('matchesContextRecall', () => {
       ]);
     });
 
-    it('should return score 0 when LLM returns no classification lines', async () => {
+    it('reports a grader error when there are no attribution verdicts', async () => {
       const context = 'Test context';
       const groundTruth = 'Test ground truth';
       const threshold = 0.5;
@@ -323,7 +323,7 @@ describe('matchesContextRecall', () => {
       const result = await matchesContextRecall(context, groundTruth, threshold);
 
       expect(result.score).toBe(0);
-      expect(result.metadata?.totalSentences).toBe(0);
+      expect(result.metadata?.graderError).toBe(true);
       expect(result.pass).toBe(false);
     });
   });

@@ -215,8 +215,9 @@ describe('matchesContextFaithfulness', () => {
 
     await expect(matchesContextFaithfulness(query, output, context, threshold)).resolves.toEqual({
       pass: false,
-      reason: 'Faithfulness 0.00 is < 0.5',
+      reason: 'Context faithfulness grader produced no verdicts',
       score: 0,
+      metadata: { graderError: true },
       tokensUsed: {
         total: expect.any(Number),
         prompt: expect.any(Number),
@@ -226,6 +227,22 @@ describe('matchesContextFaithfulness', () => {
         numRequests: 0,
       },
     });
+  });
+
+  it('should fail before the verdict call when no statements are returned', async () => {
+    const callApiSpy = vi.spyOn(DefaultGradingProvider, 'callApi');
+    callApiSpy.mockReset();
+    callApiSpy.mockResolvedValueOnce({ output: '   ' });
+
+    await expect(
+      matchesContextFaithfulness('Query text', 'Output text', 'Context text', 0.5),
+    ).resolves.toMatchObject({
+      pass: false,
+      score: 0,
+      reason: 'Context faithfulness grader produced no statements',
+      metadata: { graderError: true },
+    });
+    expect(callApiSpy).toHaveBeenCalledTimes(1);
   });
 
   it('should count missing final-answer verdicts as unsupported', async () => {

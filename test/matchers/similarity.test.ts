@@ -281,6 +281,35 @@ describe('matchesSimilarity', () => {
     }).rejects.toThrow('API call failed');
   });
 
+  it('tags an embedding-provider outage as a grader error (fail closed)', async () => {
+    const grading: GradingConfig = { provider: DefaultEmbeddingProvider };
+
+    vi.spyOn(DefaultEmbeddingProvider, 'callEmbeddingApi').mockResolvedValue({
+      error: 'embedding provider unavailable',
+    });
+
+    const result = await matchesSimilarity('Expected output', 'Sample output', 0.5, false, grading);
+
+    // A provider outage must fail closed with a grader-error tag so fallback
+    // chains and inverse-aware callers cannot mask it.
+    expect(result.pass).toBe(false);
+    expect(result.score).toBe(0);
+    expect(result.metadata?.graderError).toBe(true);
+  });
+
+  it('tags an unsupported metric as an assertion error', async () => {
+    const result = await matchesSimilarity(
+      'Expected output',
+      'Sample output',
+      0.5,
+      false,
+      undefined,
+      'unsupported' as any,
+    );
+
+    expect(result.metadata).toEqual({ assertionError: true });
+  });
+
   it('should use Nunjucks templating when PROMPTFOO_DISABLE_TEMPLATING is set', async () => {
     const restoreEnv = mockProcessEnv({ PROMPTFOO_DISABLE_TEMPLATING: 'true' });
     try {

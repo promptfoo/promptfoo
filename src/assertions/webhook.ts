@@ -36,6 +36,9 @@ export async function handleWebhook({
     }
 
     const jsonResponse = await response.json();
+    if (typeof jsonResponse?.pass !== 'boolean') {
+      throw new Error('Webhook response is missing a boolean pass verdict');
+    }
     const pass = jsonResponse.pass !== inverse;
     const score =
       typeof jsonResponse.score === 'undefined'
@@ -62,6 +65,7 @@ export async function handleWebhook({
       score: 0,
       reason: `Webhook error: ${(err as Error).message}`,
       assertion,
+      metadata: { assertionError: true },
     };
   }
 }

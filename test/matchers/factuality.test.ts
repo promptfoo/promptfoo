@@ -231,6 +231,7 @@ describe('matchesFactuality', () => {
       pass: false,
       score: 0,
       reason: 'Invalid category value: Z',
+      metadata: { graderError: true },
       tokensUsed: expect.objectContaining({
         total: expect.any(Number),
         prompt: expect.any(Number),

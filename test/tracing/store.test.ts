@@ -541,6 +541,34 @@ describe('TraceStore', () => {
   });
 
   describe('getTrace', () => {
+    it('excludes grader spans and their descendants when requested', async () => {
+      const mockTrace = { traceId: 'trace-1', evaluationId: 'eval-1', testCaseId: 'test-1' };
+      const spans = [
+        { spanId: 'target', name: 'target', startTime: 0 },
+        {
+          spanId: 'grader',
+          parentSpanId: 'target',
+          name: 'grader',
+          startTime: 1,
+          attributes: { 'promptfoo.span.role': 'grader' },
+        },
+        { spanId: 'grader-child', parentSpanId: 'grader', name: 'llm.call', startTime: 2 },
+      ];
+      mockDb.select
+        .mockReturnValueOnce({
+          from: vi.fn().mockReturnThis(),
+          where: vi.fn().mockReturnThis(),
+          limit: vi.fn().mockResolvedValue([mockTrace]),
+        })
+        .mockReturnValueOnce({
+          from: vi.fn().mockReturnThis(),
+          where: vi.fn().mockResolvedValue(spans),
+        });
+
+      const trace = await traceStore.getTrace('trace-1', { includeInternalSpans: false });
+      expect(trace?.spans.map((span) => span.spanId)).toEqual(['target']);
+    });
+
     it('should retrieve a single trace with spans', async () => {
       const mockTrace = {
         id: '1',

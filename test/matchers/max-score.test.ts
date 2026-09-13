@@ -264,6 +264,54 @@ describe('selectMaxScore', () => {
     expect(gradingResults[1].pass).toBe(false);
   });
 
+  it('should ignore failed fallback primaries when aggregating scores', async () => {
+    const outputs = ['Output 0', 'Output 1'];
+    const results = [
+      {
+        ...createMockResult(1, 0),
+        gradingResult: {
+          ...createMockResult(1, 0).gradingResult,
+          componentResults: [
+            {
+              pass: false,
+              score: 0,
+              reason: 'Failed fallback primary',
+              assertion: { type: 'contains', value: 'missing' } as Assertion,
+              metadata: { fallbackIntermediate: true as const },
+            },
+            {
+              pass: true,
+              score: 1,
+              reason: 'Passing fallback target',
+              assertion: { type: 'contains', value: 'present' } as Assertion,
+            },
+          ],
+        },
+      },
+      {
+        ...createMockResult(0.75, 1),
+        gradingResult: {
+          ...createMockResult(0.75, 1).gradingResult,
+          componentResults: [
+            {
+              pass: true,
+              score: 0.75,
+              reason: 'Independent assertion',
+              assertion: { type: 'contains', value: 'present' } as Assertion,
+            },
+          ],
+        },
+      },
+    ];
+
+    const gradingResults = await selectMaxScore(outputs, results, mockAssertion);
+
+    expect(gradingResults[0].pass).toBe(true);
+    expect(gradingResults[0].namedScores?.maxScore).toBe(1);
+    expect(gradingResults[1].pass).toBe(false);
+    expect(gradingResults[1].namedScores?.maxScore).toBe(0.75);
+  });
+
   describe('Threshold Edge Cases - Truthy vs Undefined', () => {
     it('should handle threshold=0 differently from threshold=undefined', async () => {
       const outputs = ['Output 0', 'Output 1'];

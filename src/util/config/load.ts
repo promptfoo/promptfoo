@@ -1063,6 +1063,7 @@ export async function resolveConfigs(
   validateAssertions(
     testSuite.tests || [],
     typeof testSuite.defaultTest === 'object' ? testSuite.defaultTest : undefined,
+    testSuite.scenarios,
   );
 
   // Validate provider references in tests and scenarios

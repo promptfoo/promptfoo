@@ -268,10 +268,10 @@ export async function recalculatePromptMetrics(evalRecord: Eval): Promise<void> 
         // Update assertion counts
         if (result.gradingResult?.componentResults) {
           metrics.assertPassCount += result.gradingResult.componentResults.filter(
-            (r) => r.pass,
+            (r) => r.pass && !r.metadata?.fallbackIntermediate,
           ).length;
           metrics.assertFailCount += result.gradingResult.componentResults.filter(
-            (r) => !r.pass,
+            (r) => !r.pass && !r.metadata?.fallbackIntermediate,
           ).length;
         }
 

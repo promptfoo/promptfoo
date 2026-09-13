@@ -3516,10 +3516,11 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
     }
 
     updatePromptResultCounts(metrics, row);
-    metrics.assertPassCount +=
-      row.gradingResult?.componentResults?.filter((r) => r.pass).length || 0;
-    metrics.assertFailCount +=
-      row.gradingResult?.componentResults?.filter((r) => !r.pass).length || 0;
+    const scoringComponents = row.gradingResult?.componentResults?.filter(
+      (result) => result.metadata?.fallbackIntermediate !== true,
+    );
+    metrics.assertPassCount += scoringComponents?.filter((result) => result.pass).length || 0;
+    metrics.assertFailCount += scoringComponents?.filter((result) => !result.pass).length || 0;
     metrics.totalLatencyMs += row.latencyMs || 0;
     accumulateResponseTokenUsage(metrics.tokenUsage, row.response, {
       countCachedAsRequest: (row.tokenUsage?.numRequests ?? 0) > 0,

@@ -8,10 +8,17 @@ export const handleIsValidFunctionCall = ({
   provider,
   test,
 }: AssertionParams): GradingResult => {
+  if (!hasFunctionToolCallValidator(provider)) {
+    return {
+      pass: false,
+      score: 0,
+      reason: 'Provider does not have functionality for checking function call.',
+      assertion,
+      metadata: { assertionError: true },
+    };
+  }
+
   try {
-    if (!hasFunctionToolCallValidator(provider)) {
-      throw new Error(`Provider does not have functionality for checking function call.`);
-    }
     provider.validateFunctionToolCall(output, test.vars);
     return {
       pass: true,

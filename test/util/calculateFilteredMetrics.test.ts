@@ -603,6 +603,29 @@ describe('calculateFilteredMetrics', () => {
   });
 
   describe('assertion counts aggregation', () => {
+    it('counts the terminating fallback without counting diagnostic failures', async () => {
+      const eval_ = await EvalFactory.create({ numResults: 1, resultTypes: ['success'] });
+      const db = await getDb();
+      const gradingResult = JSON.stringify({
+        pass: true,
+        score: 1,
+        componentResults: [
+          { pass: true, score: 1 },
+          { pass: false, score: 0, metadata: { fallbackIntermediate: true } },
+        ],
+      });
+      await db.run(
+        sql`UPDATE eval_results SET grading_result = ${gradingResult} WHERE eval_id = ${eval_.id}`,
+      );
+
+      const [metrics] = await calculateFilteredMetrics({
+        evalId: eval_.id,
+        numPrompts: 1,
+        whereSql: sql`eval_id = ${eval_.id}`,
+      });
+      expect([metrics.assertPassCount, metrics.assertFailCount]).toEqual([1, 0]);
+    });
+
     it('should aggregate assertion pass/fail counts from componentResults', async () => {
       const eval_ = await EvalFactory.create({
         numResults: 10,
