@@ -98,6 +98,16 @@ describe('OpenAI billing helpers', () => {
     ).toBeCloseTo(1_000 * 2e-6 + 100 * 3e-6);
   });
 
+  it('applies explicit prices to custom chat-latest ids', () => {
+    expect(
+      calculateOpenAIUsageCost(
+        'vendor/chat-latest',
+        { inputCost: 2e-6, outputCost: 3e-6 },
+        { input_tokens: 1_000, output_tokens: 100 },
+      ),
+    ).toBeCloseTo(1_000 * 2e-6 + 100 * 3e-6);
+  });
+
   it('uses non-reasoning web search preview pricing for chat-latest aliases', () => {
     const output = {
       output: [{ type: 'web_search_call', action: { type: 'search' } }],

@@ -997,8 +997,7 @@ export function calculateOpenAIUsageCost(
     config.audioOutputCost !== undefined;
   const modelRates =
     (tier && getModelRates(modelName, tier, usage.totalInputTokens)) ??
-    ((!tier || (modelName === 'chat-latest' && tier !== 'standard')) &&
-    (hasCustomTextCost || hasCustomAudioCost)
+    (hasCustomTextCost || hasCustomAudioCost
       ? { text: { input: 0 }, ...(hasCustomAudioCost && { audio: { input: 0 } }) }
       : undefined);
   if (!modelRates) {
