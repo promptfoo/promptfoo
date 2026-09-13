@@ -41,9 +41,8 @@ const RETIRED_BEDROCK_MODEL_IDS = [
   'amazon.titan-text-lite-v1',
   'amazon.titan-text-premier-v1:0',
   'anthropic.claude-3-opus-20240229-v1:0',
-  'us.anthropic.claude-3-opus-20240229-v1:0',
   'anthropic.claude-opus-4-20250514-v1:0',
-  'us.anthropic.claude-opus-4-20250514-v1:0',
+  'anthropic.claude-3-5-haiku-20241022-v1:0',
   'anthropic.claude-instant-v1',
   'anthropic.claude-v1',
   'anthropic.claude-v2',
@@ -3771,6 +3770,20 @@ describe('AWS_BEDROCK_MODELS mapping', () => {
       `Unknown Amazon Bedrock model: ${modelName}`,
     );
   });
+
+  it.each(RETIRED_BEDROCK_MODEL_IDS)(
+    'rejects retired model id %s under every inference profile prefix',
+    (modelName) => {
+      // Regional/global inference profiles must be rejected too — otherwise ids such as
+      // `eu.anthropic.claude-3-5-haiku-20241022-v1:0` fall through to the `anthropic.claude`
+      // catch-all and fail at request time with an opaque AWS error.
+      for (const prefix of ['us.', 'eu.', 'apac.', 'global.', 'jp.', 'au.']) {
+        expect(() => getHandlerForModel(`${prefix}${modelName}`)).toThrow(
+          `Unknown Amazon Bedrock model: ${prefix}${modelName}`,
+        );
+      }
+    },
+  );
 
   it('keeps Claude 3.5/3.7 Sonnet (still offered in APAC regions)', () => {
     expect(AWS_BEDROCK_MODELS['anthropic.claude-3-5-sonnet-20240620-v1:0']).toBe(
