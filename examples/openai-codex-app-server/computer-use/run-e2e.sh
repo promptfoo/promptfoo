@@ -25,7 +25,7 @@ reject_state_overrides() {
     local file="$1"
     [[ "$file" = /* ]] || file="$EXAMPLE_DIR/$file"
     if [[ -f "$file" ]] &&
-      grep -Eq 'PROMPTFOO_(CONFIG_DIR|LOG_DIR|CACHE_PATH|MEDIA_PATH)' "$file"; then
+      grep -Eq 'PROMPTFOO_(CONFIG_DIR|LOG_DIR|CACHE_PATH|MEDIA_PATH|DISABLE_REDTEAM_REMOTE_GENERATION|DISABLE_TELEMETRY|DISABLE_UPDATE)|CODEX_HOME_OVERRIDE|COMPUTER_USE_(WORKING_DIR|TARGET_APP)' "$file"; then
       echo "Refusing config that overrides runner-owned Promptfoo state: $file" >&2
       exit 1
     fi
@@ -39,7 +39,13 @@ reject_state_overrides() {
       env_path="${env_path%"${env_path##*[![:space:]]}"}"
       [[ "$env_path" = /* ]] || env_path="${config%/*}/$env_path"
       [[ -n "$env_path" ]] && reject_state_file "$env_path"
-    done < <(sed -nE 's/^[[:space:]]*envPath:[[:space:]]*([^#]+).*$/\1/p' "$config")
+    done < <(
+      if [[ "$config" == *.json ]]; then
+        node -e 'const v=JSON.parse(require("fs").readFileSync(process.argv[1],"utf8")).commandLineOptions?.envPath; for (const p of Array.isArray(v) ? v : [v]) if (typeof p === "string") console.log(p)' "$config"
+      else
+        sed -nE '/^[[:space:]]*envPath:[[:space:]]*$/,/^[^[:space:]]/ { s/^[[:space:]]*-[[:space:]]*([^#]+).*$/\1/p }; s/^[[:space:]]*envPath:[[:space:]]*([^#]+).*$/\1/p' "$config"
+      fi
+    )
   }
   inspect_paths() {
     local config

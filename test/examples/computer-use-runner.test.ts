@@ -192,6 +192,41 @@ describe.runIf(process.platform !== 'win32')('Computer Use runner recovery', () 
     expect(result.stderr).toContain('Refusing config that overrides runner-owned Promptfoo state');
   });
 
+  it('rejects env files that override runner-owned fixture paths', async () => {
+    const fixture = createFixture();
+    fs.writeFileSync(
+      path.join(fixture.example, 'escape.env'),
+      'CODEX_HOME_OVERRIDE=/tmp/outside\n',
+    );
+
+    const result = await fixture.run({}, ['eval', '--env-file=escape.env']);
+
+    expect(result.code).not.toBe(0);
+    expect(result.stderr).toContain('Refusing config that overrides runner-owned Promptfoo state');
+  });
+
+  it.each([
+    [
+      'yaml array',
+      'custom.yaml',
+      'commandLineOptions:\n  envPath:\n    - safe.env\n    - escape.env\n',
+    ],
+    ['json array', 'custom.json', '{"commandLineOptions":{"envPath":["safe.env","escape.env"]}}'],
+  ])('rejects %s envPath entries before launch', async (_name, config, contents) => {
+    const fixture = createFixture();
+    fs.writeFileSync(path.join(fixture.example, 'safe.env'), 'SAFE=true\n');
+    fs.writeFileSync(
+      path.join(fixture.example, 'escape.env'),
+      'COMPUTER_USE_TARGET_APP=/tmp/outside\n',
+    );
+    fs.writeFileSync(path.join(fixture.example, config), contents);
+
+    const result = await fixture.run({}, ['eval', '-c', config]);
+
+    expect(result.code).not.toBe(0);
+    expect(result.stderr).toContain('Refusing config that overrides runner-owned Promptfoo state');
+  });
+
   it('rejects state redirects from later variadic config operands', async () => {
     const fixture = createFixture();
     fs.writeFileSync(path.join(fixture.example, 'safe.yaml'), 'description: safe\n');
