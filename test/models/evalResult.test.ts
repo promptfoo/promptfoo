@@ -1,7 +1,10 @@
 import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 import logger from '../../src/logger';
 import { runDbMigrations } from '../../src/migrate';
-import EvalResult, { sanitizeProvider } from '../../src/models/evalResult';
+import EvalResult, {
+  sanitizeProvider,
+  sanitizeResultForJsonlArtifact,
+} from '../../src/models/evalResult';
 import { hashPrompt } from '../../src/prompts/utils';
 import { WebSocketProvider } from '../../src/providers/websocket';
 import {
@@ -29,6 +32,7 @@ describe('EvalResult', () => {
 
   afterEach(() => {
     vi.resetAllMocks();
+    vi.restoreAllMocks();
   });
 
   const mockProvider: ProviderOptions = {
@@ -55,7 +59,569 @@ describe('EvalResult', () => {
     response: undefined,
   });
 
+  it.each(['single', 'batch', 'jsonl'])(
+    'preserves opaque inputs while redacting grader credentials for %s results',
+    async (boundary) => {
+      const opaqueInput = 'abcdef0123456789'.repeat(8);
+      const result = createEvaluateResult({
+        prompt: { raw: opaqueInput, label: 'fixture', config: { opaque: opaqueInput } },
+        gradingResult: {
+          pass: true,
+          score: 1,
+          reason: 'Fixture',
+          componentResults: [
+            {
+              pass: true,
+              score: 1,
+              reason: 'Fixture',
+              assertion: {
+                type: 'contains',
+                value: opaqueInput,
+                rubricPrompt: opaqueInput,
+                config: { clientState: 'sk-abcdefghijklmnopqrstuvwxyz' },
+              },
+            },
+          ],
+        },
+        testCase: {
+          vars: { image: opaqueInput, apiKey: 'vars-fixture' },
+          providerOutput: opaqueInput,
+          options: {
+            rubricPrompt: opaqueInput,
+            prefix: opaqueInput,
+            suffix: opaqueInput,
+            provider: { id: 'fixture', config: { opaque: opaqueInput } },
+            clientState: 'sk-abcdefghijklmnopqrstuvwxyz',
+          },
+          assert: [
+            {
+              type: 'assert-set',
+              assert: [
+                {
+                  type: 'llm-rubric',
+                  value: opaqueInput,
+                  rubricPrompt: opaqueInput,
+                  config: { clientState: 'sk-abcdefghijklmnopqrstuvwxyz' },
+                  provider: { id: 'fixture', config: { opaque: opaqueInput } },
+                },
+              ],
+            },
+          ],
+        },
+      });
+      const sanitized =
+        boundary === 'single'
+          ? await EvalResult.createFromEvaluateResult('opaque-fixture', result)
+          : boundary === 'batch'
+            ? (await EvalResult.createManyFromEvaluateResult([result], 'opaque-fixture'))[0]
+            : sanitizeResultForJsonlArtifact({ ...result, vars: result.testCase.vars });
+
+      expect(sanitized.prompt.raw).toBe(opaqueInput);
+      expect(sanitized.prompt.config?.opaque).toBe('[REDACTED]');
+      expect(sanitized.testCase.vars).toEqual({ image: opaqueInput, apiKey: '[REDACTED]' });
+      expect(sanitized.testCase.providerOutput).toBe(opaqueInput);
+      expect(sanitized.testCase.options?.rubricPrompt).toBe(opaqueInput);
+      expect(sanitized.testCase.options?.prefix).toBe(opaqueInput);
+      expect(sanitized.testCase.options?.suffix).toBe(opaqueInput);
+      expect(sanitized.testCase.options?.provider).toEqual({
+        id: 'fixture',
+        config: { opaque: '[REDACTED]' },
+      });
+      expect(sanitized.testCase.options?.clientState).toBe('[REDACTED]');
+      expect(sanitized.gradingResult?.componentResults?.[0].assertion).toEqual({
+        type: 'contains',
+        value: opaqueInput,
+        rubricPrompt: opaqueInput,
+        config: { clientState: '[REDACTED]' },
+      });
+      expect(sanitized.testCase.assert).toEqual([
+        {
+          type: 'assert-set',
+          assert: [
+            {
+              type: 'llm-rubric',
+              value: opaqueInput,
+              rubricPrompt: opaqueInput,
+              config: { clientState: '[REDACTED]' },
+              provider: { id: 'fixture', config: { opaque: '[REDACTED]' } },
+            },
+          ],
+        },
+      ]);
+      if ('vars' in sanitized) {
+        expect(sanitized.vars).toEqual({ image: opaqueInput, apiKey: '[REDACTED]' });
+      }
+    },
+  );
+
+  it('preserves non-object prompt config values', () => {
+    const result = sanitizeResultForJsonlArtifact({
+      prompt: { raw: 'prompt', label: 'prompt', config: 'opaque config' as any },
+    });
+    expect(result.prompt.config).toBe('opaque config');
+  });
+
+  it('sanitizes root URL prompt configs', () => {
+    const result = sanitizeResultForJsonlArtifact({
+      prompt: {
+        raw: 'prompt',
+        label: 'prompt',
+        config: new URL('https://user:secret@example.test/path?api_key=secret') as any,
+      },
+    });
+    expect(result.prompt.config).toBe('https://***:***@example.test/path?api_key=%5BREDACTED%5D');
+  });
+
+  it('uses intrinsic URL serialization for root prompt configs', () => {
+    const url = new URL('https://user:secret@example.test/path?api_key=secret');
+    Object.defineProperty(url, 'toString', {
+      value() {
+        throw new Error('custom URL serializer ran');
+      },
+    });
+
+    const result = sanitizeResultForJsonlArtifact({
+      prompt: { raw: 'prompt', label: 'prompt', config: url as any },
+    });
+
+    expect(result.prompt.config).toBe('https://***:***@example.test/path?api_key=%5BREDACTED%5D');
+  });
+
+  it('does not invoke stateful Date serializers', () => {
+    const date = new Date('2026-01-01T00:00:00Z');
+    Object.defineProperty(date, 'toISOString', {
+      get() {
+        throw new Error('custom Date serializer ran');
+      },
+    });
+
+    const result = sanitizeResultForJsonlArtifact({
+      prompt: { raw: 'prompt', label: 'prompt', config: date as any },
+    });
+
+    expect(result.prompt.config).toBe('[REDACTED]');
+  });
+
+  it('reads response metadata once while redacting echoed headers', () => {
+    let reads = 0;
+    const response = {
+      get metadata() {
+        reads++;
+        if (reads > 1) {
+          throw new Error('metadata reread');
+        }
+        return { headers: { authorization: 'Bearer secret' } };
+      },
+    };
+
+    const result = sanitizeResultForJsonlArtifact({
+      response: response as any,
+      metadata: { headers: { authorization: 'Bearer secret' } },
+    });
+
+    expect(reads).toBe(1);
+    expect(result.metadata?.headers).toEqual({ authorization: '[REDACTED]' });
+  });
+
+  it('projects provider slots before generic result serialization', () => {
+    let providerSerializations = 0;
+    const provider = {
+      id: 'openai:chat:gpt-4.1',
+      config: { apiKey: 'sk-provider-secret', model: 'gpt-4.1' },
+      toJSON() {
+        providerSerializations++;
+        return { leak: 'sk-provider-secret' };
+      },
+    };
+
+    const result = sanitizeResultForJsonlArtifact({
+      prompt: { raw: 'prompt', label: 'prompt', config: { provider } as any },
+      testCase: {
+        vars: {},
+        description: 'kept despite provider serializer',
+        provider,
+        assert: [{ type: 'llm-rubric', value: 'ok', provider }],
+        options: {
+          provider: {
+            'openai:chat:gpt-4.1': { env: { OPENAI_API_KEY: 'sk-env-secret' } },
+            grader: { prompts: ['judge'] },
+          },
+        },
+      } as AtomicTestCase,
+      gradingResult: {
+        pass: true,
+        score: 1,
+        reason: 'ok',
+        componentResults: [
+          {
+            pass: true,
+            score: 1,
+            reason: 'ok',
+            assertion: { type: 'llm-rubric', value: 'ok', provider },
+          },
+        ],
+      },
+    });
+
+    expect(providerSerializations).toBe(0);
+    expect(result.prompt.config.provider).toEqual({
+      id: 'openai:chat:gpt-4.1',
+      config: { apiKey: '[REDACTED]', model: 'gpt-4.1' },
+    });
+    expect(result.testCase.description).toBe('kept despite provider serializer');
+    expect(result.testCase.provider).toEqual({
+      id: 'openai:chat:gpt-4.1',
+      config: { apiKey: '[REDACTED]', model: 'gpt-4.1' },
+    });
+    expect(result.testCase.options?.provider).toEqual({
+      'openai:chat:gpt-4.1': { env: { OPENAI_API_KEY: '[REDACTED]' } },
+      grader: { prompts: ['judge'] },
+    });
+    expect((result.testCase.assert?.[0] as any).provider).toEqual({
+      id: 'openai:chat:gpt-4.1',
+      config: { apiKey: '[REDACTED]', model: 'gpt-4.1' },
+    });
+    expect(result.gradingResult.componentResults[0].assertion.provider).toEqual({
+      id: 'openai:chat:gpt-4.1',
+      config: { apiKey: '[REDACTED]', model: 'gpt-4.1' },
+    });
+  });
+
+  it('redacts known secret keys inside JSON variable strings', () => {
+    const result = sanitizeResultForJsonlArtifact({
+      testCase: {
+        vars: { payload: JSON.stringify({ apiKey: 'sk-json-secret', label: 'kept' }) },
+      } as AtomicTestCase,
+    });
+
+    expect(JSON.parse(result.testCase.vars?.payload as string)).toEqual({
+      apiKey: '[REDACTED]',
+      label: 'kept',
+    });
+  });
+
+  it('preserves unchanged JSON variable string formatting', () => {
+    const payload = '{\n  "label": "kept",\n  "count": 1\n}';
+    const result = sanitizeResultForJsonlArtifact({
+      testCase: { vars: { payload } } as AtomicTestCase,
+    });
+
+    expect(result.testCase.vars?.payload).toBe(payload);
+  });
+
+  it('preserves malformed legacy assertion sets without throwing', () => {
+    const result = sanitizeResultForJsonlArtifact({
+      gradingResult: {
+        pass: false,
+        score: 0,
+        reason: 'Fixture',
+        assertion: { type: 'assert-set', assert: null } as any,
+      },
+    });
+
+    expect(result.gradingResult?.assertion).toEqual({ type: 'assert-set', assert: null });
+  });
+
+  it('preserves test cases with malformed legacy assertion entries', () => {
+    const result = sanitizeResultForJsonlArtifact({
+      testCase: {
+        vars: { prompt: 'fixture input' },
+        assert: [null] as any,
+      },
+    });
+
+    expect(result.testCase.vars).toEqual({ prompt: 'fixture input' });
+    expect(result.testCase.assert).toEqual([null]);
+  });
+
+  it('preserves malformed legacy assertion collections without iterating them', () => {
+    const result = sanitizeResultForJsonlArtifact({
+      testCase: { vars: {}, assert: { type: 'contains' } as any },
+    });
+
+    expect(result.testCase.assert).toEqual({ type: 'contains' });
+  });
+
+  it('projects assertion providers before generic JSON serialization', () => {
+    const provider = {
+      id: 'fixture',
+      config: { apiKey: 'fixture-secret' },
+      toJSON() {
+        throw new Error('custom provider serializer ran');
+      },
+    };
+    const result = sanitizeResultForJsonlArtifact({
+      testCase: {
+        vars: {},
+        assert: [{ type: 'llm-rubric', provider } as any],
+      },
+    });
+
+    expect(result.testCase.assert?.[0].provider).toEqual({
+      id: 'fixture',
+      config: { apiKey: '[REDACTED]' },
+    });
+  });
+
+  it('projects nested assertion-set providers before generic serialization', () => {
+    const provider = {
+      id: 'fixture',
+      config: { apiKey: 'fixture-secret' },
+      toJSON() {
+        throw new Error('custom provider serializer ran');
+      },
+    };
+    const result = sanitizeResultForJsonlArtifact({
+      testCase: {
+        vars: {},
+        assert: [{ type: 'assert-set', assert: [{ type: 'llm-rubric', provider }] }] as any,
+      },
+    });
+
+    expect((result.testCase.assert?.[0] as any).assert[0].provider).toEqual({
+      id: 'fixture',
+      config: { apiKey: '[REDACTED]' },
+    });
+  });
+
+  it('preserves declarative provider option fields', () => {
+    const result = sanitizeResultForJsonlArtifact({
+      testCase: {
+        vars: {},
+        provider: {
+          id: 'openai:chat:gpt-4.1',
+          prompts: ['judge'],
+          delay: 1,
+          env: { OPENAI_API_KEY: 'sk-option-secret' },
+        } as any,
+      },
+    });
+
+    expect(result.testCase.provider).toEqual({
+      id: 'openai:chat:gpt-4.1',
+      prompts: ['judge'],
+      delay: 1,
+      env: { OPENAI_API_KEY: '[REDACTED]' },
+    });
+  });
+
+  it('preserves provider maps whose keys match option fields', () => {
+    const result = sanitizeResultForJsonlArtifact({
+      testCase: {
+        vars: {},
+        options: {
+          provider: {
+            id: { env: { API_KEY: 'sk-map-secret' } },
+            label: { prompts: ['judge'] },
+            config: { delay: 1 },
+          },
+        },
+      } as AtomicTestCase,
+    });
+
+    expect(result.testCase.options?.provider).toEqual({
+      id: { env: { API_KEY: '[REDACTED]' } },
+      label: { prompts: ['judge'] },
+      config: { delay: 1 },
+    });
+  });
+
+  it('sanitizes id-less provider options without classifying map keys', () => {
+    const result = sanitizeResultForJsonlArtifact({
+      testCase: {
+        vars: {},
+        provider: { config: { apiKey: 'sk-direct-secret' } },
+        options: {
+          provider: {
+            'openai:chat:model': { config: { apiKey: 'sk-map-secret' } },
+            config: { config: { apiKey: 'sk-reserved-secret' } },
+          },
+        },
+      } as AtomicTestCase,
+    });
+
+    expect(result.testCase.options?.provider).toEqual({
+      'openai:chat:model': { config: { apiKey: '[REDACTED]' } },
+      config: { config: { apiKey: '[REDACTED]' } },
+    });
+    expect(result.testCase.provider).toEqual({ config: { apiKey: '[REDACTED]' } });
+  });
+
+  it('preserves falsy declarative provider config values', () => {
+    const result = sanitizeResultForJsonlArtifact({
+      testCase: {
+        vars: {},
+        provider: { id: 'fixture', config: false } as any,
+      } as AtomicTestCase,
+    });
+
+    expect(result.testCase.provider).toEqual({ id: 'fixture', config: false });
+  });
+
+  it('cuts circular grading components before generic serialization', () => {
+    const component: any = { pass: true, score: 1, reason: 'ok' };
+    component.componentResults = [component];
+
+    const result = sanitizeResultForJsonlArtifact({
+      gradingResult: { pass: true, score: 1, reason: 'ok', componentResults: [component] },
+    });
+
+    expect(result.gradingResult.componentResults[0].componentResults).toEqual([{}]);
+  });
+
+  it('preserves repeated acyclic grading components', () => {
+    const component = {
+      pass: true,
+      score: 1,
+      reason: 'ok',
+      assertion: { type: 'contains', value: 'ok' },
+    };
+    const result = sanitizeResultForJsonlArtifact({
+      gradingResult: {
+        pass: true,
+        score: 1,
+        reason: 'ok',
+        componentResults: [component, component],
+      },
+    });
+
+    expect(result.gradingResult.componentResults).toEqual([component, component]);
+  });
+
+  it('preserves provider-map ids and cuts circular entries', () => {
+    const entry: any = { config: { apiKey: 'sk-map-secret' } };
+    entry.self = entry;
+
+    const result = sanitizeResultForJsonlArtifact({
+      testCase: {
+        vars: {},
+        options: { provider: { auth: entry, token: { config: { apiKey: 'sk-other' } } } },
+      } as AtomicTestCase,
+    });
+
+    expect(result.testCase.options?.provider).toEqual({
+      auth: { config: { apiKey: '[REDACTED]' }, self: {} },
+      token: { config: { apiKey: '[REDACTED]' } },
+    });
+  });
+
+  it('does not invoke grading-result accessors', () => {
+    let reads = 0;
+    const gradingResult: any = { pass: true, score: 1, reason: 'ok' };
+    Object.defineProperty(gradingResult, 'assertion', {
+      enumerable: true,
+      get() {
+        if (++reads > 1) {
+          throw new Error('unexpected second read');
+        }
+        return { type: 'llm-rubric', provider: { id: 'fixture' } };
+      },
+    });
+
+    const result = sanitizeResultForJsonlArtifact({ gradingResult });
+
+    expect(result.gradingResult.assertion).toBeUndefined();
+    expect(reads).toBe(0);
+  });
+
+  it('does not invoke test-case accessors', () => {
+    let reads = 0;
+    const testCase = { options: {}, assert: [] } as AtomicTestCase;
+    Object.defineProperty(testCase, 'vars', {
+      enumerable: true,
+      get() {
+        if (++reads > 1) {
+          throw new Error('unexpected second read');
+        }
+        return { prompt: 'fixture input' };
+      },
+    });
+
+    const sanitized = sanitizeResultForJsonlArtifact({ testCase });
+
+    expect(sanitized.testCase.vars).toBeUndefined();
+    expect(reads).toBe(0);
+  });
+
+  it('does not traverse nested test-case vars twice', () => {
+    let reads = 0;
+    const vars: Record<string, unknown> = {};
+    Object.defineProperty(vars, 'prompt', {
+      enumerable: true,
+      get() {
+        if (++reads > 1) {
+          throw new Error('unexpected second nested read');
+        }
+        return 'fixture input';
+      },
+    });
+
+    const sanitized = sanitizeResultForJsonlArtifact({
+      testCase: { vars, options: {} } as AtomicTestCase,
+    });
+
+    expect(sanitized.testCase.vars).toEqual({});
+    expect(reads).toBe(0);
+  });
+
+  it('fails closed for throwing grading metadata accessors', () => {
+    const metadata: Record<string, unknown> = {};
+    Object.defineProperty(metadata, 'http', {
+      enumerable: true,
+      get() {
+        throw new Error('fixture metadata getter');
+      },
+    });
+
+    const result = sanitizeResultForJsonlArtifact({
+      gradingResult: { pass: true, score: 1, reason: 'ok', metadata },
+    });
+
+    expect(result.gradingResult.metadata).toEqual({});
+  });
+
+  it('reads option accessors once while preserving ordinary prompt text', () => {
+    let reads = 0;
+    const options = {} as NonNullable<AtomicTestCase['options']>;
+    Object.defineProperty(options, 'rubricPrompt', {
+      enumerable: true,
+      get() {
+        if (++reads > 1) {
+          throw new Error('unexpected second read');
+        }
+        return 'grade this exact text';
+      },
+    });
+
+    const sanitized = sanitizeResultForJsonlArtifact({
+      testCase: { vars: {}, options } as AtomicTestCase,
+    });
+
+    expect(sanitized.testCase.options?.rubricPrompt).toBe('grade this exact text');
+    expect(reads).toBe(1);
+  });
+
   describe('sanitizeProvider', () => {
+    it.each([
+      'cfAigToken',
+      'apiBearerToken',
+      'portkeyAwsAccessKeyId',
+      'portkeyAwsSecretAccessKey',
+      'portkeyAwsSessionToken',
+      'user_access_token',
+      'auth_password',
+      'device_token',
+    ])('redacts the supported provider credential %s', (field) => {
+      expect(
+        sanitizeProvider({
+          id: 'fixture',
+          config: { [field]: 'fixture', region: 'local', apiKeyEnvar: 'CUSTOM_KEY' },
+        }),
+      ).toEqual({
+        id: 'fixture',
+        config: { [field]: '[REDACTED]', region: 'local', apiKeyEnvar: 'CUSTOM_KEY' },
+      });
+    });
     it('should handle ApiProvider objects', () => {
       const apiProvider = createMockProvider({
         id: 'test-provider',
@@ -93,6 +659,114 @@ describe('EvalResult', () => {
       });
     });
 
+    it('should redact provider configs that contain non-JSON primitives', () => {
+      const errorSecret = 'sk-provider-bigint-error-should-never-persist';
+      const lastError = Object.assign(new Error(`Invalid API key ${errorSecret}`), {
+        toJSON() {
+          return { message: `Invalid API key ${errorSecret}` };
+        },
+      });
+      const providerOptions = {
+        id: 'test-provider',
+        label: 'Test Provider',
+        config: {
+          apiKey: 'test-key',
+          lastError,
+          retryAfterNanos: 1n,
+        },
+      } as unknown as ProviderOptions;
+
+      const result = sanitizeProvider(providerOptions);
+      expect(result).toEqual({
+        id: 'test-provider',
+        label: 'Test Provider',
+        config: {
+          apiKey: '[REDACTED]',
+          lastError: {
+            name: '[REDACTED]',
+            message: '[REDACTED]',
+          },
+          retryAfterNanos: '1',
+        },
+      });
+      expect(JSON.stringify(result)).not.toContain(errorSecret);
+
+      const withoutBigInt = sanitizeProvider({
+        id: 'test-provider',
+        config: { lastError },
+      } as unknown as ProviderOptions);
+      expect(withoutBigInt.config?.lastError).toEqual({
+        name: '[REDACTED]',
+        message: '[REDACTED]',
+      });
+      expect(JSON.stringify(withoutBigInt)).not.toContain(errorSecret);
+    });
+
+    it('redacts AWS/Azure credential fields in provider config (name-based)', () => {
+      // Regression: Bedrock (`secretAccessKey`/`sessionToken`) and Azure
+      // (`azureClientSecret`) credentials use realistic values that fall
+      // outside the value-shape `looksLikeSecret` heuristics (a 40-char AWS
+      // secret is below the 64-char base64 threshold; Azure secrets contain
+      // `~`/`.`), so they must be redacted by field name.
+      const providerOptions = {
+        id: 'bedrock:anthropic.claude-3',
+        config: {
+          region: 'us-east-1',
+          accessKeyId: 'ASIAIOSFODNN7EXAMPLE',
+          secretAccessKey: 'wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY',
+          sessionToken: 'short-session-token',
+          azureClientSecret: 'abc8Q~someSecretValue.With-Tilde_and.Dots123',
+        },
+      } as unknown as ProviderOptions;
+
+      const result = sanitizeProvider(providerOptions);
+      expect(result.config).toEqual({
+        region: 'us-east-1',
+        accessKeyId: '[REDACTED]',
+        secretAccessKey: '[REDACTED]',
+        sessionToken: '[REDACTED]',
+        azureClientSecret: '[REDACTED]',
+      });
+      const serialized = JSON.stringify(result);
+      expect(serialized).not.toContain('wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY');
+      expect(serialized).not.toContain('short-session-token');
+      expect(serialized).not.toContain('abc8Q~someSecretValue');
+    });
+
+    it('fails closed before custom JSON remapping', () => {
+      const credentials = {
+        apiKey: 'short-fixture',
+        region: 'local',
+        toJSON() {
+          return { message: this.apiKey };
+        },
+      };
+      const result = sanitizeProvider({ id: 'fixture', config: { connection: credentials } });
+      expect(result.config?.connection).toBe('[REDACTED]');
+      expect(JSON.stringify(result)).not.toContain('short-fixture');
+    });
+
+    it('should omit provider configs that throw during sanitization', () => {
+      const errorSecret = 'sk-provider-error-should-never-log';
+      const debugSpy = vi.spyOn(logger, 'debug').mockImplementation(() => undefined);
+      const config = { apiKey: 'sk-should-never-persist' } as Record<string, unknown>;
+      Object.defineProperty(config, 'client', {
+        enumerable: true,
+        get() {
+          throw new Error(`SDK client unavailable: ${errorSecret}`);
+        },
+      });
+
+      const result = sanitizeProvider({
+        id: 'test-provider',
+        config,
+      } as unknown as ProviderOptions);
+
+      expect(result.config).toEqual({});
+      expect(JSON.stringify(result)).not.toContain('sk-should-never-persist');
+      expect(JSON.stringify(debugSpy.mock.calls)).not.toContain(errorSecret);
+    });
+
     it('should handle generic objects with id function', () => {
       const provider = {
         id: () => 'test-provider',
@@ -112,6 +786,27 @@ describe('EvalResult', () => {
       });
     });
 
+    it('should normalize string providers', () => {
+      expect(sanitizeProvider('openai:gpt-4.1-mini')).toEqual({
+        id: 'openai:gpt-4.1-mini',
+      });
+    });
+
+    it('should fail closed when provider accessors throw', () => {
+      const debugSpy = vi.spyOn(logger, 'debug').mockImplementation(() => undefined);
+      const provider = {
+        get id() {
+          throw new Error('Provider unavailable: sk-provider-id-should-never-log');
+        },
+        config: { apiKey: 'sk-provider-config-should-never-persist' },
+      } as unknown as ProviderOptions;
+
+      const result = sanitizeProvider(provider);
+
+      expect(result).toEqual({ id: 'unknown' });
+      expect(JSON.stringify(result)).not.toContain('sk-provider-config-should-never-persist');
+      expect(JSON.stringify(debugSpy.mock.calls)).not.toContain('sk-provider-id-should-never-log');
+    });
     it('should redact env-rendered credentials from templated WebSocket provider data', () => {
       const provider = new WebSocketProvider('websocket', {
         config: {
@@ -447,8 +1142,32 @@ describe('EvalResult', () => {
       expect(retrieved?.response?.output).toBe('test output');
     });
 
-    // Regression context (PR #8688): provider credentials such as apiKey/token
+    it('should not log exception details when generic result serialization fails', async () => {
+      const debugSpy = vi.spyOn(logger, 'debug').mockImplementation(() => undefined);
+      const namedScores = { safe: 1 } as Record<string, number>;
+      Object.defineProperty(namedScores, 'client', {
+        enumerable: true,
+        get() {
+          throw new Error('Serialization failed for sk-response-should-never-log');
+        },
+      });
+
+      const result = await EvalResult.createFromEvaluateResult(
+        'test-eval-throwing-response',
+        {
+          ...mockEvaluateResult,
+          namedScores,
+        },
+        { persist: false },
+      );
+
+      expect(result.namedScores).toEqual({});
+      expect(JSON.stringify(debugSpy.mock.calls)).not.toContain('sk-response-should-never-log');
+    });
+
+    // Regression context (PR #8688): provider credentials (for example apiKey/token)
     // were leaking into persisted eval results and API-visible response payloads.
+    // These tests ensure sensitive fields are always redacted before storage/serialization.
     describe('credential redaction (regression for PR #8688 review)', () => {
       it('redacts apiKey in testCase.options.provider.config', async () => {
         const evalId = 'test-eval-redact-options-provider';
@@ -911,6 +1630,92 @@ describe('EvalResult', () => {
 
         expect(result.persisted).toBe(true);
         expect(JSON.stringify(result.testCase)).not.toContain('sk-live-leak');
+      });
+
+      it('omits an unsafely inspectable provider-bearing field instead of persisting secrets', async () => {
+        const errorSecret = 'sk-field-error-should-never-log';
+        const debugSpy = vi.spyOn(logger, 'debug').mockImplementation(() => undefined);
+        const providerConfig = { apiKey: 'sk-ant-api03-THROWING-GETTER' } as Record<
+          string,
+          unknown
+        >;
+        Object.defineProperty(providerConfig, 'client', {
+          enumerable: true,
+          get() {
+            throw new Error(`SDK getter failed: ${errorSecret}`);
+          },
+        });
+
+        const result = await EvalResult.createFromEvaluateResult(
+          'test-eval-redact-throwing-getter',
+          {
+            ...mockEvaluateResult,
+            testCase: {
+              vars: {},
+              options: {
+                provider: { id: 'anthropic:messages:claude', config: providerConfig },
+              },
+            } as AtomicTestCase,
+          },
+          { persist: true },
+        );
+
+        expect(JSON.stringify(result.testCase)).not.toContain('sk-ant-api03-THROWING-GETTER');
+        expect(result.testCase.options?.provider).toEqual({
+          id: 'anthropic:messages:claude',
+          config: {},
+        });
+        expect(JSON.stringify(debugSpy.mock.calls)).not.toContain(errorSecret);
+      });
+
+      it('captures prompt config before sanitizing it', async () => {
+        let reads = 0;
+        const prompt = { raw: 'fixture prompt', label: 'fixture prompt' } as Prompt;
+        Object.defineProperty(prompt, 'config', {
+          enumerable: true,
+          get() {
+            reads++;
+            if (reads > 1) {
+              throw new Error('config read twice');
+            }
+            return { temperature: 0 };
+          },
+        });
+
+        const result = await EvalResult.createFromEvaluateResult(
+          'test-eval-prompt-getter',
+          { ...mockEvaluateResult, prompt },
+          { persist: true },
+        );
+
+        expect(result.prompt).toMatchObject({
+          raw: 'fixture prompt',
+          config: { temperature: 0 },
+        });
+      });
+
+      it('reuses the first trace metadata snapshot during persistence', async () => {
+        let reads = 0;
+        const metadata = {} as Record<string, unknown>;
+        Object.defineProperty(metadata, 'stateful', {
+          enumerable: true,
+          get() {
+            reads++;
+            if (reads > 1) {
+              throw new Error('metadata read twice');
+            }
+            return 'first';
+          },
+        });
+
+        const result = await EvalResult.createFromEvaluateResult(
+          'test-eval-metadata-snapshot',
+          { ...mockEvaluateResult, metadata, traceId: 'trace-id' },
+          { persist: true },
+        );
+
+        expect(reads).toBe(1);
+        expect(result.metadata?.stateful).toBe('first');
       });
     });
 

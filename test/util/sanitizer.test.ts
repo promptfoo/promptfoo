@@ -312,6 +312,20 @@ describe('sanitizeObject', () => {
       expect(result.config.mcp.servers[0].env.GITHUB_TOKEN).toBe('[REDACTED]');
     });
 
+    it('sanitizes URL fields while preserving opaque string values', () => {
+      const result = sanitizeObject(
+        {
+          url: 'https://user:pass@example.test/path?token=secret',
+          value: 'abcdef0123456789'.repeat(8),
+        },
+        { redactStringValues: false },
+      );
+
+      expect(result.url).not.toContain('pass');
+      expect(result.url).not.toContain('secret');
+      expect(result.value).toBe('abcdef0123456789'.repeat(8));
+    });
+
     it('does not widen redaction outside env maps', () => {
       const result = sanitizeObject({
         maxTokens: 4096,
@@ -373,6 +387,27 @@ describe('sanitizeObject', () => {
     it('should return invalid JSON strings unchanged', () => {
       const invalidJson = '{invalid json}';
       expect(sanitizeObject(invalidJson)).toBe(invalidJson);
+    });
+
+    it('does not preserve hidden duplicate credential JSON keys', () => {
+      expect(sanitizeObject('{"apiKey":"sk-hidden-secret","apiKey":"[REDACTED]"}')).toBe(
+        '{"apiKey":"[REDACTED]"}',
+      );
+      expect(sanitizeObject('{"config":{"apiKey":"sk-hidden-secret"},"config":{}}')).toBe(
+        '{"config":{}}',
+      );
+      expect(sanitizeObject('{"api\\u004bey":"sk-hidden-secret","apiKey":"[REDACTED]"}')).toBe(
+        '{"apiKey":"[REDACTED]"}',
+      );
+    });
+
+    it('fails closed when sanitizing parsed JSON exceeds the call stack', () => {
+      let nested = '{"apiKey":"sk-hidden-secret"}';
+      for (let index = 0; index < 10000; index++) {
+        nested = `{"value":${nested}}`;
+      }
+
+      expect(sanitizeObject(nested, { maxDepth: Number.POSITIVE_INFINITY })).toBe('[REDACTED]');
     });
 
     it('should redact SAS tokens embedded in Azure Blob test URIs', () => {
@@ -1091,6 +1126,94 @@ describe('sanitizeObject', () => {
   });
 
   describe('class instances and prototypes', () => {
+    it('preserves URL and Buffer JSON representations', () => {
+      expect(
+        sanitizeObject({
+          endpoint: new URL('https://user:pass@example.com/path?token=fixture'),
+          bytes: Buffer.from('ok'),
+        }),
+      ).toEqual({
+        endpoint: 'https://***:***@example.com/path?token=%5BREDACTED%5D',
+        bytes: { type: 'Buffer', data: [111, 107] },
+      });
+    });
+
+    it('fails closed for custom JSON projections', () => {
+      class Credential {
+        #token = 'fixture-private-token';
+        toJSON() {
+          return { message: this.#token };
+        }
+      }
+
+      expect(sanitizeObject({ credential: new Credential() })).toEqual({
+        credential: '[REDACTED]',
+      });
+
+      let reads = 0;
+      const accessorCredential = {
+        get toJSON() {
+          reads++;
+          return reads === 1 ? () => ({ message: 'fixture-accessor-token' }) : undefined;
+        },
+      };
+      expect(sanitizeObject({ credential: accessorCredential })).toEqual({
+        credential: '[REDACTED]',
+      });
+    });
+
+    it('does not trust a custom Buffer serializer that renames credentials', () => {
+      const bytes = Object.assign(Buffer.from('ok'), {
+        apiKey: 'short-buffer-fixture',
+        toJSON() {
+          return { message: this.apiKey };
+        },
+      });
+
+      expect(JSON.stringify(sanitizeObject({ bytes }))).not.toContain('short-buffer-fixture');
+    });
+
+    it('does not let custom JSON rename nested credentials', () => {
+      const input = {
+        connection: {
+          credentials: { password: 'short-fixture' },
+          toJSON() {
+            return { message: this.credentials.password };
+          },
+        },
+      };
+
+      expect(JSON.stringify(sanitizeObject(input))).not.toContain('short-fixture');
+    });
+
+    it('does not trust a self-returning custom JSON serializer', () => {
+      const credential = {
+        apiKey: 'short-fixture',
+        toJSON() {
+          this.message = this.apiKey;
+          delete this.apiKey;
+          return this;
+        },
+      } as { apiKey?: string; message?: string; toJSON(): unknown };
+
+      expect(sanitizeObject({ credential })).toEqual({ credential: '[REDACTED]' });
+    });
+
+    it('does not let custom JSON rename inherited credentials', () => {
+      class Connection {
+        get apiKey() {
+          return 'short-inherited-fixture';
+        }
+        toJSON() {
+          return { message: `Invalid key ${this.apiKey}` };
+        }
+      }
+
+      expect(JSON.stringify(sanitizeObject({ connection: new Connection() }))).not.toContain(
+        'short-inherited-fixture',
+      );
+    });
+
     it('should convert class instances to plain objects via JSON', () => {
       class TestClass {
         public data: string;
@@ -1114,6 +1237,12 @@ describe('sanitizeObject', () => {
       expect(result.date).toBe('2023-01-01T00:00:00.000Z');
     });
 
+    it('redacts Dates with overridden ISO serialization', () => {
+      const date = new Date();
+      date.toISOString = () => 'Invalid key sk-date-fixture-should-not-persist';
+      expect(JSON.stringify(sanitizeObject({ date }))).not.toContain('sk-date-fixture');
+    });
+
     it('should convert RegExp objects to empty objects via JSON', () => {
       const regex = /test/gi;
       const result = sanitizeObject({ regex });
@@ -1129,6 +1258,70 @@ describe('sanitizeObject', () => {
         name: 'Error',
         message: 'test error',
       });
+    });
+
+    it('should redact Error messages when requested', () => {
+      const error = new Error('Invalid API key sk-error-message-should-not-persist');
+      error.name = 'Authentication failed for sk-error-name-should-not-persist';
+      const result = sanitizeObject({ error }, { redactErrorMessages: true });
+
+      expect(result.error).toEqual({
+        name: '[REDACTED]',
+        message: '[REDACTED]',
+      });
+      expect(JSON.stringify(result)).not.toContain('sk-error-message-should-not-persist');
+      expect(JSON.stringify(result)).not.toContain('sk-error-name-should-not-persist');
+    });
+
+    it('should redact Error messages before custom toJSON serialization', () => {
+      const secret = 'sk-error-to-json-should-not-persist';
+      const error = Object.assign(new Error(`Invalid API key ${secret}`), {
+        toJSON() {
+          return { message: `Invalid API key ${secret}` };
+        },
+      });
+
+      const result = sanitizeObject({ error }, { redactErrorMessages: true });
+
+      expect(result.error).toEqual({
+        name: '[REDACTED]',
+        message: '[REDACTED]',
+      });
+      expect(JSON.stringify(result)).not.toContain(secret);
+    });
+
+    it('omits accessor values without reading them or exposing other secrets', () => {
+      let reads = 0;
+      const input = {
+        apiKey: 'fixture-key',
+        get lastError() {
+          reads++;
+          if (reads > 1) {
+            throw new Error('Unexpected repeated accessor read: fixture-marker');
+          }
+          return new Error('A local error: fixture-marker');
+        },
+      };
+
+      expect(sanitizeObject(input)).toEqual({ apiKey: '[REDACTED]', lastError: '[REDACTED]' });
+      expect(reads).toBe(0);
+    });
+
+    it('redacts an accessor even when it removes itself during serialization', () => {
+      const input: Record<string, unknown> = {};
+      Object.defineProperty(input, 'credential', {
+        enumerable: true,
+        configurable: true,
+        get() {
+          delete input.credential;
+          return 'sk-accessor-fixture-should-not-persist';
+        },
+      });
+
+      const result = sanitizeObject(input);
+
+      expect(result).toEqual({ credential: '[REDACTED]' });
+      expect(JSON.stringify(result)).not.toContain('sk-accessor-fixture');
     });
 
     it('should convert Map objects to empty objects via JSON', () => {
@@ -1292,11 +1485,23 @@ describe('sanitizeObject', () => {
     it('should handle BigInt values', () => {
       const input = { bigNum: BigInt(9007199254740991), password: 'secret' };
       const result = sanitizeObject(input);
-      // BigInt is not JSON serializable; sanitizer should not expose original data.
-      expect(typeof result).toBe('string');
-      expect(result).toBe('[unable to serialize, circular reference is too complex to analyze]');
-      expect(result).not.toContain('9007199254740991');
-      expect(result).not.toContain('secret');
+      // The sanitizer's replacer converts BigInt to a string, so the object is
+      // preserved and secrets are still redacted (stronger than bailing out to a
+      // fallback string, which would drop the non-secret data too).
+      expect(result).toEqual({
+        bigNum: '9007199254740991',
+        password: '[REDACTED]',
+      });
+      expect(result.password).not.toContain('secret');
+    });
+
+    it('redacts getter-projected BigInts before string conversion', () => {
+      const input = {
+        get connection() {
+          return 12345678901234567890n;
+        },
+      };
+      expect(sanitizeObject(input).connection).toBe('[REDACTED]');
     });
   });
 
@@ -1309,7 +1514,7 @@ describe('sanitizeObject', () => {
       });
 
       const result = sanitizeObject(input, { throwOnError: false });
-      expect(result).toEqual(input);
+      expect(result).toEqual({});
     });
 
     it('should throw errors when throwOnError is true', () => {
@@ -1321,6 +1526,12 @@ describe('sanitizeObject', () => {
       expect(() => sanitizeObject(input, { throwOnError: true })).toThrow('Parse error');
     });
 
+    it('fails closed for a revoked proxy', () => {
+      const { proxy, revoke } = Proxy.revocable({ apiKey: 'fixture' }, {});
+      revoke();
+      expect(sanitizeObject(proxy)).toEqual({});
+    });
+
     it('should log context in error messages', () => {
       const input = { key: 'value' };
       vi.spyOn(JSON, 'parse').mockImplementationOnce(() => {
@@ -1328,10 +1539,7 @@ describe('sanitizeObject', () => {
       });
 
       sanitizeObject(input, { context: 'test context', throwOnError: false });
-      expect(consoleErrorSpy).toHaveBeenCalledWith(
-        expect.stringContaining('test context'),
-        expect.any(Error),
-      );
+      expect(consoleErrorSpy).toHaveBeenCalledWith(expect.stringContaining('test context'));
     });
   });
 
@@ -1434,16 +1642,53 @@ describe('sanitizeObject', () => {
       const awsConfig = {
         region: 'us-east-1',
         accessKeyId: 'AKIAIOSFODNN7EXAMPLE',
+        // Realistic 40-char AWS secret access key: below the 64-char base64
+        // `looksLikeSecret` threshold, so it must be caught by field name.
         secretAccessKey: 'wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY',
+        // Short session token: not matched by value shape, must be caught by name.
         sessionToken: 'session-token-value',
       };
       const result = sanitizeObject(awsConfig);
       expect(result.region).toBe('us-east-1');
       expect(result.accessKeyId).toBe('[REDACTED]');
-      // Previously asserted to pass through in clear text, which contradicted this
-      // test's own name: secretAccessKey and sessionToken are the actual secrets.
       expect(result.secretAccessKey).toBe('[REDACTED]');
       expect(result.sessionToken).toBe('[REDACTED]');
+    });
+
+    it('should sanitize temporary AWS credentials and snake_case env-var forms', () => {
+      const awsConfig = {
+        region: 'us-west-2',
+        // Temporary STS access key starts with ASIA (not AKIA), so value-shape
+        // detection misses it — the field name must redact it.
+        accessKeyId: 'ASIAIOSFODNN7EXAMPLE',
+        secretAccessKey: 'wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY',
+        aws_secret_access_key: 'wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY',
+        aws_session_token: 'short-session-token',
+      };
+      const result = sanitizeObject(awsConfig);
+      expect(result.region).toBe('us-west-2');
+      expect(result.accessKeyId).toBe('[REDACTED]');
+      expect(result.secretAccessKey).toBe('[REDACTED]');
+      expect(result.aws_secret_access_key).toBe('[REDACTED]');
+      expect(result.aws_session_token).toBe('[REDACTED]');
+    });
+
+    it('should sanitize Azure client secret and SAS token by field name', () => {
+      const azureConfig = {
+        region: 'eastus',
+        clientId: 'my-app-client-id-1234',
+        tenantId: 'my-tenant-id-1234',
+        // Azure client secrets contain `~` and `.`, which fall outside the base64
+        // `looksLikeSecret` charset, so they must be caught by field name.
+        azureClientSecret: 'abc8Q~someSecretValue.With-Tilde_and.Dots123',
+        sasToken: '?sv=2021-08-06&sig=abc123def456',
+      };
+      const result = sanitizeObject(azureConfig);
+      expect(result.region).toBe('eastus');
+      expect(result.clientId).toBe('my-app-client-id-1234');
+      expect(result.tenantId).toBe('my-tenant-id-1234');
+      expect(result.azureClientSecret).toBe('[REDACTED]');
+      expect(result.sasToken).toBe('[REDACTED]');
     });
 
     it('should sanitize provider response with metadata', () => {
