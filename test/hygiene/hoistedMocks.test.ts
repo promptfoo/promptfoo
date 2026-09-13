@@ -798,6 +798,13 @@ describe('hoisted mock provenance', () => {
     expect(hasHoistedPersistentMockWithoutReset(source)).toBe(violation);
   });
 
+  it('credits optional resets for conditionally created mocks', () => {
+    const source = `const mock = vi.hoisted(() =>
+      process.platform === 'win32' ? vi.fn().mockReturnValue('x') : undefined);
+      beforeEach(() => mock?.mockReset());`;
+    expect(hasHoistedPersistentMockWithoutReset(source)).toBe(false);
+  });
+
   it.each([
     "let request; switch (flag) { case 'a': request = vi.fn().mockReturnValue('a'); break; default: request = vi.fn().mockReturnValue('b'); } return request;",
     "let request; switch ('a') { case 'a': request = vi.fn().mockReturnValue('a'); break; default: request = vi.fn().mockReturnValue('b'); } return request;",

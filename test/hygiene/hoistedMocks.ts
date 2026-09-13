@@ -1222,14 +1222,30 @@ export function findHoistedPersistentMockWithoutReset(
       return node.arguments[0] ? evaluate(node.arguments[0], context) : UNKNOWN;
     }
     if (callee.type === 'MemberExpression') {
+      const method = propertyName(callee.property, callee.computed);
+      const receiverValue = evaluate(callee.object, context);
+      const guardedMockBirth =
+        callee.optional &&
+        method === 'mockReset' &&
+        [...mockKeys(receiverValue)].every((key) =>
+          birthGuards.get(key)?.some((path) => path.size > 0),
+        );
       return optionalTarget(
-        evaluate(callee.object, context),
+        receiverValue,
         callee,
         context,
         (receiver, nested) => {
-          const method = evaluateProperty(callee.property, callee.computed, nested);
-          return invokeCall(node, get(receiver, method, nested), nested, tail, receiver, method);
+          const resolvedMethod = evaluateProperty(callee.property, callee.computed, nested);
+          return invokeCall(
+            node,
+            get(receiver, resolvedMethod, nested),
+            nested,
+            tail,
+            receiver,
+            resolvedMethod,
+          );
         },
+        guardedMockBirth,
       );
     }
     let callable = evaluate(callee, context);
@@ -1249,6 +1265,7 @@ export function findHoistedPersistentMockWithoutReset(
     node: Extract<Node, { type: 'CallExpression' | 'MemberExpression' | 'NewExpression' }>,
     context: Context,
     visit: (value: Value, context: Context) => Value,
+    preserveGuard = false,
   ): Value {
     const optional = node.type !== 'NewExpression' && node.optional;
     let maySkip = false;
@@ -1263,7 +1280,10 @@ export function findHoistedPersistentMockWithoutReset(
     if (!targets.length) {
       return SHORT_CIRCUIT;
     }
-    const result = visit(union(targets), maySkip ? guarded(context, node, true) : context);
+    const result = visit(
+      union(targets),
+      maySkip && !preserveGuard ? guarded(context, node, true) : context,
+    );
     return maySkip ? union([result, SHORT_CIRCUIT]) : result;
   }
 
