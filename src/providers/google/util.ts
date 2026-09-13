@@ -598,17 +598,29 @@ export function calculateGoogleCost(
     }
   }
 
+  const tiered = (rate: number, overridden: boolean) =>
+    overridden ? rate : rate * serviceTierMultiplier;
+  const hasInputOverride = config.inputCost !== undefined || config.cost !== undefined;
+  const hasOutputOverride = config.outputCost !== undefined || config.cost !== undefined;
   return (
-    ((textInputTokens - cachedTextTokens) * inputCost +
-      cachedTextTokens * cachedInputCost +
-      (audioInputTokens - cachedAudioTokens) * serviceTierAudioInputCost +
-      cachedAudioTokens * cachedAudioInputCost +
-      (imageInputTokens - cachedImageTokens) * imageInputCost +
-      cachedImageTokens * cachedImageInputCost +
-      (completionTokens - audioOutputTokens - videoOutputTokens) * outputCost +
-      audioOutputTokens * audioOutputCost +
-      videoOutputTokens * videoOutputCost) *
-    serviceTierMultiplier
+    (textInputTokens - cachedTextTokens) * tiered(inputCost, hasInputOverride) +
+    cachedTextTokens * tiered(cachedInputCost, hasInputOverride) +
+    (audioInputTokens - cachedAudioTokens) *
+      tiered(serviceTierAudioInputCost, hasAudioInputOverride) +
+    cachedAudioTokens * tiered(cachedAudioInputCost, hasAudioInputOverride) +
+    (imageInputTokens - cachedImageTokens) *
+      tiered(imageInputCost, config.imageInputCost !== undefined || hasInputOverride) +
+    cachedImageTokens *
+      tiered(cachedImageInputCost, config.imageInputCost !== undefined || hasInputOverride) +
+    (completionTokens - audioOutputTokens - videoOutputTokens) *
+      tiered(outputCost, hasOutputOverride) +
+    audioOutputTokens *
+      tiered(
+        audioOutputCost,
+        config.audioOutputCost !== undefined || config.audioCost !== undefined || hasOutputOverride,
+      ) +
+    videoOutputTokens *
+      tiered(videoOutputCost, config.videoOutputCost !== undefined || hasOutputOverride)
   );
 }
 

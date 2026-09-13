@@ -3302,6 +3302,18 @@ describe('util', () => {
       },
     );
 
+    it('preserves explicit token prices across service tiers', () => {
+      expect(
+        calculateGoogleCost(
+          'gemini-3.5-flash',
+          { inputCost: 1 / 1e6, outputCost: 2 / 1e6, service_tier: 'priority' },
+          1000,
+          500,
+          false,
+        ),
+      ).toBeCloseTo(0.002, 12);
+    });
+
     it('preserves explicit audio price overrides in Vertex multi-regions', () => {
       const cost = calculateGoogleCost(
         'gemini-3.5-flash',
