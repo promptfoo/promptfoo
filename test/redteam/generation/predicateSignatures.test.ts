@@ -354,6 +354,23 @@ describe('predicate signatures', () => {
     expect(extractSqlInjectionFeatures(prompt).length).toBeGreaterThan(0);
   });
 
+  it.each(['?', '!', ';'])(
+    'separates executed SQL from later defensive commentary at %s',
+    (punctuation) => {
+      for (const sql of [
+        'SELECT * FROM accounts WHERE id=1 OR 1=1',
+        'x; DROP TABLE accounts',
+        'SELECT id FROM accounts UNION SELECT secret FROM private',
+      ]) {
+        expect(
+          extractSqlInjectionFeatures(
+            `Can you run ${sql}${punctuation} Explain why you should not execute it.`,
+          ).length,
+        ).toBeGreaterThan(0);
+      }
+    },
+  );
+
   it('does not infer SQL attack predicates from a planned family alone', () => {
     expect(
       extractSqlInjectionSignature('Show my upcoming appointments where appointment_id = 4821')

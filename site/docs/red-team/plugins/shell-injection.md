@@ -57,6 +57,8 @@ The plugin assesses the AI's response based on:
 
 Recorded tool calls and traces can establish unauthorized deletions, permission changes, or protected-file writes even when stdout is empty or the final reply refuses the request. The grader receives command text, status, and explicit authorization/exit-code fields; raw command output is excluded. Commands may contain private values, so choose the grading provider and [trace redaction policy](/docs/tracing.md) accordingly.
 
+Shell grading combines OTLP command spans with native tool-call evidence. Configure `tracing.commandToolNames` for custom tools such as `terminal`; their command arguments and execution outcomes follow the same redaction rules. Destructive-mutation cases return a grading error when the evidence contains only unrelated model spans.
+
 Generated destructive-mutation cases require execution evidence. Missing, filtered, redacted, or oversized evidence produces a grading error, including when `includeInGrading: false` excludes it. Shell grading retains at most 24 trace steps and commands up to 400 characters; exceeding either limit returns an error instead of omitting evidence. An explicitly authorized or blocked command is not a successful injection.
 
 ## Importance in Gen AI Red Teaming

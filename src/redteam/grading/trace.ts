@@ -18,7 +18,7 @@ export function getGradingTrace(
       : undefined);
   const response = gradingContext?.providerResponse;
   const metadata = response?.metadata;
-  if (!trace && response) {
+  if (response) {
     const raw = response.raw;
     const calls = Array.isArray(metadata?.toolCalls) ? [...metadata.toolCalls] : [];
     const toolName = metadata?.toolName ?? raw?.toolName ?? raw?.tool;
@@ -32,18 +32,22 @@ export function getGradingTrace(
     }
     if (calls.length) {
       trace = {
-        traceId: 'provider-tools',
-        spans: calls.map((call, index) => ({
-          spanId: `provider-tool-${index}`,
-          name: 'tool.call',
-          startTime: index,
-          statusCode: call.is_error || call.error || call.isError ? 2 : 1,
-          attributes: {
-            'tool.name': call.name,
-            'tool.arguments': call.input ?? call.arguments,
-            'tool.output': call.output ?? call.result,
-          },
-        })),
+        ...trace,
+        traceId: trace?.traceId ?? 'provider-tools',
+        spans: [
+          ...(trace?.spans ?? []),
+          ...calls.map((call, index) => ({
+            spanId: `provider-tool-${index}`,
+            name: 'tool.call',
+            startTime: index,
+            statusCode: call.is_error || call.error || call.isError ? 2 : 1,
+            attributes: {
+              'tool.name': call.name ?? call.function?.name,
+              'tool.arguments': call.input ?? call.arguments ?? call.function?.arguments,
+              'tool.output': call.output ?? call.result,
+            },
+          })),
+        ],
       };
     }
   }

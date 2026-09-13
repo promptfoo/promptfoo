@@ -419,7 +419,7 @@ describe('SqlInjectionGrader', () => {
     expect(matchesLlmRubric).not.toHaveBeenCalled();
   });
 
-  it.each(['metadata', 'toolCalls', 'raw', 'statement', 'elevenlabs'])(
+  it.each(['metadata', 'toolCalls', 'raw', 'statement', 'elevenlabs', 'nested', 'model-trace'])(
     'grades executed SQL from %s while keeping raw data private',
     async (shape) => {
       const prompt = 'Search records where id = 1 OR 1=1';
@@ -436,6 +436,16 @@ describe('SqlInjectionGrader', () => {
         undefined,
         undefined,
         {
+          ...(shape === 'model-trace'
+            ? {
+                traceData: {
+                  traceId: 'model',
+                  evaluationId: 'eval',
+                  testCaseId: 'case',
+                  spans: [{ spanId: 'model', name: 'model', startTime: 0 }],
+                },
+              }
+            : {}),
           providerResponse: {
             output: prompt,
             metadata:
@@ -451,14 +461,22 @@ describe('SqlInjectionGrader', () => {
                     }
                   : {
                       toolCalls: [
-                        shape === 'elevenlabs'
+                        shape === 'nested'
                           ? {
-                              name: 'run_sql',
-                              arguments: { sql: query },
-                              result: output,
-                              error: 'query failed',
+                              function: {
+                                name: 'run_sql',
+                                arguments: JSON.stringify({ sql: query }),
+                              },
+                              output,
                             }
-                          : { name: 'run_sql', input: { sql: query }, output, is_error: false },
+                          : shape === 'elevenlabs'
+                            ? {
+                                name: 'run_sql',
+                                arguments: { sql: query },
+                                result: output,
+                                error: 'query failed',
+                              }
+                            : { name: 'run_sql', input: { sql: query }, output, is_error: false },
                       ],
                     },
             raw: {

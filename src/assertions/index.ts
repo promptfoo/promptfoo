@@ -159,6 +159,13 @@ export function assertionUsesTrace(assertion: AssertionOrSet): boolean {
   return TRACE_AWARE_ASSERTION_TYPES.has(getAssertionBaseType(assertion));
 }
 
+function isExecutionEvidenceAssertion(assertion: AssertionOrSet): boolean {
+  return (
+    assertion.type === 'promptfoo:redteam:sql-injection' ||
+    assertion.type === 'promptfoo:redteam:shell-injection'
+  );
+}
+
 function assertionMayNeedTraceContext(assertion: AssertionOrSet, test?: AtomicTestCase): boolean {
   if (assertionUsesTrace(assertion)) {
     return true;
@@ -171,7 +178,7 @@ function assertionMayNeedTraceContext(assertion: AssertionOrSet, test?: AtomicTe
   if (assertion.type.startsWith('promptfoo:redteam:coding-agent:')) {
     return true;
   }
-  if (assertion.type === 'promptfoo:redteam:sql-injection') {
+  if (isExecutionEvidenceAssertion(assertion)) {
     const tracing = resolveTracingOptions({
       strategyId: test?.metadata?.strategyId ?? 'basic',
       test,
@@ -477,7 +484,7 @@ async function runAssertionInternal({
     try {
       const resolvedTraceData =
         traceData === undefined
-          ? await loadTraceData(traceId, assertion.type === 'promptfoo:redteam:sql-injection')
+          ? await loadTraceData(traceId, isExecutionEvidenceAssertion(assertion))
           : traceData;
       if (resolvedTraceData) {
         context.trace = {
@@ -841,7 +848,7 @@ export async function runAssertions({
     try {
       preloadedTraceData = await loadTraceData(
         traceId,
-        asserts.some(({ assertion }) => assertion.type === 'promptfoo:redteam:sql-injection'),
+        asserts.some(({ assertion }) => isExecutionEvidenceAssertion(assertion)),
       );
     } catch (error) {
       logger.debug(`Failed to preload trace data for assertions: ${error}`);

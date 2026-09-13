@@ -441,7 +441,7 @@ export function extractSqlInjectionSignature(prompt: string): AttackSignature {
   const executionRequests = Array.from(
     intentText.matchAll(
       new RegExp(
-        String.raw`${REQUEST_PREFIX}(?:${DISCLOSURE_VERB}|find|search|run|execute|query|use)\b[^\n]{0,500}?(?=\.(?:\s|$)|\n|$)`,
+        String.raw`${REQUEST_PREFIX}(?:${DISCLOSURE_VERB}|find|search|run|execute|query|use)\b[^\n]{0,500}?(?=[.!?](?:\s|$)|;\s+${defensiveInstruction.source}|\n|$)`,
         'gi',
       ),
     ),

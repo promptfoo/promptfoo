@@ -197,31 +197,38 @@ describe('trace assertions', () => {
     },
   );
 
-  it('passes captured trace evidence to the SQL injection grader', async () => {
-    mockTraceStore.getTrace.mockResolvedValue(mockTraceData);
-    const grade = vi.spyOn(RedteamGraderBase.prototype, 'getResult').mockResolvedValue({
-      grade: { pass: true, score: 1, reason: 'Fixture verdict' },
-      rubric: 'Fixture rubric',
-    });
+  it.each(['sql-injection', 'shell-injection'] as const)(
+    'passes captured trace evidence to the %s grader',
+    async (plugin) => {
+      mockTraceStore.getTrace.mockResolvedValue(mockTraceData);
+      const grade = vi.spyOn(RedteamGraderBase.prototype, 'getResult').mockResolvedValue({
+        grade: { pass: true, score: 1, reason: 'Fixture verdict' },
+        rubric: 'Fixture rubric',
+      });
 
-    await runAssertion({
-      assertion: { type: 'promptfoo:redteam:sql-injection' },
-      prompt: 'Perform the requested action.',
-      test: { metadata: { purpose: 'Fixture assistant', tracing: { enabled: true } } },
-      providerResponse: mockProviderResponse,
-      traceId: 'test-trace-id',
-    });
+      await runAssertion({
+        assertion: { type: `promptfoo:redteam:${plugin}` },
+        prompt: 'Perform the requested action.',
+        test: { metadata: { purpose: 'Fixture assistant', tracing: { enabled: true } } },
+        providerResponse: mockProviderResponse,
+        traceId: 'test-trace-id',
+      });
 
-    expect(grade).toHaveBeenCalledOnce();
-    expect(grade.mock.calls[0]?.[7]).toMatchObject({
-      traceData: mockTraceData,
-      traceSummary: expect.stringContaining('http.request'),
-    });
-  });
+      expect(grade).toHaveBeenCalledOnce();
+      expect(grade.mock.calls[0]?.[7]).toMatchObject({
+        traceData: mockTraceData,
+        traceSummary: expect.stringContaining('http.request'),
+      });
+    },
+  );
 
-  it.each(['single', 'set', 'batch'])(
-    'collects delayed local SQL spans across the bounded window (%s)',
-    async (mode) => {
+  it.each(
+    (['sql-injection', 'shell-injection'] as const).flatMap((plugin) =>
+      ['single', 'set', 'batch'].map((mode) => ({ plugin, mode })),
+    ),
+  )(
+    'collects delayed local execution spans across the bounded window ($plugin/$mode)',
+    async ({ plugin, mode }) => {
       mockProcessEnv({
         PROMPTFOO_TRACE_FETCH_MAX_ATTEMPTS: '4',
         PROMPTFOO_TRACE_FETCH_STABLE_POLLS: '2',
@@ -235,7 +242,10 @@ describe('trace assertions', () => {
             name: 'db.query',
             startTime: 1600,
             endTime: 1700,
-            attributes: { 'db.statement': 'SELECT id FROM accounts WHERE 1=1' },
+            attributes:
+              plugin === 'sql-injection'
+                ? { 'db.statement': 'SELECT id FROM accounts WHERE 1=1' }
+                : { command: 'rm /private/fixture' },
           },
         ],
       };
@@ -247,7 +257,7 @@ describe('trace assertions', () => {
         grade: { pass: false, score: 0, reason: 'Injected query' },
         rubric: 'Fixture rubric',
       });
-      const assertion: Assertion = { type: 'promptfoo:redteam:sql-injection' };
+      const assertion: Assertion = { type: `promptfoo:redteam:${plugin}` };
       const test: AtomicTestCase = {
         metadata: { purpose: 'Protect account records.', tracing: { enabled: true } },
         assert: mode === 'set' ? [{ type: 'assert-set', assert: [assertion] }] : [assertion],
@@ -265,7 +275,9 @@ describe('trace assertions', () => {
       }
       expect(mockTraceStore.getTrace).toHaveBeenCalledTimes(4);
       expect(grade.mock.calls[0]?.[7]?.traceData?.spans).toHaveLength(3);
-      expect(grade.mock.calls[0]?.[7]?.traceSummary).toContain('SELECT id FROM accounts');
+      expect(grade.mock.calls[0]?.[7]?.traceSummary).toContain(
+        plugin === 'sql-injection' ? 'SELECT id FROM accounts' : 'rm /private/fixture',
+      );
     },
   );
 
