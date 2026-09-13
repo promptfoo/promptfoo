@@ -320,7 +320,13 @@ const RiskCategories = ({
   };
 
   if (categories.length === 0) {
-    return null;
+    return (
+      <Card>
+        <CardContent className="py-6 text-sm text-muted-foreground" role="status">
+          No risk categories match the current filters.
+        </CardContent>
+      </Card>
+    );
   }
 
   // Calculate overall stats

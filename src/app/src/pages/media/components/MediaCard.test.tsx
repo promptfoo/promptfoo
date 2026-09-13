@@ -76,11 +76,12 @@ describe('MediaCard', () => {
 
     it('renders image preview for image kind', () => {
       const item = createMockMediaItem({ kind: 'image' });
-      renderWithProviders(<MediaCard item={item} onClick={vi.fn()} />);
+      const { container } = renderWithProviders(<MediaCard item={item} onClick={vi.fn()} />);
 
-      const img = screen.getByRole('img');
+      const img = container.querySelector('img');
+      expect(img).not.toBeNull();
       expect(img).toHaveAttribute('src', 'http://localhost:3000/blobs/abc123');
-      expect(img).toHaveAttribute('alt', 'Test Evaluation');
+      expect(img).toHaveAttribute('alt', '');
     });
 
     it('renders the provider name', () => {
@@ -206,9 +207,9 @@ describe('MediaCard', () => {
       const user = userEvent.setup();
       const onClick = vi.fn();
       const item = createMockMediaItem();
-      renderWithProviders(<MediaCard item={item} onClick={onClick} />);
+      const { container } = renderWithProviders(<MediaCard item={item} onClick={onClick} />);
 
-      await user.click(screen.getByRole('img'));
+      await user.click(container.querySelector('img')!);
 
       expect(onClick).toHaveBeenCalledTimes(1);
     });

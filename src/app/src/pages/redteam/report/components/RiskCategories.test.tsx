@@ -43,13 +43,15 @@ describe('RiskCategories', () => {
     });
   });
 
-  it('should render nothing when there are no categories with tests', () => {
+  it('should explain when there are no categories with tests', () => {
     const mockProps = createMockProps({
       categoryStats: {},
     });
 
-    const { container } = renderWithProviders(<RiskCategories {...mockProps} />);
-    expect(container.querySelector('.space-y-4')).toBeNull();
+    renderWithProviders(<RiskCategories {...mockProps} />);
+    expect(screen.getByRole('status')).toHaveTextContent(
+      'No risk categories match the current filters.',
+    );
   });
 
   it('should render categories with tests as collapsible rows', () => {

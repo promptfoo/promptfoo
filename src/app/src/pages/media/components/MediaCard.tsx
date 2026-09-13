@@ -153,7 +153,7 @@ export function MediaCard({
             {!imageLoaded && <Skeleton className="absolute inset-0 rounded-none" />}
             <img
               src={mediaUrl}
-              alt={item.context.evalDescription || 'Generated image'}
+              alt=""
               className={cn(
                 'h-full w-full object-cover transition-opacity duration-200',
                 imageLoaded ? 'opacity-100' : 'opacity-0',

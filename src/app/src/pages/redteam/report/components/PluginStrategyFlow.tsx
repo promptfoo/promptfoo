@@ -427,7 +427,7 @@ const PluginStrategyFlow = ({ failuresByPlugin, passesByPlugin }: PluginStrategy
           </thead>
           <tbody className="divide-y divide-border">
             {data.flowRows.map((row) => (
-              <tr key={`${row.plugin}-${row.strategy}`}>
+              <tr key={JSON.stringify([row.plugin, row.strategy])}>
                 <td className="px-4 py-3 font-medium">{getDisplayName(row.plugin)}</td>
                 <td className="px-4 py-3">{getDisplayName(row.strategy)}</td>
                 <td className="px-4 py-3 text-right">{row.defended}</td>

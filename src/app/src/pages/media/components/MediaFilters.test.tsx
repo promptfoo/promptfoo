@@ -337,10 +337,9 @@ describe('MediaFilters', () => {
       await user.click(screen.getByText('All Evaluations'));
 
       expect(await screen.findByRole('status')).toHaveTextContent('Loading evaluations...');
-      expect(screen.getByRole('listbox', { name: 'Evaluations' })).toHaveAttribute(
-        'aria-busy',
-        'true',
-      );
+      const listbox = screen.getByRole('listbox', { name: 'Evaluations' });
+      expect(listbox).toHaveAttribute('aria-busy', 'true');
+      expect(listbox).not.toContainElement(screen.getByRole('status'));
     });
 
     it('shows error state when evalsError is set', async () => {

@@ -363,36 +363,36 @@ export function MediaFilters({
                   </button>
                 );
               })}
-
-              {evalsLoading ? (
-                <div
-                  role="status"
-                  className="flex items-center justify-center gap-2 py-6 text-sm text-muted-foreground"
-                >
-                  <Spinner className="h-4 w-4" />
-                  Loading evaluations...
-                </div>
-              ) : evalsError ? (
-                <div
-                  role="alert"
-                  className="flex items-center justify-center gap-2 py-6 text-sm text-destructive"
-                >
-                  <AlertCircle className="h-4 w-4" />
-                  Failed to load evaluations
-                </div>
-              ) : evals.length === 0 ? (
-                <div role="status" className="py-6 text-center text-sm text-muted-foreground">
-                  No evaluations found
-                </div>
-              ) : null}
-              {evalsTruncated && !evalsLoading && !evalsError && (
-                <div className="border-t px-2 py-1.5 text-xs text-muted-foreground">
-                  {evalSearchQuery
-                    ? `Showing first ${evals.length} matches`
-                    : `Showing first ${evals.length} evaluations — type to search all`}
-                </div>
-              )}
             </div>
+
+            {evalsLoading ? (
+              <div
+                role="status"
+                className="flex items-center justify-center gap-2 py-6 text-sm text-muted-foreground"
+              >
+                <Spinner className="h-4 w-4" />
+                Loading evaluations...
+              </div>
+            ) : evalsError ? (
+              <div
+                role="alert"
+                className="flex items-center justify-center gap-2 py-6 text-sm text-destructive"
+              >
+                <AlertCircle className="h-4 w-4" />
+                Failed to load evaluations
+              </div>
+            ) : evals.length === 0 ? (
+              <div role="status" className="py-6 text-center text-sm text-muted-foreground">
+                No evaluations found
+              </div>
+            ) : null}
+            {evalsTruncated && !evalsLoading && !evalsError && (
+              <div className="border-t px-2 py-1.5 text-xs text-muted-foreground">
+                {evalSearchQuery
+                  ? `Showing first ${evals.length} matches`
+                  : `Showing first ${evals.length} evaluations — type to search all`}
+              </div>
+            )}
           </PopoverContent>
         </Popover>
       </div>
