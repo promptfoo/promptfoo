@@ -153,6 +153,20 @@ function getString(value: unknown): string | undefined {
   return typeof value === 'string' && value.trim() ? value : undefined;
 }
 
+function getToolCallId(attributes: Record<string, unknown> | undefined): string | undefined {
+  const entries = Object.entries(attributes ?? {});
+  for (const key of TOOL_CALL_ID_ATTRIBUTES) {
+    const callId =
+      getString(attributes?.[key]) ??
+      getString(
+        entries.find(([name, value]) => name.toLowerCase() === key && getString(value))?.[1],
+      );
+    if (callId) {
+      return callId;
+    }
+  }
+}
+
 function stringifyValue(value: unknown): string | undefined {
   if (typeof value === 'string') {
     return value;
@@ -361,7 +375,7 @@ function controlObservationFromSpan(
   ) {
     return {
       kind: 'guardrail',
-      callId: getString(getAttribute(attributes, TOOL_CALL_ID_ATTRIBUTES)),
+      callId: getToolCallId(attributes),
       endTimestamp: span.endTime,
       tool: getToolNameFromAttributes(attributes),
       location,
@@ -390,7 +404,7 @@ function controlObservationFromSpan(
   ) {
     return {
       kind: 'approval',
-      callId: getString(getAttribute(attributes, TOOL_CALL_ID_ATTRIBUTES)),
+      callId: getToolCallId(attributes),
       endTimestamp: span.endTime,
       tool: getToolNameFromAttributes(attributes),
       location,
@@ -529,7 +543,7 @@ function normalizedToolObservationsFromAttributes(
   span?: TraceLikeSpan,
 ): AgentObservation[] {
   const tool = getToolNameFromAttributes(attributes);
-  const callId = getString(getAttribute(attributes, TOOL_CALL_ID_ATTRIBUTES));
+  const callId = getToolCallId(attributes);
   return tool
     ? [
         {
@@ -564,7 +578,7 @@ function observationFromMappedTraceAttribute(
   span?: TraceLikeSpan,
 ): AgentObservation {
   const baseObservation = {
-    callId: getString(getAttribute(span?.attributes, TOOL_CALL_ID_ATTRIBUTES)),
+    callId: getToolCallId(span?.attributes),
     fieldLocations: { [mapped.field]: location },
     location,
     parentSpanId: span?.parentSpanId,
@@ -648,7 +662,7 @@ function observationsFromTraceAttributes(
   const spanTool = inferredToolFromSpanName(span?.name);
   if (spanTool && !dedicatedControl) {
     observations.push({
-      callId: getString(getAttribute(attributes, TOOL_CALL_ID_ATTRIBUTES)),
+      callId: getToolCallId(attributes),
       fieldLocations: { tool: baseLocation },
       kind: 'tool_call',
       location: baseLocation,
@@ -721,9 +735,7 @@ export function observationsFromTraceData(
     traceSpan.events?.forEach((event, eventIndex) => {
       const timestampNanos = nanosecondTimestamp(event.timestampNanos);
       const eventLocation = `${spanLocation} event ${eventIndex + 1}`;
-      const callId =
-        getString(getAttribute(event.attributes, TOOL_CALL_ID_ATTRIBUTES)) ??
-        getString(getAttribute(traceSpan.attributes, TOOL_CALL_ID_ATTRIBUTES));
+      const callId = getToolCallId(event.attributes) ?? getToolCallId(traceSpan.attributes);
       const eventSpan = {
         attributes: {
           ...event.attributes,

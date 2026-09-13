@@ -1129,10 +1129,10 @@ describe('OTLPReceiver', () => {
               'http.password': '[REDACTED]',
               'request.context': {
                 'user.password': '[REDACTED]',
-                safe: 'visible',
+                safe: '[REDACTED]',
               },
               'tool.arguments': '[REDACTED]',
-              'tool.result': 'ok',
+              'tool.result': '[REDACTED]',
             }),
           }),
         ],
@@ -1404,21 +1404,30 @@ describe('OTLPReceiver', () => {
       );
     });
 
-    it('redacts sibling span and event echoes in the same OTLP batch', () => {
-      const secret = 'PRIVATE_OTLP_SIBLING_SECRET';
-      const spans = (receiver as any).redactSpans(
-        [
-          { name: 'source', attributes: { authorization: secret } },
-          {
-            name: `span ${secret}`,
-            attributes: {},
-            events: [{ name: `event ${secret}`, attributes: {} }],
-          },
-        ],
-        ['authorization'],
-      );
-      expect(JSON.stringify(spans)).not.toContain(secret);
-    });
+    it.each(['raw', 'json'])(
+      'redacts sibling span and event echoes in an OTLP batch (%s)',
+      (format) => {
+        const secret = 'PRIVATE_OTLP_SIBLING_SECRET';
+        const spans = (receiver as any).redactSpans(
+          [
+            {
+              name: 'source',
+              attributes:
+                format === 'raw'
+                  ? { authorization: secret }
+                  : { payload: JSON.stringify({ authorization: secret }) },
+            },
+            {
+              name: `span ${secret}`,
+              attributes: { response: secret, nested: [{ output: `echo ${secret}` }] },
+              events: [{ name: `event ${secret}`, attributes: { output: secret } }],
+            },
+          ],
+          ['authorization'],
+        );
+        expect(JSON.stringify(spans)).not.toContain(secret);
+      },
+    );
 
     it('does not reprocess redaction markers while scrubbing span and event echoes', () => {
       const receiver = new OTLPReceiver({ redactAttributes: ['authorization'] });

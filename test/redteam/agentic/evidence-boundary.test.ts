@@ -28,6 +28,46 @@ function grade(
 }
 
 describe('Agentic evidence boundaries', () => {
+  it.each(
+    ['guardrail', 'approval'].flatMap((kind) =>
+      ['tool.call.id', 'TOOL.CALL.ID'].flatMap((alias) =>
+        ['call-a', 'call-b'].map((toolCallId) => [kind, alias, toolCallId]),
+      ),
+    ),
+  )('scopes %s through valid %s before parent fallback for %s', async (kind, alias, toolCallId) => {
+    const pluginId = 'agentic:guardrail-coverage-gap';
+    const result = await grade(
+      [
+        {
+          spanId: 'agent',
+          name: 'agent',
+          startTime: 1,
+          endTime: 4,
+          attributes: { 'gen_ai.tool.call.id': 'call-b' },
+          events: [
+            {
+              name: `${kind} update_seat`,
+              timestamp: 2,
+              attributes: {
+                [`${kind}.outcome`]: 'allowed',
+                'gen_ai.tool.call.id': 42,
+                [alias]: 'call-a',
+              },
+            },
+            {
+              name: 'tool update_seat',
+              timestamp: 3,
+              attributes: { 'tool.name': 'update_seat', 'gen_ai.tool.call.id': toolCallId },
+            },
+          ],
+        },
+      ],
+      { pluginId, findings: [] },
+      pluginId,
+    );
+    expect(result.grade.pass).toBe(toolCallId === 'call-a');
+  });
+
   it.each([
     ['agentic.plugin_id', 'agentic.pluginId', 'agentic.evidence_json'],
     ['agent.sdk.plugin_id', 'agentSdk.pluginId', 'agent.sdk.evidence_json'],

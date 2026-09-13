@@ -2,6 +2,7 @@ export interface AttributeSanitizationOptions {
   redactAttributes?: string[];
   sanitizeSensitiveAttributes?: boolean;
   truncateValues?: boolean;
+  redactText?: (value: string) => string;
 }
 
 const SENSITIVE_ATTRIBUTE_KEYS = [
@@ -88,6 +89,22 @@ export function sanitizeTraceAttributes(
       return '[TRUNCATED]';
     }
     if (typeof value === 'string') {
+      let decoded = false;
+      if (/^\s*(?:\[|\{|")/.test(value)) {
+        try {
+          const original = JSON.parse(value);
+          const sanitized = sanitizeValue(original, valueDepth + 1);
+          if (JSON.stringify(original) !== JSON.stringify(sanitized)) {
+            value = JSON.stringify(sanitized);
+          }
+          decoded = true;
+        } catch {
+          // Ordinary attribute text can start with JSON punctuation.
+        }
+      }
+      if (!decoded) {
+        value = options.redactText?.(value) ?? value;
+      }
       return truncateValues && value.length > 400 ? `${value.slice(0, 400)}…` : value;
     }
     if (Array.isArray(value)) {
@@ -99,20 +116,16 @@ export function sanitizeTraceAttributes(
     return value;
   };
 
-  const sanitized: Record<string, any> = {};
-  for (const [key, value] of Object.entries(attributes)) {
-    if (customPatterns.some((pattern) => key.toLowerCase().includes(pattern))) {
-      sanitized[key] = '[REDACTED]';
-      continue;
-    }
-    if (sanitizeSensitiveAttributes && isSensitiveAttributeKey(key)) {
-      sanitized[key] = '<redacted>';
-      continue;
-    }
-    sanitized[key] = sanitizeValue(value);
-  }
-
-  return sanitized;
+  return Object.fromEntries(
+    Object.entries(attributes).map(([key, value]) => [
+      key,
+      customPatterns.some((pattern) => key.toLowerCase().includes(pattern))
+        ? '[REDACTED]'
+        : sanitizeSensitiveAttributes && isSensitiveAttributeKey(key)
+          ? '<redacted>'
+          : sanitizeValue(value),
+    ]),
+  );
 }
 
 export interface TraceTextRedactionState {
@@ -155,7 +168,16 @@ export function getTraceTextRedactionState(
 export function getTraceTextRedactor(
   pairs: { original: unknown; sanitized: unknown }[],
   replacement = '[REDACTED]',
-  state: TraceTextRedactionState = { secrets: new Set(), length: 0, incomplete: false },
+  state: TraceTextRedactionState = {
+    secrets: new Set(),
+    length: 0,
+    incomplete: pairs.some(
+      ({ original }) =>
+        original &&
+        typeof original === 'object' &&
+        (original as Record<string, unknown>)['promptfoo.redaction.history'] === '[REDACTED]',
+    ),
+  },
 ) {
   const pending = [...pairs];
   const secrets = state.secrets;
@@ -168,6 +190,21 @@ export function getTraceTextRedactor(
       break;
     }
     const redacted = sanitized === '[REDACTED]' || sanitized === '<redacted>';
+    if (
+      !redacted &&
+      typeof original === 'string' &&
+      typeof sanitized === 'string' &&
+      original !== sanitized &&
+      /^\s*(?:\[|\{|")/.test(original)
+    ) {
+      try {
+        pending.push({ original: JSON.parse(original), sanitized: JSON.parse(sanitized) });
+        continue;
+      } catch {
+        incomplete = true;
+        break;
+      }
+    }
     // Serialized values can echo decoded fields that do not match the full string.
     if (
       redacted &&
@@ -205,7 +242,7 @@ export function getTraceTextRedactor(
   }
   const pattern = secrets.size
     ? new RegExp(
-        [...secrets]
+        [...new Set([...secrets].flatMap((value) => [value, JSON.stringify(value).slice(1, -1)]))]
           .sort((a, b) => b.length - a.length)
           .map((value) => value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'))
           .join('|'),

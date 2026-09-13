@@ -346,11 +346,16 @@ function redactExternalSpans(
     '[REDACTED]',
     state,
   );
-  return sanitized.map((span) => ({
+  return spans.map((span) => ({
     ...span,
     name: redactText(span.name),
     statusMessage: redactText(span.statusMessage),
-    events: span.events?.map((event) => ({ ...event, name: redactText(event.name) })),
+    attributes: sanitizeTraceAttributes(span.attributes, { ...options, redactText }),
+    events: span.events?.map((event) => ({
+      ...event,
+      name: redactText(event.name),
+      attributes: sanitizeTraceAttributes(event.attributes, { ...options, redactText }),
+    })),
   }));
 }
 

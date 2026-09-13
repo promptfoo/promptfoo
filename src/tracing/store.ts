@@ -125,12 +125,23 @@ function serializeSpans(
     ]),
     '<redacted>',
   );
-  return sanitized.map((span) => ({
+  return sanitized.map((span, index) => ({
     ...span,
     name: redactText(span.name),
     statusMessage: redactText(span.statusMessage),
+    attributes: span.attributes
+      ? sanitizeTraceAttributes(spans[index].attributes, { redactText })
+      : undefined,
     ...(span.events
-      ? { events: span.events.map((event) => ({ ...event, name: redactText(event.name) })) }
+      ? {
+          events: span.events.map((event, eventIndex) => ({
+            ...event,
+            name: redactText(event.name),
+            attributes: sanitizeTraceAttributes(spans[index].events?.[eventIndex].attributes, {
+              redactText,
+            }),
+          })),
+        }
       : {}),
   }));
 }

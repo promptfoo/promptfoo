@@ -563,9 +563,9 @@ describe('fetchTraceContext', () => {
     ]);
   });
 
-  it.each([false, true])(
-    'redacts sibling event echoes before external storage (JSON: %s)',
-    async (serialized) => {
+  it.each(['raw', 'secret-json', 'attribute-json'])(
+    'redacts sibling event echoes before external storage (%s)',
+    async (format) => {
       const secret = 'PRIVATE_EXTERNAL_SIBLING_EVENT';
       mockExternalTrace([
         {
@@ -577,9 +577,13 @@ describe('fetchTraceContext', () => {
             {
               name: 'source event',
               timestamp: 2,
-              attributes: {
-                authorization: serialized ? JSON.stringify({ value: secret }) : secret,
-              },
+              attributes:
+                format === 'attribute-json'
+                  ? { payload: JSON.stringify({ authorization: secret }) }
+                  : {
+                      authorization:
+                        format === 'secret-json' ? JSON.stringify({ value: secret }) : secret,
+                    },
             },
           ],
         },
@@ -587,8 +591,8 @@ describe('fetchTraceContext', () => {
           spanId: 'echo',
           name: `span ${secret}`,
           startTime: 3,
-          attributes: {},
-          events: [{ name: `event ${secret}`, timestamp: 4, attributes: {} }],
+          attributes: { response: secret, nested: [{ output: `echo ${secret}` }] },
+          events: [{ name: `event ${secret}`, timestamp: 4, attributes: { output: secret } }],
         },
       ]);
       const result = await fetchTraceContext('trace-1', {

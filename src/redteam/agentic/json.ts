@@ -71,7 +71,7 @@ function scanJsonContainers(
         }
         nestedObjects.push({ start, end: index });
       }
-    } else if (tagged && starts.length === 0 && !/\s/.test(character)) {
+    } else if (tagged && starts.length === 0 && !/[ \t\r\n]/.test(character)) {
       malformed = true;
     }
   }
@@ -135,7 +135,9 @@ export function parseEvidenceCandidates(
       if (preserveInvalid && next.length === 0) {
         candidates.push({ pluginId: inheritedPluginId, verifierFailed: true });
       }
-      pending.push(...[...next].reverse().map((value) => ({ value, pluginId: inheritedPluginId })));
+      pending.push(
+        ...[...next].reverse().map((value) => ({ value, pluginId: inheritedPluginId, tagged })),
+      );
     } else if (next && typeof next === 'object') {
       const record = next as Record<string, unknown>;
       findings += Array.isArray(record.findings) ? record.findings.length : 0;
@@ -167,7 +169,7 @@ export function parseEvidenceCandidates(
           pluginId !== undefined && record.pluginId !== pluginId ? { ...record, pluginId } : record,
         );
       }
-      pending.push(...nested.reverse().map(([, value]) => ({ value, pluginId })));
+      pending.push(...nested.reverse().map(([, value]) => ({ value, pluginId, tagged })));
     } else if (typeof next === 'string') {
       characters += next.length;
       if (characters > MAX_JSON_LENGTH) {
@@ -180,7 +182,7 @@ export function parseEvidenceCandidates(
         continue;
       }
       try {
-        pending.push({ value: JSON.parse(next), pluginId: inheritedPluginId });
+        pending.push({ value: JSON.parse(next), pluginId: inheritedPluginId, tagged });
         continue;
       } catch {
         // Fall through to bounded extraction for mixed prose and JSON.
@@ -199,7 +201,7 @@ export function parseEvidenceCandidates(
       }
       const scanned = scanJsonContainers(untagged, tagged);
       const extracted = [
-        ...scanned.values.reverse().map((value) => ({ value })),
+        ...scanned.values.reverse().map((value) => ({ value, tagged })),
         ...taggedValues.reverse().map((value) => ({ value, tagged: true })),
       ];
       if (preserveInvalid && (scanned.malformed || extracted.length === 0)) {

@@ -114,6 +114,42 @@ describe('sanitizeTraceAttributes', () => {
     });
   });
 
+  it.each([
+    { authorization: 'PRIVATE_JSON_LEAF' },
+    [{ authorization: 'PRIVATE_JSON_LEAF' }],
+    JSON.stringify({ authorization: 'PRIVATE_JSON_LEAF' }),
+  ])('discovers private fields inside JSON attribute text: %j', (payload) => {
+    const original = { payload: JSON.stringify(payload) };
+    const sanitized = sanitizeTraceAttributes(original);
+    expect(JSON.stringify(sanitized)).not.toContain('PRIVATE_JSON_LEAF');
+    const redactText = getTraceTextRedactor([{ original, sanitized }]);
+    expect(redactText('returned PRIVATE_JSON_LEAF')).toBe('returned [REDACTED]');
+    expect(
+      sanitizeTraceAttributes(
+        { response: JSON.stringify({ text: 'PRIVATE_JSON_LEAF' }) },
+        {
+          redactText,
+        },
+      ),
+    ).toEqual({ response: JSON.stringify({ text: '[REDACTED]' }) });
+  });
+
+  it('preserves harmless serialized text and own prototype-named fields', () => {
+    const payload = '{ "text": "ordinary value" }';
+    expect(sanitizeTraceAttributes({ payload })).toEqual({ payload });
+    const parsed = JSON.parse('{"__proto__":{"authorization":"PRIVATE_JSON_LEAF"}}');
+    const sanitized = sanitizeTraceAttributes(parsed);
+    expect(Object.prototype.hasOwnProperty.call(sanitized, '__proto__')).toBe(true);
+    expect(sanitized.__proto__).toEqual({ authorization: '<redacted>' });
+    expect(Object.getPrototypeOf(sanitized)).toBe(Object.prototype);
+  });
+
+  it('redacts JSON-escaped copies of a private value', () => {
+    const secret = 'PRIVATE\\VALUE\nwith "quotes"';
+    const redactText = getTraceTextRedactor([{ original: secret, sanitized: '[REDACTED]' }]);
+    expect(redactText(`request=${JSON.stringify(secret)}`)).toBe('request="[REDACTED]"');
+  });
+
   it('bounds deeply nested attribute arrays', () => {
     let nested: unknown = 'value';
     for (let depth = 0; depth < 30; depth++) {
