@@ -93,6 +93,18 @@ describe('ProviderSchema union', () => {
     expect(result.data).not.toHaveProperty('unknownField');
   });
 
+  it('preserves explicit provider capabilities', () => {
+    const input = {
+      id: () => 'embedding',
+      callApi: async () => ({}),
+      promptfooCapabilities: ['callEmbeddingApi'],
+    };
+
+    const result = ProviderSchema.parse(input);
+
+    expect(result).toMatchObject({ promptfooCapabilities: ['callEmbeddingApi'] });
+  });
+
   it('should accept string provider', () => {
     const result = ProviderSchema.safeParse('openai:gpt-4');
 
