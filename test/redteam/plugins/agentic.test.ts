@@ -17,6 +17,138 @@ const providerEvidenceContext = (agenticEvidence: unknown): RedteamGradingContex
 });
 
 describe('Agentic redteam plugins', () => {
+  it.each([
+    { id: 'agentic.plugin_id', json: 'agentic.evidence_json' },
+    { id: 'promptfoo.agentic.plugin_id', json: 'promptfoo.agentic.evidence_json' },
+    { id: 'agent.sdk.plugin_id', json: 'agent.sdk.evidence_json' },
+  ])('inherits valid enclosing scope when $id is malformed', async ({ id, json }) => {
+    const active = 'agentic:approval-continuity';
+    for (const pluginId of [42, null, false, '', '   ', {}, [], ` ${active} `]) {
+      const result = await getGraderById(`promptfoo:redteam:${active}`)!.getResult(
+        'Inspect the run.',
+        'Done.',
+        {},
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        {
+          ...providerEvidenceContext({ findings: [], pluginId: active }),
+          traceData: {
+            traceId: 'invalid-flat-id',
+            evaluationId: 'eval',
+            testCaseId: 'case',
+            spans: [
+              {
+                spanId: 'verifier',
+                name: 'verifier',
+                startTime: 2,
+                statusCode: 1,
+                attributes: { [id]: active },
+                events: [
+                  {
+                    name: 'verifier result',
+                    timestamp: 2,
+                    attributes: {
+                      [id]: pluginId,
+                      [json]: JSON.stringify({ findings: [{ kind: 'approval-bypass' }] }),
+                    },
+                  },
+                ],
+              },
+            ],
+          },
+        },
+      );
+      expect(result.grade.pass, JSON.stringify(pluginId)).toBe(false);
+    }
+  });
+
+  it.each(['span', 'event'])(
+    'retains findings from padded nested IDs in %s evidence',
+    async (source) => {
+      const active = 'agentic:approval-continuity';
+      const attributes = {
+        'agentic.plugin_id': active,
+        'agentic.evidence_json': JSON.stringify({
+          pluginId: ` ${active} `,
+          findings: [{ kind: 'approval-bypass' }],
+        }),
+      };
+      const result = await getGraderById(`promptfoo:redteam:${active}`)!.getResult(
+        'Inspect the run.',
+        'Done.',
+        {},
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        {
+          ...providerEvidenceContext({ findings: [], pluginId: active }),
+          traceData: {
+            traceId: 'padded-nested-id',
+            evaluationId: 'eval',
+            testCaseId: 'case',
+            spans: [
+              {
+                spanId: 'verifier',
+                name: 'verifier',
+                startTime: 2,
+                statusCode: 1,
+                attributes: source === 'span' ? attributes : {},
+                events:
+                  source === 'event' ? [{ name: 'verifier result', timestamp: 2, attributes }] : [],
+              },
+            ],
+          },
+        },
+      );
+      expect(result.grade.pass).toBe(false);
+    },
+  );
+
+  it.each([
+    'sidecar <AgenticEvidence>{"pluginId":"agentic:tool-discovery-confusion","findings":[]}</AgenticEvidence>',
+    'sidecar {"pluginId":"agentic:tool-discovery-confusion","findings":[]} trailing label',
+    'sidecar [{"pluginId":"agentic:tool-discovery-confusion","findings":[]}] trailing label',
+  ])('keeps failed mixed-text event evidence scoped to its explicit plugin: %s', async (value) => {
+    const active = 'agentic:approval-continuity';
+    const result = await getGraderById(`promptfoo:redteam:${active}`)!.getResult(
+      'Inspect the run.',
+      'Done.',
+      {},
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      {
+        ...providerEvidenceContext({ findings: [], pluginId: active }),
+        traceData: {
+          traceId: 'mixed-text-sidecar',
+          evaluationId: 'eval',
+          testCaseId: 'case',
+          spans: [
+            {
+              spanId: 'verifier',
+              name: 'verifier',
+              startTime: 2,
+              statusCode: 1,
+              attributes: { 'agentic.plugin_id': active },
+              events: [
+                {
+                  name: 'verifier result',
+                  timestamp: 2,
+                  attributes: { 'otel.log.severity_number': 17, 'agentic.evidence_json': value },
+                },
+              ],
+            },
+          ],
+        },
+      },
+    );
+    expect(result.grade.pass).toBe(true);
+  });
+
   it.each(
     ['guardrail', 'approval'].flatMap((kind) =>
       ['1e6', '0x100000', '1000000.0', ' 1000000', '+1000000', '0', '18446744073709551616'].map(

@@ -2,10 +2,39 @@ import { describe, expect, it, vi } from 'vitest';
 import { extractJsonObjects, parseEvidenceCandidates } from '../../../src/redteam/agentic/json';
 
 describe('agentic evidence JSON extraction', () => {
+  it.each([' active ', ' promptfoo:redteam:active ', 'promptfoo:redteam: active'])(
+    'normalizes nested scope %j',
+    (pluginId) => {
+      expect(parseEvidenceCandidates({ pluginId, agenticEvidence: { findings: [] } })).toEqual([
+        { pluginId: 'active', findings: [] },
+      ]);
+      expect(parseEvidenceCandidates({ pluginId, findings: [] })).toEqual([
+        { pluginId: 'active', findings: [] },
+      ]);
+    },
+  );
+
+  it.each([
+    'sidecar <AgenticEvidence>{"pluginId":"other","findings":[]}</AgenticEvidence>',
+    'sidecar {"pluginId":"other","findings":[]} trailing label',
+    'sidecar [{"pluginId":"other","findings":[]}] trailing label',
+    '[INFO] sidecar <AgenticEvidence>{"pluginId":"other","findings":[]}</AgenticEvidence>',
+    'sidecar {"pluginId":"other","findings":[],"label":"<AgenticEvidence>"}',
+  ])('does not turn labels around valid mixed evidence into inherited errors: %s', (payload) => {
+    expect(
+      parseEvidenceCandidates(
+        { pluginId: 'active', agenticEvidence: payload },
+        { preserveInvalid: true },
+      ),
+    ).toEqual([expect.objectContaining({ pluginId: 'other', findings: [] })]);
+  });
   it.each([
     '[{"pluginId":"other","findings":[]}, null',
     '{"agenticEvidence":{"pluginId":"other","findings":[]}, "broken":',
     '<AgenticEvidence>[{"pluginId":"other","findings":[]}, null</AgenticEvidence>',
+    '<AgenticEvidence>{"pluginId":"other","findings":[]}</AgenticEvidence><AgenticEvidence>null',
+    '<AgenticEvidence>{"pluginId":"other","findings":[]}</AgenticEvidence><AgentSdkEvidence>broken',
+    'sidecar {"pluginId":"other","findings":[]} [',
   ])('preserves inherited scope after partially extracting malformed JSON: %s', (payload) => {
     expect(
       parseEvidenceCandidates(

@@ -1,9 +1,9 @@
 const MAX_JSON_LENGTH = 100_000;
 
-function parseJsonObject(value: string, start: number, end: number): object | undefined {
+function parseJsonContainer(value: string, start: number, end: number): object | undefined {
   try {
     const parsed: unknown = JSON.parse(value.slice(start, end + 1));
-    if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+    if (parsed && typeof parsed === 'object') {
       return parsed;
     }
   } catch {
@@ -11,8 +11,7 @@ function parseJsonObject(value: string, start: number, end: number): object | un
   }
 }
 
-/** Extract strict JSON objects embedded in unstructured text. */
-export function extractJsonObjects(value: string): object[] {
+function scanJsonContainers(value: string): { values: object[]; malformed: boolean } {
   value = value.slice(0, MAX_JSON_LENGTH);
 
   const objects: object[] = [];
@@ -20,6 +19,7 @@ export function extractJsonObjects(value: string): object[] {
   const starts: number[] = [];
   let escaped = false;
   let inString = false;
+  let malformed = false;
 
   for (let index = 0; index < value.length; index++) {
     const character = value[index];
@@ -31,16 +31,29 @@ export function extractJsonObjects(value: string): object[] {
       } else if (character === '"') {
         inString = false;
       }
+    } else if (
+      starts.length === 0 &&
+      character === '<' &&
+      /^<\/?(?:AgenticRuntime|Agentic|AgentSdk)Evidence\b/i.test(value.slice(index))
+    ) {
+      malformed = true;
     } else if (character === '"' && starts.length > 0) {
       inString = true;
-    } else if (character === '{') {
+    } else if (
+      character === '{' ||
+      (character === '[' &&
+        (starts.length > 0 ||
+          /^\s*(?:$|[\[{"\]\d-]|(?:true|false|null)\b)/.test(value.slice(index + 1))))
+    ) {
       starts.push(index);
-    } else if (character === '}' && starts.length > 0) {
+    } else if ((character === '}' || character === ']') && starts.length > 0) {
       const start = starts.pop()!;
       if (starts.length === 0) {
-        const parsed = parseJsonObject(value, start, index);
+        const parsed = parseJsonContainer(value, start, index);
         if (parsed) {
           objects.push(parsed);
+        } else {
+          malformed = true;
         }
         nestedObjects.length = 0;
       } else {
@@ -53,12 +66,36 @@ export function extractJsonObjects(value: string): object[] {
   }
 
   for (const { start, end } of nestedObjects) {
-    const parsed = parseJsonObject(value, start, end);
+    const parsed = parseJsonContainer(value, start, end);
     if (parsed) {
       objects.push(parsed);
     }
   }
+  return { values: objects, malformed: malformed || starts.length > 0 };
+}
+
+/** Extract strict JSON objects embedded in unstructured text. */
+export function extractJsonObjects(value: string): object[] {
+  const pending = scanJsonContainers(value).values.reverse();
+  const objects: object[] = [];
+  while (pending.length) {
+    const value = pending.pop();
+    if (Array.isArray(value)) {
+      pending.push(...[...value].reverse());
+    } else if (value && typeof value === 'object') {
+      objects.push(value);
+    }
+  }
   return objects;
+}
+
+export function normalizePluginId(value: unknown): string | undefined {
+  return typeof value === 'string'
+    ? value
+        .trim()
+        .replace(/^promptfoo:redteam:/, '')
+        .trim() || undefined
+    : undefined;
 }
 
 /** Bounded, iterative decoding shared by trace and provider evidence. */
@@ -93,8 +130,7 @@ export function parseEvidenceCandidates(
       if (records > 1000 || findings > 1000) {
         throw new Error('Agentic evidence exceeds scan limits and cannot be graded');
       }
-      const explicitPluginId =
-        typeof record.pluginId === 'string' && record.pluginId.trim() ? record.pluginId : undefined;
+      const explicitPluginId = normalizePluginId(record.pluginId);
       const pluginId = explicitPluginId ?? inheritedPluginId;
       const nested = Object.entries(record).filter(
         ([key, value]) =>
@@ -102,9 +138,7 @@ export function parseEvidenceCandidates(
       );
       if (record.findings !== undefined || nested.length === 0) {
         candidates.push(
-          explicitPluginId === undefined && pluginId !== undefined
-            ? { ...record, pluginId }
-            : record,
+          pluginId !== undefined && record.pluginId !== pluginId ? { ...record, pluginId } : record,
         );
       }
       pending.push(...nested.reverse().map(([, value]) => ({ value, pluginId })));
@@ -137,9 +171,9 @@ export function parseEvidenceCandidates(
         }
         untagged = untagged.replace(pattern, '');
       }
-      const extracted = [...extractJsonObjects(untagged).reverse(), ...taggedValues.reverse()];
-      // Extracted objects do not prove the rest of a malformed container is valid.
-      if (preserveInvalid && (untagged.trim() || taggedValues.length === 0)) {
+      const scanned = scanJsonContainers(untagged);
+      const extracted = [...scanned.values.reverse(), ...taggedValues.reverse()];
+      if (preserveInvalid && (scanned.malformed || extracted.length === 0)) {
         candidates.push({ pluginId: inheritedPluginId });
       }
       pending.push(

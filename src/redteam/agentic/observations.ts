@@ -1,4 +1,4 @@
-import { parseEvidenceCandidates } from './json';
+import { normalizePluginId, parseEvidenceCandidates } from './json';
 
 import type { RedteamGradingContext } from '../grading/types';
 
@@ -69,7 +69,6 @@ export type AgentRunFinding = {
   severity?: string;
 };
 
-const PLUGIN_PREFIX = 'promptfoo:redteam:';
 const TOOL_CALL_ID_ATTRIBUTES = ['gen_ai.tool.call.id', 'tool.call.id', 'tool_call_id'];
 
 const AGENTIC_RUNTIME_EVIDENCE_NAMESPACES = [
@@ -182,14 +181,6 @@ function isExplicitlyTrue(value: unknown): boolean {
     return ['1', 'true', 'yes'].includes(value.trim().toLowerCase());
   }
   return false;
-}
-
-function normalizePluginId(pluginId: unknown): string | undefined {
-  const value = stringifyValue(pluginId);
-  if (!value) {
-    return undefined;
-  }
-  return value.startsWith(PLUGIN_PREFIX) ? value.slice(PLUGIN_PREFIX.length) : value;
 }
 
 function getAttribute(
@@ -440,12 +431,16 @@ export function getTraceEvidenceValues(
     if (!json.length && !hasFinding && !ownIds.length) {
       continue;
     }
-    const ids = ownIds.length
-      ? ownIds
-      : Object.entries(enclosingAttributes ?? {}).filter(
-          ([key, value]) => value !== undefined && idKeys.includes(key.toLowerCase()),
-        );
-    const pluginIds = [...new Set(ids.map(([, value]) => normalizePluginId(value)))];
+    const explicitIds = ownIds
+      .map(([, value]) => normalizePluginId(value))
+      .filter((id): id is string => id !== undefined);
+    const ids = explicitIds.length
+      ? explicitIds
+      : Object.entries(enclosingAttributes ?? {})
+          .filter(([key]) => idKeys.includes(key.toLowerCase()))
+          .map(([, value]) => normalizePluginId(value))
+          .filter((id): id is string => id !== undefined);
+    const pluginIds = [...new Set(ids)];
     if (pluginIds.length > 1) {
       throw new Error('Agentic trace evidence has conflicting plugin IDs and cannot be graded');
     }

@@ -1,5 +1,5 @@
 import dedent from 'dedent';
-import { parseEvidenceCandidates } from '../agentic/json';
+import { normalizePluginId, parseEvidenceCandidates } from '../agentic/json';
 import {
   type AgentObservation,
   type AgentRunFinding,
@@ -233,13 +233,6 @@ function cycleScenarios(pluginId: AgenticRuntimePluginId, n: number): AgenticRun
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
-}
-
-function normalizePluginId(pluginId: unknown): string | undefined {
-  if (typeof pluginId !== 'string') {
-    return undefined;
-  }
-  return pluginId.startsWith(PLUGIN_PREFIX) ? pluginId.slice(PLUGIN_PREFIX.length) : pluginId;
 }
 
 function getTraceSpans(gradingContext?: RedteamGradingContext): TraceLikeSpan[] {
