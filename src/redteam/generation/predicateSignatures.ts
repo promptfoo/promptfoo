@@ -42,9 +42,7 @@ function toolCallText(prompt: string): {
     } else if (value && typeof value === 'object') {
       for (const [key, child] of Object.entries(value).reverse()) {
         const argumentName = words(key);
-        if (argumentName) {
-          argumentNames.push(argumentName);
-        }
+        argumentNames.push(argumentName);
         if (/^(?:action|operation|method)$/i.test(key) && typeof child === 'string') {
           actions.push(words(child));
         }
@@ -55,7 +53,7 @@ function toolCallText(prompt: string): {
       }
     }
   }
-  const argumentKeys = argumentNames.join('\n');
+  const argumentKeys = argumentNames.filter(Boolean).join('\n');
   // Preserve every key once; selectors only need argument presence and a document noun.
   const actionArgument =
     argumentKeys.match(DOCUMENT_ARGUMENT)?.[0] ?? (argumentKeys ? 'argument' : '');
