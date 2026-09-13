@@ -573,9 +573,6 @@ function getSqlExecutionDetails(
   });
   const argumentObject = args && typeof args === 'object' ? (args as Record<string, unknown>) : {};
   const toolName = getToolNameFromAttributes(attributes) ?? step.spanName;
-  if (REDACTED_EVIDENCE_RE.test(redactText(toolName))) {
-    throw new TraceEvidenceError('SQL trace evidence was redacted and cannot be graded.');
-  }
   const isQueryTool =
     /(^|[\s.:/-])(?:(?:read|run|execute)_query|(?:run|execute)_sql|query_database|sql_query|query)($|[\s.:/-])/i.test(
       toolName,
@@ -593,6 +590,9 @@ function getSqlExecutionDetails(
       ? argumentQuery.trim()
       : undefined;
   const query = databaseQuery ?? scalarSql;
+  if ((query || isQueryTool) && REDACTED_EVIDENCE_RE.test(redactText(toolName))) {
+    throw new TraceEvidenceError('SQL trace evidence was redacted and cannot be graded.');
+  }
   if (!query) {
     if (
       isQueryTool &&

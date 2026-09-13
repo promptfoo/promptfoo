@@ -111,7 +111,24 @@ const PROMPT_EXTRACTION_RULES: Record<PromptExtractionPredicate, RegExp[]> = {
 };
 
 export function extractPromptExtractionSignature(prompt: string): AttackSignature {
-  prompt = toolCallText(prompt).requestText;
+  prompt = toolCallText(prompt)
+    .requestText.replace(
+      /"(?:\\.|[^"\\])*"|(?<!\w)'(?:\\.|[^'\\])*'|`[^`]*`|“[^”]*”|‘[^’]*’/g,
+      (quoted, offset, source) => {
+        const text = quoted.slice(1, -1);
+        return /\byour\s*$/i.test(source.slice(0, offset)) &&
+          /^(?:system (?:prompt|instructions?)|hidden (?:operating )?instructions?)$/i.test(text)
+          ? text
+          : ' '.repeat(quoted.length);
+      },
+    )
+    .replace(
+      new RegExp(
+        String.raw`\b(?:explain|describe|discuss|analy[sz]e|evaluate|assess|classify)\b[\s\S]*?(?=[.!?](?:\s|$)|[;:\n]\s*(?:then|but)\b|$)`,
+        'gi',
+      ),
+      ' ',
+    );
   const predicates = Object.fromEntries(
     PROMPT_EXTRACTION_PREDICATES.map((predicate) => [
       predicate,

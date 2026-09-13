@@ -699,12 +699,8 @@ describe('trajectory utilities', () => {
           },
           { includeSql: true },
         );
-      if (key === 'tool.name') {
-        expect(summarize).toThrow('SQL trace evidence was redacted');
-      } else {
-        expect(summarize()).not.toContain(secret);
-        expect(summarize()).toContain('[REDACTED]');
-      }
+      expect(summarize()).not.toContain(secret);
+      expect(summarize()).toContain('[REDACTED]');
     },
   );
 
