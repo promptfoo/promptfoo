@@ -3,7 +3,12 @@ import { getEnvFloat, getEnvString } from '../envars';
 import { getRequestTimeoutMs, parseChatPrompt } from './shared';
 
 import type { EnvOverrides } from '../types/env';
-import type { ApiProvider, ProviderEmbeddingResponse, ProviderResponse } from '../types/index';
+import type {
+  ApiProvider,
+  CallApiContextParams,
+  ProviderEmbeddingResponse,
+  ProviderResponse,
+} from '../types/index';
 
 function parseEnvFloat(value: string | undefined): number | undefined {
   if (value === undefined) {
@@ -55,7 +60,7 @@ class LocalAiGenericProvider implements ApiProvider {
 }
 
 export class LocalAiChatProvider extends LocalAiGenericProvider {
-  async callApi(prompt: string): Promise<ProviderResponse> {
+  async callApi(prompt: string, context?: CallApiContextParams): Promise<ProviderResponse> {
     const messages = parseChatPrompt(prompt, [{ role: 'user', content: prompt }]);
     const body = {
       model: this.modelName,
@@ -79,6 +84,8 @@ export class LocalAiChatProvider extends LocalAiGenericProvider {
           body: JSON.stringify(body),
         },
         getRequestTimeoutMs(),
+        'json',
+        context?.bustCache ?? context?.debug,
       )) as unknown as any);
     } catch (err) {
       return {
@@ -140,7 +147,7 @@ export class LocalAiEmbeddingProvider extends LocalAiGenericProvider {
 }
 
 export class LocalAiCompletionProvider extends LocalAiGenericProvider {
-  async callApi(prompt: string): Promise<ProviderResponse> {
+  async callApi(prompt: string, context?: CallApiContextParams): Promise<ProviderResponse> {
     const body = {
       model: this.modelName,
       prompt,
@@ -163,6 +170,8 @@ export class LocalAiCompletionProvider extends LocalAiGenericProvider {
           body: JSON.stringify(body),
         },
         getRequestTimeoutMs(),
+        'json',
+        context?.bustCache ?? context?.debug,
       )) as unknown as any);
     } catch (err) {
       return {

@@ -197,6 +197,8 @@ export class AI21ChatCompletionProvider implements ApiProvider {
           body: JSON.stringify(body),
         },
         getRequestTimeoutMs(),
+        'json',
+        context?.bustCache ?? context?.debug,
       )) as unknown as { data: any; cached: boolean });
     } catch (err) {
       return {
