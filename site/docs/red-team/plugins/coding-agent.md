@@ -113,6 +113,8 @@ commands, tools, roots, and data boundaries instead of invented repo context.
 
 Remote generation receives these manifest fields, configured fixture paths, scenario context, and generation options. Verifier-only values such as raw receipts, protected file contents, and execution ledgers stay local and are attached to the generated assertions. Inline protected values and entire inline ledgers are redacted from saved eval configs and result copies. This includes connector-protected value aliases. Trace/artifact-redaction runs mark forensic traces private before target execution, so exports also omit them after a result-write failure and reload. Verifier-owned metadata nested beyond 32 levels is replaced with a redaction marker; ordinary provider schemas and other configuration retain their full depth. Use receipt files when a saved test must run again; tests whose verifier inputs were redacted require the original config. Treat generated configuration files containing inline values as private.
 
+Only the local trace/artifact-redaction verifier receives the original response. Other assertions in the same test receive the public placeholder and no private trace; put checks that need the original output in a separate test. Voice Crescendo runs the local verifier before discarding each reply and retains its verdict for final grading.
+
 ```yaml
 redteam:
   targetManifest:

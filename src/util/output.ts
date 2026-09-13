@@ -454,7 +454,7 @@ export async function createOutputData(
 ): Promise<OutputFile> {
   const summary = await evalRecord.toEvaluateSummary();
   const redactedConfig = sanitizeConfigForOutput(evalRecord.config);
-  const traces = await evalRecord.getTraces({ normalizeSpans: false });
+  const traces = await evalRecord.getTraces({ normalizeSpans: false, throwOnError: true });
 
   const output: OutputFile = {
     evalId: evalRecord.id,

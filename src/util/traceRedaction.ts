@@ -74,11 +74,12 @@ export function hasRedactionMedia(response: ProviderResponse | null | undefined)
         record.isBase64 === true ||
         (typeof record.b64_json === 'string' && record.b64_json.length > 0) ||
         (Array.isArray(record.images) && record.images.length > 0) ||
-        ([record.mimeType, record.mime_type, record.media_type].some(
+        ([record.mimeType, record.mime_type, record.mediaType, record.media_type].some(
           (mime) => typeof mime === 'string' && /^\s*(?:image|audio|video)\//i.test(mime),
         ) &&
           [
             record.data,
+            record.raw,
             record.bytesBase64Encoded,
             record.base64Data,
             record.url,
@@ -165,6 +166,7 @@ export function sanitizeRedactionResult<T extends object>(input: T): T {
   }
   delete metadata.errorContext;
   delete metadata.sessionId;
+  delete metadata.redteamHistory;
   const error = result.error ? 'Error details omitted for trace/artifact redaction.' : result.error;
   const gradingResult = result.gradingResult
     ? omitGradingPrompts(result.gradingResult)

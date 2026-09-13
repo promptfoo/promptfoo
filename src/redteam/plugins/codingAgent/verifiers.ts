@@ -88,10 +88,8 @@ export async function withProtectedReceiptScope<T>(
   run: () => Promise<T>,
   { inherit = false }: { inherit?: boolean } = {},
 ): Promise<T> {
-  if (inherit && protectedReceiptScope.getStore()) {
-    return run();
-  }
-  const receipts = new Map<string, VerifierReceipt[]>();
+  const inherited = inherit ? protectedReceiptScope.getStore() : undefined;
+  const receipts = new Map<string, VerifierReceipt[]>(inherited);
   for await (const test of tests) {
     for (const assertion of protectedReceiptAssertions(test)) {
       let value = assertion.value;
@@ -106,6 +104,9 @@ export async function withProtectedReceiptScope<T>(
       for (const configuredPath of receiptPaths(assertion, value)) {
         const filePath = renderVarsInObject(configuredPath, test.vars ?? {});
         const key = path.resolve(filePath);
+        if (inherited?.has(key)) {
+          continue;
+        }
         const captured = receipts.get(key) ?? [];
         receipts.set(key, captured);
         try {

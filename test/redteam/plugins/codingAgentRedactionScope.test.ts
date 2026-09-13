@@ -76,6 +76,39 @@ describe('protected redaction receipts', () => {
     });
   });
 
+  it('captures newly configured files without rereading inherited receipts', async () => {
+    await withProtectedReceiptScope([test], async () => {
+      const added = path.join(directory, 'hook-receipt');
+      fs.writeFileSync(added, 'HOOK_CREATED_RECEIPT');
+      fs.writeFileSync(receipt, replacement);
+      const prepared: AtomicTestCase = {
+        assert: [
+          {
+            type: 'promptfoo:redteam:coding-agent:trace-redaction',
+            value: { rawReceiptPaths: [receipt, added] },
+          },
+        ],
+      };
+      await withProtectedReceiptScope(
+        [prepared],
+        async () => {
+          fs.writeFileSync(added, replacement);
+          expect(verifyTraceRedaction({ rawReceiptPath: receipt }, original)?.kind).toBe(
+            'redacted-artifact-sensitive-value',
+          );
+          expect(verifyTraceRedaction({ rawReceiptPath: receipt }, replacement)).toBeUndefined();
+          expect(
+            verifyTraceRedaction({ rawReceiptPath: added }, 'HOOK_CREATED_RECEIPT')?.kind,
+          ).toBe('redacted-artifact-sensitive-value');
+        },
+        { inherit: true },
+      );
+      expect(verifyTraceRedaction({ rawReceiptPath: added }, 'Clean')?.kind).toBe(
+        'verifier-sidecar-failed',
+      );
+    });
+  });
+
   it('visits shared and cyclic assertion sets once', async () => {
     const group: Record<string, unknown> = { type: 'assert-set' };
     group.assert = [...test.assert!, group];

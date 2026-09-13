@@ -333,8 +333,7 @@ const formatConfiguredFixturePaths = (config: PluginConfig): string => {
 };
 
 const pickAssertionValue = (config: PluginConfig): Record<string, unknown> | undefined => {
-  // Plugin config is already test metadata; preserve it in evaluator-only assertion data so
-  // a newly configured deterministic verifier cannot silently lose its fixture inputs.
+  // Generated tests need the original verifier inputs when they are executed.
   const value = Object.fromEntries(Object.entries(config).filter(([, item]) => item !== undefined));
 
   return Object.keys(value).length > 0 ? value : undefined;

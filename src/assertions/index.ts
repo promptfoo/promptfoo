@@ -40,8 +40,14 @@ import {
 import { processFileReference } from '../util/file';
 import { isJavascriptFile } from '../util/fileExtensions';
 import invariant from '../util/invariant';
+import { sanitizeCodingAgentVerifierInputs } from '../util/sanitizer';
 import { getNunjucksEngine } from '../util/templates';
 import { sleep } from '../util/time';
+import {
+  requiresTraceRedaction,
+  sanitizeRedactionResult,
+  TRACE_REDACTION_ASSERTIONS,
+} from '../util/traceRedaction';
 import { transform } from '../util/transform';
 import { loadYaml } from '../util/yamlLoad';
 import { handleAgentRubric } from './agentRubric';
@@ -432,6 +438,19 @@ async function runAssertionInternal({
   traceId?: string;
   traceData?: TraceData | null;
 }): Promise<GradingResult> {
+  if (
+    requiresTraceRedaction(test.assert) &&
+    !TRACE_REDACTION_ASSERTIONS.has(getAssertionBaseType(assertion))
+  ) {
+    providerResponse = sanitizeRedactionResult({
+      response: providerResponse,
+      testCase: test,
+    }).response;
+    test = sanitizeCodingAgentVerifierInputs({ ...test, vars: vars || test.vars });
+    vars = test.vars;
+    traceId = undefined;
+    traceData = null;
+  }
   // Use resolved vars if provided, otherwise fall back to test.vars
   const resolvedVars = vars || test.vars || {};
 

@@ -20,6 +20,95 @@ import {
 import { describeEvaluator } from './lifecycle';
 
 describeEvaluator('evaluator assertions', () => {
+  it.each(['deadline', 'cancel'] as const)(
+    'stops protected receipt preparation on %s without running later hooks or targets',
+    async (mode) => {
+      const controller = new AbortController();
+      let hookCalls = 0;
+      vi.mocked(runExtensionHook).mockImplementation(async (_extensions, phase, context) => {
+        if (phase === 'beforeEach') {
+          hookCalls++;
+          await new Promise(() => {});
+        }
+        return context;
+      });
+      const suite: TestSuite = {
+        providers: [mockApiProvider],
+        prompts: [toPrompt('Inspect receipts')],
+        extensions: ['file://hook.js'],
+        tests: [0, 1].map(() => ({
+          assert: [
+            {
+              type: 'promptfoo:redteam:coding-agent:trace-redaction',
+              value: { rawReceiptPath: 'missing-receipt' },
+            },
+          ],
+        })),
+      };
+      const record = await Eval.create({}, suite.prompts, { id: randomUUID() });
+      vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+      try {
+        let completed = false;
+        const pending = evaluate(suite, record, {
+          timeoutMs: 10000,
+          maxEvalTimeMs: mode === 'deadline' ? 25 : 0,
+          abortSignal: controller.signal,
+        }).finally(() => {
+          completed = true;
+        });
+        await vi.waitFor(() => expect(hookCalls).toBe(1));
+        if (mode === 'cancel') {
+          controller.abort();
+        }
+        await vi.advanceTimersByTimeAsync(25);
+        await vi.waitFor(() => expect(completed).toBe(true));
+        await pending;
+        expect(hookCalls).toBe(1);
+        expect(mockApiProvider.callApi).not.toHaveBeenCalled();
+      } finally {
+        vi.useRealTimers();
+      }
+    },
+  );
+
+  it.each(['coding-agent:trace-redaction', 'harness:artifact-redaction'] as const)(
+    'gives sibling graders only the public %s response',
+    async (plugin) => {
+      const secret = 'PRIVATE_SIBLING_GRADER_RECEIPT';
+      vi.mocked(mockApiProvider.callApi).mockResolvedValue({ output: secret });
+      const suite: TestSuite = {
+        providers: [mockApiProvider],
+        prompts: [toPrompt('Inspect report')],
+        tests: [
+          {
+            assert: [
+              {
+                type: 'assert-set',
+                assert: [
+                  { type: `promptfoo:redteam:${plugin}`, value: { rawReceipt: secret } },
+                  {
+                    type: 'llm-rubric',
+                    value: 'The report is readable.',
+                    provider: mockGradingApiProviderPasses,
+                  },
+                ],
+              },
+            ],
+          },
+        ],
+      };
+      const record = await Eval.create({}, suite.prompts, { id: randomUUID() });
+      await evaluate(suite, record, { maxConcurrency: 1 });
+      const calls = vi.mocked(mockGradingApiProviderPasses.callApi).mock.calls;
+      expect(calls).toHaveLength(1);
+      expect(calls[0][0]).not.toContain(secret);
+      expect(calls[0][0]).toContain('[Response omitted for trace/artifact redaction.]');
+      const summary = await record.toEvaluateSummary();
+      expect(summary.results[0].gradingResult?.reason).toContain('raw sensitive value');
+      expect(JSON.stringify(summary)).not.toContain(secret);
+    },
+  );
+
   it.each(
     (
       [
@@ -97,7 +186,11 @@ describeEvaluator('evaluator assertions', () => {
   it.each(
     (['coding-agent:trace-redaction', 'harness:artifact-redaction'] as const).flatMap((plugin) =>
       [1, 2].flatMap((maxConcurrency) =>
-        ['missing', 'existing'].map((initial) => ({ plugin, maxConcurrency, initial })),
+        ['missing', 'existing', 'unconfigured'].map((initial) => ({
+          plugin,
+          maxConcurrency,
+          initial,
+        })),
       ),
     ),
   )(
@@ -115,6 +208,14 @@ describeEvaluator('evaluator assertions', () => {
           if (phase === 'beforeEach' && 'test' in context) {
             const index = Number(context.test.vars?.index);
             fs.writeFileSync(receipts[index], secrets[index]);
+            if (initial === 'unconfigured') {
+              context.test.assert = [
+                {
+                  type: `promptfoo:redteam:${plugin}`,
+                  value: { rawReceiptPath: receipts[index] },
+                },
+              ];
+            }
             events.push(`hook-${index}`);
           }
           return context;
@@ -131,7 +232,10 @@ describeEvaluator('evaluator assertions', () => {
           extensions: ['file://initialize-receipts.js'],
           tests: receipts.map((receipt, index) => ({
             vars: { index },
-            assert: [{ type: `promptfoo:redteam:${plugin}`, value: { rawReceiptPath: receipt } }],
+            assert:
+              initial === 'unconfigured'
+                ? undefined
+                : [{ type: `promptfoo:redteam:${plugin}`, value: { rawReceiptPath: receipt } }],
           })),
         };
         const evalRecord = await Eval.create({}, suite.prompts, { id: randomUUID() });
@@ -146,7 +250,9 @@ describeEvaluator('evaluator assertions', () => {
         expect(
           summary.results.every((row) => row.gradingResult?.reason.includes('raw sensitive value')),
         ).toBe(true);
-        expect(events.slice(0, 2)).toEqual(['hook-0', 'hook-1']);
+        if (initial !== 'unconfigured') {
+          expect(events.slice(0, 2)).toEqual(['hook-0', 'hook-1']);
+        }
         expect(events.filter((event) => event.startsWith('hook-'))).toEqual(['hook-0', 'hook-1']);
       } finally {
         fs.rmSync(directory, { recursive: true, force: true });

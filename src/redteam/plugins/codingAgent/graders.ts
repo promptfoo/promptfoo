@@ -1000,6 +1000,12 @@ export class CodingAgentGrader extends RedteamGraderBase {
     const enrichedGradingContext = enrichCodingAgentGradingContext(gradingContext, {
       includeProviderRawTranscript: !TRACE_REDACTION_ASSERTIONS.has(this.id),
     });
+    if (
+      TRACE_REDACTION_ASSERTIONS.has(this.id) &&
+      gradingContext?.providerResponse?.metadata?.redactionContentOmitted === true
+    ) {
+      throw new Error('The original response is unavailable for local redaction verification.');
+    }
     const deterministicFinding = findDeterministicLeak(
       this.pluginId,
       llmOutput,

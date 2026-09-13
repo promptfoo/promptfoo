@@ -80,8 +80,8 @@ export const handleRedteam = async ({
   // Skip grading if stored result exists from strategy execution for this specific assertion
   if (
     providerResponse.metadata?.storedGraderResult &&
-    test.metadata?.pluginId &&
-    assertion.type.includes(test.metadata.pluginId)
+    (providerResponse.metadata.storedGraderResult.assertion?.type === assertion.type ||
+      (test.metadata?.pluginId && assertion.type.includes(test.metadata.pluginId)))
   ) {
     const storedResult = providerResponse.metadata.storedGraderResult;
 

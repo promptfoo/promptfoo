@@ -26,22 +26,30 @@ import {
   accumulateResponseTokenUsage,
   createEmptyTokenUsage,
 } from '../../../util/tokenUsageUtils';
+import { TRACE_REDACTION_ASSERTIONS } from '../../../util/traceRedaction';
+import { getGraderById } from '../../graders';
 import { shouldGenerateRemote } from '../../remoteGeneration';
 import { remoteGenerationContextPayload } from '../../remoteGenerationContext';
 import { textToAudio } from '../../strategies/simpleAudio';
 import { isBasicRefusal } from '../../util';
 import {
+  buildGraderResultAssertion,
   callGradingProvider,
   externalizeResponseForRedteamHistory,
+  getGraderAssertionValue,
   getTargetResponse,
   redteamProviderManager,
+  runRedteamGrader,
   type TargetResponse,
 } from '../shared';
 
 import type {
   ApiProvider,
+  Assertion,
+  AtomicTestCase,
   CallApiContextParams,
   CallApiOptionsParams,
+  GradingResult,
   ProviderResponse,
   TokenUsage,
 } from '../../../types/index';
@@ -124,6 +132,8 @@ const EVAL_SYSTEM_PROMPT = dedent`
  * Metadata for Voice Crescendo conversations
  */
 interface VoiceCrescendoMetadata extends BaseRedteamMetadata {
+  storedGraderResult?: GradingResult;
+  redactionContentOmitted?: boolean;
   redactionMediaOmitted?: boolean;
   voiceCrescendoTurnsCompleted: number;
   voiceCrescendoBacktrackCount: number;
@@ -500,6 +510,13 @@ export class VoiceCrescendoProvider implements ApiProvider {
     let finalConfidence = 0;
     let lastResponse = '';
     let mediaRedactionError: string | undefined;
+    let storedGraderResult: GradingResult | undefined;
+    const test = context?.test as AtomicTestCase | undefined;
+    const redactionAssertion = test?.assert
+      ?.flatMap((assertion) => (assertion.type === 'assert-set' ? assertion.assert : [assertion]))
+      .find((assertion): assertion is Assertion =>
+        TRACE_REDACTION_ASSERTIONS.has(assertion.type.replace(/^not-/, '')),
+      );
     let lastPrompt = '';
     let stopReason = 'Max turns reached';
     const audioHistory: VoiceCrescendoMetadata['audioHistory'] = [];
@@ -541,6 +558,24 @@ export class VoiceCrescendoProvider implements ApiProvider {
         accumulateResponseTokenUsage(totalTokenUsage, targetResponse);
         if (targetResponse.metadata?.redactionMediaOmitted === true) {
           mediaRedactionError ??= targetResponse.error;
+        }
+        if (test && redactionAssertion && !targetResponse.error) {
+          const grader = getGraderById(redactionAssertion.type)!;
+          const { grade, rubric } = await runRedteamGrader(
+            grader,
+            voicePrompt,
+            targetResponse.output,
+            test,
+            undefined,
+            getGraderAssertionValue(redactionAssertion),
+            undefined,
+            undefined,
+            { providerResponse: targetResponse },
+          );
+          storedGraderResult = {
+            ...grade,
+            assertion: buildGraderResultAssertion(grade.assertion, redactionAssertion, rubric),
+          };
         }
 
         if (targetResponse.conversationEnded) {
@@ -603,7 +638,16 @@ export class VoiceCrescendoProvider implements ApiProvider {
         }
 
         // Evaluate if objective achieved
-        const evaluation = await this.evaluateResponse(voicePrompt, responseText);
+        const evaluation = storedGraderResult
+          ? {
+              objectiveAchieved: !storedGraderResult.pass,
+              confidence: 1,
+              reason: storedGraderResult.reason,
+              partialSuccess: false,
+              cached: undefined,
+              tokenUsage: undefined,
+            }
+          : await this.evaluateResponse(voicePrompt, responseText);
         accumulateGradingResponseTokenUsage(totalTokenUsage, {
           cached: evaluation.cached,
           tokenUsage: evaluation.tokenUsage,
@@ -650,6 +694,8 @@ export class VoiceCrescendoProvider implements ApiProvider {
     }
 
     const metadata: VoiceCrescendoMetadata = {
+      ...(storedGraderResult && { storedGraderResult }),
+      ...(redactionAssertion && { redactionContentOmitted: true }),
       ...(mediaRedactionError && { redactionMediaOmitted: true }),
       redteamFinalPrompt: lastPrompt,
       messages: this.memory.getConversation(this.conversationId).map((m) => ({

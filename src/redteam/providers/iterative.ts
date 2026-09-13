@@ -520,10 +520,10 @@ export async function runRedteamConversation({
         ? formatTraceSummary(traceContext)
         : undefined;
 
-    if (traceContext) {
+    if (!redactTrace && traceContext) {
       targetResponse.traceContext = traceContext;
     }
-    if (computedTraceSummary) {
+    if (!redactTrace && computedTraceSummary) {
       targetResponse.traceSummary = computedTraceSummary;
     }
 

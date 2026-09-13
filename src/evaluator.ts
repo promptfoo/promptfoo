@@ -3594,15 +3594,25 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
     );
   }
 
-  private async *prepareProtectedReceiptTests(evalSteps: RunEvalOptions[], testSuite: TestSuite) {
+  private async *prepareProtectedReceiptTests(
+    evalSteps: RunEvalOptions[],
+    testSuite: TestSuite,
+    abortSignal: AbortSignal,
+  ) {
     // Capture every existing receipt before a hook can replace a shared file.
     for (const { test } of evalSteps) {
+      if (abortSignal.aborted) {
+        return;
+      }
       yield test;
     }
     if (!testSuite.extensions?.length) {
       return;
     }
     for (const evalStep of evalSteps) {
+      if (abortSignal.aborted) {
+        return;
+      }
       if (!hasProtectedReceiptFiles(evalStep.test)) {
         continue;
       }
@@ -3612,23 +3622,23 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
       const timeoutMs = this.options.timeoutMs || getEvalTimeoutMs();
       let timeoutId: NodeJS.Timeout | undefined;
       let timedOut = false;
+      let onAbort: () => void;
       try {
+        const interrupted = new Promise<never>((_, reject) => {
+          onAbort = () => reject(new Error('Operation cancelled'));
+          abortSignal.addEventListener('abort', onAbort, { once: true });
+          if (timeoutMs > 0) {
+            timeoutId = setTimeout(() => {
+              timedOut = true;
+              reject(new Error(`Evaluation timed out after ${timeoutMs}ms`));
+            }, timeoutMs);
+          }
+        });
         const hook = withCacheNamespace(
           getRepeatCacheNamespace(evalStep.repeatIndex, evalStep.evaluateOptions),
           () => runExtensionHook(testSuite.extensions, 'beforeEach', { test: evalStep.test }),
         );
-        const prepared =
-          timeoutMs > 0
-            ? await Promise.race([
-                hook,
-                new Promise<never>((_, reject) => {
-                  timeoutId = setTimeout(() => {
-                    timedOut = true;
-                    reject(new Error(`Evaluation timed out after ${timeoutMs}ms`));
-                  }, timeoutMs);
-                }),
-              ])
-            : await hook;
+        const prepared = await Promise.race([hook, interrupted]);
         evalStep.test = { ...prepared.test };
         this.preparedReceiptHooks.set(evalStep.test, {
           status: 'ready',
@@ -3637,6 +3647,9 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
         // Preserve each hook's value before another hook or target can replace it.
         yield evalStep.test;
       } catch (error) {
+        if (abortSignal.aborted) {
+          return;
+        }
         this.preparedReceiptHooks.set(evalStep.test, {
           status: timedOut ? 'timed-out' : 'failed',
           error,
@@ -3644,6 +3657,7 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
         });
       } finally {
         clearTimeout(timeoutId);
+        abortSignal.removeEventListener('abort', onAbort!);
       }
     }
   }
@@ -3673,7 +3687,7 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
       evalStep.test = beforeEachOut.test;
     }
 
-    const rows = await runEvalInternal({
+    const rows = await runEval({
       ...evalStep,
       deferGrading,
       providerCallQueue: deferGrading ? providerCallQueue : undefined,
@@ -5068,6 +5082,7 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
       this.prepareProtectedReceiptTests(
         [...serialRunEvalOptions, ...concurrentRunEvalOptions],
         testSuite,
+        combinedAbortSignal,
       ),
       () =>
         this.executeEvalSteps({

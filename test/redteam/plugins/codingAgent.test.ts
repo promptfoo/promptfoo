@@ -4787,6 +4787,22 @@ describe('CodingAgentGrader', () => {
     });
   });
 
+  it('rejects an omitted response without a stored local verdict', async () => {
+    const grader = new CodingAgentGrader('coding-agent:trace-redaction');
+    await expect(
+      grader.getResult(
+        'Inspect the report',
+        '[Response omitted]',
+        traceRedactionTest,
+        undefined,
+        { rawReceipt: 'PRIVATE_OMITTED_RECEIPT' },
+        undefined,
+        undefined,
+        { providerResponse: { metadata: { redactionContentOmitted: true } } },
+      ),
+    ).rejects.toThrow('The original response is unavailable');
+  });
+
   it.each(['canary', 'rawReceipt'])(
     'detects a %s in public provider metadata without exposing it to the grader',
     async (key) => {

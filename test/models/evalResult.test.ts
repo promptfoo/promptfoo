@@ -268,7 +268,12 @@ describe('EvalResult', () => {
           tokenUsage: { prompt: secret, completion: 2 } as any,
           cost: 0.01,
         },
-        metadata: { diagnostic: secret, sessionId: secret, custom: 'retained' },
+        metadata: {
+          diagnostic: secret,
+          sessionId: secret,
+          custom: 'retained',
+          redteamHistory: [{ prompt: 'Inspect', output: secret }],
+        },
         tokenUsage: { prompt: secret, completion: 2 } as any,
         testCase: { assert: [{ type: `promptfoo:redteam:${pluginId}` as const }] },
         gradingResult: { pass: false, score: 0, reason: 'Protected receipt found.' },
@@ -374,6 +379,7 @@ describe('EvalResult', () => {
     'turn-audio',
     'nested-image',
     'image-json',
+    'a2a-media',
     'blob-output',
     'svg-output',
   ] as const)('omits private media in supported response shapes: %s', async (mode) => {
@@ -387,6 +393,11 @@ describe('EvalResult', () => {
       'turn-audio': { turns: [{ audio: { data, format: 'wav' } }] },
       'nested-image': { metadata: { content: [{ image_url: { url: image } }] } },
       'image-json': { output: JSON.stringify({ data: [{ b64_json: data }] }) },
+      'a2a-media': {
+        output: JSON.stringify({
+          parts: [{ filename: 'report.png', mediaType: 'image/png', raw: data }],
+        }),
+      },
       'blob-output': { output: `promptfoo://blob/${'a'.repeat(64)}` },
       'svg-output': {
         output: `<svg xmlns="http://www.w3.org/2000/svg"><text>${secret}</text></svg>`,

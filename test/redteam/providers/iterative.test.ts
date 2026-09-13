@@ -229,6 +229,12 @@ describe('RedteamIterativeProvider', () => {
           }
           expect(JSON.stringify(mockRedteamProvider.callApi.mock.calls)).not.toContain(canary);
           expect(JSON.stringify(result.metadata)).not.toContain(canary);
+          for (const call of vi.mocked(mockGetGraderById.mock.results[0]?.value?.getResult).mock
+            .calls) {
+            const gradingContext = call.at(-1);
+            expect(gradingContext.providerResponse).not.toHaveProperty('traceContext');
+            expect(gradingContext.providerResponse).not.toHaveProperty('traceSummary');
+          }
         } finally {
           fetchTrace.mockRestore();
         }
