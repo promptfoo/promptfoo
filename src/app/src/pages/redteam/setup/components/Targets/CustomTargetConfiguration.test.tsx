@@ -39,7 +39,7 @@ describe('CustomTargetConfiguration', () => {
       ['false', null].map((value) => ({ type, value })),
     ),
   )(
-    'rejects a nonboolean $type key selector $value during JSON editing',
+    'preserves editable $type key selector $value without enabling default credentials',
     async ({ type, value }) => {
       const user = userEvent.setup();
       const updateCustomTarget = vi.fn();
@@ -63,7 +63,7 @@ describe('CustomTargetConfiguration', () => {
         expect.objectContaining({
           type,
           apiKeyRequired: false,
-          useDefaultApiKey: false,
+          useDefaultApiKey: typeof value === 'string' ? value : false,
         }),
       );
     },

@@ -259,7 +259,15 @@ describe('eval provider configuration round trips', () => {
         },
       ];
       expect(JSON.parse(request!.body as string).providers).toEqual(normalized);
-      expect(useStore.getState().config.providers).toEqual(normalized);
+      expect(useStore.getState().config.providers).toEqual(
+        normalized.map((item) => ({
+          ...item,
+          config: {
+            ...item.config,
+            useDefaultApiKey: typeof value === 'string' ? value : expected,
+          },
+        })),
+      );
       expect(JSON.parse(localStorage.getItem('promptfoo')!).state.config.providers).toEqual(
         normalized,
       );

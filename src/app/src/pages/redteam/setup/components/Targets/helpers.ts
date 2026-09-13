@@ -2,7 +2,7 @@ import { getProviderInitialConfig } from './providerInitialConfig';
 
 type LocalOpenAiProviderType = 'llamafile' | 'vllm' | 'text-generation-webui';
 
-function isOpenAiChatProviderId(providerId?: string): boolean {
+export function isOpenAiChatProviderId(providerId?: string): boolean {
   return providerId === 'openai:chat' || providerId?.startsWith('openai:chat:') === true;
 }
 
@@ -31,7 +31,10 @@ export function withLocalProviderType(
         apiKeyRequired: false,
         ...config,
         useDefaultApiKey:
-          typeof config.useDefaultApiKey === 'boolean' ? config.useDefaultApiKey : false,
+          typeof config.useDefaultApiKey === 'boolean' ||
+          typeof config.useDefaultApiKey === 'string'
+            ? config.useDefaultApiKey
+            : false,
         type: providerType,
         // A complete JSON replacement must not fall back to OpenAI's ambient endpoint.
         apiBaseUrl:
@@ -40,6 +43,58 @@ export function withLocalProviderType(
             : getProviderInitialConfig(providerType)?.config.apiBaseUrl,
       }
     : config;
+}
+
+const PROVIDER_OPTION_KEYS = new Set([
+  'id',
+  'label',
+  'config',
+  'prompts',
+  'transform',
+  'delay',
+  'env',
+  'inputs',
+]);
+const isRecord = (value: unknown): value is Record<string, unknown> =>
+  Boolean(value) && typeof value === 'object' && !Array.isArray(value);
+
+export const isProviderOptionsMap = (value: unknown): value is Record<string, unknown> =>
+  isRecord(value) &&
+  Object.keys(value).some((key) => !PROVIDER_OPTION_KEYS.has(key)) &&
+  Object.values(value).every(isRecord);
+
+// Preserve editable selector strings so persistence can redact their references.
+// Runtime requests accept only an explicit boolean opt-in to ambient credentials.
+export function normalizeLocalProviders<T>(
+  providers: T,
+  { forRuntime = false }: { forRuntime?: boolean } = {},
+): T {
+  const normalizeOptions = (provider: unknown, id?: string): unknown => {
+    if (!isRecord(provider) || !isRecord(provider.config)) {
+      return provider;
+    }
+    const config = withLocalProviderType(
+      id ?? (typeof provider.id === 'string' ? provider.id : undefined),
+      provider.config,
+      typeof provider.config.type === 'string' ? provider.config.type : undefined,
+    );
+    if (config === provider.config) {
+      return provider;
+    }
+    return {
+      ...provider,
+      config: forRuntime
+        ? { ...config, useDefaultApiKey: config.useDefaultApiKey === true }
+        : config,
+    };
+  };
+  const normalize = (provider: unknown): unknown =>
+    isProviderOptionsMap(provider)
+      ? Object.fromEntries(
+          Object.entries(provider).map(([id, options]) => [id, normalizeOptions(options, id)]),
+        )
+      : normalizeOptions(provider);
+  return (Array.isArray(providers) ? providers.map(normalize) : normalize(providers)) as T;
 }
 
 export function getProviderType(

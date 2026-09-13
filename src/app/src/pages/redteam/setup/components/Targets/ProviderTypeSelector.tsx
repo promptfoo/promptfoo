@@ -15,6 +15,7 @@ import { DEFAULT_WEBSOCKET_TIMEOUT_MS, DEFAULT_WEBSOCKET_TRANSFORM_RESPONSE } fr
 import {
   hasCustomOpenAiBaseUrl,
   isLocalOpenAiProviderType,
+  isOpenAiChatProviderId,
   withLocalProviderType,
 } from './helpers';
 import { getProviderDocumentationUrl, hasSpecificDocumentation } from './providerDocumentationMap';
@@ -502,7 +503,8 @@ export default function ProviderTypeSelector({
 
     if (
       isLocalOpenAiProviderType(value) &&
-      provider?.id.startsWith('openai:chat:') &&
+      provider &&
+      isOpenAiChatProviderId(provider.id) &&
       (providerType === value ||
         (!isLocalOpenAiProviderType(providerType) && hasCustomOpenAiBaseUrl(provider.config)))
     ) {

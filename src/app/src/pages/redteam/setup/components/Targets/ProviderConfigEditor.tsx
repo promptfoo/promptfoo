@@ -18,7 +18,11 @@ import CustomTargetConfiguration from './CustomTargetConfiguration';
 import { AGENT_FRAMEWORKS } from './consts';
 import FoundationModelConfiguration from './FoundationModelConfiguration';
 import HttpEndpointConfiguration from './HttpEndpointConfiguration';
-import { isLocalOpenAiProviderType, withLocalProviderType } from './helpers';
+import {
+  isLocalOpenAiProviderType,
+  isOpenAiChatProviderId,
+  withLocalProviderType,
+} from './helpers';
 import WebSocketEndpointConfiguration from './WebSocketEndpointConfiguration';
 
 import type { ProviderOptions } from '../../types';
@@ -502,6 +506,22 @@ function ProviderConfigEditor({
       // Custom providers validation
       if (!provider.id || provider.id.trim() === '') {
         errors.push('Provider ID is required');
+      }
+      if (isLocalOpenAiProviderType(providerType)) {
+        if (isOpenAiChatProviderId(provider.id)) {
+          const servedModel = provider.id.slice('openai:chat:'.length);
+          if (
+            (servedModel && !servedModel.trim()) ||
+            (!servedModel &&
+              (typeof provider.config?.model !== 'string' || !provider.config.model.trim()))
+          ) {
+            errors.push('A served model is required in the provider ID or config.model');
+          }
+        } else {
+          errors.push(
+            'Local provider ID must be openai:chat:<model> or openai:chat with config.model',
+          );
+        }
       }
       if (
         providerType === 'bedrock-agent' &&

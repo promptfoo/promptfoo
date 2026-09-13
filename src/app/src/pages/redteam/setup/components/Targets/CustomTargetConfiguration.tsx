@@ -103,17 +103,17 @@ const getProviderConfig = (providerType?: string): ProviderConfig => {
     llamafile: {
       title: 'Llamafile',
       helpText:
-        'Start the llamafile server and use its OpenAI-compatible chat API. Replace local-model with the served model name when required. Set apiBaseUrl including /v1. Authentication is disabled by default. If your server requires a key, set the key in an environment variable on the Promptfoo server and set apiKeyEnvar to that variable name.',
+        'Start the llamafile server and use its OpenAI-compatible chat API. Keep the openai:chat: prefix before the served model name, or use openai:chat with config.model. Set apiBaseUrl including /v1. Authentication is disabled by default. If your server requires a key, set the key in an environment variable on the Promptfoo server and set apiKeyEnvar to that variable name.',
     },
     vllm: {
       title: 'vLLM',
       helpText:
-        'Use the exact model name exposed by your vLLM server, including any namespace, path, or custom served-model-name. Set apiBaseUrl including /v1. Authentication is disabled by default. If your server requires a key, set the key in an environment variable on the Promptfoo server and set apiKeyEnvar to that variable name.',
+        'Keep the openai:chat: prefix before the exact model name exposed by your vLLM server, including any namespace, path, or custom served-model-name. Alternatively, use openai:chat with config.model. Set apiBaseUrl including /v1. Authentication is disabled by default. If your server requires a key, set the key in an environment variable on the Promptfoo server and set apiKeyEnvar to that variable name.',
     },
     'text-generation-webui': {
       title: 'Text Generation WebUI',
       helpText:
-        'Start the server with its OpenAI-compatible API enabled. Use the served model name and set apiBaseUrl including /v1. Authentication is disabled by default. If your server requires a key, set the key in an environment variable on the Promptfoo server and set apiKeyEnvar to that variable name.',
+        'Start the server with its OpenAI-compatible API enabled. Keep the openai:chat: prefix before the served model name, or use openai:chat with config.model. Set apiBaseUrl including /v1. Authentication is disabled by default. If your server requires a key, set the key in an environment variable on the Promptfoo server and set apiKeyEnvar to that variable name.',
     },
     ollama: {
       title: 'Ollama',

@@ -169,6 +169,64 @@ describe('TestCaseGenerationProvider', () => {
     useRedTeamTargetConfigValidation.getState().clearTargetConfigValidation();
   });
 
+  it.each(['llamafile', 'vllm', 'text-generation-webui'])(
+    'normalizes %s local generation and target requests separately',
+    async (type) => {
+      const target = {
+        id: 'openai:chat',
+        label: 'Local target',
+        config: {
+          type,
+          model: 'tenant/model:Q4',
+          apiBaseUrl: 'https://local.example.test/v1',
+          apiKeyEnvar: 'LOCAL_MODEL_KEY',
+          useDefaultApiKey: '{{ env.LOCAL_SOURCE }}',
+          stop: ['<end>'],
+        },
+      };
+
+      const user = userEvent.setup();
+      const provider = {
+        ...target,
+        id: 'openai:chat:generation-model',
+        config: {
+          ...target.config,
+          apiBaseUrl: 'https://generation.example.test/v1',
+          apiKeyEnvar: 'GENERATION_KEY',
+        },
+      };
+      const config = { ...MOCK_CONFIG, target, provider };
+      const original = JSON.parse(JSON.stringify(config));
+      render(
+        <ToastProvider>
+          <TestCaseGenerationProvider redTeamConfig={config}>
+            <TestConsumer testPlugin="harmful:hate" testStrategy="basic" />
+          </TestCaseGenerationProvider>
+        </ToastProvider>,
+      );
+      await user.click(screen.getByTestId('test-case-generation-btn'));
+      await waitFor(() =>
+        expect(callApiMock.mock.calls.filter(([path]) => path === '/providers/test')).toHaveLength(
+          1,
+        ),
+      );
+      const generation = callApiMock.mock.calls.find(
+        ([path]) => path === '/redteam/generate-test',
+      )!;
+      const execution = callApiMock.mock.calls.find(([path]) => path === '/providers/test')!;
+      expect(JSON.parse(generation[1]!.body as string).provider).toEqual({
+        ...provider,
+        config: { ...provider.config, apiKeyRequired: false, useDefaultApiKey: false },
+      });
+      expect(JSON.parse(execution[1]!.body as string).providerOptions).toEqual({
+        ...target,
+        config: { ...target.config, apiKeyRequired: false, useDefaultApiKey: false },
+      });
+      expect(config).toEqual(original);
+      await waitFor(() => expect(screen.getByTestId('isGenerating')).toHaveTextContent('false'));
+    },
+  );
+
   it('should render', () => {
     render(
       <ToastProvider>

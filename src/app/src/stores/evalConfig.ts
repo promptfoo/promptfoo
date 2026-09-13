@@ -5,7 +5,10 @@ import {
   redactAzureBlobSasTokens,
   sanitizeUrlForLogging,
 } from '../../../util/sanitizer';
-import { withLocalProviderType } from '../pages/redteam/setup/components/Targets/helpers';
+import {
+  isProviderOptionsMap,
+  normalizeLocalProviders,
+} from '../pages/redteam/setup/components/Targets/helpers';
 
 import type { EvaluateTestSuiteWithEvaluateOptions, UnifiedConfig } from '../../../types/index';
 
@@ -704,67 +707,13 @@ export const omitProviderCredentials = (
   return omitReferencedProviderEnv(sanitized, providerTemplatePaths);
 };
 
-const PROVIDER_OPTION_KEYS = new Set([
-  'id',
-  'label',
-  'config',
-  'prompts',
-  'transform',
-  'delay',
-  'env',
-  'inputs',
-]);
-
 const scrubProviderIdentifier = (value: string, templatePaths?: Set<string>): string =>
   scrubProviderUrl(redactAzureBlobSasTokens(value), templatePaths);
 
-// A provider can be supplied as an options-map keyed by the provider id —
-// `{ '<provider-id>': { ...options } }` — where the id key itself may embed
-// credentials (URL userinfo, an Azure SAS token). Those keys are scrubbed via
-// scrubProviderIdentifier; the values are sanitized via omitProviderCredentials.
-// Only an unambiguous map takes this path: at least one key outside the known
-// option fields AND every value a record. A provider OBJECT with a stray
-// non-record field (e.g. `{ id, apiKey: '...' }` or a top-level headers bag)
-// must take the normal walk instead, which drops credential-named keys and
-// applies parent-key semantics (headers, opaque tool schemas, raw requests,
-// env indirection) that the map path would bypass.
-const isProviderOptionsMap = (value: unknown): value is Record<string, unknown> =>
-  isRecord(value) &&
-  Object.keys(value).some((key) => !PROVIDER_OPTION_KEYS.has(key)) &&
-  Object.values(value).every(isRecord);
-
-const normalizeLocalProviderOptions = (provider: unknown, id?: string): unknown => {
-  if (!isRecord(provider) || !isRecord(provider.config)) {
-    return provider;
-  }
-  const config = withLocalProviderType(
-    id ?? (typeof provider.id === 'string' ? provider.id : undefined),
-    provider.config,
-    typeof provider.config.type === 'string' ? provider.config.type : undefined,
-  );
-  return config === provider.config ? provider : { ...provider, config };
-};
-
-const normalizeLocalProviders = (config: Partial<UnifiedConfig>): Partial<UnifiedConfig> => {
-  if (!hasOwn(config, 'providers')) {
-    return config;
-  }
-  const normalize = (provider: unknown): unknown =>
-    isProviderOptionsMap(provider)
-      ? Object.fromEntries(
-          Object.entries(provider).map(([id, options]) => [
-            id,
-            normalizeLocalProviderOptions(options, id),
-          ]),
-        )
-      : normalizeLocalProviderOptions(provider);
-  return {
-    ...config,
-    providers: (Array.isArray(config.providers)
-      ? config.providers.map(normalize)
-      : normalize(config.providers)) as UnifiedConfig['providers'],
-  };
-};
+const normalizeLocalConfig = (config: Partial<UnifiedConfig>): Partial<UnifiedConfig> =>
+  hasOwn(config, 'providers')
+    ? { ...config, providers: normalizeLocalProviders(config.providers) }
+    : config;
 
 // walkValue never rewrites object keys, so after the walk the surviving
 // top-level keys are scrubbed here. This covers a credential-bearing id key on
@@ -1370,11 +1319,11 @@ export const useStore = create<EvalConfigState>()(
     (set, get) => ({
       config: { ...DEFAULT_CONFIG },
 
-      setConfig: (config) => set({ config: normalizeLocalProviders(config) }),
+      setConfig: (config) => set({ config: normalizeLocalConfig(config) }),
 
       updateConfig: (updates) =>
         set((state) => ({
-          config: normalizeLocalProviders({ ...state.config, ...updates }),
+          config: normalizeLocalConfig({ ...state.config, ...updates }),
         })),
 
       reset: () => set({ config: { ...DEFAULT_CONFIG } }),
@@ -1389,7 +1338,7 @@ export const useStore = create<EvalConfigState>()(
           env: config.env,
           extensions: config.extensions,
           prompts: config.prompts,
-          providers: config.providers,
+          providers: normalizeLocalProviders(config.providers, { forRuntime: true }),
           scenarios: config.scenarios,
           tests: config.tests || [], // This is what was 'testCases' before
           tracing: config.tracing,
@@ -1403,7 +1352,7 @@ export const useStore = create<EvalConfigState>()(
       name: 'promptfoo',
       skipHydration: true,
       partialize: (state) => ({
-        config: omitPersistedSensitiveValues(state.config),
+        config: normalizeLocalConfig(omitPersistedSensitiveValues(state.config)),
       }),
       merge: (persistedState, currentState) => {
         const persistedConfig = (persistedState as Partial<EvalConfigState> | undefined)?.config;
@@ -1411,8 +1360,8 @@ export const useStore = create<EvalConfigState>()(
         return {
           ...currentState,
           ...(persistedState as Partial<EvalConfigState> | undefined),
-          config: omitPersistedSensitiveValues(
-            normalizeLocalProviders({
+          config: normalizeLocalConfig(
+            omitPersistedSensitiveValues({
               ...DEFAULT_CONFIG,
               ...persistedConfig,
             }),

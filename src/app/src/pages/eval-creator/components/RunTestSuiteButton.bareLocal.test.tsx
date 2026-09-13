@@ -8,6 +8,7 @@ import { useRedTeamConfig } from '@app/pages/redteam/setup/hooks/useRedTeamConfi
 import { generateOrderedYaml } from '@app/pages/redteam/setup/utils/yamlHelpers';
 import { useStore } from '@app/stores/evalConfig';
 import { getCallApiMock, mockCallApiRoutes, resetCallApiMock } from '@app/tests/apiMocks';
+import { restoreTestTimers, useTestTimers } from '@app/tests/timers';
 import { act, cleanup, render, screen } from '@testing-library/react';
 import * as yaml from 'js-yaml';
 import { MemoryRouter } from 'react-router-dom';
@@ -45,13 +46,14 @@ describe('bare local chat import and Run', () => {
   beforeEach(() => {
     resetStores();
     resetCallApiMock();
-    vi.useFakeTimers();
+    useTestTimers();
   });
   afterEach(() => {
     cleanup();
+    expect(vi.getTimerCount()).toBe(0);
     resetStores();
     resetCallApiMock();
-    vi.useRealTimers();
+    restoreTestTimers();
   });
 
   it.each(localTypes.flatMap((local) => policies.map((policy) => ({ ...local, ...policy }))))(
