@@ -1,7 +1,7 @@
 import fs from 'fs/promises';
 import path from 'path';
 
-import { getCache, isCacheEnabled } from '../cache';
+import { getCache } from '../cache';
 import cliState from '../cliState';
 import logger from '../logger';
 import { getConfiguredPythonPath, getEnvInt } from '../python/pythonUtils';
@@ -11,6 +11,7 @@ import { processConfigFileReferences } from '../util/fileReference';
 import { parsePathOrGlob } from '../util/index';
 import { getFileSourceHash } from '../util/sourceHash';
 import { providerRegistry } from './providerRegistry';
+import { getScriptCacheKey } from './scriptCompletion';
 import { sanitizeScriptContext } from './scriptContext';
 
 import type {
@@ -335,18 +336,24 @@ export class PythonProvider implements ApiProvider {
     logger.debug(`Computing file hash for script ${absPath}`);
     const fileHash = sha256(await fs.readFile(absPath, 'utf-8'));
 
-    // Create cache key including the function name to ensure different functions don't share caches
-    const cacheKey = `python:${this.functionName || 'default'}:${apiType}:${sha256(
-      JSON.stringify([this.scriptPath, fileHash, prompt, this.options, context?.vars]),
-    )}`;
+    const optionsWithProcessedConfig = {
+      ...this.options,
+      config: { ...this.options?.config, ...this.config },
+    };
+    const cacheKey = getScriptCacheKey(
+      `python:${this.functionName || 'default'}:${apiType}`,
+      fileHash,
+      [this.scriptPath, prompt, optionsWithProcessedConfig, context?.vars],
+      this.options?.env,
+    );
     logger.debug(`PythonProvider cache key: ${cacheKey}`);
 
     const cache = await getCache();
     let cachedResult;
-    const cacheEnabled = isCacheEnabled();
+    const cacheEnabled = cacheKey !== undefined;
     logger.debug(`PythonProvider cache enabled: ${cacheEnabled}`);
 
-    if (cacheEnabled) {
+    if (cacheKey) {
       cachedResult = await cache.get(cacheKey);
       logger.debug(`PythonProvider cache hit: ${Boolean(cachedResult)}`);
     }
@@ -363,16 +370,6 @@ export class PythonProvider implements ApiProvider {
       return applyCachedCallApiMetadata(apiType, parsedResult);
     } else {
       const sanitizedContext = sanitizeScriptContext('PythonProvider', context);
-
-      // Create a new options object with processed file references included in the config
-      // This ensures any file:// references are replaced with their actual content
-      const optionsWithProcessedConfig = {
-        ...this.options,
-        config: {
-          ...this.options?.config,
-          ...this.config, // Merge in the processed config containing resolved file references
-        },
-      };
 
       const args = buildPythonScriptArgs(
         apiType,
@@ -394,12 +391,12 @@ export class PythonProvider implements ApiProvider {
       // Store result in cache if enabled and no errors
       const hasError = hasPythonResultError(result);
 
-      if (isCacheEnabled() && !hasError) {
+      if (cacheKey && !hasError) {
         logger.debug(`PythonProvider caching result: ${cacheKey}`);
         await cache.set(cacheKey, JSON.stringify(result));
       } else {
         logger.debug(
-          `PythonProvider not caching result: ${isCacheEnabled() ? (hasError ? 'has error' : 'unknown reason') : 'cache disabled'}`,
+          `PythonProvider not caching result: ${hasError ? 'has error' : 'cache disabled'}`,
         );
       }
 

@@ -2257,7 +2257,9 @@ describe('readConfig', () => {
     const loaded = await Promise.all(configs.map((configPath) => readConfig(configPath)));
     for (const [index, configPath] of configs.entries()) {
       const provider = providers.get(configPath)!;
-      expect(provider.setConfigBasePath).toHaveBeenCalledWith(path.dirname(configPath));
+      expect(provider.setConfigBasePath).toHaveBeenCalledWith(
+        path.resolve(path.dirname(configPath)),
+      );
       expect((loaded[index].providers as unknown[])[0]).toBe(provider);
     }
   });

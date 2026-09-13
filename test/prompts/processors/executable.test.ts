@@ -3,6 +3,7 @@ import * as os from 'os';
 import * as path from 'path';
 
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
+import { getCache, isCacheEnabled } from '../../../src/cache';
 import cliState from '../../../src/cliState';
 import { generateIdFromPrompt } from '../../../src/models/prompt';
 import { processExecutableFile } from '../../../src/prompts/processors/executable';
@@ -38,6 +39,7 @@ describe('processExecutableFile', () => {
 
   afterEach(() => {
     vi.clearAllMocks();
+    vi.mocked(isCacheEnabled).mockReturnValue(false);
     vi.unstubAllEnvs();
   });
 
@@ -67,6 +69,39 @@ describe('processExecutableFile', () => {
       fs.rmSync(dir, { recursive: true, force: true });
     }
   });
+
+  it.each(['file', 'suite'])(
+    'does not reuse cached prompts across scoped %s environments',
+    async (layer) => {
+      const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'pf-prompt-cache-env-'));
+      const script = path.join(dir, 'prompt.cjs');
+      fs.writeFileSync(
+        script,
+        'process.stdout.write(process.env.PROMPTFOO_REVIEW_ENV_PROBE || "");',
+      );
+      const cache = { get: vi.fn().mockResolvedValue('wrong-tenant'), set: vi.fn() };
+      vi.mocked(getCache).mockReturnValue(cache as never);
+      vi.mocked(isCacheEnabled).mockReturnValue(true);
+      try {
+        const [prompt] = await processExecutableFile(
+          `${JSON.stringify(process.execPath)} ${JSON.stringify(script)}`,
+          {},
+        );
+        for (const value of ['first', 'second', 'first']) {
+          const run = () => prompt.function!({ vars: {}, provider: mockProvider });
+          const env = { PROMPTFOO_REVIEW_ENV_PROBE: value };
+          const output = await (layer === 'file'
+            ? cliState.withEnvFileOverrides(env, run)
+            : cliState.withEnv(env, run));
+          expect(output).toBe(value);
+        }
+        expect(cache.get).not.toHaveBeenCalled();
+        expect(cache.set).not.toHaveBeenCalled();
+      } finally {
+        fs.rmSync(dir, { recursive: true, force: true });
+      }
+    },
+  );
 
   it('fingerprints the executable selected by an isolated file PATH', async () => {
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'pf-prompt-env-path-'));

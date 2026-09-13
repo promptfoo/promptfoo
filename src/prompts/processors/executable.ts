@@ -1,9 +1,13 @@
 import { execFile } from 'child_process';
 import { stat as fsStat, readFile } from 'fs/promises';
 
-import { getCache, isCacheEnabled } from '../../cache';
+import { getCache } from '../../cache';
 import { getRuntimeEnv } from '../../envOverrides';
-import { getFileHashes, parseScriptParts } from '../../providers/scriptCompletion';
+import {
+  getFileHashes,
+  getScriptCacheKey,
+  parseScriptParts,
+} from '../../providers/scriptCompletion';
 import invariant from '../../util/invariant';
 import { safeJsonStringify } from '../../util/json';
 import { getExecutableSourceHash } from '../../util/sourceHash';
@@ -49,10 +53,13 @@ export const executablePromptFunction = async (
   const scriptParts = parseScriptParts(scriptPath);
   const fileHashes = getFileHashes(scriptParts);
 
-  const cacheKey = `exec-prompt:${scriptPath}:${fileHashes.join(':')}:${safeJsonStringify(transformedContext)}`;
+  const cacheKey =
+    fileHashes.length > 0
+      ? getScriptCacheKey('exec-prompt', fileHashes, [scriptPath, transformedContext])
+      : undefined;
 
   let cachedResult;
-  if (fileHashes.length > 0 && isCacheEnabled()) {
+  if (cacheKey) {
     const cache = getCache();
     cachedResult = await cache.get(cacheKey);
 
@@ -88,7 +95,7 @@ export const executablePromptFunction = async (
         return;
       }
 
-      if (fileHashes.length > 0 && isCacheEnabled()) {
+      if (cacheKey) {
         const cache = getCache();
         await cache.set(cacheKey, standardOutput);
       }

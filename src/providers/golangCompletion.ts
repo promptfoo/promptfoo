@@ -4,7 +4,7 @@ import os from 'os';
 import path from 'path';
 import util from 'util';
 
-import { getCache, isCacheEnabled } from '../cache';
+import { getCache } from '../cache';
 import { getRuntimeEnv } from '../envOverrides';
 import { getWrapperDir } from '../esm';
 import logger from '../logger';
@@ -13,6 +13,7 @@ import { pathExists } from '../util/file';
 import { parsePathOrGlob } from '../util/index';
 import { safeJsonStringify } from '../util/json';
 import { getFileSourceHash } from '../util/sourceHash';
+import { getScriptCacheKey } from './scriptCompletion';
 
 import type {
   ApiProvider,
@@ -83,20 +84,16 @@ export class GolangProvider implements ApiProvider {
     logger.debug(`Found module root at ${moduleRoot}`);
     logger.debug(`Computing file hash for script ${absPath}`);
     const fileHash = sha256(await fs.readFile(absPath, 'utf-8'));
-    const cacheKey = `golang:${apiType}:${sha256(
-      JSON.stringify([
-        this.scriptPath,
-        this.functionName,
-        fileHash,
-        prompt,
-        this.options,
-        context?.vars,
-      ]),
-    )}`;
+    const cacheKey = getScriptCacheKey(
+      `golang:${apiType}`,
+      fileHash,
+      [this.scriptPath, this.functionName, prompt, this.options, context?.vars],
+      this.options?.env,
+    );
     const cache = await getCache();
     let cachedResult;
 
-    if (isCacheEnabled()) {
+    if (cacheKey) {
       cachedResult = (await cache.get(cacheKey)) as string;
     }
 
@@ -196,7 +193,7 @@ export class GolangProvider implements ApiProvider {
 
         const result = JSON.parse(stdout);
 
-        if (isCacheEnabled() && !('error' in result)) {
+        if (cacheKey && !('error' in result)) {
           await cache.set(cacheKey, JSON.stringify(result));
         }
         return result;

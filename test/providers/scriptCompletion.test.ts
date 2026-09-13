@@ -290,7 +290,7 @@ describe('ScriptCompletionProvider', () => {
     await expect(provider.callApi('test prompt')).rejects.toThrow(utf8Error);
   });
 
-  it('keeps environment values private while separating cached results', async () => {
+  it('bypasses cache reads and writes when provider environment is configured', async () => {
     createHashMock.mockImplementation(
       (await vi.importActual<typeof import('crypto')>('crypto')).createHash,
     );
@@ -300,6 +300,14 @@ describe('ScriptCompletionProvider', () => {
       set: vi.fn(),
     };
     vi.mocked(cacheModule.getCache).mockResolvedValue(cache as never);
+    vi.mocked(execFile).mockImplementation(function (_cmd, _args, _options, callback) {
+      (callback as (error: Error | null, stdout: string, stderr: string) => void)(
+        null,
+        'fresh',
+        '',
+      );
+      return {} as any;
+    });
     for (const value of ['cache-private-first', 'cache-private-second', 'cache-private-first']) {
       const provider = new ScriptCompletionProvider('node script.js', {
         config: {},
@@ -307,11 +315,8 @@ describe('ScriptCompletionProvider', () => {
       });
       await provider.callApi('unchanged prompt');
     }
-    const keys = cache.get.mock.calls.map(([key]) => key);
-    expect(keys).toHaveLength(3);
-    expect(keys[0]).not.toBe(keys[1]);
-    expect(keys[0]).toBe(keys[2]);
-    expect(JSON.stringify(keys)).not.toContain('cache-private-');
+    expect(cache.get).not.toHaveBeenCalled();
+    expect(cache.set).not.toHaveBeenCalled();
   });
 
   it('should use cache when available', async () => {

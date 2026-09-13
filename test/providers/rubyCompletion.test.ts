@@ -326,13 +326,14 @@ describe('RubyProvider', () => {
   });
 
   describe('caching', () => {
-    it('keeps environment values private while separating cached results', async () => {
+    it('bypasses cache reads and writes when provider environment is configured', async () => {
       mockIsCacheEnabled.mockReturnValue(true);
       const cache = {
         get: vi.fn().mockResolvedValue(JSON.stringify({ output: 'cached' })),
         set: vi.fn(),
       };
       mockGetCache.mockResolvedValue(cache as never);
+      mockRunRuby.mockResolvedValue({ output: 'fresh' });
       for (const value of ['cache-private-first', 'cache-private-second', 'cache-private-first']) {
         const provider = new RubyProvider('script.rb', {
           config: { basePath: '/absolute/path/to' },
@@ -340,11 +341,8 @@ describe('RubyProvider', () => {
         });
         await provider.callApi('unchanged prompt');
       }
-      const keys = cache.get.mock.calls.map(([key]) => key);
-      expect(keys).toHaveLength(3);
-      expect(keys[0]).not.toBe(keys[1]);
-      expect(keys[0]).toBe(keys[2]);
-      expect(JSON.stringify(keys)).not.toContain('cache-private-');
+      expect(cache.get).not.toHaveBeenCalled();
+      expect(cache.set).not.toHaveBeenCalled();
     });
 
     it('should use cached result when available', async () => {

@@ -3,10 +3,11 @@ import crypto from 'crypto';
 import fs from 'fs';
 
 import { getCache, isCacheEnabled } from '../cache';
-import { getRuntimeEnv } from '../envOverrides';
+import { getEnvOverrides, getRuntimeEnv } from '../envOverrides';
 import logger from '../logger';
 import invariant from '../util/invariant';
 import { safeJsonStringify } from '../util/json';
+import { redactSecretLeaves, stableStringify } from '../util/sanitizer';
 import { getExecutableSourceHash } from '../util/sourceHash';
 
 import type {
@@ -56,6 +57,32 @@ export function getFileHashes(scriptParts: string[]): string[] {
   return fileHashes;
 }
 
+/** Scripts can use any environment value; credentials cannot identify a disk-cache entry. */
+export function getScriptCacheKey(
+  prefix: string,
+  sourceHash: string | string[],
+  inputs: unknown,
+  env?: ProviderOptions['env'],
+): string | undefined {
+  if (
+    !isCacheEnabled() ||
+    [env, getEnvOverrides(), getEnvOverrides('file')].some((overrides) =>
+      Object.values(overrides ?? {}).some((value) => value !== undefined),
+    )
+  ) {
+    return undefined;
+  }
+
+  const sanitized = stableStringify(redactSecretLeaves(inputs));
+  if (sanitized !== stableStringify(inputs)) {
+    return undefined;
+  }
+  return `${prefix}:${crypto
+    .createHash('sha256')
+    .update(stableStringify([sourceHash, sanitized]))
+    .digest('hex')}`;
+}
+
 export class ScriptCompletionProvider implements ApiProvider {
   constructor(
     private scriptPath: string,
@@ -81,13 +108,18 @@ export class ScriptCompletionProvider implements ApiProvider {
       logger.warn(`Could not find any valid files in the command: ${this.scriptPath}`);
     }
 
-    const cacheKey = `exec:${crypto
-      .createHash('sha256')
-      .update(JSON.stringify([this.scriptPath, fileHashes, prompt, this.options]))
-      .digest('hex')}`;
+    const cacheKey =
+      fileHashes.length > 0
+        ? getScriptCacheKey(
+            'exec',
+            fileHashes,
+            [this.scriptPath, prompt, this.options, context?.vars],
+            this.options?.env,
+          )
+        : undefined;
 
     let cachedResult;
-    if (fileHashes.length > 0 && isCacheEnabled()) {
+    if (cacheKey) {
       const cache = await getCache();
       cachedResult = await cache.get(cacheKey);
 
@@ -95,10 +127,6 @@ export class ScriptCompletionProvider implements ApiProvider {
         logger.debug(`Returning cached result for script ${this.scriptPath}: ${cachedResult}`);
         return { ...JSON.parse(cachedResult as string), cached: true };
       }
-    } else if (fileHashes.length === 0 && isCacheEnabled()) {
-      logger.warn(
-        `Could not hash any files for command ${this.scriptPath}, caching will not be used`,
-      );
     }
 
     return new Promise<ProviderResponse>((resolve, reject) => {
@@ -137,7 +165,7 @@ export class ScriptCompletionProvider implements ApiProvider {
         }
         logger.debug(`Output from script ${this.scriptPath}: ${standardOutput}`);
         const result = { output: standardOutput };
-        if (fileHashes.length > 0 && isCacheEnabled()) {
+        if (cacheKey) {
           const cache = await getCache();
           await cache.set(cacheKey, JSON.stringify(result));
         }
