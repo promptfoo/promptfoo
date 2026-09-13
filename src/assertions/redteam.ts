@@ -84,11 +84,11 @@ export function getRedteamTraceQueryOptions(
   test: AtomicTestCase,
   redteamConfig?: RedteamFileConfig,
 ) {
-  const { includeInternalSpans, maxDepth, spanFilter } = resolveTestTracingOptions(
+  const { includeInternalSpans, maxDepth, maxSpans, spanFilter } = resolveTestTracingOptions(
     test,
     redteamConfig,
   );
-  return { includeInternalSpans, maxDepth, spanFilter };
+  return { includeInternalSpans, maxDepth, maxSpans, spanFilter };
 }
 
 /**

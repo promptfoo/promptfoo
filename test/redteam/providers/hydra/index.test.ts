@@ -76,6 +76,10 @@ vi.mock('../../../../src/evaluatorHelpers', async () => ({
 vi.mock('../../../../src/redteam/util', async () => ({
   ...(await vi.importActual('../../../../src/redteam/util')),
   isBasicRefusal: mockIsBasicRefusal,
+  classifyRefusal: (response: string) => ({
+    kind: mockIsBasicRefusal(response) ? 'clean_refusal' : 'no_refusal',
+    signals: [],
+  }),
   getSessionId: mockGetSessionId,
 }));
 

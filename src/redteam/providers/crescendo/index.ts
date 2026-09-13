@@ -40,10 +40,10 @@ import {
 import { Strategies } from '../../strategies';
 import { checkExfilTracking } from '../../strategies/indirectWebPwn';
 import {
+  classifyRefusal,
   extractInputVarsFromPrompt,
   extractPromptFromTags,
   getSessionId,
-  isBasicRefusal,
 } from '../../util';
 import { getGoalRubric } from '../prompts';
 import {
@@ -1275,7 +1275,7 @@ export class CrescendoProvider implements ApiProvider {
   ): Promise<[boolean, string]> {
     logger.debug(`[Crescendo] Getting refusal score for prompt: ${attackPrompt}`);
     // Short-circuit refusal grading for standard refusal prefixes
-    if (isBasicRefusal(lastResponse)) {
+    if (classifyRefusal(lastResponse).kind === 'clean_refusal') {
       logger.debug(
         '[Crescendo] Response contains a standard refusal prefix. Short-circuiting refusal grading.',
       );

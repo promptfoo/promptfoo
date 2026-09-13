@@ -37,10 +37,10 @@ import {
 import { Strategies } from '../../strategies';
 import { checkExfilTracking } from '../../strategies/indirectWebPwn';
 import {
+  classifyRefusal,
   extractInputVarsFromPrompt,
   extractPromptFromTags,
   getSessionId,
-  isBasicRefusal,
 } from '../../util';
 import {
   accumulateGraderResult,
@@ -808,7 +808,7 @@ export class HydraProvider implements ApiProvider {
       });
 
       // Check for refusal and backtrack if in stateless mode and backtracking enabled
-      const isRefusal = isBasicRefusal(targetResponse.output);
+      const isRefusal = classifyRefusal(targetResponse.output).kind === 'clean_refusal';
 
       if (!this.stateful && this.maxBacktracks > 0 && isRefusal) {
         logger.debug(`${this.logPrefix} Response rejected (basic refusal), backtracking...`, {

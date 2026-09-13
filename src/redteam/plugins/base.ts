@@ -470,14 +470,14 @@ function redactTraceValue(
 }
 
 function redactTraceEvidence(text: string): string {
-  const bounded = truncateTraceEvidence(text, 32_000);
-  if (/^\s*[\[{]/.test(bounded)) {
+  if (/^\s*[\[{]/.test(text)) {
     try {
-      return JSON.stringify(redactTraceValue(JSON.parse(bounded)));
+      return truncateTraceEvidence(JSON.stringify(redactTraceValue(JSON.parse(text))), 32_000);
     } catch {
       // Trace summaries may be prose rather than serialized trajectory steps.
     }
   }
+  const bounded = truncateTraceEvidence(text, 32_000);
   return redactPrivateKeys(bounded.replace(/\\\r?\n\s*/g, ' '))
     .replace(/\b(AccountKey\s*=\s*)[^;\s\"'\\]+/gi, '$1[REDACTED]')
     .replace(/\b([a-z][a-z0-9+.-]*:\/\/)([^/@\s"'`\\]+)@/gi, '$1[REDACTED]@')
@@ -500,11 +500,11 @@ function redactTraceEvidence(text: string): string {
       isTracingCredentialHeader(key, '') ? quote + key + separator + '[REDACTED]' + quote : match,
     )
     .replace(
-      /\b(authorization\s*:\s*)(?:(?:Bearer|Basic|ApiKey|Digest)\s+)?[^\s"';]+/gi,
+      /\b(authorization\s*:\s*)(?:(?:Bearer|Basic|ApiKey|Digest)\s+)?[^\r\n;&|]+?(?=\s+(?:-[A-Za-z]|https?:\/\/|\/\S)|[;&|]|$)/gi,
       '$1[REDACTED]',
     )
     .replace(
-      /\b((?:set-)?cookie\s*:\s*)[^\r\n&|'"]+?(?=\s+(?:-[A-Za-z]|https?:\/\/)|;\s+(?![\w-]+\s*=)\w|[&|]|$)/gi,
+      /\b((?:set-)?cookie\s*:\s*)[^\r\n&|]+?(?=\s+(?:-[A-Za-z]|https?:\/\/|\/\S)|[&|]|$)/gi,
       '$1[REDACTED]',
     )
     .replace(/\b([\w-]+)(\s*:\s*)[^\s"'\\;&|\r\n]+/gi, (match, key, separator) =>
@@ -548,7 +548,7 @@ function redactTraceEvidence(text: string): string {
 function redactTraceUrl(value: string): string {
   const sanitized = sanitizeUrl(value);
   try {
-    const isAbsolute = /^https?:\/\//i.test(sanitized);
+    const isNetworkUrl = /^(?:[a-z][a-z0-9+.-]*:)?\/\//i.test(sanitized);
     const url = new URL(sanitized, 'https://trace.invalid');
     const originalPath = url.pathname;
     if (url.hostname.toLowerCase() === 'api.telegram.org') {
@@ -563,7 +563,12 @@ function redactTraceUrl(value: string): string {
     if (url.hash) {
       url.hash = '[REDACTED]';
     }
-    return isAbsolute ? url.toString() : url.pathname + url.search + url.hash;
+    if (isNetworkUrl) {
+      return sanitized.startsWith('//')
+        ? '//' + url.host + url.pathname + url.search + url.hash
+        : url.toString();
+    }
+    return url.pathname + url.search + url.hash;
   } catch {
     return sanitized;
   }
@@ -630,7 +635,14 @@ function formatTraceEvidence(gradingContext?: RedteamGradingContext): string {
   const spans = gradingContext?.traceData?.spans?.length
     ? gradingContext.traceData.spans
     : (gradingContext?.traceContext?.spans ?? []);
-  const actions = spans.flatMap((span) => {
+  const actionStep = Math.ceil(spans.length / 80);
+  const actionSpans =
+    spans.length > 96
+      ? spans.filter(
+          (_span, index) => index < 8 || index >= spans.length - 8 || index % actionStep === 0,
+        )
+      : spans;
+  const actions = actionSpans.flatMap((span) => {
     const { name, attributes = {} } = span;
     const hasToolArgs = TOOL_ARGUMENT_ATTRIBUTE_KEYS.some(
       (key) => key !== 'input' && attributes[key] !== undefined,
@@ -764,8 +776,7 @@ export abstract class RedteamGraderBase {
 
         Template: ${this.rubric}
 
-        Provided variables:
-        ${JSON.stringify(vars, null, 2)}
+        Provided variables: ${Object.keys(vars).join(', ')}
       `);
     }
   }
