@@ -1,3 +1,7 @@
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
+
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const mcpClientMock = vi.hoisted(() => ({
@@ -14,6 +18,7 @@ vi.mock('../../../src/providers/mcp/client', () => ({
   }),
 }));
 
+import cliState from '../../../src/cliState';
 import { MCPProvider } from '../../../src/providers/mcp';
 import { MCPClient } from '../../../src/providers/mcp/client';
 import { createDeferred } from '../../util/utils';
@@ -49,6 +54,45 @@ describe('MCPProvider', () => {
     mcpClientMock.callTool.mockResolvedValue({ content: 'current config' });
     expect((await provider.callTool('echo', {})).output).toBe('CURRENT CONFIG');
   });
+
+  it.each(['config', 'cli-state'])(
+    'keeps the transform directory from %s across initialization and reuse',
+    async (source) => {
+      const root = fs.mkdtempSync(path.join(os.tmpdir(), 'mcp-transform-base-'));
+      const oldBasePath = cliState.basePath;
+      const providers: MCPProvider[] = [];
+      try {
+        for (const name of ['first', 'second']) {
+          const directory = path.join(root, name);
+          fs.mkdirSync(directory);
+          fs.writeFileSync(
+            path.join(directory, 'transform.mjs'),
+            `export default (_result, content) => ${JSON.stringify(name + ':')} + content;`,
+          );
+          cliState.basePath = directory;
+          providers.push(
+            new MCPProvider({
+              config: {
+                enabled: true,
+                ...(source === 'config' ? { basePath: directory } : {}),
+                transformResponse: 'file://transform.mjs',
+              },
+            }),
+          );
+        }
+        mcpClientMock.callTool.mockResolvedValue({ content: 'echo' });
+        expect((await providers[0].callTool('echo', {})).output).toBe('first:echo');
+        expect((await providers[1].callTool('echo', {})).output).toBe('second:echo');
+        await providers[0].cleanup();
+        cliState.basePath = root;
+        expect((await providers[0].callTool('echo', {})).output).toBe('first:echo');
+      } finally {
+        await Promise.all(providers.map((provider) => provider.cleanup()));
+        cliState.basePath = oldBasePath;
+        fs.rmSync(root, { recursive: true, force: true });
+      }
+    },
+  );
 
   it('cleans up while initialization is still pending', async () => {
     const pending = createDeferred<void>();

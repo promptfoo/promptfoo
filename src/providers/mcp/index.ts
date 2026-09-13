@@ -1,5 +1,5 @@
 import logger from '../../logger';
-import { loadTransformModule } from '../transformUtils';
+import { getTransformBasePath, loadTransformModule } from '../transformUtils';
 import { MCPClient } from './client';
 import { createTransformResponse, type MCPTransformResponseContext } from './transforms';
 
@@ -21,6 +21,7 @@ interface MCPProviderOptions {
 export class MCPProvider implements ApiProvider {
   private mcpClient?: MCPClient;
   config: MCPConfig;
+  private readonly basePath: string;
   private defaultArgs?: Record<string, unknown>;
   private initializationPromise?: Promise<MCPClient>;
   private transformResponse: Promise<
@@ -33,6 +34,7 @@ export class MCPProvider implements ApiProvider {
 
   constructor(options: MCPProviderOptions = {}) {
     this.config = options.config || { enabled: true };
+    this.basePath = getTransformBasePath(this.config.basePath);
     this.defaultArgs = options.defaultArgs || {};
 
     // Set id function if provided
@@ -54,6 +56,7 @@ export class MCPProvider implements ApiProvider {
     this.mcpClient = client;
     this.transformResponse = loadTransformModule(
       this.config.transformResponse || this.config.responseParser,
+      this.basePath,
     ).then(createTransformResponse);
     await Promise.all([client.initialize(), this.transformResponse]);
 

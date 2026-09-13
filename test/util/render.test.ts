@@ -56,6 +56,29 @@ it.each(['frozen', 'getter'])('preserves an already-rendered %s provider', (kind
   expect(provider.config).toBe(config);
 });
 
+it('renders getter-backed config and labels without replacing the provider', async () => {
+  class Provider {
+    #config = { headers: { target: '{{ env.TARGET }}' } };
+    get config() {
+      return this.#config;
+    }
+    get label() {
+      return '{{ env.LABEL }}';
+    }
+    id() {
+      return 'getter';
+    }
+    async callApi() {
+      return { output: `${this.#config.headers.target}|${this.label}` };
+    }
+  }
+  const provider = new Provider();
+  const config = provider.config;
+  expect(renderEnvOnlyInObject(provider, { TARGET: 'fixture', LABEL: 'rendered' })).toBe(provider);
+  expect(provider.config).toBe(config);
+  expect(await provider.callApi()).toEqual({ output: 'fixture|rendered' });
+});
+
 describe('renderVarsInObject', () => {
   beforeEach(() => {
     mockProcessEnv({ PROMPTFOO_DISABLE_TEMPLATING: undefined });

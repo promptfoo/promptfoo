@@ -44,8 +44,18 @@ export function renderEnvOnlyInObject<T>(
     for (const key of ['config', 'label'] as const) {
       if (obj[key] !== undefined) {
         const rendered = renderEnvOnlyInObject(obj[key], envOverrides, replaceBase);
-        if (!isDeepStrictEqual(rendered, obj[key])) {
-          obj[key] = rendered;
+        if (!isDeepStrictEqual(rendered, obj[key]) && !Reflect.set(obj, key, rendered)) {
+          if (key === 'config') {
+            // Wrappers can expose a mutable backing config through a getter.
+            Object.assign(obj.config, rendered);
+          } else {
+            Object.defineProperty(obj, key, {
+              value: rendered,
+              writable: true,
+              configurable: true,
+              enumerable: true,
+            });
+          }
         }
       }
     }

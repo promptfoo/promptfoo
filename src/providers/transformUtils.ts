@@ -9,6 +9,10 @@ interface FileTransformReference {
   functionName?: string;
 }
 
+export function getTransformBasePath(basePath = cliState.basePath || ''): string {
+  return path.resolve(basePath);
+}
+
 export function parseFileTransformReference(reference: string): FileTransformReference {
   const rawFilename = reference.startsWith('file://')
     ? reference.slice('file://'.length)
@@ -39,6 +43,7 @@ export function parseFileTransformReference(reference: string): FileTransformRef
  */
 export async function loadTransformModule(
   transform: string | Function | undefined,
+  basePath = getTransformBasePath(),
 ): Promise<string | Function | undefined> {
   if (!transform) {
     return transform;
@@ -48,10 +53,7 @@ export async function loadTransformModule(
   }
   if (typeof transform === 'string' && transform.startsWith('file://')) {
     const { filename, functionName } = parseFileTransformReference(transform);
-    const requiredModule = await importModule(
-      path.resolve(cliState.basePath || '', filename),
-      functionName,
-    );
+    const requiredModule = await importModule(path.resolve(basePath, filename), functionName);
     if (typeof requiredModule === 'function') {
       return requiredModule;
     }

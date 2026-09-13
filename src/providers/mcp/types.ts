@@ -94,6 +94,7 @@ export type { MCPApiKeyAuth, MCPOAuthClientCredentialsAuth, MCPOAuthPasswordAuth
 
 export interface MCPConfig {
   enabled: boolean;
+  basePath?: string;
   server?: MCPServerConfig;
   servers?: MCPServerConfig[];
   transformResponse?: string | Function;
