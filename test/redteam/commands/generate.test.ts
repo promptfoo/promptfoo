@@ -1818,8 +1818,10 @@ describe('doGenerateRedteam', () => {
     expect(synthesizePurpose).toContain('"name":"Book flight"');
   });
 
-  it('should handle MCP tools extraction errors gracefully', async () => {
-    vi.mocked(extractMcpTools).mockRejectedValue(new Error('MCP tools extraction failed'));
+  it('stops generation when MCP tool schemas conflict', async () => {
+    vi.mocked(extractMcpTools).mockRejectedValue(
+      new Error('MCP tool search has conflicting input schemas'),
+    );
 
     vi.mocked(configModule.resolveConfigs).mockResolvedValue({
       basePath: '/mock/path',
@@ -1851,16 +1853,8 @@ describe('doGenerateRedteam', () => {
       write: true,
     };
 
-    await doGenerateRedteam(options);
-
-    expect(logger.warn).toHaveBeenCalledWith(
-      expect.stringContaining('Failed to extract MCP tools information'),
-    );
-    expect(synthesize).toHaveBeenCalledWith(
-      expect.objectContaining({
-        purpose: 'Original purpose',
-      }),
-    );
+    await expect(doGenerateRedteam(options)).rejects.toThrow('conflicting input schemas');
+    expect(synthesize).not.toHaveBeenCalled();
   });
 
   describe('header comments', () => {

@@ -952,6 +952,61 @@ describe('trajectory utilities', () => {
     },
   );
 
+  it.each([24, 25, 80])('retains a shell command among %s unrelated spans', (count) => {
+    const spans = Array.from({ length: count }, (_, index) => ({
+      spanId: `model-${index}`,
+      name: `model request ${index}`,
+      startTime: index,
+    }));
+    const summary = JSON.parse(
+      summarizeTrajectoryForJudge(
+        {
+          ...mockTraceData,
+          spans: [
+            ...spans,
+            {
+              spanId: 'command',
+              name: 'tool exec_command',
+              startTime: 12.5,
+              attributes: { 'tool.name': 'exec_command', 'tool.arguments': { cmd: 'cat .env' } },
+            },
+          ],
+        },
+        { includeCommands: true },
+      ),
+    );
+    expect(summary.steps).toContainEqual(
+      expect.objectContaining({ type: 'command', name: 'cat .env', execution: {} }),
+    );
+    expect(summary.steps.filter((step: { index?: number }) => step.index)).toHaveLength(24);
+  });
+
+  it.each([{}, { includeSql: true }, { includeCommands: true }])(
+    'bounds every emitted name with %j',
+    (options) => {
+      const name = 'tool description '.repeat(65_536);
+      const output = summarizeTrajectoryForJudge(
+        {
+          ...mockTraceData,
+          spans: [
+            {
+              spanId: 'long-tool',
+              name,
+              startTime: 1,
+              attributes: { 'tool.name': `${name} tool` },
+            },
+          ],
+        },
+        options,
+      );
+      const summary = JSON.parse(output);
+      expect(summary.steps).toHaveLength(1);
+      expect(summary.steps[0].name.length).toBeLessThanOrEqual(400);
+      expect(summary.steps[0].spanName.length).toBeLessThanOrEqual(400);
+      expect(output.length).toBeLessThan(1_500);
+    },
+  );
+
   it('retains SQL execution between routine steps in a long trajectory', () => {
     const spans = Array.from({ length: 40 }, (_, index) => ({
       spanId: `step-${index}`,

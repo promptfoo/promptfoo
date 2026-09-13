@@ -330,7 +330,7 @@ describe('fetchTraceContext', () => {
     ]);
   });
 
-  it('stores the complete external snapshot before applying an unfiltered span limit', async () => {
+  it('limits an ordinary read and fetches the complete snapshot for later grading', async () => {
     const spans = [
       { spanId: 'first', name: 'target.call', startTime: 1 },
       {
@@ -341,6 +341,11 @@ describe('fetchTraceContext', () => {
       },
     ];
     const fetchTrace = mockExternalTrace(spans);
+    fetchTrace.mockImplementation(async (_traceId, options) => ({
+      fetchedAt: 123,
+      traceId: 'trace-1',
+      spans: options?.maxSpans === undefined ? spans : spans.slice(0, options.maxSpans),
+    }));
     const result = await fetchTraceContext('trace-1', {
       providerConfig,
       queryDelay: 0,
@@ -348,9 +353,19 @@ describe('fetchTraceContext', () => {
       includeInternalSpans: true,
       maxSpans: 1,
     });
-    expect(fetchTrace).toHaveBeenCalledWith('trace-1', undefined);
-    expect(storedSpans).toEqual(spans);
+    expect(fetchTrace).toHaveBeenCalledWith('trace-1', { maxSpans: 1 });
+    expect(storedSpans).toEqual(spans.slice(0, 1));
     expect(result?.spans).toHaveLength(1);
+    const grading = await fetchTraceContext('trace-1', {
+      providerConfig,
+      queryDelay: 0,
+      maxRetries: 0,
+      requireComplete: true,
+      maxSpans: 1,
+    });
+    expect(fetchTrace).toHaveBeenLastCalledWith('trace-1', undefined);
+    expect(storedSpans).toEqual(spans);
+    expect(grading?.spans).toHaveLength(2);
   });
 
   it('applies wildcard filters to externally fetched spans', async () => {
@@ -421,6 +436,7 @@ describe('fetchTraceContext', () => {
     expect(fetchTrace).toHaveBeenCalledWith('trace-1', {
       abortSignal: controller.signal,
       earliestStartTime: 150,
+      maxSpans: 50,
     });
   });
 
@@ -459,6 +475,23 @@ describe('fetchTraceContext', () => {
 
     expect(fetchTrace).toHaveBeenCalledWith('trace-1', undefined);
     expect(result?.spans.map((span) => span.name)).toEqual(['execute_tool search']);
+  });
+
+  it.each([
+    { maxDepth: 1 },
+    { redactAttributes: ['credential'] },
+    { requireComplete: true },
+    { waitForStableSpans: true },
+  ])('withholds provider limits when the full snapshot is required: %j', async (options) => {
+    const fetchTrace = mockExternalTrace([{ spanId: 'target', name: 'target', startTime: 1 }]);
+    await fetchTraceContext('trace-1', {
+      providerConfig,
+      maxSpans: 50,
+      maxRetries: 0,
+      queryDelay: 0,
+      ...options,
+    });
+    expect(fetchTrace).toHaveBeenCalledWith('trace-1', undefined);
   });
 
   it('preserves time bounds and cancellation when the result limit must be applied locally', async () => {

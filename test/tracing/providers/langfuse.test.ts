@@ -538,7 +538,7 @@ describe('LangfuseProvider', () => {
     );
   });
 
-  it('applies the requested span count after reading the complete trace', async () => {
+  it('stops an explicitly limited read before fetching the next page', async () => {
     mockedFetch
       .mockResolvedValueOnce(response({ data: [observations[0]], meta: { cursor: 'next-page' } }))
       .mockResolvedValueOnce(response({ data: [observations[1]], meta: {} }));
@@ -546,8 +546,8 @@ describe('LangfuseProvider', () => {
     expect(
       (await new LangfuseProvider(config).fetchTrace(TRACE_ID, { maxSpans: 1 }))?.spans,
     ).toHaveLength(1);
-    expect(mockedFetch).toHaveBeenCalledTimes(2);
-    expect(new URL(String(mockedFetch.mock.calls[0][0])).searchParams.get('limit')).toBe('1000');
+    expect(mockedFetch).toHaveBeenCalledOnce();
+    expect(new URL(String(mockedFetch.mock.calls[0][0])).searchParams.get('limit')).toBe('1');
   });
 
   it.each(['cursor', 'page'])('detects an oversized trace across %s pages', async (pagination) => {
@@ -590,7 +590,7 @@ describe('LangfuseProvider', () => {
   it('never sends a non-positive page limit', async () => {
     await new LangfuseProvider(config).fetchTrace(TRACE_ID, { maxSpans: 0 });
 
-    expect(new URL(String(mockedFetch.mock.calls[0][0])).searchParams.get('limit')).toBe('1000');
+    expect(new URL(String(mockedFetch.mock.calls[0][0])).searchParams.get('limit')).toBe('1');
   });
 
   it('skips malformed, unrelated, and temporally invalid observations', async () => {

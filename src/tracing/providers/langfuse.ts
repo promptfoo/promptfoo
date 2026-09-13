@@ -449,7 +449,7 @@ export class LangfuseProvider implements TraceProvider {
       const url = new URL(`${this.baseUrl}/api/public/v2/observations`);
       url.searchParams.set('traceId', normalizedTraceId);
       url.searchParams.set('fields', 'core,basic,io,metadata,model,usage');
-      url.searchParams.set('limit', String(MAX_PAGE_SIZE));
+      url.searchParams.set('limit', String(Math.min(MAX_PAGE_SIZE, maxSpans)));
       if (options?.earliestStartTime !== undefined) {
         url.searchParams.set('fromStartTime', new Date(options.earliestStartTime).toISOString());
       }
@@ -499,6 +499,9 @@ export class LangfuseProvider implements TraceProvider {
         throw new TraceProviderError('Langfuse trace exceeds the maximum span count', {
           limitExceeded: true,
         });
+      }
+      if (maxSpans < MAX_SPANS && spans.length >= maxSpans) {
+        break;
       }
       page = getNextPage(result);
       cursor = page ? undefined : getNextCursor(result, seenCursors);

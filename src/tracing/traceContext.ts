@@ -352,15 +352,20 @@ function redactExternalSpans(
   }));
 }
 
-function getProviderFetchOptions(
-  spanOptions: Pick<FetchTraceContextOptions, 'earliestStartTime'>,
-  abortSignal?: AbortSignal,
-): FetchTraceOptions | undefined {
+function getProviderFetchOptions(options: FetchTraceContextOptions): FetchTraceOptions | undefined {
+  const needsFullTrace =
+    options.requireComplete ||
+    options.waitForStableSpans ||
+    options.includeInternalSpans === false ||
+    options.maxDepth !== undefined ||
+    options.spanFilter?.length ||
+    options.redactAttributes?.length;
   const providerOptions = {
-    ...(spanOptions.earliestStartTime !== undefined && {
-      earliestStartTime: spanOptions.earliestStartTime,
+    ...(options.earliestStartTime !== undefined && {
+      earliestStartTime: options.earliestStartTime,
     }),
-    ...(abortSignal && { abortSignal }),
+    ...(!needsFullTrace && options.maxSpans !== undefined && { maxSpans: options.maxSpans }),
+    ...(options.abortSignal && { abortSignal: options.abortSignal }),
   };
 
   return Object.keys(providerOptions).length > 0 ? providerOptions : undefined;
@@ -398,7 +403,7 @@ async function fetchFromExternalProvider(
     abortSignal,
     ...spanOptions
   } = options;
-  const providerFetchOptions = getProviderFetchOptions(spanOptions, abortSignal);
+  const providerFetchOptions = getProviderFetchOptions(options);
 
   let provider: ReturnType<typeof createTraceProvider>;
   try {

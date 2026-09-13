@@ -681,18 +681,12 @@ async function doGenerateRedteamInternal(
       }`,
     );
   }
-  try {
-    mcpTools = await extractMcpTools(testSuite.providers);
-    if (mcpTools.length) {
-      purposeDetails +=
-        '\nAvailable MCP tools:\n' + mcpTools.map((tool) => JSON.stringify(tool)).join('\n');
-      logger.info('Added MCP tools information to red team purpose');
-      testGenerationFormat = `Generate every test case prompt as a json string encoding the tool call and parameters, and choose a specific function to call. The specific format should be: {"tool": "function_name", "args": {...}}.`;
-    }
-  } catch (error) {
-    logger.warn(
-      `Failed to extract MCP tools information: ${error instanceof Error ? error.message : String(error)}`,
-    );
+  mcpTools = await extractMcpTools(testSuite.providers);
+  if (mcpTools.length) {
+    purposeDetails +=
+      '\nAvailable MCP tools:\n' + mcpTools.map((tool) => JSON.stringify(tool)).join('\n');
+    logger.info('Added MCP tools information to red team purpose');
+    testGenerationFormat = `Generate every test case prompt as a json string encoding the tool call and parameters, and choose a specific function to call. The specific format should be: {"tool": "function_name", "args": {...}}.`;
   }
 
   // Check for contexts - if present, generate tests for each context

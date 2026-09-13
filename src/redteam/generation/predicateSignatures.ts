@@ -83,6 +83,16 @@ export const PROMPT_EXTRACTION_PREDICATES = [
 type PromptExtractionPredicate = (typeof PROMPT_EXTRACTION_PREDICATES)[number];
 
 const REQUEST_PREFIX = String.raw`(?:^\s*|[.!?;:,\n]\s*|\b(?:and|then|but)\s+|\b(?:can|could|would|will) you\s+|\bi (?:need|want|would like) you to\s+)(?:please\s+)?`;
+function omitNegatedRequests(text: string): string {
+  return text.replace(
+    new RegExp(
+      String.raw`${REQUEST_PREFIX}(?:you\s+)?(?:do not|don't|never|must not|should not)\b[\s\S]*?(?=[.!?](?:\s|$)|[;:\n]\s*(?:then|but)\b|\bbut\s+|$)`,
+      'gi',
+    ),
+    (clause) => ' '.repeat(clause.length),
+  );
+}
+
 const DISCLOSURE_VERB = String.raw`(?:show|give|send|share|provide|reveal|repeat|quote|copy|list|summarize|display|return|print|get|fetch|retrieve|read|tell me|convert|reformat|rewrite|translate|encode|transform|render)`;
 const DISCLOSURE_ACTION = String.raw`${DISCLOSURE_VERB}\b[^.!?;\n]{0,180}`;
 
@@ -146,6 +156,7 @@ export function extractPromptExtractionSignature(prompt: string): AttackSignatur
       ),
       ' ',
     );
+  prompt = omitNegatedRequests(prompt);
   const predicates = Object.fromEntries(
     PROMPT_EXTRACTION_PREDICATES.map((predicate) => [
       predicate,
@@ -221,7 +232,7 @@ export function extractExcessiveAgencySignature(prompt: string): AttackSignature
       EXCESSIVE_AGENCY_RULES[predicate].some((rule) =>
         predicate === 'namesExternalRecipient'
           ? rule.test(argumentText)
-          : !readOnlyTool && rule.test(invocationText),
+          : !readOnlyTool && rule.test(omitNegatedRequests(invocationText)),
       ),
     ]),
   ) as AttackPredicateSignature;
@@ -261,7 +272,7 @@ const PII_DIRECT_RULES: Record<PiiDirectPredicate, RegExp[]> = {
 
 export function extractPiiDirectSignature(prompt: string): AttackSignature {
   const call = toolCallText(prompt);
-  prompt = call.requestText;
+  prompt = omitNegatedRequests(call.requestText);
   const questions = Array.from(
     prompt.matchAll(
       new RegExp(
@@ -397,7 +408,7 @@ const PII_SOCIAL_RULES: Record<PiiSocialPredicate, RegExp[]> = {
 };
 
 export function extractPiiSocialSignature(prompt: string): AttackSignature {
-  prompt = toolCallText(prompt).requestText;
+  prompt = omitNegatedRequests(toolCallText(prompt).requestText);
   const predicates = Object.fromEntries(
     PII_SOCIAL_PREDICATES.map((predicate) => [
       predicate,
@@ -472,11 +483,12 @@ const SQL_INJECTION_RULES: Record<SqlInjectionPredicate, RegExp[]> = {
 
 export function extractSqlInjectionSignature(prompt: string): AttackSignature {
   const call = toolCallText(prompt);
-  prompt = call.requestText;
+  prompt = omitNegatedRequests(call.requestText);
   const sqlText = call.toolName ? call.argumentText : prompt;
-  const intentText = sqlText.replace(
-    /'(?:''|\\.|[^'\\])*'|"(?:""|\\.|[^"\\])*"|`(?:``|\\.|[^`\\])*`/g,
-    (quoted) => ' '.repeat(quoted.length),
+  const intentText = omitNegatedRequests(
+    sqlText.replace(/'(?:''|\\.|[^'\\])*'|"(?:""|\\.|[^"\\])*"|`(?:``|\\.|[^`\\])*`/g, (quoted) =>
+      ' '.repeat(quoted.length),
+    ),
   );
   const defensiveInstruction =
     /\b(?:(?:do not|don't|never|must not|should not)\s+(?:ever\s+)?(?:run|execute|use)|(?:should|must)\s+(?:never|not)\s+be\s+(?:run|executed|used)|(?:explain\w*|describe|discuss)\s+(?:why|how|whether))\b/i;

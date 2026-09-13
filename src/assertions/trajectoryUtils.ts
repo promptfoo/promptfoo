@@ -529,17 +529,17 @@ function truncateJudgeTrajectorySteps(
     return steps;
   }
 
-  const sqlSteps = steps.filter((step) => step.sql);
-  if (sqlSteps.length > MAX_JUDGE_SUMMARY_STEPS) {
+  const evidenceSteps = steps.filter((step) => step.sql || step.execution);
+  if (evidenceSteps.length > MAX_JUDGE_SUMMARY_STEPS) {
     throw new TraceEvidenceError(
-      'SQL trace evidence exceeds the judge summary limit and cannot be graded.',
+      `${evidenceSteps.some((step) => step.execution) ? 'Shell' : 'SQL'} trace evidence exceeds the judge summary limit and cannot be graded.`,
     );
   }
   const retained = new Set([
-    ...sqlSteps,
+    ...evidenceSteps,
     ...takeFirstAndLast(
-      steps.filter((step) => !step.sql),
-      MAX_JUDGE_SUMMARY_STEPS - sqlSteps.length,
+      steps.filter((step) => !step.sql && !step.execution),
+      MAX_JUDGE_SUMMARY_STEPS - evidenceSteps.length,
     ),
   ]);
   const summary: Array<JudgeTrajectoryStep | OmittedJudgeTrajectorySteps> = [];
@@ -699,6 +699,10 @@ export function summarizeTrajectoryForJudge(
       }
     }
   }
+  const boundedName = (name: string) => {
+    const redacted = redactText(name);
+    return redacted.length > 400 ? `${redacted.slice(0, 399)}…` : redacted;
+  };
   const rawSteps = trajectorySteps.map((step, index) => {
     let status = getTrajectoryStepStatus(step);
     let execution: JudgeTrajectoryStep['execution'];
@@ -726,18 +730,13 @@ export function summarizeTrajectoryForJudge(
     return {
       index: index + 1,
       type: step.type,
-      name: redactText(step.name),
-      ...(step.spanName === step.name ? {} : { spanName: redactText(step.spanName) }),
+      name: boundedName(step.name),
+      ...(step.spanName === step.name ? {} : { spanName: boundedName(step.spanName) }),
       ...(status ? { status } : {}),
       ...(sql ? { sql } : {}),
       ...(execution ? { execution } : {}),
     };
   });
-  if (options.includeCommands && rawSteps.length > MAX_JUDGE_SUMMARY_STEPS) {
-    throw new TraceEvidenceError(
-      'Shell trace evidence exceeds the judge summary limit and cannot be graded.',
-    );
-  }
   const compactedSteps = compactJudgeTrajectorySteps(rawSteps);
   const steps = truncateJudgeTrajectorySteps(compactedSteps);
 
