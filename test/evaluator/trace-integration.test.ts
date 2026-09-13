@@ -20,6 +20,9 @@ import type {
 } from '../../src/types/index';
 
 // Mock dependencies
+vi.mock('../../src/telemetry', () => ({
+  default: { record: vi.fn() },
+}));
 vi.mock('../../src/tracing/store');
 const mockFlushOtel = vi.hoisted(() => vi.fn().mockResolvedValue(undefined));
 const mockFetchTraceContext = vi.hoisted(() => vi.fn());
@@ -877,22 +880,6 @@ describe('evaluator trace integration', () => {
         const network = vi
           .spyOn(globalThis, 'fetch')
           .mockRejectedValue(new Error('Unexpected fetch'));
-        const expectOnlyDisabledTelemetry = () => {
-          // The shared telemetry instance may issue its single opt-out notice.
-          // All requests, including that notice, are denied before transport.
-          expect(network.mock.calls.length).toBeLessThanOrEqual(1);
-          for (const [url, options] of network.mock.calls) {
-            expect(url).toBe('https://r.promptfoo.app/');
-            expect(options).toMatchObject({
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-            });
-            expect(JSON.parse(String(options?.body))).toMatchObject({
-              event: 'feature_used',
-              meta: { feature: 'telemetry disabled' },
-            });
-          }
-        };
         const debug = vi.spyOn(logger, 'debug').mockImplementation(() => logger);
         const entered = createDeferred<void>();
         const caller = new AbortController();
@@ -949,7 +936,7 @@ describe('evaluator trace integration', () => {
           expect(provider.callApi).toHaveBeenCalledTimes(1);
           await vi.advanceTimersByTimeAsync(2999);
           expect(mockEval.addResult).not.toHaveBeenCalled();
-          expectOnlyDisabledTelemetry();
+          expect(network).not.toHaveBeenCalled();
           pause.abort(reason);
           await pending;
           expect(traceSignal?.reason).toBe(reason);
@@ -969,7 +956,7 @@ describe('evaluator trace integration', () => {
             expect(row.error).toContain('Completed tool diagnostic');
           }
           await vi.advanceTimersByTimeAsync(1);
-          expectOnlyDisabledTelemetry();
+          expect(network).not.toHaveBeenCalled();
           expect(provider.callApi).toHaveBeenCalledTimes(1);
         } finally {
           caller.abort(new Error('trace delay fixture cleanup'));
