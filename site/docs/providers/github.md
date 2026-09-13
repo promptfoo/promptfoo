@@ -49,7 +49,7 @@ GitHub Models provides access to industry-leading AI models from various provide
 - OpenAI GPT-4.1 series (gpt-5, gpt-5-mini, gpt-5-nano)
 - OpenAI GPT-4o series (gpt-4o, gpt-5-mini)
 - OpenAI reasoning models (o1-preview, o1-mini, o3-mini)
-- Anthropic Claude series (claude-4-opus, claude-4-sonnet, claude-3.7-sonnet, claude-3.5-sonnet, claude-3.5-haiku)
+- Anthropic Claude series (claude-opus-5, claude-sonnet-5, claude-haiku-4.5)
 - Google Gemini series (gemini-2.5-pro, gemini-2.5-flash, gemini-2.0-flash)
 - Meta Llama series (llama-4-behemoth, llama-4-maverick, llama-4-scout, llama-3.3-70b-instruct)
 - xAI Grok series (grok-4, grok-3, grok-3-mini)
@@ -78,10 +78,10 @@ providers:
 
 ```yaml title="promptfooconfig.yaml"
 providers:
-  - id: github:anthropic/claude-4-opus # Uses GITHUB_TOKEN env var
+  - id: github:anthropic/claude-opus-5 # Uses GITHUB_TOKEN env var
     config:
-      temperature: 0.7
       max_tokens: 4096
+      # Claude 5 models reject temperature/top_p/top_k
       # apiKey: "{{ env.GITHUB_TOKEN }}"  # optional, auto-detected
 ```
 
@@ -119,9 +119,9 @@ providers:
 
 Choose models based on your specific needs:
 
-- **Best Overall**: GPT-4.1 or Claude 4 Opus - Superior coding, instruction following, and long-context understanding
+- **Best Overall**: GPT-4.1 or Claude Opus 5 - Superior coding, instruction following, and long-context understanding
 - **Fast & Cheap**: GPT-4.1-nano - Lowest latency and cost while maintaining strong capabilities
-- **Balanced**: GPT-4.1-mini or Claude 4 Sonnet - Good performance with lower cost than full models
+- **Balanced**: GPT-4.1-mini or Claude Sonnet 5 - Good performance with lower cost than full models
 - **Extended Context**: Llama 4 Scout (10M tokens) for processing entire codebases or multiple documents
 - **Code Generation**: Codestral series for specialized code tasks
 - **Reasoning**: DeepSeek-R1, o-series models, or Grok-4 for complex reasoning tasks
@@ -180,8 +180,8 @@ Examples:
 - `github:openai/gpt-5`
 - `github:openai/gpt-5-mini`
 - `github:openai/gpt-5-nano`
-- `github:anthropic/claude-4-opus`
-- `github:anthropic/claude-4-sonnet`
+- `github:anthropic/claude-opus-5`
+- `github:anthropic/claude-sonnet-5`
 - `github:google/gemini-2.5-pro`
 - `github:xai/grok-4`
 - `github:xai/grok-3`
@@ -199,7 +199,7 @@ import promptfoo from 'promptfoo';
 
 // Basic usage
 const evalRecord = await promptfoo.evaluate({
-  providers: ['github:openai/gpt-5', 'github:anthropic/claude-4-opus'],
+  providers: ['github:openai/gpt-5', 'github:anthropic/claude-opus-5'],
   prompts: ['Write a function to {{task}}'],
   tests: [
     {

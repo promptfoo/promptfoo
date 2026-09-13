@@ -113,12 +113,15 @@ All LiteLLM parameters are supported:
 
 ```yaml
 providers:
-  - id: litellm:claude-4-sonnet # Uses ANTHROPIC_API_KEY env var
+  - id: litellm:claude-sonnet-5 # Uses ANTHROPIC_API_KEY env var
     config:
       # apiKey: "{{ env.ANTHROPIC_API_KEY }}"  # optional, auto-detected
-      temperature: 0.7
       max_tokens: 4096
-      top_p: 0.9
+      # Claude 5 models reject temperature/top_p/top_k. A top-level `effort` is NOT
+      # forwarded by the LiteLLM wrapper — send it through `passthrough` instead:
+      #   passthrough:
+      #     output_config:
+      #       effort: high
       # Any other LiteLLM-supported parameters
 ```
 
@@ -180,7 +183,7 @@ description: LiteLLM evaluation example
 providers:
   # Chat models
   - id: litellm:gpt-5-mini
-  - id: litellm:claude-sonnet-4-5 # Uses ANTHROPIC_API_KEY env var
+  - id: litellm:claude-sonnet-5 # Uses ANTHROPIC_API_KEY env var
     # config:
     # apiKey: "{{ env.ANTHROPIC_API_KEY }}"  # optional, auto-detected
 
@@ -208,7 +211,7 @@ tests:
 LiteLLM supports models from all major providers:
 
 - **OpenAI**: GPT-4.1, GPT-4, GPT-3.5, embeddings, and more
-- **Anthropic**: Claude 4, Claude 3.7, Claude 3.5, Claude 3, and earlier models
+- **Anthropic**: Claude 5, Claude 4.x, and earlier models
 - **Google**: Gemini and PaLM models
 - **Meta**: Llama models
 - **Mistral**: All Mistral models

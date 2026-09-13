@@ -25,7 +25,7 @@ cloudflare-gateway:{provider}:{model}
 **Examples:**
 
 - `cloudflare-gateway:openai:gpt-5.2`
-- `cloudflare-gateway:anthropic:claude-sonnet-4-5-20250929`
+- `cloudflare-gateway:anthropic:claude-sonnet-5`
 - `cloudflare-gateway:groq:openai/gpt-oss-120b`
 
 ## Required Configuration
@@ -199,7 +199,7 @@ providers:
       accountId: '{{env.CLOUDFLARE_ACCOUNT_ID}}'
       gatewayId: '{{env.CLOUDFLARE_GATEWAY_ID}}'
 
-  - id: cloudflare-gateway:anthropic:claude-sonnet-4-5-20250929
+  - id: cloudflare-gateway:anthropic:claude-sonnet-5
     config:
       accountId: '{{env.CLOUDFLARE_ACCOUNT_ID}}'
       gatewayId: '{{env.CLOUDFLARE_GATEWAY_ID}}'

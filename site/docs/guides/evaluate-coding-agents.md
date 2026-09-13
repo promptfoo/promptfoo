@@ -24,11 +24,11 @@ Standard LLM evals test a function: given input X, does output Y meet criteria Z
 
 | Tier                      | Example providers                                                | Use when you need                                             | Watch for                                     |
 | ------------------------- | ---------------------------------------------------------------- | ------------------------------------------------------------- | --------------------------------------------- |
-| **0: Text**               | `openai:gpt-5.1`, `anthropic:claude-sonnet-4-6`                  | Code generation, explanation, JSON output, baseline behavior  | No file reads, shell commands, or tool traces |
+| **0: Text**               | `openai:gpt-5.1`, `anthropic:claude-sonnet-5`                    | Code generation, explanation, JSON output, baseline behavior  | No file reads, shell commands, or tool traces |
 | **1: Coding agent SDK**   | `openai:codex-sdk`, `anthropic:claude-agent-sdk`, `opencode:sdk` | Codebase reads, refactors, command runs, CI-friendly agent QA | Side effects, tool permissions, session state |
 | **2: Rich client server** | `openai:codex-app-server`, `openinterpreter`                     | App-server events, approvals, skills, plugins, thread details | Experimental protocol and local child process |
 
-The same underlying model behaves differently at each tier. A plain `claude-sonnet-4-6` call can't read your files; wrap it in Claude Agent SDK and it can. Use a plain LLM baseline when you want to prove that file access, shell access, or runtime state is actually contributing to the result.
+The same underlying model behaves differently at each tier. A plain `claude-sonnet-5` call can't read your files; wrap it in Claude Agent SDK and it can. Use a plain LLM baseline when you want to prove that file access, shell access, or runtime state is actually contributing to the result.
 
 Choose the provider by the runtime boundary you need to evaluate:
 
@@ -187,7 +187,7 @@ prompts:
 providers:
   - id: anthropic:claude-agent-sdk
     config:
-      model: claude-sonnet-4-6
+      model: claude-sonnet-5
       working_dir: ./user-service
       append_allowed_tools: ['Write', 'Edit', 'MultiEdit', 'Bash']
       permission_mode: acceptEdits
@@ -264,7 +264,7 @@ prompts:
 providers:
   - id: anthropic:claude-agent-sdk
     config:
-      model: claude-sonnet-4-6
+      model: claude-sonnet-5
       working_dir: ./flask-api
       append_allowed_tools: ['Write', 'Edit', 'MultiEdit']
       permission_mode: acceptEdits
