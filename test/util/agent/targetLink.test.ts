@@ -229,16 +229,18 @@ describe('attachTargetLink', () => {
     });
   });
 
-  it('follows same-origin HTTP redirects', async () => {
+  it('follows same-host HTTPS upgrade redirects', async () => {
     vi.mocked(fetchWithProxy)
-      .mockResolvedValueOnce(new Response('', { status: 307, headers: { location: '/next' } }))
+      .mockResolvedValueOnce(
+        new Response('', { status: 307, headers: { location: 'https://example.test/next' } }),
+      )
       .mockResolvedValueOnce(new Response('ok', { status: 200 }));
     const { attachTargetLink } = await import('../../../src/util/agent/targetLink');
     attachTargetLink(fakeClient as any, { id: () => 'test', callApi: vi.fn() as any });
 
     fakeClient._simulateEvent(TargetLinkEvents.PROBE_HTTP, {
-      requestId: 'same-origin',
-      url: 'https://example.test/start',
+      requestId: 'https-upgrade',
+      url: 'http://example.test/start',
       headers: { Authorization: 'Bearer sentinel' },
       body: 'payload',
     });
@@ -248,7 +250,7 @@ describe('attachTargetLink', () => {
         (event) => event.event === TargetLinkEvents.PROBE_HTTP_RESULT,
       );
       expect(result?.args[0]).toMatchObject({
-        requestId: 'same-origin',
+        requestId: 'https-upgrade',
         success: true,
         finalUrl: 'https://example.test/next',
       });
