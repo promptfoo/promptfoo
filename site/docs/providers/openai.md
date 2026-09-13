@@ -958,6 +958,10 @@ Realtime function definitions have top-level `name`, `description`, and `paramet
 
 Structured user messages use `input_text`, `input_audio`, or `input_image` blocks. Multi-turn evals use `test.metadata.conversationId` to identify the conversation. See the [Realtime example](https://github.com/promptfoo/promptfoo/tree/main/examples/openai-realtime) for message formats, session management, and a function handler.
 
+A prompt-level `functionCallHandler` applies only to that call. Later calls use the provider's configured handler.
+
+Persistent context requires `maintainContext: true` (the default) and a nonempty string or finite numeric `conversationId`. Calls without an ID use a separate connection. Consecutive calls with the same ID share context; changing IDs starts a new session, including when returning to a previous ID. Use separate provider instances to retain several conversations concurrently.
+
 This provider creates conversational sessions. Dedicated Realtime transcription and translation sessions require their own integrations.
 
 </details>
