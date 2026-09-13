@@ -214,6 +214,24 @@ describe('eval routes', () => {
       expect(updatedResult?.gradingResult?.comment).toBe('full stored comment');
       expect(updatedResult?.gradingResult?.componentResults?.[0]).toEqual(storedComponent);
       expect(updatedResult?.gradingResult?.componentResults?.[1]?.assertion?.type).toBe('human');
+
+      const leanPayload = createManualRatingPayload(updatedResult?.toEvaluateResult(), true);
+      for (const component of leanPayload.componentResults) {
+        if (component.assertion?.type === 'human') {
+          component.assertion.type = '[content omitted: 120000 characters]';
+        }
+      }
+      const leanRes = await api
+        .post(`/api/eval/${eval_.id}/results/${result.id}/rating`)
+        .send(leanPayload);
+
+      expect(leanRes.status).toBe(200);
+      const reratedResult = await EvalResult.findById(result.id);
+      expect(
+        reratedResult?.gradingResult?.componentResults?.find(
+          (component) => component.assertion?.type === 'human',
+        ),
+      ).toMatchObject({ pass: true, score: 1, assertion: { type: 'human' } });
     });
 
     it('persists the rated result before notifying through the eval save', async () => {

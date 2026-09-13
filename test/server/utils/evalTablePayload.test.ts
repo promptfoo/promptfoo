@@ -250,21 +250,26 @@ describe('trimEvalTableForApi', () => {
     const table = createEvaluateTable({
       body: Array.from({ length: 101 }, (_, index) => ({
         ...baseRow,
+        description: `row-${index}`,
         outputs: [
           {
             ...baseRow.outputs[0],
             id: `result-${index}`,
             evalId: 'eval-1',
+            provider: 'provider-label',
             text,
           },
         ],
       })),
     });
 
-    const lastCell = trimEvalTableForApi(table).body[100].outputs[0];
+    const trimmed = trimEvalTableForApi(table);
+    const lastCell = trimmed.body[100].outputs[0];
     expect(lastCell.text).toBe('[content omitted: 100000 characters]');
     expect(lastCell.id).toBe('result-100');
     expect(lastCell.evalId).toBe('eval-1');
+    expect(lastCell.provider).toBe('provider-label');
+    expect(trimmed.body[100].description).toBe('row-100');
   });
 
   it('reports media omission when oversized video data is stripped', () => {

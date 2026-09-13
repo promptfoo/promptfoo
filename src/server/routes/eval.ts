@@ -765,16 +765,37 @@ evalRouter.post(
       // when a lean table submitted placeholders.
       if (result.gradingResult) {
         const stored = result.gradingResult;
-        const reason =
-          typeof gradingResult.reason === 'string' &&
-          gradingResult.reason.startsWith('[content omitted:')
-            ? stored.reason
-            : gradingResult.reason;
-        const comment =
-          typeof gradingResult.comment === 'string' &&
-          gradingResult.comment.startsWith('[content omitted:')
-            ? stored.comment
-            : gradingResult.comment;
+        const isOmitted = (value: unknown) =>
+          typeof value === 'string' && value.startsWith('[content omitted:');
+        const reason = isOmitted(gradingResult.reason) ? stored.reason : gradingResult.reason;
+        const comment = isOmitted(gradingResult.comment) ? stored.comment : gradingResult.comment;
+        const storedHuman = stored.componentResults?.find(
+          (component) => component.assertion?.type === HUMAN_ASSERTION_TYPE,
+        );
+        const submittedHuman = gradingResult.componentResults?.find(
+          (component) => component.assertion?.type === HUMAN_ASSERTION_TYPE,
+        );
+        const human = (
+          submittedHuman
+            ? {
+                ...storedHuman,
+                ...submittedHuman,
+                assertion: { ...storedHuman?.assertion, ...submittedHuman.assertion },
+                reason: isOmitted(submittedHuman.reason)
+                  ? (storedHuman?.reason ?? '')
+                  : submittedHuman.reason,
+                comment: isOmitted(submittedHuman.comment)
+                  ? storedHuman?.comment
+                  : submittedHuman.comment,
+              }
+            : storedHuman && {
+                ...storedHuman,
+                pass: gradingResult.pass,
+                score: gradingResult.score,
+                reason: reason ?? storedHuman.reason,
+                comment,
+              }
+        ) as GradingResult | undefined;
         gradingResult = {
           ...stored,
           pass: gradingResult.pass,
@@ -785,9 +806,7 @@ evalRouter.post(
             ...(stored.componentResults ?? []).filter(
               (component) => component.assertion?.type !== HUMAN_ASSERTION_TYPE,
             ),
-            ...(gradingResult.componentResults ?? []).filter(
-              (component) => component.assertion?.type === HUMAN_ASSERTION_TYPE,
-            ),
+            ...(human ? [human] : []),
           ],
         };
       }

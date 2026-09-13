@@ -4542,6 +4542,38 @@ describe('ResultsTable handleRating - Toggle off (null isPass) behavior', () => 
     expect(finalTable.body[0].outputs[0]).toEqual(table.body[0].outputs[0]);
   });
 
+  it('reconciles an older save that succeeds after a newer save rolls back', async () => {
+    const table = createMockTableWithHumanAssertion();
+    vi.mocked(useTableStore).mockImplementation(() => ({
+      config: {},
+      evalId: '123',
+      inComparisonMode: false,
+      setTable: mockSetTable,
+      table,
+      version: 4,
+      fetchEvalData: vi.fn(),
+      filteredResultsCount: 1,
+      filters: { values: {}, appliedCount: 0, options: { metric: [] } },
+    }));
+    let resolveFirst: ((value: { ok: boolean }) => void) | undefined;
+    mockCallApi
+      .mockReturnValueOnce(new Promise((resolve) => (resolveFirst = resolve)))
+      .mockRejectedValueOnce(new Error('second failed'));
+
+    renderWithProviders(<ResultsTable {...defaultProps} />);
+    const { default: Cell } = await import('./EvalOutputCell');
+    const calls = vi.mocked(Cell).mock.calls;
+    const props = calls[calls.length - 1][0];
+    const firstSave = props.onRating(true, 1, 'first');
+    await expect(props.onRating(false, 0, 'second')).rejects.toThrow('second failed');
+    resolveFirst?.({ ok: true });
+    await firstSave;
+
+    const tableCalls = mockSetTable.mock.calls;
+    const finalTable = tableCalls[tableCalls.length - 1][0];
+    expect(finalTable.body[0].outputs[0].gradingResult.comment).toBe('first');
+  });
+
   it('should remove human assertion and recalculate pass/score when isPass is null', () => {
     const mockTable = createMockTableWithHumanAssertion();
 

@@ -356,32 +356,20 @@ export function trimEvalTableForApi<T extends TableLike>(
   table: T,
   { maxStringLength = DEFAULT_OVERSIZED_STRING_LIMIT }: TrimOptions = {},
 ): T {
-  const trimmed = trimForTable(
-    {
-      ...table,
-      head: trimForTable(table.head, maxStringLength),
-      body: table.body.map((row) => trimTableRowForApi(row, maxStringLength)),
-    } as T,
+  const trimmed = {
+    ...table,
+    head: trimForTable(table.head, maxStringLength),
+    body: table.body.map((row) => trimTableRowForApi(row, maxStringLength)),
+  } as T;
+  const texts = trimForTable(
+    trimmed.body.map((row) => row.outputs.map((cell) => cell?.text)),
     maxStringLength,
   );
-  for (const [rowIndex, row] of table.body.entries()) {
+  for (const [rowIndex, row] of trimmed.body.entries()) {
     for (const [cellIndex, cell] of row.outputs.entries()) {
-      const target = trimmed.body[rowIndex]?.outputs[cellIndex];
-      if (cell && target) {
-        target.id = cell.id;
-        target.evalId = cell.evalId;
+      if (cell) {
+        cell.text = texts[rowIndex][cellIndex];
       }
-    }
-  }
-  const sourcePrompts = (table.head as { prompts?: Array<{ id?: string; evalId?: string }> })
-    .prompts;
-  const targetPrompts = (trimmed.head as { prompts?: Array<{ id?: string; evalId?: string }> })
-    .prompts;
-  for (const [promptIndex, prompt] of sourcePrompts?.entries() ?? []) {
-    const target = targetPrompts?.[promptIndex];
-    if (target) {
-      target.id = prompt.id;
-      target.evalId = prompt.evalId;
     }
   }
   return trimmed;

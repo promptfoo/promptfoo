@@ -1997,7 +1997,23 @@ function ResultsTable({
             gradingResult,
             table: newTable,
           });
-          persistedRatingRef.current.set(resultId, newTable.body[rowIndex].outputs[promptIndex]!);
+          const previousPersisted = persistedRatingRef.current.get(resultId);
+          const savedOutput = newTable.body[rowIndex].outputs[promptIndex]!;
+          persistedRatingRef.current.set(resultId, savedOutput);
+          const latestTable = ratingTableRef.current;
+          if (
+            ratingRevisionRef.current.get(resultId) !== revision &&
+            latestTable.body[rowIndex]?.outputs[promptIndex] === previousPersisted
+          ) {
+            const updatedBody = [...latestTable.body];
+            const updatedRow = { ...updatedBody[rowIndex] };
+            const updatedOutputs = [...updatedRow.outputs];
+            updatedOutputs[promptIndex] = savedOutput;
+            updatedRow.outputs = updatedOutputs;
+            updatedBody[rowIndex] = updatedRow;
+            ratingTableRef.current = { ...latestTable, body: updatedBody };
+            setTable(ratingTableRef.current);
+          }
           if (evalId) {
             clearEvalApiResponseCache(evalId);
           }
