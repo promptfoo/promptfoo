@@ -1,3 +1,4 @@
+import { marked } from 'marked';
 import { BLOB_SCHEME } from '../blobs/constants';
 
 import type { AssertionOrSet, AtomicTestCase, GradingResult, ProviderResponse } from '../types';
@@ -18,18 +19,22 @@ export function requiresTraceRedaction(assertions: AssertionOrSet[] | undefined)
 }
 
 function hasMarkdownImage(text: string): boolean {
-  if (/!\[[^\]\n]*\]\s*(?:\([^\)\n]*\)|\[[^\]\n]*\])/.test(text)) {
+  if (!text.includes('![')) {
+    return false;
+  }
+  if (text.length > 16 * 1024 * 1024) {
     return true;
   }
-  const normalizeLabel = (label: string) => label.trim().replace(/\s+/g, ' ').toLowerCase();
-  const references = new Set(
-    Array.from(text.matchAll(/^ {0,3}\[([^\]\n]+)\]:\s*\S/gm), ([, label]) =>
-      normalizeLabel(label),
-    ),
-  );
-  return Array.from(text.matchAll(/!\[([^\]\n]+)\]/g)).some(([, label]) =>
-    references.has(normalizeLabel(label)),
-  );
+  try {
+    let hasImage = false;
+    marked.walkTokens(marked.lexer(text), (token) => {
+      hasImage ||= token.type === 'image';
+    });
+    return hasImage;
+  } catch {
+    // If Markdown cannot be inspected, the privacy check cannot accept its media.
+    return true;
+  }
 }
 
 export function hasRedactionMedia(response: ProviderResponse | null | undefined): boolean {

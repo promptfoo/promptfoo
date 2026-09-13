@@ -177,6 +177,66 @@ describe('CustomProvider', () => {
     vi.resetAllMocks();
   });
 
+  it('keeps concurrent private sessions with their own attack', async () => {
+    const provider = new CustomProvider({
+      injectVar: 'objective',
+      strategyText: 'Inspect reports',
+      maxTurns: 2,
+      maxBacktracks: 0,
+      stateful: true,
+      redteamProvider: mockRedTeamProvider,
+    });
+    vi.spyOn(provider as any, 'getAttackPrompt').mockResolvedValue({
+      generatedQuestion: 'Inspect report',
+    });
+    vi.spyOn(provider as any, 'getRefusalScore').mockResolvedValue([false, '']);
+    vi.spyOn(provider as any, 'getEvalScore').mockResolvedValue({
+      value: false,
+      metadata: 0,
+      rationale: '',
+    });
+    vi.mocked(tryUnblocking).mockResolvedValue({ success: false });
+    mockGetGraderById.mockReturnValue({
+      getResult: vi.fn().mockResolvedValue({ grade: { pass: true, score: 1 }, rubric: 'Clean' }),
+    });
+    let release!: () => void;
+    const ready = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const sessions: Record<string, unknown[]> = { first: [], second: [] };
+    mockTargetProvider.callApi.mockImplementation(async (_prompt, context) => {
+      const run = String(context?.vars.run);
+      sessions[run].push(context?.vars.sessionId);
+      if (sessions.first.length && sessions.second.length) {
+        release();
+      }
+      await ready;
+      return { output: 'Clean report', sessionId: `PRIVATE_SESSION_${run}` };
+    });
+    const results = await Promise.all(
+      ['first', 'second'].map((run) => {
+        const context = {
+          originalProvider: mockTargetProvider,
+          vars: { objective: 'Inspect report', run },
+          prompt: { raw: 'Inspect report', label: 'fixture' },
+          test: {
+            vars: {},
+            assert: [
+              {
+                type: 'promptfoo:redteam:coding-agent:trace-redaction',
+                value: { rawReceipt: 'SYNTHETIC_PROTECTED_RECEIPT_8964' },
+              },
+            ],
+          },
+        };
+        return provider.callApi('Inspect report', context);
+      }),
+    );
+    expect(sessions.first).toEqual([undefined, 'PRIVATE_SESSION_first']);
+    expect(sessions.second).toEqual([undefined, 'PRIVATE_SESSION_second']);
+    expect(JSON.stringify(results)).not.toContain('PRIVATE_SESSION_');
+  });
+
   it.each(['coding-agent:trace-redaction', 'harness:artifact-redaction'] as const)(
     'keeps %s sessions private through normal and unblocking turns',
     async (pluginId) => {

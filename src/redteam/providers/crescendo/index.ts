@@ -189,7 +189,6 @@ export class CrescendoProvider implements ApiProvider {
   private maxTurns: number;
   private maxBacktracks: number;
   private stateful: boolean;
-  private sessionId?: string;
   private excludeTargetOutputFromAgenticAttackGeneration: boolean;
   private readonly perTurnLayers: LayerConfig[];
   private successfulAttacks: Array<{
@@ -319,7 +318,7 @@ export class CrescendoProvider implements ApiProvider {
       `[Crescendo] Starting attack with: prompt=${JSON.stringify(prompt)}, filtersPresent=${!!filters}, varsKeys=${Object.keys(vars)}, providerType=${provider.constructor.name}`,
     );
 
-    this.sessionId = undefined;
+    const session: { id?: string } = {};
 
     // Reset successful attacks array for each new attack
     this.successfulAttacks = [];
@@ -477,6 +476,7 @@ export class CrescendoProvider implements ApiProvider {
           shouldFetchTrace,
           traceSnapshots,
           { inputMaterialization, materializationHandled, materializedVars },
+          session,
         );
         lastResponse = response;
         if (lastResponse.metadata?.redactionMediaOmitted === true) {
@@ -550,6 +550,8 @@ export class CrescendoProvider implements ApiProvider {
               tracingOptions,
               shouldFetchTrace,
               traceSnapshots,
+              undefined,
+              session,
             );
 
           if (unblockingTransform?.tokenUsage) {
@@ -1013,6 +1015,7 @@ export class CrescendoProvider implements ApiProvider {
       CrescendoAttackPromptResponse,
       'inputMaterialization' | 'materializationHandled' | 'materializedVars'
     >,
+    session: { id?: string } = {},
   ): Promise<{
     response: TargetResponse;
     transformResult?: TransformResult;
@@ -1218,7 +1221,7 @@ export class CrescendoProvider implements ApiProvider {
           vars: {
             ...vars,
             ...(currentRenderInputVars || {}),
-            ...(this.sessionId && { sessionId: this.sessionId }),
+            ...(session.id && { sessionId: session.id }),
             [this.config.injectVar]: finalTargetPrompt,
           },
         }
@@ -1230,7 +1233,7 @@ export class CrescendoProvider implements ApiProvider {
       options,
     );
     if (this.stateful && targetResponse.sessionId) {
-      this.sessionId = targetResponse.sessionId;
+      session.id = targetResponse.sessionId;
     }
     targetResponse = await externalizeResponseForRedteamHistory(targetResponse, context);
     logger.debug(`[Crescendo] Target response: ${JSON.stringify(targetResponse)}`);

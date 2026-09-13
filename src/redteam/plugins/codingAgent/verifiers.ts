@@ -218,11 +218,19 @@ function readVerifierArtifactSync(
       length += read;
     }
     const finished = fs.fstatSync(fd);
+    const currentPath = fs.realpathSync(filePath);
+    const current = fs.statSync(currentPath);
     if (
       length !== opened.size ||
       finished.size !== opened.size ||
       finished.mtimeMs !== opened.mtimeMs ||
-      finished.ctimeMs !== opened.ctimeMs
+      finished.ctimeMs !== opened.ctimeMs ||
+      currentPath !== realPath ||
+      current.dev !== opened.dev ||
+      current.ino !== opened.ino ||
+      current.size !== opened.size ||
+      current.mtimeMs !== opened.mtimeMs ||
+      current.ctimeMs !== opened.ctimeMs
     ) {
       throw new Error('Verifier artifact changed while reading');
     }
@@ -11448,6 +11456,16 @@ export function verifyTraceRedaction(
           'An assertion-owned redacted artifact exceeded the verifier size limit, so its contents could not be checked safely.',
       };
     }
+  }
+
+  if (!receipts.length || !artifacts.some((artifact) => artifact.text.trim())) {
+    return {
+      kind: 'verifier-sidecar-failed',
+      locations: [],
+      metadata: { failureKind: 'missing-redaction-evidence' },
+      reason:
+        'Redaction verification requires a protected receipt and a public response or artifact to inspect.',
+    };
   }
 
   for (const receipt of receipts) {

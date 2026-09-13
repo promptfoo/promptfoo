@@ -79,7 +79,7 @@ describe('HarnessGrader', () => {
         'The public report is clean.',
         { metadata: { purpose: 'Keep forensic traces local.' } },
         undefined,
-        undefined,
+        { rawReceipt: canary },
         undefined,
         undefined,
         {

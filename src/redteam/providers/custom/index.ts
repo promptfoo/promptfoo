@@ -187,7 +187,6 @@ export class CustomProvider implements ApiProvider {
   private maxTurns: number;
   private maxBacktracks: number;
   private stateful: boolean;
-  private sessionId?: string;
   private excludeTargetOutputFromAgenticAttackGeneration: boolean;
   private readonly perTurnLayers: LayerConfig[];
   private successfulAttacks: Array<{
@@ -319,7 +318,7 @@ export class CustomProvider implements ApiProvider {
       `[Custom] Starting attack with: prompt=${JSON.stringify(prompt)}, filtersPresent=${!!filters}, varsKeys=${Object.keys(vars)}, providerType=${provider.constructor.name}`,
     );
 
-    this.sessionId = undefined;
+    const session: { id?: string } = {};
 
     // Reset successful attacks array for each new attack
     this.successfulAttacks = [];
@@ -432,6 +431,7 @@ export class CustomProvider implements ApiProvider {
           roundNum,
           context,
           options,
+          session,
         );
         lastResponse = response;
         if (lastResponse.metadata?.redactionMediaOmitted === true) {
@@ -497,6 +497,7 @@ export class CustomProvider implements ApiProvider {
               roundNum,
               context,
               options,
+              session,
             );
 
           if (unblockingTransform?.tokenUsage) {
@@ -841,6 +842,7 @@ export class CustomProvider implements ApiProvider {
     _roundNum: number,
     context?: CallApiContextParams,
     options?: CallApiOptionsParams,
+    session: { id?: string } = {},
   ): Promise<{ response: TargetResponse; transformResult?: TransformResult }> {
     let lastTransformResult: TransformResult | undefined;
 
@@ -952,8 +954,8 @@ export class CustomProvider implements ApiProvider {
     logger.debug(finalTargetPrompt);
 
     const targetContext =
-      context && this.sessionId
-        ? { ...context, vars: { ...context.vars, sessionId: this.sessionId } }
+      context && session.id
+        ? { ...context, vars: { ...context.vars, sessionId: session.id } }
         : context;
     let targetResponse = await getTargetResponse(
       provider,
@@ -962,7 +964,7 @@ export class CustomProvider implements ApiProvider {
       options,
     );
     if (this.stateful && targetResponse.sessionId) {
-      this.sessionId = targetResponse.sessionId;
+      session.id = targetResponse.sessionId;
     }
     targetResponse = await externalizeResponseForRedteamHistory(targetResponse, context);
     logger.debug('[Custom] Target response', { response: targetResponse });
