@@ -41,7 +41,7 @@ describe('Eval Routes - Trace linkage persistence', () => {
     await db.run('DELETE FROM evals');
   });
 
-  it('keeps trace linkage when v4 eval saves include traced rows', async () => {
+  it('keeps trace linkage and redacts credentials when v4 evals are imported', async () => {
     const tracedResult = createEvaluateResult({
       traceId: 'route-create-trace-id',
       evaluationId: 'route-create-evaluation-id',
@@ -51,12 +51,15 @@ describe('Eval Routes - Trace linkage persistence', () => {
     const response = await api.post('/api/eval').send({
       config: { description: 'Trace linkage route coverage' },
       prompts: [],
-      results: [tracedResult],
+      results: [
+        { ...tracedResult, provider: { id: 'fixture', config: { cfAigToken: 'create-fixture' } } },
+      ],
     });
 
     expect(response.status).toBe(200);
 
     const [persistedResult] = await EvalResult.findManyByEvalId(response.body.id);
+    expect(persistedResult.provider.config).toEqual({ cfAigToken: '[REDACTED]' });
     expect(persistedResult.toEvaluateResult()).toMatchObject({
       traceId: 'route-create-trace-id',
       evaluationId: 'route-create-evaluation-id',
@@ -64,7 +67,7 @@ describe('Eval Routes - Trace linkage persistence', () => {
     });
   });
 
-  it('keeps trace linkage when appended results arrive through POST /api/eval/:id/results', async () => {
+  it('keeps trace linkage and redacts credentials in appended results', async () => {
     const eval_ = await EvalFactory.create({ numResults: 0 });
     const tracedResult = createEvaluateResult({
       traceId: 'route-append-trace-id',
@@ -77,12 +80,14 @@ describe('Eval Routes - Trace linkage persistence', () => {
         id: 'route-append-trace-result',
         evalId: eval_.id,
         ...tracedResult,
+        provider: { id: 'fixture', config: { apiBearerToken: 'append-fixture' } },
       },
     ]);
 
     expect(response.status).toBe(204);
 
     const [persistedResult] = await EvalResult.findManyByEvalId(eval_.id);
+    expect(persistedResult.provider.config).toEqual({ apiBearerToken: '[REDACTED]' });
     expect(persistedResult.toEvaluateResult()).toMatchObject({
       traceId: 'route-append-trace-id',
       evaluationId: 'route-append-evaluation-id',
