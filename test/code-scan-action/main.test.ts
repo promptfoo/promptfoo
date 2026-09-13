@@ -300,6 +300,7 @@ function setupMocks() {
           success: true,
           comments: [],
           commentsPosted: false,
+          skippedFiles: 0,
         });
         options.listeners.stdout(Buffer.from(response));
       }
@@ -544,6 +545,14 @@ describe('code-scan-action main', () => {
       const { args } = await importActionAndGetPromptfooCall();
 
       expectCliArg(args, '--base', 'feat/openai-sora-video-provider');
+      const fetchCall = mocks.exec.exec.mock.calls.find(
+        ([command, callArgs]) => command === 'git' && callArgs?.[0] === 'fetch',
+      );
+      expect(fetchCall?.[2]?.env).toMatchObject({
+        GIT_CONFIG_COUNT: '1',
+        GIT_CONFIG_KEY_0: 'http.https://github.com/.extraheader',
+        GIT_CONFIG_VALUE_0: `AUTHORIZATION: basic ${Buffer.from('x-access-token:fake-token').toString('base64')}`,
+      });
     });
 
     it('passes untrusted-looking refs and paths as single argv values', async () => {
@@ -1226,7 +1235,9 @@ describe('code-scan-action main', () => {
             return 0;
           }
           if (isPromptfooExecCommand(command, args) && options?.listeners?.stdout) {
-            options.listeners.stdout(Buffer.from(JSON.stringify(response)));
+            options.listeners.stdout(
+              Buffer.from(JSON.stringify({ skippedFiles: 0, ...(response as object) })),
+            );
           }
           return 0;
         },
@@ -1333,6 +1344,19 @@ describe('code-scan-action main', () => {
 
       expect(mocks.fs.writeFileSync).not.toHaveBeenCalled();
       expect(mocks.core.setOutput).not.toHaveBeenCalledWith('sarif-path', expect.anything());
+    });
+
+    it('does not write SARIF when an older scanner omits skippedFiles', async () => {
+      mockPromptfooScanResponse({ success: true, comments: [], skippedFiles: undefined });
+
+      await triggerSarifAction('reports/promptfoo-code-scan.sarif');
+
+      await vi.waitFor(() => {
+        expect(mocks.core.setFailed).toHaveBeenCalledWith(
+          expect.stringContaining('SARIF was requested but withheld'),
+        );
+      });
+      expect(mocks.fs.writeFileSync).not.toHaveBeenCalled();
     });
 
     it('does not write SARIF when the scanner skipped changed files', async () => {

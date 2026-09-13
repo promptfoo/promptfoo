@@ -65,6 +65,7 @@ Only select config content from a trusted workflow or base revision. A config re
   with:
     ref: ${{ github.event.pull_request.head.sha || github.ref }}
     fetch-depth: 0
+    persist-credentials: false
 
 - name: Load trusted Code Scan config
   env:

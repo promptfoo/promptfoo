@@ -326,11 +326,19 @@ async function getBaseBranch(githubToken: string, context: PullRequestContext): 
   return pr.base.ref;
 }
 
-async function fetchBaseBranch(baseBranch: string): Promise<void> {
+async function fetchBaseBranch(baseBranch: string, githubToken: string): Promise<void> {
   core.info(`📥 Fetching base branch: ${baseBranch}...`);
 
   try {
-    await exec.exec('git', ['fetch', 'origin', `${baseBranch}:${baseBranch}`]);
+    const basicAuth = Buffer.from(`x-access-token:${githubToken}`).toString('base64');
+    await exec.exec('git', ['fetch', 'origin', `${baseBranch}:${baseBranch}`], {
+      env: {
+        ...process.env,
+        GIT_CONFIG_COUNT: '1',
+        GIT_CONFIG_KEY_0: 'http.https://github.com/.extraheader',
+        GIT_CONFIG_VALUE_0: `AUTHORIZATION: basic ${basicAuth}`,
+      },
+    });
     core.info(`✅ Base branch ${baseBranch} fetched successfully`);
   } catch (error) {
     core.warning(`Failed to fetch base branch ${baseBranch}: ${formatError(error)}`);
@@ -1010,7 +1018,7 @@ async function handleScanResponse(
   inputs: ActionInputs,
   context: PullRequestContext,
 ): Promise<void> {
-  const { comments, commentsPosted, review, skipReason, skippedFiles = 0 } = scanResponse;
+  const { comments, commentsPosted, review, skipReason, skippedFiles } = scanResponse;
   const hasPrFindings = hasPrPostableFindings(comments);
 
   // A skipped scan is not a clean scan. SARIF is withheld entirely for any response
@@ -1039,7 +1047,7 @@ async function handleScanResponse(
   // incomplete scan. Surviving findings are still surfaced through PR comments below.
   if (!skipReason && skippedFiles === 0) {
     emitConfiguredSarifOutput(scanResponse, inputs);
-  } else if (skippedFiles > 0) {
+  } else if ((skippedFiles ?? 0) > 0) {
     core.warning(
       `SARIF not written because ${skippedFiles} changed file${skippedFiles === 1 ? ' was' : 's were'} skipped.`,
     );
@@ -1062,7 +1070,7 @@ async function handleScanResponse(
     core.info('✨ No vulnerabilities found!');
   }
 
-  if (inputs.sarifOutputPath && skippedFiles > 0) {
+  if (inputs.sarifOutputPath && skippedFiles !== 0) {
     throw new Error('SARIF was requested but withheld because changed files were skipped.');
   }
 }
@@ -1128,7 +1136,7 @@ async function runCodeScan(): Promise<void> {
 
   try {
     const baseBranch = await getBaseBranch(inputs.githubToken, context);
-    await fetchBaseBranch(baseBranch);
+    await fetchBaseBranch(baseBranch, inputs.githubToken);
 
     const cliArgs = buildCliArgs(inputs.apiHost, finalConfigPath, baseBranch, context);
     const scanResponse = await getScanResponse(cliArgs, oidcToken, inputs.promptfooVersion);
