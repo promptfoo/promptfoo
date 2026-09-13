@@ -3,6 +3,8 @@ import os from 'os';
 import path from 'path';
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import cliState from '../../../src/cliState';
+import { withEnvOverrides } from '../../../src/envOverrides';
 import { providerRegistry } from '../../../src/providers/providerRegistry';
 import { createDeferred, mockProcessEnv } from '../../util/utils';
 
@@ -47,11 +49,14 @@ vi.mock('../../../src/esm', async (importOriginal) => ({
 
 describe('Codex default providers', () => {
   let codexHome: string;
+  let originalConfig: typeof cliState.config;
   let originalCodexApiKey: string | undefined;
   let originalCodexHome: string | undefined;
   let originalOpenAiApiKey: string | undefined;
 
   beforeEach(async () => {
+    originalConfig = cliState.config;
+    cliState.config = {};
     vi.clearAllMocks();
     mockGetDirectory.mockReset();
     mockResolvePackageEntryPoint.mockReset();
@@ -79,6 +84,7 @@ describe('Codex default providers', () => {
     );
     clearCodexDefaultProvidersForTesting();
     await providerRegistry.shutdownAll();
+    cliState.config = originalConfig;
     vi.useRealTimers();
     vi.resetAllMocks();
 
@@ -140,6 +146,44 @@ describe('Codex default providers', () => {
     );
 
     expect(hasCodexDefaultCredentials()).toBe(false);
+  });
+
+  it('keeps login-backed attackers from forwarding a later configuration key into SDK options', async () => {
+    const { OpenAICodexSDKProvider } = await import('../../../src/providers/openai/codex-sdk');
+    const { getCodexDefaultProviders, hasCodexDefaultCredentials } = await import(
+      '../../../src/providers/openai/codexDefaults'
+    );
+    fs.writeFileSync(path.join(codexHome, 'auth.json'), '{"ok":true}');
+    const callApi = vi
+      .spyOn(OpenAICodexSDKProvider.prototype, 'callApi')
+      .mockImplementation(async function (this: InstanceType<typeof OpenAICodexSDKProvider>) {
+        await Promise.resolve();
+        // Exercise actual key resolution and SDK option construction without launching Codex.
+        return {
+          output: JSON.stringify(this['buildCodexOptions']({}, this.config, this.getApiKey())),
+        };
+      });
+    const providers = withEnvOverrides({}, () => {
+      expect(hasCodexDefaultCredentials({})).toBe(true);
+      return getCodexDefaultProviders({});
+    });
+    const originalCall = providers.gradingProvider.callApi;
+    cliState.config = { env: { OPENAI_API_KEY: 'fixture-unrelated-request' } };
+
+    expect(providers.redteamProvider).toBe(providers.gradingProvider);
+    expect(providers.redteamJsonProvider).toBe(providers.gradingProvider);
+    for (const provider of [providers.redteamProvider!, providers.redteamJsonProvider!]) {
+      const response = await provider.callApi('inert fixture');
+      expect(JSON.parse(response.output)).not.toHaveProperty('apiKey');
+    }
+    expect(withEnvOverrides({}, () => getCodexDefaultProviders({}))).toBe(providers);
+    expect(providers.gradingProvider.callApi).toBe(originalCall);
+    expect(callApi).toHaveBeenCalledTimes(2);
+
+    const explicit = new OpenAICodexSDKProvider({ config: { apiKey: 'fixture-explicit' } });
+    expect(JSON.parse((await explicit.callApi('explicit fixture')).output)).toMatchObject({
+      apiKey: 'fixture-explicit',
+    });
   });
 
   it('creates reusable Codex text and web-search providers with a read-only sandbox', async () => {

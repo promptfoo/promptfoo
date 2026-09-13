@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { fetchWithCache } from '../../src/cache';
+import { withEnvOverrides } from '../../src/envOverrides';
 import { createCerebrasProvider } from '../../src/providers/cerebras';
 import { CometApiImageProvider } from '../../src/providers/cometapi';
 import { HeliconeGatewayProvider } from '../../src/providers/helicone';
@@ -237,5 +238,33 @@ describe('Gateway scoped credentials', () => {
     } finally {
       restore();
     }
+  });
+
+  it.each([
+    ['request-key', 'request-key'],
+    ['', 'placeholder-api-key'],
+  ])(
+    'preserves Helicone request scope %s with blank explicit and provider keys',
+    async (key, expected) => {
+      reply(chatReply);
+      const provider = new HeliconeGatewayProvider('private/model', {
+        env: { HELICONE_API_KEY: '', OPENAI_API_KEY: 'unrelated-scoped-openai' },
+        config: { apiKey: '' },
+      });
+
+      await withEnvOverrides({ HELICONE_API_KEY: key }, () => provider.callApi('Hello'));
+      expect(firstRequest().headers).toMatchObject({ Authorization: `Bearer ${expected}` });
+    },
+  );
+
+  it('keeps ignoring custom credential names for Helicone', async () => {
+    reply(chatReply);
+    const provider = new HeliconeGatewayProvider('private/model', {
+      env: { HELICONE_API_KEY: 'scoped-helicone', OPENAI_API_KEY: 'custom-name-key' },
+      config: { apiKeyEnvar: 'OPENAI_API_KEY' },
+    });
+
+    await provider.callApi('Hello');
+    expect(firstRequest().headers).toMatchObject({ Authorization: 'Bearer scoped-helicone' });
   });
 });

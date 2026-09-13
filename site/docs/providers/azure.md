@@ -481,23 +481,23 @@ config:
 
 The Azure OpenAI provider supports the following environment variables:
 
-| Environment Variable           | Config Key           | Description                                                                             | Required |
-| ------------------------------ | -------------------- | --------------------------------------------------------------------------------------- | -------- |
-| `AZURE_API_KEY`                | `apiKey`             | Your Azure OpenAI API key                                                               | No\*     |
-| `AZURE_API_HOST`               | `apiHost`            | API host                                                                                | No       |
-| `AZURE_API_BASE_URL`           | `apiBaseUrl`         | API base URL                                                                            | No       |
-| `AZURE_BASE_URL`               | `apiBaseUrl`         | Alternative API base URL                                                                | No       |
-| `AZURE_DEPLOYMENT_NAME`        | -                    | Opt-in flag that, with `AZURE_OPENAI_DEPLOYMENT_NAME`, makes Azure the default provider | No†      |
-| `AZURE_OPENAI_DEPLOYMENT_NAME` | -                    | Deployment used when Azure is the default provider                                      | No†      |
-| `AZURE_CLIENT_ID`              | `azureClientId`      | Azure AD application client ID                                                          | No\*     |
-| `AZURE_CLIENT_SECRET`          | `azureClientSecret`  | Azure AD application client secret                                                      | No\*     |
-| `AZURE_TENANT_ID`              | `azureTenantId`      | Azure AD tenant ID                                                                      | No\*     |
-| `AZURE_AUTHORITY_HOST`         | `azureAuthorityHost` | Azure AD authority host                                                                 | No       |
-| `AZURE_TOKEN_SCOPE`            | `azureTokenScope`    | Azure AD token scope                                                                    | No       |
+| Environment Variable           | Config Key           | Description                                                         | Required |
+| ------------------------------ | -------------------- | ------------------------------------------------------------------- | -------- |
+| `AZURE_API_KEY`                | `apiKey`             | Your Azure OpenAI API key                                           | No\*     |
+| `AZURE_API_HOST`               | `apiHost`            | API host                                                            | No       |
+| `AZURE_API_BASE_URL`           | `apiBaseUrl`         | API base URL                                                        | No       |
+| `AZURE_BASE_URL`               | `apiBaseUrl`         | Alternative API base URL                                            | No       |
+| `AZURE_DEPLOYMENT_NAME`        | -                    | Alternative deployment name used when Azure is the default provider | No†      |
+| `AZURE_OPENAI_DEPLOYMENT_NAME` | -                    | Deployment used when Azure is the default provider                  | No†      |
+| `AZURE_CLIENT_ID`              | `azureClientId`      | Azure AD application client ID                                      | No\*     |
+| `AZURE_CLIENT_SECRET`          | `azureClientSecret`  | Azure AD application client secret                                  | No\*     |
+| `AZURE_TENANT_ID`              | `azureTenantId`      | Azure AD tenant ID                                                  | No\*     |
+| `AZURE_AUTHORITY_HOST`         | `azureAuthorityHost` | Azure AD authority host                                             | No       |
+| `AZURE_TOKEN_SCOPE`            | `azureTokenScope`    | Azure AD token scope                                                | No       |
 
 \* Either `AZURE_API_KEY` OR the combination of `AZURE_CLIENT_ID`, `AZURE_CLIENT_SECRET`, and `AZURE_TENANT_ID` must be provided.
 
-† Not needed when you name the deployment in the provider ID (e.g. `azure:chat:my-deployment`). Both are required only to make Azure the default provider (see [Default Deployment](#default-deployment)).
+† Not needed when you name the deployment in the provider ID (e.g. `azure:chat:my-deployment`). Either variable can make Azure the default provider (see [Default Deployment](#default-deployment)).
 
 Note: For API URLs, you only need to set one of `AZURE_API_HOST`, `AZURE_API_BASE_URL`, or `AZURE_BASE_URL`. If multiple are set, the provider will use them in that order of preference.
 
@@ -507,14 +507,13 @@ Azure OpenAI becomes the default provider (used for grading, dataset generation,
 
 1. No OpenAI API key is present (`OPENAI_API_KEY` is not set)
 2. Azure authentication is configured (either via API key or client credentials)
-3. Both `AZURE_DEPLOYMENT_NAME` **and** `AZURE_OPENAI_DEPLOYMENT_NAME` are set
+3. Either `AZURE_OPENAI_DEPLOYMENT_NAME` or `AZURE_DEPLOYMENT_NAME` is set
 
-The default deployment is taken from `AZURE_OPENAI_DEPLOYMENT_NAME` (`AZURE_DEPLOYMENT_NAME` acts as the opt-in flag). If `AZURE_DEPLOYMENT_NAME` is set but `AZURE_OPENAI_DEPLOYMENT_NAME` is not, Azure is not selected as the default.
+The default deployment is taken from `AZURE_OPENAI_DEPLOYMENT_NAME` when available, otherwise from `AZURE_DEPLOYMENT_NAME`. If both are set, `AZURE_OPENAI_DEPLOYMENT_NAME` takes precedence.
 
 For example, if you have these environment variables set:
 
 ```bash
-AZURE_DEPLOYMENT_NAME=gpt-4o
 AZURE_OPENAI_DEPLOYMENT_NAME=gpt-4o
 AZURE_API_KEY=your-api-key
 AZURE_API_HOST=your-host.openai.azure.com
@@ -523,7 +522,6 @@ AZURE_API_HOST=your-host.openai.azure.com
 Or these client credential environment variables:
 
 ```bash
-AZURE_DEPLOYMENT_NAME=gpt-4o
 AZURE_OPENAI_DEPLOYMENT_NAME=gpt-4o
 AZURE_CLIENT_ID=your-client-id
 AZURE_CLIENT_SECRET=your-client-secret

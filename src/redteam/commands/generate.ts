@@ -9,6 +9,7 @@ import { z } from 'zod';
 import { withCacheEnabled } from '../../cache';
 import cliState from '../../cliState';
 import { CLOUD_PROVIDER_PREFIX, DEFAULT_MAX_CONCURRENCY, VERSION } from '../../constants';
+import { withEnvOverrides } from '../../envOverrides';
 import {
   checkEmailStatusAndMaybeExit,
   EmailValidationError,
@@ -52,7 +53,6 @@ import {
   type Plugin,
   ADDITIONAL_PLUGINS as REDTEAM_ADDITIONAL_PLUGINS,
   DEFAULT_PLUGINS as REDTEAM_DEFAULT_PLUGINS,
-  REDTEAM_MODEL,
   type Severity,
 } from '../constants';
 import { extractA2AAgentCardInfo } from '../extraction/a2aAgentCard';
@@ -662,6 +662,41 @@ async function doGenerateRedteamInternal(
     );
   }
 
+  const generationEnv =
+    resolvedConfig?.env ?? (options.defaultConfig as Partial<UnifiedConfig> | undefined)?.env ?? {};
+  // Config resolution loads relative provider files using the configuration directory.
+  const resolvedDefaultTest = resolvedConfig?.defaultTest ?? testSuite.defaultTest;
+  const defaultTestConfig =
+    typeof resolvedDefaultTest === 'object' ? resolvedDefaultTest : undefined;
+  const defaultTestProvider =
+    (defaultTestConfig as any)?.provider ||
+    (defaultTestConfig?.options?.provider as any)?.text ||
+    defaultTestConfig?.options?.provider ||
+    undefined;
+
+  const generateForPurpose = (purpose: string | undefined) =>
+    withGenerationConcurrency(config.maxConcurrency, config.delay, () =>
+      withEnvOverrides(generationEnv, () =>
+        synthesize({
+          ...parsedConfig.data,
+          requestScoped: true,
+          fallbackProvider: defaultTestProvider,
+          inputs: targetInputs,
+          purpose,
+          numTests: config.numTests,
+          prompts: testSuite.prompts.map((prompt) => prompt.raw),
+          maxConcurrency: config.maxConcurrency,
+          delay: config.delay,
+          abortSignal: options.abortSignal,
+          redteamGenerationContext,
+          cloudTargetDatabaseId,
+          targetIds,
+          showProgressBar: options.progressBar !== false,
+          testGenerationInstructions: augmentedTestGenerationInstructions,
+        } as SynthesizeOptions),
+      ),
+    );
+
   // Check for contexts - if present, generate tests for each context
   const contexts = redteamConfig?.contexts;
   let redteamTests: any[] = [];
@@ -696,26 +731,7 @@ async function doGenerateRedteamInternal(
         testSuite,
       });
 
-      const contextResult = await withGenerationConcurrency(
-        config.maxConcurrency,
-        config.delay,
-        () =>
-          synthesize({
-            ...parsedConfig.data,
-            inputs: targetInputs,
-            purpose: contextPurpose,
-            numTests: config.numTests,
-            prompts: testSuite.prompts.map((prompt) => prompt.raw),
-            maxConcurrency: config.maxConcurrency,
-            delay: config.delay,
-            abortSignal: options.abortSignal,
-            redteamGenerationContext,
-            cloudTargetDatabaseId,
-            targetIds,
-            showProgressBar: options.progressBar !== false,
-            testGenerationInstructions: augmentedTestGenerationInstructions,
-          } as SynthesizeOptions),
-      );
+      const contextResult = await generateForPurpose(contextPurpose);
 
       // Collect failed plugins from this context
       if (contextResult.failedPlugins.length > 0) {
@@ -766,23 +782,7 @@ async function doGenerateRedteamInternal(
       rootPurpose,
       testSuite,
     });
-    const result = await withGenerationConcurrency(config.maxConcurrency, config.delay, () =>
-      synthesize({
-        ...parsedConfig.data,
-        inputs: targetInputs,
-        purpose: effectivePurpose,
-        numTests: config.numTests,
-        prompts: testSuite.prompts.map((prompt) => prompt.raw),
-        maxConcurrency: config.maxConcurrency,
-        delay: config.delay,
-        abortSignal: options.abortSignal,
-        redteamGenerationContext,
-        cloudTargetDatabaseId,
-        targetIds,
-        showProgressBar: options.progressBar !== false,
-        testGenerationInstructions: augmentedTestGenerationInstructions,
-      } as SynthesizeOptions),
-    );
+    const result = await generateForPurpose(effectivePurpose);
 
     redteamTests = result.testCases;
     purpose = result.purpose;
@@ -1080,7 +1080,7 @@ export function redteamGenerateCommand(
     )
     .option(
       '--provider <provider>',
-      `Provider to use for generating adversarial tests. Defaults to: ${REDTEAM_MODEL}`,
+      'Provider for local adversarial generation; overrides credential-based default selection',
     )
     .option(
       '--injectVar <varname>',

@@ -7,6 +7,7 @@ import { getEnvString } from '../../envars';
 import { getDirectory, resolvePackageEntryPoint } from '../../esm';
 import logger from '../../logger';
 import { providerRegistry } from '../providerRegistry';
+import { bindRedteamProviderEnvironment } from '../redteamDefaults';
 import { OpenAICodexSDKProvider } from './codex-sdk';
 
 import type { EnvOverrides } from '../../types/env';
@@ -44,6 +45,8 @@ type CodexDefaultProviders = Pick<
   | 'gradingJsonProvider'
   | 'gradingProvider'
   | 'llmRubricProvider'
+  | 'redteamProvider'
+  | 'redteamJsonProvider'
   | 'suggestionsProvider'
   | 'synthesizeProvider'
   | 'webSearchProvider'
@@ -53,6 +56,8 @@ type CodexDefaultProviderBundle = {
   gradingJsonProvider: OpenAICodexSDKProvider;
   gradingProvider: OpenAICodexSDKProvider;
   llmRubricProvider: OpenAICodexSDKProvider;
+  redteamProvider: OpenAICodexSDKProvider;
+  redteamJsonProvider: OpenAICodexSDKProvider;
   suggestionsProvider: OpenAICodexSDKProvider;
   synthesizeProvider: OpenAICodexSDKProvider;
   webSearchProvider: OpenAICodexSDKProvider;
@@ -210,6 +215,8 @@ function getUniqueCodexDefaultProviders(
       providers.gradingJsonProvider,
       providers.gradingProvider,
       providers.llmRubricProvider,
+      providers.redteamProvider,
+      providers.redteamJsonProvider,
       providers.suggestionsProvider,
       providers.synthesizeProvider,
       providers.webSearchProvider,
@@ -397,12 +404,16 @@ export function getCodexDefaultProviders(env?: EnvOverrides): CodexDefaultProvid
     gradingJsonProvider,
     gradingProvider,
     llmRubricProvider: gradingJsonProvider,
+    redteamProvider: gradingProvider,
+    // Strategy JSON shapes differ from the fixed grading output schema.
+    redteamJsonProvider: gradingProvider,
     shutdownRequested: false,
     suggestionsProvider: gradingProvider,
     synthesizeProvider: gradingProvider,
     webSearchProvider,
   };
   trackCodexDefaultProviderUsage(providers);
+  bindRedteamProviderEnvironment(gradingProvider, env);
   return cacheCodexDefaultProviders(cacheKey, providers);
 }
 

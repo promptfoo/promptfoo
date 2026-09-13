@@ -1,6 +1,11 @@
 import request from 'supertest';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import * as cache from '../../../src/cache';
+import cliState from '../../../src/cliState';
+import { getEnvOverrides, withEnvOverrides } from '../../../src/envOverrides';
+import { MistralChatCompletionProvider } from '../../../src/providers/mistral';
 import { createApp } from '../../../src/server/server';
+import { mockProcessEnv } from '../../util/utils';
 
 // Mock dependencies
 vi.mock('../../../src/redteam/plugins/index');
@@ -155,6 +160,86 @@ describe('Redteam Routes', () => {
           provider: undefined,
           ignoreCliState: true,
         });
+      });
+
+      it('keeps actual provider calls isolated through preview plugin and strategy execution', async () => {
+        const restoreEnv = mockProcessEnv({
+          MISTRAL_API_KEY: 'fixture-process-key',
+          MISTRAL_API_BASE_URL: 'https://process.example/v1',
+          MISTRAL_API_HOST: undefined,
+        });
+        const previousConfig = cliState.config;
+        cliState.config = {
+          env: {
+            MISTRAL_API_KEY: 'fixture-stale-key',
+            MISTRAL_API_BASE_URL: 'https://stale.example/v1',
+          },
+        };
+        const previewProvider = new MistralChatCompletionProvider('mistral-large-latest', {
+          env: {},
+        });
+        mockedRedteamProviderManager.getProviderSelection.mockImplementation(async () =>
+          withEnvOverrides({}, () => ({ provider: previewProvider, source: 'default' })),
+        );
+        const fetchSpy = vi.spyOn(cache, 'fetchWithCache').mockResolvedValue({
+          cached: false,
+          data: {
+            choices: [{ message: { content: 'fixture output' } }],
+            usage: { prompt_tokens: 1, completion_tokens: 1 },
+          },
+        } as any);
+        const testCases = [{ vars: { query: 'test' } }];
+        mockedPlugins.find = vi.fn().mockReturnValue({
+          key: 'aegis',
+          action: vi.fn().mockImplementation(async ({ provider }) => {
+            expect(provider).toBe(previewProvider);
+            await Promise.resolve();
+            expect((await provider.callApi('fixture plugin prompt')).output).toBe('fixture output');
+            cliState.config = {
+              env: {
+                MISTRAL_API_KEY: 'fixture-other-key',
+                MISTRAL_API_BASE_URL: 'https://other.example/v1',
+              },
+            };
+            return testCases;
+          }),
+        });
+        const strategySpy = vi.spyOn(Strategies, 'find').mockReturnValue({
+          id: 'math-prompt',
+          action: vi.fn().mockImplementation(async (_tests, _injectVar, _config, _id, options) => {
+            const provider = options.generationProviderSelection.provider;
+            expect(provider).toBe(previewProvider);
+            await Promise.resolve();
+            expect((await provider.callApi('fixture strategy prompt')).output).toBe(
+              'fixture output',
+            );
+            return testCases;
+          }),
+        } as any);
+        try {
+          const response = await request(app)
+            .post('/api/redteam/generate-test')
+            .send({
+              plugin: { id: 'aegis', config: {} },
+              strategy: { id: 'math-prompt', config: {} },
+              config: { applicationDefinition: { purpose: 'test assistant' } },
+            });
+          expect(response.status).toBe(200);
+          expect(fetchSpy).toHaveBeenCalledTimes(2);
+          for (const [url, options] of fetchSpy.mock.calls) {
+            expect(url).toBe('https://process.example/v1/chat/completions');
+            expect(options).toMatchObject({
+              headers: { Authorization: 'Bearer fixture-process-key' },
+            });
+          }
+          expect(previewProvider.env).toEqual({});
+          expect(getEnvOverrides()?.MISTRAL_API_KEY).toBe('fixture-other-key');
+        } finally {
+          cliState.config = previousConfig;
+          restoreEnv();
+          fetchSpy.mockRestore();
+          strategySpy.mockRestore();
+        }
       });
 
       it('passes the current preview provider through validated request data', async () => {

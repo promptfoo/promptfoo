@@ -292,6 +292,10 @@ export interface RedteamFileConfig extends CommonOptions {
 }
 
 export interface SynthesizeOptions extends CommonOptions {
+  /** Config and credentials belong to this generation request, not the CLI singleton. */
+  requestScoped?: boolean;
+  /** Resolved default-test provider from the same request. */
+  fallbackProvider?: CommonOptions['provider'];
   abortSignal?: AbortSignal;
   redteamGenerationContext?: RedteamGenerationContext;
   /** Cloud target database ID used to preserve target-owned task context during generation. */

@@ -8,7 +8,6 @@ import {
   DEFAULT_STRATEGIES,
   ADDITIONAL_PLUGINS as REDTEAM_ADDITIONAL_PLUGINS,
   DEFAULT_PLUGINS as REDTEAM_DEFAULT_PLUGINS,
-  REDTEAM_MODEL,
 } from '../../../redteam/constants';
 import { loadDefaultConfig } from '../../../util/config/default';
 import { RedteamGenerateOptionsSchema } from '../../../validators/redteam';
@@ -128,8 +127,7 @@ export function registerRedteamGenerateTool(server: McpServer) {
         .optional()
         .describe(
           dedent`
-            Provider to use for generating adversarial tests.
-            Defaults to: ${REDTEAM_MODEL}
+            Provider for local adversarial generation. Overrides credential-based default selection.
             Example: "openai:gpt-4-turbo"
           `,
         ),
@@ -265,7 +263,7 @@ export function registerRedteamGenerateTool(server: McpServer) {
             maxConcurrency,
             delay,
             language,
-            provider: provider || REDTEAM_MODEL,
+            provider: provider || 'credential-based default selection',
             force,
             write,
             remote,
@@ -310,7 +308,7 @@ export function registerRedteamGenerateTool(server: McpServer) {
                 : [],
             generatedAt: new Date().toISOString(),
             language,
-            provider: provider || REDTEAM_MODEL,
+            provider: provider || 'credential-based default selection',
           },
           nextSteps: {
             runEvaluation: write
