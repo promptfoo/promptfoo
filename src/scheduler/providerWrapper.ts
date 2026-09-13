@@ -111,6 +111,10 @@ export function wrapProviderWithRateLimiting(
     [Symbol.for('promptfoo.capabilityDelegate')]: provider,
     // Explicitly delegate id() since prototype methods aren't copied by spread
     id: () => provider.id(),
+    callClassificationApi: provider.callClassificationApi?.bind(provider),
+    callEmbeddingApi: provider.callEmbeddingApi?.bind(provider),
+    callSimilarityApi: provider.callSimilarityApi?.bind(provider),
+    callModerationApi: provider.callModerationApi?.bind(provider),
     callApi: async (
       prompt: string,
       context?: CallApiContextParams,

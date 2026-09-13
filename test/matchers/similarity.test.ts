@@ -298,6 +298,16 @@ describe('matchesSimilarity', () => {
     );
   });
 
+  it('does not hide an embedding failure behind a concurrent abort', async () => {
+    vi.spyOn(DefaultEmbeddingProvider, 'callEmbeddingApi')
+      .mockRejectedValueOnce(new DOMException('cancelled expected embedding', 'AbortError'))
+      .mockRejectedValueOnce(new Error('output embedding failed'));
+
+    await expect(matchesSimilarity('Expected output', 'Sample output', 0.5)).rejects.toThrow(
+      'output embedding failed',
+    );
+  });
+
   it('should use Nunjucks templating when PROMPTFOO_DISABLE_TEMPLATING is set', async () => {
     const restoreEnv = mockProcessEnv({ PROMPTFOO_DISABLE_TEMPLATING: 'true' });
     try {
