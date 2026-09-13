@@ -11,12 +11,19 @@ import {
   createEmptyAssertions,
   createEmptyTokenUsage,
   getErrorTokenUsage,
+  mergeMissingGenerationTokenUsage,
   normalizeTokenUsage,
 } from '../../src/util/tokenUsageUtils';
 
 import type { TokenUsage } from '../../src/types/shared';
 
 describe('tokenUsageUtils', () => {
+  it('does not claim empty canonical incurred generation usage', () => {
+    expect(
+      mergeMissingGenerationTokenUsage(createEmptyTokenUsage(), { incurredTokenUsage: {} }),
+    ).toBe(false);
+  });
+
   describe('getErrorTokenUsage', () => {
     it('returns validated usage carried by an error', () => {
       const error = Object.assign(new Error('failed'), {

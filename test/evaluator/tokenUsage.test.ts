@@ -73,6 +73,24 @@ describeEvaluator('evaluator token usage', () => {
     expect(evalRecord.prompts[0].metrics?.tokenUsage.generation).toMatchObject(generationUsage);
   });
 
+  it('keeps row generation usage when canonical usage is malformed', async () => {
+    const generationUsage = { total: 7, prompt: 4, completion: 3 };
+    const testSuite: TestSuite = {
+      providers: [mockApiProvider],
+      prompts: [toPrompt('Test prompt')],
+      tests: [{ metadata: { providerTokenUsage: generationUsage } }],
+    };
+    const evalRecord = await Eval.create(
+      { metadata: { generationAccounting: { tokenUsage: { total: 7, prompt: 'invalid' } } } },
+      testSuite.prompts,
+      { id: randomUUID() },
+    );
+
+    await evaluate(testSuite, evalRecord, {});
+
+    expect(evalRecord.prompts[0].metrics?.tokenUsage.generation).toMatchObject(generationUsage);
+  });
+
   it('preserves incurred-only generation when resuming a completed evaluation', async () => {
     const testSuite: TestSuite = {
       providers: [mockApiProvider],

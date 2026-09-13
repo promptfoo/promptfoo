@@ -109,7 +109,6 @@ import {
   cloneTokenUsageBreakdown,
   createEmptyAssertions,
   createEmptyTokenUsage,
-  hasObservableTokenUsage,
   mergeMissingGenerationTokenUsage,
 } from './util/tokenUsageUtils';
 import { TransformInputType, transform } from './util/transform';
@@ -4865,10 +4864,10 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
 
     const canonicalGenerationUsage = this.store.config.metadata?.generationAccounting?.tokenUsage;
     if (prompts[0]?.metrics && canonicalGenerationUsage) {
-      mergeMissingGenerationTokenUsage(prompts[0].metrics.tokenUsage, canonicalGenerationUsage);
-      this.generationUsageRecorded =
-        hasObservableTokenUsage(canonicalGenerationUsage) ||
-        hasObservableTokenUsage(canonicalGenerationUsage.incurredTokenUsage);
+      this.generationUsageRecorded = mergeMissingGenerationTokenUsage(
+        prompts[0].metrics.tokenUsage,
+        canonicalGenerationUsage,
+      );
     }
 
     await this.store.appendPrompts(prompts);

@@ -594,7 +594,7 @@ export function mergeMissingGenerationTokenUsage(target: TokenUsage, update: unk
     target.incurredTokenUsage.generation = createEmptyAssertions();
     accumulateTokenUsage(target.incurredTokenUsage.generation, incurredTokenUsage);
   }
-  return missingLogical || missingIncurred;
+  return hasObservableTokenUsage(logical) || hasObservableTokenUsage(incurredTokenUsage);
 }
 
 /**
