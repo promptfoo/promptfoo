@@ -20,7 +20,20 @@ export function isJavascriptFile(filePath: string): boolean {
  * @returns True if the file has an image extension, false otherwise.
  */
 export function isImageFile(filePath: string): boolean {
-  const imageExtensions = ['jpg', 'jpeg', 'png', 'gif', 'bmp', 'webp', 'svg', 'heic', 'heif'];
+  const imageExtensions = [
+    'jpg',
+    'jpeg',
+    'png',
+    'gif',
+    'bmp',
+    'webp',
+    'svg',
+    'heic',
+    'heif',
+    'avif',
+    'tif',
+    'tiff',
+  ];
   const fileExtension = filePath.split('.').pop()?.toLowerCase() || '';
   return imageExtensions.includes(fileExtension);
 }
