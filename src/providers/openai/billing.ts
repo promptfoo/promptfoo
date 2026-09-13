@@ -1093,13 +1093,14 @@ export function calculateObservableOpenAIToolCost(
   modelName: string,
   config: OpenAIToolCostConfig = {},
 ): number {
-  if (!Array.isArray(data?.output)) {
+  const output = data?._promptfooBillingOutput ?? data?.output;
+  if (!Array.isArray(output)) {
     return 0;
   }
 
   const webSearchToolType = getWebSearchToolType(config);
   let total = 0;
-  for (const item of data.output) {
+  for (const item of output) {
     if (item?.type === 'web_search_call' && item.action?.type === 'search') {
       total += webSearchToolType === 'web_search' || isReasoningModel(modelName) ? 0.01 : 0.025;
     } else if (item?.type === 'file_search_call') {

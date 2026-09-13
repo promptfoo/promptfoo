@@ -1,5 +1,8 @@
 import { describe, expect, it, vi } from 'vitest';
-import { calculateOpenAIUsageCost } from '../../../src/providers/openai/billing';
+import {
+  calculateObservableOpenAIToolCost,
+  calculateOpenAIUsageCost,
+} from '../../../src/providers/openai/billing';
 import { ResponsesProcessor } from '../../../src/providers/responses/processor';
 import { readResponsesStream } from '../../../src/providers/responses/stream';
 
@@ -86,6 +89,80 @@ describe('Responses stream regressions', () => {
       (20 * 5 + 100 * 8 + 40 * 32) / 1e6,
       10,
     );
+  });
+
+  it('does not let a malformed rich content-part ID replace terminal text', async () => {
+    const parsed = await readResponsesStream(
+      createSseResponse([
+        {
+          type: 'response.content_part.done',
+          output_index: 0,
+          content_index: 0,
+          item_id: 1,
+          part: { type: 'output_text', text: 'SECRET', annotations: [] },
+        },
+        {
+          type: 'response.incomplete',
+          response: {
+            status: 'incomplete',
+            output: [
+              {
+                type: 'message',
+                id: 'm_safe',
+                role: 'assistant',
+                content: [{ type: 'output_text', text: 'safe draft' }],
+              },
+            ],
+          },
+        },
+      ]),
+      'test',
+      { debug: vi.fn() },
+    );
+
+    expect(JSON.stringify(parsed)).not.toContain('SECRET');
+    expect(parsed.output[0].content[0].text).toBe('safe draft');
+  });
+
+  it('ignores oversized snapshots after a terminal response', async () => {
+    const parsed = await readResponsesStream(
+      createSseResponse([
+        { type: 'response.failed', response: { status: 'failed', error: { message: 'failed' } } },
+        {
+          type: 'response.in_progress',
+          response: { status: 'in_progress', output: Array.from({ length: 1025 }) },
+        },
+      ]),
+      'test',
+      { debug: vi.fn() },
+    );
+
+    expect(parsed.status).toBe('failed');
+  });
+
+  it('retains sanitized observable search markers for refused-stream billing', async () => {
+    const parsed = await readResponsesStream(
+      createSseResponse([
+        {
+          type: 'response.incomplete',
+          response: {
+            status: 'incomplete',
+            incomplete_details: { reason: 'safety' },
+            output: [
+              { type: 'web_search_call', action: { type: 'search', query: 'SECRET' } },
+              { type: 'file_search_call', results: ['SECRET'] },
+            ],
+          },
+        },
+      ]),
+      'test',
+      { debug: vi.fn() },
+    );
+
+    expect(JSON.stringify(parsed.output)).not.toContain('SECRET');
+    expect(
+      calculateObservableOpenAIToolCost(parsed, 'gpt-4.1', { tools: [{ type: 'web_search' }] }),
+    ).toBeCloseTo(0.0125);
   });
 
   it('cancels an aborted Responses stream that stalls after headers', async () => {

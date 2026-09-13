@@ -1339,12 +1339,16 @@ export async function readResponsesStream(
     ) {
       sawMalformedSsePayload = true;
     }
+    const terminalResponse = isTerminalStreamResponse(
+      latestResponseEventType,
+      latestResponse?.status,
+    );
     const snapshotOutput = Array.isArray(event?.response?.output)
       ? event.response.output
       : Array.isArray(event?.output)
         ? event.output
         : undefined;
-    if (snapshotOutput && snapshotOutput.length > MAX_STREAM_OUTPUT_KEYS) {
+    if (!terminalResponse && snapshotOutput && snapshotOutput.length > MAX_STREAM_OUTPUT_KEYS) {
       throw new Error(
         `${providerName} streaming response exceeded ${MAX_STREAM_OUTPUT_KEYS} items of output`,
       );
@@ -1354,8 +1358,8 @@ export async function readResponsesStream(
       Array.isArray(item.content) &&
       item.content.length > MAX_STREAM_CONTENT_PARTS;
     if (
-      hasOversizedMessageContent(event?.item) ||
-      snapshotOutput?.some(hasOversizedMessageContent)
+      !terminalResponse &&
+      (hasOversizedMessageContent(event?.item) || snapshotOutput?.some(hasOversizedMessageContent))
     ) {
       throw new Error(
         `${providerName} streaming response exceeded ${MAX_STREAM_CONTENT_PARTS} content parts`,
@@ -1369,10 +1373,6 @@ export async function readResponsesStream(
     }
     streamTotalInputBytes += bytes;
 
-    const terminalResponse = isTerminalStreamResponse(
-      latestResponseEventType,
-      latestResponse?.status,
-    );
     const retainedPayloadBytes =
       event && !terminalResponse ? getRetainedStreamPayloadBytes(event, addedFunctionItems) : 0;
     const creditKind = event
@@ -1643,6 +1643,9 @@ export async function readResponsesStream(
       event.part?.type === 'output_text' &&
       Object.keys(event.part).some((key) => key !== 'type' && key !== 'text')
     ) {
+      if (isInvalidOutputTextItemId(event.item_id)) {
+        return;
+      }
       const outputIndex = getValidOutputIndex(event);
       const key = getMessageOutputKey(event.output_index, event.item_id);
       const existingItem = finalizedNonMessageItems.get(key)?.item;
@@ -2074,6 +2077,17 @@ export async function readResponsesStream(
       : outputWithCompletedAnnotations,
     isCompletedResponse,
   );
+  const billingOutput = latestResponse?.output
+    ?.filter(
+      (item: any) =>
+        item?.type === 'file_search_call' ||
+        (item?.type === 'web_search_call' && item.action?.type === 'search'),
+    )
+    .map((item: any) =>
+      item.type === 'web_search_call'
+        ? { type: item.type, action: { type: 'search' } }
+        : { type: item.type },
+    );
 
   if (latestResponse && hasTerminalSafetyDecision(latestResponse)) {
     const safeOutput = filterExecutableToolCalls(finalizedStreamOutput, true);
@@ -2089,12 +2103,18 @@ export async function readResponsesStream(
         ],
       });
     }
-    return boundedResponse(getSafeRefusalResponse(latestResponse, safeOutput, true));
+    return boundedResponse({
+      ...getSafeRefusalResponse(latestResponse, safeOutput, true),
+      ...(billingOutput?.length ? { _promptfooBillingOutput: billingOutput } : {}),
+    });
   }
 
   if (useFinalizedRefusals) {
     const safeOutput = filterExecutableToolCalls(finalizedStreamOutput, true);
-    return boundedResponse(getSafeRefusalResponse(latestResponse, safeOutput, true));
+    return boundedResponse({
+      ...getSafeRefusalResponse(latestResponse, safeOutput, true),
+      ...(billingOutput?.length ? { _promptfooBillingOutput: billingOutput } : {}),
+    });
   }
 
   if (latestResponse && isCompletedResponse) {
