@@ -306,6 +306,7 @@ describe('OTLPTracingExporter', () => {
           text: 'Authorization=Custom opaque-auth curl --user alice:opaque-user',
           embedded: 'Request: "{\\"p\\u0061ssword\\":\\"opaque-embedded\\"}"',
           native: {
+            assertion: { type: 'contains', value: 'Paris' },
             client_assertion: 'opaque-assertion',
             client_assertion_type: 'public-type',
             passwords: 'opaque-passwords',
@@ -320,6 +321,7 @@ describe('OTLPTracingExporter', () => {
       expect(attributes.text).not.toContain('opaque-');
       expect(attributes.embedded).not.toContain('opaque-');
       expect(JSON.parse(attributes.native as string)).toMatchObject({
+        assertion: { type: 'contains', value: 'Paris' },
         client_assertion: '<redacted>',
         client_assertion_type: 'public-type',
         passwords: '<redacted>',
@@ -328,6 +330,16 @@ describe('OTLPTracingExporter', () => {
         encoded: '{"kty":"RSA","d":"<redacted>"}',
       });
       expect(JSON.stringify(payload)).not.toContain('opaque-');
+    },
+  );
+
+  it.each(['json', 'protobuf'] as const)(
+    'preserves long unmatched non-credential XML in %s',
+    async (format) => {
+      const xml = '<entry key="public">'.repeat(16_000);
+      const { attributes } = await exportCustomData({ xml }, format);
+
+      expect(attributes.xml).toBe(xml);
     },
   );
 

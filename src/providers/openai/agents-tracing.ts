@@ -754,14 +754,12 @@ function hasCredentialNamedPayload(value: string): boolean {
   ) {
     return true;
   }
-  for (const [, , attributes, body] of value.matchAll(
-    /<([\w.-]+)\b([^>]*)(?:\/>|>([\s\S]*?)<\/\1>)/g,
-  )) {
+  for (const [, attributes] of value.matchAll(/<(?:[\w.-]+:)?[\w.-]+\b([^>]*)>/g)) {
     const key = attributes.match(/\b(?:name|key)=["']([A-Za-z_][A-Za-z\d_.-]*)["']/i)?.[1];
     if (
       key &&
       isCredentialAttributeKey(key) &&
-      (/\bvalue=["']/i.test(attributes) || body?.trim())
+      (/\bvalue=["']/i.test(attributes) || !/\/\s*$/.test(attributes))
     ) {
       return true;
     }
@@ -842,6 +840,9 @@ function isCredentialAttributeKey(key: string): boolean {
         ].includes(parts[index - 1])
       );
     }
+    if (part === 'assertion') {
+      return parts[index - 1] === 'client' && !['type', 'types'].includes(parts[index + 1]);
+    }
     if (
       [
         'authorization',
@@ -864,7 +865,6 @@ function isCredentialAttributeKey(key: string): boolean {
         'sig',
         'signature',
         'pgpassword',
-        'assertion',
       ].includes(part)
     ) {
       if (
@@ -884,9 +884,6 @@ function isCredentialAttributeKey(key: string): boolean {
       }
       if (part === 'authorization' && ['endpoint', 'url', 'uri'].includes(parts[index + 1])) {
         return false;
-      }
-      if (part === 'assertion' && parts[index - 1] === 'client') {
-        return !['type', 'types'].includes(parts[index + 1]);
       }
       return true;
     }
