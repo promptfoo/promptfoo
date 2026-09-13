@@ -226,6 +226,8 @@ jobs:
         run: npm run test:package-artifact
 
       - name: Run built agent skill examples
+        env:
+          PROMPTFOO_POSTHOG_KEY: ''
         run: npm run test:smoke -- test/smoke/agent-skill-examples.test.ts
 
   style-check:
