@@ -283,6 +283,17 @@ describe('AbliterationProvider', () => {
     expect(provider.getApiKey()).toBe('provider-key');
   });
 
+  it('does not fall back to OpenAI credentials when the key variable is blank', () => {
+    mockAbliterationEnv({ ABLIT_KEY: undefined, OPENAI_API_KEY: 'openai-key' });
+
+    const provider = new AbliterationProvider('abliterated-model', {
+      config: { apiKeyEnvar: '' },
+    });
+
+    expect(provider.config.apiKeyEnvar).toBe('ABLIT_KEY');
+    expect(provider.getApiKey()).toBeUndefined();
+  });
+
   it('does not fall back to OpenAI credentials', async () => {
     mockAbliterationEnv({
       ABLIT_KEY: undefined,
