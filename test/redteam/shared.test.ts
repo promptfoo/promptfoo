@@ -197,6 +197,32 @@ describe('doRedteamRun', () => {
     expect(vi.mocked(doEval).mock.calls[0][0]).toMatchObject({ envPath: 'generation.env' });
   });
 
+  it('serializes runs that load environment files', async () => {
+    let releaseFirst!: () => void;
+    vi.mocked(doGenerateRedteam)
+      .mockImplementationOnce(
+        () =>
+          new Promise((resolve) => {
+            releaseFirst = () => resolve({});
+          }),
+      )
+      .mockResolvedValueOnce({});
+
+    const first = doRedteamRun({ envPath: 'first.env' });
+    await vi.waitFor(() => expect(doGenerateRedteam).toHaveBeenCalledTimes(1));
+    const second = doRedteamRun({ envPath: 'second.env' });
+
+    await Promise.resolve();
+    expect(doGenerateRedteam).toHaveBeenCalledTimes(1);
+    releaseFirst();
+    await Promise.all([first, second]);
+
+    expect(doGenerateRedteam).toHaveBeenNthCalledWith(
+      2,
+      expect.objectContaining({ envFile: 'second.env' }),
+    );
+  });
+
   it.each([true, false])('honors cache=%s in generation and evaluation', async (cache) => {
     await doRedteamRun({ cache });
     expect(doGenerateRedteam).toHaveBeenCalledWith(expect.objectContaining({ cache }));

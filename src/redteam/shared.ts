@@ -21,8 +21,20 @@ import { PartialGenerationError } from './types';
 import type Eval from '../models/eval';
 import type { RedteamRunOptions } from './types';
 
-export async function doRedteamRun(options: RedteamRunOptions): Promise<Eval | undefined> {
-  return withRemoteGeneration(options.remote, () => doRedteamRunScoped(options));
+let envPathRun = Promise.resolve();
+
+export function doRedteamRun(options: RedteamRunOptions): Promise<Eval | undefined> {
+  const run = () => withRemoteGeneration(options.remote, () => doRedteamRunScoped(options));
+  if (!options.envPath) {
+    return run();
+  }
+
+  const result = envPathRun.then(run);
+  envPathRun = result.then(
+    () => undefined,
+    () => undefined,
+  );
+  return result;
 }
 
 async function doRedteamRunScoped(options: RedteamRunOptions): Promise<Eval | undefined> {

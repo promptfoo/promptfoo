@@ -38,11 +38,7 @@
       "assertion-functions",
       "guardrails-functions",
       "red-team-functions",
-      "utility-functions",
-      "assertion-types-quick-reference",
-      "basic-assertions",
-      "llm-evaluated",
-      "custom-logic"
+      "utility-functions"
     ],
     "Core types": ["typescript-types"],
     "Runtime options": ["task-save-results", "task-disable-cache", "performance-tips"],
@@ -56,6 +52,12 @@
       "pattern-ab-test-models",
       "pattern-streaming-results",
       "pattern-batch-testing-providers"
+    ],
+    "Assertion examples": [
+      "assertion-types-quick-reference",
+      "basic-assertions",
+      "llm-evaluated",
+      "custom-logic"
     ],
     "Where to go next": ["getting-help", "next-steps"],
     "Environment": ["environment-variables"],

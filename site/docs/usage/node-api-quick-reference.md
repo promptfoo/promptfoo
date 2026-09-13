@@ -163,6 +163,13 @@ await cache.withCacheNamespace('candidate', () => evaluate(testSuite));
 const text = generateTable(await evalRecord.getTable());
 ```
 
+## Assertion examples
+
+<LegacyHeadingAnchors page="quickReference" section="Assertion examples" />
+
+Use `contains` for direct checks, `llm-rubric` for model grading, and `javascript`
+for custom logic. Pass each assertion to `assertions.runAssertion()` as shown above.
+
 ## Where to go next
 
 <LegacyHeadingAnchors page="quickReference" section="Where to go next" />
