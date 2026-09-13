@@ -301,9 +301,7 @@ function redactCredentials(
   );
   const redact = (value: string) => value.replace(pattern, REDACTED);
   const rawStrings: string[] = [];
-  for (const value of Array.isArray(response.raw)
-    ? response.raw.map((event) => event?.payload)
-    : [response.raw]) {
+  for (const value of Array.isArray(response.raw) ? response.raw : [response.raw]) {
     JSON.stringify(value, (_key, item) => {
       if (typeof item === 'string') {
         rawStrings.push(item);
@@ -316,20 +314,21 @@ function redactCredentials(
         .map((event) => event?.payload?.text)
         .filter((value): value is string => typeof value === 'string')
     : [];
-  const containsSplitCredential = (values: string[], credential: string) =>
-    values.some((_, start) => {
-      let joined = '';
-      for (let end = start; end < values.length; end++) {
-        if (values[end].includes(credential)) {
-          return end > start && credential.startsWith(joined);
-        }
-        joined = (joined + values[end]).slice(-credential.length);
-        if (end > start && joined.includes(credential)) {
-          return true;
-        }
+  const containsSplitCredential = (values: string[], credential: string) => {
+    let previous = '';
+    let suffix = '';
+    for (const value of values) {
+      if (previous && value.includes(credential) && credential.startsWith(previous)) {
+        return true;
       }
-      return false;
-    });
+      if (suffix && (suffix + value.slice(0, credential.length - 1)).includes(credential)) {
+        return true;
+      }
+      suffix = credential.length > 1 ? (suffix + value).slice(1 - credential.length) : '';
+      previous = value;
+    }
+    return false;
+  };
   const hasSplitCredential = credentials.some(
     (credential) =>
       containsSplitCredential(rawStrings, credential) ||
@@ -370,6 +369,7 @@ export class MuseCodeProvider implements ApiProvider {
   private readonly calls = new Map<AbortController, Promise<ProviderResponse>>();
   private readonly activeSessions = new Set<string>();
   private readonly sessionCredentials = new Map<string, Set<string>>();
+  private readonly sessionWorkspaces = new Map<string, string>();
 
   constructor(options: ProviderOptions = {}) {
     this.config = MuseCodeInputSchema.parse(options.config ?? {});
@@ -551,6 +551,9 @@ export class MuseCodeProvider implements ApiProvider {
       if (workspace && !(await fs.stat(workspace)).isDirectory()) {
         throw new Error(`working_dir is not a directory: ${workspace}`);
       }
+      if (config.session_id && this.sessionWorkspaces.get(config.session_id) !== workspace) {
+        throw new Error('session_id requires its original working_dir');
+      }
       tempDir = await fs.mkdtemp(path.join(os.tmpdir(), 'promptfoo-muse-code-'));
       if (!workspace) {
         workspace = path.join(tempDir, 'workspace');
@@ -573,8 +576,13 @@ export class MuseCodeProvider implements ApiProvider {
       );
       // Redact credentials from the actual child environment before tracing or persistence.
       const response = parseResponse(result);
-      if (response.sessionId) {
+      if (
+        response.sessionId &&
+        config.working_dir &&
+        (config.session_id || config.no_session_log === false)
+      ) {
         this.sessionCredentials.set(response.sessionId, new Set(credentials));
+        this.sessionWorkspaces.set(response.sessionId, workspace);
       }
       if (config.session_id) {
         this.sessionCredentials.set(config.session_id, new Set(credentials));
@@ -733,6 +741,7 @@ export class MuseCodeProvider implements ApiProvider {
       await this.cleanup();
     } finally {
       this.sessionCredentials.clear();
+      this.sessionWorkspaces.clear();
       providerRegistry.unregister(this);
     }
   }

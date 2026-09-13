@@ -329,6 +329,7 @@ describe('sanitizeObject', () => {
       HOTKEY: 'ctrl+s',
       TOKENIZER_SETTING: 'default',
       MUSE_AUTH_PATH: '/tmp/muse-auth.json',
+      ACTIONS_ID_TOKEN_REQUEST_URL: 'https://actions.example/token',
     };
     expect(sanitizeObject({ env, ordinary: { GITHUB_PAT: 'public-id' } })).toEqual({
       env: {
@@ -346,6 +347,7 @@ describe('sanitizeObject', () => {
         HOTKEY: 'ctrl+s',
         TOKENIZER_SETTING: 'default',
         MUSE_AUTH_PATH: '/tmp/muse-auth.json',
+        ACTIONS_ID_TOKEN_REQUEST_URL: 'https://actions.example/token',
       },
       ordinary: { GITHUB_PAT: 'public-id' },
     });
@@ -392,6 +394,9 @@ describe('sanitizeObject', () => {
     expect(sanitizeObject({ env: { [name]: 'ghp_shortsecret' } })).toEqual({
       env: { [name]: '[REDACTED]' },
     });
+    expect(sanitizeObject({ env: { [name]: 'literal-secret' } })).toEqual({
+      env: { [name]: '[REDACTED]' },
+    });
     expect(
       sanitizeObject({ env: { [name]: 'https://user:password@example.test/key.json' } }),
     ).toEqual({
@@ -413,9 +418,15 @@ describe('sanitizeObject', () => {
       SLACK_WEBHOOK_URL: 'https://hooks.slack.com/services/T000/B000/short-webhook-token',
       SERVICE_URL: 'https://discord.com/api/webhooks/123456/short-discord-token',
       PUBLIC_URL: 'https://example.test/resources/11111111-1111-4111-8111-111111111111',
+      TOKEN_URL: 'https://gateway.example/token/AbCdEfGhIjKlMnOpQrStUvWx',
     };
     expect(sanitizeObject({ env })).toEqual({
-      env: { ...env, SLACK_WEBHOOK_URL: '[REDACTED]', SERVICE_URL: '[REDACTED]' },
+      env: {
+        ...env,
+        SLACK_WEBHOOK_URL: '[REDACTED]',
+        SERVICE_URL: '[REDACTED]',
+        TOKEN_URL: '[REDACTED]',
+      },
     });
   });
 
@@ -1691,6 +1702,12 @@ describe('sanitizeObject', () => {
       expect(result.requestBody).toContain('api_key=%5BREDACTED%5D');
       expect(result.requestBody).not.toContain('plain-secret');
       expect(result.requestBody).not.toContain('sk-123456789012345678901234567890');
+      expect(
+        sanitizeObject({
+          requestBody:
+            'user%5Bpassword.type%5D=short-secret&github_pat=%7B%7B%20%22literal-secret%22%20%7D%7D',
+        }).requestBody,
+      ).toBe('user%5Bpassword.type%5D=%5BREDACTED%5D&github_pat=%5BREDACTED%5D');
     });
 
     it('should sanitize URL-encoded request bodies with raw spaces', () => {
@@ -1891,6 +1908,9 @@ describe('sanitizeObject url-keyed fields', () => {
     // Unparseable but credential-bearing: fail closed.
     expect(sanitizeObject({ url: 'ht!tp://x?token=sk-1234567890abcdefghij' })).toEqual({
       url: '[REDACTED]',
+    });
+    expect(sanitizeObject({ url: 'https://example.test/?github_pat=short-secret' })).toEqual({
+      url: 'https://example.test/?github_pat=%5BREDACTED%5D',
     });
   });
 

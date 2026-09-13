@@ -379,14 +379,23 @@ function getFieldNameWords(name: string): string[] {
 }
 
 function isCredentialName(name: string): boolean {
-  const words = getFieldNameWords(name);
-  if (['enabled', 'method', 'mode', 'required', 'type'].includes(words[words.length - 1] ?? '')) {
-    return false;
-  }
-  return (
-    isSecretEnvVarName(name) ||
-    words.some((word) => isSecretField(word) || /^(key|pat|credential|pass|pw)$/.test(word))
-  );
+  return name
+    .split(/[.[]]+/)
+    .filter(Boolean)
+    .some((part) => {
+      const words = getFieldNameWords(part);
+      if (
+        ['enabled', 'endpoint', 'method', 'mode', 'required', 'type', 'uri', 'url'].includes(
+          words[words.length - 1] ?? '',
+        )
+      ) {
+        return false;
+      }
+      return (
+        isSecretEnvVarName(part) ||
+        words.some((word) => isSecretField(word) || /^(key|pat|credential|pass|pw)$/.test(word))
+      );
+    });
 }
 
 function isCredentialValue(value: string): boolean {
@@ -418,6 +427,15 @@ function isCredentialPathName(name: string): boolean {
     name.toLowerCase() === 'google_application_credentials' ||
     CREDENTIAL_PATH_WORDS.has(lastWord) ||
     (lastWord === 'override' && words.some((word) => CREDENTIAL_PATH_WORDS.has(word)))
+  );
+}
+
+function isPathLikeCredentialValue(value: string): boolean {
+  return (
+    value.includes('/') ||
+    value.includes('\\') ||
+    /^[A-Za-z]:/.test(value) ||
+    /^[A-Za-z0-9_.-]+\.[A-Za-z0-9]+$/.test(value)
   );
 }
 
@@ -518,7 +536,12 @@ function collectWebhookPathCredentials(
     const segments = pathname.split('/').filter(Boolean);
     const prefix = segments.map((part) => decodeFormComponent(part) ?? part);
     for (const [index, part] of prefix.entries()) {
-      if (isCredentialValue(part)) {
+      if (
+        isCredentialValue(part) ||
+        (index > 0 &&
+          getFieldNameWords(prefix[index - 1]).length === 1 &&
+          isCredentialName(prefix[index - 1]))
+      ) {
         addCredential(segments[index]);
       }
     }
@@ -600,7 +623,10 @@ export function collectEnvCredentials(env: Record<string, unknown>, baseUrl?: st
     if (typeof value === 'string' && value) {
       // An authentication-file path is an operational setting, not the credential it names.
       const operational = isCredentialPathName(key);
-      if ((!operational && isCredentialName(key)) || isCredentialValue(value)) {
+      if (
+        (!(operational && isPathLikeCredentialValue(value)) && isCredentialName(key)) ||
+        isCredentialValue(value)
+      ) {
         credentials.add(value);
         collectAuthorizationCredentials(value, credentials);
       }
@@ -1181,8 +1207,6 @@ function redactNestedJsonValue(decoded: string | undefined): string | null {
 
 // Matches one `{{ ... }}` Nunjucks placeholder. `[^{}]*` excludes braces so it
 // cannot backtrack against the closing `}}` (linear, no ReDoS).
-const NUNJUCKS_PLACEHOLDER = /\{\{[^{}]*\}\}/g;
-
 // Only references and the standard credential-formatting filters are safe to
 // preserve. Other expressions can contain literal credentials or fallback values.
 const CREDENTIAL_REFERENCE_TEMPLATE =
@@ -1190,14 +1214,6 @@ const CREDENTIAL_REFERENCE_TEMPLATE =
 
 function isPureCredentialReference(value: string): boolean {
   return value.includes('{{') && value.replace(CREDENTIAL_REFERENCE_TEMPLATE, '').trim() === '';
-}
-
-// A value that is entirely Nunjucks placeholders (e.g. `{{password}}`) with no
-// literal content is a config template, not a runtime secret. A value that merely
-// CONTAINS a placeholder alongside literal text (e.g. `abc{{x}}def`) is not, so a
-// secret-named key must still redact it.
-function isPureTemplateValue(value: string): boolean {
-  return value.includes('{{') && value.replace(NUNJUCKS_PLACEHOLDER, '').trim() === '';
 }
 
 export function sanitizeUrlEncodedString(value: string): string {
@@ -1213,13 +1229,8 @@ export function sanitizeUrlEncodedString(value: string): string {
       return match;
     }
 
-    // Preserve pure Nunjucks placeholders (e.g. a provider body template
-    // `password={{password}}`): these are config templates, not runtime secrets,
-    // and this string flows through sanitizeObject into persisted provider
-    // configs. Mirrors the template guard in sanitizeUrl. Checked before the
-    // secret-key redaction so a templated secret field is kept, but a value that
-    // only embeds a placeholder among literal text is not exempted.
-    if (isPureTemplateValue(rawValue)) {
+    // Preserve direct credential references in persisted provider configs.
+    if (isPureCredentialReference(rawValue)) {
       return match;
     }
 
@@ -1520,6 +1531,7 @@ export function sanitizeUrl(url: string): string {
       for (const [key, value] of Array.from(sanitizedUrl.searchParams.entries())) {
         if (
           SENSITIVE_URL_PARAM_NAMES.test(key) ||
+          isCredentialName(key) ||
           rawSecretParamKeys.has(key) ||
           looksLikeSecret(value) ||
           // URLSearchParams only splits on `&`, so a `;`-delimited credential

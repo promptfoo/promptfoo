@@ -522,7 +522,6 @@ describe('MuseCodeProvider', () => {
     ['reasoning_effort', 'high', '--reasoning-effort'],
     ['approval_mode', 'never', '--approval-mode'],
     ['sandbox_network', 'restricted', '--sandbox-network'],
-    ['session_id', sessionId, '--session-id'],
   ])('renders constrained provider option %s before validating it', async (key, value, flag) => {
     const instance = provider({ config: { working_dir: testDir, [key]: '{{setting}}' } });
     const response = await instance.callApi(prompt, {
@@ -532,6 +531,24 @@ describe('MuseCodeProvider', () => {
     expect(response.error).toBeUndefined();
     const args = vi.mocked(spawn).mock.calls[0][1]!;
     expect(args[args.indexOf(flag) + 1]).toBe(value);
+  });
+
+  it('renders a validated session_id', async () => {
+    const instance = provider({
+      config: {
+        working_dir: testDir,
+        no_session_log: false,
+        muse_path: path.join(binDir, executableName('muse')),
+      },
+    });
+    expect((await instance.callApi(prompt)).error).toBeUndefined();
+    const response = await instance.callApi(prompt, {
+      vars: { setting: sessionId },
+      prompt: { raw: prompt, label: 'test', config: { session_id: '{{setting}}' } },
+    });
+    expect(response.error).toBeUndefined();
+    const args = vi.mocked(spawn).mock.calls[1][1]!;
+    expect(args[args.indexOf('--session-id') + 1]).toBe(sessionId);
   });
 
   it('rejects an invalid constrained option after rendering', async () => {
@@ -647,10 +664,11 @@ describe('MuseCodeProvider', () => {
     },
   );
 
-  it('omits raw journal data when a credential spans separate fields', async () => {
+  it('omits raw journal data when a credential spans envelope fields', async () => {
     const apiKey = 'split-secret';
     const events = structuredClone(fixtureEvents);
-    events.at(-1)!.payload.details = ['split-', 'sec', 'ret'];
+    events.at(-2)!.stream.kind = 'split-';
+    events.at(-2)!.stream.id = 'secret';
     onSpawn = (child) => {
       child.stdout.write(events.map((event) => JSON.stringify(event)).join('\n'));
       child.close();
@@ -1242,6 +1260,18 @@ describe('MuseCodeProvider', () => {
       },
     });
     expect((await instance.callApi(prompt)).error).toBeUndefined();
+    expect(spawn).toHaveBeenCalledTimes(1);
+    const otherDir = path.join(testDir, 'other');
+    await fs.mkdir(otherDir);
+    const wrongWorkspace = await instance.callApi(prompt, {
+      prompt: {
+        raw: prompt,
+        label: 'prompt',
+        config: { session_id: sessionId, working_dir: otherDir },
+      },
+      vars: {},
+    });
+    expect(wrongWorkspace.error).toContain('original working_dir');
     expect(spawn).toHaveBeenCalledTimes(1);
     onSpawn = () => {};
     const first = instance.callApi(prompt, {
