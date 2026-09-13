@@ -595,6 +595,8 @@ This is useful for inspecting the full request/response bodies (`promptfoo.reque
 
 Trace reads redact credential-like attribute keys such as authorization headers, cookies, API keys, tokens, secrets, and passwords before displaying or exporting spans. GenAI token counters such as `gen_ai.usage.input_tokens` and application token counters such as `llm.usage.prompt_tokens` and `llm.usage.completion_tokens` remain visible. Avoid placing secrets in custom span attributes because raw attributes may still be retained in the local trace store for internal evaluation workflows.
 
+OpenAI Agents SDK spans also redact credential-shaped keys and common credential text before OTLP export, including tool arguments, header records, URL credentials, and error messages. Token counters and descriptive signature metadata remain visible. Text containing YAML credentials is redacted as a whole. Oversized or deeply nested structured attributes are redacted rather than exported unsanitized.
+
 ### Exporting Traces
 
 Click the **Export Traces** button to download all traces for the current evaluation or test case as a JSON file. The export includes:
