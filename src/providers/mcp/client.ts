@@ -687,15 +687,39 @@ export class MCPClient {
       });
 
       if (activeWaits.length === 0) {
+        // Only pending refreshes own late connections. Release this client's
+        // unrelated connections now, without waiting for abandoned OAuth work.
+        for (const [serverKey, client] of [...this.clients]) {
+          if (this.tokenRefreshLocks.has(serverKey)) {
+            continue;
+          }
+          const transport = this.transports.get(serverKey);
+          this.clients.delete(serverKey);
+          this.transports.delete(serverKey);
+          this.tools.delete(serverKey);
+          this.oauthConfigs.delete(serverKey);
+          this.tokenExpiresAt.delete(serverKey);
+          await this.closeConnection(client, transport);
+        }
+
+        // Closing a connection yields: a refresh may settle or acquire a live
+        // waiter meanwhile. Reconsider ownership before deferring its cleanup.
+        const remainingLocks = [...this.tokenRefreshLocks.values()];
+        if (
+          remainingLocks.length === 0 ||
+          remainingLocks.some((lock) => lock.waiters.size > 0 || !lock.lastWaitCancelled)
+        ) {
+          continue;
+        }
         // Every pending refresh has been abandoned. Do not make teardown rejoin
         // raw token/connect work, but observe one eventual full cleanup.
         if (!this.deferredCleanupPromise) {
-          this.deferredCleanupPromise = Promise.allSettled(locks.map((lock) => lock.promise)).then(
-            async () => {
-              this.deferredCleanupPromise = null;
-              await this.cleanup();
-            },
-          );
+          this.deferredCleanupPromise = Promise.allSettled(
+            remainingLocks.map((lock) => lock.promise),
+          ).then(async () => {
+            this.deferredCleanupPromise = null;
+            await this.cleanup();
+          });
           void this.deferredCleanupPromise.catch((error: unknown) => {
             logger.debug('MCP cleanup after cancelled token refresh failed', { error });
           });

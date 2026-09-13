@@ -867,6 +867,168 @@ describe('evaluator trace integration', () => {
       );
     });
 
+    it.each(['success', 'completed error'] as const)(
+      'retains completed %s when CLI pause cancels the real default trace query delay',
+      async (outcome) => {
+        const { fetchTraceContext } = await vi.importActual<
+          typeof import('../../src/tracing/traceContext')
+        >('../../src/tracing/traceContext');
+        vi.useFakeTimers();
+        const network = vi
+          .spyOn(globalThis, 'fetch')
+          .mockRejectedValue(new Error('Unexpected fetch'));
+        const expectOnlyDisabledTelemetry = () => {
+          // The shared telemetry instance may issue its single opt-out notice.
+          // All requests, including that notice, are denied before transport.
+          expect(network.mock.calls.length).toBeLessThanOrEqual(1);
+          for (const [url, options] of network.mock.calls) {
+            expect(url).toBe('https://r.promptfoo.app/');
+            expect(options).toMatchObject({
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+            });
+            expect(JSON.parse(String(options?.body))).toMatchObject({
+              event: 'feature_used',
+              meta: { feature: 'telemetry disabled' },
+            });
+          }
+        };
+        const debug = vi.spyOn(logger, 'debug').mockImplementation(() => logger);
+        const entered = createDeferred<void>();
+        const caller = new AbortController();
+        const pause = new AbortController();
+        const reason = new Error('CLI pause during the default trace query delay');
+        const response = {
+          output: 'Completed target output',
+          ...(outcome === 'completed error' && { error: 'Completed tool diagnostic' }),
+          cost: 0.125,
+          tokenUsage: { total: 7, prompt: 4, completion: 3, numRequests: 1 },
+        };
+        const provider = createMockProvider({ response });
+        let traceSignal: AbortSignal | undefined;
+        let traceError: unknown;
+        mockFetchTraceContext.mockImplementationOnce(
+          (...args: Parameters<typeof fetchTraceContext>) => {
+            traceSignal = args[1]?.abortSignal;
+            const trace = fetchTraceContext(...args).catch((error: unknown) => {
+              traceError = error;
+              throw error;
+            });
+            entered.resolve();
+            return trace;
+          },
+        );
+        const pending = evaluate(
+          {
+            ...tracingSuite,
+            tracing: { ...tracingSuite.tracing!, queryDelay: undefined },
+            providers: [provider],
+            prompts: [{ raw: 'Test prompt', label: 'test' }],
+            tests: [{ metadata: { tracingEnabled: true, evaluationId: 'test-eval-id' } }],
+          },
+          mockEval,
+          {
+            abortSignal: caller.signal,
+            pauseSignal: pause.signal,
+            timeoutMs: -1,
+            maxEvalTimeMs: 0,
+            maxConcurrency: 1,
+            showProgressBar: false,
+          },
+        );
+        try {
+          await Promise.race([
+            entered.promise,
+            pending.then(() => {
+              throw new Error('Evaluation ended before the real trace delay');
+            }),
+          ]);
+          expect(debug).toHaveBeenCalledWith(
+            '[TraceContext] Waiting 3000ms for spans to arrive at external backend',
+          );
+          expect(provider.callApi).toHaveBeenCalledTimes(1);
+          await vi.advanceTimersByTimeAsync(2999);
+          expect(mockEval.addResult).not.toHaveBeenCalled();
+          expectOnlyDisabledTelemetry();
+          pause.abort(reason);
+          await pending;
+          expect(traceSignal?.reason).toBe(reason);
+          expect(traceError).toBeInstanceOf(Error);
+          expect(traceError).not.toBe(reason);
+          expect(traceError).toMatchObject({ name: 'AbortError', cause: reason });
+          expect(caller.signal.aborted).toBe(false);
+          expect(mockEval.addResult).toHaveBeenCalledTimes(1);
+          const row = vi.mocked(mockEval.addResult).mock.calls[0][0];
+          expect(
+            row.response,
+            'Real trace delay cancellation must retain the completed target',
+          ).toMatchObject(response);
+          expect(row.cost).toBe(0.125);
+          expect(row.success).toBe(outcome === 'success');
+          if (outcome === 'completed error') {
+            expect(row.error).toContain('Completed tool diagnostic');
+          }
+          await vi.advanceTimersByTimeAsync(1);
+          expectOnlyDisabledTelemetry();
+          expect(provider.callApi).toHaveBeenCalledTimes(1);
+        } finally {
+          caller.abort(new Error('trace delay fixture cleanup'));
+          await pending;
+          vi.useRealTimers();
+        }
+      },
+    );
+
+    it.each([
+      'caller',
+      'deadline',
+      'unrelated abort',
+      'nested cause',
+      'plain cause object',
+    ] as const)('does not treat %s trace cancellation as owned CLI pause', async (kind) => {
+      const caller = new AbortController();
+      const pause = new AbortController();
+      const pauseReason = new Error('CLI pause');
+      const foreignReason = Object.assign(new Error(`Independent ${kind}`), {
+        name: kind === 'deadline' ? 'TimeoutError' : 'AbortError',
+      });
+      const provider = createMockProvider({ response: { output: 'Completed target output' } });
+      mockFetchTraceContext.mockImplementationOnce(async () => {
+        if (kind === 'caller' || kind === 'deadline') {
+          caller.abort(foreignReason);
+        }
+        pause.abort(pauseReason);
+        if (kind === 'plain cause object') {
+          throw { name: 'AbortError', cause: pauseReason };
+        }
+        const cause =
+          kind === 'nested cause'
+            ? new Error('Nested wrapper', { cause: pauseReason })
+            : foreignReason;
+        throw Object.assign(new Error(`Independent ${kind}`, { cause }), { name: 'AbortError' });
+      });
+      await evaluate(
+        {
+          ...tracingSuite,
+          providers: [provider],
+          prompts: [{ raw: 'Test prompt', label: 'test' }],
+          tests: [{ metadata: { tracingEnabled: true, evaluationId: 'test-eval-id' } }],
+        },
+        mockEval,
+        {
+          abortSignal: caller.signal,
+          pauseSignal: pause.signal,
+          timeoutMs: -1,
+          maxEvalTimeMs: 0,
+          maxConcurrency: 1,
+          showProgressBar: false,
+        },
+      );
+      expect(provider.callApi).toHaveBeenCalledTimes(1);
+      expect(mockEval.addResult).toHaveBeenCalledTimes(1);
+      expect(vi.mocked(mockEval.addResult).mock.calls[0][0].success).toBe(false);
+    });
+
     it('does not include trace collection time in provider latency', async () => {
       vi.useFakeTimers();
       try {

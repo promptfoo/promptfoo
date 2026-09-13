@@ -77,6 +77,7 @@ import {
 } from './types/index';
 import { type ApiProvider, isApiProvider } from './types/providers';
 import { isAbortError, isNonTransientHttpStatus } from './util/fetch/errors';
+import { isCallerAbortError } from './util/fetch/requestSignal';
 import { filterByRange } from './util/filterRange';
 import { warnEmptyFilterRange } from './util/filterRangeWarn';
 import { loadFunction, parseFileUrl } from './util/functions/loadFunction';
@@ -889,7 +890,7 @@ function isCliPauseCancellation(
     pauseSignal?.aborted &&
       abortSignal?.aborted &&
       abortSignal.reason === pauseSignal.reason &&
-      error === pauseSignal.reason,
+      isCallerAbortError(error, pauseSignal, { requireReasonMatch: true }),
   );
 }
 
