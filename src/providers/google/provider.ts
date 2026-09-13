@@ -17,8 +17,6 @@ import cliState from '../../cliState';
 import { getEnvString } from '../../envars';
 import logger from '../../logger';
 import { fetchWithProxy } from '../../util/fetch/index';
-import { maybeLoadFromExternalFile } from '../../util/file';
-import { renderVarsInObject } from '../../util/index';
 import { getNunjucksEngine } from '../../util/templates';
 import {
   awaitProviderOperation,
@@ -28,29 +26,19 @@ import {
   withResponseCacheMetadata,
 } from '../shared';
 import { GoogleGenericProvider, type GoogleProviderOptions, getCallbackErrorOutput } from './base';
+import { getGeminiTokenUsage, parseGeminiContent, prepareGeminiRequest } from './gemini';
 import { getVertexApiHostForRegion } from './shared';
 import {
   calculateGoogleCostFromUsage,
   collectGroundingMetadata,
   collectThoughtSignatures,
   createAuthCacheDiscriminator,
-  formatCandidateContents,
-  geminiFormatAndSystemInstructions,
   getCandidate,
   getGoogleClient,
   getGoogleResponseServiceTier,
   getLastPromptSafetyRatings,
-  isNonCandidateStreamChunk,
   loadCredentials,
-  mergeGoogleCompletionOptions,
-  mergeGoogleRequestTools,
-  mergeParts,
   normalizeGeminiAudio,
-  normalizeGoogleServiceTier,
-  normalizeSafetySettings,
-  removeDeprecatedGeminiGenerationParams,
-  removeGoogleFunctionDeclarations,
-  resolveGoogleToolConfig,
 } from './util';
 
 import type {
@@ -58,10 +46,9 @@ import type {
   CallApiOptionsParams,
   GuardrailResponse,
   ProviderResponse,
-  TokenUsage,
 } from '../../types/index';
 import type { CompletionOptions } from './types';
-import type { GeminiApiResponse, GeminiErrorResponse, GeminiResponseData } from './util';
+import type { GeminiApiResponse } from './util';
 
 // Type for Google API errors
 type GaxiosError = any;
@@ -350,112 +337,16 @@ export class GoogleProvider extends GoogleGenericProvider {
     context?: CallApiContextParams,
     options?: CallApiOptionsParams,
   ): Promise<ProviderResponse> {
-    // Merge configs from the provider and the prompt
-    const config = mergeGoogleCompletionOptions(
-      this.config,
-      context?.prompt?.config as Partial<CompletionOptions> | undefined,
-    );
-
-    const { contents, systemInstruction } = geminiFormatAndSystemInstructions(
-      prompt,
-      context?.vars,
-      config.systemInstruction,
-      { useAssistantRole: config.useAssistantRole },
-    );
-
-    const { toolConfig, toolsDisabled } = resolveGoogleToolConfig(config);
-    // Get all tools (MCP + config tools) using base class method
-    const allTools = await this.getAllTools(context, {
-      skipExecutableToolFiles: toolsDisabled,
-      abortSignal: options?.abortSignal,
-    });
-    const requestTools = toolsDisabled ? removeGoogleFunctionDeclarations(allTools) : allTools;
-    const {
-      service_tier: passthroughServiceTier,
-      serviceTier: camelCasePassthroughServiceTier,
-      tools: passthroughTools,
-      // resolveGoogleToolConfig already folds these in; keeping them in the raw spread would
-      // let a conflicting passthrough mode overwrite a resolved NONE, so the request would
-      // carry mode ANY with the declarations already stripped.
-      toolConfig: _passthroughToolConfig,
-      tool_config: _passthroughToolConfigSnakeCase,
-      ...passthrough
-    } = config.passthrough || {};
-    const serviceTier = normalizeGoogleServiceTier(
-      passthroughServiceTier ?? camelCasePassthroughServiceTier ?? config.service_tier,
-      this.isVertexMode,
-    );
-    const serviceTierField = this.isVertexMode ? 'serviceTier' : 'service_tier';
-    const requestPassthroughTools =
-      toolsDisabled && passthroughTools !== undefined
-        ? removeGoogleFunctionDeclarations(passthroughTools)
-        : passthroughTools;
-    const mergedTools = mergeGoogleRequestTools(requestTools, requestPassthroughTools);
-
-    const body: Record<string, any> = {
-      contents,
-      generationConfig: {
-        ...(config.temperature !== undefined && { temperature: config.temperature }),
-        ...(config.topP !== undefined && { topP: config.topP }),
-        ...(config.topK !== undefined && { topK: config.topK }),
-        ...(config.stopSequences !== undefined && { stopSequences: config.stopSequences }),
-        ...(config.maxOutputTokens !== undefined && { maxOutputTokens: config.maxOutputTokens }),
-        ...config.generationConfig,
-        ...(this.modelName.includes('-tts') && {
-          response_modalities: undefined,
-          responseModalities: config.generationConfig?.responseModalities ??
-            config.generationConfig?.response_modalities?.map((modality) =>
-              modality.toUpperCase(),
-            ) ?? ['AUDIO'],
-          speechConfig: config.generationConfig?.speechConfig ?? {
-            voiceConfig: { prebuiltVoiceConfig: { voiceName: 'Kore' } },
-          },
-        }),
-      },
-      safetySettings: normalizeSafetySettings(config.safetySettings),
-      ...(toolConfig ? { toolConfig } : {}),
-      ...(mergedTools ? { tools: mergedTools } : {}),
-      // Vertex AI uses camelCase (systemInstruction), AI Studio uses snake_case (system_instruction)
-      ...(systemInstruction
-        ? this.isVertexMode
-          ? { systemInstruction }
-          : { system_instruction: systemInstruction }
-        : {}),
-      ...(serviceTier ? { [serviceTierField]: serviceTier } : {}),
-      ...passthrough,
-    };
-    body.generationConfig = removeDeprecatedGeminiGenerationParams(
+    const { body, config, toolsDisabled } = await prepareGeminiRequest(
       this.modelName,
-      body.generationConfig,
+      this.config,
+      prompt,
+      context,
+      'unified',
+      this.isVertexMode,
+      (toolOptions) =>
+        this.getAllTools(context, { ...toolOptions, abortSignal: options?.abortSignal }),
     );
-
-    // Handle response schema
-    if (config.responseSchema) {
-      if (body.generationConfig.response_schema) {
-        throw new Error(
-          '`responseSchema` provided but `generationConfig.response_schema` already set.',
-        );
-      }
-
-      let schema = maybeLoadFromExternalFile(
-        renderVarsInObject(config.responseSchema, context?.vars),
-      );
-
-      // Parse JSON string if it's a string
-      if (typeof schema === 'string') {
-        try {
-          schema = JSON.parse(schema);
-        } catch (error) {
-          throw new Error(`Invalid JSON in responseSchema: ${error}`);
-        }
-      }
-
-      // Apply variable substitution to the loaded schema
-      schema = renderVarsInObject(schema, context?.vars);
-
-      body.generationConfig.response_schema = schema;
-      body.generationConfig.response_mime_type = 'application/json';
-    }
 
     let data: GeminiApiResponse;
     let cached = false;
@@ -541,7 +432,15 @@ export class GoogleProvider extends GoogleGenericProvider {
     }
 
     // Parse response
-    return this.parseGeminiResponse(data, cached, config, context, responseHeaders, options);
+    return this.parseGeminiResponse(
+      data,
+      cached,
+      config,
+      toolsDisabled,
+      context,
+      responseHeaders,
+      options,
+    );
   }
 
   /**
@@ -551,143 +450,23 @@ export class GoogleProvider extends GoogleGenericProvider {
     data: GeminiApiResponse,
     cached: boolean,
     config: CompletionOptions,
+    toolsDisabled: boolean,
     context?: CallApiContextParams,
     responseHeaders?: unknown,
     options?: CallApiOptionsParams,
   ): Promise<ProviderResponse> {
     try {
-      const { toolsDisabled } = resolveGoogleToolConfig(config);
-
-      // Normalize response: non-streaming returns single object, streaming returns array
-      const normalizedData = Array.isArray(data) ? data : [data];
-
-      // Check for error response
-      const dataWithError = normalizedData as GeminiErrorResponse[];
-      const error = dataWithError[0]?.error;
-      if (error) {
-        return { error: `Error ${error.code}: ${error.message}` };
+      const parsed = parseGeminiContent(
+        data,
+        'unified',
+        cached,
+        shouldExposeSafetyBlockAsOutput(context),
+      );
+      if (parsed.kind === 'response') {
+        return parsed.response;
       }
-
-      const dataWithResponse = normalizedData as GeminiResponseData[];
-      let output: ReturnType<typeof formatCandidateContents> | undefined;
-
-      for (const datum of dataWithResponse) {
-        // Check for blockReason first
-        if (datum.promptFeedback?.blockReason) {
-          const isModelArmor = datum.promptFeedback.blockReason === 'MODEL_ARMOR';
-          const blockReasonMessage =
-            datum.promptFeedback.blockReasonMessage ||
-            `Content was blocked due to ${isModelArmor ? 'Model Armor' : 'safety settings'}: ${datum.promptFeedback.blockReason}`;
-
-          const tokenUsage = {
-            total: datum.usageMetadata?.totalTokenCount || 0,
-            prompt: datum.usageMetadata?.promptTokenCount || 0,
-            completion: datum.usageMetadata?.candidatesTokenCount || 0,
-          };
-
-          const guardrails: GuardrailResponse = {
-            flagged: true,
-            flaggedInput: true,
-            flaggedOutput: false,
-            reason: blockReasonMessage,
-          };
-
-          return {
-            output: blockReasonMessage,
-            tokenUsage,
-            guardrails,
-            metadata: {
-              modelArmor: isModelArmor
-                ? {
-                    blockReason: datum.promptFeedback.blockReason,
-                    ...(datum.promptFeedback.blockReasonMessage && {
-                      blockReasonMessage: datum.promptFeedback.blockReasonMessage,
-                    }),
-                  }
-                : undefined,
-            },
-          };
-        }
-
-        if (Array.isArray(data) && isNonCandidateStreamChunk(datum)) {
-          continue;
-        }
-
-        const candidate = getCandidate(datum);
-        const safetyFinishReasons = [
-          'SAFETY',
-          'PROHIBITED_CONTENT',
-          'RECITATION',
-          'BLOCKLIST',
-          'SPII',
-          'IMAGE_SAFETY',
-        ];
-
-        if (candidate.finishReason && safetyFinishReasons.includes(candidate.finishReason)) {
-          const finishReason = `Content was blocked due to safety settings with finish reason: ${candidate.finishReason}.`;
-          const tokenUsage = {
-            total: datum.usageMetadata?.totalTokenCount || 0,
-            prompt: datum.usageMetadata?.promptTokenCount || 0,
-            completion: datum.usageMetadata?.candidatesTokenCount || 0,
-          };
-          const guardrails: GuardrailResponse = {
-            flagged: true,
-            flaggedInput: false,
-            flaggedOutput: true,
-            reason: finishReason,
-          };
-          const safetyResponse = {
-            tokenUsage,
-            guardrails,
-            raw: data,
-            cached,
-          };
-          if (shouldExposeSafetyBlockAsOutput(context)) {
-            // Assertions must receive safety refusals as scorable provider outputs.
-            return { output: finishReason, ...safetyResponse };
-          }
-          return { error: finishReason, ...safetyResponse };
-        } else if (candidate.finishReason && candidate.finishReason === 'MAX_TOKENS') {
-          // MAX_TOKENS is treated as a successful completion
-          if (candidate.content?.parts) {
-            output = mergeParts(output, formatCandidateContents(candidate));
-          }
-        } else if (candidate.finishReason && candidate.finishReason !== 'STOP') {
-          return {
-            error: `Finish reason ${candidate.finishReason}: ${JSON.stringify(data)}`,
-          };
-        } else if (candidate.content?.parts) {
-          output = mergeParts(output, formatCandidateContents(candidate));
-        }
-      }
-
-      if (output === undefined || output === '') {
-        return {
-          error: `No output found in response: ${JSON.stringify(data)}`,
-        };
-      }
-
-      const lastData = dataWithResponse[dataWithResponse.length - 1];
-      const tokenUsage: TokenUsage = {
-        prompt:
-          lastData.usageMetadata?.promptTokenCount === undefined
-            ? undefined
-            : lastData.usageMetadata.promptTokenCount +
-              (lastData.usageMetadata?.toolUsePromptTokenCount ?? 0),
-        completion: lastData.usageMetadata?.candidatesTokenCount,
-        total: lastData.usageMetadata?.totalTokenCount,
-        numRequests: 1,
-        ...(lastData.usageMetadata?.cachedContentTokenCount !== undefined && {
-          cached: lastData.usageMetadata.cachedContentTokenCount,
-        }),
-        ...(lastData.usageMetadata?.thoughtsTokenCount !== undefined && {
-          completionDetails: {
-            reasoning: lastData.usageMetadata.thoughtsTokenCount,
-            acceptedPrediction: 0,
-            rejectedPrediction: 0,
-          },
-        }),
-      };
+      const { output, data: dataWithResponse, lastData } = parsed;
+      const tokenUsage = getGeminiTokenUsage(lastData.usageMetadata, false, 'unified');
 
       let guardrails: GuardrailResponse | undefined;
       const lastDataWithCandidate =
