@@ -4,21 +4,22 @@ import { context as otelContext, propagation, ROOT_CONTEXT, trace } from '@opent
 import { getCache, isCacheEnabled } from '../cache';
 import { getEnvString } from '../envars';
 import logger from '../logger';
+import {
+  type ApiEmbeddingProvider,
+  type ApiProvider,
+  type CallApiContextParams,
+  type CallApiOptionsParams,
+  inheritProviderCapabilities,
+  type ProviderEmbeddingResponse,
+  type ProviderOptions,
+  type ProviderResponse,
+} from '../types/providers';
 import { sha256 } from '../util/createHash';
 import { getRequestTimeoutMs, parseChatPrompt } from './shared';
 import { hasActiveTracingSpan } from './tracing';
 import type { LanguageModelUsage } from 'ai';
 
 import type { EnvOverrides } from '../types/env';
-import type {
-  ApiEmbeddingProvider,
-  ApiProvider,
-  CallApiContextParams,
-  CallApiOptionsParams,
-  ProviderEmbeddingResponse,
-  ProviderOptions,
-  ProviderResponse,
-} from '../types/providers';
 import type { TokenUsage } from '../types/shared';
 
 /**
@@ -543,6 +544,11 @@ export class VercelAiProvider implements ApiProvider {
  * Vercel AI Gateway embedding provider.
  */
 export class VercelAiEmbeddingProvider implements ApiEmbeddingProvider {
+  static readonly declaredProviderCapabilities = ['callEmbeddingApi'] as const;
+  readonly promptfooCapabilities = inheritProviderCapabilities(
+    VercelAiEmbeddingProvider.declaredProviderCapabilities,
+  );
+
   public modelName: string;
   public config: VercelAiConfig;
   public env?: EnvOverrides;

@@ -1,16 +1,21 @@
 import { fetchWithCache } from '../../cache';
+import {
+  type CallApiContextParams,
+  type CallApiOptionsParams,
+  inheritProviderCapabilities,
+  type ProviderEmbeddingResponse,
+} from '../../types/providers';
 import invariant from '../../util/invariant';
 import { getRequestTimeoutMs } from '../shared';
 import { DEFAULT_AZURE_API_VERSION } from './defaults';
 import { AzureGenericProvider } from './generic';
 
-import type {
-  CallApiContextParams,
-  CallApiOptionsParams,
-  ProviderEmbeddingResponse,
-} from '../../types/index';
-
 export class AzureEmbeddingProvider extends AzureGenericProvider {
+  static readonly declaredProviderCapabilities = ['callEmbeddingApi'] as const;
+  readonly promptfooCapabilities = inheritProviderCapabilities(
+    AzureEmbeddingProvider.declaredProviderCapabilities,
+  );
+
   async callEmbeddingApi(
     text: string,
     _context?: CallApiContextParams,

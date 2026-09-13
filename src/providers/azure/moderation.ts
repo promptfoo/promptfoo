@@ -3,19 +3,20 @@ import crypto from 'node:crypto';
 import { getCache, isCacheEnabled } from '../../cache';
 import { getEnvString } from '../../envars';
 import logger from '../../logger';
+import {
+  type ApiModerationProvider,
+  type CallApiContextParams,
+  type CallApiOptionsParams,
+  inheritProviderCapabilities,
+  type ModerationFlag,
+  type ProviderModerationResponse,
+} from '../../types/providers';
 import { fetchWithProxy } from '../../util/fetch/index';
 import { awaitProviderOperation, getRequestSignal } from '../shared';
 import { AzureGenericProvider } from './generic';
 
 import type { EnvVarKey } from '../../envars';
 import type { EnvOverrides } from '../../types/env';
-import type {
-  ApiModerationProvider,
-  CallApiContextParams,
-  CallApiOptionsParams,
-  ModerationFlag,
-  ProviderModerationResponse,
-} from '../../types/index';
 
 const AZURE_MODERATION_MODELS = [
   { id: 'text-content-safety', maxTokens: 10000, capabilities: ['text'] },
@@ -148,6 +149,11 @@ export function getModerationCacheKey(
 }
 
 export class AzureModerationProvider extends AzureGenericProvider implements ApiModerationProvider {
+  static readonly declaredProviderCapabilities = ['callModerationApi'] as const;
+  readonly promptfooCapabilities = inheritProviderCapabilities(
+    AzureModerationProvider.declaredProviderCapabilities,
+  );
+
   static MODERATION_MODELS = AZURE_MODERATION_MODELS;
   static MODERATION_MODEL_IDS = AZURE_MODERATION_MODELS.map((model) => model.id);
 

@@ -253,3 +253,7 @@ If you encounter issues:
 - [LiteLLM Documentation](https://docs.litellm.ai/docs/)
 - [Provider Configuration](./index.md)
 - [OpenAI Provider](./openai.md)
+
+### Provider identity and capabilities
+
+A custom provider `id` is retained for evaluation identity. LiteLLM wrappers forward request context and cancellation options to their OpenAI-compatible delegate, along with chat function validation and MCP cleanup. Embedding wrappers expose the embedding capability and cannot be selected as text graders.
