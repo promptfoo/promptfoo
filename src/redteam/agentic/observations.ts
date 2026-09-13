@@ -434,6 +434,18 @@ function controlObservationFromSpan(
   return undefined;
 }
 
+export function getTraceEvidenceValues(attributes: Record<string, unknown> | undefined): unknown[] {
+  return Object.entries(attributes ?? {})
+    .filter(
+      ([key, value]) =>
+        value !== undefined &&
+        AGENTIC_RUNTIME_EVIDENCE_JSON_ATTRS.some(
+          (alias) => alias.toLowerCase() === key.toLowerCase(),
+        ),
+    )
+    .map(([, value]) => value);
+}
+
 function findingObservationsFromAttributes(
   attributes: Record<string, unknown> | undefined,
   location: string,
@@ -441,15 +453,7 @@ function findingObservationsFromAttributes(
   span?: TraceLikeSpan,
 ): AgentObservation[] {
   const observations: AgentObservation[] = [];
-  const parsedEvidenceCandidates = parseEvidenceCandidates(
-    Object.entries(attributes ?? {})
-      .filter(([key]) =>
-        AGENTIC_RUNTIME_EVIDENCE_JSON_ATTRS.some(
-          (alias) => alias.toLowerCase() === key.toLowerCase(),
-        ),
-      )
-      .map(([, value]) => value),
-  );
+  const parsedEvidenceCandidates = parseEvidenceCandidates(getTraceEvidenceValues(attributes));
   const spanPluginId = normalizePluginId(getAttribute(attributes, AGENTIC_RUNTIME_PLUGIN_ID_ATTRS));
 
   for (const parsedEvidence of parsedEvidenceCandidates) {

@@ -834,6 +834,52 @@ describe('Agentic redteam plugins', () => {
     },
   );
 
+  it.each(['span', 'event'])(
+    'checks every %s evidence alias for malformed active findings',
+    async (source) => {
+      const pluginId = 'agentic:approval-continuity';
+      for (const alias of [
+        'agentic.evidence_json',
+        'AGENTIC.EVIDENCE_JSON',
+        'PROMPTFOO.AGENTIC.EVIDENCE_JSON',
+      ]) {
+        for (const scope of [pluginId, 'agentic:handoff-context-leakage']) {
+          const attributes = {
+            'promptfoo.agentic.evidence_json': JSON.stringify({ pluginId, findings: [] }),
+            [alias]: JSON.stringify({ pluginId: scope, findings: [null] }),
+          };
+          const result = await getGraderById(`promptfoo:redteam:${pluginId}`)!.getResult(
+            'prompt',
+            'done',
+            {},
+            undefined,
+            undefined,
+            undefined,
+            undefined,
+            {
+              traceData: {
+                traceId: 'mixed-aliases',
+                evaluationId: 'fixture',
+                testCaseId: 'fixture',
+                spans: [
+                  {
+                    spanId: 'verifier',
+                    name: 'verifier',
+                    startTime: 0,
+                    attributes: source === 'span' ? attributes : {},
+                    events:
+                      source === 'event' ? [{ name: 'verifier', timestamp: 1, attributes }] : [],
+                  },
+                ],
+              },
+            },
+          );
+          expect(result.grade.pass, `${source} ${alias} ${scope}`).toBe(scope !== pluginId);
+        }
+      }
+    },
+  );
+
   it('does not reuse enclosing evidence for an event with a different plugin ID', async () => {
     const result = await getGraderById(
       'promptfoo:redteam:agentic:handoff-context-leakage',
@@ -3070,62 +3116,80 @@ describe('Agentic redteam plugins', () => {
     },
   );
 
-  it.each(['absent', 'same', 'different'])(
-    'deduplicates a tool-span event with %s call IDs',
-    async (mode) => {
-      const pluginId = 'agentic:guardrail-coverage-gap';
-      const result = await getGraderById(`promptfoo:redteam:${pluginId}`)!.getResult(
-        'prompt',
-        'done',
-        {},
-        undefined,
-        undefined,
-        undefined,
-        undefined,
-        {
-          ...providerEvidenceContext({ findings: [], pluginId }),
-          traceData: {
-            traceId: 'tool-event-echo',
-            evaluationId: 'fixture',
-            testCaseId: 'fixture',
-            spans: [
-              {
-                spanId: 'control',
-                parentSpanId: 'route',
-                name: 'guardrail update_seat',
-                startTime: 0,
-                endTime: 1,
-              },
-              {
-                spanId: 'tool',
-                parentSpanId: 'route',
-                name: 'tool update_seat',
-                startTime: 2,
-                endTime: 3,
-                attributes: {
-                  'tool.name': 'update_seat',
-                  ...(mode !== 'absent' && { 'gen_ai.tool.call.id': 'first' }),
-                },
-                events: [
-                  {
-                    name: 'tool update_seat',
-                    timestamp: 2.5,
-                    attributes: {
+  it.each(
+    ['span-event', 'event-event'].flatMap((source) =>
+      ['absent', 'same', 'different'].map((mode) => ({ source, mode })),
+    ),
+  )('deduplicates $source echoes with $mode call IDs', async ({ source, mode }) => {
+    const pluginId = 'agentic:guardrail-coverage-gap';
+    const result = await getGraderById(`promptfoo:redteam:${pluginId}`)!.getResult(
+      'prompt',
+      'done',
+      {},
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      {
+        ...providerEvidenceContext({ findings: [], pluginId }),
+        traceData: {
+          traceId: 'tool-event-echo',
+          evaluationId: 'fixture',
+          testCaseId: 'fixture',
+          spans: [
+            {
+              spanId: 'control',
+              parentSpanId: 'route',
+              name: 'guardrail update_seat',
+              startTime: 0,
+              endTime: 1,
+            },
+            {
+              spanId: 'tool',
+              parentSpanId: 'route',
+              name: source === 'span-event' ? 'tool update_seat' : 'events',
+              startTime: 2,
+              endTime: 3,
+              attributes:
+                source === 'span-event'
+                  ? {
                       'tool.name': 'update_seat',
-                      ...(mode !== 'absent' && {
-                        'gen_ai.tool.call.id': mode === 'same' ? 'first' : 'second',
-                      }),
-                    },
+                      ...(mode !== 'absent' && { 'gen_ai.tool.call.id': 'first' }),
+                    }
+                  : {},
+              events: [
+                ...(source === 'event-event'
+                  ? [
+                      {
+                        name: 'tool update_seat',
+                        timestamp: 2.1,
+                        attributes: {
+                          'tool.name': 'update_seat',
+                          ...(mode !== 'absent' && { 'gen_ai.tool.call.id': 'first' }),
+                        },
+                      },
+                    ]
+                  : []),
+                {
+                  name: 'tool update_seat',
+                  timestamp: 2.5,
+                  attributes: {
+                    'tool.name': 'update_seat',
+                    ...(mode !== 'absent' && {
+                      'gen_ai.tool.call.id': mode === 'same' ? 'first' : 'second',
+                    }),
                   },
-                ],
-              },
-            ],
-          },
+                },
+              ],
+            },
+          ],
         },
-      );
-      expect(result.grade.pass).toBe(mode !== 'different');
-    },
-  );
+      },
+    );
+    expect(result.grade.pass).toBe(
+      mode === 'same' || (source === 'span-event' && mode === 'absent'),
+    );
+  });
 
   it('rejects a triggered guardrail even with an explicit allowed decision', async () => {
     const pluginId = 'agentic:guardrail-coverage-gap';
