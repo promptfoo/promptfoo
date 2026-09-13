@@ -139,11 +139,13 @@ function sanitizeProviderReference(provider: unknown, active = new WeakSet<objec
     if (Array.isArray(provider)) {
       return provider.map((entry) => sanitizeProviderReference(entry, active));
     }
-    if (typeof (provider as { id?: unknown }).id === 'function') {
+    const descriptors = Object.getOwnPropertyDescriptors(provider);
+    const id = descriptors.id?.value;
+    if (typeof id === 'function') {
       return sanitizeProvider(provider as ApiProvider | ProviderOptions);
     }
-    if (typeof (provider as { id?: unknown }).id === 'string') {
-      const { id, label, config, ...options } = provider as ProviderOptions;
+    if (typeof id === 'string') {
+      const { label, config, ...options } = getDataProperties(provider) as ProviderOptions;
       const sanitizedOptions = sanitizeForDbWithSecrets(options);
       return {
         ...(sanitizedOptions && typeof sanitizedOptions === 'object' ? sanitizedOptions : {}),
@@ -156,8 +158,10 @@ function sanitizeProviderReference(provider: unknown, active = new WeakSet<objec
       return sanitizeForDbWithSecrets(provider);
     }
     return Object.fromEntries(
-      Object.entries(Object.getOwnPropertyDescriptors(provider))
-        .filter(([, descriptor]) => 'value' in descriptor)
+      Object.entries(descriptors)
+        .filter(
+          ([key, descriptor]) => key !== 'toJSON' && descriptor.enumerable && 'value' in descriptor,
+        )
         .map(([key, descriptor]) => [
           key,
           sanitizeForDbWithSecrets(sanitizeProviderReference(descriptor.value, active)),
@@ -171,7 +175,9 @@ function sanitizeProviderReference(provider: unknown, active = new WeakSet<objec
 function getDataProperties(value: object): Record<string, unknown> {
   return Object.fromEntries(
     Object.entries(Object.getOwnPropertyDescriptors(value))
-      .filter(([, descriptor]) => descriptor.enumerable && 'value' in descriptor)
+      .filter(
+        ([key, descriptor]) => key !== 'toJSON' && descriptor.enumerable && 'value' in descriptor,
+      )
       .map(([key, descriptor]) => [key, descriptor.value]),
   );
 }
@@ -520,7 +526,11 @@ function sanitizeGradingResultForDb<T>(gradingResult: T, seen = new WeakSet<obje
     }
 
     if (asRecord(assertion)) {
-      next.assertion = sanitizeAssertionForDb(assertion as Assertion | AssertionSet);
+      try {
+        next.assertion = sanitizeAssertionForDb(assertion as Assertion | AssertionSet);
+      } catch {
+        next.assertion = {};
+      }
     }
 
     if (Array.isArray(componentResults)) {

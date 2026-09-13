@@ -372,6 +372,12 @@ describe('sanitizeObject', () => {
       );
     });
 
+    it('canonicalizes duplicate JSON keys even when the final value is benign', () => {
+      expect(sanitizeObject('{"message":"sk-hidden-secret","message":"safe"}')).toBe(
+        '{"message":"safe"}',
+      );
+    });
+
     it('fails closed when sanitizing parsed JSON exceeds the call stack', () => {
       let nested = '{"apiKey":"sk-hidden-secret"}';
       for (let index = 0; index < 10000; index++) {
@@ -988,6 +994,10 @@ describe('sanitizeObject', () => {
       // Sparse arrays become null during JSON.parse/stringify cycle
       expect(result[1]).toBeNull();
       expect(result[2]).toBe(3);
+    });
+
+    it('preserves trailing sparse array slots', () => {
+      expect(sanitizeObject(Array(2))).toEqual([null, null]);
     });
   });
 

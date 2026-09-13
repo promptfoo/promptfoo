@@ -881,7 +881,9 @@ function sanitizeJsonString(
       // JSON.parse keeps only final duplicate keys. Preserve benign formatting,
       // but canonicalize credential-shaped documents so discarded values cannot
       // survive in the raw text.
-      return serialized === parsedSerialized && !hasSecretJsonKey(str) ? str : serialized;
+      return serialized === parsedSerialized && !hasSecretJsonKey(str) && !hasDuplicateJsonKey(str)
+        ? str
+        : serialized;
     } catch {
       return REDACTED;
     }
@@ -897,6 +899,13 @@ function hasSecretJsonKey(value: string): boolean {
       return false;
     }
   });
+}
+
+function hasDuplicateJsonKey(value: string): boolean {
+  const keys = [...value.matchAll(/"(?:\\.|[^"\\])*"\s*:/g)].map((match) =>
+    match[0].slice(0, match[0].lastIndexOf(':')).trim(),
+  );
+  return new Set(keys).size !== keys.length;
 }
 
 // `key=value` where the key is a typical form-data identifier (allow brackets
@@ -1187,7 +1196,10 @@ function snapshotJsonData(
   if (existing) {
     return existing;
   }
-  const copy = (Array.isArray(value) ? [] : {}) as Record<string, unknown>;
+  const copy = (Array.isArray(value) ? Array(value.length) : Object.create(null)) as Record<
+    string,
+    unknown
+  >;
   seen.set(value, copy);
   for (const [key, descriptor] of Object.entries(Object.getOwnPropertyDescriptors(value))) {
     if (!descriptor.enumerable) {

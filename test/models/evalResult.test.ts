@@ -505,6 +505,18 @@ describe('EvalResult', () => {
     });
   });
 
+  it('omits hidden and serializer fields from provider maps', () => {
+    const provider: Record<string, unknown> = { visible: 'kept' };
+    Object.defineProperty(provider, 'apiKey', { value: 'fixture-secret', enumerable: false });
+    provider.toJSON = () => ({ message: 'fixture-secret' });
+
+    const result = sanitizeResultForJsonlArtifact({
+      testCase: { vars: {}, options: { provider } } as AtomicTestCase,
+    });
+
+    expect(result.testCase.options?.provider).toEqual({ visible: 'kept' });
+  });
+
   it('does not invoke grading-result accessors', () => {
     let reads = 0;
     const gradingResult: any = { pass: true, score: 1, reason: 'ok' };
