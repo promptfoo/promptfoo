@@ -216,6 +216,11 @@ function getShadowRanges(
         ranges.push([0, Number.POSITIVE_INFINITY]);
       }
     },
+    CatchClause(node) {
+      if (node.param && bindsName(node.param)) {
+        ranges.push([node.body.start, node.body.end]);
+      }
+    },
   }).visit(program);
   return ranges;
 }

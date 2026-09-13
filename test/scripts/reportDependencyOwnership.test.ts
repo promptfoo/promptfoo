@@ -960,7 +960,7 @@ describe('dependency ownership report', () => {
   it('ignores require calls shadowed by a function parameter', () => {
     write(
       'src/index.js',
-      "export function load(require, module) { require('local-only'); return module.require('local-module'); }",
+      "export function load(require, module) { require('local-only'); return module.require('local-module'); } try {} catch (require) { require('caught-require'); } try {} catch (module) { module.require('caught-module'); }",
     );
     expect(reportDependencyOwnership(root, config).undeclaredUsages).toEqual([]);
   });
