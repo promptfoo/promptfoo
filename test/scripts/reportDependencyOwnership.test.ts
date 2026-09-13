@@ -947,8 +947,9 @@ describe('dependency ownership report', () => {
       'src/index.js',
       "function require(name) { return name; }\nrequire('local-only');\nimport.meta['resolve']('resolved');",
     );
-    write('src/resolve.js', "require['resolve']('resolved-require');");
+    write('src/resolve.js', "require['resolve']('resolved-require'); module['require']('driver');");
     expect(reportDependencyOwnership(root, config).undeclaredUsages).toEqual([
+      expect.objectContaining({ dependency: 'driver' }),
       expect.objectContaining({ dependency: 'resolved' }),
       expect.objectContaining({ dependency: 'resolved-require' }),
     ]);
@@ -965,7 +966,7 @@ describe('dependency ownership report', () => {
   it('keeps require shadowing within its binding scope', () => {
     write(
       'src/index.js',
-      "export function load({ require }) { require('local'); }\nfor (let require = () => {}; false;) require('loop');\nrequire('external');",
+      "export function load({ require }) { require('local'); }\nfor (let require = () => {}; false;) require('loop');\nswitch (0) { case 0: { let require = () => {}; require('switch-local'); } }\nrequire('external');",
     );
     expect(reportDependencyOwnership(root, config).undeclaredUsages).toEqual([
       expect.objectContaining({ dependency: 'external' }),
@@ -991,13 +992,14 @@ describe('dependency ownership report', () => {
   it('ignores require calls shadowed in nested lexical scopes', () => {
     write(
       'src/index.js',
-      "export function load() { function require() {} require('function-local'); { const require = () => {}; require('block-local'); } }",
+      "export function load() { function require() {} require('function-local'); { const require = () => {}; require('block-local'); } class require {} }",
     );
     expect(reportDependencyOwnership(root, config).undeclaredUsages).toEqual([]);
   });
 
   it('ignores require imported under that name', () => {
     write('src/index.js', "import require from './local.js'; require('local-only');");
+    write('src/import-equals.ts', "import require = require('./local'); require('local-equals');");
     write('src/local.js', 'export default () => {};');
     expect(reportDependencyOwnership(root, config).undeclaredUsages).toEqual([]);
   });
@@ -1010,6 +1012,14 @@ describe('dependency ownership report', () => {
     expect(reportDependencyOwnership(root, config).undeclaredUsages).toEqual([
       expect.objectContaining({ dependency: 'driver' }),
     ]);
+  });
+
+  it('stops JSDoc type parsing after quoted braces', () => {
+    write(
+      'src/index.js',
+      "/** @type {?{value: '}'}} Description: import('prose') */\nexport const value = {};",
+    );
+    expect(reportDependencyOwnership(root, config).undeclaredUsages).toEqual([]);
   });
 
   it.each(['', " Description: import('example')", "\n * Example: import('example')"])(
@@ -1192,17 +1202,16 @@ describe('dependency ownership report', () => {
       path.join(root, 'node_modules'),
       'dir',
     );
-    const result = spawnSync(
-      process.execPath,
-      [
-        '--import',
-        import.meta.resolve('tsx'),
-        fs.realpathSync(path.join(root, 'scripts/reportDependencyOwnership.ts')),
-      ],
-      { encoding: 'utf8' },
-    );
+    const args = [
+      '--import',
+      import.meta.resolve('tsx'),
+      fs.realpathSync(path.join(root, 'scripts/reportDependencyOwnership.ts')),
+    ];
+    const result = spawnSync(process.execPath, args, { encoding: 'utf8' });
     expect(result.status, result.stderr).toBe(0);
     expect(result.stdout).toContain('src/app/package.json: app/browser (0 declarations)');
+    write('src/index.ts', "import 'undeclared';");
+    expect(spawnSync(process.execPath, [...args, '--check']).status).toBe(1);
   });
 
   it('records documented computed usage without pretending it is a literal import', () => {
