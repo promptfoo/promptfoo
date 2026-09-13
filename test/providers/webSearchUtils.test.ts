@@ -483,6 +483,16 @@ describe('webSearchUtils', () => {
       expect(mockLoadApiProvider).toHaveBeenCalledTimes(3);
     });
 
+    it('cleans rejected loaded candidates before trying the next provider', async () => {
+      const cleanup = vi.fn();
+      const rejected = { id: () => 'plugin:without-search', cleanup } as unknown as ApiProvider;
+      const accepted = { id: () => 'perplexity:sonar-pro' } as unknown as ApiProvider;
+      mockLoadApiProvider.mockResolvedValueOnce(rejected).mockResolvedValueOnce(accepted);
+
+      await expect(loadWebSearchProvider()).resolves.toBe(accepted);
+      expect(cleanup).toHaveBeenCalledOnce();
+    });
+
     it('should load Perplexity without additional config', async () => {
       const mockProvider: Partial<ApiProvider> = {
         id: () => 'perplexity:sonar-pro',

@@ -1325,11 +1325,15 @@ export async function doEval(
 
   const runEvaluation = async (initialization?: boolean) => {
     const ownedProviders = new Set<ApiProvider>();
+    const trackOwnedProvider = (provider: ApiProvider) => {
+      if (!providerRegistry.has(provider)) {
+        ownedProviders.add(provider);
+      }
+    };
     let evaluationError: unknown;
     try {
-      return await withGradingProviderTracker(
-        (provider) => ownedProviders.add(provider),
-        () => runEvaluationBody(initialization, (provider) => ownedProviders.add(provider)),
+      return await withGradingProviderTracker(trackOwnedProvider, () =>
+        runEvaluationBody(initialization, trackOwnedProvider),
       );
     } catch (error) {
       evaluationError = error;
