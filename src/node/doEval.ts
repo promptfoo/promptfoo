@@ -7,7 +7,7 @@ import dedent from 'dedent';
 import { globSync } from 'glob';
 import ora from 'ora';
 import { z } from 'zod';
-import { disableCache } from '../cache';
+import { withCacheEnabled } from '../cache';
 import cliState from '../cliState';
 import { DEFAULT_MAX_CONCURRENCY } from '../constants';
 import { getEnvBool, getEnvFloat, getEnvInt, isCI } from '../envars';
@@ -66,7 +66,6 @@ import { isUuid } from '../util/uuid';
 import { deleteErrorResults, getErrorResultIds, recalculatePromptMetrics } from './retry';
 import { notCloudEnabledShareInstructions } from './shareInstructions';
 import type { FSWatcher } from 'chokidar';
-import type { Command } from 'commander';
 
 import type {
   CommandLineOptions,
@@ -94,7 +93,7 @@ export const EvalCommandSchema = CommandLineOptionsSchema.extend({
 export type EvalCommandOptions = z.infer<typeof EvalCommandSchema>;
 
 function runtimeTagsForEval(
-  cmdObj: Partial<CommandLineOptions & Command>,
+  cmdObj: Partial<CommandLineOptions>,
   commandLineOptions: Record<string, any> | undefined,
 ): Record<string, string> | undefined {
   const tags = {
@@ -227,7 +226,7 @@ function watchUntilTerminated(watcher: FSWatcher): Promise<void> {
 }
 
 function resolveSuggestionOptions(
-  cmdObj: Partial<CommandLineOptions & Command>,
+  cmdObj: Partial<CommandLineOptions>,
   commandLineOptions: Record<string, any> | undefined,
   evaluateOptions: InternalEvaluateOptions,
 ): Pick<InternalEvaluateOptions, 'generateSuggestions' | 'suggestionsCount'> {
@@ -288,7 +287,7 @@ function isDeclarativeConfig(configPath: string): boolean {
 }
 
 export async function doEval(
-  cmdObj: Partial<CommandLineOptions & Command>,
+  cmdObj: Partial<CommandLineOptions> & { id?: string },
   defaultConfig: Partial<UnifiedConfig>,
   defaultConfigPath: string | undefined,
   evaluateOptions: InternalEvaluateOptions,
@@ -629,7 +628,6 @@ export async function doEval(
 
     if (cache === false) {
       logger.info('Cache is disabled.');
-      disableCache();
     }
 
     // Propagate maxConcurrency to cliState for providers (e.g., Python worker pool)
@@ -868,13 +866,22 @@ export async function doEval(
       };
     }
 
+    if (cmdObj.description !== undefined) {
+      config = { ...config, description: cmdObj.description };
+    }
+
     // Create or load eval record
     const author = getAuthor();
+    const evalRecordOptions = {
+      author,
+      runtimeOptions,
+      ...(cmdObj.id ? { id: cmdObj.id } : {}),
+    };
     const evalRecord = resumeEval
       ? resumeEval
       : cmdObj.write
-        ? await Eval.create(config, testSuite.prompts, { author, runtimeOptions })
-        : new Eval(config, { author, runtimeOptions });
+        ? await Eval.create(config, testSuite.prompts, evalRecordOptions)
+        : new Eval(config, evalRecordOptions);
 
     // Graceful pause support via Ctrl+C (only when writing to database)
     const abortController = new AbortController();
@@ -937,15 +944,18 @@ export async function doEval(
       process.on('SIGINT', sigintHandler);
     }
 
-    // Run the evaluation!!!!!!
+    const evalTestSuite = testSuite;
+    const evalOptions = {
+      ...options,
+      filterRange: hasScenarios || resumeEval ? filterRange : undefined,
+      abortSignal: evaluateOptions.abortSignal,
+      isRedteam: Boolean(config.redteam),
+    };
     let ret;
     try {
-      ret = await evaluate(testSuite, evalRecord, {
-        ...options,
-        filterRange: hasScenarios || resumeEval ? filterRange : undefined,
-        abortSignal: evaluateOptions.abortSignal,
-        isRedteam: Boolean(config.redteam),
-      });
+      ret = await withCacheEnabled(cache === false ? false : undefined, () =>
+        evaluate(evalTestSuite, evalRecord, evalOptions),
+      );
 
       // Post-evaluation cleanup for retry-errors mode
       // SUCCESS: Now it's safe to delete the old ERROR results and recalculate metrics

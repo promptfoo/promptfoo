@@ -1,7 +1,7 @@
 import { isGraderFailure, matchesLlmRubric } from '../matchers/llmGrading';
 import invariant from '../util/invariant';
 
-import type { AssertionParams, GradingResult } from '../types/index';
+import type { AssertionParams, GradingConfig, GradingResult } from '../types/index';
 
 export const handleLlmRubric = async ({
   assertion,
@@ -28,7 +28,7 @@ export const handleLlmRubric = async ({
   const resp = await matchesLlmRubric(
     renderedValue || '',
     outputString,
-    test.options,
+    (test.options ?? {}) as GradingConfig,
     test.vars,
     assertion,
     !assertion.transform && (providerResponse?.images?.length || providerResponse?.audio)

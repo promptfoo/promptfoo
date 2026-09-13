@@ -1,0 +1,213 @@
+import { execFileSync } from 'node:child_process';
+import * as fs from 'node:fs';
+import * as path from 'node:path';
+import { pathToFileURL } from 'node:url';
+
+import { load } from 'js-yaml';
+
+const REFERENCE_DIR = path.join('site', 'docs', 'api', 'node', 'reference');
+const LEGACY_ANCHOR_MANIFEST = path.join('site', 'src', 'data', 'nodeApiLegacyAnchors.json');
+const GUIDE_PAGES = {
+  examples: path.join('site', 'docs', 'usage', 'node-api-examples.md'),
+  package: path.join('site', 'docs', 'usage', 'node-package.md'),
+  quickReference: path.join('site', 'docs', 'usage', 'node-api-quick-reference.md'),
+  reference: path.join('site', 'docs', 'usage', 'node-api-reference.md'),
+} as const;
+const LEGACY_ANCHOR_COUNTS = {
+  examples: 26,
+  package: 7,
+  quickReference: 36,
+  reference: 47,
+} as const;
+
+type GuidePage = keyof typeof GUIDE_PAGES;
+type LegacyAnchorManifest = Record<GuidePage, Record<string, string[]>>;
+
+function comparePaths(left: string, right: string) {
+  return left < right ? -1 : left > right ? 1 : 0;
+}
+
+function collectMarkdownFiles(directory: string): string[] {
+  const files: string[] = [];
+  const pending = [directory];
+
+  while (pending.length > 0) {
+    const currentDir = pending.pop();
+    if (!currentDir) {
+      continue;
+    }
+
+    for (const entry of fs.readdirSync(currentDir, { withFileTypes: true })) {
+      const entryPath = path.join(currentDir, entry.name);
+      if (entry.isDirectory()) {
+        pending.push(entryPath);
+      } else if (entry.isFile() && path.extname(entry.name) === '.md') {
+        files.push(entryPath);
+      }
+    }
+  }
+
+  return files;
+}
+
+function parseFrontmatter(markdown: string, filePath: string): Record<string, unknown> {
+  const match = markdown.match(/^---\r?\n([\s\S]*?)\r?\n---\r?\n/);
+  if (!match?.[1]) {
+    throw new Error(`${filePath} is missing YAML frontmatter`);
+  }
+
+  const parsed = load(match[1]);
+  if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+    throw new Error(`${filePath} has invalid YAML frontmatter`);
+  }
+
+  return parsed as Record<string, unknown>;
+}
+
+function readLegacyAnchorManifest(rootDir: string): LegacyAnchorManifest {
+  const manifestPath = path.join(rootDir, LEGACY_ANCHOR_MANIFEST);
+  const parsed: unknown = JSON.parse(fs.readFileSync(manifestPath, 'utf8'));
+  if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+    throw new Error(`${manifestPath} must contain an object`);
+  }
+
+  return parsed as LegacyAnchorManifest;
+}
+
+function validateReferenceFrontmatter(rootDir: string, errors: string[]) {
+  const referenceDir = path.join(rootDir, REFERENCE_DIR);
+  const readmePath = path.join(referenceDir, 'README.md');
+  const generatedPages = collectMarkdownFiles(referenceDir)
+    .filter((filePath) => filePath !== readmePath)
+    .sort((left, right) =>
+      comparePaths(path.relative(referenceDir, left), path.relative(referenceDir, right)),
+    );
+  const orderedPages = [readmePath, ...generatedPages];
+  const sidebarPositionsByDirectory = new Map([[referenceDir, 0]]);
+
+  orderedPages.forEach((filePath) => {
+    const relativePath = path.relative(rootDir, filePath);
+    let frontmatter: Record<string, unknown>;
+    try {
+      const markdown = fs.readFileSync(filePath, 'utf8');
+      frontmatter = parseFrontmatter(markdown, relativePath);
+      // Prettier can duplicate closing generic delimiters in Markdown blockquotes.
+      if (/^>.*(?<![\\=])>+\\>/m.test(markdown)) {
+        errors.push(`${relativePath} contains malformed generic delimiters`);
+      }
+    } catch (error) {
+      errors.push(error instanceof Error ? error.message : String(error));
+      return;
+    }
+
+    const directory = path.dirname(filePath);
+    const expectedPosition = (sidebarPositionsByDirectory.get(directory) ?? 0) + 1;
+    sidebarPositionsByDirectory.set(directory, expectedPosition);
+    if (frontmatter.sidebar_position !== expectedPosition) {
+      errors.push(
+        `${relativePath} must set sidebar_position to ${expectedPosition}; found ${String(frontmatter.sidebar_position)}`,
+      );
+    }
+    if (typeof frontmatter.title !== 'string' || frontmatter.title.length === 0) {
+      errors.push(`${relativePath} must set a non-empty title`);
+    }
+    if (
+      typeof frontmatter.description !== 'string' ||
+      frontmatter.description.length < 150 ||
+      frontmatter.description.length > 160
+    ) {
+      errors.push(`${relativePath} must set a 150-160 character description`);
+    }
+  });
+}
+
+function validateLegacyAnchorContract(rootDir: string, errors: string[]) {
+  const manifest = readLegacyAnchorManifest(rootDir);
+  const expectedPages = Object.keys(GUIDE_PAGES).sort(comparePaths);
+  const manifestPages = Object.keys(manifest).sort(comparePaths);
+
+  if (expectedPages.join('\n') !== manifestPages.join('\n')) {
+    errors.push(
+      `Legacy anchor manifest pages must be ${expectedPages.join(', ')}; found ${manifestPages.join(', ')}`,
+    );
+  }
+
+  for (const page of expectedPages as GuidePage[]) {
+    const sections = manifest[page];
+    if (!sections || typeof sections !== 'object' || Array.isArray(sections)) {
+      errors.push(`Legacy anchor manifest entry ${page} must map sections to anchors`);
+      continue;
+    }
+    const anchors = Object.values(sections).flat();
+    if (anchors.length !== LEGACY_ANCHOR_COUNTS[page]) {
+      errors.push(
+        `Legacy anchor manifest entry ${page} must contain ${LEGACY_ANCHOR_COUNTS[page]} anchors; found ${anchors.length}`,
+      );
+    }
+
+    const uniqueAnchors = new Set(anchors);
+    if (uniqueAnchors.size !== anchors.length) {
+      errors.push(`Legacy anchor manifest entry ${page} contains duplicate anchors`);
+    }
+
+    for (const anchor of anchors) {
+      if (typeof anchor !== 'string' || !/^[a-z0-9][a-z0-9-]*$/.test(anchor)) {
+        errors.push(`Legacy anchor manifest entry ${page} contains invalid id ${String(anchor)}`);
+      }
+    }
+
+    const guidePath = path.join(rootDir, GUIDE_PAGES[page]);
+    const markdown = fs.readFileSync(guidePath, 'utf8');
+    const expectedImport =
+      "import LegacyHeadingAnchors from '@site/src/components/LegacyHeadingAnchors';";
+    if (!markdown.includes(expectedImport)) {
+      errors.push(`${GUIDE_PAGES[page]} must import LegacyHeadingAnchors`);
+    }
+    for (const [section, sectionAnchors] of Object.entries(sections)) {
+      if (!Array.isArray(sectionAnchors) || sectionAnchors.length === 0) {
+        errors.push(`Legacy anchor section ${page}/${section} must contain anchors`);
+      }
+      const usage = `<LegacyHeadingAnchors page="${page}" section="${section}" />`;
+      const precedingHeading = markdown
+        .slice(0, markdown.indexOf(usage))
+        .match(/(?:^|\n)#{1,6} ([^\r\n]+)\r?\n\s*$/)?.[1];
+      if (precedingHeading !== section || markdown.split(usage).length !== 2) {
+        errors.push(`${GUIDE_PAGES[page]} must render ${usage} immediately after its heading`);
+      }
+    }
+  }
+}
+
+export function validateNodeApiDocs(rootDir = process.cwd()) {
+  const errors: string[] = [];
+  validateReferenceFrontmatter(rootDir, errors);
+  validateLegacyAnchorContract(rootDir, errors);
+
+  if (errors.length > 0) {
+    throw new Error(`Node.js API documentation contract failed:\n- ${errors.join('\n- ')}`);
+  }
+}
+
+export function checkNodeApiDocsClean(rootDir = process.cwd()) {
+  execFileSync('git', ['diff', '--exit-code', '--', REFERENCE_DIR], { cwd: rootDir });
+  const untracked = execFileSync(
+    'git',
+    ['ls-files', '--others', '--exclude-standard', '--', REFERENCE_DIR],
+    {
+      cwd: rootDir,
+      encoding: 'utf8',
+    },
+  );
+  if (untracked.trim()) {
+    throw new Error(`Generated Node.js API documentation is not tracked:\n${untracked}`);
+  }
+}
+
+const invokedPath = process.argv[1] ? pathToFileURL(path.resolve(process.argv[1])).href : undefined;
+if (invokedPath === import.meta.url) {
+  validateNodeApiDocs();
+  if (process.argv.includes('--check-clean')) {
+    checkNodeApiDocsClean();
+  }
+  console.log('Node.js API documentation contract is valid.');
+}

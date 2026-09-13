@@ -8,11 +8,18 @@ import invariant from '../../util/invariant';
 import { safeJsonStringify } from '../../util/json';
 import type { Options as PythonShellOptions } from 'python-shell';
 
-import type { ApiProvider, Prompt, PromptFunctionContext, VarValue } from '../../types/index';
+import type {
+  ApiProvider,
+  Prompt,
+  PromptContent,
+  PromptFunctionContext,
+  PromptFunctionResult,
+  VarValue,
+} from '../../types/index';
 
 /**
  * Python prompt function. Runs a specific function from the python file.
- * @param promptPath - Path to the Python file.
+ * @param filePath - Path to the Python file.
  * @param functionName - Function name to execute.
  * @param context - Context for the prompt.
  * @returns The prompts
@@ -37,7 +44,9 @@ export const pythonPromptFunction = async (
     config: context.config ?? {},
   };
 
-  return runPython(filePath, functionName, [transformedContext]);
+  return runPython<PromptContent | PromptFunctionResult>(filePath, functionName, [
+    transformedContext,
+  ]);
 };
 
 /**

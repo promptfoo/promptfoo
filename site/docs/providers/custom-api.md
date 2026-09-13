@@ -7,6 +7,11 @@ description: Configure custom JavaScript providers to integrate any API or servi
 
 Custom Javascript providers let you create providers in JavaScript or TypeScript to integrate with any API or service not already built into promptfoo.
 
+If you are composing providers directly in application code instead of loading
+them from config files, start with the
+[Node.js API guide](/docs/usage/node-package) and the generated
+[Node.js API reference](/docs/api/node/).
+
 ## Supported File Formats and Examples
 
 promptfoo supports multiple JavaScript module formats. Complete working examples are available on GitHub:
@@ -19,6 +24,11 @@ promptfoo supports multiple JavaScript module formats. Complete working examples
 ## Provider Interface
 
 At minimum, a custom provider must implement an `id` method and a `callApi` method.
+For the exact TypeScript contracts, see
+[`ApiProvider`](/docs/api/node/reference/interfaces/ApiProvider),
+[`CallApiFunction`](/docs/api/node/reference/interfaces/CallApiFunction),
+[`ProviderResponse`](/docs/api/node/reference/interfaces/ProviderResponse), and
+[`CallApiContextParams`](/docs/api/node/reference/interfaces/CallApiContextParams).
 
 ```javascript title="echoProvider.mjs"
 // Save as echoProvider.mjs for ES6 syntax, or echoProvider.js for CommonJS

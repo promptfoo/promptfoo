@@ -14,10 +14,12 @@ import {
   EmailValidationError,
   getAuthor,
   getUserEmail,
+  isLoggedIntoCloud,
   promptForEmailUnverified,
 } from '../../globalConfig/accounts';
 import { cloudConfig } from '../../globalConfig/cloud';
 import logger from '../../logger';
+import { runDbMigrations } from '../../migrate';
 import { getProviderIds } from '../../providers/index';
 import { isPromptfooSampleTarget } from '../../providers/shared';
 import telemetry from '../../telemetry';
@@ -274,6 +276,9 @@ export async function doGenerateRedteam(
   options: Partial<RedteamCliGenerateOptions>,
 ): Promise<Partial<UnifiedConfig> | null> {
   setupEnv(options.envFile);
+  if (!isLoggedIntoCloud()) {
+    await runDbMigrations();
+  }
   const cacheOverride = options.cache === false ? false : undefined;
   if (cacheOverride === false) {
     logger.info('Cache is disabled');

@@ -23,11 +23,10 @@ describe('matchesFactuality', () => {
     vi.restoreAllMocks();
   });
 
-  it('should pass when the factuality check passes with legacy format', async () => {
+  it('should use default grading for a passing legacy factuality result', async () => {
     const input = 'Input text';
     const expected = 'Expected output';
     const output = 'Sample output';
-    const grading = {};
 
     const mockCallApi = vi.fn().mockResolvedValue({
       output:
@@ -37,7 +36,7 @@ describe('matchesFactuality', () => {
 
     vi.spyOn(DefaultGradingProvider, 'callApi').mockImplementation(mockCallApi);
 
-    await expect(matchesFactuality(input, expected, output, grading)).resolves.toEqual({
+    await expect(matchesFactuality(input, expected, output)).resolves.toEqual({
       pass: true,
       reason:
         'The submitted answer is a subset of the expert answer and is fully consistent with it.',

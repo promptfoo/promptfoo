@@ -108,7 +108,10 @@
     "tsc": "tsc --noEmit",
     "mcp": "node dist/src/entrypoint.js mcp",
     "deps:ownership": "tsx scripts/reportDependencyOwnership.ts",
-    "prepare": "husky || exit 0"
+    "prepare": "husky || exit 0",
+    "docs:api": "npm ci --prefix scripts/node-api-docs --ignore-scripts --registry=https://registry.npmjs.org && npm run generate --prefix scripts/node-api-docs && tsx scripts/nodeApiReferencePostprocess.ts && prettier --write \"site/docs/api/node/reference/**/*.md\"",
+    "docs:api:check": "npm run docs:api && tsx scripts/checkNodeApiDocs.ts --check-clean",
+    "docs:api:validate": "tsx scripts/checkNodeApiDocs.ts"
   },
   "overrides": {
     "uri-js": "npm:uri-js-replace",

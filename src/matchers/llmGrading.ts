@@ -66,7 +66,7 @@ function getFactualityScoreLookup(grading: GradingConfig): Record<string, number
 function buildFactualityResult(
   option: string,
   reason: string,
-  grading: GradingConfig,
+  grading: GradingConfig = {},
   resp: ProviderResponse,
 ): Omit<GradingResult, 'assertion'> {
   const scoreLookup = getFactualityScoreLookup(grading);
@@ -178,25 +178,33 @@ function getGradingOutputForAudio(llmOutput: string, audio: ProviderResponse['au
     : llmOutput;
 }
 
+/**
+ * Grade an output against a free-form LLM rubric.
+ *
+ * @param rubric - Rubric text or structured rubric payload.
+ * @param llmOutput - Model output to grade.
+ * @param grading - Provider and rubric-prompt overrides for the grader.
+ * @param vars - Template variables available while rendering custom rubrics.
+ * @param assertion - Assertion metadata to attach to the result, when present.
+ * @param options - Error-handling and remote-grading preferences.
+ * @param providerCallContext - Provider context forwarded to grader calls.
+ * @returns Grading result for the rubric check.
+ */
 export async function matchesLlmRubric(
   rubric: string | object,
   llmOutput: string,
-  grading?: GradingConfig,
+  grading: GradingConfig,
   vars?: Record<string, VarValue>,
   assertion?: Assertion,
   options?: {
+    /** Rethrow provider failures instead of converting them into a failed grading result. */
     throwOnError?: boolean;
+    /** Prefer remote grading when no explicit provider override is supplied. */
     preferRemote?: boolean;
     providerResponse?: ProviderResponse;
   },
   providerCallContext?: CallApiContextParams,
 ): Promise<GradingResult> {
-  if (!grading) {
-    throw new Error(
-      'Cannot grade output without grading config. Specify --grader option or grading config.',
-    );
-  }
-
   // Use remote grading when no provider is explicitly configured, or when a
   // caller injected an implicit default provider but still prefers remote.
   const shouldPreferRemote =
@@ -320,6 +328,17 @@ export async function matchesPiScore(
   };
 }
 
+/**
+ * Grade whether an answer is factually consistent with a reference answer.
+ *
+ * @param input - Original prompt or question.
+ * @param expected - Reference answer used as the factual baseline.
+ * @param output - Model answer to grade.
+ * @param grading - Provider and rubric-prompt overrides for the grader.
+ * @param vars - Template variables available while rendering custom rubrics.
+ * @param providerCallContext - Provider context forwarded to grader calls.
+ * @returns Factuality grading result without the surrounding assertion payload.
+ */
 export async function matchesFactuality(
   input: string,
   expected: string,
@@ -328,12 +347,7 @@ export async function matchesFactuality(
   vars?: Record<string, VarValue>,
   providerCallContext?: CallApiContextParams,
 ): Promise<Omit<GradingResult, 'assertion'>> {
-  if (!grading) {
-    throw new Error(
-      'Cannot grade output without grading config. Specify --grader option or grading config.',
-    );
-  }
-
+  grading ??= {};
   const parsedOutput = tryParse(output);
   const templateVars = { ...(vars || {}), input, ideal: expected, completion: parsedOutput };
 
@@ -379,6 +393,17 @@ export async function matchesFactuality(
   }
 }
 
+/**
+ * Grade whether an answer satisfies a closed-QA criterion.
+ *
+ * @param input - Original prompt or question.
+ * @param expected - Criterion or expected answer the output should satisfy.
+ * @param output - Model answer to grade.
+ * @param grading - Provider and rubric-prompt overrides for the grader.
+ * @param vars - Template variables available while rendering custom rubrics.
+ * @param providerCallContext - Provider context forwarded to grader calls.
+ * @returns Closed-QA grading result without the surrounding assertion payload.
+ */
 export async function matchesClosedQa(
   input: string,
   expected: string,
@@ -387,12 +412,7 @@ export async function matchesClosedQa(
   vars?: Record<string, VarValue>,
   providerCallContext?: CallApiContextParams,
 ): Promise<Omit<GradingResult, 'assertion'>> {
-  if (!grading) {
-    throw new Error(
-      'Cannot grade output without grading config. Specify --grader option or grading config.',
-    );
-  }
-
+  grading ??= {};
   const parsedOutput = tryParse(output);
   const templateVars = { ...(vars || {}), input, criteria: expected, completion: parsedOutput };
 

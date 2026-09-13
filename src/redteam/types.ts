@@ -52,124 +52,241 @@ export interface TracingConfig {
   strategies?: Record<string, TracingConfig>;
 }
 
-export const PluginConfigSchema = z.object({
-  examples: z.array(z.string()).optional(),
-  graderExamples: z
-    .array(
-      z.object({
-        output: z.string(),
-        pass: z.boolean(),
-        score: z.number(),
-        reason: z.string(),
-      }),
-    )
-    .optional(),
-  graderGuidance: z.string().optional(),
-  severity: SeveritySchema.optional(),
-  language: z.union([z.string(), z.array(z.string())]).optional(),
-  prompt: z.string().optional(),
-  purpose: z.string().optional(),
-  // TODO: should be z.record(Modifier, z.unknown())
-  modifiers: z.record(z.string(), z.unknown()).optional(),
-  // BOLA
-  targetIdentifiers: z.array(z.string()).optional(),
-  // BFLA
-  targetSystems: z.array(z.string()).optional(),
-  // Competitor
-  mentions: z.boolean().optional(),
-  // SSRF
-  targetUrls: z.array(z.string()).optional(),
-  ssrfFailThreshold: z.enum(['low', 'medium', 'high', 'critical']).optional(),
-  // PII
-  name: z.string().optional(),
-  // CyberSecEval
-  multilingual: z.boolean().optional(),
+export const PluginConfigSchema = z
+  .object({
+    /** Example inputs used to steer red-team test generation. */
+    examples: z.array(z.string()).optional(),
+    /** Example grader outputs used to calibrate plugin-specific grading. */
+    graderExamples: z
+      .array(
+        z.object({
+          output: z.string(),
+          pass: z.boolean(),
+          score: z.number(),
+          reason: z.string(),
+        }),
+      )
+      .optional(),
+    /** Additional rubric guidance passed to plugin graders. */
+    graderGuidance: z.string().optional(),
+    /** Severity override for the generated finding. */
+    severity: SeveritySchema.optional(),
+    /** Language or languages requested for generated tests. */
+    language: z.union([z.string(), z.array(z.string())]).optional(),
+    /** Prompt override used by plugins that accept custom generation prompts. */
+    prompt: z.string().optional(),
+    /** System purpose override supplied to plugin generation. */
+    purpose: z.string().optional(),
+    /** Plugin-specific behavior modifiers such as tone or style. */
+    // TODO: should be z.record(Modifier, z.unknown())
+    modifiers: z.record(z.string(), z.unknown()).optional(),
+    /** Target identifiers used by BOLA-style authorization plugins. */
+    targetIdentifiers: z.array(z.string()).optional(),
+    /** Target systems used by BFLA-style authorization plugins. */
+    targetSystems: z.array(z.string()).optional(),
+    /** Whether competitor-oriented plugins may mention the configured competitor names. */
+    mentions: z.boolean().optional(),
+    /** URLs used by SSRF-oriented plugins as candidate targets. */
+    targetUrls: z.array(z.string()).optional(),
+    /** Severity threshold that marks an SSRF probe as failed. */
+    ssrfFailThreshold: z.enum(['low', 'medium', 'high', 'critical']).optional(),
+    /** Subject name used by PII-oriented plugins. */
+    name: z.string().optional(),
+    /** Whether CyberSecEval-style plugins should generate multilingual probes. */
+    multilingual: z.boolean().optional(),
 
-  // Indirect Prompt Injection
-  indirectInjectionVar: z.string().optional(),
-  // RAG Poisoning
-  intendedResults: z.array(z.string()).optional(),
-  intent: z.union([z.string(), z.array(z.union([z.string(), z.array(z.string())]))]).optional(),
-  policy: z.union([z.string(), PolicyObjectSchema]).optional(),
-  systemPrompt: z.string().optional(),
-  // Strategy exclusions - allows plugins to exclude incompatible strategies
-  excludeStrategies: z.array(z.string()).optional(),
+    /** Variable name that receives the indirect prompt-injection payload. */
+    indirectInjectionVar: z.string().optional(),
+    /** Expected retrieval results used by RAG-poisoning plugins. */
+    intendedResults: z.array(z.string()).optional(),
+    /** Intent label or labels used by intent-aware plugins. */
+    intent: z.union([z.string(), z.array(z.union([z.string(), z.array(z.string())]))]).optional(),
+    /** Policy text or policy id used by policy-aware plugins. */
+    policy: z.union([z.string(), PolicyObjectSchema]).optional(),
+    /** System prompt supplied to plugins that need the target instructions explicitly. */
+    systemPrompt: z.string().optional(),
+    /** Strategy ids this plugin should not be combined with. */
+    excludeStrategies: z.array(z.string()).optional(),
 
-  // Coding agent deterministic fixture fields
-  protectedFilePath: z.string().optional(),
-  protectedFilePaths: z.array(z.string()).optional(),
-  secretFilePath: z.string().optional(),
-  secretFilePaths: z.array(z.string()).optional(),
-  secretLocalFilePath: z.string().optional(),
-  secretLocalFilePaths: z.array(z.string()).optional(),
-  secretFileValue: z.string().optional(),
-  secretFileValues: z.array(z.string()).optional(),
-  outsideWritePath: z.string().optional(),
-  outsideWritePaths: z.array(z.string()).optional(),
-  outsideWriteHostPath: z.string().optional(),
-  outsideWriteHostPaths: z.array(z.string()).optional(),
-  outsideWriteProbeDir: z.string().optional(),
-  outsideWriteProbeDirs: z.array(z.string()).optional(),
-  outsideWriteAllowedPath: z.string().optional(),
-  outsideWriteAllowedPaths: z.array(z.string()).optional(),
-  outsideWriteExpectedSha256: z.string().optional(),
-  outsideWritePathSha256: z.string().optional(),
-  outsideWriteSha256: z.string().optional(),
-  outsideWriteMustNotExistPath: z.string().optional(),
-  outsideWriteMustNotExistPaths: z.array(z.string()).optional(),
-  mustNotExistPath: z.string().optional(),
-  mustNotExistPaths: z.array(z.string()).optional(),
-  protectedWritePath: z.string().optional(),
-  protectedWritePaths: z.array(z.string()).optional(),
-  sandboxWritePath: z.string().optional(),
-  sandboxWritePaths: z.array(z.string()).optional(),
-  verifierArtifactRoot: z.string().optional(),
-  verifierArtifactRoots: z.array(z.string()).optional(),
-  verifierProbeDir: z.string().optional(),
-  verifierProbeDirs: z.array(z.string()).optional(),
-  workspacePath: z.string().optional(),
-  workspacePaths: z.array(z.string()).optional(),
-  workspaceRoot: z.string().optional(),
-  workspaceRoots: z.array(z.string()).optional(),
-  workingDirectory: z.string().optional(),
-  workingDirectoryPath: z.string().optional(),
-  workingDir: z.string().optional(),
-  networkEgressUrl: z.string().optional(),
-  networkEgressUrls: z.array(z.string()).optional(),
-  networkTrapUrl: z.string().optional(),
-  networkTrapUrls: z.array(z.string()).optional(),
-  networkEgressHost: z.string().optional(),
-  networkEgressHosts: z.array(z.string()).optional(),
-  networkTrapHost: z.string().optional(),
-  networkTrapHosts: z.array(z.string()).optional(),
-  networkAllowedHost: z.string().optional(),
-  networkAllowedHosts: z.array(z.string()).optional(),
-  networkAllowedUrl: z.string().optional(),
-  networkAllowedUrls: z.array(z.string()).optional(),
-  networkTrapLogPath: z.string().optional(),
-  networkTrapLogPaths: z.array(z.string()).optional(),
-  networkScanPath: z.string().optional(),
-  networkScanPaths: z.array(z.string()).optional(),
-  networkWorkspacePath: z.string().optional(),
-  networkWorkspacePaths: z.array(z.string()).optional(),
-  networkEgressReceipt: z.string().optional(),
-  networkEgressReceipts: z.array(z.string()).optional(),
+    /** Single protected file path used by coding-agent fixtures. */
+    protectedFilePath: z.string().optional(),
+    /** Multiple protected file paths used by coding-agent fixtures. */
+    protectedFilePaths: z.array(z.string()).optional(),
+    /** Single secret file path used by coding-agent fixtures. */
+    secretFilePath: z.string().optional(),
+    /** Multiple secret file paths used by coding-agent fixtures. */
+    secretFilePaths: z.array(z.string()).optional(),
+    /** Single local secret file path used by coding-agent fixtures. */
+    secretLocalFilePath: z.string().optional(),
+    /** Multiple local secret file paths used by coding-agent fixtures. */
+    secretLocalFilePaths: z.array(z.string()).optional(),
+    /** Single expected secret file value used by coding-agent fixtures. */
+    secretFileValue: z.string().optional(),
+    /** Multiple expected secret file values used by coding-agent fixtures. */
+    secretFileValues: z.array(z.string()).optional(),
+    /** Single path outside the workspace that must not be written. */
+    outsideWritePath: z.string().optional(),
+    /** Multiple paths outside the workspace that must not be written. */
+    outsideWritePaths: z.array(z.string()).optional(),
+    /** Single host path outside the workspace used by write-safety fixtures. */
+    outsideWriteHostPath: z.string().optional(),
+    /** Multiple host paths outside the workspace used by write-safety fixtures. */
+    outsideWriteHostPaths: z.array(z.string()).optional(),
+    /** Single probe directory outside the workspace used by write-safety fixtures. */
+    outsideWriteProbeDir: z.string().optional(),
+    /** Multiple probe directories outside the workspace used by write-safety fixtures. */
+    outsideWriteProbeDirs: z.array(z.string()).optional(),
+    /** Single outside path that is explicitly allowed to be written. */
+    outsideWriteAllowedPath: z.string().optional(),
+    /** Multiple outside paths that are explicitly allowed to be written. */
+    outsideWriteAllowedPaths: z.array(z.string()).optional(),
+    /** Expected SHA-256 hash for an outside-write fixture artifact. */
+    outsideWriteExpectedSha256: z.string().optional(),
+    /** SHA-256 hash of the outside path contents before the run. */
+    outsideWritePathSha256: z.string().optional(),
+    /** SHA-256 hash used by outside-write fixture checks. */
+    outsideWriteSha256: z.string().optional(),
+    /** Single outside path that must remain absent after the run. */
+    outsideWriteMustNotExistPath: z.string().optional(),
+    /** Multiple outside paths that must remain absent after the run. */
+    outsideWriteMustNotExistPaths: z.array(z.string()).optional(),
+    /** Single path that must not exist after the run. */
+    mustNotExistPath: z.string().optional(),
+    /** Multiple paths that must not exist after the run. */
+    mustNotExistPaths: z.array(z.string()).optional(),
+    /** Single protected write target used by fixture checks. */
+    protectedWritePath: z.string().optional(),
+    /** Multiple protected write targets used by fixture checks. */
+    protectedWritePaths: z.array(z.string()).optional(),
+    /** Single sandbox path used by fixture checks. */
+    sandboxWritePath: z.string().optional(),
+    /** Multiple sandbox paths used by fixture checks. */
+    sandboxWritePaths: z.array(z.string()).optional(),
+    /** Single artifact root used by verifier fixtures. */
+    verifierArtifactRoot: z.string().optional(),
+    /** Multiple artifact roots used by verifier fixtures. */
+    verifierArtifactRoots: z.array(z.string()).optional(),
+    /** Single verifier probe directory used by fixture checks. */
+    verifierProbeDir: z.string().optional(),
+    /** Multiple verifier probe directories used by fixture checks. */
+    verifierProbeDirs: z.array(z.string()).optional(),
+    /** Single workspace path supplied to coding-agent fixtures. */
+    workspacePath: z.string().optional(),
+    /** Multiple workspace paths supplied to coding-agent fixtures. */
+    workspacePaths: z.array(z.string()).optional(),
+    /** Single workspace root supplied to coding-agent fixtures. */
+    workspaceRoot: z.string().optional(),
+    /** Multiple workspace roots supplied to coding-agent fixtures. */
+    workspaceRoots: z.array(z.string()).optional(),
+    /** Preferred working directory supplied to coding-agent fixtures. */
+    workingDirectory: z.string().optional(),
+    /** Explicit working-directory path supplied to coding-agent fixtures. */
+    workingDirectoryPath: z.string().optional(),
+    /** Short-form working directory alias supplied to coding-agent fixtures. */
+    workingDir: z.string().optional(),
+    /** Single URL used to detect outbound network egress. */
+    networkEgressUrl: z.string().optional(),
+    /** Multiple URLs used to detect outbound network egress. */
+    networkEgressUrls: z.array(z.string()).optional(),
+    /** Single trap URL used by network-safety fixtures. */
+    networkTrapUrl: z.string().optional(),
+    /** Multiple trap URLs used by network-safety fixtures. */
+    networkTrapUrls: z.array(z.string()).optional(),
+    /** Single host used to detect outbound network egress. */
+    networkEgressHost: z.string().optional(),
+    /** Multiple hosts used to detect outbound network egress. */
+    networkEgressHosts: z.array(z.string()).optional(),
+    /** Single trap host used by network-safety fixtures. */
+    networkTrapHost: z.string().optional(),
+    /** Multiple trap hosts used by network-safety fixtures. */
+    networkTrapHosts: z.array(z.string()).optional(),
+    /** Single host explicitly allowed by network-safety fixtures. */
+    networkAllowedHost: z.string().optional(),
+    /** Multiple hosts explicitly allowed by network-safety fixtures. */
+    networkAllowedHosts: z.array(z.string()).optional(),
+    /** Single URL explicitly allowed by network-safety fixtures. */
+    networkAllowedUrl: z.string().optional(),
+    /** Multiple URLs explicitly allowed by network-safety fixtures. */
+    networkAllowedUrls: z.array(z.string()).optional(),
+    /** Single trap-log path inspected by network-safety fixtures. */
+    networkTrapLogPath: z.string().optional(),
+    /** Multiple trap-log paths inspected by network-safety fixtures. */
+    networkTrapLogPaths: z.array(z.string()).optional(),
+    /** Single path scanned for network-safety fixture artifacts. */
+    networkScanPath: z.string().optional(),
+    /** Multiple paths scanned for network-safety fixture artifacts. */
+    networkScanPaths: z.array(z.string()).optional(),
+    /** Single workspace path used by network-safety fixtures. */
+    networkWorkspacePath: z.string().optional(),
+    /** Multiple workspace paths used by network-safety fixtures. */
+    networkWorkspacePaths: z.array(z.string()).optional(),
+    /** Single receipt string expected from a network-egress fixture. */
+    networkEgressReceipt: z.string().optional(),
+    /** Multiple receipt strings expected from network-egress fixtures. */
+    networkEgressReceipts: z.array(z.string()).optional(),
 
-  // Multi-variable inputs - allows generating test cases with multiple variables
-  // Keys are variable names, values are descriptions of what each variable should contain
-  inputs: InputsSchema.optional(),
-  maxCharsPerMessage: z.number().int().positive().optional(),
+    /** Multi-variable input definitions used while generating test cases. */
+    inputs: InputsSchema.optional(),
+    /** Maximum generated characters per conversation message. */
+    maxCharsPerMessage: z.number().int().positive().optional(),
 
-  // Allow for the inclusion of a nonce to prevent caching of test cases.
-  __nonce: z.number().optional(),
-});
+    /** Nonce used to prevent reuse of cached generated test cases. */
+    __nonce: z.number().optional(),
+  })
+  .catchall(z.unknown());
 
-export type PluginConfig = z.infer<typeof PluginConfigSchema>;
+/**
+ * Example grader outcome used to calibrate plugin-specific red-team grading.
+ *
+ * @example
+ * ```ts
+ * const example: PluginGraderExample = {
+ *   output: 'The model refused the request.',
+ *   pass: true,
+ *   score: 1,
+ *   reason: 'Refusal followed policy.',
+ * };
+ * ```
+ *
+ * @public
+ */
+export interface PluginGraderExample {
+  /** Example model output shown to the grader. */
+  output: string;
+  /** Whether the example should be treated as passing. */
+  pass: boolean;
+  /** Numeric score assigned to the example. */
+  score: number;
+  /** Explanation of why the example passes or fails. */
+  reason: string;
+}
+
+/**
+ * Advanced plugin configuration carried on generated red-team test cases.
+ *
+ * Most callers should prefer the higher-level red-team config docs; this type is
+ * exposed here because generated test metadata preserves the resolved plugin
+ * settings.
+ *
+ * @example
+ * ```ts
+ * const pluginConfig: PluginConfig = {
+ *   language: 'Spanish',
+ *   severity: 'high',
+ * };
+ * ```
+ *
+ * @public
+ */
+export interface PluginConfig extends z.infer<typeof PluginConfigSchema> {}
 
 export const StrategyConfigSchema = z
   .object({
+    /** Whether the strategy should be enabled. */
     enabled: z.boolean().optional(),
+    /** Plugin ids that this strategy should target. */
     plugins: z.array(z.string()).optional(),
+    /** Number of tests to generate for the strategy. */
     numTests: z.number().int().min(0).finite().optional(),
     // Allow arbitrary extra fields for strategy configs
     // Use .catchall to accept any additional unknown properties
@@ -177,7 +294,34 @@ export const StrategyConfigSchema = z
   })
   .catchall(z.unknown());
 
-export type StrategyConfig = z.infer<typeof StrategyConfigSchema>;
+/**
+ * Advanced strategy configuration carried on generated red-team test cases.
+ *
+ * @example
+ * ```ts
+ * const strategyConfig: StrategyConfig = {
+ *   enabled: true,
+ *   plugins: ['prompt-injection'],
+ *   numTests: 5,
+ * };
+ * ```
+ *
+ * @public
+ */
+export interface StrategyConfig {
+  /** Whether the strategy should be enabled. */
+  enabled?: boolean;
+  /** Plugin ids that this strategy should target. */
+  plugins?: string[];
+  /** Number of tests to generate for the strategy. */
+  numTests?: number;
+  [key: string]: unknown;
+}
+
+type AssertEqual<T, U> = T extends U ? (U extends T ? true : false) : false;
+function assert<_T extends true>() {}
+
+assert<AssertEqual<StrategyConfig, z.infer<typeof StrategyConfigSchema>>>();
 
 export const ConversationMessageSchema = z.object({
   role: z.enum(['assistant', 'user']),
@@ -313,38 +457,72 @@ export type RedteamGenerationContext = RemoteGenerationContext;
 
 export type RedteamAssertionTypes = `promptfoo:redteam:${string}`;
 
+/**
+ * Runtime options accepted by `redteam.run()`.
+ *
+ * @beta
+ */
 export interface RedteamRunOptions {
+  /** Stable eval id to reuse or attach to the run. */
   id?: string;
+  /** Path to the red team config file to execute. */
   config?: string;
+  /** Target selector passed through to the run. */
   target?: string;
+  /** Optional output path for generated artifacts. */
   output?: string;
+  /** Whether to reuse cached provider responses. */
   cache?: boolean;
+  /** Path to an environment file loaded before the run. */
   envPath?: string;
+  /** Maximum number of provider calls to execute concurrently. */
   maxConcurrency?: number;
+  /** Delay in milliseconds between provider calls. */
   delay?: number;
+  /** Whether to execute against a remote Promptfoo target. */
   remote?: boolean;
+  /** Whether to bypass prompts that normally ask for confirmation. */
   force?: boolean;
+  /** Prompt filter expression applied before execution. */
   filterPrompts?: string;
+  /** Provider filter expression applied before execution. */
   filterProviders?: string;
+  /** Target filter expression applied before execution. */
   filterTargets?: string;
+  /** Whether to emit verbose runtime logging. */
   verbose?: boolean;
+  /** Whether to render a progress bar. */
   progressBar?: boolean;
+  /** Human-readable description recorded with the run. */
   description?: string;
+  /** Optional labels recorded with the run. */
   tags?: Record<string, string>;
+  /** Whether to fail closed on invalid or partial runtime input. */
   strict?: boolean;
 
-  // Used by webui
+  /**
+   * Live config payload used by the web UI flow. The payload is opaque to the
+   * Node.js API and is forwarded to the run unchanged.
+   */
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   liveRedteamConfig?: any;
+  /** Optional callback for runtime log messages. */
   logCallback?: (message: string) => void;
+  /**
+   * Callback invoked as red team results complete. `evalStep` and `metrics`
+   * mirror the {@link EvaluateOptions.progressCallback} arguments.
+   */
   progressCallback?: (
     completed: number,
     total: number,
     index: number | string,
-    evalStep: any, // RunEvalOptions, but introduces circular dependency
-    metrics: any, // PromptMetrics, but introduces circular dependency
+    evalStep: any, // RunEvalOptions, but importing it introduces a circular dependency.
+    metrics: any, // PromptMetrics, but importing it introduces a circular dependency.
   ) => void;
+  /** Signal used to cancel the run. */
   abortSignal?: AbortSignal;
 
+  /** Whether the config originated from Promptfoo Cloud. */
   loadedFromCloud?: boolean;
   eventSource?: EventSource;
 }
@@ -449,8 +627,11 @@ export interface AudioGradingConfig {
 }
 
 /**
- * Options for generating red team tests via the public API
- * This is a cleaner subset of RedteamCliGenerateOptions for external use
+ * Options for generating red team tests via the public API.
+ *
+ * This is a cleaner subset of `RedteamCliGenerateOptions` for external use.
+ *
+ * @beta
  */
 export type RedteamGenerateOptions = Partial<RedteamCliGenerateOptions>;
 
