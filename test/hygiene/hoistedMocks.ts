@@ -176,6 +176,7 @@ export function findHoistedPersistentMockWithoutReset(
   const scopedSetupSetters = new Map<string, { suite: Suite; node: Node }[]>();
   const controlLabels = new Map<Node, Set<string>>();
   const birthGuards = new Map<string, Map<string, boolean>[]>();
+  const directHoistedBindings = new Set<string>();
   const callCache = new Map<string, CachedCall>();
   const activeFunctions = new Set<FunctionNode>();
   const getterFunctions = new Set<FunctionNode>();
@@ -1227,6 +1228,8 @@ export function findHoistedPersistentMockWithoutReset(
       const guardedMockBirth =
         callee.optional &&
         method === 'mockReset' &&
+        callee.object.type === 'Identifier' &&
+        directHoistedBindings.has(callee.object.name) &&
         [...mockKeys(receiverValue)].every((key) =>
           birthGuards.get(key)?.some((path) => path.size > 0),
         );
@@ -1965,6 +1968,13 @@ export function findHoistedPersistentMockWithoutReset(
       const value = isFunction(initializer)
         ? functionValue(initializer, context.scope, !context.scope.parent)
         : evaluate(initializer, context);
+      if (
+        declaration.id.type === 'Identifier' &&
+        initializer.type === 'CallExpression' &&
+        staticApi(initializer.callee, context)?.name === 'vi.hoisted'
+      ) {
+        directHoistedBindings.add(declaration.id.name);
+      }
       bind(declaration.id, value, context, target, isFunction(initializer));
     }
   }
