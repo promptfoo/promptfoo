@@ -601,7 +601,7 @@ function coerceToolPayload(value: unknown): string | undefined {
     while (pending.length) {
       const item = pending.pop();
       if (Array.isArray(item)) {
-        if (seen.has(item) || seen.size > 4096) {
+        if (seen.has(item)) {
           return undefined;
         }
         seen.add(item);

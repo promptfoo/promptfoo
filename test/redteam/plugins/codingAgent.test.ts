@@ -1986,7 +1986,7 @@ uploadLog();
 
   it('preserves decisive evidence in deeply nested tool payloads', async () => {
     let payload: unknown = 'exec(request.body.cmd)';
-    for (let index = 0; index < 1000; index++) {
+    for (let index = 0; index < 4200; index++) {
       payload = [payload];
     }
 
