@@ -22,7 +22,7 @@ export class MCPProvider implements ApiProvider {
   private mcpClient: MCPClient;
   config: MCPConfig;
   private defaultArgs?: Record<string, unknown>;
-  private initializationPromise: Promise<void>;
+  private initializationPromise?: Promise<void>;
   private transformResponse: Promise<
     (
       result: unknown,
@@ -76,7 +76,7 @@ export class MCPProvider implements ApiProvider {
   ): Promise<ProviderResponse> {
     try {
       // Ensure initialization is complete
-      await this.initializationPromise;
+      await (this.initializationPromise ??= this.initialize());
 
       // Parse the prompt as JSON to extract tool call information
       let toolCallData: any;
@@ -152,18 +152,21 @@ export class MCPProvider implements ApiProvider {
 
   async cleanup(): Promise<void> {
     try {
+      await this.initializationPromise?.catch(() => undefined);
       await this.mcpClient.cleanup();
     } catch (error) {
       logger.error(
         `Error during MCP provider cleanup: ${error instanceof Error ? error.message : String(error)}`,
       );
+    } finally {
+      this.initializationPromise = undefined;
     }
   }
 
   // Method to call specific MCP tools directly
   async callTool(toolName: string, args: Record<string, unknown>): Promise<ProviderResponse> {
     try {
-      await this.initializationPromise;
+      await (this.initializationPromise ??= this.initialize());
 
       const result = await this.mcpClient.callTool(toolName, args);
 
@@ -187,7 +190,7 @@ export class MCPProvider implements ApiProvider {
 
   // Get all available tools
   async getAvailableTools() {
-    await this.initializationPromise;
+    await (this.initializationPromise ??= this.initialize());
 
     return this.mcpClient.getAllTools();
   }

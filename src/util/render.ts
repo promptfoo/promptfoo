@@ -34,7 +34,16 @@ export function renderEnvOnlyInObject<T>(
   envOverrides?: EnvOverrides,
   replaceBase?: boolean,
 ): T {
-  if (getEnvBool('PROMPTFOO_DISABLE_TEMPLATING') || isApiProvider(obj)) {
+  if (getEnvBool('PROMPTFOO_DISABLE_TEMPLATING')) {
+    return obj;
+  }
+
+  if (isApiProvider(obj)) {
+    for (const key of ['config', 'label'] as const) {
+      if (obj[key] !== undefined) {
+        obj[key] = renderEnvOnlyInObject(obj[key], envOverrides, replaceBase);
+      }
+    }
     return obj;
   }
 

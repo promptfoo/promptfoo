@@ -4,6 +4,8 @@ import { mockProcessEnv } from './utils';
 
 it.each(['plain', 'class'])('preserves %s provider identity while rendering config', (kind) => {
   class Provider {
+    config = { url: '{{ env.TARGET_URL }}' };
+    label = '{{ env.LABEL }}';
     id() {
       return 'shared';
     }
@@ -15,15 +17,19 @@ it.each(['plain', 'class'])('preserves %s provider identity while rendering conf
     kind === 'class'
       ? new Provider()
       : {
+          config: { url: '{{ env.TARGET_URL }}' },
+          label: '{{ env.LABEL }}',
           id: () => 'shared',
           callApi: async () => ({ output: 'ok' }),
         };
   const rendered = renderEnvOnlyInObject(
     { providers: [provider], description: '{{ env.LABEL }}' },
-    { LABEL: 'rendered' },
+    { LABEL: 'rendered', TARGET_URL: 'https://target.invalid' },
   );
   expect(rendered.providers[0]).toBe(provider);
   expect(rendered.description).toBe('rendered');
+  expect(rendered.providers[0].config.url).toBe('https://target.invalid');
+  expect(rendered.providers[0].label).toBe('rendered');
 });
 
 describe('renderVarsInObject', () => {

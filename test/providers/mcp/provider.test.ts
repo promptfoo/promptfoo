@@ -31,6 +31,22 @@ describe('MCPProvider', () => {
     mcpClientMock.cleanup.mockReset().mockResolvedValue(undefined);
   });
 
+  it('reopens a cleaned provider once when concurrent calls reuse it', async () => {
+    const provider = new MCPProvider({ config: { enabled: true } });
+    await provider.getAvailableTools();
+    await provider.cleanup();
+    mcpClientMock.callTool.mockResolvedValue({ content: 'reconnected' });
+    const [api, tool] = await Promise.all([
+      provider.callApi(JSON.stringify({ tool: 'lookup_user', args: {} })),
+      provider.callTool('lookup_user', {}),
+      provider.getAvailableTools(),
+    ]);
+    expect(mcpClientMock.initialize).toHaveBeenCalledTimes(2);
+    expect(mcpClientMock.cleanup).toHaveBeenCalledTimes(1);
+    expect(api.output).toBe('reconnected');
+    expect(tool.output).toBe('reconnected');
+  });
+
   it('should preserve existing output behavior without a response transform', async () => {
     const rawResult = {
       content: [{ type: 'text', text: 'raw response' }],
