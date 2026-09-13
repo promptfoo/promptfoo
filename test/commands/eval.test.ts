@@ -2100,13 +2100,16 @@ describe('evalCommand', () => {
       callApi: async () => ({ output: 'ok' }),
       cleanup,
     } as ApiProvider;
-    vi.mocked(resolveConfigs).mockResolvedValueOnce({
-      config: {} as UnifiedConfig,
-      testSuite: {
-        prompts: [],
-        providers: [provider],
-      },
-      basePath: path.resolve('/'),
+    vi.mocked(resolveConfigs).mockImplementationOnce(async (_cmd, _config, _type, track) => {
+      track?.(provider);
+      return {
+        config: {} as UnifiedConfig,
+        testSuite: {
+          prompts: [],
+          providers: [provider],
+        },
+        basePath: path.resolve('/'),
+      };
     });
     vi.mocked(evaluate).mockImplementationOnce(
       async (_testSuite, evalRecord) => evalRecord as Eval,
@@ -2124,13 +2127,16 @@ describe('evalCommand', () => {
       callApi: async () => ({ output: 'ok' }),
       cleanup,
     } as ApiProvider;
-    vi.mocked(resolveConfigs).mockResolvedValueOnce({
-      config: {} as UnifiedConfig,
-      testSuite: {
-        prompts: [],
-        providers: [provider],
-      },
-      basePath: path.resolve('/'),
+    vi.mocked(resolveConfigs).mockImplementationOnce(async (_cmd, _config, _type, track) => {
+      track?.(provider);
+      return {
+        config: {} as UnifiedConfig,
+        testSuite: {
+          prompts: [],
+          providers: [provider],
+        },
+        basePath: path.resolve('/'),
+      };
     });
     vi.mocked(evaluate).mockRejectedValueOnce(new Error('evaluation failed'));
 

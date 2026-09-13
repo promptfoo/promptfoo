@@ -960,7 +960,7 @@ export async function resolveConfigs(
     basePath,
   });
   if (onProviderConstructed) {
-    parsedProviders?.forEach((provider) => onProviderConstructed(provider));
+    parsedProviders.forEach((provider) => onProviderConstructed(provider));
   }
   const parsedTests: TestCase[] = await readTests(
     config.tests || [],
