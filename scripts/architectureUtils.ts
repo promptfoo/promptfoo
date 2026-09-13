@@ -48,6 +48,7 @@ export interface LayerConfig {
 }
 
 const TYPESCRIPT_EXTENSIONS = ['.ts', '.tsx', '.mts', '.cts'];
+const EXECUTABLE_SOURCE_EXTENSIONS = [...TYPESCRIPT_EXTENSIONS, '.js', '.mjs', '.cjs'];
 const DIRECTORY_INDEXES = TYPESCRIPT_EXTENSIONS.map((extension) => `index${extension}`);
 const SOURCE_EXTENSIONS_BY_RUNTIME_EXTENSION: Record<string, string[]> = {
   '.js': ['.ts', '.tsx'],
@@ -57,6 +58,13 @@ const SOURCE_EXTENSIONS_BY_RUNTIME_EXTENSION: Record<string, string[]> = {
 const BUILTIN_MODULES = new Set(
   builtinModules.flatMap((moduleName) => [moduleName, moduleName.replace(/^node:/, '')]),
 );
+const PREFIX_ONLY_BUILTINS = new Set(
+  builtinModules
+    .filter((moduleName) => moduleName.startsWith('node:'))
+    .map((moduleName) => moduleName.slice('node:'.length))
+    .filter((moduleName) => !builtinModules.includes(moduleName)),
+);
+PREFIX_ONLY_BUILTINS.add('sqlite');
 
 export function normalizePath(filePath: string): string {
   return filePath.split(path.sep).join('/');
@@ -272,70 +280,274 @@ function getStaticModuleSpecifier(node: Node): string | undefined {
   if (node.type === 'Literal' && typeof node.value === 'string') {
     return node.value;
   }
-
   if (node.type === 'TemplateLiteral' && node.expressions.length === 0) {
     return node.quasis[0]?.value.cooked ?? undefined;
   }
-
   return undefined;
 }
 
-export function extractModuleSpecifiers(sourceText: string, filePath: string): string[] {
-  const result = parseSync(filePath, sourceText);
-  if (result.errors.length > 0) {
-    throw new Error(`Could not parse ${filePath}: ${result.errors[0].message}`);
+function getMemberName(node: Node): string | undefined {
+  if (node.type !== 'MemberExpression') {
+    return undefined;
   }
+  if (!node.computed && node.property.type === 'Identifier') {
+    return node.property.name;
+  }
+  return node.computed ? getStaticModuleSpecifier(node.property) : undefined;
+}
 
-  const specifiers: string[] = [];
+function getPropertyName(node: Node): string | undefined {
+  return node.type === 'Identifier' ? node.name : getStaticModuleSpecifier(node);
+}
 
+function isRuntimeLoader(node: Node, aliases: Set<string>): boolean {
+  const memberName = getMemberName(node);
+  return (
+    (node.type === 'Identifier' && (node.name === 'require' || aliases.has(node.name))) ||
+    (node.type === 'MemberExpression' &&
+      node.object.type === 'Identifier' &&
+      (((node.object.name === 'require' || aliases.has(node.object.name)) &&
+        memberName === 'resolve') ||
+        (node.object.name === 'module' && memberName === 'require') ||
+        (node.object.name === 'process' && memberName === 'getBuiltinModule')))
+  );
+}
+
+function isImportMetaResolve(node: Node): boolean {
+  return (
+    node.type === 'MemberExpression' &&
+    getMemberName(node) === 'resolve' &&
+    node.object.type === 'MetaProperty' &&
+    node.object.meta.name === 'import'
+  );
+}
+
+export interface RuntimeModuleReference {
+  specifier: string;
+  kind: 'import' | 'require';
+  hasJsonAttribute?: boolean;
+}
+
+function hasJsonImportAttribute(options: Node | null | undefined): boolean {
+  if (options?.type !== 'ObjectExpression') {
+    return false;
+  }
+  return options.properties.some(
+    (property) =>
+      property.type === 'Property' &&
+      getPropertyName(property.key) === 'with' &&
+      property.value.type === 'ObjectExpression' &&
+      property.value.properties.some(
+        (attribute) =>
+          attribute.type === 'Property' &&
+          getPropertyName(attribute.key) === 'type' &&
+          attribute.value.type === 'Literal' &&
+          attribute.value.value === 'json',
+      ),
+  );
+}
+
+function hasJsonAttributes(attributes: Node[]): boolean {
+  return attributes.some(
+    (attribute) =>
+      attribute.type === 'ImportAttribute' &&
+      getPropertyName(attribute.key) === 'type' &&
+      attribute.value.type === 'Literal' &&
+      attribute.value.value === 'json',
+  );
+}
+
+function extractModuleReferences(
+  sourceText: string,
+  filePath: string,
+  includeTypes: boolean,
+): RuntimeModuleReference[] {
+  const { program, errors } = parseSync(filePath, sourceText);
+  if (errors.length > 0) {
+    throw new Error(`Could not parse ${filePath}: ${errors[0].message}`);
+  }
+  const aliases = new Set<string>();
+  const createRequireFactories = new Set(['createRequire']);
+  const moduleNamespaces = new Set<string>();
+  const declarations: Array<{ name: string; init: Node }> = [];
   new Visitor({
     ImportDeclaration(node) {
-      specifiers.push(node.source.value);
+      if (!['node:module', 'module'].includes(getStaticModuleSpecifier(node.source) ?? '')) {
+        return;
+      }
+      for (const specifier of node.specifiers) {
+        if (
+          specifier.type === 'ImportSpecifier' &&
+          specifier.imported.type === 'Identifier' &&
+          specifier.imported.name === 'createRequire'
+        ) {
+          createRequireFactories.add(specifier.local.name);
+        } else if (
+          specifier.type === 'ImportNamespaceSpecifier' ||
+          specifier.type === 'ImportDefaultSpecifier'
+        ) {
+          moduleNamespaces.add(specifier.local.name);
+        }
+      }
+    },
+    VariableDeclarator(node) {
+      if (node.id.type === 'Identifier' && node.init) {
+        declarations.push({ name: node.id.name, init: node.init });
+        if (
+          node.init.type === 'MemberExpression' &&
+          getMemberName(node.init) === 'createRequire' &&
+          node.init.object.type === 'CallExpression' &&
+          isRuntimeLoader(node.init.object.callee, aliases) &&
+          ['node:module', 'module'].includes(
+            getStaticModuleSpecifier(node.init.object.arguments[0]) ?? '',
+          )
+        ) {
+          createRequireFactories.add(node.id.name);
+        }
+      } else if (
+        node.id.type === 'ObjectPattern' &&
+        node.init?.type === 'CallExpression' &&
+        isRuntimeLoader(node.init.callee, aliases) &&
+        ['node:module', 'module'].includes(getStaticModuleSpecifier(node.init.arguments[0]) ?? '')
+      ) {
+        for (const property of node.id.properties) {
+          if (
+            property.type === 'Property' &&
+            property.key.type === 'Identifier' &&
+            property.key.name === 'createRequire' &&
+            property.value.type === 'Identifier'
+          ) {
+            createRequireFactories.add(property.value.name);
+          }
+        }
+      }
+    },
+  }).visit(program);
+  let previousSize: number;
+  do {
+    previousSize = aliases.size;
+    for (const { name, init } of declarations) {
+      if (
+        isRuntimeLoader(init, aliases) ||
+        (init.type === 'CallExpression' &&
+          ((init.callee.type === 'Identifier' && createRequireFactories.has(init.callee.name)) ||
+            (init.callee.type === 'MemberExpression' &&
+              init.callee.object.type === 'Identifier' &&
+              moduleNamespaces.has(init.callee.object.name) &&
+              getMemberName(init.callee) === 'createRequire')))
+      ) {
+        aliases.add(name);
+      }
+    }
+  } while (aliases.size !== previousSize);
+
+  const references: RuntimeModuleReference[] = [];
+  function add(source: Node | null | undefined, kind: RuntimeModuleReference['kind']): void {
+    const specifier = source ? getStaticModuleSpecifier(source) : undefined;
+    if (typeof specifier === 'string') {
+      references.push({ specifier, kind });
+    }
+  }
+  new Visitor({
+    ImportDeclaration(node) {
+      if (
+        includeTypes ||
+        (node.importKind !== 'type' &&
+          (node.specifiers.length === 0 ||
+            node.specifiers.some(
+              (specifier) =>
+                specifier.type !== 'ImportSpecifier' || specifier.importKind !== 'type',
+            )))
+      ) {
+        const specifier = getStaticModuleSpecifier(node.source);
+        if (typeof specifier === 'string') {
+          references.push({
+            specifier,
+            kind: 'import',
+            hasJsonAttribute: hasJsonAttributes(node.attributes),
+          });
+        }
+      }
     },
     ExportAllDeclaration(node) {
-      specifiers.push(node.source.value);
+      if (includeTypes || node.exportKind !== 'type') {
+        add(node.source, 'import');
+      }
     },
     ExportNamedDeclaration(node) {
-      if (node.source) {
-        specifiers.push(node.source.value);
+      if (
+        includeTypes ||
+        (node.exportKind !== 'type' &&
+          (node.specifiers.length === 0 ||
+            node.specifiers.some((specifier) => specifier.exportKind !== 'type')))
+      ) {
+        const specifier = node.source && getStaticModuleSpecifier(node.source);
+        if (typeof specifier === 'string') {
+          references.push({
+            specifier,
+            kind: 'import',
+            hasJsonAttribute: hasJsonAttributes(node.attributes),
+          });
+        }
       }
     },
     ImportExpression(node) {
       const specifier = getStaticModuleSpecifier(node.source);
-      if (specifier !== undefined) {
-        specifiers.push(specifier);
+      if (typeof specifier === 'string') {
+        references.push({
+          specifier,
+          kind: 'import',
+          hasJsonAttribute: hasJsonImportAttribute(node.options),
+        });
       }
     },
     TSImportEqualsDeclaration(node) {
-      if (node.moduleReference.type === 'TSExternalModuleReference') {
-        specifiers.push(node.moduleReference.expression.value);
+      if (
+        (includeTypes || node.importKind !== 'type') &&
+        node.moduleReference.type === 'TSExternalModuleReference'
+      ) {
+        add(node.moduleReference.expression, 'require');
       }
     },
     TSImportType(node) {
-      specifiers.push(node.source.value);
+      if (includeTypes) {
+        add(node.source, 'import');
+      }
     },
     CallExpression(node) {
-      if (node.arguments.length !== 1) {
-        return;
-      }
-
-      const specifier = getStaticModuleSpecifier(node.arguments[0]);
-      if (
-        specifier !== undefined &&
-        ((node.callee.type === 'Identifier' && node.callee.name === 'require') ||
-          (node.callee.type === 'MemberExpression' &&
-            !node.callee.computed &&
-            node.callee.object.type === 'Identifier' &&
-            node.callee.object.name === 'require' &&
-            node.callee.property.type === 'Identifier' &&
-            node.callee.property.name === 'resolve'))
-      ) {
-        specifiers.push(specifier);
+      if (isRuntimeLoader(node.callee, aliases)) {
+        add(node.arguments[0], 'require');
+      } else if (isImportMetaResolve(node.callee)) {
+        const specifier = getStaticModuleSpecifier(node.arguments[0]);
+        if (
+          specifier !== undefined &&
+          !specifier.startsWith('.') &&
+          !specifier.startsWith('/') &&
+          !specifier.startsWith('#')
+        ) {
+          references.push({ specifier, kind: 'import' });
+        }
       }
     },
-  }).visit(result.program);
+  }).visit(program);
+  return references;
+}
 
-  return specifiers;
+export function extractModuleSpecifiers(sourceText: string, filePath: string): string[] {
+  return extractModuleReferences(sourceText, filePath, true).map(({ specifier }) => specifier);
+}
+
+/** Runtime references retain the loader kind because import() always uses ESM resolution. */
+export function extractRuntimeModuleReferences(
+  sourceText: string,
+  filePath: string,
+): RuntimeModuleReference[] {
+  return extractModuleReferences(sourceText, filePath, false);
+}
+
+/** Excludes type-only references from package runtime budgets. */
+export function extractRuntimeModuleSpecifiers(sourceText: string, filePath: string): string[] {
+  return extractRuntimeModuleReferences(sourceText, filePath).map(({ specifier }) => specifier);
 }
 
 export function resolveInternalModule(
@@ -386,10 +598,7 @@ export function resolveInternalModule(
   for (const candidate of candidates) {
     if (fs.existsSync(candidate) && fs.statSync(candidate).isFile()) {
       const relativeCandidate = normalizePath(path.relative(repoRoot, candidate));
-      if (
-        relativeCandidate.startsWith('src/') &&
-        TYPESCRIPT_EXTENSIONS.includes(path.extname(relativeCandidate))
-      ) {
+      if (relativeCandidate.startsWith('src/')) {
         return relativeCandidate;
       }
     }
@@ -421,7 +630,31 @@ export function getExternalModuleName(specifier: string): string | undefined {
 /** The npm package name a specifier imports, or undefined for relative imports and Node builtins. */
 export function getPackageName(specifier: string): string | undefined {
   const moduleName = getExternalModuleName(specifier);
-  return moduleName && !BUILTIN_MODULES.has(moduleName) ? moduleName : undefined;
+  if (getNodeBuiltinName(specifier)) {
+    return undefined;
+  }
+  if (moduleName && BUILTIN_MODULES.has(moduleName) && !PREFIX_ONLY_BUILTINS.has(moduleName)) {
+    return undefined;
+  }
+  return moduleName;
+}
+
+/** The normalized Node builtin name a specifier imports, or undefined for npm/internal imports. */
+export function getNodeBuiltinName(specifier: string): string | undefined {
+  const withoutNodePrefix = specifier.replace(/^node:/, '');
+  if (specifier.startsWith('node:') && PREFIX_ONLY_BUILTINS.has(withoutNodePrefix)) {
+    return withoutNodePrefix;
+  }
+  if (!builtinModules.includes(specifier) && !builtinModules.includes(withoutNodePrefix)) {
+    return undefined;
+  }
+  const moduleName = getExternalModuleName(specifier);
+  if (specifier.startsWith('node:')) {
+    return moduleName;
+  }
+  return moduleName && BUILTIN_MODULES.has(moduleName) && !PREFIX_ONLY_BUILTINS.has(moduleName)
+    ? moduleName
+    : undefined;
 }
 
 export type BoundaryViolationKind = 'facade' | 'layer' | 'leaf' | 'leaf-external' | 'path';
@@ -448,6 +681,82 @@ export interface ArchitectureModuleReference {
 export interface ArchitectureSourceScan {
   sourceFiles: string[];
   references: ArchitectureModuleReference[];
+}
+
+export interface RuntimeDependencyClosure {
+  entrypoint: string;
+  files: string[];
+  externalDependencies: string[];
+  nodeBuiltins: string[];
+  unresolvedInternalImports: string[];
+}
+
+/**
+ * Computes the transitive runtime source graph for one entrypoint.
+ *
+ * This deliberately follows source modules rather than emitted chunks so the
+ * report is stable before a build and can act as a package-boundary ratchet.
+ */
+export function computeRuntimeDependencyClosure(
+  repoRoot: string,
+  entrypoint: string,
+  aliases: Record<string, string> = {},
+): RuntimeDependencyClosure {
+  const normalizedEntrypoint = normalizePath(entrypoint);
+  const absoluteEntrypoint = path.join(repoRoot, normalizedEntrypoint);
+  if (!fs.existsSync(absoluteEntrypoint) || !fs.statSync(absoluteEntrypoint).isFile()) {
+    throw new Error(`Runtime dependency entrypoint "${entrypoint}" does not exist.`);
+  }
+
+  const pending = [normalizedEntrypoint];
+  const files = new Set<string>();
+  const externalDependencies = new Set<string>();
+  const nodeBuiltins = new Set<string>();
+  const unresolvedInternalImports = new Set<string>();
+
+  while (pending.length > 0) {
+    const importer = pending.pop()!;
+    if (files.has(importer)) {
+      continue;
+    }
+    files.add(importer);
+
+    if (!EXECUTABLE_SOURCE_EXTENSIONS.includes(path.extname(importer))) {
+      continue;
+    }
+
+    const sourceText = fs.readFileSync(path.join(repoRoot, importer), 'utf8');
+    for (const specifier of extractRuntimeModuleSpecifiers(sourceText, importer)) {
+      const resolvedImport = resolveInternalModule(repoRoot, importer, specifier, aliases);
+      if (resolvedImport) {
+        if (!files.has(resolvedImport)) {
+          pending.push(resolvedImport);
+        }
+        continue;
+      }
+
+      const builtinName = getNodeBuiltinName(specifier);
+      if (builtinName) {
+        nodeBuiltins.add(builtinName);
+        continue;
+      }
+
+      const packageName = getPackageName(specifier);
+      if (packageName) {
+        externalDependencies.add(packageName);
+      } else {
+        unresolvedInternalImports.add(`${importer}: ${specifier || '<empty>'}`);
+      }
+    }
+  }
+
+  return {
+    entrypoint: normalizedEntrypoint,
+    files: [...files].sort(),
+    externalDependencies: [...externalDependencies].sort(),
+    nodeBuiltins: [...nodeBuiltins].sort(),
+    unresolvedInternalImports: [...unresolvedInternalImports].sort(),
+  };
 }
 
 /**

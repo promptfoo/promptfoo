@@ -4,16 +4,26 @@ import path from 'node:path';
 
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import {
+  computeRuntimeDependencyClosure,
   extractModuleSpecifiers,
+  extractRuntimeModuleSpecifiers,
   findUnclassifiedFiles,
   findViolations,
   getExternalModuleName,
   getLayerForFile,
+  getNodeBuiltinName,
+  getPackageName,
   getSourceFiles,
   type LayerConfig,
   readLayerConfig,
   resolveInternalModule,
 } from '../../scripts/architectureUtils';
+
+it('keeps prefix-only Node builtins distinct from npm packages', () => {
+  expect(getNodeBuiltinName('node:sqlite')).toBe('sqlite');
+  expect(getNodeBuiltinName('sqlite')).toBeUndefined();
+  expect(getPackageName('sqlite')).toBe('sqlite');
+});
 
 describe('extractModuleSpecifiers', () => {
   it('collects static ESM and CommonJS module specifiers', () => {
@@ -21,8 +31,17 @@ describe('extractModuleSpecifiers', () => {
       import imported from 'esm-import';
       export { exported } from 'esm-export';
       import('dynamic-import');
+      import('dynamic-import-with-options', { with: { type: 'json' } });
+      import data from './data.json' with { type: 'json' };
+      import.meta.resolve('resolved-package');
+      import.meta.resolve('./optional.js');
       const required = require('cjs-require');
       const resolved = require.resolve('cjs-resolve');
+      const resolvedWithPaths = require.resolve('cjs-resolve-with-paths', { paths: [] });
+      const moduleRequired = module.require('module-require');
+      const bracketRequired = module['require']('bracket-require');
+      const load = require;
+      const aliasedResolve = load.resolve('aliased-resolve');
       require(nonLiteral);
     `;
 
@@ -30,8 +49,15 @@ describe('extractModuleSpecifiers', () => {
       'esm-import',
       'esm-export',
       'dynamic-import',
+      'dynamic-import-with-options',
+      './data.json',
+      'resolved-package',
       'cjs-require',
       'cjs-resolve',
+      'cjs-resolve-with-paths',
+      'module-require',
+      'bracket-require',
+      'aliased-resolve',
     ]);
   });
 
@@ -56,6 +82,176 @@ describe('extractModuleSpecifiers', () => {
       'template-package',
       'resolved-template-package',
     ]);
+  });
+});
+
+describe('extractRuntimeModuleSpecifiers', () => {
+  it.each([extractModuleSpecifiers, extractRuntimeModuleSpecifiers])(
+    'follows transitive loader aliases regardless of declaration order',
+    (extract) => {
+      const source = `
+        function later() { const second = first; return second('yaml'); }
+        const first = require;
+        const fromCreateRequire = createRequire(import.meta.url);
+        const third = fromCreateRequire;
+        import { createRequire as makeRequire } from 'node:module';
+        import * as nodeModule from 'node:module';
+        import Module from 'node:module';
+        const fourth = makeRequire(import.meta.url);
+        const fifth = nodeModule.createRequire(import.meta.url);
+        const sixth = Module.createRequire(import.meta.url);
+        third('zod');
+        fourth('yaml');
+        fifth('toml');
+        sixth('lodash');
+      `;
+      expect(extract(source, 'fixture.ts')).toEqual([
+        'yaml',
+        'node:module',
+        'node:module',
+        'node:module',
+        'zod',
+        'yaml',
+        'toml',
+        'lodash',
+      ]);
+    },
+  );
+
+  it('excludes type-only module references from the runtime graph', () => {
+    const source = `
+      import runtimeDefault, { type ImportedType, runtimeValue } from 'runtime-import';
+      import {} from 'side-effect-empty-import';
+      import type { OnlyType } from 'type-import';
+      export { type ExportedType, runtimeExport } from 'runtime-export';
+      export {} from 'side-effect-empty-export';
+      export type { OnlyExportedType } from 'type-export';
+      import('dynamic-import');
+      import('dynamic-import-with-options', { with: { type: 'json' } });
+      const required = require('cjs-require');
+      const resolvedWithPaths = require.resolve('cjs-resolve-with-paths', { paths: [] });
+      const moduleRequired = module.require('module-require');
+      const load = require;
+      const aliased = load('aliased-require');
+      const fromCreateRequire = createRequire(import.meta.url);
+      const created = fromCreateRequire('created-require');
+      const empty = require('');
+      type Imported = import('import-type').Imported;
+      void runtimeDefault;
+      void runtimeValue;
+      void required;
+      void resolvedWithPaths;
+      void moduleRequired;
+      void aliased;
+      void created;
+      void empty;
+    `;
+
+    expect(extractRuntimeModuleSpecifiers(source, 'fixture.ts')).toEqual([
+      'runtime-import',
+      'side-effect-empty-import',
+      'runtime-export',
+      'side-effect-empty-export',
+      'dynamic-import',
+      'dynamic-import-with-options',
+      'cjs-require',
+      'cjs-resolve-with-paths',
+      'module-require',
+      'aliased-require',
+      'created-require',
+      '',
+    ]);
+  });
+
+  it('finds destructured createRequire and process builtin loads', () => {
+    const source = `
+      const { createRequire: makeRequire } = require('module');
+      const load = makeRequire(import.meta.url);
+      const factory = require('module').createRequire;
+      const memberLoad = factory(import.meta.url);
+      load('yaml');
+      memberLoad('zod');
+      process.getBuiltinModule('node:fs');
+    `;
+
+    expect(extractRuntimeModuleSpecifiers(source, 'fixture.ts')).toEqual([
+      'module',
+      'module',
+      'yaml',
+      'zod',
+      'node:fs',
+    ]);
+  });
+});
+
+describe('computeRuntimeDependencyClosure', () => {
+  let repoRoot: string;
+
+  beforeEach(() => {
+    repoRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'runtime-closure-'));
+  });
+
+  afterEach(() => {
+    fs.rmSync(repoRoot, { recursive: true, force: true });
+  });
+
+  function write(relativePath: string, contents = ''): void {
+    const absolute = path.join(repoRoot, relativePath);
+    fs.mkdirSync(path.dirname(absolute), { recursive: true });
+    fs.writeFileSync(absolute, contents);
+  }
+
+  it('reports transitive runtime files, npm dependencies, and Node builtins', () => {
+    write(
+      'src/index.ts',
+      `
+        import type { TypeOnly } from './types';
+        import { runtime } from './runtime';
+        export { runtime };
+        export const later = () => load('yaml');
+        const load = require;
+        void import('./lazy');
+        void import('./helper.js');
+      `,
+    );
+    write(
+      'src/runtime.ts',
+      `
+        import fs from 'node:fs';
+        import value from '@scope/runtime/subpath';
+        export const runtime = [fs, value];
+      `,
+    );
+    write('src/lazy.ts', "export { value } from 'external-runtime';");
+    write('src/helper.js', "require('js-runtime');");
+    write('src/types.ts', 'export interface TypeOnly { value: string }');
+
+    expect(computeRuntimeDependencyClosure(repoRoot, 'src/index.ts')).toEqual({
+      entrypoint: 'src/index.ts',
+      files: ['src/helper.js', 'src/index.ts', 'src/lazy.ts', 'src/runtime.ts'],
+      externalDependencies: ['@scope/runtime', 'external-runtime', 'js-runtime', 'yaml'],
+      nodeBuiltins: ['fs'],
+      unresolvedInternalImports: [],
+    });
+  });
+
+  it('reports unresolved internal runtime imports', () => {
+    write('src/index.ts', "import './missing.json'; import ''; require('');");
+
+    expect(computeRuntimeDependencyClosure(repoRoot, 'src/index.ts')).toMatchObject({
+      unresolvedInternalImports: ['src/index.ts: ./missing.json', 'src/index.ts: <empty>'],
+    });
+  });
+
+  it('includes existing runtime assets without parsing them as source', () => {
+    write('src/index.ts', "import './schema.json'; require('./native.node');");
+    write('src/schema.json', '{}');
+    write('src/native.node', 'binary');
+
+    expect(computeRuntimeDependencyClosure(repoRoot, 'src/index.ts')).toMatchObject({
+      files: ['src/index.ts', 'src/native.node', 'src/schema.json'],
+      unresolvedInternalImports: [],
+    });
   });
 });
 

@@ -4,6 +4,11 @@ import path from 'node:path';
 import { minVersion, satisfies, subset, validRange } from 'semver';
 import { describe, expect, it } from 'vitest';
 import { extractModuleSpecifiers, getPackageName } from '../scripts/architectureUtils';
+import {
+  findPackageCandidateExportViolations,
+  getPackageCandidateSpecifier,
+  readPackageCandidateConfig,
+} from '../scripts/packageReadiness';
 
 type PackageManifest = {
   dependencies?: Record<string, string>;
@@ -191,6 +196,25 @@ describe('package manifests', () => {
     expect(packageJson.typesVersions?.['*']?.['provider-plugin']).toEqual([
       'dist/src/provider-plugin.d.ts',
     ]);
+  });
+
+  it('declares package exports for every public package candidate', () => {
+    const packageJson = readPackageJson<{
+      exports?: Record<string, unknown>;
+      typesVersions?: Record<string, Record<string, string[]>>;
+    }>('package.json');
+    const candidates = readPackageCandidateConfig(process.cwd()).candidates;
+
+    expect(findPackageCandidateExportViolations(packageJson.exports, candidates)).toEqual([]);
+
+    for (const candidate of candidates) {
+      const specifier = getPackageCandidateSpecifier(candidate);
+      if (!specifier || !candidate.packageSubpath) {
+        continue;
+      }
+      expect(packageJson.exports?.[`./${candidate.packageSubpath}`], specifier).toBeDefined();
+      expect(packageJson.typesVersions?.['*']?.[candidate.packageSubpath], specifier).toBeDefined();
+    }
   });
 
   it('keeps the contracts subpath extension-safe for emitted ESM', () => {
@@ -1345,7 +1369,7 @@ describe('package manifests', () => {
     // No installation anywhere in the tree — including nested copies — may sit on a
     // compromised version.
     for (const [packagePath, installation] of Object.entries(packageLock.packages)) {
-      const name = packagePath.replace(/^.*node_modules\//, '');
+      const name = packagePath.split(/(?:^|\/)node_modules\//).at(-1) ?? packagePath;
       const bad = COMPROMISED[name as keyof typeof COMPROMISED];
       if (!bad || !installation.version) {
         continue;
