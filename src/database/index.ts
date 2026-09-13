@@ -34,6 +34,9 @@ let dbInstance: Drizzle | null = null;
 let dbPromise: Promise<Drizzle> | null = null;
 let sqliteInstance: Client | null = null;
 let sqliteInstanceIsTesting = false;
+let closePromise: Promise<void> | null = null;
+let drainOperations: (() => Promise<void>) | null = null;
+let executeForClose: Client['execute'] | null = null;
 
 function isMissingPathError(error: unknown): boolean {
   const code = (error as NodeJS.ErrnoException | null)?.code;
@@ -291,8 +294,20 @@ function serializeTopLevelOperations(
   type TransactionScope = { transaction: TransactionContext | undefined };
   const activeTransaction = new AsyncLocalStorage<TransactionScope>();
   let operationQueue = Promise.resolve();
+  let closing = false;
+  executeForClose = rawExecute;
+  drainOperations = () => {
+    if (activeTransaction.getStore()?.transaction) {
+      throw new Error('Cannot close the database inside a transaction');
+    }
+    closing = true;
+    return operationQueue;
+  };
 
   const runSerialized = <T>(operation: () => Promise<T>): Promise<T> => {
+    if (closing) {
+      return Promise.reject(new Error('Database connection is closing'));
+    }
     const result = operationQueue.then(operation);
     operationQueue = result.then(
       () => undefined,
@@ -356,6 +371,9 @@ function serializeTopLevelOperations(
 }
 
 export async function getDb() {
+  if (closePromise) {
+    throw new Error('Database connection is closing');
+  }
   if (dbInstance) {
     return dbInstance;
   }
@@ -410,15 +428,30 @@ export async function getDb() {
 }
 
 export async function closeDb() {
-  if (sqliteInstance) {
+  // Stop accepting work synchronously, before awaiting any queued operations.
+  // The drain also rejects a close from inside a transaction, even during shutdown.
+  const pendingOperations = drainOperations?.();
+  if (closePromise) {
+    return closePromise;
+  }
+  const initialization = dbPromise;
+  closePromise = (async () => {
+    await initialization?.catch(() => undefined);
+    await pendingOperations;
+    // Initialization may have installed the queue while closeDb was waiting.
+    await drainOperations?.();
+    if (!sqliteInstance) {
+      return;
+    }
+    const execute = executeForClose ?? sqliteInstance.execute.bind(sqliteInstance);
     try {
       // Attempt to checkpoint WAL file before closing
       if (!sqliteInstanceIsTesting && !getEnvBool('PROMPTFOO_DISABLE_WAL_MODE', false)) {
         try {
           // Queue behind pending writes, then attempt truncation without waiting on
           // readers. Native busy waits block the JS shutdown watchdog from firing.
-          await sqliteInstance.execute('PRAGMA busy_timeout = 0');
-          const result = await sqliteInstance.execute('PRAGMA wal_checkpoint(TRUNCATE)');
+          await execute('PRAGMA busy_timeout = 0');
+          const result = await execute('PRAGMA wal_checkpoint(TRUNCATE)');
           const row = result.rows[0];
           const checkpointStatus = {
             busy: Number(row?.busy),
@@ -439,7 +472,7 @@ export async function closeDb() {
       }
 
       if (sqliteInstanceIsTesting) {
-        await closeTestDatabaseClient(sqliteInstance);
+        await closeTestDatabaseClient(sqliteInstance, execute);
       } else {
         // libsql Client.close() is synchronous; the WAL checkpoint above already
         // awaited the I/O that needed to finish before the underlying connection drops.
@@ -456,7 +489,14 @@ export async function closeDb() {
       sqliteInstanceIsTesting = false;
       dbInstance = null;
       dbPromise = null;
+      drainOperations = null;
+      executeForClose = null;
     }
+  })();
+  try {
+    await closePromise;
+  } finally {
+    closePromise = null;
   }
 }
 
@@ -473,7 +513,7 @@ export function isDbOpen(): boolean {
  * Should be called during graceful shutdown to prevent event loop hanging
  */
 export async function closeDbIfOpen(): Promise<void> {
-  if (sqliteInstance) {
+  if (sqliteInstance || dbPromise || closePromise) {
     await closeDb();
   }
 }
