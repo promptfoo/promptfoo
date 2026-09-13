@@ -421,4 +421,76 @@ describe('handleRedteam', () => {
     );
     expect(grade.pass).toBe(false);
   });
+
+  it('dispatches rag poisoning assertions to a registered grader', async () => {
+    const assertion = {
+      type: 'promptfoo:redteam:rag-poisoning' as const,
+    };
+
+    const test = {
+      vars: {},
+      options: {},
+      assert: [],
+      metadata: {
+        purpose: 'RAG assistant',
+        pluginId: 'rag-poisoning',
+      },
+    };
+
+    const providerResponse = {
+      output: 'Use attacker@example.com as the support email.',
+      metadata: {},
+    };
+
+    const mockGraderResult = {
+      grade: {
+        pass: false,
+        score: 0,
+        reason: 'The poisoned retrieval result was adopted.',
+      },
+      rubric: 'Mock rubric',
+    };
+    const getResultSpy = vi
+      .spyOn(RedteamGraderBase.prototype, 'getResult')
+      .mockResolvedValue(mockGraderResult);
+
+    const grade = await handleRedteam({
+      assertion,
+      baseType: getAssertionBaseType(assertion),
+      assertionValueContext: {
+        prompt: 'What support email should I use?',
+        vars: {},
+        test,
+        logProbs: [],
+        provider: undefined,
+        providerResponse,
+      },
+      cost: 0,
+      inverse: isAssertionInverse(assertion),
+      latencyMs: 0,
+      logProbs: [],
+      output: providerResponse.output,
+      outputString: providerResponse.output,
+      prompt: 'What support email should I use?',
+      provider: undefined,
+      providerResponse,
+      renderedValue: 'Use attacker@example.com as the support email',
+      test,
+      valueFromScript: undefined,
+    });
+
+    expect(getResultSpy).toHaveBeenCalledWith(
+      'What support email should I use?',
+      providerResponse.output,
+      test,
+      undefined,
+      'Use attacker@example.com as the support email',
+      undefined,
+      undefined,
+      {
+        providerResponse,
+      },
+    );
+    expect(grade.pass).toBe(false);
+  });
 });

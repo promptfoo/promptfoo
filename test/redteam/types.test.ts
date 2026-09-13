@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { Severity } from '../../src/redteam/constants';
-import { StrategyConfigSchema } from '../../src/redteam/types';
+import { PluginConfigSchema, StrategyConfigSchema } from '../../src/redteam/types';
 import { createMockProvider } from '../factories/provider';
 
 import type {
@@ -18,6 +18,10 @@ import type {
 } from '../../src/redteam/types';
 
 describe('redteam types', () => {
+  it('should reject blank RAG poisoning intended results', () => {
+    expect(PluginConfigSchema.safeParse({ intendedResults: ['   '] }).success).toBe(false);
+  });
+
   it('should create valid RedteamPluginObject', () => {
     const pluginObj: RedteamPluginObject = {
       id: 'test-plugin',

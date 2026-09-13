@@ -28,6 +28,7 @@ import {
   assertRemoteMaterializationHandled,
   buildRemoteMaterializedInputVariables,
 } from '../../remoteMaterialization';
+import { getRemoteGeneratedRenderSkipVars, getSessionId } from '../../remoteTestProvenance';
 import {
   applyRuntimeTransforms,
   type LayerConfig,
@@ -36,12 +37,7 @@ import {
 } from '../../shared/runtimeTransform';
 import { Strategies } from '../../strategies';
 import { checkExfilTracking } from '../../strategies/indirectWebPwn';
-import {
-  extractInputVarsFromPrompt,
-  extractPromptFromTags,
-  getSessionId,
-  isBasicRefusal,
-} from '../../util';
+import { extractInputVarsFromPrompt, extractPromptFromTags, isBasicRefusal } from '../../util';
 import {
   accumulateGraderResult,
   buildGraderResultAssertion,
@@ -554,7 +550,10 @@ export class HydraProvider implements ApiProvider {
           updatedVars,
           filters,
           targetProvider,
-          [this.injectVar], // Skip template rendering for injection variable to prevent double-evaluation
+          getRemoteGeneratedRenderSkipVars(test?.metadata, [
+            this.injectVar,
+            ...Object.keys(currentRenderInputVars ?? {}),
+          ]),
         );
       } else {
         // Stateless: send full conversation history as JSON
