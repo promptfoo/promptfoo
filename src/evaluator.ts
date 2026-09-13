@@ -29,7 +29,10 @@ import { maybeEmitAzureOpenAiWarning } from './providers/azure/warnings';
 import { providerRegistry } from './providers/providerRegistry';
 import { isPromptfooSampleTarget } from './providers/shared';
 import { maybeWrapMcpProviderForRedteam } from './redteam/mcpTargetProvider';
-import { withMcpLedgerScope } from './redteam/plugins/codingAgent/verifiers';
+import {
+  withMcpLedgerScope,
+  withTraceRedactionReceiptScope,
+} from './redteam/plugins/codingAgent/verifiers';
 import { redteamProviderManager } from './redteam/providers/shared';
 import { throwIfTargetPromptExceedsMaxChars } from './redteam/shared/promptLength';
 import { getSessionId } from './redteam/util';
@@ -1608,7 +1611,10 @@ export function getTraceLinkage(
 export async function runEval(options: RunEvalOptions): Promise<EvaluateResult[]> {
   return withCacheNamespace(
     getRepeatCacheNamespace(options.repeatIndex, options.evaluateOptions),
-    () => runEvalInternal(options),
+    () =>
+      withTraceRedactionReceiptScope([options.test], () => runEvalInternal(options), {
+        inherit: true,
+      }),
   );
 }
 
@@ -4983,24 +4989,28 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
       progressBarManager.installLogInterceptor();
     }
 
-    const interruptedEval = await this.executeEvalSteps({
-      checkAbort,
-      ciProgressReporter,
-      combinedAbortSignal,
-      concurrentRunEvalOptions,
-      evalStepIndexMap,
-      globalTimeout,
-      groupedRunEvalOptions: [...serialRunEvalOptions, ...concurrentRunEvalOptions],
-      isEvalTimedOut: () => evalTimedOut,
-      isWebUI,
-      maxEvalTimeMs,
-      processingContext,
-      processedIndices,
-      progressBarManager,
-      prompts,
-      serialRunEvalOptions,
-      shouldGroupGradingByProvider,
-    });
+    const interruptedEval = await withTraceRedactionReceiptScope(
+      runEvalOptions.map(({ test }) => test),
+      () =>
+        this.executeEvalSteps({
+          checkAbort,
+          ciProgressReporter,
+          combinedAbortSignal,
+          concurrentRunEvalOptions,
+          evalStepIndexMap,
+          globalTimeout,
+          groupedRunEvalOptions: [...serialRunEvalOptions, ...concurrentRunEvalOptions],
+          isEvalTimedOut: () => evalTimedOut,
+          isWebUI,
+          maxEvalTimeMs,
+          processingContext,
+          processedIndices,
+          progressBarManager,
+          prompts,
+          serialRunEvalOptions,
+          shouldGroupGradingByProvider,
+        }),
+    );
     if (interruptedEval) {
       return interruptedEval;
     }

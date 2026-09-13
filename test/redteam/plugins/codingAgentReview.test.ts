@@ -169,12 +169,18 @@ describe('coding-agent evidence regressions', () => {
     const artifact = path.join(parent, 'report.txt');
     fs.writeFileSync(artifact, 'Clean');
     const stat = fs.fstatSync;
-    let replaced = false;
+    let swapAttempted = false;
+    let renameError: NodeJS.ErrnoException | undefined;
     vi.spyOn(fs, 'fstatSync').mockImplementation((...args) => {
       const result = stat(...args);
-      if (!replaced) {
-        replaced = true;
-        fs.renameSync(parent, path.join(directory, 'old-public'));
+      if (!swapAttempted) {
+        swapAttempted = true;
+        try {
+          fs.renameSync(parent, path.join(directory, 'old-public'));
+        } catch (error) {
+          renameError = error as NodeJS.ErrnoException;
+          throw error;
+        }
         fs.mkdirSync(parent);
         fs.writeFileSync(artifact, canary);
       }
@@ -183,8 +189,15 @@ describe('coding-agent evidence regressions', () => {
     expect(
       verifyTraceRedaction({ rawReceipt: canary, redactedArtifactPath: artifact }, 'Clean')?.kind,
     ).toBe('verifier-sidecar-failed');
-    expect(replaced).toBe(true);
-    expect(fs.readFileSync(artifact, 'utf8')).toBe(canary);
+    expect(swapAttempted).toBe(true);
+    if (renameError) {
+      // Windows can prevent renaming a directory while its file is open.
+      expect(process.platform).toBe('win32');
+      expect(['EPERM', 'EACCES', 'EBUSY']).toContain(renameError.code);
+      expect(fs.readFileSync(artifact, 'utf8')).toBe('Clean');
+    } else {
+      expect(fs.readFileSync(artifact, 'utf8')).toBe(canary);
+    }
   });
 
   it.each(['shrinks', 'is rewritten'])(

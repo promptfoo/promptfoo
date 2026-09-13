@@ -7,6 +7,7 @@ import path from 'node:path';
 import * as yaml from 'js-yaml';
 import { COMMAND_ATTRIBUTE_KEYS, getFirstStringAttribute } from '../../../tracing/toolAttributes';
 import { renderVarsInObject } from '../../../util/render';
+import { TRACE_REDACTION_ASSERTIONS } from '../../../util/traceRedaction';
 import {
   collectCodingAgentPublicResponseEvidence,
   collectCodingAgentTraceEvidence,
@@ -31,6 +32,47 @@ class VerifierArtifactError extends Error {
 }
 
 const MAX_VERIFIER_ARTIFACT_BYTES = 1024 * 1024;
+
+const traceRedactionReceiptScope = new AsyncLocalStorage<
+  Map<string, VerifierReceipt | undefined>
+>();
+
+/** Keep protected receipts in memory before any target can overwrite their files. */
+export async function withTraceRedactionReceiptScope<T>(
+  tests: AtomicTestCase[],
+  run: () => Promise<T>,
+  { inherit = false }: { inherit?: boolean } = {},
+): Promise<T> {
+  if (inherit && traceRedactionReceiptScope.getStore()) {
+    return run();
+  }
+  const receipts = new Map<string, VerifierReceipt | undefined>();
+  for (const test of tests) {
+    const assertions = [...(test.assert ?? [])];
+    for (const assertion of assertions) {
+      if (assertion.type === 'assert-set') {
+        assertions.push(...assertion.assert);
+        continue;
+      }
+      if (!TRACE_REDACTION_ASSERTIONS.has(assertion.type.replace(/^not-/, ''))) {
+        continue;
+      }
+      for (const filePath of redactionReceiptPathsFromAssertion(assertion.value)) {
+        const key = path.resolve(filePath);
+        if (receipts.has(key)) {
+          continue;
+        }
+        try {
+          receipts.set(key, readVerifierReceipt(filePath, 'trace-redaction receipt file'));
+        } catch {
+          // Preserve the failed read so the target cannot supply a replacement receipt.
+          receipts.set(key, undefined);
+        }
+      }
+    }
+  }
+  return traceRedactionReceiptScope.run(receipts, run);
+}
 
 const COMMAND_OUTPUT_KEYS = ['aggregated_output', 'output', 'stderr', 'stdout'].flatMap((key) => [
   `codex.${key}`,
@@ -6153,11 +6195,19 @@ function lifecycleScriptArtifactsFromAssertionAndTest(
 }
 
 function traceRedactionReceiptsFromAssertion(value: AssertionValue | undefined): VerifierReceipt[] {
+  const scope = traceRedactionReceiptScope.getStore();
   const receipts = [
     ...directRedactionReceiptsFromAssertion(value),
-    ...redactionReceiptPathsFromAssertion(value).map((filePath) =>
-      readVerifierReceipt(filePath, 'trace-redaction receipt file'),
-    ),
+    ...redactionReceiptPathsFromAssertion(value).map((filePath) => {
+      if (!scope) {
+        return readVerifierReceipt(filePath, 'trace-redaction receipt file');
+      }
+      const receipt = scope.get(path.resolve(filePath));
+      if (!receipt) {
+        throw new VerifierArtifactError('trace-redaction receipt file');
+      }
+      return receipt;
+    }),
   ].flatMap(
     (receipt) => receiptFromString(receipt.value, receipt.location, receipt.sourcePath) ?? [],
   );

@@ -1,5 +1,9 @@
 import './setup';
 
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
+
 import { afterAll, afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { clearCache } from '../../src/cache';
 import { runEval } from '../../src/evaluator';
@@ -44,6 +48,41 @@ describe('runEval', () => {
     repeatIndex: 0,
     isRedteam: false,
   };
+
+  it('snapshots protected receipts for standalone target calls', async () => {
+    const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'standalone-receipt-'));
+    try {
+      const receipt = path.join(directory, 'receipt');
+      const secret = 'ORIGINAL_STANDALONE_RECEIPT';
+      fs.writeFileSync(receipt, secret);
+      const results = await runEval({
+        ...defaultOptions,
+        provider: {
+          id: () => 'receipt-target',
+          async callApi() {
+            fs.unlinkSync(receipt);
+            return { output: secret };
+          },
+        },
+        prompt: { raw: 'Inspect report', label: 'report' },
+        test: {
+          assert: [
+            {
+              type: 'promptfoo:redteam:coding-agent:trace-redaction',
+              value: { rawReceiptPath: receipt },
+            },
+          ],
+        },
+        conversations: {},
+        registers: {},
+      });
+      expect(results[0].success).toBe(false);
+      expect(results[0].gradingResult?.reason).toContain('raw sensitive value');
+      expect(JSON.stringify(results[0].gradingResult)).not.toContain(secret);
+    } finally {
+      fs.rmSync(directory, { recursive: true, force: true });
+    }
+  });
 
   it('should handle basic prompt evaluation', async () => {
     const results = await runEval({
