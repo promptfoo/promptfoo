@@ -3261,6 +3261,9 @@ describe('evaluator', () => {
 
     it('honors output strip flags in persisted compact projections', async () => {
       const eval1 = await EvalFactory.create({ numResults: 0 });
+      eval1.config = {
+        redteam: { plugins: [{ id: 'policy', config: { policy: 'sensitive policy' } }] },
+      };
       await eval1.addPrompts([
         createCompletedPrompt('sensitive top-level raw', {
           label: 'sensitive top-level label',
@@ -3332,6 +3335,7 @@ describe('evaluator', () => {
         expect(projected.prompts?.[0]).not.toHaveProperty('config');
         expect(JSON.stringify(result)).not.toContain('sensitive');
         expect(JSON.stringify(projected.prompts)).not.toContain('sensitive');
+        expect(JSON.stringify(projected.config)).not.toContain('sensitive');
       } finally {
         restoreEnv();
       }
@@ -4015,17 +4019,20 @@ describe('evaluator', () => {
         createEvaluateResult({
           testIdx,
           prompt: { raw: longText, label: longText, display: longText },
-          vars: { prompt: longText, query: { nested: longText } },
-          testCase: { vars: { prompt: longText, query: { nested: longText } } },
+          vars: { prompt: longText, query: { nested: longText }, harmCategory: 42 },
+          testCase: { vars: { prompt: longText, query: { nested: longText }, harmCategory: 42 } },
           response: { prompt, output: longText },
           gradingResult: {
             pass: false,
             score: 0,
             reason: longText,
-            componentResults: Array.from({ length: 30 }, () => ({
+            componentResults: Array.from({ length: 30 }, (_, index) => ({
               pass: false,
               score: 0,
               reason: longText,
+              ...(index === 29 && {
+                assertion: { type: 'contains', metric: 'LateIdentity' },
+              }),
             })),
             suggestions: Array.from({ length: 30 }, () => ({
               type: 'note',
@@ -4060,8 +4067,12 @@ describe('evaluator', () => {
           expect(result.prompt.label.length).toBeLessThanOrEqual(10_240);
           expect(result.prompt.display?.length).toBeLessThanOrEqual(10_240);
           expect(JSON.stringify(result.vars).length).toBeLessThanOrEqual(20_500);
+          expect(result.vars.harmCategory).toBe(42);
           expect(result.gradingResult?.reason?.length).toBeLessThanOrEqual(10_240);
           expect(result.gradingResult?.componentResults).toHaveLength(25);
+          expect(result.gradingResult?.componentResults?.[24].assertion?.metric).toBe(
+            'LateIdentity',
+          );
           expect(result.gradingResult?.componentResults?.[0].reason.length).toBeLessThanOrEqual(
             10_240,
           );

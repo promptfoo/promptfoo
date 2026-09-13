@@ -834,7 +834,10 @@ function projectPluginForRedteamReport(plugin: unknown, stripPromptText = false)
   return projectedPlugin;
 }
 
-function projectConfigForRedteamReport(config: Partial<UnifiedConfig>): Partial<UnifiedConfig> {
+function projectConfigForRedteamReport(
+  config: Partial<UnifiedConfig>,
+  stripFlags: RedteamReportStripFlags,
+): Partial<UnifiedConfig> {
   const firstProvider = Array.isArray(config.providers) ? config.providers[0] : undefined;
   const providerRecord = isRecord(firstProvider) ? firstProvider : undefined;
   const providerId = typeof providerRecord?.id === 'string' ? providerRecord.id : undefined;
@@ -857,7 +860,7 @@ function projectConfigForRedteamReport(config: Partial<UnifiedConfig>): Partial<
   const plugins = (
     Array.isArray(config.redteam?.plugins)
       ? config.redteam.plugins
-          .map((plugin) => projectPluginForRedteamReport(plugin))
+          .map((plugin) => projectPluginForRedteamReport(plugin, stripFlags.shouldStripPromptText))
           .filter((plugin) => plugin !== undefined)
       : undefined
   ) as NonNullable<NonNullable<Partial<UnifiedConfig>['redteam']>['plugins']> | undefined;
@@ -2590,6 +2593,8 @@ export default class Eval {
               WHEN 'true' THEN json('true')
               WHEN 'false' THEN json('false')
               WHEN 'null' THEN json('null')
+              WHEN 'integer' THEN json(report_vars.value)
+              WHEN 'real' THEN json(report_vars.value)
               WHEN 'array' THEN json(report_vars.value)
               WHEN 'object' THEN json(report_vars.value)
               ELSE substr(report_vars.value, 1, ${MAX_COMPACT_HISTORY_TEXT_LENGTH})
@@ -2706,7 +2711,32 @@ export default class Eval {
               json_extract(${validGradingResultJson}, '$.componentResults')
             ) AS report_component
             WHERE report_component.type = 'object'
-              AND report_component.key < 25
+              AND (
+                (
+                  report_component.key < 25
+                  AND (
+                    report_component.key < 24
+                    OR EXISTS (
+                      SELECT 1
+                      FROM json_each(json_extract(${validGradingResultJson}, '$.componentResults')) AS first_component
+                      WHERE first_component.key < 25
+                        AND json_type(first_component.value, '$.assertion') = 'object'
+                    )
+                    OR NOT EXISTS (
+                      SELECT 1
+                      FROM json_each(json_extract(${validGradingResultJson}, '$.componentResults')) AS later_component
+                      WHERE later_component.key >= 25
+                        AND json_type(later_component.value, '$.assertion') = 'object'
+                    )
+                  )
+                )
+                OR report_component.key = (
+                  SELECT MIN(identity_component.key)
+                  FROM json_each(json_extract(${validGradingResultJson}, '$.componentResults')) AS identity_component
+                  WHERE identity_component.key >= 25
+                    AND json_type(identity_component.value, '$.assertion') = 'object'
+                )
+              )
           )
           ELSE NULL
         END`,
@@ -2812,7 +2842,10 @@ export default class Eval {
       results,
       config:
         resultProjection === 'redteamReport'
-          ? projectConfigForRedteamReport(sanitizeTracingConfigForPersistence(this.config))
+          ? projectConfigForRedteamReport(
+              sanitizeTracingConfigForPersistence(this.config),
+              outputStripFlags,
+            )
           : projectConfigForOutput(
               sanitizeTracingConfigForPersistence(this.config),
               outputStripFlags,
