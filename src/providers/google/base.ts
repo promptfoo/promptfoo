@@ -333,6 +333,8 @@ export abstract class GoogleGenericProvider implements ApiProvider {
   /** MCP client for tool integration */
   protected mcpClient: MCPClient | null = null;
   private mcpSession?: McpClientSession;
+  /** Preserves the eager MCP startup contract for subclasses and callers. */
+  protected initializationPromise: Promise<void> | null = null;
 
   /** Cache of loaded function callbacks */
   protected loadedFunctionCallbacks: Record<string, Function> = {};
@@ -373,7 +375,10 @@ export abstract class GoogleGenericProvider implements ApiProvider {
       this.customId = () => id;
     }
 
-    void this.initializeMCP().catch(() => undefined);
+    if (this.config.mcp?.enabled) {
+      this.initializationPromise = this.initializeMCP();
+      void this.initializationPromise.catch(() => undefined);
+    }
   }
 
   validateFunctionToolCall(output: string | object, vars?: CallApiContextParams['vars']): void {
