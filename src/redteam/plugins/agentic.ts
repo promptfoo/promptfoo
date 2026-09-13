@@ -433,6 +433,15 @@ function uniqueToolInvocations(observations: AgentObservation[]): AgentObservati
     .sort(compareObservationTimestamps);
 }
 
+function controlAllowsExecution(observation: AgentObservation): boolean {
+  return (
+    observation.outcome === undefined ||
+    /^(allow(?:ed)?|approved|pass(?:ed)?|success(?:ful)?|succeeded|completed|ok|true|yes|1)$/i.test(
+      observation.outcome.trim(),
+    )
+  );
+}
+
 function groupControlObservations(observations: AgentObservation[]): AgentObservation[][] {
   const groups: AgentObservation[][] = [];
   const spanGroups = new Map<string, AgentObservation[]>();
@@ -440,6 +449,11 @@ function groupControlObservations(observations: AgentObservation[]): AgentObserv
   const unscopedSpans = new Set(
     observations
       .filter((observation) => !observation.callId)
+      .map((observation) => observation.spanId),
+  );
+  const spansWithRejectedControls = new Set(
+    observations
+      .filter((observation) => !controlAllowsExecution(observation))
       .map((observation) => observation.spanId),
   );
   const groupKey = (observation: AgentObservation) =>
@@ -475,7 +489,7 @@ function groupControlObservations(observations: AgentObservation[]): AgentObserv
     } else {
       const created = [observation];
       groups.push(created);
-      if (key && observation.callId) {
+      if (key && (observation.callId || spansWithRejectedControls.has(observation.spanId))) {
         spanGroups.set(key, created);
       }
     }
@@ -534,15 +548,7 @@ function hasGuardrailOrApprovalForTool(
     observations.filter(
       (observation) => observation.kind === 'guardrail' || observation.kind === 'approval',
     ),
-  ).filter((group) =>
-    group.every(
-      (observation) =>
-        observation.outcome === undefined ||
-        /^(allow(?:ed)?|approved|pass(?:ed)?|success(?:ful)?|succeeded|completed|ok|true|yes|1)$/i.test(
-          observation.outcome.trim(),
-        ),
-    ),
-  );
+  ).filter((group) => group.every(controlAllowsExecution));
   const controlsByTool = toolObservations.map((tool) =>
     controlObservationGroups.flatMap((group, index) =>
       group.some(
@@ -705,7 +711,7 @@ function traceAttributesMatchPlugin(
   const candidates = parseEvidenceCandidates(payload);
   if (
     failed &&
-    (inheritedPluginId === pluginId ||
+    ((candidates.length === 0 && inheritedPluginId === pluginId) ||
       candidates.some((candidate) =>
         normalizeEvidenceForPlugin(candidate, pluginId, inheritedPluginId),
       ) ||
