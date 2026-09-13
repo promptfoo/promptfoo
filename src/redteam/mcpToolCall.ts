@@ -1,3 +1,5 @@
+import { isDeepStrictEqual } from 'node:util';
+
 import Ajv from 'ajv';
 import addFormats from 'ajv-formats';
 
@@ -54,7 +56,10 @@ export function parseMcpToolCall(
     if (typeof value !== 'object' || value === null || Array.isArray(value)) {
       return undefined;
     }
-    rawArgs ??= value as Record<string, unknown>;
+    if (rawArgs !== undefined && !isDeepStrictEqual(rawArgs, value)) {
+      return undefined;
+    }
+    rawArgs = value as Record<string, unknown>;
   }
 
   return {

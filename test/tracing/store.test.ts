@@ -175,7 +175,7 @@ describe('TraceStore', () => {
             [{ spanId: 'new', name: '', startTime: 1, [field]: 'x'.repeat(65) }],
             { skipTraceCheck: true },
           ),
-        ).rejects.toThrow('Trace redaction limit exceeded');
+        ).rejects.toThrow('Trace limit exceeded');
         expect(mockDb.insert).not.toHaveBeenCalled();
         expect(mockDb.update).toHaveBeenCalledOnce();
       },
@@ -224,7 +224,7 @@ describe('TraceStore', () => {
           skipTraceCheck: true,
           redactSpans,
         }),
-      ).rejects.toThrow('Trace redaction limit exceeded');
+      ).rejects.toThrow('Trace limit exceeded');
       expect(mockDb.select).toHaveBeenCalledTimes(2);
       expect(redactSpans).not.toHaveBeenCalled();
       expect(mockDb.insert).not.toHaveBeenCalled();

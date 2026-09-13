@@ -47,6 +47,30 @@ describe('extractMcpTools', () => {
     ).resolves.toEqual([query]);
   });
 
+  it('ignores required ordering in nested schemas without changing literal arrays', async () => {
+    const schema = (required: string[], values: string[]) => ({
+      type: 'object' as const,
+      properties: {
+        booking: {
+          type: 'object',
+          properties: { from: { type: 'string' }, to: { type: 'string' } },
+          required,
+        },
+        literal: { enum: [{ required: values }] },
+      },
+    });
+    const first = { ...query, inputSchema: schema(['from', 'to'], ['a', 'b']) };
+    const same = { ...query, inputSchema: schema(['to', 'from'], ['a', 'b']) };
+    const different = { ...query, inputSchema: schema(['from', 'to'], ['b', 'a']) };
+    await expect(
+      extractMcpTools([provider('first', [first]), provider('same', [same])]),
+    ).resolves.toEqual([first]);
+    await expect(
+      extractMcpTools([provider('first', [first]), provider('different', [different])]),
+    ).rejects.toThrow('conflicting input schemas');
+    expect(same.inputSchema.properties.booking.required).toEqual(['to', 'from']);
+  });
+
   it('preserves tools from working providers when another provider cannot connect', async () => {
     const unavailable = provider('unavailable', []);
     vi.mocked(unavailable.getAvailableTools).mockRejectedValue(new Error('Connection failed'));

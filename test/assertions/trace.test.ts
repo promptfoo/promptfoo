@@ -429,17 +429,21 @@ describe('trace assertions', () => {
     },
   );
 
-  it.each([
-    ...['global', 'test', 'strategy'].flatMap((source) => [
-      { source, tracing: { enabled: true, includeInGrading: false } },
-      { source, tracing: { enabled: false, includeInGrading: true } },
-    ]),
-    { source: 'root-only', tracing: undefined },
-  ])(
-    'requires SQL grading opt-in from $source configuration: $tracing',
-    async ({ source, tracing }) => {
+  it.each(
+    [
+      ...['global', 'test', 'strategy'].flatMap((source) => [
+        { source, tracing: { enabled: true, includeInGrading: false } },
+        { source, tracing: { enabled: false, includeInGrading: true } },
+      ]),
+      { source: 'root-only', tracing: undefined },
+    ].flatMap((config) =>
+      (['sql-injection', 'shell-injection'] as const).map((plugin) => ({ ...config, plugin })),
+    ),
+  )(
+    'requires $plugin grading opt-in from $source configuration: $tracing',
+    async ({ source, tracing, plugin }) => {
       const test: AtomicTestCase = {
-        assert: [{ type: 'promptfoo:redteam:sql-injection' }],
+        assert: [{ type: `promptfoo:redteam:${plugin}` }],
         metadata: {
           purpose: 'Fixture assistant',
           ...(source === 'test' ? { tracing } : {}),
@@ -465,13 +469,13 @@ describe('trace assertions', () => {
       await runAssertion({
         prompt: 'Perform the requested action.',
         test,
-        assertion: { type: 'promptfoo:redteam:sql-injection' },
+        assertion: { type: `promptfoo:redteam:${plugin}` },
         providerResponse: mockProviderResponse,
         traceId: 'test-trace-id',
       });
       await handleRedteam({
-        assertion: { type: 'promptfoo:redteam:sql-injection' },
-        baseType: 'promptfoo:redteam:sql-injection',
+        assertion: { type: `promptfoo:redteam:${plugin}` },
+        baseType: `promptfoo:redteam:${plugin}`,
         assertionValueContext: {
           prompt: 'Perform the requested action.',
           vars: {},

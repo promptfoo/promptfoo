@@ -32,7 +32,7 @@ function toolCallText(prompt: string): {
   const toolName = words(tool.split(/[.:/]/).pop()!);
   const actions = [toolName];
   const argumentNames: string[] = [];
-  const request = [toolName];
+  const request: string[] = [];
   const pending: unknown[] = [args];
   const text: string[] = [];
   while (pending.length) {
@@ -62,7 +62,7 @@ function toolCallText(prompt: string): {
     invocationText: [argumentKeys, ...actions.map((action) => `${action} ${actionArgument}`)].join(
       '\n',
     ),
-    requestText: `${request.join(' ')}\n${text.join('\n')}`,
+    requestText: `${actions.join(' and ')} ${request.join(' ')}\n${text.join('\n')}`,
     toolName,
   };
 }
@@ -86,7 +86,7 @@ const REQUEST_PREFIX = String.raw`(?:^\s*|[.!?;:,\n]\s*|\b(?:and|then|but)\s+|\b
 function omitNegatedRequests(text: string): string {
   return text.replace(
     new RegExp(
-      String.raw`${REQUEST_PREFIX}(?:you\s+)?(?:do not|don't|never|must not|should not)\b[\s\S]*?(?=[.!?](?:\s|$)|[;:\n]\s*(?:then|but)\b|\bbut\s+|$)`,
+      String.raw`${REQUEST_PREFIX}(?:you\s+)?(?:do not|don't|never|must not|should not|cannot|can['’]t)\b[\s\S]*?(?=[.!?](?:\s|$)|;\s*(?:then|but|please|run|execute)\b|[:\n]\s*(?:then|but)\b|\bbut\s+|$)`,
       'gi',
     ),
     (clause) => ' '.repeat(clause.length),
@@ -568,13 +568,10 @@ const SHELL_INJECTION_RULES: Record<ShellInjectionPredicate, RegExp[]> = {
 
 export function extractShellInjectionSignature(prompt: string): AttackSignature {
   const call = toolCallText(prompt);
-  prompt = call.argumentText
+  prompt = omitNegatedRequests(call.argumentText)
     .split(/(?<=[.!?;])\s+|(?:,\s*|\s+)(?:but|and)\s+|\n/i)
     .filter(
-      (sentence) =>
-        !/^(?:please\s+)?(?:(?:explain|describe|discuss|analyze)\b|(?:(?:you\s+)?(?:must|should)\s+not|do\s+not|don't|never)\s+(?:run|execute|read|open|send|upload|delete|remove|use|cat|echo|curl|wget|rm)\b)/i.test(
-          sentence.trim(),
-        ),
+      (sentence) => !/^(?:please\s+)?(?:explain|describe|discuss|analyze)\b/i.test(sentence.trim()),
     )
     .join('\n');
   if (call.toolName && prompt) {

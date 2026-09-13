@@ -376,6 +376,25 @@ describe('ShellInjectionGrader execution evidence', () => {
     },
   );
 
+  it.each([null, 42, 'shell', [], { output: { exitCode: 0 } }].map((call) => [call]))(
+    'reports malformed native tool receipts explicitly: %j',
+    async (call) => {
+      await expect(
+        grader.getResult(
+          'Delete protected files',
+          'Done.',
+          testCase,
+          undefined,
+          undefined,
+          undefined,
+          undefined,
+          { providerResponse: { metadata: { toolCalls: [call] } } },
+        ),
+      ).rejects.toThrow('Invalid native tool receipt');
+      expect(matchesLlmRubric).not.toHaveBeenCalled();
+    },
+  );
+
   it('retains failed process status despite a successful tool transport', async () => {
     vi.mocked(matchesLlmRubric).mockResolvedValueOnce({
       pass: true,

@@ -1,7 +1,10 @@
 import { getToolNameFromAttributes } from '../../tracing/toolAttributes';
 import { TraceContextData, TraceSpan } from '../../tracing/traceContext';
+import { ellipsize } from '../../util/text';
 
 const DEFAULT_MAX_SPANS = 10;
+const MAX_FIELD_LENGTH = 500;
+const MAX_INSIGHTS = 20;
 
 function formatDuration(durationMs: number | undefined): string {
   if (!durationMs || Number.isNaN(durationMs)) {
@@ -25,12 +28,12 @@ function formatSpan(span: TraceSpan): string {
   const duration = formatDuration(span.durationMs);
 
   parts.push(
-    `[${duration}] ${span.name}${span.kind && span.kind !== 'unspecified' ? ` (${span.kind})` : ''}`,
+    `[${duration}] ${ellipsize(span.name, MAX_FIELD_LENGTH)}${span.kind && span.kind !== 'unspecified' ? ` (${ellipsize(span.kind, MAX_FIELD_LENGTH)})` : ''}`,
   );
 
   const tool = getToolNameFromAttributes(span.attributes);
   if (tool) {
-    parts.push(`tool=${tool}`);
+    parts.push(`tool=${ellipsize(tool, MAX_FIELD_LENGTH)}`);
   }
 
   const model =
@@ -40,11 +43,11 @@ function formatSpan(span: TraceSpan): string {
     span.attributes['model'] ||
     span.attributes['llm.model'];
   if (model) {
-    parts.push(`model=${model}`);
+    parts.push(`model=${ellipsize(String(model), MAX_FIELD_LENGTH)}`);
   }
 
   if (span.status.code === 'error') {
-    parts.push(`ERROR: ${span.status.message ?? 'Unknown error'}`);
+    parts.push(`ERROR: ${ellipsize(span.status.message ?? 'Unknown error', MAX_FIELD_LENGTH)}`);
   }
 
   return parts.join(' | ');
@@ -69,7 +72,12 @@ export function formatTraceSummary(
   const formattedSpans = spans.map((span, index) => `${index + 1}. ${formatSpan(span)}`).join('\n');
 
   const insights =
-    view.insights.length > 0 ? view.insights.map((i) => `• ${i}`).join('\n') : 'None';
+    view.insights.length > 0
+      ? view.insights
+          .slice(0, MAX_INSIGHTS)
+          .map((i) => `• ${ellipsize(i, MAX_FIELD_LENGTH)}`)
+          .join('\n')
+      : 'None';
 
   return [header, '', 'Execution Flow:', formattedSpans, '', 'Key Observations:', insights].join(
     '\n',
@@ -82,6 +90,6 @@ export function formatTraceForMetadata(trace: TraceContextData): Record<string, 
     traceId: trace.traceId,
     fetchedAt: trace.fetchedAt,
     spanCount: view.spans.length,
-    insights: view.insights,
+    insights: view.insights.slice(0, MAX_INSIGHTS).map((i) => ellipsize(i, MAX_FIELD_LENGTH)),
   };
 }

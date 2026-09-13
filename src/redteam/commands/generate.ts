@@ -334,6 +334,7 @@ async function doGenerateRedteamInternal(
   }
 
   let testSuite: TestSuite;
+  let providersToCleanup: ApiProvider[] = [];
   let redteamConfig: RedteamFileConfig | undefined;
   let configPath = options.config || options.defaultConfigPath;
   const outputPath = options.output || 'redteam.yaml';
@@ -378,31 +379,33 @@ async function doGenerateRedteamInternal(
   let pluginSeverityOverrides: Map<Plugin, Severity> = new Map();
   let pluginSeverityOverridesId: string | undefined;
 
-  if (configPath) {
-    const resolved = await resolveConfigs(
-      {
-        config: [configPath],
-        filterProviders: options.filterProviders,
-        filterTargets: options.filterTargets,
-      },
-      options.defaultConfig || {},
-    );
-    testSuite = resolved.testSuite;
-    redteamConfig = resolved.config.redteam;
-    commandLineOptions = resolved.commandLineOptions;
-    resolvedConfig = resolved.config;
-    selectedProviderConfigs = resolved.selectedProviderConfigs ?? resolved.config.providers;
+  try {
+    if (configPath) {
+      const resolved = await resolveConfigs(
+        {
+          config: [configPath],
+          filterProviders: options.filterProviders,
+          filterTargets: options.filterTargets,
+        },
+        options.defaultConfig || {},
+      );
+      testSuite = resolved.testSuite;
+      providersToCleanup = testSuite.providers as ApiProvider[];
+      redteamConfig = resolved.config.redteam;
+      commandLineOptions = resolved.commandLineOptions;
+      resolvedConfig = resolved.config;
+      selectedProviderConfigs = resolved.selectedProviderConfigs ?? resolved.config.providers;
 
-    await checkCloudPermissions({
-      ...resolved.config,
-      providers: selectedProviderConfigs,
-    });
+      await checkCloudPermissions({
+        ...resolved.config,
+        providers: selectedProviderConfigs,
+      });
 
-    // Warn if both tests section and redteam config are present
-    if (redteamConfig && resolved.testSuite.tests && resolved.testSuite.tests.length > 0) {
-      logger.warn(
-        chalk.yellow(
-          dedent`
+      // Warn if both tests section and redteam config are present
+      if (redteamConfig && resolved.testSuite.tests && resolved.testSuite.tests.length > 0) {
+        logger.warn(
+          chalk.yellow(
+            dedent`
             ⚠️  Warning: Found both 'tests' section and 'redteam' configuration in your config file.
 
             The 'tests' section is ignored when generating red team tests. Red team automatically
@@ -414,444 +417,422 @@ async function doGenerateRedteamInternal(
             3. Using a transformRequest function in your target config
             4. Using multiple target configurations
           `,
+          ),
+        );
+      }
+
+      try {
+        // If the provider is a cloud provider, check for plugin severity overrides:
+        const providerId = getProviderIds(selectedProviderConfigs!)[0];
+        if (isCloudProvider(providerId)) {
+          const cloudId = getCloudDatabaseId(providerId);
+          const overrides = await getPluginSeverityOverridesFromCloud(cloudId);
+          if (overrides) {
+            pluginSeverityOverrides = new Map(
+              Object.entries(overrides.severities) as [Plugin, Severity][],
+            );
+            pluginSeverityOverridesId = overrides.id;
+          }
+        }
+      } catch (error) {
+        logger.error(
+          `Plugin severity override check failed: ${error instanceof Error ? error.message : String(error)}`,
+        );
+      }
+    } else if (options.purpose) {
+      // There is a purpose, so we can just have a dummy test suite for standalone invocation
+      testSuite = {
+        prompts: [],
+        providers: [],
+        tests: [],
+      };
+    } else {
+      logger.info(
+        chalk.red(
+          `\nCan't generate without configuration - run ${chalk.yellow.bold(
+            promptfooCommand('redteam init'),
+          )} first`,
         ),
       );
+      return null;
     }
+
+    // Validate email for remote generation
+    if (!neverGenerateRemote()) {
+      let hasValidEmail = false;
+      while (!hasValidEmail) {
+        const { emailNeedsValidation } = await promptForEmailUnverified();
+        const res = await checkEmailStatusAndMaybeExit({ validate: emailNeedsValidation });
+        hasValidEmail = res === EMAIL_OK_STATUS;
+      }
+    }
+
+    const startTime = Date.now();
+    telemetry.record('command_used', {
+      name: 'generate redteam - started',
+      numPrompts: testSuite.prompts.length,
+      numTestsExisting: (testSuite.tests || []).length,
+      plugins: redteamConfig?.plugins?.map((p) => (typeof p === 'string' ? p : p.id)) || [],
+      strategies: redteamConfig?.strategies?.map((s) => (typeof s === 'string' ? s : s.id)) || [],
+      isPromptfooSampleTarget: testSuite.providers.some(isPromptfooSampleTarget),
+    });
+    telemetry.record('redteam generate', {
+      phase: 'started',
+      numPrompts: testSuite.prompts.length,
+      numTestsExisting: (testSuite.tests || []).length,
+      plugins: redteamConfig?.plugins?.map((p) => (typeof p === 'string' ? p : p.id)) || [],
+      strategies: redteamConfig?.strategies?.map((s) => (typeof s === 'string' ? s : s.id)) || [],
+      isPromptfooSampleTarget: testSuite.providers.some(isPromptfooSampleTarget),
+    });
+
+    let plugins: RedteamPluginObject[] = [];
+
+    // If plugins are defined in the config file
+    if (redteamConfig?.plugins && redteamConfig.plugins.length > 0) {
+      plugins = redteamConfig.plugins.map((plugin) => {
+        // Base configuration that all plugins will have
+        const pluginConfig: {
+          id: string;
+          numTests: number | undefined;
+          config?: Record<string, any>;
+          severity?: Severity;
+        } = {
+          // Handle both string-style ('pluginName') and object-style ({ id: 'pluginName' }) plugins
+          id: typeof plugin === 'string' ? plugin : plugin.id,
+          // Use plugin-specific numTests if available, otherwise fall back to global settings
+          numTests:
+            (typeof plugin === 'object' && plugin.numTests) ||
+            options.numTests ||
+            redteamConfig?.numTests,
+        };
+
+        // If plugin has additional config options, include them
+        if (typeof plugin === 'object') {
+          if (plugin.config) {
+            pluginConfig.config = plugin.config;
+          }
+          if (plugin.severity) {
+            pluginConfig.severity = plugin.severity;
+          }
+        }
+
+        return pluginConfig;
+      });
+    } else {
+      // If no plugins specified, use default plugins
+      plugins = Array.from(REDTEAM_DEFAULT_PLUGINS).map((plugin) => ({
+        id: plugin,
+        numTests: options.numTests ?? redteamConfig?.numTests,
+      }));
+    }
+
+    // override plugins with command line options
+    if (Array.isArray(options.plugins) && options.plugins.length > 0) {
+      plugins = options.plugins.map((plugin) => {
+        const pluginConfig = {
+          id: plugin.id,
+          numTests: plugin.numTests || options.numTests || redteamConfig?.numTests,
+          ...(plugin.config && { config: plugin.config }),
+        };
+        return pluginConfig;
+      });
+    }
+    invariant(plugins && Array.isArray(plugins) && plugins.length > 0, 'No plugins found');
+
+    // Apply plugin severity overrides
+    if (pluginSeverityOverrides.size > 0) {
+      let intersectionCount = 0;
+      plugins = plugins.map((plugin) => {
+        if (pluginSeverityOverrides.has(plugin.id as Plugin)) {
+          intersectionCount++;
+          return {
+            ...plugin,
+            severity: pluginSeverityOverrides.get(plugin.id as Plugin),
+          };
+        }
+        return plugin;
+      });
+
+      logger.info(`Applied ${intersectionCount} custom plugin severity levels`);
+    }
+
+    // Resolve policy references.
+    // Each reference is an id of the policy record stored in Promptfoo Cloud; load their respective texts.
+    // Only reusable policies (with UUID ids) need to be fetched; inline policies already have their text.
+    const policyPluginsWithRefs = plugins.filter(
+      (plugin) =>
+        plugin.config?.policy &&
+        isValidPolicyObject(plugin.config?.policy) &&
+        determinePolicyTypeFromId(plugin.config.policy.id) === 'reusable',
+    );
+    if (policyPluginsWithRefs.length > 0) {
+      // Always use the calling user's team id for fetching policies.
+      // The server will return:
+      // 1. Policies owned by the user's team
+      // 2. Org-scoped policies (accessible to all teams in the org)
+      // This allows users to run scans with org-scoped templates that reference
+      // org-scoped policies, even if those policies are owned by a different team.
+      const teamId = (await resolveTeamId()).id;
+
+      const policiesById = await getCustomPolicies(policyPluginsWithRefs, teamId);
+
+      // Assign, in-place, the policy texts and severities to the plugins
+      for (const policyPlugin of policyPluginsWithRefs) {
+        const policyId = (policyPlugin.config!.policy! as PolicyObject).id;
+        const policyData = policiesById.get(policyId);
+        if (policyData) {
+          // Set the policy details
+          policyPlugin.config!.policy = {
+            id: policyId,
+            name: policyData.name,
+            text: policyData.text,
+          } as PolicyObject;
+          // Set the plugin severity if it hasn't been set already; this allows the user to override the severity
+          // on a per-config basis if necessary.
+          if (policyPlugin.severity == null) {
+            policyPlugin.severity = policyData.severity;
+          }
+        }
+      }
+    }
+
+    let strategies: (string | { id: string })[] =
+      redteamConfig?.strategies ?? DEFAULT_STRATEGIES.map((s) => ({ id: s }));
+    if (options.strategies) {
+      strategies = options.strategies;
+    }
+    const strategyObjs: RedteamStrategyObject[] = strategies.map((s) =>
+      typeof s === 'string' ? { id: s } : s,
+    );
 
     try {
-      // If the provider is a cloud provider, check for plugin severity overrides:
-      const providerId = getProviderIds(selectedProviderConfigs!)[0];
-      if (isCloudProvider(providerId)) {
-        const cloudId = getCloudDatabaseId(providerId);
-        const overrides = await getPluginSeverityOverridesFromCloud(cloudId);
-        if (overrides) {
-          pluginSeverityOverrides = new Map(
-            Object.entries(overrides.severities) as [Plugin, Severity][],
-          );
-          pluginSeverityOverridesId = overrides.id;
-        }
+      logger.debug(`plugins: ${plugins.map((p) => p.id).join(', ')}`);
+      logger.debug(`strategies: ${strategyObjs.map((s) => s.id ?? s).join(', ')}`);
+    } catch (error) {
+      logger.error('Error logging plugins and strategies. One did not have a valid id.');
+      logger.error(`Error details: ${error instanceof Error ? error.message : String(error)}`);
+    }
+
+    // Read inputs from the first target/provider
+    const targetInputs = testSuite.providers[0]?.inputs;
+
+    const explicitMaxConcurrency =
+      options.maxConcurrency ??
+      redteamConfig?.maxConcurrency ??
+      commandLineOptions?.maxConcurrency ??
+      resolvedConfig?.evaluateOptions?.maxConcurrency;
+
+    const config = {
+      injectVar: redteamConfig?.injectVar || options.injectVar,
+      // Multi-variable inputs for test case generation (read from target)
+      inputs: targetInputs,
+      language: redteamConfig?.language || options.language,
+      maxConcurrency: explicitMaxConcurrency ?? DEFAULT_MAX_CONCURRENCY,
+      numTests: redteamConfig?.numTests ?? options.numTests,
+      entities: redteamConfig?.entities,
+      plugins,
+      provider: redteamConfig?.provider || options.provider,
+      purpose: redteamConfig?.purpose ?? options.purpose,
+      strategies: strategyObjs,
+      delay:
+        options.delay ??
+        redteamConfig?.delay ??
+        commandLineOptions?.delay ??
+        resolvedConfig?.evaluateOptions?.delay,
+      sharing: redteamConfig?.sharing || options.sharing,
+      excludeTargetOutputFromAgenticAttackGeneration:
+        redteamConfig?.excludeTargetOutputFromAgenticAttackGeneration,
+      ...(redteamConfig?.testGenerationInstructions
+        ? { testGenerationInstructions: redteamConfig.testGenerationInstructions }
+        : {}),
+    };
+    const parsedConfig = RedteamConfigSchema.safeParse(config);
+    if (!parsedConfig.success) {
+      const errorMessage = z.prettifyError(parsedConfig.error);
+      throw new Error(`Invalid redteam configuration:\n${errorMessage}`);
+    }
+
+    // Resolve IDs at this orchestration boundary so the context helper stays independent of the
+    // provider registry. IDs are used for retry strategy to match failed tests by target ID.
+    const providerTargetIds = getProviderTargetIds(selectedProviderConfigs);
+    const redteamGenerationContext = getRedteamGenerationContextFromProviders(
+      selectedProviderConfigs,
+      providerTargetIds,
+    );
+    const targetIds = redteamGenerationContext.providerTargetIds;
+    const cloudTargetDatabaseId = redteamGenerationContext.cloudTargetId;
+
+    logger.debug(
+      `Extracted ${targetIds.length} target IDs from config providers: ${JSON.stringify(targetIds)}`,
+    );
+
+    // Extract MCP tools information and add it after purpose templating is resolved.
+    const rootPurpose = parsedConfig.data.purpose;
+    let purposeDetails = '';
+    let testGenerationFormat: string | undefined;
+    let mcpTools: Awaited<ReturnType<typeof extractMcpTools>> = [];
+    try {
+      const a2aAgentCardInfo = await extractA2AAgentCardInfo(testSuite.providers);
+      if (a2aAgentCardInfo) {
+        purposeDetails += a2aAgentCardInfo;
+        logger.info('Added A2A Agent Card information to red team purpose');
       }
     } catch (error) {
-      logger.error(
-        `Plugin severity override check failed: ${error instanceof Error ? error.message : String(error)}`,
+      logger.warn(
+        `Failed to extract A2A Agent Card information: ${
+          error instanceof Error ? error.message : String(error)
+        }`,
       );
     }
-  } else if (options.purpose) {
-    // There is a purpose, so we can just have a dummy test suite for standalone invocation
-    testSuite = {
-      prompts: [],
-      providers: [],
-      tests: [],
+    mcpTools = await extractMcpTools(testSuite.providers);
+    if (mcpTools.length) {
+      purposeDetails +=
+        '\nAvailable MCP tools:\n' + mcpTools.map((tool) => JSON.stringify(tool)).join('\n');
+      logger.info('Added MCP tools information to red team purpose');
+      testGenerationFormat = `Generate every test case prompt as a json string encoding the tool call and parameters, and choose a specific function to call. The specific format should be: {"tool": "function_name", "args": {...}}.`;
+    }
+
+    // Check for contexts - if present, generate tests for each context
+    const contexts = redteamConfig?.contexts;
+    let redteamTests: any[] = [];
+    const contextFrontierDiagnostics: SemanticFrontierDiagnostic[] = [];
+    let purpose: string;
+    let entities: string[] = [];
+    let finalInjectVar: string = '';
+    let failedPlugins: { pluginId: string; requested: number }[] = [];
+    const generationTokenUsage: TokenUsage = {
+      cached: 0,
+      completion: 0,
+      numRequests: 0,
+      prompt: 0,
+      total: 0,
     };
-  } else {
-    logger.info(
-      chalk.red(
-        `\nCan't generate without configuration - run ${chalk.yellow.bold(
-          promptfooCommand('redteam init'),
-        )} first`,
-      ),
-    );
-    return null;
-  }
 
-  // Validate email for remote generation
-  if (!neverGenerateRemote()) {
-    let hasValidEmail = false;
-    while (!hasValidEmail) {
-      const { emailNeedsValidation } = await promptForEmailUnverified();
-      const res = await checkEmailStatusAndMaybeExit({ validate: emailNeedsValidation });
-      hasValidEmail = res === EMAIL_OK_STATUS;
-    }
-  }
+    if (contexts && contexts.length > 0) {
+      // Multi-context mode: generate tests for each context
+      logger.info(`Generating tests for ${contexts.length} contexts...`);
 
-  const startTime = Date.now();
-  telemetry.record('command_used', {
-    name: 'generate redteam - started',
-    numPrompts: testSuite.prompts.length,
-    numTestsExisting: (testSuite.tests || []).length,
-    plugins: redteamConfig?.plugins?.map((p) => (typeof p === 'string' ? p : p.id)) || [],
-    strategies: redteamConfig?.strategies?.map((s) => (typeof s === 'string' ? s : s.id)) || [],
-    isPromptfooSampleTarget: testSuite.providers.some(isPromptfooSampleTarget),
-  });
-  telemetry.record('redteam generate', {
-    phase: 'started',
-    numPrompts: testSuite.prompts.length,
-    numTestsExisting: (testSuite.tests || []).length,
-    plugins: redteamConfig?.plugins?.map((p) => (typeof p === 'string' ? p : p.id)) || [],
-    strategies: redteamConfig?.strategies?.map((s) => (typeof s === 'string' ? s : s.id)) || [],
-    isPromptfooSampleTarget: testSuite.providers.some(isPromptfooSampleTarget),
-  });
+      // Collect failed plugins across all contexts
+      const allFailedPlugins: { pluginId: string; requested: number }[] = [];
+      let firstContextPurpose: string | undefined;
 
-  let plugins: RedteamPluginObject[] = [];
+      for (const context of contexts) {
+        logger.info(`  Generating tests for context: ${context.id}`);
 
-  // If plugins are defined in the config file
-  if (redteamConfig?.plugins && redteamConfig.plugins.length > 0) {
-    plugins = redteamConfig.plugins.map((plugin) => {
-      // Base configuration that all plugins will have
-      const pluginConfig: {
-        id: string;
-        numTests: number | undefined;
-        config?: Record<string, any>;
-        severity?: Severity;
-      } = {
-        // Handle both string-style ('pluginName') and object-style ({ id: 'pluginName' }) plugins
-        id: typeof plugin === 'string' ? plugin : plugin.id,
-        // Use plugin-specific numTests if available, otherwise fall back to global settings
-        numTests:
-          (typeof plugin === 'object' && plugin.numTests) ||
-          options.numTests ||
-          redteamConfig?.numTests,
-      };
+        const contextPurpose = resolveEffectivePurpose({
+          contextPurpose: context.purpose,
+          contextVars: context.vars,
+          extraDetails: purposeDetails,
+          rootPurpose,
+          testSuite,
+        });
 
-      // If plugin has additional config options, include them
-      if (typeof plugin === 'object') {
-        if (plugin.config) {
-          pluginConfig.config = plugin.config;
+        const contextResult = await withGenerationConcurrency(
+          config.maxConcurrency,
+          config.delay,
+          () =>
+            synthesize({
+              ...parsedConfig.data,
+              inputs: targetInputs,
+              purpose: contextPurpose,
+              numTests: config.numTests,
+              prompts: testSuite.prompts.map((prompt) => prompt.raw),
+              maxConcurrency: config.maxConcurrency,
+              delay: config.delay,
+              abortSignal: options.abortSignal,
+              redteamGenerationContext,
+              cloudTargetDatabaseId,
+              targetIds,
+              showProgressBar: options.progressBar !== false,
+              testGenerationInstructions: config.testGenerationInstructions,
+              testGenerationFormat,
+              ...(mcpTools.length ? { mcpTools } : {}),
+            } as SynthesizeOptions),
+        );
+
+        // Collect failed plugins from this context
+        if (contextResult.failedPlugins.length > 0) {
+          allFailedPlugins.push(...contextResult.failedPlugins);
         }
-        if (plugin.severity) {
-          pluginConfig.severity = plugin.severity;
+        accumulateTokenUsage(generationTokenUsage, contextResult.generationTokenUsage);
+        contextFrontierDiagnostics.push(...(contextResult.semanticFrontierDiagnostics ?? []));
+        firstContextPurpose ??= contextResult.purpose;
+
+        // Tag each test with context metadata and merge context vars
+        // IMPORTANT: Set metadata.purpose so graders and strategies use the correct context purpose
+        const taggedTests = contextResult.testCases.map((test: any) => ({
+          ...test,
+          vars: {
+            ...test.vars,
+            ...(context.vars || {}),
+          },
+          metadata: {
+            ...test.metadata,
+            purpose: contextResult.purpose,
+            contextId: context.id,
+            contextVars: context.vars,
+          },
+        }));
+
+        redteamTests = redteamTests.concat(taggedTests);
+
+        // Keep track of entities and injectVar from first context
+        if (!entities.length) {
+          entities = contextResult.entities;
         }
-      }
-
-      return pluginConfig;
-    });
-  } else {
-    // If no plugins specified, use default plugins
-    plugins = Array.from(REDTEAM_DEFAULT_PLUGINS).map((plugin) => ({
-      id: plugin,
-      numTests: options.numTests ?? redteamConfig?.numTests,
-    }));
-  }
-
-  // override plugins with command line options
-  if (Array.isArray(options.plugins) && options.plugins.length > 0) {
-    plugins = options.plugins.map((plugin) => {
-      const pluginConfig = {
-        id: plugin.id,
-        numTests: plugin.numTests || options.numTests || redteamConfig?.numTests,
-        ...(plugin.config && { config: plugin.config }),
-      };
-      return pluginConfig;
-    });
-  }
-  invariant(plugins && Array.isArray(plugins) && plugins.length > 0, 'No plugins found');
-
-  // Apply plugin severity overrides
-  if (pluginSeverityOverrides.size > 0) {
-    let intersectionCount = 0;
-    plugins = plugins.map((plugin) => {
-      if (pluginSeverityOverrides.has(plugin.id as Plugin)) {
-        intersectionCount++;
-        return {
-          ...plugin,
-          severity: pluginSeverityOverrides.get(plugin.id as Plugin),
-        };
-      }
-      return plugin;
-    });
-
-    logger.info(`Applied ${intersectionCount} custom plugin severity levels`);
-  }
-
-  // Resolve policy references.
-  // Each reference is an id of the policy record stored in Promptfoo Cloud; load their respective texts.
-  // Only reusable policies (with UUID ids) need to be fetched; inline policies already have their text.
-  const policyPluginsWithRefs = plugins.filter(
-    (plugin) =>
-      plugin.config?.policy &&
-      isValidPolicyObject(plugin.config?.policy) &&
-      determinePolicyTypeFromId(plugin.config.policy.id) === 'reusable',
-  );
-  if (policyPluginsWithRefs.length > 0) {
-    // Always use the calling user's team id for fetching policies.
-    // The server will return:
-    // 1. Policies owned by the user's team
-    // 2. Org-scoped policies (accessible to all teams in the org)
-    // This allows users to run scans with org-scoped templates that reference
-    // org-scoped policies, even if those policies are owned by a different team.
-    const teamId = (await resolveTeamId()).id;
-
-    const policiesById = await getCustomPolicies(policyPluginsWithRefs, teamId);
-
-    // Assign, in-place, the policy texts and severities to the plugins
-    for (const policyPlugin of policyPluginsWithRefs) {
-      const policyId = (policyPlugin.config!.policy! as PolicyObject).id;
-      const policyData = policiesById.get(policyId);
-      if (policyData) {
-        // Set the policy details
-        policyPlugin.config!.policy = {
-          id: policyId,
-          name: policyData.name,
-          text: policyData.text,
-        } as PolicyObject;
-        // Set the plugin severity if it hasn't been set already; this allows the user to override the severity
-        // on a per-config basis if necessary.
-        if (policyPlugin.severity == null) {
-          policyPlugin.severity = policyData.severity;
+        if (!finalInjectVar) {
+          finalInjectVar = contextResult.injectVar;
         }
       }
-    }
-  }
 
-  let strategies: (string | { id: string })[] =
-    redteamConfig?.strategies ?? DEFAULT_STRATEGIES.map((s) => ({ id: s }));
-  if (options.strategies) {
-    strategies = options.strategies;
-  }
-  const strategyObjs: RedteamStrategyObject[] = strategies.map((s) =>
-    typeof s === 'string' ? { id: s } : s,
-  );
+      // Store failed plugins for handling after the try block starts
+      failedPlugins = allFailedPlugins;
 
-  try {
-    logger.debug(`plugins: ${plugins.map((p) => p.id).join(', ')}`);
-    logger.debug(`strategies: ${strategyObjs.map((s) => s.id ?? s).join(', ')}`);
-  } catch (error) {
-    logger.error('Error logging plugins and strategies. One did not have a valid id.');
-    logger.error(`Error details: ${error instanceof Error ? error.message : String(error)}`);
-  }
-
-  // Read inputs from the first target/provider
-  const targetInputs = testSuite.providers[0]?.inputs;
-
-  const explicitMaxConcurrency =
-    options.maxConcurrency ??
-    redteamConfig?.maxConcurrency ??
-    commandLineOptions?.maxConcurrency ??
-    resolvedConfig?.evaluateOptions?.maxConcurrency;
-
-  const config = {
-    injectVar: redteamConfig?.injectVar || options.injectVar,
-    // Multi-variable inputs for test case generation (read from target)
-    inputs: targetInputs,
-    language: redteamConfig?.language || options.language,
-    maxConcurrency: explicitMaxConcurrency ?? DEFAULT_MAX_CONCURRENCY,
-    numTests: redteamConfig?.numTests ?? options.numTests,
-    entities: redteamConfig?.entities,
-    plugins,
-    provider: redteamConfig?.provider || options.provider,
-    purpose: redteamConfig?.purpose ?? options.purpose,
-    strategies: strategyObjs,
-    delay:
-      options.delay ??
-      redteamConfig?.delay ??
-      commandLineOptions?.delay ??
-      resolvedConfig?.evaluateOptions?.delay,
-    sharing: redteamConfig?.sharing || options.sharing,
-    excludeTargetOutputFromAgenticAttackGeneration:
-      redteamConfig?.excludeTargetOutputFromAgenticAttackGeneration,
-    ...(redteamConfig?.testGenerationInstructions
-      ? { testGenerationInstructions: redteamConfig.testGenerationInstructions }
-      : {}),
-  };
-  const parsedConfig = RedteamConfigSchema.safeParse(config);
-  if (!parsedConfig.success) {
-    const errorMessage = z.prettifyError(parsedConfig.error);
-    throw new Error(`Invalid redteam configuration:\n${errorMessage}`);
-  }
-
-  // Resolve IDs at this orchestration boundary so the context helper stays independent of the
-  // provider registry. IDs are used for retry strategy to match failed tests by target ID.
-  const providerTargetIds = getProviderTargetIds(selectedProviderConfigs);
-  const redteamGenerationContext = getRedteamGenerationContextFromProviders(
-    selectedProviderConfigs,
-    providerTargetIds,
-  );
-  const targetIds = redteamGenerationContext.providerTargetIds;
-  const cloudTargetDatabaseId = redteamGenerationContext.cloudTargetId;
-
-  logger.debug(
-    `Extracted ${targetIds.length} target IDs from config providers: ${JSON.stringify(targetIds)}`,
-  );
-
-  // Extract MCP tools information and add it after purpose templating is resolved.
-  const rootPurpose = parsedConfig.data.purpose;
-  let purposeDetails = '';
-  let testGenerationFormat: string | undefined;
-  let mcpTools: Awaited<ReturnType<typeof extractMcpTools>> = [];
-  try {
-    const a2aAgentCardInfo = await extractA2AAgentCardInfo(testSuite.providers);
-    if (a2aAgentCardInfo) {
-      purposeDetails += a2aAgentCardInfo;
-      logger.info('Added A2A Agent Card information to red team purpose');
-    }
-  } catch (error) {
-    logger.warn(
-      `Failed to extract A2A Agent Card information: ${
-        error instanceof Error ? error.message : String(error)
-      }`,
-    );
-  }
-  mcpTools = await extractMcpTools(testSuite.providers);
-  if (mcpTools.length) {
-    purposeDetails +=
-      '\nAvailable MCP tools:\n' + mcpTools.map((tool) => JSON.stringify(tool)).join('\n');
-    logger.info('Added MCP tools information to red team purpose');
-    testGenerationFormat = `Generate every test case prompt as a json string encoding the tool call and parameters, and choose a specific function to call. The specific format should be: {"tool": "function_name", "args": {...}}.`;
-  }
-
-  // Check for contexts - if present, generate tests for each context
-  const contexts = redteamConfig?.contexts;
-  let redteamTests: any[] = [];
-  const contextFrontierDiagnostics: SemanticFrontierDiagnostic[] = [];
-  let purpose: string;
-  let entities: string[] = [];
-  let finalInjectVar: string = '';
-  let failedPlugins: { pluginId: string; requested: number }[] = [];
-  const generationTokenUsage: TokenUsage = {
-    cached: 0,
-    completion: 0,
-    numRequests: 0,
-    prompt: 0,
-    total: 0,
-  };
-
-  if (contexts && contexts.length > 0) {
-    // Multi-context mode: generate tests for each context
-    logger.info(`Generating tests for ${contexts.length} contexts...`);
-
-    // Collect failed plugins across all contexts
-    const allFailedPlugins: { pluginId: string; requested: number }[] = [];
-    let firstContextPurpose: string | undefined;
-
-    for (const context of contexts) {
-      logger.info(`  Generating tests for context: ${context.id}`);
-
-      const contextPurpose = resolveEffectivePurpose({
-        contextPurpose: context.purpose,
-        contextVars: context.vars,
+      // Use the first generated context purpose for backward compatibility in shared metadata.
+      purpose = firstContextPurpose || '';
+      logger.info(
+        `Generated ${redteamTests.length} total test cases across ${contexts.length} contexts`,
+      );
+    } else {
+      // Single purpose mode (existing behavior)
+      const effectivePurpose = resolveEffectivePurpose({
         extraDetails: purposeDetails,
         rootPurpose,
         testSuite,
       });
-
-      const contextResult = await withGenerationConcurrency(
-        config.maxConcurrency,
-        config.delay,
-        () =>
-          synthesize({
-            ...parsedConfig.data,
-            inputs: targetInputs,
-            purpose: contextPurpose,
-            numTests: config.numTests,
-            prompts: testSuite.prompts.map((prompt) => prompt.raw),
-            maxConcurrency: config.maxConcurrency,
-            delay: config.delay,
-            abortSignal: options.abortSignal,
-            redteamGenerationContext,
-            cloudTargetDatabaseId,
-            targetIds,
-            showProgressBar: options.progressBar !== false,
-            testGenerationInstructions: config.testGenerationInstructions,
-            testGenerationFormat,
-            ...(mcpTools.length ? { mcpTools } : {}),
-          } as SynthesizeOptions),
+      const result = await withGenerationConcurrency(config.maxConcurrency, config.delay, () =>
+        synthesize({
+          ...parsedConfig.data,
+          inputs: targetInputs,
+          purpose: effectivePurpose,
+          numTests: config.numTests,
+          prompts: testSuite.prompts.map((prompt) => prompt.raw),
+          maxConcurrency: config.maxConcurrency,
+          delay: config.delay,
+          abortSignal: options.abortSignal,
+          redteamGenerationContext,
+          cloudTargetDatabaseId,
+          targetIds,
+          showProgressBar: options.progressBar !== false,
+          testGenerationInstructions: config.testGenerationInstructions,
+          testGenerationFormat,
+          ...(mcpTools.length ? { mcpTools } : {}),
+        } as SynthesizeOptions),
       );
 
-      // Collect failed plugins from this context
-      if (contextResult.failedPlugins.length > 0) {
-        allFailedPlugins.push(...contextResult.failedPlugins);
-      }
-      accumulateTokenUsage(generationTokenUsage, contextResult.generationTokenUsage);
-      contextFrontierDiagnostics.push(...(contextResult.semanticFrontierDiagnostics ?? []));
-      firstContextPurpose ??= contextResult.purpose;
-
-      // Tag each test with context metadata and merge context vars
-      // IMPORTANT: Set metadata.purpose so graders and strategies use the correct context purpose
-      const taggedTests = contextResult.testCases.map((test: any) => ({
-        ...test,
-        vars: {
-          ...test.vars,
-          ...(context.vars || {}),
-        },
-        metadata: {
-          ...test.metadata,
-          purpose: contextResult.purpose,
-          contextId: context.id,
-          contextVars: context.vars,
-        },
-      }));
-
-      redteamTests = redteamTests.concat(taggedTests);
-
-      // Keep track of entities and injectVar from first context
-      if (!entities.length) {
-        entities = contextResult.entities;
-      }
-      if (!finalInjectVar) {
-        finalInjectVar = contextResult.injectVar;
-      }
+      redteamTests = result.testCases;
+      contextFrontierDiagnostics.push(...(result.semanticFrontierDiagnostics ?? []));
+      purpose = result.purpose;
+      entities = result.entities;
+      finalInjectVar = result.injectVar;
+      failedPlugins = result.failedPlugins;
+      accumulateTokenUsage(generationTokenUsage, result.generationTokenUsage);
     }
 
-    // Store failed plugins for handling after the try block starts
-    failedPlugins = allFailedPlugins;
-
-    // Use the first generated context purpose for backward compatibility in shared metadata.
-    purpose = firstContextPurpose || '';
-    logger.info(
-      `Generated ${redteamTests.length} total test cases across ${contexts.length} contexts`,
-    );
-  } else {
-    // Single purpose mode (existing behavior)
-    const effectivePurpose = resolveEffectivePurpose({
-      extraDetails: purposeDetails,
-      rootPurpose,
-      testSuite,
-    });
-    const result = await withGenerationConcurrency(config.maxConcurrency, config.delay, () =>
-      synthesize({
-        ...parsedConfig.data,
-        inputs: targetInputs,
-        purpose: effectivePurpose,
-        numTests: config.numTests,
-        prompts: testSuite.prompts.map((prompt) => prompt.raw),
-        maxConcurrency: config.maxConcurrency,
-        delay: config.delay,
-        abortSignal: options.abortSignal,
-        redteamGenerationContext,
-        cloudTargetDatabaseId,
-        targetIds,
-        showProgressBar: options.progressBar !== false,
-        testGenerationInstructions: config.testGenerationInstructions,
-        testGenerationFormat,
-        ...(mcpTools.length ? { mcpTools } : {}),
-      } as SynthesizeOptions),
+    const semanticFrontierDiagnostics = mergeSemanticFrontierDiagnostics(
+      contextFrontierDiagnostics,
     );
 
-    redteamTests = result.testCases;
-    contextFrontierDiagnostics.push(...(result.semanticFrontierDiagnostics ?? []));
-    purpose = result.purpose;
-    entities = result.entities;
-    finalInjectVar = result.injectVar;
-    failedPlugins = result.failedPlugins;
-    accumulateTokenUsage(generationTokenUsage, result.generationTokenUsage);
-  }
-
-  const semanticFrontierDiagnostics = mergeSemanticFrontierDiagnostics(contextFrontierDiagnostics);
-
-  /**
-   * Cleans up the provider after redteam generation completes.
-   * This should always be called before returning, since providers are
-   * re-initialized when running the red team. Cleanup is particularly
-   * important for MCP servers to release resources and prevent memory leaks.
-   */
-  const cleanupProvider = async (): Promise<void> => {
-    try {
-      logger.debug('Cleaning up provider');
-      const provider = testSuite.providers[0] as ApiProvider;
-      if (provider && typeof provider.cleanup === 'function') {
-        const cleanupResult = provider.cleanup();
-        if (cleanupResult instanceof Promise) {
-          await cleanupResult;
-        }
-      }
-    } catch (cleanupErr) {
-      logger.warn(`Error during provider cleanup: ${cleanupErr}`);
-    }
-  };
-
-  // Use try/finally to ensure cleanup runs even if an exception is thrown
-  // (e.g., --strict mode failures, write errors)
-  try {
     // Check for failed plugins - warn by default, throw with --strict
     handleFailedPlugins(failedPlugins, options.strict ?? false);
 
@@ -1112,7 +1093,13 @@ async function doGenerateRedteamInternal(
 
     return ret;
   } finally {
-    await cleanupProvider();
+    for (const provider of new Set(providersToCleanup)) {
+      try {
+        await provider.cleanup?.();
+      } catch (error) {
+        logger.warn(`Error during provider cleanup: ${error}`);
+      }
+    }
   }
 }
 

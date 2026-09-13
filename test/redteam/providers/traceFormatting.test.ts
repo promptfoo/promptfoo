@@ -28,6 +28,34 @@ describe('formatTraceSummary', () => {
     expect(trace.spans).toHaveLength(1);
   });
 
+  it('bounds displayed external fields without modifying the evidence', () => {
+    const oversized = 'x'.repeat(1_000_000);
+    const span = {
+      spanId: 'span',
+      name: oversized,
+      kind: oversized,
+      startTime: 0,
+      depth: 0,
+      events: [],
+      attributes: { 'tool.name': oversized, model: oversized },
+      status: { code: 'error' as const, message: oversized },
+    };
+    const trace: TraceContextData = {
+      traceId: '0123456789abcdef',
+      fetchedAt: 0,
+      spans: [span],
+      insights: Array(100).fill(oversized),
+    };
+    const summary = formatTraceSummary(trace, { maxSpans: 1 });
+    expect(summary.length).toBeLessThan(15_000);
+    expect(summary).toContain('...');
+    expect(summary).toContain('tool=');
+    expect(summary).toContain('model=');
+    expect(summary).toContain('ERROR:');
+    expect(trace.spans[0].name).toHaveLength(1_000_000);
+    expect(trace.insights).toHaveLength(100);
+  });
+
   it('includes Vercel AI SDK tool names in formatted spans', () => {
     const trace: TraceContextData = {
       traceId: '0123456789abcdef',

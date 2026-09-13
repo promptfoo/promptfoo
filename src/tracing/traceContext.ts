@@ -358,6 +358,7 @@ function getProviderFetchOptions(options: FetchTraceContextOptions): FetchTraceO
     options.waitForStableSpans ||
     options.includeInternalSpans === false ||
     options.maxDepth !== undefined ||
+    options.earliestStartTime !== undefined ||
     options.spanFilter?.length ||
     options.redactAttributes?.length;
   const providerOptions = {

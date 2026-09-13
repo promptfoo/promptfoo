@@ -83,6 +83,12 @@ describe('TempoProvider', () => {
     expect(() => new TempoProvider(config)).toThrow();
   });
 
+  it('caps ordinary reads without limiting uncapped snapshots', async () => {
+    const provider = new TempoProvider({ id: 'tempo', endpoint: 'http://tempo:3200' });
+    expect((await provider.fetchTrace(TRACE_ID, { maxSpans: 1 }))?.spans).toHaveLength(1);
+    expect((await provider.fetchTrace(TRACE_ID))?.spans).toHaveLength(2);
+  });
+
   it('fetches and normalizes OpenTelemetry trace spans', async () => {
     const provider = new TempoProvider({ id: 'tempo', endpoint: 'http://tempo:3200/' });
 

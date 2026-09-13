@@ -399,10 +399,17 @@ describe('fetchTraceContext', () => {
     const previousTurn = { spanId: 'previous', name: 'previous.call', startTime: 100 };
     const currentTurn = { spanId: 'current', name: 'current.call', startTime: 200 };
     const fetchTrace = mockExternalTrace([previousTurn, currentTurn]);
+    fetchTrace.mockImplementation(async (_traceId, options) => ({
+      traceId: 'trace-1',
+      fetchedAt: 123,
+      spans: [previousTurn, currentTurn].slice(0, options?.maxSpans),
+    }));
 
     const result = await fetchTraceContext('trace-1', {
       providerConfig,
       earliestStartTime: 150,
+      maxSpans: 1,
+      includeInternalSpans: true,
       maxRetries: 0,
       queryDelay: 0,
     });
@@ -425,7 +432,6 @@ describe('fetchTraceContext', () => {
     await fetchTraceContext('trace-1', {
       providerConfig,
       abortSignal: controller.signal,
-      earliestStartTime: 150,
       includeInternalSpans: true,
       maxRetries: 0,
       maxSpans: 50,
@@ -435,7 +441,6 @@ describe('fetchTraceContext', () => {
 
     expect(fetchTrace).toHaveBeenCalledWith('trace-1', {
       abortSignal: controller.signal,
-      earliestStartTime: 150,
       maxSpans: 50,
     });
   });

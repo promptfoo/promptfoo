@@ -61,14 +61,16 @@ function createInitialGradingContext({
   };
 
   if (assertionValueContext.trace) {
-    const isSql = assertion.type === 'promptfoo:redteam:sql-injection';
-    const tracing = isSql
+    const usesExecutionEvidence =
+      assertion.type === 'promptfoo:redteam:sql-injection' ||
+      assertion.type === 'promptfoo:redteam:shell-injection';
+    const tracing = usesExecutionEvidence
       ? resolveTracingOptions({ strategyId: test.metadata?.strategyId ?? 'basic', test })
       : undefined;
-    if (!isSql || (tracing?.enabled && tracing.includeInGrading)) {
+    if (!usesExecutionEvidence || (tracing?.enabled && tracing.includeInGrading)) {
       const trace = assertionValueContext.trace;
       gradingContext.traceData = trace;
-      if (!isSql) {
+      if (!usesExecutionEvidence) {
         gradingContext.traceSummary = summarizeTrajectoryForJudge(trace);
       }
     }

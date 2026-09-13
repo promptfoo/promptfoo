@@ -6,6 +6,65 @@ import { MCPProvider } from '../../providers/mcp/index';
 import type { MCPTool } from '../../providers/mcp/types';
 import type { ApiProvider } from '../../types/index';
 
+// Only traverse schema positions: arrays inside enum/const/default are literal values.
+function normalizeRequired(schema: unknown): unknown {
+  if (!schema || typeof schema !== 'object' || Array.isArray(schema)) {
+    return schema;
+  }
+  return Object.fromEntries(
+    Object.entries(schema).map(([key, value]) => {
+      if (key === 'required' && Array.isArray(value)) {
+        return [key, [...value].sort()];
+      }
+      if (
+        [
+          'properties',
+          'patternProperties',
+          '$defs',
+          'definitions',
+          'dependentSchemas',
+          'dependencies',
+        ].includes(key) &&
+        value &&
+        typeof value === 'object' &&
+        !Array.isArray(value)
+      ) {
+        return [
+          key,
+          Object.fromEntries(
+            Object.entries(value).map(([name, child]) => [name, normalizeRequired(child)]),
+          ),
+        ];
+      }
+      if (
+        [
+          'items',
+          'prefixItems',
+          'allOf',
+          'anyOf',
+          'oneOf',
+          'additionalItems',
+          'additionalProperties',
+          'unevaluatedItems',
+          'unevaluatedProperties',
+          'contains',
+          'propertyNames',
+          'not',
+          'if',
+          'then',
+          'else',
+        ].includes(key)
+      ) {
+        return [
+          key,
+          Array.isArray(value) ? value.map(normalizeRequired) : normalizeRequired(value),
+        ];
+      }
+      return [key, value];
+    }),
+  );
+}
+
 export async function extractMcpTools(providers: ApiProvider[]): Promise<MCPTool[]> {
   const tools = new Map<string, { tool: MCPTool; providerId: string }>();
 
@@ -24,7 +83,13 @@ export async function extractMcpTools(providers: ApiProvider[]): Promise<MCPTool
     }
     for (const tool of availableTools) {
       const existing = tools.get(tool.name);
-      if (existing && !isDeepStrictEqual(existing.tool.inputSchema, tool.inputSchema)) {
+      if (
+        existing &&
+        !isDeepStrictEqual(
+          normalizeRequired(existing.tool.inputSchema),
+          normalizeRequired(tool.inputSchema),
+        )
+      ) {
         throw new Error(
           `MCP tool "${tool.name}" has conflicting input schemas in providers "${existing.providerId}" and "${provider.id()}". Run separate redteams for these targets or use distinct tool names.`,
         );

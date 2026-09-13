@@ -357,7 +357,7 @@ export class TempoProvider implements TraceProvider {
       throw new TraceProviderError('Tempo returned an invalid trace response');
     }
 
-    const spans = this.transformSpans(data, traceId);
+    const spans = this.transformSpans(data, traceId).slice(0, options?.maxSpans);
     const services = new Set<string>();
     for (const span of spans) {
       const service = span.attributes?.['service.name'];

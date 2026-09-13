@@ -161,7 +161,7 @@ export class BraintrustProvider implements TraceProvider {
       `    OR metadata.promptfoo_trace_id = '${normalizedTraceId}'`,
       `    OR metadata."promptfoo.trace_id" = '${normalizedTraceId}'`,
       `    OR root_span_id = '${normalizedTraceId}')`,
-      `LIMIT ${MAX_SPANS + 1}`,
+      `LIMIT ${options?.maxSpans === undefined || options.earliestStartTime !== undefined ? MAX_SPANS + 1 : maxSpans}`,
     ].join('\n');
 
     const timeoutSignal = AbortSignal.timeout(this.config.timeout ?? 10_000);

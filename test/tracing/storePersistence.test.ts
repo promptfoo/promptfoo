@@ -61,7 +61,7 @@ describe('TraceStore span persistence', () => {
         [{ spanId: 'second', name: 'second', startTime: 2, attributes }],
         { redactSpans },
       ),
-    ).rejects.toThrow('Trace redaction limit exceeded');
+    ).rejects.toThrow('Trace limit exceeded');
     expect(redactSpans).not.toHaveBeenCalled();
     const spans = await store.getSpans('redaction-size');
     expect(spans.map((span) => span.spanId)).toEqual(['first']);
@@ -74,7 +74,7 @@ describe('TraceStore span persistence', () => {
     await store.addSpans(traceId, [{ spanId: 'first', name: 'first', startTime: 1, attributes }]);
     await expect(
       store.addSpans(traceId, [{ spanId: 'second', name: 'second', startTime: 2, attributes }]),
-    ).rejects.toThrow('Trace redaction limit exceeded');
+    ).rejects.toThrow('Trace limit exceeded');
     expect(await store.getSpans(traceId)).toHaveLength(1);
   });
 
@@ -90,7 +90,7 @@ describe('TraceStore span persistence', () => {
           startTime: 1,
         })),
       ),
-    ).rejects.toThrow('Trace redaction limit exceeded');
+    ).rejects.toThrow('Trace limit exceeded');
     expect(await store.getSpans(traceId)).toHaveLength(0);
   });
 

@@ -1,3 +1,4 @@
+import { TraceEvidenceError } from '../../assertions/trajectoryUtils';
 import { sanitizeBody } from '../../tracing/genaiTracer';
 import {
   getFirstStringAttribute,
@@ -101,25 +102,37 @@ export function getGradingTrace(
         }
       });
       const nativeSpans = calls
-        .map((call, index) => ({
-          spanId: `provider-tool-${index}`,
-          name: 'tool.call',
-          startTime: index,
-          statusCode:
-            call.is_error || call.error || call.isError
-              ? 2
-              : call.output !== undefined || call.result !== undefined
-                ? 1
-                : 0,
-          attributes: {
-            'gen_ai.tool.call.id': call.id ?? call.toolCallId ?? call.tool_call_id,
-            'tool.name': call.name ?? call.function?.name,
-            'tool.arguments': sanitizeToolBody(
-              call.input ?? call.arguments ?? call.function?.arguments,
-            ),
-            'tool.output': sanitizeToolBody(call.output ?? call.result),
-          },
-        }))
+        .map((call, index) => {
+          if (
+            !call ||
+            typeof call !== 'object' ||
+            Array.isArray(call) ||
+            typeof (call.name ?? call.function?.name) !== 'string'
+          ) {
+            throw new TraceEvidenceError(
+              'Invalid native tool receipt: expected an object with a tool name.',
+            );
+          }
+          return {
+            spanId: `provider-tool-${index}`,
+            name: 'tool.call',
+            startTime: index,
+            statusCode:
+              call.is_error || call.error || call.isError
+                ? 2
+                : call.output !== undefined || call.result !== undefined
+                  ? 1
+                  : 0,
+            attributes: {
+              'gen_ai.tool.call.id': call.id ?? call.toolCallId ?? call.tool_call_id,
+              'tool.name': call.name ?? call.function?.name,
+              'tool.arguments': sanitizeToolBody(
+                call.input ?? call.arguments ?? call.function?.arguments,
+              ),
+              'tool.output': sanitizeToolBody(call.output ?? call.result),
+            },
+          };
+        })
         .filter((span) => {
           const key = toolCallKey(span);
           for (const index of key === undefined ? [] : (tracedCalls.get(key) ?? [])) {

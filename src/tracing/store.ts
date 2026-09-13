@@ -51,7 +51,7 @@ export interface AddSpansOptions {
 
 export class TraceLimitError extends Error {
   constructor() {
-    super('Trace redaction limit exceeded (10,000 spans or 10 MiB per trace)');
+    super('Trace limit exceeded (10,000 spans or 10 MiB per trace)');
     this.name = 'TraceLimitError';
   }
 }

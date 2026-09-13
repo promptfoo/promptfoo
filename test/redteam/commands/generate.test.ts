@@ -1818,15 +1818,20 @@ describe('doGenerateRedteam', () => {
     expect(synthesizePurpose).toContain('"name":"Book flight"');
   });
 
-  it('stops generation when MCP tool schemas conflict', async () => {
-    vi.mocked(extractMcpTools).mockRejectedValue(
-      new Error('MCP tool search has conflicting input schemas'),
-    );
+  it.each(['extraction', 'generation'])('cleans up all targets after %s fails', async (phase) => {
+    const otherProvider = { ...mockProvider, cleanup: vi.fn() };
+    vi.mocked(mockProvider.cleanup!).mockRejectedValueOnce(new Error('Cleanup failed'));
+    const error = new Error('MCP tool search has conflicting input schemas');
+    if (phase === 'extraction') {
+      vi.mocked(extractMcpTools).mockRejectedValue(error);
+    } else {
+      vi.mocked(synthesize).mockRejectedValue(error);
+    }
 
     vi.mocked(configModule.resolveConfigs).mockResolvedValue({
       basePath: '/mock/path',
       testSuite: {
-        providers: [mockProvider],
+        providers: [mockProvider, otherProvider, mockProvider],
         prompts: [{ raw: 'Test prompt', label: 'Test prompt' }],
         tests: [],
       },
@@ -1835,14 +1840,6 @@ describe('doGenerateRedteam', () => {
           purpose: 'Original purpose',
         },
       },
-    });
-
-    vi.mocked(synthesize).mockResolvedValue({
-      testCases: [],
-      purpose: 'Test purpose',
-      entities: [],
-      injectVar: 'input',
-      failedPlugins: [],
     });
 
     const options: RedteamCliGenerateOptions = {
@@ -1854,7 +1851,11 @@ describe('doGenerateRedteam', () => {
     };
 
     await expect(doGenerateRedteam(options)).rejects.toThrow('conflicting input schemas');
-    expect(synthesize).not.toHaveBeenCalled();
+    if (phase === 'extraction') {
+      expect(synthesize).not.toHaveBeenCalled();
+    }
+    expect(mockProvider.cleanup).toHaveBeenCalledOnce();
+    expect(otherProvider.cleanup).toHaveBeenCalledOnce();
   });
 
   describe('header comments', () => {
