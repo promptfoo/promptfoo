@@ -2227,8 +2227,8 @@ describe('evalCommand', () => {
       id: () => 'registry-provider',
       callApi: async () => ({ output: 'ok' }),
       cleanup: vi.fn(),
-      shutdown: vi.fn(),
-    } as ApiProvider & { shutdown: () => void };
+      shutdown: vi.fn(async () => {}),
+    } as ApiProvider & { shutdown: () => Promise<void> };
     vi.mocked(loadApiProvider).mockResolvedValueOnce(grader);
     vi.mocked(resolveConfigs).mockImplementationOnce(async (_cmd, _config, _type, track) => {
       track?.(registryProvider);

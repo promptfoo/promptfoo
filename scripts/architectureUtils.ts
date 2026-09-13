@@ -308,8 +308,7 @@ function isRuntimeLoader(node: Node, aliases: Set<string>): boolean {
       node.object.type === 'Identifier' &&
       (((node.object.name === 'require' || aliases.has(node.object.name)) &&
         memberName === 'resolve') ||
-        (node.object.name === 'module' && memberName === 'require') ||
-        (node.object.name === 'process' && memberName === 'getBuiltinModule')))
+        (node.object.name === 'module' && memberName === 'require')))
   );
 }
 
@@ -471,7 +470,14 @@ function extractModuleReferences(
     },
     ExportAllDeclaration(node) {
       if (includeTypes || node.exportKind !== 'type') {
-        add(node.source, 'import');
+        const specifier = getStaticModuleSpecifier(node.source);
+        if (typeof specifier === 'string') {
+          references.push({
+            specifier,
+            kind: 'import',
+            hasJsonAttribute: hasJsonAttributes(node.attributes),
+          });
+        }
       }
     },
     ExportNamedDeclaration(node) {
@@ -519,12 +525,7 @@ function extractModuleReferences(
         add(node.arguments[0], 'require');
       } else if (isImportMetaResolve(node.callee)) {
         const specifier = getStaticModuleSpecifier(node.arguments[0]);
-        if (
-          specifier !== undefined &&
-          !specifier.startsWith('.') &&
-          !specifier.startsWith('/') &&
-          !specifier.startsWith('#')
-        ) {
+        if (specifier !== undefined && !specifier.startsWith('.') && !specifier.startsWith('/')) {
           references.push({ specifier, kind: 'import' });
         }
       }

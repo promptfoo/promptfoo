@@ -487,9 +487,11 @@ function addArtifactSpecifier(
     return;
   }
   if (resolvedArtifact?.relativePath) {
+    const extension = path.extname(resolvedArtifact.relativePath);
     if (
       (kind === 'import' &&
-        (resolvedArtifact.relativePath.endsWith('.node') ||
+        ((extension !== '' && !['.js', '.mjs', '.cjs', '.json', '.node'].includes(extension)) ||
+          resolvedArtifact.relativePath.endsWith('.node') ||
           (resolvedArtifact.relativePath.endsWith('.json') && !hasJsonAttribute))) ||
       (kind === 'require' && resolvedArtifact.relativePath.endsWith('.wasm'))
     ) {

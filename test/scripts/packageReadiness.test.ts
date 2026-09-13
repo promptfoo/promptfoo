@@ -231,14 +231,16 @@ describe('package artifact readiness', () => {
     write(
       'dist/index.js',
       `export { default as data } from './data.json' with { type: 'json' };
+       export * as other from './other.json' with { type: 'json' };
        void import('./dynamic.json', { "with": { "type": 'json' } });
        import.meta.resolve('./optional.js');`,
     );
     write('dist/data.json', '{}');
+    write('dist/other.json', '{}');
     write('dist/dynamic.json', '{}');
 
     expect(computePackageArtifactClosure(packageRoot, 'dist/index.js')).toMatchObject({
-      files: ['dist/data.json', 'dist/dynamic.json', 'dist/index.js'],
+      files: ['dist/data.json', 'dist/dynamic.json', 'dist/index.js', 'dist/other.json'],
       missingFiles: [],
       unsupportedPackageImports: [],
     });
@@ -310,6 +312,16 @@ describe('package artifact readiness', () => {
     expect(computePackageArtifactClosure(packageRoot, 'dist/index.cjs')).toMatchObject({
       files: ['dist/index.cjs'],
       unsupportedPackageImports: ['dist/index.cjs: ./module.wasm'],
+    });
+  });
+
+  it('rejects unsupported ESM extensions', () => {
+    write('dist/index.js', "import './loader.txt';");
+    write('dist/loader.txt', 'export {};');
+
+    expect(computePackageArtifactClosure(packageRoot, 'dist/index.js')).toMatchObject({
+      files: ['dist/index.js'],
+      unsupportedPackageImports: ['dist/index.js: ./loader.txt'],
     });
   });
 

@@ -30,11 +30,13 @@ describe('extractModuleSpecifiers', () => {
     const source = `
       import imported from 'esm-import';
       export { exported } from 'esm-export';
+      export * as data from './star.json' with { type: 'json' };
       import('dynamic-import');
       import('dynamic-import-with-options', { with: { type: 'json' } });
       import data from './data.json' with { type: 'json' };
       import.meta.resolve('resolved-package');
       import.meta.resolve('./optional.js');
+      import.meta.resolve('#internal');
       const required = require('cjs-require');
       const resolved = require.resolve('cjs-resolve');
       const resolvedWithPaths = require.resolve('cjs-resolve-with-paths', { paths: [] });
@@ -48,10 +50,12 @@ describe('extractModuleSpecifiers', () => {
     expect(extractModuleSpecifiers(source, 'fixture.ts')).toEqual([
       'esm-import',
       'esm-export',
+      './star.json',
       'dynamic-import',
       'dynamic-import-with-options',
       './data.json',
       'resolved-package',
+      '#internal',
       'cjs-require',
       'cjs-resolve',
       'cjs-resolve-with-paths',
@@ -163,7 +167,7 @@ describe('extractRuntimeModuleSpecifiers', () => {
     ]);
   });
 
-  it('finds destructured createRequire and process builtin loads', () => {
+  it('finds destructured createRequire without treating builtin probes as loads', () => {
     const source = `
       const { createRequire: makeRequire } = require('module');
       const load = makeRequire(import.meta.url);
@@ -179,7 +183,6 @@ describe('extractRuntimeModuleSpecifiers', () => {
       'module',
       'yaml',
       'zod',
-      'node:fs',
     ]);
   });
 });
