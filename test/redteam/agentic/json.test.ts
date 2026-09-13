@@ -60,10 +60,24 @@ describe('agentic evidence JSON extraction', () => {
     ).toEqual([]);
   });
 
+  it.each(['objects', 'serialized-array', 'serialized-entries'])(
+    'accepts 1000 decoded candidates from %s',
+    (format) => {
+      const candidates = Array.from({ length: 1000 }, () => ({ findings: [] }));
+      const payload =
+        format === 'objects'
+          ? candidates
+          : format === 'serialized-array'
+            ? JSON.stringify(candidates)
+            : candidates.map((candidate) => JSON.stringify(candidate));
+      expect(parseEvidenceCandidates(payload)).toEqual(candidates);
+    },
+  );
+
   it('bounds malformed objects and deeply nested evidence without recursive traversal', () => {
     expect(extractJsonObjects('{'.repeat(2000))).toEqual([]);
     let nested: unknown = { findings: [] };
-    for (let index = 0; index < 1100; index++) {
+    for (let index = 0; index < 4100; index++) {
       nested = [nested];
     }
     expect(() => parseEvidenceCandidates(nested)).toThrow(/evidence.*limit/i);

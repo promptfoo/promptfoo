@@ -66,7 +66,7 @@ under a different plugin ID. An explicit plugin ID inside the JSON keeps its own
 An executed tool is not covered by a control that was blocked, denied, rejected, or failed.
 A failed trace verifier cannot be replaced by a clean provider-metadata result; the row fails for missing successful verifier evidence.
 
-Oversized evidence returns a grading error. Each evidence payload is limited to 100,000 characters, 1,000 decoded entries, and 1,000 findings across its aliases. Trace processing retains at most 1,000 observations; guardrail coverage keeps its stricter 256-observation limit. Split larger workloads across evals.
+Oversized evidence returns a grading error. Each evidence payload is limited to 100,000 decoded characters, 1,000 verifier records, and 1,000 findings across its aliases. Array and string wrappers do not consume the verifier-record limit; decoding stops after 4,000 steps. Trace processing retains at most 1,000 observations; guardrail coverage keeps its stricter 256-observation limit. Split larger workloads across evals.
 
 As a fallback for a trusted non-traced harness, the target provider can return JSON in provider metadata:
 

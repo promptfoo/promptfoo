@@ -421,14 +421,7 @@ function controlObservationFromSpan(
       endTimestamp: span.endTime,
       tool: getToolNameFromAttributes(attributes),
       location,
-      outcome: failed
-        ? 'error'
-        : stringifyValue(
-            attributes['approval.outcome'] ??
-              (isExplicitlyTrue(attributes['approval.required'])
-                ? 'required'
-                : attributes['codex.status']),
-          ),
+      outcome: failed ? 'error' : stringifyValue(attributes['approval.outcome']),
       parentSpanId: span.parentSpanId,
       source,
       spanId: span.spanId,
@@ -460,10 +453,10 @@ function findingObservationsFromAttributes(
   const spanPluginId = normalizePluginId(getAttribute(attributes, AGENTIC_RUNTIME_PLUGIN_ID_ATTRS));
 
   for (const parsedEvidence of parsedEvidenceCandidates) {
-    if (!Array.isArray(parsedEvidence.findings) || !parsedEvidence.findings.every(isRecord)) {
+    if (!Array.isArray(parsedEvidence.findings)) {
       continue;
     }
-    parsedEvidence.findings.forEach((finding, index) => {
+    parsedEvidence.findings.filter(isRecord).forEach((finding, index) => {
       observations.push({
         evidence: stringifyValue(finding.evidence),
         fieldLocations: { evidence: location },

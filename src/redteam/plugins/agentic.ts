@@ -435,9 +435,9 @@ function uniqueToolInvocations(observations: AgentObservation[]): AgentObservati
 
 function controlAllowsExecution(observation: AgentObservation): boolean {
   return (
-    observation.outcome === undefined ||
+    (observation.outcome === undefined && observation.kind !== 'approval') ||
     /^(allow(?:ed)?|approved|pass(?:ed)?|success(?:ful)?|succeeded|completed|ok|true|yes|1)$/i.test(
-      observation.outcome.trim(),
+      observation.outcome?.trim() ?? '',
     )
   );
 }
@@ -453,7 +453,9 @@ function groupControlObservations(observations: AgentObservation[]): AgentObserv
   );
   const spansWithRejectedControls = new Set(
     observations
-      .filter((observation) => !controlAllowsExecution(observation))
+      .filter(
+        (observation) => observation.outcome !== undefined && !controlAllowsExecution(observation),
+      )
       .map((observation) => observation.spanId),
   );
   const groupKey = (observation: AgentObservation) =>
@@ -548,7 +550,12 @@ function hasGuardrailOrApprovalForTool(
     observations.filter(
       (observation) => observation.kind === 'guardrail' || observation.kind === 'approval',
     ),
-  ).filter((group) => group.every(controlAllowsExecution));
+  ).filter(
+    (group) =>
+      group.every(
+        (observation) => observation.outcome === undefined || controlAllowsExecution(observation),
+      ) && group.some(controlAllowsExecution),
+  );
   const controlsByTool = toolObservations.map((tool) =>
     controlObservationGroups.flatMap((group, index) =>
       group.some(
@@ -636,13 +643,16 @@ function normalizeEvidenceForPlugin(
   if (!evidence || !pluginId) {
     return evidence;
   }
-  if (Array.isArray(evidence.findings) && !evidence.findings.every(isRecord)) {
+  const validFindings = Array.isArray(evidence.findings)
+    ? evidence.findings.filter(isVerifierFinding)
+    : undefined;
+  if (evidence.findings?.length && !validFindings?.length) {
     return undefined;
   }
 
   const normalizedEvidencePluginId = normalizePluginId(evidence.pluginId ?? inheritedPluginId);
-  const normalizedFindings = Array.isArray(evidence.findings)
-    ? evidence.findings.map((finding) => ({
+  const normalizedFindings = Array.isArray(validFindings)
+    ? validFindings.map((finding) => ({
         ...finding,
         pluginId: normalizePluginId(finding.pluginId) ?? normalizedEvidencePluginId,
       }))
@@ -670,20 +680,20 @@ function normalizeEvidenceForPlugin(
   };
 }
 
+function isVerifierFinding(finding: unknown): boolean {
+  return (
+    isRecord(finding) &&
+    (['pluginId', 'kind', 'location', 'severity'] as const).every(
+      (key) => finding[key] === undefined || typeof finding[key] === 'string',
+    )
+  );
+}
+
 function hasVerifierEvidence(
   evidence: AgenticRuntimeEvidence | undefined,
 ): evidence is AgenticRuntimeEvidence {
   const findings = evidence?.findings;
-  if (
-    !Array.isArray(findings) ||
-    !findings.every(
-      (finding) =>
-        isRecord(finding) &&
-        (['pluginId', 'kind', 'location', 'severity'] as const).every(
-          (key) => finding[key] === undefined || typeof finding[key] === 'string',
-        ),
-    )
-  ) {
+  if (!Array.isArray(findings) || !findings.every(isVerifierFinding)) {
     return false;
   }
   try {
