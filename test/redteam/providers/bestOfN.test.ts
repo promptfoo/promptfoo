@@ -6,13 +6,16 @@ import {
   createProviderResponse,
   type MockApiProvider,
 } from '../../factories/provider';
+import { createSelectedToolErrorTarget } from '../../util/selectedToolErrorTarget';
+import { createDeferred } from '../../util/utils';
 
-import type { ApiProvider, CallApiContextParams } from '../../../src/types/index';
+import type { ApiProvider, CallApiContextParams, ProviderResponse } from '../../../src/types/index';
 
 const mockFetchWithProxy = vi.fn();
 const mockRenderPrompt = vi.fn();
 
-vi.mock('../../../src/util/fetch/index', () => ({
+vi.mock('../../../src/util/fetch/index', async (importOriginal) => ({
+  ...(await importOriginal()),
   fetchWithProxy: (...args: unknown[]) => mockFetchWithProxy(...args),
 }));
 
@@ -78,6 +81,109 @@ describe('BestOfNProvider - Runtime Behavior', () => {
 
   afterEach(() => {
     vi.clearAllMocks();
+  });
+
+  it('retains the completed serial candidate error and incurred aggregate after caller cancellation', async () => {
+    const fixture = createSelectedToolErrorTarget();
+    try {
+      const provider = new BestOfNProvider({ injectVar: 'input', maxConcurrency: 1 });
+      const result = await fixture.run(() =>
+        provider.callApi('', createMockContext(fixture.target), {
+          abortSignal: fixture.controller.signal,
+        }),
+      );
+      expect(result.error).toContain('Completed lookup service returned 429 rate limit');
+      expect(result.metadata?.errorOrigin).toBe('tool');
+      expect(result.metadata?.http).toMatchObject({ status: 200 });
+      expect(result.tokenUsage).toMatchObject({
+        total: 5,
+        prompt: 2,
+        completion: 3,
+        numRequests: 1,
+      });
+      expect(result.cost).toBeGreaterThan(0);
+      expect(mockFetchWithProxy).toHaveBeenCalledOnce();
+      expect(globalThis.fetch).toHaveBeenCalledOnce();
+      expect(fixture.controller.signal.reason).toBe(fixture.reason);
+    } finally {
+      await fixture.cleanup();
+    }
+  });
+
+  it.each(['late failure', 'later success', 'earlier success'] as const)(
+    'retains selected errors without losing concurrent accounting or overriding %s',
+    async (order) => {
+      const controller = new AbortController();
+      const started = createDeferred<void>();
+      const first = createDeferred<ProviderResponse>();
+      const second = createDeferred<ProviderResponse>();
+      const selected: ProviderResponse = {
+        error: 'Completed tool failed',
+        metadata: { errorOrigin: 'tool' },
+        cost: 0.02,
+        tokenUsage: { total: 5, numRequests: 1 },
+      };
+      const success: ProviderResponse = {
+        output: 'Successful candidate',
+        cost: 0.03,
+        tokenUsage: { total: 7, numRequests: 1 },
+      };
+      mockTargetProvider.callApi
+        .mockImplementationOnce(() => first.promise)
+        .mockImplementationOnce(() => {
+          started.resolve();
+          return second.promise;
+        });
+      if (order !== 'earlier success') {
+        first.promise.then(() => controller.abort(new Error('caller observed selected error')));
+      }
+      const provider = new BestOfNProvider({ injectVar: 'input', maxConcurrency: 2 });
+      const call = provider.callApi('', createMockContext(mockTargetProvider), {
+        abortSignal: controller.signal,
+      });
+      await started.promise;
+      // These are selection/aggregation controls; the real Chat/OTel boundary is covered above.
+      if (order === 'earlier success') {
+        first.resolve(success);
+        await first.promise;
+        controller.abort(new Error('caller canceled other in-flight candidate'));
+        second.resolve(selected);
+      } else {
+        first.resolve(selected);
+        await first.promise;
+        if (order === 'late failure') {
+          second.reject(new Error('Independent later candidate failure'));
+        } else {
+          second.resolve(success);
+        }
+      }
+      const result = await call;
+      expect(mockTargetProvider.callApi).toHaveBeenCalledTimes(2);
+      if (order === 'late failure') {
+        expect(result.error).toBe(selected.error);
+        expect(result.metadata?.errorOrigin).toBe('tool');
+        expect(result.tokenUsage).toMatchObject({ total: 5, numRequests: 1 });
+        expect(result.cost).toBeCloseTo(0.02);
+      } else {
+        expect(result.output).toBe('Successful candidate');
+        expect(result.error).toBeUndefined();
+        expect(result.metadata).not.toHaveProperty('errorOrigin');
+        expect(result.tokenUsage).toMatchObject({ total: 12, numRequests: 2 });
+        expect(result.cost).toBeCloseTo(0.05);
+      }
+    },
+  );
+
+  it('keeps existing per-candidate thrown cancellation normalization without a selected response', async () => {
+    const reason = Object.assign(new Error('unfinished candidate canceled'), {
+      name: 'AbortError',
+    });
+    mockTargetProvider.callApi.mockRejectedValue(reason);
+    const provider = new BestOfNProvider({ injectVar: 'input', maxConcurrency: 1 });
+    const result = await provider.callApi('', createMockContext(mockTargetProvider));
+    expect(result.error).toBe(String(reason));
+    expect(result.metadata).not.toHaveProperty('errorOrigin');
+    expect(mockTargetProvider.callApi).toHaveBeenCalledTimes(2);
   });
 
   it('should pass abortSignal to fetchWithProxy', async () => {

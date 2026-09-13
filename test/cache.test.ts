@@ -782,7 +782,7 @@ describe('fetchWithCache', () => {
         if (signal === controller.signal) {
           resolveSignaledStarted();
           return new Promise<Response>((_resolve, reject) => {
-            signal.addEventListener('abort', () => reject(new Error('Aborted')), { once: true });
+            signal.addEventListener('abort', () => reject(signal.reason), { once: true });
           });
         }
         return Promise.resolve(mockFetchWithRetriesResponse(true, { data: 'unsignaled' }));
@@ -800,7 +800,7 @@ describe('fetchWithCache', () => {
 
       expect(signaledResult).toMatchObject({ status: 'rejected' });
       if (signaledResult.status === 'rejected') {
-        expect(signaledResult.reason.message).toBe('Aborted');
+        expect(signaledResult.reason).toBe(controller.signal.reason);
       }
       expect(unsignaledResult).toMatchObject({ status: 'fulfilled' });
       if (unsignaledResult.status === 'fulfilled') {
@@ -814,6 +814,10 @@ describe('fetchWithCache', () => {
 
     it('should not let aborted signaled callers join unsignaled in-flight responses', async () => {
       const controller = new AbortController();
+      let resolveSignaledStarted: () => void = () => {};
+      const signaledStarted = new Promise<void>((resolve) => {
+        resolveSignaledStarted = resolve;
+      });
       let resolveUnsignaledFetch: (value: Response) => void = () => {};
       const unsignaledFetch = new Promise<Response>((resolve) => {
         resolveUnsignaledFetch = resolve;
@@ -822,11 +826,12 @@ describe('fetchWithCache', () => {
       mockFetchWithRetries.mockImplementation((_requestUrl, requestOptions) => {
         const signal = requestOptions?.signal;
         if (signal === controller.signal) {
+          resolveSignaledStarted();
           if (signal.aborted) {
-            return Promise.reject(new Error('Aborted'));
+            return Promise.reject(signal.reason);
           }
           return new Promise<Response>((_resolve, reject) => {
-            signal.addEventListener('abort', () => reject(new Error('Aborted')), { once: true });
+            signal.addEventListener('abort', () => reject(signal.reason), { once: true });
           });
         }
         return unsignaledFetch;
@@ -835,7 +840,7 @@ describe('fetchWithCache', () => {
       const unsignaledPromise = fetchWithCache(url, {}, 1000);
       const signaledPromise = fetchWithCache(url, { signal: controller.signal }, 1000);
 
-      await Promise.resolve();
+      await signaledStarted;
       controller.abort();
       resolveUnsignaledFetch(mockFetchWithRetriesResponse(true, { data: 'unsignaled' }));
       const [unsignaledResult, signaledResult] = await Promise.allSettled([
@@ -852,7 +857,7 @@ describe('fetchWithCache', () => {
       }
       expect(signaledResult).toMatchObject({ status: 'rejected' });
       if (signaledResult.status === 'rejected') {
-        expect(signaledResult.reason.message).toBe('Aborted');
+        expect(signaledResult.reason).toBe(controller.signal.reason);
       }
       expect(mockFetchWithRetries).toHaveBeenCalledTimes(2);
     });
@@ -901,7 +906,13 @@ describe('fetchWithCache', () => {
       expect(firstResult.cached).toBe(false);
       expect(secondResult.cached).toBe(true);
       expect(mockFetchWithRetries).toHaveBeenCalledTimes(1);
-      expect(mockFetchWithRetries).toHaveBeenCalledWith(url, firstOptions, 1000, undefined);
+      expect(mockFetchWithRetries).toHaveBeenCalledWith(
+        url,
+        firstOptions,
+        1000,
+        undefined,
+        expect.any(Function),
+      );
     });
 
     it('should keep authorization and team isolation when trace contexts change', async () => {

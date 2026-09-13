@@ -67,6 +67,7 @@ describe('OpenRouter', () => {
         }),
         expect.any(Number),
         undefined,
+        expect.any(Function),
       );
     });
 
@@ -195,6 +196,27 @@ describe('OpenRouter', () => {
       } finally {
         restoreEnv();
       }
+    });
+
+    it('forwards caller cancellation without dispatching a pre-aborted request', async () => {
+      const provider = new OpenRouterProvider('fixture/model', {
+        config: { apiKey: 'fixture-key' },
+      });
+      const aborted = new AbortController();
+      aborted.abort();
+      await expect(
+        provider.callApi('Hello', undefined, { abortSignal: aborted.signal }),
+      ).rejects.toMatchObject({ name: 'AbortError' });
+      expect(mockedFetchWithRetries).not.toHaveBeenCalled();
+
+      mockedFetchWithRetries.mockResolvedValueOnce(
+        Response.json({ choices: [{ message: { content: 'Hello' } }] }),
+      );
+      const controller = new AbortController();
+      await provider.callApi('Hello', undefined, { abortSignal: controller.signal });
+      expect(mockedFetchWithRetries.mock.calls[0][1]).toMatchObject({
+        signal: controller.signal,
+      });
     });
 
     it('should call the default OpenRouter host when no apiBaseUrl override is configured', async () => {

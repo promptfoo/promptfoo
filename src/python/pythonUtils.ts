@@ -296,6 +296,7 @@ export async function validatePythonPath(pythonPath: string, isExplicit: boolean
  * @param args - An array of arguments to pass to the Python script.
  * @param options - Optional settings for running the Python script.
  * @param options.pythonExecutable - Optional path to the Python executable.
+ * @param options.abortSignal - Prevents starting the script after caller cancellation.
  * @returns A promise that resolves to the output of the Python script.
  * @throws An error if there's an issue running the Python script or parsing its output.
  */
@@ -303,14 +304,16 @@ export async function runPython<T = unknown>(
   scriptPath: string,
   method: string,
   args: (string | number | object | undefined)[],
-  options: { pythonExecutable?: string } = {},
+  options: { pythonExecutable?: string; abortSignal?: AbortSignal } = {},
 ): Promise<T> {
+  options.abortSignal?.throwIfAborted();
   const absPath = path.resolve(scriptPath);
   const customPath = getConfiguredPythonPath(options.pythonExecutable);
   let pythonPath = customPath || 'python';
   let tempDirectory: string | undefined;
 
   pythonPath = await validatePythonPath(pythonPath, typeof customPath === 'string');
+  options.abortSignal?.throwIfAborted();
 
   try {
     tempDirectory = await createSecureTempDirectory('promptfoo-python-');
@@ -334,6 +337,7 @@ export async function runPython<T = unknown>(
 
     await new Promise<void>((resolve, reject) => {
       try {
+        options.abortSignal?.throwIfAborted();
         const pyshell = new PythonShell('wrapper.py', pythonOptions);
         const stderrLogger = new PythonStderrLogger();
 
@@ -377,6 +381,9 @@ export async function runPython<T = unknown>(
 
     return result.data;
   } catch (error) {
+    if (options.abortSignal?.aborted && error === options.abortSignal.reason) {
+      throw error;
+    }
     const message = `Error running Python script: ${(error as Error).message}\nStack Trace: ${
       (error as Error).stack?.replace('--- Python Traceback ---', 'Python Traceback: ') ||
       'No Python traceback available'

@@ -4,10 +4,16 @@ import { getEnvBool, getEnvInt } from '../envars';
 import logger from '../logger';
 import { withFetchRetryContext } from '../util/fetch/retryContext';
 import { sanitizeProviderIdForLog } from '../util/provider';
+import { throwIfAborted } from './cancellation';
+import {
+  getProviderCallExecutionContext,
+  withProviderCallExecutionContext,
+} from './providerCallExecutionContext';
 import { type ProviderMetrics, ProviderRateLimitState } from './providerRateLimitState';
 import { getRateLimitKey } from './rateLimitKey';
 
-import type { ApiProvider } from '../types/providers';
+import type { ApiProvider, CallApiOptionsParams } from '../types/providers';
+import type { RateLimitExecuteOptions } from './types';
 
 export interface RateLimitRegistryOptions {
   maxConcurrency: number;
@@ -44,12 +50,8 @@ export class RateLimitRegistry extends EventEmitter {
    */
   async execute<T>(
     provider: ApiProvider,
-    callFn: () => Promise<T>,
-    options?: {
-      getHeaders?: (result: T) => Record<string, string> | undefined;
-      isRateLimited?: (result: T | undefined, error?: Error) => boolean;
-      getRetryAfter?: (result: T | undefined, error?: Error) => number | undefined;
-    },
+    callFn: (onResponseHeaders?: CallApiOptionsParams['onResponseHeaders']) => Promise<T>,
+    options?: RateLimitExecuteOptions<T>,
   ): Promise<T> {
     const providerMaxRetries = getProviderMaxRetries(provider);
 
@@ -57,6 +59,7 @@ export class RateLimitRegistry extends EventEmitter {
     // `fetchWithRetries` picks up the provider's `maxRetries` as its default
     // and `fetchWithProxy` disables transient retries when `maxRetries: 0`.
     if (!this.enabled) {
+      throwIfAborted(options?.abortSignal);
       return withFetchRetryContext(providerMaxRetries, callFn);
     }
 
@@ -73,12 +76,27 @@ export class RateLimitRegistry extends EventEmitter {
     });
 
     const run = () =>
-      state.executeWithRetry(requestId, callFn, {
-        getHeaders: options?.getHeaders,
-        isRateLimited: options?.isRateLimited,
-        getRetryAfter: options?.getRetryAfter,
-        maxRetriesOverride: providerMaxRetries,
-      });
+      state.executeWithRetry(
+        requestId,
+        (onResponseHeaders) => {
+          const executionContext = getProviderCallExecutionContext();
+          // Update an existing evaluator scope only while this acquired call owns
+          // its slot. Direct registry users do not acquire evaluator orchestration.
+          return executionContext
+            ? withProviderCallExecutionContext(
+                { ...executionContext, rateLimitRegistry: this, rateLimitProvider: provider },
+                () => callFn(onResponseHeaders),
+              )
+            : callFn(onResponseHeaders);
+        },
+        {
+          abortSignal: options?.abortSignal,
+          getHeaders: options?.getHeaders,
+          isRateLimited: options?.isRateLimited,
+          getRetryAfter: options?.getRetryAfter,
+          maxRetriesOverride: providerMaxRetries,
+        },
+      );
 
     try {
       const result = await withFetchRetryContext(providerMaxRetries, run);

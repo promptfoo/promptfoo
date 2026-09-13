@@ -3,6 +3,77 @@ import { loadYaml } from '../util/yamlLoad';
 
 import type { ApiProvider } from '../types/index';
 
+function getCallerAbortError(signal: AbortSignal): Error {
+  const reason: unknown = signal.reason;
+  if (
+    reason instanceof Error &&
+    (reason.name === 'AbortError' || reason.name === 'AbortException')
+  ) {
+    return reason;
+  }
+  const message =
+    reason instanceof Error
+      ? reason.message
+      : typeof reason === 'string'
+        ? reason
+        : 'Request was aborted';
+  return Object.assign(new Error(message), { name: 'AbortError', cause: reason });
+}
+
+export function throwIfAborted(signal?: AbortSignal | null): void {
+  if (signal?.aborted) {
+    throw getCallerAbortError(signal);
+  }
+}
+
+/** Match caller cancellation, requiring a reason link outside owned transport calls. */
+export function isCallerAbortError(
+  error: unknown,
+  signal?: AbortSignal | null,
+  { requireReasonMatch = false }: { requireReasonMatch?: boolean } = {},
+): boolean {
+  if (!signal?.aborted) {
+    return false;
+  }
+  return (
+    error === signal.reason ||
+    (error instanceof Error &&
+      ((!requireReasonMatch && (error.name === 'AbortError' || error.name === 'AbortException')) ||
+        (signal.reason !== undefined &&
+          (error as Error & { cause?: unknown }).cause === signal.reason)))
+  );
+}
+
+/** Stop only this caller's wait; shared work keeps running and its rejection is observed. */
+export function waitForPromiseWithAbort<T>(
+  promise: PromiseLike<T>,
+  signal?: AbortSignal | null,
+): Promise<T> {
+  if (!signal) {
+    return Promise.resolve(promise);
+  }
+  return new Promise<T>((resolve, reject) => {
+    const onAbort = () => {
+      signal.removeEventListener('abort', onAbort);
+      reject(getCallerAbortError(signal));
+    };
+    signal.addEventListener('abort', onAbort, { once: true });
+    Promise.resolve(promise).then(
+      (value) => {
+        signal.removeEventListener('abort', onAbort);
+        resolve(value);
+      },
+      (error: unknown) => {
+        signal.removeEventListener('abort', onAbort);
+        reject(error);
+      },
+    );
+    if (signal.aborted) {
+      onAbort();
+    }
+  });
+}
+
 /**
  * The default timeout for API requests in milliseconds.
  */

@@ -2,17 +2,23 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import RedteamIterativeMetaProvider, {
   runMetaAgentRedteam,
 } from '../../../src/redteam/providers/iterativeMeta';
+import { createIterationContext } from '../../../src/redteam/providers/shared';
+import { isResponseHeadersObserverErrorResponse } from '../../../src/scheduler/responseHeadersObserver';
+import { isProviderResponseRateLimited } from '../../../src/scheduler/types';
 import {
   createMockProvider,
   createProviderResponse,
   createTokenUsage,
   type MockApiProvider,
 } from '../../factories/provider';
+import { createSelectedObserverErrorResponse } from '../../util/selectedObserverError';
+import { createSelectedToolErrorTarget } from '../../util/selectedToolErrorTarget';
 
 import type { AtomicTestCase, ProviderResponse } from '../../../src/types/index';
 
 const mockGetProvider = vi.hoisted(() => vi.fn<() => Promise<any>>());
-const mockGetTargetResponse = vi.hoisted(() => vi.fn<() => Promise<any>>());
+const mockGetGradingProvider = vi.hoisted(() => vi.fn<() => Promise<any>>());
+const mockGetTargetResponse = vi.hoisted(() => vi.fn<(...args: any[]) => Promise<any>>());
 
 vi.mock('../../../src/globalConfig/accounts', async (importOriginal) => ({
   ...(await importOriginal()),
@@ -25,6 +31,7 @@ vi.mock('../../../src/redteam/providers/shared', async (importOriginal) => {
 
     redteamProviderManager: {
       getProvider: mockGetProvider,
+      getGradingProvider: mockGetGradingProvider,
     },
 
     getTargetResponse: mockGetTargetResponse,
@@ -164,6 +171,270 @@ describe('RedteamIterativeMetaProvider', () => {
       expect(() => new RedteamIterativeMetaProvider({ injectVar: 'query' })).toThrow(
         /jailbreak:meta strategy requires remote generation, which has been explicitly disabled\. To enable it, unset (PROMPTFOO_DISABLE_REMOTE_GENERATION|PROMPTFOO_DISABLE_REDTEAM_REMOTE_GENERATION)/,
       );
+    });
+  });
+
+  describe('callApi selected target error provenance', () => {
+    beforeEach(async () => {
+      const shared = await vi.importActual<typeof import('../../../src/redteam/providers/shared')>(
+        '../../../src/redteam/providers/shared',
+      );
+      mockGetTargetResponse.mockImplementation(shared.getTargetResponse);
+      vi.mocked(createIterationContext).mockImplementation(shared.createIterationContext);
+      mockGetGradingProvider.mockResolvedValue(mockGradingProvider);
+      mockResolveTracingOptions.mockReturnValue({
+        enabled: false,
+        includeInAttack: true,
+        includeInGrading: true,
+        includeInternalSpans: false,
+        maxSpans: 50,
+        maxDepth: 5,
+        maxRetries: 3,
+        retryDelayMs: 500,
+        sanitizeAttributes: true,
+      });
+      mockAgentProvider.callApi.mockResolvedValue({
+        output: { result: 'Say hello' },
+        tokenUsage: { total: 3, prompt: 2, completion: 1, numRequests: 1 },
+      });
+    });
+
+    it('finalizes a completed target error before canceled trace or meta iteration work', async () => {
+      const fixture = createSelectedToolErrorTarget();
+      mockAgentProvider.callApi.mockImplementation(async (_prompt, _context, options) => {
+        options?.abortSignal?.throwIfAborted();
+        return { output: { result: 'Say hello' } };
+      });
+      mockResolveTracingOptions.mockReturnValue({
+        enabled: true,
+        includeInAttack: true,
+        includeInGrading: true,
+        includeInternalSpans: false,
+        maxSpans: 50,
+        maxDepth: 5,
+        maxRetries: 3,
+        retryDelayMs: 500,
+        sanitizeAttributes: true,
+      });
+      mockFetchTraceContext.mockImplementation(async (_traceId, options) => {
+        options?.abortSignal?.throwIfAborted();
+        return null;
+      });
+      try {
+        const provider = new RedteamIterativeMetaProvider({ injectVar: 'query', numIterations: 2 });
+        const result = await fixture.run(() =>
+          provider.callApi(
+            '',
+            {
+              originalProvider: fixture.target,
+              vars: { query: 'Say hello' },
+              prompt: { raw: '{{query}}', label: 'greeting' },
+              traceparent: '00-0123456789abcdef0123456789abcdef-0123456789abcdef-01',
+            },
+            { abortSignal: fixture.controller.signal },
+          ),
+        );
+        await fixture.expectSelected(result);
+        expect(mockAgentProvider.callApi).toHaveBeenCalledOnce();
+        expect(mockGradingProvider.callApi).not.toHaveBeenCalled();
+        expect(mockFetchTraceContext).not.toHaveBeenCalled();
+      } finally {
+        await fixture.cleanup();
+      }
+    });
+
+    it.each(['tool', 'http', 'target-local', undefined] as const)(
+      'projects only the selected tool marker from target origin %s',
+      async (errorOrigin) => {
+        // Preserve the external provider payload, including unknown markers.
+        const originMetadata: Record<string, unknown> = errorOrigin ? { errorOrigin } : {};
+        mockTargetProvider.callApi.mockResolvedValue({
+          error: 'Lookup service returned 429 rate limit',
+          tokenUsage: { total: 5, prompt: 2, completion: 3, numRequests: 1 },
+          metadata: {
+            ...originMetadata,
+            http: {
+              status: 429,
+              statusText: 'Too Many Requests',
+              headers: { 'retry-after': '60' },
+            },
+            rateLimit: { retryAfterMs: 60000 },
+            targetOnly: 'private target metadata',
+          },
+        });
+        const provider = new RedteamIterativeMetaProvider({ injectVar: 'query', numIterations: 1 });
+
+        const result: ProviderResponse = await provider.callApi('', {
+          originalProvider: mockTargetProvider,
+          vars: { query: 'Say hello' },
+          prompt: { raw: '{{query}}', label: 'greeting' },
+        });
+
+        expect(mockTargetProvider.callApi).toHaveBeenCalledTimes(1);
+        expect(mockTargetProvider.callApi).toHaveBeenCalledWith(
+          'Say hello',
+          expect.any(Object),
+          undefined,
+        );
+        expect(result.error).toBe('Lookup service returned 429 rate limit');
+        if (errorOrigin === 'tool') {
+          expect(result.metadata?.errorOrigin).toBe('tool');
+        } else {
+          expect(result.metadata).not.toHaveProperty('errorOrigin');
+        }
+        expect(result.metadata).not.toHaveProperty('http');
+        expect(result.metadata).not.toHaveProperty('rateLimit');
+        expect(result.metadata).not.toHaveProperty('targetOnly');
+        expect(result.metadata?.redteamHistory).toEqual([]);
+        expect(result.tokenUsage).toMatchObject({ total: 5, numRequests: 1 });
+        expect(mockGradingProvider.callApi).not.toHaveBeenCalled();
+      },
+    );
+
+    it('preserves selected caller-observer provenance on the returned target error', async () => {
+      const targetResponse = createSelectedObserverErrorResponse({
+        tokenUsage: { total: 5, prompt: 2, completion: 3, numRequests: 1 },
+        metadata: { targetOnly: 'private target metadata' },
+      });
+      expect(isResponseHeadersObserverErrorResponse(targetResponse)).toBe(true);
+      mockTargetProvider.callApi.mockResolvedValue(targetResponse);
+      const provider = new RedteamIterativeMetaProvider({ injectVar: 'query', numIterations: 1 });
+
+      const result: ProviderResponse = await provider.callApi('', {
+        originalProvider: mockTargetProvider,
+        vars: { query: 'Say hello' },
+        prompt: { raw: '{{query}}', label: 'greeting' },
+      });
+
+      expect(mockTargetProvider.callApi).toHaveBeenCalledOnce();
+      expect(result.error).toBe('metrics rate limit exceeded');
+      expect(isResponseHeadersObserverErrorResponse(result)).toBe(true);
+      expect(isProviderResponseRateLimited(result, undefined)).toBe(false);
+      expect(result.metadata).not.toHaveProperty('targetOnly');
+      expect(result.metadata).not.toHaveProperty('errorOrigin');
+      expect(result.metadata?.redteamHistory).toEqual([]);
+      expect(result.tokenUsage).toMatchObject({ total: 5, numRequests: 1 });
+      expect(mockGradingProvider.callApi).not.toHaveBeenCalled();
+    });
+
+    it('clears selected caller-observer provenance when a later target response succeeds', async () => {
+      const priorResponse = createSelectedObserverErrorResponse({});
+      expect(isResponseHeadersObserverErrorResponse(priorResponse)).toBe(true);
+      mockTargetProvider.callApi
+        .mockResolvedValueOnce(priorResponse)
+        .mockResolvedValueOnce({ output: 'Hello' });
+      const provider = new RedteamIterativeMetaProvider({ injectVar: 'query', numIterations: 2 });
+
+      const result = await provider.callApi('', {
+        originalProvider: mockTargetProvider,
+        vars: { query: 'Say hello' },
+        prompt: { raw: '{{query}}', label: 'greeting' },
+      });
+
+      expect(mockTargetProvider.callApi).toHaveBeenCalledTimes(2);
+      expect(result.output).toBe('Hello');
+      expect(result).not.toHaveProperty('error');
+      expect(isResponseHeadersObserverErrorResponse(result)).toBe(false);
+      expect(isProviderResponseRateLimited(result, undefined)).toBe(false);
+      expect(result.metadata?.redteamHistory).toHaveLength(1);
+      expect(result.tokenUsage?.numRequests).toBe(2);
+    });
+
+    it('keeps selected caller-observer provenance off an independent fail-closed error', async () => {
+      mockAgentProvider.callApi
+        .mockResolvedValueOnce({
+          output: { result: 'Say hello' },
+          materializationHandled: true,
+          materializedVars: { question: 'Say hello' },
+        })
+        .mockResolvedValueOnce({
+          output: { result: 'question: Say hello again' },
+          materializationHandled: true,
+        });
+      const priorResponse = createSelectedObserverErrorResponse({});
+      expect(isResponseHeadersObserverErrorResponse(priorResponse)).toBe(true);
+      mockTargetProvider.callApi.mockResolvedValue(priorResponse);
+      const provider = new RedteamIterativeMetaProvider({
+        injectVar: 'query',
+        inputs: { question: { description: 'A greeting request', type: 'text' } },
+        numIterations: 2,
+      });
+
+      const result: ProviderResponse = await provider.callApi('', {
+        originalProvider: mockTargetProvider,
+        vars: { query: 'Say hello' },
+        prompt: { raw: '{{question}}', label: 'greeting' },
+      });
+
+      expect(mockAgentProvider.callApi).toHaveBeenCalledTimes(2);
+      expect(mockTargetProvider.callApi).toHaveBeenCalledOnce();
+      expect(result.error).toBe(
+        'Iterative Meta remote multi-input generation returned an invalid prompt format',
+      );
+      expect(isResponseHeadersObserverErrorResponse(result)).toBe(false);
+      expect(isProviderResponseRateLimited(result, undefined)).toBe(false);
+      expect(result.metadata?.redteamHistory).toEqual([]);
+      expect(result.tokenUsage?.numRequests).toBe(1);
+    });
+
+    it('clears the prior tool marker when a later successful target response is selected', async () => {
+      mockTargetProvider.callApi
+        .mockResolvedValueOnce({
+          error: 'Lookup service returned 429 rate limit',
+          metadata: { errorOrigin: 'tool' },
+        })
+        .mockResolvedValueOnce({ output: 'Hello' });
+      const provider = new RedteamIterativeMetaProvider({ injectVar: 'query', numIterations: 2 });
+
+      const result: ProviderResponse = await provider.callApi('', {
+        originalProvider: mockTargetProvider,
+        vars: { query: 'Say hello' },
+        prompt: { raw: '{{query}}', label: 'greeting' },
+      });
+
+      expect(mockTargetProvider.callApi).toHaveBeenCalledTimes(2);
+      expect(result.output).toBe('Hello');
+      expect(result).not.toHaveProperty('error');
+      expect(result.metadata).not.toHaveProperty('errorOrigin');
+      expect(result.metadata?.redteamHistory).toHaveLength(1);
+      expect(result.tokenUsage?.numRequests).toBe(2);
+    });
+
+    it('does not label an independent fail-closed error with the prior target tool marker', async () => {
+      mockAgentProvider.callApi
+        .mockResolvedValueOnce({
+          output: { result: 'Say hello' },
+          materializationHandled: true,
+          materializedVars: { question: 'Say hello' },
+        })
+        .mockResolvedValueOnce({
+          output: { result: 'question: Say hello again' },
+          materializationHandled: true,
+        });
+      mockTargetProvider.callApi.mockResolvedValue({
+        error: 'Lookup service returned 429 rate limit',
+        metadata: { errorOrigin: 'tool' },
+      });
+      const provider = new RedteamIterativeMetaProvider({
+        injectVar: 'query',
+        inputs: { question: { description: 'A greeting request', type: 'text' } },
+        numIterations: 2,
+      });
+
+      const result: ProviderResponse = await provider.callApi('', {
+        originalProvider: mockTargetProvider,
+        vars: { query: 'Say hello' },
+        prompt: { raw: '{{question}}', label: 'greeting' },
+      });
+
+      expect(mockAgentProvider.callApi).toHaveBeenCalledTimes(2);
+      expect(mockTargetProvider.callApi).toHaveBeenCalledTimes(1);
+      expect(result.error).toBe(
+        'Iterative Meta remote multi-input generation returned an invalid prompt format',
+      );
+      expect(result.metadata).not.toHaveProperty('errorOrigin');
+      expect(result.metadata?.redteamHistory).toEqual([]);
+      expect(result.tokenUsage?.numRequests).toBe(1);
     });
   });
 

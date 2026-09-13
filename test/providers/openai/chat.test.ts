@@ -1072,9 +1072,11 @@ Therefore, there are 2 occurrences of the letter "r" in "strawberry".\n\nThere a
 
         const result = await provider.callApi('Read the file');
 
-        expect(mcpClient.callTool).toHaveBeenCalledWith('read_file', {
-          path: '../../../etc/passwd',
-        });
+        expect(mcpClient.callTool).toHaveBeenCalledWith(
+          'read_file',
+          { path: '../../../etc/passwd' },
+          undefined,
+        );
         expect(result.output).toBe(expectedOutput);
       },
     );

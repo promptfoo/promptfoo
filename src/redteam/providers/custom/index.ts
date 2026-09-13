@@ -36,6 +36,8 @@ import {
   getLastMessageContent,
   getTargetResponse,
   isConversationEndedResponse,
+  isTargetCallAbortError,
+  preserveSelectedError,
   type RoundBacktrackingStopReason,
   redteamProviderManager,
   runRedteamGrader,
@@ -330,6 +332,7 @@ export class CustomProvider implements ApiProvider {
 
     let objectiveScore: { value: number; rationale: string } | undefined;
     let lastTargetError: string | undefined = undefined;
+    let lastTargetErrorResponse: ProviderResponse | undefined;
 
     let exitReason: RoundBacktrackingStopReason = 'Max rounds reached';
 
@@ -444,6 +447,11 @@ export class CustomProvider implements ApiProvider {
         }
         if (lastResponse.error) {
           lastTargetError = typeof lastResponse.error === 'string' ? lastResponse.error : 'Error';
+          lastTargetErrorResponse = lastResponse;
+          if (options?.abortSignal?.aborted) {
+            exitReason = 'Target error';
+            break;
+          }
           logger.info(
             `[Custom] ROUND ${roundNum} - Target error: ${lastResponse.error}. Full response: ${JSON.stringify(
               lastResponse,
@@ -510,6 +518,11 @@ export class CustomProvider implements ApiProvider {
 
           if (lastResponse.error) {
             lastTargetError = typeof lastResponse.error === 'string' ? lastResponse.error : 'Error';
+            lastTargetErrorResponse = lastResponse;
+            if (options?.abortSignal?.aborted) {
+              exitReason = 'Target error';
+              break;
+            }
             logger.info(
               `[Custom] ROUND ${roundNum} - Target error after unblocking: ${lastResponse.error}.`,
               { lastResponse },
@@ -643,7 +656,7 @@ export class CustomProvider implements ApiProvider {
         logger.debug('[Custom] Jailbreak Unsuccessful, continuing to next round');
       } catch (error) {
         // Re-throw abort errors to properly cancel the operation
-        if (error instanceof Error && error.name === 'AbortError') {
+        if (isTargetCallAbortError(error, options?.abortSignal)) {
           logger.debug('[Custom] Operation aborted');
           throw error;
         }
@@ -676,27 +689,30 @@ export class CustomProvider implements ApiProvider {
 
     const messages = this.memory.getConversation(this.targetConversationId);
     const finalPrompt = getLastMessageContent(messages, 'user');
-    return {
-      output: lastResponse.output,
-      prompt: finalPrompt,
-      metadata: {
-        redteamFinalPrompt: finalPrompt,
-        messages: messages as Record<string, any>[],
-        customRoundsCompleted: roundNum,
-        customBacktrackCount: backtrackCount,
-        customResult: evalFlag,
-        customConfidence: evalPercentage,
-        stopReason: exitReason,
-        redteamHistory,
-        successfulAttacks: this.successfulAttacks,
-        totalSuccessfulAttacks: this.successfulAttacks.length,
-        storedGraderResult: storedGraderResult,
-        sessionId: getSessionId(lastResponse, context),
+    return preserveSelectedError(
+      {
+        output: lastResponse.output,
+        prompt: finalPrompt,
+        metadata: {
+          redteamFinalPrompt: finalPrompt,
+          messages: messages as Record<string, any>[],
+          customRoundsCompleted: roundNum,
+          customBacktrackCount: backtrackCount,
+          customResult: evalFlag,
+          customConfidence: evalPercentage,
+          stopReason: exitReason,
+          redteamHistory,
+          successfulAttacks: this.successfulAttacks,
+          totalSuccessfulAttacks: this.successfulAttacks.length,
+          storedGraderResult: storedGraderResult,
+          sessionId: getSessionId(lastResponse, context),
+        },
+        tokenUsage: totalTokenUsage,
+        guardrails: lastResponse?.guardrails,
+        ...(lastTargetError ? { error: lastTargetError } : {}),
       },
-      tokenUsage: totalTokenUsage,
-      guardrails: lastResponse?.guardrails,
-      ...(lastTargetError ? { error: lastTargetError } : {}),
-    };
+      lastTargetErrorResponse,
+    );
   }
 
   private async getAttackPrompt(

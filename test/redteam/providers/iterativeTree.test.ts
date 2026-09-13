@@ -16,6 +16,8 @@ import {
 } from '../../../src/redteam/providers/prompts';
 import { getTargetResponse, redteamProviderManager } from '../../../src/redteam/providers/shared';
 import * as remoteGeneration from '../../../src/redteam/remoteGeneration';
+import { isResponseHeadersObserverErrorResponse } from '../../../src/scheduler/responseHeadersObserver';
+import { isProviderResponseRateLimited } from '../../../src/scheduler/types';
 import { getNunjucksEngine } from '../../../src/util/templates';
 import { TokenUsageTracker } from '../../../src/util/tokenUsage';
 import {
@@ -27,6 +29,8 @@ import {
   createProviderResponse,
   type MockApiProvider,
 } from '../../factories/provider';
+import { createSelectedObserverErrorResponse } from '../../util/selectedObserverError';
+import { createSelectedToolErrorTarget } from '../../util/selectedToolErrorTarget';
 
 import type { TreeSearchOutput } from '../../../src/redteam/providers/iterativeTree';
 import type {
@@ -34,9 +38,9 @@ import type {
   CallApiContextParams,
   CallApiOptionsParams,
   GradingResult,
+  ProviderResponse,
 } from '../../../src/types/index';
 
-vi.mock('../../../src/providers/openai');
 // Note: We don't mock '../../../src/util/templates' because tests need the real nunjucks engine
 vi.mock('../../../src/redteam/graders', async (importOriginal) => {
   return {
@@ -452,6 +456,279 @@ describe('RedteamIterativeProvider', () => {
         gradingProviderSpy.mockRestore();
       }
     });
+
+    it('finalizes a completed branch error without a canceled final target re-probe', async () => {
+      const fixture = createSelectedToolErrorTarget();
+      mockRedteamProvider.callApi.mockImplementation(async (_prompt, _context, options) => {
+        options?.abortSignal?.throwIfAborted();
+        return { output: JSON.stringify({ improvement: 'Use a greeting', prompt: 'Say hello' }) };
+      });
+      const gradingProvider = createMockProvider({ id: 'fixture-unused-grader' });
+      const remote = vi.spyOn(remoteGeneration, 'shouldGenerateRemote').mockReturnValue(false);
+      const attacker = vi
+        .spyOn(redteamProviderManager, 'getProvider')
+        .mockResolvedValue(mockRedteamProvider);
+      const grader = vi
+        .spyOn(redteamProviderManager, 'getGradingProvider')
+        .mockResolvedValue(gradingProvider);
+      try {
+        const provider = new RedteamIterativeTreeProvider({
+          injectVar: 'goal',
+          maxDepth: 1,
+          branchingFactor: 1,
+          maxAttempts: 2,
+        });
+        const result = await fixture.run(() =>
+          provider.callApi(
+            'Say hello',
+            {
+              originalProvider: fixture.target,
+              vars: { goal: 'Say hello' },
+              prompt: { raw: '{{goal}}', label: 'greeting' },
+            },
+            { abortSignal: fixture.controller.signal },
+          ),
+        );
+        await fixture.expectSelected(result);
+        expect(mockRedteamProvider.callApi).toHaveBeenCalledOnce();
+        expect(gradingProvider.callApi).not.toHaveBeenCalled();
+        expect(result.metadata?.redteamTreeHistory).toHaveLength(1);
+        expect(result.metadata?.stopReason).toBe('TARGET_ERROR');
+      } finally {
+        await fixture.cleanup();
+        remote.mockRestore();
+        attacker.mockRestore();
+        grader.mockRestore();
+      }
+    });
+
+    it.each([
+      {
+        label: 'final tool error after an earlier best success',
+        earlierError: undefined,
+        earlierOrigin: undefined,
+        finalError: 'final lookup: downstream 429 rate limit',
+        finalOrigin: 'tool',
+      },
+      {
+        label: 'final unmarked error after an earlier marked best success',
+        earlierError: undefined,
+        earlierOrigin: 'tool',
+        finalError: 'final target 429 rate limit',
+        finalOrigin: undefined,
+      },
+      {
+        label: 'final marked success after an earlier tool error',
+        earlierError: 'earlier lookup: downstream 429 rate limit',
+        earlierOrigin: 'tool',
+        finalError: undefined,
+        finalOrigin: 'tool',
+      },
+      {
+        label: 'final non-tool error after an earlier best success',
+        earlierError: undefined,
+        earlierOrigin: undefined,
+        finalError: 'final target 429 rate limit',
+        finalOrigin: 'provider',
+      },
+    ])(
+      'projects only selected tool-error origin for $label',
+      async ({ earlierError, earlierOrigin, finalError, finalOrigin }) => {
+        const earlierMetadata: Record<string, unknown> = earlierOrigin
+          ? { errorOrigin: earlierOrigin }
+          : {};
+        const finalMetadata: Record<string, unknown> = finalOrigin
+          ? { errorOrigin: finalOrigin }
+          : {};
+        mockRedteamProvider.callApi.mockResolvedValue({
+          output: JSON.stringify({ improvement: 'Use a greeting', prompt: 'Say hello' }),
+        });
+        const gradingProvider = createMockProvider({
+          id: 'mock-final-origin-grader',
+          response: {
+            output: JSON.stringify({
+              currentResponse: { rating: 5, explanation: 'A greeting' },
+              previousBestResponse: { rating: 0, explanation: 'None' },
+            }),
+          },
+        });
+        const targetProvider = createMockProvider({ id: 'mock-final-origin-target' });
+        targetProvider.callApi
+          .mockResolvedValueOnce({
+            output: 'Earlier greeting',
+            ...(earlierError ? { error: earlierError } : {}),
+            metadata: earlierMetadata,
+            tokenUsage: { prompt: 2, completion: 3, total: 5, numRequests: 1 },
+          })
+          .mockResolvedValueOnce({
+            output: 'Final greeting',
+            ...(finalError ? { error: finalError } : {}),
+            metadata: {
+              ...finalMetadata,
+              http: { status: 200, statusText: 'OK', headers: { 'x-ratelimit-remaining': '0' } },
+              rateLimit: { remaining: 0 },
+              targetOnly: 'must stay on the target',
+            },
+            tokenUsage: { prompt: 7, completion: 4, total: 11, numRequests: 1 },
+          });
+        const remoteGenerationSpy = vi
+          .spyOn(remoteGeneration, 'shouldGenerateRemote')
+          .mockReturnValue(false);
+        const attackerProviderSpy = vi
+          .spyOn(redteamProviderManager, 'getProvider')
+          .mockResolvedValue(mockRedteamProvider);
+        const gradingProviderSpy = vi
+          .spyOn(redteamProviderManager, 'getGradingProvider')
+          .mockResolvedValue(gradingProvider);
+
+        try {
+          const provider = new RedteamIterativeTreeProvider({
+            injectVar: 'goal',
+            maxDepth: 1,
+            branchingFactor: 1,
+            maxAttempts: 2,
+          });
+          const result: ProviderResponse = await provider.callApi('Say hello', {
+            originalProvider: targetProvider,
+            vars: { goal: 'Say hello' },
+            prompt: { raw: '{{goal}}', label: 'greeting' },
+          });
+
+          expect(targetProvider.callApi).toHaveBeenCalledTimes(2);
+          expect(mockRedteamProvider.callApi).toHaveBeenCalledOnce();
+          expect(gradingProvider.callApi).toHaveBeenCalledTimes(earlierError ? 0 : 1);
+          expect(result.output).toBe(earlierError ? 'Final greeting' : 'Earlier greeting');
+          expect(result.error).toBe(finalError);
+          expect(result.metadata?.errorOrigin).toBe(
+            finalError && finalOrigin === 'tool' ? 'tool' : undefined,
+          );
+          expect(result.metadata).not.toHaveProperty('http');
+          expect(result.metadata).not.toHaveProperty('rateLimit');
+          expect(result.metadata).not.toHaveProperty('targetOnly');
+          expect(result.metadata).toMatchObject({ attempts: 1, stopReason: 'MAX_DEPTH' });
+          expect(result.metadata?.redteamTreeHistory).toHaveLength(2);
+          expect(result.tokenUsage).toMatchObject({
+            prompt: 9,
+            completion: 7,
+            total: 16,
+            numRequests: 2,
+          });
+        } finally {
+          remoteGenerationSpy.mockRestore();
+          attackerProviderSpy.mockRestore();
+          gradingProviderSpy.mockRestore();
+        }
+      },
+    );
+
+    it.each([
+      {
+        label: 'final observer error after an earlier best success',
+        earlierObserver: false,
+        finalObserver: true,
+        finalError: 'metrics rate limit exceeded',
+      },
+      {
+        label: 'final success after an earlier observer error',
+        earlierObserver: true,
+        finalObserver: false,
+        finalError: undefined,
+      },
+      {
+        label: 'final unrelated rate limit after an earlier observer error',
+        earlierObserver: true,
+        finalObserver: false,
+        finalError: 'final target 429 rate limit',
+      },
+    ])(
+      'preserves selected caller-observer provenance for $label',
+      async ({ earlierObserver, finalObserver, finalError }) => {
+        mockRedteamProvider.callApi.mockResolvedValue({
+          output: JSON.stringify({ improvement: 'Use a greeting', prompt: 'Say hello' }),
+        });
+        const gradingProvider = createMockProvider({
+          id: 'mock-final-observer-grader',
+          response: {
+            output: JSON.stringify({
+              currentResponse: { rating: 5, explanation: 'A greeting' },
+              previousBestResponse: { rating: 0, explanation: 'None' },
+            }),
+          },
+        });
+        const earlierResponse: ProviderResponse = {
+          output: 'Earlier greeting',
+          tokenUsage: { prompt: 2, completion: 3, total: 5, numRequests: 1 },
+        };
+        const finalResponse: ProviderResponse = {
+          output: 'Final greeting',
+          ...(finalError ? { error: finalError } : {}),
+          metadata: { targetOnly: 'must stay on the target' },
+          tokenUsage: { prompt: 7, completion: 4, total: 11, numRequests: 1 },
+        };
+        const targetProvider = createMockProvider({ id: 'mock-final-observer-target' });
+        targetProvider.callApi
+          .mockImplementationOnce(async () =>
+            earlierObserver
+              ? createSelectedObserverErrorResponse(
+                  earlierResponse,
+                  'earlier metrics rate limit exceeded',
+                )
+              : earlierResponse,
+          )
+          .mockImplementationOnce(async () =>
+            finalObserver ? createSelectedObserverErrorResponse(finalResponse) : finalResponse,
+          );
+        const remoteGenerationSpy = vi
+          .spyOn(remoteGeneration, 'shouldGenerateRemote')
+          .mockReturnValue(false);
+        const attackerProviderSpy = vi
+          .spyOn(redteamProviderManager, 'getProvider')
+          .mockResolvedValue(mockRedteamProvider);
+        const gradingProviderSpy = vi
+          .spyOn(redteamProviderManager, 'getGradingProvider')
+          .mockResolvedValue(gradingProvider);
+
+        try {
+          const provider = new RedteamIterativeTreeProvider({
+            injectVar: 'goal',
+            maxDepth: 1,
+            branchingFactor: 1,
+            maxAttempts: 2,
+          });
+          const result: ProviderResponse = await provider.callApi('Say hello', {
+            originalProvider: targetProvider,
+            vars: { goal: 'Say hello' },
+            prompt: { raw: '{{goal}}', label: 'greeting' },
+          });
+
+          expect(targetProvider.callApi).toHaveBeenCalledTimes(2);
+          expect(mockRedteamProvider.callApi).toHaveBeenCalledOnce();
+          expect(gradingProvider.callApi).toHaveBeenCalledTimes(earlierObserver ? 0 : 1);
+          expect(result.output).toBe(earlierObserver ? 'Final greeting' : 'Earlier greeting');
+          expect(result.error).toBe(finalError);
+          expect(isResponseHeadersObserverErrorResponse(result)).toBe(finalObserver);
+          expect(isProviderResponseRateLimited(result, undefined)).toBe(
+            !finalObserver && finalError !== undefined,
+          );
+          expect(result.metadata).not.toHaveProperty('errorOrigin');
+          expect(result.metadata).not.toHaveProperty('http');
+          expect(result.metadata).not.toHaveProperty('rateLimit');
+          expect(result.metadata).not.toHaveProperty('targetOnly');
+          expect(result.metadata).toMatchObject({ attempts: 1, stopReason: 'MAX_DEPTH' });
+          expect(result.metadata?.redteamTreeHistory).toHaveLength(2);
+          expect(result.tokenUsage).toMatchObject({
+            prompt: 9,
+            completion: 7,
+            total: 16,
+            numRequests: 2,
+          });
+        } finally {
+          remoteGenerationSpy.mockRestore();
+          attackerProviderSpy.mockRestore();
+          gradingProviderSpy.mockRestore();
+        }
+      },
+    );
 
     it('should gracefully handle invalid API response by skipping the turn', async () => {
       mockRedteamProvider.callApi.mockResolvedValue({ output: 'invalid json' });

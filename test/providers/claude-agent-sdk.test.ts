@@ -15,6 +15,8 @@ import {
   FS_READONLY_ALLOWED_TOOLS,
 } from '../../src/providers/claude-agent-sdk';
 import { transformMCPConfigToClaudeCode } from '../../src/providers/mcp/transform';
+import { wrapProviderWithRateLimiting } from '../../src/scheduler/providerWrapper';
+import { RateLimitRegistry } from '../../src/scheduler/rateLimitRegistry';
 import * as genaiTracer from '../../src/tracing/genaiTracer';
 import * as traceStore from '../../src/tracing/store';
 import { checkProviderApiKeys } from '../../src/util/provider';
@@ -376,6 +378,105 @@ describe('ClaudeCodeSDKProvider', () => {
         }),
       }),
     );
+  });
+
+  describe('scheduler composition', () => {
+    let registry: RateLimitRegistry;
+
+    beforeEach(() => {
+      registry = new RateLimitRegistry({ maxConcurrency: 1 });
+    });
+
+    afterEach(() => {
+      registry.dispose();
+    });
+
+    it('preserves a pre-aborted caller reason before SDK dispatch', async () => {
+      const provider = new ClaudeCodeSDKProvider({ config: { apiKey: 'test-key' } });
+      const rawCall = vi.spyOn(provider, 'callApi');
+      const wrapped = wrapProviderWithRateLimiting(provider, registry);
+      const controller = new AbortController();
+      const reason = Object.freeze(new Error('caller stopped before dispatch'));
+      controller.abort(reason);
+
+      await expect(
+        wrapped.callApi('No SDK dispatch', undefined, { abortSignal: controller.signal }),
+      ).rejects.toMatchObject({ name: 'AbortError', cause: reason });
+      expect(rawCall).not.toHaveBeenCalled();
+      expect(mockQuery).not.toHaveBeenCalled();
+      expect(tempDirSpy).not.toHaveBeenCalled();
+    });
+
+    it('forwards an in-flight caller reason to the SDK controller and cleans up', async () => {
+      let started!: (signal: AbortSignal) => void;
+      const queryStarted = new Promise<AbortSignal>((resolve) => {
+        started = resolve;
+      });
+      mockQuery.mockImplementation(({ options }) => {
+        const signal: AbortSignal = options.abortController.signal;
+        return (async function* () {
+          started(signal);
+          await new Promise<never>((_resolve, reject) => {
+            signal.addEventListener('abort', () => reject(signal.reason), { once: true });
+          });
+        })();
+      });
+      const provider = new ClaudeCodeSDKProvider({ config: { apiKey: 'test-key' } });
+      const wrapped = wrapProviderWithRateLimiting(provider, registry);
+      const controller = new AbortController();
+      const reason = Object.freeze(new Error('caller stopped during SDK query'));
+      const pending = wrapped.callApi('Held SDK query', undefined, {
+        abortSignal: controller.signal,
+      });
+      try {
+        const sdkSignal = await queryStarted;
+        expect(sdkSignal).not.toBe(controller.signal);
+        expect(sdkSignal.aborted).toBe(false);
+        controller.abort(reason);
+        expect(sdkSignal.reason).toBe(reason);
+        const result = await pending;
+        expect(result.error).toBe('Claude Agent SDK call aborted');
+        expect(mockQuery).toHaveBeenCalledOnce();
+        expect(rmSyncSpy).toHaveBeenCalledWith('/tmp/test-temp-dir', {
+          recursive: true,
+          force: true,
+        });
+        expect(Object.values(registry.getMetrics())).toMatchObject([
+          { activeRequests: 0, queueDepth: 0, failedRequests: 1, retriedRequests: 0 },
+        ]);
+      } finally {
+        controller.abort(reason);
+        await pending;
+      }
+    });
+
+    it('forwards prompt credentials without reusing a different key response', async () => {
+      vi.stubEnv('ANTHROPIC_API_KEY', undefined);
+      enableCache();
+      const provider = new ClaudeCodeSDKProvider();
+      const wrapped = wrapProviderWithRateLimiting(provider, registry);
+      for (const key of ['wrapped-key-one', 'wrapped-key-two']) {
+        mockQuery.mockReturnValue(createMockResponse(key));
+        const result = await wrapped.callApi('Same wrapped prompt', {
+          vars: {},
+          prompt: { raw: 'Same wrapped prompt', label: 'test', config: { apiKey: key } },
+        });
+        expect(result.output).toBe(key);
+        expect(result.error).toBeUndefined();
+        expect(result.cached).not.toBe(true);
+        expect(mockQuery).toHaveBeenLastCalledWith(
+          expect.objectContaining({
+            options: expect.objectContaining({
+              env: expect.objectContaining({ ANTHROPIC_API_KEY: key }),
+            }),
+          }),
+        );
+      }
+      expect(mockQuery).toHaveBeenCalledTimes(2);
+      expect(Object.values(registry.getMetrics())).toMatchObject([
+        { totalRequests: 2, completedRequests: 2, activeRequests: 0, queueDepth: 0 },
+      ]);
+    });
   });
 
   describe('constructor', () => {

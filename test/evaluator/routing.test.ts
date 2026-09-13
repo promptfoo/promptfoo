@@ -294,25 +294,25 @@ describeEvaluator('evaluator prompt and provider routing', () => {
         1,
         'now=first',
         expect.anything(),
-        undefined,
+        expect.any(Object),
       );
       expect(secondProvider.callApi).toHaveBeenNthCalledWith(
         1,
         'now=first',
         expect.anything(),
-        undefined,
+        expect.any(Object),
       );
       expect(firstProvider.callApi).toHaveBeenNthCalledWith(
         2,
         'prior=First provider output now=second',
         expect.anything(),
-        undefined,
+        expect.any(Object),
       );
       expect(secondProvider.callApi).toHaveBeenNthCalledWith(
         2,
         'prior=Second provider output now=second',
         expect.anything(),
-        undefined,
+        expect.any(Object),
       );
     },
   );

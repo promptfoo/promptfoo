@@ -4,13 +4,44 @@
 
 import { isHttpRateLimitError } from '../util/fetch/errors';
 
-import type { ProviderResponse } from '../types/providers';
+import type { CallApiOptionsParams, ProviderResponse } from '../types/providers';
+
+export type ResponseHeadersObserver = NonNullable<CallApiOptionsParams['onResponseHeaders']>;
+
+// The response marker stays private to the scheduler's shared response classification.
+const CALLER_ERROR_RESPONSE = Symbol('responseHeadersCallerErrorResponse');
+
+export function markResponseHeadersObserverErrorResponse<T extends object>(response: T): T {
+  Object.defineProperty(response, CALLER_ERROR_RESPONSE, { value: true });
+  return response;
+}
+
+export function isResponseHeadersObserverErrorResponse(response: unknown): boolean {
+  return (
+    typeof response === 'object' &&
+    response !== null &&
+    (response as { [CALLER_ERROR_RESPONSE]?: boolean })[CALLER_ERROR_RESPONSE] === true
+  );
+}
+
+/** Copy private caller-exception provenance when the same error response is projected. */
+export function preserveResponseHeadersObserverErrorResponse<T extends object>(
+  source: unknown,
+  response: T,
+): T {
+  if (isResponseHeadersObserverErrorResponse(source)) {
+    markResponseHeadersObserverErrorResponse(response);
+  }
+  return response;
+}
 
 /**
  * Options for rate-limited execution.
  * Used by RateLimitRegistry.execute() and provider wrappers.
  */
 export interface RateLimitExecuteOptions<T> {
+  /** Cancel queue and retry waits for this caller. */
+  abortSignal?: AbortSignal;
   /** Extract rate limit headers from the result */
   getHeaders?: (result: T) => Record<string, string> | undefined;
   /** Detect if the result indicates a rate limit */
@@ -34,6 +65,11 @@ export function isProviderResponseRateLimited(
   result: ProviderResponse | undefined,
   error: Error | undefined,
 ): boolean {
+  if (isResponseHeadersObserverErrorResponse(result)) {
+    return false;
+  }
+  // Tool diagnostics may mention their own quota without describing the model request.
+  const responseError = result?.metadata?.errorOrigin === 'tool' ? undefined : result?.error;
   // Structured signal — never retry a hard quota.
   if (result?.metadata?.rateLimitKind === 'quota') {
     return false;
@@ -51,7 +87,7 @@ export function isProviderResponseRateLimited(
   // exceeded: ..."`), so this is a substring match rather than a
   // startsWith. The substring is specific enough that false positives are
   // implausible in normal API error envelopes.
-  if (result?.error?.includes('Quota exceeded:')) {
+  if (responseError?.includes('Quota exceeded:')) {
     return false;
   }
   if (error?.message?.includes('Quota exceeded:')) {
@@ -62,8 +98,8 @@ export function isProviderResponseRateLimited(
     // Check HTTP status code (most reliable)
     result?.metadata?.http?.status === 429 ||
       // Check error field in response
-      result?.error?.includes?.('429') ||
-      result?.error?.toLowerCase?.().includes?.('rate limit') ||
+      responseError?.includes?.('429') ||
+      responseError?.toLowerCase?.().includes?.('rate limit') ||
       // Check thrown error message
       error?.message?.includes('429') ||
       error?.message?.toLowerCase().includes('rate limit') ||

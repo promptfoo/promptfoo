@@ -481,13 +481,16 @@ export function maybeLoadResponseFormatFromExternalFile(
  *
  * @param tools - The tools configuration object or array to process.
  * @param vars - Variables to use for rendering.
+ * @param abortSignal - Prevents starting executable tool functions after cancellation.
  * @returns The processed tools configuration with variables rendered and content loaded from files if needed.
  * @throws {Error} If the loaded tools are in an invalid format
  */
 export async function maybeLoadToolsFromExternalFile(
   tools: any,
   vars?: Record<string, VarValue>,
+  abortSignal?: AbortSignal,
 ): Promise<any> {
+  abortSignal?.throwIfAborted();
   const rendered = renderVarsInObject(tools, vars);
 
   // Check if this is a Python/JS file reference with function name
@@ -509,13 +512,14 @@ export async function maybeLoadToolsFromExternalFile(
           // Resolve Python path relative to config base directory (same as JavaScript)
           const absPath = safeResolve(cliState.basePath || process.cwd(), filePath);
           logger.debug(`[maybeLoadToolsFromExternalFile] Resolved Python path: ${absPath}`);
-          toolDefinitions = await runPython(absPath, functionName, []);
+          toolDefinitions = await runPython(absPath, functionName, [], { abortSignal });
         } else {
           // Use safeResolve for security (prevents path traversal)
           const absPath = safeResolve(cliState.basePath || process.cwd(), filePath);
           logger.debug(`[maybeLoadToolsFromExternalFile] Resolved JavaScript path: ${absPath}`);
 
           const module = await importModule(absPath);
+          abortSignal?.throwIfAborted();
           const fn = module[functionName] || module.default?.[functionName];
 
           if (typeof fn !== 'function') {
@@ -550,6 +554,9 @@ export async function maybeLoadToolsFromExternalFile(
         );
         return toolDefinitions;
       } catch (err) {
+        if (abortSignal?.aborted && err === abortSignal.reason) {
+          throw err;
+        }
         const errorMessage = err instanceof Error ? err.message : String(err);
         const basePath = cliState.basePath || process.cwd();
         throw new Error(
@@ -580,7 +587,7 @@ export async function maybeLoadToolsFromExternalFile(
   // Handle arrays by recursively processing each item
   if (Array.isArray(rendered)) {
     const results = await Promise.all(
-      rendered.map((item) => maybeLoadToolsFromExternalFile(item, vars)),
+      rendered.map((item) => maybeLoadToolsFromExternalFile(item, vars, abortSignal)),
     );
     // Flatten if all items are arrays (common case: multiple file:// references)
     if (results.every((r) => Array.isArray(r))) {

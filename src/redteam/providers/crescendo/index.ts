@@ -57,7 +57,9 @@ import {
   getLastMessageContent,
   getTargetResponse,
   isConversationEndedResponse,
+  isTargetCallAbortError,
   isValidChatMessageArray,
+  preserveSelectedError,
   type RoundBacktrackingStopReason,
   redteamProviderManager,
   runRedteamGrader,
@@ -486,6 +488,10 @@ export class CrescendoProvider implements ApiProvider {
         // Track current input vars for history entry
         const lastInputVars = currentInputVars;
         accumulateResponseTokenUsage(totalTokenUsage, lastResponse);
+        if (lastResponse.error && options?.abortSignal?.aborted) {
+          exitReason = 'Target error';
+          break;
+        }
 
         if (lastResponse.sessionId && this.stateful) {
           vars['sessionId'] = lastResponse.sessionId;
@@ -546,6 +552,10 @@ export class CrescendoProvider implements ApiProvider {
           // Update lastResponse to the unblocking response and continue
           // Note: unblocking prompts don't use audio/image transforms
           lastResponse = unblockingResponse;
+          if (lastResponse.error && options?.abortSignal?.aborted) {
+            exitReason = 'Target error';
+            break;
+          }
           if (isConversationEndedResponse(lastResponse)) {
             logger.info('[Crescendo] Target ended conversation during unblocking', {
               round: roundNum,
@@ -754,7 +764,7 @@ export class CrescendoProvider implements ApiProvider {
         logger.debug(`[Crescendo] Continuing to round ${roundNum + 1}`);
       } catch (error) {
         // Re-throw abort errors to properly cancel the operation
-        if (error instanceof Error && error.name === 'AbortError') {
+        if (isTargetCallAbortError(error, options?.abortSignal)) {
           logger.debug('[Crescendo] Operation aborted');
           throw error;
         }
@@ -790,33 +800,36 @@ export class CrescendoProvider implements ApiProvider {
 
     const messages = this.memory.getConversation(this.targetConversationId);
     const finalPrompt = getLastMessageContent(messages, 'user');
-    return {
-      output: lastResponse.output,
-      ...(lastResponse.error ? { error: lastResponse.error } : {}),
-      prompt: finalPrompt,
-      metadata: {
-        sessionId: getSessionId(lastResponse, context),
-        // Use the last prompt sent to target (e.g., fetchPrompt for indirect-web-pwn layer)
-        redteamFinalPrompt: lastFinalAttackPrompt || finalPrompt,
-        messages: messages as Record<string, any>[],
-        crescendoRoundsCompleted: roundNum,
-        crescendoBacktrackCount: backtrackCount,
-        crescendoResult: evalFlag,
-        crescendoConfidence: evalPercentage,
-        stopReason: exitReason,
-        redteamHistory,
-        successfulAttacks: this.successfulAttacks,
-        totalSuccessfulAttacks: this.successfulAttacks.length,
-        storedGraderResult,
-        traceSnapshots:
-          traceSnapshots.length > 0
-            ? traceSnapshots.map((snapshot) => formatTraceForMetadata(snapshot))
-            : undefined,
-        ...(lastTransformDisplayVars && { transformDisplayVars: lastTransformDisplayVars }),
+    return preserveSelectedError(
+      {
+        output: lastResponse.output,
+        ...(lastResponse.error ? { error: lastResponse.error } : {}),
+        prompt: finalPrompt,
+        metadata: {
+          sessionId: getSessionId(lastResponse, context),
+          // Use the last prompt sent to target (e.g., fetchPrompt for indirect-web-pwn layer)
+          redteamFinalPrompt: lastFinalAttackPrompt || finalPrompt,
+          messages: messages as Record<string, any>[],
+          crescendoRoundsCompleted: roundNum,
+          crescendoBacktrackCount: backtrackCount,
+          crescendoResult: evalFlag,
+          crescendoConfidence: evalPercentage,
+          stopReason: exitReason,
+          redteamHistory,
+          successfulAttacks: this.successfulAttacks,
+          totalSuccessfulAttacks: this.successfulAttacks.length,
+          storedGraderResult,
+          traceSnapshots:
+            traceSnapshots.length > 0
+              ? traceSnapshots.map((snapshot) => formatTraceForMetadata(snapshot))
+              : undefined,
+          ...(lastTransformDisplayVars && { transformDisplayVars: lastTransformDisplayVars }),
+        },
+        tokenUsage: totalTokenUsage,
+        guardrails: lastResponse?.guardrails,
       },
-      tokenUsage: totalTokenUsage,
-      guardrails: lastResponse?.guardrails,
-    };
+      lastResponse,
+    );
   }
 
   private async getAttackPrompt(
@@ -1226,7 +1239,12 @@ export class CrescendoProvider implements ApiProvider {
       content: targetResponse.output,
     });
 
-    if (shouldFetchTrace && tracingOptions && !targetResponse.cached) {
+    if (
+      shouldFetchTrace &&
+      tracingOptions &&
+      !targetResponse.cached &&
+      !(targetResponse.error && options?.abortSignal?.aborted)
+    ) {
       const traceparent = context?.traceparent ?? undefined;
       const traceId = traceparent ? extractTraceIdFromTraceparent(traceparent) : null;
 

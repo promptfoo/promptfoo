@@ -36,6 +36,7 @@ import {
   createProviderRateLimitOptions,
   createRateLimitRegistry,
   type RateLimitRegistry,
+  sleepWithAbort,
 } from './scheduler';
 import {
   withProviderCallExecutionContext,
@@ -132,7 +133,7 @@ import type {
   VarValue,
 } from './types/index';
 import type { InternalEvaluateOptions } from './types/internal';
-import type { CallApiContextParams } from './types/providers';
+import type { CallApiContextParams, CallApiOptionsParams } from './types/providers';
 
 export class PromptSuggestionsRejectedError extends Error {
   constructor(message = 'No prompts selected. Aborting.') {
@@ -879,8 +880,22 @@ function tryParseJson(value: string): unknown {
   }
 }
 
+function isCliPauseCancellation(
+  error: unknown,
+  abortSignal?: AbortSignal,
+  pauseSignal?: AbortSignal,
+): boolean {
+  return Boolean(
+    pauseSignal?.aborted &&
+      abortSignal?.aborted &&
+      abortSignal.reason === pauseSignal.reason &&
+      error === pauseSignal.reason,
+  );
+}
+
 async function callProviderForRunEval({
   abortSignal,
+  pauseSignal,
   evalId,
   filters,
   promptForRender,
@@ -905,6 +920,7 @@ async function callProviderForRunEval({
   | 'testSuite'
 > & {
   filters: RunEvalOptions['nunjucksFilters'];
+  pauseSignal?: AbortSignal;
   promptForRender: Prompt;
   renderedPrompt: string;
   testIndex: number;
@@ -927,6 +943,7 @@ async function callProviderForRunEval({
     } else {
       response = await callActiveProvider({
         abortSignal,
+        pauseSignal,
         evalId,
         filters,
         onProviderInvoked: () => {
@@ -1039,6 +1056,7 @@ async function collectExternalTraceAfterProviderCall({
 
 async function callActiveProvider({
   abortSignal,
+  pauseSignal,
   evalId,
   filters,
   onProviderInvoked,
@@ -1057,6 +1075,7 @@ async function callActiveProvider({
   'abortSignal' | 'evalId' | 'provider' | 'rateLimitRegistry' | 'repeatIndex' | 'test' | 'testSuite'
 > & {
   filters: RunEvalOptions['nunjucksFilters'];
+  pauseSignal?: AbortSignal;
   onProviderInvoked: () => void;
   promptForRender: Prompt;
   renderedPrompt: string;
@@ -1082,13 +1101,16 @@ async function callActiveProvider({
     traceContext,
     vars,
   });
-  const callApiOptions = abortSignal ? { abortSignal } : undefined;
-
-  const callApi = () => {
+  let completedResponse: ProviderResponse | undefined;
+  const callApi = (onResponseHeaders?: CallApiOptionsParams['onResponseHeaders']) => {
+    // A previous response belongs only to backoff until the next attempt starts.
+    completedResponse = undefined;
+    const callApiOptions =
+      abortSignal || onResponseHeaders ? { abortSignal, onResponseHeaders } : undefined;
     onProviderInvoked();
-    const invoke = () =>
-      traceContext?.traceparent
-        ? withTracedProviderCall(
+    const invoke = async () => {
+      const result = traceContext?.traceparent
+        ? await withTracedProviderCall(
             {
               provider: activeProvider,
               callContext: callApiContext,
@@ -1098,14 +1120,35 @@ async function callActiveProvider({
             },
             async (context) => activeProvider.callApi(renderedPrompt, context, callApiOptions),
           )
-        : activeProvider.callApi(renderedPrompt, callApiContext, callApiOptions);
-    return testSuite?.tracing
-      ? cliState.withRequestTracingConfig(testSuite.tracing, invoke)
-      : invoke();
+        : await activeProvider.callApi(renderedPrompt, callApiContext, callApiOptions);
+      completedResponse = result;
+      return result;
+    };
+    return withProviderCallExecutionContext(
+      { abortSignal, rateLimitRegistry, rateLimitProvider: activeProvider },
+      () =>
+        testSuite?.tracing
+          ? cliState.withRequestTracingConfig(testSuite.tracing, invoke)
+          : invoke(),
+    );
   };
-  const response = rateLimitRegistry
-    ? await rateLimitRegistry.execute(activeProvider, callApi, createProviderRateLimitOptions())
-    : await callApi();
+  let response: ProviderResponse;
+  try {
+    response = rateLimitRegistry
+      ? await rateLimitRegistry.execute(
+          activeProvider,
+          callApi,
+          createProviderRateLimitOptions(abortSignal),
+        )
+      : await callApi();
+  } catch (error) {
+    if (!completedResponse || !isCliPauseCancellation(error, abortSignal, pauseSignal)) {
+      throw error;
+    }
+    // A CLI pause must not discard work the provider actually completed.
+    // Ordinary cancellation and independent provider errors keep their existing behavior.
+    response = completedResponse;
+  }
 
   logger.debug(`Provider response properties: ${Object.keys(response).join(', ')}`);
   logger.debug(`Provider response cached property explicitly: ${response.cached}`);
@@ -1200,10 +1243,29 @@ function getConversationLastInput(renderedJson: unknown) {
   return lastElt?.content || lastElt;
 }
 
-async function applyProviderDelayIfNeeded(provider: ApiProvider, response: ProviderResponse) {
+async function applyProviderDelayIfNeeded(
+  provider: ApiProvider,
+  response: ProviderResponse,
+  abortSignal?: AbortSignal,
+) {
+  if (abortSignal?.aborted) {
+    return;
+  }
   if (!response.cached && provider.delay && provider.delay > 0) {
     logger.debug(`Sleeping for ${provider.delay}ms`);
-    await sleep(provider.delay);
+    try {
+      await sleepWithAbort(provider.delay, abortSignal);
+    } catch (error) {
+      // Cancellation ends the delay without discarding the completed response.
+      const cancelled =
+        abortSignal?.aborted &&
+        isAbortError(error) &&
+        (error === abortSignal.reason ||
+          (error instanceof Error && 'cause' in error && error.cause === abortSignal.reason));
+      if (!cancelled) {
+        throw error;
+      }
+    }
   } else if (response.cached) {
     logger.debug(`Skipping delay because response is cached`);
   }
@@ -1303,6 +1365,7 @@ function trackProviderUsage(provider: ApiProvider, response: ProviderResponse) {
 async function applyRunEvalResponseOutcome({
   abortSignal,
   deferGrading,
+  deferredGradingAbortSignal,
   evalId,
   isRedteam,
   latencyMs,
@@ -1322,6 +1385,7 @@ async function applyRunEvalResponseOutcome({
 }: {
   abortSignal?: AbortSignal;
   deferGrading?: boolean;
+  deferredGradingAbortSignal?: AbortSignal;
   evalId?: string;
   isRedteam: boolean;
   latencyMs: number;
@@ -1354,6 +1418,7 @@ async function applyRunEvalResponseOutcome({
   await gradeRunEvalResponse({
     abortSignal,
     deferGrading,
+    deferredGradingAbortSignal,
     evalId,
     latencyMs,
     prompt,
@@ -1385,6 +1450,7 @@ function applyEmptyResponseOutcome(ret: EvaluateResult, isRedteam: boolean) {
 async function gradeRunEvalResponse({
   abortSignal,
   deferGrading,
+  deferredGradingAbortSignal,
   evalId,
   latencyMs,
   prompt,
@@ -1403,6 +1469,7 @@ async function gradeRunEvalResponse({
 }: {
   abortSignal?: AbortSignal;
   deferGrading?: boolean;
+  deferredGradingAbortSignal?: AbortSignal;
   evalId?: string;
   latencyMs: number;
   prompt: Prompt;
@@ -1450,7 +1517,7 @@ async function gradeRunEvalResponse({
     invariant(providerCallQueue, 'providerCallQueue is required when deferGrading is enabled');
     ret.response = processedResponse;
     const gradingPromise = withProviderCallExecutionContext(
-      { abortSignal, providerCallQueue, rateLimitRegistry },
+      { abortSignal: deferredGradingAbortSignal, providerCallQueue, rateLimitRegistry },
       () =>
         runAssertions({
           prompt: renderedPrompt,
@@ -1463,7 +1530,7 @@ async function gradeRunEvalResponse({
           traceId,
         }).then((checkResult) => applyGradingResult(ret, checkResult)),
     ).catch((error) => {
-      applyGradingError(ret, error, abortSignal);
+      applyGradingError(ret, error, deferredGradingAbortSignal);
     });
     deferredGradingPromises.set(ret, gradingPromise);
     return;
@@ -1607,27 +1674,32 @@ export async function runEval(options: RunEvalOptions): Promise<EvaluateResult[]
   );
 }
 
-async function runEvalInternal({
-  provider,
-  prompt, // raw prompt
-  test,
-  testSuite,
-  delay,
-  nunjucksFilters: filters,
-  evaluateOptions,
-  // TODO(ian): Rename these public `Idx` fields to `Index` with compatibility handling.
-  testIdx: testIndex,
-  promptIdx: promptIndex,
-  repeatIndex,
-  conversations,
-  registers,
-  isRedteam,
-  abortSignal,
-  deferGrading,
-  evalId,
-  providerCallQueue,
-  rateLimitRegistry,
-}: RunEvalOptions): Promise<EvaluateResult[]> {
+async function runEvalInternal(
+  {
+    provider,
+    prompt, // raw prompt
+    test,
+    testSuite,
+    delay,
+    nunjucksFilters: filters,
+    evaluateOptions,
+    // TODO(ian): Rename these public `Idx` fields to `Index` with compatibility handling.
+    testIdx: testIndex,
+    promptIdx: promptIndex,
+    repeatIndex,
+    conversations,
+    registers,
+    isRedteam,
+    abortSignal,
+    deferGrading,
+    evalId,
+    providerCallQueue,
+    rateLimitRegistry,
+  }: RunEvalOptions,
+  orchestrationOptions: Pick<InternalEvaluateOptions, 'abortSignal' | 'pauseSignal'> = {
+    abortSignal,
+  },
+): Promise<EvaluateResult[]> {
   provider.delay ??= delay ?? getEnvInt('PROMPTFOO_DELAY_MS', 0);
   invariant(
     typeof provider.delay === 'number',
@@ -1655,6 +1727,7 @@ async function runEvalInternal({
 
   let setup = state.setup;
   let latencyMs = 0;
+  let providerCallCompleted = false;
   let traceContext: Awaited<ReturnType<typeof generateTraceContextIfNeeded>> | undefined;
 
   try {
@@ -1690,6 +1763,7 @@ async function runEvalInternal({
         async () => {
           const providerCall = await callProviderForRunEval({
             abortSignal,
+            pauseSignal: orchestrationOptions.pauseSignal,
             evalId,
             filters,
             promptForRender: {
@@ -1706,6 +1780,7 @@ async function runEvalInternal({
             traceContext: executionTraceContext,
             vars: state.vars,
           });
+          providerCallCompleted = true;
           const response = normalizeCachedTargetResponse(providerCall.response);
           latencyMs = providerCall.latencyMs;
 
@@ -1724,7 +1799,7 @@ async function runEvalInternal({
             `Evaluator checking cached flag: response.cached = ${Boolean(response.cached)}, provider.delay = ${provider.delay}`,
           );
 
-          await applyProviderDelayIfNeeded(provider, response);
+          await applyProviderDelayIfNeeded(provider, response, abortSignal);
 
           // The __eval* runtime vars were exposed to prompt/provider rendering above.
           // Build a copy without them for the persisted result, assertions, and
@@ -1752,6 +1827,7 @@ async function runEvalInternal({
           trackProviderUsage(provider, response);
           await applyRunEvalResponseOutcome({
             abortSignal,
+            deferredGradingAbortSignal: orchestrationOptions.abortSignal,
             deferGrading,
             evalId,
             isRedteam,
@@ -1797,6 +1873,13 @@ async function runEvalInternal({
         )
       : await runExecution();
   } catch (err) {
+    if (
+      !providerCallCompleted &&
+      isCliPauseCancellation(err, abortSignal, orchestrationOptions.pauseSignal)
+    ) {
+      // Leave incomplete CLI-paused work eligible for resume instead of persisting an ERROR.
+      return [];
+    }
     const { errorWithStack, metadata, logContext } = buildProviderErrorContext({
       error: err,
       provider,
@@ -1805,9 +1888,9 @@ async function runEvalInternal({
       testIdx: testIndex,
     });
 
-    // Don't log AbortError - these are expected when scan is aborted (e.g., target unavailable)
-    const isAbortError = err instanceof Error && err.name === 'AbortError';
-    if (!isAbortError) {
+    // Caller cancellation is expected; independent provider failures remain actionable.
+    const cancelled = Boolean(abortSignal?.aborted) && isAbortError(err);
+    if (!cancelled) {
       logger.error('Provider call failed during eval', logContext);
     }
 
@@ -3589,11 +3672,14 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
     });
     evalStep.test = beforeEachOut.test;
 
-    const rows = await runEvalInternal({
-      ...evalStep,
-      deferGrading,
-      providerCallQueue: deferGrading ? providerCallQueue : undefined,
-    });
+    const rows = await runEvalInternal(
+      {
+        ...evalStep,
+        deferGrading,
+        providerCallQueue: deferGrading ? providerCallQueue : undefined,
+      },
+      this.options,
+    );
     onRowsReady?.();
     return rows;
   }
@@ -4771,13 +4857,18 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
     let progressBarManager: ProgressBarManager | null = null;
 
     // Create abort signals:
-    // - providerAbortSignal: passed to providers (user signal + timeout, but NOT target error)
+    // - providerAbortSignal: target calls use caller + CLI pause + timeout, but NOT target error
+    // Deferred grading keeps options.abortSignal so completed targets can drain during CLI pause.
     // - combinedAbortSignal: used internally for checkAbort (includes target error signal)
     // Target error signal is not passed to providers because by the time we detect a 403 etc,
     // the provider call has already completed - it's only used to stop the evaluator loop.
-    let providerAbortSignal: AbortSignal | undefined = options.abortSignal;
-    let combinedAbortSignal: AbortSignal = options.abortSignal
-      ? AbortSignal.any([options.abortSignal, targetErrorAbortController.signal])
+    let providerAbortSignal = options.pauseSignal
+      ? options.abortSignal
+        ? AbortSignal.any([options.abortSignal, options.pauseSignal])
+        : options.pauseSignal
+      : options.abortSignal;
+    let combinedAbortSignal: AbortSignal = providerAbortSignal
+      ? AbortSignal.any([providerAbortSignal, targetErrorAbortController.signal])
       : targetErrorAbortController.signal;
 
     if (maxEvalTimeMs > 0) {

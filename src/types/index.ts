@@ -37,6 +37,7 @@ import type {
 import type {
   ApiProvider,
   CallApiContextParams,
+  CallApiOptionsParams,
   ImageOutput,
   ProviderOptions,
   ProviderResponse,
@@ -51,8 +52,9 @@ import type { TraceData } from './tracing';
 export interface RateLimitRegistryRef {
   execute: <T>(
     provider: ApiProvider,
-    callFn: () => Promise<T>,
+    callFn: (onResponseHeaders?: CallApiOptionsParams['onResponseHeaders']) => Promise<T>,
     options?: {
+      abortSignal?: AbortSignal;
       getHeaders?: (result: T) => Record<string, string> | undefined;
       isRateLimited?: (result: T | undefined, error?: Error) => boolean;
       getRetryAfter?: (result: T | undefined, error?: Error) => number | undefined;
@@ -65,7 +67,7 @@ export interface RateLimitRegistryRef {
  * Minimal interface for deferred provider-call queues used by serial grading orchestration.
  */
 export interface ProviderCallQueueRef {
-  enqueue: <T>(providerId: string, call: () => Promise<T>) => Promise<T>;
+  enqueue: <T>(providerId: string, call: () => Promise<T>, abortSignal?: AbortSignal) => Promise<T>;
 }
 
 export * from '../redteam/types';

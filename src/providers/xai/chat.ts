@@ -1,8 +1,9 @@
 import logger from '../../logger';
+import { preserveResponseHeadersObserverErrorResponse } from '../../scheduler/responseHeadersObserver';
 import { renderVarsInObject } from '../../util/index';
 import invariant from '../../util/invariant';
 import { type OpenAiChatCompletionCostData, OpenAiChatCompletionProvider } from '../openai/chat';
-import { clampCachedTokens } from '../shared';
+import { clampCachedTokens, isCallerAbortError, throwIfAborted } from '../shared';
 
 import type { ApiProvider, ProviderOptions } from '../../types/index';
 import type { OpenAiCompletionOptions } from '../openai/types';
@@ -812,16 +813,19 @@ class XAIProvider extends OpenAiChatCompletionProvider {
             response.error.includes('authentication error'))
         ) {
           // Provide a more helpful error message for x.ai specific issues
-          return {
+          return preserveResponseHeadersObserverErrorResponse(response, {
             ...response,
             error: `x.ai API error: ${response.error}\n\nTip: Ensure your XAI_API_KEY environment variable is set correctly. You can get an API key from https://x.ai/`,
-          };
+          });
         }
         return response;
       }
 
       return response;
     } catch (err) {
+      if (isCallerAbortError(err, callApiOptions?.abortSignal)) {
+        throwIfAborted(callApiOptions?.abortSignal);
+      }
       // Handle JSON parsing errors and other API errors
       const errorMessage = err instanceof Error ? err.message : String(err);
 

@@ -63,6 +63,7 @@ import {
   externalizeResponseForRedteamHistory,
   getGraderAssertionValue,
   getTargetResponse,
+  preserveSelectedError,
   redteamProviderManager,
   runRedteamGrader,
 } from './shared';
@@ -501,7 +502,8 @@ type StopReason =
   | 'MAX_DEPTH'
   | 'NO_IMPROVEMENT'
   | 'GRADER_FAILED'
-  | 'ATTACKER_ERROR';
+  | 'ATTACKER_ERROR'
+  | 'TARGET_ERROR';
 
 /**
  * Represents metadata for the iterative tree search process.
@@ -630,6 +632,34 @@ async function runRedteamConversation({
   // - bestFinalAttackPrompt: the transform from the BEST scoring turn (what we want to show)
   let lastFinalAttackPrompt: string | undefined;
   let bestFinalAttackPrompt: string | undefined;
+
+  function buildFinalResponse(finalTargetResponse: ProviderResponse): RedteamTreeResponse {
+    return preserveSelectedError(
+      {
+        output:
+          bestResponse ||
+          (typeof finalTargetResponse.output === 'string' ? finalTargetResponse.output : ''),
+        prompt: bestNode.prompt,
+        metadata: {
+          highestScore: maxScore,
+          redteamFinalPrompt: bestFinalAttackPrompt || lastFinalAttackPrompt || bestNode.prompt,
+          messages: treeOutputs as Record<string, any>[],
+          attempts,
+          redteamTreeHistory: treeOutputs,
+          stopReason: stoppingReason,
+          storedGraderResult,
+          sessionIds: extractSessionIds(treeOutputs),
+          ...((bestTransformDisplayVars || lastTransformDisplayVars) && {
+            transformDisplayVars: bestTransformDisplayVars || lastTransformDisplayVars,
+          }),
+        },
+        tokenUsage: totalTokenUsage,
+        guardrails: finalTargetResponse?.guardrails,
+        ...(finalTargetResponse.error ? { error: finalTargetResponse.error } : {}),
+      },
+      finalTargetResponse,
+    );
+  }
 
   for (let depth = 0; depth < MAX_DEPTH; depth++) {
     logger.debug(
@@ -868,6 +898,10 @@ async function runRedteamConversation({
             guardrails: targetResponse?.guardrails,
             sessionId: getSessionId(targetResponse, iterationContext),
           });
+          if (options?.abortSignal?.aborted) {
+            stoppingReason = 'TARGET_ERROR';
+            return buildFinalResponse(targetResponse);
+          }
           continue;
         }
         invariant(
@@ -1274,28 +1308,7 @@ async function runRedteamConversation({
     guardrails: finalTargetResponse?.guardrails,
     sessionId: getSessionId(finalTargetResponse, context),
   });
-  return {
-    output:
-      bestResponse ||
-      (typeof finalTargetResponse.output === 'string' ? finalTargetResponse.output : ''),
-    prompt: bestNode.prompt,
-    metadata: {
-      highestScore: maxScore,
-      redteamFinalPrompt: bestFinalAttackPrompt || lastFinalAttackPrompt || bestNode.prompt,
-      messages: treeOutputs as Record<string, any>[],
-      attempts,
-      redteamTreeHistory: treeOutputs,
-      stopReason: stoppingReason,
-      storedGraderResult,
-      sessionIds: extractSessionIds(treeOutputs),
-      ...((bestTransformDisplayVars || lastTransformDisplayVars) && {
-        transformDisplayVars: bestTransformDisplayVars || lastTransformDisplayVars,
-      }),
-    },
-    tokenUsage: totalTokenUsage,
-    guardrails: finalTargetResponse?.guardrails,
-    ...(finalTargetResponse.error ? { error: finalTargetResponse.error } : {}),
-  };
+  return buildFinalResponse(finalTargetResponse);
 }
 
 /**
