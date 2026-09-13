@@ -166,12 +166,11 @@ describe('generated target configuration round trips', () => {
       JSON.stringify(config),
     );
     await replaceText(user, screen.getByRole('textbox', { name: /Target ID/ }), id);
-    const next = within(screen.getByTestId('page-navigation')).getByRole('button', {
-      name: /Next/,
-    });
-    await user.click(next);
+    const getNext = () =>
+      within(screen.getByTestId('page-navigation')).getByRole('button', { name: /Next/ });
+    await user.click(getNext());
     if (!valid) {
-      expect(next).toBeDisabled();
+      expect(getNext()).toBeDisabled();
       expect(onNext).not.toHaveBeenCalled();
       return;
     }
