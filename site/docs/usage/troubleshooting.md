@@ -72,6 +72,8 @@ export PROMPTFOO_STRIP_METADATA=true
 
 You can use any combination of these variables to optimize memory usage while preserving the data you need.
 
+These flags remove specific fields, rather than every occurrence of their values in other text. For example, stripping test variables preserves rendered prompt, response, and grading text. Use the corresponding flags to omit those fields: metadata stripping removes grading metadata, while grading-result stripping also removes grading reasons.
+
 ### Increase Node.js memory limit
 
 If you're still encountering memory issues after trying the above options, you can increase the amount of memory available to promptfoo by setting the `NODE_OPTIONS` environment variable:

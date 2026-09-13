@@ -26,9 +26,14 @@ import Eval from '../../src/models/eval';
 import EvalResult from '../../src/models/evalResult';
 import { blobsRouter } from '../../src/server/routes/blobs';
 import { TraceStore } from '../../src/tracing/store';
-import { ResultFailureReason } from '../../src/types/index';
+import { type Prompt, ResultFailureReason } from '../../src/types/index';
 import { sha256 } from '../../src/util/createHash';
-import { createOutputData } from '../../src/util/output';
+import { createOutputData, writeOutput } from '../../src/util/output';
+import {
+  createCompletedPrompt,
+  createEvaluateResult,
+  createPromptMetrics,
+} from '../factories/eval';
 import { createTempDir, mockProcessEnv, removeTempDir } from '../util/utils';
 
 vi.mock('../../src/logger', () => ({
@@ -194,6 +199,194 @@ describe('importCommand', () => {
       expect(process.exitCode).not.toBe(1);
       expect(await Eval.findById(sampleData.evalId)).toBeDefined();
     });
+  });
+
+  describe('export projection round trips', () => {
+    describe.each([
+      { name: 'missing', body: undefined },
+      { name: 'null', body: null },
+      { name: 'string', body: 'historical body' },
+      { name: 'object', body: { unavailable: true } },
+    ])('legacy table with $name body', ({ body }) => {
+      it.each([false, true])(
+        'sanitizes its header with prompt stripping=%s',
+        async (stripPrompt) => {
+          const dir = createTempDir();
+          const fixture = {
+            evalId: 'eval-malformed-legacy-body',
+            config: {},
+            results: {
+              version: 2,
+              results: [],
+              stats: { successes: 0, failures: 0 },
+              table: {
+                head: {
+                  vars: ['subject'],
+                  prompts: [
+                    createCompletedPrompt('Legacy header input', {
+                      display: 'Legacy header display',
+                      config: { password: 'Legacy header credential', temperature: 0.25 },
+                    }),
+                  ],
+                },
+                ...(body !== undefined && { body }),
+              },
+            },
+          };
+          const original = structuredClone(fixture);
+          const restore = mockProcessEnv({
+            PROMPTFOO_STRIP_PROMPT_TEXT: String(stripPrompt),
+            PROMPTFOO_STRIP_RESPONSE_OUTPUT: 'false',
+            PROMPTFOO_STRIP_TEST_VARS: 'false',
+          });
+          try {
+            const input = path.join(dir, 'legacy.json');
+            fs.writeFileSync(input, JSON.stringify(fixture));
+            importCommand(program);
+            await program.parseAsync(['node', 'test', 'import', input]);
+            expect(process.exitCode).toBeUndefined();
+            const reopened = await Eval.findById(fixture.evalId);
+            expect(reopened).toBeDefined();
+            const sourceTable = await reopened!.getTable();
+            const originalTable = structuredClone(sourceTable);
+            for (const extension of ['json', 'yaml', 'txt', 'xml']) {
+              const output = path.join(dir, `reexport.${extension}`);
+              await writeOutput(output, reopened!, null);
+              const contents = fs.readFileSync(output, 'utf8');
+              expect(contents).not.toContain('Legacy header credential');
+              expect(contents.includes('Legacy header input')).toBe(!stripPrompt);
+              expect(contents.includes('Legacy header display')).toBe(!stripPrompt);
+              if (extension === 'json') {
+                const table = JSON.parse(contents).results.table;
+                expect(table.body).toEqual(body);
+                expect(Object.hasOwn(table, 'body')).toBe(body !== undefined);
+                expect(table.head.vars).toEqual(['subject']);
+                expect(table.head.prompts[0]).toMatchObject({
+                  raw: stripPrompt ? '[prompt stripped]' : 'Legacy header input',
+                  label: stripPrompt ? '[prompt stripped]' : 'Legacy header input',
+                  display: stripPrompt ? '[prompt stripped]' : 'Legacy header display',
+                  config: { password: '[REDACTED]', temperature: 0.25 },
+                });
+              }
+            }
+            expect(sourceTable).toEqual(originalTable);
+            expect(fixture).toEqual(original);
+          } finally {
+            restore();
+            removeTempDir(dir);
+          }
+        },
+      );
+    });
+
+    it.each(['namedScores', 'namedScoresCount', 'namedScoreWeights'] as const)(
+      'normalizes nonfinite and null %s values through export and persisted import',
+      async (metricMap) => {
+        const dir = createTempDir();
+        const metrics = createPromptMetrics({
+          namedScores: { token: 0, password: -0.5, apiKey: 1 },
+          namedScoresCount: { token: 1, password: 2, apiKey: 3 },
+          namedScoreWeights: { token: 0, password: 0.5, apiKey: 2 },
+        });
+        metrics[metricMap] = { token: NaN, password: Infinity, apiKey: null as unknown as number };
+        const prompt = createCompletedPrompt('metric input', {
+          id: sha256('metric input'),
+          metrics,
+          config: { password: 'fixture prompt credential', temperature: 0.2 },
+        });
+        const original = structuredClone(prompt);
+        try {
+          const eval_ = new Eval({}, { prompts: [prompt] });
+          await eval_.addResult(createEvaluateResult({ promptId: prompt.id }));
+          const output = path.join(dir, 'metrics.json');
+          await writeOutput(output, eval_, null);
+          const contents = fs.readFileSync(output, 'utf8');
+          const exported = JSON.parse(contents);
+          importCommand(program);
+          await program.parseAsync(['node', 'test', 'import', output]);
+          expect(process.exitCode).toBeUndefined();
+          const reopened = await Eval.findById(exported.evalId);
+          expect(reopened).toBeDefined();
+          const table = await reopened!.getTable();
+          const expected = {
+            ...metrics,
+            [metricMap]: { token: null, password: null, apiKey: null },
+          };
+          expect(exported.results.prompts[0].metrics).toEqual(expected);
+          expect(table.head.prompts[0].metrics).toEqual(expected);
+          expect(exported.results.prompts[0].config).toEqual({
+            password: '[REDACTED]',
+            temperature: 0.2,
+          });
+          expect(contents).not.toContain('fixture prompt credential');
+          expect(prompt).toEqual(original);
+          expect(prompt.metrics).toBe(metrics);
+        } finally {
+          removeTempDir(dir);
+        }
+      },
+    );
+
+    it.each([false, true])(
+      'exports imported primitive row prompts with prompt stripping %s',
+      async (stripPrompt) => {
+        const dir = createTempDir();
+        const restoreEnv = mockProcessEnv({ PROMPTFOO_STRIP_PROMPT_TEXT: String(stripPrompt) });
+        const prompt = createCompletedPrompt('normal aggregate input', {
+          id: sha256('normal aggregate input'),
+        });
+        const primitive = 'historical primitive prompt';
+        const rows = [
+          createEvaluateResult({ prompt: primitive as unknown as Prompt, promptId: prompt.id }),
+          createEvaluateResult({ prompt, promptId: prompt.id, testIdx: 1 }),
+        ];
+        const fixture = {
+          evalId: 'eval-primitive-prompt-' + stripPrompt,
+          config: {},
+          results: { version: 3, prompts: [prompt], results: rows },
+        };
+        const original = structuredClone(fixture);
+        try {
+          const input = path.join(dir, 'input.json');
+          fs.writeFileSync(input, JSON.stringify(fixture));
+          importCommand(program);
+          await program.parseAsync(['node', 'test', 'import', input]);
+          expect(process.exitCode).toBeUndefined();
+          const reopened = await Eval.findById(fixture.evalId);
+          expect(reopened).toBeDefined();
+          const summary = await reopened!.toEvaluateSummary();
+          const output = path.join(dir, 'output.json');
+          await writeOutput(output, reopened!, null);
+          const content = fs.readFileSync(output, 'utf8');
+          const exported = JSON.parse(content);
+          for (const results of [summary.results, exported.results.results]) {
+            expect(results).toHaveLength(2);
+            expect(results.every((row: { success: boolean }) => row.success)).toBe(true);
+            expect(results.map((row: { promptId: string }) => row.promptId)).toEqual([
+              prompt.id,
+              prompt.id,
+            ]);
+            const first = results.find((row: { testIdx: number }) => row.testIdx === 0);
+            expect(first.prompt).toEqual(
+              stripPrompt ? { raw: '[prompt stripped]', label: '[prompt stripped]' } : primitive,
+            );
+            const neighbor = results.find((row: { testIdx: number }) => row.testIdx === 1);
+            expect(neighbor.prompt.raw).toBe(stripPrompt ? '[prompt stripped]' : prompt.raw);
+          }
+          if (stripPrompt) {
+            expect(content).not.toContain(primitive);
+          }
+          expect(fixture).toEqual(original);
+          expect(
+            (await EvalResult.findManyByEvalId(fixture.evalId)).find((row) => row.testIdx === 0)
+              ?.prompt,
+          ).toBe(primitive);
+        } finally {
+          restoreEnv();
+          removeTempDir(dir);
+        }
+      },
+    );
   });
 
   describe('with real sample file', () => {
@@ -943,6 +1136,58 @@ describe('importCommand', () => {
         restoreEnv();
       }
     });
+
+    it.each([
+      { config: 'legacy-config' },
+      { config: 42 },
+      { config: true },
+      { config: ['legacy-array'] },
+    ])(
+      're-exports imported non-record legacy config $config under independent strip flags',
+      async ({ config }) => {
+        const dir = createTempDir();
+        const fixture = {
+          id: 'eval-legacy-primitive-config',
+          config,
+          results: {
+            version: 2,
+            results: [],
+            table: { head: { prompts: [], vars: [] }, body: [] },
+            stats: { successes: 0, failures: 0 },
+          },
+        };
+        try {
+          const input = path.join(dir, 'input.json');
+          fs.writeFileSync(input, JSON.stringify(fixture));
+          importCommand(program);
+          await program.parseAsync(['node', 'test', 'import', input]);
+          expect(process.exitCode).toBeUndefined();
+          const reopened = await Eval.findById(fixture.id);
+          expect(reopened!.config).toEqual(config);
+          for (const [prompt, vars] of [
+            [false, false],
+            [true, false],
+            [false, true],
+            [true, true],
+          ]) {
+            const restoreEnv = mockProcessEnv({
+              PROMPTFOO_STRIP_PROMPT_TEXT: String(prompt),
+              PROMPTFOO_STRIP_TEST_VARS: String(vars),
+            });
+            try {
+              const output = path.join(dir, `output-${prompt}-${vars}.json`);
+              await writeOutput(output, reopened!, null);
+              expect(JSON.parse(fs.readFileSync(output, 'utf8')).config).toEqual(config);
+              expect(reopened!.config).toEqual(config);
+            } finally {
+              restoreEnv();
+            }
+          }
+        } finally {
+          removeTempDir(dir);
+        }
+      },
+    );
 
     it('should import legacy table-backed eval exports', async () => {
       const evalId = 'eval-legacy-table-backed';

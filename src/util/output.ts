@@ -9,16 +9,19 @@ import * as yaml from 'js-yaml';
 import { collectBlobHashes } from '../blobs/blobRefs';
 import { BLOB_MAX_SIZE } from '../blobs/constants';
 import { VERSION } from '../constants';
-import { getEnvBool } from '../envars';
 import { getDirectory } from '../esm';
 import { writeCsvToGoogleSheet } from '../googleSheets';
 import logger from '../logger';
 import {
   asEvaluateResult,
   getResultIndexKey,
+  getStripFlags,
+  type OutputStripFlags,
+  projectTracesForOutput,
+  sanitizePromptForArtifact,
   sanitizeResultForJsonlArtifact,
+  sanitizeTableForArtifact,
 } from '../models/evalResult';
-import { PromptfooAttributes } from '../tracing/genaiTracer';
 import {
   type CsvRow,
   type ExportedBlobAsset,
@@ -28,16 +31,18 @@ import {
 import { streamEvalCsv } from './eval/evalTableUtils';
 import invariant from './invariant';
 import { writeJunitXmlOutput } from './junit';
+import { sanitizeConfigForOutput } from './outputConfig';
 import { getOutputFileFormat, SUPPORTED_OUTPUT_FILE_FORMATS } from './outputFormats';
-import {
-  sanitizeObject,
-  sanitizeRuntimeOptions,
-  sanitizeTracingConfigForPersistence,
-} from './sanitizer';
+import { sanitizeRuntimeOptions } from './sanitizer';
 import { getNunjucksEngine } from './templates';
 
 import type Eval from '../models/eval';
-import type { EvaluateResult, EvaluateTableOutput } from '../types';
+import type {
+  EvaluateResult,
+  EvaluateSummaryV2,
+  EvaluateSummaryV3,
+  EvaluateTableOutput,
+} from '../types';
 
 export interface OutputOptions {
   includeMedia?: boolean;
@@ -95,14 +100,19 @@ async function resolveJsonlOutputPath(outputPath: string): Promise<string> {
   }
 }
 
-async function appendJsonlResultBatch(outputPath: string, results: EvaluateResult[]) {
+async function appendJsonlResultBatch(
+  outputPath: string,
+  results: EvaluateResult[],
+  stripFlags: OutputStripFlags,
+) {
   if (results.length === 0) {
     return;
   }
 
   const text =
-    results.map((result) => JSON.stringify(sanitizeResultForJsonlArtifact(result))).join(os.EOL) +
-    os.EOL;
+    results
+      .map((result) => JSON.stringify(sanitizeResultForJsonlArtifact(result, stripFlags)))
+      .join(os.EOL) + os.EOL;
   await fsPromises.appendFile(outputPath, text);
 }
 
@@ -145,7 +155,11 @@ async function readStreamedJsonlResults(outputPath: string): Promise<EvaluateRes
 //      missing or stale for those), then
 //   3. the in-memory final rows captured after the failure (timeout / deferred-grading
 //      updates that never streamed), which are authoritative.
-async function collectJsonlResultsAfterPersistenceFailure(outputPath: string, evalRecord: Eval) {
+async function collectJsonlResultsAfterPersistenceFailure(
+  outputPath: string,
+  evalRecord: Eval,
+  stripFlags: OutputStripFlags,
+) {
   const finalResults = new Map<string, EvaluateResult>();
   const put = (result: EvaluateResult) => finalResults.set(getResultIndexKey(result), result);
 
@@ -154,7 +168,7 @@ async function collectJsonlResultsAfterPersistenceFailure(outputPath: string, ev
   }
   for await (const batchResults of evalRecord.fetchResultsBatched()) {
     for (const result of batchResults) {
-      const evaluateResult = asEvaluateResult(result);
+      const evaluateResult = asEvaluateResult(result, stripFlags);
       if (!evalRecord.hasResultPersistenceFailure(evaluateResult)) {
         put(evaluateResult);
       }
@@ -180,15 +194,20 @@ async function getExistingFileMode(outputPath: string): Promise<number | undefin
 async function appendJsonlResults(
   outputPath: string,
   evalRecord: Eval,
-  recoveredResults?: EvaluateResult[],
+  recoveredResults: EvaluateResult[] | undefined,
+  stripFlags: OutputStripFlags,
 ): Promise<void> {
   if (recoveredResults) {
-    await appendJsonlResultBatch(outputPath, recoveredResults);
+    await appendJsonlResultBatch(outputPath, recoveredResults, stripFlags);
     return;
   }
 
   for await (const batchResults of evalRecord.fetchResultsBatched()) {
-    await appendJsonlResultBatch(outputPath, batchResults.map(asEvaluateResult));
+    await appendJsonlResultBatch(
+      outputPath,
+      batchResults.map((result) => asEvaluateResult(result, stripFlags)),
+      stripFlags,
+    );
   }
 }
 
@@ -196,8 +215,9 @@ async function rewriteJsonlWithExternalBackup(
   outputPath: string,
   outputMode: number | undefined,
   evalRecord: Eval,
-  preparedReplacementPath?: string,
-  recoveredResults?: EvaluateResult[],
+  preparedReplacementPath: string | undefined,
+  recoveredResults: EvaluateResult[] | undefined,
+  stripFlags: OutputStripFlags,
 ): Promise<void> {
   const tempDirectory = await fsPromises.mkdtemp(path.join(os.tmpdir(), 'promptfoo-jsonl-'));
   const backupPath = path.join(tempDirectory, 'backup.jsonl');
@@ -226,7 +246,7 @@ async function rewriteJsonlWithExternalBackup(
       } else {
         await fsPromises.writeFile(replacementPath, '', { mode: outputMode });
       }
-      await appendJsonlResults(replacementPath, evalRecord, recoveredResults);
+      await appendJsonlResults(replacementPath, evalRecord, recoveredResults, stripFlags);
     }
     overwriteAttempted = true;
     await fsPromises.copyFile(replacementPath, outputPath);
@@ -335,76 +355,35 @@ const outputToHtmlReportCell = (output: EvaluateTableOutput) => {
   };
 };
 
-function sanitizeConfigForOutput(config: Eval['config']): OutputFile['config'] {
-  return sanitizeObject(sanitizeTracingConfigForPersistence(config), {
-    context: 'output config',
-    throwOnError: true,
-    maxDepth: Number.POSITIVE_INFINITY,
-  }) as OutputFile['config'];
-}
-
-function projectTracesForOutput(traces: NonNullable<OutputFile['traces']>) {
-  const shouldStripMetadata = getEnvBool('PROMPTFOO_STRIP_METADATA', false);
-  const shouldStripPromptText = getEnvBool('PROMPTFOO_STRIP_PROMPT_TEXT', false);
-  const shouldStripResponseOutput = getEnvBool('PROMPTFOO_STRIP_RESPONSE_OUTPUT', false);
-  const shouldStripTestVars = getEnvBool('PROMPTFOO_STRIP_TEST_VARS', false);
-
-  if (
-    !shouldStripMetadata &&
-    !shouldStripPromptText &&
-    !shouldStripResponseOutput &&
-    !shouldStripTestVars
-  ) {
-    return traces;
+const outputToHtmlReportTableCell = (
+  output: EvaluateTableOutput | null | undefined,
+  options: {
+    rowIndex: number;
+    outputIndex: number;
+    description: string;
+  },
+) => {
+  if (output == null) {
+    return output;
   }
+  return {
+    kind: 'output',
+    detailId: `result-detail-${options.rowIndex}-${options.outputIndex}`,
+    detailTitle: `Result detail - row ${options.rowIndex + 1}, prompt ${options.outputIndex + 1}`,
+    description: options.description,
+    ...outputToHtmlReportCell(output),
+  };
+};
 
-  return traces.map((trace) => {
-    let projectedTrace = trace;
-    if (shouldStripMetadata) {
-      const { metadata: _metadata, ...traceWithoutMetadata } = trace;
-      projectedTrace = traceWithoutMetadata;
-    } else if (shouldStripTestVars && trace.metadata && 'vars' in trace.metadata) {
-      const { metadata: traceMetadata, ...traceWithoutMetadata } = trace;
-      const { vars: _vars, ...metadata } = traceMetadata;
-      projectedTrace = {
-        ...traceWithoutMetadata,
-        ...(Object.keys(metadata).length > 0 && { metadata }),
-      };
-    }
+const isEvaluateTableOutput = (
+  output: EvaluateTableOutput | null | undefined,
+): output is EvaluateTableOutput => output != null;
 
-    if (!shouldStripPromptText && !shouldStripResponseOutput) {
-      return projectedTrace;
-    }
-
-    return {
-      ...projectedTrace,
-      spans: projectedTrace.spans.map((span) => {
-        if (!span.attributes) {
-          return span;
-        }
-
-        const projectedAttributes = { ...span.attributes };
-        if (shouldStripPromptText) {
-          delete projectedAttributes[PromptfooAttributes.REQUEST_BODY];
-        }
-        if (shouldStripResponseOutput) {
-          delete projectedAttributes[PromptfooAttributes.RESPONSE_BODY];
-        }
-
-        const { attributes: _attributes, ...projectedSpan } = span;
-        return {
-          ...projectedSpan,
-          ...(Object.keys(projectedAttributes).length > 0 && {
-            attributes: projectedAttributes,
-          }),
-        };
-      }),
-    };
-  });
-}
-
-function resultsForMediaExportScan(results: OutputFile['results']): unknown {
-  if (!getEnvBool('PROMPTFOO_STRIP_RESPONSE_OUTPUT', false)) {
+function resultsForMediaExportScan(
+  results: OutputFile['results'],
+  stripFlags: OutputStripFlags,
+): unknown {
+  if (!stripFlags.shouldStripResponseOutput) {
     return results;
   }
 
@@ -451,13 +430,42 @@ export function createOutputMetadata(evalRecord: Eval) {
   };
 }
 
+// Project a summary before it is serialized to a file artifact (json/yaml/txt/html/xml). For
+// non-persisted evals the in-memory results are not redacted at the DB / JSONL boundary, and
+// legacy V2 summaries also carry a denormalized table with its own copies of result data.
+function sanitizeSummaryForArtifact<T extends EvaluateSummaryV2 | EvaluateSummaryV3>(
+  summary: T,
+  stripFlags: OutputStripFlags,
+): T {
+  return {
+    ...summary,
+    ...(Array.isArray(summary.results) && {
+      results: summary.results.map((result) => sanitizeResultForJsonlArtifact(result, stripFlags)),
+    }),
+    ...('prompts' in summary &&
+      Array.isArray(summary.prompts) && {
+        prompts: summary.prompts.map((prompt) =>
+          sanitizePromptForArtifact(prompt, stripFlags.shouldStripPromptText),
+        ),
+      }),
+    ...('table' in summary &&
+      summary.table && {
+        table: sanitizeTableForArtifact(summary.table, stripFlags),
+      }),
+  };
+}
+
 export async function createOutputData(
   evalRecord: Eval,
   shareableUrl: string | null,
   options: OutputOptions = {},
+  stripFlags = getStripFlags(evalRecord.config.env),
 ): Promise<OutputFile> {
-  const summary = await evalRecord.toEvaluateSummary();
-  const redactedConfig = sanitizeConfigForOutput(evalRecord.config);
+  const summary = sanitizeSummaryForArtifact(
+    await evalRecord.toEvaluateSummary(stripFlags),
+    stripFlags,
+  );
+  const redactedConfig = sanitizeConfigForOutput(evalRecord.config, stripFlags);
   let traces;
   try {
     // TraceStore redacts sensitive attribute keys on reads by default.
@@ -479,11 +487,11 @@ export async function createOutputData(
     ...(evalRecord.runtimeOptions && {
       runtimeOptions: sanitizeRuntimeOptions(evalRecord.runtimeOptions),
     }),
-    ...(traces && traces.length > 0 && { traces: projectTracesForOutput(traces) }),
+    ...(traces && traces.length > 0 && { traces: projectTracesForOutput(traces, stripFlags) }),
   };
 
   if (options.includeMedia) {
-    const blobAssets = await exportBlobAssets(evalRecord.id, summary, output.traces);
+    const blobAssets = await exportBlobAssets(evalRecord.id, summary, output.traces, stripFlags);
     if (blobAssets.length > 0) {
       output.blobAssets = blobAssets;
     }
@@ -495,11 +503,15 @@ export async function createOutputData(
 async function exportBlobAssets(
   evalId: string,
   results: OutputFile['results'],
-  traces?: OutputFile['traces'],
+  traces: OutputFile['traces'],
+  stripFlags: OutputStripFlags,
 ): Promise<ExportedBlobAsset[]> {
   const { getShareAuthorizedBlob } = await import('../blobs');
   const assets: ExportedBlobAsset[] = [];
-  for (const hash of collectBlobHashes({ results: resultsForMediaExportScan(results), traces })) {
+  for (const hash of collectBlobHashes({
+    results: resultsForMediaExportScan(results, stripFlags),
+    traces,
+  })) {
     try {
       const blob = await getShareAuthorizedBlob(hash, evalId);
       if (!blob) {
@@ -537,9 +549,10 @@ async function writeJsonOutputSafely(
   evalRecord: Eval,
   shareableUrl: string | null,
   options: OutputOptions,
+  stripFlags: OutputStripFlags,
 ): Promise<void> {
   try {
-    const outputData = await createOutputData(evalRecord, shareableUrl, options);
+    const outputData = await createOutputData(evalRecord, shareableUrl, options, stripFlags);
 
     // Use standard JSON.stringify with proper formatting
     const jsonString = JSON.stringify(outputData, null, 2);
@@ -564,22 +577,94 @@ async function writeJsonOutputSafely(
   }
 }
 
+async function writeHtmlOutput(
+  outputPath: string,
+  evalRecord: Eval,
+  stripFlags: OutputStripFlags,
+): Promise<void> {
+  const table = sanitizeTableForArtifact(await evalRecord.getTable(stripFlags), stripFlags);
+  invariant(table, 'Table is required');
+  const redactedConfig = sanitizeConfigForOutput(evalRecord.config, stripFlags);
+  const metadata = createOutputMetadata(evalRecord);
+  const template = await fsPromises.readFile(
+    path.join(getDirectory(), 'tableOutput.html'),
+    'utf-8',
+  );
+  const htmlTable = [
+    [
+      ...table.head.vars,
+      ...table.head.prompts.map((prompt) => `[${prompt.provider}] ${prompt.label}`),
+    ],
+    ...table.body.map((row, rowIndex) => [
+      ...row.vars.map((value, variableIndex) => ({
+        kind: 'variable',
+        name: table.head.vars[variableIndex],
+        text: value,
+      })),
+      ...row.outputs.map((output, outputIndex) =>
+        outputToHtmlReportTableCell(output, {
+          rowIndex,
+          outputIndex,
+          description: row.description || row.test?.description || '',
+        }),
+      ),
+    ]),
+  ];
+  const reportOutputs = table.body.flatMap((row) => row.outputs.filter(isEvaluateTableOutput));
+  const totalResults = reportOutputs.length;
+  const successes = reportOutputs.filter((output) => output.pass).length;
+  const errors = reportOutputs.filter(
+    (output) => !output.pass && output.failureReason === ResultFailureReason.ERROR,
+  ).length;
+  const failures = totalResults - successes - errors;
+  const passRate = totalResults > 0 ? (successes / totalResults) * 100 : 0;
+  const htmlOutput = getNunjucksEngine().renderString(template, {
+    config: redactedConfig,
+    table: htmlTable,
+    metadata,
+    report: {
+      totalResults,
+      totalRows: table.body.length,
+      promptCount: table.head.prompts.length,
+      variableCount: table.head.vars.length,
+      successes,
+      failures,
+      errors,
+      passRateDisplay: `${passRate.toFixed(1)}%`,
+    },
+  });
+  await fsPromises.writeFile(outputPath, htmlOutput);
+}
+
 export async function writeOutput(
   outputPath: string,
   evalRecord: Eval,
   shareableUrl: string | null,
   options: OutputOptions = {},
 ) {
+  const stripFlags = getStripFlags(evalRecord.config.env);
   if (outputPath.match(/^https:\/\/docs\.google\.com\/spreadsheets\//)) {
-    const table = await evalRecord.getTable();
+    const table = sanitizeTableForArtifact(await evalRecord.getTable(stripFlags), stripFlags);
     invariant(table, 'Table is required');
+    const usedColumnNames = new Set(table.head.vars);
+    const resultColumnNames = table.head.prompts.map((prompt, index) => {
+      const label = `[${prompt.provider}] ${prompt.label}`;
+      let key = label;
+      let suffix = index + 1;
+      while (usedColumnNames.has(key)) {
+        key = `${label} (${suffix})`;
+        suffix++;
+      }
+      usedColumnNames.add(key);
+      return key;
+    });
     const rows = table.body.map((row) => {
       const csvRow: CsvRow = {};
       table.head.vars.forEach((varName, index) => {
         csvRow[varName] = row.vars[index];
       });
-      table.head.prompts.forEach((prompt, index) => {
-        csvRow[`[${prompt.provider}] ${prompt.label}`] = outputToSimpleString(row.outputs[index]);
+      resultColumnNames.forEach((name, index) => {
+        csvRow[name] = outputToSimpleString(row.outputs[index]);
       });
       return csvRow;
     });
@@ -607,6 +692,7 @@ export async function writeOutput(
     try {
       await streamEvalCsv(evalRecord, {
         isRedteam: Boolean(evalRecord.config.redteam),
+        projectTable: (table) => sanitizeTableForArtifact(table, stripFlags),
         write: async (data: string) => {
           await fileHandle.write(data);
         },
@@ -615,67 +701,14 @@ export async function writeOutput(
       await fileHandle.close();
     }
   } else if (outputExtension === 'json') {
-    await writeJsonOutputSafely(outputPath, evalRecord, shareableUrl, options);
+    await writeJsonOutputSafely(outputPath, evalRecord, shareableUrl, options, stripFlags);
   } else if (outputExtension === 'yaml' || outputExtension === 'yml' || outputExtension === 'txt') {
     await fsPromises.writeFile(
       outputPath,
-      yaml.dump(await createOutputData(evalRecord, shareableUrl, options)),
+      yaml.dump(await createOutputData(evalRecord, shareableUrl, options, stripFlags)),
     );
   } else if (outputExtension === 'html') {
-    const table = await evalRecord.getTable();
-    invariant(table, 'Table is required');
-    const summary = await evalRecord.toEvaluateSummary();
-    const redactedConfig = sanitizeConfigForOutput(evalRecord.config);
-    const metadata = createOutputMetadata(evalRecord);
-    const template = await fsPromises.readFile(
-      path.join(getDirectory(), 'tableOutput.html'),
-      'utf-8',
-    );
-    const htmlTable = [
-      [
-        ...table.head.vars,
-        ...table.head.prompts.map((prompt) => `[${prompt.provider}] ${prompt.label}`),
-      ],
-      ...table.body.map((row, rowIndex) => [
-        ...row.vars.map((value, variableIndex) => ({
-          kind: 'variable',
-          name: table.head.vars[variableIndex],
-          text: value,
-        })),
-        ...row.outputs.map((output, outputIndex) => ({
-          kind: 'output',
-          detailId: `result-detail-${rowIndex}-${outputIndex}`,
-          detailTitle: `Result detail - row ${rowIndex + 1}, prompt ${outputIndex + 1}`,
-          description: row.description || row.test?.description || '',
-          ...outputToHtmlReportCell(output),
-        })),
-      ]),
-    ];
-    const reportOutputs = table.body.flatMap((row) => row.outputs);
-    const totalResults = reportOutputs.length;
-    const successes = reportOutputs.filter((output) => output.pass).length;
-    const errors = reportOutputs.filter(
-      (output) => !output.pass && output.failureReason === ResultFailureReason.ERROR,
-    ).length;
-    const failures = totalResults - successes - errors;
-    const passRate = totalResults > 0 ? (successes / totalResults) * 100 : 0;
-    const htmlOutput = getNunjucksEngine().renderString(template, {
-      config: redactedConfig,
-      table: htmlTable,
-      results: summary,
-      metadata,
-      report: {
-        totalResults,
-        totalRows: table.body.length,
-        promptCount: table.head.prompts.length,
-        variableCount: table.head.vars.length,
-        successes,
-        failures,
-        errors,
-        passRateDisplay: `${passRate.toFixed(1)}%`,
-      },
-    });
-    await fsPromises.writeFile(outputPath, htmlOutput);
+    await writeHtmlOutput(outputPath, evalRecord, stripFlags);
   } else if (outputExtension === 'jsonl') {
     const jsonlOutputPath = await resolveJsonlOutputPath(outputPath);
     if (jsonlOutputPath !== outputPath) {
@@ -686,7 +719,7 @@ export async function writeOutput(
     }
     const outputMode = await getExistingFileMode(jsonlOutputPath);
     const recoveredResults = evalRecord.resultPersistenceFailed
-      ? await collectJsonlResultsAfterPersistenceFailure(jsonlOutputPath, evalRecord)
+      ? await collectJsonlResultsAfterPersistenceFailure(jsonlOutputPath, evalRecord, stripFlags)
       : undefined;
     const tempOutputPath = path.join(
       path.dirname(jsonlOutputPath),
@@ -706,12 +739,13 @@ export async function writeOutput(
             evalRecord,
             undefined,
             recoveredResults,
+            stripFlags,
           );
           return;
         }
         throw error;
       }
-      await appendJsonlResults(tempOutputPath, evalRecord, recoveredResults);
+      await appendJsonlResults(tempOutputPath, evalRecord, recoveredResults, stripFlags);
       if (outputMode !== undefined) {
         await fsPromises.chmod(tempOutputPath, outputMode);
       }
@@ -727,6 +761,8 @@ export async function writeOutput(
             outputMode,
             evalRecord,
             tempOutputPath,
+            undefined,
+            stripFlags,
           );
           await removeTemporaryJsonlOutput(tempOutputPath);
           return;
@@ -738,8 +774,11 @@ export async function writeOutput(
       throw error;
     }
   } else if (outputExtension === 'xml') {
-    const summary = await evalRecord.toEvaluateSummary();
-    const redactedConfig = sanitizeConfigForOutput(evalRecord.config);
+    const summary = sanitizeSummaryForArtifact(
+      await evalRecord.toEvaluateSummary(stripFlags),
+      stripFlags,
+    );
+    const redactedConfig = sanitizeConfigForOutput(evalRecord.config, stripFlags);
 
     // Sanitize data for XML builder to prevent textValue.replace errors
     const sanitizeForXml = (obj: any): any => {

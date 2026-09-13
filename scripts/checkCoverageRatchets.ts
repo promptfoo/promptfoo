@@ -272,7 +272,10 @@ function isSourceFile(filePath: string): boolean {
     !filePath.endsWith('.test.tsx') &&
     !filePath.endsWith('.spec.ts') &&
     !filePath.endsWith('.spec.tsx') &&
-    !filePath.endsWith('.stories.tsx')
+    !filePath.endsWith('.stories.tsx') &&
+    // Match frontend browser-test discovery without excluding production browser
+    // replacements such as src/logger.browser.ts.
+    !(filePath.startsWith('src/app/src/') && /\.browser\.tsx?$/.test(filePath))
   );
 }
 
