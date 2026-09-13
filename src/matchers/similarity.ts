@@ -1,6 +1,7 @@
 import cliState from '../cliState';
 import { getDefaultProviders } from '../providers/defaults';
 import { doRemoteGrading } from '../remoteGrading';
+import { isAbortError } from '../util/fetch/errors';
 import { accumulateTokenUsage } from '../util/tokenUsageUtils';
 import {
   callGradingProvider,
@@ -142,7 +143,7 @@ async function calculateProviderSimilarity(
     throw new Error('Provider must implement callSimilarityApi or callEmbeddingApi');
   }
 
-  const [expectedEmbedding, outputEmbedding] = await Promise.all([
+  const results = await Promise.allSettled([
     callGradingProvider(
       finalProvider,
       'similarity.embedding',
@@ -162,11 +163,26 @@ async function calculateProviderSimilarity(
       { operationName: 'embeddings' },
     ),
   ]);
-
-  const mergedUsage = normalizeMatcherTokenUsage(undefined);
-  accumulateTokenUsage(mergedUsage, expectedEmbedding.tokenUsage);
-  accumulateTokenUsage(mergedUsage, outputEmbedding.tokenUsage);
-  accumulateTokenUsage(tokensUsed, mergedUsage);
+  for (const result of results) {
+    if (result.status === 'fulfilled') {
+      accumulateTokenUsage(tokensUsed, result.value.tokenUsage);
+    }
+  }
+  const [expectedResult, outputResult] = results;
+  if (expectedResult.status === 'rejected' || outputResult.status === 'rejected') {
+    const reason =
+      expectedResult.status === 'rejected'
+        ? expectedResult.reason
+        : outputResult.status === 'rejected'
+          ? outputResult.reason
+          : undefined;
+    if (!isAbortError(reason)) {
+      throw reason;
+    }
+    return fail(reason instanceof Error ? reason.message : String(reason), tokensUsed);
+  }
+  const expectedEmbedding = expectedResult.value;
+  const outputEmbedding = outputResult.value;
 
   if (expectedEmbedding.error || outputEmbedding.error) {
     return fail(
