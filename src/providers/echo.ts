@@ -27,10 +27,10 @@ export class EchoProvider implements ApiProvider {
 
   async callApi(
     input: string,
-    _options?: Record<string, any>,
-    context?: any,
+    context?: Record<string, any>,
+    options?: { abortSignal?: AbortSignal },
   ): Promise<ProviderResponse> {
-    const signal: AbortSignal | undefined = context?.abortSignal;
+    const signal = options?.abortSignal;
     signal?.throwIfAborted();
     if (this.delay && this.delay > 0) {
       await (signal ? sleepWithAbort(this.delay, signal) : sleep(this.delay));

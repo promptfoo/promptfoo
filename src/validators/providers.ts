@@ -37,6 +37,18 @@ export const ApiProviderSchema = z.object({
       (v) => typeof v === 'function',
     )
     .optional(),
+  promptfooCapabilities: z
+    .array(
+      z.enum([
+        'callApi',
+        'callEmbeddingApi',
+        'callClassificationApi',
+        'callSimilarityApi',
+        'callModerationApi',
+      ]),
+    )
+    .readonly()
+    .optional(),
   label: z.custom<ProviderLabel>().optional(),
   transform: StringOrFunctionSchema.optional(),
   delay: z.number().optional(),

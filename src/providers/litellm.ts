@@ -36,7 +36,7 @@ abstract class LiteLLMProviderWrapper<TProvider extends LiteLLMDelegate>
     text: ['callApi'],
     embedding: ['callEmbeddingApi'],
   } as const;
-  readonly promptfooCapabilities: readonly ('callApi' | 'callEmbeddingApi')[];
+  declare readonly promptfooCapabilities: readonly ('callApi' | 'callEmbeddingApi')[];
   readonly getApiKey: () => string | undefined;
   declare readonly cleanup?: ApiProvider['cleanup'];
   declare readonly validateFunctionToolCall?: OpenAiChatCompletionProvider['validateFunctionToolCall'];
@@ -47,11 +47,15 @@ abstract class LiteLLMProviderWrapper<TProvider extends LiteLLMDelegate>
     private readonly customId?: string,
   ) {
     this.getApiKey = provider.getApiKey.bind(provider);
-    this.promptfooCapabilities = inheritProviderCapabilities(
-      LiteLLMProviderWrapper.declaredProviderCapabilities[
-        providerType === 'embedding' ? 'embedding' : 'text'
-      ],
-    );
+    Object.defineProperty(this, 'promptfooCapabilities', {
+      value: inheritProviderCapabilities(
+        LiteLLMProviderWrapper.declaredProviderCapabilities[
+          providerType === 'embedding' ? 'embedding' : 'text'
+        ],
+      ),
+      configurable: true,
+      writable: true,
+    });
     if ('cleanup' in provider && !('cleanup' in Object.getPrototypeOf(this))) {
       this.cleanup = provider.cleanup.bind(provider);
     }
