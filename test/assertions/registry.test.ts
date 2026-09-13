@@ -339,6 +339,7 @@ describe('assertion registry injection', () => {
       expectTypeOf<
         AssertionParams<'not-custom-check'>['baseType']
       >().toEqualTypeOf<'custom-check'>();
+      expectTypeOf<AssertionParams<CustomType>['baseType']>().toEqualTypeOf<'custom-check'>();
       const registry = new AssertionRegistry<
         AssertionParams<CustomType>,
         GradingResult<CustomType>
