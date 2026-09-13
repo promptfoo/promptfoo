@@ -1,0 +1,16 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: GitLab CI eval with JUnit reporting
+
+prompts:
+  - '{{message}}'
+
+providers:
+  - id: echo
+
+tests:
+  - description: The sample response contains the expected text
+    vars:
+      message: GitLab CI reports this successful Promptfoo eval
+    assert:
+      - type: contains
+        value: successful Promptfoo eval
