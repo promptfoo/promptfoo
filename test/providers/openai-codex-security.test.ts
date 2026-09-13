@@ -624,7 +624,7 @@ describe('OpenAICodexSecurityProvider', () => {
     });
 
     it('does not fabricate usage or cost when the SDK omits both', async () => {
-      mockRun.mockResolvedValue(createScanResult({ cost: null, turnResult: {} }));
+      mockRun.mockResolvedValue(createScanResult({ cost: null, turnResult: undefined }));
       const provider = new OpenAICodexSecurityProvider();
 
       const response = await provider.callApi('Scan');
