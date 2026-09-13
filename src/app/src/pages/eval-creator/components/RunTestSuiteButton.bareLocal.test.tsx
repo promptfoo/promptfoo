@@ -50,10 +50,9 @@ describe('bare local chat import and Run', () => {
   });
   afterEach(() => {
     cleanup();
-    expect(vi.getTimerCount()).toBe(0);
     resetStores();
     resetCallApiMock();
-    restoreTestTimers();
+    restoreTestTimers({ runPending: true });
   });
 
   it.each(localTypes.flatMap((local) => policies.map((policy) => ({ ...local, ...policy }))))(

@@ -506,7 +506,7 @@ describe('SessionsTab', () => {
     });
   });
 
-  it.each(['llamafile', 'vllm', 'text-generation-webui'])(
+  it.each(['llamafile', 'vllm', 'text-generation-webui'] as const)(
     'normalizes %s local session requests without changing editable references',
     async (type) => {
       const target = {
@@ -527,8 +527,9 @@ describe('SessionsTab', () => {
         ...target,
         config: {
           ...target.config,
+          url: 'https://local.example.test/v1/chat/completions',
           stateful: true,
-          sessionSource: 'server',
+          sessionSource: 'server' as const,
           sessionParser: 'json.sessionId',
         },
       };

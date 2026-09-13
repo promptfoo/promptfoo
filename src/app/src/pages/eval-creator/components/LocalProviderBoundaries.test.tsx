@@ -16,6 +16,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { ProvidersListSection } from './ProvidersListSection';
 import RunTestSuiteButton from './RunTestSuiteButton';
 import { normalizeProviders } from './setupReadiness';
+import type { Config } from '@app/pages/redteam/setup/types';
 
 vi.mock('@app/utils/api', () => ({ callApi: vi.fn() }));
 vi.mock('@app/hooks/useTelemetry', () => ({ useTelemetry: () => ({ recordEvent: vi.fn() }) }));
@@ -45,7 +46,7 @@ const locals = [
 ] as const;
 const forms = ['bare', 'suffixed'] as const;
 const model = 'tenant/served-model.py:Q4_K_M';
-function localProvider(type: string, form: (typeof forms)[number] = 'bare') {
+function localProvider<T extends string>(type: T, form: (typeof forms)[number] = 'bare') {
   return {
     id: form === 'bare' ? 'openai:chat' : `openai:chat:${model}`,
     label: 'Saved local',
@@ -116,7 +117,7 @@ function prepareEval(provider: ReturnType<typeof localProvider>) {
   ]);
   renderWithProviders(<EvalSetup />);
 }
-function prepareTarget(provider: ReturnType<typeof localProvider>, type: string) {
+function prepareTarget(provider: Config['target'], type: string) {
   act(() =>
     useRedTeamConfig.setState({
       config: { ...useRedTeamConfig.getState().config, target: provider, prompts: ['{{prompt}}'] },
@@ -237,7 +238,7 @@ describe('local provider selection and execution boundaries', () => {
   it('retains an arbitrary custom route through redteam Next', async () => {
     const user = userEvent.setup();
     const provider = { ...localProvider('custom'), id: 'my-custom:opaque/model' };
-    prepareTarget(provider, 'custom');
+    prepareTarget(provider as Config['target'], 'custom');
     const onNext = vi.fn();
     renderWithProviders(
       <MemoryRouter>
@@ -289,20 +290,19 @@ describe('local provider selection and execution boundaries', () => {
       expect(useStore.getState().config.env).toEqual(env);
       expect(localStorage.getItem('promptfoo')).not.toContain('SHORT');
       expect(localStorage.getItem('promptfoo')).not.toContain('OTHER');
-      act(() =>
-        useRedTeamConfig.getState().setFullConfig({
-          ...useRedTeamConfig.getState().config,
-          target: edited,
-          env,
-          prompts: ['Hello'],
-        }),
-      );
+      const redteamConfig = {
+        ...useRedTeamConfig.getState().config,
+        target: edited,
+        env,
+        prompts: ['Hello'],
+      };
+      act(() => useRedTeamConfig.getState().setFullConfig(redteamConfig));
       const exported = yaml.load(generateOrderedYaml(useRedTeamConfig.getState().config)) as {
         targets: unknown[];
       };
       expect(exported.targets).toEqual([runtimeProvider]);
       expect(useRedTeamConfig.getState().config.target).toEqual(edited);
-      expect(useRedTeamConfig.getState().config.env).toEqual(env);
+      expect((useRedTeamConfig.getState().config as typeof redteamConfig).env).toEqual(env);
       const saved = localStorage.getItem('promptfoo')!;
       cleanup();
       act(() => useStore.getState().reset());

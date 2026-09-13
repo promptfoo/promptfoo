@@ -169,7 +169,7 @@ describe('TestCaseGenerationProvider', () => {
     useRedTeamTargetConfigValidation.getState().clearTargetConfigValidation();
   });
 
-  it.each(['llamafile', 'vllm', 'text-generation-webui'])(
+  it.each(['llamafile', 'vllm', 'text-generation-webui'] as const)(
     'normalizes %s local generation and target requests separately',
     async (type) => {
       const target = {

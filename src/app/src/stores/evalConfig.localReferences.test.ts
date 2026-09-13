@@ -4,16 +4,20 @@ import { useStore } from './evalConfig';
 
 import type { UnifiedConfig } from '../../../types/index';
 
-const locals = ['llamafile', 'vllm', 'text-generation-webui'];
+const locals = ['llamafile', 'vllm', 'text-generation-webui'] as const;
 const entries = ['setConfig', 'updateConfig', 'rehydrate'] as const;
 
-function importedConfig(type = 'vllm') {
+function importedConfig(type: (typeof locals)[number] = 'vllm') {
+  const providerEnv: Record<string, string> = {
+    LOCAL_SOURCE: 'SHORT',
+    VISIBLE: 'provider ordinary',
+  };
   return {
     providers: [
       {
         id: 'openai:chat',
         label: 'Local reference',
-        env: { LOCAL_SOURCE: 'SHORT', VISIBLE: 'provider ordinary' },
+        env: providerEnv,
         config: {
           type,
           model: 'tenant/model:Q4_K_M',
@@ -163,7 +167,8 @@ describe('local credential reference persistence', () => {
 
   it('keeps an unrelated provider environment with the same ordinary field name', () => {
     const input = importedConfig();
-    const unrelated = { id: 'echo', env: { LOCAL_SOURCE: 'ordinary provider value' }, config: {} };
+    const unrelatedEnv: Record<string, string> = { LOCAL_SOURCE: 'ordinary provider value' };
+    const unrelated = { id: 'echo', env: unrelatedEnv, config: {} };
     useStore.getState().setConfig({ ...input, providers: [...input.providers, unrelated] });
     expect(persistedConfig().providers[1]).toEqual(unrelated);
     expect(persistedConfig().providers[0].env).toEqual({ VISIBLE: 'provider ordinary' });
@@ -184,7 +189,9 @@ describe('local credential reference persistence', () => {
       defaultTest: { vars: { short_value: 'SHORT', visible: 'keep' } },
       tests: [{ vars: { short_value: 'SHORT', visible: 'also keep' } }],
     });
-    expect(useStore.getState().config.defaultTest?.vars).toEqual({
+    expect(
+      (useStore.getState().config.defaultTest as { vars?: unknown } | undefined)?.vars,
+    ).toEqual({
       short_value: 'SHORT',
       visible: 'keep',
     });
@@ -195,13 +202,14 @@ describe('local credential reference persistence', () => {
 
   it.each(locals)('retains the distinct %s redteam saved-template contract', async (type) => {
     const input = importedConfig(type);
-    useRedTeamConfig.getState().setFullConfig({
+    const redteamConfig = {
       ...useRedTeamConfig.getState().config,
       target: input.providers[0],
       env: input.env,
-    });
+    };
+    useRedTeamConfig.getState().setFullConfig(redteamConfig);
     const live = useRedTeamConfig.getState().config;
-    expect(live.env).toEqual(input.env);
+    expect((live as typeof redteamConfig).env).toEqual(input.env);
     expect(live.target.config.apiKey).toBe('{{ env.RUNTIME_SOURCE }}');
     expect(live.target.config.useDefaultApiKey).toBe('{{ env.LOCAL_SOURCE }}');
     const saved = localStorage.getItem('redTeamConfig')!;
@@ -209,7 +217,7 @@ describe('local credential reference persistence', () => {
     useRedTeamConfig.setState(useRedTeamConfig.getInitialState());
     localStorage.setItem('redTeamConfig', saved);
     await useRedTeamConfig.persist.rehydrate();
-    expect(useRedTeamConfig.getState().config.env).toEqual(input.env);
+    expect((useRedTeamConfig.getState().config as typeof redteamConfig).env).toEqual(input.env);
     expect(useRedTeamConfig.getState().config.target.config.apiKey).toBe(
       '{{ env.RUNTIME_SOURCE }}',
     );
