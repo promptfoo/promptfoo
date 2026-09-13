@@ -7,6 +7,7 @@ import { evaluate } from '../evaluator';
 import logger from '../logger';
 import Eval from '../models/eval';
 import { notifyEvaluationChanged } from '../models/evalMutation';
+import { clearCountCache } from '../models/evalPerformance';
 import { createShareableUrl, isSharingEnabled } from '../share';
 import { ResultFailureReason } from '../types/index';
 import { ConfigResolutionError, resolveConfigs } from '../util/config/load';
@@ -160,6 +161,7 @@ export async function deleteErrorResults(resultIds: string[]): Promise<void> {
   await db.delete(evalResultsTable).where(inArray(evalResultsTable.id, resultIds)).run();
 
   for (const { evalId } of affectedEvals) {
+    clearCountCache(evalId);
     notifyEvaluationChanged(evalId);
   }
 
@@ -188,6 +190,7 @@ export async function recalculatePromptMetrics(evalRecord: Eval): Promise<void> 
       testPassCount: number;
       testFailCount: number;
       testErrorCount: number;
+      cachedRows: number;
       assertPassCount: number;
       assertFailCount: number;
       totalLatencyMs: number;
@@ -207,6 +210,7 @@ export async function recalculatePromptMetrics(evalRecord: Eval): Promise<void> 
       testPassCount: 0,
       testFailCount: 0,
       testErrorCount: 0,
+      cachedRows: 0,
       assertPassCount: 0,
       assertFailCount: 0,
       totalLatencyMs: 0,
@@ -244,6 +248,7 @@ export async function recalculatePromptMetrics(evalRecord: Eval): Promise<void> 
         } else {
           metrics.testFailCount++;
         }
+        metrics.cachedRows += Number(result.response?.cached === true);
 
         // Update scores and other metrics
         metrics.score += result.score ?? 0;

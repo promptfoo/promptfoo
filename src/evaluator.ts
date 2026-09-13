@@ -1997,6 +1997,9 @@ function updatePromptResultCounts(metrics: PromptMetrics, row: EvaluateResult) {
       metrics.testFailCount += 1;
     }
   }
+  if (row.response?.cached === true) {
+    metrics.cachedRows = (metrics.cachedRows ?? 0) + 1;
+  }
 }
 
 function updateDerivedMetrics(
@@ -2261,6 +2264,7 @@ function createDefaultPromptMetrics(): PromptMetrics {
     testPassCount: 0,
     testFailCount: 0,
     testErrorCount: 0,
+    cachedRows: 0,
     assertPassCount: 0,
     assertFailCount: 0,
     totalLatencyMs: 0,
@@ -3363,6 +3367,7 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
       failures: 0,
       errors: 0,
       tokenUsage: createEmptyTokenUsage(),
+      cachedRows: 0,
     };
     this.conversations = {};
     this.registers = {};
@@ -3454,6 +3459,9 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
 
     if (row.tokenUsage) {
       accumulateResponseTokenUsage(this.stats.tokenUsage, { tokenUsage: row.tokenUsage });
+    }
+    if (row.response?.cached === true) {
+      this.stats.cachedRows = (this.stats.cachedRows ?? 0) + 1;
     }
   }
 
@@ -3658,10 +3666,6 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
 
       await this.persistEvalRow(row);
 
-      if (this.abortIfTargetUnavailable(row, context)) {
-        break;
-      }
-
       const metrics = context.prompts[row.promptIdx].metrics;
       invariant(metrics, 'Expected prompt.metrics to be set');
       this.updatePromptMetricsForRow({
@@ -3672,6 +3676,10 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
         promptEvalCount: reservePromptEvalCount(context, row.promptIdx),
         row,
       });
+
+      if (this.abortIfTargetUnavailable(row, context)) {
+        break;
+      }
 
       context.options.progressCallback?.(
         context.numComplete,
@@ -4738,6 +4746,7 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
       promptTokens: this.stats.tokenUsage.prompt,
       completionTokens: this.stats.tokenUsage.completion,
       cachedTokens: this.stats.tokenUsage.cached,
+      cachedRows: this.stats.cachedRows ?? 0,
       totalCost: prompts.reduce((acc, p) => acc + (p.metrics?.cost || 0), 0),
       totalRequests: this.stats.tokenUsage.numRequests,
       ...assertionStats,

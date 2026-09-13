@@ -24,6 +24,7 @@ interface CountCacheEntry {
 // Simple in-memory cache for counts with 5-minute TTL
 const distinctCountCache = new Map<string, CountCacheEntry>();
 const totalRowCountCache = new Map<string, CountCacheEntry>();
+const cachedResponseRowCountCache = new Map<string, CountCacheEntry>();
 const CACHE_TTL = 5 * 60 * 1000; // 5 minutes
 
 /**
@@ -100,13 +101,46 @@ export async function getTotalResultRowCount(evalId: string): Promise<number> {
   return count;
 }
 
+/**
+ * Get the count of result rows whose response was served from the response cache.
+ * This is distinct from getCachedResultsCount(), which counts unique test indices.
+ */
+export async function getCachedResponseRowsCount(evalId: string): Promise<number> {
+  const cacheKey = `cached-response:${evalId}`;
+  const cached = cachedResponseRowCountCache.get(cacheKey);
+
+  if (cached && Date.now() - cached.timestamp < CACHE_TTL) {
+    logger.debug(`Using cached response-row count for eval ${evalId}: ${cached.count}`);
+    return cached.count;
+  }
+
+  const db = await getDb();
+  const start = Date.now();
+  const result = await db
+    .select({ count: sql<number>`COUNT(*)` })
+    .from(evalResultsTable)
+    .where(
+      sql`eval_id = ${evalId} AND json_valid(response) = 1 AND json_extract(response, '$.cached') = 1`,
+    )
+    .all();
+
+  const count = Number(result[0]?.count ?? 0);
+  logger.debug(
+    `Cached response-row count query for eval ${evalId}: ${count} in ${Date.now() - start}ms`,
+  );
+  cachedResponseRowCountCache.set(cacheKey, { count, timestamp: Date.now() });
+  return count;
+}
+
 export function clearCountCache(evalId?: string) {
   if (evalId) {
     distinctCountCache.delete(`distinct:${evalId}`);
     totalRowCountCache.delete(`total:${evalId}`);
+    cachedResponseRowCountCache.delete(`cached-response:${evalId}`);
   } else {
     distinctCountCache.clear();
     totalRowCountCache.clear();
+    cachedResponseRowCountCache.clear();
   }
 }
 
