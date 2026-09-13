@@ -414,6 +414,18 @@ describe('dependency ownership report', () => {
     });
   });
 
+  it('classifies the repository root as source scope', () => {
+    json('package.json', { devDependencies: { runtime: '1' } });
+    write('lib/index.ts', "import 'runtime';");
+
+    const report = reportDependencyOwnership(root, {
+      ...config,
+      layers: [{ name: 'runtime', roots: ['.'], allowedDependencies: [] }],
+    });
+
+    expect(report.runtimeDeclarationGaps.map((entry) => entry.dependency)).toEqual(['runtime']);
+  });
+
   it('discovers configured production roots outside conventional source directories', () => {
     json('package.json', {
       workspaces: ['packages/*', 'src/app'],
@@ -955,7 +967,10 @@ describe('dependency ownership report', () => {
   });
 
   it('ignores require calls shadowed by a function parameter', () => {
-    write('src/index.js', "export function load(require) { return require('local-only'); }");
+    write(
+      'src/index.js',
+      "export function load(require) { return require('local-only'); } try {} catch (require) { require('caught-local'); }",
+    );
     expect(reportDependencyOwnership(root, config).undeclaredUsages).toEqual([]);
   });
 
@@ -999,6 +1014,16 @@ describe('dependency ownership report', () => {
     expect(reportDependencyOwnership(root, config).undeclaredUsages).toEqual([]);
   });
 
+  it('records unshadowed module.require calls', () => {
+    write(
+      'src/index.js',
+      "module.require('driver'); function load(module) { module.require('local'); }",
+    );
+    expect(reportDependencyOwnership(root, config).undeclaredUsages).toEqual([
+      expect.objectContaining({ dependency: 'driver' }),
+    ]);
+  });
+
   it.each(['', " Description: import('example')", "\n * Example: import('example')"])(
     'records a brace-less JSDoc type without its description: %s',
     (description) => {
@@ -1014,6 +1039,13 @@ describe('dependency ownership report', () => {
       ]);
     },
   );
+
+  it.each(['this', 'enum'])('records a brace-less JSDoc @%s import type', (tag) => {
+    write('src/index.js', `/** @${tag} import('schema').Node */\nexport const value = {};`);
+    expect(reportDependencyOwnership(root, config).undeclaredUsages).toEqual([
+      expect.objectContaining({ dependency: 'schema' }),
+    ]);
+  });
 
   it('reads multiline brace-less types up to the next JSDoc tag', () => {
     write(
