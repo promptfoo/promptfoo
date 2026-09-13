@@ -2,6 +2,10 @@ import { getProviderInitialConfig } from './providerInitialConfig';
 
 type LocalOpenAiProviderType = 'llamafile' | 'vllm' | 'text-generation-webui';
 
+function isOpenAiChatProviderId(providerId?: string): boolean {
+  return providerId === 'openai:chat' || providerId?.startsWith('openai:chat:') === true;
+}
+
 export function isLocalOpenAiProviderType(type: unknown): type is LocalOpenAiProviderType {
   return type === 'llamafile' || type === 'vllm' || type === 'text-generation-webui';
 }
@@ -22,7 +26,7 @@ export function withLocalProviderType(
 ): Record<string, unknown> {
   // The runtime ID identifies the protocol; retain the local editor choice in
   // the config, as we already do for WebSocket targets. It is not a model option.
-  return providerId?.startsWith('openai:chat:') && isLocalOpenAiProviderType(providerType)
+  return isOpenAiChatProviderId(providerId) && isLocalOpenAiProviderType(providerType)
     ? {
         apiKeyRequired: false,
         ...config,
@@ -54,7 +58,7 @@ export function getProviderType(
     return 'bedrock-agent';
   }
 
-  if (providerId.startsWith('openai:chat:')) {
+  if (isOpenAiChatProviderId(providerId)) {
     if (isLocalOpenAiProviderType(config?.type)) {
       return config.type;
     }
