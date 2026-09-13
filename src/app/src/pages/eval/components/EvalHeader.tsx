@@ -96,7 +96,10 @@ export default function EvalHeader({
   );
 
   const probesCount = React.useMemo(() => {
-    return head.prompts[0]?.metrics?.tokenUsage?.numRequests || totalResultsCount;
+    const counts = head.prompts.map((prompt) => prompt.metrics?.tokenUsage?.numRequests);
+    return counts.some((count) => count !== undefined)
+      ? counts.reduce<number>((total, count) => total + (count ?? 0), 0)
+      : totalResultsCount;
   }, [head.prompts, totalResultsCount]);
 
   const handleEvalIdCopyClick = () => {
