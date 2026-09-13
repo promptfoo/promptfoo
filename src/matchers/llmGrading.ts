@@ -12,7 +12,7 @@ import { getDefaultProviders } from '../providers/defaults';
 import { doRemoteGrading } from '../remoteGrading';
 import { doRemoteScoringWithPi } from '../remoteScoring';
 import invariant from '../util/invariant';
-import { extractFirstJsonObject } from '../util/json';
+import { extractJsonObjectsWithMeta, selectVerdictObject } from '../util/json';
 import { accumulateTokenUsage } from '../util/tokenUsageUtils';
 import {
   callProviderWithContext,
@@ -87,8 +87,25 @@ function parseFactualityJsonResponse(
   responseText: string,
 ): { option: string; reason: string } | undefined {
   try {
-    const jsonData = extractFirstJsonObject<{ category?: string; reason?: string }>(responseText);
-    if (!jsonData?.category || typeof jsonData.category !== 'string') {
+    // Security: verdict selection hardening. Prefer a COMPLETE verdict-shaped
+    // object over any UNTERMINATED (auto-closed) trailing fragment the judge
+    // echoed from the model-under-test, and unwrap merged verdict shells
+    // before reading the category.
+    const entries = extractJsonObjectsWithMeta(responseText);
+    const jsonData = selectVerdictObject<{ category?: string; reason?: string }>(entries, [
+      'category',
+    ]);
+    if (!jsonData) {
+      if (entries.length > 0) {
+        // Security: JSON was present but the verdict is ambiguous (conflicting
+        // verdict objects — injected content echoed by the judge). Throw so the
+        // caller fails closed instead of falling back to legacy pattern
+        // matching, which would trust the raw (possibly injected) text.
+        throw new Error('Factuality checker returned ambiguous verdict JSON (conflicting objects)');
+      }
+      return undefined;
+    }
+    if (!jsonData.category || typeof jsonData.category !== 'string') {
       return undefined;
     }
 
@@ -105,7 +122,10 @@ function parseFactualityJsonResponse(
     };
   } catch (err) {
     const error = err as Error;
-    if (error.message.startsWith('Invalid category value:')) {
+    if (
+      error.message.startsWith('Invalid category value:') ||
+      error.message.startsWith('Factuality checker returned ambiguous verdict JSON')
+    ) {
       throw error;
     }
     logger.debug(`JSON parsing failed: ${error.message}`);
