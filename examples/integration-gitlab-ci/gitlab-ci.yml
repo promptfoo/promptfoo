@@ -23,6 +23,10 @@
     - |
       export PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
       : "${PROMPTFOO_OUTPUT_DIR:?PROMPTFOO_OUTPUT_DIR must not be empty}"
+      if [ -L "$PROMPTFOO_OUTPUT_DIR" ]; then
+        echo 'PROMPTFOO_OUTPUT_DIR must not be a symlink.' >&2
+        exit 1
+      fi
       mkdir -p "$PROMPTFOO_OUTPUT_DIR"
       if find "$PROMPTFOO_OUTPUT_DIR" -mindepth 1 -maxdepth 1 -print -quit | grep -q .; then
         echo 'PROMPTFOO_OUTPUT_DIR must be empty before running an eval.' >&2
@@ -195,6 +199,7 @@
 .promptfoo-comment:
   id_tokens: {}
   cache: []
+  services: []
   image:
     name: ghcr.io/promptfoo/promptfoo:0.123.0@sha256:e53a3332eee970854cfee19040e88ad9f72161c604d7262c477431af71555afd
     entrypoint: ['']
@@ -255,6 +260,9 @@
           ;;
       esac
 
+      exec 3<<PROMPTFOO_GITLAB_TOKEN_VALUE
+      $PROMPTFOO_GITLAB_TOKEN
+      PROMPTFOO_GITLAB_TOKEN_VALUE
       env -i \
         PATH="$PATH" \
         HOME="${HOME:-/home/promptfoo}" \
@@ -272,7 +280,6 @@
         NODE_EXTRA_CA_CERTS="${NODE_EXTRA_CA_CERTS:-}" \
         NODE_USE_ENV_PROXY="$proxy_enabled" \
         PROMPTFOO_EVAL_JOB_NAME="${PROMPTFOO_EVAL_JOB_NAME:-promptfoo-eval}" \
-        PROMPTFOO_GITLAB_TOKEN="$PROMPTFOO_GITLAB_TOKEN" \
         PROMPTFOO_OUTPUT_DIR="$PROMPTFOO_OUTPUT_DIR" \
         PROMPTFOO_SHARE="${PROMPTFOO_SHARE:-false}" \
         PROMPTFOO_SHARING_APP_BASE_URL="${PROMPTFOO_SHARING_APP_BASE_URL:-https://promptfoo.app}" \
@@ -286,11 +293,11 @@
         CI_PROJECT_ID: projectId,
         CI_SERVER_URL: serverUrl,
         PROMPTFOO_EVAL_JOB_NAME: jobName,
-        PROMPTFOO_GITLAB_TOKEN: token,
         PROMPTFOO_OUTPUT_DIR: outputDirectory,
         PROMPTFOO_SHARE: share,
         PROMPTFOO_SHARING_APP_BASE_URL: sharingAppBaseUrl,
       } = process.env;
+      const token = (await readFile('/dev/fd/3', 'utf8')).replace(/\n$/, '');
 
       if (!apiBaseUrl || !mergeRequestIid || !pipelineId || !projectId || !serverUrl || !token || !outputDirectory) {
         throw new Error('GitLab API, merge request, pipeline, project, server, token, and output directory must be available.');
@@ -348,7 +355,7 @@
           throw error;
         }
       }
-      const stats = result.results?.stats ?? {};
+      const stats = result && typeof result === 'object' ? result.results?.stats ?? {} : {};
       const successes = Number(stats.successes ?? 0);
       const failures = Number(stats.failures ?? 0);
       const errors = Number(stats.errors ?? 0);

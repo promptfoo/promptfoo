@@ -27,6 +27,7 @@ interface GitLabJob {
   script: string[];
   variables: Record<string, string>;
   resource_group?: string;
+  services?: string[];
   when?: string;
 }
 
@@ -313,6 +314,19 @@ exit "\${PROMPTFOO_TEST_EXIT_CODE:-0}"
 
     expect(result.status).toBe(1);
     expect(result.stderr).toContain('PROMPTFOO_OUTPUT_DIR must be empty');
+    expect(fs.existsSync(path.join(tempDir, 'promptfoo-args'))).toBe(false);
+  });
+
+  it('rejects symlinked output directories before running eval code', async () => {
+    const staleDir = path.join(tempDir, 'stale-results');
+    fs.mkdirSync(staleDir);
+    fs.writeFileSync(path.join(staleDir, 'results.json'), 'stale');
+    fs.symlinkSync(staleDir, path.join(tempDir, job.variables.PROMPTFOO_OUTPUT_DIR));
+
+    const result = await runEvaluation();
+
+    expect(result.status).toBe(1);
+    expect(result.stderr).toContain('PROMPTFOO_OUTPUT_DIR must not be a symlink');
     expect(fs.existsSync(path.join(tempDir, 'promptfoo-args'))).toBe(false);
   });
 
@@ -708,6 +722,30 @@ exit "\${PROMPTFOO_TEST_EXIT_CODE:-0}"
     );
   });
 
+  it('treats JSON null as no results for a failed eval', async () => {
+    await runEvaluation();
+    fs.writeFileSync(path.join(tempDir, '.promptfoo-results/results.json'), 'null');
+    evalJobStatus = 'failed';
+
+    await withGitLabServer(
+      (request, response) => {
+        response.setHeader('Content-Type', 'application/json');
+        response.end(
+          request.url === '/api/v4/user' ? '{"id":123}' : request.method === 'GET' ? '[]' : '{}',
+        );
+      },
+      async (origin, requests) => {
+        const comment = await runScript(commentJob.script[0], {
+          CI_API_V4_URL: origin + '/api/v4',
+          CI_SERVER_URL: origin,
+        });
+
+        expect(comment.status).toBe(0);
+        expect(JSON.parse(requests.at(-1)!.body).body).toContain('No results were written.');
+      },
+    );
+  });
+
   it('does not restore stale default-cache results into an artifact-only comment job', async () => {
     evalJobStatus = 'failed';
     const defaultCache = { key: 'shared-results', paths: ['.promptfoo-results'] };
@@ -996,6 +1034,8 @@ exit "\${PROMPTFOO_TEST_EXIT_CODE:-0}"
   });
 
   it('ignores Node preload hooks while the merge request write token is available', async () => {
+    expect(commentJob.services).toEqual([]);
+    expect(commentJob.script[0]).not.toContain('PROMPTFOO_GITLAB_TOKEN="$PROMPTFOO_GITLAB_TOKEN"');
     await runEvaluation();
     const preloadPath = path.join(tempDir, 'preload.js');
     const leakedTokenPath = path.join(tempDir, 'leaked-token');
