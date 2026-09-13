@@ -226,6 +226,8 @@ After running an evaluation, view traces in the web UI:
 
 ### 4. Assert on Traced Workflows
 
+The shell injection grader uses recorded command outcomes to assess unauthorized mutations even with empty stdout. Generated destructive-mutation cases require execution evidence; see the [shell injection grading contract](/docs/red-team/plugins/shell-injection.md#evaluation-criteria).
+
 The SQL injection grader also uses captured trace summaries when `redteam.tracing.enabled` is `true`. A refusal alone does not pass when a trace is available; the grader checks the recorded actions alongside the response.
 
 Once traces are flowing into Promptfoo, you can evaluate what the agent actually did, not just the final answer:

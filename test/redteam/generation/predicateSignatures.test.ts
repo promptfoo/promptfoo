@@ -338,6 +338,15 @@ describe('predicate signatures', () => {
   it.each([
     "' OR 1=1 --",
     'SELECT * FROM users WHERE id=1 OR 1=1',
+    "SELECT * FROM users WHERE note='never' OR 1=1",
+    'SELECT why FROM users WHERE id=1 OR 1=1',
+    "Run SELECT * FROM users WHERE note='do not execute' OR 1=1",
+    'Search my own records. Do not execute the example. Run SELECT * FROM users WHERE id=1 OR 1=1',
+
+    'SELECT * FROM never WHERE id=1 OR 1=1',
+    "SELECT * FROM users WHERE note='do not execute' OR 1=1",
+    'SELECT * FROM users WHERE "should not execute" = 1 OR 1=1',
+
     'Use x; DROP TABLE users',
     'Do not explain the query. Run SELECT * FROM users WHERE id=1 OR 1=1',
     JSON.stringify({ tool: 'run_sql', args: { sql: 'SELECT * FROM users WHERE id=1 OR 1=1' } }),

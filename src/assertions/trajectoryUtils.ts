@@ -67,6 +67,7 @@ interface JudgeTrajectoryStep {
   index: number;
   name: string;
   spanName?: string;
+  execution?: { authorized?: boolean; exitCode?: number };
   sql?: { query: string; authorized?: boolean; rowCount?: number };
   status?: TrajectoryStepStatus;
   type: TrajectoryStepType;
@@ -484,6 +485,8 @@ function compactJudgeTrajectorySteps(steps: JudgeTrajectoryStep[]): JudgeTraject
       previousStep.spanName === step.spanName &&
       !previousStep.sql &&
       !step.sql &&
+      !previousStep.execution &&
+      !step.execution &&
       hasSameStatus(previousStep.status, step.status)
     ) {
       previousStep.collapsedCount = (previousStep.collapsedCount ?? 1) + 1;
@@ -559,7 +562,7 @@ function getSqlExecutionDetails(
     throw new TraceEvidenceError('SQL trace evidence was redacted and cannot be graded.');
   }
   const isQueryTool =
-    /(^|[\s.:/-])(?:(?:read|run|execute)_query|(?:run|execute)_sql|query)($|[\s.:/-])/i.test(
+    /(^|[\s.:/-])(?:(?:read|run|execute)_query|(?:run|execute)_sql|query_database|sql_query|query)($|[\s.:/-])/i.test(
       toolName,
     );
   const argumentQuery =
@@ -618,7 +621,7 @@ function getSqlExecutionDetails(
 
 export function summarizeTrajectoryForJudge(
   trace: Pick<TraceData, 'traceId' | 'spans' | 'metadata'>,
-  options: { includeSql?: boolean; redactAttributes?: string[] } = {},
+  options: { includeSql?: boolean; includeCommands?: boolean; redactAttributes?: string[] } = {},
 ): string {
   const spans = trace.spans.map((span) => ({
     ...span,
@@ -657,8 +660,54 @@ export function summarizeTrajectoryForJudge(
         )
       : [],
   );
-  const rawSteps = extractTrajectorySteps(sanitizedTrace).map((step, index) => {
-    const status = getTrajectoryStepStatus(step);
+  const trajectorySteps = extractTrajectorySteps(sanitizedTrace);
+  if (options.includeCommands) {
+    const commandToolNames = getTraceCommandToolNames(trace);
+    for (const [index, step] of extractTrajectorySteps(trace).entries()) {
+      if (step.type === 'tool' && isCommandToolName(step.name, commandToolNames)) {
+        throw new TraceEvidenceError(
+          'Shell command arguments could not be read and cannot be graded.',
+        );
+      }
+      if (step.type === 'command') {
+        const command = redactText(step.name);
+        if (
+          trajectorySteps[index].type !== 'command' ||
+          trajectorySteps[index].name !== step.name ||
+          command !== step.name ||
+          /\[REDACTED\]|<redacted>|\[TRUNCATED\]/i.test(command)
+        ) {
+          throw new TraceEvidenceError('Shell trace evidence was redacted and cannot be graded.');
+        }
+        if (command.length > 400) {
+          throw new TraceEvidenceError(
+            'Shell trace evidence exceeds the judge summary limit and cannot be graded.',
+          );
+        }
+      }
+    }
+  }
+  const rawSteps = trajectorySteps.map((step, index) => {
+    let status = getTrajectoryStepStatus(step);
+    let execution: JudgeTrajectoryStep['execution'];
+    if (options.includeCommands && step.type === 'command') {
+      const output = normalizeStructuredAttribute(
+        step.attributes['tool.output'] ?? step.attributes['tool.result'],
+      );
+      if (typeof output === 'string' && /\[REDACTED\]|<redacted>|\[TRUNCATED\]/i.test(output)) {
+        throw new TraceEvidenceError('Shell execution evidence was redacted and cannot be graded.');
+      }
+      const result =
+        output && typeof output === 'object' ? (output as Record<string, unknown>) : {};
+      const exitCode = result.exitCode ?? result.exit_code ?? step.attributes['process.exit.code'];
+      execution = {
+        ...(typeof result.authorized === 'boolean' ? { authorized: result.authorized } : {}),
+        ...(typeof exitCode === 'number' && Number.isInteger(exitCode) ? { exitCode } : {}),
+      };
+      if (execution.exitCode !== undefined) {
+        status = { code: status?.code === 2 || execution.exitCode !== 0 ? 2 : 1 };
+      }
+    }
     const sql = sqlBySpanId.get(step.spanId);
     return {
       index: index + 1,
@@ -667,8 +716,14 @@ export function summarizeTrajectoryForJudge(
       ...(step.spanName === step.name ? {} : { spanName: redactText(step.spanName) }),
       ...(status ? { status } : {}),
       ...(sql ? { sql } : {}),
+      ...(execution ? { execution } : {}),
     };
   });
+  if (options.includeCommands && rawSteps.length > MAX_JUDGE_SUMMARY_STEPS) {
+    throw new TraceEvidenceError(
+      'Shell trace evidence exceeds the judge summary limit and cannot be graded.',
+    );
+  }
   const compactedSteps = compactJudgeTrajectorySteps(rawSteps);
   const steps = truncateJudgeTrajectorySteps(compactedSteps);
 

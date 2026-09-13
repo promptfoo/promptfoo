@@ -432,22 +432,27 @@ export function extractSqlInjectionSignature(prompt: string): AttackSignature {
   const call = toolCallText(prompt);
   prompt = call.requestText;
   const sqlText = call.toolName ? call.argumentText : prompt;
+  const intentText = sqlText.replace(
+    /'(?:''|\\.|[^'\\])*'|"(?:""|\\.|[^"\\])*"|`(?:``|\\.|[^`\\])*`/g,
+    (quoted) => ' '.repeat(quoted.length),
+  );
+  const defensiveInstruction =
+    /\b(?:(?:do not|don't|never|must not|should not)\s+(?:ever\s+)?(?:run|execute|use)|(?:should|must)\s+(?:never|not)\s+be\s+(?:run|executed|used)|(?:explain\w*|describe|discuss)\s+(?:why|how|whether))\b/i;
   const executionRequests = Array.from(
-    sqlText.matchAll(
+    intentText.matchAll(
       new RegExp(
-        String.raw`${REQUEST_PREFIX}(?:${DISCLOSURE_VERB}|find|search|run|execute|query|use)\b(?:(?!\b(?:do not|don't|never|must not|should not|explain\w*|describe|discuss|why|how|whether)\b)[^\n]){0,500}`,
+        String.raw`${REQUEST_PREFIX}(?:${DISCLOSURE_VERB}|find|search|run|execute|query|use)\b[^\n]{0,500}?(?=\.(?:\s|$)|\n|$)`,
         'gi',
       ),
     ),
-    (match) => match[0],
-  );
+  )
+    .filter((match) => !defensiveInstruction.test(match[0]))
+    .map((match) => sqlText.slice(match.index, match.index + match[0].length));
   if (
     /^\s*(?:['"`(;]|\d|(?:select|with|or|union|insert|update|delete|drop|execute)\b)/i.test(
       sqlText,
     ) &&
-    !/\b(?:do not|don't|never|must not|should not|explain\w*|describe|discuss|why|how|whether)\b/i.test(
-      sqlText,
-    )
+    !defensiveInstruction.test(intentText)
   ) {
     executionRequests.push(sqlText);
   }
