@@ -785,7 +785,11 @@ export type AssertionValueFunctionResult = boolean | number | GradingResult;
 
 export interface AssertionParams<TType extends string = AssertionType> {
   assertion: Assertion<TType>;
-  baseType: [TType] extends [`not-${infer Base}`] ? Base : TType;
+  baseType: [AssertionType] extends [TType]
+    ? TType
+    : TType extends `not-${infer Base}`
+      ? Base
+      : TType;
   /** Context passed to provider.callApi() for model-graded assertions */
   providerCallContext?: CallApiContextParams;
   /** Context passed to assertion value functions */
