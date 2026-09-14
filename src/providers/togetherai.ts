@@ -1,10 +1,11 @@
+import { resolveProviderCreatorInput } from './creator';
 import { OpenAiChatCompletionProvider } from './openai/chat';
 import { OpenAiCompletionProvider } from './openai/completion';
 import { OpenAiEmbeddingProvider } from './openai/embedding';
 import { splitLocalOptions } from './openai/localOptions';
 
-import type { EnvOverrides } from '../types/env';
-import type { ApiProvider, ProviderOptions } from '../types/index';
+import type { ApiProvider } from '../types/index';
+import type { ProviderCreatorOptions } from './creator';
 
 /**
  * Creates a TogetherAI provider using OpenAI-compatible endpoints
@@ -14,20 +15,15 @@ import type { ApiProvider, ProviderOptions } from '../types/index';
  */
 export function createTogetherAiProvider(
   providerPath: string,
-  options: {
-    config?: ProviderOptions;
-    id?: string;
-    env?: EnvOverrides;
-  } = {},
+  options: ProviderCreatorOptions = {},
 ): ApiProvider {
+  const providerOptions = resolveProviderCreatorInput(options);
   const splits = providerPath.split(':');
 
-  const config = options.config?.config || {};
+  const config = providerOptions.config || {};
   const { modelParameters } = splitLocalOptions(config);
   const togetherAiConfig = {
-    ...options.config,
-    id: options.id ?? options.config?.id,
-    env: options.config?.env ?? options.env,
+    ...providerOptions,
     config: {
       ...config,
       apiBaseUrl: config.apiBaseUrl || 'https://api.together.xyz/v1',

@@ -199,7 +199,10 @@ export async function loadApiProvider(
 
   for (const factory of await getProviderFactories(renderedProviderPath)) {
     if (factory.test(renderedProviderPath)) {
-      const ret = await factory.create(renderedProviderPath, providerOptions, context);
+      const ret = await factory.create(renderedProviderPath, providerOptions, {
+        ...context,
+        env: mergedEnv,
+      });
       ret.transform = options.transform;
       ret.delay = options.delay;
       ret.inputs = options.inputs;

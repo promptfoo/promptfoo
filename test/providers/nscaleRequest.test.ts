@@ -12,6 +12,7 @@ vi.mock('../../src/cache', async (importOriginal) => ({
 }));
 
 import { fetchWithCache } from '../../src/cache';
+import { loadApiProvider } from '../../src/providers';
 import { createNscaleProvider } from '../../src/providers/nscale';
 import { NscaleImageProvider } from '../../src/providers/nscale/image';
 import { OpenAiGenericProvider } from '../../src/providers/openai';
@@ -149,6 +150,11 @@ describe('Nscale request construction', () => {
       cost: 0.000001,
       inputCost: 0.0000005,
       outputCost: 0.0000015,
+      basePath: '/fixture/local-config',
+      linkedTargetId: 'promptfoo://provider/fixture',
+      mcp: { enabled: false },
+      showThinking: true,
+      omitDefaults: true,
     });
 
     for (const key of [
@@ -162,9 +168,28 @@ describe('Nscale request construction', () => {
       'cost',
       'inputCost',
       'outputCost',
+      'basePath',
+      'linkedTargetId',
+      'mcp',
+      'showThinking',
+      'omitDefaults',
     ]) {
       expect(body).not.toHaveProperty(key);
     }
+  });
+
+  it('does not send the config directory injected by the provider loader', async () => {
+    mockResponse();
+    const provider = await loadApiProvider('nscale:chat:fixture-model', {
+      basePath: '/fixture/private-project',
+      options: { config: { apiKey: 'fixture-token', temperature: 0.3 } },
+    });
+    await provider.callApi('hello');
+
+    const [, request] = vi.mocked(fetchWithCache).mock.calls[0];
+    const body = JSON.parse(request?.body as string);
+    expect(body).not.toHaveProperty('basePath');
+    expect(body.temperature).toBe(0.3);
   });
 
   it('merges an explicit passthrough block without nesting it', async () => {
