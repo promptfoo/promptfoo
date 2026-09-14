@@ -38,8 +38,6 @@ type ArtifactEvalOutput = {
 
 const ROOT = path.resolve(import.meta.dirname, '..');
 const drizzleDir = path.join(ROOT, 'drizzle');
-// The August 2026 undici advisories were fixed in 6.28.0, 7.29.0 and 8.9.0. Keep this in sync
-// with PATCHED_UNDICI_RANGE in test/package-manifests.test.ts.
 const PATCHED_UNDICI_RANGE = '^6.28.0 || ^7.29.0 || >=8.9.0';
 const requiredPackagedPaths = [
   'dist/drizzle/meta/_journal.json',
@@ -239,13 +237,6 @@ function assertInstalledWebApp(installedPackageDir: string): void {
   );
 }
 
-/**
- * The ref parser fetches remote `$ref`s through its own nested undici, and consumers install
- * from the published tarball rather than this repo's lockfile — so the version they actually
- * resolve is only observable here. Asserting it against the parser's declared range would be a
- * tautology (npm cannot install outside it); the patched floor per undici major is the check
- * that can fail.
- */
 function assertInstalledRefParserTransport(installedPackageDir: string): void {
   const packageRequire = createRequire(path.join(installedPackageDir, 'package.json'));
   const parserRequire = createRequire(
@@ -342,7 +333,7 @@ function writeConsumerScripts(consumerDir: string): void {
     path.join(consumerDir, 'import-package.mjs'),
     [
       "import { AssertionSchema, AtomicTestCaseSchema, TestSuiteSchema } from 'promptfoo';",
-      "import { EmailSchema, GetUserResponseSchema, InputsSchema, PromptSchema, hasFunctionToolCallValidator } from 'promptfoo/contracts';",
+      "import { ApiRoutes, EmailSchema, GetUserResponseSchema, InputsSchema, ModelAuditSchemas, NODE_20_RUNTIME_NOTICE_ID, PromptSchema, RuntimeCompatibilityNoticeSchema, ServerResponseSchemas, hasFunctionToolCallValidator } from 'promptfoo/contracts';",
       '',
       'for (const value of [AssertionSchema, AtomicTestCaseSchema, EmailSchema, GetUserResponseSchema, InputsSchema, PromptSchema, TestSuiteSchema]) {',
       "  if (!value || typeof value.safeParse !== 'function') {",
@@ -352,6 +343,12 @@ function writeConsumerScripts(consumerDir: string): void {
       'if (!hasFunctionToolCallValidator({ validateFunctionToolCall() {} })) {',
       "  throw new Error('Missing expected ESM provider capability export');",
       '}',
+      "if (NODE_20_RUNTIME_NOTICE_ID !== 'node20-removal-2026-07-30' || !RuntimeCompatibilityNoticeSchema) {",
+      "  throw new Error('Missing expected ESM runtime compatibility export');",
+      '}',
+      "if (ApiRoutes.Health.expressPath !== '/health' || !ServerResponseSchemas.Health.Response.safeParse({ status: 'OK', version: 'test' }).success || !ModelAuditSchemas.ListScans.Query.safeParse({ limit: 1 }).success) {",
+      "  throw new Error('Missing expected ESM API contracts export');",
+      '}',
       '',
     ].join('\n'),
   );
@@ -359,7 +356,7 @@ function writeConsumerScripts(consumerDir: string): void {
     path.join(consumerDir, 'require-package.cjs'),
     [
       "const { AssertionSchema, AtomicTestCaseSchema, TestSuiteSchema } = require('promptfoo');",
-      "const { EmailSchema, GetUserResponseSchema, InputsSchema, PromptSchema, hasFunctionToolCallValidator } = require('promptfoo/contracts');",
+      "const { ApiRoutes, EmailSchema, GetUserResponseSchema, InputsSchema, ModelAuditSchemas, NODE_20_RUNTIME_NOTICE_ID, PromptSchema, RuntimeCompatibilityNoticeSchema, ServerResponseSchemas, hasFunctionToolCallValidator } = require('promptfoo/contracts');",
       '',
       'for (const value of [AssertionSchema, AtomicTestCaseSchema, EmailSchema, GetUserResponseSchema, InputsSchema, PromptSchema, TestSuiteSchema]) {',
       "  if (!value || typeof value.safeParse !== 'function') {",
@@ -369,14 +366,20 @@ function writeConsumerScripts(consumerDir: string): void {
       'if (!hasFunctionToolCallValidator({ validateFunctionToolCall() {} })) {',
       "  throw new Error('Missing expected CJS provider capability export');",
       '}',
+      "if (NODE_20_RUNTIME_NOTICE_ID !== 'node20-removal-2026-07-30' || !RuntimeCompatibilityNoticeSchema) {",
+      "  throw new Error('Missing expected CJS runtime compatibility export');",
+      '}',
+      "if (ApiRoutes.Health.expressPath !== '/health' || !ServerResponseSchemas.Health.Response.safeParse({ status: 'OK', version: 'test' }).success || !ModelAuditSchemas.ListScans.Query.safeParse({ limit: 1 }).success) {",
+      "  throw new Error('Missing expected CJS API contracts export');",
+      '}',
       '',
     ].join('\n'),
   );
   fs.writeFileSync(
     path.join(consumerDir, 'import-contracts.ts'),
     [
-      "import { GetUserResponseSchema, PromptSchema, hasFunctionToolCallValidator, isTransformFunction } from 'promptfoo/contracts';",
-      "import type { BlobRef, FunctionToolCallValidator, GetUserResponse, Prompt, ProviderResponse, TransformFunction } from 'promptfoo/contracts';",
+      "import { ApiRoutes, GetUserResponseSchema, ModelAuditSchemas, NODE_20_RUNTIME_NOTICE_ID, PromptSchema, RuntimeCompatibilityNoticeSchema, ServerResponseSchemas, hasFunctionToolCallValidator, isTransformFunction } from 'promptfoo/contracts';",
+      "import type { ApiRouteContract, BlobRef, FunctionToolCallValidator, GetUserResponse, Prompt, ProviderResponse, RuntimeCompatibilityNotice, TransformFunction } from 'promptfoo/contracts';",
       '',
       "const prompt: Prompt = { label: 'Greeting', raw: 'Hello, world!' };",
       'const transform: TransformFunction<string, string> = (output) => output;',
@@ -384,9 +387,15 @@ function writeConsumerScripts(consumerDir: string): void {
       'const validator: FunctionToolCallValidator = { validateFunctionToolCall() {} };',
       "const blobRef: BlobRef = { hash: 'abc123', mimeType: 'image/png', provider: 'filesystem', sizeBytes: 3, uri: 'promptfoo://blob/abc123' };",
       "const response: ProviderResponse = { images: [{ blobRef }], output: 'ok' };",
+      'const healthRoute: ApiRouteContract = ApiRoutes.Health;',
+      "const runtimeNotice: RuntimeCompatibilityNotice = { id: NODE_20_RUNTIME_NOTICE_ID, kind: 'runtime_deprecation', runtime: 'node', currentVersion: 'v20.20.2', currentMajor: 20, removalDate: '2026-07-30', minimumVersion: '22.22.0', recommendedVersion: '24 LTS', documentationUrl: 'https://www.promptfoo.dev/docs/installation/#nodejs-runtime-support' };",
       '',
       'GetUserResponseSchema.parse(user);',
       'PromptSchema.parse(prompt);',
+      "ServerResponseSchemas.Health.Response.parse({ status: 'OK', version: 'test' });",
+      'ModelAuditSchemas.ListScans.Query.parse({ limit: 1 });',
+      'RuntimeCompatibilityNoticeSchema.parse(runtimeNotice);',
+      'void healthRoute;',
       'void response;',
       'if (!isTransformFunction(transform) || !hasFunctionToolCallValidator(validator)) {',
       "  throw new Error('Missing expected TypeScript contracts export');",
@@ -401,6 +410,7 @@ function writeConsumerScripts(consumerDir: string): void {
         module: 'NodeNext',
         moduleResolution: 'NodeNext',
         noEmit: true,
+        skipLibCheck: false,
         strict: true,
       },
       include: ['import-contracts.ts'],
@@ -416,8 +426,14 @@ function writeConsumerScripts(consumerDir: string): void {
       'const validator: contracts.FunctionToolCallValidator = { validateFunctionToolCall() {} };',
       "const blobRef: contracts.BlobRef = { hash: 'abc123', mimeType: 'image/png', provider: 'filesystem', sizeBytes: 3, uri: 'promptfoo://blob/abc123' };",
       "const response: contracts.ProviderResponse = { images: [{ blobRef }], output: 'ok' };",
+      'const healthRoute: contracts.ApiRouteContract = contracts.ApiRoutes.Health;',
+      "const runtimeNotice: contracts.RuntimeCompatibilityNotice = { id: contracts.NODE_20_RUNTIME_NOTICE_ID, kind: 'runtime_deprecation', runtime: 'node', currentVersion: 'v20.20.2', currentMajor: 20, removalDate: '2026-07-30', minimumVersion: '22.22.0', recommendedVersion: '24 LTS', documentationUrl: 'https://www.promptfoo.dev/docs/installation/#nodejs-runtime-support' };",
       'contracts.GetUserResponseSchema.parse(user);',
       'contracts.PromptSchema.parse(prompt);',
+      "contracts.ServerResponseSchemas.Health.Response.parse({ status: 'OK', version: 'test' });",
+      'contracts.ModelAuditSchemas.ListScans.Query.parse({ limit: 1 });',
+      'contracts.RuntimeCompatibilityNoticeSchema.parse(runtimeNotice);',
+      'void healthRoute;',
       'void response;',
       'if (!contracts.hasFunctionToolCallValidator(validator)) {',
       "  throw new Error('Missing expected CommonJS TypeScript contracts export');",
@@ -432,9 +448,24 @@ function writeConsumerScripts(consumerDir: string): void {
         module: 'Node16',
         moduleResolution: 'Node16',
         noEmit: true,
+        skipLibCheck: false,
         strict: true,
       },
       include: ['require-contracts.cts'],
+    }),
+  );
+  fs.writeFileSync(
+    path.join(consumerDir, 'tsconfig.typescript-5.6-legacy.json'),
+    JSON.stringify({
+      compilerOptions: {
+        esModuleInterop: true,
+        module: 'CommonJS',
+        moduleResolution: 'node',
+        noEmit: true,
+        skipLibCheck: false,
+        strict: true,
+      },
+      include: ['import-contracts.ts'],
     }),
   );
 }
@@ -581,11 +612,13 @@ async function main(): Promise<void> {
   const configDir = path.join(tempDir, 'config');
   const consumerDir = path.join(tempDir, 'consumer');
   const consumerNpmrc = path.join(tempDir, 'consumer.npmrc');
+  const typescript56Dir = path.join(tempDir, 'typescript-5.6');
 
   try {
     fs.mkdirSync(artifactsDir);
     fs.mkdirSync(configDir);
     fs.mkdirSync(consumerDir);
+    fs.mkdirSync(typescript56Dir);
     fs.writeFileSync(consumerNpmrc, '');
 
     const packOutput = runNpm(
@@ -650,6 +683,35 @@ async function main(): Promise<void> {
     const tscPath = path.join(ROOT, 'node_modules', 'typescript', 'bin', 'tsc');
     for (const tsconfig of ['tsconfig.json', 'tsconfig.node16-cjs.json']) {
       run(process.execPath, [tscPath, '--project', tsconfig], consumerDir);
+    }
+    fs.writeFileSync(
+      path.join(typescript56Dir, 'package.json'),
+      JSON.stringify({ name: 'promptfoo-typescript-5.6-compiler', private: true }),
+    );
+    runNpm(
+      [
+        'install',
+        '--ignore-scripts',
+        '--no-audit',
+        '--no-fund',
+        '--no-package-lock',
+        '--registry=https://registry.npmjs.org/',
+        'typescript@5.6.3',
+      ],
+      typescript56Dir,
+      { npm_config_userconfig: consumerNpmrc },
+    );
+    const typescript56Path = path.join(typescript56Dir, 'node_modules', 'typescript', 'bin', 'tsc');
+    assert.equal(
+      run(process.execPath, [typescript56Path, '--version'], consumerDir).trim(),
+      'Version 5.6.3',
+    );
+    for (const tsconfig of [
+      'tsconfig.json',
+      'tsconfig.typescript-5.6-legacy.json',
+      'tsconfig.node16-cjs.json',
+    ]) {
+      run(process.execPath, [typescript56Path, '--project', tsconfig], consumerDir);
     }
     assertInstalledWebApp(installedPackageDir);
 

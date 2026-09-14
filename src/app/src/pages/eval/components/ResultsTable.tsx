@@ -12,18 +12,15 @@ import {
 } from '@app/components/ui/select';
 import { Spinner } from '@app/components/ui/spinner';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@app/components/ui/tooltip';
-import { EVAL_ROUTES, ROUTES } from '@app/constants/routes';
+import { ROUTES } from '@app/constants/routes';
 import { useToast } from '@app/hooks/useToast';
 import { cn } from '@app/lib/utils';
-import { callApi } from '@app/utils/api';
+import { callApiJson } from '@app/utils/api';
 import { formatDuration } from '@app/utils/date';
 import { normalizeMediaText, resolveAudioSource, resolveImageSource } from '@app/utils/media';
 import { getActualPrompt } from '@app/utils/providerResponse';
-import {
-  getIncurredTokenAccounting,
-  getPrimaryTokenUsageLabel,
-  getTokenUsageTotal,
-} from '@app/utils/tokenUsage';
+import { getCombinedTokenUsageTotal } from '@app/utils/tokenUsage';
+import { ApiRoutes, EVAL_TABLE_MAX_PAGE_SIZE, EvalResponseSchemas } from '@promptfoo/contracts';
 import { FILE_METADATA_KEY, HUMAN_ASSERTION_TYPE } from '@promptfoo/providers/constants';
 import {
   type EvalResultsFilterMode,
@@ -34,7 +31,6 @@ import {
   type ProviderOptions,
   type Vars,
 } from '@promptfoo/types';
-import { EVAL_TABLE_MAX_PAGE_SIZE } from '@promptfoo/types/api/eval';
 import invariant from '@promptfoo/util/invariant';
 import {
   createColumnHelper,
@@ -706,93 +702,33 @@ function renderCostMetric({
 function renderTokenMetrics({
   metrics,
   filteredMetrics,
-  isRedteam,
   testCount,
 }: {
   metrics: PromptMetrics['total'];
   filteredMetrics: PromptMetrics['filtered'];
-  isRedteam: boolean;
   testCount?: PromptSummaryMetric;
 }): React.ReactNode {
-  const primaryTokens = getTokenUsageTotal(metrics?.tokenUsage);
-  const attackerTokens = getTokenUsageTotal(metrics?.tokenUsage?.attacker);
-  const gradingTokens = getTokenUsageTotal(metrics?.tokenUsage?.assertions);
-  const incurredAccounting = getIncurredTokenAccounting(metrics?.tokenUsage);
-
-  if (primaryTokens === 0 && attackerTokens === 0 && gradingTokens === 0) {
+  const getTotal = (usage: NonNullable<typeof metrics>['tokenUsage'] | undefined) =>
+    getCombinedTokenUsageTotal(usage);
+  const totalTokens = getTotal(metrics?.tokenUsage);
+  if (!totalTokens) {
     return null;
   }
 
-  const totalTokens = primaryTokens + attackerTokens + gradingTokens;
-  const filteredPrimaryTokens = filteredMetrics?.tokenUsage
-    ? getTokenUsageTotal(filteredMetrics.tokenUsage)
-    : undefined;
-  const filteredAttackerTokens = filteredMetrics?.tokenUsage
-    ? getTokenUsageTotal(filteredMetrics.tokenUsage.attacker)
-    : undefined;
-  const filteredGradingTokens = filteredMetrics?.tokenUsage
-    ? getTokenUsageTotal(filteredMetrics.tokenUsage.assertions)
-    : undefined;
-  const filteredTokens =
-    filteredPrimaryTokens === undefined
-      ? undefined
-      : filteredPrimaryTokens + (filteredAttackerTokens ?? 0) + (filteredGradingTokens ?? 0);
+  const filteredTokens = getTotal(filteredMetrics?.tokenUsage);
   const totalAverage = testCount?.total ? totalTokens / testCount.total : 0;
   const filteredAverage =
-    filteredTokens !== undefined && testCount?.filtered
-      ? filteredTokens / testCount.filtered
-      : undefined;
+    filteredTokens && testCount?.filtered ? filteredTokens / testCount.filtered : undefined;
 
   return (
     <>
       <div>
         <strong>Total Tokens:</strong> {formatMetricValue(totalTokens)}
-        {filteredTokens === undefined
-          ? null
-          : renderFilteredSuffix(formatMetricValue(filteredTokens))}
+        {filteredTokens ? renderFilteredSuffix(formatMetricValue(filteredTokens)) : null}
       </div>
-      <div>
-        <strong>{getPrimaryTokenUsageLabel(isRedteam)} Tokens:</strong>{' '}
-        {formatMetricValue(primaryTokens)}
-        {filteredPrimaryTokens === undefined
-          ? null
-          : renderFilteredSuffix(formatMetricValue(filteredPrimaryTokens))}
-      </div>
-      {attackerTokens > 0 ? (
-        <div>
-          <strong>Attacker Tokens:</strong> {formatMetricValue(attackerTokens)}
-          {filteredAttackerTokens === undefined
-            ? null
-            : renderFilteredSuffix(formatMetricValue(filteredAttackerTokens))}
-        </div>
-      ) : null}
-      {gradingTokens > 0 ? (
-        <div>
-          <strong>Grading Tokens:</strong> {formatMetricValue(gradingTokens)}
-          {filteredGradingTokens === undefined
-            ? null
-            : renderFilteredSuffix(formatMetricValue(filteredGradingTokens))}
-        </div>
-      ) : null}
-      {incurredAccounting ? (
-        <>
-          <div>
-            <strong>Incurred Tokens:</strong> {formatMetricValue(incurredAccounting.incurredTokens)}
-          </div>
-          <div>
-            <strong>Cached Savings:</strong> {formatMetricValue(incurredAccounting.cachedSavings)}
-          </div>
-          <div>
-            <strong>Actual Target Requests:</strong>{' '}
-            {formatMetricValue(incurredAccounting.actualRequests)}
-          </div>
-        </>
-      ) : null}
       <div>
         <strong>Avg Tokens:</strong> {formatMetricValue(totalAverage)}
-        {filteredAverage === undefined
-          ? null
-          : renderFilteredSuffix(formatMetricValue(filteredAverage))}
+        {filteredAverage ? renderFilteredSuffix(formatMetricValue(filteredAverage)) : null}
       </div>
     </>
   );
@@ -1044,25 +980,22 @@ async function saveManualRating({
 }): Promise<void> {
   invariant(evalId, 'Cannot save manual rating without an evaluation ID');
 
-  const response =
-    version && version >= 4
-      ? await callApi(EVAL_ROUTES.RESULT_RATING(evalId, resultId), {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({ ...gradingResult }),
-        })
-      : await callApi(EVAL_ROUTES.DETAIL(evalId), {
-          method: 'PATCH',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({ table }),
-        });
-
-  if (!response.ok) {
-    throw new Error('Network response was not ok');
+  if (version && version >= 4) {
+    await callApiJson(ApiRoutes.Eval.SubmitRating, EvalResponseSchemas.SubmitRating.Response, {
+      params: { evalId, id: resultId },
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ ...gradingResult }),
+    });
+  } else {
+    await callApiJson(ApiRoutes.Eval.Update, EvalResponseSchemas.Update.Response, {
+      params: { id: evalId },
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ table }),
+    });
   }
 }
 
@@ -1101,7 +1034,6 @@ function renderPromptMetricDetails({
       {renderTokenMetrics({
         metrics,
         filteredMetrics,
-        isRedteam,
         testCount: testCounts[idx],
       })}
       {renderLatencyMetric({
@@ -2250,9 +2182,9 @@ function ResultsTable({
                     showDiffs={filterMode === 'different' && visiblePromptCount > 1}
                     searchText={debouncedSearchText}
                     showStats={showStats}
-                    isRedteam={isRedteam}
                     evaluationId={evalId || undefined}
                     testCaseId={info.row.original.test?.metadata?.testCaseId || output.id}
+                    isRedteam={isRedteam}
                   />
                 </ErrorBoundary>
               ) : (
@@ -2276,7 +2208,6 @@ function ResultsTable({
     handleRating,
     head,
     head.prompts,
-    isRedteam,
     maxTextLength,
     metricTotals,
     numAsserts,

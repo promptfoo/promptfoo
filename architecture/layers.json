@@ -87,6 +87,7 @@
       "roots": ["src/server"],
       "allowedDependencies": [
         "cli",
+        "contracts",
         "core",
         "legacy-contracts",
         "legacy-runtime",

@@ -24,7 +24,8 @@ vi.mock('react-router-dom', () => ({
   useLocation: () => ({ state: sourceEvalId ? { sourceEvalId } : null }),
 }));
 
-vi.mock('@app/utils/api', () => ({
+vi.mock('@app/utils/api', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@app/utils/api')>()),
   callApi: vi.fn(),
 }));
 
@@ -40,6 +41,9 @@ describe('RunTestSuiteButton', () => {
   beforeEach(() => {
     useStore.getState().reset();
     resetCallApiMock();
+    vi.spyOn(globalThis, 'fetch').mockImplementation((url, options) =>
+      getCallApiMock()(String(url).replace(/^\/api/, ''), options),
+    );
     mockShowToast.mockReset();
     sourceEvalId = undefined;
     timers = useTestTimers();
@@ -89,7 +93,13 @@ describe('RunTestSuiteButton', () => {
   });
 
   it('should serialize scalar prompt configs as an array before submitting eval jobs', async () => {
-    mockCallApiRoutes([{ method: 'POST', path: '/eval/job', response: { id: '123' } }]);
+    mockCallApiRoutes([
+      {
+        method: 'POST',
+        path: '/eval/job',
+        response: { id: '00000000-0000-4000-8000-000000000123' },
+      },
+    ]);
     useStore.getState().updateConfig({
       prompts: 'file://prompt.txt',
       providers: 'openai:gpt-4',
@@ -114,7 +124,13 @@ describe('RunTestSuiteButton', () => {
   });
 
   it('should serialize legacy prompt maps into prompt objects before submitting eval jobs', async () => {
-    mockCallApiRoutes([{ method: 'POST', path: '/eval/job', response: { id: '123' } }]);
+    mockCallApiRoutes([
+      {
+        method: 'POST',
+        path: '/eval/job',
+        response: { id: '00000000-0000-4000-8000-000000000123' },
+      },
+    ]);
     useStore.getState().updateConfig({
       prompts: { 'file://prompt.txt': 'Prompt label' },
       providers: 'openai:gpt-4',
@@ -139,7 +155,13 @@ describe('RunTestSuiteButton', () => {
   });
 
   it('includes trace-provider settings and runtime credentials in submitted eval jobs', async () => {
-    mockCallApiRoutes([{ method: 'POST', path: '/eval/job', response: { id: '123' } }]);
+    mockCallApiRoutes([
+      {
+        method: 'POST',
+        path: '/eval/job',
+        response: { id: '00000000-0000-4000-8000-000000000123' },
+      },
+    ]);
     const tracing = {
       enabled: true,
       queryDelay: 3000,
@@ -172,7 +194,13 @@ describe('RunTestSuiteButton', () => {
 
   it('should include the source eval id when rerunning a loaded evaluation', async () => {
     sourceEvalId = 'source-eval-id';
-    mockCallApiRoutes([{ method: 'POST', path: '/eval/job', response: { id: '123' } }]);
+    mockCallApiRoutes([
+      {
+        method: 'POST',
+        path: '/eval/job',
+        response: { id: '00000000-0000-4000-8000-000000000123' },
+      },
+    ]);
     useStore.getState().updateConfig({
       prompts: ['prompt 1'],
       providers: ['echo'],
@@ -207,11 +235,11 @@ describe('RunTestSuiteButton', () => {
   });
 
   it('should handle progress API failure after job creation', async () => {
-    const mockJobId = '123';
+    const mockJobId = '00000000-0000-4000-8000-000000000123';
     mockCallApiRoutes([
       { method: 'POST', path: '/eval/job', response: { id: mockJobId } },
       {
-        path: `/eval/job/${mockJobId}/`,
+        path: `/eval/job/${mockJobId}`,
         ok: false,
         status: 500,
         response: { message: 'Progress API failed' },
@@ -239,11 +267,8 @@ describe('RunTestSuiteButton', () => {
       await timers.advanceByAsync(1500);
     });
 
-    expect(mockShowToast).toHaveBeenCalledWith(
-      'An error occurred: HTTP error! status: 500',
-      'error',
-    );
-    expect(screen.getByRole('alert')).toHaveTextContent('HTTP error! status: 500');
+    expect(mockShowToast).toHaveBeenCalledWith('An error occurred: Progress API failed', 'error');
+    expect(screen.getByRole('alert')).toHaveTextContent('Progress API failed');
   });
 
   it('should revert to non-running state and display an error message when the initial API call fails', async () => {
@@ -275,7 +300,7 @@ describe('RunTestSuiteButton', () => {
   });
 
   it('should stop polling when unmounted', async () => {
-    const mockJobId = '123';
+    const mockJobId = '00000000-0000-4000-8000-000000000123';
     mockCallApiRoutes([{ method: 'POST', path: '/eval/job', response: { id: mockJobId } }]);
 
     useStore.getState().updateConfig({
@@ -328,7 +353,7 @@ describe('RunTestSuiteButton', () => {
 
     await act(async () => {
       resolveJobCreation?.(
-        new Response(JSON.stringify({ id: 'late-job' }), {
+        new Response(JSON.stringify({ id: '00000000-0000-4000-8000-000000000123' }), {
           status: 200,
           headers: { 'Content-Type': 'application/json' },
         }),

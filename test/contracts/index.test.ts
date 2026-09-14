@@ -15,13 +15,17 @@ import {
   InputDefinitionObjectSchema,
   InputsSchema,
   isTransformFunction,
+  JsonProviderOptionsWithIdSchema,
   LoginRequestSchema,
+  NODE_20_RUNTIME_NOTICE_ID,
+  NODE_20_SUPPORT_END_DATE,
   NunjucksFilterMapSchema,
   normalizeInputDefinition,
   normalizeInputs,
   PromptConfigSchema,
   PromptSchema,
   ProviderEnvOverridesSchema,
+  RuntimeCompatibilityNoticeSchema,
   StringOrFunctionSchema,
   SuccessResponseSchema,
   UserSchemas,
@@ -72,6 +76,47 @@ describe('contracts leaf surface', () => {
       expect(hasFunctionToolCallValidator({ validateFunctionToolCall: 'not-a-function' })).toBe(
         false,
       );
+    });
+
+    it('preserves the portable provider schema and its legacy export', async () => {
+      const legacy = await import('../../src/types/api/providers');
+      expect(legacy.JsonProviderOptionsWithIdSchema).toBe(JsonProviderOptionsWithIdSchema);
+      const provider = {
+        id: 'echo',
+        env: { CUSTOM_TEMPLATE_VAR: 'value' },
+        inputs: {
+          document: {
+            description: 'Review document',
+            type: 'docx',
+            config: { injectionPlacements: ['comment'] },
+          },
+        },
+      };
+      expect(JsonProviderOptionsWithIdSchema.parse(provider)).toEqual(provider);
+      expect(JsonProviderOptionsWithIdSchema.safeParse({ ...provider, id: '' }).success).toBe(
+        false,
+      );
+      expect(
+        JsonProviderOptionsWithIdSchema.safeParse({ ...provider, env: { invalid: 1 } }).success,
+      ).toBe(false);
+    });
+
+    it('re-exports runtime compatibility policy through the barrel', () => {
+      expect(NODE_20_RUNTIME_NOTICE_ID).toBe('node20-removal-2026-07-30');
+      expect(NODE_20_SUPPORT_END_DATE).toBe('2026-07-30');
+      expect(
+        RuntimeCompatibilityNoticeSchema.safeParse({
+          id: NODE_20_RUNTIME_NOTICE_ID,
+          kind: 'runtime_deprecation',
+          runtime: 'node',
+          currentVersion: 'v20.20.2',
+          currentMajor: 20,
+          removalDate: NODE_20_SUPPORT_END_DATE,
+          minimumVersion: '22.22.0',
+          recommendedVersion: '24 LTS',
+          documentationUrl: 'https://www.promptfoo.dev/docs/installation/#nodejs-runtime-support',
+        }).success,
+      ).toBe(true);
     });
   });
 

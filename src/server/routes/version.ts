@@ -2,6 +2,7 @@ import express from 'express';
 import semverGt from 'semver/functions/gt.js';
 import semverValid from 'semver/functions/valid.js';
 import { VERSION } from '../../constants';
+import { ApiRoutes } from '../../contracts/api/routes';
 import { getEnvBool } from '../../envars';
 import logger from '../../logger';
 import { VersionSchemas } from '../../types/api/version';
@@ -81,7 +82,7 @@ const CACHE_DURATION = 5 * 60 * 1000; // 5 minutes in milliseconds
 // During outages: ~60 requests/hour vs ~12 with 5-minute delay.
 const FAILURE_RETRY_DELAY = 60 * 1000; // 1 minute
 
-router.get('/', async (_req: Request, res: Response): Promise<void> => {
+router.get(ApiRoutes.Version.routerPath, async (_req: Request, res: Response): Promise<void> => {
   try {
     const now = Date.now();
     const updateChecksDisabled = getEnvBool('PROMPTFOO_DISABLE_UPDATE');

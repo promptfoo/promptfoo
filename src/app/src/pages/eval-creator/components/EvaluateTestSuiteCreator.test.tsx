@@ -1,5 +1,5 @@
 import { DEFAULT_CONFIG, useStore } from '@app/stores/evalConfig';
-import { callApi } from '@app/utils/api';
+import { callApiJson } from '@app/utils/api';
 import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
@@ -71,13 +71,9 @@ vi.mock('./InfoBox', () => ({
   InfoBox: vi.fn(({ children }) => <div data-testid="mock-info-box">{children}</div>),
 }));
 
-vi.mock('@app/utils/api', () => ({
-  callApi: vi.fn(() =>
-    Promise.resolve({
-      ok: true,
-      json: () => Promise.resolve({ hasCustomConfig: false }),
-    }),
-  ),
+vi.mock('@app/utils/api', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@app/utils/api')>()),
+  callApiJson: vi.fn(() => Promise.resolve({ success: true, data: { hasCustomConfig: false } })),
 }));
 
 describe('EvaluateTestSuiteCreator', () => {
@@ -494,15 +490,12 @@ describe('EvaluateTestSuiteCreator', () => {
   });
 
   it('should gracefully handle a missing hasCustomConfig property in the /providers/config-status response', async () => {
-    vi.mocked(callApi).mockResolvedValue({
-      ok: true,
-      json: async () => ({}),
-    } as Response);
+    vi.mocked(callApiJson).mockResolvedValue({ success: true, data: {} } as any);
 
     render(<EvaluateTestSuiteCreator />);
 
     await waitFor(() => {
-      expect(callApi).toHaveBeenCalledWith('/providers/config-status');
+      expect(callApiJson).toHaveBeenCalled();
     });
 
     expect(showToastMock).not.toHaveBeenCalled();

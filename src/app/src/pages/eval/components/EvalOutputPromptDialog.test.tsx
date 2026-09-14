@@ -849,6 +849,22 @@ describe('EvalOutputPromptDialog replay evaluation', () => {
     expect(screen.getByText('Replayed output text')).toBeInTheDocument();
   });
 
+  it('should serialize a structured historical replay output for display', async () => {
+    const customReplay = vi.fn().mockResolvedValue({
+      output: { content: [{ type: 'text', text: 'Structured replay' }] },
+    });
+
+    renderWithProviders(<EvalOutputPromptDialog {...defaultProps} onReplay={customReplay} />);
+
+    await act(async () => {
+      await user.click(screen.getByLabelText('Edit & Replay'));
+      await user.click(screen.getByRole('button', { name: /replay/i }));
+    });
+
+    await screen.findByText('Replay Output');
+    expect(screen.getByText(/"text": "Structured replay"/)).toBeInTheDocument();
+  });
+
   it('should display error when replay fails', async () => {
     const customReplay = vi.fn().mockResolvedValue({ error: 'Replay failed' });
     const propsWithReplay = {

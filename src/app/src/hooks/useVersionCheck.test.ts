@@ -14,12 +14,22 @@ import { act, renderHook, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { useVersionCheck } from './useVersionCheck';
 
-vi.mock('@app/utils/api', () => ({
-  callApi: vi.fn(),
-  fetchUserEmail: vi.fn(() => Promise.resolve('test@example.com')),
-  fetchUserId: vi.fn(() => Promise.resolve('test-user-id')),
-  updateEvalAuthor: vi.fn(() => Promise.resolve({})),
-}));
+vi.mock('@app/utils/api', () => {
+  const callApi = vi.fn();
+  return {
+    callApi,
+    callApiJson: vi.fn(async () => {
+      const response = await callApi('/version');
+      if (!response.ok) {
+        throw new Error('Failed to fetch version information');
+      }
+      return response.json();
+    }),
+    fetchUserEmail: vi.fn(() => Promise.resolve('test@example.com')),
+    fetchUserId: vi.fn(() => Promise.resolve('test-user-id')),
+    updateEvalAuthor: vi.fn(() => Promise.resolve({})),
+  };
+});
 
 describe('useVersionCheck', () => {
   beforeEach(() => {
