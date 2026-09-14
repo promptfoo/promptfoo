@@ -142,21 +142,25 @@ examples (provider and redteam setup also include a `scripts/` directory).
 
 ## Usage
 
-To connect Codex to Promptfoo Enterprise, install the plugin, then open
-**Coding Agent Setup** in your deployment's account menu and copy its public
-connection settings into a Codex task with:
+To connect Codex to Promptfoo Enterprise, install the plugin and start a Codex
+task with your Enterprise Server URL:
 
 ```text
-Use $promptfoo-enterprise-setup to connect Codex to my Promptfoo Enterprise deployment.
+Use $promptfoo-enterprise-setup to connect Codex to https://promptfoo.example.com.
 ```
 
 Enterprise Setup requires a deployment with Enterprise MCP enabled and a
-registered public OAuth client and callback. If the menu is unavailable, ask
-your administrator whether the deployment supports MCP and request its public
-connection settings. A deployment URL alone is insufficient. The skill preserves
-other MCP servers, guides browser sign-in, and verifies access with `list_teams`
-on `promptfoo-enterprise`. It does not provision licenses, install the Enterprise
-server, perform CLI login, or grant access. Never paste tokens or client secrets.
+registered public OAuth client and callback. With browser controls available,
+the skill can open your server, let you sign in, and collect the settings from
+**Coding Agent Setup**. You can also paste that page's full public connection-settings
+block, including the sign-in command; no reformatting is needed. The skill asks
+only for missing or conflicting values. If the menu is unavailable, ask your
+administrator whether the deployment supports MCP and request its public settings.
+
+The skill preserves other MCP servers, completes Codex's separate MCP sign-in,
+and verifies access with `list_teams` on `promptfoo-enterprise`. It does not
+provision licenses, install the Enterprise server, perform CLI login, or grant
+access. Never paste tokens or client secrets.
 
 Once installed, the agent selects a skill when you ask for eval coverage, a
 target connection, or a redteam workflow. In Claude Code, you can also invoke a skill directly with
