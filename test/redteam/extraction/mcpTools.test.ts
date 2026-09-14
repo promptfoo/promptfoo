@@ -71,6 +71,29 @@ describe('extractMcpTools', () => {
     expect(same.inputSchema.properties.booking.required).toEqual(['to', 'from']);
   });
 
+  it.each(['type', 'dependentRequired', 'dependencies'])(
+    'ignores order in schema %s arrays but preserves literal values',
+    async (keyword) => {
+      const schema = (members: string[], literal: string[]) => ({
+        type: 'object' as const,
+        properties: {
+          value: { [keyword]: keyword === 'type' ? members : { first: members } },
+          literal: { const: { [keyword]: literal } },
+        },
+      });
+      const first = { ...query, inputSchema: schema(['number', 'string'], ['a', 'b']) };
+      const same = { ...query, inputSchema: schema(['string', 'number'], ['a', 'b']) };
+      await expect(
+        extractMcpTools([provider('first', [first]), provider('same', [same])]),
+      ).resolves.toEqual([first]);
+      const different = { ...query, inputSchema: schema(['number', 'string'], ['b', 'a']) };
+      await expect(
+        extractMcpTools([provider('first', [first]), provider('different', [different])]),
+      ).rejects.toThrow('conflicting input schemas');
+      expect(same.inputSchema).toEqual(schema(['string', 'number'], ['a', 'b']));
+    },
+  );
+
   it('preserves tools from working providers when another provider cannot connect', async () => {
     const unavailable = provider('unavailable', []);
     vi.mocked(unavailable.getAvailableTools).mockRejectedValue(new Error('Connection failed'));

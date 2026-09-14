@@ -1,3 +1,4 @@
+import { sanitizeBody } from '../tracing/genaiTracer';
 import { getTraceTextRedactor, sanitizeTraceAttributes } from '../tracing/sanitizeAttributes';
 import {
   COMMAND_ATTRIBUTE_KEYS,
@@ -642,12 +643,13 @@ export function summarizeTrajectoryForJudge(
       truncateValues: false,
     }),
   }));
-  const redactText = getTraceTextRedactor(
+  const redactAttributeText = getTraceTextRedactor(
     trace.spans.map((span, index) => ({
       original: span.attributes,
       sanitized: spans[index].attributes,
     })),
   );
+  const redactText = (value: string) => sanitizeBody(redactAttributeText(value));
   const sanitizedTrace = {
     ...trace,
     spans: spans.map((span) => ({ ...span, name: redactText(span.name) })),

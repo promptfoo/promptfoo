@@ -548,6 +548,7 @@ describe('fetchTraceContext', () => {
         attributes: {
           nested: { authorization: 'secret-token' },
           'account.pin': 123456,
+          'account.private': { value: 'SYNTHETIC_PRIVATE_CONTAINER' },
         },
       },
     ]);
@@ -556,7 +557,7 @@ describe('fetchTraceContext', () => {
       providerConfig,
       queryDelay: 0,
       maxRetries: 0,
-      redactAttributes: ['authorization', 'pin'],
+      redactAttributes: ['authorization', 'pin', 'private'],
     });
 
     expect(storedSpans).toEqual([
@@ -566,6 +567,7 @@ describe('fetchTraceContext', () => {
         attributes: {
           nested: { authorization: '[REDACTED]' },
           'account.pin': '[REDACTED]',
+          'account.private': '[REDACTED]',
         },
       }),
     ]);

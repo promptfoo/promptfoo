@@ -804,6 +804,32 @@ describe('trajectory utilities', () => {
     expect(summarize).toThrow('SQL trace evidence was redacted');
   });
 
+  it.each([{ includeSql: true }, { includeCommands: true }])(
+    'sanitizes credentials in emitted trace names: %j',
+    (options) => {
+      const secret = `ghp_${'a'.repeat(36)}`;
+      const summary = summarizeTrajectoryForJudge(
+        {
+          ...mockTraceData,
+          spans: [
+            {
+              spanId: 'tool',
+              name: `request ${secret}`,
+              startTime: 1,
+              attributes: { 'tool.name': `inspect ${secret}` },
+            },
+          ],
+        },
+        options,
+      );
+      expect(summary).not.toContain(secret);
+      expect(JSON.parse(summary).steps[0]).toMatchObject({
+        name: expect.stringContaining('inspect'),
+        spanName: expect.stringContaining('request'),
+      });
+    },
+  );
+
   it('omits free-form status messages from model grading', () => {
     const summary = summarizeTrajectoryForJudge({
       ...mockTraceData,

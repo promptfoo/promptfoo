@@ -7,13 +7,13 @@ import type { MCPTool } from '../../providers/mcp/types';
 import type { ApiProvider } from '../../types/index';
 
 // Only traverse schema positions: arrays inside enum/const/default are literal values.
-function normalizeRequired(schema: unknown): unknown {
+function normalizeSchema(schema: unknown): unknown {
   if (!schema || typeof schema !== 'object' || Array.isArray(schema)) {
     return schema;
   }
   return Object.fromEntries(
     Object.entries(schema).map(([key, value]) => {
-      if (key === 'required' && Array.isArray(value)) {
+      if ((key === 'required' || key === 'type') && Array.isArray(value)) {
         return [key, [...value].sort()];
       }
       if (
@@ -23,6 +23,7 @@ function normalizeRequired(schema: unknown): unknown {
           '$defs',
           'definitions',
           'dependentSchemas',
+          'dependentRequired',
           'dependencies',
         ].includes(key) &&
         value &&
@@ -32,7 +33,12 @@ function normalizeRequired(schema: unknown): unknown {
         return [
           key,
           Object.fromEntries(
-            Object.entries(value).map(([name, child]) => [name, normalizeRequired(child)]),
+            Object.entries(value).map(([name, child]) => [
+              name,
+              (key === 'dependentRequired' || key === 'dependencies') && Array.isArray(child)
+                ? [...child].sort()
+                : normalizeSchema(child),
+            ]),
           ),
         ];
       }
@@ -55,10 +61,7 @@ function normalizeRequired(schema: unknown): unknown {
           'else',
         ].includes(key)
       ) {
-        return [
-          key,
-          Array.isArray(value) ? value.map(normalizeRequired) : normalizeRequired(value),
-        ];
+        return [key, Array.isArray(value) ? value.map(normalizeSchema) : normalizeSchema(value)];
       }
       return [key, value];
     }),
@@ -86,8 +89,8 @@ export async function extractMcpTools(providers: ApiProvider[]): Promise<MCPTool
       if (
         existing &&
         !isDeepStrictEqual(
-          normalizeRequired(existing.tool.inputSchema),
-          normalizeRequired(tool.inputSchema),
+          normalizeSchema(existing.tool.inputSchema),
+          normalizeSchema(tool.inputSchema),
         )
       ) {
         throw new Error(

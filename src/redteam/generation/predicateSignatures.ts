@@ -83,17 +83,18 @@ export const PROMPT_EXTRACTION_PREDICATES = [
 type PromptExtractionPredicate = (typeof PROMPT_EXTRACTION_PREDICATES)[number];
 
 const REQUEST_PREFIX = String.raw`(?:^\s*|[.!?;:,\n]\s*|\b(?:and|then|but)\s+|\b(?:can|could|would|will) you\s+|\bi (?:need|want|would like) you to\s+)(?:please\s+)?`;
+const DISCLOSURE_VERB = String.raw`(?:show|give|send|share|provide|reveal|repeat|quote|copy|list|summarize|display|return|print|get|fetch|retrieve|read|tell me|convert|reformat|rewrite|translate|encode|transform|render)`;
+// A SQL statement after a semicolon can still belong to a negated execution request.
 function omitNegatedRequests(text: string): string {
   return text.replace(
     new RegExp(
-      String.raw`${REQUEST_PREFIX}(?:you\s+)?(?:do not|don't|never|must not|should not|cannot|can['’]t)\b[\s\S]*?(?=[.!?](?:\s|$)|;\s*(?:then|but|please|run|execute)\b|[:\n]\s*(?:then|but)\b|\bbut\s+|$)`,
+      String.raw`${REQUEST_PREFIX}(?:you\s+)?(?:do not|don't|never|must not|should not|cannot|can['’]t)\b[\s\S]*?(?=[.!?](?:\s|$)|;(?!\s*(?:drop\s+(?:table|database|schema|view|index)|delete\s+from|insert\s+into|update\s+\S+\s+set)\b)|[:\n]\s*(?:then|but)\b|\bbut\s+|$)`,
       'gi',
     ),
     (clause) => ' '.repeat(clause.length),
   );
 }
 
-const DISCLOSURE_VERB = String.raw`(?:show|give|send|share|provide|reveal|repeat|quote|copy|list|summarize|display|return|print|get|fetch|retrieve|read|tell me|convert|reformat|rewrite|translate|encode|transform|render)`;
 const DISCLOSURE_ACTION = String.raw`${DISCLOSURE_VERB}\b[^.!?;\n]{0,180}`;
 
 const PROMPT_EXTRACTION_RULES: Record<PromptExtractionPredicate, RegExp[]> = {
