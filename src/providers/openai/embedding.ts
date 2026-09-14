@@ -1,6 +1,6 @@
 import { fetchWithCache } from '../../cache';
 import logger from '../../logger';
-import { getRequestTimeoutMs } from '../shared';
+import { getRequestTimeoutMs, shouldBustProviderCache, withResponseCacheMetadata } from '../shared';
 import { OpenAiGenericProvider } from '.';
 import { calculateOpenAIUsageCost } from './billing';
 import { appendOpenAiApiPath, assertOpenAiApiModel, getTokenUsage } from './util';
@@ -33,7 +33,7 @@ export class OpenAiEmbeddingProvider extends OpenAiGenericProvider {
 
   async callEmbeddingApi(
     text: string,
-    _context?: CallApiContextParams,
+    context?: CallApiContextParams,
     options?: CallApiOptionsParams,
   ): Promise<ProviderEmbeddingResponse> {
     options?.abortSignal?.throwIfAborted();
@@ -80,7 +80,7 @@ export class OpenAiEmbeddingProvider extends OpenAiGenericProvider {
         },
         getRequestTimeoutMs(),
         'json',
-        false,
+        shouldBustProviderCache(context),
         this.config.maxRetries,
       );
       ({ data, cached, status, statusText, latencyMs, deleteFromCache } = response as any);
@@ -106,14 +106,15 @@ export class OpenAiEmbeddingProvider extends OpenAiGenericProvider {
           error: 'No embedding found in OpenAI embeddings API response',
         };
       }
-      return {
-        embedding,
-        latencyMs,
-        tokenUsage: getTokenUsage(data, cached),
-        cost: calculateOpenAIUsageCost(this.getBillingModelName(), this.config, data.usage, {
-          cachedResponse: cached,
-        }),
-      };
+      return withResponseCacheMetadata(
+        {
+          embedding,
+          latencyMs,
+          tokenUsage: getTokenUsage(data, false),
+          cost: calculateOpenAIUsageCost(this.getBillingModelName(), this.config, data.usage),
+        },
+        cached,
+      );
     } catch (err) {
       logger.error(`Response parsing error: ${String(err)}`);
       await deleteFromCache?.();

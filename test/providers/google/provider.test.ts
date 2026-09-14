@@ -602,7 +602,10 @@ describe('GoogleProvider', () => {
       expect(result.tokenUsage).toEqual({
         cached: 15,
         total: 15,
-        numRequests: 1,
+        prompt: 10,
+        completion: 5,
+        numRequests: 0,
+        incurredTokenUsage: {},
       });
     });
 
@@ -1251,7 +1254,11 @@ describe('GoogleProvider', () => {
           total: 15,
           ...(cached ? { cached: 15 } : { prompt: 10, completion: 5 }),
         });
-        expect(response.cost).toEqual(cached ? undefined : expect.any(Number));
+        expect(response.cost).toEqual(expect.any(Number));
+        expect(response.tokenUsage?.numRequests).toBe(cached ? 0 : 1);
+        if (cached) {
+          expect(response.tokenUsage?.incurredTokenUsage).toEqual({});
+        }
         expect(response.metadata?.thoughtSignatures).toEqual(['signature']);
         expect(response.raw).toMatchObject({ usageMetadata: { totalTokenCount: 15 } });
         expect(succeed).toHaveBeenCalledExactlyOnceWith('{}');
@@ -1313,7 +1320,7 @@ describe('GoogleProvider', () => {
       expect(response.metadata?.thoughtSignatures).toEqual(['signed-thought']);
     });
 
-    it('should return undefined cost for cached responses', async () => {
+    it('preserves reported cost for cached responses', async () => {
       const provider = new GoogleProvider('gemini-pro', {
         config: { apiKey: 'test-key' },
       });
@@ -1330,7 +1337,14 @@ describe('GoogleProvider', () => {
 
       const result = await provider.callApi('test prompt');
 
-      expect(result.cost).toBeUndefined();
+      expect(result.cost).toBeCloseTo(0.0000125, 10);
+      expect(result.tokenUsage).toMatchObject({
+        prompt: 10,
+        completion: 5,
+        cached: 15,
+        numRequests: 0,
+        incurredTokenUsage: {},
+      });
     });
 
     it('should use tiered pricing when prompt tokens exceed threshold', async () => {

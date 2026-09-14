@@ -20,7 +20,13 @@ import { fetchWithProxy } from '../../util/fetch/index';
 import { maybeLoadFromExternalFile } from '../../util/file';
 import { renderVarsInObject } from '../../util/index';
 import { getNunjucksEngine } from '../../util/templates';
-import { awaitProviderOperation, getRequestSignal, getRequestTimeoutMs } from '../shared';
+import {
+  awaitProviderOperation,
+  getRequestSignal,
+  getRequestTimeoutMs,
+  shouldBustProviderCache,
+  withResponseCacheMetadata,
+} from '../shared';
 import { GoogleGenericProvider, type GoogleProviderOptions, getCallbackErrorOutput } from './base';
 import { getVertexApiHostForRegion } from './shared';
 import {
@@ -514,7 +520,7 @@ export class GoogleProvider extends GoogleGenericProvider {
           } as RequestInit,
           getRequestTimeoutMs(),
           'json',
-          false,
+          shouldBustProviderCache(context),
         );
         data = result.data as GeminiApiResponse;
         cached = result.cached;
@@ -662,39 +668,26 @@ export class GoogleProvider extends GoogleGenericProvider {
       }
 
       const lastData = dataWithResponse[dataWithResponse.length - 1];
-      const tokenUsage: TokenUsage = cached
-        ? {
-            cached: lastData.usageMetadata?.totalTokenCount,
-            total: lastData.usageMetadata?.totalTokenCount,
-            numRequests: 1,
-            ...(lastData.usageMetadata?.thoughtsTokenCount !== undefined && {
-              completionDetails: {
-                reasoning: lastData.usageMetadata.thoughtsTokenCount,
-                acceptedPrediction: 0,
-                rejectedPrediction: 0,
-              },
-            }),
-          }
-        : {
-            prompt:
-              lastData.usageMetadata?.promptTokenCount === undefined
-                ? undefined
-                : lastData.usageMetadata.promptTokenCount +
-                  (lastData.usageMetadata?.toolUsePromptTokenCount ?? 0),
-            completion: lastData.usageMetadata?.candidatesTokenCount,
-            total: lastData.usageMetadata?.totalTokenCount,
-            numRequests: 1,
-            ...(lastData.usageMetadata?.cachedContentTokenCount !== undefined && {
-              cached: lastData.usageMetadata.cachedContentTokenCount,
-            }),
-            ...(lastData.usageMetadata?.thoughtsTokenCount !== undefined && {
-              completionDetails: {
-                reasoning: lastData.usageMetadata.thoughtsTokenCount,
-                acceptedPrediction: 0,
-                rejectedPrediction: 0,
-              },
-            }),
-          };
+      const tokenUsage: TokenUsage = {
+        prompt:
+          lastData.usageMetadata?.promptTokenCount === undefined
+            ? undefined
+            : lastData.usageMetadata.promptTokenCount +
+              (lastData.usageMetadata?.toolUsePromptTokenCount ?? 0),
+        completion: lastData.usageMetadata?.candidatesTokenCount,
+        total: lastData.usageMetadata?.totalTokenCount,
+        numRequests: 1,
+        ...(lastData.usageMetadata?.cachedContentTokenCount !== undefined && {
+          cached: lastData.usageMetadata.cachedContentTokenCount,
+        }),
+        ...(lastData.usageMetadata?.thoughtsTokenCount !== undefined && {
+          completionDetails: {
+            reasoning: lastData.usageMetadata.thoughtsTokenCount,
+            acceptedPrediction: 0,
+            rejectedPrediction: 0,
+          },
+        }),
+      };
 
       let guardrails: GuardrailResponse | undefined;
       const lastDataWithCandidate =
@@ -719,35 +712,35 @@ export class GoogleProvider extends GoogleGenericProvider {
         tokenUsage.completion == null
           ? undefined
           : tokenUsage.completion + (lastData.usageMetadata?.thoughtsTokenCount ?? 0);
-      const pricingConfig = this.isVertexMode ? { ...config, region: this.getRegion() } : config;
-      const cost = cached
-        ? undefined
-        : calculateGoogleCostFromUsage(
-            this.modelName,
-            pricingConfig,
-            lastData.usageMetadata?.promptTokenCount,
-            completionForCost,
-            this.isVertexMode,
-            lastData.usageMetadata,
-            actualServiceTier,
-          );
+      const cost = calculateGoogleCostFromUsage(
+        this.modelName,
+        this.isVertexMode ? { ...config, region: this.getRegion() } : config,
+        lastData.usageMetadata?.promptTokenCount,
+        completionForCost,
+        this.isVertexMode,
+        lastData.usageMetadata,
+        actualServiceTier,
+      );
       const audio = normalizeGeminiAudio(output);
       const thoughtSignatures = collectThoughtSignatures(dataWithResponse);
 
-      const response: ProviderResponse = {
-        output,
-        ...(audio && { audio }),
-        tokenUsage,
-        cost,
-        raw: data,
-        cached,
-        ...(guardrails && { guardrails }),
-        metadata: {
-          ...grounding,
-          ...(thoughtSignatures.length > 0 && { thoughtSignatures }),
-          ...(actualServiceTier && { serviceTier: actualServiceTier }),
+      const response = withResponseCacheMetadata(
+        {
+          output,
+          ...(audio && { audio }),
+          tokenUsage,
+          cost,
+          raw: data,
+          cached,
+          ...(guardrails && { guardrails }),
+          metadata: {
+            ...grounding,
+            ...(thoughtSignatures.length > 0 && { thoughtSignatures }),
+            ...(actualServiceTier && { serviceTier: actualServiceTier }),
+          },
         },
-      };
+        cached,
+      );
 
       try {
         response.output = await this.executeFunctionToolCallbacks(

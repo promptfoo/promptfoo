@@ -29,6 +29,8 @@ import {
   getRequestSignal,
   getRequestTimeoutMs,
   parseChatPrompt,
+  shouldBustProviderCache,
+  withResponseCacheMetadata,
 } from '../shared';
 import { GoogleGenericProvider, type GoogleProviderOptions, getCallbackErrorOutput } from './base';
 import { getVertexApiHostForRegion } from './shared';
@@ -290,11 +292,7 @@ export class VertexChatProvider extends GoogleGenericProvider {
     const resultExtractor = (response: ProviderResponse): GenAISpanResult => {
       const result: GenAISpanResult = {};
       if (response.tokenUsage) {
-        result.tokenUsage = {
-          prompt: response.tokenUsage.prompt,
-          completion: response.tokenUsage.completion,
-          total: response.tokenUsage.total,
-        };
+        result.tokenUsage = response.tokenUsage;
       }
       return result;
     };
@@ -318,7 +316,7 @@ export class VertexChatProvider extends GoogleGenericProvider {
     } else if (this.modelName.includes('llama')) {
       return this.callLlamaApi(prompt, context, options);
     }
-    return this.callPalm2Api(prompt, options);
+    return this.callPalm2Api(prompt, options, context);
   }
 
   async callClaudeApi(
@@ -421,28 +419,31 @@ export class VertexChatProvider extends GoogleGenericProvider {
     // keeps the two paths consistent if that default ever changes, as it did in 4.6 -> 4.7.
     const showThinking = this.config.showThinking ?? thinkingConsumesTokens;
 
-    const cache = await getCache();
-    const cacheKey = getVertexBodyCacheKey(
-      `vertex:claude:${this.modelName}:showThinking=${showThinking}`,
-      body,
-      apiHost,
-    );
+    const useCache = isCacheEnabled() && !shouldBustProviderCache(context);
+    const cache = useCache ? await getCache() : undefined;
+    const cacheKey = cache
+      ? getVertexBodyCacheKey(
+          `vertex:claude:${this.modelName}:showThinking=${showThinking}`,
+          body,
+          apiHost,
+        )
+      : undefined;
 
-    let cachedResponse;
-    if (isCacheEnabled()) {
-      cachedResponse = await awaitProviderOperation(cache.get(cacheKey), options?.abortSignal);
+    if (cache && cacheKey) {
+      const cachedResponse = await awaitProviderOperation(
+        cache.get(cacheKey),
+        options?.abortSignal,
+      );
       options?.abortSignal?.throwIfAborted();
       if (cachedResponse) {
-        const parsedCachedResponse = JSON.parse(cachedResponse as string);
-        const tokenUsage = parsedCachedResponse.tokenUsage as TokenUsage;
-        if (tokenUsage) {
-          tokenUsage.cached = tokenUsage.total;
-        }
         logger.debug('Returning cached Vertex Claude response', {
           model: this.modelName,
           cacheKey,
         });
-        return { ...parsedCachedResponse, cached: true };
+        return withResponseCacheMetadata(
+          JSON.parse(cachedResponse as string) as ProviderResponse,
+          true,
+        );
       }
     }
 
@@ -527,7 +528,7 @@ export class VertexChatProvider extends GoogleGenericProvider {
         ),
       };
 
-      if (isCacheEnabled()) {
+      if (cache && cacheKey) {
         options?.abortSignal?.throwIfAborted();
         await awaitProviderOperation(
           cache.set(cacheKey, JSON.stringify(response)),
@@ -700,26 +701,25 @@ export class VertexChatProvider extends GoogleGenericProvider {
       body.generationConfig.response_mime_type = 'application/json';
     }
 
-    const cache = await getCache();
+    const useCache = isCacheEnabled() && !shouldBustProviderCache(context);
     const apiHost = this.getApiHost();
-    const cacheKey = getVertexBodyCacheKey(`vertex:${this.modelName}`, body, apiHost);
+    const cache = useCache ? await getCache() : undefined;
+    const cacheKey = cache
+      ? getVertexBodyCacheKey(`vertex:${this.modelName}`, body, apiHost)
+      : undefined;
 
     let response;
     let cachedResponse;
-    if (isCacheEnabled()) {
+    if (cache && cacheKey) {
       cachedResponse = await awaitProviderOperation(cache.get(cacheKey), options?.abortSignal);
       options?.abortSignal?.throwIfAborted();
       if (cachedResponse) {
         const parsedCachedResponse = JSON.parse(cachedResponse as string);
-        const tokenUsage = parsedCachedResponse.tokenUsage as TokenUsage;
-        if (tokenUsage) {
-          tokenUsage.cached = tokenUsage.total;
-        }
         logger.debug('Returning cached Vertex Gemini response', {
           model: this.modelName,
           cacheKey,
         });
-        response = { ...parsedCachedResponse, cached: true };
+        response = withResponseCacheMetadata(parsedCachedResponse as ProviderResponse, true);
       }
     }
     if (response === undefined) {
@@ -978,7 +978,7 @@ export class VertexChatProvider extends GoogleGenericProvider {
           response.metadata = { ...response.metadata, ...grounding };
         }
 
-        if (isCacheEnabled()) {
+        if (cache && cacheKey) {
           options?.abortSignal?.throwIfAborted();
           await awaitProviderOperation(
             cache.set(cacheKey, JSON.stringify(response)),
@@ -1010,7 +1010,11 @@ export class VertexChatProvider extends GoogleGenericProvider {
     return response;
   }
 
-  async callPalm2Api(prompt: string, options?: CallApiOptionsParams): Promise<ProviderResponse> {
+  async callPalm2Api(
+    prompt: string,
+    options?: CallApiOptionsParams,
+    context?: CallApiContextParams,
+  ): Promise<ProviderResponse> {
     options?.abortSignal?.throwIfAborted();
     const instances = parseChatPrompt(prompt, [
       {
@@ -1037,25 +1041,28 @@ export class VertexChatProvider extends GoogleGenericProvider {
       },
     };
 
-    const cache = await getCache();
     const apiHost = this.getApiHost();
-    const cacheKey = getVertexBodyCacheKey(`vertex:palm2:${this.modelName}`, body, apiHost);
+    const useCache = isCacheEnabled() && !shouldBustProviderCache(context);
+    const cache = useCache ? await getCache() : undefined;
+    const cacheKey = cache
+      ? getVertexBodyCacheKey(`vertex:palm2:${this.modelName}`, body, apiHost)
+      : undefined;
 
-    let cachedResponse;
-    if (isCacheEnabled()) {
-      cachedResponse = await awaitProviderOperation(cache.get(cacheKey), options?.abortSignal);
+    if (cache && cacheKey) {
+      const cachedResponse = await awaitProviderOperation(
+        cache.get(cacheKey),
+        options?.abortSignal,
+      );
       options?.abortSignal?.throwIfAborted();
       if (cachedResponse) {
-        const parsedCachedResponse = JSON.parse(cachedResponse as string);
-        const tokenUsage = parsedCachedResponse.tokenUsage as TokenUsage;
-        if (tokenUsage) {
-          tokenUsage.cached = tokenUsage.total;
-        }
         logger.debug('Returning cached Vertex Palm2 response', {
           model: this.modelName,
           cacheKey,
         });
-        return { ...parsedCachedResponse, cached: true };
+        return withResponseCacheMetadata(
+          JSON.parse(cachedResponse as string) as ProviderResponse,
+          true,
+        );
       }
     }
 
@@ -1107,7 +1114,7 @@ export class VertexChatProvider extends GoogleGenericProvider {
         cached: false,
       };
 
-      if (isCacheEnabled()) {
+      if (cache && cacheKey) {
         options?.abortSignal?.throwIfAborted();
         await awaitProviderOperation(
           cache.set(cacheKey, JSON.stringify(response)),
@@ -1127,7 +1134,7 @@ export class VertexChatProvider extends GoogleGenericProvider {
 
   async callLlamaApi(
     prompt: string,
-    _context?: CallApiContextParams,
+    context?: CallApiContextParams,
     options?: CallApiOptionsParams,
   ): Promise<ProviderResponse> {
     options?.abortSignal?.throwIfAborted();
@@ -1186,9 +1193,12 @@ export class VertexChatProvider extends GoogleGenericProvider {
       },
     };
 
-    const cache = await getCache();
     const apiHost = this.getApiHost();
-    const cacheKey = getVertexBodyCacheKey(`vertex:llama:${this.modelName}`, body, apiHost);
+    const useCache = isCacheEnabled() && !shouldBustProviderCache(context);
+    const cache = useCache ? await getCache() : undefined;
+    const cacheKey = cache
+      ? getVertexBodyCacheKey(`vertex:llama:${this.modelName}`, body, apiHost)
+      : undefined;
     logger.debug('Preparing to call Llama API', {
       model: this.modelName,
       region: this.getRegion(),
@@ -1202,21 +1212,21 @@ export class VertexChatProvider extends GoogleGenericProvider {
       cacheKey,
     });
 
-    let cachedResponse;
-    if (isCacheEnabled()) {
-      cachedResponse = await awaitProviderOperation(cache.get(cacheKey), options?.abortSignal);
+    if (cache && cacheKey) {
+      const cachedResponse = await awaitProviderOperation(
+        cache.get(cacheKey),
+        options?.abortSignal,
+      );
       options?.abortSignal?.throwIfAborted();
       if (cachedResponse) {
-        const parsedCachedResponse = JSON.parse(cachedResponse as string);
-        const tokenUsage = parsedCachedResponse.tokenUsage as TokenUsage;
-        if (tokenUsage) {
-          tokenUsage.cached = tokenUsage.total;
-        }
         logger.debug('Returning cached Vertex Llama response', {
           model: this.modelName,
           cacheKey,
         });
-        return { ...parsedCachedResponse, cached: true };
+        return withResponseCacheMetadata(
+          JSON.parse(cachedResponse as string) as ProviderResponse,
+          true,
+        );
       }
     }
 
@@ -1312,7 +1322,7 @@ export class VertexChatProvider extends GoogleGenericProvider {
         tokenUsage,
       };
 
-      if (isCacheEnabled()) {
+      if (cache && cacheKey) {
         options?.abortSignal?.throwIfAborted();
         await awaitProviderOperation(
           cache.set(cacheKey, JSON.stringify(response)),
