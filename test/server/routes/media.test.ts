@@ -45,6 +45,14 @@ describe('Media Routes', () => {
   });
 
   describe('GET /api/media?key=...', () => {
+    const opaqueKeys = [
+      '../private.pdf',
+      'document/../../private.pdf',
+      '/private.pdf',
+      'document/./private.pdf',
+      'document\\..\\private.pdf',
+    ];
+
     it('serves local PDF bytes while keeping the index and sidecars private', async () => {
       const directory = createTempDir('promptfoo-media-api-');
       try {
@@ -57,7 +65,12 @@ describe('Media Routes', () => {
         });
         mockedMediaExists.mockImplementation((key) => provider.exists(key));
         mockedRetrieveMedia.mockImplementation((key) => provider.retrieve(key));
-        for (const key of ['hash-index.json', `${ref.key}.meta.json`]) {
+        for (const key of [
+          'hash-index.json',
+          'document/../hash-index.json',
+          `${ref.key}.meta.json`,
+          ...opaqueKeys,
+        ]) {
           const response = await api.get('/api/media').query({ key });
           expect(response.status).toBe(404);
           expect(response.text).not.toContain('Private review notes');
@@ -76,6 +89,7 @@ describe('Media Routes', () => {
       'document/' + 'a'.repeat(64) + '.pdf',
       'tenant/invoice ?#&%2F.pdf',
       '09d620f6-9b31-4cea-936d-4bdc38ea7bc1',
+      ...opaqueKeys,
     ])('serves the exact provider-defined key %s', async (key) => {
       const data = Buffer.from('%PDF-1.7 test');
       mockedMediaExists.mockResolvedValue(true);
@@ -90,23 +104,15 @@ describe('Media Routes', () => {
       expect(mockedRetrieveMedia).toHaveBeenCalledWith(key);
     });
 
-    it.each([
-      undefined,
-      '',
-      '../private.pdf',
-      'document/../../private.pdf',
-      '/private.pdf',
-      'document/./private.pdf',
-      'document\\..\\private.pdf',
-      'file\0.pdf',
-      'a'.repeat(2049),
-      ['first.pdf', 'second.pdf'],
-    ])('rejects invalid keys before touching storage: %j', async (key) => {
-      const response = await api.get('/api/media').query({ key });
-      expect(response.status).toBe(400);
-      expect(mockedMediaExists).not.toHaveBeenCalled();
-      expect(mockedRetrieveMedia).not.toHaveBeenCalled();
-    });
+    it.each([undefined, '', 'file\0.pdf', 'a'.repeat(2049), ['first.pdf', 'second.pdf']])(
+      'rejects invalid keys before touching storage: %j',
+      async (key) => {
+        const response = await api.get('/api/media').query({ key });
+        expect(response.status).toBe(400);
+        expect(mockedMediaExists).not.toHaveBeenCalled();
+        expect(mockedRetrieveMedia).not.toHaveBeenCalled();
+      },
+    );
 
     it('returns 404 for a missing provider key', async () => {
       mockedMediaExists.mockResolvedValue(false);

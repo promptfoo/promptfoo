@@ -10,19 +10,13 @@ export const MediaParamsSchema = z.object({
 export type MediaParams = z.infer<typeof MediaParamsSchema>;
 
 // GET /api/media?key=... supports provider-defined storage keys.
+// Filesystem path validation belongs to LocalFileSystemProvider.
 const MediaQuerySchema = z.object({
   key: z
     .string()
     .min(1)
     .max(2048)
-    .refine(
-      (key) =>
-        !key.startsWith('/') &&
-        !key.includes('\\') &&
-        !key.includes('\0') &&
-        !key.split('/').some((part) => part === '.' || part === '..'),
-      'Invalid media key',
-    ),
+    .refine((key) => !key.includes('\0'), 'Invalid media key'),
 });
 
 // GET /api/media/stats
