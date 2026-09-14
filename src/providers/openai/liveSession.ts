@@ -74,6 +74,8 @@ const MAX_TRANSCRIPT_DELTAS = 20_000;
 const MAX_AUDIO_CHUNKS = 50_000;
 const MAX_PROTOCOL_ID_BYTES = 256;
 const MAX_FUNCTION_CALL_BYTES = 1024 * 1024;
+const MAX_FUNCTION_RESULT_BYTES = 1024 * 1024;
+const MAX_COMMENTARY_BYTES = 64 * 1024;
 const MAX_PENDING_SNAPSHOT_TEXT_BYTES = 8 * 1024 * 1024;
 const MAX_PENDING_SNAPSHOT_ENTRIES = 50_000;
 const MAX_HANDSHAKE_BODY_BYTES = 8 * 1024;
@@ -761,6 +763,14 @@ export class LiveSession {
           throw new Error('Invalid delegation result');
         }
         if (!this.done && !this.closing) {
+          // Bound local buffering; the gateway separately enforces its 500-token append limit.
+          if (Buffer.byteLength(content) > MAX_COMMENTARY_BYTES) {
+            this.setError(
+              'GPT-Live client commentary exceeded 64 KiB. Return a shorter delegation result.',
+            );
+            this.closeSession();
+            return;
+          }
           this.send({
             type: 'session.commentary.append',
             event_id: this.registerCommand('session.commentary.append'),
@@ -940,6 +950,11 @@ export class LiveSession {
           throw new Error('Invalid function result');
         }
         if (this.done || this.closing) {
+          return;
+        }
+        if (Buffer.byteLength(output) > MAX_FUNCTION_RESULT_BYTES) {
+          this.setError('GPT-Live function result exceeded 1 MiB. Return a shorter result.');
+          this.closeSession();
           return;
         }
         this.send({
@@ -1159,7 +1174,8 @@ export class LiveSession {
 function credentialForms(value: string): string[] {
   // HTTP drops surrounding whitespace, so a gateway echoes the trimmed value.
   const trimmed = value.trim();
-  const token = trimmed.replace(/^[A-Za-z][\w-]*\s+/, '');
+  // RFC 9110 auth-scheme uses the complete HTTP token grammar, including punctuation.
+  const token = trimmed.replace(/^[!#$%&'*+.^_`|~0-9A-Za-z-]+\s+/, '');
   const keyValueTokens = trimmed.split(/[;,]\s*/).flatMap((part) => {
     if (!part.includes('=')) {
       return [];

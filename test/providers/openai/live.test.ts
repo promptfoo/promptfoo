@@ -1898,26 +1898,41 @@ describe('OpenAiLiveProvider', () => {
     );
   });
 
-  it('redacts tokens from custom authorization schemes', async () => {
-    const result = new OpenAiLiveProvider('gpt-live-1', {
-      config: {
-        apiBaseUrl: 'http://localhost:1234/v1',
-        headers: { Authorization: 'Token gateway-secret' },
-        responseWindowMs: 100,
-        websocketTimeout: 200,
-        closeTimeoutMs: 100,
-      },
-    }).callApi('Hi');
-    await vi.advanceTimersByTimeAsync(0);
-    sockets[0].emit(
-      'unexpected-response',
-      {},
-      httpResponse(401, JSON.stringify({ error: { message: 'invalid token gateway-secret' } })),
-    );
-    const response = await result;
-    expect(response.error).toContain('invalid token [REDACTED]');
-    expect(JSON.stringify(response)).not.toContain('gateway-secret');
-  });
+  it.each(
+    ['Token', 'Custom+Token', 'Custom.Token', 'Custom~Token', '9Token', "!#$%&'*+-.^_`|~"].flatMap(
+      (scheme) => ['handshake', 'api'].map((transport) => ({ scheme, transport })),
+    ),
+  )(
+    'redacts tokens from $scheme authorization in $transport errors',
+    async ({ scheme, transport }) => {
+      const result = new OpenAiLiveProvider('gpt-live-1', {
+        config: {
+          apiBaseUrl: 'http://localhost:1234/v1',
+          headers: { Authorization: `${scheme} gateway-secret` },
+          responseWindowMs: 100,
+          websocketTimeout: 200,
+          closeTimeoutMs: 100,
+        },
+      }).callApi('Hi');
+      if (transport === 'handshake') {
+        await vi.advanceTimersByTimeAsync(0);
+        sockets[0].emit(
+          'unexpected-response',
+          {},
+          httpResponse(401, JSON.stringify({ error: { message: 'invalid token gateway-secret' } })),
+        );
+      } else {
+        const socket = await connect();
+        start(socket);
+        text(socket);
+        apiError(socket, { message: 'invalid token gateway-secret' });
+        closed(socket);
+      }
+      const response = await result;
+      expect(response.error).toContain('invalid token [REDACTED]');
+      expect(JSON.stringify(response)).not.toContain('gateway-secret');
+    },
+  );
 
   it('redacts a short userinfo password from Live error text and apiErrors', async () => {
     const result = new OpenAiLiveProvider('gpt-live-1', {
@@ -2501,6 +2516,52 @@ describe('OpenAiLiveProvider', () => {
     );
   const clientCapError =
     'GPT-Live client delegations exceeded maxToolIterations=2. Increase maxToolIterations if the eval needs more delegations.';
+
+  it.each([
+    { kind: 'ASCII at the limit', content: 'x'.repeat(65_536), oversized: false },
+    { kind: 'ASCII over the limit', content: 'x'.repeat(65_537), oversized: true },
+    { kind: 'UTF-8 at the limit', content: '🙂'.repeat(16_384), oversized: false },
+    { kind: 'UTF-8 over the limit', content: '🙂'.repeat(16_385), oversized: true },
+  ])('bounds client commentary before sending: $kind', async ({ content, oversized }) => {
+    const result = provider({ delegationHandler: async () => content }).callApi('Hi');
+    const socket = await connect();
+    start(socket);
+    text(socket);
+    clientDelegation(socket, 'd');
+    await vi.advanceTimersByTimeAsync(0);
+    const appends = delegationResults(socket);
+    expect(appends).toHaveLength(oversized ? 0 : 1);
+    if (!oversized) {
+      expect(appends[0].content).toBe(content);
+      emit(socket, { type: 'session.commentary.appended', client_event_id: appends[0].event_id });
+    }
+    closed(socket);
+    const response = await result;
+    expect(response.error).toBe(
+      oversized
+        ? 'GPT-Live client commentary exceeded 64 KiB. Return a shorter delegation result.'
+        : undefined,
+    );
+  });
+
+  it('rejects oversized function results before sending or continuing the response', async () => {
+    const result = provider({
+      delegation: lookupDelegation,
+      functionCallHandler: async () => 'x'.repeat(1_048_577),
+    }).callApi('Hi');
+    const socket = await connect();
+    start(socket);
+    backend(socket, { type: 'response.created', response: { id: 'resp_1' } });
+    backend(socket, { type: 'response.output_item.done', item: functionCall('call_1') });
+    backend(socket, { type: 'response.completed', response: { id: 'resp_1', output: [] } });
+    await vi.advanceTimersByTimeAsync(0);
+    expect(sentTypes(socket)).not.toContain('response.item.create');
+    expect(sentTypes(socket)).not.toContain('response.create');
+    closed(socket);
+    expect((await result).error).toBe(
+      'GPT-Live function result exceeded 1 MiB. Return a shorter result.',
+    );
+  });
 
   it.each(['text', 'entries'])('bounds pending client snapshot %s before cloning', async (kind) => {
     const resolvers: ((value: string) => void)[] = [];

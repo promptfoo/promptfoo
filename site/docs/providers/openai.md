@@ -479,7 +479,7 @@ prompts:
 
 providers:
   - id: openai:chat:gpt-5.6-luna
-    // highlight-start
+    # highlight-start
     config:
       tools:
         - type: function
@@ -498,7 +498,7 @@ providers:
         type: function
         function:
           name: get_order_status
-    // highlight-end
+    # highlight-end
 
 tests:
   - vars:

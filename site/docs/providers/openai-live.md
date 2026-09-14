@@ -92,6 +92,8 @@ For custom functions, set `functionCallHandler: file://tools.js`. Export an asyn
 
 Function-call IDs and names are limited to 256 bytes each. Their combined size, including argument strings, is limited to 1 MiB across the session; exceeding this limit ends the capture before the call is buffered or executed.
 
+Each function-handler result is limited to 1 MiB before it is serialized or sent. Return a summary or a reference for larger results.
+
 For your own model or agent harness, use `delegation.type: client` and `delegationHandler: file://backend.js`:
 
 ```javascript
@@ -104,6 +106,8 @@ export default async function handleDelegation(request, signal) {
 ```
 
 The delegation event contains an ID, not task text. Your handler receives a snapshot of the conversation collected so far. Return a concise string within Live's 500-token append limit. Promptfoo sends it as commentary using the original delegation ID. Handler errors are reported without sending exception details to the model. Late results are discarded after closing.
+
+Promptfoo rejects client-handler results larger than 64 KiB before sending them. This bounds local buffering; the gateway still enforces the 500-token limit.
 
 Conversation copies retained by pending client handlers are limited to 8 MiB of text and 50,000 input/transcript entries in total. Complete handlers promptly or reduce conversation history if this limit is reached. The budget is released when each handler settles, including after cancellation.
 
