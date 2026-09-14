@@ -102,8 +102,37 @@ interface FoundryResponseCreateOptions {
  * `'ETIMEDOUT'`) that would shadow the more reliable body code.
  */
 /**
- * Normalize the headers an SDK error carries (a plain record or a `Headers`
- * instance, on the error itself or on its `response`) to lowercase keys.
+ * Name/value pairs out of whichever header carrier an SDK error is holding.
+ *
+ * Web `Headers` and Azure Core's `HttpHeaders` are both declared
+ * `Iterable<[name, value]>`, but only the Web one has `.entries()`. Azure's
+ * `HttpHeadersImpl` — what an `@azure/ai-projects` `RestError` carries —
+ * exposes `get()`, `toJSON()` and `[Symbol.iterator]` and nothing else, so
+ * `.entries()` is undefined on it and `Object.entries()` yields its private
+ * `_headersMap` instead of any header. Iterating covers both, `toJSON()`
+ * covers a carrier that only has the record, and a plain record stays a plain
+ * record.
+ */
+function headerEntries(raw: object): [string, unknown][] {
+  if (typeof (raw as Iterable<unknown>)[Symbol.iterator] === 'function') {
+    return Array.from(raw as Iterable<unknown>).filter(
+      (pair): pair is [string, unknown] => Array.isArray(pair) && typeof pair[0] === 'string',
+    );
+  }
+  const toJSON = (raw as { toJSON?: () => unknown }).toJSON;
+  if (typeof toJSON === 'function') {
+    const json = toJSON.call(raw);
+    if (typeof json === 'object' && json !== null) {
+      return Object.entries(json as Record<string, unknown>);
+    }
+  }
+  return Object.entries(raw as Record<string, unknown>);
+}
+
+/**
+ * Normalize the headers an SDK error carries (a plain record, a Web `Headers`
+ * or an Azure `HttpHeaders`, on the error itself or on its `response`) to
+ * lowercase keys.
  */
 function sdkErrorHeaders(err: {
   headers?: unknown;
@@ -113,12 +142,8 @@ function sdkErrorHeaders(err: {
   if (typeof raw !== 'object' || raw === null) {
     return undefined;
   }
-  const entries =
-    typeof (raw as Headers).entries === 'function' && typeof (raw as Headers).get === 'function'
-      ? Array.from((raw as Headers).entries())
-      : Object.entries(raw as Record<string, unknown>);
   const headers: Record<string, string> = {};
-  for (const [key, value] of entries) {
+  for (const [key, value] of headerEntries(raw)) {
     if (typeof value === 'string') {
       headers[key.toLowerCase()] = value;
     }
