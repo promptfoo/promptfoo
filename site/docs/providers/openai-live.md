@@ -105,6 +105,8 @@ export default async function handleDelegation(request, signal) {
 
 The delegation event contains an ID, not task text. Your handler receives a snapshot of the conversation collected so far. Return a concise string within Live's 500-token append limit. Promptfoo sends it as commentary using the original delegation ID. Handler errors are reported without sending exception details to the model. Late results are discarded after closing.
 
+Conversation copies retained by pending client handlers are limited to 8 MiB of text and 50,000 input/transcript entries in total. Complete handlers promptly or reduce conversation history if this limit is reached. The budget is released when each handler settles, including after cancellation.
+
 Omitting delegation selects client mode. If Live requests backend work without a handler, the eval reports an error. Backend work that is pending when the capture ends, or requested after it ends, also reports an error.
 
 A spoken answer does not show that backend work ran. `metadata.delegations` lists each delegation's `id`, `target`, and `offsetMs`, and `metadata.backendResponses` lists completed Responses calls. Assert on these fields when a test requires delegation:

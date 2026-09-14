@@ -3,7 +3,7 @@ import type { IncomingMessage } from 'node:http';
 import { ProxyAgent } from 'proxy-agent';
 import { getProxyForUrl } from 'proxy-from-env';
 import WebSocket from 'ws';
-import { isSecretField, REDACTED } from '../../util/sanitizer';
+import { isSecretField, REDACTED, sanitizeObject } from '../../util/sanitizer';
 import { accumulateTokenUsage } from '../../util/tokenUsageUtils';
 import { convertG711ToPcm16, convertPcm16ToWav } from './audio';
 import { calculateOpenAIUsageCost } from './billing';
@@ -74,6 +74,8 @@ const MAX_TRANSCRIPT_DELTAS = 20_000;
 const MAX_AUDIO_CHUNKS = 50_000;
 const MAX_PROTOCOL_ID_BYTES = 256;
 const MAX_FUNCTION_CALL_BYTES = 1024 * 1024;
+const MAX_PENDING_SNAPSHOT_TEXT_BYTES = 8 * 1024 * 1024;
+const MAX_PENDING_SNAPSHOT_ENTRIES = 50_000;
 const MAX_HANDSHAKE_BODY_BYTES = 8 * 1024;
 const HANDSHAKE_BODY_TIMEOUT_MS = 2_000;
 const PENDING_WORK_ERROR =
@@ -86,7 +88,7 @@ function isBoundedProtocolId(value: unknown): value is string {
 }
 
 const CREDENTIAL_HEADER =
-  /(?:authorization|api[-_]?key|token|secret|signature|credential|cookie|password)|(?:^|[-_])(?:auth|key)(?:$|[-_])/i;
+  /(?:authorization|api[-_]?key|token|secret|signature|credential|cookie|password)|(?:^|[-_])(?:auth(?:entication)?|key)(?:$|[-_])/i;
 const GUARDRAIL_ERROR_CODES = new Set([
   'moderation_blocked',
   'content_policy_violation',
@@ -99,8 +101,13 @@ export function isLiveCredentialHeader(name: string): boolean {
 }
 
 function collectCredentials(headers: Record<string, string>): string[] {
+  const sanitizedHeaders = sanitizeObject({ headers }).headers;
   return Object.entries(headers)
-    .filter(([name, value]) => typeof value === 'string' && isLiveCredentialHeader(name))
+    .filter(
+      ([name, value]) =>
+        typeof value === 'string' &&
+        (isLiveCredentialHeader(name) || sanitizedHeaders[name] === REDACTED),
+    )
     .flatMap(([, value]) => credentialForms(value))
     .filter((value) => value.length > 0)
     .sort((left, right) => right.length - left.length);
@@ -162,6 +169,9 @@ export class LiveSession {
   private commands = new Map<string, { name: string; pending: boolean }>();
   private commandCount = 0;
   private readonly credentials: string[];
+  private readonly inputTextBytes: number;
+  private pendingSnapshotTextBytes = 0;
+  private pendingSnapshotEntries = 0;
   private tokenUsage: TokenUsage = { numRequests: 1 };
   private backendCost: number | undefined = 0;
   private backendResponses: { id: string; model: string; usage: unknown }[] = [];
@@ -177,6 +187,10 @@ export class LiveSession {
 
   constructor(private options: SessionOptions) {
     this.credentials = collectCredentials(options.headers);
+    this.inputTextBytes = options.input.reduce(
+      (total, message) => total + Buffer.byteLength(message.content[0].text),
+      0,
+    );
   }
 
   run(): Promise<ProviderResponse> {
@@ -451,7 +465,10 @@ export class LiveSession {
         this.streamAudio();
         break;
       case 'session.instructions.appended':
-        const acknowledged = this.acknowledgeCommand(event.client_event_id);
+        const acknowledged = this.acknowledgeCommand(
+          event.client_event_id,
+          'session.instructions.append',
+        );
         if (
           acknowledged &&
           this.started &&
@@ -470,7 +487,7 @@ export class LiveSession {
         }
         break;
       case 'session.commentary.appended':
-        this.acknowledgeCommand(event.client_event_id);
+        this.acknowledgeCommand(event.client_event_id, 'session.commentary.append');
         break;
       case 'session.input_transcript.delta':
       case 'session.output_transcript.delta':
@@ -566,10 +583,14 @@ export class LiveSession {
   }
 
   /** An acknowledged command is no longer pending, so session.close cannot cancel it. */
-  private acknowledgeCommand(clientEventId: unknown): boolean {
+  private acknowledgeCommand(clientEventId: unknown, commandName: string): boolean {
     const command =
       typeof clientEventId === 'string' ? this.commands.get(clientEventId) : undefined;
     if (!command?.pending) {
+      return false;
+    }
+    if (command.name !== commandName) {
+      this.fail('GPT-Live acknowledgment does not match the pending command.');
       return false;
     }
     command.pending = false;
@@ -607,6 +628,9 @@ export class LiveSession {
     const rejected = clientEventId ? `rejected ${command?.name ?? 'a client event'}` : undefined;
     if ([code, type].some((label) => label && GUARDRAIL_ERROR_CODES.has(label))) {
       // Safety interventions are refusals, even when they reject one of promptfoo's commands.
+      if (command) {
+        command.pending = false;
+      }
       this.guardrailReason ??= `GPT-Live moderation ${rejected ?? 'interrupted the response'}${detail}`;
     } else if (this.closing && command?.pending) {
       // session.close cancels pending appends and queued work; those errors don't change the result.
@@ -630,7 +654,12 @@ export class LiveSession {
   }
 
   private handleDelegation(event: LiveEvent): void {
-    const delegation = event.delegation;
+    // Pending handlers must not retain arbitrary fields from the gateway envelope.
+    const delegation = event.delegation && {
+      id: event.delegation.id,
+      target: event.delegation.target,
+      response_id: event.delegation.response_id,
+    };
     if (
       !delegation ||
       !isBoundedProtocolId(delegation.id) ||
@@ -706,24 +735,42 @@ export class LiveSession {
       this.closeSession();
       return;
     }
+    const snapshotTextBytes = this.inputTextBytes + this.transcriptBytes;
+    const snapshotEntries = this.options.input.length + this.transcript.length;
+    if (
+      this.pendingSnapshotTextBytes + snapshotTextBytes > MAX_PENDING_SNAPSHOT_TEXT_BYTES ||
+      this.pendingSnapshotEntries + snapshotEntries > MAX_PENDING_SNAPSHOT_ENTRIES
+    ) {
+      this.fail(
+        'GPT-Live client delegation snapshots exceeded the memory limit. Complete handlers promptly or reduce conversation history.',
+      );
+      return;
+    }
     const request = {
       id: delegation.id,
       offsetMs: event.offset_ms,
       input: structuredClone(this.options.input),
       transcript: structuredClone(this.transcript),
     };
+    this.pendingSnapshotTextBytes += snapshotTextBytes;
+    this.pendingSnapshotEntries += snapshotEntries;
     this.runHandler(async () => {
-      const content = await handler(request, this.handlerController.signal);
-      if (typeof content !== 'string' || !content.trim()) {
-        throw new Error('Invalid delegation result');
-      }
-      if (!this.done && !this.closing) {
-        this.send({
-          type: 'session.commentary.append',
-          event_id: this.registerCommand('session.commentary.append'),
-          delegation_id: delegation.id,
-          content,
-        });
+      try {
+        const content = await handler(request, this.handlerController.signal);
+        if (typeof content !== 'string' || !content.trim()) {
+          throw new Error('Invalid delegation result');
+        }
+        if (!this.done && !this.closing) {
+          this.send({
+            type: 'session.commentary.append',
+            event_id: this.registerCommand('session.commentary.append'),
+            delegation_id: delegation.id,
+            content,
+          });
+        }
+      } finally {
+        this.pendingSnapshotTextBytes -= snapshotTextBytes;
+        this.pendingSnapshotEntries -= snapshotEntries;
       }
     });
   }

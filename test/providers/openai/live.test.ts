@@ -1199,6 +1199,45 @@ describe('OpenAiLiveProvider', () => {
     expect((await result).error).toBe('Invalid GPT-Live transcript delta.');
   });
 
+  it.each(['instructions', 'commentary'])('rejects mismatched %s acknowledgments', async (kind) => {
+    const result = provider({ delegationHandler: async () => 'The order shipped.' }).callApi('Hi');
+    const socket = await connect();
+    start(socket, { ack: kind === 'instructions' });
+    let clientEventId = 'promptfoo_start';
+    if (kind === 'instructions') {
+      clientDelegation(socket, 'd');
+      await vi.advanceTimersByTimeAsync(0);
+      clientEventId = delegationResults(socket)[0].event_id;
+    }
+    emit(socket, { type: `session.${kind}.appended`, client_event_id: clientEventId });
+    text(socket);
+    closed(socket);
+    expect((await result).error).toContain('acknowledgment does not match');
+  });
+
+  it.each(['code', 'type'])(
+    'clears a delegated command rejected by moderation (%s)',
+    async (field) => {
+      const result = provider({ delegationHandler: async () => 'The order shipped.' }).callApi(
+        'Hi',
+      );
+      const socket = await connect();
+      start(socket);
+      clientDelegation(socket, 'd');
+      await vi.advanceTimersByTimeAsync(0);
+      apiError(socket, {
+        [field]: 'moderation_blocked',
+        client_event_id: delegationResults(socket)[0].event_id,
+      });
+      text(socket);
+      await vi.advanceTimersByTimeAsync(100);
+      closed(socket);
+      const response = await result;
+      expect(response.isRefusal).toBe(true);
+      expect(response.error).toBeUndefined();
+    },
+  );
+
   it('reports unacknowledged delegated commentary when capture closes', async () => {
     const result = provider({ delegationHandler: async () => 'The order shipped.' }).callApi('Hi');
     const socket = await connect();
@@ -1507,7 +1546,7 @@ describe('OpenAiLiveProvider', () => {
     await result;
   });
 
-  it.each(['X-Gateway-Auth', 'X-Gateway-Key'])(
+  it.each(['X-Gateway-Auth', 'X-Gateway-Key', 'X-Gateway-Authentication', 'X-Session-Access'])(
     'redacts a custom %s credential echoed in API errors',
     async (header) => {
       const result = provider({
@@ -1524,7 +1563,16 @@ describe('OpenAiLiveProvider', () => {
     },
   );
 
-  it.each(['api-key', 'X-Gateway-Auth', 'X-Gateway-Key'])(
+  it('preserves ordinary header values in diagnostics', async () => {
+    const result = provider({ headers: { 'Content-Type': 'application/json' } }).callApi('Hi');
+    const socket = await connect();
+    start(socket);
+    apiError(socket, { message: 'Unsupported application/json content' });
+    closed(socket);
+    expect((await result).error).toContain('application/json');
+  });
+
+  it.each(['api-key', 'X-Gateway-Auth', 'X-Gateway-Key', 'X-Gateway-Authentication'])(
     'accepts custom %s credentials without OPENAI_API_KEY',
     async (header) => {
       const gateway = (headers: Record<string, string>) =>
@@ -2453,6 +2501,53 @@ describe('OpenAiLiveProvider', () => {
     );
   const clientCapError =
     'GPT-Live client delegations exceeded maxToolIterations=2. Increase maxToolIterations if the eval needs more delegations.';
+
+  it.each(['text', 'entries'])('bounds pending client snapshot %s before cloning', async (kind) => {
+    const resolvers: ((value: string) => void)[] = [];
+    const handler = vi.fn(() => new Promise<string>((resolve) => resolvers.push(resolve)));
+    const result = provider({ delegationHandler: handler }).callApi(
+      kind === 'text' ? 'x'.repeat(2_000_000) : 'Hi',
+    );
+    const socket = await connect();
+    start(socket);
+    if (kind === 'entries') {
+      for (let index = 0; index < 20_000; index++) {
+        text(socket, '', 'input');
+      }
+    }
+    for (let index = 0; index < 5; index++) {
+      clientDelegation(socket, `d${index}`);
+    }
+    closed(socket);
+    const response = await result;
+    for (const resolve of resolvers) {
+      resolve('late result');
+    }
+    await vi.advanceTimersByTimeAsync(0);
+    expect(response.error).toContain('client delegation snapshots exceeded');
+    expect(handler).toHaveBeenCalledTimes(kind === 'text' ? 4 : 2);
+    expect(delegationResults(socket)).toHaveLength(0);
+  });
+
+  it('releases the client snapshot budget when a handler settles', async () => {
+    const handler = vi.fn().mockResolvedValue('result');
+    const result = provider({ delegationHandler: handler, maxToolIterations: 16 }).callApi('Hi');
+    const socket = await connect();
+    start(socket);
+    text(socket, 'x'.repeat(1_000_000));
+    for (let index = 0; index < 9; index++) {
+      clientDelegation(socket, `d${index}`);
+      await vi.advanceTimersByTimeAsync(0);
+      emit(socket, {
+        type: 'session.commentary.appended',
+        client_event_id: delegationResults(socket).at(-1).event_id,
+      });
+    }
+    await vi.advanceTimersByTimeAsync(100);
+    closed(socket);
+    expect((await result).error).toBeUndefined();
+    expect(handler).toHaveBeenCalledTimes(9);
+  });
 
   it('caps managed Responses delegations without counting repeated IDs', async () => {
     const result = provider({
