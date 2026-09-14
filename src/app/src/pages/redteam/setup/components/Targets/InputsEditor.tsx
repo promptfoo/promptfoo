@@ -168,10 +168,12 @@ export default function InputsEditor({
     }
     const currentInput = inputs[name];
     const normalizedInput = currentInput ? normalizeInputDefinition(currentInput) : undefined;
-    let config = normalizedInput?.config;
-    if (type !== 'pdf' && config?.template) {
-      const { template: _, ...remainingConfig } = config;
-      config = Object.keys(remainingConfig).length ? remainingConfig : undefined;
+    let config = normalizedInput?.config ? { ...normalizedInput.config } : undefined;
+    if (config) {
+      delete config[type === 'pdf' ? 'injectionPlacements' : 'template'];
+      if (!Object.keys(config).length) {
+        config = undefined;
+      }
     }
     onChange({
       ...inputs,

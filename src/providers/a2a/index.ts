@@ -327,6 +327,7 @@ function getPdfPromptText(
   contextVars: Record<string, unknown>,
   mediaVarName: string | undefined,
   mediaValue: string | undefined,
+  inputs: Inputs | undefined,
 ): string | undefined {
   const values = [
     mediaVarName ? getContextVar(contextVars, mediaVarName) : undefined,
@@ -341,7 +342,8 @@ function getPdfPromptText(
   }
   try {
     const parsed = JSON.parse(prompt);
-    // Input envelopes are reconstructed from declared companions below.
+    // Only declared input fields can be reconstructed below. Other rendered
+    // variables may carry task instructions and must remain in the prompt.
     if (
       (typeof parsed === 'string' && values.includes(parsed)) ||
       (parsed &&
@@ -349,7 +351,9 @@ function getPdfPromptText(
         !Array.isArray(parsed) &&
         Object.entries(parsed).every(
           ([key, value]) =>
-            contextVars[key] === value || (value === '' && contextVars[key] === undefined),
+            ((key === mediaVarName || Object.prototype.hasOwnProperty.call(inputs ?? {}, key)) &&
+              contextVars[key] === value) ||
+            (value === '' && contextVars[key] === undefined),
         ))
     ) {
       return undefined;
@@ -372,7 +376,7 @@ function getDefaultTextPart(
   const inputs = context?.test?.metadata?.pluginConfig?.inputs as Inputs | undefined;
   let text = shouldUsePromptAsText(prompt, mediaValue) ? prompt : undefined;
   if (strategyId === 'pdf') {
-    text = getPdfPromptText(prompt, contextVars, mediaVarName, mediaValue) ?? text;
+    text = getPdfPromptText(prompt, contextVars, mediaVarName, mediaValue, inputs) ?? text;
   }
   if (strategyId === 'pdf' && inputs) {
     const companions = Object.fromEntries(

@@ -187,6 +187,59 @@ describe('InputsEditor', () => {
       },
     );
 
+    it.each(['text', 'docx', 'image'] as const)(
+      'removes injection placements when changing a %s input to PDF',
+      async (type) => {
+        const user = userEvent.setup();
+        const onChange = vi.fn();
+        const config = { inputPurpose: 'Invoice review', injectionPlacements: ['body'] };
+        const initialInputs: Inputs = {
+          document: { type, description: 'Invoice', config },
+        };
+        renderWithProviders(
+          <ControlledInputsEditor initialInputs={initialInputs} onChange={onChange} compact />,
+        );
+
+        await user.click(screen.getByRole('combobox'));
+        await user.click(await screen.findByRole('option', { name: 'PDF' }));
+
+        expect(onChange).toHaveBeenLastCalledWith({
+          document: {
+            type: 'pdf',
+            description: 'Invoice',
+            config: { inputPurpose: 'Invoice review' },
+          },
+        });
+        expect(initialInputs.document).toEqual({ type, description: 'Invoice', config });
+        expect(config.injectionPlacements).toEqual(['body']);
+      },
+    );
+
+    it('omits empty config when removing the only placement setting', async () => {
+      const user = userEvent.setup();
+      const onChange = vi.fn();
+      renderWithProviders(
+        <ControlledInputsEditor
+          initialInputs={{
+            document: {
+              type: 'text',
+              description: 'Invoice',
+              config: { injectionPlacements: ['body'] },
+            },
+          }}
+          onChange={onChange}
+          compact
+        />,
+      );
+
+      await user.click(screen.getByRole('combobox'));
+      await user.click(await screen.findByRole('option', { name: 'PDF' }));
+
+      expect(onChange).toHaveBeenLastCalledWith({
+        document: { type: 'pdf', description: 'Invoice' },
+      });
+    });
+
     it('stores a plain text definition when removing the only PDF setting', async () => {
       const user = userEvent.setup();
       const onChange = vi.fn();

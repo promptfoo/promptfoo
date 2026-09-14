@@ -2,6 +2,7 @@ import { createHash } from 'node:crypto';
 import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
+import { pathToFileURL } from 'node:url';
 
 import { PDFDocument } from 'pdf-lib';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -93,6 +94,38 @@ describe('PDF strategy', () => {
     expect(original.vars!.document).toBe('old PDF');
     expect(getStrategyGenerationProvider).not.toHaveBeenCalled();
   });
+
+  it.each(['relative', 'absolute', 'file-url', 'localhost-url'])(
+    'loads a template with spaces and percent signs from a %s path',
+    async (kind) => {
+      const filename = 'invoice 10%.pdf';
+      const templatePath = path.join(directory, filename);
+      await fs.copyFile(path.join(directory, 'invoice.pdf'), templatePath);
+      const fileUrl = pathToFileURL(templatePath).href;
+      const original = testCase();
+      original.metadata.pluginConfig!.inputs!.document = {
+        type: 'pdf',
+        description: 'Invoice',
+        config: {
+          template: {
+            source: 'file',
+            path:
+              kind === 'relative'
+                ? `file://${filename}`
+                : kind === 'absolute'
+                  ? templatePath
+                  : kind === 'localhost-url'
+                    ? fileUrl.replace('file:///', 'file://localhost/')
+                    : fileUrl,
+          },
+        },
+      };
+      const [result] = await addPdfTestCases([original], '__prompt', {});
+      expect(await retrieveMedia(result.metadata!.pdf.templateStorageKey)).toEqual(
+        await fs.readFile(templatePath),
+      );
+    },
+  );
 
   it('keeps companion text fields in sync with transformed input JSON', async () => {
     const original = testCase();

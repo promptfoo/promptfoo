@@ -1,5 +1,6 @@
 import fs from 'node:fs/promises';
 import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 
 import { z } from 'zod';
 import cliState from '../../cliState';
@@ -40,7 +41,9 @@ async function prepareTemplate(
   if (config.source === 'file') {
     const filename = path.resolve(
       cliState.basePath ?? process.cwd(),
-      config.path.replace(/^file:\/\//, ''),
+      /^file:\/\/(?:\/|localhost\/)/.test(config.path)
+        ? fileURLToPath(config.path)
+        : config.path.replace(/^file:\/\//, ''),
     );
     if ((await fs.stat(filename)).size > MAX_PDF_BYTES) {
       throw new Error('PDF template exceeds the 5 MiB limit');

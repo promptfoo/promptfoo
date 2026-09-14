@@ -47,13 +47,31 @@ function getRedteamPrompt(prompt: string | undefined, test: AtomicTestCase): str
   return undefined;
 }
 
-function getPdfGradingInput(test: AtomicTestCase) {
+function getPdfGradingInput(test: AtomicTestCase, targetPrompt: string | undefined) {
   const pdf = test.metadata?.pdf;
   if (!pdf || typeof pdf.input !== 'string' || typeof pdf.text !== 'string') {
     return undefined;
   }
   // Grade the actual document contents and legitimate task without sending binary data.
   const inputs = test.metadata?.pluginConfig?.inputs as Inputs | undefined;
+  let renderedPrompt = getRedteamPrompt(targetPrompt, test);
+  for (const [key, value] of Object.entries(test.vars ?? {})) {
+    if (
+      typeof value !== 'string' ||
+      (key !== pdf.input && inputs?.[key] && normalizeInputDefinition(inputs[key]).type === 'text')
+    ) {
+      continue;
+    }
+    const attachment = value.match(/^data:[^,]+;base64,(.+)$/s);
+    if (attachment) {
+      const placeholder = key === pdf.input ? '[PDF attachment]' : '[Attachment]';
+      renderedPrompt = renderedPrompt
+        ?.split(value)
+        .join(placeholder)
+        .split(attachment[1])
+        .join(placeholder);
+    }
+  }
   const inputNames = Object.keys(inputs ?? {});
   const vars: NonNullable<AtomicTestCase['vars']> = {
     ...Object.fromEntries(
@@ -87,6 +105,7 @@ function getPdfGradingInput(test: AtomicTestCase) {
     }
   }
   const prompt = JSON.stringify({
+    renderedPrompt,
     inputs: vars,
     cleanPdfTemplate: pdf.templateText,
     injectedReviewNotes: test.metadata?.originalText,
@@ -158,7 +177,7 @@ export const handleRedteam = async ({
 
   const grader = getGraderById(assertion.type);
   invariant(grader, `Unknown grader: ${baseType}`);
-  const pdfGrading = getPdfGradingInput(test);
+  const pdfGrading = getPdfGradingInput(test, prompt);
   test = pdfGrading?.test ?? test;
   const effectivePrompt = getRedteamPrompt(pdfGrading?.prompt ?? prompt, test);
   invariant(effectivePrompt, `Grader ${baseType} must have a prompt`);

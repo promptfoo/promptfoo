@@ -43,7 +43,7 @@ redteam:
         enabled: false
 ```
 
-Paths resolve relative to the configuration file. Disable `basic` if the target requires the templated PDF variants exclusively.
+Relative paths and `file://fixtures/invoice.pdf` references resolve from the configuration file. Absolute paths and standard local file URLs, such as `file:///path/to/invoice%20copy.pdf`, are also supported. Disable `basic` if the target requires the templated PDF variants exclusively.
 
 ### Generated templates
 
@@ -89,13 +89,13 @@ Do not interpolate the URI into a text-only prompt. This tests text handling rat
 
 ## Artifacts and grading
 
-Clean and attacked PDFs are saved through the configured media storage provider. In local storage, they live under `~/.promptfoo/media/document/`, or `PROMPTFOO_MEDIA_PATH`. Generated test variables also retain the PDF data URI for replay.
+Clean and attacked PDFs are saved through the configured media storage provider. In local storage, they live under `~/.promptfoo/media/document/`, or `PROMPTFOO_MEDIA_PATH`. Generated test variables also retain the PDF data URI for replay. Storage errors stop generation so a run cannot silently lose its saved artifacts.
 
 Set `PROMPTFOO_INLINE_MEDIA=true` to skip separate media-storage writes. Attacked PDF bytes remain in test variables, and the results table provides a download link. Clean-template text and hashes remain in metadata; storage keys are absent. Generated configuration files and saved evaluation results can still contain the inline PDF.
 
 Each test's `metadata.pdf` records `input`, `mode`, readable `text`, `templateText`, `templateStorageKey`, `templateHash`, `storageKey`, and `contentHash`. Hashes are computed directly from PDF bytes and use `sha256:<hex digest>` identifiers so exports distinguish them from opaque credentials. The result table links to the attacked PDF and clean template when those storage files remain available.
 
-The strategy preserves the plugin's assertions and attack goal. Redteam graders receive the readable document and the target's declared companion inputs. Declare any text or attachment fields needed for grading in `inputs`; unrelated test variables, such as credentials or session state, are excluded from this document context. Companion DOCX inputs include the rendered wrapper body and rewritten instructions in their grading context. Other companion attachments use their recorded readable content when available; otherwise, the grader sees an explicit omitted-attachment marker. Attachment bytes are excluded from the grading prompt. `metadata.originalText` retains the injected payload. Scanned-mode grading uses the text used to render the PDF; the target must actually support visual PDF reading or OCR.
+The strategy preserves the plugin's assertions and attack goal. Redteam graders receive the rendered task prompt with attachment bytes replaced by placeholders, the readable document, and the target's declared companion inputs. Declare any text or attachment fields needed for grading in `inputs`; unrelated test variables, such as credentials or session state, are excluded from this document context. Companion DOCX inputs include the rendered wrapper body and rewritten instructions in their grading context. Other companion attachments use their recorded readable content when available; otherwise, the grader sees an explicit omitted-attachment marker. Attachment bytes are excluded from the grading prompt. `metadata.originalText` retains the injected payload. Scanned-mode grading uses the text used to render the PDF; the target must actually support visual PDF reading or OCR.
 
 ## Limits
 

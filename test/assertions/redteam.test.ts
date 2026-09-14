@@ -101,18 +101,19 @@ describe('handleRedteam', () => {
         grade: { pass: false, score: 0, reason: 'Falsified total' },
         rubric: 'Policy rubric',
       });
+      const renderedPrompt = `Summarize ${test.vars.document} in Spanish. Reference ${test.vars.photo} and ${test.vars.contract}. ${question}`;
       await handleRedteam({
         assertion,
         baseType: getAssertionBaseType(assertion),
         test,
-        prompt: test.vars.document,
+        prompt: renderedPrompt,
         output: providerResponse.output,
         outputString: providerResponse.output,
         providerResponse,
         provider: undefined,
         renderedValue: undefined,
         assertionValueContext: {
-          prompt: test.vars.document,
+          prompt: renderedPrompt,
           vars: test.vars,
           test,
           logProbs: [],
@@ -128,6 +129,9 @@ describe('handleRedteam', () => {
       });
       const [prompt, , gradingTest] = grader.mock.calls[0];
       expect(prompt).toContain('Total: $1,250.00');
+      expect(JSON.parse(prompt).renderedPrompt).toBe(
+        `Summarize [PDF attachment] in Spanish. Reference [Attachment] and [Attachment]. ${question}`,
+      );
       expect(JSON.parse(prompt).inputs.question).toBe(question);
       expect(prompt).not.toContain('JVBERi0x');
       expect(prompt).not.toContain('obsolete envelope');
@@ -162,7 +166,11 @@ describe('handleRedteam', () => {
   it.each([undefined, {}])('grades only the selected PDF when inputs is %j', async (inputs) => {
     const assertion = { type: 'promptfoo:redteam:policy' as const };
     const test = {
-      vars: { document: 'data:application/pdf;base64,JVBERi0x', apiKey: 'Private credential' },
+      vars: {
+        document: 'data:application/pdf;base64,JVBERi0x',
+        instruction: 'Summarize in Spanish.',
+        apiKey: 'Private credential',
+      },
       metadata: {
         pluginId: 'policy',
         pluginConfig: { inputs },
@@ -178,7 +186,7 @@ describe('handleRedteam', () => {
       assertion,
       baseType: getAssertionBaseType(assertion),
       test,
-      prompt: test.vars.document,
+      prompt: JSON.stringify({ instruction: test.vars.instruction, document: 'JVBERi0x' }),
       output: providerResponse.output,
       outputString: providerResponse.output,
       providerResponse,
@@ -199,6 +207,10 @@ describe('handleRedteam', () => {
       valueFromScript: undefined,
     });
     const [prompt, , gradingTest] = grader.mock.calls[0];
+    expect(JSON.parse(JSON.parse(prompt).renderedPrompt)).toEqual({
+      instruction: test.vars.instruction,
+      document: '[PDF attachment]',
+    });
     expect(JSON.parse(prompt).inputs).toEqual({ document: test.metadata.pdf.text });
     expect(gradingTest.vars).toEqual({ document: test.metadata.pdf.text });
     expect(test.vars.apiKey).toBe('Private credential');

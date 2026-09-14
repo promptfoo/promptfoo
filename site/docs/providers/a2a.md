@@ -222,7 +222,7 @@ For audio, image, and video redteam strategies, the default message includes the
 
 For the [PDF strategy](/docs/red-team/strategies/pdf/), the default message includes the selected PDF input with the `application/pdf` media type. Instructions surrounding the PDF in your prompt are preserved, with the file value replaced by `[PDF attachment]`. For example, `Summarize {{document}}` becomes `Summarize [PDF attachment]` alongside the file part.
 
-When the prompt contains only the PDF or an input JSON object, companion text comes from the target's declared text inputs: one field is sent as text, and multiple fields are sent as a JSON object preserving their names. Without declared inputs, the provider uses `question` when available.
+When the prompt contains only the PDF or a JSON object made from declared input fields, companion text comes from the target's declared text inputs: one field is sent as text, and multiple fields are sent as a JSON object preserving their names. Other rendered fields, such as an `instruction` variable, stay in the prompt. Without declared inputs, the provider uses `question` when no rendered task text is available.
 
 Custom message templates replace this default. Include any required file parts in `config.message`:
 

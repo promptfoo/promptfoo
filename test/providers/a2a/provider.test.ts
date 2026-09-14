@@ -436,6 +436,7 @@ describe('A2AProvider', () => {
             instruction: 'Summarize in Spanish.',
             document: '[PDF attachment]',
           }),
+          instruction: 'Summarize in Spanish.',
         },
         {
           prompt: JSON.stringify([{ role: 'user', content: `Summarize ${document}.` }]),
@@ -444,7 +445,7 @@ describe('A2AProvider', () => {
         { prompt: document, expected: undefined },
         { prompt: JSON.stringify(document), expected: undefined },
       ];
-      for (const { prompt, expected, request } of cases) {
+      for (const { prompt, expected, request, instruction } of cases) {
         for (const inputs of [
           undefined,
           {
@@ -459,7 +460,12 @@ describe('A2AProvider', () => {
           );
           await provider({ protocolVersion: version }).callApi(prompt, {
             prompt: { raw: prompt, label: 'PDF task' },
-            vars: { document, ...(request ? { request } : {}), apiKey: 'Private credential' },
+            vars: {
+              document,
+              ...(request ? { request } : {}),
+              ...(instruction ? { instruction } : {}),
+              apiKey: 'Private credential',
+            },
             test: {
               metadata: { strategyId: 'pdf', pdf: { input: 'document' }, pluginConfig: { inputs } },
             },
