@@ -385,6 +385,28 @@ describe('getOAuthTokenWithExpiry', () => {
     vi.clearAllMocks();
   });
 
+  it('bounds retained credential generations while reusing recent equivalent auth objects', async () => {
+    mockFetch.mockImplementation(async () => ({
+      ok: true,
+      json: async () => ({ access_token: 'bounded-token', expires_in: 3600 }),
+    }));
+    const auth: MCPOAuthClientCredentialsAuth = {
+      type: 'oauth',
+      grantType: 'client_credentials',
+      tokenUrl: 'https://auth.example.com/bounded-generations',
+      clientId: 'bounded-client',
+      clientSecret: 'generation-0',
+    };
+    await getOAuthTokenWithExpiry(auth);
+    for (let generation = 1; generation <= 1000; generation++) {
+      await getOAuthTokenWithExpiry({ ...auth, clientSecret: `generation-${generation}` });
+    }
+    await getOAuthTokenWithExpiry({ ...auth, clientSecret: 'generation-1000' });
+    expect(mockFetch).toHaveBeenCalledTimes(1001);
+    await getOAuthTokenWithExpiry({ ...auth });
+    expect(mockFetch).toHaveBeenCalledTimes(1002);
+  });
+
   it.each(['clientSecret', 'password'] as const)(
     'fetches a separate token when %s changes',
     async (field) => {

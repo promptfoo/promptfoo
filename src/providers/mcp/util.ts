@@ -1,5 +1,6 @@
 import { createHmac, randomBytes } from 'node:crypto';
 
+import { LRUCache } from 'lru-cache';
 import { getRuntimeEnv } from '../../envOverrides';
 import logger from '../../logger';
 import { fetchWithProxy } from '../../util/fetch/index';
@@ -73,7 +74,10 @@ interface OAuthTokenCache {
   expiresAt: number;
 }
 
-const oauthTokenCache = new Map<string, OAuthTokenCache>();
+const oauthTokenCache = new LRUCache<string, OAuthTokenCache>({
+  max: 1000,
+  ttlAutopurge: true,
+});
 const oauthCacheKey = randomBytes(32);
 
 /**
@@ -208,11 +212,10 @@ export async function getOAuthTokenWithExpiry(
     scopes: auth.scopes,
   });
 
-  // Cache the token
-  oauthTokenCache.set(cacheKey, {
-    accessToken: result.accessToken,
-    expiresAt: result.expiresAt,
-  });
+  const ttl = result.expiresAt - Date.now();
+  if (ttl > 0) {
+    oauthTokenCache.set(cacheKey, { ...result }, { ttl });
+  }
 
   logger.debug('[MCP Auth] Cached OAuth token');
   return result;

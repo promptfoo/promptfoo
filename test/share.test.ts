@@ -788,7 +788,23 @@ describe('createShareableUrl', () => {
           evalId: mockEval.id!,
           promptIdx: 0,
           testIdx: 0,
-          gradingResult: null,
+          gradingResult: {
+            pass: true,
+            score: 1,
+            reason: 'Visible reason',
+            assertion: {
+              type: 'llm-rubric',
+              provider: { id: 'openai:grader', config: { apiKey: 'PRIVATE_ASSERTION_CREDENTIAL' } },
+            },
+            metadata: {
+              http: {
+                headers: {
+                  authorization: 'PRIVATE_GRADER_HEADER',
+                  'content-type': 'application/json',
+                },
+              },
+            },
+          },
           failureReason: 0,
           provider,
           testCase: {
@@ -797,7 +813,27 @@ describe('createShareableUrl', () => {
             assert: [{ type: 'javascript', value: transform }],
           },
           prompt: { raw: 'Hello', label: 'Hello', config: { provider } },
-          response: { output: 'Unchanged response' },
+          response: {
+            output: 'Unchanged response',
+            metadata: {
+              http: {
+                status: 200,
+                statusText: 'OK',
+                headers: {
+                  authorization: 'PRIVATE_RESPONSE_HEADER',
+                  'content-type': 'application/json',
+                },
+              },
+            },
+          },
+          metadata: {
+            http: {
+              headers: {
+                authorization: 'PRIVATE_RESULT_HEADER',
+                'content-type': 'application/json',
+              },
+            },
+          },
           score: 1,
           success: true,
         });
@@ -813,6 +849,17 @@ describe('createShareableUrl', () => {
         await createShareableUrl(mockEval as Eval);
 
         const body = mockFetch.mock.calls[1][1].body;
+        for (const secret of [
+          'PRIVATE_ASSERTION_CREDENTIAL',
+          'PRIVATE_GRADER_HEADER',
+          'PRIVATE_RESPONSE_HEADER',
+          'PRIVATE_RESULT_HEADER',
+        ]) {
+          expect(body).not.toContain(secret);
+        }
+        expect(result.response?.metadata).toMatchObject({
+          http: { headers: { authorization: 'PRIVATE_RESPONSE_HEADER' } },
+        });
         expect(body).not.toContain('abc123');
         expect(body).not.toContain('connector123');
         expect(JSON.stringify(mockFetch.mock.calls)).not.toContain(
@@ -822,7 +869,17 @@ describe('createShareableUrl', () => {
         expect(result.testCase.options?.transform).toBe(transform);
         expect(JSON.parse(body)[0]).toMatchObject({
           testCase: { vars: { input: 'Hello' } },
-          response: { output: 'Unchanged response' },
+          response: {
+            output: 'Unchanged response',
+            metadata: {
+              http: {
+                headers: { authorization: '[REDACTED]', 'content-type': 'application/json' },
+              },
+            },
+          },
+          metadata: {
+            http: { headers: { authorization: '[REDACTED]', 'content-type': 'application/json' } },
+          },
           score: 1,
           success: true,
         });

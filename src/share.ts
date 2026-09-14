@@ -10,6 +10,7 @@ import { getEnvBool, getEnvInt, getEnvString, isCI } from './envars';
 import { getUserEmail, setUserEmail } from './globalConfig/accounts';
 import { cloudConfig } from './globalConfig/cloud';
 import logger, { isDebugEnabled } from './logger';
+import { sanitizeResultForJsonlArtifact } from './models/evalResult';
 import {
   checkCloudPermissions,
   getOrgContext,
@@ -244,20 +245,24 @@ async function sendChunkOfResults(
 ): Promise<ChunkSendResult> {
   const targetUrl = `${url}/${evalId}/results`;
   const stringifiedChunk = JSON.stringify(
-    chunk.map((result) => ({
-      ...result,
-      provider: redactSecretLeaves(omitFunctionsForShare(result.provider)),
-      testCase: redactSecretLeaves(omitFunctionsForShare(result.testCase)),
-      ...('vars' in result ? { vars: redactSecretLeaves(omitFunctionsForShare(result.vars)) } : {}),
-      ...(result.prompt?.config
-        ? {
-            prompt: {
-              ...result.prompt,
-              config: redactSecretLeaves(omitFunctionsForShare(result.prompt.config)),
-            },
-          }
-        : {}),
-    })),
+    chunk.map((result) =>
+      sanitizeResultForJsonlArtifact({
+        ...result,
+        provider: redactSecretLeaves(omitFunctionsForShare(result.provider)),
+        testCase: redactSecretLeaves(omitFunctionsForShare(result.testCase)),
+        ...('vars' in result
+          ? { vars: redactSecretLeaves(omitFunctionsForShare(result.vars)) }
+          : {}),
+        ...(result.prompt?.config
+          ? {
+              prompt: {
+                ...result.prompt,
+                config: redactSecretLeaves(omitFunctionsForShare(result.prompt.config)),
+              },
+            }
+          : {}),
+      }),
+    ),
   );
   const chunkSizeBytes = Buffer.byteLength(stringifiedChunk, 'utf8');
 
