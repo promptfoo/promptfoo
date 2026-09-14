@@ -10,8 +10,8 @@
 
 import logger from '../../logger';
 import { accumulateTokenUsage } from '../../util/tokenUsageUtils';
+import { hasPdfStrategy } from '../constants/strategies';
 import { remoteGenerationContextPayload } from '../remoteGenerationContext';
-import { hasPdfStrategy } from '../strategies/util';
 
 import type { MediaData } from '../../storage/types';
 import type { TestCaseWithPlugin, TokenUsage } from '../../types';

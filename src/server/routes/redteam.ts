@@ -4,6 +4,7 @@ import cliState from '../../cliState';
 import logger from '../../logger';
 import {
   DATASET_EXEMPT_PLUGINS,
+  hasPdfStrategy,
   isMultiTurnStrategy,
   MULTI_INPUT_EXCLUDED_PLUGINS,
   type MultiTurnStrategy,
@@ -18,7 +19,6 @@ import {
 import { doRedteamRun } from '../../redteam/shared';
 import { Strategies } from '../../redteam/strategies/index';
 import { type Strategy as StrategyFactory } from '../../redteam/strategies/types';
-import { hasPdfStrategy } from '../../redteam/strategies/util';
 import { type RedteamFileConfig, TestCaseWithPlugin } from '../../types';
 import { RedteamSchemas } from '../../types/api/redteam';
 import { fetchWithProxy } from '../../util/fetch/index';

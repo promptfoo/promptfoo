@@ -142,7 +142,7 @@ function resolveInput(testCase: TestCaseWithPlugin, injectVar: string, configure
         : [],
     ),
   );
-  return { input, payload, templateConfig, companionVars };
+  return { input, inputs, payload, templateConfig, companionVars };
 }
 
 export async function addPdfTestCases(
@@ -157,7 +157,7 @@ export async function addPdfTestCases(
 
   const results: TestCase[] = [];
   for (const testCase of testCases) {
-    const { input, payload, templateConfig, companionVars } = resolveInput(
+    const { input, inputs, payload, templateConfig, companionVars } = resolveInput(
       testCase,
       injectVar,
       configuredInput,
@@ -173,13 +173,19 @@ export async function addPdfTestCases(
     const rendered = await createPdf(notes, template.bytes);
     const bytes = mode === 'scanned' ? await scanPdf(rendered) : rendered;
     const storageKey = await savePdf(bytes, 'attack.pdf', text);
+    const vars = {
+      ...testCase.vars,
+      ...companionVars,
+      [input]: `data:application/pdf;base64,${bytes.toString('base64')}`,
+    };
+    if (inputs) {
+      vars[injectVar] = JSON.stringify(
+        Object.fromEntries(Object.keys(inputs).map((key) => [key, vars[key]])),
+      );
+    }
     results.push({
       ...testCase,
-      vars: {
-        ...testCase.vars,
-        ...companionVars,
-        [input]: `data:application/pdf;base64,${bytes.toString('base64')}`,
-      },
+      vars,
       assert: testCase.assert?.map((assertion) => ({
         ...assertion,
         metric: assertion.metric ? `${assertion.metric}/PDF` : assertion.metric,

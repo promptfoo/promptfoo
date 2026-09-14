@@ -220,7 +220,9 @@ By default, promptfoo sends a `ROLE_USER` message with a single text part contai
 
 For audio, image, and video redteam strategies, the default message includes the generated file and uses `question` as companion text when present.
 
-For the [PDF strategy](/docs/red-team/strategies/pdf/), the default message includes the selected PDF input with the `application/pdf` media type. Companion text comes from the target's declared text inputs: one field is sent as text, and multiple fields are sent as a JSON object preserving their names. Without declared inputs, the provider uses `question` or a rendered text prompt when available. A rendered prompt containing the PDF payload is not repeated as text.
+For the [PDF strategy](/docs/red-team/strategies/pdf/), the default message includes the selected PDF input with the `application/pdf` media type. Instructions surrounding the PDF in your prompt are preserved, with the file value replaced by `[PDF attachment]`. For example, `Summarize {{document}}` becomes `Summarize [PDF attachment]` alongside the file part.
+
+When the prompt contains only the PDF or an input JSON object, companion text comes from the target's declared text inputs: one field is sent as text, and multiple fields are sent as a JSON object preserving their names. Without declared inputs, the provider uses `question` when available.
 
 Custom message templates replace this default. Include any required file parts in `config.message`:
 

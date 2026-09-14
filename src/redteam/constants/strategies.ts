@@ -40,6 +40,21 @@ export const isCustomStrategy = (strategyId: string): boolean => {
   return strategyId === 'custom' || strategyId.startsWith('custom:');
 };
 
+/** Includes PDF variants nested inside layer configurations. */
+export function hasPdfStrategy(strategies: unknown): boolean {
+  if (!Array.isArray(strategies)) {
+    return false;
+  }
+  return strategies.some((strategy) => {
+    const id = typeof strategy === 'string' ? strategy : strategy?.id;
+    if (typeof id !== 'string') {
+      return false;
+    }
+    const baseId = id.split(':')[0];
+    return baseId === 'pdf' || (baseId === 'layer' && hasPdfStrategy(strategy.config?.steps));
+  });
+}
+
 export const MULTI_MODAL_STRATEGIES = ['audio', 'image', 'video', 'pdf'] as const;
 export const MULTI_MODAL_STRATEGIES_SET: ReadonlySet<string> = new Set(MULTI_MODAL_STRATEGIES);
 

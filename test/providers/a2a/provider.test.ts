@@ -372,7 +372,11 @@ describe('A2AProvider', () => {
           apiKey: 'Private provider credential',
           sessionContext: 'Private session context',
         };
-        const prompt = JSON.stringify({ invoice: vars.invoice, ...companions });
+        const prompt = JSON.stringify({
+          invoice: vars.invoice,
+          ...companions,
+          optionalInput: '',
+        });
         const result = await provider({ protocolVersion: version }).callApi(prompt, {
           prompt: { raw: prompt, label: 'auto-generated input prompt' },
           test: {
@@ -402,6 +406,73 @@ describe('A2AProvider', () => {
           'Hidden PDF instructions',
         ]) {
           expect(JSON.stringify(body.message)).not.toContain(omitted);
+        }
+      }
+    },
+  );
+
+  it.each(['1.0', '0.3.0'])(
+    'preserves static instructions beside PDF attachments in A2A %s',
+    async (version) => {
+      const raw = Buffer.from('%PDF-1.7\nPDF attachment bytes').toString('base64');
+      const document = `data:application/pdf;base64,${raw}`;
+      const cases = [
+        {
+          prompt: `Summarize ${document} in Spanish.`,
+          expected: 'Summarize [PDF attachment] in Spanish.',
+        },
+        {
+          prompt: `Summarize ${raw} in Spanish.`,
+          expected: 'Summarize [PDF attachment] in Spanish.',
+        },
+        {
+          prompt: `Read ${document} and answer in Spanish: What is the total?`,
+          expected: 'Read [PDF attachment] and answer in Spanish: What is the total?',
+          request: 'What is the total?',
+        },
+        {
+          prompt: JSON.stringify({ instruction: 'Summarize in Spanish.', document }),
+          expected: JSON.stringify({
+            instruction: 'Summarize in Spanish.',
+            document: '[PDF attachment]',
+          }),
+        },
+        {
+          prompt: JSON.stringify([{ role: 'user', content: `Summarize ${document}.` }]),
+          expected: JSON.stringify([{ role: 'user', content: 'Summarize [PDF attachment].' }]),
+        },
+        { prompt: document, expected: undefined },
+        { prompt: JSON.stringify(document), expected: undefined },
+      ];
+      for (const { prompt, expected, request } of cases) {
+        for (const inputs of [
+          undefined,
+          {
+            document: { type: 'pdf' as const, description: 'Invoice' },
+            ...(request
+              ? { request: { type: 'text' as const, description: 'Invoice question' } }
+              : {}),
+          },
+        ]) {
+          vi.mocked(fetchWithTimeout).mockResolvedValueOnce(
+            jsonResponse({ message: { role: 'ROLE_AGENT', parts: [{ text: 'pdf ok' }] } }),
+          );
+          await provider({ protocolVersion: version }).callApi(prompt, {
+            prompt: { raw: prompt, label: 'PDF task' },
+            vars: { document, ...(request ? { request } : {}), apiKey: 'Private credential' },
+            test: {
+              metadata: { strategyId: 'pdf', pdf: { input: 'document' }, pluginConfig: { inputs } },
+            },
+          });
+          const body = JSON.parse(vi.mocked(fetchWithTimeout).mock.lastCall?.[1]?.body as string);
+          const textParts = body.message.parts.filter((part: { text?: string }) => part.text);
+          expect(textParts.map((part: { text: string }) => part.text)).toEqual(
+            expected ? [expected] : [],
+          );
+          const filePart = body.message.parts.at(-1);
+          expect(version === '0.3.0' ? filePart.file.fileWithBytes : filePart.raw).toBe(raw);
+          expect(JSON.stringify(textParts)).not.toContain(raw);
+          expect(JSON.stringify(textParts)).not.toContain('Private credential');
         }
       }
     },

@@ -72,7 +72,7 @@ The initial strategy always appends review notes on new pages. Do not set `confi
 
 ## Sending the PDF to your target
 
-The provider receives `context.vars.document` as a complete `data:application/pdf;base64,...` URI. For native file APIs, forward it as the API's file input. For multipart upload APIs, decode it into bytes and attach it as a file:
+The provider receives `context.vars.document` as a complete `data:application/pdf;base64,...` URI. Multi-input targets also receive the same PDF value in the combined `context.vars.__prompt` JSON, alongside their other declared inputs. For native file APIs, forward it as the API's file input. For multipart upload APIs, decode it into bytes and attach it as a file:
 
 ```javascript
 const bytes = Buffer.from(context.vars.document.split(',')[1], 'base64');

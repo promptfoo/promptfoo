@@ -1,7 +1,15 @@
 import crypto from 'node:crypto';
 
 import logger from '../../logger';
-import { normalizeInputDefinition } from '../../types/shared';
+import {
+  type ApiProvider,
+  type CallApiContextParams,
+  type CallApiOptionsParams,
+  type Inputs,
+  normalizeInputDefinition,
+  type ProviderOptions,
+  type ProviderResponse,
+} from '../../types/index';
 import { fetchWithTimeout } from '../../util/fetch/index';
 import { safeJsonStringify } from '../../util/json';
 import { getNunjucksEngine } from '../../util/templates';
@@ -24,14 +32,6 @@ import {
   A2ATaskSchema,
 } from './types';
 
-import type {
-  ApiProvider,
-  CallApiContextParams,
-  CallApiOptionsParams,
-  Inputs,
-  ProviderOptions,
-  ProviderResponse,
-} from '../../types/index';
 import type {
   MCPOAuthClientCredentialsAuth,
   MCPOAuthPasswordAuth,
@@ -322,6 +322,44 @@ function getMediaVarName(
   return undefined;
 }
 
+function getPdfPromptText(
+  prompt: string,
+  contextVars: Record<string, unknown>,
+  mediaVarName: string | undefined,
+  mediaValue: string | undefined,
+): string | undefined {
+  const values = [
+    mediaVarName ? getContextVar(contextVars, mediaVarName) : undefined,
+    mediaValue,
+  ].filter((value): value is string => Boolean(value));
+  const text = values.reduce(
+    (result, value) => result.split(value).join('[PDF attachment]'),
+    prompt,
+  );
+  if (text === prompt || values.includes(prompt.trim())) {
+    return undefined;
+  }
+  try {
+    const parsed = JSON.parse(prompt);
+    // Input envelopes are reconstructed from declared companions below.
+    if (
+      (typeof parsed === 'string' && values.includes(parsed)) ||
+      (parsed &&
+        typeof parsed === 'object' &&
+        !Array.isArray(parsed) &&
+        Object.entries(parsed).every(
+          ([key, value]) =>
+            contextVars[key] === value || (value === '' && contextVars[key] === undefined),
+        ))
+    ) {
+      return undefined;
+    }
+  } catch {
+    // A plain-text prompt can contain instructions around the attachment.
+  }
+  return text;
+}
+
 function getDefaultTextPart(
   prompt: string,
   protocolVersion: string,
@@ -333,6 +371,9 @@ function getDefaultTextPart(
   const mediaVarName = strategyId ? getMediaVarName(strategyId, contextVars, context) : undefined;
   const inputs = context?.test?.metadata?.pluginConfig?.inputs as Inputs | undefined;
   let text = shouldUsePromptAsText(prompt, mediaValue) ? prompt : undefined;
+  if (strategyId === 'pdf') {
+    text = getPdfPromptText(prompt, contextVars, mediaVarName, mediaValue) ?? text;
+  }
   if (strategyId === 'pdf' && inputs) {
     const companions = Object.fromEntries(
       Object.entries(inputs).flatMap(([key, definition]) => {
@@ -343,9 +384,10 @@ function getDefaultTextPart(
       }),
     );
     const values = Object.values(companions);
-    text = values.length > 1 ? JSON.stringify(companions) : (values[0] ?? text);
+    text ??= values.length > 1 ? JSON.stringify(companions) : values[0];
   } else if (mediaVarName !== 'question') {
-    text = getContextVar(contextVars, 'question') ?? text;
+    const question = getContextVar(contextVars, 'question');
+    text = strategyId === 'pdf' ? (text ?? question) : (question ?? text);
   }
   if (!text) {
     return undefined;

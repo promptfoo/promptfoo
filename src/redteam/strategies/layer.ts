@@ -1,8 +1,9 @@
 import logger from '../../logger';
+import { hasPdfStrategy } from '../constants/strategies';
 import { remoteGenerationContextPayload } from '../remoteGenerationContext';
 import { getAttackProviderFullId, isAttackProvider } from '../shared/attackProviders';
 import { withPersistableGenerationProvider } from './types';
-import { hasPdfStrategy, pluginMatchesStrategyTargets } from './util';
+import { pluginMatchesStrategyTargets } from './util';
 
 import type { TestCase, TestCaseWithPlugin } from '../../types/index';
 import type { LayerConfig } from '../shared/runtimeTransform';

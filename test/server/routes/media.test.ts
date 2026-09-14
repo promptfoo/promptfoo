@@ -9,7 +9,12 @@ import { createTempDir, removeTempDir } from '../../util/utils';
 import type { MediaStorageProvider } from '../../../src/storage/types';
 
 // Mock dependencies
-vi.mock('../../../src/storage');
+vi.mock('../../../src/storage', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../../../src/storage')>()),
+  getMediaStorage: vi.fn(),
+  mediaExists: vi.fn(),
+  retrieveMedia: vi.fn(),
+}));
 
 // Import after mocking
 import { getMediaStorage, mediaExists, retrieveMedia } from '../../../src/storage';
@@ -57,6 +62,7 @@ describe('Media Routes', () => {
       const directory = createTempDir('promptfoo-media-api-');
       try {
         const provider = new LocalFileSystemProvider({ basePath: directory });
+        mockedGetMediaStorage.mockReturnValue(provider);
         const data = Buffer.from('%PDF-1.7');
         const { ref } = await provider.store(data, {
           mediaType: 'document',
@@ -79,6 +85,10 @@ describe('Media Routes', () => {
         const response = await api.get('/api/media').query({ key: ref.key });
         expect(response.status).toBe(200);
         expect(response.body).toEqual(data);
+        expect(response.headers['cache-control']).toBe('private, no-cache');
+        const legacyResponse = await api.get(`/api/media/${ref.key}`);
+        expect(legacyResponse.status).toBe(200);
+        expect(legacyResponse.headers['cache-control']).toBe('public, max-age=31536000, immutable');
       } finally {
         removeTempDir(directory);
       }
@@ -87,6 +97,7 @@ describe('Media Routes', () => {
     it.each([
       'tenant/campaign/09d620f6-9b31-4cea-936d-4bdc38ea7bc1.pdf',
       'document/' + 'a'.repeat(64) + '.pdf',
+      'document/abcdef123456.pdf',
       'tenant/invoice ?#&%2F.pdf',
       '09d620f6-9b31-4cea-936d-4bdc38ea7bc1',
       ...opaqueKeys,
@@ -325,6 +336,28 @@ describe('Media Routes', () => {
       vi.resetAllMocks();
     });
 
+    it.each(['document/abcdef123456.pdf', 'image/abcdef123456.png'])(
+      'revalidates mutable provider keys that resemble local content hashes: %s',
+      async (key) => {
+        mockedGetMediaStorage.mockReturnValue({ providerId: 'local-fs' } as MediaStorageProvider);
+        mockedMediaExists.mockResolvedValue(true);
+        const original = Buffer.from('%PDF-1.7 original');
+        const replacement = Buffer.from('%PDF-1.7 replacement');
+        mockedRetrieveMedia.mockResolvedValueOnce(original).mockResolvedValueOnce(replacement);
+
+        const first = await api.get(`/api/media/${key}`);
+        expect(first.status).toBe(200);
+        expect(first.headers['cache-control']).toBe('private, no-cache');
+        expect(first.body).toEqual(original);
+
+        const second = await api.get(`/api/media/${key}`).set('If-None-Match', first.headers.etag);
+        expect(second.status).toBe(200);
+        expect(second.headers['cache-control']).toBe('private, no-cache');
+        expect(second.headers.etag).not.toBe(first.headers.etag);
+        expect(second.body).toEqual(replacement);
+      },
+    );
+
     it('should return 400 for invalid type', async () => {
       const response = await api.get('/api/media/text/abcdef123456.txt');
 
@@ -365,7 +398,7 @@ describe('Media Routes', () => {
       expect(response.status).toBe(200);
       expect(response.headers['content-type']).toBe('audio/wav');
       expect(response.headers['content-length']).toBe(String(mockData.length));
-      expect(response.headers['cache-control']).toBe('public, max-age=31536000, immutable');
+      expect(response.headers['cache-control']).toBe('private, no-cache');
       expect(response.body).toEqual(mockData);
       expect(mockedRetrieveMedia).toHaveBeenCalledWith('audio/abcdef123456.wav');
     });

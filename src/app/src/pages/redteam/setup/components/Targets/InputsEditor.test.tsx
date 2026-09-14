@@ -1,12 +1,11 @@
 import React, { useState } from 'react';
 
 import { TooltipProvider } from '@app/components/ui/tooltip';
-import { InputDefinitionSchema } from '@promptfoo/contracts';
+import { InputDefinitionSchema, type Inputs } from '@promptfoo/contracts';
 import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import InputsEditor from './InputsEditor';
-import type { Inputs } from '@promptfoo/contracts';
 
 const renderWithProviders = (ui: React.ReactElement) => {
   return render(<TooltipProvider>{ui}</TooltipProvider>);

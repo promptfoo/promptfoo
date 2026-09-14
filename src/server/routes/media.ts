@@ -6,7 +6,12 @@
 
 import express from 'express';
 import logger from '../../logger';
-import { getMediaStorage, mediaExists, retrieveMedia } from '../../storage';
+import {
+  getMediaStorage,
+  LocalFileSystemProvider,
+  mediaExists,
+  retrieveMedia,
+} from '../../storage';
 import { MediaSchemas } from '../../types/api/media';
 import { replyValidationError, sendError } from '../utils/errors';
 import type { Request, Response } from 'express';
@@ -144,7 +149,9 @@ async function serveMedia(key: string, res: Response, contentAddressed: boolean)
     res.setHeader('Content-Length', data.length);
     res.setHeader(
       'Cache-Control',
-      contentAddressed ? 'public, max-age=31536000, immutable' : 'private, no-cache',
+      contentAddressed && getMediaStorage() instanceof LocalFileSystemProvider
+        ? 'public, max-age=31536000, immutable'
+        : 'private, no-cache',
     );
     res.setHeader('X-Content-Type-Options', 'nosniff');
     res.send(data);

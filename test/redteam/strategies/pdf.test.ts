@@ -102,6 +102,31 @@ describe('PDF strategy', () => {
     });
     const [result] = await addPdfTestCases([original], '__prompt', {});
     expect(result.vars!.question).toBe('Please explain the payment terms.');
+    expect(JSON.parse(String(result.vars!.__prompt))).toEqual({
+      document: result.vars!.document,
+      question: 'Please explain the payment terms.',
+    });
+    expect(JSON.parse(String(original.vars!.__prompt)).document).toBe('Report $0.');
+  });
+
+  it('keeps materialized attachments and excludes auxiliary variables from the combined inputs', async () => {
+    const original = testCase();
+    const image = 'data:image/png;base64,aW1hZ2U=';
+    original.vars!.image = image;
+    original.vars!.apiKey = 'PRIVATE_QA_CREDENTIAL';
+    original.metadata.pluginConfig!.inputs!.image = { type: 'image', description: 'Receipt' };
+    original.vars!.__prompt = JSON.stringify({
+      document: 'Report $0.',
+      question: 'What is the total?',
+      image: 'An invoice receipt',
+    });
+    const [result] = await addPdfTestCases([original], '__prompt', {});
+    expect(JSON.parse(String(result.vars!.__prompt))).toEqual({
+      document: result.vars!.document,
+      question: 'What is the total?',
+      image,
+    });
+    expect(result.vars!.apiKey).toBe('PRIVATE_QA_CREDENTIAL');
   });
 
   it('keeps PDF bytes inline without touching disabled storage', async () => {
