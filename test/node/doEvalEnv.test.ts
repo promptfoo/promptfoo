@@ -8,7 +8,7 @@ import { getEnvString } from '../../src/envars';
 import { getProcessEnv, getRuntimeEnv, withRuntimeEnv } from '../../src/envOverrides';
 import { doEval } from '../../src/node/doEval';
 import { getEvalConfigFromCloud } from '../../src/util/cloud';
-import { readConfig } from '../../src/util/config/load';
+import { readConfig, resolveConfigs } from '../../src/util/config/load';
 import { getNunjucksEngineForFilePath } from '../../src/util/file';
 import { getNunjucksEngine } from '../../src/util/templates';
 import { mockProcessEnv } from '../util/utils';
@@ -340,6 +340,122 @@ describe('doEval environment files', () => {
     ).rejects.toThrow('cloud unavailable');
     expect(getEnvString('PROMPTFOO_REVIEW_ENV_PROBE')).toBe('host');
     expect(process.env.PROMPTFOO_REVIEW_ENV_PROBE).toBe('host');
+  });
+
+  it.each([
+    ['json', '{{ env.PROMPTFOO_REVIEW_ENV_PROBE }}', 'from-file'],
+    ['json', "{{ env.FILE_ONLY_VALUE | default('fallback') }}", 'from-file'],
+    ['cjs', '{{ env.PROMPTFOO_REVIEW_ENV_PROBE }}', 'from-file'],
+    ['json', 'literal', 'literal'],
+    ['json', '', ''],
+  ])(
+    'loads config env files before rendering %s suite value %s',
+    async (extension, value, expected) => {
+      fs.writeFileSync(
+        path.join(tempDir, 'local.env'),
+        'PROMPTFOO_REVIEW_ENV_PROBE=from-file\nFILE_ONLY_VALUE=from-file\nFILE_CONCURRENCY=1\n',
+      );
+      fs.writeFileSync(
+        path.join(tempDir, 'target.cjs'),
+        `module.exports=class {
+      constructor(options){this.value=options.env.PROMPTFOO_REVIEW_ENV_PROBE;}
+      id(){return 'env-target';}
+      async callApi(prompt,context){return {output:JSON.stringify([this.value,context.env.PROMPTFOO_REVIEW_ENV_PROBE])};}
+    };`,
+      );
+      const configPath = path.join(tempDir, `config.${extension}`);
+      const config = {
+        prompts: ['Inspect the environment.'],
+        providers: ['file://./target.cjs'],
+        env: { PROMPTFOO_REVIEW_ENV_PROBE: value },
+        commandLineOptions: {
+          envPath: ['local.env'],
+          maxConcurrency: '{{ env.FILE_CONCURRENCY }}',
+        },
+        tests: [{ assert: [{ type: 'equals', value: JSON.stringify([expected, expected]) }] }],
+      };
+      const importCount = path.join(tempDir, 'config-imports.txt');
+      const prefix =
+        extension === 'cjs'
+          ? `require('node:fs').appendFileSync(${JSON.stringify(importCount)}, 'loaded\\n'); module.exports=`
+          : '';
+      fs.writeFileSync(configPath, prefix + JSON.stringify(config));
+      const result = await doEval(
+        {
+          config: [configPath],
+          write: false,
+          share: false,
+          table: false,
+          progressBar: false,
+          cache: false,
+        },
+        {},
+        undefined,
+        { eventSource: 'mcp', showProgressBar: false },
+      );
+      const [row] = await result.getResults();
+      expect({ success: row.success, output: row.response?.output, error: row.error }).toEqual({
+        success: true,
+        output: JSON.stringify([expected, expected]),
+        error: undefined,
+      });
+      if (extension === 'cjs') {
+        expect(fs.readFileSync(importCount, 'utf8')).toBe('loaded\n');
+      }
+      expect(process.env.PROMPTFOO_REVIEW_ENV_PROBE).toBe('host');
+    },
+  );
+
+  it('renders a previously discovered config from its source after loading env files', async () => {
+    const configPath = path.join(tempDir, 'promptfooconfig.json');
+    fs.writeFileSync(path.join(tempDir, 'local.env'), 'PROMPTFOO_REVIEW_ENV_PROBE=from-file\n');
+    fs.writeFileSync(
+      configPath,
+      JSON.stringify({
+        prompts: ['{{ env.PROMPTFOO_REVIEW_ENV_PROBE }}'],
+        providers: ['echo'],
+        env: { PROMPTFOO_REVIEW_ENV_PROBE: '{{ env.PROMPTFOO_REVIEW_ENV_PROBE }}' },
+        commandLineOptions: { envPath: ['local.env'] },
+        tests: [{ assert: [{ type: 'equals', value: 'from-file' }] }],
+      }),
+    );
+    const discovered = await readConfig(configPath);
+    expect(discovered.env).toMatchObject({ PROMPTFOO_REVIEW_ENV_PROBE: 'host' });
+    const result = await doEval(
+      { write: false, share: false, table: false, progressBar: false, cache: false },
+      discovered,
+      undefined,
+      { eventSource: 'mcp', showProgressBar: false },
+    );
+    const [row] = await result.getResults();
+    expect(row.response?.output).toBe('from-file');
+    expect(row.success).toBe(true);
+    expect(discovered.env).toMatchObject({ PROMPTFOO_REVIEW_ENV_PROBE: 'host' });
+  });
+
+  it('persists the env file resolved in its declaring config scope', async () => {
+    const files = ['first', 'second'].map((name) => path.join(tempDir, `${name}.json`));
+    for (const name of ['first', 'second']) {
+      fs.writeFileSync(path.join(tempDir, `${name}.env`), `PROMPTFOO_REVIEW_ENV_PROBE=${name}\n`);
+    }
+    fs.writeFileSync(
+      files[0],
+      JSON.stringify({
+        prompts: ['hello'],
+        providers: ['echo'],
+        env: { ENV_FILE: 'first.env' },
+        commandLineOptions: { envPath: '{{ env.ENV_FILE }}' },
+      }),
+    );
+    fs.writeFileSync(
+      files[1],
+      JSON.stringify({ providers: ['echo'], env: { ENV_FILE: 'second.env' } }),
+    );
+    await cliState.withEnvFileOverrides({}, async () => {
+      const result = await resolveConfigs({ config: files }, {}, undefined, { loadEnvFiles: true });
+      expect(result.commandLineOptions?.envPath).toBe(path.join(tempDir, 'first.env'));
+      expect(getProcessEnv().PROMPTFOO_REVIEW_ENV_PROBE).toBe('first');
+    });
   });
 
   it('isolates config-defined env files through concurrent provider calls', async () => {

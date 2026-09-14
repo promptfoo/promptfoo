@@ -335,8 +335,31 @@ function renderConfigEnvTemplatesInScope<T extends { env?: Record<string, string
   return renderedConfig;
 }
 
+// Default-config discovery caches rendered objects. Retain their source for a later
+// eval environment without executing JavaScript configuration modules again.
+const configSources = new WeakMap<object, { path: string; data: UnifiedConfig }>();
+
+async function readConfigData(configPath: string): Promise<UnifiedConfig> {
+  return cliState.withEnv(undefined, async () => {
+    const ext = path.parse(configPath).ext;
+    if (ext === '.json' || ext === '.yaml' || ext === '.yml') {
+      const rawConfig = loadYaml(await fsPromises.readFile(configPath, 'utf-8')) ?? {};
+      return dereferenceConfig(rawConfig as UnifiedConfig);
+    }
+    if (isJavascriptFile(configPath)) {
+      return importModule(configPath);
+    }
+    throw new Error(`Unsupported configuration file format: ${ext}`);
+  });
+}
+
 export async function readConfig(configPath: string): Promise<UnifiedConfig> {
-  const config = await cliState.withEnv(undefined, () => readConfigInScope(configPath));
+  return prepareConfig(configPath, await readConfigData(configPath));
+}
+
+async function prepareConfig(configPath: string, rawConfig: UnifiedConfig): Promise<UnifiedConfig> {
+  const config = await cliState.withEnv(undefined, () => readConfigInScope(configPath, rawConfig));
+  configSources.set(config, { path: configPath, data: rawConfig });
   const basePath = path.dirname(path.resolve(configPath));
   const pending: unknown[] = [config];
   const seen = new Set<object>();
@@ -358,7 +381,10 @@ export async function readConfig(configPath: string): Promise<UnifiedConfig> {
   return config;
 }
 
-async function readConfigInScope(configPath: string): Promise<UnifiedConfig> {
+async function readConfigInScope(
+  configPath: string,
+  rawConfig: UnifiedConfig,
+): Promise<UnifiedConfig> {
   let ret: UnifiedConfig & {
     targets?: UnifiedConfig['providers'];
     plugins?: RedteamPluginObject[];
@@ -366,13 +392,10 @@ async function readConfigInScope(configPath: string): Promise<UnifiedConfig> {
   };
   const ext = path.parse(configPath).ext;
   if (ext === '.json' || ext === '.yaml' || ext === '.yml') {
-    const rawConfig = loadYaml(await fsPromises.readFile(configPath, 'utf-8')) ?? {};
-    const dereferencedConfig = await dereferenceConfig(rawConfig as UnifiedConfig);
-
     // Render environment variable templates (e.g., {{ env.VAR }}) before validation.
     // This allows env vars to be used in paths and other config values.
     // Runtime templates like {{ vars.x }} are preserved for later evaluation.
-    const renderedConfig = renderConfigEnvTemplates(dereferencedConfig as UnifiedConfig);
+    const renderedConfig = renderConfigEnvTemplates(rawConfig);
     const normalizedCommandLineOptions = normalizeConfiguredCommandLineOptions(
       renderedConfig.commandLineOptions,
       `configuration file ${configPath}`,
@@ -408,12 +431,9 @@ async function readConfigInScope(configPath: string): Promise<UnifiedConfig> {
     }
     ret = normalizedConfig;
   } else if (isJavascriptFile(configPath)) {
-    // importModule normalizes ERR_MODULE_NOT_FOUND to ENOENT for missing files
-    const imported = await importModule(configPath);
-
     // Render environment variable templates for JS configs too.
     // This ensures consistent behavior across config file types.
-    const renderedConfig = renderConfigEnvTemplates(imported as UnifiedConfig);
+    const renderedConfig = renderConfigEnvTemplates(rawConfig);
     const normalizedCommandLineOptions = normalizeConfiguredCommandLineOptions(
       renderedConfig.commandLineOptions,
       `configuration file ${configPath}`,
@@ -545,14 +565,39 @@ function providerDedupeKey(provider: unknown, functionIds: Map<Function, number>
   }
 }
 
+function loadConfiguredEnvFiles(
+  config: Partial<UnifiedConfig>,
+  basePath: string,
+): CommandLineOptions['envPath'] | undefined {
+  const rendered = renderConfigEnvTemplates({
+    env: config.env,
+    envPath: config.commandLineOptions?.envPath,
+  });
+  const options = normalizeConfiguredCommandLineOptions(
+    { envPath: rendered.envPath },
+    'configuration',
+  );
+  if (options?.envPath) {
+    const paths = Array.isArray(options.envPath) ? options.envPath : [options.envPath];
+    const resolved = paths.map((file) =>
+      basePath && !path.isAbsolute(file) ? path.resolve(basePath, file) : file,
+    );
+    setupEnv(resolved, { processEnv: cliState.envFileOverrides });
+    return Array.isArray(options.envPath) ? resolved : resolved[0];
+  }
+}
+
 /**
  * Reads multiple configuration files and combines them into a single UnifiedConfig.
  *
  * @param {string[]} configPaths - An array of paths to configuration files. Supports glob patterns.
  * @returns {Promise<UnifiedConfig>} A promise that resolves to a unified configuration object.
  */
-export async function combineConfigs(configPaths: string[]): Promise<UnifiedConfig> {
-  const configs: UnifiedConfig[] = [];
+export async function combineConfigs(
+  configPaths: string[],
+  { loadEnvFiles = false }: { loadEnvFiles?: boolean } = {},
+): Promise<UnifiedConfig> {
+  const sources: { path: string; config: UnifiedConfig }[] = [];
   for (const configPath of configPaths) {
     const resolvedPath = path.resolve(process.cwd(), configPath);
 
@@ -566,9 +611,25 @@ export async function combineConfigs(configPaths: string[]): Promise<UnifiedConf
       );
     }
     for (const globPath of globPaths) {
-      const config = await readConfig(globPath);
-      configs.push(config);
+      sources.push({ path: globPath, config: await readConfigData(globPath) });
     }
+  }
+
+  if (loadEnvFiles) {
+    const source = [...sources]
+      .reverse()
+      .find(({ config }) => config.commandLineOptions?.envPath !== undefined);
+    if (source) {
+      const envPath = loadConfiguredEnvFiles(source.config, path.dirname(configPaths[0]));
+      source.config = {
+        ...source.config,
+        commandLineOptions: { ...source.config.commandLineOptions, envPath },
+      };
+    }
+  }
+  const configs: UnifiedConfig[] = [];
+  for (const source of sources) {
+    configs.push(await prepareConfig(source.path, source.config));
   }
 
   const providers: UnifiedConfig['providers'] = [];
@@ -813,10 +874,25 @@ export async function resolveConfigs(
   const configPaths = cmdObj.config;
   let promptReferenceSources: PromptReferenceSource[] = [];
   if (configPaths) {
-    fileConfig = await combineConfigs(configPaths);
+    fileConfig = await combineConfigs(configPaths, { loadEnvFiles: options.loadEnvFiles });
     promptReferenceSources = await readPromptReferenceSources(configPaths);
     // The user has provided a config file, so we do not want to use the default config.
     defaultConfig = {};
+  } else {
+    const source = configSources.get(defaultConfig);
+    let data = source?.data ?? defaultConfig;
+    if (options.loadEnvFiles) {
+      const envPath = loadConfiguredEnvFiles(
+        data,
+        options.configBasePath ?? (source ? path.dirname(source.path) : ''),
+      );
+      if (envPath !== undefined) {
+        data = { ...data, commandLineOptions: { ...data.commandLineOptions, envPath } };
+      }
+    }
+    defaultConfig = source
+      ? await prepareConfig(source.path, data as UnifiedConfig)
+      : renderConfigEnvTemplates(data);
   }
   return cliState.withEnv(fileConfig.env ?? defaultConfig.env, async () => {
     // Standalone assertion mode
@@ -870,9 +946,6 @@ export async function resolveConfigs(
         ...commandLineOptions,
         envPath: resolvedPaths.length === 1 ? resolvedPaths[0] : resolvedPaths,
       };
-      if (options.loadEnvFiles) {
-        setupEnv(commandLineOptions.envPath, { processEnv: cliState.envFileOverrides });
-      }
     }
 
     cliState.basePath = basePath;

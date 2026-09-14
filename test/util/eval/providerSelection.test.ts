@@ -10,7 +10,9 @@ import {
   buildProviderShareConfig,
   collectEffectiveTestProviderPermissions,
   createProviderSelection,
+  omitFunctionsForShare,
 } from '../../../src/util/eval/providerSelection';
+import { redactSecretLeaves } from '../../../src/util/sanitizer';
 
 import type { TestSuite, TestSuiteConfig } from '../../../src/types';
 
@@ -26,6 +28,21 @@ function provider(id: string, label?: string, config?: Record<string, unknown>) 
 }
 
 describe('provider selection', () => {
+  it('omits serialized callback source without changing the persisted config', () => {
+    const config = redactSecretLeaves({
+      transformResponse: () => 'PRIVATE_CALLBACK_SOURCE',
+      nested: { safe: 'visible', assertion: () => 'PRIVATE_ASSERTION_SOURCE' },
+      items: [() => 'PRIVATE_ARRAY_SOURCE', 42],
+    });
+    const snapshot = JSON.stringify(config);
+    expect(snapshot).toContain('__promptfooFunction');
+    expect(omitFunctionsForShare(config)).toEqual({
+      nested: { safe: 'visible' },
+      items: [null, 42],
+    });
+    expect(JSON.stringify(config)).toBe(snapshot);
+  });
+
   it('redacts URL credentials in permission and share identities without changing the provider', () => {
     const secret = 'sk-live-abcdefghijklmnopqrstuvwxyz1234567890';
     const id = `webhook:https://example.test/hooks/${secret}`;

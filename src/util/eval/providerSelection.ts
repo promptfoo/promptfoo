@@ -468,7 +468,14 @@ export function buildProviderPermissionConfig(
 }
 
 export function omitFunctionsForShare(value: unknown, seen = new WeakSet<object>()): unknown {
-  if (typeof value === 'function') {
+  if (
+    typeof value === 'function' ||
+    (value &&
+      typeof value === 'object' &&
+      Object.keys(value).length === 1 &&
+      '__promptfooFunction' in value &&
+      typeof value.__promptfooFunction === 'string')
+  ) {
     return undefined;
   }
   if (!value || typeof value !== 'object' || value instanceof Date) {
