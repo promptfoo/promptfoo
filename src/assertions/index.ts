@@ -159,11 +159,12 @@ export function assertionUsesTrace(assertion: AssertionOrSet): boolean {
   return TRACE_AWARE_ASSERTION_TYPES.has(getAssertionBaseType(assertion));
 }
 
-function isExecutionEvidenceAssertion(assertion: AssertionOrSet): boolean {
-  return (
-    assertion.type === 'promptfoo:redteam:sql-injection' ||
-    assertion.type === 'promptfoo:redteam:shell-injection'
-  );
+export function isExecutionEvidenceAssertion(assertion: AssertionOrSet): boolean {
+  if (assertion.type === 'assert-set') {
+    return assertion.assert.some(isExecutionEvidenceAssertion);
+  }
+  const type = getAssertionBaseType(assertion);
+  return type === 'promptfoo:redteam:sql-injection' || type === 'promptfoo:redteam:shell-injection';
 }
 
 function assertionMayNeedTraceContext(assertion: AssertionOrSet, test?: AtomicTestCase): boolean {
@@ -496,6 +497,9 @@ async function runAssertionInternal({
         };
       }
     } catch (error) {
+      if (isExecutionEvidenceAssertion(assertion)) {
+        throw error;
+      }
       logger.debug(`Failed to fetch trace data for assertion: ${error}`);
     }
   }
@@ -851,6 +855,9 @@ export async function runAssertions({
         asserts.some(({ assertion }) => isExecutionEvidenceAssertion(assertion)),
       );
     } catch (error) {
+      if (asserts.some(({ assertion }) => isExecutionEvidenceAssertion(assertion))) {
+        throw error;
+      }
       logger.debug(`Failed to preload trace data for assertions: ${error}`);
       preloadedTraceData = null;
     }

@@ -6,6 +6,20 @@ import { MCPProvider } from '../../providers/mcp/index';
 import type { MCPTool } from '../../providers/mcp/types';
 import type { ApiProvider } from '../../types/index';
 
+function schemaKey(schema: unknown): string {
+  return (
+    JSON.stringify(schema, (_key, value) =>
+      value && typeof value === 'object' && !Array.isArray(value)
+        ? Object.fromEntries(
+            Object.keys(value)
+              .sort()
+              .map((key) => [key, value[key]]),
+          )
+        : value,
+    ) ?? ''
+  );
+}
+
 // Only traverse schema positions: arrays inside enum/const/default are literal values.
 function normalizeSchema(schema: unknown): unknown {
   if (!schema || typeof schema !== 'object' || Array.isArray(schema)) {
@@ -61,7 +75,17 @@ function normalizeSchema(schema: unknown): unknown {
           'else',
         ].includes(key)
       ) {
-        return [key, Array.isArray(value) ? value.map(normalizeSchema) : normalizeSchema(value)];
+        const normalized = Array.isArray(value)
+          ? value.map(normalizeSchema)
+          : normalizeSchema(value);
+        if (['allOf', 'anyOf', 'oneOf'].includes(key) && Array.isArray(normalized)) {
+          normalized.sort((a, b) => {
+            const left = schemaKey(a),
+              right = schemaKey(b);
+            return left < right ? -1 : left > right ? 1 : 0;
+          });
+        }
+        return [key, normalized];
       }
       return [key, value];
     }),

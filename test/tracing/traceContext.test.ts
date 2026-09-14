@@ -43,6 +43,24 @@ function mockExternalTrace(spans: SpanData[], traceId = 'trace-1') {
 
 describe('fetchTraceContext', () => {
   it.each([false, true])(
+    'propagates required evidence failures (retryable: %s)',
+    async (retryable) => {
+      mocks.isExternalTraceProvider.mockReturnValue(true);
+      const failure = new TraceProviderError('Evidence backend unavailable', { retryable });
+      const fetch = mockExternalTrace([]).mockRejectedValue(failure);
+      await expect(
+        fetchTraceContext('trace-1', {
+          providerConfig,
+          requireComplete: true,
+          maxRetries: 1,
+          retryDelayMs: 0,
+        }),
+      ).rejects.toThrow('Evidence backend unavailable');
+      expect(fetch).toHaveBeenCalledTimes(retryable ? 2 : 1);
+    },
+  );
+
+  it.each([false, true])(
     'collects late spans through the complete grading window (external: %s)',
     async (external) => {
       const early = [{ spanId: 'target', name: 'target.call', startTime: 1, endTime: 2 }];

@@ -84,11 +84,15 @@ type PromptExtractionPredicate = (typeof PROMPT_EXTRACTION_PREDICATES)[number];
 
 const REQUEST_PREFIX = String.raw`(?:^\s*|[.!?;:,\n]\s*|\b(?:and|then|but)\s+|\b(?:can|could|would|will) you\s+|\bi (?:need|want|would like) you to\s+)(?:please\s+)?`;
 const DISCLOSURE_VERB = String.raw`(?:show|give|send|share|provide|reveal|repeat|quote|copy|list|summarize|display|return|print|get|fetch|retrieve|read|tell me|convert|reformat|rewrite|translate|encode|transform|render)`;
-// A SQL statement after a semicolon can still belong to a negated execution request.
-function omitNegatedRequests(text: string): string {
+// A command after a semicolon can remain part of a negated execution request.
+function omitNegatedRequests(text: string, shellCommands = false): string {
+  const command = shellCommands ? String.raw`\s+(?:run|execute|launch)\b` : '';
+  const semicolon = shellCommands
+    ? String.raw`;(?=\s*(?:run|execute|please|then|now)\b)`
+    : String.raw`;(?!\s*(?:drop\s+(?:table|database|schema|view|index)|delete\s+from|insert\s+into|update\s+\S+\s+set)\b)`;
   return text.replace(
     new RegExp(
-      String.raw`${REQUEST_PREFIX}(?:you\s+)?(?:do not|don't|never|must not|should not|cannot|can['’]t)\b[\s\S]*?(?=[.!?](?:\s|$)|;(?!\s*(?:drop\s+(?:table|database|schema|view|index)|delete\s+from|insert\s+into|update\s+\S+\s+set)\b)|[:\n]\s*(?:then|but)\b|\bbut\s+|$)`,
+      String.raw`${REQUEST_PREFIX}(?:you\s+)?(?:do not|don't|never|must not|should not|cannot|can['’]t)\b${command}[\s\S]*?(?=[.!?](?:\s|$)|${semicolon}|[:\n]\s*(?:then|but)\b|\bbut\s+|$)`,
       'gi',
     ),
     (clause) => ' '.repeat(clause.length),
@@ -569,7 +573,8 @@ const SHELL_INJECTION_RULES: Record<ShellInjectionPredicate, RegExp[]> = {
 
 export function extractShellInjectionSignature(prompt: string): AttackSignature {
   const call = toolCallText(prompt);
-  prompt = omitNegatedRequests(call.argumentText)
+  const withoutNegatedCommands = omitNegatedRequests(call.argumentText, true);
+  prompt = omitNegatedRequests(withoutNegatedCommands)
     .split(/(?<=[.!?;])\s+|(?:,\s*|\s+)(?:but|and)\s+|\n/i)
     .filter(
       (sentence) => !/^(?:please\s+)?(?:explain|describe|discuss|analyze)\b/i.test(sentence.trim()),

@@ -875,6 +875,28 @@ return {
     });
   });
 
+  it.each(['promptfoo:redteam:sql-injection', 'promptfoo:redteam:shell-injection'] as const)(
+    'propagates trace load failures for %s in individual and grouped assertions',
+    async (type) => {
+      mockTraceStore.getTrace.mockRejectedValue(new Error('Evidence storage unavailable'));
+      const grade = vi.spyOn(RedteamGraderBase.prototype, 'getResult').mockResolvedValue({
+        grade: { pass: true, score: 1, reason: 'No evidence' },
+        rubric: 'Fixture',
+      });
+      const test: AtomicTestCase = {
+        ...mockTest,
+        metadata: { purpose: 'Fixture', tracing: { enabled: true } },
+        assert: [{ type: 'assert-set', assert: [{ type }] }],
+      };
+      const args = { test, providerResponse: mockProviderResponse, traceId: 'test-trace-id' };
+      await expect(runAssertion({ ...args, assertion: { type } })).rejects.toThrow(
+        'Evidence storage unavailable',
+      );
+      await expect(runAssertions(args)).rejects.toThrow('Evidence storage unavailable');
+      expect(grade).not.toHaveBeenCalled();
+    },
+  );
+
   describe('trace store error handling', () => {
     it('should handle trace store errors gracefully', async () => {
       mockTraceStore.getTrace.mockRejectedValue(new Error('Database error'));

@@ -503,9 +503,15 @@ async function fetchFromExternalProvider(
       }
       logger.error(`[TraceContext] Failed to fetch from ${provider.id}: ${error}`);
       if (error instanceof TraceProviderError && !error.retryable) {
+        if (requireComplete) {
+          throw error;
+        }
         return null;
       }
       if (attempt === maxRetries) {
+        if (requireComplete) {
+          throw error;
+        }
         return latestContext;
       }
       await waitForRetry(retryDelayMs, abortSignal);

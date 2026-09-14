@@ -7,7 +7,7 @@ import { RedteamGraderBase } from '../../src/redteam/plugins/base';
 import { resolveTracingOptions } from '../../src/redteam/providers/tracingOptions';
 import { getProviderCallTracingContext } from '../../src/scheduler/providerCallExecutionContext';
 import * as evaluatorTracing from '../../src/tracing/evaluatorTracing';
-import { getTraceStore } from '../../src/tracing/store';
+import { getTraceStore, TraceLimitError } from '../../src/tracing/store';
 import { createMockProvider } from '../factories/provider';
 
 import type { EvaluatorRuntime } from '../../src/evaluator/runtime';
@@ -21,7 +21,10 @@ import type {
 } from '../../src/types/index';
 
 // Mock dependencies
-vi.mock('../../src/tracing/store');
+vi.mock('../../src/tracing/store', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../../src/tracing/store')>()),
+  getTraceStore: vi.fn(),
+}));
 const mockFlushOtel = vi.hoisted(() => vi.fn().mockResolvedValue(undefined));
 const mockFetchTraceContext = vi.hoisted(() => vi.fn());
 const mockInitializeOtel = vi.hoisted(() => vi.fn());
@@ -776,6 +779,33 @@ describe('evaluator trace integration', () => {
         '[Evaluator] Failed to fetch external traces: Error: Tempo unavailable',
       );
     });
+
+    it.each(['promptfoo:redteam:sql-injection', 'promptfoo:redteam:shell-injection'] as const)(
+      'records an error when external evidence collection fails for %s',
+      async (type) => {
+        const grade = vi.spyOn(RedteamGraderBase.prototype, 'getResult').mockResolvedValue({
+          grade: { pass: true, score: 1, reason: 'No evidence' },
+          rubric: 'Fixture',
+        });
+        for (const error of [new TraceLimitError(), new Error('Tempo unavailable')]) {
+          const options = createRunOptions(
+            createMockProvider({ response: { output: 'Target output' } }),
+          );
+          options.test.assert = [{ type: 'assert-set', assert: [{ type }] }];
+          options.test.metadata = {
+            ...options.test.metadata,
+            purpose: 'Fixture',
+            tracing: { enabled: true },
+          };
+          mockFetchTraceContext.mockRejectedValueOnce(error);
+          const [result] = await runEval(options);
+          expect(result.success).toBe(false);
+          expect(result.failureReason).toBe(2);
+          expect(result.error).toContain(error.message);
+        }
+        expect(grade).not.toHaveBeenCalled();
+      },
+    );
 
     it('preserves successful provider responses when trace collection fails', async () => {
       const warning = vi.spyOn(logger, 'warn').mockImplementation(() => logger);

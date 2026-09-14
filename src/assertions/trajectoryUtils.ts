@@ -575,7 +575,7 @@ function getSqlExecutionDetails(
   const argumentObject = args && typeof args === 'object' ? (args as Record<string, unknown>) : {};
   const toolName = getToolNameFromAttributes(attributes) ?? step.spanName;
   const isQueryTool =
-    /(^|[\s.:/-])(?:(?:read|run|execute)_query|(?:run|execute)_sql|query_database|sql_query|query)($|[\s.:/-])/i.test(
+    /(^|[\s.:/-])(?:(?:read|run|execute)_query|(?:run|execute)_sql|query_database|sql_query)($|[\s.:/-])/i.test(
       toolName,
     );
   const argumentQuery =

@@ -639,6 +639,53 @@ describe('trajectory utilities', () => {
     }
   });
 
+  it.each(['name', 'tool.name'])(
+    'removes Basic authorization credentials from %s before grading',
+    (key) => {
+      for (const credential of ['dXNlcjpwYXNzd29yZA==', 'YTpi']) {
+        const text = `Authorization: Basic ${credential}`;
+        const summary = summarizeTrajectoryForJudge({
+          ...mockTraceData,
+          spans: [
+            {
+              spanId: 'auth-name',
+              startTime: 1,
+              name: key === 'name' ? text : 'tool.call',
+              attributes: key === 'name' ? {} : { [key]: text },
+            },
+          ],
+        });
+        expect(summary).not.toContain(credential);
+        expect(summary).toContain('REDACTED');
+      }
+    },
+  );
+
+  it.each(['query', 'tools.query'])(
+    'requires SQL-shaped arguments for generic %s tools',
+    (name) => {
+      const summarize = (query: string) =>
+        JSON.parse(
+          summarizeTrajectoryForJudge(
+            {
+              ...mockTraceData,
+              spans: [
+                {
+                  spanId: 'query',
+                  name,
+                  startTime: 1,
+                  attributes: { 'tool.name': name, 'tool.arguments': { query } },
+                },
+              ],
+            },
+            { includeSql: true },
+          ),
+        );
+      expect(summarize('weather tomorrow').steps[0].sql).toBeUndefined();
+      expect(summarize('SELECT 1').steps[0].sql).toEqual({ query: 'SELECT 1' });
+    },
+  );
+
   it('redacts protected values echoed by a different span', () => {
     const secret = 'PRIVATE_CROSS_SPAN_SQL_RESULT';
     const summary = summarizeTrajectoryForJudge(

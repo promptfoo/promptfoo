@@ -94,6 +94,39 @@ describe('extractMcpTools', () => {
     },
   );
 
+  it.each(['allOf', 'anyOf', 'oneOf'])(
+    'ignores %s member ordering while preserving literal arrays and duplicate members',
+    async (keyword) => {
+      const members = [
+        { type: 'number', minimum: 0 },
+        { type: 'string', minLength: 1 },
+      ];
+      const schema = (children: object[], literal = ['a', 'b']) => ({
+        type: 'object' as const,
+        properties: { value: { [keyword]: children }, literal: { const: literal } },
+      });
+      const first = { ...query, inputSchema: schema(members) };
+      const same = {
+        ...query,
+        inputSchema: schema([
+          { minLength: 1, type: 'string' },
+          { minimum: 0, type: 'number' },
+        ]),
+      };
+      await expect(
+        extractMcpTools([provider('first', [first]), provider('same', [same])]),
+      ).resolves.toEqual([first]);
+      for (const different of [schema(members, ['b', 'a']), schema([...members, members[0]])]) {
+        await expect(
+          extractMcpTools([
+            provider('first', [first]),
+            provider('different', [{ ...query, inputSchema: different }]),
+          ]),
+        ).rejects.toThrow('conflicting input schemas');
+      }
+    },
+  );
+
   it('preserves tools from working providers when another provider cannot connect', async () => {
     const unavailable = provider('unavailable', []);
     vi.mocked(unavailable.getAvailableTools).mockRejectedValue(new Error('Connection failed'));

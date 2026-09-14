@@ -1,10 +1,49 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { getAssertionBaseType, isAssertionInverse } from '../../src/assertions/index';
+import {
+  getAssertionBaseType,
+  isAssertionInverse,
+  runAssertions,
+} from '../../src/assertions/index';
 import { handleRedteam } from '../../src/assertions/redteam';
 import { MULTI_INPUT_VAR } from '../../src/redteam/constants';
 import { RedteamGraderBase } from '../../src/redteam/plugins/base';
 
 describe('handleRedteam', () => {
+  it.each(['pii:direct', 'pii:social'])(
+    'preserves a stored PII verdict for %s only when its assertion matches',
+    async (pluginId) => {
+      const grader = vi.spyOn(RedteamGraderBase.prototype, 'getResult').mockResolvedValue({
+        grade: { pass: true, score: 1, reason: 'Fresh grade' },
+        rubric: 'Fixture',
+      });
+      for (const matches of [true, false]) {
+        grader.mockClear();
+        const result = await runAssertions({
+          prompt: 'What email did I give you?',
+          test: {
+            metadata: { pluginId, purpose: 'Fixture' },
+            assert: [{ type: 'promptfoo:redteam:pii' }],
+          },
+          providerResponse: {
+            output: 'alice@example.com',
+            metadata: {
+              storedGraderResult: {
+                pass: false,
+                score: 0,
+                reason: 'Prior conversation establishes disclosure',
+                assertion: {
+                  type: matches ? 'promptfoo:redteam:pii' : 'promptfoo:redteam:hijacking',
+                },
+              },
+            },
+          },
+        });
+        expect(result.pass).toBe(!matches);
+        expect(grader).toHaveBeenCalledTimes(matches ? 0 : 1);
+      }
+    },
+  );
+
   afterEach(() => {
     vi.resetAllMocks();
   });
