@@ -8,37 +8,82 @@ import { getNunjucksEngine } from './templates';
 import type { VarValue } from '../types';
 import type { EnvOverrides } from '../types/env';
 
-// Cached JavaScript configs reuse instances across evaluations with different environments.
-const providerTemplates = new WeakMap<
+type ProviderTemplates = WeakMap<
   ApiProvider,
   { source: Pick<ApiProvider, 'config' | 'label'>; rendered: Pick<ApiProvider, 'config' | 'label'> }
->();
+>;
+// The CLI and an SDK imported by a JS config must use the same original templates.
+const providerTemplatesKey = Symbol.for('promptfoo.providerTemplates.v1');
+const templateStores = globalThis as Record<symbol, ProviderTemplates | undefined>;
+const providerTemplates = (templateStores[providerTemplatesKey] ??= new WeakMap());
+
+function mapTemplateObject<T>(
+  value: T,
+  visit: (value: unknown, key: string) => unknown,
+  seen: WeakMap<object, unknown>,
+): T {
+  if (!value || typeof value !== 'object' || isApiProvider(value)) {
+    return value;
+  }
+  const prototype = Object.getPrototypeOf(value);
+  if (!Array.isArray(value) && prototype !== Object.prototype && prototype !== null) {
+    return value;
+  }
+  if (seen.has(value)) {
+    return seen.get(value) as T;
+  }
+  const result = Array.isArray(value) ? new Array(value.length) : Object.create(prototype);
+  seen.set(value, result);
+  for (const [key, item] of Object.entries(value)) {
+    Object.defineProperty(result, key, {
+      value: visit(item, key),
+      enumerable: true,
+      writable: true,
+      configurable: true,
+    });
+  }
+  return result;
+}
 
 function snapshotProviderTemplate<T>(
   value: T,
   previous?: { rendered: unknown; source: unknown },
+  seen = new WeakMap<object, unknown>(),
 ): T {
-  if (previous && isDeepStrictEqual(value, previous.rendered)) {
-    return previous.source as T;
+  if (!value || typeof value !== 'object') {
+    return previous && value === previous.rendered ? (previous.source as T) : value;
   }
-  if (!value || typeof value !== 'object' || isApiProvider(value)) {
-    return value;
-  }
-  const childTemplate = (key: string, item: unknown) =>
+  return mapTemplateObject(
+    value,
+    (item, key) =>
+      snapshotProviderTemplate(
+        item,
+        previous && {
+          rendered: (previous.rendered as Record<string, unknown> | undefined)?.[key],
+          source: (previous.source as Record<string, unknown> | undefined)?.[key],
+        },
+        seen,
+      ),
+    seen,
+  );
+}
+
+export function getProviderConfigForEnv<T extends ApiProvider>(
+  provider: T,
+  envOverrides: EnvOverrides,
+): T['config'] {
+  const templates = providerTemplates.get(provider);
+  return renderEnvOnlyInObject(
     snapshotProviderTemplate(
-      item,
-      previous && {
-        rendered: (previous.rendered as Record<string, unknown> | undefined)?.[key],
-        source: (previous.source as Record<string, unknown> | undefined)?.[key],
+      provider.config,
+      templates && {
+        rendered: templates.rendered.config,
+        source: templates.source.config,
       },
-    );
-  return (
-    Array.isArray(value)
-      ? value.map((item, index) => childTemplate(String(index), item))
-      : Object.fromEntries(
-          Object.entries(value).map(([key, item]) => [key, childTemplate(key, item)]),
-        )
-  ) as T;
+    ),
+    envOverrides,
+    true,
+  );
 }
 
 /**
@@ -68,12 +113,17 @@ export function renderEnvOnlyInObject<T>(
   obj: T,
   envOverrides?: EnvOverrides,
   replaceBase?: boolean,
+  seen = new WeakMap<object, unknown>(),
 ): T {
   if (getEnvBool('PROMPTFOO_DISABLE_TEMPLATING')) {
     return obj;
   }
 
+  if (obj && typeof obj === 'object' && seen.has(obj)) {
+    return seen.get(obj) as T;
+  }
   if (isApiProvider(obj)) {
+    seen.set(obj, obj);
     let templates = providerTemplates.get(obj);
     if (!templates) {
       templates = { source: {}, rendered: {} };
@@ -85,7 +135,12 @@ export function renderEnvOnlyInObject<T>(
         source: templates.source[key],
       });
       if (templates.source[key] !== undefined) {
-        const rendered = renderEnvOnlyInObject(templates.source[key], envOverrides, replaceBase);
+        const rendered = renderEnvOnlyInObject(
+          templates.source[key],
+          envOverrides,
+          replaceBase,
+          seen,
+        );
         if (!isDeepStrictEqual(rendered, obj[key]) && !Reflect.set(obj, key, rendered)) {
           if (key === 'config') {
             // Wrappers can expose a mutable backing config through a getter.
@@ -155,31 +210,13 @@ export function renderEnvOnlyInObject<T>(
     }) as unknown as T;
   }
 
-  if (Array.isArray(obj)) {
-    return obj.map((item) =>
-      renderEnvOnlyInObject(item, envOverrides, replaceBase),
-    ) as unknown as T;
-  }
-
-  if (typeof obj === 'object' && obj !== null) {
-    const result: Record<string, unknown> = {};
-    for (const key in obj) {
-      if (key === '_conversation') {
-        // Conversation history is runtime data and may contain untrusted model output.
-        // Preserve it as literal data instead of rendering env templates.
-        result[key] = (obj as Record<string, unknown>)[key];
-        continue;
-      }
-      result[key] = renderEnvOnlyInObject(
-        (obj as Record<string, unknown>)[key],
-        envOverrides,
-        replaceBase,
-      );
-    }
-    return result as T;
-  }
-
-  return obj;
+  return mapTemplateObject(
+    obj,
+    (item, key) =>
+      // Conversation history is untrusted runtime data, not a template.
+      key === '_conversation' ? item : renderEnvOnlyInObject(item, envOverrides, replaceBase, seen),
+    seen,
+  );
 }
 
 export function renderVarsInObject<T>(obj: T, vars?: Record<string, VarValue>): T {

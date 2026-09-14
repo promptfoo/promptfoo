@@ -138,7 +138,9 @@ Test case indices address logical tests after scenario expansion: explicit tests
 
 Environment files configured through `commandLineOptions.envPath` are also isolated per call, including built-in providers, subprocess providers, executable prompts, and callbacks. Suite environment settings override file defaults. JavaScript target and grading callbacks receive these values through `context.env`; that property is omitted from context serialization. SDK `evaluate()` calls retain their suite environment through execution and output writing. Loading a file does not change the server process environment or copy its values into the saved configuration’s `env` settings.
 
-Providers shared by overlapping MCP or SDK calls remain open until both calls finish. Relative assertion files resolve against each call's configuration directory. MCP and Python provider instances keep one execution environment while active; use separate instances for different environments. Reusing an instance after cleanup starts a fresh connection or worker pool. Shared eval records redact provider credentials and TLS private keys while preserving public certificates.
+Providers shared by overlapping MCP or SDK calls remain open until both calls finish. Relative assertion files resolve against each call's configuration directory. MCP connections use the calling evaluation's environment even if another evaluation has already rendered the shared provider's configuration. MCP and Python provider instances keep one execution environment while active; use separate instances for different environments. Reusing an instance after cleanup starts a fresh connection or worker pool. Shared eval records redact provider credentials and TLS private keys while preserving public certificates.
+
+Provider permission checks include nested graders, including those supplied by extension hooks, whether or not `providerFilter` is set. Replay fingerprints distinguish provider implementation paths from literal provider configuration values such as labels and URLs ending in `.js` or `.ts`.
 
 ### 2. Provider Comparison
 

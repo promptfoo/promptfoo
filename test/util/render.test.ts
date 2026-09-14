@@ -2,6 +2,32 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { renderEnvOnlyInObject, renderVarsInObject } from '../../src/util/render';
 import { mockProcessEnv } from './utils';
 
+it('shares invocation environments and provider templates across module copies', async () => {
+  const firstState = (await import('../../src/cliState')).default;
+  const firstRenderer = await import('../../src/util/render');
+  vi.resetModules();
+  const secondState = (await import('../../src/cliState')).default;
+  const secondRenderer = await import('../../src/util/render');
+  const { getRuntimeEnv } = await import('../../src/envOverrides');
+  expect(secondState).not.toBe(firstState);
+  const provider = {
+    id: () => 'shared',
+    config: { url: '{{ env.TARGET }}', credential: '{{ env.FILE_CREDENTIAL }}' },
+    callApi: async () => ({ output: 'ok' }),
+  };
+  firstRenderer.renderEnvOnlyInObject(provider, { TARGET: 'first' });
+  secondRenderer.renderEnvOnlyInObject(provider, { TARGET: 'second' });
+  firstState.withEnvFileOverrides({ FILE_CREDENTIAL: 'fixture' }, () =>
+    firstState.withEnv({ TARGET: 'first' }, () => {
+      expect(secondState.env).toEqual({ TARGET: 'first' });
+      expect(secondRenderer.getProviderConfigForEnv(provider, getRuntimeEnv())).toEqual({
+        url: 'first',
+        credential: 'fixture',
+      });
+    }),
+  );
+});
+
 it.each(['plain', 'class'])('preserves %s provider identity while rendering config', (kind) => {
   class Provider {
     config = { url: '{{ env.TARGET_URL }}' };
@@ -106,6 +132,48 @@ it.each(['plain', 'getter'])('re-renders a reused %s provider from its templates
   renderEnvOnlyInObject(provider, { TARGET: 'third', LABEL: 'third' });
   expect(provider.config?.headers.target).toBe('explicit override');
   expect(provider.label).toBe('third');
+});
+
+it('preserves opaque values in a live provider config across renders', () => {
+  class Client {
+    #value = 'live';
+    read() {
+      return this.#value;
+    }
+  }
+  const values = {
+    date: new Date('2026-01-01'),
+    map: new Map([['value', '{{ env.TARGET }}']]),
+    client: new Client(),
+  };
+  const provider = {
+    config: { ...values, url: '{{ env.TARGET }}' },
+    id: () => 'opaque',
+    callApi: async () => ({ output: 'ok' }),
+  };
+  for (const target of ['first', 'second']) {
+    renderEnvOnlyInObject(provider, { TARGET: target });
+    expect(provider.config.url).toBe(target);
+    for (const key of ['date', 'map', 'client'] as const) {
+      expect(provider.config[key]).toBe(values[key]);
+    }
+    expect(provider.config.client.read()).toBe('live');
+  }
+  const replacement = new Client();
+  provider.config.client = replacement;
+  renderEnvOnlyInObject(provider, { TARGET: 'third' });
+  expect(provider.config.client).toBe(replacement);
+});
+
+it('renders cyclic plain provider config values without revisiting the same object', () => {
+  const config: Record<string, unknown> = { url: '{{ env.TARGET }}' };
+  config.self = config;
+  const provider = { config, id: () => 'cyclic', callApi: async () => ({ output: 'ok' }) };
+  for (const target of ['first', 'second']) {
+    renderEnvOnlyInObject(provider, { TARGET: target });
+    expect(provider.config.url).toBe(target);
+    expect(provider.config.self).toBe(provider.config);
+  }
 });
 
 describe('renderVarsInObject', () => {

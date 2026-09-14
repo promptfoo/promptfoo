@@ -68,6 +68,19 @@ describe('file-backed replay provenance', () => {
     },
   );
 
+  it.each(['missing.js', 'https://example.invalid/entry.ts', 'literal.cjs'])(
+    'keeps literal provider configuration stable: %s',
+    (literal) => {
+      const basePath = directory();
+      const provider = { id: 'echo', label: literal, config: { nested: { value: literal } } };
+      const tests = [{ options: { provider } }];
+      const selection = createTestCaseSelection(tests, [0], { basePath });
+      expect(restoreTestCaseSelection(tests, selection, { basePath })).toEqual([0]);
+      fs.writeFileSync(path.join(basePath, 'missing.js'), 'unrelated source');
+      expect(restoreTestCaseSelection(tests, selection, { basePath })).toEqual([0]);
+    },
+  );
+
   it('preserves identities when serialization omits undefined options', () => {
     const tests = [{ vars: { input: 'same' } }];
     const defaultTest = { options: { prefix: undefined, provider: 'echo' } };

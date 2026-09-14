@@ -529,20 +529,18 @@ export function registerRunEvaluationTool(server: McpServer) {
                 promptFilter,
                 providerFilter,
               });
-              if (hasStringFilters(providerFilter)) {
-                try {
-                  evaluateOptionOverrides.providerSelection = createProviderSelection(
-                    unfilteredProviders,
-                    Array.isArray(selectedProviderConfigs) ? selectedProviderConfigs : undefined,
-                    testSuite.providers,
-                  );
-                } catch (error) {
-                  throw new McpEvaluationFilterError(
-                    error instanceof Error
-                      ? error.message
-                      : 'Failed to preserve selected provider identities',
-                  );
-                }
+              try {
+                evaluateOptionOverrides.providerSelection = createProviderSelection(
+                  unfilteredProviders,
+                  Array.isArray(selectedProviderConfigs) ? selectedProviderConfigs : undefined,
+                  testSuite.providers,
+                );
+              } catch (error) {
+                throw new McpEvaluationFilterError(
+                  error instanceof Error
+                    ? error.message
+                    : 'Failed to preserve selected provider identities',
+                );
               }
               suiteSummary = filteredSuite.suiteSummary;
               selectedTestCaseIndices = filteredSuite.selectedTestCaseIndices;

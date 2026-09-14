@@ -82,11 +82,20 @@ interface CliState {
 }
 
 const maxConcurrencyContext = new AsyncLocalStorage<{ maxConcurrency: number | undefined }>();
-const envContext = new AsyncLocalStorage<{
+interface EnvironmentContext {
   basePath: { value: string | undefined };
   env: EnvOverrides | undefined;
   envFileOverrides?: EnvOverrides;
-}>();
+}
+// JS configs can import the SDK alongside the CLI's separately bundled module copy.
+// Both copies access the same invocation through this async context.
+const environmentContextKey = Symbol.for('promptfoo.environmentContext.v1');
+const environmentContexts = globalThis as Record<
+  symbol,
+  AsyncLocalStorage<EnvironmentContext> | undefined
+>;
+const envContext = (environmentContexts[environmentContextKey] ??=
+  new AsyncLocalStorage<EnvironmentContext>());
 const requestTracingConfigContext = new AsyncLocalStorage<{
   tracingConfig: NonNullable<TestSuite['tracing']>;
 }>();

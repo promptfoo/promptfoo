@@ -21,6 +21,7 @@ vi.mock('../../../src/providers/mcp/client', () => ({
 import cliState from '../../../src/cliState';
 import { MCPProvider } from '../../../src/providers/mcp';
 import { MCPClient } from '../../../src/providers/mcp/client';
+import { renderEnvOnlyInObject } from '../../../src/util/render';
 import { createDeferred } from '../../util/utils';
 
 function createContext(payload: Record<string, unknown>) {
@@ -46,6 +47,27 @@ describe('MCPProvider', () => {
     provider.config = { enabled: true, server: { url: 'http://localhost:1234/mcp' } };
     await provider.getAvailableTools();
     expect(MCPClient).toHaveBeenCalledWith({ ...provider.config, basePath: expect.any(String) });
+  });
+
+  it('initializes from its invocation environment after another invocation renders the instance', async () => {
+    const provider = new MCPProvider({
+      config: { enabled: true, server: { url: '{{ env.MCP_URL }}' } },
+    });
+    const first = { MCP_URL: 'https://first.invalid/mcp' };
+    const second = { MCP_URL: 'https://second.invalid/mcp' };
+    renderEnvOnlyInObject(provider, first);
+    renderEnvOnlyInObject(provider, second);
+    try {
+      await cliState.withEnv(first, () => provider.getAvailableTools());
+      expect(MCPClient).toHaveBeenCalledWith(
+        expect.objectContaining({ server: { url: first.MCP_URL } }),
+      );
+      await expect(cliState.withEnv(second, () => provider.getAvailableTools())).rejects.toThrow(
+        'separate MCP provider instance',
+      );
+    } finally {
+      await provider.cleanup();
+    }
   });
 
   it.each(['callApi', 'callTool', 'getAvailableTools'] as const)(

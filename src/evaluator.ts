@@ -2598,24 +2598,28 @@ function canonicalizeSelectionFingerprintValue(
             ? canonicalizeSelectionFingerprintValue(key, basePath, seen, 'provider', providerFiles)
             : key;
           const kind =
-            referenceKind === 'test'
-              ? key === 'provider' || key === 'providers'
+            referenceKind === 'provider'
+              ? key === 'id'
                 ? 'provider'
-                : [
-                      'vars',
-                      'value',
-                      'assertScoringFunction',
-                      'transform',
-                      'postprocess',
-                      'transformVars',
-                      'contextTransform',
-                      'rubricPrompt',
-                    ].includes(key)
-                  ? 'file'
-                  : key === 'options' || key === 'assert'
-                    ? 'test'
-                    : 'literal'
-              : referenceKind;
+                : 'file'
+              : referenceKind === 'test'
+                ? key === 'provider' || key === 'providers'
+                  ? 'provider'
+                  : [
+                        'vars',
+                        'value',
+                        'assertScoringFunction',
+                        'transform',
+                        'postprocess',
+                        'transformVars',
+                        'contextTransform',
+                        'rubricPrompt',
+                      ].includes(key)
+                    ? 'file'
+                    : key === 'options' || key === 'assert'
+                      ? 'test'
+                      : 'literal'
+                : referenceKind;
           return [
             typeof sourceKey === 'string' ? sourceKey : JSON.stringify(sourceKey),
             canonicalizeSelectionFingerprintValue(

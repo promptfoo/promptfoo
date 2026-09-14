@@ -266,9 +266,9 @@ describe('runEvaluation tool', () => {
         expect.objectContaining({
           beforeFilterTestSuite: expect.any(Function),
           afterFilterTestSuite: expect.any(Function),
-          evaluateOptionOverrides: {
+          evaluateOptionOverrides: expect.objectContaining({
             timeoutMs: 4321,
-          },
+          }),
           disablePromptSuggestions: false,
           skipRedteamEmailPreflight: false,
         }),
@@ -281,7 +281,9 @@ describe('runEvaluation tool', () => {
         async (_cmdObj, _defaultConfig, _defaultConfigPath, _evaluateOptions, customization) => {
           const testSuite = createMockTestSuite();
           const config = { providers: testSuite.providers };
-          await customization?.beforeFilterTestSuite?.(testSuite as any, config as any);
+          await customization?.beforeFilterTestSuite?.(testSuite as any, config as any, {
+            selectedProviderConfigs: config.providers,
+          });
           await customization?.afterFilterTestSuite?.(testSuite as any, config as any, {});
           return {
             ...createMockEvalResult(),
@@ -317,7 +319,7 @@ describe('runEvaluation tool', () => {
           timeoutMs: 30000,
         }),
         expect.objectContaining({
-          evaluateOptionOverrides: {},
+          evaluateOptionOverrides: { providerSelection: expect.any(Object) },
         }),
       );
       expect(payload.data.configuration.options.timeoutMs).toBe(9999);
@@ -329,7 +331,9 @@ describe('runEvaluation tool', () => {
         async (_cmdObj, _defaultConfig, _defaultConfigPath, _evaluateOptions, customization) => {
           const testSuite = createMockTestSuite();
           const config = { providers: testSuite.providers };
-          await customization?.beforeFilterTestSuite?.(testSuite as any, config as any);
+          await customization?.beforeFilterTestSuite?.(testSuite as any, config as any, {
+            selectedProviderConfigs: config.providers,
+          });
           await customization?.afterFilterTestSuite?.(testSuite as any, config as any, {});
           return {
             ...createMockEvalResult(),
@@ -416,65 +420,81 @@ describe('runEvaluation tool', () => {
       });
     });
 
-    it('should keep source config providers unchanged while filtering executable providers', async () => {
-      const { doEval } = await import('../../../../src/node/doEval');
-      let observedConfigProviders: unknown;
-      let observedExecutableProviders: unknown;
-      let observedProviderSelection: unknown;
+    it.each([undefined, 'allowed-provider'])(
+      'keeps provider permission selection with filter %j',
+      async (providerFilter) => {
+        const { doEval } = await import('../../../../src/node/doEval');
+        let observedConfigProviders: unknown;
+        let observedExecutableProviders: unknown;
+        let observedProviderSelection: unknown;
 
-      vi.mocked(doEval).mockImplementationOnce(
-        async (_cmdObj, _defaultConfig, _defaultConfigPath, _evaluateOptions, customization) => {
-          const testSuite = {
-            ...createMockTestSuite(),
-            providers: [{ id: 'allowed-provider' }, { id: 'blocked-provider' }],
-          };
-          const config = {
-            providers: [{ id: 'allowed-provider' }, { id: 'blocked-provider' }],
-          };
+        vi.mocked(doEval).mockImplementationOnce(
+          async (_cmdObj, _defaultConfig, _defaultConfigPath, _evaluateOptions, customization) => {
+            const testSuite = {
+              ...createMockTestSuite(),
+              providers: [{ id: 'allowed-provider' }, { id: 'blocked-provider' }],
+            };
+            const config = {
+              providers: [{ id: 'allowed-provider' }, { id: 'blocked-provider' }],
+            };
 
-          await customization?.beforeFilterTestSuite?.(testSuite as any, config as any, {
-            selectedProviderConfigs: config.providers,
-          });
-          observedConfigProviders = config.providers;
-          observedExecutableProviders = testSuite.providers;
-          observedProviderSelection = customization?.evaluateOptionOverrides?.providerSelection;
-          await customization?.afterFilterTestSuite?.(testSuite as any, config as any, {});
-          return createMockEvalResult() as any;
-        },
-      );
+            await customization?.beforeFilterTestSuite?.(testSuite as any, config as any, {
+              selectedProviderConfigs: config.providers,
+            });
+            observedConfigProviders = config.providers;
+            observedExecutableProviders = testSuite.providers;
+            observedProviderSelection = customization?.evaluateOptionOverrides?.providerSelection;
+            await customization?.afterFilterTestSuite?.(testSuite as any, config as any, {});
+            return createMockEvalResult() as any;
+          },
+        );
 
-      const { registerRunEvaluationTool } = await import(
-        '../../../../src/commands/mcp/tools/runEvaluation'
-      );
+        const { registerRunEvaluationTool } = await import(
+          '../../../../src/commands/mcp/tools/runEvaluation'
+        );
 
-      let toolHandler: any;
-      registerRunEvaluationTool({
-        tool: vi.fn((_name, _schema, handler) => {
-          toolHandler = handler;
-        }),
-      } as any);
-
-      const result = await toolHandler({
-        configPath: 'test.yaml',
-        providerFilter: 'allowed-provider',
-      });
-
-      expect(result.isError).toBe(false);
-      expect(observedConfigProviders).toEqual([
-        { id: 'allowed-provider' },
-        { id: 'blocked-provider' },
-      ]);
-      expect(observedExecutableProviders).toEqual([{ id: 'allowed-provider' }]);
-      expect(observedProviderSelection).toEqual({
-        providers: [
-          expect.objectContaining({
-            fingerprint: expect.stringMatching(/^[a-f0-9]{64}$/),
-            id: 'allowed-provider',
-            index: 0,
+        let toolHandler: any;
+        registerRunEvaluationTool({
+          tool: vi.fn((_name, _schema, handler) => {
+            toolHandler = handler;
           }),
-        ],
-      });
-    });
+        } as any);
+
+        const result = await toolHandler({
+          configPath: 'test.yaml',
+          providerFilter,
+        });
+
+        expect(result.isError).toBe(false);
+        expect(observedConfigProviders).toEqual([
+          { id: 'allowed-provider' },
+          { id: 'blocked-provider' },
+        ]);
+        expect(observedExecutableProviders).toEqual(
+          providerFilter
+            ? [{ id: 'allowed-provider' }]
+            : [{ id: 'allowed-provider' }, { id: 'blocked-provider' }],
+        );
+        expect(observedProviderSelection).toEqual({
+          providers: [
+            expect.objectContaining({
+              fingerprint: expect.stringMatching(/^[a-f0-9]{64}$/),
+              id: 'allowed-provider',
+              index: 0,
+            }),
+            ...(providerFilter
+              ? []
+              : [
+                  expect.objectContaining({
+                    id: 'blocked-provider',
+                    index: 1,
+                    fingerprint: expect.stringMatching(/^[a-f0-9]{64}$/),
+                  }),
+                ]),
+          ],
+        });
+      },
+    );
 
     it('should not persist expanded file provider contents after filtering a resolved provider', async () => {
       const { doEval } = await import('../../../../src/node/doEval');
@@ -597,7 +617,9 @@ describe('runEvaluation tool', () => {
           };
 
           const config = { providers: testSuite.providers };
-          await customization?.beforeFilterTestSuite?.(testSuite as any, config as any);
+          await customization?.beforeFilterTestSuite?.(testSuite as any, config as any, {
+            selectedProviderConfigs: config.providers,
+          });
           testSuite.tests = testSuite.tests.slice(1, 2);
           await customization?.afterFilterTestSuite?.(testSuite as any, config as any, {});
           return createMockEvalResult() as any;
@@ -643,7 +665,9 @@ describe('runEvaluation tool', () => {
           };
 
           const config = { providers: testSuite.providers };
-          await customization?.beforeFilterTestSuite?.(testSuite as any, config as any);
+          await customization?.beforeFilterTestSuite?.(testSuite as any, config as any, {
+            selectedProviderConfigs: config.providers,
+          });
           await customization?.afterFilterTestSuite?.(testSuite as any, config as any, {});
           return createMockEvalResult() as any;
         },
@@ -688,7 +712,9 @@ describe('runEvaluation tool', () => {
           };
 
           const config = { providers: testSuite.providers };
-          await customization?.beforeFilterTestSuite?.(testSuite as any, config as any);
+          await customization?.beforeFilterTestSuite?.(testSuite as any, config as any, {
+            selectedProviderConfigs: config.providers,
+          });
           await customization?.afterFilterTestSuite?.(testSuite as any, config as any, {});
           return createMockEvalResult() as any;
         },
@@ -746,7 +772,9 @@ describe('runEvaluation tool', () => {
           };
           const config = { providers: testSuite.providers };
 
-          await customization?.beforeFilterTestSuite?.(testSuite as any, config as any);
+          await customization?.beforeFilterTestSuite?.(testSuite as any, config as any, {
+            selectedProviderConfigs: config.providers,
+          });
           selectedTestCaseIndices = customization?.evaluateOptionOverrides?.testCaseIndices;
           await customization?.afterFilterTestSuite?.(testSuite as any, config as any, {});
           return createMockEvalResult() as any;
@@ -817,7 +845,9 @@ describe('runEvaluation tool', () => {
           };
 
           const config = { providers: testSuite.providers };
-          await customization?.beforeFilterTestSuite?.(testSuite as any, config as any);
+          await customization?.beforeFilterTestSuite?.(testSuite as any, config as any, {
+            selectedProviderConfigs: config.providers,
+          });
           await customization?.afterFilterTestSuite?.(testSuite as any, config as any, {
             deferredFilterRange: '1:2',
           });
@@ -864,7 +894,9 @@ describe('runEvaluation tool', () => {
           };
 
           const config = { providers: testSuite.providers };
-          await customization?.beforeFilterTestSuite?.(testSuite as any, config as any);
+          await customization?.beforeFilterTestSuite?.(testSuite as any, config as any, {
+            selectedProviderConfigs: config.providers,
+          });
           await customization?.afterFilterTestSuite?.(testSuite as any, config as any, {});
           return createMockEvalResult() as any;
         },
@@ -907,7 +939,9 @@ describe('runEvaluation tool', () => {
           };
 
           const config = { providers: testSuite.providers };
-          await customization?.beforeFilterTestSuite?.(testSuite as any, config as any);
+          await customization?.beforeFilterTestSuite?.(testSuite as any, config as any, {
+            selectedProviderConfigs: config.providers,
+          });
           await customization?.afterFilterTestSuite?.(testSuite as any, config as any, {});
           return createMockEvalResult() as any;
         },

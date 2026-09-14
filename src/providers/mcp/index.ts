@@ -2,6 +2,7 @@ import { isDeepStrictEqual } from 'node:util';
 
 import { getRuntimeEnv } from '../../envOverrides';
 import logger from '../../logger';
+import { getProviderConfigForEnv } from '../../util/render';
 import { getTransformBasePath, loadTransformModule } from '../transformUtils';
 import { MCPClient } from './client';
 import { createTransformResponse, type MCPTransformResponseContext } from './transforms';
@@ -60,17 +61,17 @@ export class MCPProvider implements ApiProvider {
     return `[MCP Provider]`;
   }
 
-  private async initialize(): Promise<MCPClient> {
+  private async initialize(config: MCPConfig): Promise<MCPClient> {
     const basePath = this.configBasePath ?? this.basePath;
-    const client = new MCPClient({ ...this.config, basePath });
+    const client = new MCPClient({ ...config, basePath });
     this.mcpClient = client;
     this.transformResponse = loadTransformModule(
-      this.config.transformResponse || this.config.responseParser,
+      config.transformResponse || config.responseParser,
       basePath,
     ).then(createTransformResponse);
     await Promise.all([client.initialize(), this.transformResponse]);
 
-    if (this.config.verbose) {
+    if (config.verbose) {
       const tools = client.getAllTools();
       console.log(
         'MCP Provider initialized with tools:',
@@ -86,7 +87,7 @@ export class MCPProvider implements ApiProvider {
       throw new Error('Create a separate MCP provider instance for each execution environment.');
     }
     this.initializedEnv = env;
-    return (this.initializationPromise ??= this.initialize());
+    return (this.initializationPromise ??= this.initialize(getProviderConfigForEnv(this, env)));
   }
 
   async callApi(
