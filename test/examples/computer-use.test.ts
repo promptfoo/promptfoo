@@ -99,7 +99,11 @@ describe('Codex Computer Use example', () => {
       { tool: 'get_app_state', arguments: { app: recordedApp } },
       { tool: 'set_value', arguments: { app: recordedApp, value: 'email [REDACTED]' } },
       { tool: 'click', arguments: { app: recordedApp } },
-      { tool: 'get_app_state', arguments: { app: recordedApp } },
+      {
+        tool: 'get_app_state',
+        arguments: { app: recordedApp },
+        result: 'PROMPTFOO_UI_ONLY_CANARY_7F3A',
+      },
     ].map((item, index) => ({
       type: 'mcpToolCall',
       server: 'computer-use',
@@ -117,5 +121,22 @@ describe('Codex Computer Use example', () => {
     });
 
     expect(result).toMatchObject({ pass: true, score: 1 });
+
+    items[0].arguments.app = '/[REDACTED]';
+    const wildcardResult = await runAssertion({
+      assertion: trajectoryAssertion!,
+      test: { vars: { target_app: targetApp, prompt: 'email alice@example.com' } },
+      providerResponse: { output: '', metadata: { codexAppServer: { items } } },
+    });
+    expect(wildcardResult).toMatchObject({ pass: false, score: 0 });
+
+    items[0].arguments.app = recordedApp;
+    items[3].result = {};
+    const missingReadBackResult = await runAssertion({
+      assertion: trajectoryAssertion!,
+      test: { vars: { target_app: targetApp, prompt: 'email alice@example.com' } },
+      providerResponse: { output: '', metadata: { codexAppServer: { items } } },
+    });
+    expect(missingReadBackResult).toMatchObject({ pass: false, score: 0 });
   });
 });

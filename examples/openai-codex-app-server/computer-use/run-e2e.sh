@@ -19,13 +19,13 @@ require_command() {
 }
 
 reject_state_overrides() {
-  local arg config index env_path
+  local arg config index
   local -a configs
   reject_state_file() {
     local file="$1"
     [[ "$file" = /* ]] || file="$EXAMPLE_DIR/$file"
     if [[ -f "$file" ]] &&
-      grep -Eq '^[[:space:]]*(export[[:space:]]+)?(PROMPTFOO_(CONFIG_DIR|LOG_DIR|CACHE_PATH|MEDIA_PATH|DISABLE_REDTEAM_REMOTE_GENERATION|DISABLE_TELEMETRY|DISABLE_UPDATE)|CODEX_HOME_OVERRIDE|COMPUTER_USE_(WORKING_DIR|TARGET_APP))[[:space:]]*(=|:)|"(PROMPTFOO_(CONFIG_DIR|LOG_DIR|CACHE_PATH|MEDIA_PATH|DISABLE_REDTEAM_REMOTE_GENERATION|DISABLE_TELEMETRY|DISABLE_UPDATE)|CODEX_HOME_OVERRIDE|COMPUTER_USE_(WORKING_DIR|TARGET_APP))"[[:space:]]*:' "$file"; then
+      grep -Eq '(PROMPTFOO_(CONFIG_DIR|LOG_DIR|CACHE_PATH|MEDIA_PATH|DISABLE_REDTEAM_REMOTE_GENERATION|DISABLE_TELEMETRY|DISABLE_UPDATE)|CODEX_HOME_OVERRIDE|COMPUTER_USE_(WORKING_DIR|TARGET_APP))' "$file"; then
       echo "Refusing config that overrides runner-owned Promptfoo state: $file" >&2
       exit 1
     fi
@@ -33,32 +33,31 @@ reject_state_overrides() {
   inspect_config() {
     local config="$1"
     [[ "$config" = /* ]] || config="$EXAMPLE_DIR/$config"
-    reject_state_file "$config"
-    while IFS= read -r env_path; do
-      env_path="${env_path#"${env_path%%[![:space:]]*}"}"
-      env_path="${env_path%"${env_path##*[![:space:]]}"}"
-      [[ "$env_path" = /* ]] || env_path="${config%/*}/$env_path"
-      [[ -n "$env_path" ]] && reject_state_file "$env_path"
-    done < <(
-      if [[ "$config" == *.json ]]; then
-        node -e 'const v=JSON.parse(require("fs").readFileSync(process.argv[1],"utf8")).commandLineOptions?.envPath; for (const p of Array.isArray(v) ? v : [v]) if (typeof p === "string") console.log(p)' "$config"
-      else
-        sed -nE '/^[[:space:]]*envPath:[[:space:]]*$/,/^[^[:space:]]/ { s/^[[:space:]]*-[[:space:]]*([^#]+).*$/\1/p }; s/^[[:space:]]*envPath:[[:space:]]*([^#]+).*$/\1/p' "$config"
-      fi
-    )
+    if [[ ! -f "$config" ]]; then
+      [[ "$config" == "$EXAMPLE_DIR/promptfooconfig.yaml" ]] && return
+      echo "Refusing config that overrides runner-owned Promptfoo state: $config" >&2
+      exit 1
+    fi
+    if [[ "$config" != "$EXAMPLE_DIR/promptfooconfig.yaml" ]]; then
+      reject_state_file "$config"
+    fi
+    if grep -Eq '(^|[^[:alnum:]_])envPath([^[:alnum:]_]|$)' "$config"; then
+      echo "Refusing config that overrides runner-owned Promptfoo state: $config" >&2
+      exit 1
+    fi
   }
   inspect_paths() {
     local config
+    if [[ "$2" == config ]]; then
+      inspect_config "$1"
+      return
+    fi
     IFS=, read -ra configs <<<"$1"
     for config in "${configs[@]}"; do
       config="${config#"${config%%[![:space:]]*}"}"
       config="${config%"${config##*[![:space:]]}"}"
       [[ -n "$config" ]] || continue
-      if [[ "$2" == config ]]; then
-        inspect_config "$config"
-      else
-        reject_state_file "$config"
-      fi
+      reject_state_file "$config"
     done
   }
   for ((index = 1; index <= $#; index++)); do
@@ -66,6 +65,7 @@ reject_state_overrides() {
     case "$arg" in
     --config=*) inspect_paths "${arg#*=}" config ;;
     --env-file=* | --env-path=*) inspect_paths "${arg#*=}" env ;;
+    -c?*) inspect_paths "${arg#-c}" config ;;
     -c | --config)
       ((index++))
       while ((index <= $#)) && [[ "${!index}" != -* ]]; do
@@ -121,6 +121,16 @@ cleanup() {
 }
 trap cleanup EXIT
 
+if [[ -L "$TMP_DIR" || (-e "$TMP_DIR" && ! -d "$TMP_DIR") ]]; then
+  echo "Refusing unsafe generated-artifact path: $TMP_DIR" >&2
+  exit 1
+fi
+mkdir -p "$TMP_DIR"
+if [[ "$(cd -- "$TMP_DIR" && pwd -P)" != "$TMP_DIR" ]]; then
+  echo "Refusing generated-artifact path outside the example: $TMP_DIR" >&2
+  exit 1
+fi
+chmod 700 "$TMP_DIR"
 terminate_target_processes
 
 for command in codex node ps xcrun; do
@@ -194,17 +204,6 @@ if (($# == 0)); then
 fi
 
 reject_state_overrides "$@"
-
-if [[ -L "$TMP_DIR" || (-e "$TMP_DIR" && ! -d "$TMP_DIR") ]]; then
-  echo "Refusing unsafe generated-artifact path: $TMP_DIR" >&2
-  exit 1
-fi
-mkdir -p "$TMP_DIR"
-if [[ "$(cd -- "$TMP_DIR" && pwd -P)" != "$TMP_DIR" ]]; then
-  echo "Refusing generated-artifact path outside the example: $TMP_DIR" >&2
-  exit 1
-fi
-chmod 700 "$TMP_DIR"
 
 # Recreate fixed outputs so old symlinks or hard links cannot redirect writes.
 rm -f -- "$TMP_DIR/target.log" "$TMP_DIR/results.json" \
