@@ -15,6 +15,8 @@ The `search-rubric` assertion type is like `llm-rubric` but with web search capa
 
 The grader must return a JSON object with a boolean `pass` field. JSON inside Markdown or surrounding text is accepted. Provider errors, empty responses, and responses without a valid verdict fail with a score of `0`; `not-search-rubric` preserves these grader failures instead of inverting them.
 
+The rubric `value` must render to a string. Numbers, booleans, arrays, and objects are rejected before calling the grading provider.
+
 ## Basic Usage
 
 ```yaml
