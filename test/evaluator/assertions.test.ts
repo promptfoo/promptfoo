@@ -262,7 +262,7 @@ describeEvaluator('evaluator assertions', () => {
   );
 
   it.each(
-    ['receipt', 'static plan', 'vars'].flatMap((source) =>
+    ['receipt', 'static plan', 'vars', 'assertion value'].flatMap((source) =>
       ['repeat', 'prompts', 'providers'].map((expansion) => ({ source, expansion })),
     ),
   )(
@@ -285,8 +285,20 @@ describeEvaluator('evaluator assertions', () => {
             if (source === 'vars') {
               context.test.vars!.id = id;
             }
+            if (source === 'assertion value') {
+              const assertion = context.test.assert![0];
+              if (assertion.type === 'assert-set') {
+                throw new Error('Expected a single privacy assertion');
+              }
+              (assertion.value as { rawReceiptPath: string }).rawReceiptPath = path.join(
+                directory,
+                `receipt-${id}`,
+              );
+            }
             fs.writeFileSync(
-              source === 'vars' ? path.join(directory, `receipt-${id}`) : receipt,
+              source === 'vars' || source === 'assertion value'
+                ? path.join(directory, `receipt-${id}`)
+                : receipt,
               source === 'static plan' ? JSON.stringify({ rawReceipt: secret }) : secret,
             );
           }
@@ -383,6 +395,56 @@ describeEvaluator('evaluator assertions', () => {
       expect(mockApiProvider.callApi).not.toHaveBeenCalled();
     },
   );
+
+  it('stops all targets when a receipt hook times out and later rewrites the shared file', async () => {
+    const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'late-receipt-hook-'));
+    const receipt = path.join(directory, 'receipt');
+    let hookCalls = 0;
+    vi.mocked(runExtensionHook).mockImplementation(async (_extensions, phase, context) => {
+      if (phase === 'beforeEach') {
+        const call = ++hookCalls;
+        if (call === 1) {
+          await new Promise((resolve) => setTimeout(resolve, 30));
+        }
+        fs.writeFileSync(receipt, call === 1 ? 'LATE_UNCAPTURED_RECEIPT' : 'CAPTURED_RECEIPT');
+      }
+      return context;
+    });
+    vi.mocked(mockApiProvider.callApi).mockImplementation(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 10));
+      return { output: fs.readFileSync(receipt, 'utf8') };
+    });
+    const suite: TestSuite = {
+      providers: [mockApiProvider],
+      prompts: [toPrompt('Inspect')],
+      extensions: ['file://hook.js'],
+      tests: [0, 1].map(() => ({
+        assert: [
+          {
+            type: 'promptfoo:redteam:coding-agent:trace-redaction',
+            value: { rawReceiptPath: receipt },
+          },
+        ],
+      })),
+    };
+    const record = await Eval.create({}, suite.prompts, { id: randomUUID() });
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+    try {
+      const pending = evaluate(suite, record, { maxConcurrency: 1, timeoutMs: 25 });
+      await vi.waitFor(() => expect(hookCalls).toBe(1));
+      await vi.advanceTimersByTimeAsync(50);
+      await pending;
+      expect(mockApiProvider.callApi).not.toHaveBeenCalled();
+      const summary = await record.toEvaluateSummary();
+      expect(summary.results).toHaveLength(2);
+      expect(summary.results.every((row) => row.failureReason === ResultFailureReason.ERROR)).toBe(
+        true,
+      );
+    } finally {
+      vi.useRealTimers();
+      fs.rmSync(directory, { recursive: true, force: true });
+    }
+  });
 
   it.each([false, true])(
     'preserves hook timeouts for file receipt tests: %s',

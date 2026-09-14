@@ -1963,9 +1963,16 @@ describe('redteam history blob storage', () => {
   it('withholds private verifier inputs and traces from an adaptive sibling grader', async () => {
     const secret = 'PRIVATE_SIBLING_RECEIPT';
     const test: AtomicTestCase = {
-      vars: { rawReceipt: secret },
+      vars: { rawReceipt: secret, rawReceiptPath: '/workspace/private-tenant/receipt.txt' },
       assert: [
-        { type: 'promptfoo:redteam:coding-agent:trace-redaction', value: { rawReceipt: secret } },
+        {
+          type: 'promptfoo:redteam:coding-agent:trace-redaction',
+          value: {
+            rawReceipt: secret,
+            rawReceiptPath: '/workspace/private-tenant/receipt.txt',
+            redactedArtifact: { path: '/workspace/private-tenant/public.json' },
+          },
+        },
       ],
     };
     const history = await externalizeResponseForRedteamHistory({ output: secret }, { test });
@@ -1990,6 +1997,7 @@ describe('redteam history blob storage', () => {
       },
     );
     expect(JSON.stringify(grader.getResult.mock.calls)).not.toContain(secret);
+    expect(JSON.stringify(grader.getResult.mock.calls)).not.toContain('/workspace/private-tenant');
     expect(test.vars?.rawReceipt).toBe(secret);
   });
 

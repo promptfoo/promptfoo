@@ -563,7 +563,7 @@ export class VoiceCrescendoProvider implements ApiProvider {
           if (!test || targetResponse.metadata?.redactionMediaOmitted === true) {
             break;
           }
-          const grader = getGraderById(redactionAssertion.type.replace(/^not-/, ''))!;
+          const grader = getGraderById(redactionAssertion.type)!;
           const { grade, rubric } = await runRedteamGrader(
             grader,
             voicePrompt,

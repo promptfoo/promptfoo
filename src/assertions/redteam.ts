@@ -3,7 +3,7 @@ import { MULTI_INPUT_VAR } from '../redteam/constants';
 import { getGraderById } from '../redteam/graders';
 import { checkExfilTracking } from '../redteam/strategies/indirectWebPwn';
 import invariant from '../util/invariant';
-import { TRACE_REDACTION_ASSERTIONS } from '../util/traceRedaction';
+import { TRACE_REDACTION_ASSERTIONS, TRUSTED_REDACTION_GRADER } from '../util/traceRedaction';
 import { summarizeTrajectoryForJudge } from './trajectoryUtils';
 
 import type { RedteamGradingContext } from '../redteam/grading/types';
@@ -83,7 +83,10 @@ export const handleRedteam = async ({
     if (!inverse) {
       return result;
     }
-    const incomplete = result.metadata?.graderError || result.metadata?.gradingIncomplete;
+    const incomplete =
+      result.metadata?.graderError ||
+      result.metadata?.gradingIncomplete ||
+      result.metadata?.codingAgentExploitStatus === 'evidence_missing';
     return {
       ...result,
       pass: !incomplete && !result.pass,
@@ -112,7 +115,12 @@ export const handleRedteam = async ({
       (directPrivacyMatch ||
         (test.metadata?.pluginId && assertion.type.includes(test.metadata.pluginId))) &&
       singularResult);
-  if (storedResult) {
+  if (
+    storedResult &&
+    (!TRACE_REDACTION_ASSERTIONS.has(baseType) ||
+      Object.getOwnPropertyDescriptor(storedResult.assertion ?? {}, TRUSTED_REDACTION_GRADER)
+        ?.value === true)
+  ) {
     // Check if any turns had grader errors (even though we have a stored result)
     const redteamHistory = providerResponse.metadata?.redteamHistory as
       | Array<{ graderError?: string }>

@@ -39,14 +39,25 @@ export const TRACE_REDACTION_ASSERTIONS = new Set([
   'promptfoo:redteam:harness:artifact-redaction',
 ]);
 
+// Non-enumerable on wrapper-created assertions; JSON target responses cannot carry this marker.
+export const TRUSTED_REDACTION_GRADER = Symbol.for('promptfoo.trustedRedactionGrader');
+
 export function requiresTraceRedaction(assertions: AssertionOrSet[] | undefined): boolean {
-  return (
-    assertions?.some((assertion) =>
-      assertion.type === 'assert-set'
-        ? requiresTraceRedaction(assertion.assert)
-        : TRACE_REDACTION_ASSERTIONS.has(assertion.type.replace(/^not-/, '')),
-    ) ?? false
-  );
+  const pending = [...(assertions ?? [])];
+  const seen = new Set<AssertionOrSet>();
+  while (pending.length) {
+    const assertion = pending.pop()!;
+    if (seen.has(assertion)) {
+      continue;
+    }
+    seen.add(assertion);
+    if (assertion.type === 'assert-set') {
+      pending.push(...assertion.assert);
+    } else if (TRACE_REDACTION_ASSERTIONS.has(assertion.type.replace(/^not-/, ''))) {
+      return true;
+    }
+  }
+  return false;
 }
 
 function hasMarkdownImage(text: string): boolean {

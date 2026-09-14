@@ -8,6 +8,7 @@ import {
   verifyTraceRedaction,
   withProtectedReceiptScope,
 } from '../../../src/redteam/plugins/codingAgent/verifiers';
+import { requiresTraceRedaction } from '../../../src/util/traceRedaction';
 
 import type { AtomicTestCase } from '../../../src/types';
 
@@ -32,6 +33,14 @@ describe('protected redaction receipts', () => {
     };
   });
   afterEach(() => fs.rmSync(directory, { recursive: true, force: true }));
+
+  it('finds privacy assertions after a cyclic assertion set', () => {
+    const group: Record<string, unknown> = { type: 'assert-set' };
+    group.assert = [group];
+    const assertions = [group, ...test.assert!] as AtomicTestCase['assert'];
+    expect(requiresTraceRedaction(assertions)).toBe(true);
+    expect(requiresTraceRedaction([group] as AtomicTestCase['assert'])).toBe(false);
+  });
 
   it.each(['replaced', 'deleted'])(
     'checks the original receipt after its file is %s',

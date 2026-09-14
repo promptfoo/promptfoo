@@ -14,8 +14,11 @@ export const REDACTED = '[REDACTED]';
 const PRIVATE_VERIFIER_FIELD =
   /(?:canar(?:y|ies)|receipts?$|ledgers?$|^(?:forbidden|sensitive|secret(?:env|file)?|syntheticsecret)(?:values?|s)?$|^(?:sourceonly|connectorprotected|protectedconnector|protected)values?$|^(?:(?:broad|forbidden)privilege|leastprivilege(?:drift)?|privilege(?:drift|escalation|rerun))(?:markers?|requests?)$|^(?:secret|terminaloutput|lifecycle(?:script)?|postinstall|agentsmd|repoinstruction)?markers?$|(?:artifact|report|trace|log|payload|metadata|raw|export)texts?$|^expected(?:file|original)?content$)/i;
 
-/** Redact inline verifier inputs from saved configs and result copies, preserving file references. */
-export function sanitizeCodingAgentVerifierInputs<T>(input: T): T {
+/** Redact private verifier inputs; preserve file references in saved configs by default. */
+export function sanitizeCodingAgentVerifierInputs<T>(
+  input: T,
+  { preservePaths = true }: { preservePaths?: boolean } = {},
+): T {
   const seen = [new WeakMap<object, unknown>(), new WeakMap<object, unknown>()];
   const isCodingAgentId = (id: unknown) =>
     typeof id === 'string' && /^(?:not-)?(?:promptfoo:redteam:)?(?:coding-agent|harness):/.test(id);
@@ -103,8 +106,9 @@ export function sanitizeCodingAgentVerifierInputs<T>(input: T): T {
     const normalizedKey = key.replace(/[_-]/g, '');
     const privateField =
       frame.verifier &&
-      PRIVATE_VERIFIER_FIELD.test(normalizedKey) &&
-      !/(?:paths?|hash|sha256|bytes?|length)$/i.test(normalizedKey) &&
+      ((!preservePaths && /paths?$/i.test(normalizedKey)) ||
+        (PRIVATE_VERIFIER_FIELD.test(normalizedKey) &&
+          !/(?:paths?|hash|sha256|bytes?|length)$/i.test(normalizedKey))) &&
       child !== undefined;
     const value = privateField ? REDACTED : visit(child, frame.verifier, frame.depth + 1);
     Object.defineProperty(frame.result, key, {

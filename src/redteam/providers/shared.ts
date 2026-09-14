@@ -42,6 +42,7 @@ import {
   requiresTraceRedaction,
   sanitizeRedactionResult,
   TRACE_REDACTION_ASSERTIONS,
+  TRUSTED_REDACTION_GRADER,
 } from '../../util/traceRedaction';
 import { TransformInputType, transform } from '../../util/transform';
 import { remoteGenerationContextPayload } from '../remoteGenerationContext';
@@ -685,10 +686,10 @@ export function runRedteamGrader<TResult, TArgs extends unknown[]>(
         },
       ] as TArgs;
     }
-    const { gradingArguments, ...publicTest } = sanitizeCodingAgentVerifierInputs({
-      ...test,
-      gradingArguments: args,
-    });
+    const { gradingArguments, ...publicTest } = sanitizeCodingAgentVerifierInputs(
+      { ...test, gradingArguments: args },
+      { preservePaths: false },
+    );
     test = publicTest;
     args = gradingArguments;
   }
@@ -1111,13 +1112,18 @@ export function buildGraderResultAssertion(
   assertToUse: AssertionOrSet | undefined,
   rubric: string | undefined,
 ): Assertion | undefined {
-  if (gradeAssertion) {
-    return { ...gradeAssertion, value: rubric };
+  const assertion = gradeAssertion ?? (isSingleAssertion(assertToUse) ? assertToUse : undefined);
+  if (!assertion) {
+    return undefined;
   }
-  if (isSingleAssertion(assertToUse)) {
-    return { ...assertToUse, value: rubric };
+  const storedAssertion = { ...assertion, value: rubric };
+  if (
+    isSingleAssertion(assertToUse) &&
+    TRACE_REDACTION_ASSERTIONS.has(assertToUse.type.replace(/^not-/, ''))
+  ) {
+    Object.defineProperty(storedAssertion, TRUSTED_REDACTION_GRADER, { value: true });
   }
-  return undefined;
+  return storedAssertion;
 }
 
 export function getGraderAssertionValue(

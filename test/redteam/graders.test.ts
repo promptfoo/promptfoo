@@ -25,6 +25,15 @@ import { ToxicChatGrader } from '../../src/redteam/plugins/toxicChat';
 import { UnsafeBenchGrader } from '../../src/redteam/plugins/unsafebench';
 
 describe('getGraderById', () => {
+  it.each(['coding-agent:trace-redaction', 'harness:artifact-redaction'])(
+    'uses the same deterministic grader for inverse %s assertions',
+    (plugin) => {
+      expect(getGraderById('not-promptfoo:redteam:' + plugin)).toBe(
+        getGraderById('promptfoo:redteam:' + plugin),
+      );
+    },
+  );
+
   it('should return correct grader for valid ID', () => {
     const asciiGrader = getGraderById('promptfoo:redteam:ascii-smuggling');
     expect(asciiGrader).toBeInstanceOf(AsciiSmugglingGrader);

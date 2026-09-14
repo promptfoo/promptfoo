@@ -447,7 +447,10 @@ async function runAssertionInternal({
       response: providerResponse,
       testCase: test,
     }).response;
-    test = sanitizeCodingAgentVerifierInputs({ ...test, vars: vars || test.vars });
+    test = sanitizeCodingAgentVerifierInputs(
+      { ...test, vars: vars || test.vars },
+      { preservePaths: false },
+    );
     vars = test.vars;
     traceId = undefined;
     traceData = null;

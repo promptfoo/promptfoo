@@ -114,7 +114,11 @@ import {
   createEmptyAssertions,
   createEmptyTokenUsage,
 } from './util/tokenUsageUtils';
-import { requiresTraceRedaction, sanitizeRedactionResult } from './util/traceRedaction';
+import {
+  requiresTraceRedaction,
+  sanitizeRedactionResult,
+  TRUSTED_REDACTION_GRADER,
+} from './util/traceRedaction';
 import { TransformInputType, transform } from './util/transform';
 import type { SingleBar } from 'cli-progress';
 import type winston from 'winston';
@@ -1167,8 +1171,25 @@ function sanitizeResponseMetadata(response: ProviderResponse) {
   if (!response.metadata) {
     return;
   }
-  const sanitizedMetadata = safeJsonStringify(response.metadata);
+  const original = response.metadata;
+  const sanitizedMetadata = safeJsonStringify(original);
   response.metadata = sanitizedMetadata ? JSON.parse(sanitizedMetadata) : {};
+  const grades = [
+    [original.storedGraderResult, response.metadata!.storedGraderResult],
+    ...Object.entries(original.storedGraderResults ?? {}).map(([index, grade]) => [
+      grade,
+      response.metadata!.storedGraderResults?.[Number(index)],
+    ]),
+  ];
+  for (const [source, sanitized] of grades) {
+    if (
+      sanitized?.assertion &&
+      Object.getOwnPropertyDescriptor(source?.assertion ?? {}, TRUSTED_REDACTION_GRADER)?.value ===
+        true
+    ) {
+      Object.defineProperty(sanitized.assertion, TRUSTED_REDACTION_GRADER, { value: true });
+    }
+  }
 }
 
 function updateConversationHistory({
@@ -3599,6 +3620,21 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
     testSuite: TestSuite,
     abortSignal: AbortSignal,
   ) {
+    const cloneAssertion = (assertion: Assertion): Assertion => ({
+      ...assertion,
+      ...(assertion.value && typeof assertion.value === 'object'
+        ? { value: structuredClone(assertion.value) }
+        : {}),
+    });
+    const cloneTest = (test: AtomicTestCase): AtomicTestCase => ({
+      ...test,
+      vars: structuredClone(test.vars ?? {}),
+      assert: test.assert?.map((assertion) =>
+        assertion.type === 'assert-set'
+          ? { ...assertion, assert: assertion.assert.map(cloneAssertion) }
+          : cloneAssertion(assertion),
+      ),
+    });
     // Capture every existing receipt before a hook can replace a shared file.
     for (const { test } of evalSteps) {
       if (abortSignal.aborted) {
@@ -3617,7 +3653,7 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
         continue;
       }
       // Timeout execution copies RunEvalOptions but retains this per-case test object.
-      evalStep.test = { ...evalStep.test, vars: structuredClone(evalStep.test.vars ?? {}) };
+      evalStep.test = cloneTest(evalStep.test);
       const startedAt = Date.now();
       const timeoutMs = this.options.timeoutMs || getEvalTimeoutMs();
       let timeoutId: NodeJS.Timeout | undefined;
@@ -3639,14 +3675,7 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
           () => runExtensionHook(testSuite.extensions, 'beforeEach', { test: evalStep.test }),
         );
         const prepared = await Promise.race([hook, interrupted]);
-        evalStep.test = {
-          ...prepared.test,
-          assert: prepared.test.assert?.map((assertion) =>
-            assertion.type === 'assert-set'
-              ? { ...assertion, assert: assertion.assert.map((child) => ({ ...child })) }
-              : { ...assertion },
-          ),
-        };
+        evalStep.test = cloneTest(prepared.test);
         this.preparedReceiptHooks.set(evalStep.test, {
           status: 'ready',
           elapsedMs: Date.now() - startedAt,
@@ -3657,8 +3686,19 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
         if (abortSignal.aborted) {
           return;
         }
+        if (timedOut) {
+          // The hook may still change receipt files. Keep every target stopped.
+          for (const pending of evalSteps) {
+            this.preparedReceiptHooks.set(pending.test, {
+              status: 'timed-out',
+              error,
+              elapsedMs: Date.now() - startedAt,
+            });
+          }
+          return;
+        }
         this.preparedReceiptHooks.set(evalStep.test, {
-          status: timedOut ? 'timed-out' : 'failed',
+          status: 'failed',
           error,
           elapsedMs: Date.now() - startedAt,
         });

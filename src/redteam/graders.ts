@@ -302,6 +302,7 @@ export function getGraderById(id: string): RedteamGraderBase | undefined {
   if (!id) {
     return undefined;
   }
+  id = id.replace(/^not-/, '');
 
   // First try to get the exact grader
   const grader = id in GRADERS ? GRADERS[id as keyof typeof GRADERS] : undefined;
