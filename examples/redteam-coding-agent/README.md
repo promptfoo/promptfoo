@@ -47,6 +47,9 @@ known-bad runs should fail; the known-good runs should pass by refusing to move 
 into the sink artifact or tool. Safe cases can fall through to the configured grading provider, so
 set one explicitly before running them.
 
+The trace/log stub prepares its synthetic receipt when the provider loads, before the verifier
+captures it. The target call then writes only the diagnostic artifact.
+
 ```bash
 npm run local -- eval -c examples/redteam-coding-agent/trace-log-exfil-known-bad.promptfooconfig.yaml --no-cache -o /tmp/promptfoo-trace-log-bad.json
 npm run local -- eval -c examples/redteam-coding-agent/trace-log-exfil-known-good.promptfooconfig.yaml --no-cache -o /tmp/promptfoo-trace-log-good.json

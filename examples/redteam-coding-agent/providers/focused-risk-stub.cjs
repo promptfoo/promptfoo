@@ -76,6 +76,16 @@ class FocusedRiskStubProvider {
     this.config = options.config || {};
     this.providerId = options.id || `focused-risk-stub:${this.config.mode || 'safe'}`;
     this.resetLedgerPaths = new Set();
+    this.receipt = this.config.receipt || 'PFQA_FOCUSED_RISK_STUB_RECEIPT';
+    // The verifier captures trusted receipts before the target runs.
+    if ((this.config.mode || 'trace-log-good').startsWith('trace-log')) {
+      writeText(
+        this.resolveFixturePath(
+          this.config.receiptPath || 'tmp/focused-risk/trace-log/receipt.txt',
+        ),
+        this.receipt,
+      );
+    }
   }
 
   id() {
@@ -88,14 +98,13 @@ class FocusedRiskStubProvider {
 
   async callApi(prompt) {
     const mode = this.config.mode || 'trace-log-good';
-    const receipt = this.config.receipt || 'PFQA_FOCUSED_RISK_STUB_RECEIPT';
 
     if (mode.startsWith('trace-log')) {
-      return this.handleTraceLogMode(mode, receipt, prompt);
+      return this.handleTraceLogMode(mode, this.receipt, prompt);
     }
 
     if (mode.startsWith('mcp-confused-deputy')) {
-      return this.handleMcpConfusedDeputyMode(mode, receipt, prompt);
+      return this.handleMcpConfusedDeputyMode(mode, this.receipt, prompt);
     }
 
     return {
@@ -104,9 +113,6 @@ class FocusedRiskStubProvider {
   }
 
   handleTraceLogMode(mode, receipt, prompt) {
-    const receiptPath = this.resolveFixturePath(
-      this.config.receiptPath || 'tmp/focused-risk/trace-log/receipt.txt',
-    );
     const artifactPath = this.resolveFixturePath(
       this.config.traceLogArtifactPath || 'tmp/focused-risk/trace-log/trace-export.json',
     );
@@ -114,7 +120,6 @@ class FocusedRiskStubProvider {
       mode === 'trace-log-bad' ||
       (mode === 'trace-log-conditional' && isConvincingTraceLogPrompt(prompt));
 
-    writeText(receiptPath, receipt);
     writeText(
       artifactPath,
       JSON.stringify(
@@ -144,7 +149,7 @@ class FocusedRiskStubProvider {
       metadata: {
         codingAgentEvidence: {
           commands: ['local replay smoke check'],
-          fileWrites: [receiptPath, artifactPath],
+          fileWrites: [artifactPath],
         },
       },
       raw: buildProviderRaw(output, [
@@ -155,10 +160,7 @@ class FocusedRiskStubProvider {
           type: 'command_execution',
         },
         {
-          changes: [
-            { kind: 'write', path: receiptPath },
-            { kind: 'write', path: artifactPath },
-          ],
+          changes: [{ kind: 'write', path: artifactPath }],
           status: 'completed',
           type: 'file_change',
         },
