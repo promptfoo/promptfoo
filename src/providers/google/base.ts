@@ -24,7 +24,7 @@ import { maybeLoadToolsFromExternalFile } from '../../util/index';
 import { getNunjucksEngine } from '../../util/templates';
 import { McpClientSession } from '../mcp/session';
 import { transformMCPToolsToGoogle } from '../mcp/transform';
-import { getRequestTimeoutMs, transformTools } from '../shared';
+import { awaitProviderOperation, getRequestTimeoutMs, transformTools } from '../shared';
 import { withGenAIToolSpan } from '../tracing';
 import { GoogleAuthManager } from './auth';
 import {
@@ -35,7 +35,49 @@ import {
 } from './util';
 
 import type { EnvOverrides } from '../../types/env';
-import type { ApiProvider, CallApiContextParams, ProviderResponse } from '../../types/index';
+import type {
+  ApiProvider,
+  CallApiContextParams,
+  CallApiOptionsParams,
+  ProviderResponse,
+} from '../../types/index';
+
+class GoogleFunctionCallbackError extends Error {
+  constructor(
+    message: string,
+    readonly partialOutput?: ProviderResponse['output'],
+  ) {
+    super(message);
+  }
+}
+
+export function getCallbackErrorOutput(
+  error: unknown,
+  output: ProviderResponse['output'],
+  aborted?: boolean,
+): ProviderResponse['output'] {
+  return error instanceof GoogleFunctionCallbackError && error.partialOutput !== undefined
+    ? error.partialOutput
+    : aborted
+      ? output
+      : undefined;
+}
+
+function joinCallbackResults(results: unknown[]): string {
+  return results
+    .map((result) => {
+      if (typeof result === 'string') {
+        return result;
+      }
+      try {
+        return JSON.stringify(result) ?? String(result);
+      } catch {
+        return String(result);
+      }
+    })
+    .join('\n');
+}
+
 import type { MCPClient } from '../mcp/client';
 import type {
   CompletionOptions,
@@ -426,7 +468,11 @@ export abstract class GoogleGenericProvider implements ApiProvider {
    * Make an API call with the given prompt.
    * Must be implemented by subclasses.
    */
-  abstract callApi(prompt: string, context?: CallApiContextParams): Promise<ProviderResponse>;
+  abstract callApi(
+    prompt: string,
+    context?: CallApiContextParams,
+    options?: CallApiOptionsParams,
+  ): Promise<ProviderResponse>;
 
   /**
    * Get the API key for this provider.
@@ -478,12 +524,12 @@ export abstract class GoogleGenericProvider implements ApiProvider {
   /**
    * Initialize the MCP client for tool integration.
    */
-  protected async initializeMCP(): Promise<void> {
+  protected async initializeMCP(signal?: AbortSignal): Promise<void> {
     if (!this.config.mcp?.enabled) {
       return;
     }
     this.mcpSession ??= new McpClientSession(this.config.mcp, this);
-    this.mcpClient = await this.mcpSession.initialize();
+    this.mcpClient = await this.mcpSession.initialize(signal);
   }
 
   /**
@@ -494,9 +540,9 @@ export abstract class GoogleGenericProvider implements ApiProvider {
    */
   protected async getAllTools(
     context?: CallApiContextParams,
-    options: { skipExecutableToolFiles?: boolean } = {},
+    options: { skipExecutableToolFiles?: boolean; abortSignal?: AbortSignal } = {},
   ): Promise<Tool[]> {
-    await this.initializeMCP();
+    await this.initializeMCP(options.abortSignal);
     // Get MCP tools if client is available
     const mcpTools = this.mcpClient ? transformMCPToolsToGoogle(this.mcpClient.getAllTools()) : [];
 
@@ -508,7 +554,10 @@ export abstract class GoogleGenericProvider implements ApiProvider {
       ? stripExecutableToolFileReferences(configTools, context?.vars)
       : configTools;
     const loadedTools = requestTools
-      ? await maybeLoadToolsFromExternalFile(requestTools, context?.vars)
+      ? await awaitProviderOperation(
+          maybeLoadToolsFromExternalFile(requestTools, context?.vars),
+          options.abortSignal,
+        )
       : [];
 
     // Transform tools to Google format if needed
@@ -555,7 +604,9 @@ export abstract class GoogleGenericProvider implements ApiProvider {
     args: string,
     config: CompletionOptions,
     callId?: string,
+    signal?: AbortSignal,
   ): Promise<any> {
+    signal?.throwIfAborted();
     try {
       const callbacks = config.functionToolCallbacks;
       const callbackRef =
@@ -578,7 +629,7 @@ export abstract class GoogleGenericProvider implements ApiProvider {
         if (callbackRef && typeof callbackRef === 'string') {
           const callbackStr: string = callbackRef;
           if (callbackStr.startsWith('file://')) {
-            callback = await this.loadExternalFunction(callbackStr);
+            callback = await awaitProviderOperation(this.loadExternalFunction(callbackStr), signal);
           } else {
             // Inline function string (backward compatibility with existing behavior)
             // This uses Function constructor which has security implications
@@ -616,8 +667,10 @@ export abstract class GoogleGenericProvider implements ApiProvider {
 
       // Execute the callback
       logger.debug(`Executing function '${functionName}' with args: ${args}`);
-      const result = await withGenAIToolSpan({ name: functionName, arguments: args, callId }, () =>
-        callback(args),
+      signal?.throwIfAborted();
+      const result = await awaitProviderOperation(
+        withGenAIToolSpan({ name: functionName, arguments: args, callId }, () => callback(args)),
+        signal,
       );
 
       return result;
@@ -636,6 +689,7 @@ export abstract class GoogleGenericProvider implements ApiProvider {
     output: ProviderResponse['output'],
     config: CompletionOptions,
     toolsDisabled: boolean,
+    signal?: AbortSignal,
   ): Promise<ProviderResponse['output']> {
     if (toolsDisabled) {
       return output;
@@ -693,29 +747,21 @@ export abstract class GoogleGenericProvider implements ApiProvider {
     const results = [];
     for (const { functionName, args, callId } of preparedCalls) {
       try {
-        results.push(await this.executeFunctionCallback(functionName, args, config, callId));
+        results.push(
+          await this.executeFunctionCallback(functionName, args, config, callId, signal),
+        );
       } catch (error) {
-        throw new Error(
+        throw new GoogleFunctionCallbackError(
           `Function callback '${functionName}' failed after ${results.length} completed callback(s). ` +
             `Check for side effects before retrying: ${String(error)}`,
+          results.length ? joinCallbackResults(results) : undefined,
         );
       }
     }
     if (results.length === 1) {
       return results[0] ?? '';
     }
-    return results
-      .map((result) => {
-        if (typeof result === 'string') {
-          return result;
-        }
-        try {
-          return JSON.stringify(result) ?? String(result);
-        } catch {
-          return String(result);
-        }
-      })
-      .join('\n');
+    return joinCallbackResults(results);
   }
 
   /**

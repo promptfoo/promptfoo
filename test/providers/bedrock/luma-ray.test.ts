@@ -239,6 +239,95 @@ describe('LumaRayVideoProvider', () => {
   });
 
   describe('Text-to-Video Generation', () => {
+    it('cancels a pending credential lookup before starting a video job', async () => {
+      const controller = new AbortController();
+      const credentials = vi
+        .spyOn(provider, 'getCredentials')
+        .mockImplementation(() => new Promise(() => {}));
+      const call = provider.callApi('A video', undefined, { abortSignal: controller.signal });
+      await vi.waitFor(() => expect(credentials).toHaveBeenCalledOnce());
+      controller.abort(new Error('cancelled credentials'));
+      await expect(call).resolves.toMatchObject({
+        error: expect.stringContaining('cancelled credentials'),
+      });
+      expect(mockBedrockSend).not.toHaveBeenCalled();
+    });
+
+    it('retains the accepted job when polling is cancelled', async () => {
+      const controller = new AbortController();
+      let notifyStarted!: () => void;
+      const polling = new Promise<void>((resolve) => {
+        notifyStarted = resolve;
+      });
+      mockBedrockSend.mockReset();
+      mockBedrockSend.mockResolvedValueOnce({ invocationArn: 'accepted-job' });
+      mockBedrockSend.mockImplementationOnce((_command, options) => {
+        notifyStarted();
+        return new Promise((_resolve, reject) => {
+          options.abortSignal.addEventListener('abort', () => reject(options.abortSignal.reason), {
+            once: true,
+          });
+        });
+      });
+      const call = provider.callApi('A video', undefined, { abortSignal: controller.signal });
+      await polling;
+      controller.abort(new Error('cancelled polling'));
+      await expect(call).resolves.toMatchObject({
+        error: expect.stringContaining('cancelled polling'),
+        metadata: { invocationArn: 'accepted-job', s3OutputUri: 's3://test-bucket/luma-outputs/' },
+      });
+      expect(mockS3Send).not.toHaveBeenCalled();
+    });
+
+    it('stops waiting for an S3 response body after cancellation', async () => {
+      const controller = new AbortController();
+      let started!: () => void;
+      const reading = new Promise<void>((resolve) => {
+        started = resolve;
+      });
+      mockS3Send.mockResolvedValueOnce({
+        Body: {
+          transformToByteArray: () => {
+            started();
+            return new Promise(() => {});
+          },
+        },
+      });
+      const call = provider.callApi('A video', undefined, { abortSignal: controller.signal });
+      await reading;
+      controller.abort(new Error('cancelled S3 body'));
+      await expect(call).resolves.toMatchObject({
+        error: expect.stringContaining('cancelled S3 body'),
+        metadata: {
+          invocationArn: 'arn:aws:bedrock:us-east-1:123456789:async-invoke/test-job-id',
+          s3OutputUri: 's3://test-bucket/output-prefix',
+        },
+      });
+      expect(mockStoreBlob).not.toHaveBeenCalled();
+    });
+
+    it('stops waiting for a blob write after cancellation', async () => {
+      const controller = new AbortController();
+      let started!: () => void;
+      const writing = new Promise<void>((resolve) => {
+        started = resolve;
+      });
+      mockStoreBlob.mockImplementationOnce(() => {
+        started();
+        return new Promise(() => {});
+      });
+      const call = provider.callApi('A video', undefined, { abortSignal: controller.signal });
+      await writing;
+      controller.abort(new Error('cancelled blob write'));
+      await expect(call).resolves.toMatchObject({
+        error: expect.stringContaining('cancelled blob write'),
+        metadata: {
+          invocationArn: 'arn:aws:bedrock:us-east-1:123456789:async-invoke/test-job-id',
+          s3OutputUri: 's3://test-bucket/output-prefix',
+        },
+      });
+    });
+
     it('should successfully generate video from text prompt', async () => {
       const result = await provider.callApi('A red panda climbing a tree');
 

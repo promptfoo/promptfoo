@@ -24,8 +24,13 @@ import {
   outputFromMessage,
   parseMessages,
 } from '../anthropic/util';
-import { getRequestTimeoutMs, parseChatPrompt } from '../shared';
-import { GoogleGenericProvider, type GoogleProviderOptions } from './base';
+import {
+  awaitProviderOperation,
+  getRequestSignal,
+  getRequestTimeoutMs,
+  parseChatPrompt,
+} from '../shared';
+import { GoogleGenericProvider, type GoogleProviderOptions, getCallbackErrorOutput } from './base';
 import { getVertexApiHostForRegion } from './shared';
 import {
   calculateGoogleCostFromUsage,
@@ -55,6 +60,7 @@ import type { EnvOverrides } from '../../types/env';
 import type {
   ApiEmbeddingProvider,
   CallApiContextParams,
+  CallApiOptionsParams,
   GuardrailResponse,
   ProviderEmbeddingResponse,
   ProviderResponse,
@@ -250,7 +256,12 @@ export class VertexChatProvider extends GoogleGenericProvider {
     return client;
   }
 
-  async callApi(prompt: string, context?: CallApiContextParams): Promise<ProviderResponse> {
+  async callApi(
+    prompt: string,
+    context?: CallApiContextParams,
+    options?: CallApiOptionsParams,
+  ): Promise<ProviderResponse> {
+    options?.abortSignal?.throwIfAborted();
     // Determine the system based on model name
     const system = this.modelName.includes('claude')
       ? 'vertex:anthropic'
@@ -288,24 +299,34 @@ export class VertexChatProvider extends GoogleGenericProvider {
       return result;
     };
 
-    return withGenAISpan(spanContext, () => this.callApiInternal(prompt, context), resultExtractor);
+    return withGenAISpan(
+      spanContext,
+      () => this.callApiInternal(prompt, context, options),
+      resultExtractor,
+    );
   }
 
   private async callApiInternal(
     prompt: string,
     context?: CallApiContextParams,
+    options?: CallApiOptionsParams,
   ): Promise<ProviderResponse> {
     if (this.modelName.includes('claude')) {
-      return this.callClaudeApi(prompt, context);
+      return this.callClaudeApi(prompt, context, options);
     } else if (this.modelName.includes('gemini')) {
-      return this.callGeminiApi(prompt, context);
+      return this.callGeminiApi(prompt, context, options);
     } else if (this.modelName.includes('llama')) {
-      return this.callLlamaApi(prompt, context);
+      return this.callLlamaApi(prompt, context, options);
     }
-    return this.callPalm2Api(prompt);
+    return this.callPalm2Api(prompt, options);
   }
 
-  async callClaudeApi(prompt: string, context?: CallApiContextParams): Promise<ProviderResponse> {
+  async callClaudeApi(
+    prompt: string,
+    context?: CallApiContextParams,
+    options?: CallApiOptionsParams,
+  ): Promise<ProviderResponse> {
+    options?.abortSignal?.throwIfAborted();
     // Support YAML chat prompts (legacy format used by parseChatPrompt)
     let normalizedPrompt = prompt;
     if (prompt.trim().startsWith('- role:')) {
@@ -409,7 +430,8 @@ export class VertexChatProvider extends GoogleGenericProvider {
 
     let cachedResponse;
     if (isCacheEnabled()) {
-      cachedResponse = await cache.get(cacheKey);
+      cachedResponse = await awaitProviderOperation(cache.get(cacheKey), options?.abortSignal);
+      options?.abortSignal?.throwIfAborted();
       if (cachedResponse) {
         const parsedCachedResponse = JSON.parse(cachedResponse as string);
         const tokenUsage = parsedCachedResponse.tokenUsage as TokenUsage;
@@ -426,13 +448,18 @@ export class VertexChatProvider extends GoogleGenericProvider {
 
     let data: ClaudeResponse;
     try {
-      const client = await this.getClientWithCredentials();
-      const projectId = await this.getProjectId();
+      options?.abortSignal?.throwIfAborted();
+      const client = await awaitProviderOperation(
+        this.getClientWithCredentials(),
+        options?.abortSignal,
+      );
+      const projectId = await awaitProviderOperation(this.getProjectId(), options?.abortSignal);
       const url = `https://${apiHost}/v1/projects/${projectId}/locations/${this.getRegion()}/publishers/anthropic/models/${this.modelName}:rawPredict`;
 
       const res = await client.request({
         url,
         method: 'POST',
+        signal: options?.abortSignal,
         headers: {
           'Content-Type': 'application/json; charset=utf-8',
         },
@@ -455,6 +482,7 @@ export class VertexChatProvider extends GoogleGenericProvider {
       };
     }
 
+    let response: ProviderResponse | undefined;
     try {
       const output = outputFromMessage(data as any, showThinking);
 
@@ -485,7 +513,7 @@ export class VertexChatProvider extends GoogleGenericProvider {
         data.usage?.cache_read_input_tokens,
         data.usage?.cache_creation_input_tokens,
       );
-      const response = {
+      response = {
         cached: false,
         output,
         tokenUsage,
@@ -500,12 +528,18 @@ export class VertexChatProvider extends GoogleGenericProvider {
       };
 
       if (isCacheEnabled()) {
-        await cache.set(cacheKey, JSON.stringify(response));
+        options?.abortSignal?.throwIfAborted();
+        await awaitProviderOperation(
+          cache.set(cacheKey, JSON.stringify(response)),
+          options?.abortSignal,
+        );
       }
 
+      options?.abortSignal?.throwIfAborted();
       return response;
     } catch (err) {
       return {
+        ...response,
         error: `Claude API response error: ${String(err)}. Response data: ${JSON.stringify(data)}`,
       };
     }
@@ -540,8 +574,13 @@ export class VertexChatProvider extends GoogleGenericProvider {
     return hasApiKey && !explicitlyDisabled && !hasOAuthConfig;
   }
 
-  async callGeminiApi(prompt: string, context?: CallApiContextParams): Promise<ProviderResponse> {
-    await this.initializeMCP();
+  async callGeminiApi(
+    prompt: string,
+    context?: CallApiContextParams,
+    options?: CallApiOptionsParams,
+  ): Promise<ProviderResponse> {
+    options?.abortSignal?.throwIfAborted();
+    await this.initializeMCP(options?.abortSignal);
 
     // Merge configs from the provider and the prompt
     const config = mergeGoogleCompletionOptions(
@@ -561,6 +600,7 @@ export class VertexChatProvider extends GoogleGenericProvider {
     // Get all tools (MCP + config tools) using base class method
     const allTools = await this.getAllTools(context, {
       skipExecutableToolFiles: toolsDisabled,
+      abortSignal: options?.abortSignal,
     });
     const requestTools = toolsDisabled ? removeGoogleFunctionDeclarations(allTools) : allTools;
     const {
@@ -667,7 +707,8 @@ export class VertexChatProvider extends GoogleGenericProvider {
     let response;
     let cachedResponse;
     if (isCacheEnabled()) {
-      cachedResponse = await cache.get(cacheKey);
+      cachedResponse = await awaitProviderOperation(cache.get(cacheKey), options?.abortSignal);
+      options?.abortSignal?.throwIfAborted();
       if (cachedResponse) {
         const parsedCachedResponse = JSON.parse(cachedResponse as string);
         const tokenUsage = parsedCachedResponse.tokenUsage as TokenUsage;
@@ -700,7 +741,7 @@ export class VertexChatProvider extends GoogleGenericProvider {
             method: 'POST',
             headers: await this.getAuthHeaders(),
             body: JSON.stringify(body),
-            signal: AbortSignal.timeout(getRequestTimeoutMs()),
+            signal: getRequestSignal(options?.abortSignal),
           });
 
           if (!res.ok) {
@@ -715,14 +756,19 @@ export class VertexChatProvider extends GoogleGenericProvider {
           responseHeaders = res.headers;
         } else {
           // Standard mode: use OAuth and full endpoint
-          const client = await this.getClientWithCredentials();
-          const projectId = await this.getProjectId();
+          options?.abortSignal?.throwIfAborted();
+          const client = await awaitProviderOperation(
+            this.getClientWithCredentials(),
+            options?.abortSignal,
+          );
+          const projectId = await awaitProviderOperation(this.getProjectId(), options?.abortSignal);
           const url = `https://${apiHost}/${this.getApiVersion()}/projects/${projectId}/locations/${this.getRegion()}/publishers/${this.getPublisher()}/models/${
             this.modelName
           }:${endpoint}`;
           const res = await client.request({
             url,
             method: 'POST',
+            signal: options?.abortSignal,
             data: body,
             timeout: getRequestTimeoutMs(),
           });
@@ -933,10 +979,16 @@ export class VertexChatProvider extends GoogleGenericProvider {
         }
 
         if (isCacheEnabled()) {
-          await cache.set(cacheKey, JSON.stringify(response));
+          options?.abortSignal?.throwIfAborted();
+          await awaitProviderOperation(
+            cache.set(cacheKey, JSON.stringify(response)),
+            options?.abortSignal,
+          );
         }
+        options?.abortSignal?.throwIfAborted();
       } catch (err) {
         return {
+          ...response,
           error: `Gemini API response error: ${String(err)}. Response data: ${JSON.stringify(data)}`,
         };
       }
@@ -946,14 +998,20 @@ export class VertexChatProvider extends GoogleGenericProvider {
         response.output,
         config,
         toolsDisabled,
+        options?.abortSignal,
       );
     } catch (error) {
-      return { ...response, output: undefined, error: String(error) };
+      return {
+        ...response,
+        output: getCallbackErrorOutput(error, response.output, options?.abortSignal?.aborted),
+        error: String(error),
+      };
     }
     return response;
   }
 
-  async callPalm2Api(prompt: string): Promise<ProviderResponse> {
+  async callPalm2Api(prompt: string, options?: CallApiOptionsParams): Promise<ProviderResponse> {
+    options?.abortSignal?.throwIfAborted();
     const instances = parseChatPrompt(prompt, [
       {
         messages: [
@@ -985,7 +1043,8 @@ export class VertexChatProvider extends GoogleGenericProvider {
 
     let cachedResponse;
     if (isCacheEnabled()) {
-      cachedResponse = await cache.get(cacheKey);
+      cachedResponse = await awaitProviderOperation(cache.get(cacheKey), options?.abortSignal);
+      options?.abortSignal?.throwIfAborted();
       if (cachedResponse) {
         const parsedCachedResponse = JSON.parse(cachedResponse as string);
         const tokenUsage = parsedCachedResponse.tokenUsage as TokenUsage;
@@ -1002,14 +1061,19 @@ export class VertexChatProvider extends GoogleGenericProvider {
 
     let data: Palm2ApiResponse;
     try {
-      const client = await this.getClientWithCredentials();
-      const projectId = await this.getProjectId();
+      options?.abortSignal?.throwIfAborted();
+      const client = await awaitProviderOperation(
+        this.getClientWithCredentials(),
+        options?.abortSignal,
+      );
+      const projectId = await awaitProviderOperation(this.getProjectId(), options?.abortSignal);
       const url = `https://${apiHost}/${this.getApiVersion()}/projects/${projectId}/locations/${this.getRegion()}/publishers/${this.getPublisher()}/models/${
         this.modelName
       }:predict`;
       const res = await client.request({
         url,
         method: 'POST',
+        signal: options?.abortSignal,
         headers: {
           'Content-Type': 'application/json',
         },
@@ -1023,6 +1087,7 @@ export class VertexChatProvider extends GoogleGenericProvider {
       };
     }
 
+    let response: ProviderResponse | undefined;
     try {
       if (data.error) {
         return {
@@ -1037,24 +1102,35 @@ export class VertexChatProvider extends GoogleGenericProvider {
       }
       const output = prediction.candidates[0].content;
 
-      const response = {
+      response = {
         output,
         cached: false,
       };
 
       if (isCacheEnabled()) {
-        await cache.set(cacheKey, JSON.stringify(response));
+        options?.abortSignal?.throwIfAborted();
+        await awaitProviderOperation(
+          cache.set(cacheKey, JSON.stringify(response)),
+          options?.abortSignal,
+        );
       }
 
+      options?.abortSignal?.throwIfAborted();
       return response;
     } catch (err) {
       return {
+        ...response,
         error: `API response error: ${String(err)}: ${JSON.stringify(data)}`,
       };
     }
   }
 
-  async callLlamaApi(prompt: string, _context?: CallApiContextParams): Promise<ProviderResponse> {
+  async callLlamaApi(
+    prompt: string,
+    _context?: CallApiContextParams,
+    options?: CallApiOptionsParams,
+  ): Promise<ProviderResponse> {
+    options?.abortSignal?.throwIfAborted();
     // Validate region for Llama models (only available in us-central1)
     const region = this.getRegion();
     if (region !== 'us-central1') {
@@ -1128,7 +1204,8 @@ export class VertexChatProvider extends GoogleGenericProvider {
 
     let cachedResponse;
     if (isCacheEnabled()) {
-      cachedResponse = await cache.get(cacheKey);
+      cachedResponse = await awaitProviderOperation(cache.get(cacheKey), options?.abortSignal);
+      options?.abortSignal?.throwIfAborted();
       if (cachedResponse) {
         const parsedCachedResponse = JSON.parse(cachedResponse as string);
         const tokenUsage = parsedCachedResponse.tokenUsage as TokenUsage;
@@ -1159,14 +1236,19 @@ export class VertexChatProvider extends GoogleGenericProvider {
 
     let data: LlamaResponse;
     try {
-      const client = await this.getClientWithCredentials();
-      const projectId = await this.getProjectId();
+      options?.abortSignal?.throwIfAborted();
+      const client = await awaitProviderOperation(
+        this.getClientWithCredentials(),
+        options?.abortSignal,
+      );
+      const projectId = await awaitProviderOperation(this.getProjectId(), options?.abortSignal);
       // Llama models use a different endpoint format
       const url = `https://${apiHost}/v1beta1/projects/${projectId}/locations/${this.getRegion()}/endpoints/openapi/chat/completions`;
 
       const res = await client.request({
         url,
         method: 'POST',
+        signal: options?.abortSignal,
         headers: {
           'Content-Type': 'application/json; charset=utf-8',
         },
@@ -1202,6 +1284,7 @@ export class VertexChatProvider extends GoogleGenericProvider {
       };
     }
 
+    let response: ProviderResponse | undefined;
     try {
       // Extract the completion text from the response
       let output = '';
@@ -1223,19 +1306,25 @@ export class VertexChatProvider extends GoogleGenericProvider {
         numRequests: 1,
       };
 
-      const response = {
+      response = {
         cached: false,
         output,
         tokenUsage,
       };
 
       if (isCacheEnabled()) {
-        await cache.set(cacheKey, JSON.stringify(response));
+        options?.abortSignal?.throwIfAborted();
+        await awaitProviderOperation(
+          cache.set(cacheKey, JSON.stringify(response)),
+          options?.abortSignal,
+        );
       }
 
+      options?.abortSignal?.throwIfAborted();
       return response;
     } catch (err) {
       return {
+        ...response,
         error: `Llama API response error: ${String(err)}. Response data: ${JSON.stringify(data)}`,
       };
     }
@@ -1293,7 +1382,12 @@ export class VertexEmbeddingProvider implements ApiEmbeddingProvider {
     throw new Error('Vertex API does not provide text inference.');
   }
 
-  async callEmbeddingApi(input: string): Promise<ProviderEmbeddingResponse> {
+  async callEmbeddingApi(
+    input: string,
+    _context?: CallApiContextParams,
+    options?: CallApiOptionsParams,
+  ): Promise<ProviderEmbeddingResponse> {
+    options?.abortSignal?.throwIfAborted();
     // See https://cloud.google.com/vertex-ai/generative-ai/docs/embeddings/get-text-embeddings#get_text_embeddings_for_a_snippet_of_text
     const body = {
       instances: [{ content: input }],
@@ -1304,14 +1398,19 @@ export class VertexEmbeddingProvider implements ApiEmbeddingProvider {
 
     let data: VertexEmbeddingPredictResponse = {};
     try {
-      const client = await this.getClientWithCredentials();
-      const projectId = await this.getProjectId();
+      options?.abortSignal?.throwIfAborted();
+      const client = await awaitProviderOperation(
+        this.getClientWithCredentials(),
+        options?.abortSignal,
+      );
+      const projectId = await awaitProviderOperation(this.getProjectId(), options?.abortSignal);
       const url = `https://${this.getApiHost()}/${this.getApiVersion()}/projects/${projectId}/locations/${this.getRegion()}/publishers/google/models/${
         this.modelName
       }:predict`;
       const res = await client.request({
         url,
         method: 'POST',
+        signal: options?.abortSignal,
         data: body,
       });
       data = res.data as VertexEmbeddingPredictResponse;

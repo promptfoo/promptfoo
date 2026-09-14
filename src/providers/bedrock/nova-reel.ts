@@ -11,12 +11,18 @@ import * as path from 'path';
 import { storeBlob } from '../../blobs';
 import logger from '../../logger';
 import { ellipsize } from '../../util/text';
-import { sleep } from '../../util/time';
+import { sleep, sleepWithAbort } from '../../util/time';
+import { awaitProviderOperation } from '../shared';
 import { AwsBedrockGenericProvider } from './base';
 
 import type { BlobRef } from '../../blobs';
 import type { EnvOverrides } from '../../types/env';
-import type { ApiProvider, CallApiContextParams, ProviderResponse } from '../../types/providers';
+import type {
+  ApiProvider,
+  CallApiContextParams,
+  CallApiOptionsParams,
+  ProviderResponse,
+} from '../../types/providers';
 import type { NovaReelInvocationResponse, NovaReelVideoOptions } from './index';
 
 // =============================================================================
@@ -192,13 +198,16 @@ export class NovaReelVideoProvider extends AwsBedrockGenericProvider implements 
   private async startVideoGeneration(
     modelInput: object,
     s3OutputUri: string,
+    options?: CallApiOptionsParams,
   ): Promise<{ invocationArn?: string; error?: string }> {
     try {
-      const { BedrockRuntimeClient, StartAsyncInvokeCommand } = await import(
-        '@aws-sdk/client-bedrock-runtime'
+      const { BedrockRuntimeClient, StartAsyncInvokeCommand } = await awaitProviderOperation(
+        import('@aws-sdk/client-bedrock-runtime'),
+        options?.abortSignal,
       );
 
-      const credentials = await this.getCredentials();
+      const credentials = await awaitProviderOperation(this.getCredentials(), options?.abortSignal);
+      options?.abortSignal?.throwIfAborted();
 
       const client = new BedrockRuntimeClient({
         region: this.getRegion(),
@@ -216,7 +225,7 @@ export class NovaReelVideoProvider extends AwsBedrockGenericProvider implements 
         },
       });
 
-      const response = await client.send(command);
+      const response = await client.send(command, { abortSignal: options?.abortSignal });
 
       return { invocationArn: response.invocationArn };
     } catch (err) {
@@ -233,15 +242,18 @@ export class NovaReelVideoProvider extends AwsBedrockGenericProvider implements 
     invocationArn: string,
     pollIntervalMs: number,
     maxPollTimeMs: number,
+    options?: CallApiOptionsParams,
   ): Promise<{ response?: NovaReelInvocationResponse; error?: string }> {
     const startTime = Date.now();
 
     try {
-      const { BedrockRuntimeClient, GetAsyncInvokeCommand } = await import(
-        '@aws-sdk/client-bedrock-runtime'
+      const { BedrockRuntimeClient, GetAsyncInvokeCommand } = await awaitProviderOperation(
+        import('@aws-sdk/client-bedrock-runtime'),
+        options?.abortSignal,
       );
 
-      const credentials = await this.getCredentials();
+      const credentials = await awaitProviderOperation(this.getCredentials(), options?.abortSignal);
+      options?.abortSignal?.throwIfAborted();
 
       const client = new BedrockRuntimeClient({
         region: this.getRegion(),
@@ -249,8 +261,9 @@ export class NovaReelVideoProvider extends AwsBedrockGenericProvider implements 
       });
 
       while (Date.now() - startTime < maxPollTimeMs) {
+        options?.abortSignal?.throwIfAborted();
         const command = new GetAsyncInvokeCommand({ invocationArn });
-        const invocation = await client.send(command);
+        const invocation = await client.send(command, { abortSignal: options?.abortSignal });
 
         logger.debug(`[Nova Reel] Job status: ${invocation.status}`, {
           invocationArn,
@@ -275,7 +288,11 @@ export class NovaReelVideoProvider extends AwsBedrockGenericProvider implements 
         }
 
         // Still in progress
-        await sleep(pollIntervalMs);
+        if (options?.abortSignal) {
+          await sleepWithAbort(pollIntervalMs, options.abortSignal);
+        } else {
+          await sleep(pollIntervalMs);
+        }
       }
 
       return { error: `Video generation timed out after ${maxPollTimeMs / 1000} seconds` };
@@ -292,6 +309,7 @@ export class NovaReelVideoProvider extends AwsBedrockGenericProvider implements 
   private async downloadAndStoreVideo(
     s3Uri: string,
     context?: CallApiContextParams,
+    options?: CallApiOptionsParams,
   ): Promise<{ blobRef?: BlobRef; error?: string }> {
     try {
       // Parse S3 URI
@@ -303,8 +321,12 @@ export class NovaReelVideoProvider extends AwsBedrockGenericProvider implements 
       const [, bucket, keyPrefix] = match;
 
       // Download from S3
-      const { S3Client, GetObjectCommand } = await import('@aws-sdk/client-s3');
-      const credentials = await this.getCredentials();
+      const { S3Client, GetObjectCommand } = await awaitProviderOperation(
+        import('@aws-sdk/client-s3'),
+        options?.abortSignal,
+      );
+      const credentials = await awaitProviderOperation(this.getCredentials(), options?.abortSignal);
+      options?.abortSignal?.throwIfAborted();
 
       const s3 = new S3Client({
         region: this.getRegion(),
@@ -323,26 +345,36 @@ export class NovaReelVideoProvider extends AwsBedrockGenericProvider implements 
           Bucket: bucket,
           Key: videoKey,
         }),
+        { abortSignal: options?.abortSignal },
       );
 
       if (!response.Body) {
         return { error: 'Empty response from S3' };
       }
 
-      const buffer = Buffer.from(await response.Body.transformToByteArray());
+      const buffer = Buffer.from(
+        await awaitProviderOperation(response.Body.transformToByteArray(), options?.abortSignal),
+      );
+
+      options?.abortSignal?.throwIfAborted();
 
       // Store to blob storage
-      const { ref } = await storeBlob(buffer, 'video/mp4', {
-        evalId: context?.evaluationId,
-        kind: 'video',
-        location: 'response.video',
-        promptIdx: context?.promptIdx,
-        testIdx: context?.testIdx,
-      });
+      const { ref } = await awaitProviderOperation(
+        storeBlob(buffer, 'video/mp4', {
+          evalId: context?.evaluationId,
+          kind: 'video',
+          location: 'response.video',
+          promptIdx: context?.promptIdx,
+          testIdx: context?.testIdx,
+        }),
+        options?.abortSignal,
+      );
+      options?.abortSignal?.throwIfAborted();
 
       logger.debug(`[Nova Reel] Stored video to blob storage`, { uri: ref.uri, hash: ref.hash });
       return { blobRef: ref };
     } catch (err) {
+      options?.abortSignal?.throwIfAborted();
       const error = err as { message?: string; name?: string };
       logger.error('[Nova Reel] S3 download error', { error, s3Uri });
 
@@ -358,7 +390,12 @@ export class NovaReelVideoProvider extends AwsBedrockGenericProvider implements 
     }
   }
 
-  async callApi(prompt: string, context?: CallApiContextParams): Promise<ProviderResponse> {
+  async callApi(
+    prompt: string,
+    context?: CallApiContextParams,
+    options?: CallApiOptionsParams,
+  ): Promise<ProviderResponse> {
+    options?.abortSignal?.throwIfAborted();
     // Validate S3 output URI
     const s3OutputUri = this.videoConfig.s3OutputUri;
     if (!s3OutputUri) {
@@ -402,6 +439,7 @@ export class NovaReelVideoProvider extends AwsBedrockGenericProvider implements 
     const { invocationArn, error: startError } = await this.startVideoGeneration(
       modelInput,
       s3OutputUri,
+      options,
     );
 
     if (startError || !invocationArn) {
@@ -410,76 +448,92 @@ export class NovaReelVideoProvider extends AwsBedrockGenericProvider implements 
 
     logger.info(`[Nova Reel] Job started`, { invocationArn });
 
-    // Poll for completion
-    const pollIntervalMs = config.pollIntervalMs || DEFAULT_POLL_INTERVAL_MS;
-    const maxPollTimeMs = config.maxPollTimeMs || DEFAULT_MAX_POLL_TIME_MS;
+    const metadata = { invocationArn, model: this.modelName, s3OutputUri };
+    try {
+      // Poll for completion
+      const pollIntervalMs = config.pollIntervalMs || DEFAULT_POLL_INTERVAL_MS;
+      const maxPollTimeMs = config.maxPollTimeMs || DEFAULT_MAX_POLL_TIME_MS;
 
-    const { response, error: pollError } = await this.pollForCompletion(
-      invocationArn,
-      pollIntervalMs,
-      maxPollTimeMs,
-    );
-
-    if (pollError || !response) {
-      return { error: pollError || 'Polling failed' };
-    }
-
-    // Get S3 output location
-    const outputS3Uri = response.outputDataConfig?.s3OutputDataConfig?.s3Uri;
-    if (!outputS3Uri) {
-      return { error: 'No output location in response' };
-    }
-
-    // Download and store video (if enabled)
-    let blobRef: BlobRef | undefined;
-    const outputUrl = `${outputS3Uri}/output.mp4`;
-
-    if (config.downloadFromS3 !== false) {
-      const { blobRef: ref, error: downloadError } = await this.downloadAndStoreVideo(
-        outputS3Uri,
-        context,
-      );
-      if (downloadError) {
-        logger.warn(`[Nova Reel] Failed to download video: ${downloadError}. Using S3 URL.`);
-      } else {
-        blobRef = ref;
-      }
-    }
-
-    const latencyMs = Date.now() - startTime;
-    const durationSeconds = config.durationSeconds || DEFAULT_DURATION_SECONDS;
-
-    // Format output
-    const sanitizedPrompt = prompt
-      .replace(/\r?\n|\r/g, ' ')
-      .replace(/\[/g, '(')
-      .replace(/\]/g, ')');
-    const ellipsizedPrompt = ellipsize(sanitizedPrompt, 50);
-    const videoUrl = blobRef?.uri || outputUrl;
-    const output = `[Video: ${ellipsizedPrompt}](${videoUrl})`;
-
-    return {
-      output,
-      cached: false,
-      latencyMs,
-      video: {
-        id: invocationArn,
-        blobRef,
-        url: blobRef ? undefined : outputUrl, // Fall back to S3 URL if no blob
-        format: 'mp4',
-        size: VIDEO_DIMENSION,
-        duration: durationSeconds,
-        model: this.modelName,
-        resolution: VIDEO_DIMENSION,
-      },
-      metadata: {
+      const { response, error: pollError } = await this.pollForCompletion(
         invocationArn,
-        model: this.modelName,
-        taskType: config.taskType || 'TEXT_VIDEO',
-        durationSeconds,
-        s3OutputUri: outputS3Uri,
-        ...(blobRef && { blobHash: blobRef.hash }),
-      },
-    };
+        pollIntervalMs,
+        maxPollTimeMs,
+        options,
+      );
+
+      if (pollError || !response) {
+        return { error: pollError || 'Polling failed', metadata };
+      }
+
+      // Get S3 output location
+      const outputS3Uri = response.outputDataConfig?.s3OutputDataConfig?.s3Uri;
+      if (!outputS3Uri) {
+        return { error: 'No output location in response', metadata };
+      }
+
+      metadata.s3OutputUri = outputS3Uri;
+      options?.abortSignal?.throwIfAborted();
+
+      // Download and store video (if enabled)
+      let blobRef: BlobRef | undefined;
+      const outputUrl = `${outputS3Uri}/output.mp4`;
+
+      if (config.downloadFromS3 !== false) {
+        const { blobRef: ref, error: downloadError } = await this.downloadAndStoreVideo(
+          outputS3Uri,
+          context,
+          options,
+        );
+        options?.abortSignal?.throwIfAborted();
+        if (downloadError) {
+          logger.warn(`[Nova Reel] Failed to download video: ${downloadError}. Using S3 URL.`);
+        } else {
+          blobRef = ref;
+        }
+      }
+
+      const latencyMs = Date.now() - startTime;
+      const durationSeconds = config.durationSeconds || DEFAULT_DURATION_SECONDS;
+
+      // Format output
+      const sanitizedPrompt = prompt
+        .replace(/\r?\n|\r/g, ' ')
+        .replace(/\[/g, '(')
+        .replace(/\]/g, ')');
+      const ellipsizedPrompt = ellipsize(sanitizedPrompt, 50);
+      const videoUrl = blobRef?.uri || outputUrl;
+      const output = `[Video: ${ellipsizedPrompt}](${videoUrl})`;
+
+      return {
+        output,
+        cached: false,
+        latencyMs,
+        video: {
+          id: invocationArn,
+          blobRef,
+          url: blobRef ? undefined : outputUrl, // Fall back to S3 URL if no blob
+          format: 'mp4',
+          size: VIDEO_DIMENSION,
+          duration: durationSeconds,
+          model: this.modelName,
+          resolution: VIDEO_DIMENSION,
+        },
+        metadata: {
+          ...metadata,
+          taskType: config.taskType || 'TEXT_VIDEO',
+          durationSeconds,
+          ...(blobRef && { blobHash: blobRef.hash }),
+        },
+      };
+    } catch (error) {
+      if (!options?.abortSignal?.aborted) {
+        throw error;
+      }
+      return {
+        error: error instanceof Error ? error.message : String(error),
+        metadata,
+        latencyMs: Date.now() - startTime,
+      };
+    }
   }
 }

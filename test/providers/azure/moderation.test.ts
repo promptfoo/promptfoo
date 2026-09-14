@@ -329,6 +329,54 @@ describe('Azure Moderation', () => {
       expect(mockCache.get).toHaveBeenCalled();
     });
 
+    it('does not return a cached moderation result after cancellation during lookup', async () => {
+      const controller = new AbortController();
+      let finishLookup!: (value: { flags: never[] }) => void;
+      const lookup = new Promise<{ flags: never[] }>((resolve) => {
+        finishLookup = resolve;
+      });
+      const cache = { get: vi.fn().mockReturnValue(lookup) } as any;
+      vi.mocked(isCacheEnabled).mockReturnValue(true);
+      vi.mocked(getCache).mockResolvedValue(cache);
+      const provider = new AzureModerationProvider('text-content-safety', {
+        config: { apiKey: 'test-key', endpoint: 'https://test.cognitiveservices.azure.com/' },
+      });
+      const result = provider.callModerationApi('user', 'assistant', undefined, {
+        abortSignal: controller.signal,
+      });
+      await vi.waitFor(() => expect(cache.get).toHaveBeenCalledOnce());
+      controller.abort();
+      finishLookup({ flags: [] });
+      await expect(result).rejects.toMatchObject({ name: 'AbortError' });
+    });
+
+    it('stops waiting for a moderation cache write when cancelled', async () => {
+      const controller = new AbortController();
+      const cache = {
+        get: vi.fn().mockResolvedValue(null),
+        set: vi.fn().mockImplementation(() => new Promise(() => {})),
+      };
+      vi.mocked(isCacheEnabled).mockReturnValue(true);
+      vi.mocked(getCache).mockResolvedValue(cache as any);
+      const { fetchWithProxy } = await import('../../../src/util/fetch/index');
+      vi.mocked(fetchWithProxy).mockResolvedValue({
+        ok: true,
+        json: async () => ({ categoriesAnalysis: [] }),
+      } as any);
+      const provider = new AzureModerationProvider('text-content-safety', {
+        config: { apiKey: 'test-key', endpoint: 'https://example.cognitiveservices.azure.com/' },
+      });
+      const call = provider.callModerationApi('user', 'assistant', undefined, {
+        abortSignal: controller.signal,
+      });
+      await vi.waitFor(() => expect(cache.set).toHaveBeenCalledOnce());
+      controller.abort(new Error('cancelled cache write'));
+      await expect(call).resolves.toMatchObject({
+        flags: [],
+        error: expect.stringContaining('cancelled cache write'),
+      });
+    });
+
     it('should use resolved endpoint and apiVersion in cache key', async () => {
       const mockCache = {
         get: vi.fn().mockResolvedValue(null),

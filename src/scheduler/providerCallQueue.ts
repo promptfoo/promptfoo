@@ -8,22 +8,47 @@ export interface QueuedProviderCall<T> {
 }
 
 export interface ProviderCallQueue {
-  enqueue<T>(providerId: string, call: () => Promise<T>): Promise<T>;
+  enqueue<T>(providerId: string, call: () => Promise<T>, signal?: AbortSignal): Promise<T>;
 }
 
 export class ProviderGroupedCallQueue implements ProviderCallQueue {
   private jobs: QueuedProviderCall<unknown>[] = [];
   private waiters: (() => void)[] = [];
 
-  enqueue<T>(providerId: string, call: () => Promise<T>): Promise<T> {
-    const boundCall = AsyncResource.bind(call);
+  enqueue<T>(providerId: string, call: () => Promise<T>, signal?: AbortSignal): Promise<T> {
+    if (signal?.aborted) {
+      return Promise.reject(signal.reason);
+    }
     return new Promise<T>((resolve, reject) => {
-      this.jobs.push({
-        call: boundCall as () => Promise<unknown>,
+      const cleanup = () => signal?.removeEventListener('abort', onAbort);
+      const job: QueuedProviderCall<unknown> = {
+        call: AsyncResource.bind(() => {
+          cleanup();
+          signal?.throwIfAborted();
+          return call();
+        }),
         providerId,
-        reject,
-        resolve: resolve as (result: unknown) => void,
-      });
+        reject: (error) => {
+          cleanup();
+          reject(error);
+        },
+        resolve: (result) => {
+          cleanup();
+          resolve(result as T);
+        },
+      };
+      const onAbort = () => {
+        const index = this.jobs.indexOf(job);
+        if (index !== -1) {
+          this.jobs.splice(index, 1);
+        }
+        job.reject(signal?.reason);
+      };
+      this.jobs.push(job);
+      signal?.addEventListener('abort', onAbort, { once: true });
+      if (signal?.aborted) {
+        onAbort();
+      }
       this.notifyWaiters();
     });
   }

@@ -10,6 +10,12 @@ export function getRequestTimeoutMs(): number {
   return getEnvInt('REQUEST_TIMEOUT_MS', 300_000);
 }
 
+/** Preserve the transport deadline while also honoring caller cancellation. */
+export function getRequestSignal(abortSignal?: AbortSignal): AbortSignal {
+  const timeoutSignal = AbortSignal.timeout(getRequestTimeoutMs());
+  return abortSignal ? AbortSignal.any([abortSignal, timeoutSignal]) : timeoutSignal;
+}
+
 /**
  * Extended timeout for long-running models (deep research, gpt-5-pro, etc.) in milliseconds.
  * These models can take significantly longer to respond due to their complex reasoning.
@@ -484,4 +490,32 @@ export function transformTools(tools: unknown, format: ToolFormat): unknown {
     default:
       return tools;
   }
+}
+
+/** Stop waiting for provider work without cancelling another caller's shared work.
+ * Also pass the signal to transports that support native cancellation. */
+export function awaitProviderOperation<T>(operation: Promise<T>, signal?: AbortSignal): Promise<T> {
+  if (!signal) {
+    return operation;
+  }
+  return new Promise<T>((resolve, reject) => {
+    const onAbort = () => {
+      signal.removeEventListener('abort', onAbort);
+      reject(signal.reason);
+    };
+    signal.addEventListener('abort', onAbort, { once: true });
+    operation.then(
+      (value) => {
+        signal.removeEventListener('abort', onAbort);
+        resolve(value);
+      },
+      (error) => {
+        signal.removeEventListener('abort', onAbort);
+        reject(error);
+      },
+    );
+    if (signal.aborted) {
+      onAbort();
+    }
+  });
 }

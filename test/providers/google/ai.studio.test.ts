@@ -1522,7 +1522,7 @@ describe('AIStudioChatProvider', () => {
           "Function callback 'fail' failed after 1 completed callback(s)",
         );
         expect(response.error).toContain('Check for side effects before retrying');
-        expect(response.output).toBeUndefined();
+        expect(response.output).toBe('completed');
         expect(response.cached).toBe(cached);
         expect(response.tokenUsage).toMatchObject({
           total: 15,
@@ -2332,6 +2332,36 @@ describe('AIStudioChatProvider', () => {
       const body = JSON.parse(callArgs![1]!.body as string);
       expect(body.toolConfig).toEqual({ functionCallingConfig: { mode: 'NONE' } });
       expect(body.tools).toBeUndefined();
+    });
+
+    it('disables inherited passthrough function declarations for a prompt-level tool choice', async () => {
+      vi.mocked(templates.getNunjucksEngine).mockImplementation(function () {
+        return { renderString: vi.fn((str) => str) } as any;
+      });
+      provider = new AIStudioChatProvider('gemini-pro', {
+        config: {
+          apiKey: 'test-key',
+          tools: [{ functionDeclarations: [{ name: 'lookup' }] }],
+          passthrough: {
+            toolConfig: { functionCallingConfig: { mode: 'ANY' } },
+            tools: [{ functionDeclarations: [{ name: 'other' }] }, { googleSearch: {} }],
+          },
+        } as any,
+      });
+      vi.mocked(cache.fetchWithCache).mockResolvedValueOnce({
+        data: { candidates: [{ content: { parts: [{ text: 'ok' }] } }] },
+        cached: false,
+      } as any);
+
+      await provider.callGemini('hi', {
+        prompt: { raw: 'hi', label: 'hi', config: { tool_choice: 'none' } },
+      } as any);
+
+      const body = JSON.parse(
+        vi.mocked(cache.fetchWithCache).mock.calls.at(-1)![1]!.body as string,
+      );
+      expect(body.toolConfig).toEqual({ functionCallingConfig: { mode: 'NONE' } });
+      expect(body.tools).toEqual([{ googleSearch: {} }]);
     });
 
     it('should handle Google Search as a tool', async () => {

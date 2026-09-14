@@ -103,6 +103,7 @@ export async function discoverTokenEndpoint(
   serverUrl: string,
   signal?: AbortSignal,
 ): Promise<string> {
+  signal?.throwIfAborted();
   // Check cache first
   const cached = tokenEndpointCache.get(serverUrl);
   if (cached) {
@@ -131,7 +132,10 @@ export async function discoverTokenEndpoint(
   for (const discoveryUrl of discoveryUrls) {
     try {
       logger.debug(`[MCP Auth] Trying OAuth discovery at ${discoveryUrl}`);
-      const response = await fetchWithProxy(discoveryUrl, { signal });
+      const response = await (signal
+        ? fetchWithProxy(discoveryUrl, { signal })
+        : fetchWithProxy(discoveryUrl));
+      signal?.throwIfAborted();
 
       if (!response.ok) {
         logger.debug(`[MCP Auth] Discovery failed at ${discoveryUrl}: ${response.status}`);
@@ -139,6 +143,7 @@ export async function discoverTokenEndpoint(
       }
 
       const metadata = (await response.json()) as { token_endpoint?: string };
+      signal?.throwIfAborted();
       if (metadata.token_endpoint && isValidTokenEndpoint(metadata.token_endpoint)) {
         logger.debug(`[MCP Auth] Discovered token endpoint: ${metadata.token_endpoint}`);
         tokenEndpointCache.set(serverUrl, metadata.token_endpoint);
@@ -177,6 +182,7 @@ export async function getOAuthTokenWithExpiry(
     }
     tokenUrl = await discoverTokenEndpoint(serverUrl, signal);
   }
+  signal?.throwIfAborted();
 
   const cacheKey = getOAuthCacheKey(auth, tokenUrl);
   const cached = oauthTokenCache.get(cacheKey);
@@ -188,19 +194,21 @@ export async function getOAuthTokenWithExpiry(
   }
 
   // Use shared OAuth token fetch logic
-  const result = await fetchOAuthToken({
-    tokenUrl,
+  const result = await fetchOAuthToken(
+    {
+      tokenUrl,
+      grantType: auth.grantType,
+      clientId: auth.clientId,
+      clientSecret: auth.clientSecret,
+      username: 'username' in auth ? auth.username : undefined,
+      password: 'password' in auth ? auth.password : undefined,
+      scopes: auth.scopes,
+    },
     signal,
-    grantType: auth.grantType,
-    clientId: auth.clientId,
-    clientSecret: auth.clientSecret,
-    username: 'username' in auth ? auth.username : undefined,
-    password: 'password' in auth ? auth.password : undefined,
-    scopes: auth.scopes,
-  });
+  );
+  signal?.throwIfAborted();
 
   // Cache the token
-  signal?.throwIfAborted();
   oauthTokenCache.set(cacheKey, {
     accessToken: result.accessToken,
     expiresAt: result.expiresAt,

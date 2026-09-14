@@ -6,6 +6,7 @@ import type {
   ApiProvider,
   CallApiContextParams,
   CallApiOptionsParams,
+  ProviderEmbeddingResponse,
   ProviderOptions,
   ProviderResponse,
 } from '../types/providers';
@@ -329,7 +330,11 @@ export class TrueFoundryEmbeddingProvider extends OpenAiEmbeddingProvider {
   /**
    * Override callEmbeddingApi to add TrueFoundry-specific headers
    */
-  async callEmbeddingApi(text: string): Promise<ProviderResponse> {
+  async callEmbeddingApi(
+    text: string,
+    context?: CallApiContextParams,
+    callApiOptions?: CallApiOptionsParams,
+  ): Promise<ProviderEmbeddingResponse> {
     const tfConfig = this.config as TrueFoundryCompletionOptions;
 
     // Add TrueFoundry-specific headers
@@ -351,7 +356,7 @@ export class TrueFoundryEmbeddingProvider extends OpenAiEmbeddingProvider {
 
     try {
       // Call parent implementation
-      return await super.callEmbeddingApi(text);
+      return await super.callEmbeddingApi(text, context, callApiOptions);
     } finally {
       // Restore original headers
       this.config.headers = originalHeaders;

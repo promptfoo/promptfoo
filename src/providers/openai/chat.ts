@@ -17,6 +17,7 @@ import { McpClientSession } from '../mcp/session';
 import { transformMCPToolsToOpenAi } from '../mcp/transform';
 import { getMcpErrorMessage, isMcpErrorResult } from '../mcp/util';
 import {
+  awaitProviderOperation,
   getRequestTimeoutMs,
   parseChatPrompt,
   transformToolChoice,
@@ -127,12 +128,12 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
     validateFunctionCall(output, this.config.functions, vars);
   }
 
-  private async initializeMCP(): Promise<void> {
+  private async initializeMCP(signal?: AbortSignal): Promise<void> {
     if (!this.config.mcp?.enabled) {
       return;
     }
     this.mcpSession ??= new McpClientSession(this.config.mcp, this);
-    this.mcpClient = await this.mcpSession.initialize();
+    this.mcpClient = await this.mcpSession.initialize(signal);
   }
 
   async cleanup(): Promise<void> {
@@ -160,6 +161,7 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
     args: string,
     config: OpenAiCompletionOptions,
     callId?: string,
+    signal?: AbortSignal,
   ): Promise<string> {
     return executeProviderFunctionCallback({
       functionName,
@@ -167,6 +169,7 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
       callId,
       callbacks: config.functionToolCallbacks,
       cache: this.loadedFunctionCallbacks,
+      signal,
     });
   }
 
@@ -378,7 +381,8 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
     context?: CallApiContextParams,
     callApiOptions?: CallApiOptionsParams,
   ): Promise<ProviderResponse> {
-    await this.initializeMCP();
+    callApiOptions?.abortSignal?.throwIfAborted();
+    await this.initializeMCP(callApiOptions?.abortSignal);
     if (this.requiresApiKey() && !this.getApiKey()) {
       throw new Error(this.getMissingApiKeyErrorMessage());
     }
@@ -422,7 +426,11 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
     context?: CallApiContextParams,
     callApiOptions?: CallApiOptionsParams,
   ): Promise<ProviderResponse> {
-    const { body, config } = await this.getOpenAiBody(prompt, context, callApiOptions);
+    const { body, config } = await awaitProviderOperation(
+      this.getOpenAiBody(prompt, context, callApiOptions),
+      callApiOptions?.abortSignal,
+    );
+    callApiOptions?.abortSignal?.throwIfAborted();
 
     type OpenAIChatCompletionResponse = OpenAI.ChatCompletion & {
       choices: Array<
@@ -470,6 +478,7 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
         appendOpenAiApiPath(this.getApiUrl(), 'chat/completions'),
         {
           method: 'POST',
+          signal: callApiOptions?.abortSignal,
           headers: {
             'Content-Type': 'application/json',
             ...(this.getApiKey() ? { Authorization: `Bearer ${this.getApiKey()}` } : {}),
@@ -555,6 +564,9 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
       };
     }
 
+    let completedResponse: ProviderResponse | undefined;
+    const mcpToolCalls: McpToolCallEntry[] = [];
+    const results: string[] = [];
     try {
       const message = data.choices[0].message;
       const finishReason = normalizeFinishReason(data.choices[0].finish_reason);
@@ -646,16 +658,23 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
         output = `Thinking: ${reasoning}\n\n${output}`;
       }
 
-      // Executed MCP tool calls, published as `metadata.toolCalls` so assertions can
-      // check tool routing and arguments without wrapping the provider.
-      const mcpToolCalls: McpToolCallEntry[] = [];
+      completedResponse = {
+        output,
+        tokenUsage: getTokenUsage(data, cached),
+        cached,
+        latencyMs,
+        logProbs,
+        ...(finishReason && { finishReason }),
+        cost,
+        guardrails: { flagged: contentFiltered },
+        metadata: providerMetadata,
+      };
 
       // Handle function tool callbacks
       const functionCalls: any = message.function_call
         ? [message.function_call]
         : message.tool_calls;
       if (functionCalls && (config.functionToolCallbacks || this.mcpClient)) {
-        const results = [];
         let hasSuccessfulCallback = false;
         for (const functionCall of functionCalls) {
           const functionName = functionCall.name || functionCall.function?.name;
@@ -673,7 +692,11 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
               let parsedArgs: any;
               try {
                 parsedArgs = typeof rawArgs === 'string' ? JSON.parse(rawArgs) : rawArgs;
-                const mcpResult = await this.mcpClient.callTool(functionName, parsedArgs);
+                const mcpResult = await this.mcpClient.callTool(
+                  functionName,
+                  parsedArgs,
+                  callApiOptions?.abortSignal,
+                );
 
                 if (isMcpErrorResult(mcpResult)) {
                   const errorMessage = getMcpErrorMessage(mcpResult);
@@ -732,6 +755,7 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
                 hasSuccessfulCallback = true;
                 continue; // Skip to next function call
               } catch (error) {
+                callApiOptions?.abortSignal?.throwIfAborted();
                 logger.debug(`MCP tool execution failed for ${functionName}: ${error}`);
                 results.push(`MCP Tool Error (${functionName}): ${error}`);
                 mcpToolCalls.push({
@@ -757,10 +781,12 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
                 functionCall.arguments || functionCall.function?.arguments,
                 config,
                 functionCall.call_id ?? functionCall.id,
+                callApiOptions?.abortSignal,
               );
               results.push(functionResult);
               hasSuccessfulCallback = true;
             } catch (error) {
+              callApiOptions?.abortSignal?.throwIfAborted();
               // If callback fails, fall back to original behavior (return the function call)
               logger.debug(
                 `Function callback failed for ${functionName} with error ${error}, falling back to original output`,
@@ -772,14 +798,8 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
         }
         if (hasSuccessfulCallback && results.length > 0) {
           return {
+            ...completedResponse,
             output: results.join('\n'),
-            tokenUsage: getTokenUsage(data, cached),
-            cached,
-            latencyMs,
-            logProbs,
-            ...(finishReason && { finishReason }),
-            cost,
-            guardrails: { flagged: contentFiltered },
             metadata: {
               ...providerMetadata,
               http: {
@@ -804,6 +824,7 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
       }
       if (message.audio) {
         return {
+          ...completedResponse,
           output: message.audio.transcript || '',
           audio: {
             id: message.audio.id,
@@ -812,13 +833,6 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
             transcript: message.audio.transcript,
             format: message.audio.format || body.audio?.format || 'wav',
           },
-          tokenUsage: getTokenUsage(data, cached),
-          cached,
-          latencyMs,
-          logProbs,
-          ...(finishReason && { finishReason }),
-          cost,
-          guardrails: { flagged: contentFiltered },
           metadata: {
             ...providerMetadata,
             http: {
@@ -834,14 +848,8 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
       const citations = getChatSearchCitations(message.annotations, output);
 
       return {
+        ...completedResponse,
         output,
-        tokenUsage: getTokenUsage(data, cached),
-        cached,
-        latencyMs,
-        logProbs,
-        ...(finishReason && { finishReason }),
-        cost,
-        guardrails: { flagged: contentFiltered },
         metadata: {
           ...providerMetadata,
           http: {
@@ -858,10 +866,20 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
         },
       };
     } catch (err) {
-      await deleteFromCache?.();
+      if (callApiOptions?.abortSignal?.aborted) {
+        void deleteFromCache?.().catch(() => {});
+      } else {
+        await deleteFromCache?.();
+      }
       return {
+        ...completedResponse,
+        ...(callApiOptions?.abortSignal?.aborted &&
+          results.length > 0 && { output: results.join('\n') }),
+        ...(completedResponse && { raw: data }),
         error: `API error: ${String(err)}: ${JSON.stringify(data)}`,
         metadata: {
+          ...completedResponse?.metadata,
+          ...(mcpToolCalls.length > 0 && { toolCalls: mcpToolCalls }),
           http: {
             status,
             statusText,
