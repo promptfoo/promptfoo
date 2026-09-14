@@ -113,7 +113,7 @@ tests:
 
     expect(mockSetupEnv).toHaveBeenCalledTimes(2);
     expect(mockSetupEnv).toHaveBeenNthCalledWith(1, undefined, { processEnv: {} });
-    expect(mockSetupEnv).toHaveBeenNthCalledWith(2, tempEnvFile, { processEnv: {} });
+    expect(mockSetupEnv).toHaveBeenNthCalledWith(2, [tempEnvFile], { processEnv: {} });
     expect(mockSetupEnv.mock.calls[1][1]?.processEnv).toBe(
       mockSetupEnv.mock.calls[0][1]?.processEnv,
     );
@@ -187,7 +187,7 @@ tests:
     expect(mockSetupEnv).toHaveBeenCalledWith(undefined, { processEnv: {} });
   });
 
-  it('should handle multiple config files and use first envPath found', async () => {
+  it('should use the last configured envPath across multiple config files', async () => {
     const config1File = path.join(tempDir, 'config1.yaml');
     const config2File = path.join(tempDir, 'config2.yaml');
     const envFile2 = path.join(tempDir, '.env2');
@@ -195,6 +195,9 @@ tests:
     fs.writeFileSync(
       config1File,
       `
+commandLineOptions:
+  envPath: .env1
+
 prompts:
   - "From config 1"
 `,
@@ -226,10 +229,9 @@ tests:
       // Expected to fail due to mocked dependencies
     }
 
-    // Should call setupEnv twice: CLI + first envPath found (from config2)
     expect(mockSetupEnv).toHaveBeenCalledTimes(2);
     expect(mockSetupEnv).toHaveBeenNthCalledWith(1, undefined, { processEnv: {} });
-    expect(mockSetupEnv).toHaveBeenNthCalledWith(2, envFile2, { processEnv: {} });
+    expect(mockSetupEnv).toHaveBeenNthCalledWith(2, [envFile2], { processEnv: {} });
   });
 
   it('should resolve relative envPath against the config file directory', async () => {
@@ -261,7 +263,7 @@ tests:
 
     expect(mockSetupEnv).toHaveBeenCalledTimes(2);
     expect(mockSetupEnv).toHaveBeenNthCalledWith(1, undefined, { processEnv: {} });
-    expect(mockSetupEnv).toHaveBeenNthCalledWith(2, relEnvAbs, { processEnv: {} });
+    expect(mockSetupEnv).toHaveBeenNthCalledWith(2, [relEnvAbs], { processEnv: {} });
   });
 
   describe('multi-file envPath support', () => {
