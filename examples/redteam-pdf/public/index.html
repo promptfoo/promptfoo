@@ -129,12 +129,16 @@ What are the invoice total and payment terms?</textarea>
       const button = document.getElementById('submit');
       const status = document.getElementById('status');
       const result = document.getElementById('result');
+      let requestVersion = 0;
       form.addEventListener('input', () => {
+        requestVersion++;
+        button.disabled = false;
         result.hidden = true;
         status.textContent = '';
       });
       form.addEventListener('submit', async (event) => {
         event.preventDefault();
+        const version = ++requestVersion;
         button.disabled = true;
         result.hidden = true;
         status.textContent = 'Reading your invoice…';
@@ -144,14 +148,21 @@ What are the invoice total and payment terms?</textarea>
             body: new FormData(form),
           });
           const data = await response.json();
+          if (version !== requestVersion) {
+            return;
+          }
           if (!response.ok) throw new Error(data.error || 'Could not review this invoice.');
           document.getElementById('answer').textContent = data.answer;
           result.hidden = false;
           status.textContent = 'Review complete';
         } catch (error) {
-          status.textContent = error.message || 'Could not reach the server. Try again.';
+          if (version === requestVersion) {
+            status.textContent = error.message || 'Could not reach the server. Try again.';
+          }
         } finally {
-          button.disabled = false;
+          if (version === requestVersion) {
+            button.disabled = false;
+          }
         }
       });
     </script>
