@@ -396,6 +396,10 @@ describe('getOAuthTokenWithExpiry', () => {
         .mockResolvedValueOnce({
           ok: true,
           json: async () => ({ access_token: 'second-token', expires_in: 3600 }),
+        })
+        .mockResolvedValueOnce({
+          ok: true,
+          json: async () => ({ access_token: 'separate-token', expires_in: 3600 }),
         });
       const auth: MCPOAuthClientCredentialsAuth | MCPOAuthPasswordAuth = {
         type: 'oauth',
@@ -408,8 +412,39 @@ describe('getOAuthTokenWithExpiry', () => {
       };
       const changed = { ...auth, [field]: 'second-credential' };
       expect((await getOAuthTokenWithExpiry(auth)).accessToken).toBe('first-token');
+      expect((await getOAuthTokenWithExpiry(auth)).accessToken).toBe('first-token');
       expect((await getOAuthTokenWithExpiry(changed)).accessToken).toBe('second-token');
-      expect((await getOAuthTokenWithExpiry({ ...changed })).accessToken).toBe('second-token');
+      expect((await getOAuthTokenWithExpiry(changed)).accessToken).toBe('second-token');
+      expect((await getOAuthTokenWithExpiry({ ...changed })).accessToken).toBe('separate-token');
+      expect(mockFetch).toHaveBeenCalledTimes(3);
+    },
+  );
+
+  it.each(['clientSecret', 'password'] as const)(
+    'refreshes after mutating %s on the same auth object',
+    async (field) => {
+      mockFetch
+        .mockResolvedValueOnce({
+          ok: true,
+          json: async () => ({ access_token: 'before', expires_in: 3600 }),
+        })
+        .mockResolvedValueOnce({
+          ok: true,
+          json: async () => ({ access_token: 'after', expires_in: 3600 }),
+        });
+      const auth: MCPOAuthPasswordAuth = {
+        type: 'oauth',
+        grantType: 'password',
+        tokenUrl: 'https://auth.example.com/mutation',
+        clientId: 'client',
+        clientSecret: 'first',
+        username: 'user',
+        password: 'first',
+      };
+      expect((await getOAuthTokenWithExpiry(auth)).accessToken).toBe('before');
+      auth[field] = 'changed';
+      expect((await getOAuthTokenWithExpiry(auth)).accessToken).toBe('after');
+      expect((await getOAuthTokenWithExpiry(auth)).accessToken).toBe('after');
       expect(mockFetch).toHaveBeenCalledTimes(2);
     },
   );

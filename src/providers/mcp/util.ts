@@ -1,5 +1,3 @@
-import { createHmac, randomBytes } from 'node:crypto';
-
 import { getRuntimeEnv } from '../../envOverrides';
 import logger from '../../logger';
 import { fetchWithProxy } from '../../util/fetch/index';
@@ -71,32 +69,10 @@ export function renderAuthVars(
 interface OAuthTokenCache {
   accessToken: string;
   expiresAt: number;
+  configuration: string;
 }
 
-const oauthTokenCache = new Map<string, OAuthTokenCache>();
-const oauthCacheKey = randomBytes(32);
-
-/**
- * Get the cache key for an OAuth config
- */
-function getOAuthCacheKey(
-  auth: MCPOAuthClientCredentialsAuth | MCPOAuthPasswordAuth,
-  tokenUrl: string,
-): string {
-  return createHmac('sha256', oauthCacheKey)
-    .update(
-      JSON.stringify([
-        tokenUrl,
-        auth.grantType,
-        auth.clientId,
-        auth.clientSecret,
-        'username' in auth ? auth.username : undefined,
-        'password' in auth ? auth.password : undefined,
-        auth.scopes?.join(' ') ?? '',
-      ]),
-    )
-    .digest('hex');
-}
+const oauthTokenCache = new WeakMap<object, OAuthTokenCache>();
 
 // Cache for discovered token endpoints
 const tokenEndpointCache = new Map<string, string>();
@@ -188,11 +164,21 @@ export async function getOAuthTokenWithExpiry(
     tokenUrl = await discoverTokenEndpoint(serverUrl);
   }
 
-  const cacheKey = getOAuthCacheKey(auth, tokenUrl);
-  const cached = oauthTokenCache.get(cacheKey);
+  // Reuse tokens only for this auth object. The private snapshot detects in-place
+  // changes without deriving cache keys from credentials or retaining other invocations.
+  const configuration = JSON.stringify([
+    tokenUrl,
+    auth.grantType,
+    auth.clientId,
+    auth.clientSecret,
+    'username' in auth ? auth.username : undefined,
+    'password' in auth ? auth.password : undefined,
+    auth.scopes?.join(' ') ?? '',
+  ]);
+  const cached = oauthTokenCache.get(auth);
   const now = Date.now();
 
-  if (cached && now + TOKEN_REFRESH_BUFFER_MS < cached.expiresAt) {
+  if (cached?.configuration === configuration && now + TOKEN_REFRESH_BUFFER_MS < cached.expiresAt) {
     logger.debug('[MCP Auth] Using cached OAuth token');
     return { accessToken: cached.accessToken, expiresAt: cached.expiresAt };
   }
@@ -209,9 +195,10 @@ export async function getOAuthTokenWithExpiry(
   });
 
   // Cache the token
-  oauthTokenCache.set(cacheKey, {
+  oauthTokenCache.set(auth, {
     accessToken: result.accessToken,
     expiresAt: result.expiresAt,
+    configuration,
   });
 
   logger.debug('[MCP Auth] Cached OAuth token');
