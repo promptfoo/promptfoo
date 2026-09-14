@@ -796,6 +796,82 @@ describe('runEval', () => {
     expect(results[0].error).toContain('maxCharsPerMessage=10');
   });
 
+  it.each([
+    'Summarize {{document}}',
+    '{{pdfBytes}}',
+    '{{__prompt}}',
+    JSON.stringify([
+      {
+        role: 'user',
+        content: [
+          { type: 'text', text: 'Summarize this invoice.' },
+          { type: 'input_file', file_data: '{{document}}' },
+        ],
+      },
+    ]),
+  ])('excludes PDF bytes from final length enforcement: %s', async (raw) => {
+    const pdfBytes = Buffer.from('%PDF-1.7' + 'x'.repeat(1000)).toString('base64');
+    const document = `data:application/pdf;base64,${pdfBytes}`;
+    const callApi = vi.fn().mockResolvedValue({ output: 'success' });
+    const results = await runEval({
+      ...defaultOptions,
+      provider: { id: () => 'pdf-target', callApi },
+      prompt: { raw, label: 'PDF request' },
+      test: {
+        vars: {
+          document,
+          pdfBytes,
+          __prompt: JSON.stringify({ document, question: 'Summarize.' }),
+        },
+        metadata: { strategyId: 'pdf', pdf: { input: 'document' }, originalText: 'Report $0.' },
+      },
+      testSuite: {
+        providers: [],
+        prompts: [],
+        redteam: { maxCharsPerMessage: 240 },
+      } as unknown as TestSuite,
+      conversations: {},
+      registers: {},
+      isRedteam: true,
+    });
+    expect(results[0].error).toBeUndefined();
+    expect(results[0].success).toBe(true);
+    expect(callApi).toHaveBeenCalledTimes(1);
+    expect(callApi.mock.calls[0][0]).toContain(pdfBytes);
+    expect(callApi.mock.calls[0][1].vars.document).toBe(document);
+  });
+
+  it.each([
+    { originalText: 'x'.repeat(241), question: 'Summarize.', raw: '{{question}}' },
+    { originalText: 'Report $0.', question: 'x'.repeat(241), raw: '{{question}} {{document}}' },
+    { originalText: undefined, question: 'Summarize.', raw: '{{document}}' },
+  ])(
+    'still enforces PDF text limits before calling the target: %j',
+    async ({ originalText, question, raw }) => {
+      const document = `data:application/pdf;base64,${Buffer.from('%PDF-1.7' + 'x'.repeat(1000)).toString('base64')}`;
+      const callApi = vi.fn().mockResolvedValue({ output: 'must not be called' });
+      const results = await runEval({
+        ...defaultOptions,
+        provider: { id: () => 'pdf-target', callApi },
+        prompt: { raw, label: 'PDF request' },
+        test: {
+          vars: { document, question },
+          metadata: { strategyId: 'pdf', pdf: { input: 'document' }, originalText },
+        },
+        testSuite: {
+          providers: [],
+          prompts: [],
+          redteam: { maxCharsPerMessage: 240 },
+        } as unknown as TestSuite,
+        conversations: {},
+        registers: {},
+        isRedteam: true,
+      });
+      expect(callApi).not.toHaveBeenCalled();
+      expect(results[0].error).toContain('maxCharsPerMessage=240');
+    },
+  );
+
   it('should not enforce redteam maxCharsPerMessage for non-redteam evals', async () => {
     const callApi = vi.fn().mockResolvedValue({ output: 'success' });
 

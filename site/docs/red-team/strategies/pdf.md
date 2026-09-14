@@ -102,6 +102,7 @@ The strategy preserves the plugin's assertions and attack goal. Redteam graders 
 - Standalone, single-turn generation only. Configure `pdf` directly under `redteam.strategies`; it can run alongside other strategies, but cannot be a step inside `layer`. Multi-turn runtime PDF transforms are rejected.
 - Templates must be unencrypted PDFs with extractable text. Image-only source templates are not supported; generate image-only output with `mode: scanned`.
 - Extracted template text and newly rendered text are each limited to 50,000 characters. Template inspection and scanned rendering run in separate processes with a 15-second deadline and a bounded JavaScript heap.
+- `redteam.maxCharsPerMessage` checks the readable attack notes and the rendered accompanying text separately. The selected PDF's base64 bytes do not count toward this character limit.
 - Files are limited to 5 MiB. Templates can have at most 9 pages, leaving room for review notes within the 10-page output limit. Page dimensions must be between 1 and 20 inches.
 - New text uses Helvetica's Latin character set. Unsupported characters cause an error instead of disappearing. Existing template fonts remain intact in text mode.
 - Rendering and template-generation errors stop the transformation. There is no text-disguised-as-PDF fallback. Editing signed documents invalidates their signatures; forms, annotations, embedded files, and active PDF content are outside this strategy's coverage.

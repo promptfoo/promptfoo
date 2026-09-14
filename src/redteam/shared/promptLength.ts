@@ -140,7 +140,21 @@ export function getGeneratedPromptOverLimit(
   };
 }
 
-export function throwIfTargetPromptExceedsMaxChars(prompt: string, limit?: number): void {
+export function throwIfTargetPromptExceedsMaxChars(
+  prompt: string,
+  limit?: number,
+  pdf?: { dataUrl: string; text: string },
+): void {
+  if (!getMaxCharsPerMessage(limit)) {
+    return;
+  }
+  const prefix = 'data:application/pdf;base64,';
+  if (pdf?.dataUrl.startsWith(prefix) && pdf.dataUrl.length > prefix.length) {
+    // The attachment has its own readable attack; the surrounding prompt keeps
+    // its normal text limit. Never alter the bytes delivered to the provider.
+    throwIfTargetPromptExceedsMaxChars(pdf.text, limit);
+    prompt = prompt.split(pdf.dataUrl).join('').split(pdf.dataUrl.slice(prefix.length)).join('');
+  }
   const violation = getPromptLengthViolation(prompt, limit);
   if (!violation) {
     return;

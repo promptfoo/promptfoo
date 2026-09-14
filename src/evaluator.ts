@@ -859,7 +859,16 @@ async function renderRunEvalPrompt({
     skipRenderVars,
   );
   if (isRedteam) {
-    throwIfTargetPromptExceedsMaxChars(renderedPrompt, testSuite?.redteam?.maxCharsPerMessage);
+    const pdfInput = test.metadata?.pdf?.input;
+    const pdfValue = typeof pdfInput === 'string' ? vars[pdfInput] : undefined;
+    const originalText = test.metadata?.originalText;
+    throwIfTargetPromptExceedsMaxChars(
+      renderedPrompt,
+      testSuite?.redteam?.maxCharsPerMessage,
+      typeof pdfValue === 'string' && typeof originalText === 'string'
+        ? { dataUrl: pdfValue, text: originalText }
+        : undefined,
+    );
   }
   const promptConfig = mergeProviderPromptConfig(promptForRender.config, test.options);
   const setup = createRunEvalSetup({ provider, prompt: promptForRender, promptConfig, vars });
