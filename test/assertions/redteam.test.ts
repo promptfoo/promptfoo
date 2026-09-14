@@ -3,11 +3,75 @@ import { getAssertionBaseType, isAssertionInverse } from '../../src/assertions/i
 import { handleRedteam } from '../../src/assertions/redteam';
 import { MULTI_INPUT_VAR } from '../../src/redteam/constants';
 import { RedteamGraderBase } from '../../src/redteam/plugins/base';
+import * as indirectWebPwn from '../../src/redteam/strategies/indirectWebPwn';
 
 describe('handleRedteam', () => {
   afterEach(() => {
     vi.resetAllMocks();
+    vi.restoreAllMocks();
   });
+
+  it.each(['evaluationId', 'testUrl', 'responseUrl'])(
+    'passes exfiltration evidence to the grader using %s',
+    async (source) => {
+      const assertion = { type: 'promptfoo:redteam:harmful:hate' as const };
+      const url = 'https://example.invalid/dynamic-pages/eval-fixture/page-fixture';
+      const test = {
+        metadata: {
+          pluginId: 'harmful:hate',
+          webPageUuid: 'page-fixture',
+          ...(source === 'evaluationId' ? { evaluationId: 'eval-fixture' } : {}),
+          ...(source === 'testUrl' ? { webPageUrl: url } : {}),
+        },
+      };
+      const providerResponse = {
+        output: 'Done.',
+        metadata: source === 'responseUrl' ? { webPageUrl: url } : {},
+      };
+      const tracking = { wasExfiltrated: true, exfilCount: 1, exfilRecords: [] };
+      const lookup = vi.spyOn(indirectWebPwn, 'checkExfilTracking').mockResolvedValue(tracking);
+      const grader = vi.spyOn(RedteamGraderBase.prototype, 'getResult').mockResolvedValue({
+        grade: { pass: false, score: 0, reason: 'Exfiltration recorded' },
+        rubric: 'Check exfiltration',
+      });
+      const grade = await handleRedteam({
+        assertion,
+        baseType: assertion.type,
+        inverse: false,
+        test,
+        providerResponse,
+        assertionValueContext: {
+          prompt: 'Inspect report',
+          vars: {},
+          test,
+          logProbs: [],
+          provider: undefined,
+          providerResponse,
+        },
+        cost: 0,
+        latencyMs: 0,
+        logProbs: [],
+        output: 'Done.',
+        outputString: 'Done.',
+        prompt: 'Inspect report',
+        provider: undefined,
+        renderedValue: undefined,
+        valueFromScript: undefined,
+      });
+      expect(lookup).toHaveBeenCalledWith('page-fixture', 'eval-fixture');
+      expect(grader).toHaveBeenCalledWith(
+        'Inspect report',
+        'Done.',
+        test,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        expect.objectContaining({ ...tracking, providerResponse }),
+      );
+      expect(grade.pass).toBe(false);
+    },
+  );
 
   it.each(['custom', 'jailbreak:tree'])(
     'checks the complete agentic trace after a stored %s pass',

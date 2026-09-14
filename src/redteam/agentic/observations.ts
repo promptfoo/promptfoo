@@ -1,3 +1,4 @@
+import { TOOL_NAME_ATTRIBUTE_KEYS } from '../../tracing/toolAttributes';
 import { normalizePluginId, parseEvidenceCandidates, requireVisibleEvidenceIdentity } from './json';
 
 import type { RedteamGradingContext } from '../grading/types';
@@ -131,20 +132,6 @@ type ProviderResponseLike = {
   raw?: unknown;
 };
 
-export const TOOL_NAME_ATTRIBUTE_KEYS = [
-  'tool.name',
-  'tool_name',
-  'tool',
-  'function.name',
-  'function_name',
-  'ai.toolCall.name',
-  'gen_ai.tool.name',
-  'agent.tool_name',
-  'agent.tool',
-  'agent.toolName',
-  'codex.mcp.tool',
-] as const;
-
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
@@ -240,18 +227,24 @@ function getAttribute(
 function getToolNameFromAttributes(
   attributes: Record<string, unknown> | undefined,
 ): string | undefined {
-  if (!attributes) {
-    return undefined;
+  const names = Object.entries(attributes ?? {})
+    .filter(
+      ([key]) =>
+        TOOL_NAME_ATTRIBUTE_KEYS.some((alias) => alias.toLowerCase() === key.toLowerCase()) ||
+        key.toLowerCase().endsWith('.tool.name'),
+    )
+    .map(([, value]) => {
+      const name = getString(value)?.trim();
+      if (!name) {
+        throw new Error('Cannot grade execution evidence: invalid tool name');
+      }
+      requireVisibleEvidenceIdentity(name);
+      return name;
+    });
+  if (new Set(names).size > 1) {
+    throw new Error('Cannot grade execution evidence: conflicting tool names');
   }
-
-  for (const key of TOOL_NAME_ATTRIBUTE_KEYS) {
-    const value = attributes[key];
-    if (typeof value === 'string' && value.trim()) {
-      return value.trim();
-    }
-  }
-
-  return undefined;
+  return names[0];
 }
 
 function parseRawValue(raw: unknown): unknown {
@@ -398,10 +391,11 @@ function controlObservationFromSpan(
           ? 'allowed'
           : (stringifyValue(value)?.trim().toLowerCase() ?? 'unknown'),
       );
+    const triggered = Object.entries(attributes)
+      .filter(([key, value]) => key.toLowerCase() === 'guardrail.triggered' && value !== undefined)
+      .map(([, value]) => stringifyValue(value)?.trim().toLowerCase() ?? '');
     const hasSemanticAttribute =
-      spanType === 'guardrail' ||
-      Boolean(attributes['guardrail.name']) ||
-      attributes['guardrail.triggered'] !== undefined;
+      spanType === 'guardrail' || Boolean(attributes['guardrail.name']) || triggered.length > 0;
     const outcome =
       new Set(outcomes).size > 1
         ? 'unknown'
@@ -414,9 +408,11 @@ function controlObservationFromSpan(
       location,
       outcome: failed
         ? 'error'
-        : isExplicitlyTrue(attributes['guardrail.triggered'])
-          ? 'blocked'
-          : outcome,
+        : triggered.some((value) => !['true', '1', 'yes', 'false', '0', 'no'].includes(value))
+          ? 'unknown'
+          : triggered.some((value) => ['true', '1', 'yes'].includes(value))
+            ? 'blocked'
+            : outcome,
       parentSpanId: span.parentSpanId,
       source,
       spanId: span.spanId,

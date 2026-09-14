@@ -1,4 +1,5 @@
 import dedent from 'dedent';
+import { TOOL_NAME_ATTRIBUTE_KEYS } from '../../tracing/toolAttributes';
 import { normalizePluginId, parseEvidenceCandidates } from '../agentic/json';
 import {
   type AgentObservation,
@@ -9,7 +10,6 @@ import {
   hasErrorStatus,
   isAllowedControlOutcome,
   observationsFromTraceData,
-  TOOL_NAME_ATTRIBUTE_KEYS,
 } from '../agentic/observations';
 import {
   AGENTIC_RUNTIME_PLUGIN_ALIASES,

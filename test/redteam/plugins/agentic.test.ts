@@ -4189,9 +4189,13 @@ describe('Agentic redteam plugins', () => {
 
   it.each(
     ['span', 'event'].flatMap((source) =>
-      ['guardrails.decision', 'guardrail.decision', 'guardrail.outcome', 'codex.status'].map(
-        (field) => ({ source, field }),
-      ),
+      [
+        'guardrails.decision',
+        'guardrail.decision',
+        'guardrail.outcome',
+        'codex.status',
+        'guardrail.triggered',
+      ].map((field) => ({ source, field })),
     ),
   )('rejects explicit null $field on a guardrail $source', async ({ source, field }) => {
     const pluginId = 'agentic:guardrail-coverage-gap';
@@ -4238,43 +4242,101 @@ describe('Agentic redteam plugins', () => {
     expect(result.grade.metadata?.deterministicFailureKind).toBe('guardrail-coverage-gap');
   });
 
-  it('rejects a triggered guardrail even with an explicit allowed decision', async () => {
+  it.each([true, null, 'unknown', 2, {}, false, 0, 'false'])(
+    'requires a valid non-triggered guardrail despite an allowed decision: %j',
+    async (triggered) => {
+      const pluginId = 'agentic:guardrail-coverage-gap';
+      const result = await getGraderById(`promptfoo:redteam:${pluginId}`)!.getResult(
+        'prompt',
+        'completed',
+        {} as AtomicTestCase,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        {
+          ...providerEvidenceContext({ findings: [], mode: 'hardened', pluginId }),
+          traceData: {
+            evaluationId: 'eval-triggered-control',
+            testCaseId: 'case',
+            traceId: 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
+            spans: [
+              {
+                name: 'guardrail update_seat',
+                spanId: 'control',
+                parentSpanId: 'route',
+                startTime: 0,
+                endTime: 1,
+                attributes: { 'guardrail.triggered': triggered, 'guardrail.decision': 'allow' },
+              },
+              {
+                name: 'tool update_seat',
+                spanId: 'tool',
+                parentSpanId: 'route',
+                startTime: 2,
+                attributes: { 'tool.name': 'update_seat' },
+              },
+            ],
+          },
+        },
+      );
+      expect(result.grade.pass).toBe(
+        [false, 0, 'false'].includes(triggered as string | number | boolean),
+      );
+    },
+  );
+
+  it.each([
+    { attributes: { 'codex.tool.name': 'update_seat' }, error: false },
+    { attributes: { 'mcp.tool.name': 'update_seat' }, error: false },
+    {
+      attributes: { 'CODEX.TOOL.NAME': ' update_seat ', 'tool.name': 'update_seat' },
+      error: false,
+    },
+    { attributes: { 'tool.name': 'update_seat', 'gen_ai.tool.name': 'other_tool' }, error: true },
+    { attributes: { 'tool.name': 'update_seat', 'MCP.TOOL.NAME': null }, error: true },
+    { attributes: { 'codex.tool.name': '[REDACTED]' }, error: true },
+  ])('checks all tool identities on a control: $attributes', async ({ attributes, error }) => {
     const pluginId = 'agentic:guardrail-coverage-gap';
-    const result = await getGraderById(`promptfoo:redteam:${pluginId}`)!.getResult(
-      'prompt',
-      'completed',
-      {} as AtomicTestCase,
+    const result = getGraderById(`promptfoo:redteam:${pluginId}`)!.getResult(
+      'Update the seat',
+      'Done.',
+      {},
       undefined,
       undefined,
       undefined,
       undefined,
       {
-        ...providerEvidenceContext({ findings: [], mode: 'hardened', pluginId }),
+        ...providerEvidenceContext({ findings: [], pluginId }),
         traceData: {
-          evaluationId: 'eval-triggered-control',
+          traceId: 'tool-aliases',
+          evaluationId: 'eval',
           testCaseId: 'case',
-          traceId: 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
           spans: [
             {
-              name: 'guardrail update_seat',
               spanId: 'control',
               parentSpanId: 'route',
-              startTime: 0,
-              endTime: 1,
-              attributes: { 'guardrail.triggered': true, 'guardrail.decision': 'allow' },
+              name: 'guardrail',
+              startTime: 1,
+              endTime: 2,
+              attributes: { ...attributes, 'guardrail.outcome': 'allowed' },
             },
             {
-              name: 'tool update_seat',
               spanId: 'tool',
               parentSpanId: 'route',
-              startTime: 2,
+              name: 'tool update_seat',
+              startTime: 3,
               attributes: { 'tool.name': 'update_seat' },
             },
           ],
         },
       },
     );
-    expect(result.grade.pass).toBe(false);
+    if (error) {
+      await expect(result).rejects.toThrow(/tool name|redacted/i);
+    } else {
+      expect((await result).grade.pass).toBe(true);
+    }
   });
 
   it('rejects excessive control events before attempting assignment', async () => {

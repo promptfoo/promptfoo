@@ -124,6 +124,96 @@ describe('OTLPReceiver', () => {
     vi.restoreAllMocks();
   });
 
+  it.each(
+    ['logs', 'json', 'protobuf'].flatMap((format) =>
+      ['authorization', 'private-label'].map((key) => ({ format, key })),
+    ),
+  )(
+    'redacts resource values shadowed by $format record attributes ($key)',
+    async ({ format, key }) => {
+      const secret = 'PRIVATE_RESOURCE_RECEIPT';
+      const redactingReceiver = new OTLPReceiver({ redactAttributes: [key] });
+      const attributes = (values: Record<string, string>) =>
+        Object.entries(values).map(([name, value]) => ({
+          key: name,
+          value: { stringValue: value },
+        }));
+      const resource = {
+        attributes: attributes({
+          [key]: secret,
+          'service.name': 'resource service',
+          'otel.resource.attributes': 'resource metadata',
+        }),
+      };
+      const record = {
+        traceId: format === 'protobuf' ? Buffer.from('a'.repeat(32), 'hex') : 'a'.repeat(32),
+        spanId: format === 'protobuf' ? Buffer.from('b'.repeat(16), 'hex') : 'b'.repeat(16),
+        name: secret,
+        startTimeUnixNano: '1000000000',
+        timeUnixNano: '1000000000',
+        body: { stringValue: secret },
+        attributes: attributes({
+          [key]: 'public',
+          'service.name': 'record service',
+          'otel.resource.attributes': 'record metadata',
+        }),
+        status: { code: 1, message: secret },
+      };
+      const body =
+        format === 'logs'
+          ? { resourceLogs: [{ resource, scopeLogs: [{ logRecords: [record] }] }] }
+          : { resourceSpans: [{ resource, scopeSpans: [{ spans: [record] }] }] };
+      await request(redactingReceiver.getApp())
+        .post(format === 'logs' ? '/v1/logs' : '/v1/traces')
+        .set('Content-Type', format === 'protobuf' ? 'application/x-protobuf' : 'application/json')
+        .send(format === 'protobuf' ? await encodeOTLPRequest(body) : body)
+        .expect(200);
+      expect(persistSpans).toHaveBeenCalledOnce();
+      const [, spans] = persistSpans.mock.calls[0];
+      expect(JSON.stringify(spans)).not.toContain(secret);
+      expect(spans[0].attributes['service.name']).toBe('record service');
+      expect(JSON.stringify(spans[0].attributes['otel.resource.attributes'])).toContain(
+        'resource metadata',
+      );
+      expect(JSON.stringify(spans[0].attributes['otel.resource.attributes'])).toContain(
+        'record metadata',
+      );
+    },
+  );
+
+  it.each(['otel.log.body', 'otel.log.time_unix_nano'])(
+    'redacts resource values replaced by generated log field %s',
+    async (key) => {
+      const secret = 'PRIVATE_RESOURCE_GENERATED_FIELD';
+      const redactingReceiver = new OTLPReceiver({ redactAttributes: [key] });
+      await request(redactingReceiver.getApp())
+        .post('/v1/logs')
+        .send({
+          resourceLogs: [
+            {
+              resource: { attributes: [{ key, value: { stringValue: secret } }] },
+              scopeLogs: [
+                {
+                  logRecords: [
+                    {
+                      traceId: 'a'.repeat(32),
+                      spanId: 'b'.repeat(16),
+                      timeUnixNano: '1000000000',
+                      body: { stringValue: 'Public log body' },
+                      attributes: [{ key: 'event.name', value: { stringValue: secret } }],
+                    },
+                  ],
+                },
+              ],
+            },
+          ],
+        })
+        .expect(200);
+      expect(persistSpans).toHaveBeenCalledOnce();
+      expect(JSON.stringify(persistSpans.mock.calls[0][1])).not.toContain(secret);
+    },
+  );
+
   it.each(['duplicate', 'coerced'])(
     'rejects %s OTLP log keys before storing any records',
     async (kind) => {
@@ -1319,7 +1409,7 @@ describe('OTLPReceiver', () => {
         .send(format === 'json' ? data : await encodeOTLPRequest(data))
         .expect(200);
       const spans = persistSpans.mock.calls.at(-1)?.[1];
-      expect(JSON.stringify(spans)).not.toContain(String(secret));
+      expect(JSON.stringify(spans)).not.toContain(secret);
       expect(spans?.[0].events?.[0].attributes?.['private.pin']).toBe('[REDACTED]');
     });
 

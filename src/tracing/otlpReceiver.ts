@@ -52,6 +52,31 @@ function assertUniqueAttributeKeys(attributes: { key: string }[]): void {
   }
 }
 
+function mergeResourceAttributes(
+  resource: Record<string, unknown>,
+  record: Record<string, unknown>,
+): Record<string, unknown> {
+  const overwritten = Object.fromEntries(
+    Object.entries(resource).filter(
+      ([key, value]) => Object.prototype.hasOwnProperty.call(record, key) && value !== record[key],
+    ),
+  );
+  return {
+    ...resource,
+    ...record,
+    // Keep overridden values available to ingestion and read-time redaction.
+    ...(Object.keys(overwritten).length > 0
+      ? {
+          'otel.resource.attributes': [
+            resource['otel.resource.attributes'],
+            record['otel.resource.attributes'],
+            overwritten,
+          ].filter((value) => value !== undefined),
+        }
+      : {}),
+  };
+}
+
 interface OTLPSpan {
   traceId: string; // Base64 encoded
   spanId: string; // Base64 encoded
@@ -733,8 +758,7 @@ export class OTLPReceiver {
 
           // Parse attributes
           const spanKindName = SPAN_KIND_MAP[span.kind] ?? 'unspecified';
-          const attributes: Record<string, any> = {
-            ...resourceAttributes,
+          const attributes = mergeResourceAttributes(resourceAttributes, {
             ...this.parseAttributes(span.attributes),
             'otel.scope.name': scopeSpan.scope?.name,
             'otel.scope.version': scopeSpan.scope?.version,
@@ -742,7 +766,7 @@ export class OTLPReceiver {
             'otel.span.kind_code': span.kind,
             'otel.span.start_time_unix_nano': span.startTimeUnixNano,
             'otel.span.end_time_unix_nano': span.endTimeUnixNano,
-          };
+          });
           const startTime = Number(span.startTimeUnixNano) / 1_000_000;
 
           traces.push({
@@ -883,26 +907,23 @@ export class OTLPReceiver {
     }
 
     const logAttributes = this.parseAttributes(log.attributes);
-    const attributes: Record<string, any> = {
-      ...resourceAttributes,
+    const bodyValue = log.body ? this.parseAttributeValue(log.body) : undefined;
+    const attributes = mergeResourceAttributes(resourceAttributes, {
       ...logAttributes,
       'otel.log.record': true,
       'otel.scope.name': scopeLog.scope?.name,
       'otel.scope.version': scopeLog.scope?.version,
       'otel.log.severity_number': log.severityNumber,
       'otel.log.severity_text': log.severityText,
-    };
+      'otel.log.time_unix_nano': undefined,
+      ...(bodyValue !== undefined && { 'otel.log.body': truncateLogBody(bodyValue) }),
+    });
 
-    const bodyValue = log.body ? this.parseAttributeValue(log.body) : undefined;
     const name = resolveLogSpanName(attributes, bodyValue);
 
     if (LOG_EVENT_NAME_DENYLIST.has(name)) {
       logger.debug(`[OtlpReceiver] Dropping log: event '${name}' is in the denylist`);
       return null;
-    }
-
-    if (bodyValue !== undefined) {
-      attributes['otel.log.body'] = truncateLogBody(bodyValue);
     }
 
     const timeNano = log.timeUnixNano;
@@ -1031,8 +1052,7 @@ export class OTLPReceiver {
         name: span.name,
         startTime: this.toMilliseconds(span.startTimeUnixNano) ?? 0,
         endTime: this.toMilliseconds(span.endTimeUnixNano),
-        attributes: {
-          ...resourceAttributes,
+        attributes: mergeResourceAttributes(resourceAttributes, {
           ...this.parseDecodedAttributes(span.attributes),
           'otel.scope.name': scopeSpan.scope?.name,
           'otel.scope.version': scopeSpan.scope?.version,
@@ -1040,7 +1060,7 @@ export class OTLPReceiver {
           'otel.span.kind_code': spanKindCode,
           'otel.span.start_time_unix_nano': span.startTimeUnixNano?.toString(),
           'otel.span.end_time_unix_nano': span.endTimeUnixNano?.toString(),
-        },
+        }),
         events: (span.events ?? []).flatMap((event) => {
           const nanos = event.timeUnixNano?.toString();
           if (!nanos || !/^\d{1,20}$/.test(nanos) || BigInt(nanos) === 0n || !event.name.trim()) {
