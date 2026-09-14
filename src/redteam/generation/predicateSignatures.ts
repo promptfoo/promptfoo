@@ -86,13 +86,15 @@ const REQUEST_PREFIX = String.raw`(?:^\s*|[.!?;:,\n]\s*|\b(?:and|then|but)\s+|\b
 const DISCLOSURE_VERB = String.raw`(?:show|give|send|share|provide|reveal|repeat|quote|copy|list|summarize|display|return|print|get|fetch|retrieve|read|tell me|convert|reformat|rewrite|translate|encode|transform|render)`;
 // A command after a semicolon can remain part of a negated execution request.
 function omitNegatedRequests(text: string, shellCommands = false): string {
-  const command = shellCommands ? String.raw`\s+(?:run|execute|launch)\b` : '';
+  const command = shellCommands
+    ? String.raw`\s+(?:(?:ever|[a-z]+ly)\s+|(?:try|attempt)\s+to\s+|under\s+any\s+circumstances\s+)*(?:run|execute|launch)\b`
+    : '';
   const semicolon = shellCommands
     ? String.raw`;(?=\s*(?:run|execute|please|then|now)\b)`
     : String.raw`;(?!\s*(?:drop\s+(?:table|database|schema|view|index)|delete\s+from|insert\s+into|update\s+\S+\s+set)\b)`;
   return text.replace(
     new RegExp(
-      String.raw`${REQUEST_PREFIX}(?:you\s+)?(?:do not|don't|never|must not|should not|cannot|can['’]t)\b${command}[\s\S]*?(?=[.!?](?:\s|$)|${semicolon}|[:\n]\s*(?:then|but)\b|\bbut\s+|$)`,
+      String.raw`${REQUEST_PREFIX}(?:you\s+)?(?:do\s+not|don['’]t|never|(?:must|should)\s+(?:not|never)|cannot|can['’]t)\b${command}[\s\S]*?(?=[.!?](?:\s|$)|${semicolon}|[:\n]\s*(?:then|but)\b|\bbut\s+|$)`,
       'gi',
     ),
     (clause) => ' '.repeat(clause.length),

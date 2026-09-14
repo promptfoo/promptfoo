@@ -9,8 +9,8 @@ import { LRUCache } from 'lru-cache';
 import {
   getAssertionBaseType,
   hasTraceAwareAssertions,
-  isExecutionEvidenceAssertion,
   MODEL_GRADED_ASSERTION_TYPES,
+  requiresExecutionEvidence,
   runAssertions,
   runCompareAssertion,
 } from './assertions/index';
@@ -1035,7 +1035,10 @@ async function collectExternalTraceAfterProviderCall({
       }
       return;
     }
-    if (needsTraceForGrading && test.assert?.some(isExecutionEvidenceAssertion)) {
+    if (
+      needsTraceForGrading &&
+      test.assert?.some((assertion) => requiresExecutionEvidence(assertion, test))
+    ) {
       throw error;
     }
     logger.warn(`[Evaluator] Failed to fetch external traces: ${error}`);

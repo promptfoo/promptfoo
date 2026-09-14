@@ -1,9 +1,40 @@
 import { describe, expect, it } from 'vitest';
-import { formatTraceSummary } from '../../../src/redteam/providers/traceFormatting';
+import {
+  formatTraceForMetadata,
+  formatTraceSummary,
+} from '../../../src/redteam/providers/traceFormatting';
 
 import type { TraceContextData } from '../../../src/tracing/traceContext';
 
 describe('formatTraceSummary', () => {
+  it.each([0, 470])('redacts credentials before truncation (prefix length: %s)', (length) => {
+    const credential = 'dXNlcjpwYXNz';
+    const text = 'x'.repeat(length) + ' Authorization: Basic ' + credential;
+    const trace: TraceContextData = {
+      traceId: '0123456789abcdef',
+      fetchedAt: 0,
+      insights: [text],
+      spans: [
+        {
+          spanId: 'span',
+          name: text,
+          kind: text,
+          startTime: 0,
+          depth: 0,
+          events: [],
+          attributes: { 'tool.name': text, model: text },
+          status: { code: 'error', message: text },
+        },
+      ],
+    };
+    const summary = formatTraceSummary(trace);
+    expect(summary).not.toContain(credential);
+    expect(summary).not.toContain('Basic d');
+    expect(JSON.stringify(formatTraceForMetadata(trace))).not.toContain(credential);
+    expect(trace.spans[0].name).toBe(text);
+    expect(trace.insights[0]).toBe(text);
+  });
+
   it('uses the filtered summary view without exposing complete grading evidence or insights', () => {
     const trace: TraceContextData = {
       traceId: '0123456789abcdef',

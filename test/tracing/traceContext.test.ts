@@ -42,6 +42,24 @@ function mockExternalTrace(spans: SpanData[], traceId = 'trace-1') {
 }
 
 describe('fetchTraceContext', () => {
+  it.each([false, true])('rejects missing required evidence (external: %s)', async (external) => {
+    mocks.isExternalTraceProvider.mockReturnValue(external);
+    if (external) {
+      mockExternalTrace([]);
+    } else {
+      mocks.getSpans.mockResolvedValue([]);
+    }
+    await expect(
+      fetchTraceContext('trace-1', {
+        ...(external ? { providerConfig } : {}),
+        requireComplete: true,
+        maxRetries: 0,
+        retryDelayMs: 0,
+        queryDelay: 0,
+      }),
+    ).rejects.toThrow('No execution trace evidence');
+  });
+
   it.each([false, true])(
     'propagates required evidence failures (retryable: %s)',
     async (retryable) => {

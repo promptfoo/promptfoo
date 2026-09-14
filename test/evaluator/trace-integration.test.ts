@@ -807,6 +807,34 @@ describe('evaluator trace integration', () => {
       },
     );
 
+    it.each([{ enabled: false }, { enabled: true, includeInGrading: false }])(
+      'preserves grading when execution tracing is disabled (%j)',
+      async (tracing) => {
+        const grade = vi.spyOn(RedteamGraderBase.prototype, 'getResult').mockResolvedValue({
+          grade: { pass: true, score: 1, reason: 'Fixture' },
+          rubric: 'Fixture',
+        });
+        const options = createRunOptions(
+          createMockProvider({ response: { output: 'Target output' } }),
+        );
+        options.test.metadata = { ...options.test.metadata, purpose: 'Fixture', tracing };
+        options.test.assert = [
+          {
+            type: 'assert-set',
+            assert: [
+              { type: 'javascript', value: 'true' },
+              { type: 'promptfoo:redteam:sql-injection' },
+            ],
+          },
+        ];
+        mockFetchTraceContext.mockRejectedValueOnce(new Error('Tempo unavailable'));
+        const [result] = await runEval(options);
+        expect(result.success).toBe(true);
+        expect(result.error).toBeUndefined();
+        expect(grade).toHaveBeenCalled();
+      },
+    );
+
     it('preserves successful provider responses when trace collection fails', async () => {
       const warning = vi.spyOn(logger, 'warn').mockImplementation(() => logger);
       const provider = createMockProvider({ response: { output: 'Target output' } });

@@ -675,6 +675,44 @@ describe('trace assertions', () => {
       expect(result.pass).toBe(true);
     });
 
+    it.each([null, 'empty'] as const)(
+      'rejects absent SQL/shell evidence during preload (%s)',
+      async (missing) => {
+        const grade = vi.spyOn(RedteamGraderBase.prototype, 'getResult').mockResolvedValue({
+          grade: { pass: true, score: 1, reason: 'No evidence' },
+          rubric: 'Fixture',
+        });
+        mockTraceStore.getTrace.mockResolvedValue(
+          missing === null ? null : { ...mockTraceData, spans: [] },
+        );
+        for (const type of [
+          'promptfoo:redteam:sql-injection',
+          'promptfoo:redteam:shell-injection',
+        ] as const) {
+          await expect(
+            runAssertions({
+              test: {
+                metadata: { purpose: 'Fixture', tracing: { enabled: true } },
+                assert: [{ type: 'assert-set', assert: [{ type }] }],
+              },
+              providerResponse: mockProviderResponse,
+              traceId: 'missing-trace',
+            }),
+          ).rejects.toThrow('No execution trace evidence');
+          await expect(
+            runAssertion({
+              assertion: { type },
+              test: { metadata: { purpose: 'Fixture', tracing: { enabled: true } } },
+              providerResponse: mockProviderResponse,
+              traceId: 'missing-trace',
+              traceData: missing === null ? null : { ...mockTraceData, spans: [] },
+            }),
+          ).rejects.toThrow('No execution trace evidence');
+        }
+        expect(grade).not.toHaveBeenCalled();
+      },
+    );
+
     it('should reuse a preloaded missing trace instead of retrying once per assertion', async () => {
       mockProcessEnv({ PROMPTFOO_TRACE_FETCH_MAX_ATTEMPTS: '2' });
       mockProcessEnv({ PROMPTFOO_TRACE_FETCH_RETRY_DELAY_MS: '0' });

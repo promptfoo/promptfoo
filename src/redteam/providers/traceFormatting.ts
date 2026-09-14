@@ -1,3 +1,4 @@
+import { sanitizeBody } from '../../tracing/genaiTracer';
 import { getToolNameFromAttributes } from '../../tracing/toolAttributes';
 import { TraceContextData, TraceSpan } from '../../tracing/traceContext';
 import { ellipsize } from '../../util/text';
@@ -5,6 +6,10 @@ import { ellipsize } from '../../util/text';
 const DEFAULT_MAX_SPANS = 10;
 const MAX_FIELD_LENGTH = 500;
 const MAX_INSIGHTS = 20;
+
+function formatField(value: string): string {
+  return ellipsize(sanitizeBody(value), MAX_FIELD_LENGTH);
+}
 
 function formatDuration(durationMs: number | undefined): string {
   if (!durationMs || Number.isNaN(durationMs)) {
@@ -28,12 +33,12 @@ function formatSpan(span: TraceSpan): string {
   const duration = formatDuration(span.durationMs);
 
   parts.push(
-    `[${duration}] ${ellipsize(span.name, MAX_FIELD_LENGTH)}${span.kind && span.kind !== 'unspecified' ? ` (${ellipsize(span.kind, MAX_FIELD_LENGTH)})` : ''}`,
+    `[${duration}] ${formatField(span.name)}${span.kind && span.kind !== 'unspecified' ? ` (${formatField(span.kind)})` : ''}`,
   );
 
   const tool = getToolNameFromAttributes(span.attributes);
   if (tool) {
-    parts.push(`tool=${ellipsize(tool, MAX_FIELD_LENGTH)}`);
+    parts.push(`tool=${formatField(tool)}`);
   }
 
   const model =
@@ -43,11 +48,11 @@ function formatSpan(span: TraceSpan): string {
     span.attributes['model'] ||
     span.attributes['llm.model'];
   if (model) {
-    parts.push(`model=${ellipsize(String(model), MAX_FIELD_LENGTH)}`);
+    parts.push(`model=${formatField(String(model))}`);
   }
 
   if (span.status.code === 'error') {
-    parts.push(`ERROR: ${ellipsize(span.status.message ?? 'Unknown error', MAX_FIELD_LENGTH)}`);
+    parts.push(`ERROR: ${formatField(span.status.message ?? 'Unknown error')}`);
   }
 
   return parts.join(' | ');
@@ -75,7 +80,7 @@ export function formatTraceSummary(
     view.insights.length > 0
       ? view.insights
           .slice(0, MAX_INSIGHTS)
-          .map((i) => `• ${ellipsize(i, MAX_FIELD_LENGTH)}`)
+          .map((i) => `• ${formatField(i)}`)
           .join('\n')
       : 'None';
 
@@ -90,6 +95,6 @@ export function formatTraceForMetadata(trace: TraceContextData): Record<string, 
     traceId: trace.traceId,
     fetchedAt: trace.fetchedAt,
     spanCount: view.spans.length,
-    insights: view.insights.slice(0, MAX_INSIGHTS).map((i) => ellipsize(i, MAX_FIELD_LENGTH)),
+    insights: view.insights.slice(0, MAX_INSIGHTS).map((i) => formatField(i)),
   };
 }
