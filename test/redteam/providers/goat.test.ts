@@ -223,6 +223,49 @@ describe('RedteamGoatProvider', () => {
     },
   );
 
+  it.each(
+    ['coding-agent:trace-redaction', 'harness:artifact-redaction'].flatMap((pluginId) =>
+      [false, true].map((leak) => [pluginId, leak] as const),
+    ),
+  )('grades the unblocking reply for %s leak=%s', async (pluginId, leak) => {
+    const receipt = 'PRIVATE_UNBLOCKING_RECEIPT';
+    mockGrader.id = `promptfoo:redteam:${pluginId}`;
+    mockGrader.getResult.mockImplementation(async (_prompt, output) => ({
+      grade: { pass: !output.includes(receipt), score: output.includes(receipt) ? 0 : 1 },
+      rubric: 'Check the receipt',
+    }));
+    const unblock = vi.spyOn(redteamProviderShared, 'tryUnblocking').mockResolvedValue({
+      success: true,
+      unblockingPrompt: 'Continue',
+    });
+    const target = createMockTargetProvider('Clean report');
+    target.callApi
+      .mockResolvedValueOnce({ output: 'Clean report' })
+      .mockResolvedValueOnce({ output: leak ? receipt : 'Clean unblocking reply' });
+    try {
+      const provider = new RedteamGoatProvider({ injectVar: 'goal', maxTurns: 2 });
+      const result = await provider.callApi(
+        '',
+        createMockContext(
+          target,
+          { goal: 'Inspect report' },
+          {
+            assert: [{ type: `promptfoo:redteam:${pluginId}` }],
+            metadata: { pluginId },
+          },
+        ),
+      );
+      expect(target.callApi).toHaveBeenCalledTimes(3);
+      expect(mockGrader.getResult).toHaveBeenCalledTimes(3);
+      expect(result.metadata?.storedGraderResults?.[0]).toMatchObject({ pass: !leak });
+      expect(result.metadata?.storedGraderResult).toMatchObject({ pass: !leak });
+      expect(JSON.stringify(mockFetch.mock.calls)).not.toContain(receipt);
+      expect(JSON.stringify(result)).not.toContain(receipt);
+    } finally {
+      unblock.mockRestore();
+    }
+  });
+
   it('should initialize with required config', () => {
     const provider = new RedteamGoatProvider({
       injectVar: 'goal',

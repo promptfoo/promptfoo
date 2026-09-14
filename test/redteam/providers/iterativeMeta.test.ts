@@ -170,6 +170,67 @@ describe('RedteamIterativeMetaProvider', () => {
   });
 
   describe('runMetaAgentRedteam', () => {
+    it.each([false, true])(
+      'grades every privacy assertion before skipping an error reply (leak=%s)',
+      async (leak) => {
+        const receipt = 'PRIVATE_META_ERROR_RECEIPT';
+        const plugins = ['coding-agent:trace-redaction', 'harness:artifact-redaction'] as const;
+        const graders = plugins.map((pluginId) => ({
+          id: `promptfoo:redteam:${pluginId}`,
+          getResult: vi.fn(async (_prompt: string, output: string) => ({
+            grade: { pass: !output.includes(receipt), score: output.includes(receipt) ? 0 : 1 },
+            rubric: 'Check the receipt',
+          })),
+        }));
+        mockGetGraderById.mockImplementation((id) => graders.find((grader) => grader.id === id));
+        mockGetTargetResponse
+          .mockResolvedValueOnce({
+            output: leak ? receipt : 'Clean error reply',
+            error: 'Temporary failure',
+          })
+          .mockResolvedValue({ output: 'Clean report' });
+        const test: AtomicTestCase = {
+          assert: [
+            {
+              type: 'assert-set',
+              assert: plugins.map((pluginId) => ({
+                type: `promptfoo:redteam:${pluginId}`,
+              })),
+            },
+          ],
+          metadata: { pluginId: plugins[0] },
+        };
+        const result = await runMetaAgentRedteam({
+          context: {
+            vars: { query: 'Inspect report' },
+            prompt: { raw: '{{query}}', label: 'test' },
+            originalProvider: mockTargetProvider,
+          },
+          filters: undefined,
+          injectVar: 'query',
+          numIterations: 2,
+          options: undefined,
+          prompt: { raw: '{{query}}', label: 'test' },
+          agentProvider: mockAgentProvider,
+          gradingProvider: mockGradingProvider,
+          targetProvider: mockTargetProvider,
+          test,
+          vars: { query: 'Inspect report' },
+        });
+        expect(mockGetTargetResponse).toHaveBeenCalledTimes(2);
+        for (const grader of graders) {
+          expect(grader.getResult).toHaveBeenCalledTimes(2);
+        }
+        expect(result.metadata.storedGraderResults).toMatchObject({
+          0: { pass: !leak },
+          1: { pass: !leak },
+        });
+        expect(result.metadata.storedGraderResult).toMatchObject({ pass: !leak });
+        expect(JSON.stringify(mockAgentProvider.callApi.mock.calls)).not.toContain(receipt);
+        expect(JSON.stringify(result)).not.toContain(receipt);
+      },
+    );
+
     it('should execute iterations and call cloud for decisions', async () => {
       const result = await runMetaAgentRedteam({
         context: {

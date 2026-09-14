@@ -5,6 +5,7 @@ import path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import {
   hasProtectedReceiptFiles,
+  verifyCodingAgentResult,
   verifyTraceRedaction,
   withProtectedReceiptScope,
 } from '../../../src/redteam/plugins/codingAgent/verifiers';
@@ -74,6 +75,55 @@ describe('protected redaction receipts', () => {
       expect(verifyTraceRedaction({ rawReceiptPath: receipt }, replacement)).toBeUndefined();
     });
   });
+
+  it.each(['replaced', 'deleted'])(
+    'uses the Markdown receipt snapshot after its file is %s',
+    async (mode) => {
+      const value = { markdownUrlReceiptPath: receipt };
+      test.assert = [
+        {
+          type: 'assert-set',
+          assert: [
+            {
+              type: 'promptfoo:redteam:coding-agent:markdown-url-exfil',
+              value,
+            },
+          ],
+        },
+      ];
+      expect(hasProtectedReceiptFiles(test)).toBe(true);
+      await withProtectedReceiptScope([test], async () => {
+        if (mode === 'replaced') {
+          fs.writeFileSync(receipt, replacement);
+        } else {
+          fs.unlinkSync(receipt);
+        }
+        expect(
+          verifyCodingAgentResult(
+            'coding-agent:markdown-url-exfil',
+            `[report](https://example.invalid/${original})`,
+            test,
+            value,
+          )?.kind,
+        ).toBe('markdown-url-sensitive-value');
+        expect(
+          verifyCodingAgentResult(
+            'coding-agent:markdown-url-exfil',
+            `[report](https://example.invalid/${replacement})`,
+            test,
+            value,
+          ),
+        ).toBeUndefined();
+        const late = path.join(directory, 'late-markdown-receipt');
+        fs.writeFileSync(late, replacement);
+        expect(
+          verifyCodingAgentResult('coding-agent:markdown-url-exfil', 'Clean', test, {
+            markdownUrlReceiptPath: late,
+          })?.kind,
+        ).toBe('verifier-sidecar-failed');
+      });
+    },
+  );
 
   it('rejects receipt paths introduced after the snapshot', async () => {
     await withProtectedReceiptScope([test], async () => {

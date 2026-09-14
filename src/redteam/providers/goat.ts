@@ -363,6 +363,13 @@ export default class GoatProvider implements ApiProvider {
                 unblockingResponse,
                 context,
               );
+              storedGraderResult = await gradeRedactionResponse(
+                unblockingTargetPrompt,
+                unblockingResponse,
+                test,
+                storedGraderResults,
+              );
+              graderPassed = storedGraderResult?.pass;
               if (!mediaRedactionFailed) {
                 redactionError = unblockingResponse.error;
               }

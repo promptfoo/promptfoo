@@ -47,6 +47,7 @@ import {
   externalizeResponseForRedteamHistory,
   getGraderAssertionValue,
   getTargetResponse,
+  gradeRedactionResponse,
   redteamProviderManager,
   runRedteamGrader,
   type TargetResponse,
@@ -78,6 +79,8 @@ interface IterativeMetaMetadata {
   vulnerabilityAchieved: boolean;
   redteamFinalPrompt?: string;
   storedGraderResult?: GradingResult;
+  storedGraderResults?: Record<number, GradingResult>;
+  redactionContentOmitted?: boolean;
   stopReason: 'Grader failed' | 'Agent abandoned' | 'Max iterations reached';
   redteamHistory: {
     prompt: string;
@@ -227,6 +230,7 @@ export async function runMetaAgentRedteam({
   let bestResponse = '';
   let finalIteration = numIterations;
   let storedGraderResult: GradingResult | undefined = undefined;
+  const storedGraderResults: Record<number, GradingResult> = {};
   let stopReason: 'Grader failed' | 'Agent abandoned' | 'Max iterations reached' =
     'Max iterations reached';
   let lastResponse: TargetResponse | undefined = undefined;
@@ -510,6 +514,12 @@ export async function runMetaAgentRedteam({
       initialTargetResponse,
       { ...context, test },
     );
+    const privateGrade = redactTrace
+      ? await gradeRedactionResponse(targetPrompt, targetResponse, test, storedGraderResults)
+      : undefined;
+    if (privateGrade) {
+      storedGraderResult = privateGrade;
+    }
     if (targetResponse.metadata?.redactionMediaOmitted === true) {
       mediaRedactionError ??= targetResponse.error;
     }
@@ -578,7 +588,7 @@ export async function runMetaAgentRedteam({
     }
 
     // Grade the response
-    let graderResult: GradingResult | undefined = undefined;
+    let graderResult: GradingResult | undefined = privateGrade;
 
     // Prepare trace summaries for attack generation and grading
     const attackTraceSummary = tracingOptions.includeInAttack ? computedTraceSummary : undefined;
@@ -589,7 +599,7 @@ export async function runMetaAgentRedteam({
 
     const { getGraderById } = await import('../graders');
 
-    if (test && assertToUse) {
+    if (!redactTrace && test && assertToUse) {
       const grader = getGraderById(assertToUse.type);
       if (grader) {
         const iterationTest = {
@@ -745,6 +755,7 @@ export async function runMetaAgentRedteam({
       // This ensures UI shows what was actually sent, not the pre-transform jailbreak
       redteamFinalPrompt: lastFinalAttackPrompt || bestPrompt,
       storedGraderResult,
+      ...(redactTrace && { storedGraderResults, redactionContentOmitted: true }),
       stopReason,
       redteamHistory,
       sessionIds,
