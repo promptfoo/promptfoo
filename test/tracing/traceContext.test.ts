@@ -76,10 +76,39 @@ describe('fetchTraceContext', () => {
           maxRetries: 1,
           retryDelayMs: 0,
         }),
-      ).rejects.toThrow('Evidence backend unavailable');
+      ).rejects.toMatchObject({ name: 'TraceEvidenceError', cause: failure });
       expect(fetch).toHaveBeenCalledTimes(retryable ? 2 : 1);
     },
   );
+
+  it('normalizes malformed required backend responses', async () => {
+    mocks.isExternalTraceProvider.mockReturnValue(true);
+    const failure = new SyntaxError('Malformed trace JSON');
+    mockExternalTrace([]).mockRejectedValue(failure);
+    await expect(
+      fetchTraceContext('trace-1', {
+        providerConfig,
+        requireComplete: true,
+        maxRetries: 0,
+        queryDelay: 0,
+      }),
+    ).rejects.toMatchObject({ name: 'TraceEvidenceError', cause: failure });
+  });
+
+  it('normalizes required summary read failures', async () => {
+    mocks.isExternalTraceProvider.mockReturnValue(true);
+    mockExternalTrace([{ spanId: 'target', name: 'target.call', startTime: 1, endTime: 2 }]);
+    const failure = new Error('Summary read failed');
+    mocks.getSpans.mockRejectedValue(failure);
+    await expect(
+      fetchTraceContext('trace-1', {
+        providerConfig,
+        requireComplete: true,
+        maxRetries: 0,
+        queryDelay: 0,
+      }),
+    ).rejects.toMatchObject({ name: 'TraceEvidenceError', cause: failure });
+  });
 
   it.each([false, true])(
     'collects late spans through the complete grading window (external: %s)',

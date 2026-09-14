@@ -652,38 +652,59 @@ export async function fetchTraceContext(
   traceId: string,
   options: FetchTraceContextOptions = {},
 ): Promise<TraceContextData | null> {
-  const context = await fetchTraceContextData(traceId, options);
-  if (options.requireComplete && !context?.spans.length) {
-    throw Object.assign(new Error('No execution trace evidence was collected for grading'), {
-      name: 'TraceEvidenceError',
-    });
-  }
-  if (!context || !options.requireComplete) {
-    return context;
-  }
+  try {
+    const context = await fetchTraceContextData(traceId, options);
+    if (options.requireComplete && !context?.spans.length) {
+      throw Object.assign(new Error('No execution trace evidence was collected for grading'), {
+        name: 'TraceEvidenceError',
+      });
+    }
+    if (!context || !options.requireComplete) {
+      return context;
+    }
 
-  const {
-    earliestStartTime,
-    includeInternalSpans,
-    maxSpans,
-    maxDepth,
-    spanFilter,
-    sanitizeAttributes,
-  } = options;
-  const selected = await getTraceStore().getSpans(traceId, {
-    earliestStartTime,
-    includeInternalSpans,
-    maxSpans,
-    maxDepth,
-    spanFilter,
-    sanitizeAttributes,
-  });
-  const spanIds = new Set(context.spans.map((span) => span.spanId));
-  const spans = selected.filter((span) => spanIds.has(span.spanId));
-  const summarySpans = createTraceSpans(
-    options.redactAttributes?.length ? redactExternalSpans(spans, options.redactAttributes) : spans,
-  );
-  return { ...context, summary: { spans: summarySpans, insights: deriveInsights(summarySpans) } };
+    const {
+      earliestStartTime,
+      includeInternalSpans,
+      maxSpans,
+      maxDepth,
+      spanFilter,
+      sanitizeAttributes,
+    } = options;
+    const selected = await getTraceStore().getSpans(traceId, {
+      earliestStartTime,
+      includeInternalSpans,
+      maxSpans,
+      maxDepth,
+      spanFilter,
+      sanitizeAttributes,
+    });
+    const spanIds = new Set(context.spans.map((span) => span.spanId));
+    const spans = selected.filter((span) => spanIds.has(span.spanId));
+    const summarySpans = createTraceSpans(
+      options.redactAttributes?.length
+        ? redactExternalSpans(spans, options.redactAttributes)
+        : spans,
+    );
+    return { ...context, summary: { spans: summarySpans, insights: deriveInsights(summarySpans) } };
+  } catch (error) {
+    if (
+      !options.requireComplete ||
+      (error instanceof Error &&
+        ['AbortError', 'TraceLimitError', 'TraceEvidenceError'].includes(error.name))
+    ) {
+      throw error;
+    }
+    if (options.abortSignal?.aborted) {
+      throw createTraceAbortError(options.abortSignal);
+    }
+    throw Object.assign(
+      new Error('Failed to collect required execution trace evidence', { cause: error }),
+      {
+        name: 'TraceEvidenceError',
+      },
+    );
+  }
 }
 
 async function fetchTraceContextData(
