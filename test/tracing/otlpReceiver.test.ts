@@ -1069,7 +1069,7 @@ describe('OTLPReceiver', () => {
   });
 
   describe('Ingest-time redaction', () => {
-    it('replaces matched attribute values before persisting', async () => {
+    it('hides free-form attribute names when redacted JSON prevents inspecting secrets', async () => {
       const redactingReceiver = new OTLPReceiver({
         redactAttributes: ['password', 'authorization', 'tool.arguments'],
       });
@@ -1092,6 +1092,7 @@ describe('OTLPReceiver', () => {
                       endTimeUnixNano: '2000000000',
                       attributes: [
                         { key: 'tool.name', value: { stringValue: 'lookup_user' } },
+                        { key: '123-45-6789', value: { stringValue: 'echoed credential key' } },
                         {
                           key: 'tool.arguments',
                           value: { stringValue: '{"ssn":"123-45-6789"}' },
@@ -1124,16 +1125,10 @@ describe('OTLPReceiver', () => {
         'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
         [
           expect.objectContaining({
-            attributes: expect.objectContaining({
-              AUTHORIZATION: '[REDACTED]',
-              'http.password': '[REDACTED]',
-              'request.context': {
-                'user.password': '[REDACTED]',
-                safe: '[REDACTED]',
-              },
-              'tool.arguments': '[REDACTED]',
-              'tool.result': '[REDACTED]',
-            }),
+            spanId: '1234567890abcdef',
+            startTime: 1000,
+            endTime: 2000,
+            attributes: { '[REDACTED]': '[REDACTED]' },
           }),
         ],
         {
