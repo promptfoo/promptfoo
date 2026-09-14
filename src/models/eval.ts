@@ -1478,6 +1478,15 @@ export default class Eval {
           promptMetrics.namedScoresCount = {};
           promptMetrics.namedScoreWeights = {};
         }
+        const derivedMetrics = (this.config.derivedMetrics ?? []).map((derived) => {
+          invariant(
+            typeof derived.value === 'string',
+            `Cannot replace results: derived metric '${derived.name}' requires its original evaluation callback`,
+          );
+          return { name: derived.name, value: derived.value };
+        });
+        const math = derivedMetrics.length > 0 ? await import('mathjs') : null;
+        const promptEvalCounts = metrics.map(() => 0);
         for (const result of results) {
           const promptMetrics = metrics[result.promptIdx];
           if (!promptMetrics) {
@@ -1491,37 +1500,31 @@ export default class Eval {
               testVars: result.testCase?.vars ?? {},
             });
           }
-        }
-        const derivedMetrics = this.config.derivedMetrics ?? [];
-        if (derivedMetrics.length > 0) {
-          const math = await import('mathjs');
-          for (const promptMetrics of metrics) {
-            const count =
-              promptMetrics.testPassCount +
-              promptMetrics.testFailCount +
-              promptMetrics.testErrorCount;
+          if (math) {
+            // Replay the live evaluator's per-row order. A fallback introduced on
+            // one row becomes available to dependent expressions on later rows.
             const context: Record<string, number> = {
               ...promptMetrics.namedScores,
-              __count: count,
+              __count: ++promptEvalCounts[result.promptIdx],
             };
             for (const derived of derivedMetrics) {
-              invariant(
-                typeof derived.value === 'string',
-                `Cannot replace results: derived metric '${derived.name}' requires its original evaluation callback`,
-              );
               promptMetrics.namedScores[derived.name] ??= 0;
               try {
-                // Empty prompts have no rows on which to evaluate a derived score.
-                const value = count === 0 ? 0 : math.evaluate(derived.value, context);
+                const value = math.evaluate(derived.value, context);
                 promptMetrics.namedScores[derived.name] = value;
                 context[derived.name] = value;
               } catch (error) {
-                // Match live evaluation: missing inputs must not discard otherwise valid rows.
                 logger.debug(
                   `Could not evaluate derived metric '${derived.name}': ${(error as Error).message}`,
                 );
               }
             }
+          }
+        }
+        // Empty prompts have no rows on which to evaluate their derived scores.
+        for (const promptMetrics of metrics) {
+          for (const derived of derivedMetrics) {
+            promptMetrics.namedScores[derived.name] ??= 0;
           }
         }
         const prompts = storedPrompts.map((prompt, i) => ({ ...prompt, metrics: metrics[i] }));

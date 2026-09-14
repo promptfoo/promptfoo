@@ -390,6 +390,27 @@ describe('evaluator', () => {
     });
   });
 
+  it.each([1, 2])(
+    'matches live derived fallback propagation across %s rows',
+    async (numResults) => {
+      const eval_ = await EvalFactory.create({ numResults });
+      eval_.config.derivedMetrics = [
+        { name: 'first', value: 'missing / __count' },
+        { name: 'second', value: 'first + 1' },
+      ];
+      const rows = await EvalResult.findManyByEvalId(eval_.id);
+      for (const row of rows) {
+        row.promptIdx = 0;
+        row.namedScores = {};
+      }
+      await eval_.setResults(rows);
+      expect(eval_.prompts[0].metrics?.namedScores).toMatchObject({
+        first: 0,
+        second: numResults === 1 ? 0 : 1,
+      });
+    },
+  );
+
   it('rolls back replacement when derived metrics cannot be reconstructed', async () => {
     const eval_ = await EvalFactory.create({ numResults: 1 });
     const originalMetrics = eval_.prompts.map((p) => p.metrics);
