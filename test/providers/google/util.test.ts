@@ -44,8 +44,11 @@ import {
   stripExecutableToolFileReferences,
   validateFunctionCall,
 } from '../../../src/providers/google/util';
+import { setLoadedFileMimeTypes } from '../../../src/util/file';
 
 import type { Tool } from '../../../src/providers/google/types';
+
+const { readFileSync: readFixture } = await vi.importActual<typeof import('node:fs')>('node:fs');
 
 // Create a comprehensive mock for Google Auth Library
 // This prevents the real library from reading ~/.config/gcloud/ or environment
@@ -177,6 +180,185 @@ describe('util', () => {
     });
   });
 
+  describe('Google service tiers', () => {
+    it.each([
+      ['standard', 'standard'],
+      ['priority', 'priority'],
+      ['flex', 'flex'],
+      ['SERVICE_TIER_STANDARD', 'standard'],
+      ['SERVICE_TIER_PRIORITY', 'priority'],
+      ['SERVICE_TIER_FLEX', 'flex'],
+    ])('normalizes %s without manufacturing a wire enum', (tier, expected) => {
+      expect(normalizeGoogleServiceTier(tier)).toBe(expected);
+    });
+
+    it('preserves an unknown tier input', () => {
+      expect(normalizeGoogleServiceTier('custom')).toBe('custom');
+    });
+
+    it('prefers the actual tier reported in response headers', () => {
+      expect(
+        getGoogleResponseServiceTier(
+          { 'X-Gemini-Service-Tier': 'standard' },
+          { serviceTier: 'SERVICE_TIER_PRIORITY' },
+        ),
+      ).toBe('standard');
+    });
+
+    it('falls back to the actual tier reported in usage metadata', () => {
+      expect(getGoogleResponseServiceTier(undefined, { service_tier: 'SERVICE_TIER_FLEX' })).toBe(
+        'flex',
+      );
+    });
+  });
+
+  describe('Vertex tier protocol regression', () => {
+    it.each([
+      ['ON_DEMAND_PRIORITY', 'priority'],
+      ['ON_DEMAND_FLEX', 'flex'],
+      ['ON_DEMAND', 'standard'],
+      ['TRAFFIC_TYPE_UNSPECIFIED', undefined],
+      ['PROVISIONED_THROUGHPUT', undefined],
+      ['FUTURE_TRAFFIC_CLASS', undefined],
+      [undefined, undefined],
+    ])('recognizes only documented on-demand traffic %s', (trafficType, expected) => {
+      expect(getGoogleResponseServiceTier(undefined, { trafficType }, true)).toBe(expected);
+    });
+
+    it('keeps explicit response headers ahead of traffic and legacy metadata', () => {
+      expect(
+        getGoogleResponseServiceTier(
+          new Headers({ 'X-Gemini-Service-Tier': 'standard' }),
+          { trafficType: 'ON_DEMAND_FLEX', serviceTier: 'priority' },
+          true,
+        ),
+      ).toBe('standard');
+    });
+
+    it('uses traffic before legacy aliases while leaving native parsing unchanged', () => {
+      const usage = { trafficType: 'ON_DEMAND_FLEX', serviceTier: 'priority' };
+      expect(getGoogleResponseServiceTier(undefined, usage, true)).toBe('flex');
+      expect(getGoogleResponseServiceTier(undefined, usage)).toBe('priority');
+      expect(getGoogleResponseServiceTier(undefined, { service_tier: 'priority' }, true)).toBe(
+        'priority',
+      );
+    });
+
+    it.each(['TRAFFIC_TYPE_UNSPECIFIED', 'PROVISIONED_THROUGHPUT', 'FUTURE_TRAFFIC_CLASS'])(
+      'does not reinterpret explicit %s as a legacy PayGo tier',
+      (trafficType) => {
+        expect(
+          getGoogleResponseServiceTier(
+            undefined,
+            { trafficType, serviceTier: 'priority', service_tier: 'flex' },
+            true,
+          ),
+        ).toBeUndefined();
+      },
+    );
+
+    it.each([
+      ['ON_DEMAND_PRIORITY', 0.00099],
+      ['ON_DEMAND_FLEX', 0.000275],
+      ['ON_DEMAND', 0.00055],
+      ['PROVISIONED_THROUGHPUT', 0.00099],
+      ['FUTURE_TRAFFIC_CLASS', 0.00099],
+      [undefined, 0.00099],
+    ] as const)(
+      'prices recognized %s before falling back to the requested-tier estimate',
+      (trafficType, expected) => {
+        expect(
+          calculateGoogleCostFromUsage(
+            'gemini-3.5-flash-lite',
+            { region: 'global', service_tier: 'priority' },
+            1_000,
+            100,
+            true,
+            { trafficType },
+          ),
+        ).toBeCloseTo(expected, 12);
+      },
+    );
+
+    it('preserves zero and partial directional overrides after an actual downgrade', () => {
+      const usage = { trafficType: 'ON_DEMAND', cachedContentTokenCount: 100 };
+      expect(
+        calculateGoogleCostFromUsage(
+          'gemini-3.5-flash-lite',
+          { region: 'global', service_tier: 'priority', cost: 0 },
+          1_000,
+          100,
+          true,
+          usage,
+        ),
+      ).toBe(0);
+      expect(
+        calculateGoogleCostFromUsage(
+          'gemini-3.5-flash-lite',
+          { region: 'global', service_tier: 'priority', inputCost: 0 },
+          1_000,
+          100,
+          true,
+          usage,
+        ),
+      ).toBeCloseTo(0.00025, 12);
+    });
+
+    it('keeps directional and modality rates absolute with actual Flex traffic', () => {
+      expect(
+        calculateGoogleCostFromUsage(
+          'gemini-3.6-flash',
+          {
+            region: 'global',
+            service_tier: 'priority',
+            inputCost: 0.02,
+            outputCost: 0.03,
+            audioInputCost: 0.04,
+            audioOutputCost: 0.05,
+            imageInputCost: 0.06,
+            videoOutputCost: 0.07,
+          },
+          300,
+          300,
+          true,
+          {
+            trafficType: 'ON_DEMAND_FLEX',
+            promptTokensDetails: [
+              { modality: 'AUDIO', tokenCount: 100 },
+              { modality: 'IMAGE', tokenCount: 100 },
+            ],
+            candidatesTokensDetails: [
+              { modality: 'AUDIO', tokenCount: 100 },
+              { modality: 'VIDEO', tokenCount: 100 },
+            ],
+            cachedContentTokenCount: 150,
+            cacheTokensDetails: [
+              { modality: 'AUDIO', tokenCount: 50 },
+              { modality: 'IMAGE', tokenCount: 50 },
+            ],
+          },
+        ),
+      ).toBeCloseTo(27, 10);
+    });
+  });
+
+  describe('mergeGoogleRequestTools', () => {
+    it('omits tools when no configured or passthrough tools exist', () => {
+      expect(mergeGoogleRequestTools([], undefined)).toBeUndefined();
+    });
+
+    it('merges configured tools with a single passthrough tool', () => {
+      expect(mergeGoogleRequestTools([{ googleSearch: {} }], { codeExecution: {} })).toEqual([
+        { googleSearch: {} },
+        { codeExecution: {} },
+      ]);
+    });
+
+    it('preserves explicitly empty passthrough tools', () => {
+      expect(mergeGoogleRequestTools([], [])).toEqual([]);
+    });
+  });
+
   describe('config file references', () => {
     it.each(['rules.txt', 'schema.json'])(
       'preserves absolute Windows %s file URLs when basePath is set',
@@ -273,57 +455,6 @@ describe('util', () => {
       expect(() => parseConfigResponseSchema('{invalid}', vars)).toThrow(
         'Invalid JSON in responseSchema',
       );
-    });
-  });
-
-  describe('Google service tiers', () => {
-    it.each([
-      ['standard', false, 'standard'],
-      ['priority', false, 'priority'],
-      ['flex', false, 'flex'],
-      ['SERVICE_TIER_PRIORITY', false, 'priority'],
-      ['standard', true, 'SERVICE_TIER_STANDARD'],
-      ['priority', true, 'SERVICE_TIER_PRIORITY'],
-      ['flex', true, 'SERVICE_TIER_FLEX'],
-      ['SERVICE_TIER_FLEX', true, 'SERVICE_TIER_FLEX'],
-    ])('normalizes %s for Vertex=%s', (tier, vertexai, expected) => {
-      expect(normalizeGoogleServiceTier(tier, vertexai)).toBe(expected);
-    });
-
-    it('preserves an unknown tier so the API can reject it', () => {
-      expect(normalizeGoogleServiceTier('custom', true)).toBe('custom');
-    });
-
-    it('prefers the actual tier reported in response headers', () => {
-      expect(
-        getGoogleResponseServiceTier(
-          { 'X-Gemini-Service-Tier': 'standard' },
-          { serviceTier: 'SERVICE_TIER_PRIORITY' },
-        ),
-      ).toBe('standard');
-    });
-
-    it('falls back to the actual tier reported in usage metadata', () => {
-      expect(getGoogleResponseServiceTier(undefined, { service_tier: 'SERVICE_TIER_FLEX' })).toBe(
-        'flex',
-      );
-    });
-  });
-
-  describe('mergeGoogleRequestTools', () => {
-    it('omits tools when no configured or passthrough tools exist', () => {
-      expect(mergeGoogleRequestTools([], undefined)).toBeUndefined();
-    });
-
-    it('merges configured tools with a single passthrough tool', () => {
-      expect(mergeGoogleRequestTools([{ googleSearch: {} }], { codeExecution: {} })).toEqual([
-        { googleSearch: {} },
-        { codeExecution: {} },
-      ]);
-    });
-
-    it('preserves explicitly empty passthrough tools', () => {
-      expect(mergeGoogleRequestTools([], [])).toEqual([]);
     });
   });
 
@@ -1931,7 +2062,12 @@ describe('util', () => {
           ['audio/mpeg', Buffer.from('ID3.................').toString('base64')],
           ['audio/aac', Buffer.from('fff15080000000000000000000000000', 'hex').toString('base64')],
           ['audio/mp4', Buffer.from('....ftypM4A ........').toString('base64')],
-          ['audio/ogg', Buffer.from('OggS................').toString('base64')],
+          [
+            'audio/ogg',
+            readFixture(
+              path.join(__dirname, '../../fixtures/google-media/vorbis-ordinary.ogg'),
+            ).toString('base64'),
+          ],
           ['audio/flac', Buffer.from('fLaC................').toString('base64')],
           ['image/heic', Buffer.from('....ftypheic........').toString('base64')],
           ['image/heif', Buffer.from('....ftypmif1........').toString('base64')],
@@ -1954,6 +2090,84 @@ describe('util', () => {
         });
 
         it.each([
+          ['IMAGE/PNG', 'image/png'],
+          ['Audio/MP4', 'audio/mp4'],
+          ['Application/PDF', 'application/pdf'],
+          ['audio/mp3', 'audio/mpeg'],
+          ['audio/m4a', 'audio/mp4'],
+          ['video/mpg', 'video/mpeg'],
+          ['video/mov', 'video/quicktime'],
+        ])(
+          'should normalize the supported MIME type %s in data URLs',
+          (mimeType, normalizedMimeType) => {
+            const base64Data = Buffer.from('media-content-for-test').toString('base64');
+            const media = `data:${mimeType};base64,${base64Data}`;
+
+            const { contents } = geminiFormatAndSystemInstructions(media, { media });
+
+            expect(contents[0].parts).toEqual([
+              { inlineData: { mimeType: normalizedMimeType, data: base64Data } },
+            ]);
+          },
+        );
+
+        it.each(['isom', 'mp42'])(
+          'should use value-bound M4A provenance for the generic %s brand',
+          (brand) => {
+            const media = Buffer.from(`....ftyp${brand}........`).toString('base64');
+            const vars = { media };
+            // The real renderer supplies this same value-bound, nonenumerable carrier.
+            setLoadedFileMimeTypes(vars, new Map([[media, 'audio/mp4']]));
+
+            const { contents } = geminiFormatAndSystemInstructions(media, vars);
+
+            expect(contents[0].parts).toEqual([
+              { inlineData: { mimeType: 'audio/mp4', data: media } },
+            ]);
+            expect(vars.media).toBe(media);
+            expect(JSON.parse(JSON.stringify(vars))).toEqual({ media });
+          },
+        );
+
+        it('should preserve M4A aliases when only the alias appears in the prompt', () => {
+          const audio = Buffer.from('....ftypisom........').toString('base64');
+          const vars = { audio, alias: audio };
+          setLoadedFileMimeTypes(vars, new Map([[audio, 'audio/mp4']]));
+
+          const { contents } = geminiFormatAndSystemInstructions(vars.alias, vars);
+
+          expect(contents[0].parts[0].inlineData?.mimeType).toBe('audio/mp4');
+          expect(contents[0].parts).toEqual([
+            { inlineData: { mimeType: 'audio/mp4', data: audio } },
+          ]);
+          expect(vars).toEqual({ audio, alias: audio });
+          expect(JSON.parse(JSON.stringify(vars))).toEqual({ audio, alias: audio });
+        });
+
+        it('should preserve explicit video MIME types despite M4A file provenance', () => {
+          const base64Data = Buffer.from('....ftypisom........').toString('base64');
+          const media = `data:video/mp4;base64,${base64Data}`;
+          const vars = { media };
+          setLoadedFileMimeTypes(vars, new Map([[media, 'audio/mp4']]));
+
+          const { contents } = geminiFormatAndSystemInstructions(media, vars);
+
+          expect(contents[0].parts).toEqual([
+            { inlineData: { mimeType: 'video/mp4', data: base64Data } },
+          ]);
+        });
+
+        it('should leave unrecognized file content as text despite M4A file provenance', () => {
+          const media = 'Unrecognized audio content';
+          const vars = { media };
+          setLoadedFileMimeTypes(vars, new Map([[media, 'audio/mp4']]));
+
+          const { contents } = geminiFormatAndSystemInstructions(media, vars);
+
+          expect(contents[0].parts).toEqual([{ text: media }]);
+        });
+
+        it.each([
           ['application/pdf', Buffer.from('%PDF-1.7\n1 0 obj\n').toString('base64')],
           ['audio/wav', Buffer.from('RIFF....WAVEfmt ........').toString('base64')],
           ['audio/aiff', Buffer.from('FORM....AIFCCOMM........').toString('base64')],
@@ -1964,7 +2178,12 @@ describe('util', () => {
           ['audio/aac', Buffer.from('fff95080000000000000000000000000', 'hex').toString('base64')],
           ['audio/mpeg', Buffer.from('fffb5000000000000000000000000000', 'hex').toString('base64')],
           ['audio/mp4', Buffer.from('....ftypM4A ........').toString('base64')],
-          ['audio/ogg', Buffer.from('OggS................').toString('base64')],
+          [
+            'audio/ogg',
+            readFixture(
+              path.join(__dirname, '../../fixtures/google-media/vorbis-ordinary.ogg'),
+            ).toString('base64'),
+          ],
           ['audio/flac', Buffer.from('fLaC................').toString('base64')],
           ['image/heic', Buffer.from('....ftypheic........').toString('base64')],
           ['image/heif', Buffer.from('....ftypmif1........').toString('base64')],
@@ -1992,8 +2211,13 @@ describe('util', () => {
           ['image/bmp', Buffer.from('BM..................')],
           ['image/tiff', Buffer.from('II*.................')],
           ['image/x-icon', Buffer.from('00000100010000000000000000000000', 'hex')],
+          ['image/avif', Buffer.from('....ftypavif........')],
+          ['image/x-canon-cr3', Buffer.from('....ftypcrx ........')],
           ['audio/x-ms-wma', Buffer.from(wmaBase64, 'base64')],
-          ['video/ogg', Buffer.from('OggS........\u0080theora...')],
+          [
+            'video/ogg',
+            readFixture(path.join(__dirname, '../../fixtures/google-media/theora.ogg')),
+          ],
           ['video/x-matroska', Buffer.from(matroskaBase64, 'base64')],
           ['audio/unsupported', Buffer.from('unsupported audio...')],
           ['video/unsupported', Buffer.from('unsupported video...')],
@@ -2022,6 +2246,17 @@ describe('util', () => {
 
           expect(contents[0].parts).toEqual([{ text: base64Data }]);
         });
+
+        it.each(['avif', 'avis', 'crx '])(
+          'leaves the unsupported BMFF brand %s as text',
+          (brand) => {
+            // Synthetic sniffing-prefix fixture, not a complete or decodable media file.
+            const media = Buffer.from(`....ftyp${brand}........`).toString('base64');
+            const { contents } = geminiFormatAndSystemInstructions(media, { media });
+
+            expect(contents[0].parts).toEqual([{ text: media }]);
+          },
+        );
 
         it('does not misclassify Matroska containers as WebM', () => {
           const prompt = JSON.stringify([{ role: 'user', parts: [{ text: matroskaBase64 }] }]);
@@ -3637,6 +3872,7 @@ describe('util', () => {
     ])(
       'should apply AI Studio cached multimodal pricing for %s at %s tier',
       (modelId, serviceTier, input, output, multiplier, cachedInput) => {
+        vi.spyOn(Date, 'now').mockReturnValue(Date.UTC(2026, 8, 8));
         const cost = calculateGoogleCost(
           modelId,
           { passthrough: { service_tier: serviceTier } },
@@ -3692,7 +3928,7 @@ describe('util', () => {
       ['us-central1', 0.001705],
       ['europe-west1', 0.001705],
     ])(
-      'estimates the Gemini 3.5 Flash-Lite premium for resolved non-global endpoints: %s',
+      'uses the Gemini 3.5 Flash-Lite catalog rate for the effective Vertex endpoint: %s',
       (region, expectedCost) => {
         const cost = calculateGoogleCost(
           'gemini-3.5-flash-lite',
@@ -3967,6 +4203,47 @@ describe('util', () => {
       expect(cost).toBeCloseTo(0.00055, 12);
     });
 
+    it.each([
+      [true, 'global', 'eu', 0.0825],
+      [true, 'eu', 'global', 0.075],
+      [false, 'global', 'eu', 0.08],
+    ] as const)(
+      'keeps effective region %s/%s/%s separate from a defensive actual-Flex mismatch',
+      (vertexai, configuredRegion, effectiveRegion, expected) => {
+        const config = { region: configuredRegion, service_tier: 'priority' };
+        expect(
+          calculateGoogleCostFromUsage(
+            'gemini-3.5-flash',
+            config,
+            1_000_000,
+            0,
+            vertexai,
+            { cachedContentTokenCount: 1_000_000, serviceTier: 'SERVICE_TIER_PRIORITY' },
+            'SERVICE_TIER_FLEX',
+            effectiveRegion,
+          ),
+        ).toBeCloseTo(expected, 12);
+        expect(
+          calculateGoogleCost(
+            'gemini-3.5-flash',
+            config,
+            1_000_000,
+            0,
+            vertexai,
+            undefined,
+            undefined,
+            undefined,
+            undefined,
+            1_000_000,
+            undefined,
+            undefined,
+            'flex',
+            effectiveRegion,
+          ),
+        ).toBeCloseTo(expected, 12);
+      },
+    );
+
     it('should infer cached Gemini audio and image tokens without cache modality details', () => {
       const model = 'gemini-live-2.5-flash-preview-native-audio-09-2025';
       const calculateCachedCost = (modality: 'AUDIO' | 'IMAGE') =>
@@ -4147,7 +4424,6 @@ describe('util', () => {
     });
 
     it('should calculate resolved-model cost for gemini-flash-latest', () => {
-      // gemini-flash-latest serves gemini-3.6-flash: input=1.5/1M, output=7.5/1M
       const cost = calculateGoogleCost('gemini-flash-latest', {}, 1000, 500);
       expect(cost).toBeCloseTo(0.002625, 10);
     });
@@ -4287,6 +4563,82 @@ describe('util', () => {
         ),
       ).toBeCloseTo(4, 10);
     });
+
+    it.each(['priority', 'flex'])(
+      'preserves positive price overrides at the %s tier',
+      (service_tier) => {
+        const config = {
+          service_tier,
+          region: 'eu',
+          inputCost: 0.02,
+          outputCost: 0.03,
+          audioInputCost: 0.04,
+          audioOutputCost: 0.05,
+          imageInputCost: 0.06,
+          videoOutputCost: 0.07,
+        };
+        expect(
+          calculateGoogleCost(
+            'gemini-3.6-flash',
+            config,
+            300,
+            300,
+            true,
+            100,
+            100,
+            100,
+            100,
+            150,
+            50,
+            50,
+          ),
+        ).toBeCloseTo(27, 10);
+        expect(
+          calculateGoogleCost(
+            'gemini-3.6-flash',
+            { service_tier, cost: 0.01 },
+            300,
+            300,
+            false,
+            100,
+            100,
+            100,
+            100,
+            150,
+            50,
+            50,
+          ),
+        ).toBeCloseTo(6, 10);
+      },
+    );
+
+    it.each([
+      ['priority', 0.045, 0.9, 0.09],
+      ['flex', 0.0125, 0.25, 0.025],
+    ] as const)(
+      'keeps partial positive and zero overrides while pricing cached audio at %s',
+      (service_tier, cachedTextRate, audioRate, cachedAudioRate) => {
+        const cost = calculateGoogleCost(
+          'gemini-3.1-flash-lite',
+          { service_tier, imageInputCost: 0, outputCost: 2 / 1e6 },
+          1_000_000,
+          100_000,
+          false,
+          400_000,
+          0,
+          0,
+          200_000,
+          700_000,
+          200_000,
+          100_000,
+        );
+
+        expect(cost).toBeCloseTo(
+          0.4 * cachedTextRate + 0.2 * audioRate + 0.2 * cachedAudioRate + 0.2,
+          12,
+        );
+      },
+    );
 
     it('should respect separate custom costs for tiered pricing', () => {
       const config = { inputCost: 0.001, outputCost: 0.003 };
@@ -4569,6 +4921,18 @@ describe('util', () => {
   });
 
   describe('resolveGoogleToolConfig', () => {
+    it('lets explicit AUTO override tool_choice none', () => {
+      expect(
+        resolveGoogleToolConfig({
+          tool_choice: 'none',
+          toolConfig: { functionCallingConfig: { mode: 'AUTO' } },
+        }),
+      ).toEqual({
+        toolConfig: { functionCallingConfig: { mode: 'AUTO' } },
+        toolsDisabled: false,
+      });
+    });
+
     it('derives disablement from the winning tool config', () => {
       const result = resolveGoogleToolConfig({
         toolConfig: { functionCallingConfig: { mode: 'NONE' } },
@@ -4600,6 +4964,67 @@ describe('util', () => {
       } as any);
 
       expect(result.toolsDisabled).toBe(true);
+    });
+
+    it.each([
+      {
+        passthrough: {
+          toolConfig: { retrievalConfig: { languageCode: 'en' } },
+          tool_config: { function_calling_config: { mode: 'NONE' } },
+        },
+        toolsDisabled: false,
+      },
+      {
+        passthrough: {
+          toolConfig: { functionCallingConfig: { mode: 'NONE' } },
+          tool_config: { function_calling_config: { mode: 'ANY' } },
+        },
+        toolsDisabled: true,
+      },
+    ])(
+      'uses the winning camel-case config when both passthrough aliases are configured: $toolsDisabled',
+      ({ passthrough, toolsDisabled }) => {
+        expect(resolveGoogleToolConfig({ passthrough })).toEqual({
+          toolConfig: passthrough.toolConfig,
+          toolsDisabled,
+        });
+      },
+    );
+
+    it.each([
+      {
+        toolConfig: {
+          functionCallingConfig: { mode: 'ANY', streamFunctionCallArguments: true },
+          retrievalConfig: { languageCode: 'en' },
+          includeServerSideToolInvocations: true,
+        },
+      },
+      {
+        tool_config: {
+          function_calling_config: { mode: 'ANY', stream_function_call_arguments: true },
+          retrieval_config: { language_code: 'en' },
+          include_server_side_tool_invocations: true,
+        },
+      },
+    ])('preserves passthrough tool settings and merges explicit function names', (passthrough) => {
+      const result = resolveGoogleToolConfig({
+        tool_choice: 'auto',
+        toolConfig: { functionCallingConfig: { allowedFunctionNames: ['get_weather'] } },
+        passthrough,
+      });
+
+      expect(result).toEqual({
+        toolConfig: {
+          functionCallingConfig: {
+            mode: 'ANY',
+            allowedFunctionNames: ['get_weather'],
+            streamFunctionCallArguments: true,
+          },
+          retrievalConfig: { languageCode: 'en' },
+          includeServerSideToolInvocations: true,
+        },
+        toolsDisabled: false,
+      });
     });
 
     it('falls back to tool_choice when explicit toolConfig has invalid mode', () => {

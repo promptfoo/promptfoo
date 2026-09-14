@@ -585,11 +585,6 @@ export type GoogleVideoModel =
   | 'veo-3.1-fast-generate-preview'
   | 'veo-3.1-lite-generate-preview'
   | 'veo-3.1-fast-preview'
-  | 'veo-3.1-fast-generate-preview'
-  | 'veo-3.1-lite-generate-preview'
-  | 'veo-3.1-generate-001'
-  | 'veo-3.1-fast-generate-001'
-  | 'veo-3.1-lite-generate-001'
   | 'veo-3-generate'
   | 'veo-3-fast'
   | 'veo-2-generate'
@@ -667,9 +662,9 @@ export interface GoogleVideoOptions {
   referenceImages?: (string | GoogleVideoReferenceImage)[];
 
   // Video extension (Veo 3.1 only)
-  /** @deprecated Alias for sourceVideo; operation IDs are not supported. */
+  /** @deprecated Use sourceVideo. This remains an alias for the same supported video inputs. */
   extendVideoId?: string;
-  sourceVideo?: string; // AI Studio: prior Gemini URI, base64/file://; Vertex: gs://, base64/file://
+  sourceVideo?: string; // Veo video bytes/file://; native generated-file URI or Vertex gs:// URI
 
   // Person generation control
   personGeneration?: GoogleVideoPersonGeneration;

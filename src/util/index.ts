@@ -19,6 +19,7 @@ export {
   parsePathOrGlob,
   readFilters,
   readOutput,
+  setLoadedFileMimeTypes,
 } from './file';
 // Output operations
 export {

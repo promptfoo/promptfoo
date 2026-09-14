@@ -38,6 +38,8 @@ providers:
           name: memory
 ```
 
+For Google Gemini (AI Studio and Vertex), MCP integration adds the server’s tool definitions to model requests but does not invoke those tools automatically. Execute returned calls in your application or implement local `functionToolCallbacks`.
+
 ### MCP Config Options
 
 - `enabled`: Set to `true` to enable MCP for this provider.

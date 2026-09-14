@@ -38,11 +38,26 @@ export const predefinedTargets: RedteamUITarget[] = [
   { value: 'google:gemini-3.7-flash', label: 'Google Gemini 3.7 Flash' },
   { value: 'google:gemini-3.6-flash', label: 'Google Gemini 3.6 Flash' },
   { value: 'google:gemini-3.5-flash-lite', label: 'Google Gemini 3.5 Flash-Lite' },
-  { value: DEFAULT_VERTEX_TARGET_ID, label: 'Google Vertex AI Gemini 3.8 Flash' },
-  { value: 'vertex:gemini-3.7-flash', label: 'Google Vertex AI Gemini 3.7 Flash' },
-  { value: 'vertex:gemini-3.6-flash', label: 'Google Vertex AI Gemini 3.6 Flash' },
-  { value: 'vertex:gemini-3.5-flash-lite', label: 'Google Vertex AI Gemini 3.5 Flash-Lite' },
-  { value: 'vertex:gemini-3.1-pro-preview', label: 'Google Vertex AI Gemini 3.1 Pro' },
+  {
+    value: DEFAULT_VERTEX_TARGET_ID,
+    label: 'Google Vertex AI Gemini 3.8 Flash',
+  },
+  {
+    value: 'vertex:gemini-3.7-flash',
+    label: 'Google Vertex AI Gemini 3.7 Flash',
+  },
+  {
+    value: 'vertex:gemini-3.6-flash',
+    label: 'Google Vertex AI Gemini 3.6 Flash',
+  },
+  {
+    value: 'vertex:gemini-3.5-flash-lite',
+    label: 'Google Vertex AI Gemini 3.5 Flash-Lite',
+  },
+  {
+    value: 'vertex:gemini-3.1-pro-preview',
+    label: 'Google Vertex AI Gemini 3.1 Pro',
+  },
   { value: 'vertex:gemini-2.5-pro', label: 'Google Vertex AI Gemini 2.5 Pro' },
 ];
 
