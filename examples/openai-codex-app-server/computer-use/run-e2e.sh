@@ -25,7 +25,7 @@ reject_state_overrides() {
     local file="$1"
     [[ "$file" = /* ]] || file="$EXAMPLE_DIR/$file"
     if [[ -f "$file" ]] &&
-      grep -Eq '(PROMPTFOO_(CONFIG_DIR|LOG_DIR|CACHE_PATH|MEDIA_PATH|DISABLE_REDTEAM_REMOTE_GENERATION|DISABLE_TELEMETRY|DISABLE_UPDATE)|CODEX_HOME_OVERRIDE|COMPUTER_USE_(WORKING_DIR|TARGET_APP))' "$file"; then
+      grep -Eq '(PROMPTFOO_(CONFIG_DIR|LOG_DIR|CACHE_PATH|MEDIA_PATH|DISABLE_REDTEAM_REMOTE_GENERATION|DISABLE_TELEMETRY|DISABLE_UPDATE)|CODEX_HOME(_OVERRIDE)?|COMPUTER_USE_(WORKING_DIR|TARGET_APP)|working_dir)' "$file"; then
       echo "Refusing config that overrides runner-owned Promptfoo state: $file" >&2
       exit 1
     fi
