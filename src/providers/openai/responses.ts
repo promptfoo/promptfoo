@@ -37,6 +37,7 @@ import {
   getTokenUsage,
   hasSensitiveOpenAiCachePath,
   hasSensitiveOpenAiCacheString,
+  OPENAI_RESPONSES_ONLY_MODELS,
 } from './util';
 
 import type { EnvOverrides } from '../../types/env';
@@ -689,18 +690,12 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
     'gpt-5-nano-2025-08-07',
     'gpt-5-mini',
     'gpt-5-mini-2025-08-07',
-    'gpt-5-pro',
-    'gpt-5-pro-2025-10-06',
     // GPT-5.1 models
     'gpt-5.1',
     'gpt-5.1-2025-11-13',
     // GPT-5.2 models
     'gpt-5.2',
     'gpt-5.2-2025-12-11',
-    'gpt-5.2-pro',
-    'gpt-5.2-pro-2025-12-11',
-    // GPT-5.3 models
-    'gpt-5.3-codex',
     // GPT-6 Astra
     'gpt-6-astra',
     // GPT-5.6 models
@@ -711,8 +706,6 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
     // GPT-5.5 models
     'gpt-5.5',
     'gpt-5.5-2026-04-23',
-    'gpt-5.5-pro',
-    'gpt-5.5-pro-2026-04-23',
     // GPT-5.4 models
     'gpt-5.4',
     'gpt-5.4-2026-03-05',
@@ -720,24 +713,19 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
     'gpt-5.4-mini-2026-03-17',
     'gpt-5.4-nano',
     'gpt-5.4-nano-2026-03-17',
-    'gpt-5.4-pro',
-    'gpt-5.4-pro-2026-03-05',
     // NOTE: gpt-image-1, gpt-image-1-mini, and gpt-image-1.5 are NOT supported with the Responses API.
     // Use openai:image:gpt-image-1, openai:image:gpt-image-1-mini, or openai:image:gpt-image-1.5 instead (which uses /images/generations endpoint)
     // Reasoning models
     'o1',
     'o1-2024-12-17',
-    'o1-pro',
-    'o1-pro-2025-03-19',
-    'o3-pro',
-    'o3-pro-2025-06-10',
     'o3',
     'o3-2025-04-16',
     'o4-mini',
     'o4-mini-2025-04-16',
     'o3-mini',
     'o3-mini-2025-01-31',
-    'gpt-5-codex-mini',
+    // Models that only exist on this endpoint are tracked in one place.
+    ...OPENAI_RESPONSES_ONLY_MODELS.map((model) => model.id),
   ];
 
   config: OpenAiCompletionOptions;

@@ -394,6 +394,13 @@ export function assertOpenAiApiModel(model: unknown, apiUrl?: string): void {
 }
 
 export const OPENAI_RESPONSES_ONLY_MODELS: OpenAIModelInfo[] = [
+  ...['computer-use-preview', 'computer-use-preview-2025-03-11'].map((model) => ({
+    id: model,
+    cost: {
+      input: 3 / 1e6,
+      output: 12 / 1e6,
+    },
+  })),
   ...['o1-pro', 'o1-pro-2025-03-19'].map((model) => ({
     id: model,
     cost: {
@@ -406,6 +413,20 @@ export const OPENAI_RESPONSES_ONLY_MODELS: OpenAIModelInfo[] = [
     cost: {
       input: 20 / 1e6,
       output: 80 / 1e6,
+    },
+  })),
+  ...['gpt-5-codex', 'gpt-5.1-codex', 'gpt-5.1-codex-max'].map((model) => ({
+    id: model,
+    cost: {
+      input: 1.25 / 1e6,
+      output: 10 / 1e6,
+    },
+  })),
+  ...['gpt-5.1-codex-mini'].map((model) => ({
+    id: model,
+    cost: {
+      input: 0.25 / 1e6,
+      output: 2 / 1e6,
     },
   })),
   ...['gpt-5-codex-mini'].map((model) => ({
@@ -422,7 +443,7 @@ export const OPENAI_RESPONSES_ONLY_MODELS: OpenAIModelInfo[] = [
       output: 120 / 1e6,
     },
   })),
-  ...['gpt-5.3-codex'].map((model) => ({
+  ...['gpt-5.2-codex', 'gpt-5.3-codex'].map((model) => ({
     id: model,
     cost: {
       input: 1.75 / 1e6,
@@ -541,14 +562,7 @@ const RETIRED_OPENAI_MODELS: OpenAIModelInfo[] = [
       output: 4 / 1e6,
     },
   },
-  ...[
-    'gpt-5-chat',
-    'gpt-5-chat-latest',
-    'gpt-5.1-chat-latest',
-    'gpt-5-codex',
-    'gpt-5.1-codex',
-    'gpt-5.1-codex-max',
-  ].map((model) => ({
+  ...['gpt-5-chat', 'gpt-5-chat-latest', 'gpt-5.1-chat-latest'].map((model) => ({
     id: model,
     cost: {
       input: 1.25 / 1e6,
@@ -562,7 +576,7 @@ const RETIRED_OPENAI_MODELS: OpenAIModelInfo[] = [
       output: 6.0 / 1e6,
     },
   },
-  ...['gpt-5.2-chat-latest', 'gpt-5.3-chat-latest', 'gpt-5.2-codex'].map((model) => ({
+  ...['gpt-5.2-chat-latest', 'gpt-5.3-chat-latest'].map((model) => ({
     id: model,
     cost: {
       input: 1.75 / 1e6,
@@ -576,20 +590,6 @@ const RETIRED_OPENAI_MODELS: OpenAIModelInfo[] = [
       output: 2.4 / 1e6,
       audioInput: 10 / 1e6,
       audioOutput: 20 / 1e6,
-    },
-  },
-  ...['computer-use-preview', 'computer-use-preview-2025-03-11'].map((model) => ({
-    id: model,
-    cost: {
-      input: 3 / 1e6,
-      output: 12 / 1e6,
-    },
-  })),
-  {
-    id: 'gpt-5.1-codex-mini',
-    cost: {
-      input: 0.25 / 1e6,
-      output: 2 / 1e6,
     },
   },
   ...['gpt-realtime-mini-2025-10-06'].map((model) => ({

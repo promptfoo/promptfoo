@@ -17,17 +17,10 @@ const unsupportedAudioModels = [
 describe('OpenAiResponsesProvider model registry', () => {
   it.each([
     'codex-mini-latest',
-    'computer-use-preview',
-    'computer-use-preview-2025-03-11',
     'gpt-5-chat',
     'gpt-5-chat-latest',
-    'gpt-5-codex',
     'gpt-5.1-chat-latest',
-    'gpt-5.1-codex',
-    'gpt-5.1-codex-max',
-    'gpt-5.1-codex-mini',
     'gpt-5.2-chat-latest',
-    'gpt-5.2-codex',
     'gpt-5.3-chat-latest',
     'o1-mini',
     'o1-mini-2024-09-12',
