@@ -12,7 +12,9 @@ import {
   evalsToPromptsTable,
   evalsToTagsTable,
   promptsTable,
+  spansTable,
   tagsTable,
+  tracesTable,
 } from '../database/tables';
 import { getEnvBool } from '../envars';
 import { getAuthor } from '../globalConfig/accounts';
@@ -37,7 +39,10 @@ import {
   type ResultsFile,
   type UnifiedConfig,
 } from '../types/index';
-import { calculateFilteredMetrics } from '../util/calculateFilteredMetrics';
+import {
+  calculateFilteredMetrics,
+  calculateMetricsForResults,
+} from '../util/calculateFilteredMetrics';
 import { convertResultsToTable } from '../util/convertEvalResultsToTable';
 import { randomSequence, sha256 } from '../util/createHash';
 import { convertTestResultsToTableRow } from '../util/exportToFile/index';
@@ -1388,11 +1393,18 @@ export default class Eval {
 
   async setResults(results: EvalResult[]) {
     if (this.persisted) {
-      const retainedBlobHashes = JSON.stringify([
-        ...collectBlobHashes({ results, config: this.config, prompts: this.prompts }),
-      ]);
       const db = await getDb();
-      await db.transaction(async (tx) => {
+      const prompts = await db.transaction(async (tx) => {
+        const stored = await tx
+          .select({ prompts: evalsTable.prompts })
+          .from(evalsTable)
+          .where(eq(evalsTable.id, this.id))
+          .get();
+        invariant(stored, `Evaluation ${this.id} not found`);
+        const storedPrompts = stored.prompts ?? [];
+        const retainedBlobHashes = JSON.stringify([
+          ...collectBlobHashes({ results, config: this.config, prompts: storedPrompts }),
+        ]);
         await tx.delete(evalResultsTable).where(eq(evalResultsTable.evalId, this.id)).run();
         // Remove only this eval's obsolete references, preserving shared blob bytes and
         // existing provenance for hashes still used by its results, config, or prompts.
@@ -1407,6 +1419,21 @@ export default class Eval {
             ),
           )
           .run();
+        const retainedTraceIds = JSON.stringify(
+          results.flatMap((r) => (r.traceId ? [r.traceId] : [])),
+        );
+        const obsoleteTraces = and(
+          eq(tracesTable.evaluationId, this.id),
+          sql`${tracesTable.traceId} NOT IN (SELECT value FROM json_each(${retainedTraceIds}))`,
+        );
+        // Traces and spans have no result-row cascade; delete children first.
+        await tx
+          .delete(spansTable)
+          .where(sql`${spansTable.traceId} IN (
+          SELECT ${tracesTable.traceId} FROM ${tracesTable} WHERE ${obsoleteTraces}
+        )`)
+          .run();
+        await tx.delete(tracesTable).where(obsoleteTraces).run();
         if (results.length > 0) {
           await tx
             .insert(evalResultsTable)
@@ -1419,7 +1446,19 @@ export default class Eval {
             )
             .run();
         }
+        const metrics = await calculateMetricsForResults(
+          {
+            evalId: this.id,
+            numPrompts: storedPrompts.length,
+            whereSql: eq(evalResultsTable.evalId, this.id),
+          },
+          tx,
+        );
+        const prompts = storedPrompts.map((prompt, i) => ({ ...prompt, metrics: metrics[i] }));
+        await tx.update(evalsTable).set({ prompts }).where(eq(evalsTable.id, this.id)).run();
+        return prompts;
       });
+      this.prompts = prompts;
       notifyEvaluationChanged(this.id);
     }
     this.results = results;

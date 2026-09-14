@@ -300,6 +300,62 @@ describe('evaluator', () => {
     );
   });
 
+  it('replaces persisted prompt metrics together with result rows', async () => {
+    const eval_ = await EvalFactory.create({ numResults: 2 });
+    const [retained] = await EvalResult.findManyByEvalId(eval_.id);
+    retained.success = true;
+    retained.cost = 0.25;
+    retained.response = { output: 'kept', tokenUsage: { total: 7, prompt: 5, completion: 2 } };
+    await eval_.setResults([retained]);
+    expect(eval_.getStats()).toMatchObject({ successes: 1, failures: 0, tokenUsage: { total: 7 } });
+    const loaded = await Eval.findById(eval_.id);
+    expect(loaded?.prompts[retained.promptIdx].metrics?.cost).toBe(0.25);
+    await eval_.setResults([]);
+    expect(eval_.getStats()).toMatchObject({
+      successes: 0,
+      failures: 0,
+      errors: 0,
+      tokenUsage: { total: 0 },
+    });
+    expect((await Eval.findById(eval_.id))?.getStats().successes).toBe(0);
+  });
+
+  it('prunes removed traces and spans while retaining replacement and other eval traces', async () => {
+    const eval_ = await EvalFactory.create({ numResults: 2 });
+    const other = await EvalFactory.create({ numResults: 1 });
+    const [retained] = await EvalResult.findManyByEvalId(eval_.id);
+    retained.traceId = 'retained-trace';
+    const store = new TraceStore();
+    for (const [traceId, evaluationId] of [
+      ['retained-trace', eval_.id],
+      ['removed-trace', eval_.id],
+      ['other-trace', other.id],
+    ]) {
+      await store.createTrace({ traceId, evaluationId, testCaseId: 'test' });
+      await store.addSpans(traceId, [{ spanId: `${traceId}-span`, name: 'span', startTime: 1 }]);
+    }
+    const db = await getDb();
+    const circular: Record<string, unknown> = {};
+    circular.self = circular;
+    await expect(
+      eval_.setResults([new EvalResult({ ...retained, response: { output: circular } })]),
+    ).rejects.toThrow();
+    expect(await db.select().from(tracesTable)).toHaveLength(3);
+    expect(await db.select().from(spansTable)).toHaveLength(3);
+    await eval_.setResults([retained]);
+    expect((await db.select().from(tracesTable)).map((t) => t.traceId).sort()).toEqual([
+      'other-trace',
+      'retained-trace',
+    ]);
+    expect((await db.select().from(spansTable)).map((t) => t.traceId).sort()).toEqual([
+      'other-trace',
+      'retained-trace',
+    ]);
+    await eval_.setResults([]);
+    expect((await db.select().from(tracesTable)).map((t) => t.traceId)).toEqual(['other-trace']);
+    expect((await db.select().from(spansTable)).map((t) => t.traceId)).toEqual(['other-trace']);
+  });
+
   it('reloads summaries after appending to an evaluation with loaded results', async () => {
     const eval_ = await EvalFactory.create({ numResults: 1 });
     await eval_.loadResults();

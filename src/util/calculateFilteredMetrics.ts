@@ -270,7 +270,7 @@ export async function calculateFilteredMetrics(
     }
 
     // Calculate metrics using optimized approach
-    return await calculateWithOptimizedQuery(opts);
+    return await calculateMetricsForResults(opts, await getDb());
   } catch (error) {
     logger.error('Failed to calculate filtered metrics with optimized query', { error });
 
@@ -297,14 +297,19 @@ async function getResultCount(whereSql: SQL<unknown>): Promise<number> {
 }
 
 /**
+ * Calculate persisted row metrics using the supplied database or transaction.
+ * Errors propagate so mutation callers can roll back rather than persist empty metrics.
+ *
  * OPTIMIZED: Single GROUP BY query aggregating ALL prompts at once.
  * This is the key performance improvement from the audit.
  *
  * SECURITY: Uses parameterized SQL queries via Drizzle's sql template strings.
  */
-async function calculateWithOptimizedQuery(opts: FilteredMetricsOptions): Promise<PromptMetrics[]> {
+export async function calculateMetricsForResults(
+  opts: FilteredMetricsOptions,
+  db: Pick<Awaited<ReturnType<typeof getDb>>, 'all'>,
+): Promise<PromptMetrics[]> {
   const { numPrompts, whereSql } = opts;
-  const db = await getDb();
 
   // Initialize empty metrics
   const metrics = createEmptyMetricsArray(numPrompts);
@@ -449,10 +454,10 @@ async function calculateWithOptimizedQuery(opts: FilteredMetricsOptions): Promis
   }
 
   // ===== QUERY 2: Named scores (SQL JSON aggregation) =====
-  await aggregateNamedScores(metrics, whereSql);
+  await aggregateNamedScores(metrics, whereSql, db);
 
   // ===== QUERY 3: Assertion counts (SQL JSON aggregation) =====
-  await aggregateAssertions(metrics, whereSql);
+  await aggregateAssertions(metrics, whereSql, db);
 
   logger.debug('Filtered metrics calculated', {
     numPrompts,
@@ -474,9 +479,8 @@ async function calculateWithOptimizedQuery(opts: FilteredMetricsOptions): Promis
 async function aggregateNamedScores(
   metrics: PromptMetrics[],
   whereSql: SQL<unknown>,
+  db: Pick<Awaited<ReturnType<typeof getDb>>, 'all'>,
 ): Promise<void> {
-  const db = await getDb();
-
   // Use SQLite's json_each to parse JSON in database. When newer results include
   // grading_result.namedScoreWeights, row-level named scores are weighted averages, so we
   // multiply them back into weighted totals before aggregating prompt metrics.
@@ -555,9 +559,8 @@ async function aggregateNamedScores(
 async function aggregateAssertions(
   metrics: PromptMetrics[],
   whereSql: SQL<unknown>,
+  db: Pick<Awaited<ReturnType<typeof getDb>>, 'all'>,
 ): Promise<void> {
-  const db = await getDb();
-
   // SQLite query to count assertions from nested JSON
   // This is complex but avoids fetching all results into memory
   const query = sql`
