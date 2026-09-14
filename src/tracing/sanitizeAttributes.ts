@@ -93,12 +93,15 @@ export function sanitizeTraceAttributes(
       if (/^\s*(?:\[|\{|")/.test(value)) {
         try {
           const original = JSON.parse(value);
+          decoded = true;
           const sanitized = sanitizeValue(original, valueDepth + 1);
           if (JSON.stringify(original) !== JSON.stringify(sanitized)) {
             value = JSON.stringify(sanitized);
           }
-          decoded = true;
         } catch {
+          if (decoded) {
+            return '[TRUNCATED]';
+          }
           // Ordinary attribute text can start with JSON punctuation.
         }
       }
@@ -118,7 +121,7 @@ export function sanitizeTraceAttributes(
 
   return Object.fromEntries(
     Object.entries(attributes).map(([key, value]) => [
-      key,
+      options.redactText?.(key) ?? key,
       customPatterns.some((pattern) => key.toLowerCase().includes(pattern))
         ? '[REDACTED]'
         : sanitizeSensitiveAttributes && isSensitiveAttributeKey(key)
@@ -198,7 +201,19 @@ export function getTraceTextRedactor(
       /^\s*(?:\[|\{|")/.test(original)
     ) {
       try {
-        pending.push({ original: JSON.parse(original), sanitized: JSON.parse(sanitized) });
+        pending.push({
+          original: JSON.parse(original, (_key, value, context?: { source?: string }) => {
+            if (typeof value !== 'number') {
+              return value;
+            }
+            // Preserve digits and exponent notation before Number conversion loses them.
+            if (context?.source === undefined) {
+              throw new Error('JSON numeric source unavailable');
+            }
+            return context.source;
+          }),
+          sanitized: JSON.parse(sanitized),
+        });
         continue;
       } catch {
         incomplete = true;

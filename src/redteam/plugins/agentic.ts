@@ -4,6 +4,7 @@ import {
   type AgentObservation,
   type AgentRunFinding,
   findingsFromObservations,
+  getGradingTrace,
   getTraceEvidenceValues,
   hasErrorStatus,
   observationsFromTraceData,
@@ -233,21 +234,6 @@ function cycleScenarios(pluginId: AgenticRuntimePluginId, n: number): AgenticRun
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
-}
-
-function getTraceSpans(gradingContext?: RedteamGradingContext): TraceLikeSpan[] {
-  const spans: TraceLikeSpan[] = [];
-  if (Array.isArray(gradingContext?.traceContext?.spans)) {
-    spans.push(...(gradingContext.traceContext.spans as TraceLikeSpan[]));
-  }
-  if (Array.isArray(gradingContext?.traceData?.spans)) {
-    spans.push(...(gradingContext.traceData.spans as TraceLikeSpan[]));
-  }
-  return spans;
-}
-
-function traceIdFromContext(gradingContext?: RedteamGradingContext): string | undefined {
-  return gradingContext?.traceContext?.traceId || gradingContext?.traceData?.traceId;
 }
 
 function traceShowsToolCall(observations: AgentObservation[], toolName: string): boolean {
@@ -708,7 +694,8 @@ function extractTraceEvidence(
   gradingContext: RedteamGradingContext | undefined,
   pluginId: AgenticRuntimePluginId,
 ): AgenticRuntimeEvidence | undefined {
-  const spans = getTraceSpans(gradingContext);
+  const trace = getGradingTrace(gradingContext);
+  const spans = trace?.spans ?? [];
   if (spans.length === 0) {
     return undefined;
   }
@@ -742,10 +729,7 @@ function extractTraceEvidence(
     );
   }
 
-  const traceObservations = [
-    ...observationsFromTraceData(gradingContext?.traceData),
-    ...observationsFromTraceData(gradingContext?.traceContext),
-  ];
+  const traceObservations = observationsFromTraceData(trace);
   if (
     pluginId === 'agentic:guardrail-coverage-gap' &&
     traceObservations.length > maxControlObservations
@@ -782,7 +766,7 @@ function extractTraceEvidence(
         .map((span) => span.name)
         .filter(Boolean),
       spanCount: spans.length,
-      traceId: traceIdFromContext(gradingContext),
+      traceId: trace?.traceId,
     },
   };
 }

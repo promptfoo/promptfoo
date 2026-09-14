@@ -159,3 +159,44 @@ describe('sanitizeTraceAttributes', () => {
     expect(JSON.stringify(sanitizeTraceAttributes({ nested }))).toContain('[TRUNCATED]');
   });
 });
+
+it.each(['9007199254740993', '1e309', '1.25e2', '1.0', '-0'])(
+  'redacts original numeric JSON source %s from sibling text',
+  (literal) => {
+    const original = { payload: `{"authorization":${literal}}` };
+    const sanitized = sanitizeTraceAttributes(original, { truncateValues: false });
+    const redact = getTraceTextRedactor([{ original, sanitized }]);
+    expect(redact(`request ${literal}`)).toBe('request [REDACTED]');
+  },
+);
+
+it('fails closed when valid serialized JSON exceeds traversal capacity', () => {
+  const payload =
+    '{"authorization":"PRIVATE_DEEP_JSON","nested":' +
+    '['.repeat(10000) +
+    '0' +
+    ']'.repeat(10000) +
+    '}';
+  const original = { payload };
+  const sanitized = sanitizeTraceAttributes(original, { truncateValues: false });
+  expect(JSON.stringify(sanitized)).not.toContain('PRIVATE_DEEP_JSON');
+  expect(getTraceTextRedactor([{ original, sanitized }])('echo PRIVATE_DEEP_JSON')).toBe(
+    '[REDACTED]',
+  );
+});
+
+it.each([false, true])(
+  'redacts known credentials in object keys (serialized: %s)',
+  (serialized) => {
+    const credential = 'PRIVATE_KEY_WITH_"QUOTES"';
+    const redactText = getTraceTextRedactor([{ original: credential, sanitized: '<redacted>' }]);
+    const original = { [credential]: 'ordinary value' };
+    const result = sanitizeTraceAttributes(
+      { payload: serialized ? JSON.stringify(original) : original },
+      { redactText, truncateValues: false },
+    );
+    expect(serialized ? JSON.parse(result.payload) : result.payload).toEqual({
+      '[REDACTED]': 'ordinary value',
+    });
+  },
+);

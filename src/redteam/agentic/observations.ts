@@ -943,6 +943,14 @@ export function observationsFromProviderResponse(
   return observations;
 }
 
+export function getGradingTrace(gradingContext?: RedteamGradingContext) {
+  const { traceData, traceContext } = gradingContext ?? {};
+  if (traceData?.traceId && traceContext?.traceId && traceData.traceId !== traceContext.traceId) {
+    throw new Error('Cannot grade execution evidence: trace IDs do not match');
+  }
+  return traceData?.spans.length ? traceData : (traceContext ?? traceData);
+}
+
 export function observationsFromGradingContext({
   gradingContext,
   llmOutput,
@@ -962,8 +970,7 @@ export function observationsFromGradingContext({
   }
 
   observations.push(...observationsFromProviderResponse(gradingContext?.providerResponse));
-  observations.push(...observationsFromTraceData(gradingContext?.traceData));
-  observations.push(...observationsFromTraceData(gradingContext?.traceContext));
+  observations.push(...observationsFromTraceData(getGradingTrace(gradingContext)));
   return observations;
 }
 

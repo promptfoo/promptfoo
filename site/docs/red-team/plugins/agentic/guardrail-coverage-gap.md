@@ -11,6 +11,8 @@ description: Test whether input, output, function-tool, handoff, and nested-agen
 
 This plugin is useful when the app has several execution paths with different guardrail placement. Output-only guardrails are not enough for actions that mutate state, reveal data, or call external tools.
 
+When raw trace data and a normalized trace context are both supplied, grading uses the raw trace once. It falls back to the normalized context when the raw trace is empty, and rejects conflicting trace IDs. Limits therefore apply to the selected trace rather than counting both representations.
+
 ## Plugin ID
 
 ```yaml

@@ -17,6 +17,95 @@ const providerEvidenceContext = (agenticEvidence: unknown): RedteamGradingContex
 });
 
 describe('Agentic redteam plugins', () => {
+  it('counts raw and normalized copies of one trace only once', async () => {
+    const pluginId = 'agentic:guardrail-coverage-gap';
+    const spans: TraceData['spans'] = Array.from({ length: 129 }, (_, index) => ({
+      spanId: `span-${index}`,
+      name: 'ordinary span',
+      startTime: index,
+      statusCode: 1,
+      attributes:
+        index === 0
+          ? {
+              'promptfoo.agentic.plugin_id': pluginId,
+              'promptfoo.agentic.evidence_json': '{"findings":[]}',
+            }
+          : {},
+    }));
+    const context: RedteamGradingContext = {
+      traceData: { traceId: 'same-trace', evaluationId: 'eval', testCaseId: 'case', spans },
+      traceContext: {
+        traceId: 'same-trace',
+        fetchedAt: 0,
+        insights: [],
+        spans: spans.map((span) => ({
+          ...span,
+          attributes: span.attributes ?? {},
+          events: [],
+          kind: 'internal',
+          depth: 0,
+          status: { code: 'ok' },
+        })),
+      },
+    };
+    const result = await getGraderById(`promptfoo:redteam:${pluginId}`)!.getResult(
+      'prompt',
+      'completed',
+      {},
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      context,
+    );
+    expect(result.grade.pass).toBe(true);
+    expect(result.grade.metadata?.agenticEvidence.trace.spanCount).toBe(129);
+  });
+
+  it('rejects findings supplied under a different trace identity', async () => {
+    const pluginId = 'agentic:approval-continuity';
+    const context: RedteamGradingContext = {
+      traceData: {
+        traceId: 'current-trace',
+        evaluationId: 'eval',
+        testCaseId: 'case',
+        spans: [{ spanId: 'safe', name: 'ordinary span', startTime: 0 }],
+      },
+      traceContext: {
+        traceId: 'other-trace',
+        fetchedAt: 0,
+        insights: [],
+        spans: [
+          {
+            spanId: 'foreign',
+            name: 'foreign finding',
+            status: { code: 'ok' },
+            events: [],
+            startTime: 0,
+            kind: 'internal',
+            depth: 0,
+            attributes: {
+              'promptfoo.agentic.plugin_id': pluginId,
+              'promptfoo.agentic.finding.kind': 'approval-bypass',
+            },
+          },
+        ],
+      },
+    };
+    await expect(
+      getGraderById(`promptfoo:redteam:${pluginId}`)!.getResult(
+        'prompt',
+        'completed',
+        {},
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        context,
+      ),
+    ).rejects.toThrow('trace IDs do not match');
+  });
+
   it.each([
     { id: 'agentic.plugin_id', json: 'agentic.evidence_json' },
     { id: 'promptfoo.agentic.plugin_id', json: 'promptfoo.agentic.evidence_json' },

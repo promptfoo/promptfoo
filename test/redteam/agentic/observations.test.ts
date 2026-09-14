@@ -7,6 +7,34 @@ import {
 import type { RedteamGradingContext } from '../../../src/redteam/grading/types';
 
 describe('agentic run observations', () => {
+  it.each([false, true])('uses one trace source (raw spans present: %s)', (rawPresent) => {
+    const span = {
+      spanId: 'tool',
+      name: 'operation',
+      startTime: 0,
+      attributes: { 'tool.name': 'update_seat' },
+    };
+    const gradingContext: RedteamGradingContext = {
+      traceData: {
+        traceId: 'trace',
+        evaluationId: 'eval',
+        testCaseId: 'case',
+        spans: rawPresent ? [span] : [],
+      },
+      traceContext: {
+        traceId: 'trace',
+        fetchedAt: 0,
+        insights: [],
+        spans: [{ ...span, kind: 'internal', depth: 0, status: { code: 'ok' }, events: [] }],
+      },
+    };
+    const calls = observationsFromGradingContext({ gradingContext }).filter(
+      (item) => item.kind === 'tool_call',
+    );
+    expect(calls).toHaveLength(1);
+    expect(calls[0].tool).toBe('update_seat');
+  });
+
   it.each(['span', 'event'])(
     'retains %s evidence without trusting a coerced exact timestamp',
     (source) => {
