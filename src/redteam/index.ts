@@ -732,7 +732,7 @@ async function applyStrategies(
             ...(t?.metadata?.strategyConfig || {}),
           };
 
-          return {
+          const result: TestCaseWithPlugin = {
             ...t,
             vars,
             metadata: {
@@ -754,6 +754,11 @@ async function applyStrategies(
               ...getMaterializedMultiInputPromptMetadata(vars),
             },
           };
+          // PDFs bypass rematerialization; their snapshot only duplicates attachment bytes.
+          if (result.metadata?.pdf) {
+            delete result.metadata[MATERIALIZED_MULTI_INPUT_PROMPT_METADATA_KEY];
+          }
+          return result;
         }),
       )),
     );

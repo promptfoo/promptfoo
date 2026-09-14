@@ -977,19 +977,21 @@ describe('synthesize', () => {
         ]),
       });
       const dataUri = `data:application/pdf;base64,${'A'.repeat(3000)}`;
+      const materializedPrompt = JSON.stringify({ document: dataUri });
+      const mockStrategyAction = vi.fn().mockImplementation((cases: TestCase[]) =>
+        cases.map((test) => ({
+          ...test,
+          vars: { ...test.vars, [MULTI_INPUT_VAR]: materializedPrompt, document: dataUri },
+          metadata: {
+            ...test.metadata,
+            originalText: 'attack',
+            pdf: { input: 'document', text: 'Invoice\nattack' },
+          },
+        })),
+      );
       vi.spyOn(Strategies, 'find').mockReturnValue({
         id: 'pdf',
-        action: vi.fn().mockImplementation((cases: TestCase[]) =>
-          cases.map((test) => ({
-            ...test,
-            vars: { ...test.vars, document: dataUri },
-            metadata: {
-              ...test.metadata,
-              originalText: 'attack',
-              pdf: { input: 'document', text: 'Invoice\nattack' },
-            },
-          })),
-        ),
+        action: mockStrategyAction,
       });
       const result = await synthesize({
         inputs,
@@ -1001,9 +1003,15 @@ describe('synthesize', () => {
         strategies: [{ id: 'pdf', config: { maxCharsPerMessage: 100 } }],
         targetIds: ['test-provider'],
       });
+      const pdfTest = result.testCases.find((test) => test.metadata?.strategyId === 'pdf');
+      expect(pdfTest?.vars?.document).toBe(dataUri);
+      expect(pdfTest?.vars?.[MULTI_INPUT_VAR]).toBe(materializedPrompt);
+      expect(pdfTest?.metadata).not.toHaveProperty('__promptfooMaterializedMultiInputPrompt');
+      expect(JSON.stringify(pdfTest).split(dataUri)).toHaveLength(3);
       expect(
-        result.testCases.find((test) => test.metadata?.strategyId === 'pdf')?.vars?.document,
-      ).toBe(dataUri);
+        mockStrategyAction.mock.results[0].value[0].metadata
+          .__promptfooMaterializedMultiInputPrompt,
+      ).toBe(originalPrompt);
     });
 
     it('should re-materialize DOCX inputs after strategies mutate multi-input prompts', async () => {
@@ -1112,6 +1120,9 @@ describe('synthesize', () => {
         ),
       );
       expect(strategyTestCase?.vars?.question).toBe(strategyQuestion);
+      expect(strategyTestCase?.metadata?.__promptfooMaterializedMultiInputPrompt).toBe(
+        strategyMultiInputPrompt,
+      );
       expect(strategyTestCase?.metadata?.inputMaterialization).toMatchObject({
         document: {
           injectedInstruction,
