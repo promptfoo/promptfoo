@@ -15,7 +15,7 @@ const mocks = vi.hoisted(() => {
     }
   }
 
-  const mockGetEnvString = vi.fn((key: string) => {
+  const mockGetEnvString = vi.fn((key: string): string | undefined => {
     switch (key) {
       case 'LANGFUSE_PUBLIC_KEY':
         return 'test-public-key';
@@ -254,6 +254,80 @@ describe('langfuse integration', () => {
         secretKey: 'test-secret-key',
         baseUrl: 'https://test.langfuse.com',
       });
+    });
+
+    it('should read Langfuse settings when fetching, not when the module is imported', async () => {
+      const mockPrompt = {
+        compile: vi.fn().mockReturnValue('Test'),
+      };
+      mocks.mockGetPrompt.mockResolvedValue(mockPrompt);
+      // Settings from --env-file, .env, or the config's `env:` block are applied after import.
+      mocks.mockGetEnvString.mockImplementation(() => undefined);
+
+      const { getPrompt } = await import('../../src/integrations/langfuse');
+
+      mocks.mockGetEnvString.mockImplementation((key: string) => {
+        switch (key) {
+          case 'LANGFUSE_PUBLIC_KEY':
+            return 'late-public-key';
+          case 'LANGFUSE_SECRET_KEY':
+            return 'late-secret-key';
+          case 'LANGFUSE_HOST':
+            return 'https://self-hosted.example.com';
+          default:
+            return '';
+        }
+      });
+
+      await getPrompt('test-prompt', {}, 'text', 1);
+
+      expect(mocks.constructorCalls).toEqual([
+        {
+          publicKey: 'late-public-key',
+          secretKey: 'late-secret-key',
+          baseUrl: 'https://self-hosted.example.com',
+        },
+      ]);
+    });
+
+    it('should create a new Langfuse instance when settings change', async () => {
+      const mockPrompt = {
+        compile: vi.fn().mockReturnValue('Test'),
+      };
+      mocks.mockGetPrompt.mockResolvedValue(mockPrompt);
+
+      const { getPrompt } = await import('../../src/integrations/langfuse');
+
+      await getPrompt('test1', {}, 'text', 1);
+
+      mocks.mockGetEnvString.mockImplementation((key: string) => {
+        switch (key) {
+          case 'LANGFUSE_PUBLIC_KEY':
+            return 'other-public-key';
+          case 'LANGFUSE_SECRET_KEY':
+            return 'other-secret-key';
+          case 'LANGFUSE_HOST':
+            return 'https://other.langfuse.com';
+          default:
+            return '';
+        }
+      });
+
+      await getPrompt('test2', {}, 'text', 1);
+      await getPrompt('test3', {}, 'text', 1);
+
+      expect(mocks.constructorCalls).toEqual([
+        {
+          publicKey: 'test-public-key',
+          secretKey: 'test-secret-key',
+          baseUrl: 'https://test.langfuse.com',
+        },
+        {
+          publicKey: 'other-public-key',
+          secretKey: 'other-secret-key',
+          baseUrl: 'https://other.langfuse.com',
+        },
+      ]);
     });
 
     it('should handle label with latest version', async () => {

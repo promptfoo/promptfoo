@@ -3,13 +3,23 @@ import type { LangfuseClient } from '@langfuse/client';
 
 import type { VarValue } from '../types';
 
-const langfuseParams = {
-  publicKey: getEnvString('LANGFUSE_PUBLIC_KEY'),
-  secretKey: getEnvString('LANGFUSE_SECRET_KEY'),
-  baseUrl: getEnvString('LANGFUSE_HOST'),
+type LangfuseParams = {
+  publicKey?: string;
+  secretKey?: string;
+  baseUrl?: string;
 };
 
-let langfuse: LangfuseClient;
+let langfuse: LangfuseClient | undefined;
+let langfuseClientParams: LangfuseParams | undefined;
+
+// Read at call time: --env-file, .env, and the config's `env:` block are applied after import.
+function getLangfuseParams(): LangfuseParams {
+  return {
+    publicKey: getEnvString('LANGFUSE_PUBLIC_KEY'),
+    secretKey: getEnvString('LANGFUSE_SECRET_KEY'),
+    baseUrl: getEnvString('LANGFUSE_HOST'),
+  };
+}
 
 export async function getPrompt(
   id: string,
@@ -20,10 +30,17 @@ export async function getPrompt(
 ): Promise<string> {
   let prompt;
 
-  if (!langfuse) {
+  const langfuseParams = getLangfuseParams();
+  if (
+    !langfuse ||
+    langfuseClientParams?.publicKey !== langfuseParams.publicKey ||
+    langfuseClientParams?.secretKey !== langfuseParams.secretKey ||
+    langfuseClientParams?.baseUrl !== langfuseParams.baseUrl
+  ) {
     try {
       const { LangfuseClient } = await import('@langfuse/client');
       langfuse = new LangfuseClient(langfuseParams);
+      langfuseClientParams = langfuseParams;
     } catch (_err) {
       throw new Error(
         'The @langfuse/client package is required for Langfuse integration. Please install it with: npm install @langfuse/client',
