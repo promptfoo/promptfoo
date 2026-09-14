@@ -219,6 +219,11 @@ function getShadowRanges(
         ranges.push([0, Number.POSITIVE_INFINITY]);
       }
     },
+    TSImportEqualsDeclaration(node) {
+      if (node.id.name === name) {
+        ranges.push([0, Number.POSITIVE_INFINITY]);
+      }
+    },
     ClassDeclaration(node) {
       if (node.id?.name === name) {
         ranges.push(scopeFor(node.start, lexicalScopes));
@@ -793,11 +798,14 @@ export function reportDependencyOwnership(
         } else if (
           node.callee.type === 'MemberExpression' &&
           !isModuleShadowed(node.start) &&
-          !node.callee.computed &&
           node.callee.object.type === 'Identifier' &&
           node.callee.object.name === 'module' &&
-          node.callee.property.type === 'Identifier' &&
-          node.callee.property.name === 'require'
+          ((!node.callee.computed &&
+            node.callee.property.type === 'Identifier' &&
+            node.callee.property.name === 'require') ||
+            (node.callee.computed &&
+              node.callee.property.type === 'Literal' &&
+              node.callee.property.value === 'require'))
         ) {
           load(node, node.arguments[0], 'value');
         } else if (

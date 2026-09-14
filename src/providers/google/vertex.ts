@@ -134,7 +134,7 @@ type VertexEmbeddingProviderConfig = GoogleProviderConfig & {
   autoTruncate?: boolean;
 };
 
-function getVertexApiHost(
+export function getVertexApiHost(
   region: string,
   configApiHost?: string,
   envOverrides?: EnvOverrides,

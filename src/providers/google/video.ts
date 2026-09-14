@@ -14,6 +14,7 @@ import {
   loadCredentials,
   resolveProjectId,
 } from './util';
+import { getVertexApiHost } from './vertex';
 
 import type { BlobRef } from '../../blobs';
 import type { EnvOverrides } from '../../types/env';
@@ -227,7 +228,8 @@ export class GoogleVideoProvider implements ApiProvider {
   private async getVertexEndpoint(config: GoogleVideoOptions, action: string): Promise<string> {
     const location = this.getLocation(config);
     const projectId = config.projectId || (await resolveProjectId(config, this.env));
-    return `https://${location}-aiplatform.googleapis.com/v1/projects/${projectId}/locations/${location}/publishers/google/models/${this.modelName}:${action}`;
+    const apiHost = getVertexApiHost(location, config.apiHost, this.env);
+    return `https://${apiHost}/v1/projects/${projectId}/locations/${location}/publishers/google/models/${this.modelName}:${action}`;
   }
 
   private getAiStudioEndpoint(pathSuffix: string): string {
@@ -272,6 +274,16 @@ export class GoogleVideoProvider implements ApiProvider {
         return { error: `Video file not found: ${filePath}` };
       }
       return { data: fs.readFileSync(filePath).toString('base64') };
+    }
+    const dataUrl = videoPath.match(/^data:video\/[^;]+;base64,(.+)$/);
+    if (dataUrl) {
+      return { data: dataUrl[1] };
+    }
+    if (/^[a-z][a-z\d+.-]*:/i.test(videoPath)) {
+      return {
+        error:
+          'Vertex AI Veo sourceVideo must be base64 data, a data:video URL, gs:// URI, or file:// path.',
+      };
     }
     return { data: videoPath };
   }

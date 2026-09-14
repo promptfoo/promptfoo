@@ -250,6 +250,7 @@ describe('GoogleVideoProvider', () => {
         vertexai: true,
         projectId: 'prompt-project',
         region: 'europe-west4',
+        apiHost: 'vertex-proxy.example.test',
         credentials: '/prompt-credentials.json',
       };
       mockResolveProjectId.mockImplementation((config) => config.projectId);
@@ -286,7 +287,7 @@ describe('GoogleVideoProvider', () => {
 
       expect(result.error).toBeUndefined();
       const endpoint =
-        'https://europe-west4-aiplatform.googleapis.com/v1/projects/prompt-project/locations/europe-west4/publishers/google/models/veo-3.1-generate-001';
+        'https://vertex-proxy.example.test/v1/projects/prompt-project/locations/europe-west4/publishers/google/models/veo-3.1-generate-001';
       expect(mockRequest).toHaveBeenNthCalledWith(
         1,
         expect.objectContaining({ url: `${endpoint}:predictLongRunning`, method: 'POST' }),
@@ -1045,6 +1046,24 @@ describe('GoogleVideoProvider', () => {
         bytesBase64Encoded: sourceVideo,
         mimeType: 'video/mp4',
       });
+    });
+
+    it('extracts data URL bytes and rejects remote Vertex source videos', async () => {
+      const provider = new GoogleVideoProvider('veo-3.1-generate-001', {
+        config: { sourceVideo: 'data:video/mp4;base64,c291cmNl', pollIntervalMs: 10 },
+      });
+      mockRequest.mockResolvedValueOnce({ data: { name: 'test-op' } });
+      await provider.callApi('Extend');
+      expect(
+        JSON.parse(mockRequest.mock.calls[0][0].body).instances[0].video.bytesBase64Encoded,
+      ).toBe('c291cmNl');
+
+      const remote = new GoogleVideoProvider('veo-3.1-generate-001', {
+        config: { sourceVideo: 'https://example.test/video.mp4' },
+      });
+      await expect(remote.callApi('Extend')).resolves.toEqual(
+        expect.objectContaining({ error: expect.stringContaining('sourceVideo must be base64') }),
+      );
     });
 
     it('should handle blob storage deduplication', async () => {

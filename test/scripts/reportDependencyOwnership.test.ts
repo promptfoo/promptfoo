@@ -1007,6 +1007,17 @@ describe('dependency ownership report', () => {
     expect(reportDependencyOwnership(root, config).undeclaredUsages).toEqual([]);
   });
 
+  it('handles import-equals loader shadows and computed module require', () => {
+    write(
+      'src/index.ts',
+      "import require = require('./local'); require('local-only'); module['require']('driver');",
+    );
+    write('src/local.ts', 'export = {};');
+    expect(reportDependencyOwnership(root, config).undeclaredUsages).toEqual([
+      expect.objectContaining({ dependency: 'driver' }),
+    ]);
+  });
+
   it.each(['', " Description: import('example')", "\n * Example: import('example')"])(
     'records a brace-less JSDoc type without its description: %s',
     (description) => {

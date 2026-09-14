@@ -659,6 +659,7 @@ export interface GoogleVideoOptions {
   // Vertex AI configuration
   projectId?: string; // Google Cloud project ID
   region?: string; // Vertex AI region (default: us-central1)
+  apiHost?: string; // Vertex API host override
   credentials?: string; // Path to credentials file or JSON string
 }
 
