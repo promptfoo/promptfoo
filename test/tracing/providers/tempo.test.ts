@@ -97,6 +97,58 @@ describe('TempoProvider', () => {
     });
   });
 
+  it.each(['resource', 'span', 'event', 'nested event', 'array event'])(
+    'rejects duplicate %s attributes before they can hide a redaction source',
+    async (location) => {
+      const secret = 'PRIVATE_DUPLICATE_TEMPO_ATTRIBUTE';
+      const duplicates = [
+        { key: 'authorization', value: { stringValue: secret } },
+        { key: 'authorization', value: { stringValue: 'ordinary' } },
+      ];
+      const nested = { kvlistValue: { values: duplicates } };
+      const eventAttributes =
+        location === 'nested event'
+          ? [{ key: 'details', value: nested }]
+          : location === 'array event'
+            ? [{ key: 'details', value: { arrayValue: { values: [nested] } } }]
+            : duplicates;
+      const batch = traceResponse.batches[0];
+      const span = batch.scopeSpans[0].spans[0];
+      mockedFetch.mockResolvedValueOnce(
+        response({
+          batches: [
+            {
+              resource: { attributes: location === 'resource' ? duplicates : [] },
+              scopeSpans: [
+                {
+                  spans: [
+                    {
+                      ...span,
+                      attributes: location === 'span' ? duplicates : [],
+                      events: [
+                        {
+                          name: `echo ${secret}`,
+                          timeUnixNano: '1704067200500000000',
+                          attributes: location.includes('event') ? eventAttributes : [],
+                        },
+                      ],
+                    },
+                  ],
+                },
+              ],
+            },
+          ],
+        }),
+      );
+      await expect(
+        new TempoProvider({ id: 'tempo', endpoint: 'http://tempo:3200' }).fetchTrace(TRACE_ID),
+      ).rejects.toMatchObject({
+        message: 'Tempo returned duplicate attribute keys',
+        retryable: false,
+      });
+    },
+  );
+
   it('preserves sub-millisecond event order and drops events without a timestamp', async () => {
     const data = structuredClone(traceResponse);
     data.batches[0].scopeSpans[0].spans[0].events = [

@@ -101,6 +101,13 @@ function extractAttributeValue(value: TempoAttributeValue): unknown {
 function attributesToRecord(
   attributes?: Array<{ key: string; value: TempoAttributeValue }>,
 ): Record<string, unknown> {
+  const keys = new Set<string>();
+  for (const { key } of attributes ?? []) {
+    if (keys.has(key)) {
+      throw new TraceProviderError('Tempo returned duplicate attribute keys');
+    }
+    keys.add(key);
+  }
   return Object.fromEntries(
     (attributes ?? []).map(({ key, value }) => [key, extractAttributeValue(value)]),
   );
@@ -263,7 +270,10 @@ function transformSpan(
                 ),
               },
             ];
-          } catch {
+          } catch (error) {
+            if (error instanceof TraceProviderError) {
+              throw error;
+            }
             // A malformed event must not discard the span and its other verifier evidence.
             return [];
           }
@@ -345,7 +355,10 @@ export class TempoProvider implements TraceProvider {
               seenSpanIds.add(normalizedSpan.spanId);
               spans.push(normalizedSpan);
             }
-          } catch {
+          } catch (error) {
+            if (error instanceof TraceProviderError) {
+              throw error;
+            }
             malformedSpans++;
           }
         }
