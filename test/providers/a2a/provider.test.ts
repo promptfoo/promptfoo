@@ -299,38 +299,90 @@ describe('A2AProvider', () => {
     });
   });
 
-  it('does not add strategy media when message config is explicit', async () => {
-    vi.mocked(fetchWithTimeout).mockResolvedValueOnce(
-      jsonResponse({
-        message: {
-          role: 'ROLE_AGENT',
-          parts: [{ text: 'custom ok' }],
+  it.each(['1.0', '0.3.0'])('delivers PDF inputs in default A2A %s messages', async (version) => {
+    const raw = Buffer.from('%PDF-1.7\nPDF attachment bytes').toString('base64');
+    for (const input of ['document', 'invoiceAttachment', 'prompt']) {
+      vi.mocked(fetchWithTimeout).mockResolvedValueOnce(
+        jsonResponse({ message: { role: 'ROLE_AGENT', parts: [{ text: 'pdf ok' }] } }),
+      );
+      const result = await provider({ protocolVersion: version }).callApi('Read the invoice.', {
+        prompt: { raw: '{{question}}', label: 'question' },
+        test: {
+          metadata: {
+            strategyId: 'pdf',
+            originalText: 'Hidden PDF instructions',
+            pdf: input === 'document' ? undefined : { input },
+          },
         },
-      }),
-    );
-
-    const result = await provider({
-      message: {
-        parts: [{ text: 'Custom {{question}}' }],
-        role: 'ROLE_USER',
-      },
-    }).callApi('Please answer the question in the image.', {
-      prompt: { raw: '{{prompt}}', label: 'prompt' },
-      test: {
-        metadata: {
-          strategyId: 'image',
+        vars: {
+          document: 'Wrong fallback document',
+          [input]: `data:application/pdf;base64,${raw}`,
+          question: 'Read the invoice.',
         },
-      },
-      vars: {
-        image: 'base64-image',
-        question: 'question text',
-      },
-    });
-
-    expect(result.output).toBe('custom ok');
-    const requestBody = JSON.parse(vi.mocked(fetchWithTimeout).mock.calls[0]?.[1]?.body as string);
-    expect(requestBody.message.parts).toEqual([{ text: 'Custom question text' }]);
+      });
+      expect(result.output).toBe('pdf ok');
+      const body = JSON.parse(vi.mocked(fetchWithTimeout).mock.lastCall?.[1]?.body as string);
+      expect(body.message.parts).toEqual(
+        version === '0.3.0'
+          ? [
+              { kind: 'text', text: 'Read the invoice.' },
+              {
+                kind: 'file',
+                file: {
+                  fileWithBytes: raw,
+                  mimeType: 'application/pdf',
+                  name: 'promptfoo-document.pdf',
+                },
+              },
+            ]
+          : [
+              { text: 'Read the invoice.' },
+              { filename: 'promptfoo-document.pdf', mediaType: 'application/pdf', raw },
+            ],
+      );
+      expect(JSON.stringify(body.message)).not.toContain('Hidden PDF instructions');
+    }
   });
+
+  it.each(['image', 'pdf'])(
+    'keeps explicit messages unchanged for the %s strategy',
+    async (strategyId) => {
+      vi.mocked(fetchWithTimeout).mockResolvedValueOnce(
+        jsonResponse({
+          message: {
+            role: 'ROLE_AGENT',
+            parts: [{ text: 'custom ok' }],
+          },
+        }),
+      );
+
+      const result = await provider({
+        message: {
+          parts: [{ text: 'Custom {{question}}' }],
+          role: 'ROLE_USER',
+        },
+      }).callApi('Please answer the question in the image.', {
+        prompt: { raw: '{{prompt}}', label: 'prompt' },
+        test: {
+          metadata: {
+            strategyId,
+            pdf: { input: 'document' },
+          },
+        },
+        vars: {
+          image: 'base64-image',
+          document: 'data:application/pdf;base64,JVBERi0xLjc=',
+          question: 'question text',
+        },
+      });
+
+      expect(result.output).toBe('custom ok');
+      const requestBody = JSON.parse(
+        vi.mocked(fetchWithTimeout).mock.calls[0]?.[1]?.body as string,
+      );
+      expect(requestBody.message.parts).toEqual([{ text: 'Custom question text' }]);
+    },
+  );
 
   it('discovers an HTTP+JSON interface from the agent card', async () => {
     vi.mocked(fetchWithTimeout)

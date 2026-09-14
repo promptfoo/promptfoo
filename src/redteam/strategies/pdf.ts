@@ -128,7 +128,11 @@ function resolveInput(testCase: TestCaseWithPlugin, injectVar: string, configure
     }
   }
   const payload = inputs ? inputVars?.[input] : testCase.vars?.[injectVar];
-  if (typeof payload !== 'string' || !payload.trim() || payload.startsWith('data:')) {
+  if (
+    typeof payload !== 'string' ||
+    !payload.trim() ||
+    payload.startsWith('data:application/pdf;base64,')
+  ) {
     throw new Error(`PDF strategy requires readable attack text for input "${input}"`);
   }
   const companionVars = Object.fromEntries(

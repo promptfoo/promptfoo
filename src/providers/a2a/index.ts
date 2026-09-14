@@ -73,6 +73,11 @@ const MEDIA_STRATEGY_DEFAULTS = {
     injectVarMetadataKey: 'imageInjectVar',
     mediaType: 'image/png',
   },
+  pdf: {
+    fallbackVarName: 'document',
+    filename: 'promptfoo-document.pdf',
+    mediaType: 'application/pdf',
+  },
   video: {
     fallbackVarName: 'video',
     filename: 'promptfoo-video.mp4',
@@ -253,8 +258,8 @@ function getTestMetadata(context?: CallApiContextParams): Record<string, unknown
 
 function getMediaStrategyId(context?: CallApiContextParams): MediaStrategyId | undefined {
   const strategyId = getTestMetadata(context).strategyId;
-  return strategyId === 'audio' || strategyId === 'image' || strategyId === 'video'
-    ? strategyId
+  return typeof strategyId === 'string' && Object.keys(MEDIA_STRATEGY_DEFAULTS).includes(strategyId)
+    ? (strategyId as MediaStrategyId)
     : undefined;
 }
 
@@ -299,7 +304,10 @@ function getMediaVarName(
   context?: CallApiContextParams,
 ): string | undefined {
   const defaults = MEDIA_STRATEGY_DEFAULTS[strategyId];
-  const metadataInjectVar = getTestMetadata(context)[defaults.injectVarMetadataKey];
+  const metadataInjectVar =
+    strategyId === 'pdf'
+      ? context?.test?.metadata?.pdf?.input
+      : getTestMetadata(context)[MEDIA_STRATEGY_DEFAULTS[strategyId].injectVarMetadataKey];
   if (typeof metadataInjectVar === 'string' && getContextVar(vars, metadataInjectVar)) {
     return metadataInjectVar;
   }

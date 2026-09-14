@@ -217,7 +217,10 @@ The provider supports stream events containing `message`, `task`, `statusUpdate`
 ## Custom Messages
 
 By default, promptfoo sends a `ROLE_USER` message with a single text part containing `{{prompt}}`.
-You can provide a custom message template:
+
+For audio, image, video, and [PDF redteam strategies](/docs/red-team/strategies/pdf/), the default message includes the generated file and uses `question` as companion text when present. PDF attachments use the strategy's selected input and the `application/pdf` media type.
+
+Custom message templates replace this default. Include any required file parts in `config.message`:
 
 ```yaml
 providers:
