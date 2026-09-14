@@ -311,7 +311,7 @@ export function sanitizeRuntimeOptions(
  * Check if a value looks like a secret based on common patterns.
  * Detects API keys, tokens, and other credential patterns.
  */
-export function looksLikeSecret(value: string): boolean {
+export function looksLikeSecret(value: string, detectOpaqueValues = true): boolean {
   if (typeof value !== 'string') {
     return false;
   }
@@ -359,7 +359,7 @@ export function looksLikeSecret(value: string): boolean {
   // Long base64-like strings (likely tokens/keys) - 64+ chars of alphanumeric
   // Using 64 chars to reduce false positives on concatenated IDs, base64 content, or long model names
   // Scan for disallowed characters without growing the regex stack for large values.
-  if (value.length >= 64 && !/[^a-zA-Z0-9+/=_-]/.test(value)) {
+  if (detectOpaqueValues && value.length >= 64 && !/[^a-zA-Z0-9+/=_-]/.test(value)) {
     return true;
   }
 
@@ -394,7 +394,7 @@ function isSafeTracingCredentialTemplate(value: unknown): value is string {
   return typeof value === 'string' && SAFE_TRACING_CREDENTIAL_TEMPLATE.test(value.trim());
 }
 
-function isCredentialHeader(name: string, value: string): boolean {
+function isCredentialHeader(name: string, value: string, detectOpaqueValues = true): boolean {
   const normalizedName = name.replace(/([a-z0-9])([A-Z])/g, '$1_$2').toLowerCase();
   return (
     isSecretField(name) ||
@@ -403,7 +403,7 @@ function isCredentialHeader(name: string, value: string): boolean {
     ) ||
     normalizedName.replace(/[-_]/g, '') === 'xhoneycombteam' ||
     /^(?:bearer|basic|token|api[-_]?key)\s+\S+/i.test(value.trim()) ||
-    looksLikeSecret(value.trim())
+    looksLikeSecret(value.trim(), detectOpaqueValues)
   );
 }
 
@@ -1194,7 +1194,11 @@ function isStructurePreservingSecretKey(fieldName: string): boolean {
 const URL_KEY_RE = /(?:url|uri|endpoint)$/i;
 
 /** Redact a primitive (non-object) leaf value based on its key and content. */
-function redactPrimitiveLeaf(value: unknown, key: string | undefined): unknown {
+function redactPrimitiveLeaf(
+  value: unknown,
+  key: string | undefined,
+  redactOpaqueValues: boolean,
+): unknown {
   if (typeof value === 'string' && key && /^(?:id|provider(?:id|s)?)$/i.test(key)) {
     const url = value.match(/^([a-z][\w-]*:)?(https?:\/\/.+)$/i);
     if (url) {
@@ -1227,7 +1231,7 @@ function redactPrimitiveLeaf(value: unknown, key: string | undefined): unknown {
       return REDACTED;
     }
   }
-  if (typeof value === 'string' && looksLikeSecret(value)) {
+  if (typeof value === 'string' && looksLikeSecret(value, redactOpaqueValues)) {
     return REDACTED;
   }
   return value;
@@ -1237,6 +1241,7 @@ function redactSecretLeavesInner(
   value: unknown,
   key: string | undefined,
   seen: WeakSet<object>,
+  redactOpaqueValues: boolean,
 ): unknown {
   if (typeof value === 'bigint') {
     return { __promptfooBigInt: value.toString() };
@@ -1252,7 +1257,7 @@ function redactSecretLeavesInner(
   }
 
   if (typeof value !== 'object') {
-    return redactPrimitiveLeaf(value, key);
+    return redactPrimitiveLeaf(value, key, redactOpaqueValues);
   }
 
   if (seen.has(value)) {
@@ -1261,7 +1266,7 @@ function redactSecretLeavesInner(
   seen.add(value);
   try {
     if (Array.isArray(value)) {
-      return value.map((item) => redactSecretLeavesInner(item, key, seen));
+      return value.map((item) => redactSecretLeavesInner(item, key, seen, redactOpaqueValues));
     }
     if (value instanceof Date) {
       return value.toISOString();
@@ -1284,9 +1289,13 @@ function redactSecretLeavesInner(
         (key?.toLowerCase() === 'tls' && childKey.toLowerCase() === 'key') ||
         (key?.toLowerCase() === 'env' && isSecretEnvVarName(childKey)) ||
         (key?.toLowerCase() === 'headers' &&
-          isCredentialHeader(childKey, typeof childValue === 'string' ? childValue : ''))
+          isCredentialHeader(
+            childKey,
+            typeof childValue === 'string' ? childValue : '',
+            redactOpaqueValues,
+          ))
           ? REDACTED
-          : redactSecretLeavesInner(childValue, childKey, seen),
+          : redactSecretLeavesInner(childValue, childKey, seen, redactOpaqueValues),
       ]),
     );
   } finally {
@@ -1301,9 +1310,14 @@ function redactSecretLeavesInner(
  * surrounding structure, including the non-secret shape of `auth`/`session`
  * containers. Functions, symbols, BigInts, and circular references are replaced
  * with stable structural markers so the result is always JSON-serializable.
+ * Fingerprints disable opaque-value guessing to retain model revisions and body
+ * identifiers. Named credentials and recognizable credential formats stay redacted.
  */
-export function redactSecretLeaves<T>(value: T): T {
-  return redactSecretLeavesInner(value, undefined, new WeakSet<object>()) as T;
+export function redactSecretLeaves<T>(
+  value: T,
+  { redactOpaqueValues = true }: { redactOpaqueValues?: boolean } = {},
+): T {
+  return redactSecretLeavesInner(value, undefined, new WeakSet<object>(), redactOpaqueValues) as T;
 }
 
 function stableStringifyInner(value: unknown, seen: WeakSet<object>): string {

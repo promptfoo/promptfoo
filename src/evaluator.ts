@@ -2501,12 +2501,20 @@ function canonicalizeSelectionFingerprintValue(
   value: unknown,
   basePath: string,
   seen = new WeakSet<object>(),
-  referenceKind: 'test' | 'file' | 'provider' | 'provider-config' | 'literal' = 'test',
+  referenceKind:
+    | 'test'
+    | 'file'
+    | 'provider'
+    | 'provider-config'
+    | 'provider-session'
+    | 'literal' = 'test',
   providerFiles = new Set<string>(),
 ): unknown {
   const providerReference = referenceKind === 'provider';
   if (typeof value === 'string') {
-    const reference = providerReference ? redactSecretLeaves({ id: value }).id : value;
+    const reference = providerReference
+      ? redactSecretLeaves({ id: value }, { redactOpaqueValues: false }).id
+      : value;
     if (providerReference && isProviderConfigFileReference(reference)) {
       const filePath = fs.realpathSync(path.resolve(basePath, reference.slice('file://'.length)));
       if (providerFiles.has(filePath)) {
@@ -2519,7 +2527,7 @@ function canonicalizeSelectionFingerprintValue(
           reference,
           sourceHash: getFileSourceHash(filePath),
           providers: canonicalizeSelectionFingerprintValue(
-            redactSecretLeaves(configs),
+            redactSecretLeaves(configs, { redactOpaqueValues: false }),
             basePath,
             seen,
             'provider',
@@ -2621,7 +2629,19 @@ function canonicalizeSelectionFingerprintValue(
               kind = key === 'transform' ? 'file' : 'literal';
             }
           } else if (referenceKind === 'provider-config') {
-            kind = ['transformResponse', 'responseParser'].includes(key) ? 'file' : 'literal';
+            kind = [
+              'transformResponse',
+              'responseParser',
+              'transformRequest',
+              'sessionParser',
+              'validateStatus',
+            ].includes(key)
+              ? 'file'
+              : key === 'session'
+                ? 'provider-session'
+                : 'literal';
+          } else if (referenceKind === 'provider-session') {
+            kind = key === 'responseParser' ? 'file' : 'literal';
           } else if (referenceKind === 'test') {
             if (key === 'provider' || key === 'providers') {
               kind = 'provider';
@@ -2644,7 +2664,7 @@ function canonicalizeSelectionFingerprintValue(
           }
           const canonical = canonicalizeSelectionFingerprintValue(
             providerReference && kind !== 'provider'
-              ? redactSecretLeaves({ [key]: item })[key]
+              ? redactSecretLeaves({ [key]: item }, { redactOpaqueValues: false })[key]
               : item,
             basePath,
             seen,

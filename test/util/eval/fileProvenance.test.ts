@@ -2,10 +2,12 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
+import * as cache from '../../../src/cache';
 import cliState from '../../../src/cliState';
 import { createTestCaseSelection, restoreTestCaseSelection } from '../../../src/evaluator';
 import { GolangProvider } from '../../../src/providers/golangCompletion';
+import { HttpProvider } from '../../../src/providers/http';
 import { loadApiProvider } from '../../../src/providers/index';
 import { PythonProvider } from '../../../src/providers/pythonCompletion';
 import { RubyProvider } from '../../../src/providers/rubyCompletion';
@@ -110,6 +112,89 @@ describe('file-backed replay provenance', () => {
       ).toThrow('no longer');
     },
   );
+
+  it.each(['model', 'revision', 'body'])(
+    'tracks long semantic %s values in nested providers',
+    (field) => {
+      const test = (value: string) => ({
+        options: {
+          provider: {
+            id: 'http',
+            config: {
+              [field]: field === 'body' ? { identifier: value } : value,
+              apiKey: 'a'.repeat(64),
+            },
+          },
+        },
+      });
+      const tests = [test('b'.repeat(64))];
+      const selection = createTestCaseSelection(tests, [0]);
+      expect(restoreTestCaseSelection(tests, selection)).toEqual([0]);
+      expect(() => restoreTestCaseSelection([test('c'.repeat(64))], selection)).toThrow(
+        'no longer',
+      );
+      expect(JSON.stringify(selection)).not.toContain('b'.repeat(64));
+    },
+  );
+
+  it('keeps parser-like fields in HTTP request bodies literal', () => {
+    const tests = [
+      {
+        provider: {
+          id: 'http',
+          config: {
+            body: {
+              transformRequest: 'file://literal-body',
+              session: { responseParser: 'file://literal-session' },
+            },
+            session: { body: { responseParser: 'file://literal-body' } },
+          },
+        },
+      },
+    ];
+    const selection = createTestCaseSelection(tests, [0]);
+    expect(restoreTestCaseSelection(tests, selection)).toEqual([0]);
+  });
+
+  it.each([
+    'transformRequest',
+    'transformResponse',
+    'sessionParser',
+    'session.responseParser',
+    'validateStatus',
+  ])('tracks HTTP %s module bytes on runtime providers', async (field) => {
+    const basePath = directory();
+    const file = path.join(basePath, 'parser.cjs');
+    fs.writeFileSync(file, "exports.parse = (value) => 'first';");
+    cliState.basePath = basePath;
+    const reference = 'file://parser.cjs:parse';
+    const config =
+      field === 'session.responseParser'
+        ? { session: { url: 'http://example.test/session', responseParser: reference } }
+        : { [field]: reference };
+    const provider = new HttpProvider('http://example.test', {
+      config: { body: { input: '{{prompt}}' }, ...config },
+    });
+    const fetch = vi.spyOn(cache, 'fetchWithCache').mockResolvedValue({
+      data: {},
+      cached: false,
+      status: 200,
+      statusText: 'OK',
+      headers: {},
+    });
+    try {
+      await provider.callApi('fixture');
+    } finally {
+      fetch.mockRestore();
+    }
+    const source = { id: 'http://example.test', config };
+    const selection = createProviderSelection([provider], [source], [provider]);
+    expect(applyProviderSelection([provider], [source], selection).providers).toEqual([provider]);
+    fs.writeFileSync(file, "exports.parse = (value) => 'other';");
+    expect(() => applyProviderSelection([provider], [source], selection)).toThrow(
+      'no longer matches',
+    );
+  });
 
   it('preserves identities when serialization omits undefined options', () => {
     const tests = [{ vars: { input: 'same' } }];
@@ -243,7 +328,7 @@ describe('file-backed replay provenance', () => {
       expect(JSON.stringify(selection)).not.toContain('first');
     },
   );
-  it.each([
+  it.each<[string, unknown]>([
     ['scoring callback', { assertScoringFunction: 'file://source.js:score' }],
     [
       'assertion array',
@@ -267,6 +352,25 @@ describe('file-backed replay provenance', () => {
     [
       'provider output transform',
       { provider: { id: 'echo', transform: 'file://source.js:transform' } },
+    ],
+    ...[
+      'transformRequest',
+      'sessionParser',
+      'transformResponse',
+      'responseParser',
+      'validateStatus',
+    ].map((field): [string, unknown] => [
+      `HTTP ${field}`,
+      { provider: { id: 'http', config: { [field]: 'file://source.js:transform' } } },
+    ]),
+    [
+      'HTTP session response parser',
+      {
+        provider: {
+          id: 'http',
+          config: { session: { responseParser: 'file://source.js:transform' } },
+        },
+      },
     ],
     [
       'MCP response transform',

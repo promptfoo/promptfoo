@@ -32,6 +32,7 @@ import {
   sanitizeUrl,
   sanitizeUrlEncodedString,
 } from '../util/sanitizer';
+import { getFileSourceHash } from '../util/sourceHash';
 import { getNunjucksEngine } from '../util/templates';
 import { createEmptyTokenUsage } from '../util/tokenUsageUtils';
 import {
@@ -51,7 +52,11 @@ import {
   transformTools,
 } from './shared';
 import { normalizeResponseTransformResult } from './transformResult';
-import { loadTransformModule, parseFileTransformReference } from './transformUtils';
+import {
+  getTransformBasePath,
+  loadTransformModule,
+  parseFileTransformReference,
+} from './transformUtils';
 
 export { loadTransformModule } from './transformUtils';
 
@@ -1947,6 +1952,7 @@ export class HttpProvider implements ApiProvider {
   private transformResponse: Promise<
     (data: any, text: string, context?: TransformResponseContext) => ProviderResponse
   >;
+  private readonly transformBasePath = getTransformBasePath();
   private sessionParser: Promise<(data: SessionParserData) => string>;
   private transformRequest: Promise<
     (prompt: string, vars: Record<string, any>, context?: CallApiContextParams) => any
@@ -2015,6 +2021,29 @@ export class HttpProvider implements ApiProvider {
     if (this.config.body) {
       this.config.body = maybeLoadConfigFromExternalFile(this.config.body);
     }
+  }
+
+  getSourceHash(): string {
+    return crypto
+      .createHash('sha256')
+      .update(
+        JSON.stringify(
+          [
+            this.config.transformRequest,
+            this.config.transformResponse || this.config.responseParser,
+            this.config.sessionParser,
+            this.config.session?.responseParser,
+            this.config.validateStatus,
+          ].map((reference) => {
+            if (typeof reference !== 'string' || !reference.startsWith('file://')) {
+              return null;
+            }
+            const { filename, functionName } = parseFileTransformReference(reference);
+            return getFileSourceHash(path.resolve(this.transformBasePath, filename), functionName);
+          }),
+        ),
+      )
+      .digest('hex');
   }
 
   id(): string {

@@ -131,7 +131,11 @@ describe('runEvaluation tool', () => {
             handler = fn;
           }),
         } as any);
-        expect((await handler({})).isError).toBe(false);
+        const result = await handler({});
+        expect(result.isError).toBe(false);
+        expect(JSON.parse(result.content[0].text).data.configuration.configPath).toBe(
+          defaultConfigPath ?? 'promptfooconfig.yaml',
+        );
         expect(vi.mocked(doEval).mock.calls[0][0].config).toEqual(
           defaultConfigPath ? [defaultConfigPath] : undefined,
         );

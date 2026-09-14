@@ -99,14 +99,14 @@ function getProviderFingerprint(
     runtime: {
       callApi: provider.callApi,
       sourceHash: provider.getSourceHash?.(),
-      config: redactSecretLeaves(provider.config ?? {}),
+      config: redactSecretLeaves(provider.config ?? {}, { redactOpaqueValues: false }),
       id: getRuntimeProviderId(provider),
       label: provider.label,
       transform: provider.transform,
       delay: provider.delay,
-      inputs: redactSecretLeaves(provider.inputs),
+      inputs: redactSecretLeaves(provider.inputs, { redactOpaqueValues: false }),
     },
-    source: redactSecretLeaves(sourceFingerprintInput),
+    source: redactSecretLeaves(sourceFingerprintInput, { redactOpaqueValues: false }),
   };
   return createHash('sha256').update(stableSerialize(fingerprintInput)).digest('hex');
 }

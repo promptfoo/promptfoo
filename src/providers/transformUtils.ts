@@ -19,7 +19,7 @@ export function parseFileTransformReference(reference: string): FileTransformRef
     : reference;
   const lastColonIndex = rawFilename.lastIndexOf(':');
 
-  if (lastColonIndex === -1) {
+  if (lastColonIndex < Math.max(rawFilename.lastIndexOf('/'), rawFilename.lastIndexOf('\\')) + 1) {
     return { filename: rawFilename };
   }
 

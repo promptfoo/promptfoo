@@ -137,7 +137,7 @@ export function parseFileUrl(fileUrl: string): { filePath: string; functionName?
   }
   const lastColonIndex = urlWithoutProtocol.lastIndexOf(':');
 
-  if (lastColonIndex > 1) {
+  if (lastColonIndex > 1 && lastColonIndex >= filenameStart) {
     const candidateFilePath = urlWithoutProtocol.slice(0, lastColonIndex);
 
     // Only executable function files support a :functionName suffix. This preserves

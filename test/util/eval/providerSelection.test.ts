@@ -39,6 +39,24 @@ describe('provider selection', () => {
     expect(target.id()).toBe(id);
   });
 
+  it('tracks opaque model revisions while allowing credential rotation', () => {
+    const initial = provider('http', 'fixture', {
+      revision: 'a'.repeat(64),
+      apiKey: 'b'.repeat(64),
+    });
+    const source = { id: 'http', config: initial.config };
+    const selection = createProviderSelection([initial], [source], [initial]);
+    const rotated = provider('http', 'fixture', { ...initial.config, apiKey: 'c'.repeat(64) });
+    expect(
+      applyProviderSelection([rotated], [{ ...source, config: rotated.config }], selection)
+        .providers,
+    ).toEqual([rotated]);
+    const changed = provider('http', 'fixture', { ...initial.config, revision: 'd'.repeat(64) });
+    expect(() =>
+      applyProviderSelection([changed], [{ ...source, config: changed.config }], selection),
+    ).toThrow('no longer matches');
+  });
+
   const cloudProviderId = 'promptfoo://provider/11111111-1111-4111-8111-111111111111';
   const linkedTargetId = 'promptfoo://provider/22222222-2222-4222-8222-222222222222';
   const temporaryDirectories: string[] = [];

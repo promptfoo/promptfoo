@@ -32,6 +32,31 @@ afterEach(() => {
 });
 
 describe('redactSecretLeaves', () => {
+  it('preserves opaque semantic values for fingerprints without weakening share redaction', () => {
+    const opaque = 'a'.repeat(64);
+    const config = {
+      revision: opaque,
+      body: { identifier: opaque },
+      headers: { 'X-Model-Revision': opaque, Authorization: opaque },
+      apiKey: opaque,
+      auth: opaque,
+      session: opaque,
+      unknown: 'sk-' + 'b'.repeat(64),
+    };
+    const fingerprint = redactSecretLeaves(config, { redactOpaqueValues: false });
+    expect(fingerprint).toEqual({
+      revision: opaque,
+      body: { identifier: opaque },
+      headers: { 'X-Model-Revision': opaque, Authorization: '[REDACTED]' },
+      apiKey: '[REDACTED]',
+      auth: '[REDACTED]',
+      session: '[REDACTED]',
+      unknown: '[REDACTED]',
+    });
+    expect(JSON.stringify(redactSecretLeaves(config))).not.toContain(opaque);
+    expect(config.apiKey).toBe(opaque);
+  });
+
   it.each(['session=short', [{ name: 'session', value: 'short', domain: 'example.test' }]])(
     'redacts nested browser cookies without changing the local config',
     (cookies) => {

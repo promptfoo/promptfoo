@@ -281,6 +281,17 @@ describe('loadFunction', () => {
 });
 
 describe('parseFileUrl', () => {
+  it.each(['dir.js:variant/check.js', 'dir.py:variant/check.py', 'dir.ts:variant/check.cjs'])(
+    'preserves executable-looking directory colons in %s',
+    (filePath) => {
+      expect(parseFileUrl('file://' + filePath)).toEqual({ filePath });
+      expect(parseFileUrl('file://' + filePath + ':run')).toEqual({
+        filePath,
+        functionName: 'run',
+      });
+    },
+  );
+
   it.each([
     ['archive.rb:old/check.js:transform', 'archive.rb:old/check.js', 'transform'],
     ['archive.rb:old/check.py:validate', 'archive.rb:old/check.py', 'validate'],

@@ -608,7 +608,7 @@ export function registerRunEvaluationTool(server: McpServer) {
           },
           configuration: buildConfiguration(
             {
-              configPath,
+              configPath: configPath ?? defaultConfigPath,
               testCaseIndices,
               promptFilter,
               providerFilter,
