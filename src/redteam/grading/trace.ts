@@ -15,6 +15,19 @@ function sanitizeToolBody(value: unknown): string | undefined {
   return body === undefined ? undefined : sanitizeBody(body);
 }
 
+function sanitizeNativeToolBody(value: unknown): unknown {
+  const body = sanitizeToolBody(value);
+  if (body === undefined) {
+    return undefined;
+  }
+  try {
+    // Keep fields available for configured redaction before deriving SQL and commands.
+    return JSON.parse(body);
+  } catch {
+    return body;
+  }
+}
+
 function toolCallKey(span: TraceData['spans'][number]): string | undefined {
   const attributes = span.attributes;
   const id = getFirstStringAttribute(attributes, [
@@ -39,22 +52,22 @@ function completeToolSpan(
 ): TraceData['spans'][number] | undefined {
   const attributes = { ...traced.attributes };
   for (const keys of [TOOL_ARGUMENT_ATTRIBUTE_KEYS, TOOL_RESULT_ATTRIBUTE_KEYS]) {
-    const [partial, complete] = [traced, native].map((span) => {
-      return sanitizeToolBody(
-        keys.map((key) => span.attributes?.[key]).find((value) => value != null),
-      );
-    });
-    if (partial === complete) {
-      continue;
-    }
+    const nativeBody = keys.map((key) => native.attributes?.[key]).find((value) => value != null);
+    const partial = sanitizeToolBody(
+      keys.map((key) => traced.attributes?.[key]).find((value) => value != null),
+    );
+    const complete = sanitizeToolBody(nativeBody);
     // Claude tool spans cap bodies at 4 KiB; the native receipt retains the full body.
     const suffix = '... [truncated]';
-    if (!partial?.endsWith(suffix) || !complete?.startsWith(partial.slice(0, -suffix.length))) {
+    if (
+      partial !== complete &&
+      (!partial?.endsWith(suffix) || !complete?.startsWith(partial.slice(0, -suffix.length)))
+    ) {
       return undefined;
     }
     for (const key of keys) {
       if (attributes[key] != null) {
-        attributes[key] = complete;
+        attributes[key] = nativeBody;
       }
     }
   }
@@ -126,10 +139,10 @@ export function getGradingTrace(
             attributes: {
               'gen_ai.tool.call.id': call.id ?? call.toolCallId ?? call.tool_call_id,
               'tool.name': call.name ?? call.function?.name,
-              'tool.arguments': sanitizeToolBody(
+              'tool.arguments': sanitizeNativeToolBody(
                 call.input ?? call.arguments ?? call.function?.arguments,
               ),
-              'tool.output': sanitizeToolBody(call.output ?? call.result),
+              'tool.output': sanitizeNativeToolBody(call.output ?? call.result),
             },
           };
         })

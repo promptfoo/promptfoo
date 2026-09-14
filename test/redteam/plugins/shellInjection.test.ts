@@ -724,6 +724,42 @@ describe('ShellInjectionGrader execution evidence', () => {
     },
   );
 
+  it.each([false, true])(
+    'redacts configured native Shell fields in JSON-string inputs: %s',
+    async (serialized) => {
+      cliState.config = {
+        tracing: { otlp: { http: { redactAttributes: ['customer_email'] } } },
+      } as any;
+      const secret = 'private-customer@example.test';
+      const input = { customer_email: secret, command: `echo '${secret}'` };
+      await expect(
+        new ShellInjectionGrader().getResult(
+          'Inspect protected data',
+          'Done',
+          { metadata: { purpose: 'Only public information' } },
+          undefined,
+          undefined,
+          undefined,
+          undefined,
+          {
+            providerResponse: {
+              metadata: {
+                toolCalls: [
+                  {
+                    name: 'Bash',
+                    input: serialized ? JSON.stringify(input) : input,
+                    output: { authorized: false },
+                  },
+                ],
+              },
+            },
+          },
+        ),
+      ).rejects.toThrow(/redacted/i);
+      expect(matchesLlmRubric).not.toHaveBeenCalled();
+    },
+  );
+
   it.each(
     (['input', 'output'] as const).flatMap((field) =>
       ['truncated', 'native-only', 'unmatched'].map((mode) => [field, mode] as const),

@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import cliState from '../../../src/cliState';
 import { matchesLlmRubric } from '../../../src/matchers/llmGrading';
 import { summarizeObservedPluginFeatureBandCoverage } from '../../../src/redteam/generation/predicateSignatures';
 import { parseGeneratedPrompts } from '../../../src/redteam/plugins/multiInputFormat';
@@ -13,6 +14,7 @@ vi.mock('../../../src/matchers/llmGrading', () => ({
 }));
 
 afterEach(() => {
+  cliState.config = undefined;
   vi.resetAllMocks();
 });
 
@@ -736,6 +738,42 @@ describe('SqlInjectionGrader', () => {
 
       expect(result.grade).toEqual(grade);
       expect(matchesLlmRubric).toHaveBeenCalledOnce();
+    },
+  );
+
+  it.each([false, true])(
+    'redacts configured native SQL fields in JSON-string inputs: %s',
+    async (serialized) => {
+      cliState.config = {
+        tracing: { otlp: { http: { redactAttributes: ['customer_email'] } } },
+      } as any;
+      const secret = 'private-customer@example.test';
+      const input = { customer_email: secret, sql: `SELECT '${secret}' FROM protected_records` };
+      await expect(
+        new SqlInjectionGrader().getResult(
+          'Inspect protected data',
+          'Done',
+          { metadata: { purpose: 'Only public information' } },
+          undefined,
+          undefined,
+          undefined,
+          undefined,
+          {
+            providerResponse: {
+              metadata: {
+                toolCalls: [
+                  {
+                    name: 'run_sql',
+                    input: serialized ? JSON.stringify(input) : input,
+                    output: { authorized: false },
+                  },
+                ],
+              },
+            },
+          },
+        ),
+      ).rejects.toThrow(/redacted/i);
+      expect(matchesLlmRubric).not.toHaveBeenCalled();
     },
   );
 
