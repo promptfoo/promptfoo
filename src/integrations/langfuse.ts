@@ -12,7 +12,7 @@ type LangfuseParams = {
 let langfuse: LangfuseClient | undefined;
 let langfuseClientParams: LangfuseParams | undefined;
 
-// Read at call time: --env-file, .env, and the config's `env:` block are applied after import.
+// Read at call time: --env-file and the config's `env:` block are applied after this module is imported.
 function getLangfuseParams(): LangfuseParams {
   return {
     publicKey: getEnvString('LANGFUSE_PUBLIC_KEY'),

@@ -15,23 +15,35 @@ const mocks = vi.hoisted(() => {
     }
   }
 
-  const mockGetEnvString = vi.fn((key: string): string | undefined => {
-    switch (key) {
-      case 'LANGFUSE_PUBLIC_KEY':
-        return 'test-public-key';
-      case 'LANGFUSE_SECRET_KEY':
-        return 'test-secret-key';
-      case 'LANGFUSE_HOST':
-        return 'https://test.langfuse.com';
-      default:
-        return '';
-    }
+  const envStringFor =
+    (env: { publicKey?: string; secretKey?: string; host?: string }) =>
+    (key: string): string | undefined => {
+      switch (key) {
+        case 'LANGFUSE_PUBLIC_KEY':
+          return env.publicKey;
+        case 'LANGFUSE_SECRET_KEY':
+          return env.secretKey;
+        case 'LANGFUSE_HOST':
+          return env.host;
+        default:
+          return '';
+      }
+    };
+
+  const defaultEnvString = envStringFor({
+    publicKey: 'test-public-key',
+    secretKey: 'test-secret-key',
+    host: 'https://test.langfuse.com',
   });
+
+  const mockGetEnvString = vi.fn(defaultEnvString);
 
   return {
     mockGetPrompt,
     MockLangfuseClient,
     constructorCalls,
+    envStringFor,
+    defaultEnvString,
     mockGetEnvString,
   };
 });
@@ -48,6 +60,8 @@ vi.mock('@langfuse/client', () => ({
 describe('langfuse integration', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mocks.mockGetEnvString.mockReset();
+    mocks.mockGetEnvString.mockImplementation(mocks.defaultEnvString);
     // Clear the constructor calls array
     mocks.constructorCalls.length = 0;
     // Reset the module to clear the cached langfuse instance
@@ -261,23 +275,18 @@ describe('langfuse integration', () => {
         compile: vi.fn().mockReturnValue('Test'),
       };
       mocks.mockGetPrompt.mockResolvedValue(mockPrompt);
-      // Settings from --env-file, .env, or the config's `env:` block are applied after import.
-      mocks.mockGetEnvString.mockImplementation(() => undefined);
+      // --env-file and the config's `env:` block are applied after the module is imported.
+      mocks.mockGetEnvString.mockImplementation(mocks.envStringFor({}));
 
       const { getPrompt } = await import('../../src/integrations/langfuse');
 
-      mocks.mockGetEnvString.mockImplementation((key: string) => {
-        switch (key) {
-          case 'LANGFUSE_PUBLIC_KEY':
-            return 'late-public-key';
-          case 'LANGFUSE_SECRET_KEY':
-            return 'late-secret-key';
-          case 'LANGFUSE_HOST':
-            return 'https://self-hosted.example.com';
-          default:
-            return '';
-        }
-      });
+      mocks.mockGetEnvString.mockImplementation(
+        mocks.envStringFor({
+          publicKey: 'late-public-key',
+          secretKey: 'late-secret-key',
+          host: 'https://self-hosted.example.com',
+        }),
+      );
 
       await getPrompt('test-prompt', {}, 'text', 1);
 
@@ -290,7 +299,32 @@ describe('langfuse integration', () => {
       ]);
     });
 
-    it('should create a new Langfuse instance when settings change', async () => {
+    it.each([
+      {
+        changed: 'host',
+        env: {
+          publicKey: 'test-public-key',
+          secretKey: 'test-secret-key',
+          host: 'https://other.langfuse.com',
+        },
+      },
+      {
+        changed: 'public key',
+        env: {
+          publicKey: 'other-public-key',
+          secretKey: 'test-secret-key',
+          host: 'https://test.langfuse.com',
+        },
+      },
+      {
+        changed: 'secret key',
+        env: {
+          publicKey: 'test-public-key',
+          secretKey: 'other-secret-key',
+          host: 'https://test.langfuse.com',
+        },
+      },
+    ])('should create a new Langfuse instance when only the $changed changes', async ({ env }) => {
       const mockPrompt = {
         compile: vi.fn().mockReturnValue('Test'),
       };
@@ -299,20 +333,7 @@ describe('langfuse integration', () => {
       const { getPrompt } = await import('../../src/integrations/langfuse');
 
       await getPrompt('test1', {}, 'text', 1);
-
-      mocks.mockGetEnvString.mockImplementation((key: string) => {
-        switch (key) {
-          case 'LANGFUSE_PUBLIC_KEY':
-            return 'other-public-key';
-          case 'LANGFUSE_SECRET_KEY':
-            return 'other-secret-key';
-          case 'LANGFUSE_HOST':
-            return 'https://other.langfuse.com';
-          default:
-            return '';
-        }
-      });
-
+      mocks.mockGetEnvString.mockImplementation(mocks.envStringFor(env));
       await getPrompt('test2', {}, 'text', 1);
       await getPrompt('test3', {}, 'text', 1);
 
@@ -323,9 +344,9 @@ describe('langfuse integration', () => {
           baseUrl: 'https://test.langfuse.com',
         },
         {
-          publicKey: 'other-public-key',
-          secretKey: 'other-secret-key',
-          baseUrl: 'https://other.langfuse.com',
+          publicKey: env.publicKey,
+          secretKey: env.secretKey,
+          baseUrl: env.host,
         },
       ]);
     });
