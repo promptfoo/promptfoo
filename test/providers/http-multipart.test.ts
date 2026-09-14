@@ -409,15 +409,14 @@ describe('HttpProvider structured multipart requests', () => {
     fs.writeFileSync(path.join(outsideDir, 'report.txt'), 'outside');
     const link = path.join(baseDir, 'linked');
     fs.symlinkSync(safeDir, link, 'junction');
-    const realpath = fs.promises.realpath;
-    let sourceResolutions = 0;
-    vi.spyOn(fs.promises, 'realpath').mockImplementation(async (file) => {
-      const canonical = await realpath(file);
-      if (String(file) === path.join(link, 'report.txt') && ++sourceResolutions === 1) {
+    const open = fs.promises.open;
+    let sourceOpens = 0;
+    vi.spyOn(fs.promises, 'open').mockImplementation(async (file, flags, mode) => {
+      if (String(file) === path.join(safeDir, 'report.txt') && ++sourceOpens === 1) {
         fs.renameSync(safeDir, `${safeDir}-original`);
         fs.symlinkSync(outsideDir, safeDir, 'junction');
       }
-      return canonical;
+      return open(file, flags, mode);
     });
     const previousBasePath = cliState.basePath;
     cliState.basePath = baseDir;
