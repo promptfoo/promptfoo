@@ -56,7 +56,10 @@ export async function runPureAssertion({
   const outputString =
     typeof providerResponse.output === 'string'
       ? providerResponse.output
-      : (JSON.stringify(providerResponse.output) ?? '');
+      : JSON.stringify(providerResponse.output);
+  if (outputString === undefined) {
+    throw new Error('Pure assertions require a string or JSON-serializable output');
+  }
   const params = {
     assertion,
     assertionValueContext: {
