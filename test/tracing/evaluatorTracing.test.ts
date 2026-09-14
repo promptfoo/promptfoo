@@ -305,6 +305,24 @@ describe('evaluatorTracing', () => {
       expect(mockStartOTLPReceiver).toHaveBeenCalledOnce();
     });
 
+    it.each(['test', 'defaultTest'] as const)(
+      'creates trace context and starts the receiver for nested %s tracing',
+      async (source) => {
+        const test = { metadata: { tracing: { enabled: true, includeInGrading: true } } };
+        const suite: TestSuite = {
+          providers: [],
+          prompts: [],
+          ...(source === 'test' ? { tests: [test] } : { defaultTest: test }),
+          tracing: { enabled: false, otlp: { http: { enabled: true, port: 4318 } } },
+        };
+        expect(await startOtlpReceiverIfNeeded(suite)).toBe(true);
+        expect(mockStartOTLPReceiver).toHaveBeenCalledOnce();
+        const context = await generateTraceContextIfNeeded(test, {}, 0, 0, suite);
+        expect(context?.traceparent).toMatch(/^00-[a-f0-9]{32}-[a-f0-9]{16}-01$/);
+        expect(mockCreateTrace).toHaveBeenCalledOnce();
+      },
+    );
+
     it('should return false when testSuite.tracing.enabled is false', () => {
       const test: TestCase = { vars: {} };
       const testSuite = {

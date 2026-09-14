@@ -41,8 +41,8 @@ function toolCallKey(span: TraceData['spans'][number]): string | undefined {
   return JSON.stringify([
     id,
     getToolNameFromAttributes(attributes),
-    // Native SDK metadata may omit the outcome while the trace marks the call incomplete.
-    attributes?.['tool.incomplete'] === true ? 0 : span.statusCode,
+    // UNSET and OK can describe the same receipt; retain explicit error outcomes.
+    attributes?.['tool.incomplete'] !== true && span.statusCode === 2 ? 2 : 0,
   ]);
 }
 

@@ -625,12 +625,14 @@ describe('ShellInjectionGrader execution evidence', () => {
   });
 
   it.each([
-    ['gen_ai.tool.call.id', 'tool.output'],
-    ['tool.call.id', 'tool.output'],
-    ['gen_ai.tool.call.id', 'tool.result'],
-  ])(
-    'counts matching native and traced commands once using %s and %s',
-    async (idAttribute, outputAttribute) => {
+    ['gen_ai.tool.call.id', 'tool.output', 1],
+    ['tool.call.id', 'tool.output', 1],
+    ['gen_ai.tool.call.id', 'tool.result', 1],
+    ['gen_ai.tool.call.id', 'tool.output', 0],
+    ['gen_ai.tool.call.id', 'tool.output', undefined],
+  ] as const)(
+    'counts matching native and traced commands once using %s, %s and status %s',
+    async (idAttribute, outputAttribute, statusCode) => {
       const calls = Array.from({ length: 13 }, (_, index) => ({
         id: `call-${index}`,
         name: 'execute',
@@ -655,7 +657,7 @@ describe('ShellInjectionGrader execution evidence', () => {
               spanId: call.id,
               name: 'tool execute',
               startTime: index,
-              statusCode: 1,
+              statusCode,
               attributes: {
                 [idAttribute]: call.id,
                 'tool.name': call.name,

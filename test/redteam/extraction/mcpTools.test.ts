@@ -127,6 +127,27 @@ describe('extractMcpTools', () => {
     },
   );
 
+  it('ignores enum member order while preserving arrays inside members', async () => {
+    const schema = (members: unknown[]) => ({
+      type: 'object' as const,
+      properties: { value: { enum: members } },
+    });
+    const first = { ...query, inputSchema: schema(['draft', 'sent', ['a', 'b'], { x: 1, y: 2 }]) };
+    const same = { ...query, inputSchema: schema([{ y: 2, x: 1 }, ['a', 'b'], 'sent', 'draft']) };
+    const different = {
+      ...query,
+      inputSchema: schema(['draft', 'sent', ['b', 'a'], { x: 1, y: 2 }]),
+    };
+    const unchanged = structuredClone(same);
+    await expect(
+      extractMcpTools([provider('first', [first]), provider('same', [same])]),
+    ).resolves.toEqual([first]);
+    await expect(
+      extractMcpTools([provider('first', [first]), provider('different', [different])]),
+    ).rejects.toThrow('conflicting input schemas');
+    expect(same).toEqual(unchanged);
+  });
+
   it('preserves tools from working providers when another provider cannot connect', async () => {
     const unavailable = provider('unavailable', []);
     vi.mocked(unavailable.getAvailableTools).mockRejectedValue(new Error('Connection failed'));

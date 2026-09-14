@@ -20,7 +20,13 @@ function schemaKey(schema: unknown): string {
   );
 }
 
-// Only traverse schema positions: arrays inside enum/const/default are literal values.
+function compareSchemaValues(a: unknown, b: unknown): number {
+  const left = schemaKey(a),
+    right = schemaKey(b);
+  return left < right ? -1 : left > right ? 1 : 0;
+}
+
+// Only traverse schema positions: enum members and const/default are literal values.
 function normalizeSchema(schema: unknown): unknown {
   if (!schema || typeof schema !== 'object' || Array.isArray(schema)) {
     return schema;
@@ -29,6 +35,9 @@ function normalizeSchema(schema: unknown): unknown {
     Object.entries(schema).map(([key, value]) => {
       if ((key === 'required' || key === 'type') && Array.isArray(value)) {
         return [key, [...value].sort()];
+      }
+      if (key === 'enum' && Array.isArray(value)) {
+        return [key, [...value].sort(compareSchemaValues)];
       }
       if (
         [
@@ -79,11 +88,7 @@ function normalizeSchema(schema: unknown): unknown {
           ? value.map(normalizeSchema)
           : normalizeSchema(value);
         if (['allOf', 'anyOf', 'oneOf'].includes(key) && Array.isArray(normalized)) {
-          normalized.sort((a, b) => {
-            const left = schemaKey(a),
-              right = schemaKey(b);
-            return left < right ? -1 : left > right ? 1 : 0;
-          });
+          normalized.sort(compareSchemaValues);
         }
         return [key, normalized];
       }
