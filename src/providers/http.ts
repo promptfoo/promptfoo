@@ -2024,26 +2024,24 @@ export class HttpProvider implements ApiProvider {
   }
 
   getSourceHash(): string {
-    return crypto
-      .createHash('sha256')
-      .update(
-        JSON.stringify(
-          [
-            this.config.transformRequest,
-            this.config.transformResponse || this.config.responseParser,
-            this.config.sessionParser,
-            this.config.session?.responseParser,
-            this.config.validateStatus,
-          ].map((reference) => {
-            if (typeof reference !== 'string' || !reference.startsWith('file://')) {
-              return null;
-            }
-            const { filename, functionName } = parseFileTransformReference(reference);
-            return getFileSourceHash(path.resolve(this.transformBasePath, filename), functionName);
-          }),
-        ),
-      )
-      .digest('hex');
+    const sources = [
+      this.config.transformRequest,
+      this.config.transformResponse || this.config.responseParser,
+      this.config.sessionParser,
+      this.config.session?.responseParser,
+      this.config.validateStatus,
+    ].map((reference) => {
+      if (typeof reference !== 'string' || !reference.startsWith('file://')) {
+        return null;
+      }
+      const { filename, functionName } = parseFileTransformReference(reference);
+      return getFileSourceHash(path.resolve(this.transformBasePath, filename), functionName);
+    });
+    if (this.config.auth?.type === 'file') {
+      const { filePath, functionName } = parseFileAuthReference(this.config.auth.path);
+      sources.push(getFileSourceHash(path.resolve(this.transformBasePath, filePath), functionName));
+    }
+    return crypto.createHash('sha256').update(JSON.stringify(sources)).digest('hex');
   }
 
   id(): string {
@@ -2366,6 +2364,7 @@ export class HttpProvider implements ApiProvider {
         filePath,
         functionName,
         defaultFunctionName,
+        basePath: this.transformBasePath,
       });
       const result = FileAuthResultSchema.parse(await authFn(authContext));
       const cachedToken = this.cacheToken(cacheKey, result.token, result.expiration ?? undefined);

@@ -27,7 +27,7 @@ function getPromptFingerprint(prompt: ReplayPrompt): string {
     stableStringify({
       raw: prompt.raw,
       label: prompt.label,
-      config: redactSecretLeaves(prompt.config),
+      config: redactSecretLeaves(prompt.config, { redactOpaqueValues: false }),
       ...(prompt.function && { function: prompt.function }),
       ...(prompt.sourceHash && { sourceHash: prompt.sourceHash }),
     }),

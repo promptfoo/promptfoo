@@ -9,6 +9,27 @@ import {
 import { createCompletedPrompt } from '../../factories/eval';
 
 describe('evaluation replay helpers', () => {
+  it('rejects changed opaque prompt configuration while allowing credential rotation', () => {
+    const prompt = {
+      raw: '{{input}}',
+      label: 'Selected',
+      config: { revision: 'a'.repeat(64), apiKey: 'first' },
+    };
+    const selection = createPromptSelection([prompt]);
+    expect(
+      applyPromptSelection(
+        [{ ...prompt, config: { ...prompt.config, apiKey: 'second' } }],
+        selection,
+      ),
+    ).toHaveLength(1);
+    expect(() =>
+      applyPromptSelection(
+        [{ ...prompt, config: { ...prompt.config, revision: 'b'.repeat(64) } }],
+        selection,
+      ),
+    ).toThrow('no longer exists');
+  });
+
   it('restores logical config order when provider expansion starts with a later prompt', () => {
     const resolvedPrompts = [
       { raw: 'first', label: 'First prompt', config: { temperature: 0 } },

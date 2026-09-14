@@ -49,7 +49,7 @@ function hasUrlUserinfoPassword(url: string): boolean {
  * a benign name in a malformed URL, and `;`-separated query pairs (URLSearchParams
  * only splits on `&`). Linear: a single split plus per-segment checks.
  */
-function hasSecretFormSegment(text: string): boolean {
+function hasSecretFormSegment(text: string, redactOpaqueValues = true): boolean {
   for (const segment of text.split(/[?&;#]/)) {
     const equalsIndex = segment.indexOf('=');
     if (equalsIndex <= 0) {
@@ -61,8 +61,8 @@ function hasSecretFormSegment(text: string): boolean {
     }
     const decodedValue = decodeFormComponent(rawValue);
     if (
-      looksLikeSecret(rawValue) ||
-      (decodedValue !== undefined && looksLikeSecret(decodedValue))
+      looksLikeSecret(rawValue, redactOpaqueValues) ||
+      (decodedValue !== undefined && looksLikeSecret(decodedValue, redactOpaqueValues))
     ) {
       return true;
     }
@@ -92,8 +92,12 @@ function hasSecretFormSegment(text: string): boolean {
  * carry one of the structural markers above (the secret-named-key case is covered
  * by `hasSecretFormSegment`, which normalizes keys like `api_key` before matching).
  */
-function unparseableUrlMightLeakSecret(url: string): boolean {
-  return hasUrlUserinfoPassword(url) || looksLikeSecret(url.trim()) || hasSecretFormSegment(url);
+function unparseableUrlMightLeakSecret(url: string, redactOpaqueValues = true): boolean {
+  return (
+    hasUrlUserinfoPassword(url) ||
+    looksLikeSecret(url.trim(), redactOpaqueValues) ||
+    hasSecretFormSegment(url, redactOpaqueValues)
+  );
 }
 
 /**
@@ -922,7 +926,10 @@ function decodeFormComponent(component: string): string | undefined {
  * the value is JSON but contains no secrets (so callers can preserve the
  * original byte-for-byte).
  */
-function redactNestedJsonValue(decoded: string | undefined): string | null {
+function redactNestedJsonValue(
+  decoded: string | undefined,
+  redactOpaqueValues = true,
+): string | null {
   if (decoded === undefined) {
     return null;
   }
@@ -939,7 +946,9 @@ function redactNestedJsonValue(decoded: string | undefined): string | null {
   if (!parsed || typeof parsed !== 'object') {
     return null;
   }
-  const sanitized = sanitizeObject(parsed);
+  const sanitized = redactOpaqueValues
+    ? sanitizeObject(parsed)
+    : redactSecretLeaves(parsed, { redactOpaqueValues: false });
   const originalSerialized = JSON.stringify(parsed);
   const sanitizedSerialized = JSON.stringify(sanitized);
   return sanitizedSerialized === originalSerialized ? null : sanitizedSerialized;
@@ -957,7 +966,7 @@ function isPureTemplateValue(value: string): boolean {
   return value.includes('{{') && value.replace(NUNJUCKS_PLACEHOLDER, '').trim() === '';
 }
 
-export function sanitizeUrlEncodedString(value: string): string {
+export function sanitizeUrlEncodedString(value: string, redactOpaqueValues = true): string {
   if (!value.includes('=')) {
     return value;
   }
@@ -1004,7 +1013,7 @@ export function sanitizeUrlEncodedString(value: string): string {
     // Recurse into JSON-shaped values so credentials buried in a
     // form-encoded JSON payload (e.g. `data=%7B%22password%22%3A...%7D`) get
     // redacted at the leaf rather than leaked as opaque bytes.
-    const nestedJson = redactNestedJsonValue(decodedValue);
+    const nestedJson = redactNestedJsonValue(decodedValue, redactOpaqueValues);
     if (nestedJson !== null) {
       changed = true;
       return `${separator}${rawKey}=${encodeURIComponent(nestedJson)}`;
@@ -1015,7 +1024,8 @@ export function sanitizeUrlEncodedString(value: string): string {
     // `key=AAAA+BBBB...` where the raw 64-char chunk matches but the
     // space-bearing decoded form doesn't).
     const valueLooksSecret =
-      looksLikeSecret(rawValue) || (decodedValue !== undefined && looksLikeSecret(decodedValue));
+      looksLikeSecret(rawValue, redactOpaqueValues) ||
+      (decodedValue !== undefined && looksLikeSecret(decodedValue, redactOpaqueValues));
 
     if (valueLooksSecret) {
       changed = true;
@@ -1249,7 +1259,7 @@ function redactPrimitiveLeaf(
   if (typeof value === 'string' && key && /^(?:id|provider(?:id|s)?)$/i.test(key)) {
     const url = value.match(/^([a-z][\w-]*:)?(https?:\/\/.+)$/i);
     if (url) {
-      const sanitized = sanitizeUrlForLogging(url[2]);
+      const sanitized = sanitizeUrlForLogging(url[2], redactOpaqueValues);
       if (url[1]?.toLowerCase() === 'webhook:') {
         try {
           const parsed = new URL(sanitized);
@@ -1267,7 +1277,7 @@ function redactPrimitiveLeaf(
   }
   if (typeof key === 'string') {
     if (typeof value === 'string' && URL_KEY_RE.test(key)) {
-      return sanitizeUrl(value);
+      return sanitizeUrl(value, redactOpaqueValues);
     }
     if (isStructurePreservingSecretKey(key)) {
       // An `auth`/`session` value that is itself a bare credential string is
@@ -1424,7 +1434,7 @@ export function stableStringify(value: unknown): string {
   return stableStringifyInner(value, new WeakSet<object>());
 }
 
-function getSecretLookingRawQueryKeys(search: string): Set<string> {
+function getSecretLookingRawQueryKeys(search: string, redactOpaqueValues: boolean): Set<string> {
   const secretKeys = new Set<string>();
 
   for (const segment of search.slice(1).split('&')) {
@@ -1434,7 +1444,7 @@ function getSecretLookingRawQueryKeys(search: string): Set<string> {
     }
 
     const rawValue = segment.slice(separatorIndex + 1);
-    if (!looksLikeSecret(rawValue)) {
+    if (!looksLikeSecret(rawValue, redactOpaqueValues)) {
       continue;
     }
 
@@ -1448,7 +1458,7 @@ function getSecretLookingRawQueryKeys(search: string): Set<string> {
   return secretKeys;
 }
 
-function sanitizeTemplatedUrl(url: string): string {
+function sanitizeTemplatedUrl(url: string, redactOpaqueValues: boolean): string {
   // A template may coexist with an already-rendered env credential. Avoid URL
   // parsing here because it encodes the remaining Nunjucks syntax, but still
   // scrub literal query and fragment credentials before the value is logged or
@@ -1463,13 +1473,13 @@ function sanitizeTemplatedUrl(url: string): string {
   const queryIndex = beforeHash.indexOf('?');
   const beforeQuery = queryIndex === -1 ? beforeHash : beforeHash.slice(0, queryIndex);
   const query = queryIndex === -1 ? '' : beforeHash.slice(queryIndex + 1);
-  const sanitizedQuery = query ? sanitizeUrlEncodedString(query) : query;
-  const sanitizedHash = hash ? sanitizeUrlEncodedString(hash) : hash;
+  const sanitizedQuery = query ? sanitizeUrlEncodedString(query, redactOpaqueValues) : query;
+  const sanitizedHash = hash ? sanitizeUrlEncodedString(hash, redactOpaqueValues) : hash;
 
   return `${beforeQuery}${queryIndex === -1 ? '' : `?${sanitizedQuery}`}${hashIndex === -1 ? '' : `#${sanitizedHash}`}`;
 }
 
-export function sanitizeUrl(url: string): string {
+export function sanitizeUrl(url: string, redactOpaqueValues = true): string {
   try {
     // Ensure url is a string and handle edge cases
     if (typeof url !== 'string' || !url.trim()) {
@@ -1479,7 +1489,7 @@ export function sanitizeUrl(url: string): string {
     // Preserve unresolved template syntax while redacting any literal credentials
     // that were already rendered into another part of the same URL.
     if (url.includes('{{') && url.includes('}}')) {
-      return sanitizeTemplatedUrl(url);
+      return sanitizeTemplatedUrl(url, redactOpaqueValues);
     }
 
     // Handle path-only URLs (e.g., /api/openai/completion from raw HTTP request mode).
@@ -1497,20 +1507,25 @@ export function sanitizeUrl(url: string): string {
     }
 
     // Sanitize query parameters that might contain sensitive data
-    const rawSecretParamKeys = getSecretLookingRawQueryKeys(parsedUrl.search);
+    const rawSecretParamKeys = getSecretLookingRawQueryKeys(parsedUrl.search, redactOpaqueValues);
 
     try {
       for (const [key, value] of Array.from(sanitizedUrl.searchParams.entries())) {
         if (
           SENSITIVE_URL_PARAM_NAMES.test(key) ||
           rawSecretParamKeys.has(key) ||
-          looksLikeSecret(value) ||
+          looksLikeSecret(value, redactOpaqueValues) ||
           // URLSearchParams only splits on `&`, so a `;`-delimited credential
           // (`data=ok;api_key=sk-...`, legacy but still accepted by some stacks)
           // hides inside one value. Redact the whole value when it conceals one.
-          (value.includes(';') && hasSecretFormSegment(value))
+          (value.includes(';') && hasSecretFormSegment(value, redactOpaqueValues))
         ) {
           sanitizedUrl.searchParams.set(key, '[REDACTED]');
+        } else {
+          const nestedJson = redactNestedJsonValue(value, redactOpaqueValues);
+          if (nestedJson !== null) {
+            sanitizedUrl.searchParams.set(key, nestedJson);
+          }
         }
       }
     } catch (paramError) {
@@ -1523,7 +1538,10 @@ export function sanitizeUrl(url: string): string {
     // shape `#access_token=...`). The hash is a `key=value(&...)` string after the
     // leading `#`, so reuse the same form-pair scrubbing as the query.
     if (sanitizedUrl.hash.length > 1) {
-      const sanitizedHash = sanitizeUrlEncodedString(sanitizedUrl.hash.slice(1));
+      const sanitizedHash = sanitizeUrlEncodedString(
+        sanitizedUrl.hash.slice(1),
+        redactOpaqueValues,
+      );
       sanitizedUrl.hash = sanitizedHash ? `#${sanitizedHash}` : '';
     }
 
@@ -1540,7 +1558,7 @@ export function sanitizeUrl(url: string): string {
     // sanitizeObject runs this on any field literally named `url`, so blanket
     // redaction would destroy non-secret bare domains, relative paths, and prose
     // in persisted eval results and user-facing config error messages.
-    return unparseableUrlMightLeakSecret(url) ? REDACTED : url;
+    return unparseableUrlMightLeakSecret(url, redactOpaqueValues) ? REDACTED : url;
   }
 }
 
@@ -1549,8 +1567,8 @@ export function sanitizeUrl(url: string): string {
  * legitimate resource IDs in persisted provider results, so only logging paths
  * use this stricter redaction.
  */
-export function sanitizeUrlForLogging(url: string): string {
-  const sanitized = sanitizeUrl(url);
+export function sanitizeUrlForLogging(url: string, redactOpaqueValues = true): string {
+  const sanitized = sanitizeUrl(url, redactOpaqueValues);
   try {
     const isPathOnly = sanitized.startsWith('/') && !sanitized.startsWith('//');
     const parsed = isPathOnly ? new URL(sanitized, DUMMY_BASE) : new URL(sanitized);
@@ -1574,7 +1592,7 @@ export function sanitizeUrlForLogging(url: string): string {
           return opaqueValue ||
             (webhookRoot > 0 && index > webhookRoot && segment !== '') ||
             OPAQUE_CREDENTIAL_PATH_SEGMENT.test(decoded) ||
-            looksLikeSecret(decoded)
+            looksLikeSecret(decoded, redactOpaqueValues)
             ? '%5BREDACTED%5D'
             : segment;
         } catch {
@@ -1589,6 +1607,8 @@ export function sanitizeUrlForLogging(url: string): string {
       .some((segment) =>
         OPAQUE_CREDENTIAL_PATH_SEGMENT.test(decodeFormComponent(segment) ?? segment),
       );
-    return unparseableUrlMightLeakSecret(url) || hasOpaquePath ? REDACTED : sanitized;
+    return unparseableUrlMightLeakSecret(url, redactOpaqueValues) || hasOpaquePath
+      ? REDACTED
+      : sanitized;
   }
 }

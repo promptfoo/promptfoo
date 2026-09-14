@@ -205,7 +205,7 @@ promptfoo eval --resume <evalId>   # resumes a specific eval
 ```
 
 - On resume, promptfoo reuses the original run's effective runtime options (e.g., `--delay`, `--no-cache`, `--max-concurrency`, `--repeat`), skips completed test/prompt pairs, ignores CLI flags that change test ordering to keep indices aligned, and disables watch mode.
-- Evaluations with saved provider or test selections check selected provider entry files, assertion files, grading providers, scoring callbacks, and transforms, including files inherited from `defaultTest`. References resolve against the original configuration directory. Literal file URLs in descriptions or metadata are not loaded. If source files change, start a new evaluation. Resume and retry reject the changed selection before calling the target or replacing saved results.
+- Evaluations with saved provider or test selections check selected provider entry files, assertion files, grading providers, HTTP authentication callbacks, scoring callbacks, and transforms, including files inherited from `defaultTest`. Selected test replay also checks extension hook implementations before invoking them. References resolve against the original configuration directory. Literal file URLs in descriptions or metadata are not loaded. If source files change, start a new evaluation. Resume and retry reject the changed selection before calling the target or replacing saved results.
 
 ### Retry Errors
 

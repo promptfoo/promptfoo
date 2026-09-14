@@ -32,6 +32,25 @@ afterEach(() => {
 });
 
 describe('redactSecretLeaves', () => {
+  it.each([
+    ['url', 'https://example.test/api?revision=REVISION&api_key=credential-value'],
+    ['id', 'http:https://example.test/api?revision=REVISION&api_key=credential-value'],
+    ['endpoint', 'https://example.test/api#revision=REVISION&token=credential-value'],
+    ['url', 'https://example.test/{{route}}?revision=REVISION&token=credential-value'],
+    ['url', '/api?revision=REVISION&token=credential-value'],
+    [
+      'url',
+      'https://example.test/api?data=%7B%22revision%22%3A%22REVISION%22%2C%22token%22%3A%22credential-value%22%7D',
+    ],
+  ])('retains semantic URL values in %s fingerprints: %s', (key, url) => {
+    const revision = 'a'.repeat(64);
+    const config = { [key]: url.replace('REVISION', revision) };
+    const fingerprint = JSON.stringify(redactSecretLeaves(config, { redactOpaqueValues: false }));
+    expect(fingerprint).toContain(revision);
+    expect(fingerprint).not.toContain('credential-value');
+    expect(JSON.stringify(redactSecretLeaves(config))).not.toContain(revision);
+  });
+
   it('preserves opaque semantic values for fingerprints without weakening share redaction', () => {
     const opaque = 'a'.repeat(64);
     const config = {

@@ -947,7 +947,11 @@ async function doEvalWithEnv(
         validatedTestCaseSelection = createTestCaseSelection(
           testSuite.tests,
           testSuite.tests.map((_, index) => index),
-          { basePath: effectiveConfigBasePath, defaultTest: testSuite.defaultTest },
+          {
+            basePath: effectiveConfigBasePath,
+            defaultTest: testSuite.defaultTest,
+            extensions: testSuite.extensions,
+          },
         );
       }
       const shouldSuppressImplicitDefaultTest =
@@ -1011,11 +1015,16 @@ async function doEvalWithEnv(
         ? restoreTestCaseSelection(tests, validatedTestCaseSelection, {
             basePath: effectiveConfigBasePath,
             defaultTest: testSuite.defaultTest,
+            extensions: testSuite.extensions,
           })
         : createTestCaseSelection(
             tests,
             resumeRuntimeOptions?.testCaseIndices ?? evaluateOptions.testCaseIndices ?? [],
-            { basePath: effectiveConfigBasePath, defaultTest: testSuite.defaultTest },
+            {
+              basePath: effectiveConfigBasePath,
+              defaultTest: testSuite.defaultTest,
+              extensions: testSuite.extensions,
+            },
           ).tests.map(({ index }) => index);
       permissionTests = indices.map((index) => tests[index]);
     }

@@ -275,7 +275,11 @@ function setSelectedTestCaseIndices(
     evaluateOptionOverrides.testCaseSelection = createTestCaseSelection(
       getTestCasesForSelection(testSuite),
       selectedTestCaseIndices,
-      { basePath: configBasePath, defaultTest: testSuite.defaultTest },
+      {
+        basePath: configBasePath,
+        defaultTest: testSuite.defaultTest,
+        extensions: testSuite.extensions,
+      },
     );
   }
 }

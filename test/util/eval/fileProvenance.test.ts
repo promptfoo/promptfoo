@@ -196,6 +196,48 @@ describe('file-backed replay provenance', () => {
     );
   });
 
+  it.each(['auth.cjs', 'file://auth.cjs:authorize', 'file://auth.py:get_auth'])(
+    'tracks HTTP file authentication source: %s',
+    (reference) => {
+      const basePath = directory();
+      const filename = reference.endsWith('get_auth') ? 'auth.py' : 'auth.cjs';
+      const file = path.join(basePath, filename);
+      fs.writeFileSync(file, 'first');
+      cliState.basePath = basePath;
+      const config = { method: 'GET', auth: { type: 'file' as const, path: reference } };
+      const provider = new HttpProvider('http://example.test', { config });
+      const source = { id: 'http://example.test', config };
+      const selection = createProviderSelection([provider], [source], [provider]);
+      const tests = [{ options: { provider: source } }];
+      const testSelection = createTestCaseSelection(tests, [0], { basePath });
+      cliState.basePath = directory();
+      expect(applyProviderSelection([provider], [source], selection).providers).toEqual([provider]);
+      expect(restoreTestCaseSelection(tests, testSelection, { basePath })).toEqual([0]);
+      fs.writeFileSync(file, 'other');
+      expect(() => applyProviderSelection([provider], [source], selection)).toThrow(
+        'no longer matches',
+      );
+      expect(() => restoreTestCaseSelection(tests, testSelection, { basePath })).toThrow(
+        'no longer exists',
+      );
+    },
+  );
+
+  it.each(['beforeAll', 'beforeEach', 'afterEach', 'afterAll'])(
+    'tracks %s extension sources before selected tests execute',
+    (hook) => {
+      const basePath = directory();
+      const file = path.join(basePath, 'extension.cjs');
+      fs.writeFileSync(file, 'first');
+      const tests = [{ vars: { input: 'same' } }];
+      const context = { basePath, extensions: [`file://extension.cjs:${hook}`] };
+      const selection = createTestCaseSelection(tests, [0], context);
+      expect(restoreTestCaseSelection(tests, selection, context)).toEqual([0]);
+      fs.writeFileSync(file, 'other');
+      expect(() => restoreTestCaseSelection(tests, selection, context)).toThrow('no longer exists');
+    },
+  );
+
   it('preserves identities when serialization omits undefined options', () => {
     const tests = [{ vars: { input: 'same' } }];
     const defaultTest = { options: { prefix: undefined, provider: 'echo' } };

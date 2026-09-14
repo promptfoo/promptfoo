@@ -2507,6 +2507,7 @@ function canonicalizeSelectionFingerprintValue(
     | 'provider'
     | 'provider-config'
     | 'provider-session'
+    | 'provider-auth'
     | 'literal' = 'test',
   providerFiles = new Set<string>(),
 ): unknown {
@@ -2639,9 +2640,29 @@ function canonicalizeSelectionFingerprintValue(
               ? 'file'
               : key === 'session'
                 ? 'provider-session'
-                : 'literal';
+                : key === 'auth'
+                  ? 'provider-auth'
+                  : 'literal';
           } else if (referenceKind === 'provider-session') {
             kind = key === 'responseParser' ? 'file' : 'literal';
+          } else if (referenceKind === 'provider-auth') {
+            if (
+              key === 'path' &&
+              (value as Record<string, unknown>).type === 'file' &&
+              typeof item === 'string'
+            ) {
+              return [
+                key,
+                canonicalizeSelectionFingerprintValue(
+                  item.startsWith('file://') ? item : `file://${item}`,
+                  basePath,
+                  seen,
+                  'file',
+                  providerFiles,
+                ),
+              ];
+            }
+            kind = 'literal';
           } else if (referenceKind === 'test') {
             if (key === 'provider' || key === 'providers') {
               kind = 'provider';
@@ -2682,19 +2703,24 @@ function canonicalizeSelectionFingerprintValue(
 interface TestCaseSelectionContext {
   basePath?: string;
   defaultTest?: unknown;
+  extensions?: string[] | null;
 }
 
 function getTestCaseFingerprint(
   testCase: unknown,
-  { basePath = '.', defaultTest }: TestCaseSelectionContext,
+  { basePath = '.', defaultTest, extensions }: TestCaseSelectionContext,
 ): string {
   const test = canonicalizeSelectionFingerprintValue(testCase, basePath);
   const defaults =
     defaultTest && typeof defaultTest === 'object' && Object.keys(defaultTest).length > 0
       ? canonicalizeSelectionFingerprintValue(defaultTest, basePath)
       : undefined;
+  const hooks = extensions?.length
+    ? canonicalizeSelectionFingerprintValue(extensions, basePath, new WeakSet<object>(), 'file')
+    : undefined;
+  const selectedTest = defaults ? { test, defaults } : test;
   return createHash('sha256')
-    .update(stableSerializeSelection(defaults ? { test, defaults } : test))
+    .update(stableSerializeSelection(hooks ? { selectedTest, extensions: hooks } : selectedTest))
     .digest('hex');
 }
 
@@ -5302,6 +5328,7 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
         ? restoreTestCaseSelection(unresolvedTests, options.testCaseSelection!, {
             basePath: options.configBasePath,
             defaultTest: testSuite.defaultTest,
+            extensions: testSuite.extensions,
           })
         : options.testCaseIndices!;
       const invalidIndices = selectedTestCaseIndices.filter(
