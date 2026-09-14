@@ -191,7 +191,7 @@ vi.mock('../../src/cliState', () => ({
   },
 }));
 
-vi.mock('../../src/models/prompt', () => ({
+vi.mock('../../src/prompts/id', () => ({
   generateIdFromPrompt: vi.fn((prompt) => `prompt-${prompt.label || 'default'}`),
 }));
 
