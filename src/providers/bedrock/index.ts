@@ -291,9 +291,14 @@ interface TextConfiguration {
 }
 
 export interface BedrockAmazonNovaSonicGenerationOptions extends BedrockOptions {
-  interfaceConfig?: {
-    max_new_tokens?: number;
+  inferenceConfiguration?: {
+    maxTokens?: number;
     temperature?: number;
+    topP?: number;
+  };
+  inferenceConfig?: BedrockAmazonNovaSonicGenerationOptions['inferenceConfiguration'];
+  interfaceConfig?: BedrockAmazonNovaSonicGenerationOptions['inferenceConfiguration'] & {
+    max_new_tokens?: number;
     top_p?: number;
     top_k?: number;
     stopSequences?: string[];
@@ -330,7 +335,7 @@ export interface BedrockAmazonNovaSonicGenerationOptions extends BedrockOptions 
   };
   /** Session timeout in milliseconds (default: 300000 = 5 minutes) */
   sessionTimeout?: number;
-  /** Request timeout in milliseconds (default: 120000 = 2 minutes) */
+  /** Request timeout in milliseconds (default: 300000 = 5 minutes) */
   requestTimeout?: number;
 }
 

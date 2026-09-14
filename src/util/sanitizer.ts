@@ -14,7 +14,7 @@ export const REDACTED = '[REDACTED]';
 // Query-parameter names that imply a credential value. Shared by sanitizeUrl's
 // per-param redaction and the fail-closed decision for unparseable URLs.
 const SENSITIVE_URL_PARAM_NAMES =
-  /(api[_-]?key|token|password|secret|signature|sig|access[_-]?token|refresh[_-]?token|id[_-]?token|client[_-]?secret|authorization)/i;
+  /(api[_-]?key|key|token|password|secret|signature|sig|access[_-]?token|refresh[_-]?token|id[_-]?token|client[_-]?secret|authorization)/i;
 const OPAQUE_CREDENTIAL_PATH_SEGMENT =
   /^(?:[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}|[0-9a-f]{32,}|(?:token|key|secret|credential|auth)[-_][a-z0-9._-]{8,}|eyJ[a-zA-Z0-9_-]*\.[a-zA-Z0-9_-]+\.[a-zA-Z0-9_-]+)$/i;
 
@@ -69,7 +69,7 @@ function hasSecretFormSegment(text: string): boolean {
     const rawKey = segment.slice(0, equalsIndex);
     const key = decodeFormComponent(rawKey) ?? rawKey;
     const keyParts = key.split(/[._\-\[\]]+/).filter(Boolean);
-    if (isSecretField(key) || keyParts.some(isSecretField)) {
+    if (key.toLowerCase() === 'key' || isSecretField(key) || keyParts.some(isSecretField)) {
       return true;
     }
   }
@@ -364,6 +364,21 @@ export function looksLikeSecret(value: string): boolean {
   }
 
   return false;
+}
+
+// Headers with standard non-credential meanings; other custom headers may authenticate a gateway.
+const NON_CREDENTIAL_HEADERS = new Set([
+  'accept',
+  'content-type',
+  'openai-beta',
+  'openai-organization',
+  'openai-project',
+  'user-agent',
+  'x-openai-originator',
+]);
+
+export function isNonCredentialHeader(name: string): boolean {
+  return NON_CREDENTIAL_HEADERS.has(name.toLowerCase());
 }
 
 const SAFE_TRACING_CREDENTIAL_TEMPLATE =
@@ -1057,10 +1072,42 @@ function sanitizePlainObject(obj: any, depth: number, maxDepth: number, isEnvMap
   const sanitized: any = {};
   const isSecretKey = isEnvMap ? isSecretEnvVarName : isSecretField;
   for (const [key, value] of Object.entries(obj)) {
-    if (key === 'url' && typeof value === 'string') {
-      sanitized[key] = sanitizeUrl(value);
-    } else if (isSecretKey(key)) {
+    if (isSecretKey(key)) {
       sanitized[key] = REDACTED;
+    } else if (key.toLowerCase() === 'headers' && value && typeof value === 'object') {
+      sanitized[key] = Object.fromEntries(
+        Object.entries(value).map(([name, item]) => [
+          name,
+          isSafeTracingCredentialTemplate(item) ||
+          (typeof item === 'string' &&
+            !isTracingCredentialHeader(name, item) &&
+            (isNonCredentialHeader(name) || SAFE_TRACING_PROVIDER_HEADERS.has(name.toLowerCase())))
+            ? item
+            : REDACTED,
+        ]),
+      );
+    } else if (
+      typeof value === 'string' &&
+      (key === 'apiHost' || (isEnvMap && key.toUpperCase().endsWith('_HOST')))
+    ) {
+      const scheme = /^[a-z][a-z\d+.-]*:\/\//i;
+      const hasScheme = scheme.test(value);
+      const endpoint = sanitizeUrlForLogging(hasScheme ? value : `https://${value}`);
+      const host = hasScheme ? endpoint : endpoint.replace(/^https:\/\//, '');
+      const hasPath = value.replace(scheme, '').split(/[?#]/, 1)[0].includes('/');
+      sanitized[key] = hasPath ? host : host.replace(/\/(?=[?#]|$)/, '');
+    } else if (
+      typeof value === 'string' &&
+      (key === 'url' ||
+        key === 'apiBaseUrl' ||
+        key === 'server_url' ||
+        (isEnvMap && key.toUpperCase().endsWith('_URL')))
+    ) {
+      sanitized[key] =
+        key === 'url' ||
+        (isEnvMap && key.toUpperCase().endsWith('_URL') && !/^OPENAI_(?:API_)?BASE_URL$/i.test(key))
+          ? sanitizeUrl(value)
+          : sanitizeUrlForLogging(value);
     } else if (typeof value === 'string' && looksLikeSecret(value)) {
       // Redact values that look like secrets (API keys, tokens, etc.)
       sanitized[key] = REDACTED;
@@ -1317,19 +1364,33 @@ export function sanitizeUrlForLogging(url: string): string {
     const parsed = isPathOnly ? new URL(sanitized, DUMMY_BASE) : new URL(sanitized);
     parsed.pathname = parsed.pathname
       .split('/')
-      .map((segment) => {
+      .map((segment, index, segments) => {
+        const previous = decodeFormComponent(segments[index - 1] ?? '') ?? '';
         try {
           const decoded = decodeURIComponent(segment);
-          return OPAQUE_CREDENTIAL_PATH_SEGMENT.test(decoded) || looksLikeSecret(decoded)
+          // Credential routes can also contain ordinary words such as /auth/proxy.
+          const opaqueValue =
+            isSecretField(previous) &&
+            /^[a-z0-9._~+-]{12,}$/i.test(decoded) &&
+            /[a-z]/i.test(decoded) &&
+            /[0-9]/.test(decoded);
+          return opaqueValue ||
+            OPAQUE_CREDENTIAL_PATH_SEGMENT.test(decoded) ||
+            looksLikeSecret(decoded)
             ? '%5BREDACTED%5D'
             : segment;
         } catch {
-          return segment;
+          return isSecretField(previous) ? '%5BREDACTED%5D' : segment;
         }
       })
       .join('/');
     return isPathOnly ? parsed.pathname + parsed.search + parsed.hash : parsed.toString();
   } catch {
-    return sanitized;
+    const hasOpaquePath = url
+      .split(/[/?#]/)
+      .some((segment) =>
+        OPAQUE_CREDENTIAL_PATH_SEGMENT.test(decodeFormComponent(segment) ?? segment),
+      );
+    return unparseableUrlMightLeakSecret(url) || hasOpaquePath ? REDACTED : sanitized;
   }
 }

@@ -1064,6 +1064,7 @@ Choose a provider that matches the application you are testing:
 
 | Application                                         | Provider guide                                                        |
 | --------------------------------------------------- | --------------------------------------------------------------------- |
+| Managed Codex sessions and hosted sandboxes         | [OpenAI Agents API](/docs/providers/openai-agents-api)                |
 | TypeScript Agents SDK tools, handoffs, and sessions | [OpenAI Agents SDK](/docs/providers/openai-agents)                    |
 | Python Agents SDK application                       | [Agents SDK Python guide](/docs/guides/evaluate-openai-agents-python) |
 | ChatKit integration                                 | [OpenAI ChatKit](/docs/providers/openai-chatkit)                      |

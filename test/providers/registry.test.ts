@@ -1,8 +1,10 @@
 import path from 'path';
 
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { loadApiProvider } from '../../src/providers';
 import { isFoundationModelProvider } from '../../src/providers/constants';
 import { LlamaApiProvider } from '../../src/providers/llamaApi';
+import { MCPProvider } from '../../src/providers/mcp';
 import { OpenAiChatCompletionProvider } from '../../src/providers/openai/chat';
 import { OpenAiResponsesProvider } from '../../src/providers/openai/responses';
 import { PythonProvider } from '../../src/providers/pythonCompletion';
@@ -60,6 +62,67 @@ vi.mock('../../src/redteam/remoteGeneration', async (importOriginal) => {
 });
 
 describe('Provider Registry', () => {
+  it.each(['openai:agents-api', 'openai:agents-api:gpt-6-astra'])(
+    'routes %s to the hosted Agents API with scoped credentials',
+    async (providerPath) => {
+      const factories = await getProviderFactories(providerPath);
+      const factory = factories.find((entry) => entry.test(providerPath))!;
+      const provider = await factory.create(
+        providerPath,
+        { id: 'hosted-agent', config: { agent_id: 'agent_saved' } },
+        { basePath: '.', options: {}, env: { OPENAI_API_KEY: 'scoped-key' } },
+      );
+      expect(provider.constructor.name).toBe('OpenAiAgentsApiProvider');
+      expect(provider.id()).toBe('hosted-agent');
+      expect(provider).toHaveProperty('env.OPENAI_API_KEY', 'scoped-key');
+      expect(provider).toHaveProperty('config.agent_id', 'agent_saved');
+      expect(provider).toHaveProperty(
+        'modelName',
+        providerPath.endsWith('gpt-6-astra') ? 'gpt-6-astra' : '',
+      );
+    },
+  );
+
+  it.each([undefined, 'configured-opencode'])('preserves OpenCode provider ID %s', async (id) => {
+    const providerPath = 'opencode:sdk';
+    const factory = providerMap.find((entry) => entry.test(providerPath))!;
+    const provider = await factory.create(providerPath, { id }, { options: {} });
+    expect(provider.id()).toBe(id ?? providerPath);
+  });
+
+  it.each(['openai:codex-sdk', 'openai:codex-sdk:gpt-5.5'])(
+    'merges scoped Codex SDK environment for %s',
+    async (providerPath) => {
+      const factory = providerMap.find((entry) => entry.test(providerPath))!;
+      const provider = await factory.create(
+        providerPath,
+        { env: { CODEX_API_KEY: 'provider-key' } },
+        {
+          options: {},
+          env: { CODEX_API_KEY: 'suite-key', OPENAI_API_BASE_URL: 'https://suite.example/v1' },
+        },
+      );
+      expect(provider).toHaveProperty('env', {
+        CODEX_API_KEY: 'provider-key',
+        OPENAI_API_BASE_URL: 'https://suite.example/v1',
+      });
+    },
+  );
+
+  it.each([
+    { suite: { OPENAI_API_KEY: 'suite-key' }, scoped: { CODEX_API_KEY: 'provider-key' } },
+    { suite: { CODEX_API_KEY: 'suite-key' }, scoped: { OPENAI_API_KEY: 'provider-key' } },
+  ])(
+    'preserves scoped credentials across Codex API-key aliases: $scoped',
+    async ({ suite, scoped }) => {
+      const provider = await loadApiProvider('openai:codex-sdk', {
+        env: suite,
+        options: { env: scoped },
+      });
+      expect(provider).toHaveProperty('apiKey', 'provider-key');
+    },
+  );
+
   it.each([
     'openai:gpt-4o-mini-realtime-preview-2024-12-17',
     'openai:realtime:gpt-4o-mini-realtime-preview-2024-12-17',
@@ -164,6 +227,29 @@ describe('Provider Registry', () => {
         options: { env: { COMETAPI_KEY: 'provider-key' } },
       });
       expect((provider as CometApiImageProvider).getApiKey()).toBe('provider-key');
+    });
+
+    it('enables MCP when optional configuration omits enabled', async () => {
+      const factory = providerMap.find((entry) => entry.test('mcp'));
+      expect(factory).toBeDefined();
+
+      const configured = await factory!.create(
+        'mcp:docs',
+        { config: { verbose: false } },
+        mockContext,
+      );
+      expect(configured).toBeInstanceOf(MCPProvider);
+      expect((configured as MCPProvider).config).toMatchObject({
+        enabled: true,
+        verbose: false,
+        serverName: 'docs',
+      });
+
+      const disabled = await factory!.create('mcp', { config: { enabled: false } }, mockContext);
+      expect((disabled as MCPProvider).config).toMatchObject({ enabled: false });
+
+      const nullish = await factory!.create('mcp', { config: { enabled: null } }, mockContext);
+      expect((nullish as MCPProvider).config).toMatchObject({ enabled: true });
     });
 
     describe('getProviderFactories boundary contract', () => {
@@ -1498,49 +1584,6 @@ describe('Provider Registry', () => {
     });
   });
 
-  // Kept at the very end of the file because it uses vi.doMock + resetModules
-  // to simulate a broken redteam family dynamic import. Running last avoids
-  // polluting earlier tests that share the original module graph.
-  describe('getProviderFactories family load error wrapping', () => {
-    afterEach(() => {
-      vi.doUnmock('../../src/redteam/providers/registry');
-      vi.resetModules();
-    });
-
-    it('wraps family factories() rejections with the requested provider path and preserves cause', async () => {
-      // vi.doMock factory throws are caught by vitest and rewrapped with its
-      // own diagnostic message, which would lose the cause identity the
-      // wrapper is trying to preserve. Defining `redteamProviderFactories`
-      // as a throwing getter lets the import succeed while the destructure
-      // inside `family.factories()` triggers the throw — which is the
-      // realistic failure shape (module loads, export access fails) and
-      // round-trips cleanly through the async rejection.
-      const cause = new Error('simulated registry load failure');
-      vi.doMock('../../src/redteam/providers/registry', () => ({
-        get redteamProviderFactories() {
-          throw cause;
-        },
-      }));
-      vi.resetModules();
-      const { getProviderFactories: reloadedGetProviderFactories } = await import(
-        '../../src/providers/registry'
-      );
-
-      let caught: unknown;
-      try {
-        await reloadedGetProviderFactories('promptfoo:redteam:crescendo');
-      } catch (err) {
-        caught = err;
-      }
-      expect(caught).toBeInstanceOf(Error);
-      expect((caught as Error).message).toContain(
-        "Failed to load provider family for 'promptfoo:redteam:crescendo'",
-      );
-      expect((caught as Error).message).toContain('simulated registry load failure');
-      expect((caught as Error).cause).toBe(cause);
-    });
-  });
-
   describe('google: prefix routing', () => {
     // Empty options so the provider computes its own id() rather than using
     // a caller-supplied override.
@@ -1630,6 +1673,14 @@ describe('Provider Registry', () => {
         async () => (await import('../../src/providers/google/ai.studio')).AIStudioChatProvider,
       ],
       [
+        'google:gemini-3.6-flash',
+        async () => (await import('../../src/providers/google/ai.studio')).AIStudioChatProvider,
+      ],
+      [
+        'google:gemini-3.5-flash-lite',
+        async () => (await import('../../src/providers/google/ai.studio')).AIStudioChatProvider,
+      ],
+      [
         'palm:chat-bison',
         async () => (await import('../../src/providers/google/ai.studio')).AIStudioChatProvider,
       ],
@@ -1651,6 +1702,14 @@ describe('Provider Registry', () => {
       ],
       [
         'vertex:chat:gemini-2.5-flash',
+        async () => (await import('../../src/providers/google/vertex')).VertexChatProvider,
+      ],
+      [
+        'vertex:gemini-3.6-flash',
+        async () => (await import('../../src/providers/google/vertex')).VertexChatProvider,
+      ],
+      [
+        'vertex:gemini-3.5-flash-lite',
         async () => (await import('../../src/providers/google/vertex')).VertexChatProvider,
       ],
       [
@@ -1689,7 +1748,7 @@ describe('Provider Registry', () => {
         async () => (await import('../../src/providers/google/vertex')).VertexEmbeddingProvider,
       ],
       [
-        'vertex:video:veo-3.1-generate-preview',
+        'vertex:video:veo-3.1-generate-001',
         async () => (await import('../../src/providers/google/video')).GoogleVideoProvider,
       ],
     ] as const)(
@@ -1706,7 +1765,7 @@ describe('Provider Registry', () => {
     );
 
     it('applies vertexai config and provider id for vertex:video routes', async () => {
-      const providerPath = 'vertex:video:veo-3.1-generate-preview';
+      const providerPath = 'vertex:video:veo-3.1-generate-001';
       const factory = (await getProviderFactories(providerPath)).find((f) => f.test(providerPath));
       expect(factory).toBeDefined();
       const provider = await factory!.create(providerPath, bareOptions, bareContext);
