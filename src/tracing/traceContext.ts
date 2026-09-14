@@ -654,7 +654,9 @@ export async function fetchTraceContext(
 ): Promise<TraceContextData | null> {
   const context = await fetchTraceContextData(traceId, options);
   if (options.requireComplete && !context?.spans.length) {
-    throw new Error('No execution trace evidence was collected for grading');
+    throw Object.assign(new Error('No execution trace evidence was collected for grading'), {
+      name: 'TraceEvidenceError',
+    });
   }
   if (!context || !options.requireComplete) {
     return context;

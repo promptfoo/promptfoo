@@ -57,7 +57,10 @@ describe('fetchTraceContext', () => {
         retryDelayMs: 0,
         queryDelay: 0,
       }),
-    ).rejects.toThrow('No execution trace evidence');
+    ).rejects.toMatchObject({
+      name: 'TraceEvidenceError',
+      message: 'No execution trace evidence was collected for grading',
+    });
   });
 
   it.each([false, true])(
