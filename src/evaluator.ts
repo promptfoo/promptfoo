@@ -5320,7 +5320,6 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
     const rowsWithSelectBestAssertion = new Set<number>();
     const rowsWithMaxScoreAssertion = new Set<number>();
 
-    ensureDefaultTestForExtensions(testSuite);
     const hasTestCaseSelection = options.testCaseSelection !== undefined;
     if (options.testCaseIndices || hasTestCaseSelection) {
       const unresolvedTests = getTestCasesForSelection(testSuite);
@@ -5348,6 +5347,7 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
         scenarios: [],
       };
     }
+    ensureDefaultTestForExtensions(testSuite);
     const beforeAllOut = await runExtensionHook(testSuite.extensions, 'beforeAll', {
       suite: testSuite,
     });

@@ -10,6 +10,32 @@ import { toPrompt } from './helpers';
 import { describeEvaluator } from './lifecycle';
 
 describeEvaluator('evaluator scenarios and conversations', () => {
+  it.each([undefined, { options: { prefix: 'Please ' } }])(
+    'validates selected tests before initializing extension defaults: %j',
+    async (defaultTest) => {
+      const provider: ApiProvider = {
+        id: () => 'echo',
+        callApi: vi.fn(async (prompt) => ({ output: prompt })),
+      };
+      const suite: TestSuite = {
+        providers: [provider],
+        prompts: [toPrompt('{{value}}')],
+        tests: [{ vars: { value: 'selected' } }],
+        defaultTest,
+        extensions: ['context'],
+      };
+      const testCaseSelection = createTestCaseSelection(getTestCasesForSelection(suite), [0], {
+        defaultTest,
+        extensions: suite.extensions,
+      });
+      const record = await Eval.create({}, suite.prompts, { id: randomUUID() });
+      await evaluate(suite, record, { testCaseSelection });
+      const summary = await record.toEvaluateSummary();
+      expect(summary.results.map((row) => row.vars.value)).toEqual(['selected']);
+      expect(provider.callApi).toHaveBeenCalledOnce();
+    },
+  );
+
   it('keeps repeated selection and evaluation from appending scenarios to the caller suite', async () => {
     const provider: ApiProvider = {
       id: () => 'echo',
