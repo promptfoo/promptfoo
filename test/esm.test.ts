@@ -1,4 +1,3 @@
-import fsPromises from 'node:fs/promises';
 import fs from 'fs';
 import os from 'os';
 import path from 'path';
@@ -264,6 +263,13 @@ describe('ESM utilities', () => {
         error: { code: 'ERR_MODULE_NOT_FOUND' },
       },
       {
+        // A missing bare specifier names the package, never the entry module's path,
+        // so the ENOENT normalization must not claim the config file itself is absent.
+        name: 'missing bare package dependency',
+        source: "import 'promptfoo-not-a-real-package';",
+        error: { code: 'ERR_MODULE_NOT_FOUND' },
+      },
+      {
         name: 'invalid syntax',
         source: 'export default {;',
         // Vite reports parse failures as Error rather than Node's SyntaxError.
@@ -288,18 +294,6 @@ describe('ESM utilities', () => {
       } finally {
         fs.rmSync(tempDir, { recursive: true, force: true });
       }
-    });
-
-    it('does not treat a failed access check as proof that the module is absent', async () => {
-      const modulePath = path.resolve(__dirname, '__fixtures__/nonExistent.mjs');
-      vi.spyOn(fsPromises, 'access').mockRejectedValue(
-        Object.assign(new Error('Permission denied'), { code: 'EACCES' }),
-      );
-
-      const thrown = await importModule(modulePath).catch((err) => err);
-      expect(thrown).toMatchObject({ code: 'ERR_MODULE_NOT_FOUND' });
-      expect(logger.debug).toHaveBeenCalledWith(thrown.stack);
-      expect(logger.error).toHaveBeenCalledWith(`ESM import failed: ${thrown}`);
     });
 
     it('logs debug information during import process', async () => {

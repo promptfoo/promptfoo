@@ -164,6 +164,29 @@ describe('handleSearchRubric', () => {
     expect(result.reason).toContain('does not require web search verification');
   });
 
+  it('never inverts a grader failure into a pass', async () => {
+    // #10870: a provider outage on not:search-rubric used to read as
+    // pass:true, because the handler flipped any failure.
+    const params: AssertionParams = {
+      ...defaultParams,
+      inverse: true,
+      renderedValue: 'Contains outdated information',
+    };
+
+    mockMatchesSearchRubric.mockResolvedValue({
+      pass: false,
+      score: 0,
+      reason: 'Search rubric evaluation failed: search unavailable',
+      metadata: { graderError: true },
+    } as GradingResult);
+
+    const result = await handleSearchRubric(params);
+
+    expect(result.pass).toBe(false);
+    expect(result.score).toBe(0);
+    expect(result.reason).toContain('search unavailable');
+  });
+
   it('should pass provider to matchesSearchRubric', async () => {
     const mockProvider = createMockProvider();
 
