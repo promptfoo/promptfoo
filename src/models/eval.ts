@@ -1402,23 +1402,7 @@ export default class Eval {
           .get();
         invariant(stored, `Evaluation ${this.id} not found`);
         const storedPrompts = stored.prompts ?? [];
-        const retainedBlobHashes = JSON.stringify([
-          ...collectBlobHashes({ results, config: this.config, prompts: storedPrompts }),
-        ]);
         await tx.delete(evalResultsTable).where(eq(evalResultsTable.evalId, this.id)).run();
-        // Remove only this eval's obsolete references, preserving shared blob bytes and
-        // existing provenance for hashes still used by its results, config, or prompts.
-        await tx
-          .delete(blobReferencesTable)
-          .where(
-            and(
-              eq(blobReferencesTable.evalId, this.id),
-              sql`${blobReferencesTable.blobHash} NOT IN (
-                SELECT value FROM json_each(${retainedBlobHashes})
-              )`,
-            ),
-          )
-          .run();
         const retainedTraceIds = JSON.stringify(
           results.flatMap((r) => (r.traceId ? [r.traceId] : [])),
         );
@@ -1434,6 +1418,34 @@ export default class Eval {
         )`)
           .run();
         await tx.delete(tracesTable).where(obsoleteTraces).run();
+        const retainedTraces = await tx
+          .select({ metadata: tracesTable.metadata })
+          .from(tracesTable)
+          .where(eq(tracesTable.evaluationId, this.id));
+        const retainedSpans = await tx
+          .select({ attributes: spansTable.attributes })
+          .from(spansTable)
+          .innerJoin(tracesTable, eq(spansTable.traceId, tracesTable.traceId))
+          .where(eq(tracesTable.evaluationId, this.id));
+        const retainedBlobHashes = JSON.stringify([
+          ...collectBlobHashes({
+            results,
+            config: this.config,
+            prompts: storedPrompts,
+            traces: retainedTraces,
+            spans: retainedSpans,
+          }),
+        ]);
+        // Retain existing authorization for all surviving data, including trace-only media.
+        await tx
+          .delete(blobReferencesTable)
+          .where(
+            and(
+              eq(blobReferencesTable.evalId, this.id),
+              sql`${blobReferencesTable.blobHash} NOT IN (SELECT value FROM json_each(${retainedBlobHashes}))`,
+            ),
+          )
+          .run();
         if (results.length > 0) {
           await tx
             .insert(evalResultsTable)
@@ -1454,6 +1466,30 @@ export default class Eval {
           },
           tx,
         );
+        const derivedMetrics = this.config.derivedMetrics ?? [];
+        if (derivedMetrics.length > 0) {
+          const math = await import('mathjs');
+          for (const promptMetrics of metrics) {
+            const count =
+              promptMetrics.testPassCount +
+              promptMetrics.testFailCount +
+              promptMetrics.testErrorCount;
+            const context: Record<string, number> = {
+              ...promptMetrics.namedScores,
+              __count: count,
+            };
+            for (const derived of derivedMetrics) {
+              invariant(
+                typeof derived.value === 'string',
+                `Cannot replace results: derived metric '${derived.name}' requires its original evaluation callback`,
+              );
+              // Empty prompts have no rows on which to evaluate a derived score.
+              const value = count === 0 ? 0 : math.evaluate(derived.value, context);
+              promptMetrics.namedScores[derived.name] = value;
+              context[derived.name] = value;
+            }
+          }
+        }
         const prompts = storedPrompts.map((prompt, i) => ({ ...prompt, metrics: metrics[i] }));
         await tx.update(evalsTable).set({ prompts }).where(eq(evalsTable.id, this.id)).run();
         return prompts;

@@ -320,6 +320,73 @@ describe('evaluator', () => {
     expect((await Eval.findById(eval_.id))?.getStats().successes).toBe(0);
   });
 
+  it('retains actual-spend accounting and recalculates derived scores', async () => {
+    const eval_ = await EvalFactory.create({ numResults: 2 });
+    eval_.config.derivedMetrics = [
+      { name: 'average', value: 'quality / __count' },
+      { name: 'twice', value: 'average * 2' },
+    ];
+    const rows = await EvalResult.findManyByEvalId(eval_.id);
+    for (const row of rows) {
+      row.promptIdx = 0;
+      row.namedScores = { quality: 4 };
+      row.cost = 2;
+      row.response = { output: 'kept', incurredCost: 0.5 };
+    }
+    rows[1].response = { output: 'cached', cached: true };
+    await eval_.setResults(rows);
+    expect(eval_.prompts[0].metrics).toMatchObject({
+      cost: 4,
+      incurredCost: 0.5,
+      namedScores: { quality: 8, average: 4, twice: 8 },
+    });
+    await eval_.setResults([rows[0]]);
+    expect(eval_.prompts[0].metrics).toMatchObject({
+      cost: 2,
+      incurredCost: 0.5,
+      namedScores: { quality: 4, average: 4, twice: 8 },
+    });
+  });
+
+  it('rolls back replacement when derived metrics cannot be reconstructed', async () => {
+    const eval_ = await EvalFactory.create({ numResults: 1 });
+    const originalMetrics = eval_.prompts.map((p) => p.metrics);
+    eval_.config.derivedMetrics = [{ name: 'callback', value: () => 1 }];
+    await expect(eval_.setResults([])).rejects.toThrow('requires its original evaluation callback');
+    expect(await EvalResult.findManyByEvalId(eval_.id)).toHaveLength(1);
+    expect(eval_.prompts.map((p) => p.metrics)).toEqual(originalMetrics);
+  });
+
+  it('retains authorized media present only in a surviving trace', async () => {
+    const eval_ = await EvalFactory.create({ numResults: 1 });
+    const [row] = await EvalResult.findManyByEvalId(eval_.id);
+    row.traceId = 'media-trace';
+    const hash = 'd'.repeat(64);
+    const store = new TraceStore();
+    await store.createTrace({ traceId: row.traceId, evaluationId: eval_.id, testCaseId: 'test' });
+    await store.addSpans(row.traceId, [
+      {
+        spanId: 'media-span',
+        name: 'span',
+        startTime: 1,
+        attributes: { image: `promptfoo://blob/${hash}` },
+      },
+    ]);
+    const db = await getDb();
+    await db
+      .insert(blobAssetsTable)
+      .values({ hash, sizeBytes: 1, mimeType: 'image/png', provider: 'filesystem' })
+      .run();
+    await db
+      .insert(blobReferencesTable)
+      .values({ id: 'trace-media-ref', blobHash: hash, evalId: eval_.id, kind: 'image' })
+      .run();
+    await eval_.setResults([row]);
+    expect(await isBlobAllowedForShare(hash, eval_.id)).toBe(true);
+    await eval_.setResults([]);
+    expect(await isBlobAllowedForShare(hash, eval_.id)).toBe(false);
+  });
+
   it('prunes removed traces and spans while retaining replacement and other eval traces', async () => {
     const eval_ = await EvalFactory.create({ numResults: 2 });
     const other = await EvalFactory.create({ numResults: 1 });

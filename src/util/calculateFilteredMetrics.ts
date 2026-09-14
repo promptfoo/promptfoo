@@ -109,6 +109,8 @@ interface FilteredBasicMetricsRow {
   total_score: number;
   total_latency: number;
   total_cost: number;
+  incurred_cost: number;
+  has_incurred_cost: number;
   total_tokens: number | null;
   prompt_tokens: number | null;
   completion_tokens: number | null;
@@ -355,6 +357,10 @@ export async function calculateMetricsForResults(
       SUM(score) as total_score,
       SUM(latency_ms) as total_latency,
       SUM(cost) as total_cost,
+      SUM(CASE WHEN json_extract(response, '$.incurredCost') IS NOT NULL
+        OR json_extract(response, '$.cached') = 1 THEN 1 ELSE 0 END) as has_incurred_cost,
+      SUM(COALESCE(json_extract(response, '$.incurredCost'),
+        CASE WHEN json_extract(response, '$.cached') = 1 THEN 0 ELSE cost END, 0)) as incurred_cost,
       -- Token usage aggregation (token usage is inside response JSON)
       SUM(${jsonUsageTotal(response, targetPath)}) as total_tokens,
       SUM(${jsonUsageNumber(response, targetPath, 'prompt')}) as prompt_tokens,
@@ -444,6 +450,7 @@ export async function calculateMetricsForResults(
       testErrorCount: row.error_count || 0,
       totalLatencyMs: row.total_latency || 0,
       cost: row.total_cost || 0,
+      ...(row.has_incurred_cost ? { incurredCost: row.incurred_cost || 0 } : {}),
       tokenUsage: getFilteredTokenUsage(row),
       namedScores: {},
       namedScoresCount: {},
