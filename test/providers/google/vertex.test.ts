@@ -507,6 +507,31 @@ describe('VertexChatProvider.callGeminiApi', () => {
     });
   });
 
+  it.each([
+    { data: [] },
+    { data: [{ usageMetadata: { totalTokenCount: 3 } }] },
+    {
+      data: [
+        {
+          promptFeedback: {
+            safetyRatings: [{ category: 'HARM_CATEGORY_HARASSMENT', probability: 'NEGLIGIBLE' }],
+          },
+        },
+      ],
+    },
+  ])('retains the Vertex error contract for candidate-free stream %j', async ({ data }) => {
+    vi.spyOn(vertexUtil, 'getGoogleClient').mockResolvedValue({
+      client: { request: vi.fn().mockResolvedValue({ data }) } as unknown as JSONClient,
+      projectId: 'test-project',
+    });
+    const response = await provider.callGeminiApi('hello');
+    const details = data.length
+      ? 'No candidates returned in API response.'
+      : 'No response data found';
+    expect(response.error).toContain(`Gemini API response error: Error: ${details}`);
+    expect(response.error).toContain(`Response data: ${JSON.stringify(data)}`);
+  });
+
   it('records cached tokens on the Vertex response span', async () => {
     mockCacheGet.mockResolvedValue(
       JSON.stringify({ output: 'cached response', tokenUsage: { prompt: 6, total: 10 } }),
