@@ -71,12 +71,16 @@ describe('TempoProvider', () => {
     mockedFetch.mockImplementation(async () => response(traceResponse));
   });
 
-  it.each(['resource', 'span', 'nested span', 'array span'])(
-    'rejects duplicate %s attributes before they hide a redaction source',
-    async (location) => {
+  it.each(
+    ['resource', 'span', 'nested span', 'array span'].flatMap((location) =>
+      [false, true].map((coerced) => ({ location, coerced })),
+    ),
+  )(
+    'rejects ambiguous $location attributes before they hide a redaction source (coerced=$coerced)',
+    async ({ location, coerced }) => {
       const duplicates = [
-        { key: 'authorization', value: { stringValue: 'PRIVATE_TEMPO_SOURCE' } },
-        { key: 'authorization', value: { stringValue: 'ordinary' } },
+        { key: coerced ? 1 : 'authorization', value: { stringValue: 'PRIVATE_TEMPO_SOURCE' } },
+        { key: coerced ? '1' : 'authorization', value: { stringValue: 'ordinary' } },
       ];
       const nested = { kvlistValue: { values: duplicates } };
       const attributes =
@@ -108,7 +112,7 @@ describe('TempoProvider', () => {
       await expect(
         new TempoProvider({ id: 'tempo', endpoint: 'http://tempo:3200' }).fetchTrace(TRACE_ID),
       ).rejects.toMatchObject({
-        message: 'Tempo returned duplicate attribute keys',
+        message: expect.stringMatching(/attribute keys/i),
         retryable: false,
       });
     },
