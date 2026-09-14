@@ -16,7 +16,7 @@ import { getEnvBool } from '../envars';
 import { getAuthor } from '../globalConfig/accounts';
 import logger from '../logger';
 import { hashPrompt } from '../prompts/utils';
-import { PLUGIN_CATEGORIES } from '../redteam/constants';
+import { categoryAliasesReverse, PLUGIN_CATEGORIES } from '../redteam/constants';
 import { calculateAttackSuccessRate } from '../redteam/metrics';
 import { getRiskCategorySeverityMap } from '../redteam/sharedFrontend';
 import { getTraceStore } from '../tracing/store';
@@ -194,6 +194,23 @@ function projectAssertionForRedteamReport(
   } as GradingResult['assertion'];
 }
 
+const REDTEAM_REPORT_IDENTITY_METRIC_PREFIXES = [
+  'PolicyViolation:',
+  ...Object.keys(categoryAliasesReverse).map((alias) => `${alias}/`),
+];
+
+function hasRedteamReportIdentity(result: unknown): boolean {
+  if (!isRecord(result) || !isRecord(result.assertion)) {
+    return false;
+  }
+
+  const metric = result.assertion.metric;
+  return (
+    typeof metric === 'string' &&
+    REDTEAM_REPORT_IDENTITY_METRIC_PREFIXES.some((prefix) => metric.startsWith(prefix))
+  );
+}
+
 function projectGradingResultForRedteamReport(gradingResult: GradingResult): GradingResult {
   const assertion = projectAssertionForRedteamReport(gradingResult.assertion);
   const suggestions = projectSuggestionsForRedteamReport(gradingResult.suggestions);
@@ -202,13 +219,8 @@ function projectGradingResultForRedteamReport(gradingResult: GradingResult): Gra
     ? gradingResult.componentResults
     : undefined;
   const compactComponents = components?.slice(0, 25);
-  if (
-    compactComponents?.length === 25 &&
-    !compactComponents.some((result) => isRecord(result) && isRecord(result.assertion))
-  ) {
-    const identity = components
-      ?.slice(25)
-      .find((result) => isRecord(result) && isRecord(result.assertion));
+  if (compactComponents?.length === 25 && !compactComponents.some(hasRedteamReportIdentity)) {
+    const identity = components?.slice(25).find(hasRedteamReportIdentity);
     if (identity !== undefined) {
       compactComponents[24] = identity;
     }
@@ -349,7 +361,7 @@ function jsonHistoryForRedteamReport(
     ? ['prompt']
     : ['prompt', 'promptAudio', 'promptImage'];
   const outputFields = stripFlags.shouldStripResponseOutput
-    ? []
+    ? ['output']
     : ['output', 'outputAudio', 'outputImage'];
   const allowedFields = [
     'id',
@@ -380,6 +392,8 @@ function jsonHistoryForRedteamReport(
               WHEN history_field.type = 'false' THEN json('false')
               WHEN history_field.key = 'prompt' AND ${stripFlags.shouldStripPromptText}
                 THEN '[prompt stripped]'
+              WHEN history_field.key = 'output' AND ${stripFlags.shouldStripResponseOutput}
+                THEN '[output stripped]'
               WHEN history_field.key IN ('prompt', 'output')
                 THEN substr(history_field.value, 1, ${MAX_COMPACT_HISTORY_TEXT_LENGTH})
               WHEN history_field.key IN ('promptAudio', 'promptImage', 'outputAudio', 'outputImage')
@@ -753,9 +767,8 @@ function projectToolForRedteamReport(tool: unknown): Record<string, unknown> | u
       function: {
         ...(typeof tool.function.name === 'string' && { name: tool.function.name }),
         ...(typeof tool.function.description === 'string' && {
-          description: tool.function.description,
+          description: tool.function.description.slice(0, MAX_COMPACT_HISTORY_TEXT_LENGTH),
         }),
-        ...(isRecord(tool.function.parameters) && { parameters: tool.function.parameters }),
       },
     };
   }
@@ -818,7 +831,12 @@ function projectPluginForRedteamReport(plugin: unknown, stripPromptText = false)
 
   const policy = plugin.config.policy;
   if (typeof policy === 'string') {
-    projectedPlugin.config = { policy: policy.slice(0, MAX_COMPACT_HISTORY_TEXT_LENGTH) };
+    projectedPlugin.config = {
+      policy: {
+        id: sha256(policy).slice(0, 12),
+        text: policy.slice(0, MAX_COMPACT_HISTORY_TEXT_LENGTH),
+      },
+    };
   } else if (isRecord(policy)) {
     const projectedPolicy = {
       ...(typeof policy.id === 'string' && { id: policy.id }),
@@ -2720,13 +2738,25 @@ export default class Eval {
                       SELECT 1
                       FROM json_each(json_extract(${validGradingResultJson}, '$.componentResults')) AS first_component
                       WHERE first_component.key < 25
-                        AND json_type(first_component.value, '$.assertion') = 'object'
+                        AND (${sql.join(
+                          REDTEAM_REPORT_IDENTITY_METRIC_PREFIXES.map(
+                            (prefix) =>
+                              sql`json_extract(first_component.value, '$.assertion.metric') LIKE ${`${prefix}%`}`,
+                          ),
+                          sql` OR `,
+                        )})
                     )
                     OR NOT EXISTS (
                       SELECT 1
                       FROM json_each(json_extract(${validGradingResultJson}, '$.componentResults')) AS later_component
                       WHERE later_component.key >= 25
-                        AND json_type(later_component.value, '$.assertion') = 'object'
+                        AND (${sql.join(
+                          REDTEAM_REPORT_IDENTITY_METRIC_PREFIXES.map(
+                            (prefix) =>
+                              sql`json_extract(later_component.value, '$.assertion.metric') LIKE ${`${prefix}%`}`,
+                          ),
+                          sql` OR `,
+                        )})
                     )
                   )
                 )
@@ -2734,7 +2764,13 @@ export default class Eval {
                   SELECT MIN(identity_component.key)
                   FROM json_each(json_extract(${validGradingResultJson}, '$.componentResults')) AS identity_component
                   WHERE identity_component.key >= 25
-                    AND json_type(identity_component.value, '$.assertion') = 'object'
+                    AND (${sql.join(
+                      REDTEAM_REPORT_IDENTITY_METRIC_PREFIXES.map(
+                        (prefix) =>
+                          sql`json_extract(identity_component.value, '$.assertion.metric') LIKE ${`${prefix}%`}`,
+                      ),
+                      sql` OR `,
+                    )})
                 )
               )
           )

@@ -2504,10 +2504,6 @@ describe('evaluator', () => {
                   function: {
                     name: 'search',
                     description: 'Search safely',
-                    parameters: {
-                      type: 'object',
-                      properties: { api_key: { type: 'string' }, password: { type: 'string' } },
-                    },
                   },
                 },
                 { type: 'mcp', server_label: 'private-server', allowed_tools: ['read'] },
@@ -2521,7 +2517,12 @@ describe('evaluator', () => {
           frameworks: ['owasp:llm'],
           plugins: [
             { id: 'coding-agent:network-egress-bypass', severity: 'high' },
-            { id: 'policy', config: { policy: oversizedText.slice(0, 10_240) } },
+            {
+              id: 'policy',
+              config: {
+                policy: { id: expect.any(String), text: oversizedText.slice(0, 10_240) },
+              },
+            },
             {
               id: 'policy',
               config: {
@@ -4030,8 +4031,11 @@ describe('evaluator', () => {
               pass: false,
               score: 0,
               reason: longText,
+              ...(index === 0 && {
+                assertion: { type: 'contains', metric: 'Unrelated' },
+              }),
               ...(index === 29 && {
-                assertion: { type: 'contains', metric: 'LateIdentity' },
+                assertion: { type: 'contains', metric: 'PolicyViolation:late-policy' },
               }),
             })),
             suggestions: Array.from({ length: 30 }, () => ({
@@ -4071,7 +4075,7 @@ describe('evaluator', () => {
           expect(result.gradingResult?.reason?.length).toBeLessThanOrEqual(10_240);
           expect(result.gradingResult?.componentResults).toHaveLength(25);
           expect(result.gradingResult?.componentResults?.[24].assertion?.metric).toBe(
-            'LateIdentity',
+            'PolicyViolation:late-policy',
           );
           expect(result.gradingResult?.componentResults?.[0].reason.length).toBeLessThanOrEqual(
             10_240,
