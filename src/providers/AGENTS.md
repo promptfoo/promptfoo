@@ -181,6 +181,12 @@ Use `executeCallback` from `functionCallbackExecutor.ts` for callback loading, r
 
 Use `normalizeMcpToolContent` from `mcp/util.ts` for MCP content blocks; keep each provider's tool-result envelope and error policy local.
 
+## Media jobs
+
+Bedrock Nova Reel and Luma Ray share `bedrock/videoJob.ts` for asynchronous submission, polling, and S3-to-blob storage. Each job owns and releases its SDK clients. Forward the caller signal through credential waits, SDK calls, poll delays, and body reads. Keep model validation, request fields, pricing, and output shaping in the provider classes.
+
+Hyperbolic audio and image share `hyperbolic/transport.ts` for JSON transport, cache bypass, status errors, and cancellation. Keep modality-specific response parsing and costs in each provider.
+
 ## Creator inputs
 
 The loader normalizes configuration and environment once; factories receive that `ProviderOptions` and a context containing the same merged environment. New creator adapters should accept `providerOptions` directly rather than nesting it under another `config`. `creator.ts` adapts the legacy nested input only at existing public creator boundaries.

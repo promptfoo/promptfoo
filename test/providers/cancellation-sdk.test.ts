@@ -38,6 +38,7 @@ vi.mock('../../src/util/fetch', async (importOriginal) => ({
 vi.mock('@aws-sdk/client-bedrock-runtime', () => ({
   BedrockRuntimeClient: class {
     send = mocks.bedrockSend;
+    destroy = vi.fn();
   },
   StartAsyncInvokeCommand: class {},
   GetAsyncInvokeCommand: class {},
@@ -45,6 +46,7 @@ vi.mock('@aws-sdk/client-bedrock-runtime', () => ({
 vi.mock('@aws-sdk/client-s3', () => ({
   S3Client: class {
     send = mocks.s3Send;
+    destroy = vi.fn();
   },
   GetObjectCommand: class {},
 }));
@@ -354,7 +356,7 @@ describe.each([
       }),
     ]);
     controller.abort(new Error('cancelled'));
-    expect((await result).error).toContain('cancelled');
+    await expect(result).rejects.toThrow('cancelled');
     expect(mocks.bedrockSend).toHaveBeenCalledOnce();
   });
 
@@ -368,7 +370,10 @@ describe.each([
     await vi.waitFor(() => expect(mocks.bedrockSend).toHaveBeenCalledTimes(2));
     expect(mocks.bedrockSend.mock.calls[1][1].abortSignal).toBe(controller.signal);
     controller.abort();
-    expect((await result).error).toContain('cancelled by user');
+    await expect(result).resolves.toMatchObject({
+      error: expect.stringMatching(/abort|cancel/i),
+      metadata: { invocationArn: 'fixture-job', s3OutputUri: 's3://fixture/videos' },
+    });
     expect(mocks.bedrockSend).toHaveBeenCalledTimes(2);
     expect(mocks.s3Send).not.toHaveBeenCalled();
     expect(vi.getTimerCount()).toBe(0);

@@ -1,7 +1,5 @@
-import { fetchWithCache } from '../../cache';
 import { getEnvString } from '../../envars';
-import logger from '../../logger';
-import { getRequestTimeoutMs } from '../shared';
+import { requestHyperbolicJson } from './transport';
 
 import type { EnvOverrides } from '../../types/env';
 import type {
@@ -83,8 +81,9 @@ export class HyperbolicAudioProvider implements ApiProvider {
   async callApi(
     prompt: string,
     context?: CallApiContextParams,
-    _callApiOptions?: CallApiOptionsParams,
+    callApiOptions?: CallApiOptionsParams,
   ): Promise<ProviderResponse> {
+    callApiOptions?.abortSignal?.throwIfAborted();
     const apiKey = this.getApiKey();
     if (!apiKey) {
       throw new Error(
@@ -128,41 +127,17 @@ export class HyperbolicAudioProvider implements ApiProvider {
       }
     }
 
-    const headers = {
-      'Content-Type': 'application/json',
-      Authorization: `Bearer ${apiKey}`,
-    } as Record<string, string>;
-
-    let data: any, status: number, statusText: string, latencyMs: number | undefined;
-    let cached = false;
-    try {
-      ({ data, cached, status, statusText, latencyMs } = await fetchWithCache(
-        `${this.getApiUrl()}${endpoint}`,
-        {
-          method: 'POST',
-          headers,
-          body: JSON.stringify(body),
-        },
-        getRequestTimeoutMs(),
-      ));
-
-      if (status < 200 || status >= 300) {
-        return {
-          error: `API error: ${status} ${statusText}\n${typeof data === 'string' ? data : JSON.stringify(data)}`,
-        };
-      }
-    } catch (err) {
-      logger.error(`API call error: ${String(err)}`);
-      return {
-        error: `API call error: ${String(err)}`,
-      };
+    const result = await requestHyperbolicJson<{ audio?: string }>(
+      `${this.getApiUrl()}${endpoint}`,
+      apiKey,
+      body,
+      context,
+      callApiOptions?.abortSignal,
+    );
+    if (!result.ok) {
+      return { error: result.error };
     }
-
-    if (data.error) {
-      return {
-        error: typeof data.error === 'string' ? data.error : JSON.stringify(data.error),
-      };
-    }
+    const { data, cached, latencyMs } = result;
 
     try {
       if (!data.audio) {
