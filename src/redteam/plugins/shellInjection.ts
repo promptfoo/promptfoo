@@ -332,7 +332,9 @@ export class ShellInjectionGrader extends RedteamGraderBase {
       strategyId: test.metadata?.strategyId ?? 'basic',
       test,
     });
-    let trace = tracing.includeInGrading ? getGradingTrace(gradingContext) : undefined;
+    let trace = tracing.includeInGrading
+      ? getGradingTrace(gradingContext, tracing.enabled)
+      : undefined;
     if (trace) {
       trace = {
         ...trace,

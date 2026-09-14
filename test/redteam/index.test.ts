@@ -719,7 +719,7 @@ describe('synthesize', () => {
     });
 
     it.each([true, false])(
-      'preserves source frontier diagnostics with basic enabled=%s',
+      'reports retained frontier diagnostics with basic enabled=%s',
       async (basicEnabled) => {
         const semanticFrontier = {
           active: true,
@@ -766,13 +766,17 @@ describe('synthesize', () => {
           targetIds: ['test-provider'],
         });
 
-        expect(result.semanticFrontierDiagnostics).toEqual([
-          expect.objectContaining({
-            pluginId: 'pii:social',
-            frontierCount: 1,
-            structurallyDegraded: true,
-          }),
-        ]);
+        expect(result.semanticFrontierDiagnostics).toEqual(
+          basicEnabled
+            ? [
+                expect.objectContaining({
+                  pluginId: 'pii:social',
+                  frontierCount: 1,
+                  structurallyDegraded: true,
+                }),
+              ]
+            : undefined,
+        );
         if (!basicEnabled) {
           expect(result.testCases.length).toBeGreaterThan(0);
           expect(result.testCases.every((test) => !test.metadata?.semanticFrontier)).toBe(true);
@@ -788,6 +792,10 @@ describe('synthesize', () => {
 
         expect(reportMessage).toBeDefined();
         const cleanReport = stripAnsi(reportMessage || '');
+        if (!basicEnabled) {
+          expect(cleanReport).not.toContain('Semantic Frontier Diagnostics:');
+          return;
+        }
         expect(cleanReport).toContain('Semantic Frontier Diagnostics:');
         expect(cleanReport).toContain('pii:social');
         expect(cleanReport).toContain('0/1');

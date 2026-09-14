@@ -682,7 +682,7 @@ describe('trajectory utilities', () => {
           ),
         );
       expect(summarize('weather tomorrow').steps[0].sql).toBeUndefined();
-      expect(summarize('SELECT 1').steps[0].sql).toEqual({ query: 'SELECT 1' });
+      expect(summarize('SELECT 1').steps[0].sql).toEqual({ query: 'SELECT :literal_1' });
     },
   );
 
@@ -713,7 +713,7 @@ describe('trajectory utilities', () => {
       { includeSql: true, redactAttributes: ['tool.output'] },
     );
     expect(summary).not.toContain(secret);
-    expect(summary).toContain('run_query');
+    expect(summary).toContain('SQL query');
   });
 
   it.each(['tool.name', 'command', 'search.query'])(
@@ -1021,7 +1021,7 @@ describe('trajectory utilities', () => {
       }
       const summary = JSON.parse(summarize());
       expect(summary.steps).toHaveLength(count);
-      expect(summary.steps[12].sql.query).toContain('OR 1=1');
+      expect(summary.steps[12].sql.query).toMatch(/OR\s+(:literal_\d+)\s*=\s*\1/);
     },
   );
 

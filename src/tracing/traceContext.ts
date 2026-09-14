@@ -303,6 +303,7 @@ async function storeExternalSpans(
     const result = await traceStore.addSpans(traceId, spans, {
       warnIfMissingTrace: false,
       updateExisting: true,
+      source: 'external',
       ...(redactSpans && { redactSpans }),
     });
     if (!result.stored) {
@@ -311,7 +312,10 @@ async function storeExternalSpans(
     logger.debug(`[TraceContext] Stored ${spans.length} spans from external provider`);
     return true;
   } catch (error) {
-    if (error instanceof TraceLimitError) {
+    if (
+      error instanceof TraceLimitError ||
+      (error instanceof Error && error.name === 'TraceEvidenceError')
+    ) {
       throw error;
     }
     logger.warn(`[TraceContext] Failed to store external spans: ${error}`);
@@ -495,7 +499,10 @@ async function fetchFromExternalProvider(
         await getTraceStore().markTraceIncomplete(traceId);
         throw new TraceLimitError();
       }
-      if (error instanceof TraceLimitError) {
+      if (
+        error instanceof TraceLimitError ||
+        (error instanceof Error && error.name === 'TraceEvidenceError')
+      ) {
         throw error;
       }
       if (abortSignal?.aborted) {

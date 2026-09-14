@@ -93,6 +93,88 @@ describe('TraceStore span persistence', () => {
     },
   );
 
+  it('rejects external span collisions without changing locally stored evidence', async () => {
+    const traceId = 'local-span-collision';
+    const store = await createTrace(traceId, { promptfooExternalSpanIds: ['local'] });
+    const original = {
+      spanId: 'local',
+      name: 'promptfoo.target',
+      startTime: 1,
+      endTime: 2,
+      statusCode: 1,
+    };
+    await store.addSpans(traceId, [original]);
+    const stored = await store.getSpans(traceId, { sanitizeAttributes: false });
+    await expect(
+      store.addSpans(
+        traceId,
+        [
+          {
+            ...original,
+            name: 'db.query',
+            parentSpanId: 'fake',
+            statusCode: 2,
+            attributes: {
+              'db.statement': 'DELETE FROM users',
+              promptfooExternalSpanIds: ['local'],
+            },
+          },
+        ],
+        { source: 'external', updateExisting: true },
+      ),
+    ).rejects.toMatchObject({ name: 'TraceEvidenceError' });
+    expect(await store.getSpans(traceId, { sanitizeAttributes: false })).toEqual(stored);
+    expect((await store.getTraceMetadata(traceId))?.promptfooExternalSpanIds).toBeUndefined();
+  });
+
+  it('persists external span ownership across store instances and allows its refresh', async () => {
+    const traceId = 'external-span-refresh';
+    const store = await createTrace(traceId, { label: 'kept' });
+    const original = { spanId: 'external', name: 'query', startTime: 1 };
+    await store.addSpans(traceId, [original], { source: 'external', updateExisting: true });
+    const reopened = new TraceStore();
+    await reopened.addSpans(traceId, [{ ...original, endTime: 3, statusCode: 1 }], {
+      source: 'external',
+      updateExisting: true,
+    });
+    expect(await reopened.getSpans(traceId)).toMatchObject([
+      { ...original, endTime: 3, statusCode: 1 },
+    ]);
+    expect(await reopened.getTraceMetadata(traceId)).toMatchObject({
+      label: 'kept',
+      promptfooExternalSpanIds: ['external'],
+    });
+  });
+
+  it.each(['getSpans', 'getTrace', 'getTracesByEvaluation'] as const)(
+    'redacts credentials found only in text through %s',
+    async (method) => {
+      const traceId = 'free-text-credentials';
+      const store = await createTrace(traceId);
+      const secret = 'ghp_' + 'x'.repeat(36);
+      await store.addSpans(traceId, [
+        {
+          spanId: 'tool',
+          name: `tool failed ${secret}`,
+          startTime: 1,
+          statusMessage: `Request failed ${secret}`,
+          attributes: { 'tool.name': 'request' },
+        },
+      ]);
+      const original = await store.getTrace(traceId, { sanitizeAttributes: false });
+      const result =
+        method === 'getSpans'
+          ? await store.getSpans(traceId)
+          : method === 'getTrace'
+            ? await store.getTrace(traceId)
+            : await store.getTracesByEvaluation(original!.evaluationId!);
+      expect(JSON.stringify(result)).not.toContain(secret);
+      expect(JSON.stringify(result)).toContain('tool failed');
+      expect(await store.getTrace(traceId, { sanitizeAttributes: false })).toEqual(original);
+      expect(JSON.stringify(original)).toContain(secret);
+    },
+  );
+
   it('rejects cumulative redaction payloads over 10 MiB before reading them into the redactor', async () => {
     const store = await createTrace('redaction-size');
     const redactSpans = vi.fn((spans) => spans);

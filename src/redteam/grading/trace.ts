@@ -52,7 +52,11 @@ function completeToolSpan(
 ): TraceData['spans'][number] | undefined {
   const attributes = { ...traced.attributes };
   for (const keys of [TOOL_ARGUMENT_ATTRIBUTE_KEYS, TOOL_RESULT_ATTRIBUTE_KEYS]) {
-    const nativeBody = keys.map((key) => native.attributes?.[key]).find((value) => value != null);
+    const nativeKey = keys.find((key) => native.attributes?.[key] != null);
+    if (!nativeKey) {
+      continue;
+    }
+    const nativeBody = native.attributes![nativeKey];
     const partial = sanitizeToolBody(
       keys.map((key) => traced.attributes?.[key]).find((value) => value != null),
     );
@@ -60,15 +64,15 @@ function completeToolSpan(
     // Claude tool spans cap bodies at 4 KiB; the native receipt retains the full body.
     const suffix = '... [truncated]';
     if (
+      partial !== undefined &&
       partial !== complete &&
       (!partial?.endsWith(suffix) || !complete?.startsWith(partial.slice(0, -suffix.length)))
     ) {
       return undefined;
     }
-    for (const key of keys) {
-      if (attributes[key] != null) {
-        attributes[key] = nativeBody;
-      }
+    const existingKeys = keys.filter((key) => attributes[key] != null);
+    for (const key of existingKeys.length ? existingKeys : [nativeKey]) {
+      attributes[key] = nativeBody;
     }
   }
   return { ...traced, attributes };
@@ -76,6 +80,7 @@ function completeToolSpan(
 
 export function getGradingTrace(
   gradingContext?: RedteamGradingContext,
+  requireCurrentEvidence = false,
 ): Pick<TraceData, 'traceId' | 'spans' | 'metadata'> | undefined {
   const context = gradingContext?.traceContext;
   let trace: Pick<TraceData, 'traceId' | 'spans' | 'metadata'> | undefined =
@@ -163,6 +168,11 @@ export function getGradingTrace(
         spans: [...spans, ...nativeSpans],
       };
     }
+  }
+  if (response?.cached && (requireCurrentEvidence || trace)) {
+    throw new TraceEvidenceError(
+      'Cached responses cannot provide current execution trace evidence; rerun with --no-cache',
+    );
   }
   return trace;
 }

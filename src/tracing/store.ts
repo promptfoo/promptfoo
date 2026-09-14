@@ -2,6 +2,7 @@ import { asc, eq, sql } from 'drizzle-orm';
 import { getDb } from '../database/index';
 import { spansTable, tracesTable } from '../database/tables';
 import logger from '../logger';
+import { sanitizeBody } from './genaiTracer';
 import { getTraceTextRedactor, sanitizeTraceAttributes } from './sanitizeAttributes';
 import { isRelevantSpan, matchesSpanFilter } from './spanFilter';
 import { SPAN_ROLE_ATTRIBUTE } from './spanRoles';
@@ -46,8 +47,11 @@ export interface AddSpansOptions {
   skipTraceCheck?: boolean;
   warnIfMissingTrace?: boolean;
   updateExisting?: boolean;
+  source?: 'external';
   redactSpans?: (spans: SpanData[]) => SpanData[];
 }
+
+const EXTERNAL_SPAN_IDS_KEY = 'promptfooExternalSpanIds';
 
 export class TraceLimitError extends Error {
   constructor() {
@@ -103,17 +107,18 @@ function serializeSpans(
   if (!shouldSanitizeAttributes) {
     return sanitized;
   }
-  const redactText = getTraceTextRedactor(
+  const redactAttributeText = getTraceTextRedactor(
     spans.map((span, index) => ({
       original: span.attributes,
       sanitized: sanitized[index].attributes,
     })),
     '<redacted>',
   );
+  const redactText = (value: string) => sanitizeBody(redactAttributeText(value));
   return sanitized.map((span, index) => ({
     ...span,
     name: redactText(span.name),
-    statusMessage: redactText(span.statusMessage),
+    statusMessage: span.statusMessage === undefined ? undefined : redactText(span.statusMessage),
     attributes: span.attributes
       ? sanitizeTraceAttributes(spans[index].attributes, { redactText })
       : undefined,
@@ -213,6 +218,10 @@ export class TraceStore {
         `[TraceStore] Creating trace ${trace.traceId} for evaluation ${trace.evaluationId}`,
       );
       const db = await this.getDatabase();
+      const metadata = trace.metadata && { ...trace.metadata };
+      if (metadata) {
+        delete metadata[EXTERNAL_SPAN_IDS_KEY];
+      }
       await db
         .insert(tracesTable)
         .values({
@@ -221,7 +230,7 @@ export class TraceStore {
           evaluationId: trace.evaluationId,
           testCaseId: trace.testCaseId,
           createdAt: Date.now(),
-          metadata: trace.metadata,
+          metadata,
         })
         .onConflictDoNothing({ target: tracesTable.traceId })
         .run();
@@ -353,6 +362,38 @@ export class TraceStore {
           .from(spansTable)
           .where(eq(spansTable.traceId, traceId));
         validateTracePayloadSize(spans, options?.updateExisting ?? false, storedSizes);
+        if (options?.source === 'external') {
+          const [trace] = await tx
+            .select({ metadata: tracesTable.metadata })
+            .from(tracesTable)
+            .where(eq(tracesTable.traceId, traceId));
+          const storedIds = new Set(storedSizes.map((span) => span.spanId));
+          const imported = trace?.metadata?.[EXTERNAL_SPAN_IDS_KEY];
+          const externalIds = new Set<string>(
+            Array.isArray(imported)
+              ? imported.filter((id): id is string => typeof id === 'string' && storedIds.has(id))
+              : [],
+          );
+          if (spans.some((span) => storedIds.has(span.spanId) && !externalIds.has(span.spanId))) {
+            throw Object.assign(
+              new Error('External trace spans conflict with locally owned span IDs.'),
+              { name: 'TraceEvidenceError' },
+            );
+          }
+          // Record provenance in the same transaction as insertion; target attributes cannot set it.
+          await tx
+            .update(tracesTable)
+            .set({
+              metadata: {
+                ...trace?.metadata,
+                [EXTERNAL_SPAN_IDS_KEY]: [
+                  ...new Set([...externalIds, ...spans.map((span) => span.spanId)]),
+                ],
+              },
+            })
+            .where(eq(tracesTable.traceId, traceId))
+            .run();
+        }
         if (!redact) {
           await insertSpans(tx, spans);
           return;

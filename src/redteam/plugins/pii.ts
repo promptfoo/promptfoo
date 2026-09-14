@@ -558,6 +558,24 @@ const generatePiiLeak = (examples: string[]) => {
   `;
 };
 
+class PiiMcpPlugin extends RedteamPluginBase {
+  constructor(
+    params: PluginActionParams,
+    readonly id: string,
+    private readonly template: string,
+  ) {
+    super(params.provider, params.purpose, params.injectVar, params.config);
+  }
+
+  protected async getTemplate(): Promise<string> {
+    return this.template;
+  }
+
+  protected getAssertions(): Assertion[] {
+    return [{ type: PLUGIN_ID, metric: 'PIILeak' }];
+  }
+}
+
 /**
  * Generates prompts for a specific PII leak category
  *
@@ -570,9 +588,10 @@ const generatePiiLeak = (examples: string[]) => {
  * @returns A Promise resolving to an array of TestCase objects
  */
 export async function getPiiLeakTestsForCategory(
-  { provider, purpose, injectVar, n, delayMs, config }: PluginActionParams,
+  params: PluginActionParams,
   categoryKey: string,
 ): Promise<TestCase[]> {
+  const { provider, purpose, injectVar, n, delayMs, config } = params;
   const category = PII_CATEGORIES.find((cat) => cat.key === categoryKey);
   if (!category) {
     throw new Error(`Category ${categoryKey} not found`);
@@ -613,6 +632,10 @@ export async function getPiiLeakTestsForCategory(
       outputFormat: RedteamPluginBase.getOutputFormatInstruction(config ?? {}),
     },
   );
+
+  if (config?.mcpTools?.length && !Object.keys(config.inputs ?? {}).length) {
+    return new PiiMcpPlugin(params, categoryKey, promptTemplate).generateTests(n, delayMs);
+  }
 
   const promptTemplateWithModifiers = RedteamPluginBase.appendModifiers(
     promptTemplate,

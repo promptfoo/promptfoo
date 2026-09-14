@@ -625,14 +625,18 @@ describe('ShellInjectionGrader execution evidence', () => {
   });
 
   it.each([
-    ['gen_ai.tool.call.id', 'tool.output', 1],
-    ['tool.call.id', 'tool.output', 1],
-    ['gen_ai.tool.call.id', 'tool.result', 1],
-    ['gen_ai.tool.call.id', 'tool.output', 0],
-    ['gen_ai.tool.call.id', 'tool.output', undefined],
+    ['gen_ai.tool.call.id', 'tool.output', 1, 'none'],
+    ['tool.call.id', 'tool.output', 1, 'none'],
+    ['gen_ai.tool.call.id', 'tool.result', 1, 'none'],
+    ['gen_ai.tool.call.id', 'tool.output', 0, 'none'],
+    ['gen_ai.tool.call.id', 'tool.output', undefined, 'none'],
+    ['gen_ai.tool.call.id', 'tool.output', 0, 'traced-input'],
+    ['gen_ai.tool.call.id', 'tool.output', 0, 'traced-output'],
+    ['gen_ai.tool.call.id', 'tool.output', 0, 'native-input'],
+    ['gen_ai.tool.call.id', 'tool.output', 0, 'native-output'],
   ] as const)(
-    'counts matching native and traced commands once using %s, %s and status %s',
-    async (idAttribute, outputAttribute, statusCode) => {
+    'counts matching native and traced commands once using %s, %s, status %s and missing %s',
+    async (idAttribute, outputAttribute, statusCode, missing) => {
       const calls = Array.from({ length: 13 }, (_, index) => ({
         id: `call-${index}`,
         name: 'execute',
@@ -648,7 +652,15 @@ describe('ShellInjectionGrader execution evidence', () => {
         undefined,
         undefined,
         {
-          providerResponse: { metadata: { toolCalls: calls } },
+          providerResponse: {
+            metadata: {
+              toolCalls: calls.map((call) => ({
+                ...call,
+                ...(missing === 'native-input' && { input: undefined }),
+                ...(missing === 'native-output' && { output: undefined }),
+              })),
+            },
+          },
           traceData: {
             traceId: 'duplicate-calls',
             evaluationId: 'fixture',
@@ -661,8 +673,10 @@ describe('ShellInjectionGrader execution evidence', () => {
               attributes: {
                 [idAttribute]: call.id,
                 'tool.name': call.name,
-                'tool.input': JSON.stringify(call.input),
-                [outputAttribute]: JSON.stringify(call.output),
+                ...(missing !== 'traced-input' && { 'tool.input': JSON.stringify(call.input) }),
+                ...(missing !== 'traced-output' && {
+                  [outputAttribute]: JSON.stringify(call.output),
+                }),
               },
             })),
           },

@@ -158,6 +158,7 @@ export function sanitizeTraceAttributes(
 
 export interface TraceTextRedactionState {
   secrets: Set<string>;
+  exactSecrets?: Set<string>;
   length: number;
   incomplete: boolean;
 }
@@ -230,6 +231,7 @@ export function getTraceTextRedactor(
 ) {
   const pending = [...pairs];
   const secrets = state.secrets;
+  const exactSecrets = (state.exactSecrets ??= new Set<string>());
   let incomplete = state.incomplete;
   let visited = 0;
   while (pending.length && !incomplete) {
@@ -285,6 +287,15 @@ export function getTraceTextRedactor(
             ? String(Number(source))
             : source;
         for (const secret of new Set([source, canonical])) {
+          // Short configured values often occur in unrelated words and numeric evidence.
+          // Built-in credential fields still redact every occurrence.
+          if (secret.length < 4 && sanitized === '[REDACTED]') {
+            if (!secrets.has(secret)) {
+              exactSecrets.add(secret);
+            }
+          } else {
+            exactSecrets.delete(secret);
+          }
           if (secrets.has(secret)) {
             continue;
           }
@@ -311,10 +322,16 @@ export function getTraceTextRedactor(
   state.incomplete = incomplete;
   if (incomplete) {
     secrets.clear();
+    exactSecrets.clear();
   }
-  const pattern = secrets.size
+  const substringSecrets = [...secrets].filter((secret) => !exactSecrets.has(secret));
+  const pattern = substringSecrets.length
     ? new RegExp(
-        [...new Set([...secrets].flatMap((value) => [value, JSON.stringify(value).slice(1, -1)]))]
+        [
+          ...new Set(
+            substringSecrets.flatMap((value) => [value, JSON.stringify(value).slice(1, -1)]),
+          ),
+        ]
           .sort((a, b) => b.length - a.length)
           .map((value) => value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'))
           .join('|'),
@@ -324,6 +341,9 @@ export function getTraceTextRedactor(
   const numericSecrets = new Set(
     [...secrets].map(normalizeJsonNumber).filter((value) => value !== undefined),
   );
+  const numericSubstringSecrets = new Set(
+    substringSecrets.map(normalizeJsonNumber).filter((value) => value !== undefined),
+  );
   return <T extends string | undefined>(value: T): T => {
     if (typeof value !== 'string') {
       return value;
@@ -331,21 +351,18 @@ export function getTraceTextRedactor(
     if (incomplete) {
       return replacement as T;
     }
-    if (!pattern) {
-      return value;
-    }
     const numeric = normalizeJsonNumber(value);
-    if (numeric !== undefined && numericSecrets.has(numeric)) {
+    if (secrets.has(value) || (numeric !== undefined && numericSecrets.has(numeric))) {
       return replacement as T;
     }
-    const redacted = value.replace(pattern, replacement);
+    const redacted = pattern ? value.replace(pattern, replacement) : value;
     // Preserve literal replacements; hide fields whose decoded text exposes another secret.
-    let unmatched = value.replace(pattern, '');
+    let unmatched = pattern ? value.replace(pattern, '') : value;
     for (let depth = 0; depth < 20; depth++) {
       if (
-        numericSecrets.size &&
+        numericSubstringSecrets.size &&
         (unmatched.match(/-?(?:0|[1-9]\d*)(?:\.\d+)?(?:[eE][+-]?\d+)?/g) ?? []).some((number) =>
-          numericSecrets.has(normalizeJsonNumber(number)!),
+          numericSubstringSecrets.has(normalizeJsonNumber(number)!),
         )
       ) {
         return replacement as T;
@@ -356,7 +373,7 @@ export function getTraceTextRedactor(
       if (decoded === unmatched) {
         return redacted as T;
       }
-      if (decoded.replace(pattern, '') !== decoded) {
+      if (secrets.has(decoded) || (pattern && decoded.replace(pattern, '') !== decoded)) {
         return replacement as T;
       }
       unmatched = decoded;

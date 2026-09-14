@@ -641,6 +641,7 @@ export class OTLPReceiver {
       );
       try {
         await this.traceStore.addSpans(traceId, spans, {
+          source: 'external',
           skipTraceCheck: false,
           warnIfMissingTrace: false,
           ...(redactAttributePatterns.length > 0 && {

@@ -8,6 +8,7 @@ import {
   TOOL_ARGUMENT_ATTRIBUTE_KEYS,
   TOOL_RESULT_ATTRIBUTE_KEYS,
 } from '../tracing/toolAttributes';
+import { redactSqlLiteralsAndComments } from './sqlLexer';
 import { matchesPattern } from './traceUtils';
 
 import type { TraceData, TraceSpan } from '../types/tracing';
@@ -628,7 +629,21 @@ function getSqlExecutionDetails(
       'SQL trace evidence exceeds the judge summary limit and cannot be graded.',
     );
   }
-  sql.query = redactedQuery;
+  try {
+    sql.query = redactSqlLiteralsAndComments(redactedQuery);
+  } catch (error) {
+    throw Object.assign(
+      new TraceEvidenceError(
+        error instanceof Error ? error.message : 'SQL trace could not be safely summarized',
+      ),
+      { cause: error },
+    );
+  }
+  if (sql.query.length > 400) {
+    throw new TraceEvidenceError(
+      'SQL trace evidence exceeds the judge summary limit and cannot be graded.',
+    );
+  }
   return sql;
 }
 
@@ -732,8 +747,8 @@ export function summarizeTrajectoryForJudge(
     return {
       index: index + 1,
       type: step.type,
-      name: boundedName(step.name),
-      ...(step.spanName === step.name ? {} : { spanName: boundedName(step.spanName) }),
+      name: sql ? 'SQL query' : boundedName(step.name),
+      ...(sql || step.spanName === step.name ? {} : { spanName: boundedName(step.spanName) }),
       ...(status ? { status } : {}),
       ...(sql ? { sql } : {}),
       ...(execution ? { execution } : {}),
@@ -747,6 +762,7 @@ export function summarizeTrajectoryForJudge(
       traceId: trace.traceId,
       stepCount: rawSteps.length,
       compactedStepCount: compactedSteps.length,
+      ...(options.includeSql && { sqlValuesOmitted: true }),
       steps,
     },
     null,

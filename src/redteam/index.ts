@@ -1746,8 +1746,6 @@ export async function synthesize({
 
   // After generating plugin test cases but before applying strategies:
   const pluginTestCases = testCases;
-  const semanticFrontierDiagnostics =
-    summarizeSemanticFrontierDiagnosticsFromTests(pluginTestCases);
 
   // Initialize strategy results
   const strategyResults: Record<string, { requested: number; generated: number }> = {};
@@ -1809,6 +1807,7 @@ export async function synthesize({
 
   // Combine test cases based on basic strategy setting
   const finalTestCases = [...(includeBasicTests ? pluginTestCases : []), ...strategyTestCases];
+  const semanticFrontierDiagnostics = summarizeSemanticFrontierDiagnosticsFromTests(finalTestCases);
 
   // Check for abort signal
   checkAbort();

@@ -1,11 +1,42 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { handleContainsSql, handleIsSql } from '../../src/assertions/sql';
+import { redactSqlLiteralsAndComments } from '../../src/assertions/sqlLexer';
 
 import type { Assertion, AssertionParams, GradingResult } from '../../src/types/index';
 
 const assertion: Assertion = {
   type: 'is-sql',
 };
+
+describe('SQL trace value redaction', () => {
+  it('preserves bind placeholders and repeated literal identities', () => {
+    const result = redactSqlLiteralsAndComments(
+      'SELECT ?1, $2, :3, @4 FROM customer2 WHERE id=7 OR 7=7',
+    );
+    expect(result).toContain('SELECT ?1, $2, :3, @4 FROM customer2');
+    expect(result).toMatch(/id= (:literal_\d+) OR \1 = \1/);
+    expect(result).not.toContain('7');
+    expect(redactSqlLiteralsAndComments('SELECT :literal_1, 7')).toBe(
+      'SELECT :literal_1, :literal__1',
+    );
+  });
+
+  it('omits escaped literal contents and nested comments', () => {
+    const result = redactSqlLiteralsAndComments(
+      "SELECT 'private ''word', 12 /* outer /* inner */ hidden */ FROM records",
+    );
+    expect(result).toBe('SELECT :literal_1 , :literal_2 FROM records');
+  });
+
+  it.each([
+    "SELECT 'unclosed",
+    'SELECT $$unclosed',
+    "SELECT q'[private]'",
+    'SELECT /*! private */ 1',
+  ])('rejects syntax whose contents cannot be safely summarized: %s', (query) => {
+    expect(() => redactSqlLiteralsAndComments(query)).toThrow('cannot be safely graded');
+  });
+});
 
 describe('is-sql assertion', () => {
   // -------------------------------------------------- Basic Tests ------------------------------------------------------ //

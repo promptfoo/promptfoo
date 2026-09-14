@@ -160,6 +160,23 @@ describe('sanitizeTraceAttributes', () => {
   });
 });
 
+it('matches short configured values exactly without corrupting unrelated trace text', () => {
+  const original = { tenant_id: '1', region: 'us' };
+  const sanitized = sanitizeTraceAttributes(original, {
+    redactAttributes: ['tenant_id', 'region'],
+  });
+  const redact = getTraceTextRedactor([{ original, sanitized }]);
+  expect(redact('SELECT customer FROM users WHERE id=1')).toBe(
+    'SELECT customer FROM users WHERE id=1',
+  );
+  expect(redact('customer lookup')).toBe('customer lookup');
+  expect(redact('us')).toBe('[REDACTED]');
+  expect(redact('1.0')).toBe('[REDACTED]');
+  expect(
+    sanitizeTraceAttributes({ regionCopy: 'us', tenantCopy: 1 }, { redactText: redact }),
+  ).toEqual({ regionCopy: '[REDACTED]', tenantCopy: '[REDACTED]' });
+});
+
 it.each(['9007199254740993', '1e309', '1.25e2', '1.0', '-0'])(
   'redacts original numeric JSON source %s from sibling text',
   (literal) => {

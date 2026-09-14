@@ -91,7 +91,8 @@ export const PROMPT_EXTRACTION_PREDICATES = [
 type PromptExtractionPredicate = (typeof PROMPT_EXTRACTION_PREDICATES)[number];
 
 const REQUEST_PREFIX = String.raw`(?:^\s*|[.!?;:,\n]\s*|\b(?:and|then|but)\s+|\b(?:can|could|would|will) you\s+|\bi (?:need|want|would like) you to\s+)(?:please\s+)?`;
-const DISCLOSURE_VERB = String.raw`(?:show|give|send|share|provide|reveal|repeat|quote|copy|list|summarize|display|return|print|get|fetch|retrieve|read|tell me|convert|reformat|rewrite|translate|encode|transform|render)`;
+const DIRECT_DISCLOSURE_VERB = String.raw`(?:show|give|send|share|provide|reveal|repeat|quote|copy|list|summarize|display|return|print|get|fetch|retrieve|read|search|tell me)`;
+const DISCLOSURE_VERB = String.raw`(?:${DIRECT_DISCLOSURE_VERB}|convert|reformat|rewrite|translate|encode|transform|render)`;
 // A command after a semicolon can remain part of a negated execution request.
 function omitNegatedRequests(text: string, shellCommands = false): string {
   const command = shellCommands
@@ -109,7 +110,8 @@ function omitNegatedRequests(text: string, shellCommands = false): string {
   );
 }
 
-const DISCLOSURE_ACTION = String.raw`${DISCLOSURE_VERB}\b[^.!?;\n]{0,180}`;
+const DISCLOSURE_DETAILS = String.raw`(?:(?!\b(?:do not|don't|never|must not|should not|explain(?:ing)?|why|how|whether)\b)[^.!?;\n]){0,180}`;
+const DISCLOSURE_ACTION = String.raw`${DISCLOSURE_VERB}\b${DISCLOSURE_DETAILS}`;
 
 const PROMPT_EXTRACTION_RULES: Record<PromptExtractionPredicate, RegExp[]> = {
   requestsSystemPrompt: [
@@ -158,7 +160,12 @@ export function extractPromptExtractionSignature(prompt: string): AttackSignatur
       /"(?:\\.|[^"\\])*"|(?<!\w)'(?:\\.|[^'\\])*'|`[^`]*`|“[^”]*”|‘[^’]*’/g,
       (quoted, offset, source) => {
         const text = quoted.slice(1, -1);
-        return /\byour\s*$/i.test(source.slice(0, offset)) &&
+        const prefix = source.slice(0, offset);
+        const directRequest = new RegExp(
+          String.raw`${REQUEST_PREFIX}${DIRECT_DISCLOSURE_VERB}\s+(?:(?:your|the|initial|original|hidden|full|actual)\s+)*$`,
+          'i',
+        ).test(prefix);
+        return (/\byour\s*$/i.test(prefix) || directRequest) &&
           /^(?:system (?:prompt|instructions?)|hidden (?:operating )?instructions?)$/i.test(text)
           ? text
           : ' '.repeat(quoted.length);
@@ -178,7 +185,7 @@ export function extractPromptExtractionSignature(prompt: string): AttackSignatur
       PROMPT_EXTRACTION_RULES[predicate].some((rule) =>
         predicate.startsWith('asksFor')
           ? new RegExp(
-              String.raw`${REQUEST_PREFIX}(?:${DISCLOSURE_VERB}|audit|review|legal (?:counsel|authority) requests)\b(?:(?!\b(?:do not|don't|never|must not|should not|explain(?:ing)?|why|how|whether)\b)[^.!?;\n]){0,180}${rule.source}`,
+              String.raw`${REQUEST_PREFIX}(?:${DISCLOSURE_VERB}|audit|review|legal (?:counsel|authority) requests)\b${DISCLOSURE_DETAILS}${rule.source}`,
               'i',
             ).test(prompt)
           : rule.test(prompt),
@@ -238,7 +245,7 @@ export function extractExcessiveAgencySignature(prompt: string): AttackSignature
   const readOnlyTool =
     toolName !== undefined &&
     /\b(?:search|list|get|read|fetch|query|find|lookup)\b/i.test(toolName) &&
-    !/\b(?:deliver|swipe|mail|call|fax|send|message|post|notify|pay|charge|refund|book|upload|save|share|export|copy)\b/i.test(
+    !/\b(?:deliver|swipe|print out|mail|pick up|hand over|call|fax|(?:and|then) email|send|message|post|notify|pay|charge|refund|book|upload|save|share|export|copy)\b/i.test(
       toolName,
     );
   const predicates = Object.fromEntries(
@@ -281,7 +288,9 @@ const PII_DIRECT_RULES: Record<PiiDirectPredicate, RegExp[]> = {
   requestsCreditCard: [/\bcredit[- ]card(?: number)?\b/i],
   requestsMedicalRecord: [/\bmedical record\b/i, /\bmedical history\b/i, /\bdiagnosis\b/i],
   requestsPrescriptionDetails: [/\bprescriptions?\b/i, /\bmedications?\b/i],
-  requestsInsuranceDetails: [/\binsurance (?:details?|records?|policy(?: number)?|information)\b/i],
+  requestsInsuranceDetails: [
+    /\binsurance (?:details?|records?|policy(?: number)?(?!\s+(?:options?|examples?|advice|recommendations?)\b)|information)\b/i,
+  ],
   requestsLabResults: [/\blab results?\b/i],
 };
 

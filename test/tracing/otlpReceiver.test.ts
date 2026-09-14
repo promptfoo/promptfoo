@@ -356,7 +356,7 @@ describe('OTLPReceiver', () => {
             statusMessage: 'OK',
           }),
         ]),
-        { skipTraceCheck: false, warnIfMissingTrace: false },
+        { source: 'external', skipTraceCheck: false, warnIfMissingTrace: false },
       );
     });
 
@@ -395,7 +395,7 @@ describe('OTLPReceiver', () => {
             name: 'json-with-charset',
           }),
         ]),
-        { skipTraceCheck: false, warnIfMissingTrace: false },
+        { source: 'external', skipTraceCheck: false, warnIfMissingTrace: false },
       );
     });
 
@@ -451,7 +451,7 @@ describe('OTLPReceiver', () => {
             name: 'span-2',
           }),
         ]),
-        { skipTraceCheck: false, warnIfMissingTrace: false },
+        { source: 'external', skipTraceCheck: false, warnIfMissingTrace: false },
       );
     });
 
@@ -512,7 +512,7 @@ describe('OTLPReceiver', () => {
             }),
           }),
         ]),
-        { skipTraceCheck: false, warnIfMissingTrace: false },
+        { source: 'external', skipTraceCheck: false, warnIfMissingTrace: false },
       );
     });
 
@@ -672,7 +672,7 @@ describe('OTLPReceiver', () => {
             statusMessage: 'Success',
           }),
         ]),
-        { skipTraceCheck: false, warnIfMissingTrace: false },
+        { source: 'external', skipTraceCheck: false, warnIfMissingTrace: false },
       );
     });
 
@@ -781,6 +781,7 @@ describe('OTLPReceiver', () => {
           }),
         ],
         {
+          source: 'external',
           skipTraceCheck: false,
           warnIfMissingTrace: false,
           redactSpans: expect.any(Function),
@@ -885,6 +886,7 @@ describe('OTLPReceiver', () => {
           }),
         ],
         {
+          source: 'external',
           skipTraceCheck: false,
           warnIfMissingTrace: false,
           redactSpans: expect.any(Function),
@@ -1062,6 +1064,7 @@ describe('OTLPReceiver', () => {
           }),
         ],
         {
+          source: 'external',
           skipTraceCheck: false,
           warnIfMissingTrace: false,
           redactSpans: expect.any(Function),
@@ -1118,6 +1121,7 @@ describe('OTLPReceiver', () => {
           }),
         ],
         {
+          source: 'external',
           skipTraceCheck: false,
           warnIfMissingTrace: false,
           redactSpans: expect.any(Function),
@@ -1169,6 +1173,7 @@ describe('OTLPReceiver', () => {
           }),
         ],
         {
+          source: 'external',
           skipTraceCheck: false,
           warnIfMissingTrace: false,
         },
@@ -1229,6 +1234,7 @@ describe('OTLPReceiver', () => {
           }),
         ],
         {
+          source: 'external',
           skipTraceCheck: false,
           warnIfMissingTrace: false,
           redactSpans: expect.any(Function),
@@ -1336,6 +1342,7 @@ describe('OTLPReceiver', () => {
           }),
         ],
         {
+          source: 'external',
           skipTraceCheck: false,
           warnIfMissingTrace: false,
           redactSpans: expect.any(Function),
@@ -1392,6 +1399,7 @@ describe('OTLPReceiver', () => {
           }),
         ],
         {
+          source: 'external',
           skipTraceCheck: false,
           warnIfMissingTrace: false,
         },
@@ -1451,6 +1459,7 @@ describe('OTLPReceiver', () => {
           }),
         ],
         {
+          source: 'external',
           skipTraceCheck: false,
           warnIfMissingTrace: false,
         },
@@ -1529,6 +1538,7 @@ describe('OTLPReceiver', () => {
         .expect(200);
 
       expect(persistSpans).toHaveBeenCalledWith(traceIdHex, expect.any(Array), {
+        source: 'external',
         skipTraceCheck: false,
         warnIfMissingTrace: false,
       });
@@ -1563,6 +1573,7 @@ describe('OTLPReceiver', () => {
 
       expect(mockTraceStore.createTrace).not.toHaveBeenCalled();
       expect(persistSpans).toHaveBeenCalledWith(traceIdHex, expect.any(Array), {
+        source: 'external',
         skipTraceCheck: false,
         warnIfMissingTrace: false,
       });

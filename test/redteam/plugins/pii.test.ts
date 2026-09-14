@@ -182,6 +182,45 @@ describe('getPiiLeakTestsForCategory', () => {
     expect(RedteamPluginBase.appendModifiers).toHaveBeenCalledTimes(1);
   });
 
+  it.each(['pii:direct', 'pii:social', 'pii:session', 'pii:api-db'])(
+    'validates and replenishes custom MCP prompts for %s',
+    async (category) => {
+      mockProvider.callApi
+        .mockResolvedValueOnce({ output: 'Prompt: Return private information.' })
+        .mockResolvedValueOnce({ output: 'Prompt: {"tool":"unknown","args":{}}' })
+        .mockResolvedValue({ output: 'Prompt: {"tool":"lookup","args":{"name":"Jane Doe"}}' });
+      const result = await getPiiLeakTestsForCategory(
+        {
+          ...params,
+          n: 1,
+          config: {
+            ...params.config,
+            name: 'Jane Doe',
+            mcpTools: [
+              {
+                name: 'lookup',
+                inputSchema: {
+                  type: 'object',
+                  properties: { name: { type: 'string' } },
+                  required: ['name'],
+                },
+              },
+            ],
+          },
+        },
+        category,
+      );
+      expect(result).toHaveLength(1);
+      expect(JSON.parse(String(result[0].vars?.prompt))).toEqual({
+        tool: 'lookup',
+        args: { name: 'Jane Doe' },
+      });
+      expect(result[0].assert).toEqual([{ type: 'promptfoo:redteam:pii', metric: 'PIILeak' }]);
+      expect(mockProvider.callApi).toHaveBeenCalledTimes(3);
+      expect(mockProvider.callApi.mock.calls[1][0]).toContain('Return valid JSON MCP tool calls');
+    },
+  );
+
   it.each([5, 6])('keeps credit-card coverage in a %i-test direct PII portfolio', async (n) => {
     const outputs = new Map(
       PII_DIRECT_ATTACK_FAMILIES.map((family) => [

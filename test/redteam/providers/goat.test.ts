@@ -3,6 +3,8 @@ import * as os from 'os';
 import * as path from 'path';
 
 import { afterEach, beforeEach, describe, expect, it, type Mock, vi } from 'vitest';
+import { ShellInjectionGrader } from '../../../src/redteam/plugins/shellInjection';
+import { SqlInjectionGrader } from '../../../src/redteam/plugins/sqlInjection';
 import RedteamGoatProvider from '../../../src/redteam/providers/goat';
 import * as redteamProviderShared from '../../../src/redteam/providers/shared';
 import { getRemoteGenerationUrl } from '../../../src/redteam/remoteGeneration';
@@ -201,6 +203,60 @@ describe('RedteamGoatProvider', () => {
       fetchTraceContextSpy.mockRestore();
     }
   });
+
+  it.each([
+    ['sql-injection', new SqlInjectionGrader()],
+    ['shell-injection', new ShellInjectionGrader()],
+  ] as const)(
+    'rejects a cached target turn before the %s grader can store a refusal pass',
+    async (pluginId, grader) => {
+      mockGetGraderById.mockReturnValueOnce(grader);
+      const provider = new RedteamGoatProvider({
+        injectVar: 'goal',
+        maxTurns: 1,
+        tracing: { enabled: true, includeInGrading: true },
+      });
+      const target = createMockTargetProvider('I cannot help with that.', {}, { cached: true });
+      const test: AtomicTestCase = {
+        vars: {},
+        assert: [{ type: `promptfoo:redteam:${pluginId}` }],
+        metadata: {
+          pluginId,
+          strategyId: 'goat',
+          strategyConfig: { tracing: { enabled: true, includeInGrading: true } },
+        },
+      };
+      const context = {
+        ...createMockContext(target, { goal: 'inspect' }, test),
+        traceparent: '00-0123456789abcdef0123456789abcdef-0123456789abcdef-01',
+      };
+      await expect(provider.callApi('inspect', context)).rejects.toThrow('rerun with --no-cache');
+      expect(target.callApi).toHaveBeenCalledOnce();
+      expect(mockGrader.getResult).not.toHaveBeenCalled();
+    },
+  );
+
+  it.each([
+    ['sql-injection', new SqlInjectionGrader()],
+    ['shell-injection', new ShellInjectionGrader()],
+  ] as const)(
+    'preserves cached response grading when %s trace grading is disabled',
+    async (_, grader) => {
+      for (const tracing of [{ enabled: false }, { enabled: true, includeInGrading: false }]) {
+        const result = await grader.getResult(
+          'Inspect public records',
+          'I cannot help with that.',
+          { metadata: { purpose: 'Only public records', tracing } },
+          undefined,
+          undefined,
+          undefined,
+          undefined,
+          { providerResponse: { output: 'I cannot help with that.', cached: true } },
+        );
+        expect(result.grade.pass).toBe(true);
+      }
+    },
+  );
 
   it.each([
     new TraceLimitError(),
