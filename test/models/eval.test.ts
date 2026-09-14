@@ -1,8 +1,16 @@
 import { eq, sql } from 'drizzle-orm';
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
+import { isBlobAllowedForShare } from '../../src/blobs';
 import { getDb } from '../../src/database/index';
 import { updateSignalFile, updateSignalFileForDeletedEvals } from '../../src/database/signal';
-import { evalResultsTable, evalsTable, spansTable, tracesTable } from '../../src/database/tables';
+import {
+  blobAssetsTable,
+  blobReferencesTable,
+  evalResultsTable,
+  evalsTable,
+  spansTable,
+  tracesTable,
+} from '../../src/database/tables';
 import { getAuthor } from '../../src/globalConfig/accounts';
 import { runDbMigrations } from '../../src/migrate';
 import Eval, {
@@ -234,6 +242,76 @@ describe('evaluator', () => {
       expect(await EvalResult.findManyByEvalId(eval_.id)).toHaveLength(0);
       expect(await getCachedResultsCount(eval_.id)).toBe(0);
     });
+  });
+
+  it('prunes obsolete blob references on result replacement while retaining live references', async () => {
+    const eval_ = await EvalFactory.create({ numResults: 2 });
+    const other = await EvalFactory.create({ numResults: 1 });
+    const [retained] = await EvalResult.findManyByEvalId(eval_.id);
+    const removedHash = 'a'.repeat(64);
+    const retainedHash = 'b'.repeat(64);
+    const configHash = 'c'.repeat(64);
+    retained.response = { output: `promptfoo://blob/${retainedHash}` };
+    eval_.config = { defaultTest: { vars: { image: `promptfoo://blob/${configHash}` } } };
+    const db = await getDb();
+    await db
+      .insert(blobAssetsTable)
+      .values(
+        [removedHash, retainedHash, configHash].map((hash) => ({
+          hash,
+          sizeBytes: 1,
+          mimeType: 'image/png',
+          provider: 'filesystem',
+        })),
+      )
+      .onConflictDoNothing()
+      .run();
+    await db
+      .insert(blobReferencesTable)
+      .values([
+        ...[removedHash, retainedHash, configHash].map((blobHash, i) => ({
+          id: `replacement-ref-${i}`,
+          blobHash,
+          evalId: eval_.id,
+          kind: 'image',
+        })),
+        { id: 'other-eval-ref', blobHash: removedHash, evalId: other.id, kind: 'image' },
+      ])
+      .run();
+
+    const circular: Record<string, unknown> = {};
+    circular.self = circular;
+    const invalid = new EvalResult({ ...retained, response: { output: circular } });
+    await expect(eval_.setResults([invalid])).rejects.toThrow();
+    expect(await EvalResult.findManyByEvalId(eval_.id)).toHaveLength(2);
+    expect(await isBlobAllowedForShare(removedHash, eval_.id)).toBe(true);
+
+    await eval_.setResults([retained]);
+    expect(await isBlobAllowedForShare(removedHash, eval_.id)).toBe(false);
+    expect(await isBlobAllowedForShare(retainedHash, eval_.id)).toBe(true);
+    expect(await isBlobAllowedForShare(configHash, eval_.id)).toBe(true);
+    expect(await isBlobAllowedForShare(removedHash, other.id)).toBe(true);
+
+    await eval_.setResults([]);
+    expect(await isBlobAllowedForShare(retainedHash, eval_.id)).toBe(false);
+    expect(await isBlobAllowedForShare(configHash, eval_.id)).toBe(true);
+    expect(await db.select().from(blobAssetsTable)).toEqual(
+      expect.arrayContaining([expect.objectContaining({ hash: removedHash })]),
+    );
+  });
+
+  it('reloads summaries after appending to an evaluation with loaded results', async () => {
+    const eval_ = await EvalFactory.create({ numResults: 1 });
+    await eval_.loadResults();
+    const [existing] = await EvalResult.findManyByEvalId(eval_.id);
+    const appended = new EvalResult({
+      ...existing,
+      id: 'appended-result',
+      testIdx: 1,
+      response: existing.response ?? null,
+    });
+    await eval_.appendResults([appended]);
+    expect((await eval_.toEvaluateSummary()).results).toHaveLength(2);
   });
 
   describe('fetchResultsBatched', () => {

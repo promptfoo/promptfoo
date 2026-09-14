@@ -1,8 +1,10 @@
 import { and, desc, eq, type SQL, sql } from 'drizzle-orm';
+import { collectBlobHashes } from '../blobs/blobRefs';
 import { DEFAULT_QUERY_LIMIT, HUMAN_ASSERTION_TYPE } from '../constants';
 import { deleteTraceRecordsForEvals } from '../database/evalDeletion';
 import { getDb } from '../database/index';
 import {
+  blobReferencesTable,
   datasetsTable,
   evalResultsTable,
   evalsTable,
@@ -1386,9 +1388,25 @@ export default class Eval {
 
   async setResults(results: EvalResult[]) {
     if (this.persisted) {
+      const retainedBlobHashes = JSON.stringify([
+        ...collectBlobHashes({ results, config: this.config, prompts: this.prompts }),
+      ]);
       const db = await getDb();
       await db.transaction(async (tx) => {
         await tx.delete(evalResultsTable).where(eq(evalResultsTable.evalId, this.id)).run();
+        // Remove only this eval's obsolete references, preserving shared blob bytes and
+        // existing provenance for hashes still used by its results, config, or prompts.
+        await tx
+          .delete(blobReferencesTable)
+          .where(
+            and(
+              eq(blobReferencesTable.evalId, this.id),
+              sql`${blobReferencesTable.blobHash} NOT IN (
+                SELECT value FROM json_each(${retainedBlobHashes})
+              )`,
+            ),
+          )
+          .run();
         if (results.length > 0) {
           await tx
             .insert(evalResultsTable)
@@ -1425,6 +1443,7 @@ export default class Eval {
         )
         .run();
       notifyEvaluationChanged(this.id);
+      this.results = [];
       this._resultsLoaded = false;
     } else {
       this.results.push(...results);
