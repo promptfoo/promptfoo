@@ -692,7 +692,7 @@ export default class GoatProvider implements ApiProvider {
           }
         }
 
-        if (targetResponse.conversationEnded) {
+        if (targetResponse.conversationEnded && (!redactTrace || targetResponse.error)) {
           logger.info('[GOAT] Target ended conversation', {
             turn,
             reason: targetResponse.conversationEndReason,
@@ -872,6 +872,10 @@ export default class GoatProvider implements ApiProvider {
             stopReason = 'Grader failed';
             break;
           }
+        }
+        if (targetResponse.conversationEnded) {
+          stopReason = 'Target ended conversation';
+          break;
         }
       } catch (error) {
         // Re-throw abort errors to properly cancel the operation

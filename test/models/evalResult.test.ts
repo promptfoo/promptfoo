@@ -222,38 +222,64 @@ describe('EvalResult', () => {
     ['coding-agent:trace-redaction', 'harness:artifact-redaction'].flatMap((pluginId) =>
       [false, true].map((hasResponse) => [pluginId, hasResponse] as const),
     ),
-  )('omits saved grader prompts for %s with response=%s', async (pluginId, hasResponse) => {
-    const secret = 'PRIVATE_GRADER_PROMPT_RECEIPT';
-    const grade = {
-      pass: true,
-      score: 1,
-      reason: 'Public report checked.',
-      metadata: { renderedGradingPrompt: `Inspect the output: ${secret}`, cachedResponse: false },
-    };
-    const row = createEvaluateResult({
-      ...mockEvaluateResult,
-      testCase: { assert: [{ type: `promptfoo:redteam:${pluginId}` as const }] },
-      response: { output: secret },
-      gradingResult: { ...grade, componentResults: [{ ...grade, componentResults: [grade] }] },
-    });
-    if (!hasResponse) {
-      delete row.response;
-    }
-    const saved = await EvalResult.createFromEvaluateResult('grader-prompt-' + pluginId, row);
-    const [bulk] = await EvalResult.createManyFromEvaluateResult([row], 'grader-bulk-' + pluginId);
-    for (const result of [sanitizeResultForJsonlArtifact(row), saved, bulk]) {
-      expect(JSON.stringify(result.gradingResult)).not.toContain(secret);
-      expect(result.gradingResult).toMatchObject({
+  )(
+    'omits grader prompts and private verifier paths for %s with response=%s',
+    async (pluginId, hasResponse) => {
+      const secret = 'PRIVATE_GRADER_PROMPT_RECEIPT';
+      const safeEvidence = {
+        failureKind: 'redacted-artifact-sensitive-value',
+        artifactByteLength: 42,
+        redactedArtifactByteLength: 42,
+        redactedArtifactSha256: 'a'.repeat(64),
+        redactionReceiptByteLength: 12,
+        redactionReceiptSha256: 'b'.repeat(64),
+      };
+      const grade = {
         pass: true,
         score: 1,
-        reason: grade.reason,
-        metadata: { cachedResponse: false },
+        reason: 'Public report checked.',
+        metadata: {
+          renderedGradingPrompt: `Inspect the output: ${secret}`,
+          cachedResponse: false,
+          verifierEvidence: {
+            ...safeEvidence,
+            artifactPath: '/PRIVATE_VERIFIER_PATH/report',
+            redactedArtifactPath: '/PRIVATE_VERIFIER_PATH/redacted',
+            receiptSourcePath: '/PRIVATE_VERIFIER_PATH/receipt',
+          },
+        },
+      };
+      const row = createEvaluateResult({
+        ...mockEvaluateResult,
+        testCase: { assert: [{ type: `promptfoo:redteam:${pluginId}` as const }] },
+        response: { output: secret },
+        gradingResult: { ...grade, componentResults: [{ ...grade, componentResults: [grade] }] },
       });
-    }
-    const ordinary = sanitizeResultForJsonlArtifact({ ...row, testCase: { assert: [] } });
-    expect(ordinary.gradingResult?.metadata?.renderedGradingPrompt).toContain(secret);
-    expect(row.gradingResult?.metadata?.renderedGradingPrompt).toContain(secret);
-  });
+      if (!hasResponse) {
+        delete row.response;
+      }
+      const saved = await EvalResult.createFromEvaluateResult('grader-prompt-' + pluginId, row);
+      const [bulk] = await EvalResult.createManyFromEvaluateResult(
+        [row],
+        'grader-bulk-' + pluginId,
+      );
+      for (const result of [sanitizeResultForJsonlArtifact(row), saved, bulk]) {
+        expect(JSON.stringify(result.gradingResult)).not.toContain(secret);
+        expect(JSON.stringify(result.gradingResult)).not.toContain('PRIVATE_VERIFIER_PATH');
+        expect(result.gradingResult).toMatchObject({
+          pass: true,
+          score: 1,
+          reason: grade.reason,
+          metadata: { cachedResponse: false, verifierEvidence: safeEvidence },
+        });
+      }
+      const ordinary = sanitizeResultForJsonlArtifact({ ...row, testCase: { assert: [] } });
+      expect(ordinary.gradingResult?.metadata?.renderedGradingPrompt).toContain(secret);
+      expect(row.gradingResult?.metadata?.renderedGradingPrompt).toContain(secret);
+      expect(JSON.stringify(ordinary.gradingResult)).toContain('PRIVATE_VERIFIER_PATH');
+      expect(JSON.stringify(row.gradingResult)).toContain('PRIVATE_VERIFIER_PATH');
+    },
+  );
 
   it.each(['coding-agent:trace-redaction', 'harness:artifact-redaction'])(
     'omits leaked text and provider metadata from public %s result copies',

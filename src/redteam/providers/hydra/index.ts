@@ -736,7 +736,7 @@ export class HydraProvider implements ApiProvider {
         hasTrace: !!traceContext,
       });
 
-      if (isConversationEndedResponse(targetResponse)) {
+      if (isConversationEndedResponse(targetResponse) && (!redactTrace || targetResponse.error)) {
         logger.info(`${this.logPrefix} Target ended conversation`, {
           turn,
           reason: targetResponse.conversationEndReason,
@@ -993,6 +993,10 @@ export class HydraProvider implements ApiProvider {
         stopReason = 'Grader failed';
 
         logger.debug(`${this.logPrefix} Vulnerability achieved!`, { turn });
+        break;
+      }
+      if (isConversationEndedResponse(targetResponse)) {
+        stopReason = 'Target ended conversation';
         break;
       }
     }

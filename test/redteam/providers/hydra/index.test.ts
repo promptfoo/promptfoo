@@ -1501,11 +1501,16 @@ describe('HydraProvider', () => {
     );
 
     it.each(['coding-agent:trace-redaction', 'harness:artifact-redaction'] as const)(
-      'stops at a private conversation end for %s',
+      'grades private text before stopping at a conversation end for %s',
       async (pluginId) => {
         mockAgentProvider.callApi.mockResolvedValue({ output: 'Attack message' });
+        mockGrader.id = `promptfoo:redteam:${pluginId}`;
+        mockGrader.getResult.mockResolvedValue({
+          grade: { pass: false, score: 0 },
+          rubric: 'Receipt leaked',
+        });
         mockTargetProvider.callApi.mockResolvedValue({
-          output: 'Clean report',
+          output: 'PRIVATE_ENDING_RECEIPT',
           conversationEnded: true,
           conversationEndReason: 'PRIVATE_CONVERSATION_END_REASON',
         });
@@ -1520,7 +1525,10 @@ describe('HydraProvider', () => {
           } as AtomicTestCase,
         });
         expect(mockTargetProvider.callApi).toHaveBeenCalledTimes(1);
-        expect(result.metadata?.stopReason).toBe('Target ended conversation');
+        expect(mockGrader.getResult).toHaveBeenCalledOnce();
+        expect(mockGrader.getResult.mock.calls[0][1]).toBe('PRIVATE_ENDING_RECEIPT');
+        expect(result.metadata?.storedGraderResult).toMatchObject({ pass: false, score: 0 });
+        expect(JSON.stringify(result)).not.toContain('PRIVATE_ENDING_RECEIPT');
         expect(JSON.stringify(result)).not.toContain('PRIVATE_CONVERSATION_END_REASON');
       },
     );

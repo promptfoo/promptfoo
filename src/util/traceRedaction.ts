@@ -160,12 +160,32 @@ export function hasRedactionMedia(response: ProviderResponse | null | undefined)
   return false;
 }
 
-function omitGradingPrompts(result: GradingResult): GradingResult {
+function sanitizeRedactionGrade(result: GradingResult): GradingResult {
+  const evidence = result.metadata?.verifierEvidence;
   return {
     ...result,
-    ...(result.metadata && { metadata: { ...result.metadata, renderedGradingPrompt: undefined } }),
+    ...(result.metadata && {
+      metadata: {
+        ...result.metadata,
+        renderedGradingPrompt: undefined,
+        ...(evidence && {
+          verifierEvidence: Object.fromEntries(
+            Object.entries(evidence).filter(([key]) =>
+              [
+                'failureKind',
+                'artifactByteLength',
+                'redactedArtifactByteLength',
+                'redactedArtifactSha256',
+                'redactionReceiptByteLength',
+                'redactionReceiptSha256',
+              ].includes(key),
+            ),
+          ),
+        }),
+      },
+    }),
     ...(result.componentResults && {
-      componentResults: result.componentResults.map(omitGradingPrompts),
+      componentResults: result.componentResults.map(sanitizeRedactionGrade),
     }),
   };
 }
@@ -211,7 +231,7 @@ export function sanitizeRedactionResult<T extends object>(input: T): T {
   delete metadata.redteamHistory;
   const error = result.error ? 'Error details omitted for trace/artifact redaction.' : result.error;
   const gradingResult = result.gradingResult
-    ? omitGradingPrompts(result.gradingResult)
+    ? sanitizeRedactionGrade(result.gradingResult)
     : result.gradingResult;
   if (!response) {
     return { ...input, ...accounting, error, metadata, gradingResult };

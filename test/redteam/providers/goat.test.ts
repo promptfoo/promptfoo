@@ -18,6 +18,7 @@ import type {
 
 // Mock the graders module at the top level
 const mockGrader = {
+  id: '',
   getResult: vi.fn(),
 };
 
@@ -104,6 +105,7 @@ describe('RedteamGoatProvider', () => {
   };
 
   beforeEach(() => {
+    mockGrader.id = '';
     vi.clearAllMocks();
     mockGetGraderById.mockReset();
     mockGetGraderById.mockReturnValue(mockGrader);
@@ -186,7 +188,11 @@ describe('RedteamGoatProvider', () => {
       const media = isMedia
         ? 'data:image/png;base64,PRIVATE_GOAT_OUTPUT_MEDIA'
         : 'PRIVATE_GOAT_OUTPUT_TEXT';
-      mockGrader.getResult.mockResolvedValue({ grade: { pass: true, score: 1 }, rubric: 'Clean' });
+      mockGrader.id = `promptfoo:redteam:${pluginId}`;
+      mockGrader.getResult.mockResolvedValue({
+        grade: { pass: false, score: 0 },
+        rubric: 'Receipt leaked',
+      });
       const target = createMockTargetProvider(media, {}, { conversationEnded });
       const provider = new RedteamGoatProvider({ injectVar: 'goal', maxTurns: 2 });
       const result = await provider.callApi(
@@ -208,6 +214,9 @@ describe('RedteamGoatProvider', () => {
         expect(result.error).toContain('redaction cannot be verified');
       } else {
         expect(result.error).toBeUndefined();
+        expect(mockGrader.getResult).toHaveBeenCalledOnce();
+        expect(mockGrader.getResult.mock.calls[0][1]).toBe(media);
+        expect(result.metadata?.storedGraderResult).toMatchObject({ pass: false, score: 0 });
       }
       expect(JSON.stringify(mockFetch.mock.calls)).not.toContain(media);
       expect(JSON.stringify(result)).not.toContain(media);
