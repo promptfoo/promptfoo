@@ -75,6 +75,7 @@ export function sanitizeTraceAttributes(
     redactAttributes = [],
     sanitizeSensitiveAttributes = true,
     truncateValues = true,
+    redactText,
   } = options;
   const customPatterns = [
     ...new Set(
@@ -94,7 +95,19 @@ export function sanitizeTraceAttributes(
         try {
           const original = JSON.parse(value);
           decoded = true;
-          const sanitized = sanitizeValue(original, valueDepth + 1);
+          const sourceAware = redactText
+            ? JSON.parse(value, (_key, parsed, context?: { source?: string }) => {
+                if (typeof parsed !== 'number') {
+                  return parsed;
+                }
+                if (context?.source === undefined) {
+                  throw new Error('JSON numeric source unavailable');
+                }
+                const redacted = redactText(context.source);
+                return redacted === context.source ? parsed : redacted;
+              })
+            : original;
+          const sanitized = sanitizeValue(sourceAware, valueDepth + 1);
           if (JSON.stringify(original) !== JSON.stringify(sanitized)) {
             value = JSON.stringify(sanitized);
           }
@@ -106,7 +119,7 @@ export function sanitizeTraceAttributes(
         }
       }
       if (!decoded) {
-        value = options.redactText?.(value) ?? value;
+        value = redactText?.(value) ?? value;
       }
       return truncateValues && value.length > 400 ? `${value.slice(0, 400)}…` : value;
     }
@@ -116,12 +129,17 @@ export function sanitizeTraceAttributes(
     if (value && typeof value === 'object') {
       return sanitizeTraceAttributes(value as Record<string, any>, options, valueDepth + 1);
     }
+    if (typeof value === 'number' || typeof value === 'boolean') {
+      const text = String(value);
+      const redacted = redactText?.(text) ?? text;
+      return redacted === text ? value : redacted;
+    }
     return value;
   };
 
   return Object.fromEntries(
     Object.entries(attributes).map(([key, value]) => [
-      options.redactText?.(key) ?? key,
+      redactText?.(key) ?? key,
       customPatterns.some((pattern) => key.toLowerCase().includes(pattern))
         ? '[REDACTED]'
         : sanitizeSensitiveAttributes && isSensitiveAttributeKey(key)
@@ -245,6 +263,9 @@ export function getTraceTextRedactor(
       continue;
     }
     for (const [key, value] of Object.entries(original)) {
+      if (redacted && !Array.isArray(original)) {
+        pending.push({ original: key, sanitized });
+      }
       pending.push({
         original: value,
         sanitized: redacted ? sanitized : (sanitized as Record<string, unknown>)?.[key],

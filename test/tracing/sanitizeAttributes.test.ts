@@ -200,3 +200,37 @@ it.each([false, true])(
     });
   },
 );
+
+it('collects credential property names from fully redacted raw objects', () => {
+  const original = { authorization: { PRIVATE_KEY_ORIGIN: 'ordinary value' } };
+  const sanitized = sanitizeTraceAttributes(original);
+  const redactText = getTraceTextRedactor([{ original, sanitized }]);
+  expect(redactText('echo PRIVATE_KEY_ORIGIN')).toBe('echo [REDACTED]');
+  expect(sanitizeTraceAttributes({ PRIVATE_KEY_ORIGIN: 'echo' }, { redactText })).toEqual({
+    '[REDACTED]': 'echo',
+  });
+});
+
+it.each([123456, true])('redacts primitive echoes of known sensitive values: %s', (secret) => {
+  const original = { authorization: secret };
+  const sanitized = sanitizeTraceAttributes(original);
+  const redactText = getTraceTextRedactor([{ original, sanitized }]);
+  expect(sanitizeTraceAttributes({ copy: secret, nested: [secret, 42] }, { redactText })).toEqual({
+    copy: '[REDACTED]',
+    nested: ['[REDACTED]', 42],
+  });
+});
+
+it.each(['123456', '9007199254740993', '1e309', '1.25e2', '1.0', '-0'])(
+  'redacts numeric JSON echoes before source precision is lost: %s',
+  (literal) => {
+    const original = { payload: `{"authorization":${literal}}` };
+    const sanitized = sanitizeTraceAttributes(original, { truncateValues: false });
+    const redactText = getTraceTextRedactor([{ original, sanitized }]);
+    const result = sanitizeTraceAttributes(
+      { payload: `{"copy":${literal},"safe":42}` },
+      { redactText, truncateValues: false },
+    );
+    expect(JSON.parse(result.payload)).toEqual({ copy: '[REDACTED]', safe: 42 });
+  },
+);
