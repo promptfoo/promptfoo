@@ -109,6 +109,7 @@ describe('index.ts exports', () => {
     'getInputDescription',
     'getInputType',
     'guardrails',
+    'hasProviderCapability',
     'isApiProvider',
     'isGradingResult',
     'isProviderOptions',

@@ -121,19 +121,157 @@ export interface CallApiOptionsParams {
   abortSignal?: AbortSignal;
 }
 
-export interface ApiProvider extends MinimalApiProvider {
+/** Identity and lifecycle shared by providers, independently of their operation. */
+export interface ProviderIdentity<TConfig = unknown> {
+  id(): string;
+  config?: TConfig;
+  /** Omit for legacy method-based detection; declare to exclude inherited stubs. */
+  promptfooCapabilities?: readonly ProviderCapability[];
+  /** Release long-lived resources. Request cancellation uses abortSignal instead. */
+  cleanup?: () => void | Promise<void>;
+}
+
+export interface ProviderOperations {
   callApi: CallApiFunction;
-  callClassificationApi?: (
-    prompt: string,
-    context?: CallApiContextParams,
-    options?: CallApiOptionsParams,
-  ) => Promise<ProviderClassificationResponse>;
-  callEmbeddingApi?: (
+  callEmbeddingApi: (
     input: string,
     context?: CallApiContextParams,
     options?: CallApiOptionsParams,
   ) => Promise<ProviderEmbeddingResponse>;
-  config?: any;
+  callClassificationApi: (
+    prompt: string,
+    context?: CallApiContextParams,
+    options?: CallApiOptionsParams,
+  ) => Promise<ProviderClassificationResponse>;
+  callSimilarityApi: (
+    reference: string,
+    input: string,
+    context?: CallApiContextParams,
+    options?: CallApiOptionsParams,
+  ) => Promise<ProviderSimilarityResponse>;
+  callModerationApi: (
+    prompt: string,
+    response: string,
+    context?: CallApiContextParams,
+    options?: CallApiOptionsParams,
+  ) => Promise<ProviderModerationResponse>;
+}
+
+export type ProviderCapability = keyof ProviderOperations;
+
+const inheritedProviderCapabilities = Symbol.for('promptfoo.inheritedProviderCapabilities');
+
+/** Mark only the built-in declaration as inherited; a subclass assignment remains explicit. */
+export function inheritProviderCapabilities<T extends readonly ProviderCapability[]>(
+  declared: T,
+): T {
+  const inherited = [...declared] as unknown as T;
+  Object.defineProperty(inherited, inheritedProviderCapabilities, { value: true });
+  return inherited;
+}
+
+/** A subclass may replace a built-in stub, but the nearest explicit declaration takes precedence. */
+function getSubclassCapabilityOverride(
+  provider: object,
+  capability: ProviderCapability,
+): boolean | undefined {
+  const ownDeclaration = Object.getOwnPropertyDescriptor(provider, 'promptfooCapabilities');
+  if (ownDeclaration) {
+    const capabilities = ownDeclaration.get?.call(provider) ?? ownDeclaration.value;
+    if (
+      capabilities !== undefined &&
+      !Object.prototype.hasOwnProperty.call(capabilities ?? [], inheritedProviderCapabilities)
+    ) {
+      return Array.isArray(capabilities) && capabilities.includes(capability);
+    }
+  }
+  let prototype = Object.getPrototypeOf(provider);
+  let overridden = Object.prototype.hasOwnProperty.call(provider, capability);
+  while (prototype && prototype !== Object.prototype) {
+    const hasDeclaration =
+      prototype.constructor &&
+      Object.prototype.hasOwnProperty.call(prototype.constructor, 'declaredProviderCapabilities');
+    // A declaring class owns its stubs; subclasses may override even a map-backed wrapper.
+    const parentCapabilities = (
+      Object.getPrototypeOf(prototype)?.constructor as { declaredProviderCapabilities?: unknown }
+    )?.declaredProviderCapabilities;
+    if (
+      Object.prototype.hasOwnProperty.call(prototype, capability) &&
+      (!hasDeclaration || parentCapabilities !== undefined)
+    ) {
+      overridden = true;
+    }
+    const declaration = Object.getOwnPropertyDescriptor(prototype, 'promptfooCapabilities');
+    if (declaration) {
+      const capabilities = declaration.get?.call(provider) ?? declaration.value;
+      if (Array.isArray(capabilities)) {
+        return capabilities.includes(capability);
+      }
+    }
+    if (hasDeclaration) {
+      const capabilities = (provider as ProviderIdentity).promptfooCapabilities;
+      return (
+        (overridden &&
+          Array.isArray(capabilities) &&
+          Object.prototype.hasOwnProperty.call(capabilities, inheritedProviderCapabilities)) ||
+        undefined
+      );
+    }
+    prototype = Object.getPrototypeOf(prototype);
+  }
+  return undefined;
+}
+
+/** Check both the implementation and any explicit capability declaration. */
+export function hasProviderCapability<K extends ProviderCapability>(
+  provider: unknown,
+  capability: K,
+): provider is ProviderIdentity & Pick<ProviderOperations, K> {
+  if (
+    typeof provider !== 'object' ||
+    provider === null ||
+    !('id' in provider) ||
+    typeof provider.id !== 'function' ||
+    !(capability in provider) ||
+    typeof (provider as Record<string, unknown>)[capability] !== 'function'
+  ) {
+    return false;
+  }
+
+  const override = getSubclassCapabilityOverride(provider, capability);
+  if (override !== undefined) {
+    return override;
+  }
+  const capabilities =
+    'promptfooCapabilities' in provider ? provider.promptfooCapabilities : undefined;
+  if (capabilities === undefined) {
+    return true;
+  }
+  if (!Array.isArray(capabilities)) {
+    return false;
+  }
+  if (capabilities.includes(capability)) {
+    return true;
+  }
+
+  const delegate = (provider as Record<symbol, unknown>)[
+    Symbol.for('promptfoo.capabilityDelegate')
+  ];
+  return (
+    Object.prototype.hasOwnProperty.call(capabilities, inheritedProviderCapabilities) &&
+    delegate !== provider &&
+    hasProviderCapability(delegate, capability)
+  );
+}
+
+// Keep the legacy text-provider shape and permissive default config at the public
+// boundary. Internal adapters can specify TConfig and use operation guards.
+export interface ApiProvider<TConfig = any> extends MinimalApiProvider, ProviderIdentity<TConfig> {
+  callApi: ProviderOperations['callApi'];
+  callClassificationApi?: ProviderOperations['callClassificationApi'];
+  callEmbeddingApi?: ProviderOperations['callEmbeddingApi'];
+  callSimilarityApi?: ProviderOperations['callSimilarityApi'];
+  callModerationApi?: ProviderOperations['callModerationApi'];
   delay?: number;
   getSessionId?: () => string;
   /** Native audio input content format accepted by this provider and its configured model. */
@@ -142,46 +280,22 @@ export interface ApiProvider extends MinimalApiProvider {
   label?: ProviderLabel;
   transform?: string | TransformFunction;
   toJSON?: () => any;
-  /**
-   * Provider-wide cleanup hook for releasing long-lived resources such as worker
-   * processes, browser sessions, or pooled connections at eval shutdown.
-   * Request-scoped cancellation should be implemented with `abortSignal`.
-   */
-  cleanup?: () => void | Promise<void>;
 }
 
 export interface ApiEmbeddingProvider extends ApiProvider {
-  callEmbeddingApi: (
-    input: string,
-    context?: CallApiContextParams,
-    options?: CallApiOptionsParams,
-  ) => Promise<ProviderEmbeddingResponse>;
+  callEmbeddingApi: ProviderOperations['callEmbeddingApi'];
 }
 
 export interface ApiSimilarityProvider extends ApiProvider {
-  callSimilarityApi: (
-    reference: string,
-    input: string,
-    context?: CallApiContextParams,
-    options?: CallApiOptionsParams,
-  ) => Promise<ProviderSimilarityResponse>;
+  callSimilarityApi: ProviderOperations['callSimilarityApi'];
 }
 
 export interface ApiClassificationProvider extends ApiProvider {
-  callClassificationApi: (
-    prompt: string,
-    context?: CallApiContextParams,
-    options?: CallApiOptionsParams,
-  ) => Promise<ProviderClassificationResponse>;
+  callClassificationApi: ProviderOperations['callClassificationApi'];
 }
 
 export interface ApiModerationProvider extends ApiProvider {
-  callModerationApi: (
-    prompt: string,
-    response: string,
-    context?: CallApiContextParams,
-    options?: CallApiOptionsParams,
-  ) => Promise<ProviderModerationResponse>;
+  callModerationApi: ProviderOperations['callModerationApi'];
 }
 
 export type FilePath = string;
@@ -195,7 +309,7 @@ export type CallApiFunction = {
   label?: string;
 };
 
-export function isApiProvider(provider: any): provider is ApiProvider {
+export function isApiProvider(provider: unknown): provider is ApiProvider {
   return (
     typeof provider === 'object' &&
     provider != null &&

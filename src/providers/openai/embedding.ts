@@ -1,16 +1,17 @@
 import { fetchWithCache } from '../../cache';
 import logger from '../../logger';
+import {
+  type CallApiContextParams,
+  type CallApiOptionsParams,
+  inheritProviderCapabilities,
+  type ProviderEmbeddingResponse,
+} from '../../types/providers';
 import { getRequestTimeoutMs, shouldBustProviderCache, withResponseCacheMetadata } from '../shared';
 import { OpenAiGenericProvider } from '.';
 import { calculateOpenAIUsageCost } from './billing';
 import { appendOpenAiApiPath, assertOpenAiApiModel, getTokenUsage } from './util';
 
 import type { EnvOverrides } from '../../types/env';
-import type {
-  CallApiContextParams,
-  CallApiOptionsParams,
-  ProviderEmbeddingResponse,
-} from '../../types/index';
 import type { OpenAiSharedOptions } from './types';
 
 type OpenAiEmbeddingOptions = OpenAiSharedOptions & {
@@ -18,6 +19,11 @@ type OpenAiEmbeddingOptions = OpenAiSharedOptions & {
 };
 
 export class OpenAiEmbeddingProvider extends OpenAiGenericProvider {
+  static readonly declaredProviderCapabilities = ['callEmbeddingApi'] as const;
+  readonly promptfooCapabilities = inheritProviderCapabilities(
+    OpenAiEmbeddingProvider.declaredProviderCapabilities,
+  );
+
   declare config: OpenAiEmbeddingOptions;
 
   constructor(

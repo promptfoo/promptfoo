@@ -1,15 +1,15 @@
 import { fetchWithCache } from '../cache';
 import { getEnvString } from '../envars';
 import logger from '../logger';
+import {
+  type ApiEmbeddingProvider,
+  type CallApiContextParams,
+  type CallApiOptionsParams,
+  inheritProviderCapabilities,
+  type ProviderEmbeddingResponse,
+  type ProviderResponse,
+} from '../types/providers';
 import { getRequestTimeoutMs } from './shared';
-
-import type {
-  ApiEmbeddingProvider,
-  CallApiContextParams,
-  CallApiOptionsParams,
-  ProviderEmbeddingResponse,
-  ProviderResponse,
-} from '../types/index';
 
 function formatVoyageApiError(status: number, statusText: string, data: any): string {
   const responseText =
@@ -25,6 +25,11 @@ function formatVoyageApiError(status: number, statusText: string, data: any): st
 }
 
 export class VoyageEmbeddingProvider implements ApiEmbeddingProvider {
+  static readonly declaredProviderCapabilities = ['callEmbeddingApi'] as const;
+  readonly promptfooCapabilities = inheritProviderCapabilities(
+    VoyageEmbeddingProvider.declaredProviderCapabilities,
+  );
+
   modelName: string;
   config: any;
   env?: any;

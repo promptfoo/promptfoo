@@ -4,19 +4,20 @@ import { z } from 'zod';
 import { getEnvFloat, getEnvInt, getEnvString } from '../envars';
 import logger from '../logger';
 import telemetry from '../telemetry';
+import {
+  type ApiEmbeddingProvider,
+  type ApiProvider,
+  type CallApiContextParams,
+  type CallApiOptionsParams,
+  inheritProviderCapabilities,
+  type ProviderEmbeddingResponse,
+  type ProviderOptions,
+  type ProviderResponse,
+} from '../types/providers';
 import { getTransformErrorMessage, TransformInputType, transform } from '../util/transform';
 import { StringOrFunctionSchema } from '../validators/shared';
 
 import type { EnvOverrides } from '../types/env';
-import type {
-  ApiEmbeddingProvider,
-  ApiProvider,
-  CallApiContextParams,
-  CallApiOptionsParams,
-  ProviderEmbeddingResponse,
-  ProviderOptions,
-  ProviderResponse,
-} from '../types/index';
 import type { TransformContext, TransformFunction } from '../types/transform';
 
 /**
@@ -846,6 +847,11 @@ export class SageMakerEmbeddingProvider
   extends SageMakerGenericProvider
   implements ApiEmbeddingProvider
 {
+  static readonly declaredProviderCapabilities = ['callEmbeddingApi'] as const;
+  readonly promptfooCapabilities = inheritProviderCapabilities(
+    SageMakerEmbeddingProvider.declaredProviderCapabilities,
+  );
+
   async callApi(): Promise<ProviderResponse> {
     throw new Error(
       'callApi is not implemented for embedding provider. Use callEmbeddingApi instead.',

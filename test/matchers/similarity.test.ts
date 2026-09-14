@@ -450,6 +450,31 @@ describe('matchesSimilarity', () => {
     });
   });
 
+  it.each(['dot_product', 'euclidean'] as const)(
+    'does not call a declared unsupported embedding stub for %s',
+    async (metric) => {
+      const callEmbeddingApi = vi.fn().mockRejectedValue(new Error('unsupported embedding stub'));
+      const provider = Object.assign(createMockProvider({ id: 'similarity-only' }), {
+        promptfooCapabilities: ['callSimilarityApi'] as const,
+        callSimilarityApi: vi.fn().mockResolvedValue({ similarity: 0.9 }),
+        callEmbeddingApi,
+      });
+      const result = await matchesSimilarity(
+        'expected',
+        'output',
+        0.5,
+        false,
+        { provider },
+        metric,
+      );
+      expect(result).toMatchObject({
+        pass: false,
+        reason: expect.stringContaining('only supports cosine similarity'),
+      });
+      expect(callEmbeddingApi).not.toHaveBeenCalled();
+    },
+  );
+
   describe('metric validation', () => {
     it('records native similarity providers beneath the grading trace', async () => {
       const provider = Object.assign(createMockProvider({ id: 'native-similarity' }), {
