@@ -82,7 +82,7 @@ function hasDuplicateJsonKeys(json: string): boolean {
       }
       if (json[next] === ':') {
         const key = JSON.parse(json.slice(start, index + 1)) as string;
-        const keys = objects.at(-1)!;
+        const keys = objects[objects.length - 1];
         if (keys.has(key)) {
           return true;
         }
