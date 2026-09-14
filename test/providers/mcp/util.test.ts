@@ -396,10 +396,6 @@ describe('getOAuthTokenWithExpiry', () => {
         .mockResolvedValueOnce({
           ok: true,
           json: async () => ({ access_token: 'second-token', expires_in: 3600 }),
-        })
-        .mockResolvedValueOnce({
-          ok: true,
-          json: async () => ({ access_token: 'separate-token', expires_in: 3600 }),
         });
       const auth: MCPOAuthClientCredentialsAuth | MCPOAuthPasswordAuth = {
         type: 'oauth',
@@ -415,8 +411,8 @@ describe('getOAuthTokenWithExpiry', () => {
       expect((await getOAuthTokenWithExpiry(auth)).accessToken).toBe('first-token');
       expect((await getOAuthTokenWithExpiry(changed)).accessToken).toBe('second-token');
       expect((await getOAuthTokenWithExpiry(changed)).accessToken).toBe('second-token');
-      expect((await getOAuthTokenWithExpiry({ ...changed })).accessToken).toBe('separate-token');
-      expect(mockFetch).toHaveBeenCalledTimes(3);
+      expect((await getOAuthTokenWithExpiry({ ...changed })).accessToken).toBe('second-token');
+      expect(mockFetch).toHaveBeenCalledTimes(2);
     },
   );
 
@@ -436,7 +432,7 @@ describe('getOAuthTokenWithExpiry', () => {
         type: 'oauth',
         grantType: 'password',
         tokenUrl: 'https://auth.example.com/mutation',
-        clientId: 'client',
+        clientId: `client-${field}`,
         clientSecret: 'first',
         username: 'user',
         password: 'first',
