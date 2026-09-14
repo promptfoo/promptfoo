@@ -450,6 +450,81 @@ describe('EvalResult', () => {
     // Regression context (PR #8688): provider credentials such as apiKey/token
     // were leaking into persisted eval results and API-visible response payloads.
     describe('credential redaction (regression for PR #8688 review)', () => {
+      it('preserves environment templates and credential-file paths in persisted provider records', async () => {
+        const env = {
+          META_API_KEY: '{{ env.META_API_KEY }}',
+          GITHUB_PAT: '{{ token }}',
+          PGPASSWORD: '{{ password }}',
+          GOOGLE_APPLICATION_CREDENTIALS: '/home/user/key.json',
+          AWS_SHARED_CREDENTIALS_FILE: '/home/user/.aws/credentials',
+          CLOUDSDK_AUTH_CREDENTIAL_FILE_OVERRIDE: '/home/user/gcloud-key.json',
+          DEPLOY_KEY: '{{ "template-literal-secret" }}',
+        };
+        const museProvider: ProviderOptions = { id: 'muse-code', config: { env } };
+        const result = await EvalResult.createFromEvaluateResult(
+          'test-eval-muse-provider-references',
+          { ...mockEvaluateResult, provider: museProvider },
+          { persist: true },
+        );
+        const retrieved = await EvalResult.findById(result.id);
+        expect(retrieved?.provider.config?.env).toEqual({ ...env, DEPLOY_KEY: '[REDACTED]' });
+        expect(JSON.stringify(retrieved?.provider)).not.toContain('template-literal-secret');
+      });
+
+      it('redacts child environment credentials from persisted provider records', async () => {
+        const museProvider: ProviderOptions = {
+          id: 'muse-code',
+          config: {
+            base_url: 'https://user:endpoint-password@meta.example/v1',
+            env: {
+              META_API_KEY: 'meta-dev-key',
+              GITHUB_PAT: 'abc123',
+              DATABASE_PASSWORD: 'short-pass',
+              PGPASSWORD: 'short-pg-pass',
+              AUTHORIZATION: 'Bearer short-auth-token',
+              SLACK_WEBHOOK_URL: 'https://hooks.slack.com/services/T000/B000/persist-webhook-token',
+              HTTPS_PROXY: 'http://proxy-user:proxy-pass@proxy.example:8080',
+              MUSE_AUTH_PATH: '/tmp/muse-auth.json',
+              PUBLIC_SETTING: 'keep-me',
+            },
+          },
+        };
+        const result = await EvalResult.createFromEvaluateResult(
+          'test-eval-redact-muse-provider',
+          {
+            ...mockEvaluateResult,
+            provider: museProvider,
+          },
+          { persist: true },
+        );
+        const retrieved = await EvalResult.findById(result.id);
+        expect(retrieved).not.toBeNull();
+        expect(retrieved?.provider.config?.base_url).toBe('[REDACTED]');
+        expect(retrieved?.provider.config?.env).toEqual({
+          META_API_KEY: '[REDACTED]',
+          GITHUB_PAT: '[REDACTED]',
+          DATABASE_PASSWORD: '[REDACTED]',
+          PGPASSWORD: '[REDACTED]',
+          AUTHORIZATION: '[REDACTED]',
+          SLACK_WEBHOOK_URL: '[REDACTED]',
+          HTTPS_PROXY: '[REDACTED]',
+          MUSE_AUTH_PATH: '/tmp/muse-auth.json',
+          PUBLIC_SETTING: 'keep-me',
+        });
+        for (const credential of [
+          'meta-dev-key',
+          'abc123',
+          'short-pass',
+          'short-pg-pass',
+          'short-auth-token',
+          'persist-webhook-token',
+          'proxy-pass',
+          'endpoint-password',
+        ]) {
+          expect(JSON.stringify(retrieved?.provider)).not.toContain(credential);
+        }
+      });
+
       it('redacts apiKey in testCase.options.provider.config', async () => {
         const evalId = 'test-eval-redact-options-provider';
         const result = await EvalResult.createFromEvaluateResult(

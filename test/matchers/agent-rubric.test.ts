@@ -104,6 +104,27 @@ describe('matchesAgentRubric', () => {
     );
   });
 
+  it('grades with a coding agent whose display ID has been overridden', async () => {
+    const { matchesAgentRubric } = await import('../../src/matchers/agent');
+    const museProvider = {
+      ...mocks.claudeProvider,
+      id: () => 'muse-comparison',
+      supportsAgenticGrading: true,
+    };
+    mocks.loadApiProvider.mockResolvedValue(museProvider);
+
+    const result = await matchesAgentRubric('Inspect the artifact', 'done', {
+      provider: 'muse-code',
+    });
+
+    expect(museProvider.callApi).toHaveBeenCalledTimes(1);
+    expect(result).toMatchObject({
+      pass: true,
+      score: 1,
+      metadata: { agentProvider: 'muse-comparison' },
+    });
+  });
+
   it('keeps reserved output and rubric vars ahead of user vars', async () => {
     const { matchesAgentRubric } = await import('../../src/matchers/agent');
 

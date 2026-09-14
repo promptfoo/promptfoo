@@ -20,6 +20,7 @@ import type { ApiProvider, ProviderResponse } from '../types/index';
 const AGENTIC_PROVIDER_IDS = [
   'anthropic:claude-agent-sdk',
   'anthropic:claude-code',
+  'muse-code',
   'openai:codex',
   'openai:codex-app-server',
   'openai:codex-desktop',
@@ -38,6 +39,9 @@ const AGENTIC_PROVIDER_IDS = [
 export function isAgenticProvider(provider: ApiProvider | null | undefined): boolean {
   if (!provider || typeof provider.id !== 'function') {
     return false;
+  }
+  if (provider.supportsAgenticGrading === true) {
+    return true;
   }
 
   let providerId: string;
@@ -58,6 +62,9 @@ export function isAgenticProvider(provider: ApiProvider | null | undefined): boo
 export function isAgenticGradingProvider(provider: ApiProvider | null | undefined): boolean {
   if (!provider || !isAgenticProvider(provider)) {
     return false;
+  }
+  if (provider.supportsAgenticGrading !== undefined) {
+    return provider.supportsAgenticGrading === true;
   }
 
   const providerId = provider.id();

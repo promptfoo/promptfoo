@@ -4890,7 +4890,7 @@ describe('OpenAICodexAppServerProvider', () => {
           command: 'cat env_dump.txt',
           cwd: process.cwd(),
           status: 'completed',
-          aggregatedOutput: 'PROMPTFOO_SYNTHETIC_SECRET=synthetic-value',
+          aggregatedOutput: 'PROMPTFOO_SYNTHETIC_VALUE=synthetic-value',
           exitCode: 0,
           durationMs: 1,
         },
@@ -4983,7 +4983,7 @@ describe('OpenAICodexAppServerProvider', () => {
       expect.arrayContaining([
         expect.objectContaining({
           type: 'command_execution',
-          aggregated_output: 'PROMPTFOO_SYNTHETIC_SECRET=synthetic-value',
+          aggregated_output: 'PROMPTFOO_SYNTHETIC_VALUE=synthetic-value',
           exit_code: 0,
         }),
         expect.objectContaining({

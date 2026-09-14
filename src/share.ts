@@ -17,7 +17,11 @@ import {
 } from './util/cloud';
 import { fetchWithProxy } from './util/fetch/index';
 import { createBlobInlineCache, inlineBlobRefsForShare } from './util/inlineBlobsForShare';
-import { redactAzureBlobSasTokens, sanitizeTracingConfigForPersistence } from './util/sanitizer';
+import {
+  redactAzureBlobSasTokens,
+  sanitizeObject,
+  sanitizeTracingConfigForPersistence,
+} from './util/sanitizer';
 
 import type Eval from './models/eval';
 import type EvalResult from './models/evalResult';
@@ -141,9 +145,16 @@ async function sendEvalRecord(
 ): Promise<string> {
   // Fetch traces for the eval
   const traces = await evalRecord.getTraces();
-  const redactedConfig = redactAzureBlobSasTokens(
-    sanitizeTracingConfigForPersistence(evalRecord.config),
-  );
+  const { tracing, ...config } = sanitizeTracingConfigForPersistence(evalRecord.config);
+  const redactedConfig = redactAzureBlobSasTokens({
+    ...sanitizeObject(config, {
+      context: 'shared eval config',
+      throwOnError: true,
+      maxDepth: Number.POSITIVE_INFINITY,
+    }),
+    // The tracing sanitizer preserves safe credential references and tenant headers.
+    ...(tracing ? { tracing } : {}),
+  }) as Eval['config'];
 
   // Preserve the verified runtime team on server-issued unified configs. For
   // other configs, use the current CLI team to avoid falling back to default.
