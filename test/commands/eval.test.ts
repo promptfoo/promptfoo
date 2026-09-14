@@ -36,6 +36,7 @@ import {
   getErrorResultIds,
   recalculatePromptMetrics,
 } from '../../src/node/retry';
+import { ClaudeCodeSDKProvider } from '../../src/providers/claude-agent-sdk';
 import { loadApiProvider } from '../../src/providers/index';
 import { providerRegistry } from '../../src/providers/providerRegistry';
 import { createShareableUrl, isSharingEnabled } from '../../src/share';
@@ -50,6 +51,7 @@ import { ConfigResolutionError, maybeReadConfig, resolveConfigs } from '../../sr
 import { writeMultipleOutputs } from '../../src/util/index';
 import { checkProviderApiKeys } from '../../src/util/provider';
 import { TokenUsageTracker } from '../../src/util/tokenUsage';
+import { mockProcessEnv } from '../util/utils';
 
 import type { ApiProvider, TestSuite, UnifiedConfig } from '../../src/types/index';
 
@@ -1485,6 +1487,36 @@ describe('evalCommand', () => {
     } finally {
       vi.mocked(checkProviderApiKeys).mockReturnValue(new Map());
       process.exitCode = previousExitCode;
+    }
+  });
+
+  it('allows prompt-only Claude SDK credentials through CLI preflight', async () => {
+    const restoreEnv = mockProcessEnv({
+      ANTHROPIC_API_KEY: undefined,
+      CLAUDE_CODE_USE_VERTEX: undefined,
+      CLAUDE_CODE_USE_BEDROCK: undefined,
+    });
+    const actual =
+      await vi.importActual<typeof import('../../src/util/provider')>('../../src/util/provider');
+    vi.mocked(checkProviderApiKeys).mockReset().mockImplementation(actual.checkProviderApiKeys);
+    const provider = new ClaudeCodeSDKProvider();
+    const prompts = [{ raw: 'Hello', label: 'test', config: { apiKey: 'prompt-only-key' } }];
+    vi.mocked(resolveConfigs).mockResolvedValueOnce({
+      config: defaultConfig,
+      testSuite: { providers: [provider], prompts },
+      basePath: path.resolve('/'),
+    });
+    vi.mocked(evaluate).mockImplementationOnce(async (_suite, record) => record as Eval);
+    try {
+      await doEval({ write: false }, defaultConfig, defaultConfigPath, {});
+      expect(evaluate).toHaveBeenCalledWith(
+        expect.objectContaining({ providers: [provider], prompts }),
+        expect.anything(),
+        expect.anything(),
+      );
+    } finally {
+      restoreEnv();
+      vi.mocked(checkProviderApiKeys).mockReset().mockReturnValue(new Map());
     }
   });
 

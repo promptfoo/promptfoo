@@ -672,15 +672,6 @@ providers:
         topP: 0.95 # Nucleus sampling parameter
       textOutputConfiguration:
         mediaType: text/plain
-      toolConfiguration: # Optional tool configuration
-        tools:
-          - toolSpec:
-              name: 'getDateTool'
-              description: 'Get information about the current date'
-              inputSchema:
-                json: '{"$schema":"http://json-schema.org/draft-07/schema#","type":"object","properties":{},"required":[]}'
-      toolUseOutputConfiguration:
-        mediaType: application/json
       # Optional audio output configuration
       audioOutputConfiguration:
         mediaType: audio/lpcm
@@ -691,6 +682,10 @@ providers:
         encoding: base64
         audioType: SPEECH
 ```
+
+`inferenceConfiguration` takes precedence over the older `inferenceConfig` and `interfaceConfig` aliases, in that order. Omitted settings use provider defaults. Legacy `interfaceConfig.max_new_tokens` and `interfaceConfig.top_p` map to `maxTokens` and `topP`.
+
+The provider does not execute tools. If the model requests a tool, it receives an explicit unsupported-tool error.
 
 Note: Nova Sonic has advanced multimodal capabilities including audio input/output, but audio input requires base64 encoded data which may be better handled through the API directly rather than in the configuration file.
 

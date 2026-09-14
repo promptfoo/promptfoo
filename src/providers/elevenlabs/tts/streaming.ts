@@ -26,7 +26,14 @@ export async function createStreamingConnection(
   });
 
   // Connect to TTS streaming endpoint
-  const endpoint = `/v1/text-to-speech/${voiceId}/stream-input?model_id=${config.modelId}`;
+  const query = new URLSearchParams({ model_id: config.modelId });
+  if (config.outputFormat) {
+    query.set('output_format', config.outputFormat);
+  }
+  if (config.seed !== undefined) {
+    query.set('seed', String(config.seed));
+  }
+  const endpoint = `/v1/text-to-speech/${voiceId}/stream-input?${query}`;
 
   // Initial configuration
   const streamConfig: Record<string, any> = {
@@ -131,18 +138,12 @@ export async function handleStreamingTTS(
 
     // Send the text for generation
     try {
-      // Split text into smaller chunks for better streaming latency
-      const sentences = text.match(/[^.!?]+[.!?]+/g) || [text];
-
-      for (const sentence of sentences) {
-        client.sendText(sentence.trim(), false);
-      }
+      client.sendText(text, false);
 
       // Send flush to signal end of input
       client.flush();
 
       logger.debug('[ElevenLabs Streaming] Text sent', {
-        totalSentences: sentences.length,
         totalLength: text.length,
       });
 
