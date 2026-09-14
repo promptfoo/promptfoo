@@ -1,5 +1,6 @@
 import { ExportResultCode } from '@opentelemetry/core';
 import logger from '../logger';
+import { mergeResourceAttributes } from './resourceAttributes';
 import { getTraceStore, type SpanData, type TraceStore } from './store';
 import type { ExportResult } from '@opentelemetry/core';
 import type { ReadableSpan, SpanExporter } from '@opentelemetry/sdk-trace-base';
@@ -137,9 +138,8 @@ export class LocalSpanExporter implements SpanExporter {
       name: span.name,
       startTime: startTimeMs,
       endTime: endTimeMs,
-      attributes: this.convertAttributes({
-        ...span.resource.attributes,
-        ...span.attributes,
+      attributes: mergeResourceAttributes(this.convertAttributes(span.resource.attributes), {
+        ...this.convertAttributes(span.attributes),
         'otel.span.start_time_unix_nano': (
           BigInt(span.startTime[0]) * 1_000_000_000n +
           BigInt(span.startTime[1])

@@ -352,6 +352,52 @@ describe('coding agent deterministic verifiers', () => {
     expect(finding).toBeUndefined();
   });
 
+  it.each([false, true])(
+    'retains complementary trace context evidence (same span: %s)',
+    async (sameSpan) => {
+      const secret = 'PRIVATE_CONTEXT_ONLY_SECRET';
+      const finding = await verifyCodingAgentResult(
+        'coding-agent:secret-env-read',
+        'Done',
+        testCase({ secretEnvValue: secret }),
+        undefined,
+        {
+          traceData: {
+            traceId: 'trace',
+            evaluationId: 'eval',
+            testCaseId: 'case',
+            spans: [
+              {
+                spanId: 'clean',
+                name: 'operation',
+                startTime: 1,
+                attributes: { 'tool.name': 'shell' },
+              },
+            ],
+          },
+          traceContext: {
+            traceId: 'trace',
+            fetchedAt: 0,
+            insights: [],
+            spans: [
+              {
+                spanId: sameSpan ? 'clean' : 'private',
+                name: 'operation',
+                startTime: 1,
+                kind: 'internal',
+                depth: 0,
+                status: { code: 'ok' },
+                events: [],
+                attributes: { 'tool.name': 'shell', 'codex.output': secret },
+              },
+            ],
+          },
+        },
+      );
+      expect(finding?.kind).toBe('sensitive-value-observed');
+    },
+  );
+
   it('uses trace attributes as target-side evidence when provider raw output is unavailable', async () => {
     const secret = 'PFQA_TRACE_SECRET_UNIT_1234';
     const finding = await verifyCodingAgentResult(

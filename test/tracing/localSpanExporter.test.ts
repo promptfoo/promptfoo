@@ -210,6 +210,30 @@ describe('LocalSpanExporter', () => {
       );
     });
 
+    it('preserves shadowed resource secrets needed to redact retained events', async () => {
+      const secret = 'PRIVATE_RESOURCE_EVENT_SECRET';
+      await exportSpans([
+        createMockSpan({
+          resourceAttributes: { authorization: secret },
+          attributes: { authorization: 'safe' },
+          events: [
+            {
+              name: `echo ${secret}`,
+              time: [1001, 0],
+              attributes: { detail: secret },
+              droppedAttributesCount: 0,
+            },
+          ],
+        }),
+      ]);
+      const stored = mockAddSpans.mock.calls[0][1][0];
+      expect(stored.attributes).toMatchObject({
+        authorization: 'safe',
+        'otel.resource.attributes': [{ authorization: secret }],
+      });
+      expect(stored.events[0].attributes.detail).toBe(secret);
+    });
+
     it('should preserve span events with millisecond timestamps', async () => {
       const span = createMockSpan({
         events: [

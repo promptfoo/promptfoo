@@ -13,6 +13,7 @@ import {
   longToNumber,
 } from './protobuf';
 import {
+  mergeResourceAttributes,
   PROMPTFOO_RESOURCE_ATTR_PARENT_SPAN_ID,
   PROMPTFOO_RESOURCE_ATTR_TRACE_ID,
 } from './resourceAttributes';
@@ -50,31 +51,6 @@ function assertUniqueAttributeKeys(attributes: { key: string }[]): void {
   if (new Set(attributes.map(({ key }) => key)).size !== attributes.length) {
     throw new SyntaxError('Invalid OTLP payload: duplicate attribute keys');
   }
-}
-
-function mergeResourceAttributes(
-  resource: Record<string, unknown>,
-  record: Record<string, unknown>,
-): Record<string, unknown> {
-  const overwritten = Object.fromEntries(
-    Object.entries(resource).filter(
-      ([key, value]) => Object.prototype.hasOwnProperty.call(record, key) && value !== record[key],
-    ),
-  );
-  return {
-    ...resource,
-    ...record,
-    // Keep overridden values available to ingestion and read-time redaction.
-    ...(Object.keys(overwritten).length > 0
-      ? {
-          'otel.resource.attributes': [
-            resource['otel.resource.attributes'],
-            record['otel.resource.attributes'],
-            overwritten,
-          ].filter((value) => value !== undefined),
-        }
-      : {}),
-  };
 }
 
 interface OTLPSpan {
@@ -1016,7 +992,7 @@ export class OTLPReceiver {
   }
 
   private parseDecodedResourceSpan(resourceSpan: DecodedResourceSpans): ParsedTrace[] {
-    const resourceAttributes = this.parseDecodedAttributes(resourceSpan.resource?.attributes);
+    const resourceAttributes = this.parseAttributes(resourceSpan.resource?.attributes, true);
     logger.debug(
       `[OtlpReceiver] Parsed ${Object.keys(resourceAttributes).length} resource attributes from protobuf`,
     );
@@ -1053,7 +1029,7 @@ export class OTLPReceiver {
         startTime: this.toMilliseconds(span.startTimeUnixNano) ?? 0,
         endTime: this.toMilliseconds(span.endTimeUnixNano),
         attributes: mergeResourceAttributes(resourceAttributes, {
-          ...this.parseDecodedAttributes(span.attributes),
+          ...this.parseAttributes(span.attributes, true),
           'otel.scope.name': scopeSpan.scope?.name,
           'otel.scope.version': scopeSpan.scope?.version,
           'otel.span.kind': spanKindName,
@@ -1071,7 +1047,7 @@ export class OTLPReceiver {
               name: event.name,
               timestamp: Number(nanos) / 1_000_000,
               timestampNanos: nanos,
-              attributes: this.parseDecodedAttributes(event.attributes),
+              attributes: this.parseAttributes(event.attributes, true),
             },
           ];
         }),
@@ -1081,95 +1057,93 @@ export class OTLPReceiver {
     };
   }
 
-  private parseDecodedAttributes(attributes?: DecodedAttribute[]): Record<string, any> {
-    if (!attributes) {
+  private parseAttributes(
+    attributes?: Array<OTLPAttribute | DecodedAttribute>,
+    decoded = false,
+  ): Record<string, any> {
+    if (attributes === undefined) {
       return {};
     }
-
-    assertUniqueAttributeKeys(attributes);
-    const result: Record<string, any> = {};
-
-    for (const attr of attributes) {
-      const value = this.parseDecodedAttributeValue(attr.value);
-      if (value !== undefined) {
-        result[attr.key] = value;
-      }
+    if (!Array.isArray(attributes)) {
+      throw new SyntaxError('Invalid OTLP payload: attributes must be an array');
     }
-
-    return result;
+    assertUniqueAttributeKeys(attributes);
+    return Object.fromEntries(
+      attributes.map((attribute) => [
+        attribute.key,
+        this.parseAttributeValue(attribute.value, decoded),
+      ]),
+    );
   }
 
-  private parseDecodedAttributeValue(value: DecodedAttribute['value']): any {
-    if (!value) {
-      return undefined;
+  private parseAttributeValue(
+    value: OTLPAttribute['value'] | DecodedAttribute['value'],
+    decoded = false,
+  ): any {
+    const invalid = () => new SyntaxError('Invalid OTLP payload: malformed attribute value');
+    if (!value || typeof value !== 'object' || Array.isArray(value)) {
+      throw invalid();
+    }
+    const fields = Object.keys(value).filter(
+      (key) => value[key as keyof typeof value] !== undefined,
+    );
+    if (fields.length === 0) {
+      // Empty AnyValue is valid OTLP. Keep its presence so semantic evidence is unknown, not absent.
+      return null;
+    }
+    if (fields.length !== 1) {
+      throw invalid();
     }
     if (value.stringValue !== undefined) {
-      return value.stringValue;
-    }
-    if (value.intValue !== undefined) {
-      const number = Number(value.intValue);
-      return Number.isSafeInteger(number) ? number : String(value.intValue);
-    }
-    if (value.doubleValue !== undefined) {
-      return value.doubleValue;
-    }
-    if (value.boolValue !== undefined) {
-      return value.boolValue;
-    }
-    if (value.bytesValue !== undefined) {
-      return Buffer.from(value.bytesValue).toString('base64');
-    }
-    if (value.arrayValue?.values) {
-      return value.arrayValue.values.map((v) => this.parseDecodedAttributeValue(v));
-    }
-    if (value.kvlistValue?.values) {
-      return this.parseDecodedAttributes(value.kvlistValue.values);
-    }
-    return undefined;
-  }
-
-  private parseAttributes(attributes?: OTLPAttribute[]): Record<string, any> {
-    if (!attributes) {
-      return {};
-    }
-
-    assertUniqueAttributeKeys(attributes);
-    const result: Record<string, any> = {};
-
-    for (const attr of attributes) {
-      const value = this.parseAttributeValue(attr.value);
-      if (value !== undefined) {
-        result[attr.key] = value;
+      if (typeof value.stringValue !== 'string') {
+        throw invalid();
       }
-    }
-
-    return result;
-  }
-
-  private parseAttributeValue(value: OTLPAttribute['value']): any {
-    if (value.stringValue !== undefined) {
       return value.stringValue;
     }
     if (value.bytesValue !== undefined) {
-      return value.bytesValue;
+      if (
+        decoded ? !(value.bytesValue instanceof Uint8Array) : typeof value.bytesValue !== 'string'
+      ) {
+        throw invalid();
+      }
+      return decoded
+        ? Buffer.from(value.bytesValue as Uint8Array).toString('base64')
+        : value.bytesValue;
     }
     if (value.intValue !== undefined) {
-      const number = Number(value.intValue);
-      return Number.isSafeInteger(number) ? number : String(value.intValue);
+      const text = String(value.intValue);
+      if (!/^-?\d+$/.test(text)) {
+        throw invalid();
+      }
+      const number = Number(text);
+      return Number.isSafeInteger(number) ? number : text;
     }
     if (value.doubleValue !== undefined) {
+      if (typeof value.doubleValue !== 'number' || !Number.isFinite(value.doubleValue)) {
+        throw invalid();
+      }
       return value.doubleValue;
     }
     if (value.boolValue !== undefined) {
+      if (typeof value.boolValue !== 'boolean') {
+        throw invalid();
+      }
       return value.boolValue;
     }
-    if (value.arrayValue?.values) {
-      return value.arrayValue.values.map((v) => this.parseAttributeValue(v));
+    if (value.arrayValue !== undefined || value.kvlistValue !== undefined) {
+      const container = value.arrayValue ?? value.kvlistValue;
+      if (!container || typeof container !== 'object' || Array.isArray(container)) {
+        throw invalid();
+      }
+      const values = container.values ?? [];
+      if (!Array.isArray(values)) {
+        throw invalid();
+      }
+      return value.arrayValue === undefined
+        ? this.parseAttributes(values as Array<OTLPAttribute | DecodedAttribute>, decoded)
+        : values.map((entry) => this.parseAttributeValue(entry, decoded));
     }
-    if (value.kvlistValue?.values) {
-      return this.parseAttributes(value.kvlistValue.values);
-    }
-    return undefined;
+    throw invalid();
   }
 
   private convertId(id: string, expectedHexLength: number): string {

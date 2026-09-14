@@ -7,33 +7,67 @@ import {
 import type { RedteamGradingContext } from '../../../src/redteam/grading/types';
 
 describe('agentic run observations', () => {
-  it.each([false, true])('uses one trace source (raw spans present: %s)', (rawPresent) => {
-    const span = {
-      spanId: 'tool',
-      name: 'operation',
-      startTime: 0,
-      attributes: { 'tool.name': 'update_seat' },
-    };
-    const gradingContext: RedteamGradingContext = {
-      traceData: {
-        traceId: 'trace',
-        evaluationId: 'eval',
-        testCaseId: 'case',
-        spans: rawPresent ? [span] : [],
-      },
-      traceContext: {
-        traceId: 'ABCDEF0123456789ABCDEF0123456789',
-        fetchedAt: 0,
-        insights: [],
-        spans: [{ ...span, kind: 'internal', depth: 0, status: { code: 'ok' }, events: [] }],
-      },
-    };
-    gradingContext.traceData!.traceId = 'abcdef0123456789abcdef0123456789';
-    const calls = observationsFromGradingContext({ gradingContext }).filter(
-      (item) => item.kind === 'tool_call',
-    );
-    expect(calls).toHaveLength(1);
-    expect(calls[0].tool).toBe('update_seat');
+  it.each([false, true])(
+    'does not duplicate matching trace evidence (raw spans present: %s)',
+    (rawPresent) => {
+      const span = {
+        spanId: 'tool',
+        name: 'operation',
+        startTime: 0,
+        attributes: { 'tool.name': 'update_seat' },
+      };
+      const gradingContext: RedteamGradingContext = {
+        traceData: {
+          traceId: 'trace',
+          evaluationId: 'eval',
+          testCaseId: 'case',
+          spans: rawPresent ? [span] : [],
+        },
+        traceContext: {
+          traceId: 'ABCDEF0123456789ABCDEF0123456789',
+          fetchedAt: 0,
+          insights: [],
+          spans: [{ ...span, kind: 'internal', depth: 0, status: { code: 'ok' }, events: [] }],
+        },
+      };
+      gradingContext.traceData!.traceId = 'abcdef0123456789abcdef0123456789';
+      const calls = observationsFromGradingContext({ gradingContext }).filter(
+        (item) => item.kind === 'tool_call',
+      );
+      expect(calls).toHaveLength(1);
+      expect(calls[0].tool).toBe('update_seat');
+    },
+  );
+
+  it('rejects contradictory attributes instead of dropping either trace source', () => {
+    const span = { spanId: 'tool', name: 'operation', startTime: 0 };
+    expect(() =>
+      observationsFromGradingContext({
+        gradingContext: {
+          traceData: {
+            traceId: 'trace',
+            evaluationId: 'eval',
+            testCaseId: 'case',
+            spans: [{ ...span, attributes: { 'tool.output': 'clean' } }],
+          },
+          traceContext: {
+            traceId: 'trace',
+            fetchedAt: 0,
+            insights: [],
+            spans: [
+              {
+                ...span,
+                kind: 'internal',
+                depth: 0,
+                status: { code: 'ok' },
+                events: [],
+                attributes: { 'tool.output': 'private' },
+              },
+            ],
+          },
+        },
+      }),
+    ).toThrow('conflicting attributes');
   });
 
   it.each(['span', 'event'])(

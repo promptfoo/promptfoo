@@ -1,4 +1,5 @@
 import logger from '../../logger';
+import { mergeResourceAttributes } from '../resourceAttributes';
 import {
   fetchWithProxy,
   MAX_TRACE_RESPONSE_BYTES,
@@ -237,8 +238,7 @@ function transformSpan(
     name: span.name,
     startTime,
     endTime,
-    attributes: {
-      ...resourceAttributes,
+    attributes: mergeResourceAttributes(resourceAttributes, {
       ...attributesToRecord(span.attributes),
       'otel.span.start_time_unix_nano': span.startTimeUnixNano,
       'otel.span.end_time_unix_nano': endTimeUnixNano,
@@ -250,7 +250,7 @@ function transformSpan(
       ...(typeof span.kind === 'string' && {
         'otel.span.kind': span.kind.replace(/^SPAN_KIND_/i, '').toLowerCase(),
       }),
-    },
+    }),
     statusCode: normalizeStatusCode(span.status?.code),
     statusMessage: span.status?.message,
     events: Array.isArray(span.events)

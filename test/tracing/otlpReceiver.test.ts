@@ -503,6 +503,17 @@ describe('OTLPReceiver', () => {
     },
   );
 
+  it.each([false, true])(
+    'preserves an empty AnyValue as unknown evidence (decoded: %s)',
+    (decoded) => {
+      const attributes = (receiver as any).parseAttributes(
+        [{ key: 'guardrail.triggered', value: {} }],
+        decoded,
+      );
+      expect(attributes).toEqual({ 'guardrail.triggered': null });
+    },
+  );
+
   describe('Health check', () => {
     it.each(['resource', 'span', 'log', 'nested'])(
       'rejects null %s attribute entries before storage',
@@ -752,7 +763,7 @@ describe('OTLPReceiver', () => {
     });
 
     it.each([{ arrayValue: { values: [null] } }])(
-      'isolates malformed nested event attributes: %j',
+      'rejects malformed nested event attributes without dropping evidence: %j',
       async (value) => {
         await request(receiver.getApp())
           .post('/v1/traces')
@@ -782,10 +793,8 @@ describe('OTLPReceiver', () => {
               },
             ],
           })
-          .expect(200);
-        expect(persistSpans.mock.calls[0][1][0].events).toEqual([
-          { name: 'valid tool', timestamp: 1200, timestampNanos: '1200000000', attributes: {} },
-        ]);
+          .expect(400);
+        expect(persistSpans).not.toHaveBeenCalled();
       },
     );
 
@@ -2818,37 +2827,36 @@ describe('OTLPReceiver', () => {
       expect(storedBody.endsWith('... [truncated]')).toBe(true);
     });
 
-    it('skips a malformed record but keeps good ones in the same batch', async () => {
-      const req = makeLogsRequest([
-        {
-          // Missing attribute value shape — triggers a throw inside parseAttributes.
-          timeUnixNano: '1700000000000000000',
-          traceId: hexTraceId,
-          spanId: hexParentSpanId,
-          attributes: [{ key: 'broken' } as any],
-        },
-        {
-          timeUnixNano: '1700000000100000000',
-          traceId: hexTraceId,
-          spanId: hexParentSpanId,
-          attributes: [{ key: 'event.name', value: { stringValue: 'claude_code.tool.execution' } }],
-        },
-      ]);
+    it.each([undefined, null, { boolValue: false, stringValue: 'allowed' }])(
+      'rejects malformed log values without losing failed verifier evidence: %j',
+      async (value) => {
+        const req = makeLogsRequest([
+          {
+            // Missing attribute value shape — triggers a throw inside parseAttributes.
+            timeUnixNano: '1700000000000000000',
+            traceId: hexTraceId,
+            spanId: hexParentSpanId,
+            severityNumber: 17,
+            attributes: [{ key: 'broken', value } as any],
+          },
+          {
+            timeUnixNano: '1700000000100000000',
+            traceId: hexTraceId,
+            spanId: hexParentSpanId,
+            attributes: [
+              { key: 'event.name', value: { stringValue: 'claude_code.tool.execution' } },
+            ],
+          },
+        ]);
 
-      await request(receiver.getApp())
-        .post('/v1/logs')
-        .set('Content-Type', 'application/json')
-        .send(req)
-        .expect(200);
-
-      // Either both survived (because parseAttributes was lenient) or the bad
-      // one was skipped while the good one survived — both acceptable. The
-      // failure mode we're guarding against is "bad record → 500 → whole
-      // batch dropped", verified by the 200 status.
-      expect(persistSpans).toHaveBeenCalled();
-      const [, spans] = persistSpans.mock.calls[0];
-      expect((spans as any[]).some((s: any) => s.name === 'claude_code.tool.execution')).toBe(true);
-    });
+        await request(receiver.getApp())
+          .post('/v1/logs')
+          .set('Content-Type', 'application/json')
+          .send(req)
+          .expect(400);
+        expect(persistSpans).not.toHaveBeenCalled();
+      },
+    );
 
     it('treats a base64-encoded all-zero span_id as no parent linkage', async () => {
       const req = makeLogsRequest([

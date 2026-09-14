@@ -1,3 +1,5 @@
+import { isDeepStrictEqual } from 'node:util';
+
 import { TOOL_NAME_ATTRIBUTE_KEYS } from '../../tracing/toolAttributes';
 import { normalizePluginId, parseEvidenceCandidates, requireVisibleEvidenceIdentity } from './json';
 
@@ -350,7 +352,7 @@ export function hasErrorStatus(span: TraceLikeSpan): boolean {
   const attributes = span.attributes ?? {};
   const statusCode = span.statusCode ?? span.status?.code;
   return (
-    statusCode === 2 ||
+    Number(statusCode) === 2 ||
     Number(attributes['otel.log.severity_number']) >= 17 ||
     [
       statusCode,
@@ -359,6 +361,17 @@ export function hasErrorStatus(span: TraceLikeSpan): boolean {
       attributes['otel.log.severity_text'],
     ].some((value) => /^(?:STATUS_CODE_)?(?:ERROR|FATAL)[1-4]?$/i.test(String(value)))
   );
+}
+
+function controlOutcome(attributes: Record<string, unknown>, keys: string[]): string | undefined {
+  const outcomes = Object.entries(attributes)
+    .filter(([key, value]) => value !== undefined && keys.includes(key.toLowerCase()))
+    .map(([, value]) =>
+      isAllowedControlOutcome(value)
+        ? 'allowed'
+        : (stringifyValue(value)?.trim().toLowerCase() ?? 'unknown'),
+    );
+  return new Set(outcomes).size > 1 ? 'unknown' : outcomes[0];
 }
 
 function controlObservationFromSpan(
@@ -371,35 +384,28 @@ function controlObservationFromSpan(
   const spanType = stringifyValue(attributes['openai.agents.span_type'])?.toLowerCase();
   const guardrailDecision = getAttribute(attributes, ['guardrails.decision', 'guardrail.decision']);
   const failed = hasErrorStatus(span);
+  const guardrailNames = Object.entries(attributes)
+    .filter(([key]) => key.toLowerCase() === 'guardrail.name')
+    .map(([, value]) => value);
 
   if (
     name.includes('guardrail') ||
     spanType === 'guardrail' ||
-    Boolean(attributes['guardrail.name']) ||
+    guardrailNames.length > 0 ||
     guardrailDecision !== undefined
   ) {
-    const outcomeKeys = [
+    const explicitOutcome = controlOutcome(attributes, [
       'guardrails.decision',
       'guardrail.decision',
       'guardrail.outcome',
       'codex.status',
-    ];
-    const outcomes = Object.entries(attributes)
-      .filter(([key, value]) => value !== undefined && outcomeKeys.includes(key.toLowerCase()))
-      .map(([, value]) =>
-        isAllowedControlOutcome(value)
-          ? 'allowed'
-          : (stringifyValue(value)?.trim().toLowerCase() ?? 'unknown'),
-      );
+    ]);
     const triggered = Object.entries(attributes)
       .filter(([key, value]) => key.toLowerCase() === 'guardrail.triggered' && value !== undefined)
       .map(([, value]) => stringifyValue(value)?.trim().toLowerCase() ?? '');
     const hasSemanticAttribute =
-      spanType === 'guardrail' || Boolean(attributes['guardrail.name']) || triggered.length > 0;
-    const outcome =
-      new Set(outcomes).size > 1
-        ? 'unknown'
-        : (outcomes[0] ?? (hasSemanticAttribute ? 'allowed' : undefined));
+      spanType === 'guardrail' || guardrailNames.length > 0 || triggered.length > 0;
+    const outcome = explicitOutcome ?? (hasSemanticAttribute ? 'allowed' : undefined);
     return {
       kind: 'guardrail',
       callId: getToolCallId(attributes),
@@ -408,7 +414,9 @@ function controlObservationFromSpan(
       location,
       outcome: failed
         ? 'error'
-        : triggered.some((value) => !['true', '1', 'yes', 'false', '0', 'no'].includes(value))
+        : guardrailNames.some((value) => !getString(value)) ||
+            new Set(guardrailNames).size > 1 ||
+            triggered.some((value) => !['true', '1', 'yes', 'false', '0', 'no'].includes(value))
           ? 'unknown'
           : triggered.some((value) => ['true', '1', 'yes'].includes(value))
             ? 'blocked'
@@ -433,7 +441,7 @@ function controlObservationFromSpan(
       endTimestamp: span.endTime,
       tool: getToolNameFromAttributes(attributes),
       location,
-      outcome: failed ? 'error' : stringifyValue(attributes['approval.outcome']),
+      outcome: failed ? 'error' : controlOutcome(attributes, ['approval.outcome']),
       parentSpanId: span.parentSpanId,
       source,
       spanId: span.spanId,
@@ -1007,7 +1015,59 @@ export function getGradingTrace(gradingContext?: RedteamGradingContext) {
   ) {
     throw new Error('Cannot grade execution evidence: trace IDs do not match');
   }
-  return traceData?.spans.length ? traceData : (traceContext ?? traceData);
+  if (!traceData?.spans.length || !traceContext?.spans.length) {
+    return traceData?.spans.length ? traceData : (traceContext ?? traceData);
+  }
+  const spans: TraceLikeSpan[] = [...traceData.spans];
+  const indices = new Map(spans.map((span, index) => [span.spanId, index]));
+  for (const incoming of traceContext.spans) {
+    const index = indices.get(incoming.spanId);
+    if (index === undefined) {
+      indices.set(incoming.spanId, spans.length);
+      spans.push(incoming);
+      continue;
+    }
+    const original = spans[index];
+    const attributes = { ...original.attributes };
+    for (const [key, value] of Object.entries(incoming.attributes ?? {})) {
+      if (attributes[key] !== undefined && !isDeepStrictEqual(attributes[key], value)) {
+        throw new Error(
+          'Cannot grade execution evidence: conflicting attributes for the same span',
+        );
+      }
+      attributes[key] = value;
+    }
+    for (const key of ['name', 'parentSpanId', 'startTime', 'endTime'] as const) {
+      if (
+        original[key] !== undefined &&
+        incoming[key] !== undefined &&
+        original[key] !== incoming[key]
+      ) {
+        throw new Error('Cannot grade execution evidence: conflicting fields for the same span');
+      }
+    }
+    const events = [...(original.events ?? [])];
+    for (const [eventIndex, event] of incoming.events.entries()) {
+      if (
+        events[eventIndex] &&
+        !isDeepStrictEqual(
+          { ...events[eventIndex], attributes: events[eventIndex].attributes ?? {} },
+          event,
+        )
+      ) {
+        throw new Error('Cannot grade execution evidence: conflicting events for the same span');
+      }
+      events[eventIndex] = event;
+    }
+    spans[index] = {
+      ...incoming,
+      ...original,
+      attributes,
+      events,
+      statusCode: hasErrorStatus(original) || hasErrorStatus(incoming) ? 2 : original.statusCode,
+    };
+  }
+  return { ...traceData, spans };
 }
 
 export function observationsFromGradingContext({

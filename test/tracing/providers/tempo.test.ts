@@ -81,6 +81,46 @@ describe('TempoProvider', () => {
     mockedFetch.mockImplementation(async () => response(traceResponse));
   });
 
+  it('preserves shadowed resource secrets needed to redact retained events', async () => {
+    const secret = 'PRIVATE_TEMPO_RESOURCE_EVENT_SECRET';
+    const span = traceResponse.batches[0].scopeSpans[0].spans[0];
+    mockedFetch.mockResolvedValueOnce(
+      response({
+        batches: [
+          {
+            resource: { attributes: [{ key: 'authorization', value: { stringValue: secret } }] },
+            scopeSpans: [
+              {
+                spans: [
+                  {
+                    ...span,
+                    attributes: [{ key: 'authorization', value: { stringValue: 'safe' } }],
+                    events: [
+                      {
+                        name: `echo ${secret}`,
+                        timeUnixNano: '1704067200500000000',
+                        attributes: [{ key: 'detail', value: { stringValue: secret } }],
+                      },
+                    ],
+                  },
+                ],
+              },
+            ],
+          },
+        ],
+      }),
+    );
+    const result = await new TempoProvider({
+      id: 'tempo',
+      endpoint: 'http://tempo:3200',
+    }).fetchTrace(TRACE_ID);
+    expect(result?.spans[0].attributes).toMatchObject({
+      authorization: 'safe',
+      'otel.resource.attributes': [{ authorization: secret }],
+    });
+    expect(result?.spans[0].events?.[0].attributes?.detail).toBe(secret);
+  });
+
   it.each(['coerced', 'missing-value'])(
     'rejects ambiguous event keys with %s entries',
     async (kind) => {
