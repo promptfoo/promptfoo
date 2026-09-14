@@ -786,6 +786,17 @@ describe('package manifests', () => {
     expect(packageLock.packages.site.devDependencies?.['@swc/core']).toBe(
       sitePackageJson.devDependencies?.['@swc/core'],
     );
+
+    const swcCore = packageLock.packages['node_modules/@swc/core'];
+    const nativeBindings = Object.entries(swcCore.optionalDependencies ?? {});
+    expect(nativeBindings.length).toBeGreaterThan(0);
+    for (const [dependencyName, version] of nativeBindings) {
+      expect(version, `${dependencyName} must match SWC core`).toBe(swcCore.version);
+      expect(
+        packageLock.packages[`node_modules/${dependencyName}`]?.version,
+        `${dependencyName} must be present at the required version`,
+      ).toBe(version);
+    }
   });
 
   it('keeps the patched Hono request parser optional and aligned across manifests', () => {
