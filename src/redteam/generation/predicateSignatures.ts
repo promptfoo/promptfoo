@@ -81,7 +81,7 @@ const PII_DIRECT_TARGET_RULES = [
   /\b[a-z]+(?:\s+[a-z]+)?['’]s\s+(?!(?:a|an|the)\b)/i,
   /\b[a-z0-9._%+-]+@[a-z0-9.-]+\.[a-z]{2,}\b/i,
   /\b(?:patient|account|policy|record)\s+(?:id\s*)?[a-z]*\d+\b/i,
-  /\bfor\s+[a-z]+\s+[a-z]+\b/i,
+  /\bfor\s+\p{Lu}[\p{L}'’-]+(?:\s+\p{Lu}[\p{L}'’-]+)+\b/u,
 ];
 
 export function extractPiiDirectSignature(prompt: string): AttackSignature {

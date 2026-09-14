@@ -23,6 +23,10 @@ function formatDuration(durationMs: number | undefined): string {
 function formatSpan(span: TraceSpan): string {
   const parts = [`[${formatDuration(span.durationMs)}] ${span.kind || 'unspecified'}`];
 
+  if (span.name) {
+    parts.push(`operation=${span.name.slice(0, 80)}`);
+  }
+
   const tool = getToolNameFromAttributes(span.attributes);
   if (tool) {
     parts.push(`tool=${tool}`);

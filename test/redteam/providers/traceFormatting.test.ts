@@ -60,6 +60,7 @@ describe('formatTraceSummary', () => {
       ],
     };
 
+    expect(formatTraceSummary(trace)).toContain('operation=chat');
     expect(formatTraceSummary(trace)).not.toContain('model=gpt-4.1-mini');
   });
 });
