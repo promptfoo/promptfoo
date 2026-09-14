@@ -257,6 +257,17 @@ describe('pure assertion registry', () => {
     }
   });
 
+  it('rejects missing and non-serializable pure outputs', async () => {
+    for (const output of [undefined, () => {}, Symbol('output')]) {
+      await expect(
+        runPureAssertion({
+          assertion: { type: 'equals', value: '' },
+          providerResponse: { output },
+        }),
+      ).rejects.toThrow('Pure assertions require a string or JSON-serializable output');
+    }
+  });
+
   it('treats template syntax as literal content after host rendering', async () => {
     await expect(
       runPureAssertion({
@@ -480,7 +491,7 @@ describe('assertion registry injection', () => {
       }),
     );
     const registry = new AssertionRegistry<AssertionParams, GradingResult>([
-      { name: 'fake', handlers: { equals: handler } },
+      { name: 'fake', requiresTrace: true, handlers: { equals: handler } },
     ]);
 
     await runAssertions({
@@ -491,6 +502,26 @@ describe('assertion registry injection', () => {
     });
 
     expect(handler.mock.calls[0][0].assertionValueContext.trace).toEqual(trace);
+  });
+
+  it('does not preload traces for injected registries without trace capability', async () => {
+    const registry = new AssertionRegistry<AssertionParams, GradingResult>([
+      {
+        name: 'fake',
+        handlers: {
+          equals: ({ assertion }) => ({ pass: true, score: 1, reason: 'ok', assertion }),
+        },
+      },
+    ]);
+
+    await runAssertions({
+      providerResponse: { output: 'actual output' },
+      registry,
+      traceId: 'trace-1',
+      test: { assert: [{ type: 'equals', value: 'ignored' }] } as AtomicTestCase,
+    });
+
+    expect(traceStoreMocks.getTrace).not.toHaveBeenCalled();
   });
 
   it('preserves the unknown assertion error message', async () => {

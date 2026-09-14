@@ -7,6 +7,7 @@ interface RegisteredPrefixHandler<TParams, TResult> {
 }
 
 export class AssertionRegistry<TParams, TResult> {
+  private traceRequired = false;
   private readonly handlers = new Map<
     string,
     { handler: AssertionHandler<TParams, TResult>; packName: string }
@@ -27,6 +28,10 @@ export class AssertionRegistry<TParams, TResult> {
     return this.prefixes.map(({ prefix }) => prefix);
   }
 
+  get requiresTrace(): boolean {
+    return this.traceRequired;
+  }
+
   resolve(type: string): AssertionHandler<TParams, TResult> | undefined {
     const exact = this.handlers.get(type);
     if (exact) {
@@ -45,6 +50,8 @@ export class AssertionRegistry<TParams, TResult> {
   }
 
   private registerPack(pack: AssertionCapabilityPack<TParams, TResult>): void {
+    this.traceRequired ||= pack.requiresTrace === true;
+
     for (const [type, handler] of Object.entries(pack.handlers ?? {})) {
       if (!handler) {
         continue;
