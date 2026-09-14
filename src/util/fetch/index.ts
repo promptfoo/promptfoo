@@ -12,7 +12,7 @@ import { getRequestTimeoutMs } from '../../providers/shared';
 import { parseRateLimitHeaders, parseRetryAfter } from '../../scheduler/headerParser';
 import invariant from '../../util/invariant';
 import { sleep } from '../../util/time';
-import { sanitizeUrl } from '../sanitizer';
+import { sanitizeUrl, sanitizeUrlForLogging } from '../sanitizer';
 import {
   extractRateLimitErrorCode,
   HttpRateLimitError,
@@ -21,6 +21,7 @@ import {
 } from './errors';
 import { monkeyPatchFetch } from './monkeyPatchFetch';
 import { getFetchRetryContextMaxRetries } from './retryContext';
+import { stripDecompressionHeaders } from './stripDecompressionHeaders';
 
 import type { FetchOptions } from './types';
 
@@ -84,7 +85,9 @@ function getOrCreateAgent(tlsOptions: ConnectionOptions): Dispatcher {
     keepAliveMaxTimeout: 60_000,
     connections: concurrency,
     connect: tlsOptions,
-  }).compose(interceptors.decompress({ skipErrorResponses: false }));
+  })
+    .compose(interceptors.decompress({ skipErrorResponses: false }))
+    .compose(stripDecompressionHeaders());
   cachedAgents.set(concurrency, agent);
   return agent;
 }
@@ -108,7 +111,9 @@ function getOrCreateProxyAgent(proxyUrl: string, tlsOptions: ConnectionOptions):
     keepAliveTimeout: 30_000,
     keepAliveMaxTimeout: 60_000,
     connections: concurrency,
-  }).compose(interceptors.decompress({ skipErrorResponses: false }));
+  })
+    .compose(interceptors.decompress({ skipErrorResponses: false }))
+    .compose(stripDecompressionHeaders());
   cachedProxyAgents.set(cacheKey, agent);
   return agent;
 }
@@ -200,27 +205,35 @@ export async function fetchWithProxy(
     try {
       const parsedUrl = new URL(url);
       if (parsedUrl.username || parsedUrl.password) {
-        if (
-          finalOptions.headers &&
-          'Authorization' in (finalOptions.headers as Record<string, string>)
-        ) {
+        const headers = (finalOptions.headers ?? {}) as Record<string, string>;
+        // Header names are case-insensitive, and a Headers instance or array lowercases them.
+        // Matching only `Authorization` would add a second value that servers receive combined.
+        if (Object.keys(headers).some((name) => name.toLowerCase() === 'authorization')) {
           logger.warn(
             'Both URL credentials and Authorization header present - URL credentials will be ignored',
           );
         } else {
-          // Move credentials to Authorization header
-          const username = parsedUrl.username || '';
-          const password = parsedUrl.password || '';
-          const credentials = Buffer.from(`${username}:${password}`).toString('base64');
+          // Userinfo percent-encodes reserved characters, and HTTP clients decode it before
+          // Basic auth, so a password written as p%40ss must authenticate as p@ss. A malformed
+          // escape has no decoding and stays as written.
+          const credentials = [parsedUrl.username, parsedUrl.password]
+            .map((part) => {
+              try {
+                return decodeURIComponent(part);
+              } catch {
+                return part;
+              }
+            })
+            .join(':');
           finalOptions.headers = {
-            ...(finalOptions.headers as Record<string, string>),
-            Authorization: `Basic ${credentials}`,
+            ...headers,
+            Authorization: `Basic ${Buffer.from(credentials).toString('base64')}`,
           };
         }
         parsedUrl.username = '';
         parsedUrl.password = '';
         finalUrl = parsedUrl.toString();
-        finalUrlString = finalUrl.toString();
+        finalUrlString = finalUrl;
       }
     } catch (e) {
       logger.debug(`URL parsing failed in fetchWithProxy: ${e}`);
@@ -344,22 +357,21 @@ export function computeRateLimitWaitMs(response: Response): number {
     response.headers.get('x-ratelimit-reset-requests') ||
     response.headers.get('x-ratelimit-reset-tokens');
 
-  let waitTime = 60_000;
-
   if (openaiReset) {
     const parsedHeaders = parseRateLimitHeaders(Object.fromEntries(response.headers.entries()));
     if (parsedHeaders.resetAt !== undefined) {
-      waitTime = Math.max(parsedHeaders.resetAt - Date.now(), 0);
+      return Math.max(parsedHeaders.resetAt - Date.now(), 0);
     }
-  } else if (rateLimitReset) {
-    const resetTime = new Date(Number.parseInt(rateLimitReset) * 1000);
-    const now = new Date();
-    waitTime = Math.max(resetTime.getTime() - now.getTime() + 1000, 0);
-  } else if (retryAfter) {
-    waitTime = parseRetryAfter(retryAfter) ?? waitTime;
   }
 
-  return waitTime;
+  if (rateLimitReset) {
+    const resetAt = Number.parseInt(rateLimitReset, 10) * 1000;
+    if (Number.isFinite(resetAt) && resetAt >= 0) {
+      return Math.max(resetAt - Date.now() + 1000, 0);
+    }
+  }
+
+  return retryAfter ? (parseRetryAfter(retryAfter) ?? 60_000) : 60_000;
 }
 
 /**
@@ -373,14 +385,49 @@ const RATE_LIMIT_JITTER_MS = 1000;
  * uniform random jitter to avoid synchronized retry storms when many
  * concurrent requests hit the same rate limit.
  */
-export async function handleRateLimit(response: Response): Promise<void> {
+function getAbortError(signal: AbortSignal): Error {
+  const reason = signal.reason;
+  if (reason instanceof Error && reason.name === 'AbortError') {
+    return reason;
+  }
+  const error = new Error(reason instanceof Error ? reason.message : 'Request was aborted');
+  error.name = 'AbortError';
+  return error;
+}
+
+async function sleepWithAbort(waitTime: number, signal?: AbortSignal | null): Promise<void> {
+  if (!signal) {
+    await sleep(waitTime);
+    return;
+  }
+  if (signal.aborted) {
+    throw getAbortError(signal);
+  }
+  await new Promise<void>((resolve, reject) => {
+    const timeout = setTimeout(() => {
+      signal.removeEventListener('abort', onAbort);
+      resolve();
+    }, waitTime);
+    const onAbort = () => {
+      clearTimeout(timeout);
+      signal.removeEventListener('abort', onAbort);
+      reject(getAbortError(signal));
+    };
+    signal.addEventListener('abort', onAbort, { once: true });
+  });
+}
+
+export async function handleRateLimit(
+  response: Response,
+  signal?: AbortSignal | null,
+): Promise<void> {
   const waitTime = computeRateLimitWaitMs(response);
   const jitter = Math.floor(Math.random() * RATE_LIMIT_JITTER_MS);
   const totalWait = waitTime + jitter;
   logger.debug(
     `Rate limited, waiting ${totalWait}ms (base ${waitTime}ms + ${jitter}ms jitter) before retry`,
   );
-  await sleep(totalWait);
+  await sleepWithAbort(totalWait, signal);
 }
 
 /**
@@ -448,7 +495,7 @@ async function peekRateLimitBody(
  * in that path we consult `Content-Length` first to skip materializing
  * very large bodies entirely.
  */
-async function readBoundedText(response: Response, maxBytes: number): Promise<string> {
+export async function readBoundedText(response: Response, maxBytes: number): Promise<string> {
   if (!response.body) {
     const contentLength = Number.parseInt(response.headers?.get?.('content-length') ?? '', 10);
     if (Number.isFinite(contentLength) && contentLength > maxBytes) {
@@ -544,11 +591,24 @@ export type { FetchOptions } from './types';
  * `X-RateLimit-Remaining=0` 200 case). Otherwise sleeps via
  * {@link handleRateLimit} and returns so the caller can `continue` the loop.
  */
+/**
+ * Returns a string form of a {@link RequestInfo} suitable for log output.
+ * Strips basic-auth credentials and known sensitive query parameters (api_key,
+ * token, password, signature, …) via {@link sanitizeUrl} so providers that
+ * embed credentials in the URL (e.g. n8n webhooks, HTTP providers with
+ * `?api_key=…`) do not leak them into retry diagnostics.
+ */
+function urlForLog(url: RequestInfo): string {
+  const raw = typeof url === 'string' ? url : url.url;
+  return sanitizeUrlForLogging(raw);
+}
+
 async function handleRateLimitedResponse(
   response: Response,
   url: RequestInfo,
   attempt: number,
   maxRetries: number,
+  signal?: AbortSignal | null,
 ): Promise<void> {
   // Only the 429 path produces a structured error. A 200 OK with
   // `X-RateLimit-Remaining=0` is a soft hint that we're approaching a limit —
@@ -559,13 +619,14 @@ async function handleRateLimitedResponse(
   const { body, code } = isHardRateLimit
     ? await peekRateLimitBody(response)
     : { body: undefined, code: undefined };
+  const safeUrl = urlForLog(url);
 
   // Hard quota codes (e.g. insufficient_quota) won't resolve on retry. Fail
   // fast with a structured error so the caller can stop instead of amplifying
   // load against an exhausted account.
   if (isHardRateLimit && isHardQuotaCode(code)) {
     logger.debug(
-      `Quota exhausted on URL ${url}: HTTP ${response.status} (code: ${code}), failing fast.`,
+      `Quota exhausted on URL ${safeUrl}: HTTP ${response.status} (code: ${code}), failing fast.`,
     );
     throw buildHttpRateLimitError(response, body, code);
   }
@@ -575,7 +636,7 @@ async function handleRateLimitedResponse(
       // No retries remain: throw a structured error instead of a bare string
       // so callers can read Retry-After / reset / code without re-parsing.
       logger.debug(
-        `Rate limited on URL ${url}: HTTP ${response.status} ${response.statusText}, attempt ${attempt + 1}/${maxRetries + 1}, no retries remain.`,
+        `Rate limited on URL ${safeUrl}: HTTP ${response.status} ${response.statusText}, attempt ${attempt + 1}/${maxRetries + 1}, no retries remain.`,
       );
       throw buildHttpRateLimitError(response, body, code);
     }
@@ -585,19 +646,21 @@ async function handleRateLimitedResponse(
   }
 
   logger.debug(
-    `Rate limited on URL ${url}: HTTP ${response.status} ${response.statusText}, attempt ${attempt + 1}/${maxRetries + 1}, waiting before retry...`,
+    `Rate limited on URL ${safeUrl}: HTTP ${response.status} ${response.statusText}, attempt ${attempt + 1}/${maxRetries + 1}, waiting before retry...`,
   );
-  await handleRateLimit(response);
+  await handleRateLimit(response, signal);
 }
 
-function formatFetchErrorMessage(error: unknown): string {
+function formatFetchErrorMessage(error: unknown, url: RequestInfo): string {
   if (!(error instanceof Error)) {
     return String(error);
   }
   const typedError = error as SystemError;
-  let message = `${typedError.name}: ${typedError.message}`;
+  const rawUrl = typeof url === 'string' ? url : url.url;
+  const redactUrl = (value: string) => value.split(rawUrl).join(urlForLog(url));
+  let message = `${typedError.name}: ${redactUrl(typedError.message)}`;
   if (typedError.cause) {
-    message += ` (Cause: ${typedError.cause})`;
+    message += ` (Cause: ${redactUrl(String(typedError.cause))})`;
   }
   if (typedError.code) {
     message += ` (Code: ${typedError.code})`;
@@ -616,6 +679,7 @@ export async function fetchWithRetries(
 
   let lastErrorMessage: string | undefined;
   const backoff = getEnvInt('PROMPTFOO_REQUEST_BACKOFF_MS', 5000);
+  const signal = options.signal ?? (url instanceof Request ? url.signal : undefined);
 
   for (let i = 0; i <= maxRetries; i++) {
     let response;
@@ -632,7 +696,7 @@ export async function fetchWithRetries(
       }
 
       if (response && isRateLimited(response)) {
-        await handleRateLimitedResponse(response, url, i, maxRetries);
+        await handleRateLimitedResponse(response, url, i, maxRetries, signal);
         continue;
       }
 
@@ -642,6 +706,9 @@ export async function fetchWithRetries(
       if (error instanceof Error && error.name === 'AbortError') {
         throw error;
       }
+      if (signal?.aborted) {
+        throw getAbortError(signal);
+      }
 
       // Structured rate-limit errors are already final (quota fail-fast or
       // retries exhausted) and carry retry-after / reset metadata. Don't
@@ -650,12 +717,14 @@ export async function fetchWithRetries(
         throw error;
       }
 
-      const errorMessage = formatFetchErrorMessage(error);
+      const errorMessage = formatFetchErrorMessage(error, url);
 
-      logger.debug(`Request to ${url} failed (attempt #${i + 1}), retrying: ${errorMessage}`);
+      logger.debug(
+        `Request to ${urlForLog(url)} failed (attempt #${i + 1}), retrying: ${errorMessage}`,
+      );
       if (i < maxRetries) {
         const waitTime = Math.pow(2, i) * (backoff + 1000 * Math.random());
-        await sleep(waitTime);
+        await sleepWithAbort(waitTime, signal);
       }
       lastErrorMessage = errorMessage;
     }

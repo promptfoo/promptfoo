@@ -1,0 +1,46 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: 'Anthropic Messages provider with MCP tool execution'
+
+prompts:
+  - 'Answer the question using the available MCP tools, then summarize what you found in 2-3 sentences. Question: {{question}}'
+
+providers:
+  - id: anthropic:messages:claude-sonnet-4-6
+    label: 'Claude Sonnet 4.6 + deepwiki MCP'
+    config:
+      max_tokens: 1500
+      temperature: 0
+      # Cap how many MCP rounds promptfoo will run per request. Default is 8.
+      max_tool_calls: 5
+      mcp:
+        enabled: true
+        servers:
+          # Hosted MCP server with two tools: ask_question, read_wiki_structure.
+          # Streams over HTTP — no local install required to try this example.
+          - name: deepwiki
+            url: https://mcp.deepwiki.com/mcp
+
+tests:
+  - vars:
+      question: 'Which transport protocols are described in the modelcontextprotocol/modelcontextprotocol repository?'
+    assert:
+      - type: contains-any
+        value: ['stdio', 'sse', 'streamable']
+      - type: llm-rubric
+        value: 'The response identifies at least one MCP transport (stdio, SSE, or streamable HTTP) and explains its purpose.'
+
+  - vars:
+      question: 'What is the high-level architecture of the promptfoo/promptfoo repository according to its docs?'
+    assert:
+      - type: contains
+        value: 'promptfoo'
+      - type: llm-rubric
+        value: 'The response describes promptfoo as an evaluation framework for LLMs (or similar wording) and mentions at least one concrete feature such as evals, redteam, providers, or assertions.'
+
+  # Demonstrate the loop terminating gracefully when the model decides it has
+  # enough information without further tool calls.
+  - vars:
+      question: 'In one sentence, what does MCP stand for?'
+    assert:
+      - type: contains
+        value: 'Model Context Protocol'

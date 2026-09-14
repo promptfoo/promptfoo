@@ -120,6 +120,23 @@ describe('providerWrapper', () => {
       expect(capturedOptions.isRateLimited(result, undefined)).toBe(true);
     });
 
+    it('should detect explicit transient rate limit metadata without error text parsing', async () => {
+      let capturedOptions: any;
+      mockExecute.mockImplementation(async (_provider, callFn, options) => {
+        capturedOptions = options;
+        return callFn();
+      });
+
+      const wrappedProvider = wrapProviderWithRateLimiting(mockProvider, mockRegistry);
+      await wrappedProvider.callApi('test');
+
+      const result: ProviderResponse = {
+        error: 'SDK throttle',
+        metadata: { rateLimitKind: 'rate_limit' },
+      };
+      expect(capturedOptions.isRateLimited(result, undefined)).toBe(true);
+    });
+
     it('should detect rate limit from error message', async () => {
       let capturedOptions: any;
       mockExecute.mockImplementation(async (_provider, callFn, options) => {
@@ -183,6 +200,45 @@ describe('providerWrapper', () => {
       // Headers are normalized to lowercase in getRetryAfter
       const retryAfter = capturedOptions.getRetryAfter(result, undefined);
       expect(retryAfter).toBe(30000); // 30 seconds in ms
+    });
+
+    it('should ignore non-finite retry-after-ms and fall back to retry-after', async () => {
+      let capturedOptions: any;
+      mockExecute.mockImplementation(async (_provider, callFn, options) => {
+        capturedOptions = options;
+        return callFn();
+      });
+
+      const wrappedProvider = wrapProviderWithRateLimiting(mockProvider, mockRegistry);
+      await wrappedProvider.callApi('test');
+
+      const result: ProviderResponse = {
+        output: 'test',
+        metadata: {
+          http: {
+            status: 429,
+            statusText: 'Too Many Requests',
+            headers: { 'retry-after-ms': '9'.repeat(400), 'retry-after': '30' },
+          },
+        },
+      };
+
+      expect(capturedOptions.getRetryAfter(result, undefined)).toBe(30000);
+    });
+
+    it('should ignore a non-finite retry-after parsed from the error message', async () => {
+      let capturedOptions: any;
+      mockExecute.mockImplementation(async (_provider, callFn, options) => {
+        capturedOptions = options;
+        return callFn();
+      });
+
+      const wrappedProvider = wrapProviderWithRateLimiting(mockProvider, mockRegistry);
+      await wrappedProvider.callApi('test');
+
+      const overflowingRetryAfter = `retry after ${'9'.repeat(400)}`;
+      const error = new Error(overflowingRetryAfter);
+      expect(capturedOptions.getRetryAfter(undefined, error)).toBeUndefined();
     });
   });
 });

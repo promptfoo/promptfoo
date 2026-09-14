@@ -1,16 +1,17 @@
 import { createHmac } from 'crypto';
-import path from 'path';
 
 import { getCache, isCacheEnabled } from '../../cache';
-import cliState from '../../cliState';
-import { importModule } from '../../esm';
 import logger from '../../logger';
 import {
   extractRateLimitErrorCode,
   formatRateLimitErrorMessage,
   HttpRateLimitError,
 } from '../../util/fetch/errors';
-import { isJavascriptFile } from '../../util/fileExtensions';
+import {
+  CallbackPathTraversalError,
+  loadCallbackFromFileUrl,
+  wrapError,
+} from '../../util/functions/loadFunction';
 import {
   maybeLoadResponseFormatFromExternalFile,
   maybeLoadToolsFromExternalFile,
@@ -18,6 +19,15 @@ import {
 } from '../../util/index';
 import { FunctionCallbackHandler } from '../functionCallbackUtils';
 import { ResponsesProcessor } from '../responses/index';
+import {
+  buildChatSpanContext,
+  emitTurnMarkerSpan,
+  extractProviderResponseAttributes,
+  GenAIAttributes,
+  getGenAITracer,
+  withGenAISpan,
+  withGenAIToolSpan,
+} from '../tracing';
 import {
   formatContentFilterResponse,
   isContentFilterError,
@@ -27,9 +37,9 @@ import {
 import { AzureGenericProvider } from './generic';
 import { calculateAzureCost } from './util';
 import type { Agent, AIProjectClient as AzureAIProjectClient } from '@azure/ai-projects';
+import type { Span } from '@opentelemetry/api';
 import type {
   Response as OpenAIResponse,
-  ResponseCreateParamsNonStreaming,
   ResponseFunctionToolCall,
   ResponseFunctionToolCallOutputItem,
 } from 'openai/resources/responses/responses';
@@ -43,6 +53,12 @@ import type { CallbackContext, ReasoningEffort } from '../openai/types';
 import type { AzureAssistantOptions, AzureAssistantProviderOptions } from './types';
 
 type FoundryAgent = Agent;
+type FoundryResponseCreateParams = Parameters<
+  ReturnType<AzureAIProjectClient['getOpenAIClient']>['responses']['create']
+>[0] & { stream?: false };
+type CachedFoundryAgentResponse = ProviderResponse & {
+  __promptfooFoundryAgent?: Pick<FoundryAgent, 'id' | 'name'>;
+};
 type FoundryResponse = OpenAIResponse;
 type ResponseFunctionCallItem = ResponseFunctionToolCall;
 type EffectiveFoundryConfig = AzureAssistantOptions & Record<string, any>;
@@ -121,11 +137,27 @@ export class AzureFoundryAgentProvider extends AzureGenericProvider {
       modelName: this.assistantConfig.modelName || deploymentName,
       providerType: 'azure',
       functionCallbackHandler: new FunctionCallbackHandler(),
+      // calculateAzureCost expects (modelName, config, promptTokens, completionTokens); the Foundry
+      // usage object is Responses-shaped (input_tokens/output_tokens). Pass the token counts so
+      // cost is non-zero (previously `usage` was passed into the ignored config slot).
       costCalculator: (_modelName: string, usage: any, requestConfig?: any) =>
         calculateAzureCost(
           requestConfig?.model || this.assistantConfig.modelName || this.deploymentName,
-          usage,
-        ) ?? 0,
+          requestConfig,
+          usage?.prompt_tokens ?? usage?.input_tokens,
+          usage?.completion_tokens ?? usage?.output_tokens,
+          usage?.prompt_tokens_details?.cached_tokens ?? usage?.input_tokens_details?.cached_tokens,
+          usage?.prompt_tokens_details?.audio_tokens ?? usage?.input_tokens_details?.audio_tokens,
+          usage?.completion_tokens_details?.audio_tokens ??
+            usage?.output_tokens_details?.audio_tokens,
+          usage?.prompt_tokens_details?.image_tokens ?? usage?.input_tokens_details?.image_tokens,
+          usage?.prompt_tokens_details?.cached_tokens_details?.audio_tokens ??
+            usage?.input_tokens_details?.cached_tokens_details?.audio_tokens,
+          usage?.prompt_tokens_details?.cached_tokens_details?.image_tokens ??
+            usage?.input_tokens_details?.cached_tokens_details?.image_tokens,
+          usage?.completion_tokens_details?.image_tokens ??
+            usage?.output_tokens_details?.image_tokens,
+        ),
     });
 
     if (this.assistantConfig.functionToolCallbacks) {
@@ -210,45 +242,13 @@ export class AzureFoundryAgentProvider extends AzureGenericProvider {
   }
 
   private async loadExternalFunction(fileRef: string): Promise<Function> {
-    let filePath = fileRef.slice('file://'.length);
-    let functionName: string | undefined;
-
-    if (filePath.includes(':')) {
-      const splits = filePath.split(':');
-      if (splits[0] && isJavascriptFile(splits[0])) {
-        [filePath, functionName] = splits;
-      }
-    }
-
     try {
-      const resolvedPath = path.resolve(cliState.basePath || '', filePath);
-      const requiredModule = await importModule(resolvedPath, functionName);
-
-      if (typeof requiredModule === 'function') {
-        return requiredModule;
+      return await loadCallbackFromFileUrl(fileRef);
+    } catch (error) {
+      if (error instanceof CallbackPathTraversalError) {
+        throw error;
       }
-
-      if (
-        requiredModule &&
-        typeof requiredModule === 'object' &&
-        functionName &&
-        functionName in requiredModule
-      ) {
-        const fn = requiredModule[functionName];
-        if (typeof fn === 'function') {
-          return fn;
-        }
-      }
-
-      throw new Error(
-        `Function callback malformed: ${filePath} must export ${
-          functionName
-            ? `a named function '${functionName}'`
-            : 'a function or have a default export as a function'
-        }`,
-      );
-    } catch (error: any) {
-      throw new Error(`Error loading function from ${filePath}: ${error.message || String(error)}`);
+      throw wrapError(`Error loading function from ${fileRef}: ${(error as Error).message}`, error);
     }
   }
 
@@ -257,41 +257,44 @@ export class AzureFoundryAgentProvider extends AzureGenericProvider {
     args: string,
     context?: CallbackContext,
     callbacks?: FunctionToolCallbacks,
+    callId?: string,
   ): Promise<string> {
     try {
-      let callback = this.loadedFunctionCallbacks[functionName];
-      const effectiveCallbacks = callbacks || this.assistantConfig.functionToolCallbacks;
+      return await withGenAIToolSpan({ name: functionName, arguments: args, callId }, async () => {
+        let callback = this.loadedFunctionCallbacks[functionName];
+        const effectiveCallbacks = callbacks || this.assistantConfig.functionToolCallbacks;
 
-      if (!callback) {
-        const callbackRef = effectiveCallbacks?.[functionName];
+        if (!callback) {
+          const callbackRef = effectiveCallbacks?.[functionName];
 
-        if (callbackRef && typeof callbackRef === 'string') {
-          if (callbackRef.startsWith('file://')) {
-            callback = await this.loadExternalFunction(callbackRef);
-          } else {
-            callback = new Function('return ' + callbackRef)();
+          if (callbackRef && typeof callbackRef === 'string') {
+            if (callbackRef.startsWith('file://')) {
+              callback = await this.loadExternalFunction(callbackRef);
+            } else {
+              callback = new Function('return ' + callbackRef)();
+            }
+          } else if (typeof callbackRef === 'function') {
+            callback = callbackRef;
           }
-        } else if (typeof callbackRef === 'function') {
-          callback = callbackRef;
+
+          if (callback) {
+            this.loadedFunctionCallbacks[functionName] = callback;
+          }
         }
 
-        if (callback) {
-          this.loadedFunctionCallbacks[functionName] = callback;
+        if (!callback) {
+          throw new Error(`No callback found for function '${functionName}'`);
         }
-      }
 
-      if (!callback) {
-        throw new Error(`No callback found for function '${functionName}'`);
-      }
-
-      const result = await callback(args, context);
-      if (result === undefined || result === null) {
-        return '';
-      }
-      if (typeof result === 'object') {
-        return JSON.stringify(result);
-      }
-      return String(result);
+        const result = await callback(args, context);
+        if (result === undefined || result === null) {
+          return '';
+        }
+        if (typeof result === 'object') {
+          return JSON.stringify(result);
+        }
+        return String(result);
+      });
     } catch (error: any) {
       logger.error(`Error executing function '${functionName}': ${error.message || String(error)}`);
       return JSON.stringify({
@@ -475,6 +478,7 @@ export class AzureFoundryAgentProvider extends AzureGenericProvider {
           call.arguments,
           callbackContext,
           callbacks,
+          call.call_id,
         ),
       })),
     );
@@ -499,6 +503,10 @@ export class AzureFoundryAgentProvider extends AzureGenericProvider {
     effectiveConfig: EffectiveFoundryConfig,
   ): Promise<ProviderResponse> {
     const result = await this.processor.processResponseOutput(response, effectiveConfig, false);
+    const cachedInputTokens = response.usage?.input_tokens_details?.cached_tokens;
+    if (result.tokenUsage && cachedInputTokens !== undefined) {
+      result.tokenUsage.cached = cachedInputTokens;
+    }
     if (!result.error) {
       return result;
     }
@@ -522,6 +530,32 @@ export class AzureFoundryAgentProvider extends AzureGenericProvider {
   async callApi(
     prompt: string,
     context?: CallApiContextParams,
+    callApiOptions?: CallApiOptionsParams,
+  ): Promise<ProviderResponse> {
+    const spanContext = buildChatSpanContext({
+      system: 'azure',
+      model: this.assistantConfig.modelName || this.deploymentName,
+      providerId: this.id(),
+      prompt,
+      context,
+    });
+
+    return withGenAISpan(
+      {
+        ...spanContext,
+        operationName: 'invoke_agent',
+        agentName: this.resolvedAgent?.name ?? this.deploymentName,
+        agentId: this.resolvedAgent?.id,
+      },
+      (span) => this.callApiInternal(prompt, span, context, callApiOptions),
+      extractProviderResponseAttributes,
+    );
+  }
+
+  private async callApiInternal(
+    prompt: string,
+    span: Span,
+    context?: CallApiContextParams,
     _callApiOptions?: CallApiOptionsParams,
   ): Promise<ProviderResponse> {
     const { body, effectiveConfig } = await this.buildResponsesBody(prompt, context);
@@ -531,13 +565,37 @@ export class AzureFoundryAgentProvider extends AzureGenericProvider {
     if (isCacheEnabled()) {
       try {
         const cache = await getCache();
-        const cachedResult = await cache.get<ProviderResponse>(cacheKey);
+        const cachedResult = await cache.get<CachedFoundryAgentResponse>(cacheKey);
         if (cachedResult) {
           logger.debug('Cache hit for Foundry agent response', {
             deploymentName: this.deploymentName,
             cacheKey,
           });
-          return { ...cachedResult, cached: true };
+          const { __promptfooFoundryAgent: cachedAgent, ...response } = cachedResult;
+          if (cachedAgent) {
+            span.setAttribute(GenAIAttributes.AGENT_ID, cachedAgent.id);
+            span.setAttribute(GenAIAttributes.AGENT_NAME, cachedAgent.name);
+            span.updateName(`invoke_agent ${cachedAgent.name}`);
+          }
+
+          const tokenUsage = response.tokenUsage;
+          return {
+            ...response,
+            ...(tokenUsage && {
+              tokenUsage: {
+                ...tokenUsage,
+                ...(tokenUsage.total !== undefined && { cached: tokenUsage.total }),
+                ...(tokenUsage.cached !== undefined &&
+                  tokenUsage.completionDetails?.cacheReadInputTokens === undefined && {
+                    completionDetails: {
+                      ...tokenUsage.completionDetails,
+                      cacheReadInputTokens: tokenUsage.cached,
+                    },
+                  }),
+              },
+            }),
+            cached: true,
+          };
         }
       } catch (error) {
         logger.warn(`Error checking cache for Azure Foundry agent response: ${error}`);
@@ -547,15 +605,60 @@ export class AzureFoundryAgentProvider extends AzureGenericProvider {
     try {
       const client = await this.initializeClient();
       const agent = await this.resolveAgent(client);
+      span.setAttribute(GenAIAttributes.AGENT_ID, agent.id);
+      span.setAttribute(GenAIAttributes.AGENT_NAME, agent.name);
+      span.updateName(`invoke_agent ${agent.name}`);
       const openAIClient = client.getOpenAIClient();
       const responseOptions = this.getAgentReference(agent);
       const maxLoopTimeMs = this.assistantConfig.maxPollTimeMs || 300000;
       const startTime = Date.now();
+      const tracer = getGenAITracer();
+      let turnCount = 0;
 
-      let response = await openAIClient.responses.create(
-        body as ResponseCreateParamsNonStreaming,
-        responseOptions,
-      );
+      const emitTurnSpan = (callStartedAt: number, callEndedAt: number, errorMessage?: string) => {
+        turnCount += 1;
+        emitTurnMarkerSpan({
+          tracer,
+          index: turnCount,
+          startTime: callStartedAt,
+          endTime: callEndedAt,
+          attributes: {
+            'gen_ai.turn.index': turnCount,
+            [GenAIAttributes.PROVIDER_NAME]: 'azure.ai.openai',
+          },
+          errorMessage,
+          logLabel: 'AzureFoundryAgent',
+        });
+      };
+
+      // The Responses API can resolve with a failed/errored response object
+      // instead of throwing. Surface that on the turn marker so a failed model
+      // round is not reported as OK (the parent chat span is already marked
+      // failed downstream via processResponse).
+      const responseFailureMessage = (resp: any): string | undefined => {
+        if (resp?.error) {
+          return typeof resp.error === 'string'
+            ? resp.error
+            : resp.error.message || resp.error.code || 'Response failed';
+        }
+        if (resp?.status === 'failed') {
+          return resp.incomplete_details?.reason || 'Response status: failed';
+        }
+        return undefined;
+      };
+
+      let turnStartedAt = Date.now();
+      let response;
+      try {
+        response = await openAIClient.responses.create(
+          body as FoundryResponseCreateParams,
+          responseOptions,
+        );
+        emitTurnSpan(turnStartedAt, Date.now(), responseFailureMessage(response));
+      } catch (err) {
+        emitTurnSpan(turnStartedAt, Date.now(), err instanceof Error ? err.message : String(err));
+        throw err;
+      }
       while (Date.now() - startTime <= maxLoopTimeMs) {
         const functionCalls = this.getCallableFunctionCalls(
           response,
@@ -574,13 +677,20 @@ export class AzureFoundryAgentProvider extends AzureGenericProvider {
         logger.debug(
           `[AzureFoundryAgentProvider] Submitting ${outputs.length} function_call_output item(s)`,
         );
-        response = await openAIClient.responses.create(
-          {
-            input: outputs as ResponseFunctionToolCallOutputItem[],
-            previous_response_id: response.id,
-          } as ResponseCreateParamsNonStreaming,
-          responseOptions,
-        );
+        turnStartedAt = Date.now();
+        try {
+          response = await openAIClient.responses.create(
+            {
+              input: outputs as ResponseFunctionToolCallOutputItem[],
+              previous_response_id: response.id,
+            } as FoundryResponseCreateParams,
+            responseOptions,
+          );
+          emitTurnSpan(turnStartedAt, Date.now(), responseFailureMessage(response));
+        } catch (err) {
+          emitTurnSpan(turnStartedAt, Date.now(), err instanceof Error ? err.message : String(err));
+          throw err;
+        }
       }
 
       if (Date.now() - startTime > maxLoopTimeMs) {
@@ -593,7 +703,10 @@ export class AzureFoundryAgentProvider extends AzureGenericProvider {
       if (isCacheEnabled() && !result.error) {
         try {
           const cache = await getCache();
-          await cache.set(cacheKey, result);
+          await cache.set(cacheKey, {
+            ...result,
+            __promptfooFoundryAgent: { id: agent.id, name: agent.name },
+          } satisfies CachedFoundryAgentResponse);
         } catch (error) {
           logger.warn(`Error caching Azure Foundry agent response: ${error}`);
         }

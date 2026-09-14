@@ -56,9 +56,12 @@ vi.mock('../src/logger', () => ({
 }));
 
 vi.mock('../src/globalConfig/cloud', () => ({
-  CLOUD_API_HOST: 'https://api.promptfoo.dev',
   cloudConfig: {
+    getApiHost: vi.fn().mockReturnValue('https://api.promptfoo.dev'),
     getApiKey: vi.fn(),
+    getAuthHeaderName: vi.fn().mockReturnValue('Authorization'),
+    getCurrentOrganizationId: vi.fn(),
+    getCurrentTeamId: vi.fn(),
   },
 }));
 
@@ -93,7 +96,8 @@ vi.mock('undici', () => {
   };
 });
 
-vi.mock('../src/envars', () => {
+vi.mock('../src/envars', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../src/envars')>();
   return {
     getEnvString: vi.fn().mockImplementation((key: string, defaultValue: string = '') => {
       if (key === 'HTTPS_PROXY' && process.env.HTTPS_PROXY) {
@@ -127,9 +131,7 @@ vi.mock('../src/envars', () => {
         return (process.env as NodeJS.ProcessEnv).PROMPTFOO_RETRY_5XX_ENABLED === 'true';
       }
       if (key === 'PROMPTFOO_INSECURE_SSL') {
-        return process.env.PROMPTFOO_INSECURE_SSL === undefined
-          ? defaultValue
-          : process.env.PROMPTFOO_INSECURE_SSL === 'true';
+        return actual.getEnvBool(key, defaultValue);
       }
       if (key === 'PROMPTFOO_RETRY_5XX') {
         return (process.env as NodeJS.ProcessEnv).PROMPTFOO_RETRY_5XX === 'true';
@@ -163,6 +165,8 @@ describe('fetchWithProxy', () => {
     vi.clearAllMocks();
     clearAgentCache();
     vi.spyOn(global, 'fetch').mockResolvedValue(new Response());
+    vi.mocked(cloudConfig.getApiHost).mockReturnValue('https://api.promptfoo.dev');
+    vi.mocked(cloudConfig.getAuthHeaderName).mockReturnValue('Authorization');
     vi.mocked(ProxyAgent).mockClear();
     cliState.basePath = undefined;
     cliState.maxConcurrency = undefined;
@@ -309,6 +313,46 @@ describe('fetchWithProxy', () => {
     );
   });
 
+  it('should not inject saved cloud auth when skipCloudAuthInjection is set', async () => {
+    vi.mocked(cloudConfig.getApiKey).mockReturnValue('old-saved-key');
+    vi.mocked(cloudConfig.getAuthHeaderName).mockReturnValue('Authorization');
+
+    await fetchWithProxy('https://api.promptfoo.dev/api/v1/users/me', {
+      headers: { 'X-Custom-Auth': 'Bearer new-candidate-key' },
+      skipCloudAuthInjection: true,
+    });
+
+    expect(global.fetch).toHaveBeenCalledWith(
+      'https://api.promptfoo.dev/api/v1/users/me',
+      expect.objectContaining({
+        headers: expect.objectContaining({
+          'X-Custom-Auth': 'Bearer new-candidate-key',
+        }),
+      }),
+    );
+    const [, calledOpts] = vi.mocked(global.fetch).mock.calls.at(-1)!;
+    expect(new Headers(calledOpts?.headers).has('Authorization')).toBe(false);
+  });
+
+  it('should still inject saved cloud auth when skipCloudAuthInjection is not set', async () => {
+    vi.mocked(cloudConfig.getApiKey).mockReturnValue('old-saved-key');
+    vi.mocked(cloudConfig.getAuthHeaderName).mockReturnValue('Authorization');
+
+    await fetchWithProxy('https://api.promptfoo.dev/api/v1/users/me', {
+      headers: { 'X-Custom-Auth': 'Bearer new-candidate-key' },
+    });
+
+    expect(global.fetch).toHaveBeenCalledWith(
+      'https://api.promptfoo.dev/api/v1/users/me',
+      expect.objectContaining({
+        headers: expect.objectContaining({
+          'X-Custom-Auth': 'Bearer new-candidate-key',
+          Authorization: 'Bearer old-saved-key',
+        }),
+      }),
+    );
+  });
+
   it('should not add cloud auth to lookalike Promptfoo cloud hosts', async () => {
     vi.mocked(cloudConfig.getApiKey).mockReturnValue('cloud-token');
 
@@ -400,6 +444,95 @@ describe('fetchWithProxy', () => {
         },
       }),
     );
+  });
+
+  it('should decode percent-encoded URL credentials before sending Basic auth', async () => {
+    const url = 'https://us%40er:p%40ss%3Aword@example.com/api';
+
+    await fetchWithProxy(url);
+
+    expect(global.fetch).toHaveBeenCalledWith(
+      'https://example.com/api',
+      expect.objectContaining({
+        headers: {
+          Authorization: `Basic ${Buffer.from('us@er:p@ss:word').toString('base64')}`,
+          'x-promptfoo-version': VERSION,
+        },
+      }),
+    );
+  });
+
+  it('should keep malformed percent escapes in URL credentials as written', async () => {
+    const url = 'https://user:bad%zzsecret@example.com/api';
+
+    await fetchWithProxy(url);
+
+    expect(global.fetch).toHaveBeenCalledWith(
+      'https://example.com/api',
+      expect.objectContaining({
+        headers: {
+          Authorization: `Basic ${Buffer.from('user:bad%zzsecret').toString('base64')}`,
+          'x-promptfoo-version': VERSION,
+        },
+      }),
+    );
+  });
+
+  it('should not add Basic auth beside a lowercase authorization header', async () => {
+    const url = 'https://username:password@example.com/api';
+
+    await fetchWithProxy(url, { headers: new Headers({ authorization: 'Bearer token123' }) });
+
+    expect(logger.warn).toHaveBeenCalledWith(
+      expect.stringContaining('Both URL credentials and Authorization header present'),
+    );
+    expect(global.fetch).toHaveBeenCalledWith(
+      'https://example.com/api',
+      expect.objectContaining({
+        headers: {
+          authorization: 'Bearer token123',
+          'x-promptfoo-version': VERSION,
+        },
+      }),
+    );
+    const [, calledOptions] = vi.mocked(global.fetch).mock.calls.at(-1)!;
+    expect(new Headers(calledOptions?.headers as HeadersInit).get('authorization')).toBe(
+      'Bearer token123',
+    );
+  });
+
+  it.each([
+    [undefined, true],
+    ['false', true],
+    ['true', false],
+    ['', true],
+    ['1', false],
+    ['yes', false],
+  ])('uses insecure SSL=%s with certificate verification=%s', async (insecure, verify) => {
+    const restore = mockProcessEnv({ PROMPTFOO_INSECURE_SSL: insecure });
+    try {
+      const actual = await vi.importActual<typeof import('../src/envars')>('../src/envars');
+      vi.mocked(getEnvBool).mockImplementation(actual.getEnvBool);
+      await fetchWithProxy('https://example.com');
+      expect(Agent).toHaveBeenCalledWith(
+        expect.objectContaining({ connect: { rejectUnauthorized: verify } }),
+      );
+
+      const restoreProxy = mockProcessEnv({ HTTPS_PROXY: 'http://proxy.example.com' });
+      try {
+        await fetchWithProxy('https://example.com');
+        expect(ProxyAgent).toHaveBeenCalledWith(
+          expect.objectContaining({
+            proxyTls: { rejectUnauthorized: verify },
+            requestTls: { rejectUnauthorized: verify },
+          }),
+        );
+      } finally {
+        restoreProxy();
+      }
+    } finally {
+      restore();
+    }
   });
 
   it('should use custom CA certificate when PROMPTFOO_CA_CERT_PATH is set', async () => {
@@ -1250,6 +1383,17 @@ describe('computeRateLimitWaitMs', () => {
     expect(wait).toBeGreaterThanOrEqual(2_900);
     expect(wait).toBeLessThanOrEqual(3_100);
   });
+
+  it('falls back to Retry-After when a reset header is non-finite', () => {
+    const response = createMockResponse({
+      headers: new Headers({
+        'X-RateLimit-Reset': 'Infinity',
+        'Retry-After': '7',
+      }),
+    });
+
+    expect(computeRateLimitWaitMs(response)).toBe(7_000);
+  });
 });
 
 describe('fetchWithRetries', () => {
@@ -1312,6 +1456,24 @@ describe('fetchWithRetries', () => {
     expect(sleep).toHaveBeenCalledTimes(2);
   });
 
+  it('redacts URL credentials and sensitive query values in retry failure logs', async () => {
+    const url =
+      'https://webhook-user:webhook-password@n8n.example.com/webhook/agent?token=webhook-secret';
+    vi.mocked(global.fetch).mockRejectedValue(new Error(`Network error for ${url}`));
+
+    const failure = await fetchWithRetries(url, {}, 1000, 0).catch((error) => error);
+
+    for (const output of [
+      failure.message,
+      JSON.stringify(vi.mocked(logger.debug).mock.calls.at(-1)),
+    ]) {
+      expect(output).toContain('n8n.example.com');
+      expect(output).not.toContain('webhook-user');
+      expect(output).not.toContain('webhook-password');
+      expect(output).not.toContain('webhook-secret');
+    }
+  });
+
   it('should not sleep after the final attempt', async () => {
     vi.mocked(global.fetch).mockRejectedValue(new Error('Network error'));
 
@@ -1369,6 +1531,24 @@ describe('fetchWithRetries', () => {
     expect(mockFetch).toHaveBeenCalledTimes(2);
     expect(logger.debug).toHaveBeenCalledWith(expect.stringContaining('Rate limited on URL'));
     expect(sleep).toHaveBeenCalledTimes(1);
+  });
+
+  it('redacts sensitive URL query values in rate-limit logs', async () => {
+    vi.mocked(global.fetch).mockResolvedValue(
+      createMockResponse({
+        status: 429,
+        statusText: 'Too Many Requests',
+        headers: new Headers(),
+      }),
+    );
+
+    await expect(
+      fetchWithRetries('https://n8n.example.com/webhook/agent?token=webhook-secret', {}, 1000, 0),
+    ).rejects.toThrow(/Rate limit exceeded/);
+
+    const debugLogs = JSON.stringify(vi.mocked(logger.debug).mock.calls);
+    expect(debugLogs).toContain('n8n.example.com');
+    expect(debugLogs).not.toContain('webhook-secret');
   });
 
   it('should respect maximum retry count', async () => {
@@ -1560,6 +1740,111 @@ describe('fetchWithRetries', () => {
 
       // Should not retry on abort
       expect(global.fetch).toHaveBeenCalledTimes(1);
+    });
+
+    it('should preserve AbortError semantics when a signal uses a custom Error reason', async () => {
+      const controller = new AbortController();
+      vi.mocked(global.fetch).mockImplementationOnce(async () => {
+        controller.abort(new Error('caller cancelled'));
+        throw controller.signal.reason;
+      });
+
+      await expect(
+        fetchWithRetries('https://example.com', { signal: controller.signal }, 1000, 3),
+      ).rejects.toMatchObject({ name: 'AbortError', message: 'caller cancelled' });
+
+      expect(global.fetch).toHaveBeenCalledTimes(1);
+      expect(sleep).not.toHaveBeenCalled();
+    });
+
+    it('should stop promptly when a request is aborted during exponential backoff', async () => {
+      const controller = new AbortController();
+      vi.mocked(global.fetch).mockRejectedValueOnce(new Error('temporary network failure'));
+      vi.mocked(sleep).mockImplementationOnce(() => new Promise(() => {}));
+
+      const pending = fetchWithRetries(
+        'https://example.com',
+        { signal: controller.signal },
+        1000,
+        2,
+      );
+      await vi.waitFor(() => expect(global.fetch).toHaveBeenCalledOnce());
+      controller.abort(new Error('caller cancelled backoff'));
+      const result = await Promise.race([
+        pending.then(
+          () => 'resolved',
+          (error: Error) => error,
+        ),
+        new Promise<'unbounded'>((resolve) => setTimeout(() => resolve('unbounded'), 100)),
+      ]);
+
+      expect(result).toMatchObject({ name: 'AbortError', message: 'caller cancelled backoff' });
+      expect(global.fetch).toHaveBeenCalledOnce();
+      vi.mocked(sleep).mockReset().mockResolvedValue(undefined);
+    });
+
+    it('should stop promptly when a request is aborted during Retry-After backoff', async () => {
+      const controller = new AbortController();
+      vi.mocked(global.fetch).mockResolvedValueOnce(
+        createMockResponse({ status: 429, headers: new Headers({ 'Retry-After': '60' }) }),
+      );
+      vi.mocked(sleep).mockImplementationOnce(() => new Promise(() => {}));
+
+      const pending = fetchWithRetries(
+        'https://example.com',
+        { signal: controller.signal },
+        1000,
+        2,
+      );
+      await vi.waitFor(() => expect(global.fetch).toHaveBeenCalledOnce());
+      controller.abort(new Error('caller cancelled rate limit'));
+      const result = await Promise.race([
+        pending.then(
+          () => 'resolved',
+          (error: Error) => error,
+        ),
+        new Promise<'unbounded'>((resolve) => setTimeout(() => resolve('unbounded'), 100)),
+      ]);
+
+      expect(result).toMatchObject({ name: 'AbortError', message: 'caller cancelled rate limit' });
+      expect(global.fetch).toHaveBeenCalledOnce();
+      vi.mocked(sleep).mockReset().mockResolvedValue(undefined);
+    });
+
+    it.each([
+      ['exponential backoff', new Error('temporary network failure')],
+      [
+        'Retry-After backoff',
+        createMockResponse({ status: 429, headers: new Headers({ 'Retry-After': '60' }) }),
+      ],
+    ])('should honor a Request-embedded signal during %s', async (_kind, responseOrError) => {
+      const controller = new AbortController();
+      if (responseOrError instanceof Error) {
+        vi.mocked(global.fetch).mockRejectedValueOnce(responseOrError);
+      } else {
+        vi.mocked(global.fetch).mockResolvedValueOnce(responseOrError);
+      }
+      vi.mocked(sleep).mockImplementationOnce(() => new Promise(() => {}));
+
+      const pending = fetchWithRetries(
+        new Request('https://example.com', { signal: controller.signal }),
+        {},
+        1000,
+        2,
+      );
+      await vi.waitFor(() => expect(global.fetch).toHaveBeenCalledOnce());
+      controller.abort(new Error('embedded request cancelled'));
+      const result = await Promise.race([
+        pending.then(
+          () => 'resolved',
+          (error: Error) => error,
+        ),
+        new Promise<'unbounded'>((resolve) => setTimeout(() => resolve('unbounded'), 100)),
+      ]);
+
+      expect(result).toMatchObject({ name: 'AbortError', message: 'embedded request cancelled' });
+      expect(global.fetch).toHaveBeenCalledOnce();
+      vi.mocked(sleep).mockReset().mockResolvedValue(undefined);
     });
   });
 
@@ -2297,6 +2582,15 @@ describe('fetchWithRetries with disableTransientRetries', () => {
       }
       return defaultValue;
     });
+  });
+
+  it('redacts opaque path credentials in retry diagnostics', async () => {
+    const credential = '123e4567-e89b-12d3-a456-426614174000';
+    vi.spyOn(global, 'fetch').mockRejectedValueOnce(new Error('offline'));
+    await expect(
+      fetchWithRetries(`https://gateway.example/v1/${credential}/responses`, {}, 1000, 0),
+    ).rejects.toThrow('Request failed');
+    expect(logger.debug).toHaveBeenCalledWith(expect.not.stringContaining(credential));
   });
 
   it('should disable transient retries in fetchWithProxy to avoid double-retrying', async () => {
