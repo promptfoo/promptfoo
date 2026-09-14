@@ -1,4 +1,7 @@
 import cliState from '../../cliState';
+import { getInputType } from '../../types/shared';
+
+import type { AtomicTestCase, Inputs } from '../../types/index';
 
 export const MAX_CHARS_PER_MESSAGE_MODIFIER_KEY = 'maxCharsPerMessage';
 
@@ -143,17 +146,42 @@ export function getGeneratedPromptOverLimit(
 export function throwIfTargetPromptExceedsMaxChars(
   prompt: string,
   limit?: number,
-  pdf?: { dataUrl: string; text: string },
+  test?: Pick<AtomicTestCase, 'metadata' | 'vars'>,
 ): void {
   if (!getMaxCharsPerMessage(limit)) {
     return;
   }
-  const prefix = 'data:application/pdf;base64,';
-  if (pdf?.dataUrl.startsWith(prefix) && pdf.dataUrl.length > prefix.length) {
-    // The attachment has its own readable attack; the surrounding prompt keeps
-    // its normal text limit. Never alter the bytes delivered to the provider.
-    throwIfTargetPromptExceedsMaxChars(pdf.text, limit);
-    prompt = prompt.split(pdf.dataUrl).join('').split(pdf.dataUrl.slice(prefix.length)).join('');
+  const metadata = test?.metadata;
+  const pdfInput = metadata?.pdf?.input;
+  if (typeof pdfInput === 'string' && typeof metadata?.originalText === 'string') {
+    const inputs = metadata.pluginConfig?.inputs as Inputs | undefined;
+    for (const [key, value] of Object.entries(test?.vars ?? {})) {
+      if (
+        typeof value !== 'string' ||
+        (key !== pdfInput && (!inputs?.[key] || getInputType(inputs[key]) === 'text'))
+      ) {
+        continue;
+      }
+      const attachment = value.match(/^data:([^,]+);base64,(.+)$/s);
+      if (!attachment || (key === pdfInput && attachment[1] !== 'application/pdf')) {
+        continue;
+      }
+      const materialized = metadata.inputMaterialization?.[key];
+      const text =
+        key === pdfInput
+          ? metadata.originalText
+          : typeof materialized?.bodyText === 'string'
+            ? [materialized.bodyText, materialized.injectedInstruction]
+                .filter((part) => typeof part === 'string' && part)
+                .join('\n\n')
+            : (materialized?.injectedInstruction ?? metadata.inputVars?.[key]);
+      if (typeof text !== 'string' || /^data:[^,]+;base64,/.test(text)) {
+        continue;
+      }
+      // Check readable content separately; only measurement excludes attachment bytes.
+      throwIfTargetPromptExceedsMaxChars(text, limit);
+      prompt = prompt.split(value).join('').split(attachment[2]).join('');
+    }
   }
   const violation = getPromptLengthViolation(prompt, limit);
   if (!violation) {
