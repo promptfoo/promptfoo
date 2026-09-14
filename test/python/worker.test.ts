@@ -1015,6 +1015,27 @@ def call_api(prompt, options, context):
   );
 
   it(
+    'should wait for a timed-out process to stop before shutdown resolves',
+    async () => {
+      // Ignores SIGINT and SIGTERM, so stopping it takes the full grace period before SIGKILL.
+      const worker = new PythonWorker(ignoreSignalsPath, 'call_api', undefined, 1000);
+      await worker.initialize();
+      const pid = getProcess(worker)?.childProcess.pid;
+      expect(pid).toBeDefined();
+
+      await expect(worker.call('call_api', ['slow', {}, {}])).rejects.toThrow(
+        'Python worker timed out after 1000ms',
+      );
+      // Shut down while the timed-out process is still being stopped. Previously shutdown
+      // returned at once and left that process running.
+      await worker.shutdown();
+
+      expect(isProcessAlive(pid!)).toBe(false);
+    },
+    TEST_TIMEOUT,
+  );
+
+  it(
     'should not start a new process when shut down while a call is being dispatched',
     async () => {
       const worker = new PythonWorker(slowPath, 'call_api', undefined, 1000);

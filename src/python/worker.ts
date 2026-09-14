@@ -49,6 +49,8 @@ export class PythonWorker {
   private readonly maxCrashes: number = 3;
   /** Settles once a process has exited and its output has been handled. */
   private readonly processClosed = new WeakMap<PythonShell, Promise<void>>();
+  /** Stops still in progress, including a timed-out process being replaced. */
+  private readonly pendingStops = new Set<Promise<void>>();
   private pendingRequest: {
     responseFile: string;
     resolve: (result: unknown) => void;
@@ -401,7 +403,13 @@ export class PythonWorker {
    * such as subprocesses. SIGKILL follows if it still hasn't exited.
    * Resolves once the process has exited and its output has been handled.
    */
-  private async stopProcess(pythonProcess: PythonShell): Promise<void> {
+  private stopProcess(pythonProcess: PythonShell): Promise<void> {
+    const stop = this.endProcess(pythonProcess).finally(() => this.pendingStops.delete(stop));
+    this.pendingStops.add(stop);
+    return stop;
+  }
+
+  private async endProcess(pythonProcess: PythonShell): Promise<void> {
     if (this.process === pythonProcess) {
       this.process = null;
       this.ready = false;
@@ -524,6 +532,8 @@ export class PythonWorker {
     const pythonProcess = this.process;
     this.process = null;
     if (!pythonProcess) {
+      // A process replaced after a request timeout may still be stopping.
+      await Promise.all(this.pendingStops);
       this.busy = false;
       return;
     }
@@ -545,7 +555,9 @@ export class PythonWorker {
       logger.error(`Error during worker shutdown: ${error}`);
     } finally {
       // Force-stops the process if it is still running; resolves at once if it already exited.
+      // Also waits for any earlier stop, such as a timed-out process being replaced.
       await this.stopProcess(pythonProcess);
+      await Promise.all(this.pendingStops);
       this.busy = false;
     }
   }
