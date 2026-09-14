@@ -403,6 +403,19 @@ export class LiveSession {
   }
 
   private handleEvent(event: LiveEvent): void {
+    if (
+      !this.started &&
+      [
+        'session.input_transcript.delta',
+        'session.output_transcript.delta',
+        'session.output_audio.delta',
+        'session.usage.updated',
+        'response.event',
+      ].includes(event.type)
+    ) {
+      this.fail(`GPT-Live received ${event.type} before session.started.`);
+      return;
+    }
     switch (event.type) {
       case 'session.started':
         if (this.started || !isBoundedProtocolId(event.session?.id)) {
@@ -523,6 +536,9 @@ export class LiveSession {
         if (this.reason === 'content') {
           this.guardrailReason = 'GPT-Live safety filter ended the session.';
         } else {
+          if (this.reason === 'close_requested' && !this.closing) {
+            this.setError('GPT-Live session ended without a close request.');
+          }
           if (this.reason !== 'close_requested' && this.reason !== 'remote_hangup') {
             this.setError(`GPT-Live session ended: ${this.reason ?? 'unknown reason'}.`);
           }
@@ -549,18 +565,21 @@ export class LiveSession {
   private handleApiError(event: LiveEvent): void {
     const details = event.error && typeof event.error === 'object' ? event.error : {};
     const clientEventId = [details.client_event_id, event.client_event_id].find(
-      (id): id is string => typeof id === 'string',
+      isBoundedProtocolId,
     );
+    const redactedClientEventId = clientEventId && this.redact(clientEventId);
+    const code = safeLabel(details.code);
+    const type = safeLabel(details.type);
     const apiError: LiveApiError = {
-      code: safeLabel(details.code),
-      type: safeLabel(details.type),
+      code: code && this.redact(code).slice(0, 80),
+      type: type && this.redact(type).slice(0, 80),
       message:
         typeof details.message === 'string'
           ? this.redact(details.message).slice(0, MAX_ERROR_MESSAGE_LENGTH)
           : undefined,
       param:
         typeof details.param === 'string' ? this.redact(details.param).slice(0, 200) : undefined,
-      clientEventId,
+      clientEventId: isBoundedProtocolId(redactedClientEventId) ? redactedClientEventId : undefined,
     };
     if (this.apiErrors.length < MAX_API_ERRORS) {
       this.apiErrors.push(apiError);
@@ -572,7 +591,7 @@ export class LiveSession {
     }
     const command = clientEventId ? this.commands.get(clientEventId) : undefined;
     const rejected = clientEventId ? `rejected ${command?.name ?? 'a client event'}` : undefined;
-    if ([apiError.code, apiError.type].some((label) => label && GUARDRAIL_ERROR_CODES.has(label))) {
+    if ([code, type].some((label) => label && GUARDRAIL_ERROR_CODES.has(label))) {
       // Safety interventions are refusals, even when they reject one of promptfoo's commands.
       this.guardrailReason ??= `GPT-Live moderation ${rejected ?? 'interrupted the response'}${detail}`;
     } else if (this.closing && command?.pending) {
@@ -720,6 +739,10 @@ export class LiveSession {
         this.fail('GPT-Live backend response started before the active response completed.');
         return;
       }
+      if (!turn && [...this.finishedResponses.values()].includes(delegationId)) {
+        this.fail('GPT-Live backend delegation already completed; no continuation was requested.');
+        return;
+      }
       // Each accepted delegation can start one response, plus one continuation per tool call.
       if (this.backendResponseCount >= responseLimit) {
         this.fail('GPT-Live backend response limit exceeded.');
@@ -785,6 +808,13 @@ export class LiveSession {
       }
       if (turn.id !== response.id) {
         this.fail('GPT-Live backend response ID changed unexpectedly.');
+        return;
+      }
+      if (
+        response.model !== undefined &&
+        (!isBoundedProtocolId(response.model) || !response.model.trim())
+      ) {
+        this.fail('Invalid GPT-Live backend model.');
         return;
       }
       if (this.finishedResponses.size >= responseLimit) {

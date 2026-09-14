@@ -82,13 +82,23 @@ function decodeWav(bytes: Buffer, format: LiveAudioFormat, maxAudioBytes: number
       throw new Error('Truncated GPT-Live WAV input.');
     }
     if (kind === 'fmt ') {
-      validFormat = isMonoPcm16(bytes, start, size, format.rate);
-    } else if (kind === 'data' && size > 0) {
+      if (validFormat || !isMonoPcm16(bytes, start, size, format.rate)) {
+        throw new Error(
+          'GPT-Live WAV input requires one mono PCM16 format chunk at the configured sample rate.',
+        );
+      }
+      validFormat = true;
+    } else if (kind === 'data') {
+      if (!validFormat) {
+        throw new Error('GPT-Live WAV input requires a valid format chunk before audio data.');
+      }
       audioBytes += size;
       if (audioBytes > maxAudioBytes) {
         throw new Error(AUDIO_DURATION_ERROR);
       }
-      chunks.push(bytes.subarray(start, start + size));
+      if (size > 0) {
+        chunks.push(bytes.subarray(start, start + size));
+      }
     }
     offset = start + size + (size % 2);
   }

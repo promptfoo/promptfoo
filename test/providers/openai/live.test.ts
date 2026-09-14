@@ -83,7 +83,10 @@ function text(socket: Socket, delta = 'Hello', role = 'output', start_ms = 0, en
   emit(socket, { type: `session.${role}_transcript.delta`, delta, start_ms, end_ms });
 }
 function closed(socket: Socket, seconds = 12) {
-  emit(socket, { type: 'session.closed', reason: 'close_requested', usage: { seconds } });
+  const reason = socket.sent.some((event) => event.type === 'session.close')
+    ? 'close_requested'
+    : 'remote_hangup';
+  emit(socket, { type: 'session.closed', reason, usage: { seconds } });
 }
 function backend(socket: Socket, event: object) {
   emit(socket, { type: 'response.event', delegation_id: 'delegation_1', event });
@@ -132,6 +135,105 @@ describe('OpenAiLiveProvider', () => {
     const p = provider();
     expect(p.id()).toBe('openai:live:gpt-live-1');
   });
+
+  it.each(['input_transcript', 'output_transcript', 'output_audio'])(
+    'rejects %s before session startup',
+    async (kind) => {
+      const result = provider().callApi('Hi');
+      const socket = await connect();
+      emit(socket, {
+        type: `session.${kind}.delta`,
+        delta: kind === 'output_audio' ? 'AQI=' : 'EARLY_CANARY',
+        start_ms: 0,
+        end_ms: 10,
+      });
+      start(socket);
+      closed(socket);
+      const response = await result;
+      expect(response.error).toContain('before session.started');
+      expect(response.output).toBe('');
+      expect(response.audio).toBeUndefined();
+    },
+  );
+
+  it('rejects a close acknowledgment when no close was requested', async () => {
+    const result = provider().callApi('Hi');
+    const socket = await connect();
+    start(socket);
+    text(socket);
+    emit(socket, { type: 'session.closed', reason: 'close_requested', usage: { seconds: 1 } });
+    expect((await result).error).toContain('without a close request');
+  });
+
+  it.each([
+    {
+      type: 'response.event',
+      delegation_id: 'delegation_1',
+      event: { type: 'response.created', response: { id: 'resp_1' } },
+    },
+    { type: 'session.usage.updated', usage: { seconds: 12 } },
+  ])('rejects $type before session startup', async (event) => {
+    const result = provider({ delegation: lookupDelegation }).callApi('Hi');
+    const socket = await connect();
+    emit(socket, event);
+    start(socket);
+    closed(socket);
+    expect((await result).error).toContain('before session.started');
+  });
+
+  it.each(['client_event_id', 'code', 'type'])(
+    'redacts a credential echoed in API error %s',
+    async (field) => {
+      const result = provider().callApi('Hi');
+      const socket = await connect();
+      start(socket);
+      text(socket);
+      apiError(socket, { [field]: 'fixture-key', message: 'Gateway error' });
+      closed(socket);
+      expect(JSON.stringify(await result)).not.toContain('fixture-key');
+    },
+  );
+
+  it('discards oversized API error event identifiers', async () => {
+    const result = provider().callApi('Hi');
+    const socket = await connect();
+    start(socket);
+    apiError(socket, { client_event_id: 'x'.repeat(257), message: 'Gateway error' });
+    closed(socket);
+    expect((await result).metadata?.apiErrors[0].clientEventId).toBeUndefined();
+  });
+
+  it('rejects an unsolicited backend response after its delegation finished', async () => {
+    const handler = vi.fn().mockResolvedValue('result');
+    const result = provider({ delegation: lookupDelegation, functionCallHandler: handler }).callApi(
+      'Hi',
+    );
+    const socket = await connect();
+    start(socket);
+    backend(socket, { type: 'response.created', response: { id: 'resp_1' } });
+    backend(socket, { type: 'response.completed', response: { id: 'resp_1' } });
+    backend(socket, { type: 'response.created', response: { id: 'unsolicited' } });
+    backend(socket, { type: 'response.output_item.done', item: functionCall('call_1') });
+    backend(socket, { type: 'response.completed', response: { id: 'unsolicited' } });
+    closed(socket);
+    expect((await result).error).toContain('already completed');
+    expect(handler).not.toHaveBeenCalled();
+  });
+
+  it.each(['x'.repeat(257), { untrusted: 'model' }, 123])(
+    'rejects invalid backend model metadata (%j)',
+    async (model) => {
+      const result = provider({ delegation: lookupDelegation }).callApi('Hi');
+      const socket = await connect();
+      start(socket);
+      backend(socket, { type: 'response.created', response: { id: 'resp_1' } });
+      backend(socket, { type: 'response.completed', response: { id: 'resp_1', model } });
+      closed(socket);
+      const response = await result;
+      expect(response.error).toContain('Invalid GPT-Live backend model');
+      expect(response.metadata?.backendResponses).toHaveLength(0);
+    },
+  );
 
   it.each([false, true])(
     'ignores output after capture closes (prior output: %s)',
@@ -620,6 +722,7 @@ describe('OpenAiLiveProvider', () => {
       start(socket);
       text(socket);
       emit(socket, { type: 'session.usage.updated', usage: { seconds: 5 } });
+      await vi.advanceTimersByTimeAsync(100);
       emit(socket, { type: 'session.closed', reason: 'close_requested', usage });
       expect((await result).metadata?.finalUsageConfirmed).toBe(false);
       expect((await result).error).toContain('usage is unconfirmed');

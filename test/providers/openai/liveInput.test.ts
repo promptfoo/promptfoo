@@ -74,6 +74,24 @@ describe('Live input', () => {
     expect(decodeWav(convertPcm16ToWav(audio)).audio).toEqual(audio);
   });
 
+  it.each(['invalid-first', 'data-first', 'duplicate-format'])(
+    'rejects ambiguous WAV format ordering (%s)',
+    (kind) => {
+      const valid = convertPcm16ToWav(Buffer.from([1, 0]));
+      const fmt = valid.subarray(12, 36);
+      const first = Buffer.from(valid);
+      if (kind === 'invalid-first') {
+        first.writeUInt16LE(3, 20);
+      }
+      const wav =
+        kind === 'data-first'
+          ? Buffer.concat([valid.subarray(0, 12), valid.subarray(36), fmt])
+          : Buffer.concat([first, fmt]);
+      wav.writeUInt32LE(wav.length - 8, 4);
+      expect(() => decodeWav(wav)).toThrow('format chunk');
+    },
+  );
+
   it('ignores data appended outside a finite RIFF container', () => {
     const audio = Buffer.from([1, 0]);
     const wav = Buffer.concat([
