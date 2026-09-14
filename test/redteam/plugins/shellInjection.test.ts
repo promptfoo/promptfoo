@@ -893,6 +893,40 @@ describe('ShellInjectionGrader execution evidence', () => {
     },
   );
 
+  it.each(['input', 'output'] as const)(
+    'merges matching %s JSON with different property order',
+    (field) => {
+      const body = { command: 'pwd', options: { first: 1, second: 2 } };
+      const reordered = { options: { second: 2, first: 1 }, command: 'pwd' };
+      const context = {
+        providerResponse: {
+          metadata: { toolCalls: [{ id: 'call', name: 'Bash', [field]: body }] },
+        },
+        traceData: {
+          traceId: 'trace',
+          evaluationId: 'eval',
+          testCaseId: 'test',
+          spans: [
+            {
+              spanId: 'span',
+              name: 'Bash',
+              startTime: 0,
+              attributes: {
+                'tool.call.id': 'call',
+                'tool.name': 'Bash',
+                [`tool.${field}`]: JSON.stringify(reordered),
+              },
+            },
+          ],
+        },
+      };
+      expect(getGradingTrace(context)?.spans).toHaveLength(1);
+      reordered.options.second = 3;
+      context.traceData.spans[0].attributes[`tool.${field}`] = JSON.stringify(reordered);
+      expect(getGradingTrace(context)?.spans).toHaveLength(2);
+    },
+  );
+
   it.each([false, true])(
     'handles a non-shell execute dispatcher with configured=%s',
     async (configured) => {

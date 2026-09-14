@@ -630,7 +630,10 @@ function getSqlExecutionDetails(
     );
   }
   try {
-    sql.query = redactSqlLiteralsAndComments(redactedQuery);
+    sql.query = redactSqlLiteralsAndComments(
+      redactedQuery,
+      getFirstStringAttribute(attributes, ['db.system.name', 'db.system']),
+    );
   } catch (error) {
     throw Object.assign(
       new TraceEvidenceError(

@@ -1,4 +1,5 @@
 import cliState from '../../cliState';
+import { mergeStrategyTracingConfig } from '../../tracing/otelConfig';
 
 import type { AtomicTestCase, UnifiedConfig } from '../../types/index';
 
@@ -57,13 +58,6 @@ const DEFAULT_TRACING_OPTIONS: Omit<RedteamTracingOptions, 'provider' | 'queryDe
   sanitizeAttributes: true,
 };
 
-function mergeTracingConfig(...configs: Array<RawTracingConfig | undefined>): RawTracingConfig {
-  return configs.reduce<RawTracingConfig>(
-    (acc, config) => (config ? { ...acc, ...config } : acc),
-    {},
-  );
-}
-
 function normalizeTracingOptions(
   config: RawTracingConfig,
   rootTracingConfig?: {
@@ -115,28 +109,12 @@ export function resolveTracingOptions({
   )?.tracing as RawTracingConfig | undefined;
   const providerStrategyConfig = (config?.tracing as RawTracingConfig | undefined) ?? undefined;
 
-  const globalStrategyOverride =
-    strategyId && globalConfig?.strategies ? globalConfig.strategies[strategyId] : undefined;
-  const testStrategyOverride =
-    strategyId && testConfig?.strategies ? testConfig.strategies[strategyId] : undefined;
-  const metadataStrategyOverride =
-    strategyId && metadataStrategyConfig?.strategies
-      ? metadataStrategyConfig.strategies[strategyId]
-      : undefined;
-  const providerStrategyOverride =
-    strategyId && providerStrategyConfig?.strategies
-      ? providerStrategyConfig.strategies[strategyId]
-      : undefined;
-
-  const merged = mergeTracingConfig(
+  const merged = mergeStrategyTracingConfig(
+    strategyId,
     globalConfig,
     testConfig,
     metadataStrategyConfig,
     providerStrategyConfig,
-    globalStrategyOverride,
-    testStrategyOverride,
-    metadataStrategyOverride,
-    providerStrategyOverride,
   );
 
   // Read provider and queryDelay from root tracing config (not redteam config)

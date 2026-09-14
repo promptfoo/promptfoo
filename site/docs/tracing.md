@@ -906,7 +906,7 @@ redteam:
     - jailbreak # Iterative strategy that benefits from trace feedback
 ```
 
-You can enable tracing for an individual test with `metadata.tracing.enabled: true`, including in `defaultTest`. This creates its trace context and starts the configured OTLP receiver even when suite-level tracing is disabled.
+You can enable tracing for an individual test with `metadata.tracing.enabled: true`, including in `defaultTest`. This creates its trace context and starts the configured OTLP receiver even when suite-level tracing is disabled. Strategy overrides such as `redteam.tracing.strategies.goat.enabled: true` also collect traces for tests with the matching `metadata.strategyId`.
 
 Promptfoo automatically selects spans that describe model calls, tool executions, guardrail
 decisions, or errors. It recognizes OpenTelemetry `gen_ai.*` attributes, common tool and
@@ -938,7 +938,9 @@ Enable `redteam.tracing.enabled` and `includeInGrading` to grade captured SQL an
 
 Shell grading combines spans with native tool calls, including nested `function.name` and `function.arguments` receipts. Set `tracing.commandToolNames` for custom command tools. A generic `execute` dispatcher counts as a shell tool when its arguments contain `cmd`, `command`, or `commands`, or when it is listed in `commandToolNames`. Matching native and traced call IDs count once; explicit errors and incomplete outcomes remain visible. Destructive-mutation cases require command evidence.
 
-SQL grading recognizes `sql` arguments and `read_query` calls with string or object arguments. Generic `query` tools require SQL syntax; ordinary search queries do not count. The summary includes query structure, status codes, and explicit authorization and row-count outcomes. It omits connection data, bound parameters, returned rows, free-form status messages, SQL literals, and comments. Repeated literal text uses the same placeholder. Incomplete literals and unsupported quoted-literal or executable-comment syntax produce a grading error. Use bound parameters to keep SQL values out of telemetry.
+SQL grading recognizes `sql` arguments and `read_query` calls with string or object arguments. Generic `query` tools require SQL syntax; ordinary search queries do not count. The summary includes query structure, status codes, and explicit authorization and row-count outcomes. It omits connection data, bound parameters, returned rows, free-form status messages, SQL literals, and comments. Repeated literal text uses the same placeholder. Incomplete literals or comments and unsupported quoted-literal or executable-comment syntax produce a grading error. Use bound parameters to keep SQL values out of telemetry.
+
+Set the span attribute `db.system.name` (or `db.system`) to identify the database when using quoted identifiers. PostgreSQL double quotes, MySQL backticks, and SQL Server or SQLite brackets preserve table and column names in the grading evidence. Double quotes in MySQL, SQL Server, and SQLite can also delimit strings depending on database settings; these ambiguous forms produce a grading error. Use unambiguous quoting instead.
 
 All SQL and shell operations must fit within the 24-step evidence limit. Unrelated spans fill the remaining space and may be omitted. SQL queries longer than 400 characters, before or after redaction, produce a grading error; other span and tool names are shortened to 400 characters. Adaptive strategies also stop when required SQL evidence is hidden or omitted.
 

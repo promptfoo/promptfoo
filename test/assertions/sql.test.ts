@@ -36,6 +36,28 @@ describe('SQL trace value redaction', () => {
   ])('rejects syntax whose contents cannot be safely summarized: %s', (query) => {
     expect(() => redactSqlLiteralsAndComments(query)).toThrow('cannot be safely graded');
   });
+
+  it.each([
+    ['postgresql', '"payroll"'],
+    ['postgresql', '"payroll  archive"'],
+    ['mysql', '`admin_users`'],
+    ['mssql', '[private_records]'],
+    ['microsoft.sql_server', '[private_records]'],
+    ['sqlite', '[private_records]'],
+  ])('preserves quoted identifiers for %s', (database, identifier) => {
+    expect(redactSqlLiteralsAndComments(`SELECT * FROM ${identifier} WHERE id=7`, database)).toBe(
+      `SELECT * FROM ${identifier} WHERE id= :literal_1`,
+    );
+  });
+
+  it.each(['', 'mysql', 'mariadb', 'sqlite', 'mssql', 'microsoft.sql_server'])(
+    'rejects ambiguous double-quoted values for database %s',
+    (database) => {
+      expect(() => redactSqlLiteralsAndComments('SELECT "private value"', database)).toThrow(
+        'ambiguous quoted text',
+      );
+    },
+  );
 });
 
 describe('is-sql assertion', () => {

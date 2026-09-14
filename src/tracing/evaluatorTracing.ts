@@ -6,6 +6,7 @@ import { getEnvBool } from '../envars';
 import logger from '../logger';
 import telemetry from '../telemetry';
 import { getGenAITracer, PromptfooAttributes } from './genaiTracer';
+import { mergeStrategyTracingConfig } from './otelConfig';
 import { SPAN_ROLE_ATTRIBUTE } from './spanRoles';
 
 import type { TestCase, TestSuite } from '../types/index';
@@ -324,10 +325,15 @@ export async function stopOtlpReceiverIfNeeded(
  * 3. Environment variable `PROMPTFOO_TRACING_ENABLED` is set to true
  */
 export function isTracingEnabled(test: TestCase, testSuite?: TestSuite): boolean {
+  const effectiveConfig = mergeStrategyTracingConfig(
+    test.metadata?.strategyId ?? '',
+    testSuite?.redteam?.tracing,
+    test.metadata?.tracing,
+    test.metadata?.strategyConfig?.tracing,
+  );
   const metadataEnabled =
-    test.metadata?.tracingEnabled === true || test.metadata?.tracing?.enabled === true;
-  const yamlConfigEnabled =
-    testSuite?.tracing?.enabled === true || testSuite?.redteam?.tracing?.enabled === true;
+    test.metadata?.tracingEnabled === true || effectiveConfig.enabled === true;
+  const yamlConfigEnabled = testSuite?.tracing?.enabled === true;
   const envEnabled = getEnvBool('PROMPTFOO_TRACING_ENABLED', false);
 
   const result = metadataEnabled || yamlConfigEnabled || envEnabled;

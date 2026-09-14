@@ -159,6 +159,13 @@ describe('BraintrustProvider', () => {
     expect((await new BraintrustProvider(config).fetchTrace(TRACE_ID))?.spans).toHaveLength(10_000);
   });
 
+  it.each([-1, 0])('bounds non-positive span limits: %s', async (maxSpans) => {
+    const result = await new BraintrustProvider(config).fetchTrace(TRACE_ID, { maxSpans });
+    expect(result?.spans).toHaveLength(1);
+    const query = JSON.parse(mockedFetch.mock.calls[0][1]?.body as string).query;
+    expect(query).toMatch(/LIMIT 1$/);
+  });
+
   it('links deeply nested spans to their immediate parent', async () => {
     mockedFetch.mockResolvedValue(
       response({

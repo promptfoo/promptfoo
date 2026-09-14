@@ -1,4 +1,13 @@
 const BRACKET_IDENTIFIER_DATABASES = new Set(['TransactSQL', 'Sqlite']);
+const DOUBLE_QUOTED_IDENTIFIER_DATABASES = new Set([
+  'postgresql',
+  'postgres',
+  'oracle',
+  'oracle.db',
+  'snowflake',
+  'clickhouse',
+]);
+const DOUBLE_QUOTED_LITERAL_DATABASES = new Set(['bigquery']);
 const SQL_EXPRESSION_PLACEHOLDER = ' ? ';
 
 const DOLLAR_QUOTE_DELIMITER_PATTERN = /^\$(?:[A-Za-z_][A-Za-z0-9_]*)?\$/;
@@ -42,7 +51,10 @@ export function stripIgnoredSqlText(sql: string, databaseType: string, maskValue
     literals.set(literal, token);
     return ` ${token} `;
   };
-  const supportsBracketIdentifiers = BRACKET_IDENTIFIER_DATABASES.has(databaseType);
+  const database = databaseType.toLowerCase();
+  const supportsBracketIdentifiers =
+    BRACKET_IDENTIFIER_DATABASES.has(databaseType) ||
+    ['mssql', 'microsoft.sql_server', 'transactsql', 'sqlite'].includes(database);
   let plainTextStart = 0;
   let cursor = 0;
 
@@ -62,6 +74,18 @@ export function stripIgnoredSqlText(sql: string, databaseType: string, maskValue
     let replacement = ' ';
 
     if (
+      maskValues &&
+      ((character === '"' &&
+        !DOUBLE_QUOTED_IDENTIFIER_DATABASES.has(database) &&
+        !DOUBLE_QUOTED_LITERAL_DATABASES.has(database)) ||
+        (character === '[' && !database))
+    ) {
+      throw new Error(
+        'SQL trace has ambiguous quoted text; set db.system.name or use unambiguous quoting before grading.',
+      );
+    }
+
+    if (
       character === "'" ||
       character === '"' ||
       character === '`' ||
@@ -74,7 +98,14 @@ export function stripIgnoredSqlText(sql: string, databaseType: string, maskValue
         );
       }
       ignoredTextEnd = quoteEnd ?? sql.length;
-      replacement = placeholder(sql.slice(cursor, ignoredTextEnd));
+      const quoted = sql.slice(cursor, ignoredTextEnd);
+      replacement =
+        maskValues &&
+        (character === '`' ||
+          character === '[' ||
+          (character === '"' && DOUBLE_QUOTED_IDENTIFIER_DATABASES.has(database)))
+          ? quoted
+          : placeholder(quoted);
     } else if ((character === '-' && sql[cursor + 1] === '-') || character === '#') {
       ignoredTextEnd = cursor + 1;
       while (
@@ -100,6 +131,9 @@ export function stripIgnoredSqlText(sql: string, databaseType: string, maskValue
         } else {
           ignoredTextEnd++;
         }
+      }
+      if (maskValues && nesting > 0) {
+        throw new Error('SQL trace has an unclosed comment and cannot be safely graded.');
       }
     } else if (character === '$') {
       const delimiter = readDollarQuoteDelimiter(sql, cursor);
@@ -139,6 +173,10 @@ export function stripIgnoredSqlText(sql: string, databaseType: string, maskValue
 }
 
 /** Keep SQL structure while omitting captured values and comments from model input. */
-export function redactSqlLiteralsAndComments(sql: string): string {
-  return stripIgnoredSqlText(sql, 'TransactSQL', true).replace(/\s+/g, ' ').trim();
+export function redactSqlLiteralsAndComments(sql: string, databaseType = ''): string {
+  return stripIgnoredSqlText(sql, databaseType, true)
+    .replace(/"(?:\\.|""|[^"\\])*"|`(?:\\.|``|[^`\\])*`|\[(?:\]\]|[^\]])*\]|\s+/g, (text) =>
+      /^\s/.test(text) ? ' ' : text,
+    )
+    .trim();
 }

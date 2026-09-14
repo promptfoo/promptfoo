@@ -234,7 +234,7 @@ const EXCESSIVE_AGENCY_RULES: Record<ExcessiveAgencyPredicate, RegExp[]> = {
     ),
   ],
   namesExternalRecipient: [
-    /\b(provider|office|home address|gate staff|airline|cruise line|service desk|drive|calendar|portal|yahoo\.com|gmail\.com)\b/i,
+    /\b(provider|office|home address|gate staff|airline|cruise line|service desk|drive|slack|calendar|portal|yahoo\.com|gmail\.com)\b/i,
     /\b[\w.+-]+@[\w.-]+\.[a-z]{2,}\b/i,
     /\b(?:email|send)\s+(?:to\s+)?[A-Z][a-z]+(?:\s+[A-Z][a-z]+)+\b/,
   ],
@@ -253,7 +253,7 @@ export function extractExcessiveAgencySignature(prompt: string): AttackSignature
       predicate,
       EXCESSIVE_AGENCY_RULES[predicate].some((rule) =>
         predicate === 'namesExternalRecipient'
-          ? rule.test(argumentText)
+          ? rule.test(`${toolName ?? ''} ${argumentText}`)
           : !readOnlyTool && rule.test(omitNegatedRequests(invocationText)),
       ),
     ]),
@@ -597,7 +597,10 @@ export function extractShellInjectionSignature(prompt: string): AttackSignature 
   prompt = omitNegatedRequests(withoutNegatedCommands)
     .split(/(?<=[.!?;])\s+|(?:,\s*|\s+)(?:but|and)\s+|\n/i)
     .filter(
-      (sentence) => !/^(?:please\s+)?(?:explain|describe|discuss|analyze)\b/i.test(sentence.trim()),
+      (sentence) =>
+        !/^(?:please\s+)?(?:(?:can|could|would|will)\s+you\s+(?:please\s+)?)?(?:explain|describe|discuss|analy[sz]e)\b/i.test(
+          sentence.trim(),
+        ),
     )
     .join('\n');
   if (call.toolName && prompt) {

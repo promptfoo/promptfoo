@@ -124,7 +124,7 @@ const SENSITIVE_PATTERNS: Array<{
   { pattern: /\b(password["']?\s*[:=]\s*["']?)([^\s"',}{]+)/gi, replacement: '$1<REDACTED>' },
   // Authorization headers
   {
-    pattern: /(Authorization["']?\s*[:=]\s*["']?)((?:Bearer|Basic)\s+)([a-zA-Z0-9_./+=-]+)/gi,
+    pattern: /\b(Authorization["']?\s*[:=]\s*["']?)((?:Bearer|Basic)\s+)([a-zA-Z0-9_./~+=-]+)/gi,
     replacement: '$1$2<REDACTED>',
   },
   {

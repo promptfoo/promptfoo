@@ -147,7 +147,7 @@ export class BraintrustProvider implements TraceProvider {
     }
 
     const normalizedTraceId = traceId.toLowerCase();
-    const maxSpans = Math.min(options?.maxSpans ?? MAX_SPANS, MAX_SPANS);
+    const maxSpans = Math.min(Math.max(options?.maxSpans ?? MAX_SPANS, 1), MAX_SPANS);
     // Braintrust native root_span_id values do not necessarily match W3C trace IDs.
     // Customers should log the propagated ID as metadata.trace_id or metadata.promptfoo_trace_id.
     // The traces shape returns every span in a matching trace, including child spans that do

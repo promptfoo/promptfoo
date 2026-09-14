@@ -661,6 +661,19 @@ describe('trajectory utilities', () => {
     },
   );
 
+  it.each(['~private-token', 'private~token', 'private-token~'])(
+    'redacts the complete Bearer credential in trace names: %s',
+    (credential) => {
+      const summary = summarizeTrajectoryForJudge({
+        ...mockTraceData,
+        spans: [{ spanId: 'auth-name', startTime: 1, name: `Authorization: Bearer ${credential}` }],
+      });
+      expect(summary).not.toContain(credential);
+      expect(summary).not.toContain('private');
+      expect(summary).toContain('REDACTED');
+    },
+  );
+
   it.each(['query', 'tools.query'])(
     'requires SQL-shaped arguments for generic %s tools',
     (name) => {

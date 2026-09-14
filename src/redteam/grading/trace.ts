@@ -28,6 +28,20 @@ function sanitizeNativeToolBody(value: unknown): unknown {
   }
 }
 
+function toolBodiesMatch(partial: string, complete: string | undefined): boolean {
+  if (partial === complete) {
+    return true;
+  }
+  if (complete === undefined) {
+    return false;
+  }
+  try {
+    return isDeepStrictEqual(JSON.parse(partial), JSON.parse(complete));
+  } catch {
+    return false;
+  }
+}
+
 function toolCallKey(span: TraceData['spans'][number]): string | undefined {
   const attributes = span.attributes;
   const id = getFirstStringAttribute(attributes, [
@@ -65,7 +79,7 @@ function completeToolSpan(
     const suffix = '... [truncated]';
     if (
       partial !== undefined &&
-      partial !== complete &&
+      !toolBodiesMatch(partial, complete) &&
       (!partial?.endsWith(suffix) || !complete?.startsWith(partial.slice(0, -suffix.length)))
     ) {
       return undefined;
@@ -176,3 +190,5 @@ export function getGradingTrace(
   }
   return trace;
 }
+
+import { isDeepStrictEqual } from 'node:util';
