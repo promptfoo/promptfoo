@@ -1,12 +1,25 @@
+import { hasDuplicateJsonKeys } from '../../util/jsonKeys';
+
 const MAX_JSON_LENGTH = 100_000;
+
+function parseEvidenceJson(value: string): unknown {
+  const parsed: unknown = JSON.parse(value);
+  if (hasDuplicateJsonKeys(value)) {
+    throw new Error('Agentic evidence contains duplicate JSON properties and cannot be graded');
+  }
+  return parsed;
+}
 
 function parseJsonContainer(value: string, start: number, end: number): object | undefined {
   try {
-    const parsed: unknown = JSON.parse(value.slice(start, end + 1));
+    const parsed: unknown = parseEvidenceJson(value.slice(start, end + 1));
     if (parsed && typeof parsed === 'object') {
       return parsed;
     }
-  } catch {
+  } catch (error) {
+    if (!(error instanceof SyntaxError)) {
+      throw error;
+    }
     // Reject malformed evidence at the verifier boundary.
   }
 }
@@ -182,9 +195,12 @@ export function parseEvidenceCandidates(
         continue;
       }
       try {
-        pending.push({ value: JSON.parse(next), pluginId: inheritedPluginId, tagged });
+        pending.push({ value: parseEvidenceJson(next), pluginId: inheritedPluginId, tagged });
         continue;
-      } catch {
+      } catch (error) {
+        if (!(error instanceof SyntaxError)) {
+          throw error;
+        }
         // Fall through to bounded extraction for mixed prose and JSON.
       }
       let untagged = next;

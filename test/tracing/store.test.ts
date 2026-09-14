@@ -181,21 +181,29 @@ describe('TraceStore', () => {
       },
     );
 
-    it('does not persist caller-supplied redaction history', async () => {
-      await traceStore.addSpans(
-        'trace',
-        [
-          {
-            spanId: 'raw',
-            name: 'execute',
-            startTime: 1,
-            attributes: { 'promptfoo.redaction.history': '[REDACTED]', note: '[REDACTED]' },
-          },
-        ],
-        { skipTraceCheck: true },
-      );
-      expect(mockDb.insert().values.mock.calls[0][0][0].attributes).toEqual({ note: '[REDACTED]' });
-    });
+    it.each(['span', 'event'])(
+      'does not persist caller-supplied %s redaction history',
+      async (source) => {
+        const attributes = { 'promptfoo.redaction.history': '[REDACTED]', note: '[REDACTED]' };
+        await traceStore.addSpans(
+          'trace',
+          [
+            {
+              spanId: 'raw',
+              name: 'execute',
+              startTime: 1,
+              attributes: source === 'span' ? attributes : {},
+              events: source === 'event' ? [{ name: 'event', timestamp: 1, attributes }] : [],
+            },
+          ],
+          { skipTraceCheck: true },
+        );
+        const stored = mockDb.insert().values.mock.calls[0][0][0];
+        expect(source === 'span' ? stored.attributes : stored.events[0].attributes).toEqual({
+          note: '[REDACTED]',
+        });
+      },
+    );
 
     it('inserts a complete snapshot in bounded statements inside one transaction', async () => {
       const spans = Array.from({ length: 501 }, (_, i) => ({

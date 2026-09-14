@@ -1,3 +1,5 @@
+import { hasDuplicateJsonKeys } from '../util/jsonKeys';
+
 export interface AttributeSanitizationOptions {
   redactAttributes?: string[];
   sanitizeSensitiveAttributes?: boolean;
@@ -60,37 +62,6 @@ function isSensitiveAttributeKey(key: string): boolean {
       normalizedKey.includes(NORMALIZED_SENSITIVE_ATTRIBUTE_KEYS[index])
     );
   });
-}
-
-// JSON.parse keeps only the last duplicate property, so its result cannot recover all secrets.
-function hasDuplicateJsonKeys(json: string): boolean {
-  const objects: Set<string>[] = [];
-  for (let index = 0; index < json.length; index++) {
-    const character = json[index];
-    if (character === '{') {
-      objects.push(new Set());
-    } else if (character === '}') {
-      objects.pop();
-    } else if (character === '"') {
-      const start = index++;
-      while (index < json.length && json[index] !== '"') {
-        index += json[index] === '\\' ? 2 : 1;
-      }
-      let next = index + 1;
-      while (next < json.length && /\s/.test(json[next])) {
-        next++;
-      }
-      if (json[next] === ':') {
-        const key = JSON.parse(json.slice(start, index + 1)) as string;
-        const keys = objects[objects.length - 1];
-        if (keys.has(key)) {
-          return true;
-        }
-        keys.add(key);
-      }
-    }
-  }
-  return false;
 }
 
 export function sanitizeTraceAttributes(
@@ -220,6 +191,23 @@ export function getTraceTextRedactionState(
   return state;
 }
 
+function normalizeJsonNumber(value: string): string | undefined {
+  const match = /^(-?)(0|[1-9]\d*)(?:\.(\d+))?(?:[eE]([+-]?\d+))?$/.exec(value);
+  if (!match) {
+    return undefined;
+  }
+  const digits = (match[2] + (match[3] ?? '')).replace(/^0+/, '');
+  if (!digits) {
+    return '0';
+  }
+  const coefficient = digits.replace(/0+$/, '');
+  const exponent =
+    BigInt(match[4] ?? '0') -
+    BigInt(match[3]?.length ?? 0) +
+    BigInt(digits.length - coefficient.length);
+  return `${match[1]}${coefficient}e${exponent}`;
+}
+
 export function getTraceTextRedactor(
   pairs: { original: unknown; sanitized: unknown }[],
   replacement = '[REDACTED]',
@@ -327,6 +315,9 @@ export function getTraceTextRedactor(
         'g',
       )
     : undefined;
+  const numericSecrets = new Set(
+    [...secrets].map(normalizeJsonNumber).filter((value) => value !== undefined),
+  );
   return <T extends string | undefined>(value: T): T => {
     if (typeof value !== 'string') {
       return value;
@@ -337,15 +328,33 @@ export function getTraceTextRedactor(
     if (!pattern) {
       return value;
     }
+    const numeric = normalizeJsonNumber(value);
+    if (numeric !== undefined && numericSecrets.has(numeric)) {
+      return replacement as T;
+    }
     const redacted = value.replace(pattern, replacement);
-    // Free-form text can embed escaped JSON. Hide the field if decoding exposes
-    // another secret, while keeping literal replacements and other escapes intact.
-    const unmatched = value.replace(pattern, '');
-    const decoded = unmatched.replace(/\\(?:u[0-9a-fA-F]{4}|["\\/bfnrt])/g, (escape) =>
-      JSON.parse(`"${escape}"`),
-    );
-    return (
-      decoded !== unmatched && decoded.replace(pattern, '') !== decoded ? replacement : redacted
-    ) as T;
+    // Preserve literal replacements; hide fields whose decoded text exposes another secret.
+    let unmatched = value.replace(pattern, '');
+    for (let depth = 0; depth < 20; depth++) {
+      if (
+        numericSecrets.size &&
+        (unmatched.match(/-?(?:0|[1-9]\d*)(?:\.\d+)?(?:[eE][+-]?\d+)?/g) ?? []).some((number) =>
+          numericSecrets.has(normalizeJsonNumber(number)!),
+        )
+      ) {
+        return replacement as T;
+      }
+      const decoded = unmatched.replace(/\\(?:u[0-9a-fA-F]{4}|["\\/bfnrt])/g, (escape) =>
+        JSON.parse(`"${escape}"`),
+      );
+      if (decoded === unmatched) {
+        return redacted as T;
+      }
+      if (decoded.replace(pattern, '') !== decoded) {
+        return replacement as T;
+      }
+      unmatched = decoded;
+    }
+    return replacement as T;
   };
 }

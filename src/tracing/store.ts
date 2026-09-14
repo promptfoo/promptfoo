@@ -293,17 +293,25 @@ export class TraceStore {
       }
 
       // Only the store may create persisted redaction-history markers.
-      spans = spans.map((span) => {
+      const stripRedactionHistory = (attributes: SpanData['attributes']) => {
         if (
-          !span.attributes ||
-          !Object.prototype.hasOwnProperty.call(span.attributes, 'promptfoo.redaction.history')
+          !attributes ||
+          !Object.prototype.hasOwnProperty.call(attributes, 'promptfoo.redaction.history')
         ) {
-          return span;
+          return attributes;
         }
-        const attributes = { ...span.attributes };
-        delete attributes['promptfoo.redaction.history'];
-        return { ...span, attributes };
-      });
+        const sanitized = { ...attributes };
+        delete sanitized['promptfoo.redaction.history'];
+        return sanitized;
+      };
+      spans = spans.map((span) => ({
+        ...span,
+        attributes: stripRedactionHistory(span.attributes),
+        events: span.events?.map((event) => ({
+          ...event,
+          attributes: stripRedactionHistory(event.attributes),
+        })),
+      }));
 
       const insertSpans = async (connection: Pick<typeof db, 'insert'>, incoming: SpanData[]) => {
         const spanRecords = incoming.map((span) => {

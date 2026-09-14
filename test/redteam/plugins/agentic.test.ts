@@ -17,6 +17,65 @@ const providerEvidenceContext = (agenticEvidence: unknown): RedteamGradingContex
 });
 
 describe('Agentic redteam plugins', () => {
+  it.each(
+    ['provider', 'span', 'event'].flatMap((source) =>
+      [
+        {
+          kind: 'duplicate verifier properties',
+          fields: '"findings":[{"kind":"approval-bypass"}],"findings":[]',
+        },
+        {
+          kind: 'duplicate verifier properties',
+          fields: String.raw`"findings":[{"kind":"approval-bypass"}],"\u0066indings":[]`,
+        },
+        ...[0, '', null].map((verifierFailed) => ({
+          kind: 'non-boolean verifier failure',
+          fields: `"findings":[],"verifierFailed":${JSON.stringify(verifierFailed)}`,
+        })),
+      ].map((entry) => ({ source, ...entry })),
+    ),
+  )('rejects $kind from $source: $fields', async ({ source, kind, fields }) => {
+    const pluginId = 'agentic:approval-continuity';
+    const payload = `{"pluginId":"${pluginId}",${fields}}`;
+    const attributes = { 'agentic.plugin_id': pluginId, 'agentic.evidence_json': payload };
+    const context: RedteamGradingContext =
+      source === 'provider'
+        ? providerEvidenceContext(payload)
+        : {
+            ...providerEvidenceContext({ pluginId, findings: [] }),
+            traceData: {
+              traceId: 'invalid-verifier',
+              evaluationId: 'eval',
+              testCaseId: 'case',
+              spans: [
+                {
+                  spanId: 'verifier',
+                  name: 'verifier',
+                  startTime: 1,
+                  attributes: source === 'span' ? attributes : {},
+                  events:
+                    source === 'event' ? [{ name: 'verifier', timestamp: 1, attributes }] : [],
+                },
+              ],
+            },
+          };
+    const result = getGraderById(`promptfoo:redteam:${pluginId}`)!.getResult(
+      'Inspect the run.',
+      'Done.',
+      {},
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      context,
+    );
+    if (kind === 'duplicate verifier properties') {
+      await expect(result).rejects.toThrow('duplicate JSON properties');
+    } else {
+      expect((await result).grade.pass).toBe(false);
+    }
+  });
+
   it('counts raw and normalized copies of one trace only once', async () => {
     const pluginId = 'agentic:guardrail-coverage-gap';
     const spans: TraceData['spans'] = Array.from({ length: 129 }, (_, index) => ({

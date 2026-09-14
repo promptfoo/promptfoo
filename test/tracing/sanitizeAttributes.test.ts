@@ -297,3 +297,26 @@ it('keeps unrelated escapes when a literal secret was already removed', () => {
     String.raw`prefix [REDACTED] suffix\n`,
   );
 });
+
+it.each([
+  ['1e3', '10e2'],
+  ['1e-3', '10e-4'],
+  ['9007199254740993', '90071992547409930e-1'],
+  ['1e309', '10e308'],
+] as const)('redacts noncanonical numeric echoes of %s', (secret, echo) => {
+  const original = { payload: `{"authorization":${secret}}` };
+  const sanitized = sanitizeTraceAttributes(original, { truncateValues: false });
+  const redactText = getTraceTextRedactor([{ original, sanitized }]);
+  expect(redactText(`echo ${echo}`)).not.toContain(echo);
+  const result = sanitizeTraceAttributes(
+    { payload: `{"copy":${echo},"safe":42}` },
+    { redactText, truncateValues: false },
+  );
+  expect(JSON.parse(result.payload)).toEqual({ copy: '[REDACTED]', safe: 42 });
+});
+
+it.each([2, 3, 25])('redacts nested JSON escapes at depth %s', (depth) => {
+  const redactText = getTraceTextRedactor([{ original: 'PRIVATE', sanitized: '<redacted>' }]);
+  const echo = String.raw`PRIV\u005c` + 'u005c'.repeat(depth - 2) + 'u0041TE';
+  expect(redactText(`echo ${echo}`)).toBe('[REDACTED]');
+});

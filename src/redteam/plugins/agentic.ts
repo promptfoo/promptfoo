@@ -638,7 +638,9 @@ function normalizeEvidenceForPlugin(
     ...evidence,
     findings: normalizedFindings,
     pluginId: normalizedEvidencePluginId ?? pluginId,
-    verifierFailed: evidence.verifierFailed || malformedMatchingFinding,
+    verifierFailed:
+      (evidence.verifierFailed !== undefined && evidence.verifierFailed !== false) ||
+      malformedMatchingFinding,
   };
 }
 
