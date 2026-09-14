@@ -1945,7 +1945,8 @@ export class HttpProvider implements ApiProvider {
   private transformRequestPromise?: ReturnType<typeof createTransformRequest>;
   private sessionParserPromise?: ReturnType<typeof createSessionParser>;
   private validateStatusPromise?: ReturnType<typeof createValidateStatus>;
-  private readonly transformBasePath = getTransformBasePath();
+  private transformBasePath = getTransformBasePath();
+  private configBasePathLocked = false;
   private lastSignatureTimestamp?: number;
   private lastSignature?: string;
   private authTokenCache = new Map<string, CachedAuthToken>();
@@ -2031,6 +2032,17 @@ export class HttpProvider implements ApiProvider {
     if (this.config.body) {
       this.config.body = maybeLoadConfigFromExternalFile(this.config.body);
     }
+  }
+
+  setConfigBasePath(basePath: string): void {
+    const resolved = path.resolve(basePath);
+    if (resolved === this.transformBasePath) {
+      return;
+    }
+    if (this.configBasePathLocked) {
+      throw new Error('Cannot change the configuration directory of an initialized HTTP provider');
+    }
+    this.transformBasePath = resolved;
   }
 
   getSourceHash(): string {
@@ -2682,6 +2694,7 @@ export class HttpProvider implements ApiProvider {
     context?: CallApiContextParams,
     options?: CallApiOptionsParams,
   ): Promise<ProviderResponse> {
+    this.configBasePathLocked = true;
     return this.callApiInternal(prompt, context, options);
   }
 

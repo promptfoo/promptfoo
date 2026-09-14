@@ -669,6 +669,25 @@ describe('writeOutput', () => {
     },
   );
 
+  it.each(['json', 'yaml'])(
+    'redacts provider selection credentials in %s exports without discarding replay fingerprints',
+    async (extension) => {
+      const id = 'webhook:https://hooks.slack.com/services/T-short/B-short/short-secret';
+      const selection = { providers: [{ index: 0, id, fingerprint: 'a'.repeat(64) }] };
+      const evaluation = new Eval({}, { runtimeOptions: { providerSelection: selection } });
+      await writeOutput(`output.${extension}`, evaluation, null);
+      const written = vi.mocked(fsPromises.writeFile).mock.calls[0][1] as string;
+      const exported = yaml.load(written) as {
+        runtimeOptions: { providerSelection: typeof selection };
+      };
+      expect(JSON.stringify(exported.runtimeOptions)).not.toContain('short-secret');
+      expect(exported.runtimeOptions.providerSelection.providers[0].fingerprint).toBe(
+        'a'.repeat(64),
+      );
+      expect(evaluation.runtimeOptions?.providerSelection).toEqual(selection);
+    },
+  );
+
   it('redacts env and secret config fields in YAML output', async () => {
     const outputPath = 'output.yaml';
     const eval_ = new Eval({

@@ -624,7 +624,8 @@ export class A2AProvider implements ApiProvider {
   config: A2AProviderConfig;
   private readonly providerId: string;
   private transformResponse?: Promise<ReturnType<typeof createTransformResponse>>;
-  private readonly transformBasePath = getTransformBasePath();
+  private transformBasePath = getTransformBasePath();
+  private configBasePathLocked = false;
 
   constructor(providerPath: string, options: ProviderOptions = {}) {
     const shorthandUrl = nonEmptyString(
@@ -635,6 +636,17 @@ export class A2AProvider implements ApiProvider {
       ...(options.config ?? {}),
       url: nonEmptyString(options.config?.url) ?? shorthandUrl,
     });
+  }
+
+  setConfigBasePath(basePath: string): void {
+    const resolved = path.resolve(basePath);
+    if (resolved === this.transformBasePath) {
+      return;
+    }
+    if (this.configBasePathLocked) {
+      throw new Error('Cannot change the configuration directory of an initialized A2A provider');
+    }
+    this.transformBasePath = resolved;
   }
 
   getSourceHash(): string {
@@ -670,6 +682,7 @@ export class A2AProvider implements ApiProvider {
     context?: CallApiContextParams,
     options?: CallApiOptionsParams,
   ): Promise<ProviderResponse> {
+    this.configBasePathLocked = true;
     try {
       const contextVars = { ...(context?.vars ?? {}) };
       const vars = {

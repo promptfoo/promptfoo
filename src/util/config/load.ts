@@ -588,7 +588,7 @@ export async function combineConfigs(
       .reverse()
       .find(({ config }) => config.commandLineOptions?.envPath !== undefined);
     if (source) {
-      const envPath = loadConfiguredEnvFiles(source.config, path.dirname(configPaths[0]));
+      const envPath = loadConfiguredEnvFiles(source.config, path.dirname(source.path));
       source.config = {
         ...source.config,
         commandLineOptions: { ...source.config.commandLineOptions, envPath },

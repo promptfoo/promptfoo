@@ -2597,8 +2597,8 @@ function canonicalizeSelectionFingerprintValue(
   try {
     if (providerReference && isApiProvider(value)) {
       return {
-        providerFingerprint: createProviderSelection([value], [value], [value]).providers[0]
-          .fingerprint,
+        providerFingerprint: createProviderSelection([value], [value], [value], basePath)
+          .providers[0].fingerprint,
       };
     }
     if (Array.isArray(value)) {

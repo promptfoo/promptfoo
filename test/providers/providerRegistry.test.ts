@@ -173,11 +173,11 @@ describe.each(['shutdown', 'cleanup'] as const)('provider %s scopes', (method) =
   });
 });
 
-it('runs both lifecycle hooks even when shutdown fails', async () => {
+it('calls cleanup once when shutdown delegates to it', async () => {
   const cleanup = vi.fn(async () => {});
   const provider = {
-    shutdown: vi.fn(() => {
-      throw new Error('shutdown failed');
+    shutdown: vi.fn(async function (this: { cleanup: () => Promise<void> }) {
+      await this.cleanup();
     }),
     cleanup,
   };

@@ -949,7 +949,20 @@ export default class EvalResult {
     const { traceId: _traceId, evaluationId: _evaluationId, pluginId: _pluginId, ...rest } = this;
     const persistedValues = {
       ...rest,
-      metadata: persistTraceMetadata(this.metadata, this.traceId, this.evaluationId),
+      ...redactSensitiveResultFieldsForDb({
+        response: sanitizeForDb(this.response),
+        gradingResult: sanitizeForDb(this.gradingResult),
+        metadata: sanitizeForDb(
+          persistTraceMetadata(this.metadata, this.traceId, this.evaluationId),
+        ),
+      }),
+      provider: sanitizeProvider(this.provider),
+      prompt: sanitizeForDbWithSecrets(this.prompt),
+      testCase: sanitizeForDbWithSecrets({
+        ...this.testCase,
+        ...(this.testCase.provider && { provider: sanitizeProvider(this.testCase.provider) }),
+      }),
+      namedScores: sanitizeForDb(this.namedScores),
     };
     //check if this exists in the db
     if (this.persisted) {

@@ -83,7 +83,7 @@ interface CliState {
 
 const maxConcurrencyContext = new AsyncLocalStorage<{ maxConcurrency: number | undefined }>();
 interface EnvironmentContext {
-  basePath: { value: string | undefined };
+  invocation: Pick<CliState, 'basePath' | 'config' | 'selectedProviderConfigs'>;
   env: EnvOverrides | undefined;
   envFileOverrides?: EnvOverrides;
 }
@@ -100,15 +100,27 @@ const requestTracingConfigContext = new AsyncLocalStorage<{
   tracingConfig: NonNullable<TestSuite['tracing']>;
 }>();
 let globalMaxConcurrency: number | undefined;
-const globalBasePath: { value: string | undefined } = { value: undefined };
+const globalInvocation: EnvironmentContext['invocation'] = {};
 let activeOtlpReceiver: ActiveOtlpReceiver | undefined;
 
 const state: CliState = {
   get basePath() {
-    return (envContext.getStore()?.basePath ?? globalBasePath).value;
+    return (envContext.getStore()?.invocation ?? globalInvocation).basePath;
   },
   set basePath(value: string | undefined) {
-    (envContext.getStore()?.basePath ?? globalBasePath).value = value;
+    (envContext.getStore()?.invocation ?? globalInvocation).basePath = value;
+  },
+  get config() {
+    return (envContext.getStore()?.invocation ?? globalInvocation).config;
+  },
+  set config(value: CliState['config']) {
+    (envContext.getStore()?.invocation ?? globalInvocation).config = value;
+  },
+  get selectedProviderConfigs() {
+    return (envContext.getStore()?.invocation ?? globalInvocation).selectedProviderConfigs;
+  },
+  set selectedProviderConfigs(value: CliState['selectedProviderConfigs']) {
+    (envContext.getStore()?.invocation ?? globalInvocation).selectedProviderConfigs = value;
   },
   get maxConcurrency() {
     const store = maxConcurrencyContext.getStore();
@@ -137,14 +149,18 @@ const state: CliState = {
   },
   withEnvFileOverrides<T>(env: EnvOverrides | undefined, fn: () => T): T {
     return envContext.run(
-      { basePath: { value: state.basePath }, env: undefined, envFileOverrides: env },
+      {
+        invocation: { ...(envContext.getStore()?.invocation ?? globalInvocation) },
+        env: undefined,
+        envFileOverrides: env,
+      },
       fn,
     );
   },
   withEnv<T>(env: EnvOverrides | undefined, fn: () => T): T {
     // Config loading may resolve the path inside a nested environment scope.
-    const basePath = envContext.getStore()?.basePath ?? globalBasePath;
-    return envContext.run({ basePath, env, envFileOverrides: state.envFileOverrides }, fn);
+    const invocation = envContext.getStore()?.invocation ?? globalInvocation;
+    return envContext.run({ invocation, env, envFileOverrides: state.envFileOverrides }, fn);
   },
   get requestTracingConfig() {
     return requestTracingConfigContext.getStore()?.tracingConfig;

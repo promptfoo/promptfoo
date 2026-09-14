@@ -1097,6 +1097,31 @@ describe('assertErrorResultsReplaced replacement accounting', () => {
     ]);
   });
 
+  it.each([0, 1, 2])(
+    'requires one replacement per repeated execution (%s replacements)',
+    async (count) => {
+      const staleRows = ['err-1', 'err-2'].map((id) => ({
+        evalId: 'e',
+        id,
+        testIdx: 0,
+        promptIdx: 1,
+      }));
+      const replacements = Array.from({ length: count }, (_, index) => ({
+        ...staleRows[0],
+        id: `new-${index}`,
+      }));
+      vi.mocked(getDb).mockResolvedValue(
+        sequencedDb([staleRows, [...staleRows, ...replacements]]) as any,
+      );
+      const result = assertErrorResultsReplaced(staleRows.map(({ id }) => id));
+      if (count < staleRows.length) {
+        await expect(result).rejects.toThrow('Original ERROR rows were preserved');
+      } else {
+        await expect(result).resolves.toEqual(['err-1', 'err-2']);
+      }
+    },
+  );
+
   it('does not infer retry provenance from insertion order', async () => {
     const staleError = { evalId: 'e', id: 'err', testIdx: 0, promptIdx: 1, rowId: 2 };
     const oldSuccess = { evalId: 'e', id: 'old-success', testIdx: 0, promptIdx: 1, rowId: 1 };

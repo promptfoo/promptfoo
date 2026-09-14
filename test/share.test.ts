@@ -722,7 +722,7 @@ describe('createShareableUrl', () => {
       };
       mockEval.prompts = [
         {
-          provider: 'echo',
+          provider: 'webhook:https://hooks.slack.com/services/T-short/B-short/short-secret',
           raw: 'Hello',
           label: 'Hello',
           config: { apiKey: 'completed-prompt-secret', endpoint: 'https://u:p@gateway.test' },
@@ -754,6 +754,7 @@ describe('createShareableUrl', () => {
       expect(requestBody.runtimeOptions).not.toHaveProperty('testCaseSelection');
       expect(requestBody.runtimeOptions).not.toHaveProperty('configEnvSource');
       expect(JSON.stringify(requestBody)).not.toContain('completed-prompt-secret');
+      expect(JSON.stringify(requestBody.prompts)).not.toContain('short-secret');
       expect(JSON.stringify(requestBody)).not.toContain('https://u:p@');
       expect(mockEval.prompts[0].config?.apiKey).toBe('completed-prompt-secret');
       expect(JSON.stringify(requestBody.config)).not.toContain('local-secret');

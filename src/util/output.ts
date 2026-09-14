@@ -30,6 +30,7 @@ import invariant from './invariant';
 import { writeJunitXmlOutput } from './junit';
 import { getOutputFileFormat, SUPPORTED_OUTPUT_FILE_FORMATS } from './outputFormats';
 import {
+  redactSecretLeaves,
   sanitizeObject,
   sanitizeRuntimeOptions,
   sanitizeTracingConfigForPersistence,
@@ -488,7 +489,9 @@ export async function createOutputData(
     metadata: createOutputMetadata(evalRecord),
     ...(evalRecord.vars?.length > 0 && { vars: [...evalRecord.vars] }),
     ...(evalRecord.runtimeOptions && {
-      runtimeOptions: sanitizeRuntimeOptions(evalRecord.runtimeOptions),
+      runtimeOptions: redactSecretLeaves(sanitizeRuntimeOptions(evalRecord.runtimeOptions), {
+        redactOpaqueValues: false,
+      }),
     }),
     ...(traces && traces.length > 0 && { traces: projectTracesForOutput(traces) }),
   };

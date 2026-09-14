@@ -6,6 +6,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import cliState from '../../src/cliState';
 import { getEnvString } from '../../src/envars';
 import { getProcessEnv, getRuntimeEnv, withRuntimeEnv } from '../../src/envOverrides';
+import { getGradingProvider, getRemoteGradingContext } from '../../src/matchers/providers';
 import { doEval } from '../../src/node/doEval';
 import { getEvalConfigFromCloud } from '../../src/util/cloud';
 import { readConfig, resolveConfigs } from '../../src/util/config/load';
@@ -201,6 +202,51 @@ describe('doEval environment files', () => {
       expect(hooks.every((hook) => hook.host === 'host')).toBe(true);
     },
   );
+
+  it('isolates concurrent target and grader configuration in the invocation context', async () => {
+    let release!: () => void;
+    const ready = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    let arrived = 0;
+    const outsideConfig = cliState.config;
+    const outsideProviders = cliState.selectedProviderConfigs;
+    const results = await Promise.all(
+      ['first', 'second'].map((name) =>
+        cliState.withEnvFileOverrides({}, () =>
+          cliState.withEnv({ INVOCATION: name }, async () => {
+            cliState.config = {
+              providers: [`promptfoo://provider/config-${name}`],
+              defaultTest: {
+                options: {
+                  provider: { id: () => `grader-${name}`, callApi: async () => ({ output: 'ok' }) },
+                },
+              },
+            };
+            cliState.selectedProviderConfigs = [`promptfoo://provider/selected-${name}`];
+            if (++arrived === 2) {
+              release();
+            }
+            await ready;
+            return {
+              target: getRemoteGradingContext(),
+              grader: (await getGradingProvider('text', undefined, null))?.id(),
+              env: cliState.env?.INVOCATION,
+            };
+          }),
+        ),
+      ),
+    );
+    for (const [index, name] of ['first', 'second'].entries()) {
+      expect(results[index]).toEqual({
+        target: { targetId: `selected-${name}` },
+        grader: `grader-${name}`,
+        env: name,
+      });
+    }
+    expect(cliState.config).toBe(outsideConfig);
+    expect(cliState.selectedProviderConfigs).toBe(outsideProviders);
+  });
 
   it('keeps file defaults below suite values without saving them as config overrides', async () => {
     const configPath = path.join(tempDir, 'config.json');
@@ -455,6 +501,33 @@ describe('doEval environment files', () => {
       const result = await resolveConfigs({ config: files }, {}, undefined, { loadEnvFiles: true });
       expect(result.commandLineOptions?.envPath).toBe(path.join(tempDir, 'first.env'));
       expect(getProcessEnv().PROMPTFOO_REVIEW_ENV_PROBE).toBe('first');
+    });
+  });
+
+  it.each([false, true])('resolves the later declaring config env file (glob=%s)', async (glob) => {
+    const directories = ['a', 'b'].map((name) => path.join(tempDir, name));
+    for (const [index, directory] of directories.entries()) {
+      fs.mkdirSync(directory);
+      fs.writeFileSync(
+        path.join(directory, 'choice.env'),
+        `PROMPTFOO_REVIEW_ENV_PROBE=directory-${index}`,
+      );
+      fs.writeFileSync(
+        path.join(directory, 'config.json'),
+        JSON.stringify({
+          providers: ['echo'],
+          prompts: ['hello'],
+          ...(index === 1 && { commandLineOptions: { envPath: 'choice.env' } }),
+        }),
+      );
+    }
+    await cliState.withEnvFileOverrides({}, async () => {
+      const paths = glob
+        ? [path.join(tempDir, '*', 'config.json')]
+        : directories.map((directory) => path.join(directory, 'config.json'));
+      const result = await resolveConfigs({ config: paths }, {}, undefined, { loadEnvFiles: true });
+      expect(result.commandLineOptions?.envPath).toBe(path.join(directories[1], 'choice.env'));
+      expect(getProcessEnv().PROMPTFOO_REVIEW_ENV_PROBE).toBe('directory-1');
     });
   });
 

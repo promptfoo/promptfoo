@@ -228,6 +228,7 @@ async function resolveReplayConfigs(
           ? configs.selectedProviderConfigs
           : undefined,
         providerSelection,
+        configs.basePath,
       );
       configs.testSuite.providers = selected.providers;
       configs.selectedProviderConfigs = selected.providerConfigs;
@@ -740,6 +741,7 @@ async function doEvalWithEnv(
         resolvedProvidersBeforeCustomization,
         Array.isArray(selectedProviderConfigs) ? selectedProviderConfigs : undefined,
         initialProviderSelection,
+        effectiveConfigBasePath,
       );
       testSuite.providers = selected.providers;
       selectedProviderConfigs = selected.providerConfigs;

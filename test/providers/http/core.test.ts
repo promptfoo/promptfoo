@@ -41,6 +41,28 @@ describe('HttpProvider', () => {
     expect(importModule).not.toHaveBeenCalled();
   });
 
+  it('binds preconstructed file transforms to the declaring configuration directory', async () => {
+    const instance = new HttpProvider(mockUrl, {
+      config: { method: 'GET', transformResponse: 'file://response.js' },
+    });
+    instance.setConfigBasePath('/declaring/config');
+    vi.mocked(fetchWithCache).mockResolvedValueOnce({
+      data: '{}',
+      status: 200,
+      statusText: 'OK',
+      cached: false,
+    });
+    await instance.callApi('hello');
+    expect(importModule).toHaveBeenCalledWith(
+      path.resolve('/declaring/config/response.js'),
+      undefined,
+    );
+    expect(() => instance.setConfigBasePath('/different/config')).toThrow(
+      'initialized HTTP provider',
+    );
+    expect(() => instance.setConfigBasePath('/declaring/config')).not.toThrow();
+  });
+
   it('should call the API and return the response', async () => {
     provider = new HttpProvider(mockUrl, {
       config: {

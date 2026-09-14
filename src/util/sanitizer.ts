@@ -1277,7 +1277,7 @@ function redactPrimitiveLeaf(
   }
   if (typeof key === 'string') {
     if (typeof value === 'string' && URL_KEY_RE.test(key)) {
-      return sanitizeUrl(value, redactOpaqueValues);
+      return sanitizeUrlForLogging(value, redactOpaqueValues);
     }
     if (isStructurePreservingSecretKey(key)) {
       // An `auth`/`session` value that is itself a bare credential string is

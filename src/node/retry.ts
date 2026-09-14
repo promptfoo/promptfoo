@@ -130,6 +130,7 @@ async function resolveRetryConfigs(
           ? configs.selectedProviderConfigs
           : undefined,
         providerSelection,
+        configs.basePath,
       );
       configs.testSuite.providers = selected.providers;
       configs.selectedProviderConfigs = selected.providerConfigs;
@@ -294,7 +295,7 @@ export async function assertErrorResultsReplaced(
   const failedExecutions = new Set(
     staleRows.map((row) => `${row.evalId}:${row.testIdx}:${row.promptIdx}`),
   );
-  const replacedExecutions = new Set<string>();
+  const replacedExecutions = new Map<string, number>();
   const testIndicesByEval = new Map<string, Set<number>>();
   for (const row of staleRows) {
     const testIndices = testIndicesByEval.get(row.evalId) ?? new Set<number>();
@@ -324,7 +325,7 @@ export async function assertErrorResultsReplaced(
       for (const row of candidateRows) {
         const key = `${row.evalId}:${row.testIdx}:${row.promptIdx}`;
         if (!preexistingIds.has(row.id)) {
-          replacedExecutions.add(key);
+          replacedExecutions.set(key, (replacedExecutions.get(key) ?? 0) + 1);
         } else if (failedExecutions.has(key)) {
           supersededIds.add(row.id);
         }
@@ -335,8 +336,11 @@ export async function assertErrorResultsReplaced(
   const missingRows: typeof staleRows = [];
   for (const row of staleRows) {
     const key = `${row.evalId}:${row.testIdx}:${row.promptIdx}`;
-    if (!replacedExecutions.has(key)) {
+    const replacements = replacedExecutions.get(key) ?? 0;
+    if (replacements === 0) {
       missingRows.push(row);
+    } else {
+      replacedExecutions.set(key, replacements - 1);
     }
   }
   if (missingRows.length > 0) {

@@ -1,7 +1,9 @@
 import { createHash } from 'crypto';
+import path from 'path';
 
 import { usesGradingProvider } from '../../assertions/providerTypes';
 import { isCloudProvider } from '../cloud';
+import { parseFileUrl } from '../functions/loadFunction';
 import {
   isProviderConfigFileReference,
   normalizeProviderRef,
@@ -9,6 +11,7 @@ import {
 } from '../providerRef';
 import { renderEnvOnlyInObject } from '../render';
 import { redactSecretLeaves } from '../sanitizer';
+import { getFileSourceHash } from '../sourceHash';
 
 interface RuntimeProvider {
   id: string | (() => string);
@@ -93,7 +96,12 @@ function stableSerialize(value: unknown, seen = new WeakSet<object>()): string {
 function getProviderFingerprint(
   provider: RuntimeProvider,
   sourceFingerprintInput: unknown,
+  basePath?: string,
 ): string {
+  const transformFile =
+    typeof provider.transform === 'string' && provider.transform.startsWith('file://')
+      ? parseFileUrl(provider.transform)
+      : undefined;
   // Keep the base directory and auth structure so replay detects implementation drift.
   const fingerprintInput = {
     runtime: {
@@ -103,6 +111,12 @@ function getProviderFingerprint(
       id: getRuntimeProviderId(provider),
       label: provider.label,
       transform: provider.transform,
+      transformSource: transformFile
+        ? getFileSourceHash(
+            path.resolve(basePath || '.', transformFile.filePath),
+            transformFile.functionName,
+          )
+        : undefined,
       delay: provider.delay,
       inputs: redactSecretLeaves(provider.inputs, { redactOpaqueValues: false }),
     },
@@ -159,6 +173,7 @@ function createSelectionEntry(
   provider: RuntimeProvider,
   source: unknown,
   index: number,
+  basePath?: string,
 ): ProviderSelectionEntry {
   const {
     cloudProviderId,
@@ -173,7 +188,7 @@ function createSelectionEntry(
   return {
     index,
     id: getRuntimeProviderId(provider),
-    fingerprint: getProviderFingerprint(provider, sourceFingerprintInput),
+    fingerprint: getProviderFingerprint(provider, sourceFingerprintInput, basePath),
     ...(provider.label ? { label: provider.label } : {}),
     ...(cloudProviderId ? { cloudProviderId } : {}),
     ...(linkedTargetId ? { linkedTargetId } : {}),
@@ -184,6 +199,7 @@ export function createProviderSelection<TRuntime extends RuntimeProvider, TSourc
   allProviders: TRuntime[],
   selectedProviderConfigs: TSource[] | undefined,
   selectedProviders: TRuntime[],
+  basePath?: string,
 ): ProviderSelection {
   if (!selectedProviderConfigs || selectedProviderConfigs.length !== allProviders.length) {
     throw new Error(
@@ -208,6 +224,7 @@ export function createProviderSelection<TRuntime extends RuntimeProvider, TSourc
         allProviders[providerIndex],
         selectedProviderConfigs[providerIndex],
         providerIndex,
+        basePath,
       ),
     );
     providerIndex++;
@@ -220,6 +237,7 @@ export function applyProviderSelection<TRuntime extends RuntimeProvider, TSource
   allProviders: TRuntime[],
   selectedProviderConfigs: TSource[] | undefined,
   selection: ProviderSelection,
+  basePath?: string,
 ): { providers: TRuntime[]; providerConfigs: TSource[] } {
   if (!selectedProviderConfigs || selectedProviderConfigs.length !== allProviders.length) {
     throw new Error(
@@ -242,9 +260,10 @@ export function applyProviderSelection<TRuntime extends RuntimeProvider, TSource
 
     const provider = allProviders[expected.index];
     const source = selectedProviderConfigs[expected.index];
-    const actual = createSelectionEntry(provider, source, expected.index);
+    const actual = createSelectionEntry(provider, source, expected.index, basePath);
     if (
-      actual.id !== expected.id ||
+      redactSecretLeaves({ id: actual.id }, { redactOpaqueValues: false }).id !==
+        redactSecretLeaves({ id: expected.id }, { redactOpaqueValues: false }).id ||
       actual.label !== expected.label ||
       actual.cloudProviderId !== expected.cloudProviderId ||
       actual.linkedTargetId !== expected.linkedTargetId ||

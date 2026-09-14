@@ -169,6 +169,7 @@ async function sendEvalRecord(
     ...evalRecord,
     prompts: evalRecord.prompts.map((prompt) => ({
       ...prompt,
+      provider: redactSecretLeaves({ provider: prompt.provider }).provider,
       ...(prompt.config
         ? { config: redactSecretLeaves(omitFunctionsForShare(prompt.config)) }
         : {}),

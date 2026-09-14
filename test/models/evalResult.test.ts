@@ -97,6 +97,54 @@ describe('EvalResult', () => {
     },
   );
 
+  it.each([true, false])(
+    'redacts each save while retaining live values (persisted=%s)',
+    async (persist) => {
+      const result = await EvalResult.createFromEvaluateResult('save-privacy', mockEvaluateResult, {
+        persist,
+      });
+      const secret = 'fixture-save-private-receipt';
+      const metadata = {
+        http: {
+          status: 200,
+          statusText: 'OK',
+          requestHeaders: { Authorization: secret, Cookie: secret, 'x-safe-debug': 'visible' },
+        },
+      };
+      result.response = { output: { password: 'model-output-preserved' }, metadata };
+      result.gradingResult = {
+        pass: true,
+        score: 1,
+        reason: 'ok',
+        metadata,
+        componentResults: [{ pass: true, score: 1, reason: 'ok', metadata }],
+      };
+      result.metadata = metadata;
+      result.provider = { id: 'echo', config: { apiKey: secret, temperature: 0.2 } };
+      result.testCase = { ...result.testCase, options: { provider: result.provider } };
+      const live = JSON.stringify({
+        response: result.response,
+        grade: result.gradingResult,
+        metadata,
+        provider: result.provider,
+      });
+      await result.save();
+      const stored = await EvalResult.findById(result.id);
+      expect(stored).toBeDefined();
+      expect(JSON.stringify(stored)).not.toContain(secret);
+      expect(stored?.response?.output).toEqual({ password: 'model-output-preserved' });
+      expect(stored?.response?.metadata?.http?.requestHeaders?.['x-safe-debug']).toBe('visible');
+      expect(
+        JSON.stringify({
+          response: result.response,
+          grade: result.gradingResult,
+          metadata,
+          provider: result.provider,
+        }),
+      ).toBe(live);
+    },
+  );
+
   describe('sanitizeProvider', () => {
     it('should handle ApiProvider objects', () => {
       const apiProvider = createMockProvider({

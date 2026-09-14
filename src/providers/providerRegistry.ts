@@ -44,12 +44,10 @@ class ProviderRegistry {
   }
 
   private async close(provider: CleanupProvider): Promise<void> {
-    for (const cleanup of [provider.shutdown, provider.cleanup]) {
-      try {
-        await cleanup?.call(provider);
-      } catch (error) {
-        logger.warn('Error cleaning up provider', { error });
-      }
+    try {
+      await (provider.shutdown ?? provider.cleanup)?.call(provider);
+    } catch (error) {
+      logger.warn('Error cleaning up provider', { error });
     }
   }
 

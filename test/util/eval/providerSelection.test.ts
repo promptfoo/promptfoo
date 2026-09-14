@@ -56,6 +56,47 @@ describe('provider selection', () => {
     expect(target.id()).toBe(id);
   });
 
+  it('replays a redacted provider ID using its unchanged fingerprint', () => {
+    const id = 'webhook:https://hooks.slack.com/services/T-short/B-short/short-secret';
+    const target = provider(id);
+    const selection = redactSecretLeaves(createProviderSelection([target], [id], [target]), {
+      redactOpaqueValues: false,
+    });
+    expect(JSON.stringify(selection)).not.toContain('short-secret');
+    expect(applyProviderSelection([target], [id], selection).providers).toEqual([target]);
+    const changed = provider(id + '-changed');
+    expect(() => applyProviderSelection([changed], [id], selection)).toThrow(/no longer matches/);
+  });
+
+  it('redacts short webhook path credentials in nested grader configs', () => {
+    const url = 'https://hooks.slack.com/services/T-short/B-short/short-secret';
+    const config = { defaultTest: { options: { provider: { id: 'webhook', config: { url } } } } };
+    expect(JSON.stringify(buildProviderShareConfig(config, { providers: [] }))).not.toContain(
+      'short-secret',
+    );
+    expect(config.defaultTest.options.provider.config.url).toBe(url);
+  });
+
+  it('detects changes to a provider transform file while preserving the selected export', () => {
+    const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'provider-transform-source-'));
+    try {
+      const file = path.join(directory, 'transform.cjs');
+      fs.writeFileSync(file, 'exports.transform = output => output.first;');
+      const target = { ...provider('echo'), transform: 'file://transform.cjs:transform' };
+      const source = { id: 'echo', transform: target.transform };
+      const selection = createProviderSelection([target], [source], [target], directory);
+      expect(applyProviderSelection([target], [source], selection, directory).providers).toEqual([
+        target,
+      ]);
+      fs.writeFileSync(file, 'exports.transform = output => output.second;');
+      expect(() => applyProviderSelection([target], [source], selection, directory)).toThrow(
+        /no longer matches/,
+      );
+    } finally {
+      fs.rmSync(directory, { recursive: true, force: true });
+    }
+  });
+
   it('tracks opaque model revisions while allowing credential rotation', () => {
     const initial = provider('http', 'fixture', {
       revision: 'a'.repeat(64),

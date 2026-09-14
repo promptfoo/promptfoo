@@ -540,6 +540,7 @@ export function registerRunEvaluationTool(server: McpServer) {
                   unfilteredProviders,
                   Array.isArray(selectedProviderConfigs) ? selectedProviderConfigs : undefined,
                   testSuite.providers,
+                  configBasePath,
                 );
               } catch (error) {
                 throw new McpEvaluationFilterError(

@@ -111,6 +111,24 @@ describe('A2AProvider', () => {
     expect(importModule).toHaveBeenCalledTimes(1);
   });
 
+  it('binds a preconstructed transform to its configuration directory', async () => {
+    vi.mocked(importModule).mockResolvedValue(() => ({ output: 'transformed' }));
+    vi.mocked(fetchWithTimeout).mockResolvedValue(
+      jsonResponse({ message: { role: 'ROLE_AGENT', parts: [{ text: 'original' }] } }),
+    );
+    const instance = provider({ transformResponse: 'file://response.js' });
+    instance.setConfigBasePath('/declaring/config');
+    await expect(instance.callApi('hello')).resolves.toMatchObject({ output: 'transformed' });
+    expect(importModule).toHaveBeenCalledWith(
+      path.resolve('/declaring/config/response.js'),
+      undefined,
+    );
+    expect(() => instance.setConfigBasePath('/different/config')).toThrow(
+      'initialized A2A provider',
+    );
+    expect(() => instance.setConfigBasePath('/declaring/config')).not.toThrow();
+  });
+
   it('loads from the provider registry with a bare id and shorthand url', async () => {
     await expect(loadApiProvider('a2a')).resolves.toBeInstanceOf(A2AProvider);
     const loaded = await loadApiProvider('a2a:https://agent.example.com/a2a/v1');
