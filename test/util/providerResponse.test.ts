@@ -23,13 +23,12 @@ describe('getActualPrompt', () => {
     expect(getActualPrompt(response)).toBe('Hello, world!');
   });
 
-  it('should return undefined for empty string prompt', () => {
+  it('should preserve an explicitly empty string prompt', () => {
     const response: ProviderResponse = {
       output: 'test output',
       prompt: '',
     };
-    // Empty string is truthy check but empty, so we return undefined
-    expect(getActualPrompt(response)).toBeUndefined();
+    expect(getActualPrompt(response)).toBe('');
   });
 
   it('should stringify chat message array', () => {
@@ -97,8 +96,7 @@ describe('getActualPrompt', () => {
         redteamFinalPrompt: 'fallback prompt',
       },
     };
-    // With empty string prompt explicitly set, we return undefined (not the fallback)
-    expect(getActualPrompt(response)).toBeUndefined();
+    expect(getActualPrompt(response)).toBe('');
   });
 });
 
@@ -132,7 +130,7 @@ describe('getActualPromptWithFallback', () => {
     expect(getActualPromptWithFallback(undefined, 'original prompt')).toBe('original prompt');
   });
 
-  it('should return original prompt when prompt is empty string', () => {
+  it('should return the original prompt when the reported prompt is empty', () => {
     const response: ProviderResponse = {
       output: 'test output',
       prompt: '',

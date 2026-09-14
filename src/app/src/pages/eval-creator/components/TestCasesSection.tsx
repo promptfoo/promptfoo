@@ -21,7 +21,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from '@app/components/ui/tool
 import { useToast } from '@app/hooks/useToast';
 import { cn } from '@app/lib/utils';
 import { useStore } from '@app/stores/evalConfig';
-import { testCaseFromCsvRow } from '@promptfoo/csv';
+import { testCaseFromCsvRow } from '@app/utils/csv';
 import TestCaseDialog from './TestCaseDialog';
 import type { CsvRow, TestCase, TestGeneratorConfig } from '@promptfoo/types';
 

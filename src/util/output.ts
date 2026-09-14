@@ -13,12 +13,14 @@ import { getEnvBool } from '../envars';
 import { getDirectory } from '../esm';
 import { writeCsvToGoogleSheet } from '../googleSheets';
 import logger from '../logger';
+import Eval, { projectConfigForOutput } from '../models/eval';
 import {
   asEvaluateResult,
+  getOutputStripFlags,
   getResultIndexKey,
+  projectTracesForOutput,
   sanitizeResultForJsonlArtifact,
 } from '../models/evalResult';
-import { PromptfooAttributes } from '../tracing/genaiTracer';
 import {
   type CsvRow,
   type ExportedBlobAsset,
@@ -36,7 +38,6 @@ import {
 } from './sanitizer';
 import { getNunjucksEngine } from './templates';
 
-import type Eval from '../models/eval';
 import type { EvaluateResult, EvaluateTableOutput } from '../types';
 
 export interface OutputOptions {
@@ -336,71 +337,14 @@ const outputToHtmlReportCell = (output: EvaluateTableOutput) => {
 };
 
 function sanitizeConfigForOutput(config: Eval['config']): OutputFile['config'] {
-  return sanitizeObject(sanitizeTracingConfigForPersistence(config), {
-    context: 'output config',
-    throwOnError: true,
-    maxDepth: Number.POSITIVE_INFINITY,
-  }) as OutputFile['config'];
-}
-
-function projectTracesForOutput(traces: NonNullable<OutputFile['traces']>) {
-  const shouldStripMetadata = getEnvBool('PROMPTFOO_STRIP_METADATA', false);
-  const shouldStripPromptText = getEnvBool('PROMPTFOO_STRIP_PROMPT_TEXT', false);
-  const shouldStripResponseOutput = getEnvBool('PROMPTFOO_STRIP_RESPONSE_OUTPUT', false);
-  const shouldStripTestVars = getEnvBool('PROMPTFOO_STRIP_TEST_VARS', false);
-
-  if (
-    !shouldStripMetadata &&
-    !shouldStripPromptText &&
-    !shouldStripResponseOutput &&
-    !shouldStripTestVars
-  ) {
-    return traces;
-  }
-
-  return traces.map((trace) => {
-    let projectedTrace = trace;
-    if (shouldStripMetadata) {
-      const { metadata: _metadata, ...traceWithoutMetadata } = trace;
-      projectedTrace = traceWithoutMetadata;
-    } else if (shouldStripTestVars && trace.metadata && 'vars' in trace.metadata) {
-      const { metadata: traceMetadata, ...traceWithoutMetadata } = trace;
-      const { vars: _vars, ...metadata } = traceMetadata;
-      projectedTrace = {
-        ...traceWithoutMetadata,
-        ...(Object.keys(metadata).length > 0 && { metadata }),
-      };
-    }
-
-    if (!shouldStripPromptText && !shouldStripResponseOutput) {
-      return projectedTrace;
-    }
-
-    return {
-      ...projectedTrace,
-      spans: projectedTrace.spans.map((span) => {
-        if (!span.attributes) {
-          return span;
-        }
-
-        const projectedAttributes = { ...span.attributes };
-        if (shouldStripPromptText) {
-          delete projectedAttributes[PromptfooAttributes.REQUEST_BODY];
-        }
-        if (shouldStripResponseOutput) {
-          delete projectedAttributes[PromptfooAttributes.RESPONSE_BODY];
-        }
-
-        const { attributes: _attributes, ...projectedSpan } = span;
-        return {
-          ...projectedSpan,
-          ...(Object.keys(projectedAttributes).length > 0 && {
-            attributes: projectedAttributes,
-          }),
-        };
-      }),
-    };
-  });
+  return sanitizeObject(
+    projectConfigForOutput(sanitizeTracingConfigForPersistence(config), getOutputStripFlags()),
+    {
+      context: 'output config',
+      throwOnError: true,
+      maxDepth: Number.POSITIVE_INFINITY,
+    },
+  ) as OutputFile['config'];
 }
 
 function resultsForMediaExportScan(results: OutputFile['results']): unknown {

@@ -290,7 +290,7 @@ function TableHeader({
   );
 }
 
-function getVariableCellValue({
+export function getVariableCellValue({
   row,
   varName,
   injectVarName,
@@ -301,14 +301,13 @@ function getVariableCellValue({
   injectVarName: string;
   fallbackValue: string | object;
 }): string | object {
-  let value = fallbackValue;
+  const value = fallbackValue;
 
   if (varName === injectVarName) {
     for (const output of row.outputs || []) {
       const actualPrompt = getActualPrompt(output?.response);
       if (actualPrompt) {
-        value = actualPrompt;
-        break;
+        return actualPrompt;
       }
     }
   }
