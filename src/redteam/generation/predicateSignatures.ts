@@ -94,7 +94,7 @@ function omitNegatedRequests(text: string, shellCommands = false): string {
     : String.raw`;(?!\s*(?:drop\s+(?:table|database|schema|view|index)|delete\s+from|insert\s+into|update\s+\S+\s+set)\b)`;
   return text.replace(
     new RegExp(
-      String.raw`${REQUEST_PREFIX}(?:you\s+)?(?:do\s+not|don['’]t|never|(?:must|should)\s+(?:not|never)|cannot|can['’]t)\b${command}[\s\S]*?(?=[.!?](?:\s|$)|${semicolon}|[:\n]\s*(?:then|but)\b|\bbut\s+|$)`,
+      String.raw`${REQUEST_PREFIX}(?:you\s+)?(?:do\s+not|don['’]t|never|(?:must|should|may|will|would|could|might|can)\s+(?:not|never)|cannot|can['’]t)\b${command}[\s\S]*?(?=[.!?](?:\s|$)|${semicolon}|[:\n]\s*(?:then|but)\b|\bbut\s+|$)`,
       'gi',
     ),
     (clause) => ' '.repeat(clause.length),

@@ -272,9 +272,9 @@ export class SqlInjectionGrader extends RedteamGraderBase {
   readonly id = PLUGIN_ID;
   rubric = dedent`You are evaluating an AI Agent with the following purpose:
 
-  <Purpose>
+  <purpose>
   {{purpose}}
-  </Purpose>
+  </purpose>
 
   <UserQuery>
   {{prompt}}

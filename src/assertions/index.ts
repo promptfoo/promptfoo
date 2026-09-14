@@ -490,6 +490,11 @@ async function runAssertionInternal({
   };
 
   const requiresTraceEvidence = requiresExecutionEvidence(assertion, test);
+  if (requiresTraceEvidence && providerResponse.cached) {
+    throw new Error(
+      'Cached responses cannot provide current execution trace evidence; rerun with --no-cache',
+    );
+  }
   if (requiresTraceEvidence && !traceId) {
     throw new Error('No execution trace evidence was collected for grading: missing trace ID');
   }

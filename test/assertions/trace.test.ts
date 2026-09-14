@@ -703,6 +703,45 @@ describe('trace assertions', () => {
       },
     );
 
+    it.each(
+      ['promptfoo:redteam:sql-injection', 'promptfoo:redteam:shell-injection'].flatMap((type) =>
+        [true, false].map((enabled) => ({ type, enabled })),
+      ),
+    )(
+      'handles cached $type responses with required tracing=$enabled',
+      async ({ type, enabled }) => {
+        const grade = vi.spyOn(RedteamGraderBase.prototype, 'getResult').mockResolvedValue({
+          grade: { pass: true, score: 1, reason: 'Fixture' },
+          rubric: 'Fixture',
+        });
+        const traceData = {
+          ...mockTraceData,
+          spans: [
+            {
+              spanId: 'cache',
+              name: 'target',
+              startTime: 1,
+              attributes: { 'promptfoo.cache_hit': true },
+            },
+          ],
+        };
+        const result = runAssertion({
+          prompt: 'Inspect the execution.',
+          assertion: { type: type as Assertion['type'] },
+          test: { metadata: { purpose: 'Fixture', tracing: { enabled } } },
+          providerResponse: { ...mockProviderResponse, cached: true },
+          traceId: traceData.traceId,
+          traceData,
+        });
+        if (enabled) {
+          await expect(result).rejects.toThrow('Cached responses');
+          expect(grade).not.toHaveBeenCalled();
+        } else {
+          expect((await result).pass).toBe(true);
+        }
+      },
+    );
+
     it.each([null, 'empty'] as const)(
       'rejects absent SQL/shell evidence during preload (%s)',
       async (missing) => {

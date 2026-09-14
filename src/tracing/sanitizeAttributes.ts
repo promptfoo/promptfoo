@@ -1,3 +1,5 @@
+import { hasDuplicateJsonKeys } from './jsonKeys';
+
 export interface AttributeSanitizationOptions {
   redactAttributes?: string[];
   sanitizeSensitiveAttributes?: boolean;
@@ -75,6 +77,7 @@ export function sanitizeTraceAttributes(
     redactAttributes = [],
     sanitizeSensitiveAttributes = true,
     truncateValues = true,
+    redactText,
   } = options;
   const customPatterns = [
     ...new Set(
@@ -89,7 +92,40 @@ export function sanitizeTraceAttributes(
       return '[TRUNCATED]';
     }
     if (typeof value === 'string') {
-      value = options.redactText?.(value) ?? value;
+      let decoded = false;
+      if (/^\s*(?:\[|\{|")/.test(value)) {
+        try {
+          const original = JSON.parse(value);
+          decoded = true;
+          if (hasDuplicateJsonKeys(value)) {
+            return '[TRUNCATED]';
+          }
+          const sourceAware = redactText
+            ? JSON.parse(value, (_key, parsed, context?: { source?: string }) => {
+                if (typeof parsed !== 'number') {
+                  return parsed;
+                }
+                if (context?.source === undefined) {
+                  throw new Error('JSON numeric source unavailable');
+                }
+                const redacted = redactText(context.source);
+                return redacted === context.source ? parsed : redacted;
+              })
+            : original;
+          const sanitized = sanitizeValue(sourceAware, valueDepth + 1);
+          if (JSON.stringify(original) !== JSON.stringify(sanitized)) {
+            value = JSON.stringify(sanitized);
+          }
+        } catch {
+          if (decoded) {
+            return '[TRUNCATED]';
+          }
+          // Ordinary attribute text can start with JSON punctuation.
+        }
+      }
+      if (!decoded) {
+        value = redactText?.(value) ?? value;
+      }
       return truncateValues && value.length > 400 ? `${value.slice(0, 400)}…` : value;
     }
     if (Array.isArray(value)) {
@@ -98,23 +134,26 @@ export function sanitizeTraceAttributes(
     if (value && typeof value === 'object') {
       return sanitizeTraceAttributes(value as Record<string, any>, options, valueDepth + 1);
     }
+    if (typeof value === 'number' || typeof value === 'boolean') {
+      const text = String(value);
+      const redacted = redactText?.(text) ?? text;
+      return redacted === text ? value : redacted;
+    }
     return value;
   };
 
-  const sanitized: Record<string, any> = {};
-  for (const [key, value] of Object.entries(attributes)) {
-    if (customPatterns.some((pattern) => key.toLowerCase().includes(pattern))) {
-      sanitized[key] = '[REDACTED]';
-      continue;
-    }
-    if (sanitizeSensitiveAttributes && isSensitiveAttributeKey(key)) {
-      sanitized[key] = '<redacted>';
-      continue;
-    }
-    sanitized[key] = sanitizeValue(value);
-  }
-
-  return sanitized;
+  return Object.fromEntries(
+    Object.entries(attributes)
+      .filter(([, value]) => value !== undefined)
+      .map(([key, value]) => [
+        redactText?.(key) ?? key,
+        customPatterns.some((pattern) => key.toLowerCase().includes(pattern))
+          ? '[REDACTED]'
+          : sanitizeSensitiveAttributes && isSensitiveAttributeKey(key)
+            ? '<redacted>'
+            : sanitizeValue(value),
+      ]),
+  );
 }
 
 export interface TraceTextRedactionState {
@@ -154,10 +193,36 @@ export function getTraceTextRedactionState(
   return state;
 }
 
+function normalizeJsonNumber(value: string): string | undefined {
+  const match = /^(-?)(0|[1-9]\d*)(?:\.(\d+))?(?:[eE]([+-]?\d+))?$/.exec(value);
+  if (!match) {
+    return undefined;
+  }
+  const digits = (match[2] + (match[3] ?? '')).replace(/^0+/, '');
+  if (!digits) {
+    return '0';
+  }
+  const coefficient = digits.replace(/0+$/, '');
+  const exponent =
+    BigInt(match[4] ?? '0') -
+    BigInt(match[3]?.length ?? 0) +
+    BigInt(digits.length - coefficient.length);
+  return `${match[1]}${coefficient}e${exponent}`;
+}
+
 export function getTraceTextRedactor(
   pairs: { original: unknown; sanitized: unknown }[],
   replacement = '[REDACTED]',
-  state: TraceTextRedactionState = { secrets: new Set(), length: 0, incomplete: false },
+  state: TraceTextRedactionState = {
+    secrets: new Set(),
+    length: 0,
+    incomplete: pairs.some(
+      ({ original }) =>
+        original &&
+        typeof original === 'object' &&
+        (original as Record<string, unknown>)['promptfoo.redaction.history'] === '[REDACTED]',
+    ),
+  },
 ) {
   const pending = [...pairs];
   const secrets = state.secrets;
@@ -170,6 +235,33 @@ export function getTraceTextRedactor(
       break;
     }
     const redacted = sanitized === '[REDACTED]' || sanitized === '<redacted>';
+    if (
+      !redacted &&
+      typeof original === 'string' &&
+      typeof sanitized === 'string' &&
+      original !== sanitized &&
+      /^\s*(?:\[|\{|")/.test(original)
+    ) {
+      try {
+        pending.push({
+          original: JSON.parse(original, (_key, value, context?: { source?: string }) => {
+            if (typeof value !== 'number') {
+              return value;
+            }
+            // Preserve digits and exponent notation before Number conversion loses them.
+            if (context?.source === undefined) {
+              throw new Error('JSON numeric source unavailable');
+            }
+            return context.source;
+          }),
+          sanitized: JSON.parse(sanitized),
+        });
+        continue;
+      } catch {
+        incomplete = true;
+        break;
+      }
+    }
     // Serialized values can echo decoded fields that do not match the full string.
     if (
       redacted &&
@@ -182,8 +274,16 @@ export function getTraceTextRedactor(
     }
     if (!original || typeof original !== 'object') {
       if (original !== undefined && original !== null && redacted && String(original)) {
-        const secret = String(original);
-        if (!secrets.has(secret)) {
+        const source = String(original);
+        const canonical =
+          /^-?(?:0|[1-9]\d*)(?:\.\d+)?(?:[eE][+-]?\d+)?$/.test(source) &&
+          Number.isFinite(Number(source))
+            ? String(Number(source))
+            : source;
+        for (const secret of new Set([source, canonical])) {
+          if (secrets.has(secret)) {
+            continue;
+          }
           state.length += secret.length;
           if (state.length > 16_384 || secrets.size >= 1_000) {
             incomplete = true;
@@ -195,6 +295,9 @@ export function getTraceTextRedactor(
       continue;
     }
     for (const [key, value] of Object.entries(original)) {
+      if (redacted && !Array.isArray(original)) {
+        pending.push({ original: key, sanitized });
+      }
       pending.push({
         original: value,
         sanitized: redacted ? sanitized : (sanitized as Record<string, unknown>)?.[key],
@@ -214,6 +317,9 @@ export function getTraceTextRedactor(
         'g',
       )
     : undefined;
+  const numericSecrets = new Set(
+    [...secrets].map(normalizeJsonNumber).filter((value) => value !== undefined),
+  );
   return <T extends string | undefined>(value: T): T => {
     if (typeof value !== 'string') {
       return value;
@@ -221,6 +327,36 @@ export function getTraceTextRedactor(
     if (incomplete) {
       return replacement as T;
     }
-    return (pattern ? value.replace(pattern, replacement) : value) as T;
+    if (!pattern) {
+      return value;
+    }
+    const numeric = normalizeJsonNumber(value);
+    if (numeric !== undefined && numericSecrets.has(numeric)) {
+      return replacement as T;
+    }
+    const redacted = value.replace(pattern, replacement);
+    // Preserve literal replacements; hide fields whose decoded text exposes another secret.
+    let unmatched = value.replace(pattern, '');
+    for (let depth = 0; depth < 20; depth++) {
+      if (
+        numericSecrets.size &&
+        (unmatched.match(/-?(?:0|[1-9]\d*)(?:\.\d+)?(?:[eE][+-]?\d+)?/g) ?? []).some((number) =>
+          numericSecrets.has(normalizeJsonNumber(number)!),
+        )
+      ) {
+        return replacement as T;
+      }
+      const decoded = unmatched.replace(/\\(?:u[0-9a-fA-F]{4}|["\\/bfnrt])/g, (escape) =>
+        JSON.parse(`"${escape}"`),
+      );
+      if (decoded === unmatched) {
+        return redacted as T;
+      }
+      if (decoded.replace(pattern, '') !== decoded) {
+        return replacement as T;
+      }
+      unmatched = decoded;
+    }
+    return replacement as T;
   };
 }

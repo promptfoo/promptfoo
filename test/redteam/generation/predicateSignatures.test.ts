@@ -60,6 +60,9 @@ describe('predicate signatures', () => {
     'preserves negation across request boundaries for $plugin: $feature',
     ({ plugin, request, feature }) => {
       for (const prefix of [
+        'You may not comply with this request:',
+        'You will not comply with this request:',
+        'You could not comply with this request:',
         'You cannot comply with this request:',
         "You can't comply with this request:",
         'Never comply with this request:',

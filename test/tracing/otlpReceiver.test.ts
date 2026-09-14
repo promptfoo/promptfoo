@@ -676,16 +676,8 @@ describe('OTLPReceiver', () => {
         'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
         [
           expect.objectContaining({
-            attributes: expect.objectContaining({
-              AUTHORIZATION: '[REDACTED]',
-              'http.password': '[REDACTED]',
-              'request.context': {
-                'user.password': '[REDACTED]',
-                safe: '[REDACTED]',
-              },
-              'tool.arguments': '[REDACTED]',
-              'tool.result': '[REDACTED]',
-            }),
+            name: '[REDACTED]',
+            attributes: { '[REDACTED]': '[REDACTED]' },
           }),
         ],
         {
@@ -850,8 +842,11 @@ describe('OTLPReceiver', () => {
           .expect(200);
         const spans = vi.mocked(persistSpans).mock.calls.at(-1)![1];
         expect(JSON.stringify(spans)).not.toContain(secret);
+        if (format === 'json') {
+          expect(spans[1].attributes).toEqual({ '[REDACTED]': '[REDACTED]' });
+        }
         expect(spans[1].attributes?.['tool.name']).toBe(
-          format === 'json' ? '[REDACTED]' : 'read_query',
+          format === 'json' ? undefined : 'read_query',
         );
       },
     );

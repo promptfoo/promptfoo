@@ -338,12 +338,14 @@ Patterns are matched against each attribute key **at every nesting level individ
 nested key like `authorization` inside a `headers` object is matched by the pattern
 `authorization`, but a full dotted path such as `request.headers.authorization` will **not**
 match the nested leaf key — use the key's own name.
-Redaction covers span **attributes** (recursively, including nested objects and arrays),
-and a span `name` or `statusMessage` **only when it exactly echoes the value of a redacted
-attribute**. A secret that appears solely in a span name, status/error message, or log
-body — without also being a redacted attribute value — is not detected. Redaction also does
-**not** scan arbitrary free text or trace `metadata` (such as test `vars`), so avoid placing
-secrets in test variables when traces are retained.
+Redaction covers span **attributes**, including nested objects, arrays, and serialized JSON.
+It also masks matching values echoed in attribute keys, other attributes, span names, and
+status messages. Valid JSON stays parseable when individual fields can be redacted safely;
+ambiguous JSON, such as objects with duplicate keys, is replaced in full.
+
+A secret that appears only in free text without a matching protected attribute is not
+detected. Trace `metadata` (such as test `vars`) is not covered, so avoid placing secrets
+in test variables when traces are retained.
 
 :::warning Scope of `redactAttributes`
 
