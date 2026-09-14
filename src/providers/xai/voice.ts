@@ -364,16 +364,12 @@ export class XAIVoiceProvider implements ApiProvider {
       };
     }
 
-    // Apply function handler if provided in context
-    if (
-      context?.prompt?.config?.functionCallHandler &&
-      typeof context.prompt.config.functionCallHandler === 'function'
-    ) {
-      this.config.functionCallHandler = context.prompt.config.functionCallHandler;
-    }
+    const promptHandler = context?.prompt?.config?.functionCallHandler;
+    const functionCallHandler =
+      typeof promptHandler === 'function' ? promptHandler : this.config.functionCallHandler;
 
     try {
-      const result = await this.webSocketRequest(prompt);
+      const result = await this.webSocketRequest(prompt, functionCallHandler);
 
       // Build output - if function calls exist, include them in output for assertions
       const hasFunctionCalls = result.functionCalls && result.functionCalls.length > 0;
@@ -399,7 +395,10 @@ export class XAIVoiceProvider implements ApiProvider {
   /**
    * WebSocket request implementation
    */
-  private async webSocketRequest(prompt: string): Promise<{
+  private async webSocketRequest(
+    prompt: string,
+    functionCallHandler = this.config.functionCallHandler,
+  ): Promise<{
     output: string;
     cost: number;
     metadata: Record<string, unknown>;
@@ -550,12 +549,9 @@ export class XAIVoiceProvider implements ApiProvider {
                     });
                   }
 
-                  if (this.config.functionCallHandler) {
+                  if (functionCallHandler) {
                     try {
-                      const result = await this.config.functionCallHandler(
-                        call.name,
-                        call.arguments,
-                      );
+                      const result = await functionCallHandler(call.name, call.arguments);
                       functionCallResults.push(result);
 
                       // Track function call with full details for assertions
@@ -605,7 +601,7 @@ export class XAIVoiceProvider implements ApiProvider {
                 pendingFunctionCalls = [];
 
                 // Request continuation if we have a handler
-                if (this.config.functionCallHandler) {
+                if (functionCallHandler) {
                   sendEvent({ type: 'response.create' });
                   return;
                 }
