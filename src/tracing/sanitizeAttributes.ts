@@ -202,7 +202,11 @@ function normalizeJsonNumber(value: string): string | undefined {
   if (!digits) {
     return '0';
   }
-  const coefficient = digits.replace(/0+$/, '');
+  let end = digits.length;
+  while (digits[end - 1] === '0') {
+    end--;
+  }
+  const coefficient = digits.slice(0, end);
   const exponent =
     BigInt(match[4] ?? '0') -
     BigInt(match[3]?.length ?? 0) +

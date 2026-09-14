@@ -43,6 +43,12 @@ interface OTLPAttribute {
   };
 }
 
+function assertUniqueAttributeKeys(attributes: { key: string }[]): void {
+  if (new Set(attributes.map(({ key }) => key)).size !== attributes.length) {
+    throw new SyntaxError('Invalid OTLP payload: duplicate attribute keys');
+  }
+}
+
 interface OTLPSpan {
   traceId: string; // Base64 encoded
   spanId: string; // Base64 encoded
@@ -689,7 +695,7 @@ export class OTLPReceiver {
     );
 
     const errorMessage = error instanceof Error ? error.message : String(error);
-    if (errorMessage.toLowerCase().includes('invalid protobuf')) {
+    if (error instanceof SyntaxError || errorMessage.toLowerCase().includes('invalid protobuf')) {
       res.status(400).json({ error: errorMessage });
       return;
     }
@@ -785,7 +791,10 @@ export class OTLPReceiver {
                       attributes: this.parseAttributes(event.attributes),
                     },
                   ];
-                } catch {
+                } catch (error) {
+                  if (error instanceof SyntaxError) {
+                    throw error;
+                  }
                   return [];
                 }
               }),
@@ -1051,6 +1060,7 @@ export class OTLPReceiver {
       return {};
     }
 
+    assertUniqueAttributeKeys(attributes);
     const result: Record<string, any> = {};
 
     for (const attr of attributes) {
@@ -1087,11 +1097,7 @@ export class OTLPReceiver {
       return value.arrayValue.values.map((v) => this.parseDecodedAttributeValue(v));
     }
     if (value.kvlistValue?.values) {
-      const kvMap: Record<string, any> = {};
-      for (const kv of value.kvlistValue.values) {
-        kvMap[kv.key] = this.parseDecodedAttributeValue(kv.value);
-      }
-      return kvMap;
+      return this.parseDecodedAttributes(value.kvlistValue.values);
     }
     return undefined;
   }
@@ -1101,6 +1107,7 @@ export class OTLPReceiver {
       return {};
     }
 
+    assertUniqueAttributeKeys(attributes);
     const result: Record<string, any> = {};
 
     for (const attr of attributes) {
@@ -1134,11 +1141,7 @@ export class OTLPReceiver {
       return value.arrayValue.values.map((v) => this.parseAttributeValue(v));
     }
     if (value.kvlistValue?.values) {
-      const kvMap: Record<string, any> = {};
-      for (const kv of value.kvlistValue.values) {
-        kvMap[kv.key] = this.parseAttributeValue(kv.value);
-      }
-      return kvMap;
+      return this.parseAttributes(value.kvlistValue.values);
     }
     return undefined;
   }

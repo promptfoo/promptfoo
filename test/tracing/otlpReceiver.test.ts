@@ -125,6 +125,54 @@ describe('OTLPReceiver', () => {
   });
 
   it.each(
+    ['json', 'protobuf'].flatMap((format) => [false, true].map((nested) => ({ format, nested }))),
+  )(
+    'rejects duplicate event keys before redaction: $format nested=$nested',
+    async ({ format, nested }) => {
+      const secret = 'PRIVATE_EVENT_RECEIPT';
+      const attributes = [
+        { key: 'authorization', value: { stringValue: secret } },
+        { key: 'authorization', value: { stringValue: 'benign' } },
+      ];
+      const id = (value: string) => (format === 'json' ? value : Buffer.from(value, 'hex'));
+      const data = {
+        resourceSpans: [
+          {
+            scopeSpans: [
+              {
+                spans: [
+                  {
+                    traceId: id('a'.repeat(32)),
+                    spanId: id('b'.repeat(16)),
+                    name: `span ${secret}`,
+                    startTimeUnixNano: '1000000000',
+                    events: [
+                      {
+                        name: `event ${secret}`,
+                        timeUnixNano: '1000000100',
+                        attributes: nested
+                          ? [{ key: 'details', value: { kvlistValue: { values: attributes } } }]
+                          : attributes,
+                      },
+                    ],
+                  },
+                ],
+              },
+            ],
+          },
+        ],
+      };
+      const response = await request(receiver.getApp())
+        .post('/v1/traces')
+        .set('Content-Type', format === 'json' ? 'application/json' : 'application/x-protobuf')
+        .send(format === 'json' ? data : await encodeOTLPRequest(data));
+      expect(response.status).toBe(400);
+      expect(response.body.error).toMatch(/duplicate attribute keys/i);
+      expect(persistSpans).not.toHaveBeenCalled();
+    },
+  );
+
+  it.each(
     ['json', 'protobuf'].flatMap((format) =>
       [-100, 0, 100].map((offset) => [format, offset] as const),
     ),

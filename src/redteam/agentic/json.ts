@@ -113,7 +113,14 @@ export function extractJsonObjects(value: string): object[] {
   return objects;
 }
 
+export function requireVisibleEvidenceIdentity(value: unknown): void {
+  if (typeof value === 'string' && /\[(?:REDACTED|TRUNCATED)\]|<redacted>/.test(value)) {
+    throw new Error('Agentic verifier evidence was redacted and cannot be graded');
+  }
+}
+
 export function normalizePluginId(value: unknown): string | undefined {
+  requireVisibleEvidenceIdentity(value);
   return typeof value === 'string'
     ? value
         .trim()
@@ -153,6 +160,15 @@ export function parseEvidenceCandidates(
       );
     } else if (next && typeof next === 'object') {
       const record = next as Record<string, unknown>;
+      Object.keys(record).forEach(requireVisibleEvidenceIdentity);
+      if (Array.isArray(record.findings)) {
+        for (const finding of record.findings) {
+          if (finding && typeof finding === 'object') {
+            Object.keys(finding).forEach(requireVisibleEvidenceIdentity);
+            requireVisibleEvidenceIdentity(finding.pluginId);
+          }
+        }
+      }
       findings += Array.isArray(record.findings) ? record.findings.length : 0;
       records += Number(record.findings !== undefined);
       if (records > 1000 || findings > 1000) {
@@ -164,7 +180,11 @@ export function parseEvidenceCandidates(
         ([key, value]) =>
           /^(?:agentic|agentSdk)Evidence$/i.test(key) && (preserveInvalid || value != null),
       );
-      if (record.findings !== undefined || nested.length === 0) {
+      if (
+        record.findings !== undefined ||
+        record.verifierFailed !== undefined ||
+        nested.length === 0
+      ) {
         try {
           JSON.stringify(record, (key, value) => {
             decodedCharacters += key.length + (typeof value === 'string' ? value.length : 0);

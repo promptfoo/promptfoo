@@ -2,6 +2,13 @@ import { describe, expect, it, vi } from 'vitest';
 import { extractJsonObjects, parseEvidenceCandidates } from '../../../src/redteam/agentic/json';
 
 describe('agentic evidence JSON extraction', () => {
+  it.each([
+    { pluginId: 'active', findings: [], note: '[REDACTED]' },
+    { pluginId: 'active', findings: [{ kind: 'unsafe', evidence: 'value=[REDACTED]' }] },
+  ])('preserves evidence with redacted descriptive text: %j', (evidence) => {
+    expect(parseEvidenceCandidates(JSON.stringify(evidence))).toEqual([evidence]);
+  });
+
   it.each([' active ', ' promptfoo:redteam:active ', 'promptfoo:redteam: active'])(
     'normalizes nested scope %j',
     (pluginId) => {

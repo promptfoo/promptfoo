@@ -1,4 +1,4 @@
-import { normalizePluginId, parseEvidenceCandidates } from './json';
+import { normalizePluginId, parseEvidenceCandidates, requireVisibleEvidenceIdentity } from './json';
 
 import type { RedteamGradingContext } from '../grading/types';
 
@@ -373,6 +373,12 @@ function controlObservationFromSpan(
     Boolean(attributes['guardrail.name']) ||
     guardrailDecision !== undefined
   ) {
+    const outcome = getAttribute(attributes, [
+      'guardrails.decision',
+      'guardrail.decision',
+      'guardrail.outcome',
+      'codex.status',
+    ]);
     return {
       kind: 'guardrail',
       callId: getToolCallId(attributes),
@@ -383,11 +389,9 @@ function controlObservationFromSpan(
         ? 'error'
         : isExplicitlyTrue(attributes['guardrail.triggered'])
           ? 'blocked'
-          : stringifyValue(
-              guardrailDecision ??
-                getAttribute(attributes, ['guardrail.outcome']) ??
-                attributes['codex.status'],
-            ),
+          : outcome === null
+            ? 'unknown'
+            : stringifyValue(outcome),
       parentSpanId: span.parentSpanId,
       source,
       spanId: span.spanId,
@@ -436,7 +440,7 @@ export function getTraceEvidenceValues(
       throw new Error('Agentic trace verifier evidence was redacted and cannot be graded');
     }
   };
-  requireVisible(entries.map(([key]) => key));
+  entries.forEach(([key]) => requireVisibleEvidenceIdentity(key));
   const values: unknown[] = [];
   for (const namespace of AGENTIC_RUNTIME_EVIDENCE_NAMESPACES) {
     const idKeys = namespace.pluginIds.map((key) => key.toLowerCase());
@@ -446,7 +450,7 @@ export function getTraceEvidenceValues(
     const json = entries.filter(
       ([key, value]) => value !== undefined && key.toLowerCase() === namespace.json,
     );
-    requireVisible([...ownIds, ...json].map(([, value]) => value));
+    requireVisible(json.map(([, value]) => value));
     const finding = Object.fromEntries(
       ['kind', 'location', 'evidence', 'severity'].map((field) => [
         field,
