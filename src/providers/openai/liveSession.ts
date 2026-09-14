@@ -7,6 +7,7 @@ import { isSecretField, REDACTED } from '../../util/sanitizer';
 import { accumulateTokenUsage } from '../../util/tokenUsageUtils';
 import { convertG711ToPcm16, convertPcm16ToWav } from './audio';
 import { calculateOpenAIUsageCost } from './billing';
+import { getLiveBytesPerSecond, LIVE_MAX_CAPTURE_MS } from './liveInput';
 import { getOpenAICompletionTokenDetails, resolveMaxToolIterations } from './util';
 import type OpenAI from 'openai';
 
@@ -70,7 +71,6 @@ const MAX_API_ERRORS = 20;
 const MAX_ERROR_MESSAGE_LENGTH = 500;
 const MAX_TRANSCRIPT_BYTES = 1024 * 1024;
 const MAX_TRANSCRIPT_DELTAS = 20_000;
-const MAX_AUDIO_BYTES = 32 * 1024 * 1024;
 const MAX_AUDIO_CHUNKS = 50_000;
 const MAX_PROTOCOL_ID_BYTES = 256;
 const MAX_FUNCTION_CALL_BYTES = 1024 * 1024;
@@ -86,7 +86,7 @@ function isBoundedProtocolId(value: unknown): value is string {
 }
 
 const CREDENTIAL_HEADER =
-  /(?:authorization|api[-_]?key|token|secret|signature|credential|cookie|password)/i;
+  /(?:authorization|api[-_]?key|token|secret|signature|credential|cookie|password)|(?:^|[-_])(?:auth|key)(?:$|[-_])/i;
 const GUARDRAIL_ERROR_CODES = new Set([
   'moderation_blocked',
   'content_policy_violation',
@@ -400,6 +400,18 @@ export class LiveSession {
   private startResponseWindow(): void {
     const elapsedMs = performance.now() - this.streamStartedAt;
     this.captureEndFrame = Math.ceil((elapsedMs + this.options.responseWindowMs) / LIVE_FRAME_MS);
+    if (this.audioBytes > this.getMaxAudioBytes()) {
+      this.fail('GPT-Live audio exceeded the capture limit.');
+    }
+  }
+
+  private getMaxAudioBytes(): number {
+    // Before the opening acknowledgment, startup may still extend a text capture.
+    const frames =
+      this.captureEndFrame ??
+      Math.ceil((this.options.websocketTimeout + this.options.responseWindowMs) / LIVE_FRAME_MS);
+    const durationMs = Math.min(frames * LIVE_FRAME_MS, LIVE_MAX_CAPTURE_MS);
+    return Math.ceil((getLiveBytesPerSecond(this.options.format) * durationMs) / 1000);
   }
 
   private handleEvent(event: LiveEvent): void {
@@ -494,16 +506,18 @@ export class LiveSession {
         if (this.closing) {
           return;
         }
-        const bytes = typeof event.delta === 'string' ? decodeBase64(event.delta) : undefined;
-        if (!bytes?.length) {
-          this.fail('Invalid GPT-Live audio delta.');
-          return;
-        }
+        // Reject oversized base64 before allocating decoded audio or converting it to WAV.
         if (
-          this.audioBytes + bytes.length > MAX_AUDIO_BYTES ||
+          (typeof event.delta === 'string' &&
+            this.audioBytes + Buffer.byteLength(event.delta, 'base64') > this.getMaxAudioBytes()) ||
           this.audioChunks.length >= MAX_AUDIO_CHUNKS
         ) {
           this.fail('GPT-Live audio exceeded the capture limit.');
+          return;
+        }
+        const bytes = typeof event.delta === 'string' ? decodeBase64(event.delta) : undefined;
+        if (!bytes?.length) {
+          this.fail('Invalid GPT-Live audio delta.');
           return;
         }
         this.audioBytes += bytes.length;
@@ -760,6 +774,11 @@ export class LiveSession {
       const turn = this.backendTurns.get(delegationId);
       if (!turn) {
         this.fail('GPT-Live function call arrived without a backend response.');
+        return;
+      }
+      // Standard Responses item events omit this ID; check it when a gateway supplies it.
+      if (event.response_id !== undefined && event.response_id !== turn.id) {
+        this.fail('Invalid GPT-Live function-call response ID.');
         return;
       }
       if (!turn.calls.has(event.item.call_id)) {

@@ -92,6 +92,9 @@ function decodeWav(bytes: Buffer, format: LiveAudioFormat, maxAudioBytes: number
       if (!validFormat) {
         throw new Error('GPT-Live WAV input requires a valid format chunk before audio data.');
       }
+      if (size % 2 !== 0) {
+        throw new Error('GPT-Live WAV data chunk ends with an incomplete PCM16 sample.');
+      }
       audioBytes += size;
       if (audioBytes > maxAudioBytes) {
         throw new Error(AUDIO_DURATION_ERROR);
@@ -107,9 +110,6 @@ function decodeWav(bytes: Buffer, format: LiveAudioFormat, maxAudioBytes: number
     throw new Error(
       'GPT-Live WAV input must be nonempty mono PCM16 at the configured sample rate. Resample the file before evaluating.',
     );
-  }
-  if (pcm.length % 2 !== 0) {
-    throw new Error('GPT-Live WAV input ends with an incomplete PCM16 sample.');
   }
   return pcm;
 }

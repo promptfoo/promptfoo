@@ -59,7 +59,7 @@ Use OpenAI chat-format audio content in your prompt:
 ]
 ```
 
-Set the `audio` test variable to `file://sample.wav`. WAV files must contain mono, signed 16-bit PCM matching `audio.format.rate` (24,000 Hz by default). Promptfoo removes the WAV container before streaming and ignores bytes after its declared RIFF boundary. It accepts streaming headers with unknown sizes, such as OpenAI text-to-speech `wav` output and ffmpeg pipe output, and `WAVE_FORMAT_EXTENSIBLE` PCM. It rejects mismatched rates and compressed formats; it does not resample audio.
+Set the `audio` test variable to `file://sample.wav`. WAV files must contain mono, signed 16-bit PCM matching `audio.format.rate` (24,000 Hz by default). The file must declare one valid format before its audio data, and each data chunk must contain complete PCM16 samples. Promptfoo removes the WAV container before streaming and ignores bytes after its declared RIFF boundary. It accepts streaming headers with unknown sizes, such as OpenAI text-to-speech `wav` output and ffmpeg pipe output, and `WAVE_FORMAT_EXTENSIBLE` PCM. It rejects mismatched rates and compressed formats; it does not resample audio.
 
 Raw base64 audio accepts `pcm16`, `g711_ulaw`, or `g711_alaw` in `input_audio.format`. Configure the corresponding shared input/output format:
 
@@ -77,6 +77,8 @@ Audio is accepted only in the final user message. Supply prior history as text m
 Promptfoo streams audio in 20 ms frames at the configured sample rate. Recorded audio is followed by `responseWindowMs` of silence (default: 30 seconds). For text prompts, Promptfoo streams silence immediately, asks Live to answer, and starts the response window when Live acknowledges that instruction. It then sends `session.close` and waits for final usage. The input clip plus response window may total at most five minutes.
 
 Live has no authoritative speech-completed event. The response window is a fixed recording window and may cut off speech. Increase it for long replies or backend work. Backend completion and transcript gaps do not end the capture early. Transcript and audio deltas received after closing begins are ignored; final usage and errors are still processed. Output audio contains the received samples; transcript timestamps are on the session timeline and do not establish playback timing.
+
+Output audio is capped by the configured format and capture duration, with a maximum of five minutes. Excess audio ends the capture with an error.
 
 `websocketTimeout` covers the handshake, `session.started`, and a text prompt's acknowledgment (default: 30 seconds); `closeTimeoutMs` controls finalization (default: 15 seconds). These timeouts plus the capture duration must fit within `REQUEST_TIMEOUT_MS` (default: five minutes). Increase it for a full five-minute capture. Cancellation and eval shutdown release active sockets. Live responses are not cached.
 

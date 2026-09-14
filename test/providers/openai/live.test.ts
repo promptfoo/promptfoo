@@ -7,6 +7,7 @@ import { providerRegistry } from '../../../src/providers/providerRegistry';
 import { checkProviderApiKeys } from '../../../src/util/provider';
 import { mockProcessEnv } from '../../util/utils';
 
+import type { LiveAudioFormat } from '../../../src/providers/openai/liveInput';
 import type { OpenAiLiveOptions } from '../../../src/providers/openai/liveTypes';
 
 interface Socket extends EventEmitter {
@@ -1234,8 +1235,41 @@ describe('OpenAiLiveProvider', () => {
     expect((await result).error).toBe('Invalid GPT-Live audio delta.');
   });
 
+  it.each(
+    (
+      [
+        { type: 'audio/pcm', rate: 16_000 },
+        { type: 'audio/pcm', rate: 24_000 },
+        { type: 'audio/pcmu', rate: 8_000 },
+        { type: 'audio/pcma', rate: 8_000 },
+      ] satisfies LiveAudioFormat[]
+    ).flatMap((format) => [false, true].map((overflow) => ({ format, overflow }))),
+  )(
+    'bounds output by capture duration ($format.type, $format.rate, overflow: $overflow)',
+    async ({ format, overflow }) => {
+      const result = provider({ audio: { format }, responseWindowMs: 100 }).callApi('Hi');
+      const socket = await connect();
+      start(socket);
+      const sampleBytes = format.type === 'audio/pcm' ? 2 : 1;
+      const bytes = Buffer.alloc((format.rate * sampleBytes) / 10);
+      emit(socket, { type: 'session.output_audio.delta', delta: bytes.toString('base64') });
+      if (overflow) {
+        emit(socket, {
+          type: 'session.output_audio.delta',
+          delta: Buffer.alloc(sampleBytes).toString('base64'),
+        });
+      }
+      closed(socket);
+      const response = await result;
+      expect(response.error).toBe(
+        overflow ? 'GPT-Live audio exceeded the capture limit.' : undefined,
+      );
+      expect(Buffer.from(response.audio!.data!, 'base64').length).toBe(44 + (format.rate / 10) * 2);
+    },
+  );
+
   it('bounds the number of tiny output audio chunks', async () => {
-    const result = provider().callApi('Hi');
+    const result = provider({ responseWindowMs: 100_000 }).callApi('Hi');
     const socket = await connect();
     start(socket);
     for (let index = 0; index <= 50_000; index++) {
@@ -1245,6 +1279,50 @@ describe('OpenAiLiveProvider', () => {
     const response = await result;
     expect(response.error).toBe('GPT-Live audio exceeded the capture limit.');
     expect(Buffer.from(response.audio!.data!, 'base64').length).toBe(100_044);
+  });
+
+  it('includes replayed input duration in the output audio budget', async () => {
+    const result = provider().callApi(audioPrompt(Buffer.alloc(9600)));
+    const socket = await connect();
+    start(socket);
+    const audio = Buffer.alloc(14_400);
+    emit(socket, { type: 'session.output_audio.delta', delta: audio.toString('base64') });
+    await vi.advanceTimersByTimeAsync(300);
+    closed(socket);
+    const response = await result;
+    expect(response.error).toBeUndefined();
+    expect(Buffer.from(response.audio!.data!, 'base64').subarray(44)).toEqual(audio);
+  });
+
+  it('rechecks buffered audio when the opening acknowledgment fixes the capture duration', async () => {
+    const result = provider({ audio: { format: { type: 'audio/pcmu', rate: 8_000 } } }).callApi(
+      'Hi',
+    );
+    const socket = await connect();
+    emit(socket, { type: 'session.started', session: { id: 'session_1' } });
+    emit(socket, {
+      type: 'session.output_audio.delta',
+      delta: Buffer.alloc(1600).toString('base64'),
+    });
+    emit(socket, { type: 'session.instructions.appended', client_event_id: 'promptfoo_start' });
+    closed(socket);
+    expect((await result).error).toBe('GPT-Live audio exceeded the capture limit.');
+  });
+
+  it('bounds audio while the opening acknowledgment is pending', async () => {
+    const result = provider({ audio: { format: { type: 'audio/pcmu', rate: 8_000 } } }).callApi(
+      'Hi',
+    );
+    const socket = await connect();
+    emit(socket, { type: 'session.started', session: { id: 'session_1' } });
+    emit(socket, {
+      type: 'session.output_audio.delta',
+      delta: Buffer.alloc(2401).toString('base64'),
+    });
+    closed(socket);
+    const response = await result;
+    expect(response.error).toBe('GPT-Live audio exceeded the capture limit.');
+    expect(response.audio).toBeUndefined();
   });
 
   it('accepts canonical output audio with or without padding', async () => {
@@ -1429,27 +1507,49 @@ describe('OpenAiLiveProvider', () => {
     await result;
   });
 
-  it('accepts a custom credential header without OPENAI_API_KEY', async () => {
-    const gateway = (headers: Record<string, string>) =>
-      new OpenAiLiveProvider('gpt-live-1', {
-        config: {
-          apiBaseUrl: 'http://localhost:1234/v1',
-          headers,
-          responseWindowMs: 100,
-          websocketTimeout: 200,
-          closeTimeoutMs: 100,
-        },
-      });
-    const result = gateway({ 'api-key': 'gateway-key' }).callApi('Hi');
-    const socket = await connect();
-    expect(socket.options.headers).toEqual({ 'api-key': 'gateway-key' });
-    start(socket);
-    text(socket);
-    closed(socket);
-    expect((await result).error).toBeUndefined();
-    expect((await gateway({ 'api-key': ' ' }).callApi('Hi')).error).toContain('API key is not set');
-    expect(sockets).toHaveLength(1);
-  });
+  it.each(['X-Gateway-Auth', 'X-Gateway-Key'])(
+    'redacts a custom %s credential echoed in API errors',
+    async (header) => {
+      const result = provider({
+        apiBaseUrl: 'http://localhost:1234/v1',
+        headers: { [header]: 'gateway-private-value' },
+      }).callApi('Hi');
+      const socket = await connect();
+      start(socket);
+      apiError(socket, { message: 'Invalid gateway-private-value' });
+      closed(socket);
+      const response = await result;
+      expect(response.error).toContain('[REDACTED]');
+      expect(JSON.stringify(response)).not.toContain('gateway-private-value');
+    },
+  );
+
+  it.each(['api-key', 'X-Gateway-Auth', 'X-Gateway-Key'])(
+    'accepts custom %s credentials without OPENAI_API_KEY',
+    async (header) => {
+      const gateway = (headers: Record<string, string>) =>
+        new OpenAiLiveProvider('gpt-live-1', {
+          config: {
+            apiBaseUrl: 'http://localhost:1234/v1',
+            headers,
+            responseWindowMs: 100,
+            websocketTimeout: 200,
+            closeTimeoutMs: 100,
+          },
+        });
+      const result = gateway({ [header]: 'gateway-key' }).callApi('Hi');
+      const socket = await connect();
+      expect(socket.options.headers).toEqual({ [header]: 'gateway-key' });
+      start(socket);
+      text(socket);
+      closed(socket);
+      expect((await result).error).toBeUndefined();
+      expect((await gateway({ [header]: ' ' }).callApi('Hi')).error).toContain(
+        'API key is not set',
+      );
+      expect(sockets).toHaveLength(1);
+    },
+  );
 
   it('does not forward an ambient OpenAI key to a gateway with its own credential header', async () => {
     mockProcessEnv({ OPENAI_API_KEY: 'ambient-openai-key' });
@@ -1909,88 +2009,112 @@ describe('OpenAiLiveProvider', () => {
     expect(output.metadata?.backendResponses[0].usage).toBeUndefined();
   });
 
-  it('handles nested function calls even when the terminal response output is empty', async () => {
+  it('rejects function calls belonging to another response', async () => {
     const handler = vi.fn().mockResolvedValue('result');
-    const result = provider({
-      delegation: {
-        type: 'responses',
-        responses: {
-          model: 'gpt-4.1-mini',
-          tools: [{ type: 'function', name: 'lookup', parameters: {}, strict: false }],
-        },
-      },
-      inputCost: 0.01,
-      outputCost: 0.02,
-      functionCallHandler: handler,
-    }).callApi('Check my order');
+    const result = provider({ delegation: lookupDelegation, functionCallHandler: handler }).callApi(
+      'Hi',
+    );
     const socket = await connect();
     start(socket);
     backend(socket, { type: 'response.created', response: { id: 'resp_1' } });
-    const item = {
-      type: 'function_call',
-      call_id: 'call_1',
-      name: 'lookup',
-      arguments: '{"id":42}',
-    };
-    backend(socket, { type: 'response.output_item.done', item });
-    backend(socket, { type: 'response.output_item.done', item });
     backend(socket, {
       type: 'response.output_item.done',
-      item: { ...item, call_id: 'call_2', arguments: '{"id":43}' },
+      response_id: 'another_response',
+      item: functionCall('call_1'),
     });
+    backend(socket, { type: 'response.completed', response: { id: 'resp_1' } });
+    await vi.advanceTimersByTimeAsync(0);
+    closed(socket);
+    expect((await result).error).toContain('function-call response ID');
     expect(handler).not.toHaveBeenCalled();
-    const response = {
-      id: 'resp_1',
-      model: 'gpt-4.1-mini',
-      output: [],
-      usage: {
+  });
+
+  it.each([undefined, 'resp_1'])(
+    'handles nested function calls when terminal output is empty (response_id: %s)',
+    async (response_id) => {
+      const handler = vi.fn().mockResolvedValue('result');
+      const result = provider({
+        delegation: {
+          type: 'responses',
+          responses: {
+            model: 'gpt-4.1-mini',
+            tools: [{ type: 'function', name: 'lookup', parameters: {}, strict: false }],
+          },
+        },
+        inputCost: 0.01,
+        outputCost: 0.02,
+        functionCallHandler: handler,
+      }).callApi('Check my order');
+      const socket = await connect();
+      start(socket);
+      backend(socket, { type: 'response.created', response: { id: 'resp_1' } });
+      const item = {
+        type: 'function_call',
+        call_id: 'call_1',
+        name: 'lookup',
+        arguments: '{"id":42}',
+      };
+      backend(socket, { type: 'response.output_item.done', response_id, item });
+      backend(socket, { type: 'response.output_item.done', response_id, item });
+      backend(socket, {
+        type: 'response.output_item.done',
+        response_id,
+        item: { ...item, call_id: 'call_2', arguments: '{"id":43}' },
+      });
+      expect(handler).not.toHaveBeenCalled();
+      const response = {
+        id: 'resp_1',
+        model: 'gpt-4.1-mini',
+        output: [],
+        usage: {
+          input_tokens: 10,
+          output_tokens: 5,
+          total_tokens: 15,
+          input_tokens_details: { cached_tokens: 0 },
+          untrusted_metadata: { nested: ['discarded'] },
+        },
+      };
+      backend(socket, { type: 'response.completed', response });
+      backend(socket, { type: 'response.completed', response });
+      await vi.advanceTimersByTimeAsync(0);
+      expect(handler).toHaveBeenCalledTimes(2);
+      expect(handler).toHaveBeenNthCalledWith(1, 'lookup', '{"id":42}', expect.any(AbortSignal));
+      expect(handler).toHaveBeenNthCalledWith(2, 'lookup', '{"id":43}', expect.any(AbortSignal));
+      expect(socket.sent.slice(-3)).toEqual([
+        {
+          type: 'response.item.create',
+          event_id: eventId,
+          item: { type: 'function_call_output', call_id: 'call_1', output: 'result' },
+        },
+        {
+          type: 'response.item.create',
+          event_id: eventId,
+          item: { type: 'function_call_output', call_id: 'call_2', output: 'result' },
+        },
+        { type: 'response.create', event_id: eventId },
+      ]);
+      backend(socket, { type: 'response.created', response: { id: 'resp_2' } });
+      backend(socket, { type: 'response.completed', response: { ...response, id: 'resp_2' } });
+      text(socket);
+      await vi.advanceTimersByTimeAsync(100);
+      closed(socket, 60);
+      const output = await result;
+      expect(output.error).toBeUndefined();
+      expect(output.tokenUsage).toMatchObject({
+        prompt: 20,
+        completion: 10,
+        total: 30,
+        numRequests: 3,
+      });
+      expect(output.cost).toBeCloseTo(0.45);
+      expect(output.metadata?.backendResponses).toHaveLength(2);
+      expect(output.metadata?.backendResponses[0].usage).toEqual({
         input_tokens: 10,
         output_tokens: 5,
         total_tokens: 15,
-        input_tokens_details: { cached_tokens: 0 },
-        untrusted_metadata: { nested: ['discarded'] },
-      },
-    };
-    backend(socket, { type: 'response.completed', response });
-    backend(socket, { type: 'response.completed', response });
-    await vi.advanceTimersByTimeAsync(0);
-    expect(handler).toHaveBeenCalledTimes(2);
-    expect(handler).toHaveBeenNthCalledWith(1, 'lookup', '{"id":42}', expect.any(AbortSignal));
-    expect(handler).toHaveBeenNthCalledWith(2, 'lookup', '{"id":43}', expect.any(AbortSignal));
-    expect(socket.sent.slice(-3)).toEqual([
-      {
-        type: 'response.item.create',
-        event_id: eventId,
-        item: { type: 'function_call_output', call_id: 'call_1', output: 'result' },
-      },
-      {
-        type: 'response.item.create',
-        event_id: eventId,
-        item: { type: 'function_call_output', call_id: 'call_2', output: 'result' },
-      },
-      { type: 'response.create', event_id: eventId },
-    ]);
-    backend(socket, { type: 'response.created', response: { id: 'resp_2' } });
-    backend(socket, { type: 'response.completed', response: { ...response, id: 'resp_2' } });
-    text(socket);
-    await vi.advanceTimersByTimeAsync(100);
-    closed(socket, 60);
-    const output = await result;
-    expect(output.error).toBeUndefined();
-    expect(output.tokenUsage).toMatchObject({
-      prompt: 20,
-      completion: 10,
-      total: 30,
-      numRequests: 3,
-    });
-    expect(output.cost).toBeCloseTo(0.45);
-    expect(output.metadata?.backendResponses).toHaveLength(2);
-    expect(output.metadata?.backendResponses[0].usage).toEqual({
-      input_tokens: 10,
-      output_tokens: 5,
-      total_tokens: 15,
-    });
-  });
+      });
+    },
+  );
 
   it.each(['unconfigured', 'missing-handler', 'invalid-arguments'])(
     'rejects %s backend function calls without executing a tool',

@@ -163,6 +163,20 @@ describe('Live input', () => {
     expect(decodeWav(wav).audio).toEqual(Buffer.from([1, 0, 2, 0]));
   });
 
+  it.each([false, true])('requires per-chunk PCM16 alignment (streaming: %s)', (streaming) => {
+    const chunk = Buffer.alloc(10);
+    chunk.write('data');
+    chunk.writeUInt32LE(1, 4);
+    chunk[8] = 1;
+    const wav = Buffer.concat([
+      convertPcm16ToWav(Buffer.from([1, 0])).subarray(0, 36),
+      chunk,
+      chunk,
+    ]);
+    wav.writeUInt32LE(streaming ? 0xffffffff : wav.length - 8, 4);
+    expect(() => decodeWav(wav)).toThrow('incomplete PCM16 sample');
+  });
+
   it('accepts streaming WAV headers from OpenAI text-to-speech and ffmpeg pipes', () => {
     const audio = Buffer.from([1, 0, 2, 0, 3, 0]);
     expect(decodeWav(streamingWav(audio)).audio).toEqual(audio);
