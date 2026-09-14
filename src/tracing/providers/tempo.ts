@@ -101,15 +101,23 @@ function extractAttributeValue(value: TempoAttributeValue): unknown {
 function attributesToRecord(
   attributes?: Array<{ key: string; value: TempoAttributeValue }>,
 ): Record<string, unknown> {
+  if (attributes != null && !Array.isArray(attributes)) {
+    throw new TraceProviderError('Tempo attributes must be a list');
+  }
   const keys = new Set<string>();
   for (const { key } of attributes ?? []) {
+    if (typeof key !== 'string') {
+      throw new TraceProviderError('Tempo attribute keys must be strings');
+    }
     if (keys.has(key)) {
       throw new TraceProviderError('Tempo returned duplicate attribute keys');
     }
     keys.add(key);
   }
   return Object.fromEntries(
-    (attributes ?? []).map(({ key, value }) => [key, extractAttributeValue(value)]),
+    (attributes ?? [])
+      .filter((attribute) => attribute?.value)
+      .map(({ key, value }) => [key, extractAttributeValue(value)]),
   );
 }
 
@@ -262,12 +270,7 @@ function transformSpan(
                 name: event.name,
                 timestamp: nanoToMs(event.timeUnixNano),
                 timestampNanos: event.timeUnixNano,
-                attributes: attributesToRecord(
-                  event.attributes?.filter(
-                    (attribute) =>
-                      attribute && typeof attribute.key === 'string' && attribute.value,
-                  ),
-                ),
+                attributes: attributesToRecord(event.attributes?.filter(Boolean)),
               },
             ];
           } catch (error) {

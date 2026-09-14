@@ -124,6 +124,38 @@ describe('OTLPReceiver', () => {
     vi.restoreAllMocks();
   });
 
+  it.each(['duplicate', 'coerced'])(
+    'rejects %s OTLP log keys before storing any records',
+    async (kind) => {
+      const attributes =
+        kind === 'duplicate'
+          ? [
+              { key: 'authorization', value: { stringValue: 'private' } },
+              { key: 'authorization', value: { stringValue: 'public' } },
+            ]
+          : [
+              { key: 1, value: { stringValue: 'private' } },
+              { key: '1', value: { stringValue: 'public' } },
+            ];
+      const log = {
+        traceId: 'a'.repeat(32),
+        spanId: 'b'.repeat(16),
+        timeUnixNano: '1000000000',
+        body: { stringValue: 'verifier' },
+      };
+      const response = await request(receiver.getApp())
+        .post('/v1/logs')
+        .send({
+          resourceLogs: [
+            { scopeLogs: [{ logRecords: [log, { ...log, severityNumber: 17, attributes }] }] },
+          ],
+        });
+      expect(response.status).toBe(400);
+      expect(response.body.error).toMatch(/attribute keys/i);
+      expect(persistSpans).not.toHaveBeenCalled();
+    },
+  );
+
   it.each(
     ['json', 'protobuf'].flatMap((format) => [false, true].map((nested) => ({ format, nested }))),
   )(
@@ -382,6 +414,57 @@ describe('OTLPReceiver', () => {
   );
 
   describe('Health check', () => {
+    it.each(['resource', 'span', 'log', 'nested'])(
+      'rejects null %s attribute entries before storage',
+      async (location) => {
+        const span = {
+          traceId: 'a'.repeat(32),
+          spanId: 'b'.repeat(16),
+          name: 'invalid attributes',
+          startTimeUnixNano: '1000000000',
+          attributes:
+            location === 'nested'
+              ? [{ key: 'nested', value: { kvlistValue: { values: [null] } } }]
+              : location === 'span'
+                ? [null]
+                : [],
+        };
+        const body =
+          location === 'log'
+            ? {
+                resourceLogs: [
+                  {
+                    scopeLogs: [
+                      {
+                        logRecords: [
+                          {
+                            traceId: span.traceId,
+                            spanId: span.spanId,
+                            timeUnixNano: span.startTimeUnixNano,
+                            attributes: [null],
+                          },
+                        ],
+                      },
+                    ],
+                  },
+                ],
+              }
+            : {
+                resourceSpans: [
+                  {
+                    resource: { attributes: location === 'resource' ? [null] : [] },
+                    scopeSpans: [{ spans: [span] }],
+                  },
+                ],
+              };
+        await request(receiver.getApp())
+          .post(location === 'log' ? '/v1/logs' : '/v1/traces')
+          .send(body)
+          .expect(400);
+        expect(persistSpans).not.toHaveBeenCalled();
+      },
+    );
+
     it('should respond to health check endpoint', async () => {
       const response = await request(receiver.getApp()).get('/health').expect(200);
 
@@ -578,7 +661,7 @@ describe('OTLPReceiver', () => {
       expect(result.grade.metadata?.deterministicFailureKind).toBe('handoff-context-leakage');
     });
 
-    it.each([{ arrayValue: { values: [null] } }, { kvlistValue: { values: [null] } }])(
+    it.each([{ arrayValue: { values: [null] } }])(
       'isolates malformed nested event attributes: %j',
       async (value) => {
         await request(receiver.getApp())

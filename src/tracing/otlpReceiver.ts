@@ -44,6 +44,9 @@ interface OTLPAttribute {
 }
 
 function assertUniqueAttributeKeys(attributes: { key: string }[]): void {
+  if (attributes.some((attribute) => attribute == null || typeof attribute.key !== 'string')) {
+    throw new SyntaxError('Invalid OTLP payload: attribute keys must be strings');
+  }
   if (new Set(attributes.map(({ key }) => key)).size !== attributes.length) {
     throw new SyntaxError('Invalid OTLP payload: duplicate attribute keys');
   }
@@ -837,6 +840,9 @@ export class OTLPReceiver {
               traces.push(parsed);
             }
           } catch (err) {
+            if (err instanceof SyntaxError) {
+              throw err;
+            }
             logger.warn(
               `[OtlpReceiver] Skipping malformed log record in scope ${scopeLog.scope?.name ?? '(unknown)'}: ${err}`,
             );

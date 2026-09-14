@@ -77,8 +77,9 @@ export const handleRedteam = async ({
   providerResponse,
   assertionValueContext,
 }: AssertionParams): Promise<GradingResult> => {
-  // Skip grading if stored result exists from strategy execution for this specific assertion
+  // Agentic assertions must also inspect the complete trace collected after strategy execution.
   if (
+    !baseType.startsWith('promptfoo:redteam:agentic:') &&
     providerResponse.metadata?.storedGraderResult &&
     test.metadata?.pluginId &&
     assertion.type.includes(test.metadata.pluginId)

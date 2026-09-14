@@ -81,6 +81,25 @@ describe('TempoProvider', () => {
     mockedFetch.mockImplementation(async () => response(traceResponse));
   });
 
+  it.each(['coerced', 'missing-value'])(
+    'rejects ambiguous event keys with %s entries',
+    async (kind) => {
+      const data = structuredClone(traceResponse);
+      const event = data.batches[0].scopeSpans[0].spans[0].events![0];
+      event.attributes =
+        kind === 'coerced'
+          ? [
+              { key: 1, value: { stringValue: 'private' } },
+              { key: '1', value: { stringValue: 'public' } },
+            ]
+          : [{ key: 'authorization' }, { key: 'authorization', value: { stringValue: 'public' } }];
+      mockedFetch.mockResolvedValue(response(data));
+      await expect(
+        new TempoProvider({ id: 'tempo', endpoint: 'http://tempo:3200' }).fetchTrace(TRACE_ID),
+      ).rejects.toThrow(/attribute keys/i);
+    },
+  );
+
   it('preserves exact span nanoseconds for guardrail ordering', async () => {
     const data = structuredClone(traceResponse);
     const span = data.batches[0].scopeSpans[0].spans[0];

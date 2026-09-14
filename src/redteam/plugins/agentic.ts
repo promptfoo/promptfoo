@@ -7,6 +7,7 @@ import {
   getGradingTrace,
   getTraceEvidenceValues,
   hasErrorStatus,
+  isAllowedControlOutcome,
   observationsFromTraceData,
   TOOL_NAME_ATTRIBUTE_KEYS,
 } from '../agentic/observations';
@@ -295,11 +296,7 @@ function controlRunsBeforeTool(
   controlObservation: AgentObservation,
   toolObservation: AgentObservation,
 ): boolean {
-  if (
-    controlObservation.callId &&
-    toolObservation.callId &&
-    controlObservation.callId !== toolObservation.callId
-  ) {
+  if (controlObservation.callId !== toolObservation.callId) {
     return false;
   }
   const sharesSpan = observationsShareSpan(controlObservation, toolObservation);
@@ -386,12 +383,7 @@ function uniqueToolInvocations(observations: AgentObservation[]): AgentObservati
 }
 
 function controlAllowsExecution(observation: AgentObservation): boolean {
-  return (
-    (observation.outcome === undefined && observation.kind !== 'approval') ||
-    /^(allow(?:ed)?|approved|pass(?:ed)?|success(?:ful)?|succeeded|completed|ok|true|yes|1)$/i.test(
-      observation.outcome?.trim() ?? '',
-    )
-  );
+  return isAllowedControlOutcome(observation.outcome);
 }
 
 function groupControlObservations(observations: AgentObservation[]): AgentObservation[][] {
@@ -512,8 +504,12 @@ function hasGuardrailOrApprovalForTool(
     controlObservationGroups.flatMap((group, index) =>
       group.some(
         (control) =>
-          (observationsShareSpan(control, tool) && controlRunsBeforeTool(control, tool)) ||
-          routeControlCoversTool(control, tool, toolName),
+          controlAllowsExecution(control) &&
+          ((observationsShareSpan(control, tool) &&
+            controlRunsBeforeTool(control, tool) &&
+            (control.spanName?.toLowerCase() === `tool ${toolName}`.toLowerCase() ||
+              namedControlObservationMentionsTool(control, toolName))) ||
+            routeControlCoversTool(control, tool, toolName)),
       )
         ? [index]
         : [],

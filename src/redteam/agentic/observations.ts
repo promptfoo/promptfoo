@@ -154,17 +154,29 @@ function getString(value: unknown): string | undefined {
 }
 
 function getToolCallId(attributes: Record<string, unknown> | undefined): string | undefined {
-  const entries = Object.entries(attributes ?? {});
-  for (const key of TOOL_CALL_ID_ATTRIBUTES) {
-    const callId =
-      getString(attributes?.[key]) ??
-      getString(
-        entries.find(([name, value]) => name.toLowerCase() === key && getString(value))?.[1],
-      );
-    if (callId) {
-      return callId;
-    }
+  const values = Object.entries(attributes ?? {})
+    .filter(
+      ([name, value]) =>
+        value !== undefined && TOOL_CALL_ID_ATTRIBUTES.includes(name.toLowerCase()),
+    )
+    .map(([, value]) => value);
+  const ids = values.map(getString).filter((id): id is string => id !== undefined);
+  if (values.length && !ids.length) {
+    throw new Error('Cannot grade execution evidence: invalid tool call ID');
   }
+  for (const id of ids) {
+    requireVisibleEvidenceIdentity(id);
+  }
+  if (new Set(ids).size > 1) {
+    throw new Error('Cannot grade execution evidence: conflicting tool call IDs');
+  }
+  return ids[0];
+}
+
+export function isAllowedControlOutcome(value: unknown): boolean {
+  return /^(allow(?:ed)?|approved|pass(?:ed)?|success(?:ful)?|succeeded|completed|ok|true|yes|1)$/i.test(
+    stringifyValue(value)?.trim() ?? '',
+  );
 }
 
 function stringifyValue(value: unknown): string | undefined {
@@ -373,12 +385,27 @@ function controlObservationFromSpan(
     Boolean(attributes['guardrail.name']) ||
     guardrailDecision !== undefined
   ) {
-    const outcome = getAttribute(attributes, [
+    const outcomeKeys = [
       'guardrails.decision',
       'guardrail.decision',
       'guardrail.outcome',
       'codex.status',
-    ]);
+    ];
+    const outcomes = Object.entries(attributes)
+      .filter(([key, value]) => value !== undefined && outcomeKeys.includes(key.toLowerCase()))
+      .map(([, value]) =>
+        isAllowedControlOutcome(value)
+          ? 'allowed'
+          : (stringifyValue(value)?.trim().toLowerCase() ?? 'unknown'),
+      );
+    const hasSemanticAttribute =
+      spanType === 'guardrail' ||
+      Boolean(attributes['guardrail.name']) ||
+      attributes['guardrail.triggered'] !== undefined;
+    const outcome =
+      new Set(outcomes).size > 1
+        ? 'unknown'
+        : (outcomes[0] ?? (hasSemanticAttribute ? 'allowed' : undefined));
     return {
       kind: 'guardrail',
       callId: getToolCallId(attributes),
@@ -389,9 +416,7 @@ function controlObservationFromSpan(
         ? 'error'
         : isExplicitlyTrue(attributes['guardrail.triggered'])
           ? 'blocked'
-          : outcome === null
-            ? 'unknown'
-            : stringifyValue(outcome),
+          : outcome,
       parentSpanId: span.parentSpanId,
       source,
       spanId: span.spanId,
@@ -464,9 +489,27 @@ export function getTraceEvidenceValues(
     const explicitIds = ownIds
       .map(([, value]) => normalizePluginId(value))
       .filter((id): id is string => id !== undefined);
-    const inheritedIds = Object.entries(enclosingAttributes ?? {})
-      .filter(([key]) => idKeys.includes(key.toLowerCase()))
-      .map(([, value]) => normalizePluginId(value))
+    const needsInheritedScope =
+      enclosingAttributes !== undefined &&
+      (ownIds.length > 0 ||
+        hasFinding ||
+        json.some(([, value]) =>
+          parseEvidenceCandidates(value, { preserveInvalid: true }).some(
+            (candidate) => normalizePluginId(candidate.pluginId) === undefined,
+          ),
+        ));
+    const inheritedIds = (needsInheritedScope ? Object.entries(enclosingAttributes ?? {}) : [])
+      .flatMap(([key, value]) => {
+        if (idKeys.includes(key.toLowerCase())) {
+          return [normalizePluginId(value)];
+        }
+        if (key.toLowerCase() === namespace.json) {
+          return parseEvidenceCandidates(value, { preserveInvalid: true }).map((candidate) =>
+            normalizePluginId(candidate.pluginId),
+          );
+        }
+        return [];
+      })
       .filter((id): id is string => id !== undefined);
     const ids = explicitIds.length ? explicitIds : inheritedIds;
     const pluginIds = [...new Set(ids)];
@@ -961,7 +1004,11 @@ export function observationsFromProviderResponse(
 
 export function getGradingTrace(gradingContext?: RedteamGradingContext) {
   const { traceData, traceContext } = gradingContext ?? {};
-  if (traceData?.traceId && traceContext?.traceId && traceData.traceId !== traceContext.traceId) {
+  if (
+    traceData?.traceId &&
+    traceContext?.traceId &&
+    traceData.traceId.toLowerCase() !== traceContext.traceId.toLowerCase()
+  ) {
     throw new Error('Cannot grade execution evidence: trace IDs do not match');
   }
   return traceData?.spans.length ? traceData : (traceContext ?? traceData);

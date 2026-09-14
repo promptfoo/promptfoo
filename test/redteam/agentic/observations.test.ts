@@ -22,12 +22,13 @@ describe('agentic run observations', () => {
         spans: rawPresent ? [span] : [],
       },
       traceContext: {
-        traceId: 'trace',
+        traceId: 'ABCDEF0123456789ABCDEF0123456789',
         fetchedAt: 0,
         insights: [],
         spans: [{ ...span, kind: 'internal', depth: 0, status: { code: 'ok' }, events: [] }],
       },
     };
+    gradingContext.traceData!.traceId = 'abcdef0123456789abcdef0123456789';
     const calls = observationsFromGradingContext({ gradingContext }).filter(
       (item) => item.kind === 'tool_call',
     );

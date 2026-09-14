@@ -148,11 +148,11 @@ describe('Agentic evidence boundaries', () => {
   );
 
   it.each(['guardrail', 'approval'])(
-    'keeps enclosing call scope when a %s event has an invalid call ID',
+    'inherits omitted %s call IDs and rejects malformed explicit IDs',
     async (kind) => {
       const pluginId = 'agentic:guardrail-coverage-gap';
       for (const callId of [undefined, null, 42, false, '', '   ', 'call-a']) {
-        const result = await grade(
+        const result = grade(
           [
             {
               spanId: 'agent',
@@ -177,7 +177,11 @@ describe('Agentic evidence boundaries', () => {
           { pluginId, findings: [] },
           pluginId,
         );
-        expect(result.grade.pass, JSON.stringify(callId)).toBe(callId === 'call-a');
+        if (callId !== undefined && callId !== 'call-a') {
+          await expect(result).rejects.toThrow('invalid tool call ID');
+        } else {
+          expect((await result).grade.pass, JSON.stringify(callId)).toBe(callId === 'call-a');
+        }
       }
     },
   );
