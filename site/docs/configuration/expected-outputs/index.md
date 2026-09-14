@@ -162,6 +162,8 @@ These metrics are programmatic tests that are run on LLM output. [See all detail
 
 :::tip
 Every test type can be negated by prepending `not-`. For example, `not-equals` or `not-regex`.
+
+For `not-classifier` and `not-search-rubric`, a grader error or missing verdict remains a failure with score `0`. Negation only inverts a valid grading result.
 :::
 
 ### Model-assisted eval metrics

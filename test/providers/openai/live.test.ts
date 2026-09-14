@@ -133,6 +133,167 @@ describe('OpenAiLiveProvider', () => {
     expect(p.id()).toBe('openai:live:gpt-live-1');
   });
 
+  it.each([false, true])(
+    'ignores output after capture closes (prior output: %s)',
+    async (prior) => {
+      const result = provider().callApi('Hi');
+      const socket = await connect();
+      start(socket);
+      if (prior) {
+        text(socket, 'On time');
+      }
+      await vi.advanceTimersByTimeAsync(100);
+      expect(sentTypes(socket)).toContain('session.close');
+      text(socket, 'LATE_CAPTURE_CANARY');
+      text(socket, 'late input', 'input');
+      emit(socket, { type: 'session.output_audio.delta', delta: 'AQI=' });
+      closed(socket);
+      const response = await result;
+      expect(response.output).toBe(prior ? 'On time' : '');
+      expect(response.audio).toBeUndefined();
+      expect(response.metadata?.inputTranscript).toBe('');
+      expect(response.metadata?.finalUsageConfirmed).toBe(true);
+      if (prior) {
+        expect(response.error).toBeUndefined();
+      } else {
+        expect(response.error).toContain('no transcript or audio');
+      }
+    },
+  );
+
+  it('releases all timers when an audio frame cannot be sent', async () => {
+    const result = provider().callApi('Hi');
+    const socket = await connect();
+    start(socket);
+    vi.spyOn(socket, 'send').mockImplementation(() => {
+      throw new Error('send failed');
+    });
+    await vi.advanceTimersByTimeAsync(20);
+    expect((await result).error).toContain('Failed to send');
+    expect(vi.getTimerCount()).toBe(0);
+  });
+
+  it.each(['ftp://gateway.example/v1', 'file:///tmp/live', 'https://gateway.example/v1#tenant'])(
+    'rejects an unsupported Live endpoint %s before opening a socket',
+    async (apiBaseUrl) => {
+      const result = provider({ apiBaseUrl }).callApi('Hi');
+      await vi.runAllTimersAsync();
+      expect((await result).error).toContain('GPT-Live session URL');
+      expect(sockets).toHaveLength(0);
+    },
+  );
+
+  it.each(['session', 'response'])('bounds the %s identifier before retention', async (kind) => {
+    const result = provider({
+      delegation: { type: 'responses', responses: { model: 'gpt-4.1-mini' } },
+    }).callApi('Hi');
+    const socket = await connect();
+    const id = 'x'.repeat(257);
+    if (kind === 'session') {
+      start(socket, { id });
+    } else {
+      start(socket);
+      emit(socket, {
+        type: 'session.delegation.created',
+        delegation: {
+          id: 'delegation_1',
+          target: 'responses',
+          response_id: id,
+        },
+      });
+    }
+    closed(socket);
+    const response = await result;
+    expect(response.error).toContain('Invalid GPT-Live');
+    expect(JSON.stringify(response)).not.toContain(id);
+  });
+
+  it.each(['"gateway-secret"', '"gateway%2Dsecret"', 'gateway%2Dsecret', '%22gateway%2Dsecret%22'])(
+    'redacts decoded cookie values from diagnostics (%s)',
+    async (cookie) => {
+      const result = provider({ headers: { Cookie: `session=${cookie}; other=value` } }).callApi(
+        'Hi',
+      );
+      const socket = await connect();
+      start(socket);
+      apiError(socket, { code: 'upstream_error', message: 'Invalid session gateway-secret.' });
+      closed(socket);
+      const response = await result;
+      expect(response.error).toContain('[REDACTED]');
+      expect(JSON.stringify(response)).not.toContain('gateway-secret');
+    },
+  );
+
+  it.each([undefined, 'resp_1'])(
+    'keeps completed backend work complete when delegation arrives late (%s)',
+    async (response_id) => {
+      const result = provider({
+        delegation: { type: 'responses', responses: { model: 'gpt-4.1-mini' } },
+      }).callApi('Hi');
+      const socket = await connect();
+      start(socket);
+      backend(socket, { type: 'response.created', response: { id: 'resp_1' } });
+      backend(socket, {
+        type: 'response.completed',
+        response: {
+          id: 'resp_1',
+          usage: { input_tokens: 10, output_tokens: 5, total_tokens: 15 },
+        },
+      });
+      emit(socket, {
+        type: 'session.delegation.created',
+        delegation: {
+          id: 'delegation_1',
+          target: 'responses',
+          response_id,
+        },
+      });
+      text(socket);
+      await vi.advanceTimersByTimeAsync(100);
+      closed(socket);
+      const response = await result;
+      expect(response.error).toBeUndefined();
+      expect(response.cost).toBeTypeOf('number');
+      expect(response.metadata?.delegations).toHaveLength(1);
+      expect(response.tokenUsage).toMatchObject({ numRequests: 2, total: 15 });
+    },
+  );
+
+  it.each(['call_id', 'name', 'arguments', 'aggregate'])(
+    'bounds function-call %s before buffering or executing it',
+    async (field) => {
+      const handler = vi.fn().mockResolvedValue('result');
+      const result = provider({
+        delegation: {
+          type: 'responses',
+          responses: {
+            model: 'gpt-4.1-mini',
+            tools: [{ type: 'function', name: 'lookup', parameters: {}, strict: false }],
+          },
+        },
+        functionCallHandler: handler,
+      }).callApi('Hi');
+      const socket = await connect();
+      start(socket);
+      backend(socket, { type: 'response.created', response: { id: 'resp_1' } });
+      const item = { type: 'function_call', call_id: 'call_1', name: 'lookup', arguments: '{}' };
+      if (field === 'aggregate') {
+        item.arguments = 'x'.repeat(600_000);
+        backend(socket, { type: 'response.output_item.done', item });
+        item.call_id = 'call_2';
+      } else {
+        item[field as 'call_id' | 'name' | 'arguments'] = 'x'.repeat(
+          field === 'arguments' ? 1_048_577 : 257,
+        );
+      }
+      backend(socket, { type: 'response.output_item.done', item });
+      closed(socket);
+      const response = await result;
+      expect(response.error).toMatch(/function.call.*(?:limit|Invalid)|Invalid.*function.call/i);
+      expect(handler).not.toHaveBeenCalled();
+    },
+  );
+
   it('starts Live, waits for readiness, and returns exact transcripts, WAV audio, and final duration cost', async () => {
     const result = provider({ audio: { output: { voice: 'quartz' } } }).callApi('Hello');
     const socket = await connect();
@@ -1758,10 +1919,16 @@ describe('OpenAiLiveProvider', () => {
       await vi.advanceTimersByTimeAsync(0);
       expect(handler).not.toHaveBeenCalled();
       expect(sentTypes(socket)).not.toContain('response.create');
-      expect(socket.sent.at(-1)).toEqual({ type: 'session.close' });
+      if (scenario !== 'invalid-arguments') {
+        expect(socket.sent.at(-1)).toEqual({ type: 'session.close' });
+      }
       closed(socket);
       expect((await result).error).toContain(
-        scenario === 'missing-handler' ? 'no functionCallHandler' : 'handler failed',
+        scenario === 'missing-handler'
+          ? 'no functionCallHandler'
+          : scenario === 'invalid-arguments'
+            ? 'Invalid GPT-Live backend function call'
+            : 'handler failed',
       );
     },
   );

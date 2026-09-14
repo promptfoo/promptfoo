@@ -73,6 +73,7 @@ const MAX_TRANSCRIPT_DELTAS = 20_000;
 const MAX_AUDIO_BYTES = 32 * 1024 * 1024;
 const MAX_AUDIO_CHUNKS = 50_000;
 const MAX_PROTOCOL_ID_BYTES = 256;
+const MAX_FUNCTION_CALL_BYTES = 1024 * 1024;
 const MAX_HANDSHAKE_BODY_BYTES = 8 * 1024;
 const HANDSHAKE_BODY_TIMEOUT_MS = 2_000;
 const PENDING_WORK_ERROR =
@@ -167,10 +168,11 @@ export class LiveSession {
   private delegations: LiveDelegation[] = [];
   private pendingHandlers = 0;
   private backendTurns = new Map<string, BackendTurn>();
-  private finishedResponses = new Set<string>();
+  private finishedResponses = new Map<string, string>();
   private backendResponseCount = 0;
   private completedToolCalls = new Set<string>();
   private receivedToolCallCount = 0;
+  private receivedToolCallBytes = 0;
   private handlerController = new AbortController();
 
   constructor(private options: SessionOptions) {
@@ -382,6 +384,9 @@ export class LiveSession {
         this.inputBytesSent + frameSize,
       );
       this.send({ type: 'session.input_audio.append', audio: bytes.toString('base64') });
+      if (this.done) {
+        return;
+      }
       this.framesSent++;
       this.later(
         sendFrame,
@@ -400,7 +405,7 @@ export class LiveSession {
   private handleEvent(event: LiveEvent): void {
     switch (event.type) {
       case 'session.started':
-        if (this.started || typeof event.session?.id !== 'string') {
+        if (this.started || !isBoundedProtocolId(event.session?.id)) {
           this.fail('Invalid GPT-Live session startup.');
           return;
         }
@@ -444,6 +449,9 @@ export class LiveSession {
         break;
       case 'session.input_transcript.delta':
       case 'session.output_transcript.delta':
+        if (this.closing) {
+          return;
+        }
         if (
           typeof event.delta !== 'string' ||
           !Number.isFinite(event.start_ms) ||
@@ -470,6 +478,9 @@ export class LiveSession {
         });
         break;
       case 'session.output_audio.delta': {
+        if (this.closing) {
+          return;
+        }
         const bytes = typeof event.delta === 'string' ? decodeBase64(event.delta) : undefined;
         if (!bytes?.length) {
           this.fail('Invalid GPT-Live audio delta.');
@@ -587,7 +598,11 @@ export class LiveSession {
 
   private handleDelegation(event: LiveEvent): void {
     const delegation = event.delegation;
-    if (!delegation || !isBoundedProtocolId(delegation.id)) {
+    if (
+      !delegation ||
+      !isBoundedProtocolId(delegation.id) ||
+      (delegation.response_id !== undefined && !isBoundedProtocolId(delegation.response_id))
+    ) {
       this.fail('Invalid GPT-Live delegation event.');
       return;
     }
@@ -619,6 +634,21 @@ export class LiveSession {
       target: delegation.target,
       ...(Number.isFinite(event.offset_ms) && { offsetMs: event.offset_ms }),
     });
+    // Responses can finish before their delegation notification is delivered. Keep any active
+    // continuation, but do not create pending work for an already completed response.
+    if (
+      delegation.target === 'responses' &&
+      !this.backendTurns.has(delegation.id) &&
+      [...this.finishedResponses.values()].includes(delegation.id)
+    ) {
+      if (
+        delegation.response_id !== undefined &&
+        this.finishedResponses.get(delegation.response_id) !== delegation.id
+      ) {
+        this.fail('Invalid GPT-Live delegation response ID.');
+      }
+      return;
+    }
     if (this.closing) {
       this.setError(LATE_WORK_ERROR);
       return;
@@ -710,6 +740,21 @@ export class LiveSession {
         return;
       }
       if (!turn.calls.has(event.item.call_id)) {
+        const { call_id, name, arguments: args } = event.item;
+        if (
+          !isBoundedProtocolId(call_id) ||
+          !isBoundedProtocolId(name) ||
+          typeof args !== 'string'
+        ) {
+          this.fail('Invalid GPT-Live backend function call.');
+          return;
+        }
+        const bytes =
+          Buffer.byteLength(call_id) + Buffer.byteLength(name) + Buffer.byteLength(args);
+        if (this.receivedToolCallBytes + bytes > MAX_FUNCTION_CALL_BYTES) {
+          this.fail('GPT-Live backend function-call payload limit exceeded.');
+          return;
+        }
         const maxToolIterations = resolveMaxToolIterations(this.options.config.maxToolIterations);
         if (this.receivedToolCallCount >= maxToolIterations) {
           this.setError(
@@ -719,7 +764,8 @@ export class LiveSession {
           return;
         }
         this.receivedToolCallCount++;
-        turn.calls.set(event.item.call_id, event.item);
+        this.receivedToolCallBytes += bytes;
+        turn.calls.set(call_id, { call_id, name, arguments: args });
       }
     } else if (
       ['response.completed', 'response.failed', 'response.incomplete'].includes(event.type)
@@ -745,7 +791,7 @@ export class LiveSession {
         this.fail('GPT-Live backend response limit exceeded.');
         return;
       }
-      this.finishedResponses.add(response.id);
+      this.finishedResponses.set(response.id, delegationId);
       this.recordBackendUsage(response);
       this.backendTurns.delete(delegationId);
       if (event.type !== 'response.completed') {
@@ -1018,9 +1064,19 @@ function credentialForms(value: string): string[] {
   // HTTP drops surrounding whitespace, so a gateway echoes the trimmed value.
   const trimmed = value.trim();
   const token = trimmed.replace(/^[A-Za-z][\w-]*\s+/, '');
-  const keyValueTokens = trimmed
-    .split(/[;,]\s*/)
-    .flatMap((part) => (part.includes('=') ? [part.slice(part.indexOf('=') + 1)] : []));
+  const keyValueTokens = trimmed.split(/[;,]\s*/).flatMap((part) => {
+    if (!part.includes('=')) {
+      return [];
+    }
+    const raw = part.slice(part.indexOf('=') + 1).trim();
+    const unquoted = raw.startsWith('"') && raw.endsWith('"') ? raw.slice(1, -1) : raw;
+    try {
+      const decoded = decodeURIComponent(unquoted);
+      return [raw, unquoted, decoded, decoded.replace(/^"(.*)"$/, '$1')];
+    } catch {
+      return [raw, unquoted];
+    }
+  });
   if (!/^Basic\s/i.test(trimmed)) {
     return [trimmed, token, ...keyValueTokens];
   }

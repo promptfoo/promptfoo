@@ -85,9 +85,15 @@ export class OpenAiLiveProvider extends OpenAiGenericProvider {
     // A prompt-level apiBaseUrl or apiHost selects this call's endpoint, which then decides the
     // host-dependent headers and which credentials may be sent.
     const url = new URL(appendOpenAiApiPath(this.getApiUrl(config), 'live/sessions'));
+    if (!['http:', 'https:', 'ws:', 'wss:'].includes(url.protocol)) {
+      throw new Error('GPT-Live session URLs require HTTP(S) or WS(S).');
+    }
     url.protocol = ['http:', 'ws:'].includes(url.protocol) ? 'ws:' : 'wss:';
     if (url.search) {
       throw new Error('GPT-Live session URLs do not accept query parameters.');
+    }
+    if (url.hash) {
+      throw new Error('GPT-Live session URLs do not accept fragments.');
     }
     // Send URL userinfo as an explicit Basic credential, which diagnostics redact, instead of
     // leaving it in the socket URL.

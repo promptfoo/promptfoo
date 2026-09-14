@@ -53,21 +53,29 @@ function decodeWav(bytes: Buffer, format: LiveAudioFormat, maxAudioBytes: number
   ) {
     throw new Error('GPT-Live WAV input must be mono PCM16 matching audio.format.');
   }
+  const riffSize = bytes.readUInt32LE(4);
+  const streaming = riffSize === UNKNOWN_CHUNK_SIZE;
+  const containerEnd = streaming ? bytes.length : riffSize + 8;
+  if (containerEnd < 12 || containerEnd > bytes.length) {
+    throw new Error('Truncated GPT-Live WAV input.');
+  }
   let validFormat = false;
   const chunks: Buffer[] = [];
   let audioBytes = 0;
   let chunkCount = 0;
-  for (let offset = 12; offset + 8 <= bytes.length; ) {
+  for (let offset = 12; offset + 8 <= containerEnd; ) {
     if (++chunkCount > MAX_WAV_CHUNKS) {
       throw new Error(`GPT-Live WAV input has too many chunks (maximum ${MAX_WAV_CHUNKS}).`);
     }
     const kind = bytes.toString('ascii', offset, offset + 4);
     const declaredSize = bytes.readUInt32LE(offset + 4);
     const start = offset + 8;
-    const available = bytes.length - start;
+    const available = containerEnd - start;
     // Streaming writers, such as OpenAI text-to-speech and ffmpeg pipes, cannot backfill data sizes.
     const size =
-      kind === 'data' && (declaredSize === UNKNOWN_CHUNK_SIZE || declaredSize > available)
+      streaming &&
+      kind === 'data' &&
+      (declaredSize === UNKNOWN_CHUNK_SIZE || declaredSize > available)
         ? available
         : declaredSize;
     if (size > available) {

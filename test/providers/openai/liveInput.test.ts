@@ -74,6 +74,21 @@ describe('Live input', () => {
     expect(decodeWav(convertPcm16ToWav(audio)).audio).toEqual(audio);
   });
 
+  it('ignores data appended outside a finite RIFF container', () => {
+    const audio = Buffer.from([1, 0]);
+    const wav = Buffer.concat([
+      convertPcm16ToWav(audio),
+      convertPcm16ToWav(Buffer.from([2, 0])).subarray(36),
+    ]);
+    expect(decodeWav(wav).audio).toEqual(audio);
+  });
+
+  it('rejects a data chunk crossing a finite RIFF boundary', () => {
+    const wav = convertPcm16ToWav(Buffer.from([1, 0, 2, 0]));
+    wav.writeUInt32LE(wav.length - 10, 4);
+    expect(() => decodeWav(wav)).toThrow('Truncated');
+  });
+
   it.each([
     { seconds: 300, metadataBytes: 0 },
     { seconds: 299, metadataBytes: 64_000 },
@@ -134,6 +149,7 @@ describe('Live input', () => {
     const audio = Buffer.from([1, 0, 2, 0, 3, 0]);
     expect(decodeWav(streamingWav(audio)).audio).toEqual(audio);
     const overstated = convertPcm16ToWav(audio);
+    overstated.writeUInt32LE(0xffffffff, 4);
     overstated.writeUInt32LE(1_000, 40);
     expect(decodeWav(overstated).audio).toEqual(audio);
   });
@@ -159,6 +175,8 @@ describe('Live input', () => {
     truncatedFormat.writeUInt32LE(1_000, 16);
     expect(() => decodeWav(truncatedFormat)).toThrow('Truncated');
     const incompleteSample = convertPcm16ToWav(Buffer.alloc(4)).subarray(0, -1);
+    expect(() => decodeWav(incompleteSample)).toThrow('Truncated');
+    incompleteSample.writeUInt32LE(0xffffffff, 4);
     expect(() => decodeWav(incompleteSample)).toThrow('incomplete PCM16 sample');
   });
 

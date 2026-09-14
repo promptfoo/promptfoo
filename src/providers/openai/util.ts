@@ -384,6 +384,12 @@ export function assertOpenAiApiModel(model: unknown, apiUrl?: string): void {
     return;
   }
 
+  if (model === 'gpt-live-transcribe' || model.startsWith('gpt-live-transcribe-')) {
+    throw new Error(
+      'gpt-live-transcribe requires a dedicated Realtime transcription session, which this provider does not support.',
+    );
+  }
+
   if (apiUrl) {
     try {
       if (new URL(apiUrl).hostname.toLowerCase() !== 'api.openai.com') {

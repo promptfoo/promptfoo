@@ -1,0 +1,47 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: OpenAI hosted agent arithmetic
+
+prompts:
+  - >-
+    Write and run a Python script that calculates the sum and count of these numbers:
+    {{values}}. Return only a JSON object with keys "sum" and "count".
+
+providers:
+  - id: openai:agents-api:gpt-6-astra
+    config:
+      agent:
+        instructions: Use the sandbox to compute the answer. Report the actual result.
+        reasoning:
+          effort: low
+        text:
+          format:
+            type: json_schema
+            schema:
+              type: object
+              properties:
+                sum:
+                  type: number
+                count:
+                  type: integer
+              required: [sum, count]
+              additionalProperties: false
+      environment:
+        type: openai_hosted
+        network:
+          access: disabled
+
+defaultTest:
+  assert:
+    - type: is-json
+
+tests:
+  - vars:
+      values: '[10, 20, 30]'
+    assert:
+      - type: javascript
+        value: JSON.parse(output).sum === 60 && JSON.parse(output).count === 3
+  - vars:
+      values: '[4, -1, 7, 0]'
+    assert:
+      - type: javascript
+        value: JSON.parse(output).sum === 10 && JSON.parse(output).count === 4
