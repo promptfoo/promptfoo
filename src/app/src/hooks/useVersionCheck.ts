@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 
-import { callApi } from '@app/utils/api';
+import { callApiJson } from '@app/utils/api';
+import { ApiRoutes, VersionSchemas } from '@promptfoo/contracts';
 
 interface VersionInfo {
   currentVersion: string;
@@ -58,11 +59,7 @@ export function useVersionCheck(): UseVersionCheckResult {
 
     const checkVersion = async () => {
       try {
-        const response = await callApi('/version');
-        if (!response.ok) {
-          throw new Error('Failed to fetch version information');
-        }
-        const data: VersionInfo = await response.json();
+        const data = await callApiJson(ApiRoutes.Version, VersionSchemas.Response);
 
         if (!active) {
           return;
