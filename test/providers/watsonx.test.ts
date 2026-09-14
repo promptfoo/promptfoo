@@ -80,6 +80,7 @@ describe('WatsonXProvider', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
+    vi.mocked(envarsModule.getEnvString).mockReset();
     clearModelSpecsCache();
   });
 
