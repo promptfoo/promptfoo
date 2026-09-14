@@ -531,6 +531,9 @@ export async function doEval(
       } = await resolveConfigs(cmdObj, defaultConfig));
     }
 
+    const describeReplayAction = (isRetryErrors: boolean | undefined) =>
+      isRetryErrors ? 'retrying errors for' : 'resuming';
+
     const persistedProviderFilterOptions = resumeEval
       ? getPersistedProviderFilterOptions(resumeEval.runtimeOptions?.providerFilter)
       : {};
@@ -538,12 +541,12 @@ export async function doEval(
     const cliProviderFilter = cmdObj.filterProviders || cmdObj.filterTargets;
     if (resumeEval && cliProviderFilter && cliProviderFilter !== persistedProviderFilter) {
       logger.warn(
-        `Ignoring --filter-providers/--filter-targets "${cliProviderFilter}": ${retryErrors ? 'retrying errors for' : 'resuming'} evaluation ${resumeEval.id} with stored provider filter ${persistedProviderFilter ? `"${persistedProviderFilter}"` : '(none)'} to preserve test indices.`,
+        `Ignoring --filter-providers/--filter-targets "${cliProviderFilter}": ${describeReplayAction(retryErrors)} evaluation ${resumeEval.id} with stored provider filter ${persistedProviderFilter ? `"${persistedProviderFilter}"` : '(none)'} to preserve test indices.`,
       );
     }
     if (resumeEval && persistedProviderFilter && testSuite.providers.length === 0) {
       return failEvalRun(
-        `Stored provider filter "${persistedProviderFilter}" matched no providers while ${retryErrors ? 'retrying errors for' : 'resuming'} evaluation ${resumeEval.id}. The evaluation was not changed.`,
+        `Stored provider filter "${persistedProviderFilter}" matched no providers while ${describeReplayAction(retryErrors)} evaluation ${resumeEval.id}. The evaluation was not changed.`,
         isCliInvocation,
       );
     }
