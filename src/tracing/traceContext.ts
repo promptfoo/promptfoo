@@ -698,12 +698,10 @@ export async function fetchTraceContext(
     if (options.abortSignal?.aborted) {
       throw createTraceAbortError(options.abortSignal);
     }
-    throw Object.assign(
-      new Error('Failed to collect required execution trace evidence', { cause: error }),
-      {
-        name: 'TraceEvidenceError',
-      },
-    );
+    throw Object.assign(new Error('Failed to collect required execution trace evidence'), {
+      name: 'TraceEvidenceError',
+      cause: error,
+    });
   }
 }
 
