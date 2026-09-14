@@ -26,7 +26,7 @@ const expectedSkillDirs = [
   'promptfoo-redteam-run',
   'promptfoo-redteam-setup',
 ];
-const expectedPluginVersion = '0.2.0';
+const expectedPluginVersion = '0.2.1';
 const expectedFixtureDirs = [
   'evals-json-rubric',
   'evals-local-js',
