@@ -201,6 +201,57 @@ describe('OTLPReceiver', () => {
       },
     );
 
+    it.each(['resource', 'span', 'log', 'nested'])(
+      'rejects null %s attribute entries before storage',
+      async (location) => {
+        const span = {
+          traceId: 'a'.repeat(32),
+          spanId: 'b'.repeat(16),
+          name: 'invalid attributes',
+          startTimeUnixNano: '1000000000',
+          attributes:
+            location === 'nested'
+              ? [{ key: 'nested', value: { kvlistValue: { values: [null] } } }]
+              : location === 'span'
+                ? [null]
+                : [],
+        };
+        const body =
+          location === 'log'
+            ? {
+                resourceLogs: [
+                  {
+                    scopeLogs: [
+                      {
+                        logRecords: [
+                          {
+                            traceId: span.traceId,
+                            spanId: span.spanId,
+                            timeUnixNano: span.startTimeUnixNano,
+                            attributes: [null],
+                          },
+                        ],
+                      },
+                    ],
+                  },
+                ],
+              }
+            : {
+                resourceSpans: [
+                  {
+                    resource: { attributes: location === 'resource' ? [null] : [] },
+                    scopeSpans: [{ spans: [span] }],
+                  },
+                ],
+              };
+        await request(receiver.getApp())
+          .post(location === 'log' ? '/v1/logs' : '/v1/traces')
+          .send(body)
+          .expect(400);
+        expect(persistSpans).not.toHaveBeenCalled();
+      },
+    );
+
     it('should respond to health check endpoint', async () => {
       const response = await request(receiver.getApp()).get('/health').expect(200);
 

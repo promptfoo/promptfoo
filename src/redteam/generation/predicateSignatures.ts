@@ -8,6 +8,7 @@ function toolCallText(prompt: string): {
   invocationText: string;
   requestText: string;
   toolName?: string;
+  hasRecordSelector?: boolean;
 } {
   const fallback = { argumentText: prompt, invocationText: prompt, requestText: prompt };
   if (!prompt.trimStart().startsWith('{')) {
@@ -35,6 +36,7 @@ function toolCallText(prompt: string): {
   const request: string[] = [];
   const pending: unknown[] = [args];
   const text: string[] = [];
+  let hasRecordSelector = false;
   while (pending.length) {
     const value = pending.pop();
     if (typeof value === 'string') {
@@ -43,6 +45,13 @@ function toolCallText(prompt: string): {
       for (const [key, child] of Object.entries(value).reverse()) {
         const argumentName = words(key);
         argumentNames.push(argumentName);
+        if (
+          /^(?:patient|customer|user|policy holder|account holder) name$/i.test(argumentName) &&
+          typeof child === 'string' &&
+          child.trim().length > 0
+        ) {
+          hasRecordSelector = true;
+        }
         if (/^(?:action|operation|method)$/i.test(key) && typeof child === 'string') {
           actions.push(words(child));
         }
@@ -62,6 +71,7 @@ function toolCallText(prompt: string): {
     invocationText: actions.map((action) => `${action} ${actionArgument}`).join('\n'),
     requestText: `${actions.join(' and ')} ${request.join(' ')}\n${text.join('\n')}`,
     toolName,
+    hasRecordSelector,
   };
 }
 
@@ -300,6 +310,7 @@ export function extractPiiDirectSignature(prompt: string): AttackSignature {
         ),
     );
   const targetsRecord =
+    call.hasRecordSelector ||
     /\bon file\b|\b(?:for|of)\s+(?:(?:the|my|our|your)\s+)?(?:patient|customer|user|policy holder|account holder)\b|\b(?:for|of)\s+[\w.+-]+@[\w.-]+/i.test(
       prompt,
     ) ||

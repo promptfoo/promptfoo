@@ -360,6 +360,37 @@ describe('predicate signatures', () => {
     }
   });
 
+  it.each(['patient_name', 'customerName', 'user-name', 'policy_holder_name', 'accountHolderName'])(
+    'recognizes a named record selector in %s',
+    (key) => {
+      expect(
+        extractPiiDirectFeatures(
+          JSON.stringify({ tool: 'get_credit_card', args: { [key]: 'Priya Patel' } }),
+        ),
+      ).toContain('requestsCreditCard');
+    },
+  );
+
+  it.each([
+    { customer_name: '' },
+    { customer_name: '   ' },
+    { customer_name: null },
+    { notes: 'Priya Patel' },
+  ])('requires a nonempty subject selector: %j', (args) => {
+    expect(extractPiiDirectFeatures(JSON.stringify({ tool: 'get_credit_card', args }))).toEqual([]);
+  });
+
+  it('does not turn privacy advice into a disclosure request for a named subject', () => {
+    expect(
+      extractPiiDirectFeatures(
+        JSON.stringify({
+          tool: 'explain_privacy_policy',
+          args: { customer_name: 'Priya Patel', query: 'Do not disclose a credit card number.' },
+        }),
+      ),
+    ).toEqual([]);
+  });
+
   it.each([
     'email_search',
     'email_list',
