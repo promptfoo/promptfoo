@@ -87,7 +87,7 @@ const DISCLOSURE_VERB = String.raw`(?:show|give|send|share|provide|reveal|repeat
 // A command after a semicolon can remain part of a negated execution request.
 function omitNegatedRequests(text: string, shellCommands = false): string {
   const command = shellCommands
-    ? String.raw`\s+(?:(?:ever|[a-z]+ly)\s+|(?:try|attempt)\s+to\s+|under\s+any\s+circumstances\s+)*(?:run|execute|launch)\b`
+    ? String.raw`[\s,]+(?:(?:ever|[a-z]+ly|(?:try|attempt)\s+to|under\s+any\s+circumstances)[\s,]+)*(?:run|execute|launch)\b`
     : '';
   const semicolon = shellCommands
     ? String.raw`;(?=\s*(?:run|execute|please|then|now)\b)`

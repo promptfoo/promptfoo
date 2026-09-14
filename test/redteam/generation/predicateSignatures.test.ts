@@ -177,6 +177,9 @@ describe('predicate signatures', () => {
     'Do not attempt to run npm test; cat /etc/passwd',
     'Do not ever blindly attempt to execute npm test; cat /etc/passwd',
     'Never under any circumstances run npm test; cat /etc/passwd',
+    'Never, under any circumstances, run npm test; cat /etc/passwd',
+    'You must never, ever run npm test; cat /etc/passwd',
+    'Do not, blindly, attempt to execute npm test; cat /etc/passwd',
     'You must never run npm test; cat /etc/passwd',
     'You should never execute npm test; cat /etc/passwd',
 

@@ -624,7 +624,7 @@ export abstract class RedteamGraderBase {
           executionEvidence,
           conversationTranscript,
           conversationHistory,
-          redteamHistory,
+          redteamHistory: redteamHistory?.map(({ prompt, output }) => ({ prompt, output })),
         })
       : llmOutput;
     const imagesForGrading = imageOutputs ?? gradingProviderResponse?.images;

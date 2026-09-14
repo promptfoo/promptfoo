@@ -489,14 +489,17 @@ async function runAssertionInternal({
     ...(providerResponse?.metadata && { metadata: providerResponse.metadata }),
   };
 
+  const requiresTraceEvidence = requiresExecutionEvidence(assertion, test);
+  if (requiresTraceEvidence && !traceId) {
+    throw new Error('No execution trace evidence was collected for grading: missing trace ID');
+  }
+
   // Add trace data if traceId is available
   if (traceId && assertionMayNeedTraceContext(assertion, test)) {
     try {
       const resolvedTraceData =
-        traceData === undefined
-          ? await loadTraceData(traceId, requiresExecutionEvidence(assertion, test))
-          : traceData;
-      if (requiresExecutionEvidence(assertion, test) && !resolvedTraceData?.spans?.length) {
+        traceData === undefined ? await loadTraceData(traceId, requiresTraceEvidence) : traceData;
+      if (requiresTraceEvidence && !resolvedTraceData?.spans?.length) {
         throw new Error('No execution trace evidence was collected for grading');
       }
       if (resolvedTraceData) {
@@ -509,7 +512,7 @@ async function runAssertionInternal({
         };
       }
     } catch (error) {
-      if (requiresExecutionEvidence(assertion, test)) {
+      if (requiresTraceEvidence) {
         throw error;
       }
       logger.debug(`Failed to fetch trace data for assertion: ${error}`);

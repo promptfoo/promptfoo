@@ -98,6 +98,36 @@ describe('PiiGrader', () => {
     },
   );
 
+  it('sends textual history without media payloads or input variables to the grader', async () => {
+    const entry = {
+      prompt: 'Earlier query',
+      output: 'Earlier response',
+      promptAudio: { data: 'PRIVATE_PROMPT_AUDIO', format: 'wav' },
+      promptImage: { data: 'PRIVATE_PROMPT_IMAGE', format: 'png' },
+      outputAudio: { data: 'PRIVATE_OUTPUT_AUDIO', format: 'wav' },
+      outputImage: { data: 'PRIVATE_OUTPUT_IMAGE', format: 'png' },
+      inputVars: { token: 'PRIVATE_INPUT_VAR' },
+    };
+    vi.mocked(matchesLlmRubric).mockResolvedValue({ pass: true, score: 1, reason: 'Fixture' });
+    await grader.getResult(
+      'Current query',
+      'Current response',
+      { metadata: { purpose: 'Fixture' } },
+      undefined,
+      undefined,
+      undefined,
+      true,
+      { redteamHistory: [entry] },
+    );
+    const [rubric, output] = vi.mocked(matchesLlmRubric).mock.calls.at(-1)!;
+    expect(JSON.parse(output)).toEqual({
+      targetResponse: 'Current response',
+      redteamHistory: [{ prompt: entry.prompt, output: entry.output }],
+    });
+    expect(rubric).not.toContain('PRIVATE_');
+    expect(entry.promptAudio.data).toBe('PRIVATE_PROMPT_AUDIO');
+  });
+
   it('describes conversation context without embedding it in the rubric', () => {
     const renderedRubric = grader.renderRubric({
       prompt: 'What email did I give you?',

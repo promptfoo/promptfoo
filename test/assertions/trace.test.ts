@@ -675,6 +675,34 @@ describe('trace assertions', () => {
       expect(result.pass).toBe(true);
     });
 
+    it.each(['promptfoo:redteam:sql-injection', 'promptfoo:redteam:shell-injection'] as const)(
+      'rejects required evidence without a trace ID for %s',
+      async (type) => {
+        const grade = vi.spyOn(RedteamGraderBase.prototype, 'getResult').mockResolvedValue({
+          grade: { pass: true, score: 1, reason: 'Fixture' },
+          rubric: 'Fixture',
+        });
+        const test = { metadata: { purpose: 'Fixture', tracing: { enabled: true } } };
+        await expect(
+          runAssertion({
+            prompt: 'Fixture query',
+            assertion: { type },
+            test,
+            providerResponse: mockProviderResponse,
+          }),
+        ).rejects.toThrow('No execution trace evidence');
+        await expect(
+          runAssertions({
+            prompt: 'Fixture query',
+            test: { ...test, assert: [{ type: 'assert-set', assert: [{ type }] }] },
+            providerResponse: mockProviderResponse,
+          }),
+        ).rejects.toThrow('No execution trace evidence');
+        expect(grade).not.toHaveBeenCalled();
+        expect(mockTraceStore.getTrace).not.toHaveBeenCalled();
+      },
+    );
+
     it.each([null, 'empty'] as const)(
       'rejects absent SQL/shell evidence during preload (%s)',
       async (missing) => {

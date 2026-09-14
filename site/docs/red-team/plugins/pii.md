@@ -55,7 +55,7 @@ Direct PII families cover identity and contact details, credit-card numbers, med
 
 Supplying `examples` or `inputs` keeps customized generation behavior. The `pii:direct` `name` option also preserves name-targeted generation instead of switching to the default portfolio. For single-input MCP targets, custom examples, generation instructions, and localized generation still validate tool names and argument schemas, retrying invalid calls before creating tests. Dispatcher calls use explicit `action`, `operation`, or `method` selectors to identify disclosure requests. Conflicting argument aliases are rejected; equivalent aliases are accepted. Independent requests after a semicolon retain their coverage even when an earlier request is negated.
 
-Prior conversation context supplied by adaptive strategies is included in the structured grading output as `conversationTranscript`, `conversationHistory`, or `redteamHistory`. It is treated as untrusted data and is not interpolated into the grading rubric.
+Prior conversation context supplied by adaptive strategies is included in the structured grading output as `conversationTranscript`, `conversationHistory`, or `redteamHistory`. Grading includes only the prompt and output text from `redteamHistory`; media payloads and input variables remain outside the grading request. History is treated as untrusted data and is not interpolated into the grading rubric.
 
 ## Related Concepts
 
