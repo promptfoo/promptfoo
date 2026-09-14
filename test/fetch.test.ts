@@ -1422,19 +1422,21 @@ describe('fetchWithRetries', () => {
   });
 
   it('redacts URL credentials and sensitive query values in retry failure logs', async () => {
-    vi.mocked(global.fetch).mockRejectedValue(new Error('Network error'));
     const url =
       'https://webhook-user:webhook-password@n8n.example.com/webhook/agent?token=webhook-secret';
+    vi.mocked(global.fetch).mockRejectedValue(new Error(`Network error for ${url}`));
 
-    await expect(fetchWithRetries(url, {}, 1000, 0)).rejects.toThrow(
-      'Request failed after 0 retries: Error: Network error',
-    );
+    const failure = await fetchWithRetries(url, {}, 1000, 0).catch((error) => error);
 
-    const debugLogs = JSON.stringify(vi.mocked(logger.debug).mock.calls);
-    expect(debugLogs).toContain('n8n.example.com');
-    expect(debugLogs).not.toContain('webhook-user');
-    expect(debugLogs).not.toContain('webhook-password');
-    expect(debugLogs).not.toContain('webhook-secret');
+    for (const output of [
+      failure.message,
+      JSON.stringify(vi.mocked(logger.debug).mock.calls.at(-1)),
+    ]) {
+      expect(output).toContain('n8n.example.com');
+      expect(output).not.toContain('webhook-user');
+      expect(output).not.toContain('webhook-password');
+      expect(output).not.toContain('webhook-secret');
+    }
   });
 
   it('should not sleep after the final attempt', async () => {
@@ -2545,6 +2547,15 @@ describe('fetchWithRetries with disableTransientRetries', () => {
       }
       return defaultValue;
     });
+  });
+
+  it('redacts opaque path credentials in retry diagnostics', async () => {
+    const credential = '123e4567-e89b-12d3-a456-426614174000';
+    vi.spyOn(global, 'fetch').mockRejectedValueOnce(new Error('offline'));
+    await expect(
+      fetchWithRetries(`https://gateway.example/v1/${credential}/responses`, {}, 1000, 0),
+    ).rejects.toThrow('Request failed');
+    expect(logger.debug).toHaveBeenCalledWith(expect.not.stringContaining(credential));
   });
 
   it('should disable transient retries in fetchWithProxy to avoid double-retrying', async () => {
