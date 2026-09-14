@@ -8,6 +8,7 @@ import { type ProviderMetrics, ProviderRateLimitState } from './providerRateLimi
 import { getRateLimitKey } from './rateLimitKey';
 
 import type { ApiProvider } from '../types/providers';
+import type { RateLimitExecuteOptions } from './types';
 
 export interface RateLimitRegistryOptions {
   maxConcurrency: number;
@@ -45,13 +46,10 @@ export class RateLimitRegistry extends EventEmitter {
   async execute<T>(
     provider: ApiProvider,
     callFn: () => Promise<T>,
-    options?: {
-      getHeaders?: (result: T) => Record<string, string> | undefined;
-      isRateLimited?: (result: T | undefined, error?: Error) => boolean;
-      getRetryAfter?: (result: T | undefined, error?: Error) => number | undefined;
-    },
+    options?: RateLimitExecuteOptions<T>,
   ): Promise<T> {
     const providerMaxRetries = getProviderMaxRetries(provider);
+    options?.abortSignal?.throwIfAborted();
 
     // Even when the scheduler is disabled, propagate the retry context so
     // `fetchWithRetries` picks up the provider's `maxRetries` as its default
@@ -74,6 +72,7 @@ export class RateLimitRegistry extends EventEmitter {
 
     const run = () =>
       state.executeWithRetry(requestId, callFn, {
+        abortSignal: options?.abortSignal,
         getHeaders: options?.getHeaders,
         isRateLimited: options?.isRateLimited,
         getRetryAfter: options?.getRetryAfter,

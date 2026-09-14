@@ -9,3 +9,4 @@ export * from './shared.js';
 export * from './transform.js';
 export * from './validators/prompts.js';
 export * from './validators/shared.js';
+export * from './validators/traceAssertionConfig.js';

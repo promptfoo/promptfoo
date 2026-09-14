@@ -150,6 +150,7 @@ describeIfBuildExists('Library Exports', () => {
       expect(contractsModule.GetUserResponseSchema).toBeDefined();
       expect(contractsModule.InputsSchema).toBeDefined();
       expect(contractsModule.PromptSchema).toBeDefined();
+      expect(contractsModule.traceSpanCountBoundsError).toBeDefined();
     });
   });
 
@@ -196,6 +197,7 @@ describeIfBuildExists('Library Exports', () => {
       expect(contractsModule.GetUserResponseSchema).toBeDefined();
       expect(contractsModule.InputsSchema).toBeDefined();
       expect(contractsModule.PromptSchema).toBeDefined();
+      expect(contractsModule.traceSpanCountBoundsError).toBeDefined();
     });
   });
 });

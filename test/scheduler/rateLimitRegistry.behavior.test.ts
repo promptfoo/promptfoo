@@ -99,6 +99,22 @@ describe('RateLimitRegistry integration - provider maxRetries', () => {
     }
   });
 
+  it('does not invoke a disabled scheduler call after cancellation', async () => {
+    vi.stubEnv('PROMPTFOO_DISABLE_ADAPTIVE_SCHEDULER', 'true');
+    const registry = new RateLimitRegistry({ maxConcurrency: 1 });
+    const callFn = vi.fn();
+    const controller = new AbortController();
+    controller.abort(new Error('cancelled'));
+    try {
+      await expect(
+        registry.execute(createProvider(), callFn, { abortSignal: controller.signal }),
+      ).rejects.toThrow('cancelled');
+      expect(callFn).not.toHaveBeenCalled();
+    } finally {
+      registry.dispose();
+    }
+  });
+
   it('should not retry when provider maxRetries is 0', async () => {
     expect(await runRateLimitedCall(0)).toBe(1);
   });
