@@ -92,9 +92,10 @@ describe('PFX signature paths (generateSignature)', () => {
   });
 
   it('succeeds when PFX content yields a key', async () => {
+    const expectedKey = '-----BEGIN PRIVATE KEY-----\nMOCK\n-----END PRIVATE KEY-----';
     readPkcs12.mockImplementation((_buf, _opts, cb) =>
       cb(null, {
-        key: '-----BEGIN PRIVATE KEY-----\nMOCK\n-----END PRIVATE KEY-----',
+        key: expectedKey,
         cert: 'CERT',
       }),
     );
@@ -115,7 +116,7 @@ describe('PFX signature paths (generateSignature)', () => {
     };
 
     const result = await generateSignature(signatureAuth, Date.now());
-    expect(typeof result).toBe('string');
-    expect(result.length).toBeGreaterThan(0);
+    expect(sign).toHaveBeenCalledExactlyOnceWith(expectedKey);
+    expect(result).toBe(Buffer.from('sig').toString('base64'));
   });
 });
