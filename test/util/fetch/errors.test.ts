@@ -360,6 +360,35 @@ describe('HttpRateLimitError: quota classification via type', () => {
     }
   });
 
+  it('a DEFINITIVE billing type outranks a recognized transient code', () => {
+    // Some gateways pair a generic `code: rate_limit_exceeded` with the
+    // specific billing `type`. Yielding to the code there would spend the whole
+    // retry budget on an account that has no credits left, and the
+    // definitive-billing guard below could not help: it only protects a kind
+    // that is already 'quota'.
+    for (const type of [
+      'credit_balance_exhausted',
+      'billing_hard_limit_reached',
+      'billing_not_active',
+      'access_terminated',
+    ]) {
+      const err = new HttpRateLimitError({ status: 429, code: 'rate_limit_exceeded', type });
+      expect(err.kind, type).toBe('quota');
+      expect(err.code, type).toBe('rate_limit_exceeded');
+      expect(err.type, type).toBe(type);
+    }
+  });
+
+  it('keeps a definitive billing type at quota even with a short Retry-After', () => {
+    const err = new HttpRateLimitError({
+      status: 429,
+      code: 'rate_limit_exceeded',
+      type: 'credit_balance_exhausted',
+      retryAfterMs: 1000,
+    });
+    expect(err.kind).toBe('quota');
+  });
+
   it('keeps rate_limit when neither code nor type is a hard quota', () => {
     const err = new HttpRateLimitError({
       status: 429,

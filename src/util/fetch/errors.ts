@@ -50,9 +50,12 @@ export const DEFINITIVE_BILLING_ERROR_CODES: ReadonlySet<string> = new Set([
 /**
  * Body codes that name a per-window throttle outright (OpenAI / Azure OpenAI
  * `rate_limit_exceeded`, Anthropic `rate_limit_error` / `overloaded_error`,
- * per-minute token / request buckets). A hard-quota `type` is only a fallback
- * for an unrecognized `code`; next to one of these it never promotes the error
- * to `quota`, whether or not the server sent a `Retry-After` / reset header.
+ * per-minute token / request buckets). An AMBIGUOUS hard-quota `type`
+ * (`insufficient_quota`, `quota_exceeded`) is only a fallback for an
+ * unrecognized `code`; next to one of these it never promotes the error to
+ * `quota`, whether or not the server sent a `Retry-After` / reset header. A
+ * {@link DEFINITIVE_BILLING_ERROR_CODES} type still does, because it names the
+ * account's billing state rather than guessing at it.
  */
 export const TRANSIENT_RATE_LIMIT_ERROR_CODES: ReadonlySet<string> = new Set([
   'rate_limit_exceeded',
@@ -174,15 +177,20 @@ export class HttpRateLimitError extends Error {
     const resetAt = normalizeNonNegativeMs(init.resetAt);
 
     // A hard-quota body code (or a hard-quota `type` next to an unrecognized
-    // code — a recognized transient code such as `rate_limit_exceeded` wins
-    // over the type) normally implies `kind: 'quota'`. But Azure OpenAI is known to
+    // code) normally implies `kind: 'quota'`. But Azure OpenAI is known to
     // return `insufficient_quota` for per-minute deployment saturation too; in
     // that case the server hints at recovery via `Retry-After` or a reset
     // timestamp. Trust that hint: if the wait is short, this is recoverable
     // rate_limit, not billing exhaustion. A billing state named outright
     // (`credit_balance_exhausted`, ...) in either `code` or `type` is never
-    // downgraded — some gateways attach a Retry-After to every 429.
-    const typeImpliesQuota = isHardQuotaCode(init.type) && !isTransientRateLimitCode(init.code);
+    // downgraded — some gateways attach a Retry-After to every 429, and some
+    // pair a generic `code: rate_limit_exceeded` with the specific type. So a
+    // recognized transient code outranks only an AMBIGUOUS quota type; against
+    // a definitive billing type it does not, or the guard below never sees a
+    // `quota` to protect.
+    const typeImpliesQuota =
+      isHardQuotaCode(init.type) &&
+      (isDefinitiveBillingCode(init.type) || !isTransientRateLimitCode(init.code));
     let kind: RateLimitKind =
       isHardQuotaCode(init.code) || typeImpliesQuota ? 'quota' : 'rate_limit';
     if (
