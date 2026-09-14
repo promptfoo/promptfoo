@@ -426,6 +426,17 @@ export function getTraceEvidenceValues(
   enclosingAttributes?: Record<string, unknown>,
 ): unknown[] {
   const entries = Object.entries(attributes ?? {});
+  const requireVisible = (values: unknown[]) => {
+    if (
+      values.some(
+        (value) =>
+          typeof value === 'string' && /^(?:\[(?:REDACTED|TRUNCATED)\]|<redacted>)$/.test(value),
+      )
+    ) {
+      throw new Error('Agentic trace verifier evidence was redacted and cannot be graded');
+    }
+  };
+  requireVisible(entries.map(([key]) => key));
   const values: unknown[] = [];
   for (const namespace of AGENTIC_RUNTIME_EVIDENCE_NAMESPACES) {
     const idKeys = namespace.pluginIds.map((key) => key.toLowerCase());
@@ -435,6 +446,7 @@ export function getTraceEvidenceValues(
     const json = entries.filter(
       ([key, value]) => value !== undefined && key.toLowerCase() === namespace.json,
     );
+    requireVisible([...ownIds, ...json].map(([, value]) => value));
     const finding = Object.fromEntries(
       ['kind', 'location', 'evidence', 'severity'].map((field) => [
         field,

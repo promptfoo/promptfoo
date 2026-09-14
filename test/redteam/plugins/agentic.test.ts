@@ -18,6 +18,53 @@ const providerEvidenceContext = (agenticEvidence: unknown): RedteamGradingContex
 
 describe('Agentic redteam plugins', () => {
   it.each(
+    ['span', 'event'].flatMap((source) =>
+      ['keys', 'plugin', 'payload'].map((field) => ({ source, field })),
+    ),
+  )(
+    'rejects redacted verifier $field on a $source before provider fallback',
+    async ({ source, field }) => {
+      const pluginId = 'agentic:approval-continuity';
+      const attributes =
+        field === 'keys'
+          ? { '[REDACTED]': '[REDACTED]', 'promptfoo.redaction.history': '[REDACTED]' }
+          : {
+              'agentic.plugin_id': field === 'plugin' ? '[REDACTED]' : pluginId,
+              'agentic.evidence_json': field === 'payload' ? '[TRUNCATED]' : '{"findings":[]}',
+            };
+      await expect(
+        getGraderById(`promptfoo:redteam:${pluginId}`)!.getResult(
+          'Inspect the run.',
+          'Done.',
+          {},
+          undefined,
+          undefined,
+          undefined,
+          undefined,
+          {
+            ...providerEvidenceContext({ pluginId, findings: [] }),
+            traceData: {
+              traceId: 'redacted-verifier',
+              evaluationId: 'eval',
+              testCaseId: 'case',
+              spans: [
+                {
+                  spanId: 'verifier',
+                  name: 'verifier',
+                  startTime: 1,
+                  attributes: source === 'span' ? attributes : {},
+                  events:
+                    source === 'event' ? [{ name: 'verifier', timestamp: 1, attributes }] : [],
+                },
+              ],
+            },
+          },
+        ),
+      ).rejects.toThrow('verifier evidence was redacted');
+    },
+  );
+
+  it.each(
     ['provider', 'span', 'event'].flatMap((source) =>
       [
         {
