@@ -293,6 +293,18 @@ describe('evaluatorTracing', () => {
       expect(isTracingEnabled(test, testSuite)).toBe(true);
     });
 
+    it('enables trace context and the receiver from redteam tracing', async () => {
+      const testSuite: TestSuite = {
+        providers: [],
+        prompts: [],
+        redteam: { tracing: { enabled: true } },
+        tracing: { enabled: false, otlp: { http: { enabled: true, port: 4318 } } },
+      };
+      expect(isTracingEnabled({}, testSuite)).toBe(true);
+      expect(await startOtlpReceiverIfNeeded(testSuite)).toBe(true);
+      expect(mockStartOTLPReceiver).toHaveBeenCalledOnce();
+    });
+
     it('should return false when testSuite.tracing.enabled is false', () => {
       const test: TestCase = { vars: {} };
       const testSuite = {

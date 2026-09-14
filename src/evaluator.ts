@@ -48,6 +48,8 @@ import telemetry from './telemetry';
 import {
   generateTraceContextIfNeeded,
   isOtlpReceiverStarted,
+  isTracingEnabled,
+  isTracingEnabledForSuite,
   startOtlpReceiverIfNeeded,
   stopOtlpReceiverIfNeeded,
 } from './tracing/evaluatorTracing';
@@ -2916,7 +2918,7 @@ function createRunEvalTest(
     options: testOptions,
   };
 
-  if (!isTracingEnabledForTest(testSuite, testCase)) {
+  if (!isTracingEnabled(testCase, testSuite)) {
     return baseTest;
   }
   return {
@@ -2927,20 +2929,6 @@ function createRunEvalTest(
       evaluationId: evalId,
     },
   };
-}
-
-function isTracingEnabledForTest(testSuite: TestSuite, testCase: AtomicTestCase) {
-  const tracingEnvEnabled = getEnvBool('PROMPTFOO_TRACING_ENABLED', false);
-  const tracingEnabled =
-    tracingEnvEnabled ||
-    testCase.metadata?.tracingEnabled === true ||
-    testSuite.tracing?.enabled === true;
-
-  logger.debug(
-    `[Evaluator] Tracing check: env=${tracingEnvEnabled}, testCase.metadata?.tracingEnabled=${testCase.metadata?.tracingEnabled}, testSuite.tracing?.enabled=${testSuite.tracing?.enabled}, tracingEnabled=${tracingEnabled}`,
-  );
-
-  return tracingEnabled;
 }
 
 function markComparisonRows(
@@ -5043,13 +5031,7 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
 
   async evaluate(): Promise<TEvaluation> {
     // Initialize OTEL SDK if tracing is enabled
-    // Check env flag, test suite level, and default test metadata
-    const tracingEnabled =
-      getEnvBool('PROMPTFOO_TRACING_ENABLED', false) ||
-      this.testSuite.tracing?.enabled === true ||
-      (typeof this.testSuite.defaultTest === 'object' &&
-        this.testSuite.defaultTest?.metadata?.tracingEnabled === true) ||
-      this.testSuite.tests?.some((t) => t.metadata?.tracingEnabled === true);
+    const tracingEnabled = isTracingEnabledForSuite(this.testSuite);
     let otelInitialized = false;
     let otlpReceiverAcquired = false;
 

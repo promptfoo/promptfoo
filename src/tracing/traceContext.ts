@@ -509,7 +509,7 @@ async function fetchFromExternalProvider(
         return null;
       }
       if (attempt === maxRetries) {
-        if (requireComplete) {
+        if (requireComplete && (!latestContext || !(error instanceof TraceProviderError))) {
           throw error;
         }
         return latestContext;

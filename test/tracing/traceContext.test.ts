@@ -81,6 +81,48 @@ describe('fetchTraceContext', () => {
     },
   );
 
+  it.each([true, false])(
+    'retains required evidence after a transient retry error: %s',
+    async (retryable) => {
+      mocks.isExternalTraceProvider.mockReturnValue(true);
+      const spans = [{ spanId: 'target', name: 'target.call', startTime: 1, endTime: 2 }];
+      const failure = new TraceProviderError('Evidence backend unavailable', { retryable });
+      mockExternalTrace(spans)
+        .mockResolvedValueOnce({ fetchedAt: 123, spans })
+        .mockRejectedValue(failure);
+      const result = fetchTraceContext('trace-1', {
+        providerConfig,
+        requireComplete: true,
+        maxRetries: 1,
+        retryDelayMs: 0,
+        queryDelay: 0,
+      });
+      if (retryable) {
+        expect((await result)?.spans.map((span) => span.spanId)).toEqual(['target']);
+      } else {
+        await expect(result).rejects.toMatchObject({ name: 'TraceEvidenceError', cause: failure });
+      }
+    },
+  );
+
+  it('does not fall back to earlier evidence after a required store read fails', async () => {
+    mocks.isExternalTraceProvider.mockReturnValue(true);
+    mockExternalTrace([{ spanId: 'target', name: 'target.call', startTime: 1, endTime: 2 }]);
+    const failure = new Error('Summary read failed');
+    mocks.getSpans
+      .mockResolvedValueOnce([{ spanId: 'target', name: 'target.call', startTime: 1, endTime: 2 }])
+      .mockRejectedValue(failure);
+    await expect(
+      fetchTraceContext('trace-1', {
+        providerConfig,
+        requireComplete: true,
+        maxRetries: 1,
+        retryDelayMs: 0,
+        queryDelay: 0,
+      }),
+    ).rejects.toMatchObject({ name: 'TraceEvidenceError', cause: failure });
+  });
+
   it('normalizes malformed required backend responses', async () => {
     mocks.isExternalTraceProvider.mockReturnValue(true);
     const failure = new SyntaxError('Malformed trace JSON');

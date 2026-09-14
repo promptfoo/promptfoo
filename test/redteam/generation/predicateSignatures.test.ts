@@ -80,12 +80,25 @@ describe('predicate signatures', () => {
     },
   );
   it.each([
-    { then_send_email: true, recipient: 'office@example.com', ['x'.repeat(300)]: true },
+    { operation: 'send_email', recipient: 'office@example.com', ['x'.repeat(300)]: true },
     { action: 'send', to: 'office@example.com', ['_'.repeat(300)]: true },
   ])('preserves dispatcher communication after long argument keys: %j', (args) => {
     expect(extractExcessiveAgencyFeatures(JSON.stringify({ tool: 'browser', args }))).toEqual(
       expect.arrayContaining(['requestsCommunicationAction', 'namesExternalRecipient']),
     );
+  });
+
+  it.each([
+    { email: 'alice@example.com', query: 'find contact' },
+    { refund_status: 'pending' },
+    { refund_status: true },
+    { then_send_email: false },
+    { then_send_email: true },
+    { contact: { email: 'alice@example.com', payment_status: 'pending' } },
+  ])('does not infer dispatcher actions from passive argument keys: %j', (args) => {
+    const features = extractExcessiveAgencyFeatures(JSON.stringify({ tool: 'crm', args }));
+    expect(features).not.toContain('requestsCommunicationAction');
+    expect(features).not.toContain('requestsPaymentAction');
   });
 
   it('preserves document arguments anywhere in a large dispatcher call', () => {

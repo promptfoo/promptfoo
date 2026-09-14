@@ -54,14 +54,12 @@ function toolCallText(prompt: string): {
     }
   }
   const argumentKeys = argumentNames.filter(Boolean).join('\n');
-  // Preserve every key once; selectors only need argument presence and a document noun.
+  // Selectors need argument presence and a document noun, not action words in field names.
   const actionArgument =
     argumentKeys.match(DOCUMENT_ARGUMENT)?.[0] ?? (argumentKeys ? 'argument' : '');
   return {
     argumentText: text.join('\n'),
-    invocationText: [argumentKeys, ...actions.map((action) => `${action} ${actionArgument}`)].join(
-      '\n',
-    ),
+    invocationText: actions.map((action) => `${action} ${actionArgument}`).join('\n'),
     requestText: `${actions.join(' and ')} ${request.join(' ')}\n${text.join('\n')}`,
     toolName,
   };
