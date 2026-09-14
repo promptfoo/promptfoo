@@ -1,4 +1,4 @@
-import { hasDuplicateJsonKeys } from '../util/jsonKeys';
+import { hasDuplicateJsonKeys } from './jsonKeys';
 
 export interface AttributeSanitizationOptions {
   redactAttributes?: string[];
@@ -143,14 +143,16 @@ export function sanitizeTraceAttributes(
   };
 
   return Object.fromEntries(
-    Object.entries(attributes).map(([key, value]) => [
-      redactText?.(key) ?? key,
-      customPatterns.some((pattern) => key.toLowerCase().includes(pattern))
-        ? '[REDACTED]'
-        : sanitizeSensitiveAttributes && isSensitiveAttributeKey(key)
-          ? '<redacted>'
-          : sanitizeValue(value),
-    ]),
+    Object.entries(attributes)
+      .filter(([, value]) => value !== undefined)
+      .map(([key, value]) => [
+        redactText?.(key) ?? key,
+        customPatterns.some((pattern) => key.toLowerCase().includes(pattern))
+          ? '[REDACTED]'
+          : sanitizeSensitiveAttributes && isSensitiveAttributeKey(key)
+            ? '<redacted>'
+            : sanitizeValue(value),
+      ]),
   );
 }
 

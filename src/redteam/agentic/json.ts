@@ -1,4 +1,4 @@
-import { hasDuplicateJsonKeys } from '../../util/jsonKeys';
+import { hasDuplicateJsonKeys } from '../../tracing/jsonKeys';
 
 const MAX_JSON_LENGTH = 100_000;
 

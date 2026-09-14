@@ -320,3 +320,17 @@ it.each([2, 3, 25])('redacts nested JSON escapes at depth %s', (depth) => {
   const echo = String.raw`PRIV\u005c` + 'u005c'.repeat(depth - 2) + 'u0041TE';
   expect(redactText(`echo ${echo}`)).toBe('[REDACTED]');
 });
+
+it('preserves redacted field identities through JSON storage when another value is undefined', () => {
+  const original = {
+    evidence: '{"findings":[{"kind":"unsafe"}],"findings":[]}',
+    missing: undefined,
+  };
+  const options = { sanitizeSensitiveAttributes: false, truncateValues: false };
+  const sanitized = sanitizeTraceAttributes(original, options);
+  const redactText = getTraceTextRedactor([{ original, sanitized }]);
+  const stored = JSON.parse(
+    JSON.stringify(sanitizeTraceAttributes(original, { ...options, redactText })),
+  );
+  expect(stored).toEqual({ '[REDACTED]': '[TRUNCATED]' });
+});
