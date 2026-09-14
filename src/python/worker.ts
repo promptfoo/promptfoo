@@ -16,7 +16,7 @@ import { PythonStderrLogger } from './stderr';
 
 export { MAX_STDERR_BUFFER_LENGTH } from './stderr';
 
-/** How long a stopped Python process gets to exit after SIGTERM before it is killed. */
+/** How long a stopped Python process gets to exit after SIGINT before it is killed. */
 const STOP_GRACE_MS = 2000;
 
 /**
@@ -195,6 +195,11 @@ export class PythonWorker {
       // the script can inherit them and keep them open after Python exits, which would
       // otherwise hide a crash or stall a restart indefinitely.
       pythonProcess.childProcess.once('exit', () => {
+        // Stop dispatching to a process that has already exited, even while its output
+        // streams drain; requests queue for the restarted process instead.
+        if (this.process === pythonProcess) {
+          this.ready = false;
+        }
         setTimeout(() => {
           if (!closed) {
             pythonProcess.stdout?.destroy();
@@ -384,7 +389,9 @@ export class PythonWorker {
 
   /**
    * Detaches a process from this worker and ends it. Closing stdin lets an idle wrapper
-   * exit, SIGTERM interrupts a running call, and SIGKILL follows if it still hasn't exited.
+   * exit. SIGINT interrupts a running call by raising KeyboardInterrupt, so the script's
+   * `finally` blocks and context managers still run and can clean up anything it started,
+   * such as subprocesses. SIGKILL follows if it still hasn't exited.
    * Resolves once the process has exited and its output has been handled.
    */
   private async stopProcess(pythonProcess: PythonShell): Promise<void> {
@@ -397,7 +404,7 @@ export class PythonWorker {
     if (!hasExited(pythonProcess)) {
       const forceKill = setTimeout(() => {
         if (!hasExited(pythonProcess)) {
-          logger.warn(`Python worker did not exit after SIGTERM, killing ${this.scriptPath}`);
+          logger.warn(`Python worker did not exit after SIGINT, killing ${this.scriptPath}`);
           pythonProcess.kill('SIGKILL');
         }
       }, STOP_GRACE_MS);
@@ -405,7 +412,7 @@ export class PythonWorker {
       void closed.then(() => clearTimeout(forceKill));
 
       pythonProcess.stdin?.end();
-      pythonProcess.kill('SIGTERM');
+      pythonProcess.kill('SIGINT');
     }
 
     await closed;

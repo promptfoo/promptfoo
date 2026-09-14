@@ -713,7 +713,9 @@ describeOrSkip('PythonWorker process lifecycle', () => {
   const fixturesDir = path.join(__dirname, 'fixtures');
   const importErrorPath = path.join(fixturesDir, 'lifecycle_import_error_provider.py');
   const slowPath = path.join(fixturesDir, 'lifecycle_slow_provider.py');
-  const ignoreSigtermPath = path.join(fixturesDir, 'lifecycle_ignore_sigterm_provider.py');
+  const ignoreSignalsPath = path.join(fixturesDir, 'lifecycle_ignore_signals_provider.py');
+  const cleanupPath = path.join(fixturesDir, 'lifecycle_cleanup_provider.py');
+  const cleanupHelperPidPath = `${cleanupPath}.helper.pid`;
   const helperProcessPath = path.join(fixturesDir, 'lifecycle_helper_process_provider.py');
   const helperPidPath = `${helperProcessPath}.helper.pid`;
 
@@ -755,11 +757,12 @@ def call_api(prompt, options, context):
     );
 
     await fs.promises.writeFile(
-      ignoreSigtermPath,
+      ignoreSignalsPath,
       `
 import signal
 import time
 
+signal.signal(signal.SIGINT, signal.SIG_IGN)
 signal.signal(signal.SIGTERM, signal.SIG_IGN)
 
 def call_api(prompt, options, context):
@@ -790,21 +793,52 @@ def call_api(prompt, options, context):
     return {"output": prompt}
 `,
     );
+
+    // Cleans up the helper it starts in a finally block, as a well-behaved script would.
+    await fs.promises.writeFile(
+      cleanupPath,
+      `
+import subprocess
+import sys
+import time
+
+def call_api(prompt, options, context):
+    if prompt == "slow":
+        helper = subprocess.Popen([sys.executable, "-c", "import time; time.sleep(60)"])
+        with open(${JSON.stringify(cleanupHelperPidPath)}, "w") as pid_file:
+            pid_file.write(str(helper.pid))
+        try:
+            time.sleep(10)
+        finally:
+            helper.kill()
+            helper.wait()
+    return {"output": prompt}
+`,
+    );
   });
 
   afterAll(async () => {
-    for (const fixturePath of [importErrorPath, slowPath, ignoreSigtermPath, helperProcessPath]) {
+    for (const fixturePath of [
+      importErrorPath,
+      slowPath,
+      ignoreSignalsPath,
+      helperProcessPath,
+      cleanupPath,
+    ]) {
       fs.rmSync(fixturePath, { force: true });
     }
   });
 
   // Kills the helper process a fixture started, which outlives the Python worker on purpose.
-  const killHelperProcess = () => {
-    if (!fs.existsSync(helperPidPath)) {
+  const readHelperPid = (pidPath: string) =>
+    fs.existsSync(pidPath) ? Number(fs.readFileSync(pidPath, 'utf8')) : undefined;
+
+  const killHelperProcess = (pidPath = helperPidPath) => {
+    const helperPid = readHelperPid(pidPath);
+    fs.rmSync(pidPath, { force: true });
+    if (helperPid === undefined) {
       return;
     }
-    const helperPid = Number(fs.readFileSync(helperPidPath, 'utf8'));
-    fs.rmSync(helperPidPath, { force: true });
     try {
       process.kill(helperPid, 'SIGKILL');
     } catch {
@@ -860,9 +894,9 @@ def call_api(prompt, options, context):
   );
 
   it(
-    'should force-kill a timed-out process that ignores SIGTERM',
+    'should force-kill a timed-out process that ignores interrupt and termination signals',
     async () => {
-      const worker = new PythonWorker(ignoreSigtermPath, 'call_api', undefined, 1000);
+      const worker = new PythonWorker(ignoreSignalsPath, 'call_api', undefined, 1000);
       await worker.initialize();
       const pid = getProcess(worker)?.childProcess.pid;
       expect(pid).toBeDefined();
@@ -927,6 +961,31 @@ def call_api(prompt, options, context):
   );
 
   it(
+    'should let a timed-out script clean up the subprocesses it started',
+    async () => {
+      const worker = new PythonWorker(cleanupPath, 'call_api', undefined, 1000);
+      await worker.initialize();
+
+      try {
+        await expect(worker.call('call_api', ['slow', {}, {}])).rejects.toThrow(
+          'Python worker timed out after 1000ms',
+        );
+        const helperPid = readHelperPid(cleanupHelperPidPath);
+        expect(helperPid).toBeDefined();
+        // The worker is interrupted rather than terminated outright, so the script's finally
+        // block runs and stops its helper before the process is replaced.
+        await vi.waitFor(() => expect(isProcessAlive(helperPid!)).toBe(false), {
+          timeout: 5_000,
+        });
+      } finally {
+        await worker.shutdown();
+        killHelperProcess(cleanupHelperPidPath);
+      }
+    },
+    TEST_TIMEOUT,
+  );
+
+  it(
     'should not start a new process when shut down while a call is being dispatched',
     async () => {
       const worker = new PythonWorker(slowPath, 'call_api', undefined, 1000);
@@ -939,9 +998,10 @@ def call_api(prompt, options, context):
       await expect(call).rejects.toThrow('Worker shutting down');
       await shutdown;
 
-      // Previously the request timeout fired after shutdown and restarted the worker,
-      // leaving a Python process that nothing would ever stop.
-      await new Promise((resolve) => setTimeout(resolve, 1_500));
+      // Previously the request stayed pending until its timeout fired after shutdown and
+      // restarted the worker, leaving a Python process that nothing would ever stop. No
+      // request timer may remain armed, and nothing may be running.
+      expect((worker as unknown as { requestTimeout: unknown }).requestTimeout).toBeNull();
       expect(getProcess(worker)).toBeNull();
       expect(worker.isReady()).toBe(false);
       expect(logger.warn).not.toHaveBeenCalledWith(expect.stringContaining('restarting'));

@@ -4,6 +4,7 @@ import path from 'path';
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { PythonWorker } from '../../src/python/worker';
 import { PythonWorkerPool } from '../../src/python/workerPool';
+import type { PythonShell } from 'python-shell';
 
 // Windows CI has severe filesystem delays (antivirus, etc.) - allow up to 90s
 // Non-Windows CI can also have timing variance with Python IPC, so use 15s (matching windows-path.test.ts)
@@ -219,6 +220,8 @@ describeOrSkip('PythonWorkerPool crash recovery', () => {
   const crashScriptPath = path.join(fixturesDir, 'pool_crash_on_marker_provider.py');
   const brokenOnRestartPath = path.join(fixturesDir, 'pool_break_on_restart_provider.py');
   const slowScriptPath = path.join(fixturesDir, 'pool_slow_provider.py');
+  const exitAfterReplyPath = path.join(fixturesDir, 'pool_exit_after_reply_provider.py');
+  const exitHelperPidPath = `${exitAfterReplyPath}.helper.pid`;
 
   beforeAll(() => {
     if (!fs.existsSync(fixturesDir)) {
@@ -248,10 +251,35 @@ def call_api(prompt, options, context):
     return {"output": prompt}
 `,
     );
+
+    // Replies, then exits shortly afterwards while a helper still holds the worker's output
+    // streams, so the worker only learns about the exit once they have drained.
+    fs.writeFileSync(
+      exitAfterReplyPath,
+      `
+import os
+import subprocess
+import sys
+import threading
+
+def call_api(prompt, options, context):
+    if prompt == "exit soon":
+        helper = subprocess.Popen([sys.executable, "-c", "import time; time.sleep(60)"])
+        with open(${JSON.stringify(exitHelperPidPath)}, "w") as pid_file:
+            pid_file.write(str(helper.pid))
+        threading.Timer(0.2, lambda: os._exit(3)).start()
+    return {"output": prompt}
+`,
+    );
   });
 
   afterAll(() => {
-    for (const fixturePath of [crashScriptPath, brokenOnRestartPath, slowScriptPath]) {
+    for (const fixturePath of [
+      crashScriptPath,
+      brokenOnRestartPath,
+      slowScriptPath,
+      exitAfterReplyPath,
+    ]) {
       fs.rmSync(fixturePath, { force: true });
     }
   });
@@ -359,6 +387,52 @@ def call_api(prompt, options, context):
         }
       } finally {
         await pool.shutdown();
+      }
+    },
+    TEST_TIMEOUT,
+  );
+
+  it(
+    'should queue a request that arrives after the worker process exited',
+    async () => {
+      const isProcessAlive = (pid: number) => {
+        try {
+          process.kill(pid, 0);
+          return true;
+        } catch {
+          return false;
+        }
+      };
+      const pool = new PythonWorkerPool(exitAfterReplyPath, 'call_api', 1);
+      await pool.initialize();
+      const worker = (pool as unknown as { workers: Array<{ process: PythonShell | null }> })
+        .workers[0];
+      const workerPid = worker.process?.childProcess.pid;
+      expect(workerPid).toBeDefined();
+
+      try {
+        await expect(pool.execute('call_api', ['exit soon', {}, {}])).resolves.toEqual({
+          output: 'exit soon',
+        });
+        await vi.waitFor(() => expect(isProcessAlive(workerPid!)).toBe(false), {
+          timeout: 3_000,
+        });
+
+        // Previously this was sent to the exited process while its streams drained, and
+        // failed with "Worker crashed" instead of waiting for the restart.
+        await expect(pool.execute('call_api', ['after exit', {}, {}])).resolves.toEqual({
+          output: 'after exit',
+        });
+      } finally {
+        await pool.shutdown();
+        if (fs.existsSync(exitHelperPidPath)) {
+          try {
+            process.kill(Number(fs.readFileSync(exitHelperPidPath, 'utf8')), 'SIGKILL');
+          } catch {
+            // Already exited
+          }
+          fs.rmSync(exitHelperPidPath, { force: true });
+        }
       }
     },
     TEST_TIMEOUT,
