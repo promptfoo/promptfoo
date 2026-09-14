@@ -785,8 +785,8 @@ import time
 def call_api(prompt, options, context):
     if prompt in ("slow", "crash"):
         helper = subprocess.Popen([sys.executable, "-c", "import time; time.sleep(60)"])
-        with open(${JSON.stringify(helperPidPath)}, "w") as pid_file:
-            pid_file.write(str(helper.pid))
+        with open(${JSON.stringify(helperPidPath)}, "a") as pid_file:
+            print(helper.pid, file=pid_file)
         if prompt == "crash":
             os._exit(1)
         time.sleep(10)
@@ -829,20 +829,22 @@ def call_api(prompt, options, context):
     }
   });
 
-  // Kills the helper process a fixture started, which outlives the Python worker on purpose.
-  const readHelperPid = (pidPath: string) =>
-    fs.existsSync(pidPath) ? Number(fs.readFileSync(pidPath, 'utf8')) : undefined;
+  // Kills the helper processes a fixture started, which outlive the Python worker on purpose.
+  const readHelperPids = (pidPath: string) =>
+    fs.existsSync(pidPath)
+      ? fs.readFileSync(pidPath, 'utf8').split(/\s+/).filter(Boolean).map(Number)
+      : [];
+  const readHelperPid = (pidPath: string) => readHelperPids(pidPath)[0];
 
   const killHelperProcess = (pidPath = helperPidPath) => {
-    const helperPid = readHelperPid(pidPath);
+    const helperPids = readHelperPids(pidPath);
     fs.rmSync(pidPath, { force: true });
-    if (helperPid === undefined) {
-      return;
-    }
-    try {
-      process.kill(helperPid, 'SIGKILL');
-    } catch {
-      // Already exited
+    for (const helperPid of helperPids) {
+      try {
+        process.kill(helperPid, 'SIGKILL');
+      } catch {
+        // Already exited
+      }
     }
   };
 
@@ -952,6 +954,33 @@ def call_api(prompt, options, context):
         await expect(worker.call('call_api', ['crash', {}, {}])).rejects.toThrow(
           'Worker crashed (exit code 1)',
         );
+      } finally {
+        await worker.shutdown();
+        killHelperProcess();
+      }
+    },
+    TEST_TIMEOUT,
+  );
+
+  it(
+    'should count a crash toward the limit when the request times out before the exit is handled',
+    async () => {
+      // Shorter than the output-stream drain, so the timeout fires before the crash is handled.
+      const worker = new PythonWorker(helperProcessPath, 'call_api', undefined, 800);
+      await worker.initialize();
+
+      try {
+        for (let attempt = 1; attempt <= 3; attempt++) {
+          await expect(worker.call('call_api', ['crash', {}, {}])).rejects.toThrow(
+            'Worker crashed (exit code 1)',
+          );
+          if (attempt < 3) {
+            await vi.waitFor(() => expect(worker.isReady()).toBe(true), { timeout: 5_000 });
+          }
+        }
+        // Previously each crash was handled as a timeout, which doesn't count toward the
+        // limit, so the worker kept restarting instead of stopping after three in a row.
+        await vi.waitFor(() => expect(worker.isDead()).toBe(true), { timeout: 5_000 });
       } finally {
         await worker.shutdown();
         killHelperProcess();

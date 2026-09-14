@@ -360,6 +360,13 @@ export class PythonWorker {
     return new Promise((_, reject) => {
       this.requestTimeout = setTimeout(() => {
         this.requestTimeout = null;
+        if (this.process === pythonProcess && hasExited(pythonProcess)) {
+          // The process exited without answering: a crash whose close handling hasn't run
+          // yet, for example while a subprocess holds its output streams open. Report it as
+          // a crash and leave it to that handling, which counts it toward maxCrashes.
+          reject(new Error(`Worker crashed (${describeExit(pythonProcess)})`));
+          return;
+        }
         const error = new Error(`Python worker timed out after ${this.timeout}ms`);
         reject(error);
         // The Python function is still running, so the next request would wait behind it.
