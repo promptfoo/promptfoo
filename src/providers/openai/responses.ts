@@ -709,6 +709,7 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
     'gpt-5.6-terra',
     'gpt-5.6-luna',
     // GPT-5.5 models
+    'chat-latest',
     'gpt-5.5',
     'gpt-5.5-2026-04-23',
     'gpt-5.5-pro',
@@ -779,7 +780,9 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
       typeof passthroughModel === 'string' && passthroughModel !== this.modelName
         ? passthroughModel
         : this.getBillingModelName(config);
-    const billingModelName = modelName.split('/').pop() ?? modelName;
+    const billingModelName = modelName.endsWith('/chat-latest')
+      ? modelName.replace(/^openai\//, '')
+      : (modelName.split('/').pop() ?? modelName);
     const responseCost = calculateOpenAIUsageCost(
       billingModelName,
       config,

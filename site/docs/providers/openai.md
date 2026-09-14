@@ -61,6 +61,10 @@ If you keep your key in a local `.env` file, add `--env-file .env` to the comman
 
 Use an explicit endpoint in each provider ID. This makes the request format predictable, including for newly released models.
 
+`openai:chat:chat-latest` and `openai:responses:chat-latest` use [OpenAI's current ChatGPT Instant alias](https://developers.openai.com/api/docs/models/chat-latest). Its underlying snapshot can change; use a dated model for stable eval baselines.
+
+[Published Standard pricing](https://developers.openai.com/api/docs/pricing) is $5 input, $0.50 cached input, and $30 output per million tokens, including image-input tokens. Standard rates apply regardless of input length; Batch, Flex, and Priority remain unpriced for this alias.
+
 | Task                                   | Provider ID                                | Guide                                                                    |
 | -------------------------------------- | ------------------------------------------ | ------------------------------------------------------------------------ |
 | Text, image inputs, and built-in tools | `openai:responses:<model>`                 | [Responses API](#responses-api)                                          |
