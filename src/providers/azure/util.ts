@@ -11,7 +11,6 @@ const AZURE_CACHE_READ_RATE_GROUPS: Array<[number, string[]]> = [
       'gpt-5',
       'gpt-5-2025-08-07',
       'gpt-5-chat',
-      'gpt-5-chat-latest',
       'gpt-5-chat-2025-08-07',
       'gpt-5-chat-2025-10-03',
       'gpt-5-codex',
@@ -37,7 +36,21 @@ const AZURE_CACHE_READ_RATE_GROUPS: Array<[number, string[]]> = [
     ],
   ],
   [0.005, ['gpt-5-nano', 'gpt-5-nano-2025-08-07']],
-  [0.5, ['gpt-5.5', 'gpt-5.5-2026-04-23', 'gpt-4.1', 'gpt-4.1-2025-04-14', 'o3', 'o3-2025-04-16']],
+  [
+    0.5,
+    [
+      'gpt-5.5',
+      'gpt-5.5-2026-04-24',
+      'gpt-chat-latest',
+      'gpt-chat-latest-2026-06-24',
+      'gpt-chat-latest-2026-05-28',
+      'gpt-chat-latest-2026-05-05',
+      'gpt-4.1',
+      'gpt-4.1-2025-04-14',
+      'o3',
+      'o3-2025-04-16',
+    ],
+  ],
   [0.25, ['gpt-5.4', 'gpt-5.4-2026-03-05']],
   [3, ['gpt-5.4-pro', 'gpt-5.4-pro-2026-03-05']],
   [0.075, ['gpt-5.4-mini', 'gpt-5.4-mini-2026-03-17', 'gpt-4o-mini', 'gpt-4o-mini-2024-07-18']],
@@ -49,9 +62,13 @@ const AZURE_CACHE_READ_RATE_GROUPS: Array<[number, string[]]> = [
       'gpt-5.2-2025-12-11',
       'gpt-5.2-chat',
       'gpt-5.2-chat-2025-12-11',
+      'gpt-5.2-chat-2026-02-10',
       'gpt-5.2-codex',
+      'gpt-5.2-codex-2026-01-14',
       'gpt-5.3-chat',
+      'gpt-5.3-chat-2026-03-03',
       'gpt-5.3-codex',
+      'gpt-5.3-codex-2026-02-24',
     ],
   ],
   [0.1, ['gpt-4.1-mini', 'gpt-4.1-mini-2025-04-14']],
@@ -62,7 +79,8 @@ const AZURE_CACHE_READ_RATE_GROUPS: Array<[number, string[]]> = [
   [0.605, ['o1-mini']],
   [1.25, ['gpt-4o', 'gpt-4o-2024-11-20', 'gpt-4o-2024-08-06']],
   [0.375, ['codex-mini']],
-  [1, ['claude-fable-5']],
+  [1, ['claude-fable-5', 'claude-mythos-5']],
+  [2.5, ['claude-mythos-preview']],
   [
     0.5,
     [
@@ -89,7 +107,7 @@ const AZURE_LONG_CONTEXT_CACHE_READ_RATES = new Map(
   [
     [0.5, ['gpt-5.4', 'gpt-5.4-2026-03-05']],
     [6, ['gpt-5.4-pro', 'gpt-5.4-pro-2026-03-05']],
-    [1, ['gpt-5.5', 'gpt-5.5-2026-04-23']],
+    [1, ['gpt-5.5', 'gpt-5.5-2026-04-24']],
   ].flatMap(([rate, ids]) => (ids as string[]).map((id) => [id, (rate as number) / 1e6] as const)),
 );
 
@@ -97,15 +115,25 @@ const AZURE_PRIORITY_MULTIPLIERS = new Map<string, number>([
   ['gpt-5.4', 2],
   ['gpt-5.4-2026-03-05', 2],
   ['gpt-5.5', 2],
-  ['gpt-5.5-2026-04-23', 2],
+  ['gpt-5.5-2026-04-24', 2],
   ['gpt-5.2-2025-12-11', 2],
   ['gpt-5.2-chat', 2],
   ['gpt-5.2-chat-2025-12-11', 2],
+  ['gpt-5.2-chat-2026-02-10', 2],
   ['gpt-5.3-chat', 2],
+  ['gpt-5.3-chat-2026-03-03', 2],
   ['gpt-5.1-2025-11-13', 2],
   ['gpt-5.1-chat-2025-11-13', 2],
   ['gpt-5.1-codex-2025-11-13', 2],
   ['gpt-5.1-codex-mini-2025-11-13', 1.8],
+]);
+
+// Azure Retail Prices publishes GPT-5.5 Global ShortCo PP input/cache/output
+// meters at $12.50/$1.25/$75 per 1M tokens, versus $5/$0.50/$30 standard.
+// This override is limited to those short-context meters: https://prices.azure.com/api/retail/prices
+const AZURE_SHORT_CONTEXT_PRIORITY_MULTIPLIERS = new Map<string, number>([
+  ['gpt-5.5', 2.5],
+  ['gpt-5.5-2026-04-24', 2.5],
 ]);
 
 /**
@@ -155,12 +183,12 @@ export function calculateAzureCost(
       : undefined;
   const inputCost = longContext?.input ?? model.cost.input;
   const outputCost = longContext?.output ?? model.cost.output;
+  const defaultCacheReadCost =
+    model.cost.cacheRead ?? AZURE_CACHE_READ_RATES.get(modelName) ?? inputCost;
   const cacheReadCost =
     longContext?.cacheRead ??
     (longContext ? AZURE_LONG_CONTEXT_CACHE_READ_RATES.get(modelName) : undefined) ??
-    model.cost.cacheRead ??
-    AZURE_CACHE_READ_RATES.get(modelName) ??
-    inputCost;
+    defaultCacheReadCost;
   const cachedTokens = clampCachedTokens(cachedPromptTokens, promptTokens);
   const audioInputTokens = clampCachedTokens(audioPromptTokens, promptTokens);
   const imageInputTokens = clampCachedTokens(
@@ -199,7 +227,10 @@ export function calculateAzureCost(
   const serviceTier = (config.passthrough as { service_tier?: unknown } | undefined)?.service_tier;
   const priorityMultiplier =
     serviceTier === 'priority'
-      ? (model.cost.priorityMultiplier ?? AZURE_PRIORITY_MULTIPLIERS.get(modelName) ?? 1)
+      ? (model.cost.priorityMultiplier ??
+        (longContext ? undefined : AZURE_SHORT_CONTEXT_PRIORITY_MULTIPLIERS.get(modelName)) ??
+        AZURE_PRIORITY_MULTIPLIERS.get(modelName) ??
+        1)
       : 1;
 
   return (

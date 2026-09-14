@@ -1,8 +1,34 @@
-import { OpenAiChatCompletionProvider } from './openai/chat';
+import { type OpenAiChatCompletionCostData, OpenAiChatCompletionProvider } from './openai/chat';
 import { splitLocalOptions } from './openai/localOptions';
+import { calculateCost } from './shared';
 
 import type { EnvOverrides } from '../types/env';
 import type { ApiProvider, ProviderOptions } from '../types/index';
+import type { OpenAiCompletionOptions } from './openai/types';
+
+export const CEREBRAS_CHAT_MODELS = [
+  {
+    id: 'gpt-oss-120b',
+    cost: { input: 0.35 / 1e6, output: 0.75 / 1e6 },
+  },
+  {
+    id: 'gemma-4-31b',
+    cost: { input: 0.99 / 1e6, output: 1.49 / 1e6 },
+  },
+  {
+    id: 'zai-glm-4.7',
+    cost: { input: 2.25 / 1e6, output: 2.75 / 1e6 },
+  },
+];
+
+export function calculateCerebrasCost(
+  modelName: string,
+  config: OpenAiCompletionOptions,
+  promptTokens?: number,
+  completionTokens?: number,
+): number | undefined {
+  return calculateCost(modelName, config, promptTokens, completionTokens, CEREBRAS_CHAT_MODELS);
+}
 
 /**
  * Creates a Cerebras provider using OpenAI-compatible chat endpoints
@@ -10,7 +36,7 @@ import type { ApiProvider, ProviderOptions } from '../types/index';
  * Documentation: https://docs.cerebras.ai
  *
  * Cerebras API supports the OpenAI-compatible chat completion interface.
- * All parameters are automatically passed through to the Cerebras API.
+ * Cerebras-supported parameters are automatically passed through to the Cerebras API.
  */
 export function createCerebrasProvider(
   providerPath: string,
@@ -44,7 +70,35 @@ export function createCerebrasProvider(
         delete body.max_tokens;
       }
 
+      // Promptfoo pricing overrides are local billing metadata, not Cerebras request fields.
+      delete body.cost;
+      delete body.inputCost;
+      delete body.outputCost;
+
       return { body, config };
+    }
+
+    protected override calculateResponseCost(
+      data: OpenAiChatCompletionCostData,
+      config: OpenAiCompletionOptions,
+      cached: boolean,
+    ): number | undefined {
+      if (cached) {
+        return 0;
+      }
+
+      const passthrough = (config.passthrough ?? {}) as Partial<OpenAiCompletionOptions> & {
+        model?: unknown;
+      };
+      const effectiveConfig = { ...passthrough, ...config };
+      // The request body uses the provider selector unless passthrough overrides it.
+      const modelName = typeof passthrough.model === 'string' ? passthrough.model : this.modelName;
+      return calculateCerebrasCost(
+        modelName,
+        effectiveConfig,
+        data.usage?.prompt_tokens,
+        data.usage?.completion_tokens,
+      );
     }
   }
 

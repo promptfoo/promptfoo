@@ -18,6 +18,34 @@ import { loadYaml } from './yamlLoad';
 
 import type { NunjucksFilterMap, OutputFile, VarValue } from '../types';
 
+const loadedFileMimeTypes = Symbol('loadedFileMimeTypes');
+type VarsWithFileMimeTypes = Record<string, unknown> & {
+  [loadedFileMimeTypes]?: ReadonlyMap<string, string>;
+};
+
+/** Keep loaded-file provenance on the current vars object, outside serialized vars. */
+export function setLoadedFileMimeTypes(
+  vars: Record<string, unknown>,
+  mimeTypes?: ReadonlyMap<string, string>,
+): void {
+  if (mimeTypes) {
+    Object.defineProperty(vars, loadedFileMimeTypes, {
+      value: mimeTypes,
+      enumerable: false,
+      configurable: true,
+    });
+  } else {
+    delete (vars as VarsWithFileMimeTypes)[loadedFileMimeTypes];
+  }
+}
+
+export function getLoadedFileMimeType(
+  vars: Record<string, unknown>,
+  value: string,
+): string | undefined {
+  return (vars as VarsWithFileMimeTypes)[loadedFileMimeTypes]?.get(value);
+}
+
 type CsvParseOptionsWithColumns<T> = Omit<CsvOptions<T>, 'columns'> & {
   columns: Exclude<CsvOptions['columns'], undefined | false>;
 };

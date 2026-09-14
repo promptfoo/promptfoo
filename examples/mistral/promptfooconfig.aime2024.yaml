@@ -1,5 +1,5 @@
 # yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
-description: Reproduce Mistral Magistral AIME2024 benchmark
+description: Evaluate current Mistral reasoning models on AIME2024
 
 prompts:
   - |
@@ -11,17 +11,19 @@ prompts:
     End with: "Therefore, the answer is [your answer]."
 
 providers:
-  - id: mistral:magistral-medium-latest
-    label: Magistral Medium
+  - id: mistral:mistral-medium-3-5
+    label: Mistral Medium 3.5
     config:
+      reasoning_effort: high
       temperature: 0.7
       top_p: 0.95
       max_tokens: 40960
-  # The `magistral-small-latest` alias now resolves to Mistral Small 4, so use the
-  # canonical id. It contrasts a general hybrid model against native-reasoning Magistral.
+  # `magistral-small-latest` still resolves to the deprecated 2509 snapshot, so use
+  # the current Mistral Small 4 alias for the hybrid-model comparison.
   - id: mistral:mistral-small-latest
     label: Mistral Small 4
     config:
+      reasoning_effort: high
       temperature: 0.7
       top_p: 0.95
       max_tokens: 40960

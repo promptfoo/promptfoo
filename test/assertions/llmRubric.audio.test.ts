@@ -71,7 +71,10 @@ describe('llm-rubric audio grading', () => {
   ])('sends native audio through the Chat transport for %s with ID %s', async (model, id) => {
     const provider = new OpenAiChatCompletionProvider(model, {
       id,
-      config: { modalities: ['text'] },
+      config: {
+        modalities: ['text'],
+        ...(model.endsWith('-preview') ? { apiBaseUrl: 'https://gateway.example.com/v1' } : {}),
+      },
     });
     const result = await grade(provider);
     const body = JSON.parse(vi.mocked(fetchWithCache).mock.calls[0][1]!.body as string);

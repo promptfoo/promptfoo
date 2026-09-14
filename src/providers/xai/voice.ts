@@ -4,9 +4,9 @@
  * Provides real-time voice conversations with Grok models via WebSocket.
  * WebSocket Endpoint: wss://api.x.ai/v1/realtime
  *
- * Pricing: $0.05/minute of connection time
+ * Pricing: audio duration plus text-input charges; connection time is not a billing total.
  *
- * @see https://docs.x.ai/docs/guides/voice
+ * @see https://docs.x.ai/developers/model-capabilities/audio/speech-to-speech
  */
 
 import WebSocket from 'ws';
@@ -28,18 +28,27 @@ import type {
 
 export const XAI_VOICE_DEFAULT_API_URL = 'https://api.x.ai/v1';
 export const XAI_VOICE_DEFAULT_WS_URL = 'wss://api.x.ai/v1/realtime';
-export const XAI_VOICE_COST_PER_MINUTE = 0.05;
-export const XAI_VOICE_DEFAULT_MODEL = 'grok-voice-think-fast-1.0';
+export const XAI_VOICE_DEFAULT_MODEL = 'grok-voice-think-fast-2.0';
+export const XAI_VOICE_COST_PER_MINUTE = 0.08;
+export const XAI_VOICE_COST_PER_MINUTE_BY_MODEL: Record<string, number> = {
+  'grok-voice-think-fast-2.0': 0.08,
+  'grok-voice-think-fast-1.0': 0.05,
+};
+const XAI_VOICE_LATEST_2_START_MS = Date.UTC(2026, 7, 5);
 
 export const XAI_VOICE_DEFAULTS = {
-  voice: 'Ara' as const,
+  voice: 'eve' as const,
   sampleRate: 24000,
   audioFormat: 'audio/pcm' as const,
   websocketTimeout: 30000,
 };
 
+// Preserve the original public tuple for existing TypeScript consumers. xAI's current
+// request examples use lowercase IDs, so normalize these legacy spellings before dispatch.
 export const XAI_VOICES = ['Ara', 'Rex', 'Sal', 'Eve', 'Leo'] as const;
-export type XAIVoice = (typeof XAI_VOICES)[number];
+export const XAI_CURRENT_VOICES = ['ara', 'rex', 'sal', 'eve', 'leo'] as const;
+/** Built-in voice names and opaque custom voice IDs are accepted by the API. */
+export type XAIVoice = string;
 
 export const XAI_AUDIO_FORMATS = ['audio/pcm', 'audio/pcmu', 'audio/pcma'] as const;
 export type XAIAudioFormatType = (typeof XAI_AUDIO_FORMATS)[number];
@@ -214,11 +223,23 @@ function convertPcm16ToWav(pcmData: Buffer, sampleRate = 24000): Buffer {
 }
 
 /**
- * Calculate xAI Voice API cost based on connection duration
+ * Compatibility estimate for the audio-duration portion of xAI Voice pricing.
+ * The caller must supply billed audio duration. This excludes text-input charges and
+ * is not a complete response cost; elapsed connection time is not billed audio duration.
  */
-export function calculateXAIVoiceCost(durationMs: number): number {
+export function calculateXAIVoiceCost(
+  durationMs: number,
+  modelName = XAI_VOICE_DEFAULT_MODEL,
+  now = Date.now(),
+): number {
   const durationMinutes = durationMs / 60000;
-  return XAI_VOICE_COST_PER_MINUTE * durationMinutes;
+  const costPerMinute =
+    modelName === 'grok-voice-latest'
+      ? now >= XAI_VOICE_LATEST_2_START_MS
+        ? 0.08
+        : 0.05
+      : (XAI_VOICE_COST_PER_MINUTE_BY_MODEL[modelName] ?? XAI_VOICE_COST_PER_MINUTE);
+  return costPerMinute * durationMinutes;
 }
 
 /**
@@ -226,6 +247,14 @@ export function calculateXAIVoiceCost(durationMs: number): number {
  */
 function generateEventId(): string {
   return `evt_${Date.now()}_${Math.random().toString(36).substring(2, 10)}`;
+}
+
+function normalizeXAIVoice(voice: XAIVoice | undefined): XAIVoice | undefined {
+  if (!voice) {
+    return undefined;
+  }
+  const builtin = XAI_CURRENT_VOICES.find((name) => name === voice.toLowerCase());
+  return builtin ?? voice;
 }
 
 // ============================================================================
@@ -238,7 +267,7 @@ function generateEventId(): string {
  * Provides real-time voice conversations with Grok models.
  *
  * Usage:
- *   xai:voice:grok-voice-think-fast-1.0
+ *   xai:voice:grok-voice-think-fast-2.0
  */
 export class XAIVoiceProvider implements ApiProvider {
   modelName: string;
@@ -250,7 +279,12 @@ export class XAIVoiceProvider implements ApiProvider {
     options: { config?: XAIVoiceOptions; id?: string; env?: EnvOverrides } = {},
   ) {
     this.modelName = modelName;
-    this.config = options.config || {};
+    this.config = options.config
+      ? {
+          ...options.config,
+          voice: normalizeXAIVoice(options.config.voice),
+        }
+      : {};
     this.env = options.env;
   }
 
@@ -401,7 +435,7 @@ export class XAIVoiceProvider implements ApiProvider {
    */
   private async webSocketRequest(prompt: string): Promise<{
     output: string;
-    cost: number;
+    cost?: number;
     metadata: Record<string, unknown>;
     functionCalls?: XAIFunctionCallOutput[];
     audio?: {
@@ -611,10 +645,10 @@ export class XAIVoiceProvider implements ApiProvider {
                 }
               }
 
-              // Calculate cost and resolve
+              // Keep elapsed connection time for diagnostics. The WebSocket response
+              // does not establish billed audio duration or a complete monetary total.
               clearTimeout(timeout);
               const durationMs = Date.now() - connectionStartTime;
-              const cost = calculateXAIVoiceCost(durationMs);
 
               // Prepare audio data
               let finalAudioData: string | null = null;
@@ -646,7 +680,6 @@ export class XAIVoiceProvider implements ApiProvider {
 
               resolve({
                 output: responseTranscript,
-                cost,
                 metadata: {
                   voice: this.config.voice || XAI_VOICE_DEFAULTS.voice,
                   durationMs,

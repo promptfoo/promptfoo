@@ -119,6 +119,56 @@ describe('OpenAI Provider', () => {
       expect(mockEmbeddingResponse.usage.completion_tokens).toBe(0);
     });
 
+    it('should bill a qualified passthrough embedding model through a custom gateway', async () => {
+      const passthroughProvider = new OpenAiEmbeddingProvider('text-embedding-3-large', {
+        config: {
+          apiKey: 'test-key',
+          apiBaseUrl: 'https://gateway.example/v1',
+          passthrough: { model: 'openai/text-embedding-3-small' },
+        },
+      });
+      vi.mocked(fetchWithCache).mockResolvedValue({
+        data: {
+          data: [{ embedding: [0.1, 0.2, 0.3] }],
+          usage: { total_tokens: 1_000_000, prompt_tokens: 1_000_000, completion_tokens: 0 },
+        },
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+      });
+
+      const result = await passthroughProvider.callEmbeddingApi('test text');
+      const request = vi.mocked(fetchWithCache).mock.calls[0] as [string, { body: string }];
+
+      expect(JSON.parse(request[1].body).model).toBe('openai/text-embedding-3-small');
+      expect(result.cost).toBeCloseTo(0.02, 10);
+    });
+
+    it('should not apply OpenAI pricing to another gateway embedding namespace', async () => {
+      const passthroughProvider = new OpenAiEmbeddingProvider('text-embedding-3-large', {
+        config: {
+          apiKey: 'test-key',
+          apiBaseUrl: 'https://gateway.example/v1',
+          passthrough: { model: 'vendor/text-embedding-3-small' },
+        },
+      });
+      vi.mocked(fetchWithCache).mockResolvedValue({
+        data: {
+          data: [{ embedding: [0.1, 0.2, 0.3] }],
+          usage: { total_tokens: 1_000_000, prompt_tokens: 1_000_000, completion_tokens: 0 },
+        },
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+      });
+
+      const result = await passthroughProvider.callEmbeddingApi('test text');
+      const request = vi.mocked(fetchWithCache).mock.calls[0] as [string, { body: string }];
+
+      expect(JSON.parse(request[1].body).model).toBe('vendor/text-embedding-3-small');
+      expect(result.cost).toBeUndefined();
+    });
+
     it('should handle API errors', async () => {
       vi.mocked(fetchWithCache).mockRejectedValue(new Error('API error'));
 

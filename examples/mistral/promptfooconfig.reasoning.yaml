@@ -1,19 +1,21 @@
 # yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
-description: 'Advanced reasoning with Mistral Magistral models'
+description: 'Advanced reasoning with current Mistral models'
 
 providers:
-  - id: mistral:magistral-medium-latest
-    label: magistral-medium
+  - id: mistral:mistral-medium-3-5
+    label: mistral-medium-3-5
     config:
+      reasoning_effort: high
       temperature: 0.7
       top_p: 0.95
       max_tokens: 40960
 
-  # The `magistral-small-latest` alias now resolves to Mistral Small 4, so use the
-  # canonical id. Small 4 solves these with chain-of-thought when prompted to.
+  # `magistral-small-latest` still resolves to the deprecated 2509 snapshot, so use
+  # the current Mistral Small 4 alias. Small 4 reasons when prompted to.
   - id: mistral:mistral-small-latest
     label: mistral-small-4
     config:
+      reasoning_effort: high
       temperature: 0.7
       top_p: 0.95
       max_tokens: 40960

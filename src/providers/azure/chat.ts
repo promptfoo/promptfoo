@@ -75,7 +75,7 @@ export class AzureChatCompletionProvider extends AzureGenericProvider {
   /**
    * Check if the current deployment is configured as a reasoning model.
    * Reasoning models use max_completion_tokens instead of max_tokens,
-   * don't support temperature, and accept reasoning_effort parameter.
+   * don't support temperature, and may support configurable reasoning effort.
    */
   protected isReasoningModel(modelName = this.config.modelName ?? this.deploymentName): boolean {
     // Check explicit config flags first
@@ -97,6 +97,8 @@ export class AzureChatCompletionProvider extends AzureGenericProvider {
       // GPT-5 series (reasoning by default)
       lowerName.startsWith('gpt-5') ||
       lowerName.includes('-gpt-5') ||
+      lowerName === 'gpt-chat-latest' ||
+      lowerName.startsWith('gpt-chat-latest-') ||
       isGpt6AstraModel(lowerName) ||
       // DeepSeek reasoning models
       lowerName.includes('deepseek-r1') ||
@@ -205,6 +207,7 @@ export class AzureChatCompletionProvider extends AzureGenericProvider {
         : (config.modelName ?? this.deploymentName)
     ).toLowerCase();
     const isReasoningModel = this.isReasoningModel(capabilityModelName);
+    const isFixedReasoningModel = /^gpt-chat-latest(?:-|$)/.test(capabilityModelName);
     const samplingParamsDeprecated = this.isSamplingParamsDeprecatedClaudeModel(config);
     const grokSamplingRestricted = this.isGrok4OrNewerModel();
 
@@ -236,7 +239,9 @@ export class AzureChatCompletionProvider extends AzureGenericProvider {
       : (config.frequency_penalty ?? getEnvFloat('OPENAI_FREQUENCY_PENALTY', 0));
 
     // Get reasoning effort for reasoning models
-    const reasoningEffort = config.reasoning_effort ?? (config.omitDefaults ? undefined : 'medium');
+    const reasoningEffort = isFixedReasoningModel
+      ? undefined
+      : (config.reasoning_effort ?? (config.omitDefaults ? undefined : 'medium'));
 
     // --- MCP tool injection logic ---
     const mcpTools = this.mcpClient ? transformMCPToolsToOpenAi(this.mcpClient.getAllTools()) : [];
@@ -306,6 +311,10 @@ export class AzureChatCompletionProvider extends AzureGenericProvider {
         `Forced tool choice is not supported on ${this.deploymentName} and will be omitted. Use 'auto' or 'none' instead.`,
       );
       delete body.tool_choice;
+    }
+
+    if (isFixedReasoningModel) {
+      delete body.reasoning_effort;
     }
 
     applyGpt6AstraRequestRules(body, capabilityModelName, 'chat');

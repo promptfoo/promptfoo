@@ -98,7 +98,12 @@ export class ResponsesProcessor {
       };
 
       const processedOutput = await this.processOutput(data.output, context);
-      const cost = this.config.costCalculator(this.config.modelName, data.usage, requestConfig);
+      const cost = this.config.costCalculator(
+        this.config.modelName,
+        data.usage,
+        requestConfig,
+        data,
+      );
 
       if (processedOutput.isRefusal) {
         return {

@@ -5,6 +5,10 @@ import { OpenAiEmbeddingProvider } from './openai/embedding';
 import type { ProviderOptions } from '../types/index';
 
 const KNOWN_MODELS = new Set([
+  'qwen3.7-plus',
+  'qwen3.8-flash',
+  'qwen3.8-max',
+
   // Qwen3.6
   'qwen3.6-max-preview',
   'qwen3.6-plus',

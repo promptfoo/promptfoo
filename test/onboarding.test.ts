@@ -290,6 +290,23 @@ describe('createDummyFiles', () => {
     expect(parsedConfig.providers).toEqual(googleProviders);
   });
 
+  it('should offer current Cohere direct API models', async () => {
+    mockSelect
+      .mockResolvedValueOnce('compare')
+      .mockResolvedValueOnce(['cohere:command-a-plus-05-2026', 'cohere:command-a-03-2025']);
+
+    await createDummyFiles(tempDir, true);
+
+    const providerPrompt = mockSelect.mock.calls[1][0];
+    const cohereChoice = providerPrompt.choices.find((choice: { name: string }) =>
+      choice.name.startsWith('[Cohere]'),
+    );
+    expect(cohereChoice).toEqual({
+      name: '[Cohere] Command A+, Command A, ...',
+      value: ['cohere:command-a-plus-05-2026', 'cohere:command-a-03-2025'],
+    });
+  });
+
   it('offers current Gemini Flash models during interactive onboarding', async () => {
     const googleModels = [
       { id: 'vertex:gemini-3.8-flash', config: { region: 'global' } },

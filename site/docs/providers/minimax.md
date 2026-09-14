@@ -45,7 +45,7 @@ When MiniMax reports prompt-cache reads, promptfoo calculates cost using the ret
 
 ### MiniMax-M3 (Default)
 
-- Latest flagship model with up to a 1M token context window (512K guaranteed minimum) and up to 128K output
+- Flagship model with up to a 1M token context window (512K guaranteed minimum) and up to 128K output
 - Multimodal: supports text, image, and video input
 - Standard tier, up to 512K input tokens: $0.06/1M cached input, $0.30/1M uncached input, and $1.20/1M output
 - Standard tier, above 512K input tokens: $0.12/1M cached input, $0.60/1M uncached input, and $2.40/1M output
@@ -75,7 +75,8 @@ M3 is the default. Compare the [current API prices](https://platform.minimax.io/
 
 Here's an example comparing MiniMax with OpenAI:
 
-```yaml
+```yaml title="promptfooconfig.yaml"
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
 providers:
   - id: minimax:MiniMax-M3
     config:

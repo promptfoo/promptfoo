@@ -1,4 +1,5 @@
 import * as fs from 'fs';
+import path from 'path';
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import * as cache from '../../../src/cache';
@@ -1226,6 +1227,101 @@ describe('AIStudioChatProvider', () => {
       );
     });
 
+    it('preserves template syntax introduced by inline response schema variables in the request', async () => {
+      const actualTemplates = await vi.importActual<typeof templates>(
+        '../../../src/util/templates',
+      );
+      vi.mocked(templates.getNunjucksEngine).mockImplementation(actualTemplates.getNunjucksEngine);
+      mockMaybeLoadFromExternalFile.mockImplementation((input) => input);
+      provider = new AIStudioChatProvider('gemini-pro', {
+        config: {
+          apiKey: 'test-key',
+          responseSchema: '{"type":"string","enum":["{{label}}"]}',
+        },
+      });
+      vi.mocked(cache.fetchWithCache).mockResolvedValue({
+        data: { candidates: [{ content: { parts: [{ text: '"{{name}}"' }] } }] },
+        cached: false,
+      } as any);
+      vi.mocked(util.maybeCoerceToGeminiFormat).mockReturnValue({
+        contents: [{ role: 'user', parts: [{ text: 'test prompt' }] }],
+        coerced: false,
+        systemInstruction: undefined,
+      });
+
+      await provider.callGemini('test prompt', {
+        prompt: { raw: 'test prompt', label: 'test' },
+        vars: { label: '{{name}}' },
+      });
+
+      const requestBody = JSON.parse(
+        vi.mocked(cache.fetchWithCache).mock.calls.at(-1)?.[1]?.body as string,
+      );
+      expect(requestBody.generationConfig.response_schema).toEqual({
+        type: 'string',
+        enum: ['{{name}}'],
+      });
+    });
+
+    const providerSchemaBasePath = path.resolve('provider', 'base');
+    const promptSchemaBasePath = path.resolve('prompt', 'base');
+
+    it.each([
+      {
+        owner: 'provider',
+        promptConfig: { basePath: promptSchemaBasePath },
+        expectedReference: `file://${path.resolve(providerSchemaBasePath, 'schema.json')}`,
+      },
+      {
+        owner: 'prompt',
+        promptConfig: {
+          basePath: promptSchemaBasePath,
+          responseSchema: 'file://schema.json',
+        },
+        expectedReference: `file://${path.resolve(promptSchemaBasePath, 'schema.json')}`,
+      },
+    ])(
+      'resolves $owner-owned responseSchema against its AI Studio basePath',
+      async ({ promptConfig, expectedReference }) => {
+        const responseSchema = {
+          type: 'object',
+          properties: { answer: { type: 'string' } },
+        };
+        mockMaybeLoadFromExternalFile.mockImplementation((input) =>
+          input === expectedReference ? JSON.stringify(responseSchema) : input,
+        );
+        provider = new AIStudioChatProvider('gemini-pro', {
+          config: {
+            apiKey: 'test-key',
+            basePath: providerSchemaBasePath,
+            responseSchema: 'file://schema.json',
+          },
+        });
+        vi.mocked(cache.fetchWithCache).mockResolvedValue({
+          data: {
+            candidates: [{ content: { parts: [{ text: '{"answer":"ok"}' }] } }],
+          },
+          cached: false,
+        } as any);
+        vi.mocked(util.maybeCoerceToGeminiFormat).mockReturnValue({
+          contents: [{ role: 'user', parts: [{ text: 'test prompt' }] }],
+          coerced: false,
+          systemInstruction: undefined,
+        });
+
+        await provider.callGemini('test prompt', {
+          prompt: { raw: 'test prompt', label: 'test', config: promptConfig },
+          vars: {},
+        });
+
+        expect(mockMaybeLoadFromExternalFile).toHaveBeenCalledWith(expectedReference);
+        const requestBody = JSON.parse(
+          vi.mocked(cache.fetchWithCache).mock.calls.at(-1)?.[1]?.body as string,
+        );
+        expect(requestBody.generationConfig.response_schema).toEqual(responseSchema);
+      },
+    );
+
     it('should handle safety ratings', async () => {
       const mockResponse = {
         data: {
@@ -1592,6 +1688,61 @@ describe('AIStudioChatProvider', () => {
       expect(response.output).toBe('Sunny, 25°C');
       expect(response.metadata?.thoughtSignatures).toEqual(['signed-thought']);
     });
+
+    it('executes an explicitly mapped JSON callback from a text part', async () => {
+      const callback = vi.fn().mockResolvedValue('mapped result');
+      const text = JSON.stringify({ functionCall: { name: 'get_weather', args: {} } });
+      provider = new AIStudioChatProvider('gemini-3.6-flash', {
+        config: { apiKey: 'test-key', functionToolCallbacks: { get_weather: callback } },
+      });
+      vi.mocked(cache.fetchWithCache).mockResolvedValue({
+        data: { candidates: [{ content: { parts: [{ text }] } }] },
+        cached: false,
+      } as any);
+
+      const response = await provider.callGemini('test prompt');
+
+      expect(response.output).toBe('mapped result');
+      expect(callback).toHaveBeenCalledExactlyOnceWith('{}');
+    });
+
+    it.each([false, true])(
+      'returns an error before callbacks for unexpected argument fragments (cached: %s)',
+      async (cached) => {
+        const callback = vi.fn().mockResolvedValue('should not run');
+        provider = new AIStudioChatProvider('gemini-3.6-flash', {
+          config: { apiKey: 'test-key', functionToolCallbacks: { get_weather: callback } },
+        });
+        vi.mocked(cache.fetchWithCache).mockResolvedValue({
+          data: {
+            candidates: [
+              {
+                content: {
+                  parts: [
+                    { functionCall: { name: 'get_weather', args: { location: 'Boston' } } },
+                    {
+                      functionCall: {
+                        name: 'get_weather',
+                        partialArgs: [{ jsonPath: '$.location', stringValue: 'Seattle' }],
+                      },
+                    },
+                  ],
+                },
+              },
+            ],
+          },
+          cached,
+        } as any);
+
+        const response = await provider.callGemini('test prompt');
+
+        expect(response.error).toContain(
+          'Streamed function-call arguments require streaming: true and toolConfig.functionCallingConfig.streamFunctionCallArguments: true.',
+        );
+        expect(response.output).toBeUndefined();
+        expect(callback).not.toHaveBeenCalled();
+      },
+    );
 
     it('should not execute callbacks when passthrough disables function calling', async () => {
       const callback = vi.fn().mockResolvedValue('should not run');
@@ -2759,6 +2910,87 @@ describe('AIStudioChatProvider', () => {
       expect(mockMaybeLoadFromExternalFile).toHaveBeenCalledWith('file://system-instruction.txt');
     });
 
+    const providerSystemInstructionBasePath = path.resolve('provider', 'base');
+    const promptSystemInstructionBasePath = path.resolve('prompt', 'base');
+
+    it.each([
+      {
+        owner: 'provider',
+        promptConfig: { basePath: promptSystemInstructionBasePath },
+        expectedBasePath: providerSystemInstructionBasePath,
+      },
+      {
+        owner: 'prompt',
+        promptConfig: {
+          basePath: promptSystemInstructionBasePath,
+          systemInstruction: 'file://system-instruction.txt',
+          responseSchema: 'file://schema.json',
+        },
+        expectedBasePath: promptSystemInstructionBasePath,
+      },
+    ])(
+      'preserves explicit audio MIME with $owner-owned instruction and schema files',
+      async ({ promptConfig, expectedBasePath }) => {
+        const media = Buffer.from('....ftypisom........').toString('base64');
+        const audio = `data:audio/mp4;base64,${media}`;
+        const expectedInstructionReference = `file://${path.resolve(
+          expectedBasePath,
+          'system-instruction.txt',
+        )}`;
+        const expectedSchemaReference = `file://${path.resolve(expectedBasePath, 'schema.json')}`;
+        const mockSystemInstruction = 'Instruction loaded from the owning base path.';
+        const responseSchema = {
+          type: 'object',
+          properties: { transcript: { type: 'string' } },
+        };
+        mockMaybeLoadFromExternalFile.mockImplementation((input) => {
+          if (input === expectedInstructionReference) {
+            return mockSystemInstruction;
+          }
+          if (input === expectedSchemaReference) {
+            return JSON.stringify(responseSchema);
+          }
+          return input;
+        });
+        provider = new AIStudioChatProvider('gemini-pro', {
+          config: {
+            apiKey: 'test-key',
+            basePath: providerSystemInstructionBasePath,
+            systemInstruction: 'file://system-instruction.txt',
+            responseSchema: 'file://schema.json',
+          },
+        });
+        vi.mocked(cache.fetchWithCache).mockResolvedValue({
+          data: {
+            candidates: [{ content: { parts: [{ text: 'response text' }] } }],
+          },
+          cached: false,
+        } as any);
+        const response = await provider.callGemini(audio, {
+          prompt: { raw: '{{audio}}', label: 'Audio', config: promptConfig },
+          vars: { audio },
+          test: { vars: { audio: 'file://recording.m4a' } },
+        });
+
+        expect(mockMaybeLoadFromExternalFile.mock.calls.map(([input]) => input)).toEqual([
+          expectedInstructionReference,
+          expectedSchemaReference,
+        ]);
+        const requestBody = JSON.parse(
+          vi.mocked(cache.fetchWithCache).mock.calls.at(-1)?.[1]?.body as string,
+        );
+        expect(requestBody.contents[0].parts).toEqual([
+          { inlineData: { mimeType: 'audio/mp4', data: media } },
+        ]);
+        expect(requestBody.system_instruction).toEqual({
+          parts: [{ text: mockSystemInstruction }],
+        });
+        expect(requestBody.generationConfig.response_schema).toEqual(responseSchema);
+        expect(response.error).toBeUndefined();
+        expect(response.output).toBe('response text');
+      },
+    );
+
     describe('thinking token tracking', () => {
       it('should track thinking tokens when present in response', async () => {
         const provider = new AIStudioChatProvider('gemini-2.5-flash', {
@@ -3178,7 +3410,7 @@ describe('AIStudioEmbeddingProvider', () => {
   it('reports cost for priced embedding models', async () => {
     vi.mocked(cache.fetchWithCache).mockResolvedValue(embeddingResponse([0.1, 0.2], 10_000) as any);
 
-    const provider = new AIStudioEmbeddingProvider('gemini-embedding-2-preview');
+    const provider = new AIStudioEmbeddingProvider('embedding-2-preview');
     const response = await provider.callEmbeddingApi('hello world');
 
     // $0.20 per 1M input tokens
@@ -3194,7 +3426,7 @@ describe('AIStudioEmbeddingProvider', () => {
       cached: true,
     } as any);
 
-    const provider = new AIStudioEmbeddingProvider('gemini-embedding-2-preview');
+    const provider = new AIStudioEmbeddingProvider('embedding-2-preview');
     const response = await provider.callEmbeddingApi('hello world');
 
     expect(response.cached).toBe(true);
@@ -3204,7 +3436,7 @@ describe('AIStudioEmbeddingProvider', () => {
   it('omits cost when the response has no usage metadata', async () => {
     vi.mocked(cache.fetchWithCache).mockResolvedValue(embeddingResponse([0.1, 0.2]) as any);
 
-    const provider = new AIStudioEmbeddingProvider('gemini-embedding-2-preview');
+    const provider = new AIStudioEmbeddingProvider('embedding-2-preview');
     const response = await provider.callEmbeddingApi('hello world');
 
     expect(response.cost).toBeUndefined();

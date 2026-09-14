@@ -40,8 +40,9 @@ This provider extends the OpenAI provider and supports OpenAI-compatible feature
 
 - Proper message formatting
 - Tool/function calling (model-dependent)
-- Streaming (model-dependent)
 - Token counting (when returned by the provider)
+
+The `huggingface:chat:` provider waits for a complete JSON response; streaming is not supported.
 
 Browse available chat models at [huggingface.co/models?other=conversational](https://huggingface.co/models?other=conversational).
 
@@ -71,7 +72,7 @@ providers:
   - id: huggingface:chat:meta-llama/Llama-3.3-70B-Instruct:fastest
 ```
 
-Available models and providers change over time. To find which providers currently support a model, check the model page on HuggingFace or query the API:
+Available models and providers change over time. To find which providers support a model, check the model page on HuggingFace or query the API:
 
 ```bash
 curl https://huggingface.co/api/models/MODEL_ID?expand[]=inferenceProviderMapping

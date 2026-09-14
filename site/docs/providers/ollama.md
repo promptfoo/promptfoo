@@ -7,6 +7,14 @@ description: "Run open-source LLMs locally using Ollama's streamlined interface 
 
 The `ollama` provider is compatible with [Ollama](https://github.com/jmorganca/ollama), which enables access to Llama, Mixtral, Mistral, and more.
 
+For a small local starting point, [Llama 3.2 3B](https://ollama.com/library/llama3.2:3b) has a roughly 2 GB model download. Install it before running an eval:
+
+```sh
+ollama pull llama3.2:3b
+```
+
+Use `ollama:chat:llama3.2:3b` in your provider configuration.
+
 You can use its `/api/generate` endpoint by specifying any of the following providers from the [Ollama library](https://ollama.ai/library):
 
 - `ollama:completion:llama3.2`
@@ -52,21 +60,20 @@ Supported environment variables:
 
 To pass configuration options to Ollama, use the `config` key like so:
 
-```yaml title="promptfooconfig.yaml"
+```yaml
 providers:
-  - id: ollama:chat:llama3.3
+  - id: ollama:chat:llama3.2:3b
     config:
       num_predict: 1024
       temperature: 0.7
       top_p: 0.9
-      think: true # Enable thinking/reasoning mode (top-level API parameter)
 ```
 
 You can also pass arbitrary fields directly to the Ollama API using the `passthrough` option:
 
-```yaml title="promptfooconfig.yaml"
+```yaml
 providers:
-  - id: ollama:chat:llama3.3
+  - id: ollama:chat:llama3.2:3b
     config:
       passthrough:
         keep_alive: '5m'
@@ -79,11 +86,12 @@ providers:
 Ollama chat models that support function calling (like Llama 3.1, Llama 3.3, Qwen, and others) can use tools with the `tools` config:
 
 ```yaml title="promptfooconfig.yaml"
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
 prompts:
   - 'What is the weather like in {{city}}?'
 
 providers:
-  - id: ollama:chat:llama3.3
+  - id: ollama:chat:llama3.2:3b
     config:
       tools:
         - type: function
@@ -114,7 +122,7 @@ tests:
 
 Ollama can be used as a local grading provider for assertions that require language model evaluation. When you have tests that use both text-based assertions (like `llm-rubric`, `answer-relevance`) and embedding-based assertions (like `similar`), you can configure different Ollama models for each type:
 
-```yaml title="promptfooconfig.yaml"
+```yaml
 defaultTest:
   options:
     provider:
@@ -131,7 +139,7 @@ defaultTest:
           # embedding-specific config if needed
 
 providers:
-  - ollama:chat:llama3.3
+  - ollama:chat:llama3.2:3b
   - ollama:chat:qwen2.5:14b
 
 tests:
@@ -154,7 +162,7 @@ When running with `--max-concurrency 1` and no per-eval timeout, Promptfoo group
 
 Ollama's embedding models can be used with the `similar` assertion to check semantic similarity between outputs and expected values:
 
-```yaml title="promptfooconfig.yaml"
+```yaml
 providers:
   - ollama:chat:llama3.2
 
@@ -177,7 +185,7 @@ tests:
 
 You can also set the embedding provider globally for all similarity assertions:
 
-```yaml title="promptfooconfig.yaml"
+```yaml
 defaultTest:
   options:
     provider:
@@ -203,7 +211,7 @@ Popular Ollama embedding models include:
 
 ## Using a Remote Ollama Server
 
-To connect to Ollama running on another machine (e.g., a more powerful server on your local network), set `OLLAMA_BASE_URL` to the remote address:
+To connect to Ollama running on another machine (e.g., a server on your local network), set `OLLAMA_BASE_URL` to the remote address:
 
 ```bash
 export OLLAMA_BASE_URL="http://192.168.1.100:11434"
@@ -242,7 +250,7 @@ To investigate and fix this issue, there's a few possible solutions:
 
 ## Evaluating models serially
 
-By default, promptfoo evaluates all providers concurrently for each prompt. However, you can run evaluations serially using the `-j 1` option:
+By default, promptfoo evaluates all providers concurrently for each prompt. However, you can run evals serially using the `-j 1` option:
 
 ```bash
 promptfoo eval -j 1
@@ -250,7 +258,7 @@ promptfoo eval -j 1
 
 This sets concurrency to 1, which means:
 
-1. Evaluations happen one provider at a time, then one prompt at a time.
+1. Evals happen one provider at a time, then one prompt at a time.
 2. Only one model is loaded into memory, conserving system resources.
 3. You can easily swap models between evaluations without conflicts.
 

@@ -14,7 +14,13 @@ providers:
   - id: openai:o4-mini
     config:
       max_completion_tokens: 4000
-  # - deepseek:deepseek-reasoner
+  # Requires DEEPSEEK_API_KEY
+  # - id: deepseek:deepseek-flash
+  #   config:
+  #     max_tokens: 8192
+  #     passthrough:
+  #       thinking:
+  #         type: enabled
 
 defaultTest:
   assert:

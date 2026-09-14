@@ -58,6 +58,42 @@ describe('config-schema.json', () => {
     expect(schema.definitions).toHaveProperty('PromptfooConfigSchema');
   });
 
+  it('should accept provider-scoped GOOGLE_CLOUD_PROJECT in a config file', () => {
+    const validate = ajv.compile(schema);
+    const config = {
+      prompts: ['Embed this'],
+      providers: [
+        {
+          id: 'vertex:embedding:gemini-embedding-001',
+          env: { GOOGLE_CLOUD_PROJECT: 'provider-project' },
+        },
+      ],
+    };
+
+    expect(validate(config), JSON.stringify(validate.errors, null, 2)).toBe(true);
+
+    const providerEnvSchemas: any[] = [];
+    const collectProviderEnvSchemas = (node: any): void => {
+      if (!node || typeof node !== 'object') {
+        return;
+      }
+      if (node.properties?.GOOGLE_CLOUD_LOCATION) {
+        providerEnvSchemas.push(node);
+      }
+      for (const value of Object.values(node)) {
+        collectProviderEnvSchemas(value);
+      }
+    };
+    collectProviderEnvSchemas(schema);
+
+    expect(providerEnvSchemas.length).toBeGreaterThan(0);
+    for (const providerEnvSchema of providerEnvSchemas) {
+      expect(providerEnvSchema.properties).toHaveProperty('GOOGLE_CLOUD_PROJECT', {
+        type: 'string',
+      });
+    }
+  });
+
   describe('redteam plugin enums', () => {
     it('should not have duplicate entries in plugin enums', () => {
       const findPluginEnums = (
