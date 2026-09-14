@@ -48,6 +48,7 @@ import { randomSequence, sha256 } from '../util/createHash';
 import { convertTestResultsToTableRow } from '../util/exportToFile/index';
 import { isNonTransientHttpStatus, NON_TRANSIENT_HTTP_STATUSES } from '../util/fetch/errors';
 import invariant from '../util/invariant';
+import { accumulateNamedMetric } from '../util/namedMetrics';
 import { sanitizeRuntimeOptions, sanitizeTracingConfigForPersistence } from '../util/sanitizer';
 import { getCurrentTimestamp } from '../util/time';
 import {
@@ -1466,6 +1467,27 @@ export default class Eval {
           },
           tx,
         );
+        // Row-level SQL counts cannot recover multiple assertions contributing to
+        // one metric; use the same weighting and rendered names as live evaluation.
+        for (const promptMetrics of metrics) {
+          promptMetrics.namedScores = {};
+          promptMetrics.namedScoresCount = {};
+          promptMetrics.namedScoreWeights = {};
+        }
+        for (const result of results) {
+          const promptMetrics = metrics[result.promptIdx];
+          if (!promptMetrics) {
+            continue;
+          }
+          for (const [metricName, metricValue] of Object.entries(result.namedScores ?? {})) {
+            accumulateNamedMetric(promptMetrics, {
+              metricName,
+              metricValue,
+              gradingResult: result.gradingResult,
+              testVars: result.testCase?.vars ?? {},
+            });
+          }
+        }
         const derivedMetrics = this.config.derivedMetrics ?? [];
         if (derivedMetrics.length > 0) {
           const math = await import('mathjs');

@@ -320,6 +320,34 @@ describe('evaluator', () => {
     expect((await Eval.findById(eval_.id))?.getStats().successes).toBe(0);
   });
 
+  it.each([undefined, 4])(
+    'preserves assertion-level named metric counts with stored weight %s',
+    async (weight) => {
+      const eval_ = await EvalFactory.create({ numResults: 1 });
+      const [row] = await EvalResult.findManyByEvalId(eval_.id);
+      row.testCase.vars = { suffix: 'alpha' };
+      row.namedScores = { 'quality:alpha': 0.75 };
+      row.gradingResult = {
+        pass: true,
+        score: 0.75,
+        reason: 'metric',
+        ...(weight === undefined ? {} : { namedScoreWeights: { 'quality:alpha': weight } }),
+        componentResults: [1, 0.5].map((score) => ({
+          pass: true,
+          score,
+          reason: 'component',
+          assertion: { type: 'contains' as const, value: 'x', metric: 'quality:{{ suffix }}' },
+        })),
+      };
+      await eval_.setResults([row]);
+      expect(eval_.prompts[row.promptIdx].metrics).toMatchObject({
+        namedScores: { 'quality:alpha': weight === undefined ? 0.75 : 3 },
+        namedScoresCount: { 'quality:alpha': 2 },
+        namedScoreWeights: { 'quality:alpha': weight ?? 2 },
+      });
+    },
+  );
+
   it('retains actual-spend accounting and recalculates derived scores', async () => {
     const eval_ = await EvalFactory.create({ numResults: 2 });
     eval_.config.derivedMetrics = [
