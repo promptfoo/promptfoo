@@ -1,16 +1,5 @@
 import { getEnvBool, getEnvString } from '../envars';
 
-export function mergeStrategyTracingConfig<T extends { strategies?: Record<string, unknown> }>(
-  strategyId: string,
-  ...configs: Array<T | undefined>
-): T {
-  return Object.assign(
-    {},
-    ...configs,
-    ...configs.map((config) => config?.strategies?.[strategyId]),
-  );
-}
-
 /**
  * Configuration for OpenTelemetry tracing.
  */

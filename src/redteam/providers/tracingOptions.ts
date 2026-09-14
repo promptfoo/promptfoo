@@ -1,5 +1,4 @@
 import cliState from '../../cliState';
-import { mergeStrategyTracingConfig } from '../../tracing/otelConfig';
 
 import type { AtomicTestCase, UnifiedConfig } from '../../types/index';
 
@@ -109,12 +108,11 @@ export function resolveTracingOptions({
   )?.tracing as RawTracingConfig | undefined;
   const providerStrategyConfig = (config?.tracing as RawTracingConfig | undefined) ?? undefined;
 
-  const merged = mergeStrategyTracingConfig(
-    strategyId,
-    globalConfig,
-    testConfig,
-    metadataStrategyConfig,
-    providerStrategyConfig,
+  const configs = [globalConfig, testConfig, metadataStrategyConfig, providerStrategyConfig];
+  const merged = Object.assign(
+    {},
+    ...configs,
+    ...configs.map((entry) => entry?.strategies?.[strategyId]),
   );
 
   // Read provider and queryDelay from root tracing config (not redteam config)
