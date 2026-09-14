@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { type Inputs, InputsSchema } from '../types/shared';
+import { type Inputs, InputsSchema, type TokenUsage } from '../types/shared';
 import { type FrameworkComplianceId, type Plugin, Severity, SeveritySchema } from './constants';
 import { isValidPolicyId } from './plugins/policy/validators';
 
@@ -8,6 +8,8 @@ import type { ApiProvider, ProviderOptions, RemoteGenerationContext } from '../t
 
 // Re-export Inputs from shared to maintain backwards compatibility
 export { type Inputs, InputsSchema };
+
+export type GenerationTokenUsage = TokenUsage;
 
 // Modifiers are used to modify the behavior of the plugin.
 // They let the user specify additional instructions for the plugin,

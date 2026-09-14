@@ -134,6 +134,12 @@ describe('metadata constants', () => {
         expect(keys).toContain(reverseKey);
       });
     });
+
+    it('keeps the legacy specialized-advice label readable', () => {
+      expect(categoryAliasesReverse['Specialized Advice - Financial']).toBe(
+        'harmful:specialized-advice',
+      );
+    });
   });
 
   describe('Plugin and strategy descriptions', () => {

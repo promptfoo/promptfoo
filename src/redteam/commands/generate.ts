@@ -23,6 +23,12 @@ import { isPromptfooSampleTarget } from '../../providers/shared';
 import telemetry from '../../telemetry';
 import { EMAIL_OK_STATUS } from '../../types/email';
 import {
+  type ApiProvider,
+  summarizeSemanticFrontierDiagnosticsFromTests,
+  type TestSuite,
+  type UnifiedConfig,
+} from '../../types/index';
+import {
   checkCloudPermissions,
   getCloudDatabaseId,
   getConfigFromCloud,
@@ -64,7 +70,6 @@ import { getRedteamGenerationContextFromProviders } from '../remoteGenerationCon
 import { PartialGenerationError, ProbeLimitExceededError } from '../types';
 import type { Command } from 'commander';
 
-import type { ApiProvider, TestSuite, UnifiedConfig } from '../../types/index';
 import type { TokenUsage } from '../../types/shared';
 import type {
   FailedPluginInfo,
@@ -880,6 +885,8 @@ async function doGenerateRedteamInternal(
       // No need to return anything, Burp outputs are only invoked via command line.
       return {};
     } else if (options.output) {
+      const semanticFrontierDiagnostics =
+        summarizeSemanticFrontierDiagnosticsFromTests(redteamTests);
       const existingYaml = configPath
         ? (loadYaml(await fs.readFile(configPath, 'utf8')) as Partial<UnifiedConfig>)
         : {};
@@ -889,6 +896,7 @@ async function doGenerateRedteamInternal(
       delete existingMetadata.generationTokenUsage;
       delete existingMetadata.generation;
       delete existingMetadata.generationAccounting;
+      delete existingMetadata.semanticFrontierDiagnostics;
       const updatedYaml: Partial<UnifiedConfig> = {
         ...existingYaml,
         ...(options.description ? { description: options.description } : {}),
@@ -909,6 +917,7 @@ async function doGenerateRedteamInternal(
             : { configHash: 'force-regenerate' }),
           ...((generationTokenUsage.numRequests ?? 0) > 0 && { generationTokenUsage }),
           generation,
+          ...(semanticFrontierDiagnostics.length > 0 && { semanticFrontierDiagnostics }),
           ...(pluginSeverityOverridesId ? { pluginSeverityOverridesId } : {}),
         },
       };
@@ -969,16 +978,21 @@ async function doGenerateRedteamInternal(
       }
       existingConfig.tests = [...testsArray, ...redteamTests];
       existingConfig.redteam = { ...(existingConfig.redteam || {}), ...updatedRedteamConfig };
+      const semanticFrontierDiagnostics = summarizeSemanticFrontierDiagnosticsFromTests(
+        existingConfig.tests,
+      );
       const existingMetadata = { ...(existingConfig.metadata || {}) };
       delete existingMetadata.generationTokenUsage;
       delete existingMetadata.generation;
       delete existingMetadata.generationAccounting;
+      delete existingMetadata.semanticFrontierDiagnostics;
       // Add the config hash to metadata
       existingConfig.metadata = {
         ...existingMetadata,
         configHash: await getConfigHash(configPath, options),
         ...((generationTokenUsage.numRequests ?? 0) > 0 && { generationTokenUsage }),
         generation,
+        ...(semanticFrontierDiagnostics.length > 0 && { semanticFrontierDiagnostics }),
       };
       const author = getAuthor();
       const userEmail = getUserEmail();
@@ -1003,6 +1017,8 @@ async function doGenerateRedteamInternal(
         : promptfooCommand(`eval -c ${path.relative(process.cwd(), configPath)}`);
       logger.info('\n' + chalk.green(`Run ${chalk.bold(`${command}`)} to run the red team!`));
     } else {
+      const semanticFrontierDiagnostics =
+        summarizeSemanticFrontierDiagnosticsFromTests(redteamTests);
       const author = getAuthor();
       const userEmail = getUserEmail();
       const cloudHost = userEmail ? cloudConfig.getApiHost() : null;
@@ -1022,6 +1038,7 @@ async function doGenerateRedteamInternal(
           metadata: {
             ...((generationTokenUsage.numRequests ?? 0) > 0 ? { generationTokenUsage } : {}),
             generation,
+            ...(semanticFrontierDiagnostics.length > 0 && { semanticFrontierDiagnostics }),
           },
           tests: redteamTests,
         },

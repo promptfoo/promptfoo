@@ -222,7 +222,7 @@ function parseLegacyPrompts(lines: string[]): { __prompt: string }[] {
 
   return promptLines
     .map(({ line, lineIndex }) => parsePrompt(line, lineIndex))
-    .filter((prompt): prompt is string => prompt !== null && prompt.length > 0)
+    .filter((prompt): prompt is string => prompt !== null)
     .map((prompt) => ({ __prompt: prompt }));
 }
 

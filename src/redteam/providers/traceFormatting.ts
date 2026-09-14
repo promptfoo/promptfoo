@@ -21,31 +21,18 @@ function formatDuration(durationMs: number | undefined): string {
 }
 
 function formatSpan(span: TraceSpan): string {
-  const parts: string[] = [];
-  const duration = formatDuration(span.durationMs);
+  const parts = [`[${formatDuration(span.durationMs)}] ${span.kind || 'unspecified'}`];
 
-  parts.push(
-    `[${duration}] ${span.name}${span.kind && span.kind !== 'unspecified' ? ` (${span.kind})` : ''}`,
-  );
+  if (span.name) {
+    parts.push(`operation=${span.name.slice(0, 80)}`);
+  }
 
   const tool = getToolNameFromAttributes(span.attributes);
   if (tool) {
     parts.push(`tool=${tool}`);
   }
 
-  const model =
-    span.attributes['gen_ai.request.model'] ||
-    span.attributes['gen_ai.response.model'] ||
-    span.attributes['ai.model.id'] ||
-    span.attributes['model'] ||
-    span.attributes['llm.model'];
-  if (model) {
-    parts.push(`model=${model}`);
-  }
-
-  if (span.status.code === 'error') {
-    parts.push(`ERROR: ${span.status.message ?? 'Unknown error'}`);
-  }
+  parts.push(`status=${span.status.code}`);
 
   return parts.join(' | ');
 }
@@ -67,12 +54,7 @@ export function formatTraceSummary(
 
   const formattedSpans = spans.map((span, index) => `${index + 1}. ${formatSpan(span)}`).join('\n');
 
-  const insights =
-    trace.insights.length > 0 ? trace.insights.map((i) => `• ${i}`).join('\n') : 'None';
-
-  return [header, '', 'Execution Flow:', formattedSpans, '', 'Key Observations:', insights].join(
-    '\n',
-  );
+  return [header, '', 'Execution Flow:', formattedSpans].join('\n');
 }
 
 export function formatTraceForMetadata(trace: TraceContextData): Record<string, unknown> {

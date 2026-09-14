@@ -32,7 +32,8 @@ describe('formatTraceSummary', () => {
     const summary = formatTraceSummary(trace);
 
     expect(summary).toContain('tool=lookup_customer');
-    expect(summary).toContain('Tool call lookup_customer via "ai.toolCall"');
+    expect(summary).not.toContain('Tool call lookup_customer via "ai.toolCall"');
+    expect(summary).toContain('status=ok');
   });
 
   it('includes OpenTelemetry GenAI model names in formatted spans', () => {
@@ -59,6 +60,7 @@ describe('formatTraceSummary', () => {
       ],
     };
 
-    expect(formatTraceSummary(trace)).toContain('model=gpt-4.1-mini');
+    expect(formatTraceSummary(trace)).toContain('operation=chat');
+    expect(formatTraceSummary(trace)).not.toContain('model=gpt-4.1-mini');
   });
 });
