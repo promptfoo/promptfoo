@@ -45,6 +45,54 @@ describe('TraceStore span persistence', () => {
     return traceStore;
   }
 
+  it.each(['getSpans', 'getTrace', 'getTracesByEvaluation'] as const)(
+    'redacts credential echoes from %s without changing stored evidence',
+    async (method) => {
+      const traceId = 'read-redaction';
+      const store = await createTrace(traceId);
+      const secret = 'PRIVATE_TRACE_READ_RECEIPT';
+      await store.addSpans(traceId, [
+        {
+          spanId: 'source',
+          name: 'grader source',
+          startTime: 1,
+          attributes: { authorization: secret, 'promptfoo.span.role': 'grader' },
+        },
+        {
+          spanId: 'echo',
+          name: `tool ${secret}`,
+          startTime: 2,
+          statusMessage: `error ${secret}`,
+          attributes: {
+            'tool.name': 'query',
+            'tool.arguments': JSON.stringify({ sql: `SELECT '${secret}'` }),
+            [secret]: 'echoed key',
+          },
+        },
+      ]);
+      const original = await store.getTrace(traceId, { sanitizeAttributes: false });
+      expect(JSON.stringify(original)).toContain(secret);
+      const result =
+        method === 'getSpans'
+          ? await store.getSpans(traceId, {
+              earliestStartTime: 2,
+              includeInternalSpans: false,
+              spanFilter: [`tool ${secret}`],
+              maxSpans: 1,
+            })
+          : method === 'getTrace'
+            ? await store.getTrace(traceId)
+            : await store.getTracesByEvaluation(original!.evaluationId!);
+      expect(JSON.stringify(result)).not.toContain(secret);
+      if (method === 'getSpans') {
+        expect(result).toMatchObject([
+          { spanId: 'echo', name: 'tool <redacted>', statusMessage: 'error <redacted>' },
+        ]);
+      }
+      expect(await store.getTrace(traceId, { sanitizeAttributes: false })).toEqual(original);
+    },
+  );
+
   it('rejects cumulative redaction payloads over 10 MiB before reading them into the redactor', async () => {
     const store = await createTrace('redaction-size');
     const redactSpans = vi.fn((spans) => spans);

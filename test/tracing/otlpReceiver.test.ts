@@ -152,6 +152,47 @@ describe('OTLPReceiver', () => {
   );
 
   describe('Health check', () => {
+    it.each(
+      ['json', 'protobuf'].flatMap((format) => [false, true].map((nested) => ({ format, nested }))),
+    )(
+      'rejects duplicate span attributes before storage: $format nested=$nested',
+      async ({ format, nested }) => {
+        const attributes = [
+          { key: 'authorization', value: { stringValue: 'PRIVATE_OTLP_SOURCE' } },
+          { key: 'authorization', value: { stringValue: 'ordinary' } },
+        ];
+        const id = (value: string) => (format === 'json' ? value : Buffer.from(value, 'hex'));
+        const data = {
+          resourceSpans: [
+            {
+              scopeSpans: [
+                {
+                  spans: [
+                    {
+                      traceId: id('a'.repeat(32)),
+                      spanId: id('b'.repeat(16)),
+                      name: 'echo PRIVATE_OTLP_SOURCE',
+                      startTimeUnixNano: '1000000000',
+                      attributes: nested
+                        ? [{ key: 'details', value: { kvlistValue: { values: attributes } } }]
+                        : attributes,
+                    },
+                  ],
+                },
+              ],
+            },
+          ],
+        };
+        const response = await request(receiver.getApp())
+          .post('/v1/traces')
+          .set('Content-Type', format === 'json' ? 'application/json' : 'application/x-protobuf')
+          .send(format === 'json' ? data : await encodeOTLPRequest(data));
+        expect(response.status).toBe(400);
+        expect(response.body.error).toMatch(/duplicate attribute keys/i);
+        expect(persistSpans).not.toHaveBeenCalled();
+      },
+    );
+
     it('should respond to health check endpoint', async () => {
       const response = await request(receiver.getApp()).get('/health').expect(200);
 

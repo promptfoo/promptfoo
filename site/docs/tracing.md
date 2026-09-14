@@ -343,6 +343,9 @@ It also masks matching values echoed in attribute keys, other attributes, span n
 status messages. Valid JSON stays parseable when individual fields can be redacted safely;
 ambiguous JSON, such as objects with duplicate keys, is replaced in full.
 
+The OTLP receiver and Tempo reject repeated resource or span attribute keys, including
+nested key-value lists, before redaction and storage.
+
 A secret that appears only in free text without a matching protected attribute is not
 detected. Trace `metadata` (such as test `vars`) is not covered, so avoid placing secrets
 in test variables when traces are retained.
@@ -605,7 +608,7 @@ Click the expand icon on any span to reveal a detailed attributes panel showing:
 
 This is useful for inspecting the full request/response bodies (`promptfoo.request.body` and `promptfoo.response.body`) and debugging provider behavior.
 
-Trace reads redact credential-like attribute keys such as authorization headers, cookies, API keys, tokens, secrets, and passwords before displaying or exporting spans. GenAI token counters such as `gen_ai.usage.input_tokens` and application token counters such as `llm.usage.prompt_tokens` and `llm.usage.completion_tokens` remain visible. Avoid placing secrets in custom span attributes because raw attributes may still be retained in the local trace store for internal evaluation workflows.
+Trace reads redact credential-like attribute keys such as authorization headers, cookies, API keys, tokens, secrets, and passwords before displaying or exporting spans. Values from those attributes are also masked when echoed in span names, status messages, and other attributes in the same trace, including when the source span is filtered out. GenAI token counters such as `gen_ai.usage.input_tokens` and application token counters such as `llm.usage.prompt_tokens` and `llm.usage.completion_tokens` remain visible. Raw evidence remains available to internal assertion workflows and may still be retained in the local trace store; configure `redactAttributes` to remove it before storage.
 
 ### Exporting Traces
 
