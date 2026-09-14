@@ -228,6 +228,7 @@ describe('OTLPTracingExporter', () => {
           odbc: 'Driver={ODBC Driver};UID=buildbot;PWD={opaque;credential};Database=public',
           escapedOdbc: 'Driver={ODBC Driver};PWD={opaque}};suffix};Database=public',
           xml: '<settings><password>opaque/xml</password></settings>',
+          spacedXml: '<property name = "password" value = "opaque/spaced"/>',
           public: 'config: {description: "public phrase"}',
         },
         format,
@@ -240,6 +241,7 @@ describe('OTLPTracingExporter', () => {
       );
       expect(attributes.escapedOdbc).toBe('Driver={ODBC Driver};PWD=<redacted>;Database=public');
       expect(attributes.xml).toBe('<redacted>');
+      expect(attributes.spacedXml).toBe('<redacted>');
       expect(attributes.public).toBe('config: {description: "public phrase"}');
       expect(JSON.stringify(payload)).not.toMatch(/opaque|suffix|credential/);
     },
@@ -289,12 +291,29 @@ describe('OTLPTracingExporter', () => {
   );
 
   it.each(['json', 'protobuf'] as const)('redacts byte array attributes in %s', async (format) => {
+    const throwing = { safe: 'public' };
+    Object.defineProperty(throwing, 'secret', {
+      enumerable: true,
+      get() {
+        throw new Error('do not read');
+      },
+    });
     const { attributes, payload } = await exportCustomData(
-      { native: { bytes: Buffer.from('sk-opaque-byte-secret') } },
+      {
+        direct: Buffer.from('sk-direct-byte-secret'),
+        native: { bytes: Buffer.from('sk-opaque-byte-secret') },
+        throwing,
+      },
       format,
     );
 
+    expect(attributes.direct).toBe('<redacted>');
     expect(JSON.parse(attributes.native as string)).toEqual({ bytes: '<redacted>' });
+    expect(JSON.parse(attributes.throwing as string)).toEqual({
+      safe: 'public',
+      secret: '<redacted>',
+    });
+    expect(JSON.stringify(payload)).not.toContain('direct-byte-secret');
     expect(JSON.stringify(payload)).not.toContain('opaque-byte-secret');
   });
 
@@ -337,9 +356,18 @@ describe('OTLPTracingExporter', () => {
     'preserves long unmatched non-credential XML in %s',
     async (format) => {
       const xml = '<entry key="public">'.repeat(16_000);
-      const { attributes } = await exportCustomData({ xml }, format);
+      const unterminated = '<entry key="public"'.repeat(16_000);
+      const blankLines = '\n'.repeat(80_000);
+      const encoded = '\\"public'.repeat(40_000);
+      const { attributes } = await exportCustomData(
+        { xml, unterminated, blankLines, encoded },
+        format,
+      );
 
       expect(attributes.xml).toBe(xml);
+      expect(attributes.unterminated).toBe(unterminated);
+      expect(attributes.blankLines).toBe(blankLines);
+      expect(attributes.encoded).toBe(encoded);
     },
   );
 
@@ -1247,6 +1275,7 @@ describe('OTLPTracingExporter', () => {
               digest: `Authorization: Digest uri="/app?x=1&y=2", response="${credentials[0]}"`,
               header_text: `Cookie: sid="${credentials[1]}"`,
               cmd: ['deploy', '--api-key', credentials[2], '--region', 'test-region'],
+              optionOnly: ['deploy', '--password', '--region', 'test-region'],
               invocation: `deploy --dry-run --api-key=${credentials[2]} --token-count 12`,
               command: `deploy --dry-run --token "${credentials[3]}" --region test-region`,
             },
@@ -1285,6 +1314,16 @@ describe('OTLPTracingExporter', () => {
       expect(getAttributes(span).invocation).toBe(
         'deploy --dry-run --api-key=<redacted> --token-count 12',
       );
+      expect(getAttributes(span).optionOnly).toEqual({
+        arrayValue: {
+          values: [
+            { stringValue: 'deploy' },
+            { stringValue: '--password' },
+            { stringValue: '--region' },
+            { stringValue: 'test-region' },
+          ],
+        },
+      });
       expect(getAttributes(span).cmd).toEqual({
         arrayValue: {
           values: [
@@ -1462,8 +1501,8 @@ describe('OTLPTracingExporter', () => {
           spanData: { type: 'custom', name: 'lookup', data: { 'evaluation.id': 'spoofed' } },
           traceMetadata: {
             'promptfoo.otlp_format': format,
-            'evaluation.id': 'eval-trusted',
-            'test.case.id': 'case-trusted',
+            'evaluation.id': 'sk-trusted-evaluation',
+            'test.case.id': 'sk-trusted-case',
           },
           error: null,
         } as any,
@@ -1482,8 +1521,8 @@ describe('OTLPTracingExporter', () => {
       expect.soft(attributes.script).toBe('document.cookie = <redacted>; return response;');
       expect.soft(attributes.bytes).toBe('{"nested":"<redacted>"}');
       expect(getAttributes(spans[1])).toMatchObject({
-        'evaluation.id': 'eval-trusted',
-        'test.case.id': 'case-trusted',
+        'evaluation.id': 'sk-trusted-evaluation',
+        'test.case.id': 'sk-trusted-case',
       });
     },
   );
@@ -1493,6 +1532,7 @@ describe('OTLPTracingExporter', () => {
     async (format) => {
       const exporter = new OTLPTracingExporter();
       const credentials = ['opaque-equals-digest-proof', 'sk-abcdefghijklmnopqrstuvwxyz'];
+      const jwe = JSON.stringify(createJwe());
       const privateKeys = [
         'PRIVATE KEY',
         'RSA PRIVATE KEY',
@@ -1510,7 +1550,7 @@ describe('OTLPTracingExporter', () => {
           spanId: 'span_0123456789abcdef',
           spanData: {
             type: 'custom',
-            name: 'lookup',
+            name: jwe,
             data: {
               digest: `Authorization=Digest uri="/app?x=1&y=2", response="${credentials[0]}"`,
               private_keys: privateKeys.map((key) => `Command failed: ${key}`),
@@ -1521,7 +1561,7 @@ describe('OTLPTracingExporter', () => {
           },
           traceMetadata: {
             'promptfoo.otlp_format': format,
-            'promptfoo.service_name': credentials[1],
+            'promptfoo.service_name': jwe,
           },
           error: null,
         } as any,
@@ -1532,7 +1572,12 @@ describe('OTLPTracingExporter', () => {
           ? await decodeExportTraceServiceRequest(body as Uint8Array)
           : JSON.parse(body as string);
       const serialized = JSON.stringify(payload);
-      for (const credential of [...credentials, 'private-material-', 'private-partial-material']) {
+      for (const credential of [
+        ...credentials,
+        createJwe().ciphertext,
+        'private-material-',
+        'private-partial-material',
+      ]) {
         expect.soft(serialized).not.toContain(credential);
       }
       const attributes = getAttributes(payload.resourceSpans[0].scopeSpans[0].spans[0]);

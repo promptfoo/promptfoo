@@ -104,7 +104,7 @@ export class OTLPTracingExporter implements TracingExporter {
     const defaultServiceName = getTracingServiceName();
 
     for (const span of spans) {
-      const serviceName = sanitizeCredentialText(
+      const serviceName = sanitizeSerializedAttribute(
         getStringTraceMetadata(span, 'promptfoo.service_name') ?? defaultServiceName,
       );
       const serviceSpans = spansByService.get(serviceName) ?? [];
@@ -144,7 +144,7 @@ export class OTLPTracingExporter implements TracingExporter {
       traceId: this.hexToBase64(traceId, 'trace'),
       spanId: this.hexToBase64(spanId, 'span'),
       parentSpanId: parentSpanId ? this.hexToBase64(parentSpanId, 'span') : undefined,
-      name: sanitizeCredentialText(this.getSpanName(span)),
+      name: sanitizeSerializedAttribute(this.getSpanName(span)),
       kind:
         span.spanData.type === 'generation' || span.spanData.type === 'response'
           ? OTLP_SPAN_KIND_CLIENT
@@ -375,14 +375,18 @@ export class OTLPTracingExporter implements TracingExporter {
   private attributesToOTLP(attributes: Record<string, unknown>, span: Span<any>): any[] {
     return Object.entries(attributes)
       .filter(([, value]) => value !== undefined)
-      .map(([key, value]) => ({
-        key: sanitizeCredentialText(key),
-        value: this.valueToOTLP(
-          sanitizeAttributeByKey(key, value),
+      .map(([key, value]) => {
+        const preserveTraceLinkage =
           TRACE_LINKAGE_ATTRIBUTE_KEYS.has(key) &&
-            Object.prototype.hasOwnProperty.call(span.traceMetadata ?? {}, key),
-        ),
-      }));
+          Object.prototype.hasOwnProperty.call(span.traceMetadata ?? {}, key);
+        return {
+          key: sanitizeCredentialText(key),
+          value: this.valueToOTLP(
+            preserveTraceLinkage ? value : sanitizeAttributeByKey(key, value),
+            preserveTraceLinkage,
+          ),
+        };
+      });
   }
 
   private valueToOTLP(value: unknown, preserveTraceLinkage = false): any {
@@ -634,7 +638,9 @@ function sanitizeCredentialText(value: string): string {
     return '<redacted>';
   }
 
-  for (const [, key] of value.matchAll(/<(?:[\w.-]+:)?([A-Za-z_][A-Za-z\d_.-]*)\b[^>]*>/gi)) {
+  for (const [, key] of value.matchAll(
+    /<(?:[\w.-]+:)?([A-Za-z_][A-Za-z\d_.-]*)\b[^>\r\n]{0,4096}>/gi,
+  )) {
     if (isCredentialAttributeKey(key)) {
       return '<redacted>';
     }
@@ -659,14 +665,14 @@ function sanitizeCredentialText(value: string): string {
 
   const netrc = value.replace(/^[ \t]*#[^\r\n]*/gm, '');
   if (
-    /(?:^|[\r\n])\s*(?:machine\s+\S+\s+|default\s+)(?:login|password|account)\b/i.test(netrc) &&
+    /(?:^|[\r\n])[ \t]*(?:machine\s+\S+\s+|default\s+)(?:login|password|account)\b/i.test(netrc) &&
     /(?:^|\s)(?:password|account)\s+\S/i.test(netrc)
   ) {
     return '<redacted>';
   }
 
   // Embedded encoded JSON cannot be traversed safely as an ordinary text value.
-  for (const [, encodedKey] of value.matchAll(/\\+"((?:\\.|[^"\\])*)\\+"\s*:/g)) {
+  for (const [, encodedKey] of value.matchAll(/\\+"((?:\\.|[^"\\]){0,4096})\\+"\s*:/g)) {
     let key = encodedKey;
     try {
       key = JSON.parse(`"${encodedKey}"`);
@@ -754,12 +760,14 @@ function hasCredentialNamedPayload(value: string): boolean {
   ) {
     return true;
   }
-  for (const [, attributes] of value.matchAll(/<(?:[\w.-]+:)?[\w.-]+\b([^>]*)>/g)) {
-    const key = attributes.match(/\b(?:name|key)=["']([A-Za-z_][A-Za-z\d_.-]*)["']/i)?.[1];
+  for (const [, attributes] of value.matchAll(/<(?:[\w.-]+:)?[\w.-]+\b([^>\r\n]{0,4096})>/g)) {
+    const key = attributes.match(
+      /\b(?:name|key)[ \t\r\n]*=[ \t\r\n]*["']([A-Za-z_][A-Za-z\d_.-]*)["']/i,
+    )?.[1];
     if (
       key &&
       isCredentialAttributeKey(key) &&
-      (/\bvalue=["']/i.test(attributes) || !/\/\s*$/.test(attributes))
+      (/\bvalue[ \t\r\n]*=[ \t\r\n]*["']/i.test(attributes) || !/\/\s*$/.test(attributes))
     ) {
       return true;
     }
@@ -916,8 +924,10 @@ function sanitizeAttributeByKey(key: string, value: unknown): unknown {
 function isCredentialPairValue(source: Record<string, unknown> | unknown[], key: string) {
   if (Array.isArray(source)) {
     const option = source[Number(key) - 1];
+    const value = source[Number(key)];
     return (
       typeof option === 'string' &&
+      !(typeof value === 'string' && /^--?[A-Za-z][A-Za-z\d_.-]*$/.test(value)) &&
       (['-u', '--user', '--proxy-user'].includes(option) ||
         (isCredentialAttributeKey(option) &&
           (/^--?[A-Za-z][A-Za-z\d_.-]*$/.test(option) ||
@@ -1035,7 +1045,7 @@ function sanitizeStructuredAttribute(
         state.changed ||= sanitized !== entry;
       }
 
-      const sanitizedKey = sanitizeCredentialText(key);
+      const sanitizedKey = sanitizeSerializedAttribute(key);
       state.changed ||= sanitizedKey !== key;
       Object.defineProperty(target, sanitizedKey, {
         configurable: true,
@@ -1059,7 +1069,11 @@ function* structuredAttributeEntries(
 ): Generator<[string, unknown]> {
   for (const key in value) {
     if (Object.prototype.hasOwnProperty.call(value, key)) {
-      yield [key, Reflect.get(value, key)];
+      try {
+        yield [key, Reflect.get(value, key)];
+      } catch {
+        yield [key, '<redacted>'];
+      }
     }
   }
 }
@@ -1072,6 +1086,10 @@ function sanitizeAttributeValue(value: unknown): unknown {
     typeof value === 'boolean'
   ) {
     return value;
+  }
+
+  if (ArrayBuffer.isView(value)) {
+    return '<redacted>';
   }
 
   if (Array.isArray(value) || isRecord(value)) {
