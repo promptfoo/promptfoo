@@ -385,73 +385,41 @@ async function readConfigInScope(
   configPath: string,
   rawConfig: UnifiedConfig,
 ): Promise<UnifiedConfig> {
-  let ret: UnifiedConfig & {
+  const ext = path.parse(configPath).ext;
+  const isDataFile = ext === '.json' || ext === '.yaml' || ext === '.yml';
+  if (!isDataFile && !isJavascriptFile(configPath)) {
+    throw new Error(`Unsupported configuration file format: ${ext}`);
+  }
+
+  // Resolve environment templates before validation; leave runtime templates intact.
+  const renderedConfig = renderConfigEnvTemplates(rawConfig);
+  const commandLineOptions = normalizeConfiguredCommandLineOptions(
+    renderedConfig.commandLineOptions,
+    `configuration file ${configPath}`,
+  );
+  const ret: UnifiedConfig & {
     targets?: UnifiedConfig['providers'];
     plugins?: RedteamPluginObject[];
     strategies?: RedteamStrategyObject[];
-  };
-  const ext = path.parse(configPath).ext;
-  if (ext === '.json' || ext === '.yaml' || ext === '.yml') {
-    // Render environment variable templates (e.g., {{ env.VAR }}) before validation.
-    // This allows env vars to be used in paths and other config values.
-    // Runtime templates like {{ vars.x }} are preserved for later evaluation.
-    const renderedConfig = renderConfigEnvTemplates(rawConfig);
-    const normalizedCommandLineOptions = normalizeConfiguredCommandLineOptions(
-      renderedConfig.commandLineOptions,
-      `configuration file ${configPath}`,
-    );
-    const normalizedConfig =
-      normalizedCommandLineOptions === undefined
-        ? renderedConfig
-        : { ...renderedConfig, commandLineOptions: normalizedCommandLineOptions };
+  } = commandLineOptions === undefined ? renderedConfig : { ...renderedConfig, commandLineOptions };
 
-    // Validator requires `prompts`, but prompts is not actually required for redteam.
-    // We create a relaxed schema for validation that makes prompts optional
-    const UnifiedConfigSchemaWithoutPrompts = TestSuiteConfigSchema.extend({
-      evaluateOptions: EvaluateOptionsSchema.optional(),
-      commandLineOptions: CommandLineOptionsSchema.partial().optional(),
-      providers: ProvidersSchema.optional(),
-      targets: ProvidersSchema.optional(),
-      prompts: TestSuiteConfigSchema.shape.prompts.optional(),
-    }).refine(
-      (data) => {
-        const hasTargets = data.targets !== undefined;
-        const hasProviders = data.providers !== undefined;
-        return (hasTargets && !hasProviders) || (!hasTargets && hasProviders);
-      },
-      {
+  // Data configs can omit prompts for redteam and use targets instead of providers.
+  const schema = isDataFile
+    ? TestSuiteConfigSchema.extend({
+        evaluateOptions: EvaluateOptionsSchema.optional(),
+        commandLineOptions: CommandLineOptionsSchema.partial().optional(),
+        providers: ProvidersSchema.optional(),
+        targets: ProvidersSchema.optional(),
+        prompts: TestSuiteConfigSchema.shape.prompts.optional(),
+      }).refine((data) => (data.targets !== undefined) !== (data.providers !== undefined), {
         message: "Exactly one of 'targets' or 'providers' must be provided, but not both",
-      },
+      })
+    : UnifiedConfigSchema;
+  const validationResult = schema.safeParse(ret);
+  if (!validationResult.success) {
+    logger.warn(
+      `Invalid configuration file ${configPath}:\n${z.prettifyError(validationResult.error)}`,
     );
-    const validationResult = UnifiedConfigSchemaWithoutPrompts.safeParse(normalizedConfig);
-    if (!validationResult.success) {
-      logger.warn(
-        `Invalid configuration file ${configPath}:\n${z.prettifyError(validationResult.error)}`,
-      );
-    }
-    ret = normalizedConfig;
-  } else if (isJavascriptFile(configPath)) {
-    // Render environment variable templates for JS configs too.
-    // This ensures consistent behavior across config file types.
-    const renderedConfig = renderConfigEnvTemplates(rawConfig);
-    const normalizedCommandLineOptions = normalizeConfiguredCommandLineOptions(
-      renderedConfig.commandLineOptions,
-      `configuration file ${configPath}`,
-    );
-    const normalizedConfig =
-      normalizedCommandLineOptions === undefined
-        ? renderedConfig
-        : { ...renderedConfig, commandLineOptions: normalizedCommandLineOptions };
-
-    const validationResult = UnifiedConfigSchema.safeParse(normalizedConfig);
-    if (!validationResult.success) {
-      logger.warn(
-        `Invalid configuration file ${configPath}:\n${z.prettifyError(validationResult.error)}`,
-      );
-    }
-    ret = normalizedConfig;
-  } else {
-    throw new Error(`Unsupported configuration file format: ${ext}`);
   }
 
   if (ret.targets) {
