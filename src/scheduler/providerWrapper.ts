@@ -5,6 +5,7 @@
  * code paths that bypass the main evaluator.
  */
 
+import { isSafeCost, isSafeTokenCount } from '../util/numeric';
 import { parseRetryAfter } from './headerParser';
 import {
   getProviderResponseHeaders,
@@ -42,12 +43,8 @@ const COMPLETION_DETAIL_FIELDS = [
   'cacheCreationInputTokens',
 ] as const;
 
-function isSafeTokenMetric(value: unknown): value is number {
-  return typeof value === 'number' && Number.isSafeInteger(value) && value >= 0;
-}
-
 function addSafeTokenMetric(current: number | undefined, value: unknown): number | undefined {
-  if (!isSafeTokenMetric(value)) {
+  if (!isSafeTokenCount(value)) {
     return undefined;
   }
   const total = (current ?? 0) + value;
@@ -74,7 +71,7 @@ function accumulateRetryTokenUsage(target: Partial<TokenUsage>, response: Provid
 
   const requests = response.cached
     ? 0
-    : isSafeTokenMetric(usage?.numRequests)
+    : isSafeTokenCount(usage?.numRequests)
       ? usage.numRequests
       : 1;
   const totalRequests = addSafeTokenMetric(target.numRequests, requests);
@@ -141,11 +138,7 @@ export function createProviderRateLimitOptions(): RateLimitExecuteOptions<Provid
       let hasCost = false;
       for (const response of [...retryResults, result]) {
         accumulateRetryTokenUsage(tokenUsage, response);
-        if (
-          typeof response.cost === 'number' &&
-          Number.isFinite(response.cost) &&
-          response.cost >= 0
-        ) {
+        if (isSafeCost(response.cost)) {
           combinedCost += response.cost;
           hasCost = true;
         }

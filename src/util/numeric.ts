@@ -12,3 +12,20 @@ export function filterFiniteScores(scores: Record<string, unknown>): Record<stri
   }
   return filtered;
 }
+
+/**
+ * Bounds a provider-controlled token count to a non-negative safe integer.
+ * Usage numbers arrive as untrusted API data and flow into cost/metrics
+ * aggregation, so garbage must not pass.
+ */
+export function isSafeTokenCount(value: unknown): value is number {
+  return typeof value === 'number' && Number.isSafeInteger(value) && value >= 0;
+}
+
+/**
+ * Bounds a provider-controlled cost to a non-negative finite number (costs
+ * are fractional, so no integer constraint).
+ */
+export function isSafeCost(value: unknown): value is number {
+  return typeof value === 'number' && Number.isFinite(value) && value >= 0;
+}

@@ -1678,6 +1678,7 @@ describe('OpenRouter', () => {
 
         // Should return tool_calls directly without any reasoning
         expect(result.output).toEqual([mockToolCall]);
+
         expect(result.tokenUsage).toEqual({
           total: 60,
           prompt: 25,
@@ -1932,6 +1933,45 @@ describe('OpenRouter', () => {
           completion: 35,
           numRequests: 1,
         });
+      });
+      it('keeps a complete function call whose type discriminator is omitted', async () => {
+        // OpenRouter sometimes sends tool_calls entries with no `type`; the
+        // payload is unambiguous, so the call must survive rather than take
+        // the whole message down as malformed.
+        const provider = new OpenRouterProvider('google/gemini-2.5-pro', {});
+        const quirksToolCall = {
+          id: 'call_abc123',
+          function: {
+            name: 'get_weather',
+            arguments: '{"location": "San Francisco"}',
+          },
+        };
+        mockedFetchWithRetries.mockResolvedValueOnce(
+          new Response(
+            JSON.stringify({
+              choices: [
+                { message: { content: null, tool_calls: [quirksToolCall] }, finish_reason: 'stop' },
+              ],
+              usage: { total_tokens: 60, prompt_tokens: 25, completion_tokens: 35 },
+            }),
+            {
+              status: 200,
+              statusText: 'OK',
+              headers: new Headers({ 'Content-Type': 'application/json' }),
+            },
+          ),
+        );
+
+        const result = await provider.callApi('Weather?');
+
+        expect(result.error).toBeUndefined();
+        // the call survives verbatim; no synthetic discriminator is added
+        expect(result.output).toEqual([
+          {
+            id: 'call_abc123',
+            function: { name: 'get_weather', arguments: '{"location": "San Francisco"}' },
+          },
+        ]);
       });
 
       it('should prioritize tool calls over content+reasoning when all three are present (fixes Qwen thinking models)', async () => {

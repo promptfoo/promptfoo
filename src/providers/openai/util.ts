@@ -2,6 +2,7 @@ import OpenAI from 'openai';
 import logger from '../../logger';
 import { maybeLoadFromExternalFileWithVars } from '../../util/index';
 import { getAjv, safeJsonStringify } from '../../util/json';
+import { isSafeCost, isSafeTokenCount } from '../../util/numeric';
 import { looksLikeSecret, sanitizeUrl } from '../../util/sanitizer';
 import { calculateCost } from '../shared';
 
@@ -949,14 +950,6 @@ export function calculateOpenAICost(
   return totalCost;
 }
 
-function isSafeTokenCount(value: unknown): value is number {
-  return typeof value === 'number' && Number.isSafeInteger(value) && value >= 0;
-}
-
-function isSafeCost(value: unknown): value is number {
-  return typeof value === 'number' && Number.isFinite(value) && value >= 0;
-}
-
 /**
  * Calculate cost without trusting provider-controlled usage or cost fields.
  */
@@ -1136,7 +1129,11 @@ function isToolCall(value: unknown): value is Record<string, unknown> {
     return false;
   }
   return (
-    (value.type === 'function' && hasFunctionPayload(value.function)) ||
+    // OpenRouter sometimes omits the discriminator on a complete function
+    // payload; treat it as 'function' rather than discarding the message.
+    // An explicit unknown type still fails, and `custom` keeps its own shape.
+    ((value.type === 'function' || value.type === undefined) &&
+      hasFunctionPayload(value.function)) ||
     (value.type === 'custom' &&
       hasNamedPayload(value.custom) &&
       typeof value.custom.input === 'string')
