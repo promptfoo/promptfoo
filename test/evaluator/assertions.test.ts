@@ -400,18 +400,21 @@ describeEvaluator('evaluator assertions', () => {
     const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'late-receipt-hook-'));
     const receipt = path.join(directory, 'receipt');
     let hookCalls = 0;
+    let finishHook!: () => void;
+    const lateHook = new Promise<void>((resolve) => {
+      finishHook = resolve;
+    });
     vi.mocked(runExtensionHook).mockImplementation(async (_extensions, phase, context) => {
       if (phase === 'beforeEach') {
         const call = ++hookCalls;
         if (call === 1) {
-          await new Promise((resolve) => setTimeout(resolve, 30));
+          await lateHook;
         }
         fs.writeFileSync(receipt, call === 1 ? 'LATE_UNCAPTURED_RECEIPT' : 'CAPTURED_RECEIPT');
       }
       return context;
     });
     vi.mocked(mockApiProvider.callApi).mockImplementation(async () => {
-      await new Promise((resolve) => setTimeout(resolve, 10));
       return { output: fs.readFileSync(receipt, 'utf8') };
     });
     const suite: TestSuite = {
@@ -432,9 +435,11 @@ describeEvaluator('evaluator assertions', () => {
     try {
       const pending = evaluate(suite, record, { maxConcurrency: 1, timeoutMs: 25 });
       await vi.waitFor(() => expect(hookCalls).toBe(1));
-      await vi.advanceTimersByTimeAsync(50);
+      await vi.advanceTimersByTimeAsync(25);
+      finishHook();
       await pending;
       expect(mockApiProvider.callApi).not.toHaveBeenCalled();
+      expect(fs.readFileSync(receipt, 'utf8')).toBe('LATE_UNCAPTURED_RECEIPT');
       const summary = await record.toEvaluateSummary();
       expect(summary.results).toHaveLength(2);
       expect(summary.results.every((row) => row.failureReason === ResultFailureReason.ERROR)).toBe(
