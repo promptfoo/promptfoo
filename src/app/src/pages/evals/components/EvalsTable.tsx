@@ -194,6 +194,7 @@ export default function EvalsTable({
               to={EVAL_ROUTES.DETAIL(evalId)}
               onClick={(e) => {
                 e.preventDefault();
+                e.stopPropagation();
                 onEvalSelected(evalId);
               }}
               title={evalId}
