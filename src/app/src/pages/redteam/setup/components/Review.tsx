@@ -32,13 +32,13 @@ import { cn } from '@app/lib/utils';
 import YamlEditor from '@app/pages/eval-creator/components/YamlEditor';
 import { useRedteamJobStore } from '@app/stores/redteamJobStore';
 import { callApi } from '@app/utils/api';
+import { getUnifiedConfig } from '@promptfoo/presentation/redteamConfig';
 import { isFoundationModelProvider } from '@promptfoo/providers/constants';
 import { REDTEAM_DEFAULTS, strategyDisplayNames } from '@promptfoo/redteam/constants';
 import {
   isValidPolicyObject,
   makeDefaultPolicyName,
 } from '@promptfoo/redteam/plugins/policy/utils';
-import { getUnifiedConfig } from '@promptfoo/redteam/sharedFrontend';
 import isEqual from 'fast-deep-equal';
 import { BarChart2, ChevronDown, Eye, Info, Play, Save, Search, Sliders, X } from 'lucide-react';
 import { Link } from 'react-router-dom';

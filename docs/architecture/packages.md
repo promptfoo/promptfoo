@@ -117,6 +117,20 @@ path from the allowlist. Avoid adding paths unless the dependency is
 intentionally browser-safe. Allowlist entries are exact files, not directory
 roots.
 
+## Shared Presentation Helpers
+
+`src/presentation` owns table conversion, redteam metrics, and configuration
+presentation shared by the UI and Node consumers. Import these focused modules
+directly from browser code. The old `src/util/convertEvalResultsToTable`,
+`src/redteam/metrics`, and `src/redteam/sharedFrontend` paths preserve the same
+function exports for existing source consumers.
+
+Presentation helpers remain classified as `legacy-runtime` while their type
+dependencies include the transitional configuration/result contracts. They are
+not exports of the public contracts barrel or a new published package. Table
+conversion retains its existing result-variable mutations and logger behavior;
+Vite substitutes the browser logger, and its hash substitution remains in place.
+
 ## Dependency Ownership Report
 
 The dependency report groups direct runtime imports by the private layer that

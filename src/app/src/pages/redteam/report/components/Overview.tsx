@@ -1,8 +1,8 @@
 import React from 'react';
 
+import { getRiskCategorySeverityMap } from '@promptfoo/presentation/redteamConfig';
 import { type Plugin as PluginType, Severity } from '@promptfoo/redteam/constants';
 import { isValidPolicyObject, makeInlinePolicyId } from '@promptfoo/redteam/plugins/policy/utils';
-import { getRiskCategorySeverityMap } from '@promptfoo/redteam/sharedFrontend';
 import { type TestResultStats } from './FrameworkComplianceUtils';
 import SeverityCard from './SeverityCard';
 import { useReportStore } from './store';

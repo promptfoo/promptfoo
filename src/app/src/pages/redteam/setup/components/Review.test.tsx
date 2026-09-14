@@ -203,7 +203,7 @@ const mockGetUnifiedConfig = vi.hoisted(() =>
     strategies: [],
   }),
 );
-vi.mock('@promptfoo/redteam/sharedFrontend', () => ({
+vi.mock('@promptfoo/presentation/redteamConfig', () => ({
   getUnifiedConfig: mockGetUnifiedConfig,
 }));
 
