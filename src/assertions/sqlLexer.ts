@@ -142,4 +142,3 @@ export function stripIgnoredSqlText(sql: string, databaseType: string, maskValue
 export function redactSqlLiteralsAndComments(sql: string): string {
   return stripIgnoredSqlText(sql, 'TransactSQL', true).replace(/\s+/g, ' ').trim();
 }
-

@@ -423,7 +423,11 @@ describe('trace assertions', () => {
       expect(steps).toHaveLength(2);
       expect(steps.map((step: { sql: unknown }) => step.sql)).toEqual([
         { query: queries[0], authorized: true, rowCount: 1 },
-        { query: queries[1], authorized: false, rowCount: 2 },
+        {
+          query: 'SELECT id FROM records WHERE owner_id = ? OR :literal_1 = :literal_1',
+          authorized: false,
+          rowCount: 2,
+        },
       ]);
       expect(summary).not.toMatch(/PRIVATE_/);
     },
