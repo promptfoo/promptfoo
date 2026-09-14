@@ -859,10 +859,39 @@ async function renderRunEvalPrompt({
     skipRenderVars,
   );
   if (isRedteam) {
-    throwIfTargetPromptExceedsMaxChars(renderedPrompt, testSuite?.redteam?.maxCharsPerMessage, {
-      metadata: test.metadata,
-      vars,
-    });
+    const attachments: { dataUrl: string; text: string }[] = [];
+    const metadata = test.metadata;
+    const pdfInput = metadata?.pdf?.input;
+    if (typeof pdfInput === 'string' && typeof metadata?.originalText === 'string') {
+      for (const [key, value] of Object.entries(vars)) {
+        const input = metadata.pluginConfig?.inputs?.[key];
+        if (
+          typeof value !== 'string' ||
+          (key === pdfInput
+            ? !value.startsWith('data:application/pdf;base64,')
+            : typeof input !== 'object' || !input.type || input.type === 'text')
+        ) {
+          continue;
+        }
+        const materialized = metadata.inputMaterialization?.[key];
+        const text =
+          key === pdfInput
+            ? metadata.originalText
+            : typeof materialized?.bodyText === 'string'
+              ? [materialized.bodyText, materialized.injectedInstruction]
+                  .filter((part) => typeof part === 'string' && part)
+                  .join('\n\n')
+              : (materialized?.injectedInstruction ?? metadata.inputVars?.[key]);
+        if (typeof text === 'string' && !/^data:[^,]+;base64,/.test(text)) {
+          attachments.push({ dataUrl: value, text });
+        }
+      }
+    }
+    throwIfTargetPromptExceedsMaxChars(
+      renderedPrompt,
+      testSuite?.redteam?.maxCharsPerMessage,
+      attachments,
+    );
   }
   const promptConfig = mergeProviderPromptConfig(promptForRender.config, test.options);
   const setup = createRunEvalSetup({ provider, prompt: promptForRender, promptConfig, vars });

@@ -1,7 +1,4 @@
 import cliState from '../../cliState';
-import { getInputType } from '../../types/shared';
-
-import type { AtomicTestCase, Inputs } from '../../types/index';
 
 export const MAX_CHARS_PER_MESSAGE_MODIFIER_KEY = 'maxCharsPerMessage';
 
@@ -146,41 +143,17 @@ export function getGeneratedPromptOverLimit(
 export function throwIfTargetPromptExceedsMaxChars(
   prompt: string,
   limit?: number,
-  test?: Pick<AtomicTestCase, 'metadata' | 'vars'>,
+  attachments: { dataUrl: string; text: string }[] = [],
 ): void {
   if (!getMaxCharsPerMessage(limit)) {
     return;
   }
-  const metadata = test?.metadata;
-  const pdfInput = metadata?.pdf?.input;
-  if (typeof pdfInput === 'string' && typeof metadata?.originalText === 'string') {
-    const inputs = metadata.pluginConfig?.inputs as Inputs | undefined;
-    for (const [key, value] of Object.entries(test?.vars ?? {})) {
-      if (
-        typeof value !== 'string' ||
-        (key !== pdfInput && (!inputs?.[key] || getInputType(inputs[key]) === 'text'))
-      ) {
-        continue;
-      }
-      const attachment = value.match(/^data:([^,]+);base64,(.+)$/s);
-      if (!attachment || (key === pdfInput && attachment[1] !== 'application/pdf')) {
-        continue;
-      }
-      const materialized = metadata.inputMaterialization?.[key];
-      const text =
-        key === pdfInput
-          ? metadata.originalText
-          : typeof materialized?.bodyText === 'string'
-            ? [materialized.bodyText, materialized.injectedInstruction]
-                .filter((part) => typeof part === 'string' && part)
-                .join('\n\n')
-            : (materialized?.injectedInstruction ?? metadata.inputVars?.[key]);
-      if (typeof text !== 'string' || /^data:[^,]+;base64,/.test(text)) {
-        continue;
-      }
+  for (const { dataUrl, text } of attachments) {
+    const attachment = dataUrl.match(/^data:[^,]+;base64,(.+)$/s);
+    if (attachment) {
       // Check readable content separately; only measurement excludes attachment bytes.
       throwIfTargetPromptExceedsMaxChars(text, limit);
-      prompt = prompt.split(value).join('').split(attachment[2]).join('');
+      prompt = prompt.split(dataUrl).join('').split(attachment[1]).join('');
     }
   }
   const violation = getPromptLengthViolation(prompt, limit);
