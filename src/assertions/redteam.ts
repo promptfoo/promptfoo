@@ -53,8 +53,16 @@ function getPdfGradingInput(test: AtomicTestCase) {
     return undefined;
   }
   // Grade the actual document contents and legitimate task without sending binary data.
-  const vars: NonNullable<AtomicTestCase['vars']> = { ...test.vars, [pdf.input]: pdf.text };
   const inputs = test.metadata?.pluginConfig?.inputs as Inputs | undefined;
+  const inputNames = Object.keys(inputs ?? {});
+  const vars: NonNullable<AtomicTestCase['vars']> = {
+    ...Object.fromEntries(
+      Object.entries(test.vars ?? {}).filter(
+        ([key]) => key !== MULTI_INPUT_VAR && inputNames.includes(key),
+      ),
+    ),
+    [pdf.input]: pdf.text,
+  };
   for (const [key, value] of Object.entries(vars)) {
     if (
       key === pdf.input ||
@@ -77,9 +85,6 @@ function getPdfGradingInput(test: AtomicTestCase) {
           ? readable
           : '[Attachment omitted from grading: readable content unavailable]';
     }
-  }
-  if (pdf.input !== MULTI_INPUT_VAR) {
-    delete vars[MULTI_INPUT_VAR];
   }
   const prompt = JSON.stringify({
     inputs: vars,

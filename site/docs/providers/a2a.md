@@ -218,7 +218,9 @@ The provider supports stream events containing `message`, `task`, `statusUpdate`
 
 By default, promptfoo sends a `ROLE_USER` message with a single text part containing `{{prompt}}`.
 
-For audio, image, video, and [PDF redteam strategies](/docs/red-team/strategies/pdf/), the default message includes the generated file and uses `question` as companion text when present. PDF attachments use the strategy's selected input and the `application/pdf` media type.
+For audio, image, and video redteam strategies, the default message includes the generated file and uses `question` as companion text when present.
+
+For the [PDF strategy](/docs/red-team/strategies/pdf/), the default message includes the selected PDF input with the `application/pdf` media type. Companion text comes from the target's declared text inputs: one field is sent as text, and multiple fields are sent as a JSON object preserving their names. Without declared inputs, the provider uses `question` or a rendered text prompt when available. A rendered prompt containing the PDF payload is not repeated as text.
 
 Custom message templates replace this default. Include any required file parts in `config.message`:
 

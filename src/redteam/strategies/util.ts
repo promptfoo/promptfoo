@@ -3,6 +3,21 @@ import { STRATEGY_EXEMPT_PLUGINS } from '../constants';
 
 import type { RedteamStrategyObject } from '../types';
 
+/** Includes PDF variants nested inside layer configurations. */
+export function hasPdfStrategy(strategies: unknown): boolean {
+  if (!Array.isArray(strategies)) {
+    return false;
+  }
+  return strategies.some((strategy) => {
+    const id = typeof strategy === 'string' ? strategy : strategy?.id;
+    if (typeof id !== 'string') {
+      return false;
+    }
+    const baseId = id.split(':')[0];
+    return baseId === 'pdf' || (baseId === 'layer' && hasPdfStrategy(strategy.config?.steps));
+  });
+}
+
 /**
  * Determines whether a strategy should be applied to a test case based on plugin targeting rules.
  *

@@ -51,6 +51,9 @@ describe('handleRedteam', () => {
           appendix: 'data:application/pdf;base64,QVBQRU5ESVg=',
           unknown: 'data:image/jpeg;base64,SU1BR0U=',
           question,
+          apiKey: 'Private provider credential',
+          sessionContext: 'Private session context',
+          tenantId: 'Private tenant identifier',
           [MULTI_INPUT_VAR]: 'obsolete envelope',
         },
         options: {},
@@ -58,7 +61,15 @@ describe('handleRedteam', () => {
         metadata: {
           pluginId: 'policy',
           pluginConfig: {
-            inputs: { question: { type: 'text' as const, description: 'Legitimate question' } },
+            inputs: {
+              document: { type: 'pdf' as const, description: 'Invoice' },
+              photo: { type: 'image' as const, description: 'Receipt' },
+              contract: { type: 'docx' as const, description: 'Terms' },
+              legacyContract: { type: 'docx' as const, description: 'Legacy terms' },
+              appendix: { type: 'pdf' as const, description: 'Appendix' },
+              unknown: { type: 'image' as const, description: 'Unknown image' },
+              question: { type: 'text' as const, description: 'Legitimate question' },
+            },
           },
           goal: 'Falsify the total',
           originalText: 'report $0',
@@ -120,6 +131,10 @@ describe('handleRedteam', () => {
       expect(JSON.parse(prompt).inputs.question).toBe(question);
       expect(prompt).not.toContain('JVBERi0x');
       expect(prompt).not.toContain('obsolete envelope');
+      for (const name of ['apiKey', 'sessionContext', 'tenantId'] as const) {
+        expect(prompt).not.toContain(test.vars[name]);
+        expect(gradingTest.vars).not.toHaveProperty(name);
+      }
       expect(JSON.parse(prompt).cleanPdfTemplate).toBe('Total: $1,250.00');
       expect(grader.mock.calls[0][5]).toContain('attacker-controlled review notes');
       expect(grader.mock.calls[0][7]?.traceData).toBe(trace);
@@ -143,6 +158,52 @@ describe('handleRedteam', () => {
       expect(test.vars[MULTI_INPUT_VAR]).toBe('obsolete envelope');
     },
   );
+
+  it.each([undefined, {}])('grades only the selected PDF when inputs is %j', async (inputs) => {
+    const assertion = { type: 'promptfoo:redteam:policy' as const };
+    const test = {
+      vars: { document: 'data:application/pdf;base64,JVBERi0x', apiKey: 'Private credential' },
+      metadata: {
+        pluginId: 'policy',
+        pluginConfig: { inputs },
+        pdf: { input: 'document', text: 'Invoice total: $1,250' },
+      },
+    };
+    const providerResponse = { output: 'The total is $0.' };
+    const grader = vi.spyOn(RedteamGraderBase.prototype, 'getResult').mockResolvedValue({
+      grade: { pass: false, score: 0, reason: 'Falsified total' },
+      rubric: 'Policy rubric',
+    });
+    await handleRedteam({
+      assertion,
+      baseType: getAssertionBaseType(assertion),
+      test,
+      prompt: test.vars.document,
+      output: providerResponse.output,
+      outputString: providerResponse.output,
+      providerResponse,
+      provider: undefined,
+      renderedValue: undefined,
+      assertionValueContext: {
+        prompt: test.vars.document,
+        vars: test.vars,
+        test,
+        logProbs: [],
+        provider: undefined,
+        providerResponse,
+      },
+      cost: 0,
+      inverse: false,
+      latencyMs: 0,
+      logProbs: [],
+      valueFromScript: undefined,
+    });
+    const [prompt, , gradingTest] = grader.mock.calls[0];
+    expect(JSON.parse(prompt).inputs).toEqual({ document: test.metadata.pdf.text });
+    expect(gradingTest.vars).toEqual({ document: test.metadata.pdf.text });
+    expect(test.vars.apiKey).toBe('Private credential');
+    expect(test.vars.document).toBe('data:application/pdf;base64,JVBERi0x');
+  });
 
   it('returns pass with explanation when iterative strategy has SOME grader errors and re-grading fails', async () => {
     const assertion = {

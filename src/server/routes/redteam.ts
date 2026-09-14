@@ -18,6 +18,7 @@ import {
 import { doRedteamRun } from '../../redteam/shared';
 import { Strategies } from '../../redteam/strategies/index';
 import { type Strategy as StrategyFactory } from '../../redteam/strategies/types';
+import { hasPdfStrategy } from '../../redteam/strategies/util';
 import { type RedteamFileConfig, TestCaseWithPlugin } from '../../types';
 import { RedteamSchemas } from '../../types/api/redteam';
 import { fetchWithProxy } from '../../util/fetch/index';
@@ -57,7 +58,7 @@ redteamRouter.post('/generate-test', async (req: Request, res: Response): Promis
       count,
     } = parsedBody.data;
 
-    if (strategy.id === 'pdf') {
+    if (hasPdfStrategy([strategy])) {
       res.status(400).json({
         error: 'Run a red team eval to test PDF uploads; the example preview only supports text.',
       });

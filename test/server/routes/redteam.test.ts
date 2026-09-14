@@ -62,12 +62,17 @@ describe('Redteam Routes', () => {
       mockedExtractGeneratedPrompt.mockReturnValue('generated test prompt');
     });
 
-    it('rejects a PDF preview before generation', async () => {
+    it.each([
+      { id: 'pdf', config: {} },
+      { id: 'layer', config: { steps: ['pdf'] } },
+      { id: 'layer', config: { steps: ['base64', { id: 'pdf', config: { mode: 'scanned' } }] } },
+      { id: 'layer', config: { steps: [{ id: 'layer', config: { steps: ['pdf'] } }] } },
+    ])('rejects a PDF preview before generation: %j', async (strategy) => {
       const response = await request(app)
         .post('/api/redteam/generate-test')
         .send({
           plugin: { id: 'policy', config: {} },
-          strategy: { id: 'pdf', config: {} },
+          strategy,
           config: { applicationDefinition: { purpose: 'Invoice review' } },
         });
       expect(response.status).toBe(400);

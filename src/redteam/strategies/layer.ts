@@ -2,7 +2,7 @@ import logger from '../../logger';
 import { remoteGenerationContextPayload } from '../remoteGenerationContext';
 import { getAttackProviderFullId, isAttackProvider } from '../shared/attackProviders';
 import { withPersistableGenerationProvider } from './types';
-import { pluginMatchesStrategyTargets } from './util';
+import { hasPdfStrategy, pluginMatchesStrategyTargets } from './util';
 
 import type { TestCase, TestCaseWithPlugin } from '../../types/index';
 import type { LayerConfig } from '../shared/runtimeTransform';
@@ -59,8 +59,7 @@ export async function addLayerTestCases(
     return [];
   }
 
-  const stepIds = steps.map((step) => (typeof step === 'string' ? step : step.id));
-  if (stepIds.some((id) => id.split(':')[0] === 'pdf')) {
+  if (hasPdfStrategy(steps)) {
     throw new Error('PDF is a standalone strategy and cannot be used inside a layer');
   }
 

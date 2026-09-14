@@ -25,6 +25,8 @@ import { A2AProvider } from '../../../src/providers/a2a';
 import { fetchWithProxy, fetchWithTimeout } from '../../../src/util/fetch/index';
 import { sleep } from '../../../src/util/time';
 
+import type { Inputs } from '../../../src/types/index';
+
 function jsonResponse(body: unknown, init?: ResponseInit): Response {
   return new Response(JSON.stringify(body), {
     headers: { 'Content-Type': 'application/a2a+json' },
@@ -301,7 +303,7 @@ describe('A2AProvider', () => {
 
   it.each(['1.0', '0.3.0'])('delivers PDF inputs in default A2A %s messages', async (version) => {
     const raw = Buffer.from('%PDF-1.7\nPDF attachment bytes').toString('base64');
-    for (const input of ['document', 'invoiceAttachment', 'prompt']) {
+    for (const input of ['document', 'invoiceAttachment', 'prompt', 'question']) {
       vi.mocked(fetchWithTimeout).mockResolvedValueOnce(
         jsonResponse({ message: { role: 'ROLE_AGENT', parts: [{ text: 'pdf ok' }] } }),
       );
@@ -316,8 +318,8 @@ describe('A2AProvider', () => {
         },
         vars: {
           document: 'Wrong fallback document',
-          [input]: `data:application/pdf;base64,${raw}`,
           question: 'Read the invoice.',
+          [input]: `data:application/pdf;base64,${raw}`,
         },
       });
       expect(result.output).toBe('pdf ok');
@@ -343,6 +345,67 @@ describe('A2AProvider', () => {
       expect(JSON.stringify(body.message)).not.toContain('Hidden PDF instructions');
     }
   });
+
+  it.each(['1.0', '0.3.0'])(
+    'preserves declared PDF companion inputs in A2A %s without including auxiliary variables',
+    async (version) => {
+      const raw = Buffer.from('%PDF-1.7\nPDF attachment bytes').toString('base64');
+      const companionCases: Record<string, string>[] = [
+        { request: 'Read the invoice.' },
+        { request: 'Read the invoice.', locale: 'en-US' },
+        {},
+      ];
+      for (const companions of companionCases) {
+        vi.mocked(fetchWithTimeout).mockResolvedValueOnce(
+          jsonResponse({ message: { role: 'ROLE_AGENT', parts: [{ text: 'pdf ok' }] } }),
+        );
+        const inputs: Inputs = {
+          invoice: { type: 'pdf', description: 'An invoice' },
+          photo: { type: 'image', description: 'A receipt' },
+          ...Object.fromEntries(Object.keys(companions).map((key) => [key, 'A text input'])),
+        };
+        const vars = {
+          invoice: `data:application/pdf;base64,${raw}`,
+          photo: 'data:image/png;base64,UE5H',
+          ...companions,
+          question: 'Undeclared question',
+          apiKey: 'Private provider credential',
+          sessionContext: 'Private session context',
+        };
+        const prompt = JSON.stringify({ invoice: vars.invoice, ...companions });
+        const result = await provider({ protocolVersion: version }).callApi(prompt, {
+          prompt: { raw: prompt, label: 'auto-generated input prompt' },
+          test: {
+            metadata: {
+              strategyId: 'pdf',
+              pdf: { input: 'invoice' },
+              pluginConfig: { inputs },
+              originalText: 'Hidden PDF instructions',
+            },
+          },
+          vars,
+        });
+        expect(result.output).toBe('pdf ok');
+        const body = JSON.parse(vi.mocked(fetchWithTimeout).mock.lastCall?.[1]?.body as string);
+        const textParts = body.message.parts.filter((part: { text?: string }) => part.text);
+        const values = Object.values(companions);
+        expect(textParts.map((part: { text: string }) => part.text)).toEqual(
+          values.length === 0 ? [] : [values.length === 1 ? values[0] : JSON.stringify(companions)],
+        );
+        const filePart = body.message.parts.at(-1);
+        expect(version === '0.3.0' ? filePart.file.fileWithBytes : filePart.raw).toBe(raw);
+        for (const omitted of [
+          vars.question,
+          vars.apiKey,
+          vars.sessionContext,
+          vars.photo,
+          'Hidden PDF instructions',
+        ]) {
+          expect(JSON.stringify(body.message)).not.toContain(omitted);
+        }
+      }
+    },
+  );
 
   it.each(['image', 'pdf'])(
     'keeps explicit messages unchanged for the %s strategy',

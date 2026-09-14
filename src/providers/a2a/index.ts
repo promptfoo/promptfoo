@@ -1,6 +1,7 @@
 import crypto from 'node:crypto';
 
 import logger from '../../logger';
+import { normalizeInputDefinition } from '../../types/shared';
 import { fetchWithTimeout } from '../../util/fetch/index';
 import { safeJsonStringify } from '../../util/json';
 import { getNunjucksEngine } from '../../util/templates';
@@ -27,6 +28,7 @@ import type {
   ApiProvider,
   CallApiContextParams,
   CallApiOptionsParams,
+  Inputs,
   ProviderOptions,
   ProviderResponse,
 } from '../../types/index';
@@ -325,10 +327,26 @@ function getDefaultTextPart(
   protocolVersion: string,
   contextVars: Record<string, unknown>,
   mediaValue?: string,
+  context?: CallApiContextParams,
 ): A2APart | undefined {
-  const text =
-    getContextVar(contextVars, 'question') ??
-    (shouldUsePromptAsText(prompt, mediaValue) ? prompt : undefined);
+  const strategyId = getMediaStrategyId(context);
+  const mediaVarName = strategyId ? getMediaVarName(strategyId, contextVars, context) : undefined;
+  const inputs = context?.test?.metadata?.pluginConfig?.inputs as Inputs | undefined;
+  let text = shouldUsePromptAsText(prompt, mediaValue) ? prompt : undefined;
+  if (strategyId === 'pdf' && inputs) {
+    const companions = Object.fromEntries(
+      Object.entries(inputs).flatMap(([key, definition]) => {
+        const value = getContextVar(contextVars, key);
+        return key !== mediaVarName && normalizeInputDefinition(definition).type === 'text' && value
+          ? [[key, value]]
+          : [];
+      }),
+    );
+    const values = Object.values(companions);
+    text = values.length > 1 ? JSON.stringify(companions) : (values[0] ?? text);
+  } else if (mediaVarName !== 'question') {
+    text = getContextVar(contextVars, 'question') ?? text;
+  }
   if (!text) {
     return undefined;
   }
@@ -390,7 +408,7 @@ function getDefaultMessage(
             typeof mediaPart.file.fileWithBytes === 'string'
           ? mediaPart.file.fileWithBytes
           : undefined;
-    const textPart = getDefaultTextPart(prompt, protocolVersion, contextVars, mediaValue);
+    const textPart = getDefaultTextPart(prompt, protocolVersion, contextVars, mediaValue, context);
     return {
       role: usesLegacyMessageShape(protocolVersion) ? 'user' : 'ROLE_USER',
       parts: textPart ? [textPart, mediaPart] : [mediaPart],

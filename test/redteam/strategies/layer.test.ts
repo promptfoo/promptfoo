@@ -17,6 +17,8 @@ describe('addLayerTestCases', () => {
     ['pdf:scanned'],
     ['base64', { id: 'pdf:scanned' }],
     ['jailbreak:hydra', 'pdf:scanned'],
+    [{ id: 'layer', config: { steps: ['pdf'] } }],
+    ['jailbreak:hydra', { id: 'layer', config: { steps: ['base64', { id: 'pdf' }] } }],
   ])('rejects unsupported PDF composition: %j', async (...steps) => {
     await expect(addLayerTestCases([], 'prompt', { steps }, [], vi.fn())).rejects.toThrow(
       'PDF is a standalone strategy',

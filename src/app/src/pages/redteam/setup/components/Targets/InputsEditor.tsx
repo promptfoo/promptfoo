@@ -168,10 +168,15 @@ export default function InputsEditor({
     }
     const currentInput = inputs[name];
     const normalizedInput = currentInput ? normalizeInputDefinition(currentInput) : undefined;
+    let config = normalizedInput?.config;
+    if (type !== 'pdf' && config?.template) {
+      const { template: _, ...remainingConfig } = config;
+      config = Object.keys(remainingConfig).length ? remainingConfig : undefined;
+    }
     onChange({
       ...inputs,
       [name]: toStoredInputDefinition({
-        config: normalizedInput?.config,
+        config,
         name,
         description: normalizedInput?.description ?? '',
         type,
