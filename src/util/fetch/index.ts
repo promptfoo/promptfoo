@@ -12,7 +12,7 @@ import { getRequestTimeoutMs } from '../../providers/shared';
 import { parseRateLimitHeaders, parseRetryAfter } from '../../scheduler/headerParser';
 import invariant from '../../util/invariant';
 import { sleep } from '../../util/time';
-import { sanitizeUrl } from '../sanitizer';
+import { sanitizeUrl, sanitizeUrlForLogging } from '../sanitizer';
 import {
   extractRateLimitErrorCode,
   HttpRateLimitError,
@@ -495,7 +495,7 @@ async function peekRateLimitBody(
  * in that path we consult `Content-Length` first to skip materializing
  * very large bodies entirely.
  */
-async function readBoundedText(response: Response, maxBytes: number): Promise<string> {
+export async function readBoundedText(response: Response, maxBytes: number): Promise<string> {
   if (!response.body) {
     const contentLength = Number.parseInt(response.headers?.get?.('content-length') ?? '', 10);
     if (Number.isFinite(contentLength) && contentLength > maxBytes) {
@@ -600,7 +600,7 @@ export type { FetchOptions } from './types';
  */
 function urlForLog(url: RequestInfo): string {
   const raw = typeof url === 'string' ? url : url.url;
-  return sanitizeUrl(raw);
+  return sanitizeUrlForLogging(raw);
 }
 
 async function handleRateLimitedResponse(
@@ -651,14 +651,16 @@ async function handleRateLimitedResponse(
   await handleRateLimit(response, signal);
 }
 
-function formatFetchErrorMessage(error: unknown): string {
+function formatFetchErrorMessage(error: unknown, url: RequestInfo): string {
   if (!(error instanceof Error)) {
     return String(error);
   }
   const typedError = error as SystemError;
-  let message = `${typedError.name}: ${typedError.message}`;
+  const rawUrl = typeof url === 'string' ? url : url.url;
+  const redactUrl = (value: string) => value.split(rawUrl).join(urlForLog(url));
+  let message = `${typedError.name}: ${redactUrl(typedError.message)}`;
   if (typedError.cause) {
-    message += ` (Cause: ${typedError.cause})`;
+    message += ` (Cause: ${redactUrl(String(typedError.cause))})`;
   }
   if (typedError.code) {
     message += ` (Code: ${typedError.code})`;
@@ -715,7 +717,7 @@ export async function fetchWithRetries(
         throw error;
       }
 
-      const errorMessage = formatFetchErrorMessage(error);
+      const errorMessage = formatFetchErrorMessage(error, url);
 
       logger.debug(
         `Request to ${urlForLog(url)} failed (attempt #${i + 1}), retrying: ${errorMessage}`,
