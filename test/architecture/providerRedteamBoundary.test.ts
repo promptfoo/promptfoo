@@ -12,7 +12,11 @@ const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../
 // is specifically that the *dispatch* path stays free of static redteam
 // imports, so it is enumerated rather than globbed.
 const providerLoadingFiles = [
+  'src/provider-plugin.ts',
+  'src/providers/builtinProviderPlugins.ts',
   'src/providers/index.ts',
+  'src/providers/pluginRegistry.ts',
+  'src/providers/plugins.ts',
   'src/providers/registry.ts',
   'src/providers/registryTypes.ts',
 ];

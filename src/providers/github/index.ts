@@ -1,4 +1,5 @@
-import type { LoadApiProviderContext, ProviderOptions } from '../../types/index';
+import type { ProviderOptions } from '../../types/providers';
+import type { ProviderLoadContext } from '../registryTypes';
 
 export const GITHUB_MODELS_RETIREMENT_MESSAGE =
   'GitHub Models was retired on July 30, 2026, including its inference API. ' +
@@ -8,7 +9,7 @@ export const GITHUB_MODELS_RETIREMENT_MESSAGE =
 export function createGitHubProvider(
   _providerPath: string,
   _providerOptions: ProviderOptions,
-  _context: LoadApiProviderContext,
+  _context: ProviderLoadContext,
 ): never {
   throw new Error(GITHUB_MODELS_RETIREMENT_MESSAGE);
 }

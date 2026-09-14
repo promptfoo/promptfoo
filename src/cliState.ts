@@ -2,7 +2,7 @@ import { AsyncLocalStorage } from 'node:async_hooks';
 
 import { setEnvOverridesProvider } from './envOverrides';
 
-import type { TestSuite, UnifiedConfig } from './types/index';
+import type { ApiProvider, TestSuite, UnifiedConfig } from './types/index';
 
 export interface ActiveOtlpReceiver {
   host: string;
@@ -71,8 +71,20 @@ const maxConcurrencyContext = new AsyncLocalStorage<{ maxConcurrency: number | u
 const requestTracingConfigContext = new AsyncLocalStorage<{
   tracingConfig: NonNullable<TestSuite['tracing']>;
 }>();
+const gradingProviderTracker = new AsyncLocalStorage<(provider: ApiProvider) => void>();
 let globalMaxConcurrency: number | undefined;
 let activeOtlpReceiver: ActiveOtlpReceiver | undefined;
+
+export function withGradingProviderTracker<T>(
+  track: (provider: ApiProvider) => void,
+  fn: () => Promise<T>,
+): Promise<T> {
+  return gradingProviderTracker.run(track, fn);
+}
+
+export function trackGradingProvider(provider: ApiProvider): void {
+  gradingProviderTracker.getStore()?.(provider);
+}
 
 const state: CliState = {
   get maxConcurrency() {

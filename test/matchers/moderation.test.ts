@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { withGradingProviderTracker } from '../../src/cliState';
 import { matchesModeration } from '../../src/matchers/moderation';
 import { OpenAiModerationProvider } from '../../src/providers/openai/moderation';
 import { ReplicateModerationProvider } from '../../src/providers/replicate';
@@ -162,6 +163,20 @@ describe('matchesModeration', () => {
     });
 
     expect(replicateSpy).toHaveBeenCalledWith('test prompt', 'test response');
+  });
+
+  it('tracks a constructed Replicate fallback', async () => {
+    setTestEnv({ REPLICATE_API_KEY: 'test-key' });
+    vi.spyOn(ReplicateModerationProvider.prototype, 'callModerationApi').mockResolvedValue(
+      mockModerationResponse,
+    );
+    const track = vi.fn();
+
+    await withGradingProviderTracker(track, () =>
+      matchesModeration({ userPrompt: 'test prompt', assistantResponse: 'test response' }),
+    );
+
+    expect(track).toHaveBeenCalledWith(expect.any(ReplicateModerationProvider));
   });
 
   it('should respect provider override in grading config', async () => {

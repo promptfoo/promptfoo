@@ -72,7 +72,7 @@ describe('Provider Registry', () => {
         id: 'realtime-fixture',
         config: { apiKey: 'fixture-key', apiBaseUrl: 'http://localhost:1234/v1' },
       },
-      { basePath: '.', options: {} },
+      { basePath: '.' },
     );
     expect(provider.constructor.name).toBe('OpenAiRealtimeProvider');
     expect(provider).toHaveProperty('modelName', 'gpt-4o-mini-realtime-preview-2024-12-17');
@@ -92,7 +92,7 @@ describe('Provider Registry', () => {
     const provider = await factory!.create(
       providerPath,
       { config: { task, apiBaseUrl: 'https://tenant.example/gateway' } },
-      { basePath: '.', options: {}, env: { TRUEFOUNDRY_API_KEY: 'scoped-test-key' } },
+      { basePath: '.', env: { TRUEFOUNDRY_API_KEY: 'scoped-test-key' } },
     );
     expect(provider.constructor.name).toBe(className);
     expect(provider).toHaveProperty('modelName', modelName);
@@ -104,7 +104,7 @@ describe('Provider Registry', () => {
     const providerPath = 'truefoundry:tenant/model';
     const factory = providerMap.find((entry) => entry.test(providerPath));
     await expect(
-      factory!.create(providerPath, { config: { task: 'image' } }, { basePath: '.', options: {} }),
+      factory!.create(providerPath, { config: { task: 'image' } }, { basePath: '.' }),
     ).rejects.toThrow('TrueFoundry config.task must be "chat" or "embedding"');
   });
 
@@ -120,7 +120,7 @@ describe('Provider Registry', () => {
     const provider = await factory!.create(
       providerPath,
       { id: 'custom-local-id', env: { LOCALAI_BASE_URL: 'http://localhost:1234/v1' } },
-      { basePath: '.', options: {} },
+      { basePath: '.' },
     );
     expect(provider.constructor.name).toBe(className);
     expect(provider).toHaveProperty('modelName', 'served-model:q4:latest');
@@ -1348,10 +1348,7 @@ describe('Provider Registry', () => {
 
       // Use options without id to verify the provider generates its own id
       const groqOptions = { ...mockProviderOptions, id: undefined };
-      const provider = await factory!.create('groq:openai/gpt-oss-120b', groqOptions, {
-        ...mockContext,
-        options: groqOptions,
-      });
+      const provider = await factory!.create('groq:openai/gpt-oss-120b', groqOptions, mockContext);
       expect(provider).toBeDefined();
       expect(provider.id()).toBe('groq:openai/gpt-oss-120b');
 
@@ -1370,10 +1367,7 @@ describe('Provider Registry', () => {
         id: undefined,
         config: { gatewayUrl: 'http://localhost:5000' },
       };
-      const provider = await factory!.create('mlflow-gateway:my-endpoint', options, {
-        ...mockContext,
-        options,
-      });
+      const provider = await factory!.create('mlflow-gateway:my-endpoint', options, mockContext);
       expect(provider).toBeDefined();
       expect(provider.id()).toBe('mlflow-gateway:my-endpoint');
 
@@ -1393,10 +1387,11 @@ describe('Provider Registry', () => {
 
       // Use options without id to verify the provider generates its own id
       const groqOptions = { ...mockProviderOptions, id: undefined };
-      const provider = await factory!.create('groq:responses:openai/gpt-oss-120b', groqOptions, {
-        ...mockContext,
-        options: groqOptions,
-      });
+      const provider = await factory!.create(
+        'groq:responses:openai/gpt-oss-120b',
+        groqOptions,
+        mockContext,
+      );
       expect(provider).toBeDefined();
       expect(provider.id()).toBe('groq:responses:openai/gpt-oss-120b');
 
@@ -1483,10 +1478,7 @@ describe('Provider Registry', () => {
       expect(factory).toBeDefined();
 
       const orcaOptions = { ...mockProviderOptions, id: undefined };
-      const provider = await factory!.create('orcarouter:openai/gpt-4o', orcaOptions, {
-        ...mockContext,
-        options: orcaOptions,
-      });
+      const provider = await factory!.create('orcarouter:openai/gpt-4o', orcaOptions, mockContext);
       expect(provider.id()).toBe('orcarouter:openai/gpt-4o');
 
       const autoProvider = await factory!.create(
@@ -1501,13 +1493,13 @@ describe('Provider Registry', () => {
   // Kept at the very end of the file because it uses vi.doMock + resetModules
   // to simulate a broken redteam family dynamic import. Running last avoids
   // polluting earlier tests that share the original module graph.
-  describe('getProviderFactories family load error wrapping', () => {
+  describe('getProviderFactories plugin load error wrapping', () => {
     afterEach(() => {
       vi.doUnmock('../../src/redteam/providers/registry');
       vi.resetModules();
     });
 
-    it('wraps family factories() rejections with the requested provider path and preserves cause', async () => {
+    it('wraps plugin load failures with the requested provider path and preserves cause', async () => {
       // vi.doMock factory throws are caught by vitest and rewrapped with its
       // own diagnostic message, which would lose the cause identity the
       // wrapper is trying to preserve. Defining `redteamProviderFactories`
@@ -1534,7 +1526,7 @@ describe('Provider Registry', () => {
       }
       expect(caught).toBeInstanceOf(Error);
       expect((caught as Error).message).toContain(
-        "Failed to load provider family for 'promptfoo:redteam:crescendo'",
+        "Failed to load provider plugin '@promptfoo/provider-redteam' for 'promptfoo:redteam:crescendo'",
       );
       expect((caught as Error).message).toContain('simulated registry load failure');
       expect((caught as Error).cause).toBe(cause);

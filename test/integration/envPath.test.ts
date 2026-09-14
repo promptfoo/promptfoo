@@ -13,6 +13,7 @@ import {
   vi,
 } from 'vitest';
 import { doEval } from '../../src/node/doEval';
+import { loadApiProviders } from '../../src/providers';
 import { setupEnv } from '../../src/util/index';
 
 vi.mock('../../src/cache');
@@ -78,6 +79,7 @@ describe('Integration: commandLineOptions.envPath', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
+    vi.mocked(loadApiProviders).mockResolvedValue([]);
   });
 
   it('should load environment from config-specified envPath', async () => {

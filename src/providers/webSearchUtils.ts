@@ -243,6 +243,7 @@ export async function loadWebSearchProvider(
       logger.debug(
         `Loaded provider ${getProviderId(provider) ?? 'unknown'} does not support web search`,
       );
+      await provider.cleanup?.();
     }
   }
 

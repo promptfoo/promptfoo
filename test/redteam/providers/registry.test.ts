@@ -67,6 +67,10 @@ describe('redteamProviderFactories', () => {
       path: 'promptfoo:redteam:mischievous-user',
       expectedId: 'promptfoo:redteam:mischievous-user',
     },
+    {
+      path: 'promptfoo:redteam:voice-crescendo',
+      expectedId: 'promptfoo:redteam:voice-crescendo',
+    },
   ];
 
   // Route every case through getProviderFactories so a regression in

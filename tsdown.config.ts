@@ -102,6 +102,7 @@ export default defineConfig([
     entry: {
       contracts: 'src/contracts.ts',
       index: 'src/index.ts',
+      'provider-plugin': 'src/provider-plugin.ts',
     },
     format: ['esm'],
     treeshake: true,
@@ -119,6 +120,7 @@ export default defineConfig([
     entry: {
       contracts: 'src/contracts.ts',
       index: 'src/index.ts',
+      'provider-plugin': 'src/provider-plugin.ts',
     },
     format: ['cjs'],
     fixedExtension: true, // Use .cjs extension for CJS output

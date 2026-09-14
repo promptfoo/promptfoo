@@ -85,6 +85,7 @@ const MockOpenAiChatCompletionProvider = vi.hoisted(() => {
 vi.mock('../../../src/util/time');
 vi.mock('../../../src/cliState', () => ({
   __esModule: true,
+  trackGradingProvider: vi.fn(),
   default: {
     config: {
       redteam: {
