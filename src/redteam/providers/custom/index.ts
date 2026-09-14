@@ -610,6 +610,8 @@ export class CustomProvider implements ApiProvider {
         // and a later passing grade replaced it. A grader error is not a verdict and keeps the
         // handling below.
         if (graderPassed === false && storedGraderResult?.metadata?.graderError !== true) {
+          // recordSuccessfulAttack ignores a turn it has already recorded, so with
+          // continueAfterSuccess the check after the evaluator doesn't record this turn twice.
           this.recordSuccessfulAttack(roundNum, attackPrompt, lastResponse.output);
           if (!this.config.continueAfterSuccess) {
             exitReason = 'Grader failed';
