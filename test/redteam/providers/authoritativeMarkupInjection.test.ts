@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { isResponseHeadersObserverErrorResponse } from '../../../src/scheduler/responseHeadersObserver';
 import {
   accumulateResponseTokenUsage,
   createEmptyTokenUsage,
@@ -8,6 +9,7 @@ import {
   createProviderResponse,
   type MockApiProvider,
 } from '../../factories/provider';
+import { createSelectedObserverErrorResponse } from '../../util/selectedObserverError';
 
 import type { ApiProvider, CallApiContextParams } from '../../../src/types/index';
 
@@ -117,6 +119,38 @@ describe('AuthoritativeMarkupInjectionProvider', () => {
       options,
     );
   });
+
+  it.each([true, false])(
+    'retains only selected observer error provenance: marked=%s',
+    async (marked) => {
+      const selected = {
+        error: 'metrics rate limit exceeded',
+        tokenUsage: { prompt: 5, completion: 4, total: 9, numRequests: 1 },
+        metadata: { diagnostic: 'selected target error' },
+      };
+      mockTargetProvider.callApi.mockResolvedValueOnce(
+        marked ? createSelectedObserverErrorResponse(selected) : selected,
+      );
+      mockFetchWithProxy.mockResolvedValueOnce({
+        json: async () => ({
+          message: { role: 'user', content: 'Hello' },
+          tokenUsage: { prompt: 2, completion: 1, total: 3, numRequests: 1 },
+        }),
+      });
+      const provider = new AuthoritativeMarkupInjectionProvider({ injectVar: 'input' });
+      const response = await provider.callApi('Hello', createMockContext(mockTargetProvider));
+      expect(response.error).toBe(selected.error);
+      expect(response.metadata).toEqual(selected.metadata);
+      expect(isResponseHeadersObserverErrorResponse(response)).toBe(marked);
+      expect(response.tokenUsage).toMatchObject({
+        total: 9,
+        numRequests: 1,
+        attacker: { total: 3, numRequests: 1 },
+      });
+      expect(mockTargetProvider.callApi).toHaveBeenCalledOnce();
+      expect(mockFetchWithProxy).toHaveBeenCalledOnce();
+    },
+  );
 
   describe('Token Usage Tracking', () => {
     it('keeps remote attack generation separate from target tokens and probes', async () => {

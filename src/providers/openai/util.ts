@@ -1080,6 +1080,24 @@ export function validateFunctionCall(
   }
 }
 
+/** A completed provider error without a competing nonempty choice. */
+export function isOpenAiErrorOnlyResponse(data: unknown): data is { error: { message: string } } {
+  return (
+    data !== null &&
+    typeof data === 'object' &&
+    !Array.isArray(data) &&
+    'error' in data &&
+    data.error !== null &&
+    typeof data.error === 'object' &&
+    !Array.isArray(data.error) &&
+    'message' in data.error &&
+    typeof data.error.message === 'string' &&
+    (!('choices' in data) ||
+      data.choices == null ||
+      (Array.isArray(data.choices) && data.choices.length === 0))
+  );
+}
+
 export function formatOpenAiError(data: {
   error: { message: string; type?: string; code?: string };
 }): string {

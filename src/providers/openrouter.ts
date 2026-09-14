@@ -1,10 +1,24 @@
 import { fetchWithCache } from '../cache';
 import logger from '../logger';
+import {
+  isResponseHeadersObserverError,
+  preserveResponseHeadersObserverError,
+} from '../scheduler/responseHeadersObserver';
 import { type GenAISpanContext, type GenAISpanResult, withGenAISpan } from '../tracing/genaiTracer';
 import { normalizeFinishReason } from '../util/finishReason';
 import { OpenAiChatCompletionProvider } from './openai/chat';
-import { appendOpenAiApiPath, formatOpenAiError, getTokenUsage } from './openai/util';
-import { getRequestTimeoutMs } from './shared';
+import {
+  appendOpenAiApiPath,
+  formatOpenAiError,
+  getTokenUsage,
+  isOpenAiErrorOnlyResponse,
+} from './openai/util';
+import {
+  getRequestTimeoutMs,
+  isCallerAbortError,
+  throwIfAborted,
+  waitForPromiseWithAbort,
+} from './shared';
 import type OpenAI from 'openai';
 
 import type {
@@ -157,6 +171,7 @@ export class OpenRouterProvider extends OpenAiChatCompletionProvider {
     context?: CallApiContextParams,
     callApiOptions?: CallApiOptionsParams,
   ): Promise<ProviderResponse> {
+    throwIfAborted(callApiOptions?.abortSignal);
     // Set up tracing context
     const spanContext: GenAISpanContext = {
       system: 'openrouter',
@@ -201,8 +216,13 @@ export class OpenRouterProvider extends OpenAiChatCompletionProvider {
     context?: CallApiContextParams,
     callApiOptions?: CallApiOptionsParams,
   ): Promise<ProviderResponse> {
+    throwIfAborted(callApiOptions?.abortSignal);
     // Get the request body and config
-    const { body, config } = await this.getOpenAiBody(prompt, context, callApiOptions);
+    const { body, config } = await waitForPromiseWithAbort(
+      this.getOpenAiBody(prompt, context, callApiOptions),
+      callApiOptions?.abortSignal,
+    );
+    throwIfAborted(callApiOptions?.abortSignal);
 
     // Make the API call directly
     logger.debug(`Calling OpenRouter API: model=${this.modelName}`);
@@ -243,22 +263,43 @@ export class OpenRouterProvider extends OpenAiChatCompletionProvider {
               ...config.headers,
             },
             body: JSON.stringify(body),
+            ...(callApiOptions?.abortSignal ? { signal: callApiOptions.abortSignal } : {}),
           },
           getRequestTimeoutMs(),
           'json',
           context?.bustCache ?? context?.debug,
+          undefined,
+          (response) => {
+            if (response.status >= 200 && response.status < 300 && response.headers) {
+              callApiOptions?.onResponseHeaders?.(response.headers);
+            }
+          },
+          callApiOptions?.onResponseHeaders
+            ? (backoff) => callApiOptions.onResponseHeaders?.(backoff.headers, backoff)
+            : undefined,
         ));
-
       if (status < 200 || status >= 300) {
         return {
           error: `API error: ${status} ${statusText}\n${typeof data === 'string' ? data : JSON.stringify(data)}`,
         };
       }
+      // Cache coalescing can complete this diagnostic before a shared caller aborts.
+      // Usable choices and all other processing retain their cancellation checks.
+      if (isOpenAiErrorOnlyResponse(data)) {
+        return { error: formatOpenAiError(data) };
+      }
+      throwIfAborted(callApiOptions?.abortSignal);
     } catch (err) {
+      if (
+        !isResponseHeadersObserverError(callApiOptions?.onResponseHeaders, err) &&
+        isCallerAbortError(err, callApiOptions?.abortSignal)
+      ) {
+        throwIfAborted(callApiOptions?.abortSignal);
+      }
       logger.error(`API call error: ${String(err)}`);
-      return {
+      return preserveResponseHeadersObserverError(callApiOptions?.onResponseHeaders, err, {
         error: `API call error: ${String(err)}`,
-      };
+      });
     }
 
     if (data.error) {

@@ -2,15 +2,24 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import RedteamIterativeProvider, {
   runRedteamConversation,
 } from '../../../src/redteam/providers/iterative';
+import { wrapProviderWithRateLimiting } from '../../../src/scheduler/providerWrapper';
+import { RateLimitRegistry } from '../../../src/scheduler/rateLimitRegistry';
+import { isResponseHeadersObserverErrorResponse } from '../../../src/scheduler/responseHeadersObserver';
+import { isProviderResponseRateLimited } from '../../../src/scheduler/types';
 import * as traceContext from '../../../src/tracing/traceContext';
 import {
   createMockProvider,
   createProviderResponse,
   type MockApiProvider,
 } from '../../factories/provider';
+import { createSelectedObserverErrorResponse } from '../../util/selectedObserverError';
+import {
+  createPredispatchAbortTarget,
+  createSelectedToolErrorTarget,
+} from '../../util/selectedToolErrorTarget';
 import { mockProcessEnv } from '../../util/utils';
 
-import type { ApiProvider, AtomicTestCase } from '../../../src/types/index';
+import type { ApiProvider, AtomicTestCase, ProviderResponse } from '../../../src/types/index';
 
 const mockGetProvider = vi.hoisted(() => vi.fn());
 const mockGetTargetResponse = vi.hoisted(() => vi.fn());
@@ -22,7 +31,8 @@ vi.mock('../../../src/globalConfig/accounts', async (importOriginal) => ({
   isLoggedIntoCloud: vi.fn().mockReturnValue(true),
 }));
 
-vi.mock('../../../src/logger', () => ({
+vi.mock('../../../src/logger', async (importOriginal) => ({
+  ...(await importOriginal()),
   default: {
     debug: vi.fn(),
     info: vi.fn(),
@@ -147,7 +157,292 @@ describe('RedteamIterativeProvider', () => {
     });
   });
 
+  it.each(['AbortException', 'AbortError', 'string'] as const)(
+    'preserves caller reason at target entry after render: %s',
+    async (kind) => {
+      const reason =
+        kind === 'string'
+          ? 'caller stopped at target render'
+          : Object.freeze(
+              Object.assign(new Error('caller stopped at target render'), { name: kind }),
+            );
+      const fixture = createPredispatchAbortTarget(reason, false);
+      const shared = await vi.importActual<typeof import('../../../src/redteam/providers/shared')>(
+        '../../../src/redteam/providers/shared',
+      );
+      mockGetTargetResponse.mockImplementation(shared.getTargetResponse);
+      mockRedteamProvider.callApi.mockImplementation(async (_prompt, _context, options) => {
+        options?.abortSignal?.throwIfAborted();
+        fixture.events.push('attacker response');
+        return {
+          output: JSON.stringify({ improvement: 'Use a greeting', prompt: 'Say hello' }),
+          tokenUsage: { total: 3, prompt: 2, completion: 1, numRequests: 1 },
+        };
+      });
+      const registry = new RateLimitRegistry({ maxConcurrency: 1 });
+      const strategy: ApiProvider = {
+        id: () => 'fixture-real-iterative-render',
+        callApi: (_prompt, _context, options) =>
+          runRedteamConversation({
+            prompt: { raw: '{{goal | stopBeforeTarget}}', label: 'greeting' },
+            filters: {
+              stopBeforeTarget: (value: string) => {
+                fixture.events.push('target render');
+                fixture.cancel();
+                return value;
+              },
+            },
+            vars: { goal: 'Say hello' },
+            redteamProvider: mockRedteamProvider,
+            gradingProvider: mockRedteamProvider,
+            targetProvider: fixture.target,
+            injectVar: 'goal',
+            numIterations: 2,
+            options,
+            excludeTargetOutputFromAgenticAttackGeneration: false,
+          }),
+      };
+      try {
+        const wrapped = wrapProviderWithRateLimiting(strategy, registry);
+        const outcome = await fixture.run(() =>
+          wrapped.callApi('', undefined, {
+            abortSignal: fixture.controller.signal,
+          }),
+        );
+        await fixture.expectRejected(outcome);
+        expect(fixture.events).toEqual([
+          'attacker response',
+          'target render',
+          'caller abort',
+          'target entered',
+        ]);
+        expect(mockRedteamProvider.callApi).toHaveBeenCalledOnce();
+        expect(Object.values(registry.getMetrics())).toEqual([
+          expect.objectContaining({
+            totalRequests: 1,
+            completedRequests: 0,
+            failedRequests: 1,
+            activeRequests: 0,
+            queueDepth: 0,
+            retriedRequests: 0,
+            rateLimitHits: 0,
+          }),
+        ]);
+      } finally {
+        registry.dispose();
+        await fixture.cleanup();
+        mockGetTargetResponse.mockReset();
+      }
+    },
+  );
+
+  it.each(['pending', 'success'] as const)(
+    'keeps %s tool cancellation rejected instead of returning a stale target',
+    async (mode) => {
+      const fixture = createSelectedToolErrorTarget(0, mode === 'success' ? 'success' : 'error');
+      if (mode === 'pending') {
+        fixture.holdCallback();
+      }
+      const shared = await vi.importActual<typeof import('../../../src/redteam/providers/shared')>(
+        '../../../src/redteam/providers/shared',
+      );
+      mockGetTargetResponse.mockImplementation(shared.getTargetResponse);
+      mockRedteamProvider.callApi.mockResolvedValue({
+        output: JSON.stringify({ improvement: 'Use a greeting', prompt: 'Say hello' }),
+      });
+      try {
+        const pending = fixture
+          .run(() =>
+            runRedteamConversation({
+              prompt: { raw: '{{goal}}', label: 'greeting' },
+              filters: undefined,
+              vars: { goal: 'Say hello' },
+              redteamProvider: mockRedteamProvider,
+              gradingProvider: mockRedteamProvider,
+              targetProvider: fixture.target,
+              injectVar: 'goal',
+              numIterations: 2,
+              options: { abortSignal: fixture.controller.signal },
+              excludeTargetOutputFromAgenticAttackGeneration: false,
+            }),
+          )
+          .then(
+            (value) => ({ value, error: undefined }),
+            (error) => ({ value: undefined, error }),
+          );
+        await Promise.race([
+          fixture.callbackStarted,
+          pending.then((outcome) => {
+            throw new Error('Target settled before callback entry: ' + JSON.stringify(outcome));
+          }),
+        ]);
+        if (mode === 'pending') {
+          fixture.controller.abort(fixture.reason);
+        }
+        const outcome = await pending;
+        expect(outcome.value).toBeUndefined();
+        expect(outcome.error).toBe(fixture.reason);
+        expect(mockRedteamProvider.callApi).toHaveBeenCalledOnce();
+      } finally {
+        await fixture.cleanup();
+        mockGetTargetResponse.mockReset();
+      }
+    },
+  );
+
+  it('finalizes a completed target error before another canceled iteration', async () => {
+    const fixture = createSelectedToolErrorTarget();
+    const shared = await vi.importActual<typeof import('../../../src/redteam/providers/shared')>(
+      '../../../src/redteam/providers/shared',
+    );
+    mockGetTargetResponse.mockImplementation(shared.getTargetResponse);
+    mockRedteamProvider.callApi.mockImplementation(async (_prompt, _context, options) => {
+      options?.abortSignal?.throwIfAborted();
+      return { output: JSON.stringify({ improvement: 'Use a greeting', prompt: 'Say hello' }) };
+    });
+    try {
+      const result = await fixture.run(() =>
+        runRedteamConversation({
+          prompt: { raw: '{{goal}}', label: 'greeting' },
+          filters: undefined,
+          vars: { goal: 'Say hello' },
+          redteamProvider: mockRedteamProvider,
+          gradingProvider: mockRedteamProvider,
+          targetProvider: fixture.target,
+          injectVar: 'goal',
+          numIterations: 2,
+          options: { abortSignal: fixture.controller.signal },
+          excludeTargetOutputFromAgenticAttackGeneration: false,
+        }),
+      );
+      await fixture.expectSelected(result);
+      expect(mockRedteamProvider.callApi).toHaveBeenCalledOnce();
+    } finally {
+      await fixture.cleanup();
+      mockGetTargetResponse.mockReset();
+    }
+  });
+
   describe('runRedteamConversation', () => {
+    it.each([
+      { label: 'actual caller observer', callerOrigin: true },
+      { label: 'independent target error with the same diagnostic', callerOrigin: false },
+    ])('selected caller-observer provenance: $label', async ({ callerOrigin }) => {
+      const shared = await vi.importActual<typeof import('../../../src/redteam/providers/shared')>(
+        '../../../src/redteam/providers/shared',
+      );
+      mockGetTargetResponse.mockImplementation(shared.getTargetResponse);
+      mockRedteamProvider.callApi.mockReset().mockResolvedValue({
+        output: JSON.stringify({ improvement: 'Use a greeting', prompt: 'Say hello' }),
+      });
+      mockTargetProvider.callApi.mockImplementation(async () => {
+        const response: ProviderResponse = {
+          output: 'Completed target output',
+          error: 'metrics rate limit exceeded',
+          tokenUsage: { prompt: 2, completion: 3, total: 5, numRequests: 1 },
+        };
+        return callerOrigin ? createSelectedObserverErrorResponse(response) : response;
+      });
+      try {
+        const result: ProviderResponse = await runRedteamConversation({
+          prompt: { raw: '{{goal}}', label: 'greeting' },
+          filters: undefined,
+          vars: { goal: 'Say hello' },
+          redteamProvider: mockRedteamProvider,
+          gradingProvider: mockRedteamProvider,
+          targetProvider: mockTargetProvider,
+          injectVar: 'goal',
+          numIterations: 1,
+          excludeTargetOutputFromAgenticAttackGeneration: false,
+        });
+
+        expect(mockTargetProvider.callApi).toHaveBeenCalledOnce();
+        expect(mockRedteamProvider.callApi).toHaveBeenCalledOnce();
+        expect(result.output).toBe('Completed target output');
+        expect(result.error).toBe('metrics rate limit exceeded');
+        expect(result.tokenUsage).toMatchObject({
+          prompt: 2,
+          completion: 3,
+          total: 5,
+          numRequests: 1,
+        });
+        expect(result.metadata).not.toHaveProperty('errorOrigin');
+        expect(result.metadata).not.toHaveProperty('http');
+        expect(isResponseHeadersObserverErrorResponse(result)).toBe(callerOrigin);
+        expect(isProviderResponseRateLimited(result, undefined)).toBe(!callerOrigin);
+      } finally {
+        mockGetTargetResponse.mockReset();
+      }
+    });
+
+    it.each([
+      { label: 'selected tool error', error: 'lookup: downstream 429 rate limit', origin: 'tool' },
+      { label: 'unmarked target error', error: 'target 429 rate limit', origin: undefined },
+      { label: 'non-tool target error', error: 'target 429 rate limit', origin: 'provider' },
+      { label: 'successful marked target', error: undefined, origin: 'tool' },
+    ])('projects only selected tool-error origin for $label', async ({ error, origin }) => {
+      // External provider metadata may contain an unknown origin marker.
+      const originMetadata: Record<string, unknown> = origin ? { errorOrigin: origin } : {};
+      const shared = await vi.importActual<typeof import('../../../src/redteam/providers/shared')>(
+        '../../../src/redteam/providers/shared',
+      );
+      mockGetTargetResponse.mockImplementation(shared.getTargetResponse);
+      mockRedteamProvider.callApi
+        .mockReset()
+        .mockResolvedValueOnce({
+          output: JSON.stringify({ improvement: 'Use a greeting', prompt: 'Say hello' }),
+        })
+        .mockResolvedValueOnce({
+          output: JSON.stringify({
+            currentResponse: { rating: 5, explanation: 'A greeting' },
+            previousBestResponse: { rating: 0, explanation: 'None' },
+          }),
+        });
+      mockTargetProvider.callApi.mockResolvedValue({
+        output: 'Hello',
+        ...(error ? { error } : {}),
+        metadata: {
+          ...originMetadata,
+          http: { status: 200, statusText: 'OK', headers: { 'x-ratelimit-remaining': '0' } },
+          rateLimit: { remaining: 0 },
+          targetOnly: 'must stay on the target',
+        },
+        tokenUsage: { prompt: 2, completion: 3, total: 5, numRequests: 1 },
+      });
+
+      try {
+        const result: ProviderResponse = await runRedteamConversation({
+          prompt: { raw: '{{goal}}', label: 'greeting' },
+          filters: undefined,
+          vars: { goal: 'Say hello' },
+          redteamProvider: mockRedteamProvider,
+          gradingProvider: mockRedteamProvider,
+          targetProvider: mockTargetProvider,
+          injectVar: 'goal',
+          numIterations: 1,
+          excludeTargetOutputFromAgenticAttackGeneration: false,
+        });
+
+        expect(mockTargetProvider.callApi).toHaveBeenCalledOnce();
+        expect(mockRedteamProvider.callApi).toHaveBeenCalledTimes(error ? 1 : 2);
+        expect(result.output).toBe('Hello');
+        expect(result.error).toBe(error);
+        expect(result.metadata?.errorOrigin).toBe(error && origin === 'tool' ? 'tool' : undefined);
+        expect(result.metadata).not.toHaveProperty('http');
+        expect(result.metadata).not.toHaveProperty('rateLimit');
+        expect(result.metadata).not.toHaveProperty('targetOnly');
+        expect(result.metadata).toMatchObject({ finalIteration: 1 });
+        expect(result.tokenUsage).toMatchObject({
+          prompt: 2,
+          completion: 3,
+          total: 5,
+          numRequests: 1,
+        });
+      } finally {
+        mockGetTargetResponse.mockReset();
+      }
+    });
+
     it('skips trace retrieval when an iterative target response came from cache', async () => {
       mockGetTargetResponse.mockResolvedValue({ output: 'Cached target response', cached: true });
       const test: AtomicTestCase = { metadata: { tracing: { enabled: true } } };

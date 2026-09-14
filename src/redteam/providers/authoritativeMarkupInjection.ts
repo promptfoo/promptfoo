@@ -17,7 +17,7 @@ import {
 } from '../remoteGeneration';
 import { remoteGenerationContextPayload } from '../remoteGenerationContext';
 import { throwIfTargetPromptExceedsMaxChars } from '../shared/promptLength';
-import { callTargetProvider } from './shared';
+import { callTargetProvider, preserveSelectedError } from './shared';
 
 import type {
   ApiProvider,
@@ -145,10 +145,13 @@ export default class AuthoritativeMarkupInjectionProvider implements ApiProvider
     });
 
     if (targetResponse.error) {
-      return {
-        ...targetResponse,
-        tokenUsage: totalTokenUsage,
-      };
+      return preserveSelectedError(
+        {
+          ...targetResponse,
+          tokenUsage: totalTokenUsage,
+        },
+        targetResponse,
+      );
     }
 
     return {

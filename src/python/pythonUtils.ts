@@ -296,6 +296,7 @@ export async function validatePythonPath(pythonPath: string, isExplicit: boolean
  * @param args - An array of arguments to pass to the Python script.
  * @param options - Optional settings for running the Python script.
  * @param options.pythonExecutable - Optional path to the Python executable.
+ * @param options.abortSignal - Stops this invocation and waits for its child to close before cleanup.
  * @returns A promise that resolves to the output of the Python script.
  * @throws An error if there's an issue running the Python script or parsing its output.
  */
@@ -303,14 +304,16 @@ export async function runPython<T = unknown>(
   scriptPath: string,
   method: string,
   args: (string | number | object | undefined)[],
-  options: { pythonExecutable?: string } = {},
+  options: { pythonExecutable?: string; abortSignal?: AbortSignal } = {},
 ): Promise<T> {
+  options.abortSignal?.throwIfAborted();
   const absPath = path.resolve(scriptPath);
   const customPath = getConfiguredPythonPath(options.pythonExecutable);
   let pythonPath = customPath || 'python';
   let tempDirectory: string | undefined;
 
   pythonPath = await validatePythonPath(pythonPath, typeof customPath === 'string');
+  options.abortSignal?.throwIfAborted();
 
   try {
     tempDirectory = await createSecureTempDirectory('promptfoo-python-');
@@ -333,28 +336,117 @@ export async function runPython<T = unknown>(
     logger.debug('[Python] Running script', { scriptPath: absPath, method });
 
     await new Promise<void>((resolve, reject) => {
+      options.abortSignal?.throwIfAborted();
+      const pyshell = new PythonShell('wrapper.py', pythonOptions);
+      const child = pyshell.childProcess;
+      const signal = options.abortSignal;
+      const stderrLogger = new PythonStderrLogger();
+      let childClosed = false;
+      let settled = false;
+      let shellEnded = false;
+      let shellFailed = false;
+      let stopRequested = false;
+      let killTimer: NodeJS.Timeout | undefined;
+      let failure: { error: unknown } | undefined;
+      let exitFailure: Error | undefined;
+
+      // Preserve whichever independent failure or caller cancellation arrived first.
+      const rememberFailure = (error: unknown) => {
+        failure ??= { error };
+      };
+      const onStdout = (chunk: Buffer) => logger.debug(chunk.toString('utf-8').trim());
+      const onStderr = (chunk: Buffer) => stderrLogger.handleData(chunk);
+      const finish = () => {
+        // SDK end/close and kill acceptance do not prove the child has closed.
+        // Spawn failure can emit error/child close without an SDK end callback.
+        if (settled || !childClosed || (!shellEnded && !shellFailed)) {
+          return;
+        }
+        settled = true;
+        signal?.removeEventListener('abort', onAbort);
+        clearTimeout(killTimer);
+        child.removeListener('close', onClose);
+        pyshell.removeListener('error', onError);
+        pyshell.stdout?.removeListener('data', onStdout);
+        pyshell.stderr?.removeListener('data', onStderr);
+        stderrLogger.flush();
+        if (failure) {
+          reject(failure.error);
+        } else if (exitFailure) {
+          reject(exitFailure);
+        } else {
+          resolve();
+        }
+      };
+      const onError = (error: Error) => {
+        shellFailed = true;
+        rememberFailure(error);
+        finish();
+      };
+      const onClose = (code: number | null, exitSignal: NodeJS.Signals | null) => {
+        childClosed = true;
+        // Stop escalation and detach the caller as soon as the owned child closes.
+        signal?.removeEventListener('abort', onAbort);
+        clearTimeout(killTimer);
+        if (exitSignal) {
+          exitFailure = new Error(`Python process exited with signal ${exitSignal}`);
+        } else if (code !== null && code !== 0) {
+          exitFailure = new Error(`Python process exited with code ${code}`);
+        }
+        finish();
+      };
+      const stopChild = () => {
+        if (childClosed || stopRequested) {
+          return;
+        }
+        stopRequested = true;
+        try {
+          child.kill('SIGTERM');
+        } catch (error) {
+          rememberFailure(error);
+        }
+        if (!childClosed) {
+          killTimer = setTimeout(() => {
+            if (!childClosed) {
+              try {
+                child.kill('SIGKILL');
+              } catch (error) {
+                rememberFailure(error);
+              }
+            }
+          }, 1000);
+          killTimer.unref();
+        }
+      };
+      const onAbort = () => {
+        if (!childClosed) {
+          rememberFailure(signal!.reason);
+          stopChild();
+        }
+      };
+
+      pyshell.on('error', onError);
+      child.once('close', onClose);
       try {
-        const pyshell = new PythonShell('wrapper.py', pythonOptions);
-        const stderrLogger = new PythonStderrLogger();
-
-        pyshell.stdout?.on('data', (chunk: Buffer) => {
-          logger.debug(chunk.toString('utf-8').trim());
-        });
-
-        pyshell.stderr?.on('data', (chunk: Buffer) => {
-          stderrLogger.handleData(chunk);
-        });
-
-        pyshell.end((err) => {
-          stderrLogger.flush();
-          if (err) {
-            reject(err);
-          } else {
-            resolve();
+        pyshell.stdout?.on('data', onStdout);
+        pyshell.stderr?.on('data', onStderr);
+        signal?.addEventListener('abort', onAbort, { once: true });
+        pyshell.end((error) => {
+          shellEnded = true;
+          if (error) {
+            rememberFailure(error);
           }
+          finish();
         });
+        // Covers cancellation between the initial check and listener attachment.
+        if (signal?.aborted) {
+          onAbort();
+        }
       } catch (error) {
-        reject(error);
+        shellFailed = true;
+        rememberFailure(error);
+        stopChild();
+        finish();
       }
     });
 
@@ -377,6 +469,9 @@ export async function runPython<T = unknown>(
 
     return result.data;
   } catch (error) {
+    if (options.abortSignal?.aborted && error === options.abortSignal.reason) {
+      throw error;
+    }
     const message = `Error running Python script: ${(error as Error).message}\nStack Trace: ${
       (error as Error).stack?.replace('--- Python Traceback ---', 'Python Traceback: ') ||
       'No Python traceback available'

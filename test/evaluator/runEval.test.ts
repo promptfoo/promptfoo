@@ -3,12 +3,15 @@ import './setup';
 import { afterAll, afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { clearCache } from '../../src/cache';
 import { runEval } from '../../src/evaluator';
+import logger from '../../src/logger';
+import { RateLimitRegistry } from '../../src/scheduler/rateLimitRegistry';
 import {
   type ApiProvider,
   type Prompt,
   ResultFailureReason,
   type TestSuite,
 } from '../../src/types/index';
+import { sleep } from '../../src/util/time';
 import { mockGradingApiProviderPasses, resetMockProviders } from './helpers';
 
 describe('runEval', () => {
@@ -1167,5 +1170,132 @@ describe('runEval', () => {
 
       expect(results[0].latencyMs).toBe(0);
     });
+  });
+
+  it.each(['already-aborted', 'during-delay', 'ordinary', 'cached'] as const)(
+    'preserves completed provider diagnostics through %s delay handling',
+    async (phase) => {
+      const actualTime =
+        await vi.importActual<typeof import('../../src/util/time')>('../../src/util/time');
+      vi.mocked(sleep).mockImplementation(actualTime.sleep);
+      vi.useFakeTimers();
+      const registry = new RateLimitRegistry({ maxConcurrency: 1 });
+      const controller = new AbortController();
+      const reason = Object.freeze(
+        Object.assign(new Error('caller stopped'), { name: 'AbortException' }),
+      );
+      const response = {
+        error: 'Completed callback diagnostic',
+        cost: 0.25,
+        tokenUsage: { prompt: 2, completion: 3, total: 5, numRequests: 1 },
+        metadata: { errorOrigin: 'tool' as const },
+        cached: phase === 'cached',
+      };
+      const provider: ApiProvider = {
+        id: () => 'completed-diagnostic',
+        delay: 60000,
+        callApi: vi.fn(async () => {
+          if (phase === 'already-aborted') {
+            controller.abort(reason);
+          }
+          return response;
+        }),
+      };
+      let outcome: { rows: Awaited<ReturnType<typeof runEval>> } | { error: unknown } | undefined;
+      const pending = runEval({
+        ...defaultOptions,
+        provider,
+        prompt: { raw: 'Test prompt', label: 'test-label' },
+        test: {},
+        abortSignal: controller.signal,
+        rateLimitRegistry: registry,
+      }).then(
+        (rows) => {
+          outcome = { rows };
+        },
+        (error: unknown) => {
+          outcome = { error };
+        },
+      );
+      try {
+        await vi.advanceTimersByTimeAsync(0);
+        expect(provider.callApi).toHaveBeenCalledOnce();
+        if (phase === 'ordinary' || phase === 'during-delay') {
+          expect(outcome).toBeUndefined();
+        }
+        if (phase === 'during-delay') {
+          controller.abort(reason);
+          await vi.advanceTimersByTimeAsync(0);
+        } else if (phase === 'ordinary') {
+          await vi.advanceTimersByTimeAsync(59999);
+          expect(outcome).toBeUndefined();
+          await vi.advanceTimersByTimeAsync(1);
+        }
+        expect(outcome).toBeDefined();
+        if (!outcome || 'error' in outcome) {
+          throw new Error('runEval did not settle with a result');
+        }
+        const [row] = outcome.rows;
+        expect(row.error).toBe(response.error);
+        expect(row.response?.cost).toBe(0.25);
+        expect(row.response?.tokenUsage).toMatchObject({ prompt: 2, completion: 3, total: 5 });
+        expect(row.success).toBe(false);
+        expect(row.failureReason).toBe(ResultFailureReason.ERROR);
+        expect(provider.callApi).toHaveBeenCalledOnce();
+        expect(
+          Object.values(registry.getMetrics()).every(
+            (m) => m.activeRequests === 0 && m.queueDepth === 0,
+          ),
+        ).toBe(true);
+        expect(vi.getTimerCount()).toBe(0);
+      } finally {
+        registry.dispose();
+        await vi.advanceTimersByTimeAsync(60000);
+        await pending;
+        vi.mocked(sleep).mockReset();
+      }
+    },
+  );
+
+  it.each([
+    { description: 'caller AbortException', name: 'AbortException', aborted: true, logged: false },
+    { description: 'independent SDK AbortError', name: 'AbortError', aborted: false, logged: true },
+    {
+      description: 'unrelated error during caller cancellation',
+      name: 'SyntaxError',
+      aborted: true,
+      logged: true,
+    },
+  ])('classifies provider logging for $description', async ({ name, aborted, logged }) => {
+    const controller = new AbortController();
+    const error = Object.freeze(Object.assign(new Error('Exact provider diagnostic'), { name }));
+    const errorLog = vi.spyOn(logger, 'error').mockImplementation(() => logger);
+    const provider: ApiProvider = {
+      id: () => 'logging-control',
+      callApi: vi.fn(async () => {
+        if (aborted) {
+          controller.abort(error);
+        }
+        throw error;
+      }),
+    };
+    const [row] = await runEval({
+      ...defaultOptions,
+      provider,
+      prompt: { raw: 'Test prompt', label: 'test-label' },
+      test: {},
+      abortSignal: controller.signal,
+    });
+    expect(row.error).toContain('Exact provider diagnostic');
+    expect(row.failureReason).toBe(ResultFailureReason.ERROR);
+    expect(row.success).toBe(false);
+    expect(provider.callApi).toHaveBeenCalledOnce();
+    expect(error.name).toBe(name);
+    if (aborted) {
+      expect(controller.signal.reason).toBe(error);
+    }
+    expect(
+      errorLog.mock.calls.filter(([message]) => message === 'Provider call failed during eval'),
+    ).toHaveLength(logged ? 1 : 0);
   });
 });

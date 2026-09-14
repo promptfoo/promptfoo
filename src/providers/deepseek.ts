@@ -142,7 +142,10 @@ class DeepSeekProvider extends OpenAiChatCompletionProvider {
   async callApi(prompt: string, context?: any, callApiOptions?: any): Promise<any> {
     const response = await super.callApi(prompt, context, callApiOptions);
 
-    if (!response || response.error) {
+    if (
+      !response ||
+      (response.error && (response.metadata?.errorOrigin !== 'tool' || !response.tokenUsage))
+    ) {
       return response;
     }
 

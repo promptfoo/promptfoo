@@ -8,9 +8,13 @@ import * as path from 'path';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import cliState from '../../src/cliState';
 import { __resetPromptConversationCacheForTests, evaluate } from '../../src/evaluator';
+import { runExtensionHook } from '../../src/evaluatorHelpers';
 import logger from '../../src/logger';
 import Eval from '../../src/models/eval';
+import EvalResult from '../../src/models/evalResult';
 import { providerRegistry } from '../../src/providers/providerRegistry';
+import { ProviderGroupedCallQueue } from '../../src/scheduler/providerCallQueue';
+import { RateLimitRegistry } from '../../src/scheduler/rateLimitRegistry';
 import {
   type ApiProvider,
   type ProviderResponse,
@@ -20,6 +24,7 @@ import {
 import { JsonlFileWriter } from '../../src/util/exportToFile/writeToFile';
 import { sleep } from '../../src/util/time';
 import { createEmptyTokenUsage } from '../../src/util/tokenUsageUtils';
+import { createDeferred } from '../util/utils';
 import { toPrompt } from './helpers';
 import { describeEvaluator } from './lifecycle';
 
@@ -33,26 +38,42 @@ afterEach(() => {
 
 describeEvaluator('evaluator execution control', () => {
   it('evaluates with provider delay', async () => {
-    const mockApiProvider: ApiProvider = {
-      id: vi.fn().mockReturnValue('test-provider'),
+    const started = createDeferred<void>();
+    const provider: ApiProvider = {
+      id: () => 'test-provider',
       delay: 100,
-      callApi: vi.fn().mockResolvedValue({
-        output: 'Test output',
-        tokenUsage: { total: 10, prompt: 5, completion: 5, cached: 0, numRequests: 1 },
+      callApi: vi.fn<ApiProvider['callApi']>().mockImplementation(async () => {
+        started.resolve();
+        return { output: 'Test output', tokenUsage: createEmptyTokenUsage() };
       }),
     };
-
     const testSuite: TestSuite = {
-      providers: [mockApiProvider],
+      providers: [provider],
       prompts: [toPrompt('Test prompt')],
       tests: [{}],
     };
-
     const evalRecord = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
-    await evaluate(testSuite, evalRecord, {});
-
-    expect(sleep).toHaveBeenCalledWith(100);
-    expect(mockApiProvider.callApi).toHaveBeenCalledTimes(1);
+    vi.useFakeTimers();
+    let completed = false;
+    const pending = evaluate(testSuite, evalRecord, {}).then((result) => {
+      completed = true;
+      return result;
+    });
+    try {
+      await started.promise;
+      await vi.advanceTimersByTimeAsync(0);
+      expect(provider.callApi).toHaveBeenCalledOnce();
+      expect(completed).toBe(false);
+      await vi.advanceTimersByTimeAsync(99);
+      expect(completed).toBe(false);
+      await vi.advanceTimersByTimeAsync(1);
+      await pending;
+      expect(completed).toBe(true);
+    } finally {
+      await vi.runAllTimersAsync();
+      await pending;
+      vi.useRealTimers();
+    }
   });
 
   it('evaluates with no provider delay', async () => {
@@ -75,6 +96,133 @@ describeEvaluator('evaluator execution control', () => {
 
     expect(sleep).not.toHaveBeenCalled();
     expect(mockApiProvider.callApi).toHaveBeenCalledTimes(1);
+  });
+
+  it.each([
+    'incomplete CLI pause',
+    'ordinary caller cancellation',
+    'completed success during CLI pause',
+    'completed tool error during CLI pause',
+    'independent SDK error during CLI pause',
+  ] as const)('preserves resume eligibility for %s', async (mode) => {
+    vi.stubEnv('PROMPTFOO_DISABLE_ADAPTIVE_SCHEDULER', 'false');
+    const controller = new AbortController();
+    const cancelBeforeCall =
+      mode === 'incomplete CLI pause' || mode === 'ordinary caller cancellation';
+    vi.mocked(runExtensionHook).mockImplementation(async (_extensions, hookName, context) => {
+      if (hookName === 'beforeEach' && cancelBeforeCall) {
+        controller.abort();
+      }
+      return context;
+    });
+    const completed: ProviderResponse = {
+      output: 'Completed answer',
+      cost: 0.25,
+      tokenUsage: { ...createEmptyTokenUsage(), prompt: 2, completion: 3, total: 5 },
+      ...(mode === 'completed tool error during CLI pause'
+        ? { error: 'Tool callback failed', metadata: { errorOrigin: 'tool' } }
+        : {}),
+    };
+    const provider: ApiProvider = {
+      id: () => 'pause-contract-provider',
+      callApi: vi.fn<ApiProvider['callApi']>().mockImplementation(async () => {
+        controller.abort();
+        if (mode === 'independent SDK error during CLI pause') {
+          throw new DOMException('Independent SDK failure', 'AbortError');
+        }
+        return completed;
+      }),
+    };
+    const testSuite: TestSuite = {
+      providers: [provider],
+      prompts: [toPrompt('Pause contract')],
+      tests: [{ assert: [{ type: 'contains', value: 'Completed' }] }],
+    };
+    const evalRecord = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
+    try {
+      await evaluate(testSuite, evalRecord, {
+        maxConcurrency: 1,
+        abortSignal: controller.signal,
+        pauseSignal: mode === 'ordinary caller cancellation' ? undefined : controller.signal,
+      });
+      const rows = await evalRecord.getResults();
+      expect(provider.callApi).toHaveBeenCalledTimes(cancelBeforeCall ? 0 : 1);
+      const incomplete = mode === 'incomplete CLI pause';
+      expect(rows).toHaveLength(incomplete ? 0 : 1);
+      // Ordinary errors still count as completed unless retry-errors is explicitly selected.
+      expect(await EvalResult.getCompletedIndexPairs(evalRecord.id)).toEqual(
+        new Set(incomplete ? [] : ['0:0']),
+      );
+      if (incomplete) {
+        return;
+      }
+      const row = rows[0];
+      if (mode.startsWith('completed')) {
+        expect(row.response?.output).toBe(completed.output);
+        expect(row.response?.cost).toBe(0.25);
+        expect(row.response?.tokenUsage).toMatchObject({ prompt: 2, completion: 3, total: 5 });
+        expect(row.cost).toBe(0.25);
+        expect(row.success).toBe(mode === 'completed success during CLI pause');
+        if (mode === 'completed tool error during CLI pause') {
+          expect(row.error).toBe('Tool callback failed');
+          expect(row.response?.metadata).toMatchObject({ errorOrigin: 'tool' });
+        }
+      } else {
+        expect(row.success).toBe(false);
+        expect(row.failureReason).toBe(ResultFailureReason.ERROR);
+        expect(row.response).toBeFalsy();
+        expect(row.error).toContain(
+          mode === 'independent SDK error during CLI pause'
+            ? 'Independent SDK failure'
+            : 'This operation was aborted',
+        );
+      }
+    } finally {
+      vi.unstubAllEnvs();
+      vi.mocked(runExtensionHook).mockImplementation(
+        async (_extensions, _hookName, context) => context,
+      );
+    }
+  });
+
+  it('leaves a retried call resumable when CLI pause interrupts its next attempt', async () => {
+    vi.stubEnv('PROMPTFOO_DISABLE_ADAPTIVE_SCHEDULER', 'false');
+    const controller = new AbortController();
+    const provider: ApiProvider = {
+      id: () => 'pause-retry-provider',
+      config: { maxRetries: 1 },
+      callApi: vi
+        .fn<ApiProvider['callApi']>()
+        .mockResolvedValueOnce({
+          error: 'Rate limit exceeded on the first attempt',
+          metadata: { headers: { 'retry-after-ms': '0' } },
+          cost: 0.25,
+          tokenUsage: createEmptyTokenUsage(),
+        })
+        .mockImplementationOnce(async () => {
+          controller.abort();
+          throw controller.signal.reason;
+        }),
+    };
+    const testSuite: TestSuite = {
+      providers: [provider],
+      prompts: [toPrompt('Retry before pausing')],
+      tests: [{}],
+    };
+    const evalRecord = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
+    try {
+      await evaluate(testSuite, evalRecord, {
+        maxConcurrency: 1,
+        abortSignal: controller.signal,
+        pauseSignal: controller.signal,
+      });
+      expect(provider.callApi).toHaveBeenCalledTimes(2);
+      // The first attempt's diagnostic must not become the interrupted retry's result.
+      expect(await evalRecord.getResults()).toEqual([]);
+      expect(await EvalResult.getCompletedIndexPairs(evalRecord.id)).toEqual(new Set());
+    } finally {
+      vi.unstubAllEnvs();
+    }
   });
 
   it('closes JSONL writers after evaluation', async () => {
@@ -1165,4 +1313,182 @@ describeEvaluator('evaluator execution control', () => {
     expect(resultByTopic.get('alpha')?.error).toBeUndefined();
     expect(resultByTopic.get('gamma')?.error).toContain('Evaluation exceeded max duration');
   });
+
+  it.each(['queued', 'active after deadline', 'immediate per-step'] as const)(
+    'retains original caller cancellation for %s grading',
+    async (mode) => {
+      vi.useFakeTimers();
+      const controller = new AbortController();
+      const reason = Object.assign(new Error('original caller cancelled grading'), {
+        name: 'AbortError',
+      });
+      const rows: any[] = [];
+      const drains: (() => void)[] = [];
+      const metrics: { activeRequests: number; queueDepth: number }[] = [];
+      const dispose = RateLimitRegistry.prototype.dispose;
+      const disposeSpy = vi
+        .spyOn(RateLimitRegistry.prototype, 'dispose')
+        .mockImplementation(function (this: RateLimitRegistry) {
+          metrics.push(...Object.values(this.getMetrics()));
+          return dispose.call(this);
+        });
+      const enqueued = vi.spyOn(ProviderGroupedCallQueue.prototype, 'enqueue');
+      const held = (signal?: AbortSignal, ms?: number) =>
+        new Promise<void>((resolve, reject) => {
+          let timer: ReturnType<typeof setTimeout> | undefined;
+          const finish = (error?: unknown) => {
+            if (timer) {
+              clearTimeout(timer);
+            }
+            signal?.removeEventListener('abort', abort);
+            if (error) {
+              reject(error);
+            } else {
+              resolve();
+            }
+          };
+          const abort = () => finish(signal?.reason ?? reason);
+          drains.push(() => finish());
+          if (signal?.aborted) {
+            abort();
+          } else {
+            signal?.addEventListener('abort', abort, { once: true });
+            if (ms !== undefined) {
+              timer = setTimeout(() => finish(), ms);
+            }
+          }
+        });
+      const topics =
+        mode === 'queued'
+          ? ['alpha', 'beta', 'gamma']
+          : mode === 'active after deadline'
+            ? ['alpha', 'beta', 'gamma', 'delta']
+            : ['alpha'];
+      let activeJudges = 0;
+      let judgeSignal: AbortSignal | undefined;
+      const target: ApiProvider = {
+        id: () => `caller-target-${mode}`,
+        callApi: vi.fn(async (prompt, _context, options) => {
+          if (mode === 'queued' && prompt.includes('beta')) {
+            await held(options?.abortSignal);
+          }
+          if (mode === 'active after deadline') {
+            await held(options?.abortSignal, prompt.includes('gamma') ? undefined : 10);
+          }
+          return { output: `Completed ${prompt}`, tokenUsage: createEmptyTokenUsage() };
+        }),
+      };
+      const judge: ApiProvider = {
+        id: () => `caller-judge-${mode}`,
+        callApi: vi.fn(async (_prompt, _context, options) => {
+          judgeSignal = options?.abortSignal;
+          activeJudges++;
+          try {
+            if (mode !== 'queued') {
+              await held(judgeSignal);
+            }
+            return {
+              output: JSON.stringify({ pass: true, score: 1, reason: 'passed' }),
+              tokenUsage: createEmptyTokenUsage(),
+            };
+          } finally {
+            activeJudges--;
+          }
+        }),
+      };
+      const record = {
+        id: `caller-grading-${mode}`,
+        results: rows,
+        prompts: [],
+        persisted: false,
+        config: {},
+        addPrompts: vi.fn().mockResolvedValue(undefined),
+        addResult: vi.fn(async (row) => {
+          rows.push(row);
+        }),
+        fetchResultsByTestIdx: vi.fn().mockResolvedValue([]),
+        getResults: vi.fn().mockResolvedValue(rows),
+        save: vi.fn().mockResolvedValue(undefined),
+        setDurationMs: vi.fn(),
+        setVars: vi.fn(),
+        toEvaluateSummary: vi.fn(),
+      };
+      let settled = false;
+      const pending = evaluate(
+        {
+          providers: [target],
+          prompts: [toPrompt('Topic {{topic}}')],
+          tests: topics.map((topic) => ({
+            vars: { topic },
+            assert: [{ type: 'llm-rubric', value: 'Harmless judge', provider: judge }],
+          })),
+        },
+        record as unknown as Eval,
+        {
+          maxConcurrency: 1,
+          abortSignal: controller.signal,
+          ...(mode === 'immediate per-step' ? { timeoutMs: 1000 } : { maxEvalTimeMs: 55 }),
+        },
+      ).finally(() => {
+        settled = true;
+      });
+      try {
+        await vi.advanceTimersByTimeAsync(mode === 'active after deadline' ? 55 : 0);
+        expect(settled).toBe(false);
+        if (mode === 'queued') {
+          expect(target.callApi).toHaveBeenCalledTimes(2);
+          expect(enqueued.mock.calls.some(([id]) => id === judge.id())).toBe(true);
+          expect(judge.callApi).not.toHaveBeenCalled();
+        } else {
+          expect(judge.callApi).toHaveBeenCalledOnce();
+          expect(activeJudges).toBe(1);
+          expect(judgeSignal?.aborted).toBe(false);
+        }
+        controller.abort(reason);
+        await vi.advanceTimersByTimeAsync(0);
+        expect(settled).toBe(true);
+        await pending;
+        expect(activeJudges).toBe(0);
+        expect(judge.callApi).toHaveBeenCalledTimes(mode === 'queued' ? 0 : 1);
+        if (mode !== 'queued') {
+          expect(judgeSignal?.aborted).toBe(true);
+        }
+        const alpha = rows.filter((row) => row.vars.topic === 'alpha');
+        expect(alpha).toHaveLength(1);
+        if (mode !== 'immediate per-step') {
+          expect(alpha[0].response.output).toBe('Completed Topic alpha');
+        }
+        expect(alpha[0].success).toBe(false);
+        expect(alpha[0].error).toMatch(/abort|cancel/i);
+        if (mode === 'active after deadline') {
+          expect(rows.find((row) => row.vars.topic === 'beta')?.response.output).toBe(
+            'Completed Topic beta',
+          );
+          expect(rows.find((row) => row.vars.topic === 'delta')?.error).toContain(
+            'Evaluation exceeded max duration',
+          );
+        }
+        expect(metrics.length).toBeGreaterThan(0);
+        expect(metrics.every((m) => m.activeRequests === 0 && m.queueDepth === 0)).toBe(true);
+        const calls = [
+          vi.mocked(target.callApi).mock.calls.length,
+          vi.mocked(judge.callApi).mock.calls.length,
+        ];
+        await vi.advanceTimersByTimeAsync(1000);
+        expect([
+          vi.mocked(target.callApi).mock.calls.length,
+          vi.mocked(judge.callApi).mock.calls.length,
+        ]).toEqual(calls);
+      } finally {
+        controller.abort(reason);
+        for (const drain of drains) {
+          drain();
+        }
+        await vi.advanceTimersByTimeAsync(0);
+        await pending;
+        disposeSpy.mockRestore();
+        enqueued.mockRestore();
+      }
+    },
+  );
 });

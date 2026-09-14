@@ -20,10 +20,17 @@ import {
   type SystemError,
 } from './errors';
 import { monkeyPatchFetch } from './monkeyPatchFetch';
+import { getEffectiveRequestSignal } from './requestSignal';
 import { getFetchRetryContextMaxRetries } from './retryContext';
 import { stripDecompressionHeaders } from './stripDecompressionHeaders';
 
 import type { FetchOptions } from './types';
+
+export type FetchRateLimitObservation = {
+  headers: Record<string, string>;
+  status: number;
+  resetAt: number;
+};
 
 // Cached agents to avoid recreating on every request.
 // Keep separate entries per resolved connection count so overlapping requests
@@ -420,8 +427,18 @@ async function sleepWithAbort(waitTime: number, signal?: AbortSignal | null): Pr
 export async function handleRateLimit(
   response: Response,
   signal?: AbortSignal | null,
+  onRateLimitBackoff?: (observation: FetchRateLimitObservation) => void,
 ): Promise<void> {
   const waitTime = computeRateLimitWaitMs(response);
+  if (!signal?.aborted) {
+    onRateLimitBackoff?.(
+      Object.freeze({
+        headers: Object.freeze(Object.fromEntries(response.headers.entries())),
+        status: response.status,
+        resetAt: Date.now() + waitTime,
+      }),
+    );
+  }
   const jitter = Math.floor(Math.random() * RATE_LIMIT_JITTER_MS);
   const totalWait = waitTime + jitter;
   logger.debug(
@@ -448,18 +465,22 @@ const RATE_LIMIT_BODY_PEEK_BYTES = 64 * 1024;
  * response may still be observed by upstream wrappers (logging middleware,
  * monkey-patched fetch); cloning preserves their ability to read the body.
  *
- * Failures (clone, read, parse) degrade to `{ body: undefined, code:
- * undefined }` and are logged at debug level. Losing the body code only
+ * Clone/read failures degrade to `{ body: undefined, code: undefined }`
+ * unless the caller cancelled the unfinished peek. Losing the body code only
  * widens classification from `quota` to `rate_limit`, which is the safer
  * (retryable) side of the misclassification.
  */
 async function peekRateLimitBody(
   response: Response,
+  signal?: AbortSignal | null,
 ): Promise<{ body: unknown; code: string | undefined }> {
   let cloned: Response;
   try {
     cloned = response.clone();
   } catch (err) {
+    if (signal?.aborted) {
+      throw getAbortError(signal);
+    }
     logger.debug(`[fetch] peekRateLimitBody: clone failed, skipping body code lookup: ${err}`);
     return { body: undefined, code: undefined };
   }
@@ -468,6 +489,9 @@ async function peekRateLimitBody(
   try {
     text = await readBoundedText(cloned, RATE_LIMIT_BODY_PEEK_BYTES);
   } catch (err) {
+    if (signal?.aborted) {
+      throw getAbortError(signal);
+    }
     logger.debug(`[fetch] peekRateLimitBody: body read failed: ${err}`);
     return { body: undefined, code: undefined };
   }
@@ -609,6 +633,7 @@ async function handleRateLimitedResponse(
   attempt: number,
   maxRetries: number,
   signal?: AbortSignal | null,
+  onRateLimitBackoff?: (observation: FetchRateLimitObservation) => void,
 ): Promise<void> {
   // Only the 429 path produces a structured error. A 200 OK with
   // `X-RateLimit-Remaining=0` is a soft hint that we're approaching a limit —
@@ -617,7 +642,7 @@ async function handleRateLimitedResponse(
   // 64 KB body peek on every successful call.
   const isHardRateLimit = response.status === 429;
   const { body, code } = isHardRateLimit
-    ? await peekRateLimitBody(response)
+    ? await peekRateLimitBody(response, signal)
     : { body: undefined, code: undefined };
   const safeUrl = urlForLog(url);
 
@@ -648,7 +673,7 @@ async function handleRateLimitedResponse(
   logger.debug(
     `Rate limited on URL ${safeUrl}: HTTP ${response.status} ${response.statusText}, attempt ${attempt + 1}/${maxRetries + 1}, waiting before retry...`,
   );
-  await handleRateLimit(response, signal);
+  await handleRateLimit(response, signal, onRateLimitBackoff);
 }
 
 function formatFetchErrorMessage(error: unknown): string {
@@ -671,13 +696,14 @@ export async function fetchWithRetries(
   options: FetchOptions = {},
   timeout: number,
   maxRetries?: number,
+  onRateLimitBackoff?: (observation: FetchRateLimitObservation) => void,
 ): Promise<Response> {
   const contextMaxRetries = getFetchRetryContextMaxRetries();
   maxRetries = Math.max(0, maxRetries ?? contextMaxRetries ?? 4);
 
   let lastErrorMessage: string | undefined;
   const backoff = getEnvInt('PROMPTFOO_REQUEST_BACKOFF_MS', 5000);
-  const signal = options.signal ?? (url instanceof Request ? url.signal : undefined);
+  const signal = getEffectiveRequestSignal(url, options);
 
   for (let i = 0; i <= maxRetries; i++) {
     let response;
@@ -694,7 +720,7 @@ export async function fetchWithRetries(
       }
 
       if (response && isRateLimited(response)) {
-        await handleRateLimitedResponse(response, url, i, maxRetries, signal);
+        await handleRateLimitedResponse(response, url, i, maxRetries, signal, onRateLimitBackoff);
         continue;
       }
 
@@ -704,15 +730,14 @@ export async function fetchWithRetries(
       if (error instanceof Error && error.name === 'AbortError') {
         throw error;
       }
-      if (signal?.aborted) {
-        throw getAbortError(signal);
-      }
-
       // Structured rate-limit errors are already final (quota fail-fast or
       // retries exhausted) and carry retry-after / reset metadata. Don't
-      // swallow them in the generic retry path.
+      // replace a completed response with a later cancellation or retry it.
       if (error instanceof HttpRateLimitError) {
         throw error;
+      }
+      if (signal?.aborted) {
+        throw getAbortError(signal);
       }
 
       const errorMessage = formatFetchErrorMessage(error);

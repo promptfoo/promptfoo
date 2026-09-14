@@ -5,6 +5,7 @@ import {
   wrapError,
 } from '../util/functions/loadFunction';
 import { getMcpErrorMessage, isMcpErrorResult } from './mcp/util';
+import { isCallerAbortError, throwIfAborted, waitForPromiseWithAbort } from './shared';
 import { withGenAIToolSpan } from './tracing';
 
 import type {
@@ -55,6 +56,7 @@ export async function executeProviderFunctionCallback({
   callbacks,
   cache,
   logPrefix,
+  abortSignal,
 }: {
   functionName: string;
   args: string;
@@ -64,33 +66,48 @@ export async function executeProviderFunctionCallback({
   cache: Record<string, Function>;
   /** This provider's log prefix, e.g. `[Bedrock Converse]`. */
   logPrefix?: string;
+  /** Stops this caller's wait without stopping callback code that has already started. */
+  abortSignal?: AbortSignal;
 }): Promise<string> {
   const prefix = logPrefix ? `${logPrefix} ` : '';
   try {
+    throwIfAborted(abortSignal);
     let callback = cache[functionName];
 
     if (!callback) {
       const callbackRef = callbacks?.[functionName];
 
       if (callbackRef && typeof callbackRef === 'string') {
-        callback = callbackRef.startsWith('file://')
-          ? await loadProviderCallbackFromFileUrl(callbackRef, logPrefix)
-          : new Function('return ' + callbackRef)();
-        cache[functionName] = callback;
+        if (callbackRef.startsWith('file://')) {
+          const loading = loadProviderCallbackFromFileUrl(callbackRef, logPrefix).then(
+            (loadedCallback) => {
+              // The import owns cache publication even if this caller stops waiting.
+              cache[functionName] = loadedCallback;
+              return loadedCallback;
+            },
+          );
+          callback = await waitForPromiseWithAbort(loading, abortSignal);
+        } else {
+          callback = new Function('return ' + callbackRef)();
+          cache[functionName] = callback;
+        }
       } else if (typeof callbackRef === 'function') {
         callback = callbackRef;
         cache[functionName] = callback;
       }
     }
+    throwIfAborted(abortSignal);
 
     if (!callback) {
       throw new Error(`No callback found for function '${functionName}'`);
     }
 
     logger.debug(`${prefix}Executing function '${functionName}' with args: ${args}`);
-    const result = await withGenAIToolSpan({ name: functionName, arguments: args, callId }, () =>
-      callback(args),
-    );
+    const result = await withGenAIToolSpan({ name: functionName, arguments: args, callId }, () => {
+      throwIfAborted(abortSignal);
+      return waitForPromiseWithAbort(Promise.resolve(callback(args)), abortSignal);
+    });
+    throwIfAborted(abortSignal);
 
     if (result === undefined || result === null) {
       return '';
@@ -105,6 +122,9 @@ export async function executeProviderFunctionCallback({
     }
     return String(result);
   } catch (error: any) {
+    if (isCallerAbortError(error, abortSignal, { requireReasonMatch: true })) {
+      throwIfAborted(abortSignal);
+    }
     logger.error(
       `${prefix}Error executing function '${functionName}': ${error.message || String(error)}`,
     );

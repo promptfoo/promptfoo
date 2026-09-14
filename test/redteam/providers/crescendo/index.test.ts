@@ -3,11 +3,19 @@ import * as evaluatorHelpers from '../../../../src/evaluatorHelpers';
 import { CrescendoProvider, MemorySystem } from '../../../../src/redteam/providers/crescendo/index';
 import { redteamProviderManager, tryUnblocking } from '../../../../src/redteam/providers/shared';
 import { shouldGenerateRemote } from '../../../../src/redteam/remoteGeneration';
+import { isResponseHeadersObserverErrorResponse } from '../../../../src/scheduler/responseHeadersObserver';
+import { isProviderResponseRateLimited } from '../../../../src/scheduler/types';
 import * as traceContext from '../../../../src/tracing/traceContext';
 import { checkServerFeatureSupport } from '../../../../src/util/server';
 import { createMockProvider, type MockApiProvider } from '../../../factories/provider';
+import { createSelectedObserverErrorResponse } from '../../../util/selectedObserverError';
+import {
+  createPredispatchAbortTarget,
+  createSelectedToolErrorTarget,
+} from '../../../util/selectedToolErrorTarget';
 
 import type { Message } from '../../../../src/redteam/providers/shared';
+import type { ProviderResponse } from '../../../../src/types/providers';
 
 // Hoisted mock for getGraderById
 const mockGetGraderById = vi.hoisted(() => vi.fn());
@@ -56,7 +64,8 @@ vi.mock('../../../../src/redteam/graders', () => ({
   getGraderById: mockGetGraderById,
 }));
 
-vi.mock('../../../../src/logger', () => ({
+vi.mock('../../../../src/logger', async (importOriginal) => ({
+  ...(await importOriginal()),
   default: {
     debug: vi.fn(),
     error: vi.fn(),
@@ -378,6 +387,391 @@ describe('CrescendoProvider', () => {
     expect(mockTargetProvider.callApi).toHaveBeenCalledOnce();
     expect(fetchTraceContextSpy).not.toHaveBeenCalled();
   });
+
+  it('preserves caller reason at target entry through the crescendo outer catch', async () => {
+    const reason = Object.freeze(
+      Object.assign(new Error('caller stopped at target entry'), {
+        name: 'AbortException',
+      }),
+    );
+    const fixture = createPredispatchAbortTarget(reason);
+    vi.mocked(evaluatorHelpers.renderPrompt).mockResolvedValue('Say hello.');
+    mockRedTeamProvider.callApi.mockImplementation(async (_prompt, _context, options) => {
+      options?.abortSignal?.throwIfAborted();
+      fixture.events.push('attacker response');
+      return {
+        output: JSON.stringify({
+          generatedQuestion: 'Say hello.',
+          rationaleBehindJailbreak: 'Harmless entry fixture',
+          lastResponseSummary: 'A greeting',
+        }),
+      };
+    });
+    try {
+      const provider = new CrescendoProvider({
+        injectVar: 'objective',
+
+        maxTurns: 2,
+        maxBacktracks: 0,
+        redteamProvider: mockRedTeamProvider,
+        stateful: true,
+      });
+      const outcome = await fixture.run(() =>
+        provider.callApi(
+          'Say hello.',
+          {
+            originalProvider: fixture.target,
+            vars: { objective: 'Say hello.' },
+            prompt: { raw: '{{objective}}', label: 'greeting' },
+          },
+          { abortSignal: fixture.controller.signal },
+        ),
+      );
+      await fixture.expectRejected(outcome);
+      expect(fixture.events).toEqual(['attacker response', 'target entered', 'caller abort']);
+      expect(mockRedTeamProvider.callApi).toHaveBeenCalledOnce();
+      expect(mockScoringProvider.callApi).not.toHaveBeenCalled();
+      expect(tryUnblocking).not.toHaveBeenCalled();
+    } finally {
+      await fixture.cleanup();
+    }
+  });
+
+  it.each(['normal', 'unblocking'] as const)(
+    'finalizes a completed %s target error before canceled follow-up work',
+    async (path) => {
+      const fixture = createSelectedToolErrorTarget(path === 'unblocking' ? 1 : 0);
+      vi.mocked(evaluatorHelpers.renderPrompt).mockResolvedValue('Say hello.');
+      mockRedTeamProvider.callApi.mockImplementation(async (_prompt, _context, options) => {
+        options?.abortSignal?.throwIfAborted();
+        return {
+          output: JSON.stringify({
+            generatedQuestion: 'Say hello.',
+            rationaleBehindJailbreak: 'Harmless fixture',
+            lastResponseSummary: 'A greeting',
+          }),
+        };
+      });
+      mockScoringProvider.callApi.mockImplementation(async (_prompt, _context, options) => {
+        options?.abortSignal?.throwIfAborted();
+        return { output: JSON.stringify({ value: false, metadata: 25, rationale: 'Continue' }) };
+      });
+      vi.mocked(tryUnblocking)
+        .mockReset()
+        .mockResolvedValue({ success: true, unblockingPrompt: 'The reference is 123.' });
+      const traceSpy = vi
+        .spyOn(traceContext, 'fetchTraceContext')
+        .mockImplementation(async (_id, options) => {
+          options?.abortSignal?.throwIfAborted();
+          return null;
+        });
+      try {
+        const provider = new CrescendoProvider({
+          injectVar: 'objective',
+          maxTurns: 2,
+          maxBacktracks: 0,
+          redteamProvider: mockRedTeamProvider,
+          stateful: true,
+        });
+        const result = await fixture.run(() =>
+          provider.callApi(
+            'Say hello.',
+            {
+              originalProvider: fixture.target,
+              vars: { objective: 'Say hello.' },
+              prompt: { raw: '{{objective}}', label: 'greeting' },
+              traceparent: '00-0123456789abcdef0123456789abcdef-0123456789abcdef-01',
+              test: { metadata: { tracing: { enabled: true } } },
+            },
+            { abortSignal: fixture.controller.signal },
+          ),
+        );
+        await fixture.expectSelected(result);
+        expect(mockRedTeamProvider.callApi).toHaveBeenCalledOnce();
+        expect(mockScoringProvider.callApi).not.toHaveBeenCalled();
+        expect(tryUnblocking).toHaveBeenCalledTimes(path === 'unblocking' ? 1 : 0);
+        expect(traceSpy).toHaveBeenCalledTimes(path === 'unblocking' ? 1 : 0);
+      } finally {
+        await fixture.cleanup();
+        traceSpy.mockRestore();
+      }
+    },
+  );
+
+  describe.each(['normal', 'unblocking'] as const)('%s target error provenance', (path) => {
+    it.each([
+      { name: 'projects the selected tool error after grading', final: 'tool error' },
+      { name: 'does not label a later unmarked error', final: 'unmarked error' },
+      { name: 'does not label a later success', final: 'success' },
+    ] as const)('$name', async ({ final }) => {
+      const events: string[] = [];
+      const childMetadata = {
+        http: { status: 200, statusText: 'OK', headers: { 'x-ratelimit-remaining': '0' } },
+        headers: { 'retry-after': '60' },
+        rateLimitKind: 'rate_limit',
+        arbitraryTargetMetadata: 'belongs to the child',
+      };
+      const markedError: ProviderResponse = {
+        output: 'Completed tool diagnostic',
+        error: 'Tool lookup failed: downstream 429 rate limit',
+        metadata: { ...childMetadata, errorOrigin: 'tool' },
+      };
+      const selectedResponse: ProviderResponse =
+        final === 'tool error'
+          ? markedError
+          : {
+              output: 'Later target output',
+              ...(final === 'unmarked error' ? { error: 'Target rejected the later request' } : {}),
+              metadata: {
+                ...childMetadata,
+                ...(final === 'success' ? { errorOrigin: 'tool' } : {}),
+              },
+            };
+      const targetResponses =
+        path === 'unblocking'
+          ? [
+              final === 'tool error'
+                ? { output: 'Please provide the example reference number.' }
+                : markedError,
+              selectedResponse,
+            ]
+          : final === 'tool error'
+            ? [selectedResponse]
+            : [markedError, selectedResponse];
+      const rounds = path === 'unblocking' ? 1 : targetResponses.length;
+      for (const [index, response] of targetResponses.entries()) {
+        mockTargetProvider.callApi.mockImplementationOnce(async () => {
+          events.push(`target ${index + 1}`);
+          return {
+            ...response,
+            tokenUsage: { total: 5, prompt: 3, completion: 2, numRequests: 1 },
+          };
+        });
+      }
+      mockRedTeamProvider.callApi.mockImplementation(async () => {
+        events.push('attacker');
+        return {
+          output: JSON.stringify({
+            generatedQuestion: 'Say hello.',
+            rationaleBehindJailbreak: 'Harmless result projection fixture',
+            lastResponseSummary: 'Continue the greeting.',
+          }),
+          tokenUsage: { total: 2, prompt: 1, completion: 1, numRequests: 1 },
+        };
+      });
+      vi.mocked(tryUnblocking).mockImplementation(async () => {
+        events.push('unblocking');
+        return path === 'unblocking'
+          ? { success: true, unblockingPrompt: 'The example reference is 123.' }
+          : { success: false };
+      });
+      mockScoringProvider.callApi.mockImplementation(async (_prompt, context) => {
+        events.push(context?.prompt.label ?? 'missing scoring label');
+        return {
+          output: JSON.stringify({ value: false, metadata: 25, rationale: 'Continue.' }),
+          tokenUsage: { total: 3, prompt: 2, completion: 1, numRequests: 1 },
+        };
+      });
+      const provider = new CrescendoProvider({
+        injectVar: 'objective',
+        maxTurns: rounds,
+        maxBacktracks: 0,
+        redteamProvider: mockRedTeamProvider,
+        stateful: true,
+      });
+
+      // Keep this projection fixture live through both actual judging steps and final return.
+      const result = await provider.callApi('Say hello.', {
+        originalProvider: mockTargetProvider,
+        vars: { objective: 'Say hello.' },
+        prompt: { raw: 'Say hello.', label: 'greeting' },
+      });
+      events.push('return');
+
+      expect(events).toEqual(
+        path === 'unblocking'
+          ? ['attacker', 'target 1', 'unblocking', 'target 2', 'refusal', 'eval', 'return']
+          : [
+              ...targetResponses.flatMap((_response, index) => [
+                'attacker',
+                `target ${index + 1}`,
+                'unblocking',
+                'refusal',
+                'eval',
+              ]),
+              'return',
+            ],
+      );
+      const gradedResponses = path === 'unblocking' ? [selectedResponse] : targetResponses;
+      expect(
+        mockScoringProvider.callApi.mock.calls.map(([body, context]) => ({
+          label: context?.prompt.label,
+          output: JSON.parse(JSON.parse(body)[1].content).responseToEvaluateInput,
+        })),
+      ).toEqual(
+        gradedResponses.flatMap((response) => [
+          { label: 'refusal', output: response.output },
+          { label: 'eval', output: response.output },
+        ]),
+      );
+      expect(mockTargetProvider.callApi).toHaveBeenCalledTimes(targetResponses.length);
+      expect(result.output).toBe(selectedResponse.output);
+      expect(result.error).toBe(selectedResponse.error);
+      if (final === 'tool error') {
+        expect(result.metadata).toHaveProperty('errorOrigin', 'tool');
+      } else {
+        expect(result.metadata).not.toHaveProperty('errorOrigin');
+      }
+      for (const key of Object.keys(childMetadata)) {
+        expect(result.metadata).not.toHaveProperty(key);
+      }
+      expect(result.metadata?.crescendoRoundsCompleted).toBe(rounds);
+      expect(result.metadata?.crescendoConfidence).toBe(25);
+      expect(result.metadata?.stopReason).toBe('Max rounds reached');
+      expect(result.metadata?.redteamHistory).toHaveLength(rounds);
+      expect(result.tokenUsage).toMatchObject({
+        total: targetResponses.length * 5,
+        prompt: targetResponses.length * 3,
+        completion: targetResponses.length * 2,
+        numRequests: targetResponses.length,
+        attacker: { total: rounds * 2, numRequests: rounds },
+        assertions: { total: rounds * 6, numRequests: rounds * 2 },
+      });
+    });
+  });
+
+  describe.each(['normal', 'unblocking'] as const)(
+    '%s selected caller-observer provenance',
+    (path) => {
+      it.each([
+        { name: 'projects the selected observer error after grading', final: 'observer error' },
+        { name: 'does not label a later selected provider error', final: 'provider error' },
+        { name: 'does not label a later selected success', final: 'success' },
+      ] as const)('$name', async ({ final }) => {
+        const events: string[] = [];
+        const observerResponse: ProviderResponse = {
+          output: 'Completed observer diagnostic',
+          error: 'metrics rate limit exceeded',
+        };
+        const selectedResponse: ProviderResponse =
+          final === 'observer error'
+            ? observerResponse
+            : {
+                output: 'Later target output',
+                ...(final === 'provider error'
+                  ? { error: 'Target inference failed: rate limit exceeded' }
+                  : {}),
+              };
+        const targetResponses =
+          path === 'unblocking'
+            ? [
+                final === 'observer error'
+                  ? { output: 'Please provide the example reference number.' }
+                  : observerResponse,
+                selectedResponse,
+              ]
+            : final === 'observer error'
+              ? [selectedResponse]
+              : [observerResponse, selectedResponse];
+        const rounds = path === 'unblocking' ? 1 : targetResponses.length;
+        for (const [index, response] of targetResponses.entries()) {
+          mockTargetProvider.callApi.mockImplementationOnce(async () => {
+            events.push(`target ${index + 1}`);
+            const delivered: ProviderResponse = {
+              ...response,
+              tokenUsage: { total: 5, prompt: 3, completion: 2, numRequests: 1 },
+            };
+            return response === observerResponse
+              ? createSelectedObserverErrorResponse(delivered)
+              : delivered;
+          });
+        }
+        mockRedTeamProvider.callApi.mockImplementation(async () => {
+          events.push('attacker');
+          return {
+            output: JSON.stringify({
+              generatedQuestion: 'Say hello.',
+              rationaleBehindJailbreak: 'Harmless observer result projection fixture',
+              lastResponseSummary: 'Continue the greeting.',
+            }),
+            tokenUsage: { total: 2, prompt: 1, completion: 1, numRequests: 1 },
+          };
+        });
+        vi.mocked(tryUnblocking).mockImplementation(async () => {
+          events.push('unblocking');
+          return path === 'unblocking'
+            ? { success: true, unblockingPrompt: 'The example reference is 123.' }
+            : { success: false };
+        });
+        mockScoringProvider.callApi.mockImplementation(async (_prompt, context) => {
+          events.push(context?.prompt.label ?? 'missing scoring label');
+          return {
+            output: JSON.stringify({ value: false, metadata: 25, rationale: 'Continue.' }),
+            tokenUsage: { total: 3, prompt: 2, completion: 1, numRequests: 1 },
+          };
+        });
+        const provider = new CrescendoProvider({
+          injectVar: 'objective',
+          maxTurns: rounds,
+          maxBacktracks: 0,
+          redteamProvider: mockRedTeamProvider,
+          stateful: true,
+        });
+
+        const result = await provider.callApi('Say hello.', {
+          originalProvider: mockTargetProvider,
+          vars: { objective: 'Say hello.' },
+          prompt: { raw: 'Say hello.', label: 'greeting' },
+        });
+        events.push('return');
+
+        expect(events).toEqual(
+          path === 'unblocking'
+            ? ['attacker', 'target 1', 'unblocking', 'target 2', 'refusal', 'eval', 'return']
+            : [
+                ...targetResponses.flatMap((_response, index) => [
+                  'attacker',
+                  `target ${index + 1}`,
+                  'unblocking',
+                  'refusal',
+                  'eval',
+                ]),
+                'return',
+              ],
+        );
+        const gradedResponses = path === 'unblocking' ? [selectedResponse] : targetResponses;
+        expect(
+          mockScoringProvider.callApi.mock.calls.map(([body, context]) => ({
+            label: context?.prompt.label,
+            output: JSON.parse(JSON.parse(body)[1].content).responseToEvaluateInput,
+          })),
+        ).toEqual(
+          gradedResponses.flatMap((response) => [
+            { label: 'refusal', output: response.output },
+            { label: 'eval', output: response.output },
+          ]),
+        );
+        expect(mockTargetProvider.callApi).toHaveBeenCalledTimes(targetResponses.length);
+        expect(result.output).toBe(selectedResponse.output);
+        expect(result.error).toBe(selectedResponse.error);
+        expect(isResponseHeadersObserverErrorResponse(result)).toBe(final === 'observer error');
+        expect(isProviderResponseRateLimited(result, undefined)).toBe(final === 'provider error');
+        expect(result.metadata).not.toHaveProperty('errorOrigin');
+        expect(result.metadata?.crescendoRoundsCompleted).toBe(rounds);
+        expect(result.metadata?.crescendoConfidence).toBe(25);
+        expect(result.metadata?.stopReason).toBe('Max rounds reached');
+        expect(result.metadata?.redteamHistory).toHaveLength(rounds);
+        expect(result.tokenUsage).toMatchObject({
+          total: targetResponses.length * 5,
+          prompt: targetResponses.length * 3,
+          completion: targetResponses.length * 2,
+          numRequests: targetResponses.length,
+          attacker: { total: rounds * 2, numRequests: rounds },
+          assertions: { total: rounds * 6, numRequests: rounds * 2 },
+        });
+      });
+    },
+  );
 
   describe('Unblocking functionality', () => {
     it('should detect blocking question and send unblocking response', async () => {
@@ -2557,7 +2951,7 @@ describe('CrescendoProvider - Chat Template Support', () => {
     "content": "You are a helpful assistant"
   },
   {
-    "role": "user", 
+    "role": "user",
     "content": "{{ user_input }}"
   }
 ]`;
