@@ -485,6 +485,7 @@ export default class Eval {
     const db = await getDb();
 
     const datasetId = sha256(JSON.stringify(config.tests || []));
+    const persistedConfig = sanitizeConfigForPersistence(config);
 
     const durationResults = {
       ...(opts?.durationMs !== undefined && { durationMs: opts.durationMs }),
@@ -504,7 +505,7 @@ export default class Eval {
           createdAt: createdAt.getTime(),
           author,
           description: config.description,
-          config: sanitizeConfigForPersistence(config),
+          config: persistedConfig,
           results: durationResults,
           vars: opts?.vars || [],
           runtimeOptions: sanitizeRuntimeOptions(opts?.runtimeOptions),
@@ -557,7 +558,7 @@ export default class Eval {
         .insert(datasetsTable)
         .values({
           id: datasetId,
-          tests: config.tests,
+          tests: persistedConfig.tests,
         })
         .onConflictDoNothing()
         .run();

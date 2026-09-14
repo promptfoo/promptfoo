@@ -29,6 +29,7 @@ import {
   accumulateResponseTokenUsage,
   createEmptyTokenUsage,
 } from '../../util/tokenUsageUtils';
+import { requiresTraceRedaction } from '../../util/traceRedaction';
 import { shouldGenerateRemote } from '../remoteGeneration';
 import { remoteGenerationContextPayload } from '../remoteGenerationContext';
 import {
@@ -63,6 +64,7 @@ import {
   externalizeResponseForRedteamHistory,
   getGraderAssertionValue,
   getTargetResponse,
+  gradeRedactionResponse,
   redteamProviderManager,
   runRedteamGrader,
 } from './shared';
@@ -514,6 +516,8 @@ interface TreeIterativeMetadata extends BaseRedteamMetadata {
   attempts: number;
   redteamTreeHistory: TreeSearchOutput[];
   storedGraderResult?: GradingResult;
+  storedGraderResults?: Record<number, GradingResult>;
+  redactionContentOmitted?: boolean;
   sessionIds: string[]; // All session IDs from the tree exploration
 }
 
@@ -613,6 +617,8 @@ async function runRedteamConversation({
   let bestScore = 0;
   let noImprovementCount = 0;
   let storedGraderResult: GradingResult | undefined = undefined;
+  const storedGraderResults: Record<number, GradingResult> = {};
+  const redactTrace = requiresTraceRedaction(test?.assert);
 
   const totalTokenUsage: TokenUsage = createEmptyTokenUsage();
 
@@ -694,6 +700,10 @@ async function runRedteamConversation({
               redteamTreeHistory: treeOutputs,
               stopReason: 'ATTACKER_ERROR',
               storedGraderResult,
+              ...(redactTrace && {
+                storedGraderResults,
+                redactionContentOmitted: true,
+              }),
               sessionIds: extractSessionIds(treeOutputs),
             },
             tokenUsage: totalTokenUsage,
@@ -839,6 +849,14 @@ async function runRedteamConversation({
           options,
         );
         targetResponse = await externalizeResponseForRedteamHistory(targetResponse, context);
+        if (redactTrace && test) {
+          storedGraderResult = await gradeRedactionResponse(
+            targetPrompt,
+            targetResponse,
+            { ...test, vars: updatedVars },
+            storedGraderResults,
+          );
+        }
         if (targetResponse.metadata?.redactionMediaOmitted === true) {
           mediaRedactionError ??= targetResponse.error;
         }
@@ -928,7 +946,7 @@ async function runRedteamConversation({
         }
 
         const { getGraderById } = await import('../graders');
-        let graderPassed: boolean | undefined;
+        let graderPassed: boolean | undefined = storedGraderResult?.pass;
         let assertToUse = test?.assert?.find(
           (a: { type: string }) => a.type && a.type.includes(test.metadata?.pluginId),
         );
@@ -938,7 +956,7 @@ async function runRedteamConversation({
           assertToUse = test?.assert?.find((a: { type: string }) => a.type);
         }
 
-        if (test && assertToUse) {
+        if (!redactTrace && test && assertToUse) {
           const grader = getGraderById(assertToUse.type);
           if (grader) {
             // Create test object with iteration-specific vars
@@ -1057,6 +1075,10 @@ async function runRedteamConversation({
               redteamTreeHistory: treeOutputs,
               stopReason: stoppingReason,
               storedGraderResult,
+              ...(redactTrace && {
+                storedGraderResults,
+                redactionContentOmitted: true,
+              }),
               sessionIds: extractSessionIds(treeOutputs),
               ...((bestTransformDisplayVars || lastTransformDisplayVars) && {
                 transformDisplayVars: bestTransformDisplayVars || lastTransformDisplayVars,
@@ -1102,6 +1124,10 @@ async function runRedteamConversation({
               redteamTreeHistory: treeOutputs,
               stopReason: stoppingReason,
               storedGraderResult,
+              ...(redactTrace && {
+                storedGraderResults,
+                redactionContentOmitted: true,
+              }),
               sessionIds: extractSessionIds(treeOutputs),
               ...((bestTransformDisplayVars || lastTransformDisplayVars) && {
                 transformDisplayVars: bestTransformDisplayVars || lastTransformDisplayVars,
@@ -1148,6 +1174,10 @@ async function runRedteamConversation({
               redteamTreeHistory: treeOutputs,
               stopReason: stoppingReason,
               storedGraderResult,
+              ...(redactTrace && {
+                storedGraderResults,
+                redactionContentOmitted: true,
+              }),
               sessionIds: extractSessionIds(treeOutputs),
               ...((bestTransformDisplayVars || lastTransformDisplayVars) && {
                 transformDisplayVars: bestTransformDisplayVars || lastTransformDisplayVars,
@@ -1260,6 +1290,14 @@ async function runRedteamConversation({
     options,
   );
   finalTargetResponse = await externalizeResponseForRedteamHistory(finalTargetResponse, context);
+  if (redactTrace && test) {
+    storedGraderResult = await gradeRedactionResponse(
+      finalTargetPrompt,
+      finalTargetResponse,
+      { ...test, vars: finalUpdatedVars },
+      storedGraderResults,
+    );
+  }
   if (finalTargetResponse.metadata?.redactionMediaOmitted === true) {
     mediaRedactionError ??= finalTargetResponse.error;
   }
@@ -1302,6 +1340,10 @@ async function runRedteamConversation({
       redteamTreeHistory: treeOutputs,
       stopReason: stoppingReason,
       storedGraderResult,
+      ...(redactTrace && {
+        storedGraderResults,
+        redactionContentOmitted: true,
+      }),
       sessionIds: extractSessionIds(treeOutputs),
       ...((bestTransformDisplayVars || lastTransformDisplayVars) && {
         transformDisplayVars: bestTransformDisplayVars || lastTransformDisplayVars,

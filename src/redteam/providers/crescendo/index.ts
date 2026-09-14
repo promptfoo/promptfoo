@@ -57,6 +57,7 @@ import {
   getGraderAssertionValue,
   getLastMessageContent,
   getTargetResponse,
+  gradeRedactionResponse,
   isConversationEndedResponse,
   isValidChatMessageArray,
   type RoundBacktrackingStopReason,
@@ -111,6 +112,8 @@ interface CrescendoMetadata extends BaseRedteamMetadata {
   }>;
   totalSuccessfulAttacks?: number;
   storedGraderResult?: GradingResult;
+  storedGraderResults?: Record<number, GradingResult>;
+  redactionContentOmitted?: boolean;
   traceSnapshots?: Record<string, unknown>[];
 }
 
@@ -333,7 +336,8 @@ export class CrescendoProvider implements ApiProvider {
     let evalPercentage: number | null = null;
 
     let objectiveScore: { value: number; rationale: string } | undefined;
-    let storedGraderResult: any = undefined;
+    let storedGraderResult: GradingResult | undefined = undefined;
+    const storedGraderResults: Record<number, GradingResult> = {};
 
     let exitReason: RoundBacktrackingStopReason = 'Max rounds reached';
 
@@ -479,6 +483,15 @@ export class CrescendoProvider implements ApiProvider {
           session,
         );
         lastResponse = response;
+        if (redactTrace) {
+          storedGraderResult = await gradeRedactionResponse(
+            attackPrompt,
+            lastResponse,
+            test,
+            storedGraderResults,
+          );
+          graderPassed = storedGraderResult?.pass;
+        }
         if (lastResponse.metadata?.redactionMediaOmitted === true) {
           mediaRedactionError ??= lastResponse.error;
         }
@@ -562,6 +575,15 @@ export class CrescendoProvider implements ApiProvider {
           // Update lastResponse to the unblocking response and continue
           // Note: unblocking prompts don't use audio/image transforms
           lastResponse = unblockingResponse;
+          if (redactTrace) {
+            storedGraderResult = await gradeRedactionResponse(
+              attackPrompt,
+              lastResponse,
+              test,
+              storedGraderResults,
+            );
+            graderPassed = storedGraderResult?.pass;
+          }
           if (lastResponse.metadata?.redactionMediaOmitted === true) {
             mediaRedactionError ??= lastResponse.error;
           }
@@ -624,7 +646,7 @@ export class CrescendoProvider implements ApiProvider {
           continue;
         }
 
-        if (test && assertToUse) {
+        if (!redactTrace && test && assertToUse) {
           const grader = getGraderById(assertToUse.type);
           if (grader) {
             const gradingTraceSummary = tracingOptions.includeInGrading
@@ -830,6 +852,10 @@ export class CrescendoProvider implements ApiProvider {
         successfulAttacks: this.successfulAttacks,
         totalSuccessfulAttacks: this.successfulAttacks.length,
         storedGraderResult,
+        ...(redactTrace && {
+          storedGraderResults,
+          redactionContentOmitted: true,
+        }),
         traceSnapshots:
           !redactTrace && traceSnapshots.length > 0
             ? traceSnapshots.map((snapshot) => formatTraceForMetadata(snapshot))

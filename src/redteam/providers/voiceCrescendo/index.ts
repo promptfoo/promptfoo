@@ -26,7 +26,7 @@ import {
   accumulateResponseTokenUsage,
   createEmptyTokenUsage,
 } from '../../../util/tokenUsageUtils';
-import { TRACE_REDACTION_ASSERTIONS } from '../../../util/traceRedaction';
+import { getAssertionLeaves, TRACE_REDACTION_ASSERTIONS } from '../../../util/traceRedaction';
 import { getGraderById } from '../../graders';
 import { shouldGenerateRemote } from '../../remoteGeneration';
 import { remoteGenerationContextPayload } from '../../remoteGenerationContext';
@@ -511,8 +511,7 @@ export class VoiceCrescendoProvider implements ApiProvider {
     let mediaRedactionError: string | undefined;
     const storedGraderResults: Record<number, GradingResult> = {};
     const test = context?.test as AtomicTestCase | undefined;
-    const redactionAssertions = (test?.assert ?? [])
-      .flatMap((assertion) => (assertion.type === 'assert-set' ? assertion.assert : [assertion]))
+    const redactionAssertions = getAssertionLeaves(test?.assert)
       .map((assertion, index) => ({ assertion, index }))
       .filter(({ assertion }) =>
         TRACE_REDACTION_ASSERTIONS.has(assertion.type.replace(/^not-/, '')),

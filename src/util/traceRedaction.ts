@@ -42,22 +42,42 @@ export const TRACE_REDACTION_ASSERTIONS = new Set([
 // Non-enumerable on wrapper-created assertions; JSON target responses cannot carry this marker.
 export const TRUSTED_REDACTION_GRADER = Symbol.for('promptfoo.trustedRedactionGrader');
 
-export function requiresTraceRedaction(assertions: AssertionOrSet[] | undefined): boolean {
-  const pending = [...(assertions ?? [])];
-  const seen = new Set<AssertionOrSet>();
+export function getAssertionLeaves(assertions: AssertionOrSet[] | undefined): Assertion[] {
+  const leaves: Assertion[] = [];
+  const ancestors = new Set<AssertionOrSet>();
+  const pending = (assertions ?? [])
+    .slice()
+    .reverse()
+    .map((assertion) => ({ assertion, exit: false }));
   while (pending.length) {
-    const assertion = pending.pop()!;
-    if (seen.has(assertion)) {
+    const { assertion, exit } = pending.pop()!;
+    if (exit) {
+      ancestors.delete(assertion);
       continue;
     }
-    seen.add(assertion);
     if (assertion.type === 'assert-set') {
-      pending.push(...assertion.assert);
-    } else if (TRACE_REDACTION_ASSERTIONS.has(assertion.type.replace(/^not-/, ''))) {
-      return true;
+      if (ancestors.has(assertion)) {
+        continue;
+      }
+      ancestors.add(assertion);
+      pending.push({ assertion, exit: true });
+      pending.push(
+        ...assertion.assert
+          .slice()
+          .reverse()
+          .map((child) => ({ assertion: child, exit: false })),
+      );
+    } else {
+      leaves.push(assertion);
     }
   }
-  return false;
+  return leaves;
+}
+
+export function requiresTraceRedaction(assertions: AssertionOrSet[] | undefined): boolean {
+  return getAssertionLeaves(assertions).some((assertion) =>
+    TRACE_REDACTION_ASSERTIONS.has(assertion.type.replace(/^not-/, '')),
+  );
 }
 
 function hasMarkdownImage(text: string): boolean {

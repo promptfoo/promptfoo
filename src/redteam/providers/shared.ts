@@ -37,6 +37,7 @@ import {
   accumulateTokenUsage,
 } from '../../util/tokenUsageUtils';
 import {
+  getAssertionLeaves,
   getProtectedAssertionValue,
   hasRedactionMedia,
   requiresTraceRedaction,
@@ -649,6 +650,47 @@ interface TraceableRedteamGrader<TResult, TArgs extends unknown[]> {
 }
 
 const privateRedactionResponses = new WeakMap<ProviderResponse, ProviderResponse>();
+
+/** Grade every private target response before strategy control flow can discard it. */
+export async function gradeRedactionResponse(
+  prompt: string,
+  response: ProviderResponse,
+  test: AtomicTestCase | undefined,
+  results: Record<number, GradingResult>,
+): Promise<GradingResult | undefined> {
+  if (!test || response.metadata?.redactionMediaOmitted === true) {
+    return undefined;
+  }
+  const { getGraderById } = await import('../graders');
+  for (const [index, assertion] of getAssertionLeaves(test.assert).entries()) {
+    const type = assertion.type.replace(/^not-/, '');
+    if (!TRACE_REDACTION_ASSERTIONS.has(type)) {
+      continue;
+    }
+    const grader = getGraderById(type);
+    invariant(grader, `Missing privacy grader: ${type}`);
+    const { grade, rubric } = await runRedteamGrader(
+      grader,
+      prompt,
+      String(response.output ?? ''),
+      test,
+      undefined,
+      getGraderAssertionValue(assertion),
+      undefined,
+      undefined,
+      { providerResponse: response },
+    );
+    const previous = results[index];
+    const current = accumulateGraderResult(previous, {
+      ...grade,
+      assertion: buildGraderResultAssertion(grade.assertion, assertion, rubric),
+    });
+    results[index] =
+      previous?.pass === false ? { ...previous, tokensUsed: current.tokensUsed } : current;
+  }
+  const grades = Object.values(results);
+  return grades.find((grade) => !grade.pass) ?? grades[0];
+}
 
 /** Trace every strategy grader at one boundary, including graders with custom getResult methods. */
 export function runRedteamGrader<TResult, TArgs extends unknown[]>(

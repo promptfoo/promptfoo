@@ -2,7 +2,13 @@ import { eq, sql } from 'drizzle-orm';
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { getDb } from '../../src/database/index';
 import { updateSignalFile, updateSignalFileForDeletedEvals } from '../../src/database/signal';
-import { evalResultsTable, evalsTable, spansTable, tracesTable } from '../../src/database/tables';
+import {
+  datasetsTable,
+  evalResultsTable,
+  evalsTable,
+  spansTable,
+  tracesTable,
+} from '../../src/database/tables';
 import { getAuthor } from '../../src/globalConfig/accounts';
 import { runDbMigrations } from '../../src/migrate';
 import Eval, {
@@ -18,6 +24,7 @@ import { EvalEvaluationStore } from '../../src/node/evaluationStore';
 import { generateTraceContextIfNeeded } from '../../src/tracing/evaluatorTracing';
 import { TraceStore } from '../../src/tracing/store';
 import { type EvaluateResult, type Prompt, ResultFailureReason } from '../../src/types/index';
+import { sha256 } from '../../src/util/createHash';
 import { updateResult, writeResultsToDatabase } from '../../src/util/database';
 import {
   getCachedStandaloneEvals,
@@ -1605,6 +1612,35 @@ describe('evaluator', () => {
       );
       context?.rootSpan?.end();
     });
+
+    it.each(['rawReceipt', 'sensitiveValue', 'expectedContent'])(
+      'sanitizes %s in saved datasets while preserving original dataset identity',
+      async (key) => {
+        const secret = `PRIVATE_DATASET_RECEIPT_${key}`;
+        const tests = [
+          {
+            assert: [
+              {
+                type: 'promptfoo:redteam:coding-agent:trace-redaction' as const,
+                value: { [key]: secret },
+              },
+            ],
+          },
+        ];
+        const datasetId = sha256(JSON.stringify(tests));
+        const evaluation = await Eval.create({ tests }, []);
+        const db = await getDb();
+        const dataset = await db
+          .select()
+          .from(datasetsTable)
+          .where(eq(datasetsTable.id, datasetId))
+          .get();
+        expect(dataset).toBeDefined();
+        expect(JSON.stringify(dataset?.tests)).not.toContain(secret);
+        expect(evaluation.config.tests).toEqual(tests);
+        expect(JSON.stringify(evaluation.config.tests)).toContain(secret);
+      },
+    );
 
     it.each(['rawReceipt', 'sensitiveValue', 'expectedContent'])(
       'keeps %s out of persisted and exported verifier configuration',

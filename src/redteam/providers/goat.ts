@@ -51,6 +51,7 @@ import {
   externalizeResponseForRedteamHistory,
   getGraderAssertionValue,
   getLastMessageContent,
+  gradeRedactionResponse,
   runRedteamGrader,
   tryUnblocking,
 } from './shared';
@@ -94,6 +95,8 @@ interface GoatMetadata extends BaseRedteamMetadata {
   }>;
   totalSuccessfulAttacks?: number;
   storedGraderResult?: GradingResult;
+  storedGraderResults?: Record<number, GradingResult>;
+  redactionContentOmitted?: boolean;
   traceSnapshots?: Record<string, unknown>[];
 }
 
@@ -257,6 +260,7 @@ export default class GoatProvider implements ApiProvider {
     let assertToUse: Assertion | AssertionSet | undefined;
     let graderPassed: boolean | undefined;
     let storedGraderResult: GradingResult | undefined;
+    const storedGraderResults: Record<number, GradingResult> = {};
     const { getGraderById } = await import('../graders');
     let test: AtomicTestCase | undefined;
 
@@ -645,6 +649,13 @@ export default class GoatProvider implements ApiProvider {
 
         if (redactTrace) {
           targetResponse = await externalizeResponseForRedteamHistory(targetResponse, context);
+          storedGraderResult = await gradeRedactionResponse(
+            targetPrompt,
+            targetResponse,
+            test,
+            storedGraderResults,
+          );
+          graderPassed = storedGraderResult?.pass;
           if (!mediaRedactionFailed) {
             redactionError = targetResponse.error;
           }
@@ -782,7 +793,7 @@ export default class GoatProvider implements ApiProvider {
         lastTargetResponse = finalResponse;
 
         const grader = assertToUse ? getGraderById(assertToUse.type) : undefined;
-        if (test && assertToUse && grader && finalOutput) {
+        if (!redactTrace && test && assertToUse && grader && finalOutput) {
           // Build grading context with image outputs, tracing, and exfil tracking data.
           let gradingContext: RedteamGradingContext | undefined = {
             providerResponse: finalResponse,
@@ -909,6 +920,10 @@ export default class GoatProvider implements ApiProvider {
         successfulAttacks: this.successfulAttacks,
         totalSuccessfulAttacks: this.successfulAttacks.length,
         storedGraderResult,
+        ...(redactTrace && {
+          storedGraderResults,
+          redactionContentOmitted: true,
+        }),
         traceSnapshots:
           !redactTrace && traceSnapshots.length > 0
             ? traceSnapshots.map((snapshot) => formatTraceForMetadata(snapshot))

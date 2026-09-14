@@ -3,7 +3,11 @@ import { MULTI_INPUT_VAR } from '../redteam/constants';
 import { getGraderById } from '../redteam/graders';
 import { checkExfilTracking } from '../redteam/strategies/indirectWebPwn';
 import invariant from '../util/invariant';
-import { TRACE_REDACTION_ASSERTIONS, TRUSTED_REDACTION_GRADER } from '../util/traceRedaction';
+import {
+  getAssertionLeaves,
+  TRACE_REDACTION_ASSERTIONS,
+  TRUSTED_REDACTION_GRADER,
+} from '../util/traceRedaction';
 import { summarizeTrajectoryForJudge } from './trajectoryUtils';
 
 import type { RedteamGradingContext } from '../redteam/grading/types';
@@ -95,9 +99,7 @@ export const handleRedteam = async ({
         : Math.min(1, Math.max(0, 1 - (Number.isFinite(result.score) ? result.score : 0))),
     };
   };
-  const originalAssertions = assertionValueContext.test.assert?.flatMap((item) =>
-    item.type === 'assert-set' ? item.assert : [item],
-  );
+  const originalAssertions = getAssertionLeaves(assertionValueContext.test.assert);
   const assertionIndex = originalAssertions?.indexOf(assertion);
   const canReuseSingularResult =
     !TRACE_REDACTION_ASSERTIONS.has(baseType) ||

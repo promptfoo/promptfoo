@@ -49,6 +49,7 @@ import {
   externalizeResponseForRedteamHistory,
   getGraderAssertionValue,
   getTargetResponse,
+  gradeRedactionResponse,
   isConversationEndedResponse,
   type Message,
   runRedteamGrader,
@@ -93,6 +94,8 @@ interface HydraMetadata extends BaseRedteamMetadata {
   }>;
   totalSuccessfulAttacks?: number;
   storedGraderResult?: GradingResult;
+  storedGraderResults?: Record<number, GradingResult>;
+  redactionContentOmitted?: boolean;
   redteamHistory: Array<{
     prompt: string;
     promptAudio?: MediaData;
@@ -355,6 +358,7 @@ export class HydraProvider implements ApiProvider {
     let vulnerabilityAchieved = false;
     let stopReason: TurnBacktrackingStopReason = 'Max turns reached';
     let storedGraderResult: GradingResult | undefined = undefined;
+    const storedGraderResults: Record<number, GradingResult> = {};
     let lastTargetResponse: TargetResponse | undefined = undefined;
     let backtrackCount = 0;
     let agentFailureError: string | undefined;
@@ -691,6 +695,12 @@ export class HydraProvider implements ApiProvider {
       const targetSessionId = targetResponse.sessionId;
       if (redactTrace) {
         targetResponse = await externalizeResponseForRedteamHistory(targetResponse, context);
+        storedGraderResult = await gradeRedactionResponse(
+          finalTargetPrompt,
+          targetResponse,
+          test,
+          storedGraderResults,
+        );
         if (targetResponse.metadata?.redactionMediaOmitted === true) {
           redactionError ??= targetResponse.error;
         }
@@ -864,7 +874,7 @@ export class HydraProvider implements ApiProvider {
       }
 
       // Grade the response
-      let graderResult: GradingResult | undefined = undefined;
+      let graderResult: GradingResult | undefined = redactTrace ? storedGraderResult : undefined;
 
       // Prepare trace summaries for attack generation and grading
       const attackTraceSummary = tracingOptions.includeInAttack ? computedTraceSummary : undefined;
@@ -875,7 +885,7 @@ export class HydraProvider implements ApiProvider {
       // Update previous trace summary for next turn's attack generation
       previousTraceSummary = attackTraceSummary;
 
-      if (test && assertToUse) {
+      if (!redactTrace && test && assertToUse) {
         const grader = getGraderById(assertToUse.type);
         if (grader) {
           // Build grading context with image outputs, tracing, and exfil tracking data.
@@ -1080,6 +1090,10 @@ export class HydraProvider implements ApiProvider {
         successfulAttacks,
         totalSuccessfulAttacks: successfulAttacks.length,
         storedGraderResult,
+        ...(redactTrace && {
+          storedGraderResults,
+          redactionContentOmitted: true,
+        }),
         redteamHistory,
         traceSnapshots:
           !redactTrace && traceSnapshots.length > 0

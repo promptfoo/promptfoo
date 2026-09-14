@@ -55,6 +55,7 @@ import {
   externalizeResponseForRedteamHistory,
   getGraderAssertionValue,
   getTargetResponse,
+  gradeRedactionResponse,
   redteamProviderManager,
   runRedteamGrader,
   type TargetResponse,
@@ -105,6 +106,8 @@ interface IterativeMetadata {
   highestScore: number;
   redteamFinalPrompt?: string;
   storedGraderResult?: GradingResult;
+  storedGraderResults?: Record<number, GradingResult>;
+  redactionContentOmitted?: boolean;
   stopReason: StopReason;
   redteamHistory: {
     prompt: string;
@@ -214,6 +217,7 @@ export async function runRedteamConversation({
   let bestInjectVar: string | undefined = undefined;
   let targetPrompt: string | null = null;
   let storedGraderResult: GradingResult | undefined = undefined;
+  const storedGraderResults: Record<number, GradingResult> = {};
   let stopReason: StopReason = 'Max iterations reached';
 
   const sessionIds: string[] = [];
@@ -459,6 +463,14 @@ export async function runRedteamConversation({
     );
     // Externalize blobs before they hit history/prompts
     targetResponse = await externalizeResponseForRedteamHistory(targetResponse, context);
+    if (redactTrace && test) {
+      storedGraderResult = await gradeRedactionResponse(
+        targetPrompt,
+        targetResponse,
+        { ...test, vars: updatedVars },
+        storedGraderResults,
+      );
+    }
     if (targetResponse.metadata?.redactionMediaOmitted === true) {
       mediaRedactionError ??= targetResponse.error;
     }
@@ -544,7 +556,7 @@ export async function runRedteamConversation({
 
     const { getGraderById } = await import('../graders');
 
-    if (test && assertToUse) {
+    if (!redactTrace && test && assertToUse) {
       const grader = getGraderById(assertToUse.type);
       if (grader) {
         // Create test object with iteration-specific vars
@@ -843,6 +855,10 @@ export async function runRedteamConversation({
       redteamHistory: previousOutputs,
       redteamFinalPrompt: bestInjectVar,
       storedGraderResult,
+      ...(redactTrace && {
+        storedGraderResults,
+        redactionContentOmitted: true,
+      }),
       stopReason: stopReason,
       sessionIds,
       traceSnapshots:

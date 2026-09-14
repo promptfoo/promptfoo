@@ -268,6 +268,87 @@ describe('CrescendoProvider', () => {
     expect(JSON.stringify(results)).not.toContain('PRIVATE_SESSION_');
   });
 
+  it.each(
+    ['coding-agent:trace-redaction', 'harness:artifact-redaction'].flatMap((pluginId) =>
+      ['normal', 'ending', 'unblocking'].map((mode) => ({ pluginId, mode })),
+    ),
+  )(
+    'grades every nested privacy receipt on $mode responses for $pluginId',
+    async ({ pluginId, mode }) => {
+      const provider = new CrescendoProvider({
+        injectVar: 'objective',
+        maxTurns: 1,
+        maxBacktracks: 0,
+        stateful: true,
+        redteamProvider: mockRedTeamProvider,
+      });
+      vi.spyOn(provider as any, 'getAttackPrompt').mockResolvedValue({
+        generatedQuestion: 'Inspect report',
+      });
+      vi.spyOn(provider as any, 'getRefusalScore').mockResolvedValue([false, '']);
+      vi.spyOn(provider as any, 'getEvalScore').mockResolvedValue({
+        value: false,
+        metadata: 0,
+        rationale: '',
+      });
+      vi.mocked(tryUnblocking).mockResolvedValue(
+        mode === 'unblocking'
+          ? { success: true, unblockingPrompt: 'Continue report' }
+          : { success: false },
+      );
+      const getResult = vi.fn(async (_prompt, output, _test, _provider, value) => ({
+        grade: { pass: !output.includes(value), score: output.includes(value) ? 0 : 1 },
+        rubric: 'Privacy',
+      }));
+      mockGetGraderById.mockReturnValue({ id: `promptfoo:redteam:${pluginId}`, getResult });
+      mockTargetProvider.callApi.mockResolvedValue({
+        output: 'PRIVATE_NESTED_RECEIPT',
+        conversationEnded: mode !== 'normal',
+      });
+      if (mode === 'unblocking') {
+        mockTargetProvider.callApi.mockResolvedValueOnce({ output: 'Clean first report' });
+      }
+      const result = await provider.callApi('Inspect report', {
+        originalProvider: mockTargetProvider,
+        vars: { objective: 'Inspect report' },
+        prompt: { raw: 'Inspect report', label: 'fixture' },
+        test: {
+          vars: {},
+          metadata: { pluginId },
+          assert: [
+            { type: 'contains', value: 'report' },
+            {
+              type: 'assert-set',
+              assert: [
+                { type: `promptfoo:redteam:${pluginId}`, value: 'ABSENT_RECEIPT' },
+                {
+                  type: 'assert-set',
+                  assert: [
+                    { type: `promptfoo:redteam:${pluginId}`, value: 'PRIVATE_NESTED_RECEIPT' },
+                  ],
+                },
+              ],
+            },
+          ],
+        } as AtomicTestCase,
+      });
+      expect(getResult).toHaveBeenCalledTimes(mode === 'unblocking' ? 4 : 2);
+      expect(mockTargetProvider.callApi).toHaveBeenCalledTimes(mode === 'unblocking' ? 2 : 1);
+      expect(result.metadata?.storedGraderResults).toMatchObject({
+        1: { pass: true },
+        2: { pass: false },
+      });
+      expect(result.metadata?.redactionContentOmitted).toBe(true);
+      expect(
+        Object.getOwnPropertyDescriptor(
+          result.metadata?.storedGraderResults?.[2].assertion ?? {},
+          Symbol.for('promptfoo.trustedRedactionGrader'),
+        )?.value,
+      ).toBe(true);
+      expect(JSON.stringify(result)).not.toContain('PRIVATE_NESTED_RECEIPT');
+    },
+  );
+
   it.each(['coding-agent:trace-redaction', 'harness:artifact-redaction'] as const)(
     'keeps %s sessions private through normal and unblocking turns',
     async (pluginId) => {

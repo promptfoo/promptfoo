@@ -14,6 +14,7 @@ import {
   accumulateResponseTokenUsage,
   createEmptyTokenUsage,
 } from '../../../util/tokenUsageUtils';
+import { requiresTraceRedaction } from '../../../util/traceRedaction';
 import { shouldGenerateRemote } from '../../remoteGeneration';
 import { remoteGenerationContextPayload } from '../../remoteGenerationContext';
 import {
@@ -35,6 +36,7 @@ import {
   getGraderAssertionValue,
   getLastMessageContent,
   getTargetResponse,
+  gradeRedactionResponse,
   isConversationEndedResponse,
   type RoundBacktrackingStopReason,
   redteamProviderManager,
@@ -129,6 +131,8 @@ export interface CustomMetadata extends BaseRedteamMetadata {
   }>;
   totalSuccessfulAttacks?: number;
   storedGraderResult?: GradingResult;
+  storedGraderResults?: Record<number, GradingResult>;
+  redactionContentOmitted?: boolean;
 }
 
 /**
@@ -362,6 +366,8 @@ export class CustomProvider implements ApiProvider {
     const { getGraderById } = await import('../../graders');
     let graderPassed: boolean | undefined;
     let storedGraderResult: GradingResult | undefined;
+    const storedGraderResults: Record<number, GradingResult> = {};
+    const redactTrace = requiresTraceRedaction(test?.assert);
 
     // Generate goal-specific evaluation rubric
     const additionalRubric = getGoalRubric(this.userGoal);
@@ -434,6 +440,15 @@ export class CustomProvider implements ApiProvider {
           session,
         );
         lastResponse = response;
+        if (redactTrace) {
+          storedGraderResult = await gradeRedactionResponse(
+            attackPrompt,
+            lastResponse,
+            test,
+            storedGraderResults,
+          );
+          graderPassed = storedGraderResult?.pass;
+        }
         if (lastResponse.metadata?.redactionMediaOmitted === true) {
           mediaRedactionError ??= lastResponse.error;
         }
@@ -508,6 +523,15 @@ export class CustomProvider implements ApiProvider {
           // Update lastResponse to the unblocking response and continue
           // Note: unblocking prompts don't use audio/image transforms
           lastResponse = unblockingResponse;
+          if (redactTrace) {
+            storedGraderResult = await gradeRedactionResponse(
+              attackPrompt,
+              lastResponse,
+              test,
+              storedGraderResults,
+            );
+            graderPassed = storedGraderResult?.pass;
+          }
           if (lastResponse.metadata?.redactionMediaOmitted === true) {
             mediaRedactionError ??= lastResponse.error;
           }
@@ -576,7 +600,7 @@ export class CustomProvider implements ApiProvider {
           continue;
         }
 
-        if (test && assertToUse) {
+        if (!redactTrace && test && assertToUse) {
           const grader = getGraderById(assertToUse.type);
           if (grader) {
             const gradingContext: RedteamGradingContext | undefined = {
@@ -703,7 +727,11 @@ export class CustomProvider implements ApiProvider {
         redteamHistory,
         successfulAttacks: this.successfulAttacks,
         totalSuccessfulAttacks: this.successfulAttacks.length,
-        storedGraderResult: storedGraderResult,
+        storedGraderResult,
+        ...(redactTrace && {
+          storedGraderResults,
+          redactionContentOmitted: true,
+        }),
         sessionId: getSessionId(lastResponse, context),
       },
       tokenUsage: totalTokenUsage,
