@@ -315,17 +315,16 @@ function redactCredentials(
         .filter((value): value is string => typeof value === 'string')
     : [];
   const containsSplitCredential = (values: string[], credential: string) => {
-    let previous = '';
     let suffix = '';
     for (const value of values) {
-      if (previous && value.includes(credential) && credential.startsWith(previous)) {
-        return true;
+      if (value.includes(credential)) {
+        suffix = '';
+        continue;
       }
       if (suffix && (suffix + value.slice(0, credential.length - 1)).includes(credential)) {
         return true;
       }
       suffix = credential.length > 1 ? (suffix + value).slice(1 - credential.length) : '';
-      previous = value;
     }
     return false;
   };
