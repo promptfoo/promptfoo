@@ -1,0 +1,6 @@
+interface:
+  display_name: 'Promptfoo Enterprise Setup'
+  short_description: 'Connect Codex to Promptfoo Enterprise with MCP'
+  default_prompt: 'Use $promptfoo-enterprise-setup to connect Codex to my Promptfoo Enterprise deployment.'
+policy:
+  allow_implicit_invocation: true

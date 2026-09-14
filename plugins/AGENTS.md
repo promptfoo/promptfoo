@@ -5,7 +5,7 @@ editing `plugins/promptfoo` or adding another plugin bundle.
 
 ## Promptfoo Plugin (shared Codex + Claude Code bundle)
 
-`plugins/promptfoo` is a single bundle published to BOTH marketplaces:
+`plugins/promptfoo` is a single bundle exposed by two repository marketplaces:
 
 - Codex, via `.codex-plugin/plugin.json` and `.agents/plugins/marketplace.json`.
 - Claude Code, via `.claude-plugin/plugin.json` and the repo-root
@@ -19,9 +19,10 @@ Keep both manifests' `version` fields equal, and bump them together whenever the
 published bundle content changes. When a plugin declares an explicit version,
 Claude Code only delivers changed plugin content after that version changes.
 
-Keep the public surface to the four focused skills unless the product decision
+Keep the public surface to the five focused skills unless the product decision
 changes:
 
+- `promptfoo-enterprise-setup` (Codex Enterprise MCP connection)
 - `promptfoo-evals`
 - `promptfoo-provider-setup`
 - `promptfoo-redteam-setup`
@@ -64,6 +65,7 @@ From the repo root:
 
 ```bash
 CODEX_HOME="${CODEX_HOME:-$HOME/.codex}"
+python3 "$CODEX_HOME/skills/.system/skill-creator/scripts/quick_validate.py" plugins/promptfoo/skills/promptfoo-enterprise-setup
 python3 "$CODEX_HOME/skills/.system/skill-creator/scripts/quick_validate.py" plugins/promptfoo/skills/promptfoo-evals
 python3 "$CODEX_HOME/skills/.system/skill-creator/scripts/quick_validate.py" plugins/promptfoo/skills/promptfoo-provider-setup
 python3 "$CODEX_HOME/skills/.system/skill-creator/scripts/quick_validate.py" plugins/promptfoo/skills/promptfoo-redteam-setup
