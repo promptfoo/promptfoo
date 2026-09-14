@@ -1177,6 +1177,13 @@ describe('evaluateOptions behavior', () => {
     });
 
     it('should persist and restore exact MCP provider and flattened test selections', async () => {
+      const previousProviderConfigs = cliState.selectedProviderConfigs;
+      evaluateMock.mockImplementationOnce(async (_suite, evalRecord) => {
+        expect(cliState.selectedProviderConfigs).toEqual([
+          { id: 'echo', label: 'selected-target' },
+        ]);
+        return evalRecord;
+      });
       const tempConfig = writeTempConfig(tmpDir, 'test-provider-selection-replay.yaml', {
         providers: [
           { id: 'echo', label: 'excluded-target' },
@@ -1221,7 +1228,7 @@ describe('evaluateOptions behavior', () => {
       const initialSuite = evaluateMock.mock.calls.at(-1)?.[0] as TestSuite;
       const initialEval = evaluateMock.mock.calls.at(-1)?.[1] as Eval;
       expect(initialSuite.providers.map((provider) => provider.label)).toEqual(['selected-target']);
-      expect(cliState.selectedProviderConfigs).toEqual([{ id: 'echo', label: 'selected-target' }]);
+      expect(cliState.selectedProviderConfigs).toBe(previousProviderConfigs);
       expect(initialEval.runtimeOptions).toMatchObject({
         configBasePath: tmpDir,
         providerSelection,

@@ -1820,7 +1820,7 @@ describe('retry command', () => {
       },
     );
 
-    it('passes once this retry persists a genuinely new replacement row', async () => {
+    it('requires a distinct new replacement for every duplicate error row', async () => {
       const evalId = uniqueEvalId();
       await Eval.create({}, [], { id: evalId });
       await insertRow(evalId, `${evalId}-old-success`, ResultFailureReason.NONE, true);
@@ -1832,6 +1832,13 @@ describe('retry command', () => {
 
       // Simulate the retry persisting a fresh replacement row at the same key.
       await insertRow(evalId, `${evalId}-new-row`, ResultFailureReason.NONE, true);
+
+      await expect(
+        assertErrorResultsReplaced(errorResultIds, preexistingResultIds),
+      ).rejects.toThrow('Retry produced no persisted replacement for 1 ERROR result');
+      expect(await getErrorResultIds(evalId)).toEqual(errorResultIds);
+
+      await insertRow(evalId, `${evalId}-second-new-row`, ResultFailureReason.NONE, true);
 
       await expect(
         assertErrorResultsReplaced(errorResultIds, preexistingResultIds),
