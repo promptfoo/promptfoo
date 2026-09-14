@@ -376,6 +376,20 @@ describe('evaluator', () => {
     });
   });
 
+  it('keeps replacement usable when a derived expression has missing inputs', async () => {
+    const eval_ = await EvalFactory.create({ numResults: 1 });
+    eval_.config.derivedMetrics = [{ name: 'average', value: 'accuracy / __count' }];
+    const [row] = await EvalResult.findManyByEvalId(eval_.id);
+    row.success = false;
+    row.failureReason = ResultFailureReason.ERROR;
+    row.namedScores = {};
+    await eval_.setResults([row]);
+    expect(eval_.prompts[row.promptIdx].metrics).toMatchObject({
+      testErrorCount: 1,
+      namedScores: { average: 0 },
+    });
+  });
+
   it('rolls back replacement when derived metrics cannot be reconstructed', async () => {
     const eval_ = await EvalFactory.create({ numResults: 1 });
     const originalMetrics = eval_.prompts.map((p) => p.metrics);

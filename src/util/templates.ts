@@ -567,3 +567,26 @@ export function analyzeTemplateReference(
 export function templateReferencesVariable(template: string, variableName: string): boolean {
   return analyzeTemplateReference(template, variableName).referenced;
 }
+
+const metricNunjucks = getNunjucksEngine();
+
+export function renderMetricName(
+  metric: string | undefined,
+  vars: Record<string, unknown>,
+): string | undefined {
+  if (!metric) {
+    return metric;
+  }
+  try {
+    const rendered = metricNunjucks.renderString(metric, vars);
+    if (rendered === '' && metric !== '') {
+      logger.debug(`Metric template "${metric}" rendered to empty string`);
+    }
+    return rendered;
+  } catch (error) {
+    logger.warn(
+      `Failed to render metric template "${metric}": ${error instanceof Error ? error.message : error}`,
+    );
+    return metric;
+  }
+}

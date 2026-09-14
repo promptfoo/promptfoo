@@ -1505,10 +1505,18 @@ export default class Eval {
                 typeof derived.value === 'string',
                 `Cannot replace results: derived metric '${derived.name}' requires its original evaluation callback`,
               );
-              // Empty prompts have no rows on which to evaluate a derived score.
-              const value = count === 0 ? 0 : math.evaluate(derived.value, context);
-              promptMetrics.namedScores[derived.name] = value;
-              context[derived.name] = value;
+              promptMetrics.namedScores[derived.name] ??= 0;
+              try {
+                // Empty prompts have no rows on which to evaluate a derived score.
+                const value = count === 0 ? 0 : math.evaluate(derived.value, context);
+                promptMetrics.namedScores[derived.name] = value;
+                context[derived.name] = value;
+              } catch (error) {
+                // Match live evaluation: missing inputs must not discard otherwise valid rows.
+                logger.debug(
+                  `Could not evaluate derived metric '${derived.name}': ${(error as Error).message}`,
+                );
+              }
             }
           }
         }
