@@ -5,7 +5,7 @@ import { usePageMeta } from '@app/hooks/usePageMeta';
 import { callApi } from '@app/utils/api';
 import ErrorBoundary from '../../components/ErrorBoundary';
 import History from './History';
-import type { StandaloneEval } from '@promptfoo/util/database';
+import type { StandaloneEval } from '@promptfoo/types/standaloneEval';
 
 interface HistoryPageProps {
   showDatasetColumn?: boolean;

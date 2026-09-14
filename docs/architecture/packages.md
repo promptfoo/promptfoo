@@ -107,6 +107,13 @@ not refresh the baseline merely to make a newly introduced dependency pass.
 
 ## Browser Import Ratchet
 
+Browser consumers import result failure reasons from `src/types/results.ts` and
+the evaluation page limit from `src/types/evalConstants.ts`. Their legacy barrel
+exports remain compatible. History uses the `src/types/standaloneEval.ts` DTO,
+and trace views use the existing `TraceSpan` type from `src/types/tracing.ts`,
+without importing database or cache implementations. These type-only changes
+narrow the source graph; they do not by themselves measure bundle-size savings.
+
 The `app` layer has an additional internal-path allowlist. It pins the existing
 browser-to-runtime imports while DTOs and presentation helpers move into a
 browser-safe package surface. A new app import from root runtime code fails the
