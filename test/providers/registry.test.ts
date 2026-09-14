@@ -1630,6 +1630,14 @@ describe('Provider Registry', () => {
         async () => (await import('../../src/providers/google/ai.studio')).AIStudioChatProvider,
       ],
       [
+        'google:gemini-3.6-flash',
+        async () => (await import('../../src/providers/google/ai.studio')).AIStudioChatProvider,
+      ],
+      [
+        'google:gemini-3.5-flash-lite',
+        async () => (await import('../../src/providers/google/ai.studio')).AIStudioChatProvider,
+      ],
+      [
         'palm:chat-bison',
         async () => (await import('../../src/providers/google/ai.studio')).AIStudioChatProvider,
       ],
@@ -1651,6 +1659,14 @@ describe('Provider Registry', () => {
       ],
       [
         'vertex:chat:gemini-2.5-flash',
+        async () => (await import('../../src/providers/google/vertex')).VertexChatProvider,
+      ],
+      [
+        'vertex:gemini-3.6-flash',
+        async () => (await import('../../src/providers/google/vertex')).VertexChatProvider,
+      ],
+      [
+        'vertex:gemini-3.5-flash-lite',
         async () => (await import('../../src/providers/google/vertex')).VertexChatProvider,
       ],
       [
@@ -1689,7 +1705,7 @@ describe('Provider Registry', () => {
         async () => (await import('../../src/providers/google/vertex')).VertexEmbeddingProvider,
       ],
       [
-        'vertex:video:veo-3.1-generate-preview',
+        'vertex:video:veo-3.1-generate-001',
         async () => (await import('../../src/providers/google/video')).GoogleVideoProvider,
       ],
     ] as const)(
@@ -1706,7 +1722,7 @@ describe('Provider Registry', () => {
     );
 
     it('applies vertexai config and provider id for vertex:video routes', async () => {
-      const providerPath = 'vertex:video:veo-3.1-generate-preview';
+      const providerPath = 'vertex:video:veo-3.1-generate-001';
       const factory = (await getProviderFactories(providerPath)).find((f) => f.test(providerPath));
       expect(factory).toBeDefined();
       const provider = await factory!.create(providerPath, bareOptions, bareContext);
