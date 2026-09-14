@@ -62,6 +62,37 @@ function isSensitiveAttributeKey(key: string): boolean {
   });
 }
 
+// JSON.parse keeps only the last duplicate property, so its result cannot recover all secrets.
+function hasDuplicateJsonKeys(json: string): boolean {
+  const objects: Set<string>[] = [];
+  for (let index = 0; index < json.length; index++) {
+    const character = json[index];
+    if (character === '{') {
+      objects.push(new Set());
+    } else if (character === '}') {
+      objects.pop();
+    } else if (character === '"') {
+      const start = index++;
+      while (index < json.length && json[index] !== '"') {
+        index += json[index] === '\\' ? 2 : 1;
+      }
+      let next = index + 1;
+      while (next < json.length && /\s/.test(json[next])) {
+        next++;
+      }
+      if (json[next] === ':') {
+        const key = JSON.parse(json.slice(start, index + 1)) as string;
+        const keys = objects.at(-1)!;
+        if (keys.has(key)) {
+          return true;
+        }
+        keys.add(key);
+      }
+    }
+  }
+  return false;
+}
+
 export function sanitizeTraceAttributes(
   attributes: Record<string, any> | null | undefined,
   options: AttributeSanitizationOptions = {},
@@ -95,6 +126,9 @@ export function sanitizeTraceAttributes(
         try {
           const original = JSON.parse(value);
           decoded = true;
+          if (hasDuplicateJsonKeys(value)) {
+            return '[TRUNCATED]';
+          }
           const sourceAware = redactText
             ? JSON.parse(value, (_key, parsed, context?: { source?: string }) => {
                 if (typeof parsed !== 'number') {
@@ -250,8 +284,16 @@ export function getTraceTextRedactor(
     }
     if (!original || typeof original !== 'object') {
       if (original !== undefined && original !== null && redacted && String(original)) {
-        const secret = String(original);
-        if (!secrets.has(secret)) {
+        const source = String(original);
+        const canonical =
+          /^-?(?:0|[1-9]\d*)(?:\.\d+)?(?:[eE][+-]?\d+)?$/.test(source) &&
+          Number.isFinite(Number(source))
+            ? String(Number(source))
+            : source;
+        for (const secret of new Set([source, canonical])) {
+          if (secrets.has(secret)) {
+            continue;
+          }
           state.length += secret.length;
           if (state.length > 16_384 || secrets.size >= 1_000) {
             incomplete = true;
@@ -292,6 +334,18 @@ export function getTraceTextRedactor(
     if (incomplete) {
       return replacement as T;
     }
-    return (pattern ? value.replace(pattern, replacement) : value) as T;
+    if (!pattern) {
+      return value;
+    }
+    const redacted = value.replace(pattern, replacement);
+    // Free-form text can embed escaped JSON. Hide the field if decoding exposes
+    // another secret, while keeping literal replacements and other escapes intact.
+    const unmatched = value.replace(pattern, '');
+    const decoded = unmatched.replace(/\\(?:u[0-9a-fA-F]{4}|["\\/bfnrt])/g, (escape) =>
+      JSON.parse(`"${escape}"`),
+    );
+    return (
+      decoded !== unmatched && decoded.replace(pattern, '') !== decoded ? replacement : redacted
+    ) as T;
   };
 }

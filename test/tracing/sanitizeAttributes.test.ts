@@ -234,3 +234,66 @@ it.each(['123456', '9007199254740993', '1e309', '1.25e2', '1.0', '-0'])(
     expect(JSON.parse(result.payload)).toEqual({ copy: '[REDACTED]', safe: 42 });
   },
 );
+
+it.each([
+  ['1.25e2', 125],
+  ['1e3', 1000],
+  ['1.0', 1],
+  ['-0', 0],
+] as const)('redacts numeric equivalents of a protected JSON value: %s', (literal, numeric) => {
+  const original = { payload: `{"authorization":${literal}}` };
+  const sanitized = sanitizeTraceAttributes(original, { truncateValues: false });
+  const redactText = getTraceTextRedactor([{ original, sanitized }]);
+  const result = sanitizeTraceAttributes(
+    { raw: numeric, payload: JSON.stringify({ copy: numeric }) },
+    { redactText, truncateValues: false },
+  );
+  expect(result.raw).toBe('[REDACTED]');
+  expect(JSON.parse(result.payload)).toEqual({ copy: '[REDACTED]' });
+});
+
+it.each([
+  '{"authorization":"SECRET_DUP","authorization":"safe"}',
+  '{"value":{"token":"SECRET_DUP"},"value":"safe"}',
+  String.raw`{"authorization":"SECRET_DUP","\u0061uthorization":"safe"}`,
+])('hides serialized values with duplicate keys and their unknown echoes: %s', (payload) => {
+  const original = { payload };
+  const sanitized = sanitizeTraceAttributes(original, { truncateValues: false });
+  expect(sanitized.payload).toBe('[TRUNCATED]');
+  const redactText = getTraceTextRedactor([{ original, sanitized }]);
+  expect(redactText('Echo SECRET_DUP')).toBe('[REDACTED]');
+});
+
+it('allows repeated property names in separate JSON objects', () => {
+  const payload = String.raw`{"items":[{"value":"brace } and quote \""},{"value":"ordinary"}]}`;
+  expect(sanitizeTraceAttributes({ payload }, { truncateValues: false })).toEqual({ payload });
+});
+
+it.each([
+  ['PRIVATE/KEY', String.raw`request={"copy":"PRIVATE\/KEY"}`],
+  ['PRIVATE/KEY', String.raw`request={"copy":"PRIVATE\u002FKEY"}`],
+  ['PRIVATE', String.raw`request={"copy":"PRIV\u0041TE"}`],
+  ['PRIVATE', String.raw`echo PRIV\u0041TE`],
+  ['PRIVATE\nKEY', String.raw`request={"copy":"PRIVATE\u000AKEY"}`],
+  ['PRIVATE🧪', String.raw`request={"copy":"PRIVATE\uD83E\uDDEA"}`],
+])('redacts alternate JSON escapes for %s', (secret, echo) => {
+  const original = { authorization: secret };
+  const sanitized = sanitizeTraceAttributes(original);
+  const redactText = getTraceTextRedactor([{ original, sanitized }]);
+  expect(redactText(echo)).toBe('[REDACTED]');
+});
+
+it('redacts the longest supported secret without expanding its regular expression', () => {
+  const secret = 'm'.repeat(16_384);
+  const redactText = getTraceTextRedactor([{ original: secret, sanitized: '[REDACTED]' }]);
+  expect(redactText(secret)).toBe('[REDACTED]');
+  expect(redactText('safe payload')).toBe('safe payload');
+  expect(redactText(secret.slice(0, -1) + String.raw`\u006d`)).toBe('[REDACTED]');
+});
+
+it('keeps unrelated escapes when a literal secret was already removed', () => {
+  const redactText = getTraceTextRedactor([{ original: 'SECRET', sanitized: '[REDACTED]' }]);
+  expect(redactText(String.raw`prefix SECRET suffix\n`)).toBe(
+    String.raw`prefix [REDACTED] suffix\n`,
+  );
+});
