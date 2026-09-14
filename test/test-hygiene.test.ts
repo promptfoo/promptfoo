@@ -741,12 +741,12 @@ type RootPolicyResults = FilePolicyResults & {
 };
 
 const hoistedSetterPattern =
-  /\b(?:vi|vitest\.vi)\.hoisted\s*\([\s\S]*?\.(?:mockImplementation|mockRejectedValue|mockResolvedValue|mockReturnValue)(?:Once)?\s*\(/;
+  /\b(?:vi|vitest\.vi)\.hoisted\s*\([\s\S]*?(?:\.(?:mockImplementation|mockRejectedValue|mockResolvedValue|mockReturnValue)(?:Once)?|\[['"](?:mockImplementation|mockRejectedValue|mockResolvedValue|mockReturnValue)(?:Once)?['"]\])\s*\(/;
 const globalBeforeEachResetPattern =
   /\bbeforeEach\s*\(\s*(?:(?:vi|vitest\.vi)\.resetAllMocks\s*\)|(?:(?:\(\)|[\w$]+)\s*=>\s*)(?:\{[^}]*?)?(?:vi|vitest\.vi)\.resetAllMocks\s*\()/;
 const mockResetPattern = /(?:\.mockReset\s*\(|\b(?:vi|vitest\.vi)\.resetAllMocks\s*\()/;
 const individualTestSetterPattern =
-  /\b(?:it|test)(?:\.each\s*\([^)]*\))?\s*\(\s*['"`][^'"`]*['"`]\s*,\s*(?:async\s*)?(?:(?:\([^)]*\)|[\w$]+)\s*=>|function\s*\([^)]*\))\s*(?:\{[^}]*?\b)?([\w$]+(?:\.[\w$]+)*)\.(?:mockImplementation|mockRejectedValue|mockResolvedValue|mockReturnValue)(?:Once)?\s*\(/g;
+  /\b(?:it|test)(?:\.each\s*\([^)]*\))?\s*\(\s*['"`][^'"`]*['"`]\s*,\s*(?:async\s*)?(?:(?:\([^)]*\)|[\w$]+)\s*=>|function\s*\([^)]*\))\s*(?:\{[^}]*?\b)?([\w$]+(?:\.[\w$]+)*)(?:\.(?:mockImplementation|mockRejectedValue|mockResolvedValue|mockReturnValue)(?:Once)?|\[['"](?:mockImplementation|mockRejectedValue|mockResolvedValue|mockReturnValue)(?:Once)?['"]\])\s*\(/g;
 
 function hasUnresetNamedSetter(source: string): boolean {
   if (globalBeforeEachResetPattern.test(source)) {
@@ -755,13 +755,15 @@ function hasUnresetNamedSetter(source: string): boolean {
   const resetNames = new Set(
     [...source.matchAll(/\b([\w$]+(?:\.[\w$]+)*)\.mockReset\s*\(/g)].map((match) => match[1]),
   );
-  const aliases = new Map(
-    [...source.matchAll(/\bconst\s+([\w$]+)\s*=\s*([\w$]+(?:\.[\w$]+)*)\s*;/g)].map((match) => [
-      match[1],
-      match[2],
-    ]),
+  const firstTest = source.search(/\b(?:it|test)\s*(?:\.|\()/);
+  const moduleAliases = new Map(
+    [
+      ...source
+        .slice(0, firstTest < 0 ? source.length : firstTest)
+        .matchAll(/\bconst\s+([\w$]+)\s*=\s*([\w$]+(?:\.[\w$]+)*)\s*;/g),
+    ].map((match) => [match[1], match[2]]),
   );
-  const canonical = (name: string) => {
+  const canonical = (name: string, aliases = moduleAliases) => {
     const seen = new Set<string>();
     while (aliases.has(name) && !seen.has(name)) {
       seen.add(name);
@@ -769,8 +771,41 @@ function hasUnresetNamedSetter(source: string): boolean {
     }
     return name;
   };
-  return [...source.matchAll(individualTestSetterPattern)].some((match) => {
+  const parameterizedSetter =
+    /\b(?:it|test)\.each\s*\(\s*\[\s*([\w$]+)\s*\]\s*\)\s*\(\s*['"`][^'"`]*['"`]\s*,\s*(?:async\s*)?(?:\(\s*([\w$]+)[^)]*\)|([\w$]+))\s*=>[\s\S]*?\b(?:\2|\3)\.(?:mockImplementation|mockRejectedValue|mockResolvedValue|mockReturnValue)(?:Once)?\s*\(/g;
+  for (const match of source.matchAll(parameterizedSetter)) {
     const receiver = canonical(match[1]);
+    const name = receiver.replace(/[\.$]/g, '\\$&');
+    if (
+      !resetNames.has(receiver) &&
+      new RegExp('\\b' + name + '\\s*\\(').test(source.slice(match.index! + match[0].length))
+    ) {
+      return true;
+    }
+  }
+  for (const match of source.matchAll(
+    /\b([\w$]+(?:\.[\w$]+)*)\s*\[\s*['"](?:mockImplementation|mockRejectedValue|mockResolvedValue|mockReturnValue)(?:Once)?['"]\s*\]\s*\(/g,
+  )) {
+    const receiver = canonical(match[1]);
+    if (!resetNames.has(receiver)) {
+      return true;
+    }
+  }
+  if (
+    /\.forEach\s*\([\s\S]*?\[[\s\S]*?\]\s*=\s*(?:vi|vitest\.vi)\.fn\s*\([^)]*\)\.(?:mockImplementation|mockRejectedValue|mockResolvedValue|mockReturnValue)(?:Once)?\s*\(/.test(
+      source,
+    )
+  ) {
+    return true;
+  }
+  return [...source.matchAll(individualTestSetterPattern)].some((match) => {
+    const aliases = new Map([
+      ...moduleAliases,
+      ...[...match[0].matchAll(/\bconst\s+([\w$]+)\s*=\s*([\w$]+(?:\.[\w$]+)*)\s*;/g)].map(
+        (alias) => [alias[1], alias[2]] as const,
+      ),
+    ]);
+    const receiver = canonical(match[1], aliases);
     if (resetNames.has(receiver)) {
       return false;
     }
@@ -1057,6 +1092,37 @@ describe('root test hygiene', () => {
     ["const mock = vi.hoisted(() => vi.fn()); [0].forEach(() => mock.mockReturnValue('x'));"],
   ])('detects hoisted persistent mock implementations without reset', (source) => {
     expect(hasHoistedPersistentMockWithoutReset(source)).toBe(true);
+  });
+
+  it.each([
+    [
+      'parameterized rows',
+      "const unsafe = vi.hoisted(() => vi.fn()); it.each([unsafe])('sets', (candidate) => candidate.mockReturnValue('x')); it('later', () => unsafe());",
+    ],
+    [
+      'lexical aliases',
+      "const unsafe = vi.hoisted(() => vi.fn()); const safe = vi.hoisted(() => vi.fn()); beforeEach(() => safe.mockReset()); it('sets', () => { const target = unsafe; target.mockReturnValue('x'); }); it('later', () => { const target = safe; unsafe(); });",
+    ],
+    [
+      'direct afterEach reset',
+      "const mock = vi.hoisted(() => vi.fn().mockReturnValue('x')); afterEach(vi.resetAllMocks);",
+    ],
+    [
+      'forEach allocations',
+      "const holder = vi.hoisted(() => ({})); [0, 1].forEach((i) => (holder[i ? 'second' : 'first'] = vi.fn().mockReturnValue(i))); beforeEach(() => holder.first.mockReset());",
+    ],
+    [
+      'computed setters',
+      "const unsafe = vi.hoisted(() => vi.fn()); const safe = vi.hoisted(() => vi.fn()); beforeEach(() => safe.mockReset()); it('sets', () => unsafe['mockReturnValue']('x')); it('later', () => unsafe());",
+    ],
+  ])('detects %s without reset', (_name, source) => {
+    expect(hasHoistedPersistentMockWithoutReset(source)).toBe(true);
+  });
+
+  it('allows guarded reset through a direct hoisted property', () => {
+    const source =
+      "const holder = vi.hoisted(() => ({ mock: flag ? vi.fn().mockReturnValue('x') : undefined })); beforeEach(() => holder.mock?.mockReset());";
+    expect(hasHoistedPersistentMockWithoutReset(source)).toBe(false);
   });
 
   it.each([

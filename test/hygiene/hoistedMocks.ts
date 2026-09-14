@@ -1008,7 +1008,11 @@ export function findHoistedPersistentMockWithoutReset(
       const callback = args[0];
       if (callback?.kind === 'function') {
         setupCallbacks.push({ callback, context, call: node, api: base });
-      } else if (callback?.kind === 'api' && callback.name === 'vi.resetAllMocks') {
+      } else if (
+        HOOK_PHASES.get(base) === 'reset' &&
+        callback?.kind === 'api' &&
+        callback.name === 'vi.resetAllMocks'
+      ) {
         directResetHooks.push(context);
       }
     } else if (TEST_APIS.has(base) && !curried && !api.endsWith('.todo') && args.length >= 2) {
@@ -1225,11 +1229,15 @@ export function findHoistedPersistentMockWithoutReset(
     if (callee.type === 'MemberExpression') {
       const method = propertyName(callee.property, callee.computed);
       const receiverValue = evaluate(callee.object, context);
+      let directReceiver: Node = callee.object;
+      while (directReceiver.type === 'MemberExpression') {
+        directReceiver = unwrap(directReceiver.object);
+      }
       const guardedMockBirth =
         callee.optional &&
         method === 'mockReset' &&
-        callee.object.type === 'Identifier' &&
-        directHoistedBindings.has(callee.object.name) &&
+        directReceiver.type === 'Identifier' &&
+        directHoistedBindings.has(directReceiver.name) &&
         [...mockKeys(receiverValue)].every((key) =>
           birthGuards.get(key)?.some((path) => path.size > 0),
         );
@@ -1354,9 +1362,16 @@ export function findHoistedPersistentMockWithoutReset(
           if (element.value === MISSING) {
             continue;
           }
-          invoke(args[0], [element.value, literal(index), receiver], context, node, {
-            tail: false,
-          });
+          invoke(
+            args[0],
+            [element.value, literal(index), receiver],
+            {
+              ...context,
+              allocationPath: `${context.allocationPath}/forEach:${node.start}:${index}`,
+            },
+            node,
+            { tail: false },
+          );
         }
         return MISSING;
       }
