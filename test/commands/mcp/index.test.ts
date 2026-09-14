@@ -1,7 +1,7 @@
 import { Command } from 'commander';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { mcpCommand } from '../../../src/commands/mcp/index';
-import { startStdioMcpServer } from '../../../src/commands/mcp/server';
+import { startHttpMcpServer, startStdioMcpServer } from '../../../src/commands/mcp/server';
 import logger from '../../../src/logger';
 
 vi.mock('../../../src/logger', () => ({
@@ -20,6 +20,8 @@ vi.mock('../../../src/telemetry', () => ({
 }));
 
 vi.mock('../../../src/commands/mcp/server', () => ({
+  DEFAULT_MCP_HTTP_HOST: '127.0.0.1',
+  MCP_AUTH_TOKEN_ENV_VAR: 'PROMPTFOO_MCP_AUTH_TOKEN',
   startHttpMcpServer: vi.fn(),
   startStdioMcpServer: vi.fn(),
   createMcpServer: vi.fn(),
@@ -58,6 +60,17 @@ describe('mcp command', () => {
 
       expect(logger.error).toHaveBeenCalledWith('Invalid port number: not-a-number');
       expect(process.exitCode).toBe(1);
+    });
+  });
+
+  describe('http containment', () => {
+    it('should start HTTP transport on loopback by default', async () => {
+      const mcpCmd = program.commands.find((cmd) => cmd.name() === 'mcp');
+      expect(mcpCmd).toBeDefined();
+
+      await mcpCmd!.parseAsync(['node', 'test', '--transport', 'http']);
+
+      expect(startHttpMcpServer).toHaveBeenCalledWith(3100);
     });
   });
 

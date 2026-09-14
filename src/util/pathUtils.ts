@@ -4,6 +4,41 @@
 import { fileURLToPath } from 'node:url';
 import path from 'path';
 
+function decodeUrlPath(value: string): string {
+  try {
+    return decodeURIComponent(value);
+  } catch {
+    return value;
+  }
+}
+
+/** Normalize Promptfoo's file:// shorthand without changing plain paths. */
+export function normalizeFilePath(filePath: string): string {
+  if (!filePath.startsWith('file://')) {
+    return filePath;
+  }
+
+  let url = filePath;
+  if (url.startsWith('file://localhost/')) {
+    url = `file:///${url.slice('file://localhost/'.length)}`;
+  }
+
+  const winDriveMatch = url.match(/^file:\/\/\/?([a-zA-Z]:[\\/].*)$/);
+  if (winDriveMatch) {
+    return path.normalize(decodeUrlPath(winDriveMatch[1]));
+  }
+
+  if (url.startsWith('file:///')) {
+    try {
+      return fileURLToPath(url);
+    } catch {
+      return decodeUrlPath(url.slice('file://'.length));
+    }
+  }
+
+  return url.slice('file://'.length);
+}
+
 /**
  * Check if a file path is absolute, handling both regular paths and URLs
  * @param filePath - The file path to check

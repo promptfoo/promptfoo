@@ -43,6 +43,22 @@ describe('MCP Utility Functions', () => {
       expect(parsedContent.data).toBeUndefined();
     });
 
+    it('should include provided data in error tool responses', () => {
+      const response = createToolResponse(
+        'test_tool',
+        false,
+        { suggestion: 'Check the config path' },
+        'Something went wrong',
+      );
+
+      expect(response.isError).toBe(true);
+
+      const parsedContent = JSON.parse(response.content[0].text);
+      expect(parsedContent.success).toBe(false);
+      expect(parsedContent.error).toBe('Something went wrong');
+      expect(parsedContent.data).toEqual({ suggestion: 'Check the config path' });
+    });
+
     it('should create response without data or error', () => {
       const response = createToolResponse('test_tool', true);
 

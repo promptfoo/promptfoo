@@ -2,6 +2,7 @@ import dedent from 'dedent';
 import { z } from 'zod';
 import { runAssertions } from '../../../assertions/index';
 import logger from '../../../logger';
+import { validateMcpAssertion } from '../lib/security';
 import { createToolResponse } from '../lib/utils';
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 
@@ -79,6 +80,7 @@ export function registerRunAssertionTool(server: McpServer) {
     async (args) => {
       try {
         const { output, assertion, prompt, vars = {}, latencyMs } = args;
+        validateMcpAssertion(assertion);
 
         // Create a minimal test case for the assertion
         const testCase: AtomicTestCase = {

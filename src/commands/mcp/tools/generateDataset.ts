@@ -1,7 +1,7 @@
 import dedent from 'dedent';
 import { z } from 'zod';
 import { synthesizeFromTestSuite } from '../../../testCase/synthesis';
-import { validateFilePath, validateProviderId } from '../lib/security';
+import { validateMcpFilePath, validateProviderId } from '../lib/security';
 import { createToolResponse, DEFAULT_TOOL_TIMEOUT_MS, withTimeout } from '../lib/utils';
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 
@@ -59,7 +59,7 @@ export function registerGenerateDatasetTool(server: McpServer) {
       try {
         // Validate security constraints
         if (outputPath) {
-          validateFilePath(outputPath);
+          validateMcpFilePath(outputPath);
         }
 
         if (provider) {
