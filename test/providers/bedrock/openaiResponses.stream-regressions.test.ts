@@ -7037,5 +7037,131 @@ describe('Responses stream regressions', () => {
       ]);
       expect(JSON.stringify(parsed)).not.toContain('danger');
     });
+
+    it('does not merge a finalized refusal into a different terminal message', async () => {
+      const parsed = await readResponsesStream(
+        createSseResponse([
+          {
+            type: 'response.refusal.done',
+            output_index: 0,
+            item_id: 'm_secret',
+            refusal: 'SECRET REFUSAL',
+          },
+          {
+            type: 'response.incomplete',
+            response: {
+              status: 'incomplete',
+              output: [
+                {
+                  type: 'message',
+                  id: 'm_safe',
+                  role: 'assistant',
+                  content: [{ type: 'output_text', text: 'SAFE' }],
+                },
+              ],
+            },
+          },
+        ]),
+        'test',
+        { debug: vi.fn() },
+      );
+      expect(JSON.stringify(parsed)).not.toContain('SECRET REFUSAL');
+      expect(parsed.output[0].id).toBe('m_safe');
+    });
+
+    it('does not let a malformed message seal a later valid finalization', async () => {
+      const parsed = await readResponsesStream(
+        createSseResponse([
+          {
+            type: 'response.output_item.done',
+            output_index: 0,
+            item: { type: 'message', id: '', content: [{ type: 'output_text', text: 'BAD' }] },
+          },
+          {
+            type: 'response.output_text.done',
+            output_index: 0,
+            content_index: 0,
+            item_id: 'm_safe',
+            text: 'SAFE FINAL',
+          },
+          {
+            type: 'response.incomplete',
+            response: {
+              status: 'incomplete',
+              output: [
+                {
+                  type: 'message',
+                  id: 'm_safe',
+                  content: [{ type: 'output_text', text: 'STALE' }],
+                },
+              ],
+            },
+          },
+        ]),
+        'test',
+        { debug: vi.fn() },
+      );
+      expect(parsed.output[0].content[0].text).toBe('SAFE FINAL');
+    });
+
+    it('does not execute a finalized tool with conflicting terminal identity', async () => {
+      const processCalls = vi.fn().mockResolvedValue('executed');
+      const parsed = await readResponsesStream(
+        createSseResponse([
+          {
+            type: 'response.in_progress',
+            response: {
+              status: 'in_progress',
+              output: [
+                {
+                  type: 'function_call',
+                  id: 'a',
+                  call_id: 'call_a',
+                  name: 'safe',
+                  arguments: '{}',
+                },
+              ],
+            },
+          },
+          {
+            type: 'response.output_item.done',
+            output_index: 0,
+            item: {
+              type: 'function_call',
+              id: 'b',
+              call_id: 'call_b',
+              name: 'danger',
+              arguments: '{}',
+            },
+          },
+        ]),
+        'test',
+        { debug: vi.fn() },
+      );
+      await createProcessor(processCalls).processResponseOutput(parsed, {}, false);
+      expect(processCalls).not.toHaveBeenCalled();
+    });
+
+    it('deduplicates anonymous finalized and terminal search billing', async () => {
+      const search = { type: 'web_search_call', action: { type: 'search' } };
+      const parsed = await readResponsesStream(
+        createSseResponse([
+          { type: 'response.output_item.done', output_index: 0, item: search },
+          {
+            type: 'response.incomplete',
+            response: {
+              status: 'incomplete',
+              incomplete_details: { reason: 'safety' },
+              output: [search],
+            },
+          },
+        ]),
+        'test',
+        { debug: vi.fn() },
+      );
+      expect(
+        calculateObservableOpenAIToolCost(parsed, 'gpt-4o', { tools: [{ type: 'web_search' }] }),
+      ).toBeCloseTo(0.01, 10);
+    });
   });
 });

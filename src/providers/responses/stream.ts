@@ -542,11 +542,22 @@ function filterUnfinalizedTerminalToolCalls(
         const identities = [item.id, item.call_id].filter(
           (identity): identity is string => typeof identity === 'string',
         );
+        const conflictingIdentity =
+          (typeof item.id === 'string' &&
+            typeof finalizedItem.id === 'string' &&
+            item.id !== finalizedItem.id) ||
+          (typeof item.call_id === 'string' &&
+            typeof finalizedItem.call_id === 'string' &&
+            item.call_id !== finalizedItem.call_id) ||
+          (typeof item.name === 'string' &&
+            typeof finalizedItem.name === 'string' &&
+            item.name !== finalizedItem.name);
         const matches =
-          (finalizedIndex !== undefined && finalizedIndex === outputIndex) ||
-          identities.some(
-            (identity) => finalizedItem.id === identity || finalizedItem.call_id === identity,
-          );
+          !conflictingIdentity &&
+          ((finalizedIndex !== undefined && finalizedIndex === outputIndex) ||
+            identities.some(
+              (identity) => finalizedItem.id === identity || finalizedItem.call_id === identity,
+            ));
         if (matches) {
           matchedToolCalls.add(finalizedToolCall);
           finalizedToolCallByItem.set(item, finalizedItem);
@@ -1452,12 +1463,14 @@ export async function readResponsesStream(
       latestResponseEventCount = streamEventCount;
     }
     if (event.type === 'response.output_item.done' && event.item?.type === 'message') {
+      if (isInvalidOutputTextItemId(event.item.id)) {
+        return;
+      }
       const outputIndex = getValidOutputIndex(event);
       if (outputIndex !== undefined) {
         finalizedMessageOutputIndices.add(outputIndex);
       }
     }
-
     let finalizedRefusalItem = getOutputRefusalItem(event);
     if (finalizedRefusalItem) {
       const hasRefusalText = finalizedRefusalItem.content.some(
@@ -2080,7 +2093,7 @@ export async function readResponsesStream(
       ? applyFinalizedText(latestResponse.output, true)
       : latestResponse?.output;
   const refusalTerminalOutput = filterExecutableToolCalls(latestResponse?.output, true);
-  const outputWithFinalizedText =
+  let outputWithFinalizedText =
     useFinalizedRefusals && !hasTerminalSafetyDecision(latestResponse)
       ? (recoverIncompleteOutput(
           refusalTerminalOutput,
@@ -2091,10 +2104,26 @@ export async function readResponsesStream(
           completedUnindexedOutputTexts.length + finalizedInvalidOutputTexts.length,
         ) ?? refusalTerminalOutput)
       : terminalOutputWithFinalizedText;
+  const finalizedRefusalOutput = useFinalizedItems
+    ? Array.from(finalizedRefusalItems.values()).filter(
+        ({ item, outputIndex }) =>
+          !latestResponse?.output?.some(
+            (terminalItem: any, terminalIndex: number) =>
+              terminalIndex === outputIndex &&
+              terminalItem?.type === 'message' &&
+              typeof terminalItem.id === 'string' &&
+              typeof item?.id === 'string' &&
+              terminalItem.id !== item.id,
+          ),
+      )
+    : [];
+  if (useFinalizedRefusals && finalizedRefusalOutput.length === 0) {
+    outputWithFinalizedText = terminalOutputWithFinalizedText;
+  }
   const mergedStreamOutput = mergeFinalizedStreamOutput(
     outputWithFinalizedText,
     Array.from(finalizedNonMessageItems.values()),
-    useFinalizedItems ? Array.from(finalizedRefusalItems.values()) : [],
+    finalizedRefusalOutput,
     useFinalizedItems,
   );
   const outputWithCompletedAnnotations = isCompletedResponse
@@ -2116,19 +2145,23 @@ export async function readResponsesStream(
       : outputWithCompletedAnnotations,
     isCompletedResponse,
   );
+  const billingItems = [
+    ...(latestResponse?.output ?? []).map((item: any, outputIndex: number) => ({
+      item,
+      outputIndex,
+    })),
+    ...Array.from(finalizedNonMessageItems.values()),
+  ];
   const billingOutput = Array.from(
     new Map(
-      [
-        ...(latestResponse?.output ?? []),
-        ...Array.from(finalizedNonMessageItems.values(), ({ item }) => item),
-      ]
+      billingItems
         .filter(
-          (item: any) =>
+          ({ item }) =>
             item?.type === 'file_search_call' ||
             (item?.type === 'web_search_call' && item.action?.type === 'search'),
         )
-        .map((item: any, index) => [
-          `${item.type}:${typeof item.id === 'string' ? item.id : typeof item.call_id === 'string' ? item.call_id : index}`,
+        .map(({ item, outputIndex }, index) => [
+          `${item.type}:${typeof item.id === 'string' ? item.id : typeof item.call_id === 'string' ? item.call_id : (outputIndex ?? index)}`,
           item.type === 'web_search_call'
             ? { type: item.type, action: { type: 'search' } }
             : { type: item.type },
@@ -2156,7 +2189,7 @@ export async function readResponsesStream(
     });
   }
 
-  if (useFinalizedRefusals) {
+  if (finalizedRefusalOutput.length > 0) {
     const safeOutput = filterExecutableToolCalls(finalizedStreamOutput, true);
     return boundedResponse({
       ...getSafeRefusalResponse(latestResponse, safeOutput, true),
