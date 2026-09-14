@@ -493,6 +493,18 @@ describe('webSearchUtils', () => {
       expect(cleanup).toHaveBeenCalledOnce();
     });
 
+    it('surfaces cleanup failures from rejected loaded candidates', async () => {
+      const cleanupError = new Error('cleanup failed');
+      const rejected = {
+        id: () => 'plugin:without-search',
+        cleanup: vi.fn().mockRejectedValue(cleanupError),
+      } as unknown as ApiProvider;
+      mockLoadApiProvider.mockResolvedValueOnce(rejected);
+
+      await expect(loadWebSearchProvider()).rejects.toThrow(cleanupError);
+      expect(mockLoadApiProvider).toHaveBeenCalledOnce();
+    });
+
     it('should load Perplexity without additional config', async () => {
       const mockProvider: Partial<ApiProvider> = {
         id: () => 'perplexity:sonar-pro',

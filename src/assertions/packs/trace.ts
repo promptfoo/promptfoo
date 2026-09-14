@@ -14,6 +14,7 @@ import type { AssertionCapabilityPack } from '../registryTypes';
 
 export const traceAssertionPack = {
   name: 'trace',
+  requiresTrace: true,
   handlers: {
     'skill-used': handleSkillUsed,
     'trace-error-spans': handleTraceErrorSpans,

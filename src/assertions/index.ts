@@ -311,7 +311,10 @@ async function runAssertionInternal<TType extends string>({
     ...(providerResponse?.metadata && { metadata: providerResponse.metadata }),
   };
 
-  if (traceData !== undefined || (traceId && assertionMayNeedTraceContext(assertion))) {
+  if (
+    traceData !== undefined ||
+    (traceId && (registry.requiresTrace || assertionMayNeedTraceContext(assertion)))
+  ) {
     try {
       const resolvedTraceData =
         traceData === undefined && traceId ? await loadTraceData(traceId) : traceData;
@@ -697,8 +700,7 @@ export async function runAssertions({
 
   const shouldPreloadTrace =
     !!traceId &&
-    (registry !== defaultAssertionRegistry ||
-      hasTraceAwareAssertions(asserts.map(({ assertion }) => assertion)));
+    (registry.requiresTrace || hasTraceAwareAssertions(asserts.map(({ assertion }) => assertion)));
   let preloadedTraceData: TraceData | null | undefined;
   if (shouldPreloadTrace && traceId) {
     try {
