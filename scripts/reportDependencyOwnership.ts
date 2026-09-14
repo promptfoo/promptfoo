@@ -188,6 +188,9 @@ function getShadowRanges(
     if (record.type === 'RestElement') {
       return bindsName(record.argument);
     }
+    if (record.type === 'TSParameterProperty') {
+      return bindsName(record.parameter);
+    }
     if (record.type === 'Property') {
       return bindsName(record.value);
     }
@@ -449,12 +452,13 @@ function leadingTypeReferences(comments: Comment[], firstStatement: number, file
       continue;
     }
     const directive = comment.value.match(
-      /^\/\s*<reference\s+((?:[\w-]+\s*=\s*(?:"[^"]*"|'[^']*')\s*)+)\/>/,
+      /^\/\s*<(reference|amd-dependency)\s+((?:[\w-]+\s*=\s*(?:"[^"]*"|'[^']*')\s*)+)\/>/,
     );
+    const attributeName = directive?.[1] === 'amd-dependency' ? 'path' : 'types';
     const typeAttribute =
       directive &&
-      [...directive[1].matchAll(/([\w-]+)\s*=\s*(?:"([^"]*)"|'([^']*)')/g)].find(
-        (attribute) => attribute[1] === 'types',
+      [...directive[2].matchAll(/([\w-]+)\s*=\s*(?:"([^"]*)"|'([^']*)')/g)].find(
+        (attribute) => attribute[1] === attributeName,
       );
     const specifier = typeAttribute?.[2] ?? typeAttribute?.[3];
     if (!specifier) {
@@ -464,7 +468,10 @@ function leadingTypeReferences(comments: Comment[], firstStatement: number, file
     if (!name) {
       continue;
     }
-    const typesPackage = `@types/${name.startsWith('@') ? name.slice(1).replace('/', '__') : name}`;
+    const typesPackage =
+      attributeName === 'path'
+        ? name
+        : `@types/${name.startsWith('@') ? name.slice(1).replace('/', '__') : name}`;
     const typesSpecifier = typesPackage + specifier.slice(name.length);
     const hasInstalledTypes = (createRequire(file).resolve.paths(typesSpecifier) ?? []).some(
       (directory) => {

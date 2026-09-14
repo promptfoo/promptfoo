@@ -292,6 +292,13 @@ describe('dependency ownership report', () => {
     expect(report.runtimeDeclarationGaps).toEqual([]);
   });
 
+  it('records leading AMD dependency directives', () => {
+    write('src/index.ts', '/// <amd-dependency path="legacy-driver" />\nexport {};');
+    expect(reportDependencyOwnership(root, config).undeclaredUsages).toEqual([
+      expect.objectContaining({ dependency: 'legacy-driver' }),
+    ]);
+  });
+
   it.each([' // reason', ' trailing prose', ' // <reference types="ignored-tail" />'])(
     'recognizes a type directive followed by %s',
     (suffix) => {
@@ -971,6 +978,14 @@ describe('dependency ownership report', () => {
     write(
       'src/index.js',
       "export function load(require) { return require('local-only'); } try {} catch (require) { require('caught-local'); }",
+    );
+    expect(reportDependencyOwnership(root, config).undeclaredUsages).toEqual([]);
+  });
+
+  it('ignores require calls shadowed by a parameter property', () => {
+    write(
+      'src/index.ts',
+      "class Loader { constructor(private require: Function) { require('local-only'); } }",
     );
     expect(reportDependencyOwnership(root, config).undeclaredUsages).toEqual([]);
   });
