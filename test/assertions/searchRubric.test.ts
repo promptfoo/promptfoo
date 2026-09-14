@@ -41,15 +41,20 @@ describe('handleSearchRubric', () => {
     },
   };
 
-  it('should throw error when renderedValue is undefined', async () => {
-    const params: AssertionParams = {
-      ...defaultParams,
-      renderedValue: undefined,
-    };
+  it.each([
+    { renderedValue: undefined },
+    { renderedValue: null },
+    { renderedValue: 123 },
+    { renderedValue: false },
+    { renderedValue: { rubric: 'test' } },
+    { renderedValue: ['test'] },
+  ])('rejects non-string rubric %j before calling the grader', async ({ renderedValue }) => {
+    const params = { ...defaultParams, renderedValue } as AssertionParams;
 
     await expect(handleSearchRubric(params)).rejects.toThrow(
       'search-rubric assertion type must have a string value',
     );
+    expect(mockMatchesSearchRubric).not.toHaveBeenCalled();
   });
 
   it('should call matchesSearchRubric with correct parameters', async () => {
