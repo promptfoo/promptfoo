@@ -323,7 +323,7 @@ const RiskCategories = ({
     return (
       <Card>
         <CardContent className="py-6 text-sm text-muted-foreground" role="status">
-          No risk categories match the current filters.
+          No risk categories found in the current results.
         </CardContent>
       </Card>
     );

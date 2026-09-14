@@ -190,7 +190,7 @@ describe('PluginStrategyFlow', () => {
         screen.getByRole('region', { name: 'Plugin strategy outcome flow' }),
       ).toBeInTheDocument();
       expect(
-        screen.getByText('3 tests across 1 plugin-strategy paths: 2 defended and 1 vulnerable.'),
+        screen.getByText('3 tests across 1 plugin-strategy path: 2 defended and 1 vulnerable.'),
       ).toBeInTheDocument();
 
       const summaryTable = screen.getByRole('table');
@@ -223,7 +223,10 @@ describe('PluginStrategyFlow', () => {
 
       const tooltipElement = screen.getByTestId('tooltip');
       expect(tooltipElement).toBeInTheDocument();
-      expect(tooltipElement).toHaveTextContent('PluginA → StrategyX: 1 tests');
+      expect(tooltipElement).toHaveTextContent('PluginA → StrategyX: 1 test');
+      expect(
+        screen.getByText('1 test across 1 plugin-strategy path: 0 defended and 1 vulnerable.'),
+      ).toBeInTheDocument();
     });
 
     it('should handle plugin and strategy IDs with special characters and long names', () => {

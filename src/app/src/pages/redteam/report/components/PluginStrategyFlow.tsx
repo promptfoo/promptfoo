@@ -360,8 +360,9 @@ const PluginStrategyFlow = ({ failuresByPlugin, passesByPlugin }: PluginStrategy
         Plugin strategy outcome flow
       </h4>
       <p id={summaryId} className="mb-3 text-sm text-muted-foreground">
-        {data.totalTests} tests across {data.flowRows.length} plugin-strategy paths:{' '}
-        {data.totalDefended} defended and {data.totalVulnerable} vulnerable.
+        {data.totalTests} test{data.totalTests === 1 ? '' : 's'} across {data.flowRows.length}{' '}
+        plugin-strategy path{data.flowRows.length === 1 ? '' : 's'}: {data.totalDefended} defended
+        and {data.totalVulnerable} vulnerable.
       </p>
       <div
         role="img"
@@ -395,14 +396,15 @@ const PluginStrategyFlow = ({ failuresByPlugin, passesByPlugin }: PluginStrategy
                         <strong>
                           {getDisplayName(source.name)} → {getDisplayName(target.name)}
                         </strong>
-                        : {entry.value} tests
+                        : {entry.value} test{entry.value === 1 ? '' : 's'}
                       </div>
                     );
                   }
                   // Node hover
                   return (
                     <div className="rounded border border-border bg-card px-3 py-2 text-sm shadow-sm">
-                      <strong>{getDisplayName(String(entry.name))}</strong>: {entry.value} tests
+                      <strong>{getDisplayName(String(entry.name))}</strong>: {entry.value} test
+                      {entry.value === 1 ? '' : 's'}
                     </div>
                   );
                 }}

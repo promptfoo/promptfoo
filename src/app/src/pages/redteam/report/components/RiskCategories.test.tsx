@@ -50,7 +50,7 @@ describe('RiskCategories', () => {
 
     renderWithProviders(<RiskCategories {...mockProps} />);
     expect(screen.getByRole('status')).toHaveTextContent(
-      'No risk categories match the current filters.',
+      'No risk categories found in the current results.',
     );
   });
 
