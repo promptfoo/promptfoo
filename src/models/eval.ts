@@ -1404,21 +1404,25 @@ export default class Eval {
         invariant(stored, `Evaluation ${this.id} not found`);
         const storedPrompts = stored.prompts ?? [];
         await tx.delete(evalResultsTable).where(eq(evalResultsTable.evalId, this.id)).run();
-        const retainedTraceIds = JSON.stringify(
-          results.flatMap((r) => (r.traceId ? [r.traceId] : [])),
-        );
-        const obsoleteTraces = and(
-          eq(tracesTable.evaluationId, this.id),
-          sql`${tracesTable.traceId} NOT IN (SELECT value FROM json_each(${retainedTraceIds}))`,
-        );
-        // Traces and spans have no result-row cascade; delete children first.
-        await tx
-          .delete(spansTable)
-          .where(sql`${spansTable.traceId} IN (
-          SELECT ${tracesTable.traceId} FROM ${tracesTable} WHERE ${obsoleteTraces}
-        )`)
-          .run();
-        await tx.delete(tracesTable).where(obsoleteTraces).run();
+        // Legacy rows may have eval-level traces without per-row linkage. Missing
+        // linkage is not evidence of removal; an empty replacement still clears all.
+        if (results.every((result) => result.traceId)) {
+          const retainedTraceIds = JSON.stringify(
+            results.flatMap((r) => (r.traceId ? [r.traceId] : [])),
+          );
+          const obsoleteTraces = and(
+            eq(tracesTable.evaluationId, this.id),
+            sql`${tracesTable.traceId} NOT IN (SELECT value FROM json_each(${retainedTraceIds}))`,
+          );
+          // Traces and spans have no result-row cascade; delete children first.
+          await tx
+            .delete(spansTable)
+            .where(sql`${spansTable.traceId} IN (
+            SELECT ${tracesTable.traceId} FROM ${tracesTable} WHERE ${obsoleteTraces}
+          )`)
+            .run();
+          await tx.delete(tracesTable).where(obsoleteTraces).run();
+        }
         const retainedTraces = await tx
           .select({ metadata: tracesTable.metadata })
           .from(tracesTable)

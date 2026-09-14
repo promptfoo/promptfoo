@@ -429,6 +429,25 @@ describe('evaluator', () => {
     expect(await isBlobAllowedForShare(hash, eval_.id)).toBe(false);
   });
 
+  it('preserves legacy trace history when replacement rows lack trace linkage', async () => {
+    const eval_ = await EvalFactory.create({ numResults: 1 });
+    const rows = await EvalResult.findManyByEvalId(eval_.id);
+    const store = new TraceStore();
+    await store.createTrace({
+      traceId: 'legacy-trace',
+      evaluationId: eval_.id,
+      testCaseId: 'legacy-test',
+    });
+    await store.addSpans('legacy-trace', [{ spanId: 'legacy-span', name: 'legacy', startTime: 1 }]);
+    await eval_.setResults(rows);
+    const db = await getDb();
+    expect(await db.select().from(tracesTable)).toHaveLength(1);
+    expect(await db.select().from(spansTable)).toHaveLength(1);
+    await eval_.setResults([]);
+    expect(await db.select().from(tracesTable)).toHaveLength(0);
+    expect(await db.select().from(spansTable)).toHaveLength(0);
+  });
+
   it('prunes removed traces and spans while retaining replacement and other eval traces', async () => {
     const eval_ = await EvalFactory.create({ numResults: 2 });
     const other = await EvalFactory.create({ numResults: 1 });
