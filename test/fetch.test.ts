@@ -445,6 +445,61 @@ describe('fetchWithProxy', () => {
     );
   });
 
+  it('should decode percent-encoded URL credentials before sending Basic auth', async () => {
+    const url = 'https://us%40er:p%40ss%3Aword@example.com/api';
+
+    await fetchWithProxy(url);
+
+    expect(global.fetch).toHaveBeenCalledWith(
+      'https://example.com/api',
+      expect.objectContaining({
+        headers: {
+          Authorization: `Basic ${Buffer.from('us@er:p@ss:word').toString('base64')}`,
+          'x-promptfoo-version': VERSION,
+        },
+      }),
+    );
+  });
+
+  it('should keep malformed percent escapes in URL credentials as written', async () => {
+    const url = 'https://user:bad%zzsecret@example.com/api';
+
+    await fetchWithProxy(url);
+
+    expect(global.fetch).toHaveBeenCalledWith(
+      'https://example.com/api',
+      expect.objectContaining({
+        headers: {
+          Authorization: `Basic ${Buffer.from('user:bad%zzsecret').toString('base64')}`,
+          'x-promptfoo-version': VERSION,
+        },
+      }),
+    );
+  });
+
+  it('should not add Basic auth beside a lowercase authorization header', async () => {
+    const url = 'https://username:password@example.com/api';
+
+    await fetchWithProxy(url, { headers: new Headers({ authorization: 'Bearer token123' }) });
+
+    expect(logger.warn).toHaveBeenCalledWith(
+      expect.stringContaining('Both URL credentials and Authorization header present'),
+    );
+    expect(global.fetch).toHaveBeenCalledWith(
+      'https://example.com/api',
+      expect.objectContaining({
+        headers: {
+          authorization: 'Bearer token123',
+          'x-promptfoo-version': VERSION,
+        },
+      }),
+    );
+    const [, calledOptions] = vi.mocked(global.fetch).mock.calls.at(-1)!;
+    expect(new Headers(calledOptions?.headers as HeadersInit).get('authorization')).toBe(
+      'Bearer token123',
+    );
+  });
+
   it('should use custom CA certificate when PROMPTFOO_CA_CERT_PATH is set', async () => {
     const mockCertPath = path.normalize('/path/to/cert.pem');
     const mockCertContent = 'mock-cert-content';
@@ -1367,19 +1422,21 @@ describe('fetchWithRetries', () => {
   });
 
   it('redacts URL credentials and sensitive query values in retry failure logs', async () => {
-    vi.mocked(global.fetch).mockRejectedValue(new Error('Network error'));
     const url =
       'https://webhook-user:webhook-password@n8n.example.com/webhook/agent?token=webhook-secret';
+    vi.mocked(global.fetch).mockRejectedValue(new Error(`Network error for ${url}`));
 
-    await expect(fetchWithRetries(url, {}, 1000, 0)).rejects.toThrow(
-      'Request failed after 0 retries: Error: Network error',
-    );
+    const failure = await fetchWithRetries(url, {}, 1000, 0).catch((error) => error);
 
-    const debugLogs = JSON.stringify(vi.mocked(logger.debug).mock.calls);
-    expect(debugLogs).toContain('n8n.example.com');
-    expect(debugLogs).not.toContain('webhook-user');
-    expect(debugLogs).not.toContain('webhook-password');
-    expect(debugLogs).not.toContain('webhook-secret');
+    for (const output of [
+      failure.message,
+      JSON.stringify(vi.mocked(logger.debug).mock.calls.at(-1)),
+    ]) {
+      expect(output).toContain('n8n.example.com');
+      expect(output).not.toContain('webhook-user');
+      expect(output).not.toContain('webhook-password');
+      expect(output).not.toContain('webhook-secret');
+    }
   });
 
   it('should not sleep after the final attempt', async () => {
@@ -2556,6 +2613,15 @@ describe('fetchWithRetries with disableTransientRetries', () => {
       }
       return defaultValue;
     });
+  });
+
+  it('redacts opaque path credentials in retry diagnostics', async () => {
+    const credential = '123e4567-e89b-12d3-a456-426614174000';
+    vi.spyOn(global, 'fetch').mockRejectedValueOnce(new Error('offline'));
+    await expect(
+      fetchWithRetries(`https://gateway.example/v1/${credential}/responses`, {}, 1000, 0),
+    ).rejects.toThrow('Request failed');
+    expect(logger.debug).toHaveBeenCalledWith(expect.not.stringContaining(credential));
   });
 
   it('should disable transient retries in fetchWithProxy to avoid double-retrying', async () => {

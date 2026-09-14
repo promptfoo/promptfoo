@@ -1324,7 +1324,7 @@ describe('package manifests', () => {
     // No installation anywhere in the tree — including nested copies — may sit on a
     // compromised version.
     for (const [packagePath, installation] of Object.entries(packageLock.packages)) {
-      const name = packagePath.replace(/^.*node_modules\//, '');
+      const name = packagePath.split(/(?:^|\/)node_modules\//).at(-1) ?? packagePath;
       const bad = COMPROMISED[name as keyof typeof COMPROMISED];
       if (!bad || !installation.version) {
         continue;
