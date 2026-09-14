@@ -68,7 +68,7 @@ describe('file-backed replay provenance', () => {
     },
   );
 
-  it.each(['missing.js', 'https://example.invalid/entry.ts', 'literal.cjs'])(
+  it.each(['missing.js', 'https://example.invalid/entry.ts', 'literal.cjs', 'file://display-name'])(
     'keeps literal provider configuration stable: %s',
     (literal) => {
       const basePath = directory();
@@ -81,6 +81,36 @@ describe('file-backed replay provenance', () => {
     },
   );
 
+  it.each(['id', 'implementation', 'source'])(
+    'detects changes to nested provider %s without serializing prototype methods',
+    (change) => {
+      class Grader {
+        id() {
+          return 'original';
+        }
+        async callApi() {
+          return { output: 'original' };
+        }
+        getSourceHash() {
+          return 'source-original';
+        }
+      }
+      const provider = new Grader();
+      const tests = [{ options: { provider } }];
+      const selection = createTestCaseSelection(tests, [0]);
+      expect(restoreTestCaseSelection(tests, selection)).toEqual([0]);
+      class ChangedGrader extends Grader {}
+      const method = change === 'id' ? 'id' : change === 'source' ? 'getSourceHash' : 'callApi';
+      Object.defineProperty(ChangedGrader.prototype, method, {
+        value: change === 'implementation' ? async () => ({ output: 'changed' }) : () => 'changed',
+      });
+      const changed = new ChangedGrader();
+      expect(() =>
+        restoreTestCaseSelection([{ options: { provider: changed } }], selection),
+      ).toThrow('no longer');
+    },
+  );
+
   it('preserves identities when serialization omits undefined options', () => {
     const tests = [{ vars: { input: 'same' } }];
     const defaultTest = { options: { prefix: undefined, provider: 'echo' } };
@@ -90,6 +120,38 @@ describe('file-backed replay provenance', () => {
         defaultTest: JSON.parse(JSON.stringify(defaultTest)),
       }),
     ).toEqual([0]);
+  });
+
+  it.each(['transform', 'delay', 'inputs'] as const)(
+    'tracks public %s metadata on nested provider instances',
+    (field) => {
+      const provider: ApiProvider = {
+        id: () => 'echo',
+        callApi: async () => ({ output: 'original' }),
+      };
+      const selection = createTestCaseSelection([{ provider }], [0]);
+      const changed = {
+        ...provider,
+        ...(field === 'transform'
+          ? { transform: 'output + "changed"' }
+          : field === 'delay'
+            ? { delay: 10 }
+            : { inputs: { query: 'changed' } }),
+      };
+      expect(() => restoreTestCaseSelection([{ provider: changed }], selection)).toThrow(
+        'no longer',
+      );
+    },
+  );
+
+  it('preserves an explicit provider base path over the containing configuration directory', async () => {
+    const basePath = directory();
+    const configuredPath = directory();
+    const provider = await loadApiProvider('echo', {
+      basePath,
+      options: { config: { basePath: configuredPath } },
+    });
+    expect(provider.config.basePath).toBe(configuredPath);
   });
 
   it('rejects circular provider configuration before replay', () => {
@@ -202,6 +264,14 @@ describe('file-backed replay provenance', () => {
       { assert: [{ type: 'llm-rubric', value: 'ok', provider: 'python:source.js:grade' }] },
     ],
     ['provider map grader', { options: { provider: { 'file://source.js': { temperature: 0 } } } }],
+    [
+      'provider output transform',
+      { provider: { id: 'echo', transform: 'file://source.js:transform' } },
+    ],
+    [
+      'MCP response transform',
+      { provider: { id: 'mcp', config: { transformResponse: 'file://source.js:transform' } } },
+    ],
   ])('rejects edited %s while another invocation changes the global base path', (_name, test) => {
     const basePath = directory();
     const elsewhere = directory();

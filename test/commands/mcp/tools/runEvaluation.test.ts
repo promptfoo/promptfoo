@@ -113,6 +113,31 @@ describe('runEvaluation tool', () => {
   });
 
   describe('shared execution path', () => {
+    it.each(['promptfooconfig.yml', 'promptfooconfig.json', undefined])(
+      'uses the discovered default configuration path: %s',
+      async (defaultConfigPath) => {
+        const { loadDefaultConfig } = await import('../../../../src/util/config/default');
+        const { doEval } = await import('../../../../src/node/doEval');
+        const { registerRunEvaluationTool } = await import(
+          '../../../../src/commands/mcp/tools/runEvaluation'
+        );
+        vi.mocked(loadDefaultConfig).mockResolvedValueOnce({
+          defaultConfig: {},
+          defaultConfigPath,
+        });
+        let handler: any;
+        registerRunEvaluationTool({
+          tool: vi.fn((_name, _schema, fn) => {
+            handler = fn;
+          }),
+        } as any);
+        expect((await handler({})).isError).toBe(false);
+        expect(vi.mocked(doEval).mock.calls[0][0].config).toEqual(
+          defaultConfigPath ? [defaultConfigPath] : undefined,
+        );
+      },
+    );
+
     it.each([false, true])(
       'isolates overlapping evaluation concurrency (peer fails=%s)',
       async (peerFails) => {

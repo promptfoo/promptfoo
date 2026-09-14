@@ -3,6 +3,7 @@ import os from 'os';
 import path from 'path';
 
 import { afterEach, describe, expect, it } from 'vitest';
+import cliState from '../../../src/cliState';
 import {
   applyProviderSelection,
   buildProviderPermissionConfig,
@@ -41,6 +42,35 @@ describe('provider selection', () => {
   const cloudProviderId = 'promptfoo://provider/11111111-1111-4111-8111-111111111111';
   const linkedTargetId = 'promptfoo://provider/22222222-2222-4222-8222-222222222222';
   const temporaryDirectories: string[] = [];
+
+  it('authorizes scoped environment identities for hook-added nested graders', () => {
+    const source = {
+      tests: [
+        {
+          assert: [
+            { type: 'llm-rubric', provider: { id: '{{ env.OPENAI_API_KEY }}' } },
+            {
+              type: 'llm-rubric',
+              provider: { id: 'http', config: { linkedTargetId: '{{ env.OPENAI_API_HOST }}' } },
+            },
+          ],
+        },
+      ],
+    };
+    for (const suiteOverride of [false, true]) {
+      const result = cliState.withEnvFileOverrides(
+        {
+          OPENAI_API_KEY: cloudProviderId,
+          OPENAI_API_HOST: suiteOverride ? 'file-default' : linkedTargetId,
+        },
+        () =>
+          cliState.withEnv(suiteOverride ? { OPENAI_API_HOST: linkedTargetId } : {}, () =>
+            collectEffectiveTestProviderPermissions(source),
+          ),
+      );
+      expect(result).toEqual([cloudProviderId, { id: 'http', config: { linkedTargetId } }]);
+    }
+  });
 
   afterEach(() => {
     for (const directory of temporaryDirectories.splice(0)) {

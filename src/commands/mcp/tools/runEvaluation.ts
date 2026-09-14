@@ -494,7 +494,7 @@ export function registerRunEvaluationTool(server: McpServer) {
         let suiteSummary: EvaluationFilterSummary | undefined;
 
         const cmdObj: Partial<CommandLineOptions & Command> = {
-          config: configPath ? [configPath] : ['promptfooconfig.yaml'],
+          config: configPath ? [configPath] : defaultConfigPath ? [defaultConfigPath] : undefined,
           maxConcurrency,
           repeat,
           delay,
@@ -513,7 +513,9 @@ export function registerRunEvaluationTool(server: McpServer) {
           ...(args.timeoutMs === undefined ? {} : { timeoutMs }),
         };
 
-        logger.debug(`Running evaluation with config: ${configPath || 'promptfooconfig.yaml'}`);
+        logger.debug(
+          `Running evaluation with config: ${configPath || defaultConfigPath || '(default)'}`,
+        );
 
         const startTime = Date.now();
         const evalResult = await cliState.withMaxConcurrency(maxConcurrency, () =>

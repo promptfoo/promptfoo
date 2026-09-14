@@ -84,7 +84,10 @@ import {
 } from './types/index';
 import { type ApiProvider, isApiProvider } from './types/providers';
 import { checkCloudPermissions } from './util/cloud';
-import { buildProviderPermissionConfig } from './util/eval/providerSelection';
+import {
+  buildProviderPermissionConfig,
+  createProviderSelection,
+} from './util/eval/providerSelection';
 import { isAbortError, isNonTransientHttpStatus } from './util/fetch/errors';
 import { parsePathOrGlob } from './util/file';
 import { filterByRange } from './util/filterRange';
@@ -107,7 +110,7 @@ import {
   isProviderAllowed,
   sanitizeProviderIdForLog,
 } from './util/provider';
-import { isProviderConfigFileReference } from './util/providerRef';
+import { isProviderConfigFileReference, normalizeProviderRef } from './util/providerRef';
 import { promptYesNo } from './util/readline';
 import { redactSecretLeaves } from './util/sanitizer';
 import { getExecutableSourceHash, getFileSourceHash } from './util/sourceHash';
@@ -2498,21 +2501,22 @@ function canonicalizeSelectionFingerprintValue(
   value: unknown,
   basePath: string,
   seen = new WeakSet<object>(),
-  referenceKind: 'test' | 'file' | 'provider' | 'literal' = 'test',
+  referenceKind: 'test' | 'file' | 'provider' | 'provider-config' | 'literal' = 'test',
   providerFiles = new Set<string>(),
 ): unknown {
   const providerReference = referenceKind === 'provider';
   if (typeof value === 'string') {
-    if (providerReference && isProviderConfigFileReference(value)) {
-      const filePath = fs.realpathSync(path.resolve(basePath, value.slice('file://'.length)));
+    const reference = providerReference ? redactSecretLeaves({ id: value }).id : value;
+    if (providerReference && isProviderConfigFileReference(reference)) {
+      const filePath = fs.realpathSync(path.resolve(basePath, reference.slice('file://'.length)));
       if (providerFiles.has(filePath)) {
-        throw new Error(`Circular provider config: ${value}`);
+        throw new Error(`Circular provider config: ${reference}`);
       }
       providerFiles.add(filePath);
       try {
         const configs = loadYaml(fs.readFileSync(filePath, 'utf8'));
         return {
-          reference: value,
+          reference,
           sourceHash: getFileSourceHash(filePath),
           providers: canonicalizeSelectionFingerprintValue(
             redactSecretLeaves(configs),
@@ -2526,25 +2530,25 @@ function canonicalizeSelectionFingerprintValue(
         providerFiles.delete(filePath);
       }
     }
-    if (providerReference && value.startsWith('exec:')) {
+    if (providerReference && reference.startsWith('exec:')) {
       return {
-        reference: value,
-        sourceHash: getExecutableSourceHash(parseScriptParts(value.slice(5)), basePath),
+        reference,
+        sourceHash: getExecutableSourceHash(parseScriptParts(reference.slice(5)), basePath),
       };
     }
     const providerPath = providerReference
-      ? value.match(/^(?:python|ruby|golang):(.+)$/s)?.[1]
+      ? reference.match(/^(?:python|ruby|golang):(.+)$/s)?.[1]
       : undefined;
     const file =
-      (providerReference || referenceKind === 'file') && value.startsWith('file://')
-        ? parseFileUrl(value)
-        : providerPath || (providerReference && /\.(?:[cm]?js|ts)(?::[^/\\]+)?$/.test(value))
-          ? parsePathOrGlob(basePath, providerPath ?? value)
+      (providerReference || referenceKind === 'file') && reference.startsWith('file://')
+        ? parseFileUrl(reference)
+        : providerPath || (providerReference && /\.(?:[cm]?js|ts)(?::[^/\\]+)?$/.test(reference))
+          ? parsePathOrGlob(basePath, providerPath ?? reference)
           : undefined;
     if (file && hasMagic(file.filePath, { magicalBraces: true, windowsPathsNoEscape: true })) {
       const files = globSync(file.filePath, { cwd: basePath, windowsPathsNoEscape: true }).sort();
       return {
-        reference: value,
+        reference,
         sourceHash: files.length
           ? createHash('sha256')
               .update(
@@ -2560,10 +2564,10 @@ function canonicalizeSelectionFingerprintValue(
     }
     return file
       ? {
-          reference: value,
+          reference,
           sourceHash: getFileSourceHash(path.resolve(basePath, file.filePath), file.functionName),
         }
-      : value;
+      : reference;
   }
   if (typeof value === 'function') {
     return { __promptfooFunction: Function.prototype.toString.call(value) };
@@ -2582,6 +2586,12 @@ function canonicalizeSelectionFingerprintValue(
   }
   seen.add(value);
   try {
+    if (providerReference && isApiProvider(value)) {
+      return {
+        providerFingerprint: createProviderSelection([value], [value], [value]).providers[0]
+          .fingerprint,
+      };
+    }
     if (Array.isArray(value)) {
       return value.map((item) =>
         canonicalizeSelectionFingerprintValue(item, basePath, seen, referenceKind, providerFiles),
@@ -2590,46 +2600,58 @@ function canonicalizeSelectionFingerprintValue(
     if (value instanceof Date) {
       return value.toISOString();
     }
+    const providerMap = providerReference && normalizeProviderRef(value).kind === 'map';
     return Object.fromEntries(
       Object.entries(value)
         .filter(([, item]) => item !== undefined)
         .map(([key, item]) => {
-          const sourceKey = providerReference
+          const sourceKey = providerMap
             ? canonicalizeSelectionFingerprintValue(key, basePath, seen, 'provider', providerFiles)
             : key;
-          const kind =
-            referenceKind === 'provider'
-              ? key === 'id'
-                ? 'provider'
-                : 'file'
-              : referenceKind === 'test'
-                ? key === 'provider' || key === 'providers'
-                  ? 'provider'
-                  : [
-                        'vars',
-                        'value',
-                        'assertScoringFunction',
-                        'transform',
-                        'postprocess',
-                        'transformVars',
-                        'contextTransform',
-                        'rubricPrompt',
-                      ].includes(key)
-                    ? 'file'
-                    : key === 'options' || key === 'assert'
-                      ? 'test'
-                      : 'literal'
-                : referenceKind;
-          return [
-            typeof sourceKey === 'string' ? sourceKey : JSON.stringify(sourceKey),
-            canonicalizeSelectionFingerprintValue(
-              kind === 'provider' ? redactSecretLeaves(item) : item,
-              basePath,
-              seen,
-              kind,
-              providerFiles,
-            ),
-          ];
+          let kind = referenceKind;
+          if (providerReference) {
+            if (
+              providerMap ||
+              ['id', 'text', 'embedding', 'classification', 'moderation'].includes(key)
+            ) {
+              kind = 'provider';
+            } else if (key === 'config') {
+              kind = 'provider-config';
+            } else {
+              kind = key === 'transform' ? 'file' : 'literal';
+            }
+          } else if (referenceKind === 'provider-config') {
+            kind = ['transformResponse', 'responseParser'].includes(key) ? 'file' : 'literal';
+          } else if (referenceKind === 'test') {
+            if (key === 'provider' || key === 'providers') {
+              kind = 'provider';
+            } else if (
+              [
+                'vars',
+                'value',
+                'assertScoringFunction',
+                'transform',
+                'postprocess',
+                'transformVars',
+                'contextTransform',
+                'rubricPrompt',
+              ].includes(key)
+            ) {
+              kind = 'file';
+            } else {
+              kind = key === 'options' || key === 'assert' ? 'test' : 'literal';
+            }
+          }
+          const canonical = canonicalizeSelectionFingerprintValue(
+            providerReference && kind !== 'provider'
+              ? redactSecretLeaves({ [key]: item })[key]
+              : item,
+            basePath,
+            seen,
+            kind,
+            providerFiles,
+          );
+          return [typeof sourceKey === 'string' ? sourceKey : JSON.stringify(sourceKey), canonical];
         }),
     );
   } finally {

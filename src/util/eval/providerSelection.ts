@@ -16,6 +16,9 @@ interface RuntimeProvider {
   config?: Record<string, unknown>;
   callApi?: unknown;
   getSourceHash?: () => string;
+  transform?: unknown;
+  delay?: number;
+  inputs?: unknown;
 }
 
 interface ProviderSelectionEntry {
@@ -91,12 +94,7 @@ function getProviderFingerprint(
   provider: RuntimeProvider,
   sourceFingerprintInput: unknown,
 ): string {
-  // Retain `basePath` in the fingerprint: a relative file-backed provider ref
-  // (`python:provider.py`, `file://./p.js`) resolves to different code under a
-  // different base directory, so dropping it would let replay run a different
-  // implementation under the same identity. `redactSecretLeaves` strips only the
-  // credential leaves while preserving the resolved provenance and the non-secret
-  // authentication/session structure needed to detect endpoint/auth drift.
+  // Keep the base directory and auth structure so replay detects implementation drift.
   const fingerprintInput = {
     runtime: {
       callApi: provider.callApi,
@@ -104,6 +102,9 @@ function getProviderFingerprint(
       config: redactSecretLeaves(provider.config ?? {}),
       id: getRuntimeProviderId(provider),
       label: provider.label,
+      transform: provider.transform,
+      delay: provider.delay,
+      inputs: redactSecretLeaves(provider.inputs),
     },
     source: redactSecretLeaves(sourceFingerprintInput),
   };

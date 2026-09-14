@@ -1962,6 +1962,46 @@ describe('evalCommand', () => {
     }
   });
 
+  it('restores provider selection before applying the stored runtime provider filter', async () => {
+    const providers = [
+      { id: () => 'echo', label: 'excluded', callApi: vi.fn() },
+      { id: () => 'echo', label: 'selected', callApi: vi.fn() },
+    ];
+    const providerConfigs = [
+      { id: 'echo', label: 'excluded' },
+      { id: 'echo', label: 'selected' },
+    ];
+    const record = new Eval({ providers: providerConfigs, prompts: [] } as UnifiedConfig);
+    record.runtimeOptions = {
+      providerFilter: 'selected',
+      providerSelection: createProviderSelection(providers, providerConfigs, [providers[1]]),
+    };
+    const lookup = vi.spyOn(Eval, 'findById').mockResolvedValueOnce(record);
+    vi.mocked(resolveConfigs).mockResolvedValueOnce({
+      config: record.config,
+      testSuite: { prompts: [], providers },
+      selectedProviderConfigs: providerConfigs,
+      basePath: path.resolve('/'),
+    });
+    vi.mocked(evaluate).mockImplementationOnce(async (suite, evalRecord) => {
+      expect(suite.providers).toEqual([providers[1]]);
+      return evalRecord as Eval;
+    });
+    try {
+      await expect(
+        doEval(
+          { resume: 'eval-123' } as Parameters<typeof doEval>[0],
+          defaultConfig,
+          defaultConfigPath,
+          {},
+        ),
+      ).resolves.toBe(record);
+      expect(evaluate).toHaveBeenCalledTimes(1);
+    } finally {
+      lookup.mockRestore();
+    }
+  });
+
   it.each(['resume', 'retry'])(
     'clears replay state after %s selection validation fails',
     async (mode) => {

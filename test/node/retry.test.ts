@@ -734,7 +734,8 @@ describe('retryCommand', () => {
     await expect(retryCommand(originalEval.id, {})).resolves.toBe(retriedEval);
   });
 
-  it('replays the persisted provider, test, repeat, delay, and prompt selection', async () => {
+  it.each([false, true])('replays selections (filtered: %s)', async (filtered) => {
+    const providerFilter = filtered ? 'selected-target' : undefined;
     const excludedProvider = {
       id: () => 'echo',
       label: 'excluded-target',
@@ -773,6 +774,7 @@ describe('retryCommand', () => {
         },
       ] as any,
       runtimeOptions: {
+        ...(providerFilter ? { providerFilter } : {}),
         configBasePath: '/workspace/config',
         delay: 4,
         maxConcurrency: 7,
@@ -821,11 +823,16 @@ describe('retryCommand', () => {
 
     await expect(retryCommand(originalEval.id, { share: true })).resolves.toBe(retriedEval);
 
-    expect(resolveConfigs).toHaveBeenCalledWith({}, originalEval.config, undefined, {
-      allowConfigFilterSample: false,
-      configBasePath: '/workspace/config',
-      loadEnvFiles: true,
-    });
+    expect(resolveConfigs).toHaveBeenCalledWith(
+      providerFilter ? { filterProviders: providerFilter } : {},
+      originalEval.config,
+      undefined,
+      {
+        allowConfigFilterSample: false,
+        configBasePath: '/workspace/config',
+        loadEnvFiles: true,
+      },
+    );
     expect(createShareableUrl).toHaveBeenCalledWith(retriedEval, {
       silent: false,
     });

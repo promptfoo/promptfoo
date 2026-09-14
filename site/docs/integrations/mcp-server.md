@@ -100,6 +100,7 @@ After restarting your AI tool, you should see promptfoo tools available. Try ask
 - **`get_evaluation_details`** - Get comprehensive results, metrics, and test cases for a specific evaluation
 - **`run_evaluation`** - Execute evaluations with custom parameters, test case filtering, and concurrency control
   Filtered runs check access to the selected targets and active graders, including graders loaded from provider files or added by extension hooks. Default assertions disabled by a selected test do not require access to their graders.
+  Without `configPath`, it uses the discovered `promptfooconfig.yaml`, `.yml`, or `.json` file.
 - **`share_evaluation`** - Generate publicly shareable URLs for evaluation results
   Shared result configuration redacts credential values and omits executable function bodies. Runtime callbacks and credentials remain available locally.
 
@@ -140,7 +141,9 @@ Environment files configured through `commandLineOptions.envPath` are also isola
 
 Providers shared by overlapping MCP or SDK calls remain open until both calls finish. Relative assertion files resolve against each call's configuration directory. MCP connections use the calling evaluation's environment even if another evaluation has already rendered the shared provider's configuration. MCP and Python provider instances keep one execution environment while active; use separate instances for different environments. Reusing an instance after cleanup starts a fresh connection or worker pool. Shared eval records redact provider credentials and TLS private keys while preserving public certificates.
 
-Provider permission checks include nested graders, including those supplied by extension hooks, whether or not `providerFilter` is set. Replay fingerprints distinguish provider implementation paths from literal provider configuration values such as labels and URLs ending in `.js` or `.ts`.
+Provider permission checks include nested graders, including those supplied by extension hooks, whether or not `providerFilter` is set. Replay fingerprints distinguish provider implementation paths from literal labels and configuration values, including `file://` strings. Preconstructed grading providers retain their implementation and public settings in replay identity. Resume and retry restore saved provider selections before applying runtime filters.
+
+Use environment references for credentials. With `write: true`, local evaluation storage retains inline configuration values; credential redaction for shared results does not remove those local values.
 
 ### 2. Provider Comparison
 

@@ -122,7 +122,7 @@ async function createApiProvider(
     id: renderedId,
     config: {
       ...renderedConfig,
-      basePath,
+      basePath: renderedConfig?.basePath ?? basePath,
     },
     env: fileEnv
       ? {

@@ -121,12 +121,6 @@ async function resolveRetryConfigs(
       )
     : await resolveConfigs(providerFilterOptions, originalEval.config, undefined, resolveOptions);
 
-  // The original run filtered twice: raw configs in resolveConfigs, then instantiated
-  // providers by live id()/label in doEval. Replay both stages so the retried provider
-  // set matches the original even when an instantiated id or label diverges from its
-  // raw config reference.
-  configs.testSuite.providers = filterProviders(configs.testSuite.providers, providerFilter);
-
   const providerSelection = originalEval.runtimeOptions?.providerSelection;
   if (providerSelection) {
     try {
@@ -146,6 +140,8 @@ async function resolveRetryConfigs(
       );
     }
   }
+  // Selection indices address the resolved list before runtime id/label filtering.
+  configs.testSuite.providers = filterProviders(configs.testSuite.providers, providerFilter);
   const promptSelection = originalEval.runtimeOptions?.promptSelection;
   if (promptSelection) {
     try {
