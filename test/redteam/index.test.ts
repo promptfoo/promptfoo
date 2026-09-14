@@ -19,7 +19,10 @@ import {
   synthesize,
 } from '../../src/redteam/index';
 import { Plugins } from '../../src/redteam/plugins/index';
-import { redteamProviderManager } from '../../src/redteam/providers/shared';
+import {
+  redteamProviderManager,
+  setRedteamProviderLoader,
+} from '../../src/redteam/providers/shared';
 import { getRemoteHealthUrl, shouldGenerateRemote } from '../../src/redteam/remoteGeneration';
 import { Strategies, validateStrategies } from '../../src/redteam/strategies/index';
 import { checkRemoteHealth } from '../../src/util/apiHealth';
@@ -234,6 +237,30 @@ describe('synthesize', () => {
       });
 
       expect(loadApiProvider).not.toHaveBeenCalled();
+    });
+
+    it('cleans providers loaded for synthesis', async () => {
+      const cleanup = vi.fn();
+      const provider = { ...mockProvider, cleanup };
+      const restoreLoader = setRedteamProviderLoader(async () => [provider]);
+      redteamProviderManager.clearProvider();
+
+      try {
+        await synthesize({
+          language: 'en',
+          numTests: 1,
+          plugins: [{ id: 'test-plugin', numTests: 1 }],
+          prompts: ['Test prompt'],
+          provider: 'plugin:generation-provider',
+          strategies: [],
+          targetIds: ['test-provider'],
+        });
+
+        expect(cleanup).toHaveBeenCalledOnce();
+      } finally {
+        redteamProviderManager.clearProvider();
+        restoreLoader();
+      }
     });
   });
 
