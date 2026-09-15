@@ -82,8 +82,8 @@ const inFlightExternalFetches = new WeakMap<
 
 async function assertStoredTraceComplete(traceId: string): Promise<void> {
   const reason = (await getTraceStore().getTraceMetadata(traceId))?.promptfooTraceIncomplete;
-  if (reason === 'conflicting trace evidence') {
-    throw Object.assign(new Error('Cannot grade incomplete trace: conflicting trace evidence.'), {
+  if (reason === 'conflicting trace evidence' || reason === 'cyclic parent relationships') {
+    throw Object.assign(new Error(`Cannot grade incomplete trace: ${reason}.`), {
       name: 'TraceEvidenceError',
     });
   }
@@ -446,6 +446,15 @@ async function fetchFromExternalProvider(
       await assertStoredTraceComplete(traceId);
       const result = await provider.fetchTrace(traceId, providerFetchOptions);
       const validSpans = result ? discardCyclicExternalSpans(result.spans) : [];
+      if (requireComplete && result && validSpans.length !== result.spans.length) {
+        await getTraceStore().markTraceIncomplete(traceId, 'cyclic parent relationships');
+        throw Object.assign(
+          new Error('Cannot grade incomplete trace: cyclic parent relationships.'),
+          {
+            name: 'TraceEvidenceError',
+          },
+        );
+      }
 
       if (!result || validSpans.length === 0) {
         if (attempt === maxRetries) {

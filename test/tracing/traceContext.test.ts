@@ -693,6 +693,67 @@ describe('fetchTraceContext', () => {
     expect(result?.spans.map((span) => span.name)).toEqual(['target.call']);
   });
 
+  it.each(['mixed', 'all cyclic', 'all cyclic after complete'])(
+    'rejects required external evidence with cyclic parent relationships: %s',
+    async (snapshot) => {
+      const valid = { spanId: 'valid', name: 'target.call', startTime: 1, endTime: 2 };
+      const cycles = [
+        { spanId: 'a', parentSpanId: 'b', name: 'work.a', startTime: 1, endTime: 2 },
+        { spanId: 'b', parentSpanId: 'a', name: 'work.b', startTime: 1, endTime: 2 },
+      ];
+      const fetch = mockExternalTrace(snapshot === 'mixed' ? [valid, ...cycles] : cycles);
+      const previousSnapshots = snapshot === 'all cyclic after complete' ? 2 : 0;
+      for (let index = 0; index < previousSnapshots; index++) {
+        fetch.mockResolvedValueOnce({ traceId: 'trace-1', fetchedAt: index, spans: [valid] });
+      }
+
+      await expect(
+        fetchTraceContext('trace-1', {
+          providerConfig,
+          requireComplete: true,
+          waitForStableSpans: true,
+          maxRetries: 2,
+          retryDelayMs: 0,
+          queryDelay: 0,
+        }),
+      ).rejects.toMatchObject({
+        name: 'TraceEvidenceError',
+        message: 'Cannot grade incomplete trace: cyclic parent relationships.',
+      });
+      expect(fetch).toHaveBeenCalledTimes(previousSnapshots + 1);
+      expect(mocks.addSpans).toHaveBeenCalledTimes(previousSnapshots);
+      expect(mocks.markTraceIncomplete).toHaveBeenCalledWith(
+        'trace-1',
+        'cyclic parent relationships',
+      );
+    },
+  );
+
+  it.each([false, true])(
+    'rejects previously recorded cyclic trace evidence (external: %s)',
+    async (external) => {
+      mocks.isExternalTraceProvider.mockReturnValue(external);
+      const fetch = mockExternalTrace([
+        { spanId: 'valid', name: 'target.call', startTime: 1, endTime: 2 },
+      ]);
+      mocks.getTraceMetadata.mockResolvedValue({
+        promptfooTraceIncomplete: 'cyclic parent relationships',
+      });
+      await expect(
+        fetchTraceContext('trace-1', {
+          ...(external && { providerConfig }),
+          requireComplete: true,
+          maxRetries: 0,
+          queryDelay: 0,
+        }),
+      ).rejects.toMatchObject({
+        name: 'TraceEvidenceError',
+        message: 'Cannot grade incomplete trace: cyclic parent relationships.',
+      });
+      expect(fetch).not.toHaveBeenCalled();
+    },
+  );
+
   it('redacts configured nested and numeric attribute values before persistence', async () => {
     mockExternalTrace([
       {
