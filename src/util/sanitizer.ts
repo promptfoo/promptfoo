@@ -853,7 +853,12 @@ export function restoreAzureBlobSasTokens<T>(value: T, storedValue: unknown): T 
 /**
  * Parse and sanitize JSON strings, also check if the string looks like a secret
  */
-function sanitizeJsonString(str: string, depth: number, maxDepth: number): string {
+function sanitizeJsonString(
+  str: string,
+  depth: number,
+  maxDepth: number,
+  redactOpaqueValues = true,
+): string {
   const redactedAzureBlobUri = redactAzureBlobSasToken(str);
   if (redactedAzureBlobUri !== str) {
     return redactedAzureBlobUri;
@@ -862,19 +867,19 @@ function sanitizeJsonString(str: string, depth: number, maxDepth: number): strin
   try {
     const parsed = JSON.parse(str);
     if (parsed && typeof parsed === 'object') {
-      const sanitized = recursiveSanitize(parsed, depth, maxDepth);
+      const sanitized = recursiveSanitize(parsed, depth, maxDepth, false, redactOpaqueValues);
       return JSON.stringify(sanitized);
     }
   } catch {
     if (looksLikeUrlEncodedFormData(str)) {
-      const sanitizedUrlEncoded = sanitizeUrlEncodedString(str);
+      const sanitizedUrlEncoded = sanitizeUrlEncodedString(str, redactOpaqueValues);
       if (sanitizedUrlEncoded !== str) {
         return sanitizedUrlEncoded;
       }
     }
 
     // Not JSON - check if it looks like a secret
-    if (looksLikeSecret(str)) {
+    if (looksLikeSecret(str, redactOpaqueValues)) {
       return REDACTED;
     }
   }
@@ -1040,7 +1045,13 @@ export function sanitizeUrlEncodedString(value: string, redactOpaqueValues = tru
 /**
  * Sanitize plain object fields
  */
-function sanitizePlainObject(obj: any, depth: number, maxDepth: number, isEnvMap = false): any {
+function sanitizePlainObject(
+  obj: any,
+  depth: number,
+  maxDepth: number,
+  isEnvMap = false,
+  redactOpaqueValues = true,
+): any {
   const sanitized: any = {};
   const isSecretKey = isEnvMap ? isSecretEnvVarName : isSecretField;
   for (const [key, value] of Object.entries(obj)) {
@@ -1052,7 +1063,7 @@ function sanitizePlainObject(obj: any, depth: number, maxDepth: number, isEnvMap
           name,
           isSafeTracingCredentialTemplate(item) ||
           (typeof item === 'string' &&
-            !isCredentialHeader(name, item) &&
+            !isCredentialHeader(name, item, redactOpaqueValues) &&
             (isNonCredentialHeader(name) || SAFE_TRACING_PROVIDER_HEADERS.has(name.toLowerCase())))
             ? item
             : REDACTED,
@@ -1064,7 +1075,10 @@ function sanitizePlainObject(obj: any, depth: number, maxDepth: number, isEnvMap
     ) {
       const scheme = /^[a-z][a-z\d+.-]*:\/\//i;
       const hasScheme = scheme.test(value);
-      const endpoint = sanitizeUrlForLogging(hasScheme ? value : `https://${value}`);
+      const endpoint = sanitizeUrlForLogging(
+        hasScheme ? value : `https://${value}`,
+        redactOpaqueValues,
+      );
       const host = hasScheme ? endpoint : endpoint.replace(/^https:\/\//, '');
       const hasPath = value.replace(scheme, '').split(/[?#]/, 1)[0].includes('/');
       sanitized[key] = hasPath ? host : host.replace(/\/(?=[?#]|$)/, '');
@@ -1078,15 +1092,21 @@ function sanitizePlainObject(obj: any, depth: number, maxDepth: number, isEnvMap
       sanitized[key] =
         key === 'url' ||
         (isEnvMap && key.toUpperCase().endsWith('_URL') && !/^OPENAI_(?:API_)?BASE_URL$/i.test(key))
-          ? sanitizeUrl(value)
-          : sanitizeUrlForLogging(value);
-    } else if (typeof value === 'string' && looksLikeSecret(value)) {
+          ? sanitizeUrl(value, redactOpaqueValues)
+          : sanitizeUrlForLogging(value, redactOpaqueValues);
+    } else if (typeof value === 'string' && looksLikeSecret(value, redactOpaqueValues)) {
       // Redact values that look like secrets (API keys, tokens, etc.)
       sanitized[key] = REDACTED;
     } else {
       // An `env` map is handed verbatim to a subprocess, so its keys are environment
       // variable names and get the broader credential-word match one level down.
-      sanitized[key] = recursiveSanitize(value, depth + 1, maxDepth, key === 'env');
+      sanitized[key] = recursiveSanitize(
+        value,
+        depth + 1,
+        maxDepth,
+        key === 'env',
+        redactOpaqueValues,
+      );
     }
   }
   return sanitized;
@@ -1095,14 +1115,20 @@ function sanitizePlainObject(obj: any, depth: number, maxDepth: number, isEnvMap
 /**
  * Recursively sanitize an object, redacting secret fields at any depth
  */
-function recursiveSanitize(obj: any, depth = 0, maxDepth = MAX_DEPTH, isEnvMap = false): any {
+function recursiveSanitize(
+  obj: any,
+  depth = 0,
+  maxDepth = MAX_DEPTH,
+  isEnvMap = false,
+  redactOpaqueValues = true,
+): any {
   if (typeof obj === 'function') {
     return `[Function] ${obj.name}`;
   }
 
   // Handle strings - check if they're JSON and sanitize if so
   if (typeof obj === 'string') {
-    return sanitizeJsonString(obj, depth, maxDepth);
+    return sanitizeJsonString(obj, depth, maxDepth, redactOpaqueValues);
   }
 
   // Handle primitives and null/undefined
@@ -1117,7 +1143,9 @@ function recursiveSanitize(obj: any, depth = 0, maxDepth = MAX_DEPTH, isEnvMap =
 
   // Handle arrays
   if (Array.isArray(obj)) {
-    return obj.map((item) => recursiveSanitize(item, depth + 1, maxDepth));
+    return obj.map((item) =>
+      recursiveSanitize(item, depth + 1, maxDepth, false, redactOpaqueValues),
+    );
   }
 
   // Handle class instances
@@ -1127,7 +1155,7 @@ function recursiveSanitize(obj: any, depth = 0, maxDepth = MAX_DEPTH, isEnvMap =
   }
 
   // Handle plain objects
-  return sanitizePlainObject(obj, depth, maxDepth, isEnvMap);
+  return sanitizePlainObject(obj, depth, maxDepth, isEnvMap, redactOpaqueValues);
 }
 
 /**
@@ -1142,9 +1170,15 @@ export function sanitizeObject(
     context?: string;
     throwOnError?: boolean;
     maxDepth?: number;
+    redactOpaqueValues?: boolean;
   } = {},
 ): any {
-  const { context = 'object', throwOnError = false, maxDepth = MAX_DEPTH } = options;
+  const {
+    context = 'object',
+    throwOnError = false,
+    maxDepth = MAX_DEPTH,
+    redactOpaqueValues = true,
+  } = options;
 
   try {
     // Handle null/undefined
@@ -1154,7 +1188,7 @@ export function sanitizeObject(
 
     // Handle strings - check if they're JSON and sanitize if so
     if (typeof obj === 'string') {
-      return sanitizeJsonString(obj, 0, maxDepth);
+      return sanitizeJsonString(obj, 0, maxDepth, redactOpaqueValues);
     }
 
     // Handle other primitives
@@ -1186,7 +1220,7 @@ export function sanitizeObject(
     );
 
     // Apply recursive sanitization with depth limiting
-    return recursiveSanitize(safeObj, 0, maxDepth);
+    return recursiveSanitize(safeObj, 0, maxDepth, false, redactOpaqueValues);
   } catch (error) {
     if (throwOnError) {
       throw error;

@@ -498,6 +498,29 @@ describe('isSecretEnvVarName', () => {
 });
 
 describe('sanitizeObject', () => {
+  it('can preserve opaque payloads without retaining named or recognizable credentials', () => {
+    const opaque = 'Q'.repeat(80);
+    const input = {
+      payload: opaque,
+      nested: [{ payload: opaque }],
+      json: JSON.stringify({ payload: opaque, apiKey: 'private-json-key' }),
+      form: `payload=${opaque}&api_key=private-form-key`,
+      url: `https://example.com/?payload=${opaque}&api_key=private-url-key`,
+      apiKey: 'private-key',
+      tokenShape: 'sk-' + 'x'.repeat(24),
+    };
+    const result = sanitizeObject(input, { redactOpaqueValues: false });
+    expect(result.payload).toBe(opaque);
+    expect(result.nested[0].payload).toBe(opaque);
+    expect(JSON.parse(result.json)).toEqual({ payload: opaque, apiKey: '[REDACTED]' });
+    expect(result.form).toContain(`payload=${opaque}`);
+    expect(result.url).toContain(`payload=${opaque}`);
+    expect(result.apiKey).toBe('[REDACTED]');
+    expect(result.tokenShape).toBe('[REDACTED]');
+    expect(JSON.stringify(result)).not.toContain('private-');
+    expect(sanitizeObject(input).payload).toBe('[REDACTED]');
+  });
+
   describe('environment variable maps', () => {
     it('redacts credential-named variables inside an env map', () => {
       // Regression: `env` is handed verbatim to a subprocess, so it is where a config

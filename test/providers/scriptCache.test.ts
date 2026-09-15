@@ -1,13 +1,20 @@
 import crypto from 'crypto';
 
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { isCacheEnabled } from '../../src/cache';
 import cliState from '../../src/cliState';
 import { getScriptCacheKey } from '../../src/providers/scriptCompletion';
+import { mockProcessEnv } from '../util/utils';
 
 vi.mock('../../src/cache', () => ({ isCacheEnabled: vi.fn(() => true) }));
 
+let restoreEnv: () => void;
+beforeEach(() => {
+  restoreEnv = mockProcessEnv({}, { clear: true });
+});
+
 afterEach(() => {
+  restoreEnv();
   vi.restoreAllMocks();
   vi.mocked(isCacheEnabled).mockReturnValue(true);
 });

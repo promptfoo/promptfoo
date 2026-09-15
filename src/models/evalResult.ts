@@ -34,6 +34,7 @@ import { clearCountCache } from './evalPerformance';
 function sanitizeProviderConfig(config: ProviderConfig): ProviderConfig {
   return sanitizeObject(JSON.parse(safeJsonStringify(config) as string), {
     context: 'provider config',
+    redactOpaqueValues: false,
     maxDepth: Number.POSITIVE_INFINITY,
   }) as ProviderConfig;
 }
@@ -180,6 +181,7 @@ function sanitizeForDbWithSecrets<T>(obj: T): T {
   }
   return sanitizeObject(obj, {
     context: 'evalResult field',
+    redactOpaqueValues: false,
     // Nested provider configs can be deeper than the default maxDepth (4);
     // match the behavior of `sanitizeConfigForOutput` in `src/util/output.ts`.
     maxDepth: Number.POSITIVE_INFINITY,

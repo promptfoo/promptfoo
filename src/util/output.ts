@@ -339,6 +339,7 @@ const outputToHtmlReportCell = (output: EvaluateTableOutput) => {
 function sanitizeConfigForOutput(config: Eval['config']): OutputFile['config'] {
   return sanitizeObject(sanitizeTracingConfigForPersistence(config), {
     context: 'output config',
+    redactOpaqueValues: false,
     throwOnError: true,
     maxDepth: Number.POSITIVE_INFINITY,
   }) as OutputFile['config'];

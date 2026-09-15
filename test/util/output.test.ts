@@ -171,7 +171,7 @@ describe('writeOutput', () => {
     expect(fsPromises.writeFile).toHaveBeenCalledTimes(1);
   });
 
-  it('exports very large token-like config values with secret redaction intact', async () => {
+  it('preserves large encoded inputs while redacting named credentials', async () => {
     const eval_ = new Eval({
       tests: [{ vars: { media: 'A'.repeat(16_369_336), message: 'Public fixture text.' } }],
       providers: [{ id: 'echo', config: { apiKey: 'fixture-api-key', max_tokens: 37 } }],
@@ -182,10 +182,8 @@ describe('writeOutput', () => {
     expect(fsPromises.writeFile).toHaveBeenCalledTimes(1);
     const outputJson = vi.mocked(fsPromises.writeFile).mock.calls[0][1] as string;
     const parsed = JSON.parse(outputJson);
-    expect(parsed.config.tests[0].vars).toEqual({
-      media: '[REDACTED]',
-      message: 'Public fixture text.',
-    });
+    expect(parsed.config.tests[0].vars.media === 'A'.repeat(16_369_336)).toBe(true);
+    expect(parsed.config.tests[0].vars.message).toBe('Public fixture text.');
     expect(parsed.config.providers[0].config).toEqual({
       apiKey: '[REDACTED]',
       max_tokens: 37,

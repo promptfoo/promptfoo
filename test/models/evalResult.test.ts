@@ -97,6 +97,53 @@ describe('EvalResult', () => {
     },
   );
 
+  it.each(['memory', 'single', 'batch', 'artifact'])(
+    'preserves opaque user payloads while redacting credentials at the %s boundary',
+    async (boundary) => {
+      const opaque = Buffer.from(
+        'An ordinary encoded input for the evaluation. '.repeat(4),
+      ).toString('base64');
+      const revision = 'a'.repeat(64);
+      const credential = 'fixture-private-api-key';
+      const input = {
+        ...mockEvaluateResult,
+        prompt: { ...mockPrompt, raw: opaque, config: { model: revision, apiKey: credential } },
+        testCase: {
+          ...mockTestCase,
+          vars: { encoded: opaque, apiKey: credential },
+          options: { provider: { id: 'echo', config: { model: revision, apiKey: credential } } },
+        },
+        gradingResult: {
+          pass: true,
+          score: 1,
+          reason: 'ok',
+          assertion: { type: 'equals' as const, value: opaque },
+        },
+      };
+      const result =
+        boundary === 'artifact'
+          ? sanitizeResultForArtifact(input)
+          : boundary === 'batch'
+            ? (
+                await EvalResult.createManyFromEvaluateResult([input], 'opaque-batch')
+              )[0].toEvaluateResult()
+            : (
+                await EvalResult.createFromEvaluateResult('opaque-' + boundary, input, {
+                  persist: boundary !== 'memory',
+                })
+              ).toEvaluateResult();
+      expect(result.prompt.raw).toBe(opaque);
+      expect(result.prompt.config?.model).toBe(revision);
+      expect(result.testCase.vars?.encoded).toBe(opaque);
+      expect(result.testCase.options?.provider).toMatchObject({
+        config: { model: revision, apiKey: '[REDACTED]' },
+      });
+      expect(result.gradingResult?.assertion?.value).toBe(opaque);
+      expect(JSON.stringify(result)).not.toContain(credential);
+      expect(input.testCase.vars.apiKey).toBe(credential);
+    },
+  );
+
   it.each([true, false])(
     'redacts each save while retaining live values (persisted=%s)',
     async (persist) => {
