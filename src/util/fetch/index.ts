@@ -46,8 +46,9 @@ const cachedProxyAgents: Map<string, Dispatcher> = new Map();
 function getConnectionPoolSize(): number {
   const envConnections = getEnvString('PROMPTFOO_FETCH_CONNECTIONS');
   if (envConnections != null) {
-    const parsed = parseInt(envConnections, 10);
-    if (!isNaN(parsed)) {
+    const normalized = envConnections.trim();
+    const parsed = Number(normalized);
+    if (/^\d+$/.test(normalized) && Number.isSafeInteger(parsed) && parsed > 0) {
       return parsed;
     }
   }
@@ -493,19 +494,12 @@ async function peekRateLimitBody(
  * Drain a Response's body into a string, but stop reading once `maxBytes`
  * have been collected. Each streamed chunk is bounded to the remaining
  * budget *before* it enters the in-memory buffer, so a single oversized
- * chunk cannot exceed `maxBytes` of retained memory. Falls back to
- * `.text()` when the body stream isn't available (some Response polyfills);
- * in that path we consult `Content-Length` first to skip materializing
- * very large bodies entirely.
+ * chunk cannot exceed `maxBytes` of retained memory. Without a readable
+ * stream, skip the body: Content-Length cannot guarantee a bounded allocation.
  */
 export async function readBoundedText(response: Response, maxBytes: number): Promise<string> {
   if (!response.body) {
-    const contentLength = Number.parseInt(response.headers?.get?.('content-length') ?? '', 10);
-    if (Number.isFinite(contentLength) && contentLength > maxBytes) {
-      return '';
-    }
-    const text = await response.text();
-    return text.length > maxBytes ? text.slice(0, maxBytes) : text;
+    return '';
   }
   const reader = response.body.getReader();
   const chunks: Uint8Array[] = [];

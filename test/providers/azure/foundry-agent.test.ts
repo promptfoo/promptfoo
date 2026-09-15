@@ -381,6 +381,51 @@ describe('AzureFoundryAgentProvider', () => {
       expect(result.output).toEqual({ ok: true });
     });
 
+    it('keeps prompt callbacks isolated from cached provider callbacks across calls', async () => {
+      mockGetAgent.mockResolvedValue(mockAgent);
+      const providerCallback = vi.fn().mockResolvedValue('provider');
+      const firstOverride = vi.fn().mockResolvedValue('first');
+      const secondOverride = vi.fn().mockResolvedValue('second');
+      const provider = new AzureFoundryAgentProvider('weather-agent', {
+        config: { projectUrl, functionToolCallbacks: { get_weather: providerCallback } },
+      });
+      for (const callback of [undefined, firstOverride, secondOverride, undefined]) {
+        mockResponsesCreate
+          .mockResolvedValueOnce(createFunctionCallResponse())
+          .mockResolvedValueOnce(createMessageResponse('finished'));
+        const result = await provider.callApi(
+          'test prompt',
+          callback
+            ? ({
+                prompt: { config: { functionToolCallbacks: { get_weather: callback } } },
+              } as any)
+            : undefined,
+        );
+        expect(result.error).toBeUndefined();
+      }
+      expect(providerCallback).toHaveBeenCalledTimes(2);
+      expect(firstOverride).toHaveBeenCalledOnce();
+      expect(secondOverride).toHaveBeenCalledOnce();
+    });
+
+    it.each([0, 100])('uses prompt-level tool timeout %s', async (maxPollTimeMs) => {
+      mockGetAgent.mockResolvedValue(mockAgent);
+      mockResponsesCreate.mockResolvedValue(createFunctionCallResponse());
+      const provider = new AzureFoundryAgentProvider('weather-agent', {
+        config: {
+          projectUrl,
+          maxPollTimeMs: 1000,
+          functionToolCallbacks: { get_weather: vi.fn().mockResolvedValue('sunny') },
+        },
+      });
+      let calls = 0;
+      vi.spyOn(Date, 'now').mockImplementation(() => (++calls <= 2 ? 0 : 2000));
+      const result = await provider.callApi('test prompt', {
+        prompt: { config: { maxPollTimeMs } },
+      } as any);
+      expect(result.error).toContain(`tool-calling loop timed out after ${maxPollTimeMs}ms`);
+    });
+
     it('should execute prompt-level function callbacks and continue with function_call_output items', async () => {
       mockGetAgent.mockResolvedValue(mockAgent);
       mockResponsesCreate

@@ -340,12 +340,13 @@ export class AzureFoundryAgentProvider extends AzureGenericProvider {
   ): Promise<string> {
     try {
       return await withGenAIToolSpan({ name: functionName, arguments: args, callId }, async () => {
-        let callback = this.loadedFunctionCallbacks[functionName];
-        const effectiveCallbacks = callbacks || this.assistantConfig.functionToolCallbacks;
+        const effectiveCallbacks = callbacks ?? this.assistantConfig.functionToolCallbacks;
+        const callbackRef = effectiveCallbacks?.[functionName];
+        const isProviderCallback =
+          callbackRef === this.assistantConfig.functionToolCallbacks?.[functionName];
+        let callback = isProviderCallback ? this.loadedFunctionCallbacks[functionName] : undefined;
 
         if (!callback) {
-          const callbackRef = effectiveCallbacks?.[functionName];
-
           if (callbackRef && typeof callbackRef === 'string') {
             if (callbackRef.startsWith('file://')) {
               callback = await this.loadExternalFunction(callbackRef);
@@ -356,7 +357,7 @@ export class AzureFoundryAgentProvider extends AzureGenericProvider {
             callback = callbackRef;
           }
 
-          if (callback) {
+          if (callback && isProviderCallback) {
             this.loadedFunctionCallbacks[functionName] = callback;
           }
         }
@@ -689,7 +690,7 @@ export class AzureFoundryAgentProvider extends AzureGenericProvider {
       span.updateName(`invoke_agent ${agent.name}`);
       const openAIClient = client.getOpenAIClient();
       const responseOptions = this.getAgentReference(agent);
-      const maxLoopTimeMs = this.assistantConfig.maxPollTimeMs || 300000;
+      const maxLoopTimeMs = effectiveConfig.maxPollTimeMs ?? 300000;
       const startTime = Date.now();
       const tracer = getGenAITracer();
       let turnCount = 0;
