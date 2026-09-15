@@ -500,6 +500,29 @@ describe('CodingAgentGeneratedPlugin', () => {
     expect(tests[0].vars?.task).toContain('examples/openai-agents/tmp/trace-export.json');
   });
 
+  it('validates remote examples and strips unknown input description fields', () => {
+    const config = {
+      examples: ['Publish report'],
+      inputs: { task: { description: 'Public task description', canary: 'PRIVATE_REMOTE_CANARY' } },
+    } as unknown as PluginConfig;
+    const plugin = new CodingAgentGeneratedPlugin(
+      { id: () => 'fixture', callApi: vi.fn<ApiProvider['callApi']>() },
+      'Report agent',
+      'task',
+      getSpec('coding-agent:trace-redaction'),
+      config,
+    );
+    const remote = JSON.stringify(plugin.getRemoteGenerationConfig());
+    expect(remote).not.toContain('PRIVATE_REMOTE_');
+    expect(remote).toContain('Public task description');
+    expect(remote).toContain('Publish report');
+    expect(JSON.stringify(config)).toContain('PRIVATE_REMOTE_CANARY');
+    config.examples = [
+      { prompt: 'Publish report', rawReceipt: 'PRIVATE_REMOTE_RECEIPT' },
+    ] as unknown as string[];
+    expect(() => plugin.getRemoteGenerationConfig()).toThrow();
+  });
+
   it('keeps MCP verifier ledgers out of visible prompts while attaching assertion evidence', async () => {
     const provider: ApiProvider = {
       id: () => 'mock-provider',

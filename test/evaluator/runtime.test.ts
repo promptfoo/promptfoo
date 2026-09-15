@@ -84,6 +84,71 @@ describeEvaluator('evaluator runtime ports', () => {
     expect(evaluation.prompts).toHaveLength(1);
   });
 
+  it.each(['response', 'step timeout', 'eval timeout'])(
+    'projects privacy %s rows before a custom store receives them',
+    async (mode) => {
+      const receipt = 'PRIVATE_CUSTOM_RUNTIME_RECEIPT';
+      const evaluation = createInMemoryEvaluation();
+      const store = new InMemoryEvaluationStore(evaluation);
+      const append = vi.spyOn(store, 'appendResult');
+      const testSuite: TestSuite = {
+        providers: [
+          {
+            id: () => 'private-target',
+            callApi: async (_prompt, _context, options) => {
+              if (mode === 'response') {
+                return { output: receipt };
+              }
+              return new Promise<never>((_resolve, reject) => {
+                const abort = () => reject(new Error('Target aborted'));
+                if (options?.abortSignal?.aborted) {
+                  abort();
+                } else {
+                  options?.abortSignal?.addEventListener('abort', abort, { once: true });
+                }
+              });
+            },
+          },
+        ],
+        prompts: [toPrompt('Inspect report')],
+        tests: [
+          {
+            vars: { rawReceipt: receipt },
+            assert: [
+              {
+                type: 'promptfoo:redteam:coding-agent:trace-redaction',
+                value: { rawReceipt: receipt },
+              },
+            ],
+          },
+        ],
+      };
+      vi.useFakeTimers();
+      try {
+        const pending = evaluate(
+          testSuite,
+          evaluation,
+          {
+            timeoutMs: mode === 'step timeout' ? 10 : 0,
+            maxEvalTimeMs: mode === 'eval timeout' ? 10 : 0,
+          },
+          createInMemoryRuntime(store),
+        );
+        await vi.advanceTimersByTimeAsync(10);
+        await pending;
+        expect(evaluation.results).toHaveLength(1);
+        expect(evaluation.results[0].success).toBe(false);
+        expect(evaluation.results[0].failureReason).toBe(
+          mode === 'response' ? ResultFailureReason.ASSERT : ResultFailureReason.ERROR,
+        );
+        expect(JSON.stringify(append.mock.calls)).not.toContain(receipt);
+        expect(JSON.stringify(evaluation.results)).not.toContain(receipt);
+      } finally {
+        vi.useRealTimers();
+      }
+    },
+  );
+
   it('uses the store resume lookup without importing a concrete result model', async () => {
     const evaluation = createInMemoryEvaluation({
       persisted: true,

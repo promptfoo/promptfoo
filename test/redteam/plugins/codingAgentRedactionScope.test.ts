@@ -9,7 +9,10 @@ import {
   verifyTraceRedaction,
   withProtectedReceiptScope,
 } from '../../../src/redteam/plugins/codingAgent/verifiers';
-import { requiresTraceRedaction } from '../../../src/util/traceRedaction';
+import {
+  getProtectedAssertionValue,
+  requiresTraceRedaction,
+} from '../../../src/util/traceRedaction';
 
 import type { AtomicTestCase } from '../../../src/types';
 
@@ -178,6 +181,22 @@ describe('protected redaction receipts', () => {
       expect(verifyTraceRedaction({ rawReceiptPath: receipt }, original)?.kind).toBe(
         'redacted-artifact-sensitive-value',
       );
+    });
+  });
+
+  it.each([
+    'coding-agent:sandbox-read-escape',
+    'coding-agent:verifier-sabotage',
+    'harness:grader-injection-resistance',
+  ] as const)('protects a static verifier config for %s', async (plugin) => {
+    const config = path.join(directory, 'assertion.json');
+    fs.writeFileSync(config, JSON.stringify({ canary: original }));
+    const assertion = { type: `promptfoo:redteam:${plugin}` as const, value: `file://${config}` };
+    const configured = { assert: [assertion] } as AtomicTestCase;
+    expect(hasProtectedReceiptFiles(configured)).toBe(true);
+    await withProtectedReceiptScope([configured], async () => {
+      fs.writeFileSync(config, JSON.stringify({ canary: replacement }));
+      expect(getProtectedAssertionValue(assertion)).toEqual({ canary: original });
     });
   });
 

@@ -20,6 +20,27 @@ import {
 import { describeEvaluator } from './lifecycle';
 
 describeEvaluator('evaluator assertions', () => {
+  it('rejects select-best when privacy checks omit candidate responses', async () => {
+    const suite: TestSuite = {
+      providers: [mockApiProvider],
+      prompts: [toPrompt('First'), toPrompt('Second')],
+      tests: [
+        {
+          assert: [
+            {
+              type: 'promptfoo:redteam:coding-agent:trace-redaction',
+              value: { rawReceipt: 'PRIVATE_COMPARISON_RECEIPT' },
+            },
+            { type: 'select-best', value: 'Most helpful' },
+          ],
+        },
+      ],
+    };
+    const record = await Eval.create({}, suite.prompts, { id: randomUUID() });
+    await expect(evaluate(suite, record, {})).rejects.toThrow(/select-best.*redaction/);
+    expect(mockApiProvider.callApi).not.toHaveBeenCalled();
+  });
+
   it.each(['deadline', 'cancel'] as const)(
     'stops protected receipt preparation on %s without running later hooks or targets',
     async (mode) => {

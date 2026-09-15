@@ -175,7 +175,7 @@ export function hasRedactionMedia(response: ProviderResponse | null | undefined)
       }
       if (
         text.includes(BLOB_SCHEME) ||
-        /data:(?:audio|image|video)\/|<(?:svg|img|audio|video|picture|source)(?:\s|\/?>)/i.test(
+        /data:(?:audio|image|video)\/|<(?:svg|img|audio|video|picture|source|object|embed)(?:\s|\/?>)/i.test(
           text,
         ) ||
         hasImageInput(text) ||
@@ -279,6 +279,7 @@ function sanitizeRedactionGrade(result: GradingResult): GradingResult {
 export function sanitizeRedactionResult<T extends object>(input: T): T {
   const result = input as T & {
     testCase?: AtomicTestCase;
+    vars?: Record<string, unknown>;
     response?: ProviderResponse | null;
     gradingResult?: GradingResult | null;
     metadata?: Record<string, unknown>;
@@ -303,10 +304,11 @@ export function sanitizeRedactionResult<T extends object>(input: T): T {
   const publicInputs = sanitizeCodingAgentVerifierInputs({
     assert: result.testCase?.assert,
     testCase: result.testCase,
+    vars: result.vars,
     gradingResult: result.gradingResult,
     metadata: result.metadata,
   });
-  const { testCase } = publicInputs;
+  const { testCase, vars } = publicInputs;
   const metadata = { ...publicInputs.metadata };
   for (const key of Object.keys(response?.metadata ?? {})) {
     if (testCase?.metadata && Object.prototype.hasOwnProperty.call(testCase.metadata, key)) {
@@ -323,12 +325,13 @@ export function sanitizeRedactionResult<T extends object>(input: T): T {
     ? sanitizeRedactionGrade(publicInputs.gradingResult)
     : publicInputs.gradingResult;
   if (!response) {
-    return { ...input, ...accounting, testCase, error, metadata, gradingResult };
+    return { ...input, ...accounting, testCase, vars, error, metadata, gradingResult };
   }
   return {
     ...input,
     ...accounting,
     testCase,
+    vars,
     error,
     metadata,
     gradingResult,

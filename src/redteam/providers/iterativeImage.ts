@@ -21,6 +21,7 @@ import {
   createIterationContext,
   externalizeResponseForRedteamHistory,
   getTargetResponse,
+  gradeRedactionResponse,
   redteamProviderManager,
   type TargetResponse,
 } from './shared';
@@ -30,6 +31,7 @@ import type {
   AtomicTestCase,
   CallApiContextParams,
   CallApiOptionsParams,
+  GradingResult,
   Inputs,
   NunjucksFilterMap,
   Prompt,
@@ -286,6 +288,8 @@ async function runRedteamConversation({
   let bestResponse: BestResponse | null = null;
   let lastResponse: TargetResponse | undefined = undefined;
   let mediaRedactionError: string | undefined;
+  const storedGraderResults: Record<number, GradingResult> = {};
+  let storedGraderResult: GradingResult | undefined;
   const previousOutputs: ImageGenerationOutput[] = [];
   let finalIteration = 0;
 
@@ -390,6 +394,13 @@ async function runRedteamConversation({
         options,
       );
       targetResponse = await externalizeResponseForRedteamHistory(targetResponse, context);
+      storedGraderResult =
+        (await gradeRedactionResponse(
+          targetPrompt,
+          targetResponse,
+          test && { ...test, vars: targetContext?.vars ?? iterationVars },
+          storedGraderResults,
+        )) ?? storedGraderResult;
       if (targetResponse.metadata?.redactionMediaOmitted === true) {
         mediaRedactionError ??= targetResponse.error;
       }
@@ -589,6 +600,11 @@ async function runRedteamConversation({
     prompt: targetPrompt || undefined,
     metadata: {
       ...(mediaRedactionError && { redactionMediaOmitted: true }),
+      ...(storedGraderResult && {
+        storedGraderResult,
+        storedGraderResults,
+        redactionContentOmitted: true,
+      }),
       finalIteration,
       highestScore,
       redteamHistory,

@@ -2979,6 +2979,11 @@ function markComparisonRows(
 ) {
   for (const evalOption of runEvalOptions) {
     if (evalOption.test.assert?.some((a) => a.type === 'select-best')) {
+      if (requiresTraceRedaction(evalOption.test.assert)) {
+        throw new Error(
+          'select-best cannot compare responses omitted for trace/artifact redaction.',
+        );
+      }
       rowsWithSelectBestAssertion.add(evalOption.testIdx);
     }
     if (evalOption.test.assert?.some((a) => a.type === 'max-score')) {
@@ -3513,11 +3518,12 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
   // that never stream) to override stale entries in the recovery merge.
   private trackFinalJsonlResult(row: TResult | EvaluateResult): void {
     if (this.fileWriters.length > 0 && this.store.resultPersistenceFailed) {
-      this.store.recordFinalResult(this.store.toEvaluateResult(row));
+      this.store.recordFinalResult(sanitizeRedactionResult(this.store.toEvaluateResult(row)));
     }
   }
 
   private async persistEvalRow(row: EvaluateResult): Promise<void> {
+    row = sanitizeRedactionResult(row);
     try {
       await this.store.appendResult(row);
     } catch (error) {
@@ -3961,7 +3967,7 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
       error,
     );
     this.trackFinalJsonlResult(timeoutResult);
-    await this.store.appendResult(timeoutResult);
+    await this.store.appendResult(sanitizeRedactionResult(timeoutResult));
     this.stats.errors++;
 
     const { metrics } = context.prompts[evalStep.promptIdx];
@@ -4811,7 +4817,7 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
       const evalStep = runEvalOptions[i];
       const timeoutResult = createMaxDurationTimeoutResult(evalStep, maxEvalTimeMs, startTime);
       this.trackFinalJsonlResult(timeoutResult);
-      await this.store.appendResult(timeoutResult);
+      await this.store.appendResult(sanitizeRedactionResult(timeoutResult));
       this.stats.errors++;
       const { metrics } = prompts[evalStep.promptIdx];
       if (metrics) {

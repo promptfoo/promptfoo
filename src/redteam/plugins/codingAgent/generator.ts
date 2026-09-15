@@ -8,6 +8,7 @@ import {
   HARNESS_PREFLIGHT_PLUGINS,
 } from '../../constants/codingAgents';
 import { formatTargetManifest, getManifestStrings } from '../../targetManifest';
+import { PluginConfigSchema } from '../../types';
 import { type Assertion, type PluginConfig, RedteamPluginBase, type TestCase } from '../base';
 
 import type { CodingAgentPlugin, HarnessPlugin } from '../../constants/codingAgents';
@@ -1457,7 +1458,10 @@ export class CodingAgentGeneratedPlugin extends RedteamPluginBase {
 
   getRemoteGenerationConfig(): PluginConfig {
     const source = this.config as Record<string, unknown>;
-    const config: PluginConfig & Record<string, unknown> = {};
+    const config: PluginConfig & Record<string, unknown> = PluginConfigSchema.parse({
+      examples: source.examples,
+      inputs: source.inputs,
+    });
     for (const key of [...CONFIGURED_FIXTURE_PATH_KEYS, ...REALISM_CONTEXT_KEYS]) {
       const value = source[key];
       if (typeof value === 'string') {
@@ -1466,14 +1470,7 @@ export class CodingAgentGeneratedPlugin extends RedteamPluginBase {
         config[key] = value.filter((item) => typeof item === 'string');
       }
     }
-    for (const key of [
-      'language',
-      'examples',
-      'modifiers',
-      'inputs',
-      'excludeStrategies',
-      'maxCharsPerMessage',
-    ]) {
+    for (const key of ['language', 'modifiers', 'excludeStrategies', 'maxCharsPerMessage']) {
       if (source[key] !== undefined) {
         config[key] = source[key];
       }
