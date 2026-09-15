@@ -965,6 +965,120 @@ describe('ShellInjectionGrader execution evidence', () => {
     expect(trace?.spans).toHaveLength(1);
   });
 
+  it.each(['native', 'traced'] as const)(
+    'rejects conflicting and malformed %s call IDs',
+    (source) => {
+      for (const alias of ['other-call', '', 1, null]) {
+        expect(() =>
+          getGradingTrace({
+            providerResponse: {
+              metadata: {
+                toolCalls: [
+                  {
+                    id: 'call',
+                    ...(source === 'native' && { toolCallId: alias }),
+                    name: 'Bash',
+                    input: { command: 'pwd' },
+                    output: '',
+                  },
+                ],
+              },
+            },
+            traceData: {
+              traceId: 'trace',
+              evaluationId: 'eval',
+              testCaseId: 'case',
+              spans: [
+                {
+                  spanId: 'span',
+                  name: 'Bash',
+                  startTime: 0,
+                  attributes: {
+                    'tool.call.id': 'call',
+                    ...(source === 'traced' && { tool_call_id: alias }),
+                    'tool.name': 'Bash',
+                  },
+                },
+              ],
+            },
+          }),
+        ).toThrow(/call ID/);
+      }
+    },
+  );
+
+  it.each(['name', 'input', 'output', 'status', 'equivalent'])(
+    'reconciles repeated native call IDs with %s evidence',
+    (mode) => {
+      const call = {
+        id: 'call',
+        name: 'Bash',
+        input: { command: 'pwd', options: { first: 1, second: 2 } },
+        output: { exitCode: 0 },
+      };
+      const duplicate = {
+        ...call,
+        toolCallId: call.id,
+        input: { options: { second: 2, first: 1 }, command: 'pwd' },
+        ...(mode === 'name' && { name: 'shell' }),
+        ...(mode === 'input' && { input: { command: 'whoami' } }),
+        ...(mode === 'output' && { output: { exitCode: 1 } }),
+        ...(mode === 'status' && { isError: true }),
+      };
+      const context = { providerResponse: { metadata: { toolCalls: [call, duplicate] } } };
+      if (mode === 'equivalent') {
+        expect(getGradingTrace(context)?.spans).toHaveLength(1);
+      } else {
+        expect(() => getGradingTrace(context)).toThrow('Conflicting native tool receipts');
+      }
+    },
+  );
+
+  it('matches a native call to its raw envelope by explicit call ID', () => {
+    const call = { id: 'call', name: 'Bash', input: { command: 'pwd' }, output: { exitCode: 0 } };
+    expect(
+      getGradingTrace({
+        providerResponse: {
+          metadata: { toolCalls: [call] },
+          raw: { tool: call.name, toolCallId: call.id, args: call.input, result: call.output },
+        },
+      })?.spans,
+    ).toHaveLength(1);
+  });
+
+  it.each([
+    { is_error: false, isError: true },
+    { is_error: true, isError: false },
+    { is_error: false, error: 'Tool failed' },
+    { is_error: 'false' },
+    { isError: 1 },
+  ])('rejects contradictory or malformed native outcomes: %j', (outcomes) => {
+    expect(() =>
+      getGradingTrace({
+        providerResponse: {
+          metadata: {
+            toolCalls: [{ name: 'Bash', input: { command: 'pwd' }, output: '', ...outcomes }],
+          },
+        },
+      }),
+    ).toThrow(/tool outcome/);
+  });
+
+  it.each([
+    { name: 'request only', raw: {}, code: 0 },
+    { name: 'MCP content', raw: { content: [{ type: 'text', text: '/workspace' }] }, code: 1 },
+    { name: 'empty MCP result', raw: { content: [] }, code: 1 },
+    { name: 'MCP error', raw: { isError: true }, code: 2 },
+  ])('keeps $name execution status in raw envelopes', ({ raw, code }) => {
+    const trace = getGradingTrace({
+      providerResponse: { raw: { tool: 'Bash', args: { command: 'pwd' }, ...raw } },
+    });
+    expect(trace?.spans[0].statusCode).toBe(code);
+    if (code === 0) {
+      expect(trace?.spans[0].attributes?.['tool.output']).toBeUndefined();
+    }
+  });
+
   it.each(['status', 'input alias', 'output alias', 'tool name'])(
     'rejects conflicting native and traced receipt %s',
     (conflict) => {

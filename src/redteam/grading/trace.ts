@@ -7,7 +7,6 @@ import {
 } from '../../assertions/trajectoryUtils';
 import { sanitizeBody } from '../../tracing/genaiTracer';
 import {
-  getFirstStringAttribute,
   getToolArgumentAttributeKeys,
   TOOL_NAME_ATTRIBUTE_KEYS,
   TOOL_RESULT_ATTRIBUTE_KEYS,
@@ -48,15 +47,19 @@ function toolBodiesMatch(partial: string, complete: string | undefined): boolean
   }
 }
 
-function toolCallKey(span: TraceData['spans'][number]): string | undefined {
-  const attributes = span.attributes;
-  const id = getFirstStringAttribute(attributes, [
-    'gen_ai.tool.call.id',
-    'tool.call.id',
-    'tool_call_id',
-  ]);
-  if (!id) {
-    return undefined;
+function getToolCallId(values: unknown[]): string | undefined {
+  let id: string | undefined;
+  for (const value of values) {
+    if (value === undefined) {
+      continue;
+    }
+    if (typeof value !== 'string' || !value.trim()) {
+      throw new TraceEvidenceError('Invalid tool call ID alias.');
+    }
+    if (id !== undefined && id !== value) {
+      throw new TraceEvidenceError('Conflicting tool call ID aliases.');
+    }
+    id = value;
   }
   return id;
 }
@@ -148,61 +151,93 @@ export function getGradingTrace(
     const toolName = getConsistentToolName([metadata?.toolName, raw?.toolName, raw?.tool]);
     if (typeof toolName === 'string') {
       calls.push({
+        id: getToolCallId([metadata?.toolCallId, raw?.toolCallId, raw?.tool_call_id]),
         name: toolName,
         input: getConsistentToolBody([metadata?.toolArgs, raw?.args, raw?.arguments]),
-        output: getConsistentToolBody([raw?.structuredContent, raw?.result]) ?? raw,
-        is_error: Boolean(response.error || raw?.isError),
+        output:
+          getConsistentToolBody([raw?.structuredContent, raw?.result]) ??
+          (raw?.content === undefined ? undefined : raw),
+        is_error: raw?.is_error,
+        isError: raw?.isError,
+        error: response.error || raw?.error,
       });
     }
     if (calls.length) {
       const spans = [...(trace?.spans ?? [])];
       const tracedCalls = new Map<string, number[]>();
       spans.forEach((span, index) => {
-        const key = toolCallKey(span);
+        const key = getToolCallId([
+          span.attributes?.['gen_ai.tool.call.id'],
+          span.attributes?.['tool.call.id'],
+          span.attributes?.['tool_call_id'],
+        ]);
         if (key !== undefined) {
           const indices = tracedCalls.get(key) ?? [];
           indices.push(index);
           tracedCalls.set(key, indices);
         }
       });
-      const nativeSpans = calls
-        .map((call, index) => {
-          const name = getConsistentToolName([call?.name, call?.function?.name]);
-          if (!call || typeof call !== 'object' || Array.isArray(call) || name === undefined) {
-            throw new TraceEvidenceError(
-              'Invalid native tool receipt: expected an object with a tool name.',
-            );
+      const nativeSpans: TraceData['spans'] = [];
+      const nativeCalls = new Map<string, TraceData['spans'][number]>();
+      for (const [index, call] of calls.entries()) {
+        const name = getConsistentToolName([call?.name, call?.function?.name]);
+        if (!call || typeof call !== 'object' || Array.isArray(call) || name === undefined) {
+          throw new TraceEvidenceError(
+            'Invalid native tool receipt: expected an object with a tool name.',
+          );
+        }
+        const errors = [call.is_error, call.isError].filter((value) => value !== undefined);
+        if (call.error !== undefined && call.error !== null && call.error !== '') {
+          errors.push(typeof call.error === 'boolean' ? call.error : true);
+        }
+        if (errors.some((value) => typeof value !== 'boolean')) {
+          throw new TraceEvidenceError('Invalid native tool outcome alias.');
+        }
+        if (errors.some((value) => value !== errors[0])) {
+          throw new TraceEvidenceError('Conflicting native tool outcome aliases.');
+        }
+        const key = getToolCallId([call.id, call.toolCallId, call.tool_call_id]);
+        const span = {
+          spanId: `provider-tool-${index}`,
+          name: 'tool.call',
+          startTime: index,
+          statusCode: errors[0]
+            ? 2
+            : call.output !== undefined || call.result !== undefined
+              ? 1
+              : 0,
+          attributes: {
+            'gen_ai.tool.call.id': key,
+            'tool.name': name,
+            'tool.arguments': sanitizeNativeToolBody(
+              getConsistentToolBody([call.input, call.arguments, call.function?.arguments]),
+            ),
+            'tool.output': sanitizeNativeToolBody(
+              getConsistentToolBody([call.output, call.result]),
+            ),
+          },
+        };
+        if (key !== undefined) {
+          const previous = nativeCalls.get(key);
+          if (previous) {
+            if (
+              previous.statusCode !== span.statusCode ||
+              !isDeepStrictEqual(previous.attributes, span.attributes)
+            ) {
+              throw new TraceEvidenceError('Conflicting native tool receipts for one call ID.');
+            }
+            continue;
           }
-          return {
-            spanId: `provider-tool-${index}`,
-            name: 'tool.call',
-            startTime: index,
-            statusCode:
-              call.is_error || call.error || call.isError
-                ? 2
-                : call.output !== undefined || call.result !== undefined
-                  ? 1
-                  : 0,
-            attributes: {
-              'gen_ai.tool.call.id': call.id ?? call.toolCallId ?? call.tool_call_id,
-              'tool.name': name,
-              'tool.arguments': sanitizeNativeToolBody(
-                getConsistentToolBody([call.input, call.arguments, call.function?.arguments]),
-              ),
-              'tool.output': sanitizeNativeToolBody(
-                getConsistentToolBody([call.output, call.result]),
-              ),
-            },
-          };
-        })
-        .filter((span) => {
-          const key = toolCallKey(span);
-          const matching = key === undefined ? [] : (tracedCalls.get(key) ?? []);
-          for (const index of matching) {
-            spans[index] = completeToolSpan(spans[index], span);
-          }
-          return matching.length === 0;
-        });
+          nativeCalls.set(key, span);
+        }
+        const matching = key === undefined ? [] : (tracedCalls.get(key) ?? []);
+        for (const index of matching) {
+          spans[index] = completeToolSpan(spans[index], span);
+        }
+        if (matching.length === 0) {
+          nativeSpans.push(span);
+        }
+      }
       trace = {
         ...trace,
         traceId: trace?.traceId ?? 'provider-tools',
