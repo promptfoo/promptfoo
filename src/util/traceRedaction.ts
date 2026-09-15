@@ -42,9 +42,9 @@ export const TRACE_REDACTION_ASSERTIONS = new Set([
 ]);
 
 /** Project model-grading inputs after local verifiers have used the original receipts. */
-export function sanitizeRedactionGradingInputs(
+export function sanitizeRedactionGradingInputs<T extends AtomicTestCase>(
   type: string,
-  test: AtomicTestCase,
+  test: T,
   value: Assertion['value'],
 ) {
   return sanitizeCodingAgentVerifierInputs(
@@ -113,8 +113,8 @@ function hasMarkdownImage(text: string): boolean {
   }
 }
 
-function hasImageInput(text: string): boolean {
-  if (!/<input(?:\s|\/?>)/i.test(text)) {
+function hasHtmlMedia(text: string): boolean {
+  if (!/<[a-z]/i.test(text)) {
     return false;
   }
   if (text.length > 16 * 1024 * 1024) {
@@ -123,12 +123,34 @@ function hasImageInput(text: string): boolean {
   const pending: DefaultTreeAdapterMap['node'][] = [parseFragment(text)];
   while (pending.length) {
     const node = pending.pop()!;
-    if (
-      'tagName' in node &&
-      node.tagName === 'input' &&
-      node.attrs.some(({ name, value }) => name === 'type' && value.toLowerCase() === 'image')
-    ) {
-      return true;
+    if ('tagName' in node) {
+      if (
+        (node.tagName === 'input' &&
+          node.attrs.some(
+            ({ name, value }) => name === 'type' && value.toLowerCase() === 'image',
+          )) ||
+        (node.tagName === 'link' &&
+          node.attrs.some(
+            ({ name, value }) =>
+              name === 'rel' && value.toLowerCase().split(/\s+/).includes('stylesheet'),
+          ))
+      ) {
+        return true;
+      }
+      const styles = node.attrs.filter(({ name }) => name === 'style').map(({ value }) => value);
+      if (node.tagName === 'style') {
+        styles.push(node.childNodes.map((child) => ('value' in child ? child.value : '')).join(''));
+      }
+      // Escaped CSS can hide both loaded media and receipts from the text verifier.
+      if (
+        styles.some((style) =>
+          /\\|\b(?:url|image|(?:-webkit-)?image-set)\s*\(|@import\b/i.test(
+            style.replace(/\/\*[\s\S]*?\*\//g, ''),
+          ),
+        )
+      ) {
+        return true;
+      }
     }
     if ('childNodes' in node) {
       for (const child of node.childNodes) {
@@ -178,7 +200,7 @@ export function hasRedactionMedia(response: ProviderResponse | null | undefined)
         /data:(?:audio|image|video)\/|<(?:svg|img|audio|video|picture|source|object|embed)(?:\s|\/?>)/i.test(
           text,
         ) ||
-        hasImageInput(text) ||
+        hasHtmlMedia(text) ||
         hasMarkdownImage(text)
       ) {
         return true;

@@ -115,6 +115,24 @@ describe('evaluatorTracing', () => {
   });
 
   describe('generateTraceContextIfNeeded', () => {
+    it('keeps private verifier metadata out of debug logs', async () => {
+      await generateTraceContextIfNeeded(
+        {
+          metadata: {
+            tracingEnabled: true,
+            pluginId: 'coding-agent:trace-redaction',
+            pluginConfig: { secretFileValue: 'PRIVATE_TRACE_METADATA_RECEIPT' },
+          },
+        },
+        {},
+        0,
+        0,
+      );
+      expect(JSON.stringify(vi.mocked(logger.debug).mock.calls)).not.toContain(
+        'PRIVATE_TRACE_METADATA_RECEIPT',
+      );
+    });
+
     it('should return null when tracing is not enabled', async () => {
       const test: TestCase = {
         vars: { foo: 'bar' },

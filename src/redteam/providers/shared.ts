@@ -29,7 +29,6 @@ import {
 } from '../../types/index';
 import invariant from '../../util/invariant';
 import { safeJsonStringify } from '../../util/json';
-import { sanitizeCodingAgentVerifierInputs } from '../../util/sanitizer';
 import { sleep } from '../../util/time';
 import { TokenUsageTracker } from '../../util/tokenUsage';
 import {
@@ -41,6 +40,7 @@ import {
   getProtectedAssertionValue,
   hasRedactionMedia,
   requiresTraceRedaction,
+  sanitizeRedactionGradingInputs,
   sanitizeRedactionResult,
   TRACE_REDACTION_ASSERTIONS,
   TRUSTED_REDACTION_GRADER,
@@ -728,10 +728,11 @@ export function runRedteamGrader<TResult, TArgs extends unknown[]>(
         },
       ] as TArgs;
     }
-    const { gradingArguments, ...publicTest } = sanitizeCodingAgentVerifierInputs(
+    const { gradingArguments, ...publicTest } = sanitizeRedactionGradingInputs(
+      grader.id,
       { ...test, gradingArguments: args },
-      { preservePaths: false },
-    );
+      undefined,
+    ).test;
     test = publicTest;
     args = gradingArguments;
   }

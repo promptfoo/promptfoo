@@ -366,7 +366,6 @@ export async function generateTraceContextIfNeeded(
 
   if (tracingEnabled) {
     logger.debug('[EvaluatorTracing] Tracing enabled for test case');
-    logger.debug(`[EvaluatorTracing] Test metadata: ${JSON.stringify(test.metadata)}`);
   }
 
   if (!tracingEnabled) {

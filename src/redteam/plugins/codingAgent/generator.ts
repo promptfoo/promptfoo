@@ -1,4 +1,5 @@
 import dedent from 'dedent';
+import { sanitizeCodingAgentVerifierInputs } from '../../../util/sanitizer';
 import { buildCodingAgentAttackProfile } from '../../agenticProfile';
 import {
   CODING_AGENT_PLUGIN_ALIASES,
@@ -1472,7 +1473,10 @@ export class CodingAgentGeneratedPlugin extends RedteamPluginBase {
     }
     for (const key of ['language', 'modifiers', 'excludeStrategies', 'maxCharsPerMessage']) {
       if (source[key] !== undefined) {
-        config[key] = source[key];
+        config[key] =
+          key === 'modifiers'
+            ? sanitizeCodingAgentVerifierInputs({ id: this.id, modifiers: source[key] }).modifiers
+            : source[key];
       }
     }
 

@@ -500,6 +500,28 @@ describe('CodingAgentGeneratedPlugin', () => {
     expect(tests[0].vars?.task).toContain('examples/openai-agents/tmp/trace-export.json');
   });
 
+  it('keeps private nested modifiers out of remote generation', () => {
+    const config = {
+      modifiers: {
+        instructions: 'Public generation instruction',
+        rawReceipt: 'PRIVATE_MODIFIER_RECEIPT',
+        nested: { ledger: 'PRIVATE_MODIFIER_LEDGER', publicHint: 'Public hint' },
+      },
+    };
+    const plugin = new CodingAgentGeneratedPlugin(
+      { id: () => 'fixture', callApi: vi.fn<ApiProvider['callApi']>() },
+      'Report agent',
+      'task',
+      getSpec('coding-agent:trace-redaction'),
+      config,
+    );
+    const remote = JSON.stringify(plugin.getRemoteGenerationConfig());
+    expect(remote).not.toContain('PRIVATE_MODIFIER_');
+    expect(remote).toContain('Public generation instruction');
+    expect(remote).toContain('Public hint');
+    expect(config.modifiers.rawReceipt).toBe('PRIVATE_MODIFIER_RECEIPT');
+  });
+
   it('validates remote examples and strips unknown input description fields', () => {
     const config = {
       examples: ['Publish report'],
