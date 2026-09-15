@@ -66,7 +66,7 @@ interface CliState {
   readonly requestTracingConfig?: TestSuite['tracing'];
   readonly activeOtlpReceiver?: ActiveOtlpReceiver;
 
-  withMaxConcurrency<T>(maxConcurrency: number, fn: () => Promise<T>): Promise<T>;
+  withMaxConcurrency<T>(maxConcurrency: number | undefined, fn: () => Promise<T>): Promise<T>;
   /** The innermost environment scope, or the last config's env outside a scope. */
   readonly env?: EnvOverrides;
   readonly envFileOverrides?: EnvOverrides;
@@ -81,7 +81,13 @@ interface CliState {
   setActiveOtlpReceiver(receiver?: ActiveOtlpReceiver): void;
 }
 
-const maxConcurrencyContext = new AsyncLocalStorage<{ maxConcurrency: number | undefined }>();
+const maxConcurrencyContextKey = Symbol.for('promptfoo.maxConcurrencyContext.v1');
+const maxConcurrencyContexts = globalThis as Record<
+  symbol,
+  AsyncLocalStorage<{ maxConcurrency: number | undefined }> | undefined
+>;
+const maxConcurrencyContext = (maxConcurrencyContexts[maxConcurrencyContextKey] ??=
+  new AsyncLocalStorage<{ maxConcurrency: number | undefined }>());
 interface EnvironmentContext {
   invocation: Pick<CliState, 'basePath' | 'config' | 'selectedProviderConfigs'>;
   env: EnvOverrides | undefined;
@@ -137,7 +143,7 @@ const state: CliState = {
     }
     globalMaxConcurrency = value;
   },
-  withMaxConcurrency<T>(maxConcurrency: number, fn: () => Promise<T>): Promise<T> {
+  withMaxConcurrency<T>(maxConcurrency: number | undefined, fn: () => Promise<T>): Promise<T> {
     return maxConcurrencyContext.run({ maxConcurrency }, fn);
   },
   get env() {

@@ -238,6 +238,37 @@ describe('file-backed replay provenance', () => {
     },
   );
 
+  it('reads shared source inputs once per selection operation and rechecks later changes', () => {
+    const basePath = directory();
+    const defaultsPath = path.join(basePath, 'defaults.txt');
+    const hookPath = path.join(basePath, 'extension.cjs');
+    fs.writeFileSync(defaultsPath, 'first');
+    fs.writeFileSync(hookPath, 'first');
+    const context = {
+      basePath,
+      defaultTest: { vars: { shared: 'file://defaults.txt' } },
+      extensions: ['file://extension.cjs:beforeAll'],
+    };
+    const tests = Array.from({ length: 64 }, () => ({ vars: { input: 'same' } }));
+    const open = vi.spyOn(fs, 'openSync');
+    const reads = () =>
+      open.mock.calls.filter(([file]) => file === defaultsPath || file === hookPath);
+    try {
+      const selection = createTestCaseSelection(tests, [8, 10, 8], context);
+      expect(reads()).toHaveLength(2);
+      open.mockClear();
+      expect(restoreTestCaseSelection(tests, selection, context)).toEqual([8, 10, 8]);
+      expect(reads()).toHaveLength(2);
+      fs.writeFileSync(hookPath, 'other');
+      expect(() => restoreTestCaseSelection(tests, selection, context)).toThrow('no longer exists');
+      fs.writeFileSync(hookPath, 'first');
+      fs.writeFileSync(defaultsPath, 'other');
+      expect(() => restoreTestCaseSelection(tests, selection, context)).toThrow('no longer exists');
+    } finally {
+      open.mockRestore();
+    }
+  });
+
   it('preserves identities when serialization omits undefined options', () => {
     const tests = [{ vars: { input: 'same' } }];
     const defaultTest = { options: { prefix: undefined, provider: 'echo' } };

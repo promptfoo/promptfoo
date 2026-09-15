@@ -10,7 +10,7 @@ import { PythonProvider } from '../../src/providers/pythonCompletion';
 import * as pythonUtils from '../../src/python/pythonUtils';
 import { getConfiguredPythonPath, getEnvInt } from '../../src/python/pythonUtils';
 import { PythonWorkerPool } from '../../src/python/workerPool';
-import { createDeferred } from '../util/utils';
+import { createDeferred, mockProcessEnv } from '../util/utils';
 import type { Mock } from 'vitest';
 
 vi.mock('../../src/logger', () => ({
@@ -97,6 +97,8 @@ vi.mock('../../src/python/workerPool', async (importOriginal) => {
 });
 
 describe('PythonProvider', () => {
+  let restoreHostEnv: () => void;
+
   it.each([false, true])(
     'rejects a different environment while initializing=%s',
     async (duringInitialization) => {
@@ -150,6 +152,7 @@ describe('PythonProvider', () => {
   const PythonWorkerPoolMock = workerPoolMocks.PythonWorkerPoolMock;
 
   beforeEach(() => {
+    restoreHostEnv = mockProcessEnv({}, { clear: true });
     vi.clearAllMocks();
     PythonWorkerPoolMock.mockClear();
     mockPoolInstance.initialize.mockReset();
@@ -184,6 +187,7 @@ describe('PythonProvider', () => {
   });
 
   afterEach(() => {
+    restoreHostEnv();
     // Ensure cliState is cleaned up after each test
     cliState.maxConcurrency = undefined;
   });

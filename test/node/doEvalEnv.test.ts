@@ -89,6 +89,47 @@ describe('doEval environment files', () => {
     ]);
   });
 
+  it('keeps concurrent worker limits scoped through evaluation and restores the caller', async () => {
+    let arrivals = 0;
+    let release!: () => void;
+    const ready = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const provider = {
+      id: () => 'worker-limit-fixture',
+      async callApi() {
+        const before = cliState.maxConcurrency;
+        if (++arrivals === 2) {
+          release();
+        }
+        await ready;
+        return { output: JSON.stringify([before, cliState.maxConcurrency]) };
+      },
+    };
+    await cliState.withMaxConcurrency(9, async () => {
+      const results = await Promise.all(
+        [2, 3].map(async (maxConcurrency) => {
+          const evaluation = await doEval(
+            {
+              maxConcurrency,
+              write: false,
+              share: false,
+              table: false,
+              progressBar: false,
+              cache: false,
+            },
+            { prompts: ['Inspect limit'], providers: [provider.callApi], tests: [{ vars: {} }] },
+            undefined,
+            { eventSource: 'mcp', showProgressBar: false },
+          );
+          return (await evaluation.toEvaluateSummary()).results[0].response?.output;
+        }),
+      );
+      expect(results).toEqual(['[2,2]', '[3,3]']);
+      expect(cliState.maxConcurrency).toBe(9);
+    });
+  });
+
   it.each(
     ['file', 'inline'].flatMap((mode) =>
       [false, true].map((suiteOverride) => ({ mode, suiteOverride })),

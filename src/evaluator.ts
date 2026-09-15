@@ -26,7 +26,7 @@ import { withRuntimeEnv } from './envOverrides';
 import { collectFileMetadata, renderPrompt, runExtensionHook } from './evaluatorHelpers';
 import logger, { globalLogCallback, setLogCallback } from './logger';
 import { selectMaxScore } from './matchers/comparison';
-import { getResultIndexKey, sanitizeResultForJsonlArtifact } from './models/evalResult';
+import { getResultIndexKey, sanitizeResultForArtifact } from './models/evalResult';
 import { generateIdFromPrompt } from './models/prompt';
 import { nodeEvaluatorRuntime } from './node/evaluatorRuntime';
 import { CIProgressReporter } from './progress/ciProgressReporter';
@@ -2706,11 +2706,11 @@ interface TestCaseSelectionContext {
   extensions?: string[] | null;
 }
 
-function getTestCaseFingerprint(
-  testCase: unknown,
-  { basePath = '.', defaultTest, extensions }: TestCaseSelectionContext,
-): string {
-  const test = canonicalizeSelectionFingerprintValue(testCase, basePath);
+function createTestCaseFingerprinter({
+  basePath = '.',
+  defaultTest,
+  extensions,
+}: TestCaseSelectionContext): (testCase: unknown) => string {
   const defaults =
     defaultTest && typeof defaultTest === 'object' && Object.keys(defaultTest).length > 0
       ? canonicalizeSelectionFingerprintValue(defaultTest, basePath)
@@ -2718,10 +2718,13 @@ function getTestCaseFingerprint(
   const hooks = extensions?.length
     ? canonicalizeSelectionFingerprintValue(extensions, basePath, new WeakSet<object>(), 'file')
     : undefined;
-  const selectedTest = defaults ? { test, defaults } : test;
-  return createHash('sha256')
-    .update(stableSerializeSelection(hooks ? { selectedTest, extensions: hooks } : selectedTest))
-    .digest('hex');
+  return (testCase) => {
+    const test = canonicalizeSelectionFingerprintValue(testCase, basePath);
+    const selectedTest = defaults ? { test, defaults } : test;
+    return createHash('sha256')
+      .update(stableSerializeSelection(hooks ? { selectedTest, extensions: hooks } : selectedTest))
+      .digest('hex');
+  };
 }
 
 /** Persist selected logical tests without storing their potentially sensitive definitions. */
@@ -2739,10 +2742,14 @@ export function createTestCaseSelection(
     );
   }
 
+  if (indices.length === 0) {
+    return { tests: [] };
+  }
+  const fingerprint = createTestCaseFingerprinter(context);
   return {
     tests: indices.map((index) => ({
       index,
-      fingerprint: getTestCaseFingerprint(testCases[index], context),
+      fingerprint: fingerprint(testCases[index]),
     })),
   };
 }
@@ -2755,6 +2762,9 @@ export function restoreTestCaseSelection(
 ): number[] {
   if (!selection || !Array.isArray(selection.tests)) {
     throw new Error('Stored test case selection is invalid.');
+  }
+  if (selection.tests.length === 0) {
+    return [];
   }
   // Distinct original indices to restore. Entries repeating the SAME original
   // index are a deliberate repeat of one logical row and must resolve to the same
@@ -2787,8 +2797,9 @@ export function restoreTestCaseSelection(
   // Candidate resolved indices per needed fingerprint, in ascending config order.
   const candidatesByFingerprint = new Map<string, number[]>();
   const neededFingerprints = new Set(distinctOriginalIndicesByFingerprint.keys());
+  const fingerprintTestCase = createTestCaseFingerprinter(context);
   for (let index = 0; index < testCases.length && neededFingerprints.size > 0; index++) {
-    const fingerprint = getTestCaseFingerprint(testCases[index], context);
+    const fingerprint = fingerprintTestCase(testCases[index]);
     if (!neededFingerprints.has(fingerprint)) {
       continue;
     }
@@ -3965,7 +3976,7 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
     }
 
     for (const writer of this.fileWriters) {
-      await writer.write(sanitizeResultForJsonlArtifact(row));
+      await writer.write(sanitizeResultForArtifact(row));
     }
   }
 

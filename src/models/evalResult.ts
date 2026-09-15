@@ -501,7 +501,7 @@ function surfaceTraceMetadata(metadata: Record<string, unknown> | null | undefin
 // Apply the credential-header redaction trio to the already-`sanitizeForDb`'d fields bound for
 // the database or a JSONL artifact. Single source of truth for which redactor pairs with which
 // field, shared by DB persistence (`createFromEvaluateResult` / `createManyFromEvaluateResult`)
-// and the JSONL artifact boundary (`sanitizeResultForJsonlArtifact`) so a newly added sensitive
+// and the output artifact boundary (`sanitizeResultForArtifact`) so a newly added sensitive
 // field can't be redacted on one path while leaking from another.
 function redactSensitiveResultFieldsForDb<
   R extends ProviderResponse | null | undefined,
@@ -529,7 +529,7 @@ function redactSensitiveResultFieldsForDb<
   };
 }
 
-// Read the `PROMPTFOO_STRIP_*` output-projection flags. Shared by the JSONL-artifact
+// Read the `PROMPTFOO_STRIP_*` output-projection flags. Shared by the artifact
 // sanitizer and the EvalResult -> EvaluateResult projection so both honor the same env.
 function getStripFlags() {
   return {
@@ -541,15 +541,8 @@ function getStripFlags() {
   };
 }
 
-/**
- * Sanitize a result before it is serialized into a JSONL output artifact. This is the
- * JSONL-boundary equivalent of the database-persistence sanitization and must stay in sync
- * with it: it redacts credential-bearing HTTP headers from the response / grading / metadata
- * and applies the `PROMPTFOO_STRIP_*` projections (prompt text, response output, test vars,
- * grading result, metadata). In-memory rows keep their real values for hooks; only the
- * on-disk copy is sanitized.
- */
-export function sanitizeResultForJsonlArtifact<T extends object>(result: T): T {
+/** Redact credentials and apply strip flags to an artifact copy, preserving live hook inputs. */
+export function sanitizeResultForArtifact<T extends object>(result: T): T {
   const {
     shouldStripPromptText,
     shouldStripResponseOutput,

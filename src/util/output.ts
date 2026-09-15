@@ -16,7 +16,7 @@ import logger from '../logger';
 import {
   asEvaluateResult,
   getResultIndexKey,
-  sanitizeResultForJsonlArtifact,
+  sanitizeResultForArtifact,
 } from '../models/evalResult';
 import { PromptfooAttributes } from '../tracing/genaiTracer';
 import {
@@ -102,7 +102,7 @@ async function appendJsonlResultBatch(outputPath: string, results: EvaluateResul
   }
 
   const text =
-    results.map((result) => JSON.stringify(sanitizeResultForJsonlArtifact(result))).join(os.EOL) +
+    results.map((result) => JSON.stringify(sanitizeResultForArtifact(result))).join(os.EOL) +
     os.EOL;
   await fsPromises.appendFile(outputPath, text);
 }
@@ -346,13 +346,18 @@ function sanitizeConfigForOutput(config: Eval['config']): OutputFile['config'] {
 
 async function createOutputSummary(evalRecord: Eval): Promise<OutputFile['results']> {
   const summary = await evalRecord.toEvaluateSummary();
+  const results = summary.results.map(sanitizeResultForArtifact);
   const prompts = ('prompts' in summary ? summary.prompts : summary.table.head.prompts).map(
     (prompt) =>
       prompt.config ? { ...prompt, config: sanitizeConfigForOutput(prompt.config) } : prompt,
   );
   return 'prompts' in summary
-    ? { ...summary, prompts }
-    : { ...summary, table: { ...summary.table, head: { ...summary.table.head, prompts } } };
+    ? { ...summary, results, prompts }
+    : {
+        ...summary,
+        results,
+        table: { ...summary.table, head: { ...summary.table.head, prompts } },
+      };
 }
 
 function projectTracesForOutput(traces: NonNullable<OutputFile['traces']>) {

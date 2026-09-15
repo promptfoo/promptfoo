@@ -408,8 +408,10 @@ export async function doEval(
   const envFileOverrides = isCliEventSource(evaluateOptions) ? undefined : {};
   setupEnv(cmdObj.envPath, { processEnv: envFileOverrides });
   return cliState.withEnvFileOverrides(envFileOverrides, () =>
-    providerRegistry.withScope(() =>
-      doEvalWithEnv(cmdObj, defaultConfig, defaultConfigPath, evaluateOptions, customization),
+    cliState.withMaxConcurrency(cliState.maxConcurrency, () =>
+      providerRegistry.withScope(() =>
+        doEvalWithEnv(cmdObj, defaultConfig, defaultConfigPath, evaluateOptions, customization),
+      ),
     ),
   );
 }

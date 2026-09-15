@@ -1,9 +1,10 @@
 import fs from 'fs';
 import path from 'path';
 
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import cliState from '../../src/cliState';
 import { GolangProvider } from '../../src/providers/golangCompletion';
+import { mockProcessEnv } from '../util/utils';
 
 // Hoisted mock functions
 const mockExecFile = vi.hoisted(() => vi.fn());
@@ -102,6 +103,9 @@ vi.mock('../../src/util', () => ({
 }));
 
 describe('GolangProvider', () => {
+  let restoreHostEnv: () => void;
+  afterEach(() => restoreHostEnv());
+
   const mockReadFileSync = vi.mocked(fs.readFileSync);
   const mockResolve = vi.mocked(path.resolve);
   const mockMkdtempSync = vi.mocked(fs.mkdtempSync);
@@ -116,6 +120,7 @@ describe('GolangProvider', () => {
   const mockRelative = vi.mocked(path.relative);
 
   beforeEach(async () => {
+    restoreHostEnv = mockProcessEnv({}, { clear: true });
     vi.clearAllMocks();
     mockExecFile.mockReset();
     mockGetCache.mockReset();

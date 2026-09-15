@@ -3,7 +3,7 @@ import logger from '../../src/logger';
 import { runDbMigrations } from '../../src/migrate';
 import EvalResult, {
   sanitizeProvider,
-  sanitizeResultForJsonlArtifact,
+  sanitizeResultForArtifact,
 } from '../../src/models/evalResult';
 import { hashPrompt } from '../../src/prompts/utils';
 import { WebSocketProvider } from '../../src/providers/websocket';
@@ -80,7 +80,7 @@ describe('EvalResult', () => {
       const original = JSON.stringify(input);
       const result =
         boundary === 'artifact'
-          ? sanitizeResultForJsonlArtifact(input)
+          ? sanitizeResultForArtifact(input)
           : boundary === 'batch'
             ? (await EvalResult.createManyFromEvaluateResult([input], 'grade-credential-batch'))[0]
             : await EvalResult.createFromEvaluateResult('grade-credential-single', input);

@@ -10,7 +10,7 @@ import { getEnvBool, getEnvInt, getEnvString, isCI } from './envars';
 import { getUserEmail, setUserEmail } from './globalConfig/accounts';
 import { cloudConfig } from './globalConfig/cloud';
 import logger, { isDebugEnabled } from './logger';
-import { sanitizeResultForJsonlArtifact } from './models/evalResult';
+import { sanitizeResultForArtifact } from './models/evalResult';
 import {
   checkCloudPermissions,
   getOrgContext,
@@ -247,7 +247,7 @@ async function sendChunkOfResults(
   const targetUrl = `${url}/${evalId}/results`;
   const stringifiedChunk = JSON.stringify(
     chunk.map((result) =>
-      sanitizeResultForJsonlArtifact({
+      sanitizeResultForArtifact({
         ...result,
         provider: redactSecretLeaves(omitFunctionsForShare(result.provider)),
         testCase: redactSecretLeaves(omitFunctionsForShare(result.testCase)),

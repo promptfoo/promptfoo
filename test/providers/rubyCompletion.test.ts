@@ -7,6 +7,7 @@ import { RubyProvider } from '../../src/providers/rubyCompletion';
 import * as rubyUtils from '../../src/ruby/rubyUtils';
 import { runRuby } from '../../src/ruby/rubyUtils';
 import * as fileReference from '../../src/util/fileReference';
+import { mockProcessEnv } from '../util/utils';
 
 const fsMocks = vi.hoisted(() => ({
   readFileSync: vi.fn(),
@@ -91,6 +92,8 @@ vi.mock('../../src/util', async () => {
 });
 
 describe('RubyProvider', () => {
+  let restoreHostEnv: () => void;
+
   const mockRunRuby = vi.mocked(runRuby);
   const mockGetCache = vi.mocked(vi.mocked(getCache));
   const mockIsCacheEnabled = vi.mocked(isCacheEnabled);
@@ -98,6 +101,7 @@ describe('RubyProvider', () => {
   const mockResolve = vi.mocked(path.resolve);
 
   beforeEach(() => {
+    restoreHostEnv = mockProcessEnv({}, { clear: true });
     vi.clearAllMocks();
     // Reset mocked implementations to avoid test interference
     mockRunRuby.mockReset();
@@ -115,6 +119,7 @@ describe('RubyProvider', () => {
   });
 
   afterEach(() => {
+    restoreHostEnv();
     vi.clearAllMocks();
   });
 

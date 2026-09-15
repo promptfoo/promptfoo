@@ -8,6 +8,7 @@ import * as cacheModule from '../../src/cache';
 import cliState from '../../src/cliState';
 import {
   getFileHashes,
+  getScriptCacheKey,
   parseScriptParts,
   ScriptCompletionProvider,
 } from '../../src/providers/scriptCompletion';
@@ -158,10 +159,52 @@ describe('getFileHashes', () => {
   });
 });
 
+describe('script cache environment identity', () => {
+  let restoreEnv: () => void;
+
+  beforeEach(async () => {
+    restoreEnv = mockProcessEnv({ REGION: 'west' }, { clear: true });
+    vi.mocked(cacheModule.isCacheEnabled).mockReset().mockReturnValue(true);
+    vi.mocked(crypto.createHash).mockImplementation(
+      (await vi.importActual<typeof import('crypto')>('crypto')).createHash,
+    );
+  });
+
+  afterEach(() => restoreEnv());
+
+  it('changes the cache identity when a non-secret child environment changes', () => {
+    const first = getScriptCacheKey('exec', 'source', ['prompt']);
+    expect(first).toMatch(/^exec:[a-f0-9]{64}$/);
+    const restoreRegion = mockProcessEnv({ REGION: 'east' });
+    try {
+      expect(getScriptCacheKey('exec', 'source', ['prompt'])).not.toBe(first);
+    } finally {
+      restoreRegion();
+    }
+    expect(getScriptCacheKey('exec', 'source', ['prompt'])).toBe(first);
+  });
+
+  it.each(['account-a', 'account-b'])(
+    'bypasses caching when the child inherits credentials: %s',
+    (credential) => {
+      const restoreCredential = mockProcessEnv({ OPENAI_API_KEY: credential });
+      try {
+        expect(getScriptCacheKey('exec', 'source', ['prompt'])).toBeUndefined();
+      } finally {
+        restoreCredential();
+      }
+    },
+  );
+});
+
 describe('ScriptCompletionProvider', () => {
+  let restoreHostEnv: () => void;
+  afterEach(() => restoreHostEnv());
+
   let provider: ScriptCompletionProvider;
 
   beforeEach(() => {
+    restoreHostEnv = mockProcessEnv({}, { clear: true });
     provider = new ScriptCompletionProvider('node script.js');
     vi.clearAllMocks();
     vi.mocked(cacheModule.getCache).mockReset();

@@ -35,7 +35,9 @@ Cache entries are stored using provider-specific composite keys that include:
 
 Cache key formats are implementation details and may change between versions.
 Sensitive request payloads and headers are hashed where possible instead of
-being embedded directly in cache keys. Script, Python, Ruby, and Go providers, and executable prompts, bypass caching when provider, suite, or environment-file overrides are set, or when request/configuration inputs contain credentials. Scripts can use arbitrary environment values, so omitting those values from a shared cache key could reuse another invocation's result. Other script cache keys use sorted configuration keys and source hashes. Executable providers and prompts resolve those source files against `config.basePath`, matching the directory used to run the command.
+being embedded directly in cache keys.
+
+Script, Python, Ruby, and Go providers bypass result caching when provider, suite, or environment-file overrides are set, or when their inputs or inherited environment contain recognized credentials. Otherwise, their cache identity includes the child environment, so changing a non-secret value such as a region invalidates the cached response. Executable prompts also bypass caching for configured environment overrides or credential-bearing inputs. Executable providers and prompts resolve source files against `config.basePath`, matching the directory used to run the command.
 
 ```js
 // Provider-specific scope plus a digest of request material

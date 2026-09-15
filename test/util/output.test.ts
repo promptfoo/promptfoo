@@ -647,6 +647,58 @@ describe('writeOutput', () => {
     expect(fsPromises.writeFile).toHaveBeenCalledTimes(1);
   });
 
+  it.each(['json', 'yaml', 'yml', 'txt', 'xml'])(
+    'redacts credential-bearing live result fields in %s exports without mutating hooks',
+    async (extension) => {
+      const evaluation = new Eval({});
+      const result = {
+        success: true,
+        score: 1,
+        error: undefined,
+        response: {
+          output: 'visible output',
+          metadata: { headers: { Authorization: 'Bearer response-private' } },
+        },
+        gradingResult: {
+          pass: true,
+          score: 1,
+          reason: 'visible grade',
+          componentResults: [
+            {
+              pass: true,
+              score: 1,
+              metadata: { http: { requestHeaders: { 'X-Auth-Token': 'grade-private' } } },
+            },
+          ],
+        },
+        metadata: {
+          headers: { Authorization: 'Bearer response-private' },
+          http: { requestHeaders: { 'X-Auth-Token': 'metadata-private' } },
+        },
+        testCase: {},
+        vars: {},
+        provider: { id: 'echo' },
+        prompt: { raw: 'hello', label: 'hello' },
+        promptIdx: 0,
+        testIdx: 0,
+      } as unknown as EvaluateResult;
+      const summary = await evaluation.toEvaluateSummary();
+      vi.spyOn(evaluation, 'toEvaluateSummary').mockResolvedValue({
+        ...summary,
+        results: [result],
+      });
+      const original = structuredClone(result);
+      await writeOutput(`output.${extension}`, evaluation, null);
+      const written = vi.mocked(fsPromises.writeFile).mock.calls[0][1] as string;
+      expect(written).toContain('visible output');
+      expect(written).toContain('visible grade');
+      for (const credential of ['response-private', 'grade-private', 'metadata-private']) {
+        expect(written).not.toContain(credential);
+      }
+      expect(result).toEqual(original);
+    },
+  );
+
   it.each(['yaml', 'txt'])(
     'sanitizes runtime options before writing %s output for in-memory evals',
     async (extension) => {
