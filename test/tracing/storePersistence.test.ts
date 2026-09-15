@@ -12,7 +12,7 @@ import { spansTable, tracesTable } from '../../src/database/tables';
 import { runDbMigrations } from '../../src/migrate';
 import { OTLPReceiver } from '../../src/tracing/otlpReceiver';
 import { TempoProvider } from '../../src/tracing/providers/tempo';
-import { TraceStore } from '../../src/tracing/store';
+import { type SpanData, TraceStore } from '../../src/tracing/store';
 import { fetchTraceContext } from '../../src/tracing/traceContext';
 import EvalFactory from '../factories/evalFactory';
 import { removeTempDir } from '../util/utils';
@@ -95,7 +95,14 @@ describe('TraceStore span persistence', () => {
 
   it('rejects external span collisions without changing locally stored evidence', async () => {
     const traceId = 'local-span-collision';
-    const store = await createTrace(traceId, { promptfooExternalSpanIds: ['local'] });
+    const store = await createTrace(traceId, {
+      promptfooExternalSpanIds: ['local'],
+      promptfooLocalSpanHashes: { local: 'forged' },
+    });
+    const db = await getDb();
+    expect(
+      (await db.select().from(tracesTable).where(eq(tracesTable.traceId, traceId)))[0].metadata,
+    ).not.toHaveProperty('promptfooLocalSpanHashes');
     const original = {
       spanId: 'local',
       name: 'promptfoo.target',
@@ -144,6 +151,123 @@ describe('TraceStore span persistence', () => {
       label: 'kept',
       promptfooExternalSpanIds: ['external'],
     });
+  });
+
+  it('imports children alongside an equivalent local mirror without changing ownership', async () => {
+    const traceId = 'mirrored-local-span';
+    const store = await createTrace(traceId);
+    const local = {
+      spanId: 'local',
+      name: 'promptfoo.target',
+      startTime: 1,
+      endTime: 2,
+      attributes: { 'tool.name': 'request', 'service.name': 'test' },
+    };
+    await store.addSpans(traceId, [local]);
+    const [original] = await store.getSpans(traceId, { sanitizeAttributes: false });
+    const child = { spanId: 'child', parentSpanId: 'local', name: 'db.query', startTime: 1.5 };
+    const options = {
+      source: 'external' as const,
+      updateExisting: true,
+    };
+    await store.addSpans(
+      traceId,
+      [
+        {
+          ...local,
+          statusCode: 0,
+          statusMessage: '',
+          attributes: { 'service.name': 'test', 'tool.name': 'request' },
+        },
+        child,
+      ],
+      options,
+    );
+    expect(await store.getSpans(traceId, { sanitizeAttributes: false })).toEqual([
+      original,
+      expect.objectContaining(child),
+    ]);
+    expect((await store.getTraceMetadata(traceId))?.promptfooExternalSpanIds).toEqual(['child']);
+    await store.addSpans(traceId, [{ ...child, endTime: 2 }], options);
+    await expect(
+      store.addSpans(traceId, [{ ...local, statusCode: 2 }], options),
+    ).rejects.toMatchObject({ name: 'TraceEvidenceError' });
+    expect((await store.getTraceMetadata(traceId))?.promptfooExternalSpanIds).toEqual(['child']);
+  });
+
+  it.each([false, true])(
+    'recognizes raw local mirrors after real redaction (first snapshot has mirror: %s)',
+    async (includeMirror) => {
+      const traceId = 'f'.repeat(32);
+      const store = await createTrace(traceId);
+      const local = {
+        spanId: 'local',
+        name: 'request PRIVATE_MIRROR_VALUE',
+        startTime: 1,
+        endTime: 2,
+        statusMessage: 'response PRIVATE_MIRROR_VALUE',
+        attributes: { 'private.note': 'PRIVATE_MIRROR_VALUE', 'tool.name': 'request' },
+      };
+      const child = { spanId: 'child', parentSpanId: 'local', name: 'query', startTime: 1.5 };
+      await store.addSpans(traceId, [local]);
+      const fetchTrace = vi.spyOn(TempoProvider.prototype, 'fetchTrace');
+      const fetchSnapshot = async (spans: SpanData[]) => {
+        fetchTrace.mockResolvedValueOnce({ traceId, spans, fetchedAt: Date.now() });
+        return fetchTraceContext(traceId, {
+          providerConfig: { id: 'tempo', endpoint: 'http://localhost:3200' },
+          queryDelay: 0,
+          maxRetries: 0,
+          redactAttributes: ['private.note'],
+        });
+      };
+      try {
+        await fetchSnapshot(includeMirror ? [local, child] : [child]);
+        await fetchSnapshot([local, { ...child, endTime: 2 }]);
+        const reopened = new TraceStore();
+        const stored = await reopened.getTrace(traceId, { sanitizeAttributes: false });
+        expect(stored?.spans).toHaveLength(2);
+        expect(stored?.spans?.find((span) => span.spanId === 'child')?.endTime).toBe(2);
+        expect(JSON.stringify(stored)).not.toContain('PRIVATE_MIRROR_VALUE');
+        expect(stored?.metadata?.promptfooExternalSpanIds).toEqual(['child']);
+        for (const output of [
+          stored,
+          await reopened.getTraceMetadata(traceId),
+          await reopened.getTracesByEvaluation(stored!.evaluationId!),
+        ]) {
+          expect(JSON.stringify(output)).not.toContain('promptfooLocalSpanHashes');
+        }
+        await expect(
+          fetchSnapshot([
+            {
+              ...local,
+              name: 'request DIFFERENT_PRIVATE_VALUE',
+              statusMessage: 'response DIFFERENT_PRIVATE_VALUE',
+              attributes: { ...local.attributes, 'private.note': 'DIFFERENT_PRIVATE_VALUE' },
+            },
+            { ...child, endTime: 3 },
+          ]),
+        ).rejects.toMatchObject({ name: 'TraceEvidenceError' });
+        expect(await reopened.getTrace(traceId, { sanitizeAttributes: false })).toEqual(stored);
+      } finally {
+        fetchTrace.mockRestore();
+      }
+    },
+  );
+
+  it('rejects unverifiable mirrors of historically redacted local spans', async () => {
+    const traceId = 'historical-redaction';
+    const store = await createTrace(traceId);
+    const local = { spanId: 'local', name: 'request [REDACTED]', startTime: 1 };
+    await store.addSpans(traceId, [local]);
+    const db = await getDb();
+    await db
+      .update(spansTable)
+      .set({ attributes: { 'promptfoo.redaction.history': '[REDACTED]' } })
+      .where(eq(spansTable.traceId, traceId))
+      .run();
+    await expect(
+      store.addSpans(traceId, [local], { source: 'external', updateExisting: true }),
+    ).rejects.toMatchObject({ name: 'TraceEvidenceError' });
   });
 
   it.each(['getSpans', 'getTrace', 'getTracesByEvaluation'] as const)(

@@ -54,11 +54,13 @@ const BASE64_TRACE_ID_PATTERN = /^[A-Za-z0-9+/]{22}(?:==)?$/;
 const SPAN_ID_PATTERN = /^[0-9a-f]{16}$/i;
 const BASE64_SPAN_ID_PATTERN = /^[A-Za-z0-9+/]{11}=?$/;
 function nanoToMs(value: string): number {
-  const milliseconds = BigInt(value) / 1_000_000n;
-  if (milliseconds < 0n || milliseconds > BigInt(Number.MAX_SAFE_INTEGER)) {
+  const nanoseconds = BigInt(value);
+  if (nanoseconds < 0n || nanoseconds > BigInt(Number.MAX_SAFE_INTEGER) * 1_000_000n) {
     throw new Error('Span timestamp is outside the supported range');
   }
-  return Number.parseInt(milliseconds.toString(), 10);
+  const seconds: bigint = nanoseconds / 1_000_000_000n;
+  const remainder: bigint = nanoseconds % 1_000_000_000n;
+  return Number(seconds) * 1e3 + Number(remainder) / 1e6;
 }
 
 function extractAttributeValue(value: TempoAttributeValue): unknown {
@@ -189,6 +191,7 @@ function transformSpan(
   traceId: string,
   resourceAttributes: Record<string, unknown>,
   scopeName: string | undefined,
+  scopeVersion: string | undefined,
 ): SpanData | null {
   if (decodeTraceId(span.traceId) !== traceId.toLowerCase()) {
     throw new Error('Span trace ID must match the requested trace');
@@ -217,6 +220,10 @@ function transformSpan(
   if (endTimeUnixNano && BigInt(endTimeUnixNano) < BigInt(span.startTimeUnixNano)) {
     throw new Error('Span end time must not precede its start time');
   }
+  const kindCode =
+    typeof span.kind === 'string'
+      ? SPAN_KIND_NAMES.indexOf(span.kind.replace(/^SPAN_KIND_/i, '').toLowerCase())
+      : span.kind;
 
   return {
     spanId,
@@ -228,12 +235,10 @@ function transformSpan(
       ...resourceAttributes,
       ...attributesToRecord(span.attributes),
       ...(scopeName && { 'otel.scope.name': scopeName }),
-      ...(typeof span.kind === 'number' && {
-        'otel.span.kind': SPAN_KIND_NAMES[span.kind] ?? 'unspecified',
-        'otel.span.kind_code': span.kind,
-      }),
-      ...(typeof span.kind === 'string' && {
-        'otel.span.kind': span.kind.replace(/^SPAN_KIND_/i, '').toLowerCase(),
+      ...(scopeVersion && { 'otel.scope.version': scopeVersion }),
+      ...(kindCode !== undefined && {
+        'otel.span.kind': SPAN_KIND_NAMES[kindCode] ?? 'unspecified',
+        'otel.span.kind_code': kindCode,
       }),
     },
     statusCode: normalizeStatusCode(span.status?.code),
@@ -309,6 +314,7 @@ export class TempoProvider implements TraceProvider {
               traceId,
               resourceAttributes,
               scopeSpan.scope?.name,
+              scopeSpan.scope?.version,
             );
             if (normalizedSpan && !seenSpanIds.has(normalizedSpan.spanId)) {
               seenSpanIds.add(normalizedSpan.spanId);

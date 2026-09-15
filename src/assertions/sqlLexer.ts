@@ -8,6 +8,7 @@ const DOUBLE_QUOTED_IDENTIFIER_DATABASES = new Set([
   'clickhouse',
 ]);
 const DOUBLE_QUOTED_LITERAL_DATABASES = new Set(['bigquery']);
+const HASH_COMMENT_DATABASES = new Set(['mysql', 'mariadb', 'bigquery', 'clickhouse']);
 const SQL_EXPRESSION_PLACEHOLDER = ' ? ';
 
 const DOLLAR_QUOTE_DELIMITER_PATTERN = /^\$(?:[A-Za-z_][A-Za-z0-9_]*)?\$/;
@@ -75,6 +76,18 @@ export function stripIgnoredSqlText(sql: string, databaseType: string, maskValue
 
     if (
       maskValues &&
+      character === '#' &&
+      !HASH_COMMENT_DATABASES.has(database) &&
+      !DOUBLE_QUOTED_IDENTIFIER_DATABASES.has(database) &&
+      !supportsBracketIdentifiers
+    ) {
+      throw new Error(
+        'SQL trace has ambiguous hash syntax; set a supported db.system.name before grading.',
+      );
+    }
+
+    if (
+      maskValues &&
       ((character === '"' &&
         !DOUBLE_QUOTED_IDENTIFIER_DATABASES.has(database) &&
         !DOUBLE_QUOTED_LITERAL_DATABASES.has(database)) ||
@@ -106,7 +119,17 @@ export function stripIgnoredSqlText(sql: string, databaseType: string, maskValue
           (character === '"' && DOUBLE_QUOTED_IDENTIFIER_DATABASES.has(database)))
           ? quoted
           : placeholder(quoted);
-    } else if ((character === '-' && sql[cursor + 1] === '-') || character === '#') {
+    } else if (
+      (character === '-' &&
+        sql[cursor + 1] === '-' &&
+        (!['mysql', 'mariadb'].includes(database) ||
+          cursor + 2 === sql.length ||
+          sql.charCodeAt(cursor + 2) <= 32)) ||
+      (character === '#' &&
+        HASH_COMMENT_DATABASES.has(database) &&
+        (database !== 'clickhouse' || /[!\s]/.test(sql[cursor + 1] ?? ''))) ||
+      (database === 'clickhouse' && character === '/' && sql[cursor + 1] === '/')
+    ) {
       ignoredTextEnd = cursor + 1;
       while (
         ignoredTextEnd < sql.length &&

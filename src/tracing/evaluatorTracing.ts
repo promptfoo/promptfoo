@@ -331,8 +331,7 @@ export function isTracingEnabled(test: TestCase, testSuite?: TestSuite): boolean
   ];
   const effectiveConfig = Object.assign(
     {},
-    ...configs,
-    ...configs.map((entry) => entry?.strategies?.[test.metadata?.strategyId ?? '']),
+    ...configs.flatMap((entry) => [entry, entry?.strategies?.[test.metadata?.strategyId ?? '']]),
   );
   const metadataEnabled =
     test.metadata?.tracingEnabled === true || effectiveConfig.enabled === true;

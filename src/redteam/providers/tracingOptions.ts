@@ -111,8 +111,7 @@ export function resolveTracingOptions({
   const configs = [globalConfig, testConfig, metadataStrategyConfig, providerStrategyConfig];
   const merged = Object.assign(
     {},
-    ...configs,
-    ...configs.map((entry) => entry?.strategies?.[strategyId]),
+    ...configs.flatMap((entry) => [entry, entry?.strategies?.[strategyId]]),
   );
 
   // Read provider and queryDelay from root tracing config (not redteam config)

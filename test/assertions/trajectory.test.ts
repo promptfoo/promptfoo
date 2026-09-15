@@ -639,6 +639,32 @@ describe('trajectory utilities', () => {
     }
   });
 
+  it.each(['#>', '#>>', '#'])(
+    'retains PostgreSQL %s structure in the judge summary',
+    (operator) => {
+      const summary = summarizeTrajectoryForJudge(
+        {
+          ...mockTraceData,
+          spans: [
+            {
+              spanId: 'query',
+              name: 'db.query',
+              startTime: 1,
+              attributes: {
+                'db.system.name': 'postgresql',
+                'db.statement': `SELECT payload ${operator} 'private' FROM records WHERE owner='private'`,
+              },
+            },
+          ],
+        },
+        { includeSql: true },
+      );
+      expect(summary).toContain(operator);
+      expect(summary).toContain('FROM records WHERE owner=');
+      expect(summary).not.toContain('private');
+    },
+  );
+
   it.each(['name', 'tool.name'])(
     'removes Basic authorization credentials from %s before grading',
     (key) => {

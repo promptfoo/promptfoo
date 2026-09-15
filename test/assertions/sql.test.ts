@@ -9,6 +9,55 @@ const assertion: Assertion = {
 };
 
 describe('SQL trace value redaction', () => {
+  it.each(['#>', '#>>', '#-'])('preserves PostgreSQL JSON operator %s', (operator) => {
+    const result = redactSqlLiteralsAndComments(
+      `SELECT payload ${operator} '{private}' FROM records WHERE owner='private'`,
+      'postgresql',
+    );
+    expect(result).toBe(
+      `SELECT payload ${operator} :literal_1 FROM records WHERE owner= :literal_2`,
+    );
+  });
+
+  it('preserves PostgreSQL XOR and SQL Server temporary-table names', () => {
+    expect(redactSqlLiteralsAndComments('SELECT 5 # 3 FROM records WHERE id=7', 'postgres')).toBe(
+      'SELECT :literal_1 # :literal_2 FROM records WHERE id= :literal_3',
+    );
+    expect(redactSqlLiteralsAndComments('SELECT * FROM #records WHERE id=7', 'mssql')).toBe(
+      'SELECT * FROM #records WHERE id= :literal_1',
+    );
+  });
+
+  it.each(['mysql', 'mariadb', 'bigquery', 'clickhouse'])(
+    'removes hash comments for %s',
+    (database) => {
+      expect(
+        redactSqlLiteralsAndComments(
+          "SELECT id FROM records # private comment\nWHERE owner='private'",
+          database,
+        ),
+      ).toBe('SELECT id FROM records WHERE owner= :literal_1');
+    },
+  );
+
+  it.each(['', 'unknown'])('rejects ambiguous hash syntax for %s', (database) => {
+    expect(() => redactSqlLiteralsAndComments('SELECT a # b FROM records', database)).toThrow(
+      'ambiguous hash syntax',
+    );
+  });
+
+  it('preserves MySQL subtraction and removes ClickHouse slash comments', () => {
+    expect(redactSqlLiteralsAndComments('SELECT a--b FROM records', 'mysql')).toBe(
+      'SELECT a--b FROM records',
+    );
+    expect(
+      redactSqlLiteralsAndComments(
+        'SELECT a FROM records // private comment\nWHERE b=1',
+        'clickhouse',
+      ),
+    ).toBe('SELECT a FROM records WHERE b= :literal_1');
+  });
+
   it('preserves bind placeholders and repeated literal identities', () => {
     const result = redactSqlLiteralsAndComments(
       'SELECT ?1, $2, :3, @4 FROM customer2 WHERE id=7 OR 7=7',

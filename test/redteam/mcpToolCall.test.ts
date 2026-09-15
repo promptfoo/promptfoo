@@ -4,6 +4,21 @@ import { normalizeMcpToolCall } from '../../src/redteam/mcpToolCall';
 const tools = [{ name: 'book_flight', inputSchema: { type: 'object' } }];
 
 describe('MCP tool call argument envelopes', () => {
+  it.each(['toolName', 'function', 'functionName', 'name'])(
+    'rejects conflicting or malformed tool-name alias %s',
+    (field) => {
+      const allowed = [...tools, { name: 'cancel_flight' }];
+      for (const value of ['cancel_flight', 'unknown', '', 1, null, undefined]) {
+        expect(
+          normalizeMcpToolCall({ tool: 'book_flight', [field]: value }, allowed),
+        ).toBeUndefined();
+      }
+      expect(
+        normalizeMcpToolCall({ tool: 'book_flight', [field]: 'book_flight' }, allowed),
+      ).toEqual({ tool: 'book_flight', args: {} });
+    },
+  );
+
   it.each([
     'http://json-schema.org/draft-07/schema#',
     'https://json-schema.org/draft/2020-12/schema',

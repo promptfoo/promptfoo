@@ -2,7 +2,7 @@ import { afterEach, describe, expect, it } from 'vitest';
 import cliState from '../../../src/cliState';
 import { resolveTracingOptions } from '../../../src/redteam/providers/tracingOptions';
 
-import type { UnifiedConfig } from '../../../src/types/index';
+import type { AtomicTestCase, UnifiedConfig } from '../../../src/types/index';
 
 const previousConfig = cliState.config;
 
@@ -11,6 +11,45 @@ afterEach(() => {
 });
 
 describe('resolveTracingOptions', () => {
+  it.each(['test', 'metadata', 'provider'] as const)(
+    'honors a %s opt-out over global strategy defaults',
+    (source) => {
+      cliState.config = {
+        prompts: [],
+        providers: [],
+        redteam: {
+          tracing: { strategies: { goat: { enabled: true, includeInGrading: true } } },
+        },
+      } as UnifiedConfig;
+      const tracing = { enabled: false, includeInGrading: false };
+      const test: AtomicTestCase = {
+        vars: {},
+        metadata: {
+          ...(source === 'test' && { tracing }),
+          ...(source === 'metadata' && { strategyConfig: { tracing } }),
+        },
+      };
+      expect(
+        resolveTracingOptions({
+          strategyId: 'goat',
+          test,
+          config: source === 'provider' ? { tracing } : undefined,
+        }),
+      ).toMatchObject(tracing);
+    },
+  );
+
+  it('applies a local strategy entry after its own general configuration', () => {
+    const test: AtomicTestCase = {
+      vars: {},
+      metadata: {
+        tracing: { includeInGrading: false, strategies: { goat: { includeInGrading: true } } },
+      },
+    };
+    expect(resolveTracingOptions({ strategyId: 'goat', test }).includeInGrading).toBe(true);
+    expect(resolveTracingOptions({ strategyId: 'basic', test }).includeInGrading).toBe(false);
+  });
+
   it('prefers request-scoped tracing configuration to stale process-global configuration', async () => {
     cliState.config = {
       tracing: {

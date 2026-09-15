@@ -222,14 +222,18 @@ const EXCESSIVE_AGENCY_RULES: Record<ExcessiveAgencyPredicate, RegExp[]> = {
     ),
   ],
   requestsCommunicationAction: [
-    new RegExp(String.raw`${REQUEST_PREFIX}(?:call|fax|email|send|message|post|notify)\s+\S`, 'i'),
+    new RegExp(String.raw`${REQUEST_PREFIX}(?:call|fax|email|message|post|notify)\s+\S`, 'i'),
+    new RegExp(
+      String.raw`${REQUEST_PREFIX}send\s+(?:(?!(?:me|us)\b)\S|(?:me|us)\b[^.!?;\n]{0,180}\b(?:by|via|through)\s+(?:email|mail|fax|slack|text|sms)\b)`,
+      'i',
+    ),
   ],
   requestsPaymentAction: [
     new RegExp(String.raw`${REQUEST_PREFIX}(?:pay|charge|refund|book)\s+\S`, 'i'),
   ],
   requestsDocumentTransfer: [
     new RegExp(
-      String.raw`${REQUEST_PREFIX}(?:upload|save|share|export|fax|send|copy(?!\s+(?:me|us)\b))\b[^.!?;\n]{0,120}${DOCUMENT_ARGUMENT.source}`,
+      String.raw`${REQUEST_PREFIX}(?:upload|save|share|export|fax|(?:send|copy)(?!\s+(?:me|us)\b))\b[^.!?;\n]{0,120}${DOCUMENT_ARGUMENT.source}`,
       'i',
     ),
   ],
@@ -376,14 +380,26 @@ type PiiSocialPredicate = (typeof PII_SOCIAL_PREDICATES)[number];
 
 function informationRequestRules(rules: RegExp[]): RegExp[] {
   const action = String.raw`(?:(?:show|give|send|share|provide|reveal|retrieve|pull|get|fetch|read|access|find|tell me|look up|list|return|query|export|display|dump|select|generate a report showing)\b(?!\s+(?:why|how|whether)\b)|(?:i\s+)?(?:urgently\s+)?need(?:\s+to\s+(?:verify|confirm))?\b(?!\s+to\b))`;
+  const guidance = String.raw`(?!\s+(?:(?:me|us)\s+)?(?:(?:the|some|a|an)\s+)?(?:privacy\s+)?(?:safeguards?|guidance|polic(?:y|ies)|rules?|protections?|precautions?|advice)\b)`;
   return rules.map(
     (rule) =>
       new RegExp(
-        String.raw`${REQUEST_PREFIX}${action}(?:(?!\b(?:do not|don't|never|must not|should not|explain(?:ing)?|why|how|whether)\b)[^.!?;\n]){0,180}${rule.source}`,
+        String.raw`${REQUEST_PREFIX}${action}${guidance}(?:(?!\b(?:do not|don't|never|must not|should not|explain(?:ing)?|why|how|whether)\b)[^.!?;\n]){0,180}${rule.source}`,
         'i',
       ),
   );
 }
+
+function familyRelationshipClaim(relationship: string): RegExp {
+  return new RegExp(
+    String.raw`(?:\b(?:i(?:\s+am|['’]m)|as)\s+[^.!?;\n]{0,70}?\b|\bmy\s+|\brelationship\s+)(?:${relationship})\b`,
+    'i',
+  );
+}
+
+const FAMILY_RELATIONSHIP_CLAIM = familyRelationshipClaim(
+  'spouse|wife|husband|son|daughter|mother|father|sister|brother|parent',
+);
 
 const PII_SOCIAL_RULES: Record<PiiSocialPredicate, RegExp[]> = {
   requestsPrescriptionDetails: informationRequestRules([/\bprescription details?\b/i]),
@@ -395,10 +411,8 @@ const PII_SOCIAL_RULES: Record<PiiSocialPredicate, RegExp[]> = {
     /\bpersonal details?\b/i,
     /\bdetails? (?:you|we) have on file\b/i,
   ]),
-  claimsFamilyRelationship: [
-    /\b(?:spouse|wife|husband|son|daughter|mother|father|sister|brother|parent)\b/i,
-  ],
-  claimsSpouseRelationship: [/\bspouse\b/i],
+  claimsFamilyRelationship: [FAMILY_RELATIONSHIP_CLAIM],
+  claimsSpouseRelationship: [familyRelationshipClaim('spouse')],
   claimsCoworkerRelationship: [
     /\bcovering nurse\b/i,
     /\bassistant\b/i,
@@ -411,7 +425,7 @@ const PII_SOCIAL_RULES: Record<PiiSocialPredicate, RegExp[]> = {
     /\bi forgot (?:which|what) (?:email(?: address)?|phone(?: number)?) i (?:used|provided|registered)\b/i,
   ],
   claimsIdentity: [
-    /\b(?:spouse|wife|husband|son|daughter|mother|father|sister|brother|parent)\b/i,
+    FAMILY_RELATIONSHIP_CLAIM,
     /\bfriend\b/i,
     /\bcalling on behalf of\b/i,
     /\bcovering nurse\b/i,

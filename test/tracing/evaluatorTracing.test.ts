@@ -264,6 +264,26 @@ describe('evaluatorTracing', () => {
   });
 
   describe('isTracingEnabled', () => {
+    it.each(['test', 'strategy'] as const)(
+      'honors a %s opt-out over a global strategy default',
+      (source) => {
+        const tracing = { enabled: false };
+        const test: TestCase = {
+          metadata: {
+            strategyId: 'goat',
+            ...(source === 'test' ? { tracing } : { strategyConfig: { tracing } }),
+          },
+        };
+        const suite: TestSuite = {
+          providers: [],
+          prompts: [],
+          redteam: { tracing: { strategies: { goat: { enabled: true } } } },
+        };
+        expect(isTracingEnabled(test, suite)).toBe(false);
+        expect(isTracingEnabled(test, { ...suite, tracing: { enabled: true } })).toBe(true);
+      },
+    );
+
     it('should return false when no tracing is configured', () => {
       const test: TestCase = { vars: {} };
       expect(isTracingEnabled(test)).toBe(false);

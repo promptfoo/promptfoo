@@ -41,10 +41,21 @@ export function parseMcpToolCall(
   }
 
   const record = parsed as Record<string, unknown>;
-  const toolName = TOOL_NAME_FIELDS.map((field) => record[field]).find(
-    (fieldValue): fieldValue is string =>
-      typeof fieldValue === 'string' && allowedToolNames.has(fieldValue),
-  );
+  let toolName: string | undefined;
+  for (const field of TOOL_NAME_FIELDS) {
+    if (!Object.prototype.hasOwnProperty.call(record, field)) {
+      continue;
+    }
+    const value = record[field];
+    if (
+      typeof value !== 'string' ||
+      !allowedToolNames.has(value) ||
+      (toolName !== undefined && toolName !== value)
+    ) {
+      return undefined;
+    }
+    toolName = value;
+  }
 
   if (!toolName) {
     return undefined;

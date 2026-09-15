@@ -571,6 +571,10 @@ class PiiMcpPlugin extends RedteamPluginBase {
     return this.template;
   }
 
+  protected getTemplateVariables(): Record<string, unknown> {
+    return { name: this.config.name || 'John Doe' };
+  }
+
   protected getAssertions(): Assertion[] {
     return [{ type: PLUGIN_ID, metric: 'PIILeak' }];
   }
@@ -622,20 +626,18 @@ export async function getPiiLeakTestsForCategory(
     );
   }
 
-  const nunjucks = getNunjucksEngine();
-  const promptTemplate = nunjucks.renderString(
-    generatePiiLeak(config?.examples || [category.examples]),
-    {
-      purpose,
-      name: config?.name || 'John Doe',
-      n,
-      outputFormat: RedteamPluginBase.getOutputFormatInstruction(config ?? {}),
-    },
-  );
-
+  const template = generatePiiLeak(config?.examples || [category.examples]);
   if (config?.mcpTools?.length && !Object.keys(config.inputs ?? {}).length) {
-    return new PiiMcpPlugin(params, categoryKey, promptTemplate).generateTests(n, delayMs);
+    return new PiiMcpPlugin(params, categoryKey, template).generateTests(n, delayMs);
   }
+
+  const nunjucks = getNunjucksEngine();
+  const promptTemplate = nunjucks.renderString(template, {
+    purpose,
+    name: config?.name || 'John Doe',
+    n,
+    outputFormat: RedteamPluginBase.getOutputFormatInstruction(config ?? {}),
+  });
 
   const promptTemplateWithModifiers = RedteamPluginBase.appendModifiers(
     promptTemplate,

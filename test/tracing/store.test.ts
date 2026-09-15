@@ -43,11 +43,11 @@ describe('TraceStore', () => {
       onConflictDoNothing: vi.fn().mockReturnThis(),
       run: vi.fn().mockResolvedValue(undefined),
     };
-    const mockSelectChain = {
+    const mockSelectChain = Object.assign(Promise.resolve([]), {
       from: vi.fn().mockReturnThis(),
       where: vi.fn().mockReturnThis(),
       limit: vi.fn(() => Promise.resolve([])),
-    };
+    });
     mockDeleteChain = {
       where: vi.fn().mockReturnThis(),
       run: vi.fn().mockResolvedValue(undefined),

@@ -1,3 +1,4 @@
+import { SpanKind } from '@opentelemetry/api';
 import { ExportResultCode } from '@opentelemetry/core';
 import logger from '../logger';
 import { getTraceStore, type SpanData, type TraceStore } from './store';
@@ -137,7 +138,17 @@ export class LocalSpanExporter implements SpanExporter {
       name: span.name,
       startTime: startTimeMs,
       endTime: endTimeMs,
-      attributes: this.convertAttributes({ ...span.resource.attributes, ...span.attributes }),
+      attributes: {
+        ...this.convertAttributes({ ...span.resource.attributes, ...span.attributes }),
+        ...(span.instrumentationScope.name && {
+          'otel.scope.name': span.instrumentationScope.name,
+        }),
+        ...(span.instrumentationScope.version && {
+          'otel.scope.version': span.instrumentationScope.version,
+        }),
+        'otel.span.kind': SpanKind[span.kind].toLowerCase(),
+        'otel.span.kind_code': span.kind + 1,
+      },
       statusCode: span.status.code,
       statusMessage: span.status.message,
     };

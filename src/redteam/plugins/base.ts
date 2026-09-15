@@ -102,6 +102,10 @@ export abstract class RedteamPluginBase {
    */
   protected abstract getTemplate(): Promise<string>;
 
+  protected getTemplateVariables(): Record<string, unknown> {
+    return {};
+  }
+
   /**
    * Abstract method to get assertions for a given prompt.
    * @param prompt - The prompt to generate assertions for.
@@ -163,6 +167,7 @@ export abstract class RedteamPluginBase {
       logger.debug(`Generating batch of ${currentBatchSize} prompts`);
       const nunjucks = getNunjucksEngine();
       const renderedTemplate = nunjucks.renderString(await templateGetter(), {
+        ...this.getTemplateVariables(),
         purpose: this.purpose,
         n: currentBatchSize,
         examples: this.config.examples,
