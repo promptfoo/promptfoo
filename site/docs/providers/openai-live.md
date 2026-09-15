@@ -7,7 +7,7 @@ description: Test GPT-Live voice conversations with paced audio input, timestamp
 
 Use `openai:live:gpt-live-1` to evaluate [OpenAI's GPT-Live API](https://developers.openai.com/api/docs/guides/live). It connects to `/v1/live/sessions` and supports full-duplex audio, where the model can listen and speak simultaneously. `openai:gpt-live-1` and `openai:live` select the same provider, as do dated `openai:gpt-live-1-YYYY-MM-DD` snapshots. The transcription-only `gpt-live-transcribe` model requires a separate transcription session and is not supported here.
 
-Set `OPENAI_API_KEY` to an OpenAI project key with Live access. For a compatible gateway, set `apiBaseUrl` and authenticate with `apiKey`, a credential header in `headers` (such as `Authorization` or `api-key`), or userinfo in `apiBaseUrl`, which is sent as a Basic `Authorization` header. When a gateway uses its own credential header or URL userinfo, an `OPENAI_API_KEY` from the environment is not sent to it unless the provider or prompt config sets `apiKey` or `apiKeyEnvar`. A prompt's `config` can set its own `apiBaseUrl`, `apiHost`, `organization`, and credentials; each session uses the merged endpoint, default headers, and credentials together.
+Set `OPENAI_API_KEY` to an OpenAI project key with Live access. For a compatible gateway, set `apiBaseUrl` and authenticate with `apiKey`, a credential header in `headers` (such as `Authorization` or `api-key`), or userinfo in `apiBaseUrl`, which is sent as a Basic `Authorization` header. When a gateway uses its own credential header or URL userinfo, an `OPENAI_API_KEY` from the environment is not sent to it unless the provider or prompt config sets `apiKey` or `apiKeyEnvar`. A prompt's `config` can set its own `apiBaseUrl`, `apiHost`, `organization`, and credentials; each session uses the merged endpoint, default headers, and credentials together. For gateways that authenticate with an opaque header name such as `X-Session-Access`, set `apiKeyRequired: false`; the header value is still redacted from diagnostics.
 
 ## Quickstart
 
@@ -78,13 +78,13 @@ Promptfoo streams audio in 20 ms frames at the configured sample rate. Recorded 
 
 Live has no authoritative speech-completed event. The response window is a fixed recording window and may cut off speech. Increase it for long replies or backend work. Backend completion and transcript gaps do not end the capture early. Transcript and audio deltas received after closing begins are ignored; final usage and errors are still processed. Output audio contains the received samples; transcript timestamps are on the session timeline and do not establish playback timing.
 
-Output audio is capped by the configured format and capture duration, with a maximum of five minutes. Excess audio ends the capture with an error.
+Output audio is capped by the configured format and capture duration, with a maximum of five minutes. Startup delay does not increase this budget. Excess audio ends the capture with an error.
 
 `websocketTimeout` covers the handshake, `session.started`, and a text prompt's acknowledgment (default: 30 seconds); `closeTimeoutMs` controls finalization (default: 15 seconds). These timeouts plus the capture duration must fit within `REQUEST_TIMEOUT_MS` (default: five minutes). Increase it for a full five-minute capture. Cancellation and eval shutdown release active sockets. Live responses are not cached.
 
 ## Backend delegation
 
-For managed Responses delegation, set `delegation.type: responses` and `delegation.responses.model`. The backend can use `function` and `web_search` tools. It has its own instructions, token limit, reasoning settings, and service tier. Follow [OpenAI's delegation configuration](https://developers.openai.com/api/docs/guides/live-delegation) for supported settings.
+For managed Responses delegation, set `delegation.type: responses` and `delegation.responses.model` to a nonempty string of at most 256 UTF-8 bytes. The backend can use `function` and `web_search` tools. It has its own instructions, token limit, reasoning settings, and service tier. Follow [OpenAI's delegation configuration](https://developers.openai.com/api/docs/guides/live-delegation) for supported settings.
 
 For custom functions, set `functionCallHandler: file://tools.js`. Export an async function `(name, args, signal) => string`, where `args` is the JSON argument string. Promptfoo checks the function name against configured tools, collects completed calls, returns every result, and then continues the backend response. Handlers must enforce permissions for actions they execute.
 
@@ -113,7 +113,7 @@ Conversation copies retained by pending client handlers are limited to 8 MiB of 
 
 Omitting delegation selects client mode. If Live requests backend work without a handler, the eval reports an error. Backend work that is pending when the capture ends, or requested after it ends, also reports an error.
 
-A spoken answer does not show that backend work ran. `metadata.delegations` lists each delegation's `id`, `target`, and `offsetMs`, and `metadata.backendResponses` lists completed Responses calls. Assert on these fields when a test requires delegation:
+A spoken answer does not show that backend work ran. `metadata.delegations` lists each delegation's `id`, `target`, and `offsetMs`, and `metadata.backendResponses` lists completed Responses calls. Known credentials echoed in session IDs, backend metadata, or close reasons are redacted. Assert on these fields when a test requires delegation:
 
 ```yaml
 assert:
