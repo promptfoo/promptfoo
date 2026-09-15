@@ -159,6 +159,39 @@ export function normalizeInputDefinition(input: InputDefinition): NormalizedInpu
   };
 }
 
+/** Include alternate file encodings retained in a serialized multi-input prompt. */
+export function getInputRepresentations(
+  vars: Record<string, unknown>,
+  inputs: Inputs | undefined,
+  fileInput?: string,
+): [string, unknown][] {
+  const entries = Object.entries(vars);
+  if (typeof vars.__prompt === 'string') {
+    try {
+      const envelope = JSON.parse(vars.__prompt);
+      if (envelope && typeof envelope === 'object' && !Array.isArray(envelope)) {
+        for (const [key, value] of Object.entries(envelope)) {
+          const input = inputs?.[key];
+          if (
+            value !== vars[key] &&
+            (key === fileInput ||
+              (input && typeof input === 'object' && input.type && input.type !== 'text'))
+          ) {
+            entries.push([key, value]);
+          }
+        }
+      }
+    } catch {
+      // Plain task prompts do not contain serialized input fields.
+    }
+  }
+  // Replace whole data URIs before shorter raw encodings of the same file.
+  return entries.sort(
+    ([, a], [, b]) =>
+      (typeof b === 'string' ? b.length : 0) - (typeof a === 'string' ? a.length : 0),
+  );
+}
+
 export function normalizeInputs(
   inputs?: Inputs,
 ): Record<string, NormalizedInputDefinition> | undefined {

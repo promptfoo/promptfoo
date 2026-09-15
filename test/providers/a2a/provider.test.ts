@@ -467,6 +467,84 @@ describe('A2AProvider', () => {
     },
   );
 
+  it.each(
+    ['1.0', '0.3.0'].flatMap((version) =>
+      ['raw-to-uri', 'uri-to-raw', 'wrapped-to-uri'].map((encoding) => ({ version, encoding })),
+    ),
+  )(
+    'redacts equivalent envelope files in A2A $version: $encoding',
+    async ({ version, encoding }) => {
+      const raw = Buffer.from('%PDF-1.7\nOriginal invoice').toString('base64');
+      const photoRaw = Buffer.from('Original receipt').toString('base64');
+      const encode = (raw: string, mime: string, envelope: boolean) => {
+        if ((encoding === 'raw-to-uri' && envelope) || (encoding === 'uri-to-raw' && !envelope)) {
+          return raw.replace(/=+$/, '');
+        }
+        return encoding === 'wrapped-to-uri' && envelope
+          ? `DATA:${mime.toUpperCase()};BASE64,${raw.replace(/.{4}/g, '$&\n')}`
+          : `data:${mime};base64,${raw}`;
+      };
+      for (const authoredTask of [false, true]) {
+        vi.mocked(fetchWithTimeout).mockResolvedValueOnce(
+          jsonResponse({ message: { role: 'ROLE_AGENT', parts: [{ text: 'pdf ok' }] } }),
+        );
+        const envelope = {
+          document: encode(raw, 'application/pdf', true),
+          photo: encode(photoRaw, 'image/png', true),
+          question: 'What is the total?',
+        };
+        const literal = 'Explain data:image/png;base64,SU5MSU5F.';
+        const prompt = JSON.stringify({
+          ...envelope,
+          ...(authoredTask ? { instruction: literal } : {}),
+        });
+        const result = await provider({ protocolVersion: version }).callApi(prompt, {
+          prompt: { raw: prompt, label: 'Serialized inputs' },
+          vars: {
+            document: encode(raw, 'application/pdf', false),
+            photo: encode(photoRaw, 'image/png', false),
+            question: envelope.question,
+            __prompt: JSON.stringify(envelope),
+          },
+          test: {
+            metadata: {
+              strategyId: 'pdf',
+              pdf: { input: 'document' },
+              pluginConfig: {
+                inputs: {
+                  document: { type: 'pdf', description: 'Invoice' },
+                  photo: { type: 'image', description: 'Receipt' },
+                  question: 'Question',
+                },
+              },
+            },
+          },
+        });
+        expect(result.error).toBeUndefined();
+        const body = JSON.parse(vi.mocked(fetchWithTimeout).mock.lastCall?.[1]?.body as string);
+        const text = body.message.parts[0].text;
+        if (authoredTask) {
+          expect(JSON.parse(JSON.parse(text).task)).toEqual({
+            document: '[PDF attachment]',
+            photo: '[Attachment]',
+            question: envelope.question,
+            instruction: literal,
+          });
+        } else {
+          expect(text).toBe(envelope.question);
+        }
+        expect(
+          Buffer.from(
+            version === '0.3.0'
+              ? body.message.parts[1].file.fileWithBytes
+              : body.message.parts[1].raw,
+            'base64',
+          ),
+        ).toEqual(Buffer.from(raw, 'base64'));
+      }
+    },
+  );
+
   it('accepts a PDF exactly at the size limit', async () => {
     const bytes = Buffer.alloc(5 * 1024 * 1024, 32);
     bytes.write('%PDF-1.7');

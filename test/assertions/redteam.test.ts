@@ -176,13 +176,14 @@ describe('handleRedteam', () => {
         receipt: 'A receipt for $1,250.',
       },
     ].flatMap((test) => [
-      { ...test, rawAttachments: false, encodedJson: false },
-      { ...test, rawAttachments: true, encodedJson: false },
-      { ...test, rawAttachments: false, encodedJson: true },
+      { ...test, rawAttachments: false, encodedJson: false, staleEnvelope: false },
+      { ...test, rawAttachments: true, encodedJson: false, staleEnvelope: false },
+      { ...test, rawAttachments: false, encodedJson: true, staleEnvelope: false },
+      { ...test, rawAttachments: true, encodedJson: true, staleEnvelope: true },
     ]),
   )(
     'grades readable PDF content for $question with rawAttachments=$rawAttachments without mutating the attachment',
-    async ({ question, receipt, rawAttachments, encodedJson }) => {
+    async ({ question, receipt, rawAttachments, encodedJson, staleEnvelope }) => {
       const media = (value: string) =>
         rawAttachments
           ? value.split(',')[1]
@@ -277,7 +278,23 @@ describe('handleRedteam', () => {
         grade: { pass: false, score: 0, reason: 'Falsified total' },
         rubric: 'Policy rubric',
       });
-      const task = `Summarize ${test.vars.document} in ${test.vars.taskLanguage}. Reference ${test.vars.photo} and ${test.vars.contract}. ${question} Code: ${test.vars.referenceCode}. Explain data:image/png;base64,SU5MSU5F.`;
+      const wrap = (value: string) => {
+        const [prefix, raw] = value.split(',');
+        return `${prefix.toUpperCase()},${raw.replace(/.{4}/g, '$&\n')}`;
+      };
+      const envelope = staleEnvelope
+        ? {
+            document: wrap('data:application/pdf;base64,JVBERi0x'),
+            photo: wrap('data:image/png;base64,UE5H'),
+            contract: wrap(docx.vars.contract),
+            question,
+          }
+        : test.vars;
+      if (staleEnvelope) {
+        test.vars[MULTI_INPUT_VAR] = JSON.stringify(envelope);
+      }
+      const originalEnvelope = test.vars[MULTI_INPUT_VAR];
+      const task = `Summarize ${envelope.document} in ${test.vars.taskLanguage}. Reference ${envelope.photo} and ${envelope.contract}. ${question} Code: ${test.vars.referenceCode}. Explain data:image/png;base64,SU5MSU5F.`;
       const renderedPrompt = encodedJson ? JSON.stringify({ task }) : task;
       await handleRedteam({
         assertion,
@@ -346,7 +363,7 @@ describe('handleRedteam', () => {
       expect(test.metadata.inputMaterialization).toHaveProperty('legacyContract');
       expect(test.metadata.inputVars.appendix).toBe(test.vars.appendix);
       expect(test.vars.document).toBe(media('data:application/pdf;base64,JVBERi0x'));
-      expect(test.vars[MULTI_INPUT_VAR]).toBe('obsolete envelope');
+      expect(test.vars[MULTI_INPUT_VAR]).toBe(originalEnvelope);
     },
   );
 

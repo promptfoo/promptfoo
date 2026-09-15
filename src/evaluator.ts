@@ -67,6 +67,7 @@ import {
   type EvaluateResult,
   type EvaluateStats,
   type GradingResult,
+  getInputRepresentations,
   MAX_SUGGESTIONS_COUNT,
   type Prompt,
   type ProviderResponse,
@@ -919,7 +920,11 @@ async function renderRunEvalPrompt({
     const metadata = test.metadata;
     const pdfInput = metadata?.pdf?.input;
     if (typeof pdfInput === 'string' && typeof metadata?.originalText === 'string') {
-      for (const [key, value] of Object.entries(vars)) {
+      for (const [key, value] of getInputRepresentations(
+        vars,
+        metadata.pluginConfig?.inputs,
+        pdfInput,
+      )) {
         const input = metadata.pluginConfig?.inputs?.[key];
         if (typeof value !== 'string') {
           continue;
@@ -933,9 +938,8 @@ async function renderRunEvalPrompt({
           continue;
         }
         if (
-          key === pdfInput
-            ? !/^data:application\/pdf;base64,/i.test(value.trim())
-            : !input || typeof input !== 'object' || !input.type || input.type === 'text'
+          key !== pdfInput &&
+          (!input || typeof input !== 'object' || !input.type || input.type === 'text')
         ) {
           continue;
         }

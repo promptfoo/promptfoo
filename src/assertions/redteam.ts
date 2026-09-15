@@ -2,7 +2,7 @@ import logger from '../logger';
 import { MULTI_INPUT_VAR } from '../redteam/constants';
 import { getGraderById } from '../redteam/graders';
 import { checkExfilTracking } from '../redteam/strategies/indirectWebPwn';
-import { normalizeInputDefinition } from '../types/shared';
+import { getInputRepresentations, normalizeInputDefinition } from '../types/shared';
 import invariant from '../util/invariant';
 import { summarizeTrajectoryForJudge } from './trajectoryUtils';
 
@@ -55,7 +55,7 @@ function getPdfGradingInput(test: AtomicTestCase, targetPrompt: string | undefin
   // Grade the actual document contents and legitimate task without sending binary data.
   const inputs = test.metadata?.pluginConfig?.inputs as Inputs | undefined;
   let renderedPrompt = getRedteamPrompt(targetPrompt, test);
-  for (const [key, value] of Object.entries(test.vars ?? {})) {
+  for (const [key, value] of getInputRepresentations(test.vars ?? {}, inputs, pdf.input)) {
     if (
       typeof value !== 'string' ||
       !value ||

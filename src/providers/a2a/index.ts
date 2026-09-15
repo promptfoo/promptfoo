@@ -5,6 +5,7 @@ import {
   type ApiProvider,
   type CallApiContextParams,
   type CallApiOptionsParams,
+  getInputRepresentations,
   type Inputs,
   normalizeInputDefinition,
   type ProviderOptions,
@@ -338,18 +339,15 @@ function getPdfPromptText(
   mediaValue: string | undefined,
   inputs: Inputs | undefined,
 ): string | undefined {
-  const values = [mediaVarName ? getContextVar(contextVars, mediaVarName) : undefined, mediaValue]
+  const entries = getInputRepresentations(contextVars, inputs, mediaVarName);
+  if (mediaVarName && mediaValue) {
+    entries.push([mediaVarName, mediaValue]);
+  }
+  const values = entries
+    .filter(([key]) => key === mediaVarName)
+    .map(([, value]) => nonEmptyString(value))
     .filter((value): value is string => Boolean(value))
     .flatMap((value) => [value, value.trim()]);
-  let text = values.reduce(
-    (result, value) =>
-      result
-        .split(value)
-        .join('[PDF attachment]')
-        .split(JSON.stringify(value).slice(1, -1))
-        .join('[PDF attachment]'),
-    prompt,
-  );
   if (values.includes(prompt.trim())) {
     return undefined;
   }
@@ -365,7 +363,7 @@ function getPdfPromptText(
         Object.entries(parsed).every(
           ([key, value]) =>
             ((key === mediaVarName || Object.prototype.hasOwnProperty.call(inputs ?? {}, key)) &&
-              contextVars[key] === value) ||
+              entries.some(([name, representation]) => name === key && representation === value)) ||
             (value === '' && contextVars[key] === undefined),
         ))
     ) {
@@ -374,23 +372,26 @@ function getPdfPromptText(
   } catch {
     // A plain-text prompt can contain instructions around the attachment.
   }
-  for (const [key, input] of Object.entries(contextVars)) {
+  let text = prompt;
+  for (const [key, input] of entries) {
     const value = nonEmptyString(input);
     if (
       !value ||
-      key === mediaVarName ||
-      (inputs?.[key] && normalizeInputDefinition(inputs[key]).type === 'text')
+      (key !== mediaVarName &&
+        inputs?.[key] &&
+        normalizeInputDefinition(inputs[key]).type === 'text')
     ) {
       continue;
     }
     const attachment = value.trim().match(/^data:[^,]+;base64,(.+)$/is);
-    if (attachment || inputs?.[key]) {
+    if (attachment || key === mediaVarName || inputs?.[key]) {
+      const placeholder = key === mediaVarName ? '[PDF attachment]' : '[Attachment]';
       for (const part of attachment ? [value, attachment[0], attachment[1]] : [value]) {
         text = text
           .split(part)
-          .join('[Attachment]')
+          .join(placeholder)
           .split(JSON.stringify(part).slice(1, -1))
-          .join('[Attachment]');
+          .join(placeholder);
       }
     }
   }
@@ -498,6 +499,7 @@ function getDefaultMessage(
   media?: MediaPayload,
 ): A2AMessage {
   if (media) {
+    // A2A 1.0 Part uses raw/filename/mediaType directly (specification section 4.1.6).
     const mediaPart: A2APart = usesLegacyMessageShape(protocolVersion)
       ? {
           kind: 'file',

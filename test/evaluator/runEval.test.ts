@@ -9,6 +9,7 @@ import {
   ResultFailureReason,
   type TestSuite,
 } from '../../src/types/index';
+import { sha256 } from '../../src/util/createHash';
 import { mockGradingApiProviderPasses, resetMockProviders } from './helpers';
 
 describe('runEval', () => {
@@ -347,6 +348,70 @@ describe('runEval', () => {
       JSON.stringify(['test-provider', 'custom-id', 0, 'conv1']),
     ]);
   });
+
+  it.each(['raw-to-uri', 'uri-to-raw', 'wrapped-to-uri'])(
+    'measures equivalent file representations in an unchanged envelope: %s',
+    async (encoding) => {
+      const bytes = Buffer.from('%PDF-1.7' + 'x'.repeat(1000));
+      const companionBytes = Buffer.from('Receipt attachment'.repeat(100));
+      const uri = (raw: string) => `data:application/pdf;base64,${raw}`;
+      const encode = (bytes: Buffer, envelope: boolean) => {
+        const raw = bytes.toString('base64');
+        if ((encoding === 'raw-to-uri' && envelope) || (encoding === 'uri-to-raw' && !envelope)) {
+          return raw.replace(/=+$/, '');
+        }
+        return encoding === 'wrapped-to-uri' && envelope
+          ? `DATA:APPLICATION/PDF;BASE64,${raw.replace(/.{80}/g, '$&\n')}`
+          : uri(raw);
+      };
+      const document = encode(bytes, false);
+      const companion = encode(companionBytes, false);
+      const envelope = JSON.stringify({
+        document: encode(bytes, true),
+        companion: encode(companionBytes, true),
+        question: 'What is the total?',
+      });
+      const callApi = vi.fn().mockResolvedValue({ output: 'success' });
+      const results = await runEval({
+        ...defaultOptions,
+        provider: { id: () => 'pdf-target', callApi },
+        prompt: { raw: '{{__prompt}}', label: 'Serialized attachments' },
+        test: {
+          vars: { document, companion, question: 'What is the total?', __prompt: envelope },
+          metadata: {
+            strategyId: 'pdf',
+            pdf: {
+              input: 'document',
+              contentHash: `sha256:${sha256(bytes)}`,
+              companionHashes: { companion: `sha256:${sha256(companionBytes)}` },
+            },
+            originalText: 'Report $0.',
+            pluginConfig: {
+              inputs: {
+                document: { type: 'pdf', description: 'Invoice' },
+                companion: { type: 'pdf', description: 'Reference' },
+                question: 'Question',
+              },
+            },
+            inputVars: { companion: 'Receipt for $1,250.' },
+          },
+        },
+        testSuite: {
+          providers: [],
+          prompts: [],
+          redteam: { maxCharsPerMessage: 240 },
+        } as unknown as TestSuite,
+        conversations: {},
+        registers: {},
+        isRedteam: true,
+      });
+      expect(results[0].error).toBeUndefined();
+      expect(results[0].success).toBe(true);
+      expect(callApi).toHaveBeenCalledOnce();
+      expect(callApi.mock.calls[0][0]).toBe(envelope);
+      expect(callApi.mock.calls[0][1].vars.document).toBe(document);
+    },
+  );
 
   it.each([
     {

@@ -158,9 +158,9 @@ export function throwIfTargetPromptExceedsMaxChars(
       );
     }
     const attachment = dataUrl?.trim().match(/^data:[^,]+;base64,(.+)$/is);
-    if (attachment) {
+    if (dataUrl) {
       // Check readable content separately; only measurement excludes attachment bytes.
-      for (const value of [attachment[0], attachment[1]]) {
+      for (const value of attachment ? [attachment[0], attachment[1]] : [dataUrl]) {
         prompt = prompt.split(value).join('').split(JSON.stringify(value).slice(1, -1)).join('');
       }
     }
