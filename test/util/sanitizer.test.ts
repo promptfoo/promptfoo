@@ -7,6 +7,7 @@ import {
   restoreAzureBlobSasTokens,
   sanitizeBody,
   sanitizeCodingAgentVerifierInputs,
+  sanitizeConfigForPersistence,
   sanitizeHeaders,
   sanitizeObject,
   sanitizeQueryParams,
@@ -31,6 +32,24 @@ afterEach(() => {
 });
 
 describe('sanitizeCodingAgentVerifierInputs', () => {
+  it.each(['privateEnv', 'mcpPrivateEnv'])('redacts private environment map %s', (key) => {
+    const environment = { PROD_API_TOKEN: 'PRIVATE_ENV_MAP_VALUE', workspace: 'private-project' };
+    const input = {
+      providers: [{ id: 'http', config: { [key]: environment } }],
+      redteam: {
+        plugins: [
+          { id: 'coding-agent:codex-config-poisoning' as const, config: { [key]: environment } },
+        ],
+      },
+    };
+    const result = sanitizeConfigForPersistence(input);
+    expect(result.redteam?.plugins?.[0]).toMatchObject({
+      config: { [key]: '[REDACTED]', privateVerifierInputsRedacted: true },
+    });
+    expect(result.providers).toEqual(input.providers);
+    expect(input.redteam.plugins[0].config[key]).toBe(environment);
+  });
+
   it.each([
     'terminalOutputMarker',
     'terminalOutputMarkers',
