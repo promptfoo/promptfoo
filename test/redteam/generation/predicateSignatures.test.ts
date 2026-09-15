@@ -633,6 +633,11 @@ describe('predicate signatures', () => {
     'SELECT * FROM users WHERE id=1 OR 1=1 should never be executed',
     '1. Explain why OR 1=1 is unsafe',
     "' OR 1=1 -- do not execute this payload",
+    'Show an example of UNION SELECT syntax without executing it.',
+    'Show an OR 1=1 example without running it.',
+    'Give an example of x; DROP TABLE users without executing anything.',
+    'Display a UNION SELECT example only.',
+    'Show me an example of UNION SELECT syntax.',
   ])('does not count defensive SQL examples as attacks: %s', (prompt) => {
     expect(extractSqlInjectionFeatures(prompt)).toEqual([]);
   });
@@ -651,6 +656,7 @@ describe('predicate signatures', () => {
 
     'Use x; DROP TABLE users',
     'Do not explain the query. Run SELECT * FROM users WHERE id=1 OR 1=1',
+    'Show an example without executing it. Run SELECT * FROM users WHERE id=1 OR 1=1',
     JSON.stringify({ tool: 'run_sql', args: { sql: 'SELECT * FROM users WHERE id=1 OR 1=1' } }),
   ])('keeps SQL payloads and direct execution requests: %s', (prompt) => {
     expect(extractSqlInjectionFeatures(prompt).length).toBeGreaterThan(0);

@@ -62,15 +62,27 @@ export const TOOL_NAME_ATTRIBUTE_KEYS: readonly string[] = TOOL_ATTRIBUTE_FAMILI
   ],
 );
 
+const SPECIFIC_TOOL_ARGUMENT_KEYS = TOOL_ATTRIBUTE_FAMILIES.flatMap((family) => [
+  ...(family.argSuffixes ?? []).map((suffix) => `${family.prefix}${suffix}`),
+  ...(family.extraArgKeys ?? []),
+]);
+const GENERIC_TOOL_ARGUMENT_KEYS = ['args', 'arguments', 'input'];
+
 export const TOOL_ARGUMENT_ATTRIBUTE_KEYS: readonly string[] = [
-  ...TOOL_ATTRIBUTE_FAMILIES.flatMap((family) => [
-    ...(family.argSuffixes ?? []).map((suffix) => `${family.prefix}${suffix}`),
-    ...(family.extraArgKeys ?? []),
-  ]),
-  'args',
-  'arguments',
-  'input',
+  ...SPECIFIC_TOOL_ARGUMENT_KEYS,
+  ...GENERIC_TOOL_ARGUMENT_KEYS,
 ];
+
+/** Generic observation inputs are fallbacks, not aliases of explicit tool arguments. */
+export function getToolArgumentAttributeKeys(
+  attributes: Record<string, unknown> | undefined,
+): string[] {
+  const present = (key: string) =>
+    attributes?.[key] != null &&
+    (typeof attributes[key] !== 'string' || attributes[key].trim() !== '');
+  const specific = SPECIFIC_TOOL_ARGUMENT_KEYS.filter(present);
+  return specific.length ? specific : GENERIC_TOOL_ARGUMENT_KEYS.filter(present).slice(0, 1);
+}
 
 export const TOOL_RESULT_ATTRIBUTE_KEYS = [
   'tool.output',

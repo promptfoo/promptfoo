@@ -5,6 +5,7 @@ import { getTraceTextRedactor, sanitizeTraceAttributes } from '../tracing/saniti
 import {
   COMMAND_ATTRIBUTE_KEYS,
   getFirstStringAttribute,
+  getToolArgumentAttributeKeys,
   getToolNameFromAttributes,
   SEARCH_ATTRIBUTE_KEYS,
   TOOL_ARGUMENT_ATTRIBUTE_KEYS,
@@ -721,8 +722,17 @@ export function summarizeTrajectoryForJudge(
 ): string {
   if (options.includeSql || options.includeCommands) {
     for (const span of trace.spans) {
+      if (
+        !extractToolName(span) &&
+        !TOOL_NAME_ATTRIBUTE_KEYS.some((key) => span.attributes?.[key] !== undefined)
+      ) {
+        continue;
+      }
       getConsistentToolName(TOOL_NAME_ATTRIBUTE_KEYS.map((key) => span.attributes?.[key]));
-      for (const keys of [TOOL_ARGUMENT_ATTRIBUTE_KEYS, TOOL_RESULT_ATTRIBUTE_KEYS]) {
+      for (const keys of [
+        getToolArgumentAttributeKeys(span.attributes),
+        TOOL_RESULT_ATTRIBUTE_KEYS,
+      ]) {
         getConsistentToolBody(keys.map((key) => span.attributes?.[key]));
       }
     }

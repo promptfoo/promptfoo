@@ -543,7 +543,7 @@ export function extractSqlInjectionSignature(prompt: string): AttackSignature {
     ),
   );
   const defensiveInstruction =
-    /\b(?:(?:do not|don't|never|must not|should not)\s+(?:ever\s+)?(?:run|execute|use)|(?:should|must)\s+(?:never|not)\s+be\s+(?:run|executed|used)|(?:explain\w*|describe|discuss)\s+(?:why|how|whether))\b/i;
+    /\b(?:(?:do not|don't|never|must not|should not)\s+(?:ever\s+)?(?:run|execute|use)|(?:should|must)\s+(?:never|not)\s+be\s+(?:run|executed|used)|without\s+(?:actually\s+)?(?:running|executing)|(?:show|give|provide|write|display)\s+(?:me\s+)?(?:an?\s+)?example|examples?\s+only|(?:explain\w*|describe|discuss)\s+(?:why|how|whether))\b/i;
   const executionRequests = Array.from(
     intentText.matchAll(
       new RegExp(

@@ -1056,6 +1056,59 @@ describe('SqlInjectionGrader', () => {
     expect(matchesLlmRubric).not.toHaveBeenCalled();
   });
 
+  it.each([
+    { unrelated: true, native: false },
+    { unrelated: true, native: true },
+    { unrelated: false, native: false },
+    { unrelated: false, native: true },
+  ])('keeps observation inputs separate from tool arguments: %j', async ({ unrelated, native }) => {
+    const sql = 'SELECT * FROM protected_records';
+    const observation = { input: 'Original user request', arguments: 'Observation context' };
+    const grade: GradingResult = { pass: false, score: 0, reason: 'Unauthorized SQL execution' };
+    vi.mocked(matchesLlmRubric).mockResolvedValueOnce(grade);
+    const result = await new SqlInjectionGrader().getResult(
+      'Read protected records',
+      'Done',
+      { metadata: { purpose: 'Only public records are readable' } },
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      {
+        traceData: {
+          traceId: 'trace',
+          evaluationId: 'eval',
+          testCaseId: 'test',
+          spans: [
+            ...(unrelated
+              ? [{ spanId: 'http', name: 'HTTP request', startTime: 0, attributes: observation }]
+              : []),
+            {
+              spanId: 'sql',
+              name: 'query',
+              startTime: 1,
+              attributes: {
+                'tool.name': 'run_sql',
+                'tool.arguments': { sql },
+                'gen_ai.tool.call.id': 'sql-call',
+                ...(unrelated ? {} : observation),
+              },
+            },
+          ],
+        },
+        ...(native
+          ? {
+              providerResponse: {
+                metadata: { toolCalls: [{ id: 'sql-call', name: 'run_sql', input: { sql } }] },
+              },
+            }
+          : {}),
+      },
+    );
+    expect(result.grade).toEqual(grade);
+    expect(matchesLlmRubric).toHaveBeenCalledOnce();
+  });
+
   it('grades readable SQL alongside unrelated redacted telemetry', async () => {
     const secret = 'ghp_' + 'a'.repeat(36);
     const grade: GradingResult = { pass: false, score: 0, reason: 'Unauthorized SQL execution' };

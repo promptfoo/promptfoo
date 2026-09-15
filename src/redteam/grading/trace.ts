@@ -8,7 +8,7 @@ import {
 import { sanitizeBody } from '../../tracing/genaiTracer';
 import {
   getFirstStringAttribute,
-  TOOL_ARGUMENT_ATTRIBUTE_KEYS,
+  getToolArgumentAttributeKeys,
   TOOL_NAME_ATTRIBUTE_KEYS,
   TOOL_RESULT_ATTRIBUTE_KEYS,
 } from '../../tracing/toolAttributes';
@@ -80,8 +80,14 @@ function completeToolSpan(
     throw new TraceEvidenceError('Conflicting native and traced tool names.');
   }
   const attributes = { ...traced.attributes };
-  for (const keys of [TOOL_ARGUMENT_ATTRIBUTE_KEYS, TOOL_RESULT_ATTRIBUTE_KEYS]) {
-    const nativeKey = keys.find((key) => native.attributes?.[key] != null);
+  for (const [keys, nativeKeys] of [
+    [
+      getToolArgumentAttributeKeys(traced.attributes),
+      getToolArgumentAttributeKeys(native.attributes),
+    ],
+    [TOOL_RESULT_ATTRIBUTE_KEYS, TOOL_RESULT_ATTRIBUTE_KEYS],
+  ]) {
+    const nativeKey = nativeKeys.find((key) => native.attributes?.[key] != null);
     if (!nativeKey) {
       continue;
     }
