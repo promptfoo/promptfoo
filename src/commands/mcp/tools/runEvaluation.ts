@@ -14,7 +14,13 @@ import { createToolResponse } from '../lib/utils';
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import type { Command } from 'commander';
 
-import type { CommandLineOptions, TestSuite, UnifiedConfig } from '../../../types/index';
+import type {
+  CommandLineOptions,
+  EvaluateSummaryV2,
+  EvaluateSummaryV3,
+  TestSuite,
+  UnifiedConfig,
+} from '../../../types/index';
 import type { InternalEvaluateOptions } from '../../../types/internal';
 
 interface EvaluationFilterSummary {
@@ -496,6 +502,12 @@ export function registerRunEvaluationTool(server: McpServer) {
           hasStringFilters(providerFilter);
         let selectedTestCaseIndices: number[] | undefined;
         let suiteSummary: EvaluationFilterSummary | undefined;
+        let evaluationOutput:
+          | {
+              summary: EvaluateSummaryV2 | EvaluateSummaryV3;
+              formatted: ReturnType<typeof formatEvaluationResults>;
+            }
+          | undefined;
 
         const cmdObj: Partial<CommandLineOptions & Command> = {
           config: configPath ? [configPath] : defaultConfigPath ? [defaultConfigPath] : undefined,
@@ -578,6 +590,13 @@ export function registerRunEvaluationTool(server: McpServer) {
                 selectedTestCaseIndices?.length,
               );
             },
+            afterEvaluate: async (result) => {
+              const summary = await result.toEvaluateSummary();
+              evaluationOutput = {
+                summary,
+                formatted: formatEvaluationResults(summary, { resultLimit, resultOffset }),
+              };
+            },
             evaluateOptionOverrides,
             allowConfigFilterRange: testCaseIndices === undefined,
             allowConfigFilterSample: testCaseIndices === undefined,
@@ -586,7 +605,7 @@ export function registerRunEvaluationTool(server: McpServer) {
           }),
         );
         const endTime = Date.now();
-        if (!suiteSummary) {
+        if (!suiteSummary || !evaluationOutput) {
           return createToolResponse(
             'run_evaluation',
             false,
@@ -595,14 +614,11 @@ export function registerRunEvaluationTool(server: McpServer) {
           );
         }
 
-        const summary = await evalResult.toEvaluateSummary();
+        const { summary, formatted } = evaluationOutput;
         const effectiveTimeoutMs = evalResult.runtimeOptions?.timeoutMs ?? timeoutMs;
         const effectiveMaxConcurrency = evalResult.runtimeOptions?.maxConcurrency ?? maxConcurrency;
         const effectiveDelay = evalResult.runtimeOptions?.delay ?? delay;
-        const { results: formattedResults, pagination } = formatEvaluationResults(summary, {
-          resultLimit,
-          resultOffset,
-        });
+        const { results: formattedResults, pagination } = formatted;
 
         const evalData = {
           eval: {

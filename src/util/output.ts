@@ -39,7 +39,7 @@ import {
 import { getNunjucksEngine } from './templates';
 
 import type Eval from '../models/eval';
-import type { EvaluateResult, EvaluateTableOutput } from '../types';
+import type { CompletedPrompt, EvaluateResult, EvaluateTable, EvaluateTableOutput } from '../types';
 
 export interface OutputOptions {
   includeMedia?: boolean;
@@ -349,23 +349,55 @@ function sanitizeConfigForOutput(config: Eval['config']): OutputFile['config'] {
   ) as OutputFile['config'];
 }
 
+function sanitizeOutputPrompt(prompt: CompletedPrompt): CompletedPrompt {
+  return {
+    ...prompt,
+    ...(getEnvBool('PROMPTFOO_STRIP_PROMPT_TEXT', false) && { raw: '[prompt stripped]' }),
+    provider: redactSecretLeaves({ provider: prompt.provider }, { redactOpaqueValues: false })
+      .provider,
+    ...(prompt.config && { config: sanitizeConfigForOutput(prompt.config) }),
+  };
+}
+
+function sanitizeOutputTable(table: EvaluateTable): EvaluateTable {
+  const stripVars = getEnvBool('PROMPTFOO_STRIP_TEST_VARS', false);
+  const stripOutput = getEnvBool('PROMPTFOO_STRIP_RESPONSE_OUTPUT', false);
+  return {
+    ...table,
+    head: { ...table.head, prompts: table.head.prompts.map(sanitizeOutputPrompt) },
+    body: table.body.map((row) => {
+      const projected = sanitizeResultForArtifact({ testCase: row.test, vars: row.vars });
+      return {
+        ...row,
+        test: projected.testCase,
+        vars: stripVars ? row.vars.map(() => '') : projected.vars,
+        outputs: row.outputs.map((output) => {
+          const projectedOutput = sanitizeResultForArtifact({
+            ...output,
+            prompt: { raw: output.prompt, label: '' },
+            provider: output.provider ? { id: output.provider } : undefined,
+          });
+          return {
+            ...projectedOutput,
+            prompt: projectedOutput.prompt.raw,
+            provider: projectedOutput.provider?.id,
+            text: stripOutput ? '[output stripped]' : output.text,
+          };
+        }),
+      };
+    }),
+  };
+}
+
 async function createOutputSummary(evalRecord: Eval): Promise<OutputFile['results']> {
   const summary = await evalRecord.toEvaluateSummary();
   const results = summary.results.map(sanitizeResultForArtifact);
-  const prompts = ('prompts' in summary ? summary.prompts : summary.table.head.prompts).map(
-    (prompt) => ({
-      ...prompt,
-      provider: redactSecretLeaves({ provider: prompt.provider }, { redactOpaqueValues: false })
-        .provider,
-      ...(prompt.config && { config: sanitizeConfigForOutput(prompt.config) }),
-    }),
-  );
   return 'prompts' in summary
-    ? { ...summary, results, prompts }
+    ? { ...summary, results, prompts: summary.prompts.map(sanitizeOutputPrompt) }
     : {
         ...summary,
         results,
-        table: { ...summary.table, head: { ...summary.table.head, prompts } },
+        table: sanitizeOutputTable(summary.table),
       };
 }
 
@@ -600,7 +632,7 @@ export async function writeOutput(
   options: OutputOptions = {},
 ) {
   if (outputPath.match(/^https:\/\/docs\.google\.com\/spreadsheets\//)) {
-    const table = await evalRecord.getTable();
+    const table = sanitizeOutputTable(await evalRecord.getTable());
     invariant(table, 'Table is required');
     const rows = table.body.map((row) => {
       const csvRow: CsvRow = {};
@@ -651,9 +683,9 @@ export async function writeOutput(
       yaml.dump(await createOutputData(evalRecord, shareableUrl, options)),
     );
   } else if (outputExtension === 'html') {
-    const table = await evalRecord.getTable();
-    invariant(table, 'Table is required');
     const summary = await createOutputSummary(evalRecord);
+    const table =
+      'table' in summary ? summary.table : sanitizeOutputTable(await evalRecord.getTable());
     const redactedConfig = sanitizeConfigForOutput(evalRecord.config);
     const metadata = createOutputMetadata(evalRecord);
     const template = await fsPromises.readFile(

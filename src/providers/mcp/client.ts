@@ -283,7 +283,12 @@ export class MCPClient {
           logger.debug('Connected using Streamable HTTP transport');
         } catch (error) {
           signal.throwIfAborted();
-          await this.transports.get(serverKey)?.close();
+          await this.transports
+            .get(serverKey)
+            ?.close()
+            .catch((closeError) => {
+              logger.debug('Failed to close unsuccessful MCP transport', { error: closeError });
+            });
           logger.debug(
             `Failed to connect to MCP server with Streamable HTTP transport ${serverKey}: ${error}`,
           );

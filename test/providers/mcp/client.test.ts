@@ -509,31 +509,37 @@ describe('MCPClient', () => {
       });
     });
 
-    it('should fall back to SSEClientTransport if StreamableHTTPClientTransport fails', async () => {
-      // Reset mocks for this test
-      mockClient.connect
-        .mockImplementationOnce(function () {
-          throw new Error('Connection failed');
-        })
-        .mockResolvedValueOnce(undefined);
+    it.each([false, true])(
+      'falls back to SSE when HTTP fails (cleanup rejects: %s)',
+      async (cleanupRejects) => {
+        if (cleanupRejects) {
+          mockStreamableHTTPTransport.close.mockRejectedValueOnce(new Error('Cleanup failed'));
+        }
+        // Reset mocks for this test
+        mockClient.connect
+          .mockImplementationOnce(function () {
+            throw new Error('Connection failed');
+          })
+          .mockResolvedValueOnce(undefined);
 
-      mockClient.listTools.mockResolvedValueOnce({
-        tools: [{ name: 'tool1', description: 'desc1', inputSchema: {} }],
-      });
+        mockClient.listTools.mockResolvedValueOnce({
+          tools: [{ name: 'tool1', description: 'desc1', inputSchema: {} }],
+        });
 
-      mcpClient = new MCPClient({
-        enabled: true,
-        server: {
-          url: 'http://localhost:3000',
-        },
-      });
+        mcpClient = new MCPClient({
+          enabled: true,
+          server: {
+            url: 'http://localhost:3000',
+          },
+        });
 
-      await mcpClient.initialize();
+        await mcpClient.initialize();
 
-      expect(StreamableHTTPClientTransport).toHaveBeenCalledWith(expect.any(URL), undefined);
-      expect(SSEClientTransport).toHaveBeenCalledWith(expect.any(URL), undefined);
-      expect(mockClient.connect).toHaveBeenCalledTimes(2);
-    });
+        expect(StreamableHTTPClientTransport).toHaveBeenCalledWith(expect.any(URL), undefined);
+        expect(SSEClientTransport).toHaveBeenCalledWith(expect.any(URL), undefined);
+        expect(mockClient.connect).toHaveBeenCalledTimes(2);
+      },
+    );
 
     it('should fall back to SSEClientTransport with headers if StreamableHTTPClientTransport fails', async () => {
       // Reset mocks for this test

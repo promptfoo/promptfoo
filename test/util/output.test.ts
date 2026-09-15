@@ -192,7 +192,7 @@ describe('writeOutput', () => {
   });
 
   it.each(['json', 'yaml', 'html', 'xml'])(
-    'redacts legacy prompt config in %s exports',
+    'redacts legacy table credentials and honors strip flags in %s exports',
     async (extension) => {
       const prompt = {
         raw: 'Summarize',
@@ -207,17 +207,82 @@ describe('writeOutput', () => {
         timestamp: summary.timestamp,
         stats: summary.stats,
         results: [],
-        table: { head: { vars: [], prompts: [prompt] }, body: [] },
+        table: {
+          head: { vars: ['value'], prompts: [prompt] },
+          body: [
+            {
+              testIdx: 0,
+              vars: ['PRIVATE_TABLE_VAR'],
+              test: {
+                metadata: {
+                  headers: { Authorization: 'Bearer PRIVATE_LEGACY_TEST' },
+                  label: 'Public metadata',
+                },
+              },
+              outputs: [
+                {
+                  id: 'legacy',
+                  pass: true,
+                  score: 1,
+                  cost: 0,
+                  failureReason: 0,
+                  latencyMs: 1,
+                  namedScores: {},
+                  prompt: 'Summarize',
+                  text: 'Public response',
+                  testCase: {},
+                  response: {
+                    output: 'Public response',
+                    metadata: {
+                      http: {
+                        status: 200,
+                        statusText: 'OK',
+                        requestHeaders: { Authorization: 'Bearer PRIVATE_LEGACY_RESPONSE' },
+                      },
+                    },
+                  },
+                  gradingResult: {
+                    pass: true,
+                    score: 1,
+                    reason: 'Public verdict',
+                    metadata: {
+                      http: { requestHeaders: { Authorization: 'Bearer PRIVATE_LEGACY_GRADE' } },
+                    },
+                  },
+                },
+              ],
+            },
+          ],
+        },
       };
       if (extension === 'html') {
-        vi.mocked(fsPromises.readFile).mockResolvedValue('{{ results | dump }}');
+        vi.mocked(fsPromises.readFile).mockResolvedValue('{{ results | dump }}|{{ table | dump }}');
       }
       await writeOutput(`output.${extension}`, eval_, null);
       const output = vi.mocked(fsPromises.writeFile).mock.calls[0][1] as string;
       expect(output).not.toContain('legacy-header-7294');
+      expect(output).not.toContain('PRIVATE_LEGACY_');
+      expect(output).toContain('Public response');
       expect(output).not.toContain('PRIVATE_PROMPT_PROVIDER');
       expect(output).toContain('[REDACTED]');
       expect(prompt.config.headers['X-Gateway-Auth']).toBe('legacy-header-7294');
+      const restoreEnv = mockProcessEnv({
+        PROMPTFOO_STRIP_PROMPT_TEXT: 'true',
+        PROMPTFOO_STRIP_RESPONSE_OUTPUT: 'true',
+        PROMPTFOO_STRIP_TEST_VARS: 'true',
+      });
+      try {
+        await writeOutput(`stripped.${extension}`, eval_, null);
+        const stripped = vi.mocked(fsPromises.writeFile).mock.calls.at(-1)![1] as string;
+        expect(stripped).not.toContain('Public response');
+        expect(stripped).not.toContain('PRIVATE_TABLE_VAR');
+        expect(stripped).not.toContain('Summarize');
+        expect(stripped).toContain('[output stripped]');
+        expect(eval_.oldResults.table.body[0].outputs[0].prompt).toBe('Summarize');
+        expect(eval_.oldResults.table.body[0].vars).toEqual(['PRIVATE_TABLE_VAR']);
+      } finally {
+        restoreEnv();
+      }
     },
   );
 

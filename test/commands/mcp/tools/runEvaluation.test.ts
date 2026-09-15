@@ -69,6 +69,11 @@ function createMockEvalResult() {
   };
 }
 
+async function completeMockEval(result: any, customization: any) {
+  await customization?.afterEvaluate?.(result);
+  return result;
+}
+
 function createMockTestSuite() {
   return {
     prompts: [{ label: 'test-prompt', raw: 'What is 2+2?' }],
@@ -90,7 +95,7 @@ async function defaultDoEvalImplementation(
     selectedProviderConfigs: testSuite.providers,
   });
   await customization?.afterFilterTestSuite?.(testSuite, config, {});
-  return createMockEvalResult();
+  return completeMockEval(createMockEvalResult(), customization);
 }
 
 vi.mock('../../../../src/node/doEval', () => ({
@@ -314,12 +319,15 @@ describe('runEvaluation tool', () => {
             selectedProviderConfigs: config.providers,
           });
           await customization?.afterFilterTestSuite?.(testSuite as any, config as any, {});
-          return {
-            ...createMockEvalResult(),
-            runtimeOptions: {
-              timeoutMs: 9999,
+          return completeMockEval(
+            {
+              ...createMockEvalResult(),
+              runtimeOptions: {
+                timeoutMs: 9999,
+              },
             },
-          } as any;
+            customization,
+          );
         },
       );
 
@@ -364,14 +372,17 @@ describe('runEvaluation tool', () => {
             selectedProviderConfigs: config.providers,
           });
           await customization?.afterFilterTestSuite?.(testSuite as any, config as any, {});
-          return {
-            ...createMockEvalResult(),
-            runtimeOptions: {
-              delay: 100,
-              maxConcurrency: 1,
-              timeoutMs: 30000,
+          return completeMockEval(
+            {
+              ...createMockEvalResult(),
+              runtimeOptions: {
+                delay: 100,
+                maxConcurrency: 1,
+                timeoutMs: 30000,
+              },
             },
-          } as any;
+            customization,
+          );
         },
       );
 
@@ -420,11 +431,14 @@ describe('runEvaluation tool', () => {
           },
         );
         await customization.afterFilterTestSuite(testSuite, { providers: [] }, {});
-        return {
-          ...createMockEvalResult(),
-          shared: true,
-          shareableUrl: 'https://app.promptfoo.dev/eval/shared-123',
-        } as any;
+        return completeMockEval(
+          {
+            ...createMockEvalResult(),
+            shared: true,
+            shareableUrl: 'https://app.promptfoo.dev/eval/shared-123',
+          },
+          customization,
+        );
       });
 
       const sharedResult = await toolHandler({ configPath: 'test.yaml', share: true });
@@ -474,7 +488,7 @@ describe('runEvaluation tool', () => {
             observedExecutableProviders = testSuite.providers;
             observedProviderSelection = customization?.evaluateOptionOverrides?.providerSelection;
             await customization?.afterFilterTestSuite?.(testSuite as any, config as any, {});
-            return createMockEvalResult() as any;
+            return completeMockEval(createMockEvalResult(), customization);
           },
         );
 
@@ -560,7 +574,7 @@ describe('runEvaluation tool', () => {
           observedExecutableProviders = testSuite.providers;
           observedProviderSelection = customization?.evaluateOptionOverrides?.providerSelection;
           await customization?.afterFilterTestSuite?.(testSuite as any, config as any, {});
-          return createMockEvalResult() as any;
+          return completeMockEval(createMockEvalResult(), customization);
         },
       );
 
@@ -651,7 +665,7 @@ describe('runEvaluation tool', () => {
           });
           testSuite.tests = testSuite.tests.slice(1, 2);
           await customization?.afterFilterTestSuite?.(testSuite as any, config as any, {});
-          return createMockEvalResult() as any;
+          return completeMockEval(createMockEvalResult(), customization);
         },
       );
 
@@ -698,7 +712,7 @@ describe('runEvaluation tool', () => {
             selectedProviderConfigs: config.providers,
           });
           await customization?.afterFilterTestSuite?.(testSuite as any, config as any, {});
-          return createMockEvalResult() as any;
+          return completeMockEval(createMockEvalResult(), customization);
         },
       );
 
@@ -745,7 +759,7 @@ describe('runEvaluation tool', () => {
             selectedProviderConfigs: config.providers,
           });
           await customization?.afterFilterTestSuite?.(testSuite as any, config as any, {});
-          return createMockEvalResult() as any;
+          return completeMockEval(createMockEvalResult(), customization);
         },
       );
 
@@ -806,7 +820,7 @@ describe('runEvaluation tool', () => {
           });
           selectedTestCaseIndices = customization?.evaluateOptionOverrides?.testCaseIndices;
           await customization?.afterFilterTestSuite?.(testSuite as any, config as any, {});
-          return createMockEvalResult() as any;
+          return completeMockEval(createMockEvalResult(), customization);
         },
       );
 
@@ -880,7 +894,7 @@ describe('runEvaluation tool', () => {
           await customization?.afterFilterTestSuite?.(testSuite as any, config as any, {
             deferredFilterRange: '1:2',
           });
-          return createMockEvalResult() as any;
+          return completeMockEval(createMockEvalResult(), customization);
         },
       );
 
@@ -927,7 +941,7 @@ describe('runEvaluation tool', () => {
             selectedProviderConfigs: config.providers,
           });
           await customization?.afterFilterTestSuite?.(testSuite as any, config as any, {});
-          return createMockEvalResult() as any;
+          return completeMockEval(createMockEvalResult(), customization);
         },
       );
 
@@ -972,7 +986,7 @@ describe('runEvaluation tool', () => {
             selectedProviderConfigs: config.providers,
           });
           await customization?.afterFilterTestSuite?.(testSuite as any, config as any, {});
-          return createMockEvalResult() as any;
+          return completeMockEval(createMockEvalResult(), customization);
         },
       );
 
@@ -999,6 +1013,69 @@ describe('runEvaluation tool', () => {
       });
     });
   });
+
+  it.each(['config', 'env file'])(
+    'projects actual MCP results within the %s environment',
+    async (source) => {
+      const { doEval } = await import('../../../../src/node/doEval');
+      const actualDoEval = await vi.importActual<typeof import('../../../../src/node/doEval')>(
+        '../../../../src/node/doEval',
+      );
+      vi.mocked(doEval).mockImplementationOnce(actualDoEval.doEval);
+      const { resolveConfigs } = await import('../../../../src/util/config/load');
+      const actualConfig = await vi.importActual<typeof import('../../../../src/util/config/load')>(
+        '../../../../src/util/config/load',
+      );
+      vi.mocked(resolveConfigs).mockImplementationOnce(actualConfig.resolveConfigs);
+      const { runDbMigrations } = await import('../../../../src/migrate');
+      await runDbMigrations();
+      const { registerRunEvaluationTool } = await import(
+        '../../../../src/commands/mcp/tools/runEvaluation'
+      );
+      const tool = vi.fn();
+      registerRunEvaluationTool({ tool } as unknown as McpServer);
+      const handler = tool.mock.calls[0][2];
+      const directory = await mkdtemp(path.join(os.tmpdir(), 'mcp-strip-env-'));
+      const original = {
+        basePath: cliState.basePath,
+        config: cliState.config,
+        selectedProviderConfigs: cliState.selectedProviderConfigs,
+      };
+      try {
+        const env = {
+          PROMPTFOO_STRIP_RESPONSE_OUTPUT: 'true',
+          PROMPTFOO_STRIP_TEST_VARS: 'true',
+          PROMPTFOO_STRIP_PROMPT_TEXT: 'true',
+        };
+        const envPath = path.join(directory, 'run.env');
+        await writeFile(
+          envPath,
+          Object.entries(env)
+            .map(([key, value]) => `${key}=${value}`)
+            .join('\n'),
+        );
+        const configPath = path.join(directory, 'config.json');
+        await writeFile(
+          configPath,
+          JSON.stringify({
+            prompts: ['{{privateValue}}'],
+            providers: ['echo'],
+            ...(source === 'config' ? { env } : { commandLineOptions: { envPath } }),
+            tests: [{ vars: { privateValue: 'PRIVATE_MCP_SCOPED_OUTPUT' } }],
+          }),
+        );
+        const result = await handler({ configPath, cache: false, write: false, share: false });
+        expect(result.isError).toBe(false);
+        expect(JSON.stringify(result)).not.toContain('PRIVATE_MCP_SCOPED_OUTPUT');
+        const payload = JSON.parse(result.content[0].text);
+        expect(payload.data.results.results[0].testCase.vars).toEqual({});
+        expect(payload.data.results.results[0].prompt.raw).toBe('[prompt stripped]');
+      } finally {
+        Object.assign(cliState, original);
+        await rm(directory, { recursive: true, force: true });
+      }
+    },
+  );
 
   it.each([false, true])(
     'keeps the actual Anthropic provider when using its advertised filter (mixed: %s)',

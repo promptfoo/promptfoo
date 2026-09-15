@@ -151,6 +151,7 @@ function resolveEnvPathsForPersistence(
 export interface EvalRunCustomization {
   beforeFilterTestSuite?: TestSuiteTransform;
   afterFilterTestSuite?: PostFilterTestSuiteTransform;
+  afterEvaluate?: (evalResult: Eval) => void | Promise<void>;
   evaluateOptionOverrides?: Partial<InternalEvaluateOptions>;
   allowConfigFilterRange?: boolean;
   allowConfigFilterSample?: boolean;
@@ -1605,7 +1606,11 @@ async function doEvalWithEnv(
 
   const runEvaluation = (initialization?: boolean) => {
     const runEnv: EnvOverrides = {};
-    return cliState.withEnv(runEnv, () => runEvaluationWithEnv(runEnv, initialization));
+    return cliState.withEnv(runEnv, async () => {
+      const result = await runEvaluationWithEnv(runEnv, initialization);
+      await customization.afterEvaluate?.(result);
+      return result;
+    });
   };
 
   const result = await runEvaluation(true /* initialization */);
