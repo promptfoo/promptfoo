@@ -333,10 +333,7 @@ function getPdfPromptText(
     mediaVarName ? getContextVar(contextVars, mediaVarName) : undefined,
     mediaValue,
   ].filter((value): value is string => Boolean(value));
-  const text = values.reduce(
-    (result, value) => result.split(value).join('[PDF attachment]'),
-    prompt,
-  );
+  let text = values.reduce((result, value) => result.split(value).join('[PDF attachment]'), prompt);
   if (values.includes(prompt.trim())) {
     return undefined;
   }
@@ -361,6 +358,23 @@ function getPdfPromptText(
   } catch {
     // A plain-text prompt can contain instructions around the attachment.
   }
+  for (const [key, input] of Object.entries(contextVars)) {
+    const value = nonEmptyString(input);
+    if (
+      !value ||
+      key === mediaVarName ||
+      (inputs?.[key] && normalizeInputDefinition(inputs[key]).type === 'text')
+    ) {
+      continue;
+    }
+    const attachment = value.match(/^data:[^,]+;base64,(.+)$/s);
+    if (attachment || inputs?.[key]) {
+      text = text.split(value).join('[Attachment]');
+      if (attachment) {
+        text = text.split(attachment[1]).join('[Attachment]');
+      }
+    }
+  }
   return text;
 }
 
@@ -376,10 +390,12 @@ function getDefaultTextPart(
   const configuredInputs = context?.test?.metadata?.pluginConfig?.inputs as Inputs | undefined;
   const inputs =
     configuredInputs && Object.keys(configuredInputs).length ? configuredInputs : undefined;
-  let text = shouldUsePromptAsText(prompt, mediaValue) ? prompt : undefined;
-  if (strategyId === 'pdf') {
-    text = getPdfPromptText(prompt, contextVars, mediaVarName, mediaValue, inputs) ?? text;
-  }
+  let text =
+    strategyId === 'pdf'
+      ? getPdfPromptText(prompt, contextVars, mediaVarName, mediaValue, inputs)
+      : shouldUsePromptAsText(prompt, mediaValue)
+        ? prompt
+        : undefined;
   if (strategyId === 'pdf' && inputs) {
     const companions = Object.fromEntries(
       Object.entries(inputs).flatMap(([key, definition]) => {

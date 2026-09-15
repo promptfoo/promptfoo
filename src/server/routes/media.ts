@@ -6,12 +6,7 @@
 
 import express from 'express';
 import logger from '../../logger';
-import {
-  getMediaStorage,
-  LocalFileSystemProvider,
-  mediaExists,
-  retrieveMedia,
-} from '../../storage';
+import { getMediaStorage, mediaExists, retrieveMedia } from '../../storage';
 import { MediaSchemas } from '../../types/api/media';
 import { replyValidationError, sendError } from '../utils/errors';
 import type { Request, Response } from 'express';
@@ -152,7 +147,7 @@ async function serveMedia(key: string, res: Response, contentAddressed: boolean)
       contentAddressed &&
         !key.startsWith('document/') &&
         contentType !== 'application/pdf' &&
-        getMediaStorage() instanceof LocalFileSystemProvider
+        getMediaStorage().hasImmutableKeys === true
         ? 'public, max-age=31536000, immutable'
         : 'private, no-cache',
     );

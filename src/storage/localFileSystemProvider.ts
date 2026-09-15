@@ -59,6 +59,7 @@ function computeHash(data: Buffer): string {
  */
 export class LocalFileSystemProvider implements MediaStorageProvider {
   readonly providerId = 'local';
+  readonly hasImmutableKeys = true;
   private basePath: string;
   private hashIndexPath: string;
   private hashIndex: Map<string, string> = new Map();

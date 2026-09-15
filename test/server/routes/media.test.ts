@@ -357,15 +357,36 @@ describe('Media Routes', () => {
   describe('GET /api/media/:type/:filename', () => {
     beforeEach(() => {
       vi.resetAllMocks();
+      mockedGetMediaStorage.mockReturnValue({ providerId: 'custom' } as MediaStorageProvider);
     });
 
-    it.each(['document/abcdef123456.pdf', 'image/abcdef123456.png'])(
-      'revalidates mutable provider keys that resemble local content hashes: %s',
+    it.each(['image/abcdef123456.png', 'audio/abcdef123456.wav'])(
+      'supports immutable caching for custom providers that declare immutable keys: %s',
       async (key) => {
+        mockedGetMediaStorage.mockReturnValue({
+          providerId: 'custom',
+          hasImmutableKeys: true,
+        } as MediaStorageProvider);
+        mockedMediaExists.mockResolvedValue(true);
+        mockedRetrieveMedia.mockResolvedValue(Buffer.from('Immutable media'));
+        const response = await api.get(`/api/media/${key}`);
+        expect(response.status).toBe(200);
+        expect(response.headers['cache-control']).toBe('public, max-age=31536000, immutable');
+      },
+    );
+
+    it.each([
+      ['document/abcdef123456.pdf', '%PDF-1.7'],
+      ['image/abcdef123456.png', '%PDF-1.7'],
+      ['image/abcdef123456.png', 'PNG'],
+      ['audio/abcdef123456.wav', 'RIFF'],
+    ])(
+      'revalidates mutable provider keys that resemble local content hashes: %s (%s)',
+      async (key, prefix) => {
         mockedGetMediaStorage.mockReturnValue({ providerId: 'local-fs' } as MediaStorageProvider);
         mockedMediaExists.mockResolvedValue(true);
-        const original = Buffer.from('%PDF-1.7 original');
-        const replacement = Buffer.from('%PDF-1.7 replacement');
+        const original = Buffer.from(`${prefix} original`);
+        const replacement = Buffer.from(`${prefix} replacement`);
         mockedRetrieveMedia.mockResolvedValueOnce(original).mockResolvedValueOnce(replacement);
 
         const first = await api.get(`/api/media/${key}`);

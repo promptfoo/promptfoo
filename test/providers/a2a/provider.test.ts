@@ -355,7 +355,10 @@ describe('A2AProvider', () => {
         { request: 'Read the invoice.', locale: 'en-US' },
         {},
       ];
-      for (const companions of companionCases) {
+      for (const { companions, includeInvoice } of companionCases.flatMap((companions) => [
+        { companions, includeInvoice: true },
+        { companions, includeInvoice: false },
+      ])) {
         vi.mocked(fetchWithTimeout).mockResolvedValueOnce(
           jsonResponse({ message: { role: 'ROLE_AGENT', parts: [{ text: 'pdf ok' }] } }),
         );
@@ -373,7 +376,7 @@ describe('A2AProvider', () => {
           sessionContext: 'Private session context',
         };
         const prompt = JSON.stringify({
-          invoice: vars.invoice,
+          ...(includeInvoice ? { invoice: vars.invoice } : { photo: vars.photo }),
           ...companions,
           optionalInput: '',
         });
@@ -476,6 +479,69 @@ describe('A2AProvider', () => {
         inputs: { question: 'What is the total?', locale: 'en' },
       });
       expect(text).not.toContain('Private credential');
+    },
+  );
+
+  it.each(['1.0', '0.3.0'])(
+    'redacts auxiliary attachments from rendered PDF tasks in A2A %s',
+    async (version) => {
+      const raw = Buffer.from('%PDF-1.7 selected document').toString('base64');
+      const document = `data:application/pdf;base64,${raw}`;
+      const scan = Buffer.from('PNG declared attachment').toString('base64');
+      const secret = Buffer.from('JPEG undeclared attachment').toString('base64');
+      const question = 'data:application/pdf;base64,this-is-a-question';
+      for (const rawScan of [false, true]) {
+        const vars = {
+          document,
+          scan: rawScan ? scan : `data:image/png;base64,${scan}`,
+          secretFile: `data:image/jpeg;base64,${secret}`,
+          question,
+          referenceCode: 'A'.repeat(100),
+        };
+        for (const plain of [false, true]) {
+          const prompt = plain
+            ? `Read ${document}. References: ${vars.scan} and ${vars.secretFile}. ${question}`
+            : JSON.stringify(vars);
+          vi.mocked(fetchWithTimeout).mockResolvedValueOnce(
+            jsonResponse({ message: { role: 'ROLE_AGENT', parts: [{ text: 'pdf ok' }] } }),
+          );
+          await provider({ protocolVersion: version }).callApi(prompt, {
+            prompt: { raw: prompt, label: 'PDF task with attachments' },
+            vars,
+            test: {
+              metadata: {
+                strategyId: 'pdf',
+                pdf: { input: 'document' },
+                pluginConfig: {
+                  inputs: {
+                    document: { type: 'pdf', description: 'Invoice' },
+                    scan: { type: 'image', description: 'Receipt' },
+                    question: 'Question',
+                  },
+                },
+              },
+            },
+          });
+          const body = JSON.parse(vi.mocked(fetchWithTimeout).mock.lastCall?.[1]?.body as string);
+          const text = body.message.parts.find((part: { text?: string }) => part.text).text;
+          expect(JSON.parse(text)).toEqual({
+            task: plain
+              ? `Read [PDF attachment]. References: [Attachment] and [Attachment]. ${question}`
+              : JSON.stringify({
+                  ...vars,
+                  document: '[PDF attachment]',
+                  scan: '[Attachment]',
+                  secretFile: '[Attachment]',
+                }),
+            inputs: { question },
+          });
+          for (const bytes of [raw, scan, secret]) {
+            expect(text).not.toContain(bytes);
+          }
+          const filePart = body.message.parts.at(-1);
+          expect(version === '0.3.0' ? filePart.file.fileWithBytes : filePart.raw).toBe(raw);
+        }
+      }
     },
   );
 

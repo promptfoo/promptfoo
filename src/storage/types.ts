@@ -81,6 +81,9 @@ export interface MediaStorageProvider {
   /** Provider identifier (e.g., 'local', 's3') */
   readonly providerId: string;
 
+  /** Whether a stored key always identifies the same bytes. Enables immutable media caching. */
+  readonly hasImmutableKeys?: boolean;
+
   /**
    * Store media data
    * @param data - Binary data to store
