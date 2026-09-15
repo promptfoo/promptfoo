@@ -1557,6 +1557,34 @@ describe('importCommand', () => {
       expect(replacedEval!.config.description).toBe(sampleData.config.description);
     });
 
+    it.each([
+      { events: {} },
+      { events: [null] },
+      { events: [{ name: 'verifier', timestamp: 'invalid' }] },
+    ])('preserves the existing eval when imported events are malformed: %j', async ({ events }) => {
+      const sampleFilePath = path.join(__dirname, '../__fixtures__/sample-export.json');
+      const replacement = JSON.parse(fs.readFileSync(sampleFilePath, 'utf8'));
+      importCommand(program);
+      await program.parseAsync(['node', 'test', 'import', sampleFilePath]);
+      replacement.traces = [
+        {
+          traceId: 'invalid-events',
+          evaluationId: replacement.evalId,
+          testCaseId: 'fixture',
+          spans: [{ spanId: 'span', name: 'verifier', startTime: 1, events }],
+        },
+      ];
+      tempFilePath = path.join(__dirname, `temp-force-events-${Date.now()}.json`);
+      fs.writeFileSync(tempFilePath, JSON.stringify(replacement));
+      const second = new Command();
+      importCommand(second);
+      await second.parseAsync(['node', 'test', 'import', '--force', tempFilePath]);
+      expect(process.exitCode).toBe(1);
+      expect(logger.error).toHaveBeenCalledWith(expect.stringContaining('trace span events'));
+      expect(await Eval.findById(replacement.evalId)).toBeDefined();
+      expect(await EvalResult.findManyByEvalId(replacement.evalId)).toHaveLength(4);
+    });
+
     it('should keep the existing eval when a --force replacement fails preflight', async () => {
       const sampleFilePath = path.join(__dirname, '../__fixtures__/sample-export.json');
       const sampleData = JSON.parse(fs.readFileSync(sampleFilePath, 'utf-8'));

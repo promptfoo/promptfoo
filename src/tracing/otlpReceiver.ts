@@ -55,6 +55,8 @@ interface OTLPSpan {
   endTimeUnixNano?: string;
   attributes?: OTLPAttribute[];
   events?: OTLPSpanEvent[];
+  droppedAttributesCount?: number;
+  droppedEventsCount?: number;
   status?: {
     code: number;
     message?: string;
@@ -65,12 +67,14 @@ interface OTLPSpanEvent {
   timeUnixNano?: string;
   name: string;
   attributes?: OTLPAttribute[];
+  droppedAttributesCount?: number;
 }
 
 interface OTLPScopeSpan {
   scope?: {
     name: string;
     version?: string;
+    droppedAttributesCount?: number;
   };
   spans: OTLPSpan[];
 }
@@ -78,6 +82,7 @@ interface OTLPScopeSpan {
 interface OTLPResourceSpan {
   resource?: {
     attributes?: OTLPAttribute[];
+    droppedAttributesCount?: number;
   };
   scopeSpans: OTLPScopeSpan[];
 }
@@ -745,6 +750,16 @@ export class OTLPReceiver {
             traceId,
             span: {
               spanId,
+              ...(([
+                resourceSpan.resource?.droppedAttributesCount,
+                scopeSpan.scope?.droppedAttributesCount,
+                span.droppedAttributesCount,
+                span.droppedEventsCount,
+              ].some((count) => (count ?? 0) > 0) ||
+                (Array.isArray(span.events) &&
+                  span.events.some((event) => (event?.droppedAttributesCount ?? 0) > 0))) && {
+                incomplete: true,
+              }),
               parentSpanId,
               name: span.name,
               startTime, // Convert to ms
@@ -988,7 +1003,12 @@ export class OTLPReceiver {
 
     return (resourceSpan.scopeSpans || []).flatMap((scopeSpan) =>
       (scopeSpan.spans || []).map((span) =>
-        this.createDecodedParsedTrace(resourceAttributes, scopeSpan, span),
+        this.createDecodedParsedTrace(
+          resourceAttributes,
+          scopeSpan,
+          span,
+          resourceSpan.resource?.droppedAttributesCount,
+        ),
       ),
     );
   }
@@ -997,6 +1017,7 @@ export class OTLPReceiver {
     resourceAttributes: Record<string, any>,
     scopeSpan: DecodedScopeSpans,
     span: DecodedSpan,
+    droppedResourceAttributes?: number,
   ): ParsedTrace {
     const traceId = bytesToHex(span.traceId, 32);
     const spanId = bytesToHex(span.spanId, 16);
@@ -1013,6 +1034,15 @@ export class OTLPReceiver {
       traceId,
       span: {
         spanId,
+        ...(([
+          droppedResourceAttributes,
+          scopeSpan.scope?.droppedAttributesCount,
+          span.droppedAttributesCount,
+          span.droppedEventsCount,
+        ].some((count) => (count ?? 0) > 0) ||
+          span.events?.some((event) => (event.droppedAttributesCount ?? 0) > 0)) && {
+          incomplete: true,
+        }),
         parentSpanId,
         name: span.name,
         startTime: this.toMilliseconds(span.startTimeUnixNano) ?? 0,

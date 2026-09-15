@@ -794,8 +794,12 @@ function extractAgenticRuntimeEvidence(
     }
   }
 
+  const metadata = gradingContext?.providerResponse?.metadata;
+  const providerEvidence = Object.fromEntries(
+    Object.entries(metadata ?? {}).filter(([key]) => /^(?:agentic|agentSdk)Evidence$/i.test(key)),
+  );
   const scopedEvidenceCandidates = parseEvidenceCandidates(
-    gradingContext?.providerResponse?.metadata,
+    { pluginId: metadata?.pluginId, ...providerEvidence },
     { preserveInvalid: true },
   )
     .map((evidence) => normalizeEvidenceForPlugin(evidence as AgenticRuntimeEvidence, pluginId))

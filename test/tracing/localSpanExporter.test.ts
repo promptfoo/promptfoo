@@ -89,6 +89,36 @@ describe('LocalSpanExporter', () => {
   }
 
   describe('export', () => {
+    it.each(['span attributes', 'events', 'event attributes'])(
+      'preserves loss of %s for the store',
+      async (source) => {
+        const span = createMockSpan();
+        Object.assign(
+          span,
+          source === 'span attributes'
+            ? { droppedAttributesCount: 1 }
+            : source === 'events'
+              ? { droppedEventsCount: 1 }
+              : {
+                  events: [
+                    {
+                      name: 'verifier',
+                      time: [1000, 0],
+                      attributes: {},
+                      droppedAttributesCount: 1,
+                    },
+                  ],
+                },
+        );
+        await exportSpans([span]);
+        expect(mockAddSpans).toHaveBeenCalledWith(
+          'trace-id-123',
+          [expect.objectContaining({ incomplete: true })],
+          expect.anything(),
+        );
+      },
+    );
+
     it('should export empty span array successfully', async () => {
       const result = await exportSpans([]);
 

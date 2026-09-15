@@ -52,10 +52,7 @@ const traceResponse = {
                 {
                   name: 'tool event',
                   timeUnixNano: '1704067200500000000',
-                  attributes: [
-                    null as any,
-                    { key: 'command', value: { stringValue: 'echo fixture' } },
-                  ],
+                  attributes: [{ key: 'command', value: { stringValue: 'echo fixture' } }],
                 },
               ],
             },
@@ -78,6 +75,41 @@ describe('TempoProvider', () => {
   beforeEach(() => {
     vi.resetAllMocks();
     mockedFetch.mockImplementation(async () => response(traceResponse));
+  });
+
+  it.each(['resource', 'scope', 'span', 'event', 'event count'])(
+    'rejects Tempo snapshots with dropped %s evidence',
+    async (source) => {
+      const data = structuredClone(traceResponse);
+      const batch = data.batches[0];
+      const scope = batch.scopeSpans[0];
+      const span = scope.spans[0];
+      const item =
+        source === 'resource'
+          ? batch.resource
+          : source === 'scope'
+            ? scope.scope
+            : source === 'event'
+              ? span.events![0]
+              : span;
+      Object.assign(
+        item,
+        source === 'event count' ? { droppedEventsCount: 1 } : { droppedAttributesCount: 1 },
+      );
+      mockedFetch.mockResolvedValueOnce(response(data));
+      await expect(
+        new TempoProvider({ id: 'tempo', endpoint: 'http://tempo:3200' }).fetchTrace(TRACE_ID),
+      ).rejects.toMatchObject({ invalidEvidence: true });
+    },
+  );
+
+  it('rejects malformed event attributes instead of dropping them', async () => {
+    const data = structuredClone(traceResponse);
+    data.batches[0].scopeSpans[0].spans[0].events![0].attributes.push(null as any);
+    mockedFetch.mockResolvedValueOnce(response(data));
+    await expect(
+      new TempoProvider({ id: 'tempo', endpoint: 'http://tempo:3200' }).fetchTrace(TRACE_ID),
+    ).rejects.toMatchObject({ invalidEvidence: true });
   });
 
   it.each(
@@ -272,13 +304,18 @@ describe('TempoProvider', () => {
     async (kind) => {
       const data = structuredClone(traceResponse);
       const event = data.batches[0].scopeSpans[0].spans[0].events![0];
-      event.attributes =
-        kind === 'coerced'
-          ? [
-              { key: 1, value: { stringValue: 'private' } },
-              { key: '1', value: { stringValue: 'public' } },
-            ]
-          : [{ key: 'authorization' }, { key: 'authorization', value: { stringValue: 'public' } }];
+      Object.assign(event, {
+        attributes:
+          kind === 'coerced'
+            ? [
+                { key: 1, value: { stringValue: 'private' } },
+                { key: '1', value: { stringValue: 'public' } },
+              ]
+            : [
+                { key: 'authorization' },
+                { key: 'authorization', value: { stringValue: 'public' } },
+              ],
+      });
       mockedFetch.mockResolvedValue(response(data));
       await expect(
         new TempoProvider({ id: 'tempo', endpoint: 'http://tempo:3200' }).fetchTrace(TRACE_ID),
@@ -354,12 +391,39 @@ describe('TempoProvider', () => {
     },
   );
 
-  it('preserves sub-millisecond event order and drops events without a timestamp', async () => {
+  it.each([undefined, '0', 'bad-clock'])(
+    'rejects a verifier event with an invalid timestamp: %s',
+    async (timeUnixNano) => {
+      const data = structuredClone(traceResponse);
+      data.batches[0].scopeSpans[0].spans[0].events = [
+        {
+          name: 'agentic verifier finding',
+          timeUnixNano,
+          attributes: [
+            {
+              key: 'agenticEvidence',
+              value: {
+                stringValue: JSON.stringify({
+                  pluginId: 'agentic:approval-continuity',
+                  findings: [{ kind: 'approval-continuity' }],
+                }),
+              },
+            },
+          ],
+        },
+      ] as any;
+      mockedFetch.mockResolvedValue(response(data));
+      await expect(
+        new TempoProvider({ id: 'tempo', endpoint: 'http://tempo:3200' }).fetchTrace(TRACE_ID),
+      ).rejects.toMatchObject({ invalidEvidence: true });
+    },
+  );
+
+  it('preserves sub-millisecond event order', async () => {
     const data = structuredClone(traceResponse);
     data.batches[0].scopeSpans[0].spans[0].events = [
       { name: 'tool update_seat', timeUnixNano: '1704067200000000200', attributes: [] },
       { name: 'guardrail update_seat', timeUnixNano: '1704067200000000300', attributes: [] },
-      { name: 'undated guardrail', attributes: [] } as any,
     ];
     mockedFetch.mockResolvedValue(response(data));
     const result = await new TempoProvider({
@@ -438,7 +502,7 @@ describe('TempoProvider', () => {
       data.batches[0].scopeSpans[0].spans[0].events!.unshift({
         name: 'broken event',
         timeUnixNano: '1704067200500000000',
-        attributes: [{ key: 'broken', value }],
+        attributes: [{ key: 'broken', value: value as any }],
       });
       mockedFetch.mockResolvedValueOnce(response(data));
       await expect(

@@ -38,19 +38,25 @@ interface TempoSpan {
   startTimeUnixNano: string;
   endTimeUnixNano?: string;
   attributes?: Array<{ key: string; value: TempoAttributeValue }>;
+  droppedAttributesCount?: number;
+  droppedEventsCount?: number;
   events?: Array<{
     name: string;
     timeUnixNano?: string;
     attributes?: Array<{ key: string; value: TempoAttributeValue }>;
+    droppedAttributesCount?: number;
   }>;
   status?: { code?: number | string; message?: string };
 }
 
 interface TempoTraceResponse {
   batches?: Array<{
-    resource?: { attributes?: Array<{ key: string; value: TempoAttributeValue }> };
+    resource?: {
+      attributes?: Array<{ key: string; value: TempoAttributeValue }>;
+      droppedAttributesCount?: number;
+    };
     scopeSpans?: Array<{
-      scope?: { name?: string; version?: string };
+      scope?: { name?: string; version?: string; droppedAttributesCount?: number };
       spans?: TempoSpan[];
     }>;
   }>;
@@ -195,6 +201,10 @@ function transformSpan(
     throw new Error('Span status message must be a string');
   }
 
+  if (span.events !== undefined && !Array.isArray(span.events)) {
+    throw new Error('Tempo span events must be an array');
+  }
+
   const startTime = nanoToMs(span.startTimeUnixNano);
   const endTimeUnixNano = span.endTimeUnixNano;
   const endTime = endTimeUnixNano ? nanoToMs(endTimeUnixNano) : undefined;
@@ -223,35 +233,23 @@ function transformSpan(
     }),
     statusCode: normalizeStatusCode(span.status?.code),
     statusMessage: span.status?.message,
-    events: Array.isArray(span.events)
-      ? span.events.flatMap((event) => {
-          if (
-            !event ||
-            typeof event.name !== 'string' ||
-            !event.name.trim() ||
-            !event.timeUnixNano ||
-            /^0+$/.test(event.timeUnixNano)
-          ) {
-            return [];
-          }
-          try {
-            return [
-              {
-                name: event.name,
-                timestamp: nanoToMs(event.timeUnixNano),
-                timestampNanos: event.timeUnixNano,
-                attributes: attributesToRecord(event.attributes?.filter(Boolean)),
-              },
-            ];
-          } catch (error) {
-            if (error instanceof TraceProviderError) {
-              throw error;
-            }
-            // A malformed event must not discard the span and its other verifier evidence.
-            return [];
-          }
-        })
-      : [],
+    events: span.events?.map((event) => {
+      if (
+        !event ||
+        typeof event.name !== 'string' ||
+        !event.name.trim() ||
+        !event.timeUnixNano ||
+        /^0+$/.test(event.timeUnixNano)
+      ) {
+        throw new Error('Tempo event must have a name and a valid timestamp');
+      }
+      return {
+        name: event.name,
+        timestamp: nanoToMs(event.timeUnixNano),
+        timestampNanos: event.timeUnixNano,
+        attributes: attributesToRecord(event.attributes),
+      };
+    }),
   };
 }
 
@@ -321,6 +319,17 @@ export class TempoProvider implements TraceProvider {
             );
             if (!normalized) {
               continue;
+            }
+            if (
+              [
+                batch.resource?.droppedAttributesCount,
+                scopeSpan.scope?.droppedAttributesCount,
+                span.droppedAttributesCount,
+                span.droppedEventsCount,
+              ].some((count) => (count ?? 0) > 0) ||
+              span.events?.some((event) => (event.droppedAttributesCount ?? 0) > 0)
+            ) {
+              throw new Error('Tempo returned incomplete trace data: dropped telemetry');
             }
             const previous = spans.get(normalized.spanId);
             if (previous && !isDeepStrictEqual(previous, normalized)) {

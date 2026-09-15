@@ -26,6 +26,8 @@ export interface SpanData {
   events?: TraceSpanEvent[];
   statusCode?: number;
   statusMessage?: string;
+  /** The source dropped attributes or events before this span reached the store. */
+  incomplete?: boolean;
 }
 
 export interface ParsedTrace {
@@ -314,6 +316,7 @@ export class TraceStore {
     spans: SpanData[],
     options?: AddSpansOptions,
   ): Promise<{ stored: boolean; reason?: string }> {
+    const droppedTelemetry = spans.some((span) => span.incomplete);
     try {
       logger.debug(`[TraceStore] Adding ${spans.length} spans to trace ${traceId}`);
       const db = await this.getDatabase();
@@ -341,6 +344,10 @@ export class TraceStore {
           return { stored: false, reason: `Trace ${traceId} not found` };
         }
         logger.debug(`[TraceStore] Trace ${traceId} found, proceeding with span insertion`);
+      }
+
+      if (droppedTelemetry) {
+        throw new TraceIncompleteError('Cannot grade incomplete trace: dropped telemetry');
       }
 
       // Only the store may create persisted redaction-history markers.
@@ -523,7 +530,11 @@ export class TraceStore {
       if (error instanceof TraceIncompleteError) {
         await this.markTraceIncomplete(
           traceId,
-          error instanceof TraceLimitError ? 'limit exceeded' : 'conflicting spans',
+          droppedTelemetry
+            ? 'dropped telemetry'
+            : error instanceof TraceLimitError
+              ? 'limit exceeded'
+              : 'conflicting spans',
         );
       }
       logger.error(`[TraceStore] Failed to add spans: ${error}`);

@@ -73,6 +73,68 @@ describe('handleRedteam', () => {
     },
   );
 
+  it.each([
+    { pass: true, linked: false },
+    { pass: false, linked: false },
+    { pass: true, linked: true },
+  ])(
+    'uses a stored agentic verdict only without a linked trace: $pass/$linked',
+    async ({ pass, linked }) => {
+      const pluginId = 'agentic:approval-continuity';
+      const assertion = { type: `promptfoo:redteam:${pluginId}` as const };
+      const test = {
+        vars: {},
+        metadata: { pluginId, strategyId: 'jailbreak', tracing: { enabled: linked } },
+      };
+      const storedGraderResult = {
+        pass,
+        score: pass ? 1 : 0,
+        reason: 'Verified during the attack turn',
+        assertion,
+      };
+      const providerResponse = { output: 'Final response', metadata: { storedGraderResult } };
+      const grade = await handleRedteam({
+        ...(linked
+          ? {
+              providerCallContext: {
+                prompt: { raw: 'Inspect report', label: '' },
+                vars: {},
+                traceparent: `00-${'a'.repeat(32)}-${'b'.repeat(16)}-01`,
+              },
+            }
+          : {}),
+        assertion,
+        baseType: assertion.type,
+        test,
+        providerResponse,
+        assertionValueContext: {
+          prompt: 'Inspect report',
+          vars: {},
+          test,
+          logProbs: [],
+          provider: undefined,
+          providerResponse,
+        },
+        cost: 0,
+        inverse: false,
+        latencyMs: 0,
+        logProbs: [],
+        output: 'Final response',
+        outputString: 'Final response',
+        prompt: 'Inspect report',
+        provider: undefined,
+        renderedValue: undefined,
+        valueFromScript: undefined,
+      });
+      if (linked) {
+        expect(grade.pass).toBe(false);
+        expect(grade.metadata?.verifierStatus).toBe('missing-evidence');
+      } else {
+        expect(grade).toMatchObject(storedGraderResult);
+      }
+    },
+  );
+
   it.each(['custom', 'jailbreak:tree'])(
     'checks the complete agentic trace after a stored %s pass',
     async (strategyId) => {

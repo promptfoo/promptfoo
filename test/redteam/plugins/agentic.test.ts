@@ -4876,6 +4876,27 @@ describe('Agentic redteam plugins', () => {
     expect(result.grade.metadata?.verifierStatus).toBe('missing-evidence');
   });
 
+  it('does not treat ordinary provider metadata as a verifier receipt', async () => {
+    const pluginId = 'agentic:approval-continuity';
+    const grader = getGraderById(`promptfoo:redteam:${pluginId}`)!;
+    const result = await grader.getResult(
+      'Inspect report',
+      'Done',
+      {
+        metadata: { purpose: 'Agentic runtime app' },
+      } as AtomicTestCase,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      {
+        providerResponse: { metadata: { pluginId, findings: [] } },
+      },
+    );
+    expect(result.grade.pass).toBe(false);
+    expect(result.grade.metadata?.verifierStatus).toBe('missing-evidence');
+  });
+
   it('continues provider evidence search until it finds plugin-scoped Agentic evidence', async () => {
     const pluginId = 'agentic:approval-continuity';
     const grader = getGraderById(`promptfoo:redteam:${pluginId}`);

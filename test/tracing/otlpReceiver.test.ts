@@ -84,6 +84,59 @@ describe('OTLPReceiver', () => {
     deleteOldTraces: MockedFunction<() => Promise<void>>;
   };
 
+  it.each(
+    ['json', 'protobuf'].flatMap((format) =>
+      [
+        'span attributes',
+        'events',
+        'event attributes',
+        'resource attributes',
+        'scope attributes',
+      ].map((source) => ({ format, source })),
+    ),
+  )('preserves dropped $source from $format', async ({ format, source }) => {
+    const span = {
+      traceId: format === 'json' ? 'a'.repeat(32) : Buffer.from('a'.repeat(32), 'hex'),
+      spanId: format === 'json' ? 'b'.repeat(16) : Buffer.from('b'.repeat(16), 'hex'),
+      name: 'verifier',
+      startTimeUnixNano: '1000000',
+      endTimeUnixNano: '2000000',
+      ...(source === 'span attributes' ? { droppedAttributesCount: 1 } : {}),
+      ...(source === 'events' ? { droppedEventsCount: 1 } : {}),
+      events: [
+        {
+          name: 'verifier',
+          timeUnixNano: '1500000',
+          droppedAttributesCount: source === 'event attributes' ? 1 : 0,
+        },
+      ],
+    };
+    const data = {
+      resourceSpans: [
+        {
+          resource: { droppedAttributesCount: source === 'resource attributes' ? 1 : 0 },
+          scopeSpans: [
+            {
+              scope: { droppedAttributesCount: source === 'scope attributes' ? 1 : 0 },
+              spans: [span],
+            },
+          ],
+        },
+      ],
+    };
+    const body = format === 'json' ? data : await encodeOTLPRequest(data);
+    await request(receiver.getApp())
+      .post('/v1/traces')
+      .set('Content-Type', format === 'json' ? 'application/json' : 'application/x-protobuf')
+      .send(body)
+      .expect(200);
+    expect(mockTraceStore.addSpans).toHaveBeenCalledWith(
+      'a'.repeat(32),
+      [expect.objectContaining({ incomplete: true })],
+      expect.anything(),
+    );
+  });
+
   beforeAll(async () => {
     mockedTraceStore = vi.mocked(await import('../../src/tracing/store'));
   });

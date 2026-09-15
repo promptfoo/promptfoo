@@ -110,6 +110,7 @@ export interface DecodedSpanEvent {
   timeUnixNano?: Long | number;
   name: string;
   attributes?: DecodedAttribute[];
+  droppedAttributesCount?: number;
 }
 
 /**
@@ -141,6 +142,7 @@ export interface DecodedScope {
   name?: string;
   version?: string;
   attributes?: DecodedAttribute[];
+  droppedAttributesCount?: number;
 }
 
 /**

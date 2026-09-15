@@ -76,10 +76,12 @@ export const handleRedteam = async ({
   renderedValue,
   providerResponse,
   assertionValueContext,
+  providerCallContext,
 }: AssertionParams): Promise<GradingResult> => {
-  // Agentic assertions must also inspect the complete trace collected after strategy execution.
+  // Inspect the final agentic trace, including when a linked trace is not available yet.
   if (
-    !baseType.startsWith('promptfoo:redteam:agentic:') &&
+    (!baseType.startsWith('promptfoo:redteam:agentic:') ||
+      (!assertionValueContext.trace && !providerCallContext?.traceparent)) &&
     providerResponse.metadata?.storedGraderResult &&
     test.metadata?.pluginId &&
     assertion.type.includes(test.metadata.pluginId)

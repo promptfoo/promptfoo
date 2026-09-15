@@ -161,6 +161,19 @@ describe('TraceStore', () => {
   });
 
   describe('addSpans', () => {
+    it('marks a trace incomplete before accepting telemetry with dropped evidence', async () => {
+      const markIncomplete = vi.spyOn(traceStore, 'markTraceIncomplete').mockResolvedValue();
+      await expect(
+        traceStore.addSpans(
+          'trace',
+          [{ spanId: 'partial', name: 'verifier', startTime: 1, incomplete: true } as any],
+          { skipTraceCheck: true },
+        ),
+      ).rejects.toThrow('dropped telemetry');
+      expect(markIncomplete).toHaveBeenCalledWith('trace', 'dropped telemetry');
+      expect(mockDb.insert).not.toHaveBeenCalled();
+    });
+
     it.each(['spanId', 'parentSpanId'] as const)(
       'counts persisted %s bytes toward the cumulative limit',
       async (field) => {

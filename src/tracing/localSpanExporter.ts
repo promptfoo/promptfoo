@@ -134,6 +134,11 @@ export class LocalSpanExporter implements SpanExporter {
 
     return {
       spanId: spanContext.spanId,
+      ...((span.droppedAttributesCount > 0 ||
+        span.droppedEventsCount > 0 ||
+        span.events.some((event) => (event.droppedAttributesCount ?? 0) > 0)) && {
+        incomplete: true,
+      }),
       parentSpanId: span.parentSpanContext?.spanId || undefined,
       name: span.name,
       startTime: startTimeMs,

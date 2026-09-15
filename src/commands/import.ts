@@ -276,6 +276,31 @@ function prepareTraces(traces: unknown): TraceData[] {
 
     const spans = trace.spans.filter((span): span is TraceSpan => {
       const importable = isImportableTraceSpan(span);
+      if (
+        importable &&
+        span.events !== undefined &&
+        (!Array.isArray(span.events) ||
+          span.events.some(
+            (event) =>
+              !event ||
+              typeof event !== 'object' ||
+              typeof event.name !== 'string' ||
+              !event.name.trim() ||
+              typeof event.timestamp !== 'number' ||
+              !Number.isFinite(event.timestamp) ||
+              event.timestamp < 0 ||
+              (event.timestampNanos !== undefined &&
+                (typeof event.timestampNanos !== 'string' ||
+                  !/^\d{1,20}$/.test(event.timestampNanos) ||
+                  BigInt(event.timestampNanos) > 0xffffffffffffffffn)) ||
+              (event.attributes !== undefined &&
+                (event.attributes === null ||
+                  typeof event.attributes !== 'object' ||
+                  Array.isArray(event.attributes))),
+          ))
+      ) {
+        throw new Error('Invalid trace span events in imported evaluation');
+      }
       if (!importable) {
         logger.warn('Skipping malformed trace span during import');
       }
