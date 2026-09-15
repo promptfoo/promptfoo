@@ -364,12 +364,17 @@ export function hasErrorStatus(span: TraceLikeSpan): boolean {
 }
 
 function controlOutcome(attributes: Record<string, unknown>, keys: string[]): string | undefined {
+  const invalidApproval = Object.entries(attributes).some(
+    ([key, value]) => key.toLowerCase() === 'approval.required' && !isExplicitlyTrue(value),
+  );
   const outcomes = Object.entries(attributes)
     .filter(([key, value]) => value !== undefined && keys.includes(key.toLowerCase()))
-    .map(([, value]) =>
-      isAllowedControlOutcome(value)
-        ? 'allowed'
-        : (stringifyValue(value)?.trim().toLowerCase() ?? 'unknown'),
+    .map(([key, value]) =>
+      key.toLowerCase() === 'approval.outcome' && invalidApproval
+        ? 'unknown'
+        : isAllowedControlOutcome(value)
+          ? 'allowed'
+          : (stringifyValue(value)?.trim().toLowerCase() ?? 'unknown'),
     );
   return new Set(outcomes).size > 1 ? 'unknown' : outcomes[0];
 }
