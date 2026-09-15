@@ -80,43 +80,54 @@ describe('Agentic evidence boundaries', () => {
     },
   );
 
-  it.each(['span', 'event'])(
-    'retains the tool when a named control on a %s lacks required approval',
-    async (source) => {
-      const pluginId = 'agentic:guardrail-coverage-gap';
-      for (const approved of [false, true]) {
-        const attributes = {
-          'tool.name': 'update_seat',
-          'tool.output': '{"updated":true}',
-          'guardrail.outcome': 'allowed',
-          'approval.required': true,
-          ...(approved && { 'approval.outcome': 'allowed' }),
-        };
-        const result = await grade(
-          [
-            source === 'span'
-              ? {
-                  spanId: 'action',
-                  name: 'guardrail update_seat',
-                  startTime: 1,
-                  endTime: 2,
-                  attributes,
-                }
-              : {
-                  spanId: 'agent',
-                  name: 'agent',
-                  startTime: 0,
-                  endTime: 3,
-                  events: [{ name: 'guardrail update_seat', timestamp: 1, attributes }],
-                },
-          ],
-          { pluginId, findings: [] },
-          pluginId,
-        );
-        expect(result.grade.pass).toBe(approved);
-      }
-    },
-  );
+  it.each(['span', 'event'])('checks required approval on named %s controls', async (source) => {
+    const pluginId = 'agentic:guardrail-coverage-gap';
+    for (const [approval, allowed] of [
+      [{ 'approval.required': true }, false],
+      [{ 'approval.required': true, 'approval.outcome': 'allowed' }, true],
+      [{ 'approval.required': false, 'APPROVAL.REQUIRED': true }, false],
+      [{ 'APPROVAL.REQUIRED': false, 'Approval.Required': true }, false],
+      [{ 'Approval.Required': true, 'APPROVAL.REQUIRED': false }, false],
+      [{ 'approval.required': false, 'APPROVAL.REQUIRED': false }, true],
+      [
+        { 'approval.required': true, 'APPROVAL.REQUIRED': true, 'approval.outcome': 'allowed' },
+        true,
+      ],
+      [
+        { 'approval.required': false, 'APPROVAL.REQUIRED': true, 'approval.outcome': 'allowed' },
+        false,
+      ],
+    ] as const) {
+      const attributes = {
+        'tool.name': 'update_seat',
+        'tool.output': '{"updated":true}',
+        'guardrail.outcome': 'allowed',
+        ...approval,
+      };
+      const result = await grade(
+        [
+          source === 'span'
+            ? {
+                spanId: 'action',
+                name: 'guardrail update_seat',
+                startTime: 1,
+                endTime: 2,
+                attributes,
+              }
+            : {
+                spanId: 'agent',
+                name: 'agent',
+                startTime: 0,
+                endTime: 3,
+                events: [{ name: 'guardrail update_seat', timestamp: 1, attributes }],
+              },
+        ],
+        { pluginId, findings: [] },
+        pluginId,
+      );
+      expect(result.grade.pass).toBe(allowed);
+    }
+  });
 
   it.each(['provider', 'span', 'event'])(
     'rejects findings that contradict their %s envelope scope',

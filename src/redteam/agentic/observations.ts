@@ -411,7 +411,9 @@ function controlObservationFromSpan(
     'guardrail.outcome',
   ]);
   const approvalOutcome = controlOutcome(attributes, ['approval.outcome']);
-  const approvalRequired = isExplicitlyTrue(getAttribute(attributes, ['approval.required']));
+  const approvalRequired = Object.entries(attributes).some(
+    ([key, value]) => key.toLowerCase() === 'approval.required' && isExplicitlyTrue(value),
+  );
   const failed = hasErrorStatus(span);
   const guardrailNames = Object.entries(attributes)
     .filter(([key]) => key.toLowerCase() === 'guardrail.name')
