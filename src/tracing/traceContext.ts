@@ -425,6 +425,7 @@ async function fetchFromExternalProvider(
 
   let previousSnapshot: string | undefined;
   let latestContext: TraceContextData | null = null;
+  let latestComplete = false;
   for (let attempt = 0; attempt <= maxRetries; attempt++) {
     if (abortSignal?.aborted) {
       throw createTraceAbortError(abortSignal);
@@ -438,6 +439,9 @@ async function fetchFromExternalProvider(
 
       if (!result || validSpans.length === 0) {
         if (attempt === maxRetries) {
+          if (requireComplete && latestContext && !latestComplete) {
+            throw new Error('Execution trace evidence is incomplete or unstable');
+          }
           logger.debug(
             `[TraceContext] No spans found for trace ${traceId} from ${provider.id} after ${attempt + 1} attempts`,
           );
@@ -475,22 +479,19 @@ async function fetchFromExternalProvider(
         };
       }
 
-      if (requireComplete && attempt < maxRetries) {
+      const snapshot = waitForStableSpans
+        ? JSON.stringify([...validSpans].sort((a, b) => a.spanId.localeCompare(b.spanId)))
+        : undefined;
+      latestComplete =
+        validSpans.every((span) => span.endTime !== undefined && span.endTime >= span.startTime) &&
+        (!waitForStableSpans || snapshot === previousSnapshot);
+      previousSnapshot = snapshot;
+      if ((requireComplete || (waitForStableSpans && !latestComplete)) && attempt < maxRetries) {
         await waitForRetry(retryDelayMs, abortSignal);
         continue;
       }
-      if (waitForStableSpans && attempt < maxRetries) {
-        const snapshot = JSON.stringify(
-          [...validSpans].sort((a, b) => a.spanId.localeCompare(b.spanId)),
-        );
-        const complete = validSpans.every(
-          (span) => span.endTime !== undefined && span.endTime >= span.startTime,
-        );
-        if (snapshot !== previousSnapshot || !complete) {
-          previousSnapshot = snapshot;
-          await waitForRetry(retryDelayMs, abortSignal);
-          continue;
-        }
+      if (requireComplete && !latestComplete) {
+        throw new Error('Execution trace evidence is incomplete or unstable');
       }
 
       return latestContext;
@@ -516,7 +517,10 @@ async function fetchFromExternalProvider(
         return null;
       }
       if (attempt === maxRetries) {
-        if (requireComplete && (!latestContext || !(error instanceof TraceProviderError))) {
+        if (
+          requireComplete &&
+          (!latestContext || !latestComplete || !(error instanceof TraceProviderError))
+        ) {
           throw error;
         }
         return latestContext;

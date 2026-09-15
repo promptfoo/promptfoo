@@ -1,3 +1,5 @@
+import { isDeepStrictEqual } from 'node:util';
+
 import logger from '../../logger';
 import {
   fetchWithProxy,
@@ -295,8 +297,7 @@ export class TempoProvider implements TraceProvider {
   }
 
   private transformSpans(data: TempoTraceResponse, traceId: string): SpanData[] {
-    const spans: SpanData[] = [];
-    const seenSpanIds = new Set<string>();
+    const spans = new Map<string, SpanData>();
     let malformedSpans = 0;
 
     for (const batch of data.batches ?? []) {
@@ -319,9 +320,12 @@ export class TempoProvider implements TraceProvider {
               scopeSpan.scope?.name,
               scopeSpan.scope?.version,
             );
-            if (normalizedSpan && !seenSpanIds.has(normalizedSpan.spanId)) {
-              seenSpanIds.add(normalizedSpan.spanId);
-              spans.push(normalizedSpan);
+            if (normalizedSpan) {
+              const previous = spans.get(normalizedSpan.spanId);
+              if (previous && !isDeepStrictEqual(previous, normalizedSpan)) {
+                throw new TraceProviderError('Conflicting duplicate Tempo span IDs');
+              }
+              spans.set(normalizedSpan.spanId, normalizedSpan);
             }
           } catch (error) {
             if (error instanceof TraceProviderError) {
@@ -337,7 +341,7 @@ export class TempoProvider implements TraceProvider {
       logger.warn(`[TempoProvider] Skipped ${malformedSpans} malformed spans`);
     }
 
-    return spans;
+    return [...spans.values()];
   }
 
   async fetchTrace(traceId: string, options?: FetchTraceOptions): Promise<FetchTraceResult | null> {

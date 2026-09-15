@@ -1,11 +1,15 @@
 import { isDeepStrictEqual } from 'node:util';
 
-import { getConsistentToolBody, TraceEvidenceError } from '../../assertions/trajectoryUtils';
+import {
+  getConsistentToolBody,
+  getConsistentToolName,
+  TraceEvidenceError,
+} from '../../assertions/trajectoryUtils';
 import { sanitizeBody } from '../../tracing/genaiTracer';
 import {
   getFirstStringAttribute,
-  getToolNameFromAttributes,
   TOOL_ARGUMENT_ATTRIBUTE_KEYS,
+  TOOL_NAME_ATTRIBUTE_KEYS,
   TOOL_RESULT_ATTRIBUTE_KEYS,
 } from '../../tracing/toolAttributes';
 
@@ -70,7 +74,8 @@ function completeToolSpan(
     throw new TraceEvidenceError('Conflicting native and traced tool outcomes.');
   }
   if (
-    getToolNameFromAttributes(traced.attributes) !== getToolNameFromAttributes(native.attributes)
+    getConsistentToolName(TOOL_NAME_ATTRIBUTE_KEYS.map((key) => traced.attributes?.[key])) !==
+    getConsistentToolName(TOOL_NAME_ATTRIBUTE_KEYS.map((key) => native.attributes?.[key]))
   ) {
     throw new TraceEvidenceError('Conflicting native and traced tool names.');
   }
@@ -134,12 +139,12 @@ export function getGradingTrace(
   if (response) {
     const raw = response.raw;
     const calls = Array.isArray(metadata?.toolCalls) ? [...metadata.toolCalls] : [];
-    const toolName = metadata?.toolName ?? raw?.toolName ?? raw?.tool;
+    const toolName = getConsistentToolName([metadata?.toolName, raw?.toolName, raw?.tool]);
     if (typeof toolName === 'string') {
       calls.push({
         name: toolName,
-        input: metadata?.toolArgs ?? raw?.args ?? raw?.arguments,
-        output: raw?.structuredContent ?? raw?.result ?? raw,
+        input: getConsistentToolBody([metadata?.toolArgs, raw?.args, raw?.arguments]),
+        output: getConsistentToolBody([raw?.structuredContent, raw?.result]) ?? raw,
         is_error: Boolean(response.error || raw?.isError),
       });
     }
@@ -156,12 +161,8 @@ export function getGradingTrace(
       });
       const nativeSpans = calls
         .map((call, index) => {
-          if (
-            !call ||
-            typeof call !== 'object' ||
-            Array.isArray(call) ||
-            typeof (call.name ?? call.function?.name) !== 'string'
-          ) {
+          const name = getConsistentToolName([call?.name, call?.function?.name]);
+          if (!call || typeof call !== 'object' || Array.isArray(call) || name === undefined) {
             throw new TraceEvidenceError(
               'Invalid native tool receipt: expected an object with a tool name.',
             );
@@ -178,7 +179,7 @@ export function getGradingTrace(
                   : 0,
             attributes: {
               'gen_ai.tool.call.id': call.id ?? call.toolCallId ?? call.tool_call_id,
-              'tool.name': call.name ?? call.function?.name,
+              'tool.name': name,
               'tool.arguments': sanitizeNativeToolBody(
                 getConsistentToolBody([call.input, call.arguments, call.function?.arguments]),
               ),

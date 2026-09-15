@@ -63,6 +63,125 @@ it.each([
   expect(getExecutionEvidence(result)).not.toContain('SQL query');
 });
 
+it.each(['arguments', 'metadata', 'result', 'equivalent'])(
+  'checks raw receipt aliases: %s',
+  async (kind) => {
+    vi.mocked(matchesLlmRubric).mockResolvedValue({
+      pass: true,
+      score: 1,
+      reason: 'Read-only query',
+    });
+    const args = { query: 'SELECT 1' };
+    const result = { authorized: true };
+    const providerResponse = {
+      output: 'Done',
+      metadata: kind === 'metadata' ? { toolArgs: { query: 'DELETE FROM accounts' } } : undefined,
+      raw: {
+        tool: 'run_sql',
+        args,
+        arguments: kind === 'arguments' ? { query: 'DELETE FROM accounts' } : JSON.stringify(args),
+        result,
+        structuredContent: kind === 'result' ? { authorized: false } : JSON.stringify(result),
+      },
+    };
+    const grade = new SqlInjectionGrader().getResult(
+      'Read records',
+      'Done',
+      { metadata: { purpose: 'Read-only records' } },
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      { providerResponse },
+    );
+    if (kind === 'equivalent') {
+      expect((await grade).grade.pass).toBe(true);
+      expect(matchesLlmRubric).toHaveBeenCalledOnce();
+    } else {
+      await expect(grade).rejects.toThrow('Conflicting tool argument or result aliases');
+      expect(matchesLlmRubric).not.toHaveBeenCalled();
+    }
+  },
+);
+
+it.each(
+  ['trace', 'raw', 'native'].flatMap((source) =>
+    [false, true].map((conflict) => ({ source, conflict })),
+  ),
+)('checks $source tool-name aliases (conflict=$conflict)', async ({ source, conflict }) => {
+  vi.mocked(matchesLlmRubric).mockResolvedValue({
+    pass: true,
+    score: 1,
+    reason: 'Read-only query',
+  });
+  const alias = conflict ? 'execute_shell' : 'run_sql';
+  const call = {
+    id: 'call-1',
+    name: 'run_sql',
+    input: { query: 'SELECT 1' },
+    output: { rows: [] },
+  };
+  const context: RedteamGradingContext = {
+    providerResponse:
+      source === 'raw'
+        ? {
+            output: 'Done',
+            metadata: { toolName: 'run_sql' },
+            raw: { tool: alias, args: call.input, result: call.output },
+          }
+        : {
+            output: 'Done',
+            metadata: {
+              toolCalls: [
+                { ...call, ...(source === 'native' ? { function: { name: alias } } : {}) },
+              ],
+            },
+          },
+    ...(source === 'trace'
+      ? {
+          traceData: {
+            traceId: 'name-aliases',
+            evaluationId: 'eval',
+            testCaseId: 'case',
+            spans: [
+              {
+                spanId: 'span-1',
+                name: 'tool.call',
+                startTime: 1,
+                endTime: 2,
+                statusCode: 1,
+                attributes: {
+                  'gen_ai.tool.call.id': call.id,
+                  'tool.name': 'run_sql',
+                  'gen_ai.tool.name': alias,
+                  'tool.arguments': call.input,
+                  'tool.output': call.output,
+                },
+              },
+            ],
+          },
+        }
+      : {}),
+  };
+  const result = new SqlInjectionGrader().getResult(
+    'Read records',
+    'Done',
+    { metadata: { purpose: 'Read-only records' } },
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    context,
+  );
+  if (conflict) {
+    await expect(result).rejects.toThrow(/Conflicting.*tool.*name/i);
+    expect(matchesLlmRubric).not.toHaveBeenCalled();
+  } else {
+    expect((await result).grade.pass).toBe(true);
+    expect(matchesLlmRubric).toHaveBeenCalledOnce();
+  }
+});
+
 describe('SqlInjectionPlugin', () => {
   it('generates assertions with the SQL injection metric', () => {
     const plugin = new SqlInjectionPlugin(createMockProvider(), 'test purpose', 'test_var');

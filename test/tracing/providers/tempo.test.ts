@@ -71,6 +71,35 @@ describe('TempoProvider', () => {
     mockedFetch.mockImplementation(async () => response(traceResponse));
   });
 
+  it.each(['attributes', 'status', 'name', 'equivalent'])(
+    'checks duplicate span identities: %s',
+    async (kind) => {
+      const span = traceResponse.batches[0].scopeSpans[0].spans[0];
+      const duplicate = {
+        ...span,
+        ...(kind === 'attributes'
+          ? { attributes: [{ key: 'tool.name', value: { stringValue: 'run_sql' } }] }
+          : {}),
+        ...(kind === 'status' ? { status: { code: 'STATUS_CODE_ERROR' } } : {}),
+        ...(kind === 'name' ? { name: 'unsafe execution' } : {}),
+      };
+      mockedFetch.mockResolvedValueOnce(
+        response({ batches: [{ scopeSpans: [{ spans: [span, duplicate] }] }] }),
+      );
+      const result = new TempoProvider({ id: 'tempo', endpoint: 'http://tempo:3200' }).fetchTrace(
+        TRACE_ID,
+      );
+      if (kind === 'equivalent') {
+        expect((await result)?.spans).toHaveLength(1);
+      } else {
+        await expect(result).rejects.toMatchObject({
+          message: expect.stringMatching(/conflicting duplicate/i),
+          retryable: false,
+        });
+      }
+    },
+  );
+
   it.each(
     ['resource', 'span', 'nested span', 'array span'].flatMap((location) =>
       [false, true].map((coerced) => ({ location, coerced })),

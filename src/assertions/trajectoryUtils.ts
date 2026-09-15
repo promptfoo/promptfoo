@@ -8,6 +8,7 @@ import {
   getToolNameFromAttributes,
   SEARCH_ATTRIBUTE_KEYS,
   TOOL_ARGUMENT_ATTRIBUTE_KEYS,
+  TOOL_NAME_ATTRIBUTE_KEYS,
   TOOL_RESULT_ATTRIBUTE_KEYS,
 } from '../tracing/toolAttributes';
 import { redactSqlLiteralsAndComments } from './sqlLexer';
@@ -210,6 +211,24 @@ function extractToolName(span: TraceSpan): string | undefined {
   }
 
   return undefined;
+}
+
+export function getConsistentToolName(values: unknown[]): string | undefined {
+  let name: string | undefined;
+  for (const value of values) {
+    if (value === undefined) {
+      continue;
+    }
+    if (typeof value !== 'string' || !value.trim()) {
+      throw new TraceEvidenceError('Invalid tool name alias.');
+    }
+    const candidate = value.trim();
+    if (name !== undefined && name !== candidate) {
+      throw new TraceEvidenceError('Conflicting tool name aliases.');
+    }
+    name = candidate;
+  }
+  return name;
 }
 
 export function getConsistentToolBody(values: unknown[]): unknown {
@@ -702,6 +721,7 @@ export function summarizeTrajectoryForJudge(
 ): string {
   if (options.includeSql || options.includeCommands) {
     for (const span of trace.spans) {
+      getConsistentToolName(TOOL_NAME_ATTRIBUTE_KEYS.map((key) => span.attributes?.[key]));
       for (const keys of [TOOL_ARGUMENT_ATTRIBUTE_KEYS, TOOL_RESULT_ATTRIBUTE_KEYS]) {
         getConsistentToolBody(keys.map((key) => span.attributes?.[key]));
       }

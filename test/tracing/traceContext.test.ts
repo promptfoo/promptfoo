@@ -42,6 +42,45 @@ function mockExternalTrace(spans: SpanData[], traceId = 'trace-1') {
 }
 
 describe('fetchTraceContext', () => {
+  it.each(['open', 'changing', 'empty after open', 'error after open'])(
+    'rejects required external evidence that remains %s',
+    async (state) => {
+      mocks.isExternalTraceProvider.mockReturnValue(true);
+      const span = {
+        spanId: 'target',
+        name: 'tool.call',
+        startTime: 1,
+        ...(state === 'changing' ? { endTime: 2 } : {}),
+      };
+      const fetch = mockExternalTrace([span]);
+      if (state === 'changing') {
+        fetch
+          .mockResolvedValueOnce({ fetchedAt: 1, spans: [span] })
+          .mockResolvedValue({ fetchedAt: 2, spans: [{ ...span, endTime: 3 }] });
+      }
+      if (state === 'empty after open') {
+        fetch
+          .mockResolvedValueOnce({ fetchedAt: 1, spans: [span] })
+          .mockResolvedValue({ fetchedAt: 2, spans: [] });
+      }
+      if (state === 'error after open') {
+        fetch
+          .mockResolvedValueOnce({ fetchedAt: 1, spans: [span] })
+          .mockRejectedValue(new TraceProviderError('temporary failure', { retryable: true }));
+      }
+      await expect(
+        fetchTraceContext('trace-1', {
+          providerConfig,
+          requireComplete: true,
+          waitForStableSpans: true,
+          maxRetries: 1,
+          retryDelayMs: 0,
+          queryDelay: 0,
+        }),
+      ).rejects.toMatchObject({ name: 'TraceEvidenceError' });
+    },
+  );
+
   it.each([false, true])('rejects missing required evidence (external: %s)', async (external) => {
     mocks.isExternalTraceProvider.mockReturnValue(external);
     if (external) {
@@ -193,17 +232,19 @@ describe('fetchTraceContext', () => {
     'reads complete grading evidence despite view filters (external: %s)',
     async (external) => {
       const spans: SpanData[] = [
-        { spanId: 'previous', name: 'previous iteration', startTime: 1 },
+        { spanId: 'previous', name: 'previous iteration', startTime: 1, endTime: 2 },
         {
           spanId: 'clean',
           name: 'target.call',
           startTime: 2,
+          endTime: 3,
           attributes: { 'gen_ai.operation.name': 'chat' },
         },
         {
           spanId: 'unsafe',
           name: 'tool update_seat',
           startTime: 3,
+          endTime: 4,
           attributes: {
             'tool.name': 'update_seat',
             'agentic.evidence_json': JSON.stringify({ padding: 'x'.repeat(500), finding: true }),
@@ -443,11 +484,12 @@ describe('fetchTraceContext', () => {
 
   it('limits an ordinary read and fetches the complete snapshot for later grading', async () => {
     const spans = [
-      { spanId: 'first', name: 'target.call', startTime: 1 },
+      { spanId: 'first', name: 'target.call', startTime: 1, endTime: 2 },
       {
         spanId: 'last',
         name: 'db.query',
         startTime: 2,
+        endTime: 3,
         attributes: { 'db.statement': 'unsafe query' },
       },
     ];
@@ -599,7 +641,9 @@ describe('fetchTraceContext', () => {
     { requireComplete: true },
     { waitForStableSpans: true },
   ])('withholds provider limits when the full snapshot is required: %j', async (options) => {
-    const fetchTrace = mockExternalTrace([{ spanId: 'target', name: 'target', startTime: 1 }]);
+    const fetchTrace = mockExternalTrace([
+      { spanId: 'target', name: 'target', startTime: 1, endTime: 2 },
+    ]);
     await fetchTraceContext('trace-1', {
       providerConfig,
       maxSpans: 50,
