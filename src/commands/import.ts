@@ -263,26 +263,30 @@ function isImportableTraceSpan(span: unknown): span is TraceSpan {
 }
 
 function prepareTraces(traces: unknown): TraceData[] {
-  if (!Array.isArray(traces)) {
+  if (traces === undefined) {
     return [];
+  }
+  if (!Array.isArray(traces)) {
+    throw new Error('Invalid trace collection in imported evaluation');
   }
 
   const preparedTraces: TraceData[] = [];
   const traceIds = new Set<string>();
   for (const trace of traces) {
     if (!isImportableTrace(trace)) {
-      logger.warn('Skipping malformed trace during import');
-      continue;
+      throw new Error('Invalid trace record in imported evaluation');
     }
     if (traceIds.has(trace.traceId)) {
       throw new Error('Duplicate trace IDs in imported evaluation');
     }
     traceIds.add(trace.traceId);
 
-    const spans = trace.spans.filter((span): span is TraceSpan => {
-      const importable = isImportableTraceSpan(span);
+    const spans = trace.spans;
+    for (const span of spans) {
+      if (!isImportableTraceSpan(span)) {
+        throw new Error('Invalid trace span in imported evaluation');
+      }
       if (
-        importable &&
         span.events !== undefined &&
         (!Array.isArray(span.events) ||
           span.events.some(
@@ -306,11 +310,7 @@ function prepareTraces(traces: unknown): TraceData[] {
       ) {
         throw new Error('Invalid trace span events in imported evaluation');
       }
-      if (!importable) {
-        logger.warn('Skipping malformed trace span during import');
-      }
-      return importable;
-    });
+    }
     validateTraceBatchSize(spans);
     const hashes = new Map<string, string>();
     for (const span of spans) {
@@ -320,7 +320,7 @@ function prepareTraces(traces: unknown): TraceData[] {
       }
       hashes.set(span.spanId, hash);
     }
-    preparedTraces.push({ ...trace, spans });
+    preparedTraces.push(trace);
   }
 
   return preparedTraces;

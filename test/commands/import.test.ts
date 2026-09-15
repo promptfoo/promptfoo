@@ -303,9 +303,6 @@ describe('importCommand', () => {
               attributes: { operation: 'search' },
               statusCode: 1,
             },
-            {
-              spanId: 'span-malformed',
-            },
           ],
         },
       ];
@@ -333,12 +330,10 @@ describe('importCommand', () => {
           statusCode: 1,
         }),
       ]);
-      expect(logger.warn).toHaveBeenCalledWith(
-        expect.stringContaining('Skipping malformed trace span'),
-      );
+      expect(process.exitCode).toBeUndefined();
     });
 
-    it('should skip malformed traces and still import the eval', async () => {
+    it('rejects the whole import when a trace is malformed', async () => {
       const sampleFilePath = path.join(__dirname, '../__fixtures__/sample-export.json');
       const sampleData = JSON.parse(fs.readFileSync(sampleFilePath, 'utf-8'));
       sampleData.traces = [
@@ -359,13 +354,12 @@ describe('importCommand', () => {
       importCommand(program);
       await program.parseAsync(['node', 'test', 'import', filePath]);
 
-      expect(process.exitCode).toBeUndefined();
-      expect(logger.warn).toHaveBeenCalledWith(
-        expect.stringContaining('Skipping malformed trace during import'),
+      expect(process.exitCode).toBe(1);
+      expect(logger.error).toHaveBeenCalledWith(
+        expect.stringContaining('Invalid trace record in imported evaluation'),
       );
-      const traces = await new TraceStore().getTracesByEvaluation(sampleData.evalId);
-      expect(traces).toHaveLength(1);
-      expect(traces[0].traceId).toBe('trace-valid');
+      expect(await Eval.findById(sampleData.evalId)).toBeUndefined();
+      expect(await new TraceStore().getTracesByEvaluation(sampleData.evalId)).toEqual([]);
     });
 
     it('should clear result trace linkage when the exported trace is absent', async () => {
@@ -1668,6 +1662,73 @@ describe('importCommand', () => {
         expect(await new TraceStore().getTracesByEvaluation(replacement.evalId)).toEqual([]);
       },
     );
+
+    it.each([
+      { name: 'null collection', traces: null },
+      { name: 'object collection', traces: {} },
+      { name: 'null trace', traces: [null] },
+      { name: 'incomplete trace', traces: [{ traceId: 'broken', spans: [] }] },
+      {
+        name: 'null span',
+        traces: [{ traceId: 'broken', testCaseId: 'case', spans: [null] }],
+      },
+      {
+        name: 'incomplete span alongside a valid span',
+        traces: [
+          {
+            traceId: 'broken',
+            testCaseId: 'case',
+            spans: [
+              { spanId: 'valid', name: 'valid', startTime: 1 },
+              { spanId: 'incomplete', name: 'missing start time' },
+            ],
+          },
+        ],
+      },
+    ])('preserves stored eval and trace data for malformed $name', async ({ traces }) => {
+      const sampleFilePath = path.join(__dirname, '../__fixtures__/sample-export.json');
+      const original = JSON.parse(fs.readFileSync(sampleFilePath, 'utf8'));
+      original.traces = [
+        {
+          traceId: 'original-trace',
+          testCaseId: 'original-case',
+          spans: [{ spanId: 'original-span', name: 'original', startTime: 1 }],
+        },
+      ];
+      tempFilePath = path.join(__dirname, `temp-force-malformed-${Date.now()}.json`);
+      fs.writeFileSync(tempFilePath, JSON.stringify(original));
+      importCommand(program);
+      await program.parseAsync(['node', 'test', 'import', tempFilePath]);
+      expect(process.exitCode).toBeUndefined();
+      const originalIds = (await EvalResult.findManyByEvalId(original.evalId))
+        .map((row) => row.id)
+        .sort();
+      const traceStore = new TraceStore();
+      const originalTraces = await traceStore.getTracesByEvaluation(original.evalId);
+
+      fs.writeFileSync(
+        tempFilePath,
+        JSON.stringify({
+          ...original,
+          config: { ...original.config, description: 'replacement' },
+          traces,
+        }),
+      );
+      vi.clearAllMocks();
+      const replacement = new Command();
+      importCommand(replacement);
+      await replacement.parseAsync(['node', 'test', 'import', '--force', tempFilePath]);
+
+      expect(process.exitCode).toBe(1);
+      expect(logger.error).toHaveBeenCalledWith(expect.stringMatching(/Invalid.*trace/i));
+      expect((await Eval.findById(original.evalId))?.config).toEqual(original.config);
+      expect(
+        (await EvalResult.findManyByEvalId(original.evalId)).map((row) => row.id).sort(),
+      ).toEqual(originalIds);
+      expect(await traceStore.getTracesByEvaluation(original.evalId)).toEqual(originalTraces);
+      expect(updateSignalFile).not.toHaveBeenCalled();
+      expect(updateSignalFileForDeletedEvals).not.toHaveBeenCalled();
+    });
 
     it.each(['count', 'bytes'])(
       'preserves existing result identities when a forced trace exceeds %s limits',
