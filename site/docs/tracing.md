@@ -946,7 +946,7 @@ SQL grading recognizes `sql` arguments and `read_query` calls with string or obj
 
 Set the span attribute `db.system.name` (or `db.system`) to identify the database when using quoted identifiers. PostgreSQL double quotes, MySQL backticks, and SQL Server or SQLite brackets preserve table and column names in the grading evidence. Double quotes in MySQL, SQL Server, and SQLite can also delimit strings depending on database settings; these ambiguous forms produce a grading error. Use unambiguous quoting instead.
 
-PostgreSQL summaries follow the default `standard_conforming_strings=on`: a backslash in an ordinary string does not escape its closing quote. `E'…'` strings and their continuations support backslash escapes. Quoted identifiers retain their original whitespace.
+PostgreSQL summaries follow the default `standard_conforming_strings=on`: a backslash in an ordinary string does not escape its closing quote. `E'…'` strings and their continuations support backslash escapes. SQLite strings use doubled quotes and never treat backslashes as escapes. Quoted identifiers retain their original whitespace.
 
 Dialect metadata also controls dollar quotes and nested comments. PostgreSQL dollar-quoted values and Snowflake `$$…$$` values are omitted; dollar signs in MySQL/MariaDB identifiers remain visible. PostgreSQL and SQL Server block comments can nest, while SQLite, MySQL, and MariaDB comments end at the first `*/`. Ambiguous dollar quoting or nested comments in other dialects produce a grading error.
 
