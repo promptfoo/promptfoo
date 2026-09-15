@@ -2137,6 +2137,32 @@ describe('OpenAICodexSDKProvider', () => {
         expect(result.output).toBe('Recovered response');
       });
 
+      it.each([
+        ['insufficient_quota: credit_balance_exhausted', 'credit_balance_exhausted'],
+        ['rate_limit_exceeded: billing_not_active', 'billing_not_active'],
+        ['insufficient_quota: no credits remaining', 'credit_balance_exhausted'],
+      ])('keeps mixed billing messages non-retryable: %s', async (message, code) => {
+        vi.spyOn(logger, 'error').mockImplementation(() => {});
+        const mockEvents = async function* () {
+          yield {
+            type: 'turn.failed',
+            error: { message: `${message}. Please try again in 25ms.` },
+          };
+        };
+        mockRunStreamed.mockResolvedValue({ events: mockEvents() });
+        const provider = new OpenAICodexSDKProvider({
+          config: { enable_streaming: true },
+          env: { OPENAI_API_KEY: 'test-api-key' },
+        });
+
+        const result = await provider.callApi('Test prompt');
+
+        expect(result.metadata?.rateLimitKind).toBe('quota');
+        expect(result.metadata?.http?.headers).toEqual({});
+        expect(result.error).toContain(`(code: ${code})`);
+        expect(result.error).toContain('Retries will not help');
+      });
+
       it('should retry if a stream ends after a TPM error event', async () => {
         vi.spyOn(logger, 'error').mockImplementation(() => {});
         const mockEvents = async function* () {

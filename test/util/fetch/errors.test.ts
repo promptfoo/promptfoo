@@ -275,6 +275,24 @@ describe('extractRateLimitErrorCode', () => {
     expect(extractRateLimitErrorCode({ code: 'tokens_per_min' })).toBe('tokens_per_min');
   });
 
+  it('prefers an actual root code over a nested type alias', () => {
+    expect(
+      extractRateLimitErrorCode({
+        code: 'credit_balance_exhausted',
+        error: { type: 'insufficient_quota' },
+      }),
+    ).toBe('credit_balance_exhausted');
+  });
+
+  it('prefers an actual nested code over a transport code', () => {
+    expect(
+      extractRateLimitErrorCode({
+        code: 'ETIMEDOUT',
+        error: { code: 'rate_limit_exceeded', type: 'insufficient_quota' },
+      }),
+    ).toBe('rate_limit_exceeded');
+  });
+
   it('reads top-level type', () => {
     expect(extractRateLimitErrorCode({ type: 'rate_limit_error' })).toBe('rate_limit_error');
   });

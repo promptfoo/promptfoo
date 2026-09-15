@@ -22,6 +22,7 @@ import {
   formatRateLimitErrorMessage,
   HARD_QUOTA_ERROR_CODES,
   HttpRateLimitError,
+  isDefinitiveBillingCode,
   isHardQuotaCode,
 } from '../../util/fetch/errors';
 import { normalizeFieldName, REDACTED, sanitizeObject } from '../../util/sanitizer';
@@ -507,13 +508,22 @@ const CODEX_RATE_LIMIT_PATTERNS = [
 
 function extractCodexRateLimitCode(message: string): string | undefined {
   const lowerMessage = message.toLowerCase();
-  const explicitCode = CODEX_RATE_LIMIT_CODES.find((code) => lowerMessage.includes(code));
-  if (explicitCode) {
-    return explicitCode;
+  // Flattened SDK messages can contain both a broad quota type and a specific
+  // billing code. Preserve the definitive billing classification.
+  const billingCode = CODEX_RATE_LIMIT_CODES.find(
+    (code) => isDefinitiveBillingCode(code) && lowerMessage.includes(code),
+  );
+  if (billingCode) {
+    return billingCode;
   }
 
   if (/\bno credits remaining\b/i.test(message)) {
     return 'credit_balance_exhausted';
+  }
+
+  const explicitCode = CODEX_RATE_LIMIT_CODES.find((code) => lowerMessage.includes(code));
+  if (explicitCode) {
+    return explicitCode;
   }
 
   if (

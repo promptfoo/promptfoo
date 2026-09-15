@@ -85,23 +85,6 @@ interface FoundryResponseCreateOptions {
 }
 
 /**
- * Adapt a 429 from the OpenAI / Azure SDK error shape (`status === 429`
- * plus a body-level error code in `.error.code` / `.error.type`) into the
- * shared {@link HttpRateLimitError} so SDK-raised rate limits flow through
- * the same formatter and quota/retry classification as fetch-based paths.
- * Returns null when the input is not a 429.
- *
- * Status detection: prefer the modern OpenAI SDK shape (`err.status`) and
- * fall back to `err.response.status` for older SDK versions or alternate
- * Azure wrappers that nest the response.
- *
- * Code detection: prefer the body-level `err.error.code` / `err.error.type`
- * over any top-level `err.code`. The OpenAI SDK's `APIError` exposes a
- * top-level `code` that can mirror the body, but other SDK wrappers
- * sometimes set top-level `code` to a transport-level value (e.g.
- * `'ETIMEDOUT'`) that would shadow the more reliable body code.
- */
-/**
  * Name/value pairs out of whichever header carrier an SDK error is holding.
  *
  * Web `Headers` and Azure Core's `HttpHeaders` are both declared
@@ -170,6 +153,12 @@ function rateLimitResponse(error: HttpRateLimitError, details?: string): Provide
   };
 }
 
+/**
+ * Adapt an SDK 429 into the shared quota/retry classification. Prefer the
+ * modern `err.status` shape, falling back to `err.response.status`.
+ * The body code takes priority over a wrapper's transport code; type aliases
+ * are only a fallback when neither level provides an actual code.
+ */
 function rateLimitFromSdkError(error: unknown): HttpRateLimitError | null {
   if (typeof error !== 'object' || error === null) {
     return null;
@@ -187,7 +176,7 @@ function rateLimitFromSdkError(error: unknown): HttpRateLimitError | null {
   // Prefer body-level code; fall back to top-level / `type` aliases. The type
   // is forwarded separately so a billing-specific code the allowlist does not
   // know still classifies as quota via `type: "insufficient_quota"`.
-  const code = extractRateLimitErrorCode(err.error) ?? extractRateLimitErrorCode(err);
+  const code = extractRateLimitErrorCode(err);
   const type = extractRateLimitErrorType(err.error) ?? extractRateLimitErrorType(err);
   // Retry-After decides whether a hard-quota code is really a short per-window
   // throttle (see HttpRateLimitError), so the SDK's headers must reach it.

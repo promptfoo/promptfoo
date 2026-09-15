@@ -311,24 +311,19 @@ export function extractRateLimitErrorCode(body: unknown): string | undefined {
   }
   const root = body as Record<string, unknown>;
 
-  // OpenAI / Azure OpenAI: { error: { code, type, message } }
+  // Prefer actual codes over type aliases, with the body code taking priority
+  // over a transport-level code on an SDK wrapper.
   if (typeof root.error === 'object' && root.error !== null) {
     const err = root.error as Record<string, unknown>;
     if (typeof err.code === 'string' && err.code.length > 0) {
       return err.code;
-    }
-    if (typeof err.type === 'string' && err.type.length > 0) {
-      return err.type;
     }
   }
 
   if (typeof root.code === 'string' && root.code.length > 0) {
     return root.code;
   }
-  if (typeof root.type === 'string' && root.type.length > 0) {
-    return root.type;
-  }
-  return undefined;
+  return extractRateLimitErrorType(body);
 }
 
 /**

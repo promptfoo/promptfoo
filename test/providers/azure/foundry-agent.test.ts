@@ -1061,6 +1061,30 @@ describe('AzureFoundryAgentProvider', () => {
         expect(result.error).not.toContain('Retries will not help');
       });
 
+      it.each([undefined, '', null])(
+        'preserves a definitive root code when the nested code is %s',
+        async (code) => {
+          mockGetAgent.mockResolvedValue(mockAgent);
+          mockResponsesCreate.mockRejectedValue(
+            Object.assign(new Error('sdk error'), {
+              status: 429,
+              code: 'credit_balance_exhausted',
+              headers: { 'Retry-After': '2' },
+              error: { code, type: 'insufficient_quota' },
+            }),
+          );
+          const provider = new AzureFoundryAgentProvider('weather-agent', {
+            config: { projectUrl },
+          });
+
+          const result = await provider.callApi('test prompt');
+
+          expect(result.metadata?.rateLimitKind).toBe('quota');
+          expect(result.error).toContain('(code: credit_balance_exhausted)');
+          expect(result.error).toContain('Retries will not help');
+        },
+      );
+
       it('forwards the SDK status and Retry-After headers in metadata.http for the scheduler', async () => {
         mockGetAgent.mockResolvedValue(mockAgent);
         mockResponsesCreate.mockRejectedValue(
