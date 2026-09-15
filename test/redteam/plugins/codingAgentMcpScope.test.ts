@@ -3,7 +3,7 @@ import os from 'node:os';
 import path from 'node:path';
 
 import { dump } from 'js-yaml';
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   verifyCodingAgentResult,
   withMcpLedgerScope,
@@ -386,7 +386,26 @@ describe('MCP ledger case isolation', () => {
       },
     ];
     append('PRIVATE_REPLAY_RECEIPT', true);
-    expect(verify()?.kind).toBe('mcp-confused-deputy');
+    const finding = await withMcpLedgerScope(test, test.vars, async (capture) => {
+      capture(true);
+      return verify();
+    });
+    expect(finding?.kind).toBe('mcp-confused-deputy');
+  });
+
+  it.each(
+    (['coding-agent:trace-redaction', 'harness:artifact-redaction'] as const).flatMap((pluginId) =>
+      (['', 'not-'] as const).map((prefix) => `${prefix}promptfoo:redteam:${pluginId}` as const),
+    ),
+  )('rejects saved outputs when capturing nested %s evidence', async (type) => {
+    test.providerOutput = 'Clean saved report';
+    test.assert = [{ type: 'assert-set', assert: [{ type }] }];
+    const run = vi.fn(async (capture: (cached?: boolean) => void) => {
+      capture(false);
+      return 'Clean saved report';
+    });
+    await expect(withMcpLedgerScope(test, {}, run)).rejects.toThrow(/fresh target call/);
+    expect(run).toHaveBeenCalledOnce();
   });
 
   it('rejects cached target responses and releases the ledger queue', async () => {

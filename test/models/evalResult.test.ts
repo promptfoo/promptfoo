@@ -30,6 +30,58 @@ import { createAtomicTestCase, createPrompt } from '../factories/testSuite';
 import { mockProcessEnv } from '../util/utils';
 
 describe('EvalResult', () => {
+  it.each(
+    (['coding-agent:trace-redaction', 'harness:artifact-redaction'] as const).flatMap((pluginId) =>
+      [false, true].map((hasResponse) => ({ pluginId, hasResponse })),
+    ),
+  )(
+    'omits rendered privacy prompts for $pluginId with response=$hasResponse',
+    async ({ pluginId, hasResponse }) => {
+      const secret = 'PRIVATE_RENDERED_PROMPT_RECEIPT';
+      const row = createEvaluateResult({
+        ...mockEvaluateResult,
+        prompt: {
+          raw: `Inspect ${secret}`,
+          label: 'Public prompt',
+          config: { rawReceipt: secret },
+        },
+        testCase: {
+          assert: [
+            { type: 'assert-set', assert: [{ type: `promptfoo:redteam:${pluginId}` as const }] },
+          ],
+          vars: { rawReceipt: secret },
+        },
+        vars: { rawReceipt: secret },
+        response: hasResponse ? { output: 'Clean report' } : undefined,
+      });
+      const saved = await EvalResult.createFromEvaluateResult('private-prompt-' + pluginId, row);
+      const [bulk] = await EvalResult.createManyFromEvaluateResult(
+        [row],
+        'private-prompt-bulk-' + pluginId,
+      );
+      for (const result of [
+        sanitizeResultForJsonlArtifact(row),
+        saved.toEvaluateResult(),
+        bulk.toEvaluateResult(),
+      ]) {
+        expect(JSON.stringify(result)).not.toContain(secret);
+        expect(result.prompt.raw).toContain('Prompt omitted');
+        expect(result.prompt.label).toBe('Public prompt');
+        expect(result.promptIdx).toBe(row.promptIdx);
+      }
+      const legacy = new EvalResult({
+        ...saved,
+        prompt: row.prompt,
+        response: saved.response ?? null,
+      });
+      expect(JSON.stringify(legacy.toEvaluateResult())).not.toContain(secret);
+      expect(row.prompt.raw).toContain(secret);
+      expect(sanitizeResultForJsonlArtifact({ ...row, testCase: { assert: [] } }).prompt.raw).toBe(
+        row.prompt.raw,
+      );
+    },
+  );
+
   it.each([undefined, 'ordinary-plugin'])(
     'redacts restored metadata when privacy comes from assertions and pluginId is %s',
     async (pluginId) => {

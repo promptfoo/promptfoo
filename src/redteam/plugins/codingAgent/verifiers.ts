@@ -14,6 +14,7 @@ import {
   getProtectedAssertionValue,
   hasRedactionMedia,
   protectedReceiptScope,
+  requiresTraceRedaction,
   type VerifierReceipt,
 } from '../../../util/traceRedaction';
 import {
@@ -230,7 +231,11 @@ export async function withMcpLedgerScope<T>(
     }
   }
   if (test.providerOutput) {
-    return run(() => {});
+    return run(() => {
+      if (requiresTraceRedaction(test.assert)) {
+        throw new Error('Privacy evidence requires a fresh target call; remove providerOutput');
+      }
+    });
   }
   const requireFreshTarget = (cached?: boolean) => {
     if (cached && requiresFreshTarget) {

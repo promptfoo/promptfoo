@@ -11,6 +11,7 @@ import type {
   AssertionOrSet,
   AtomicTestCase,
   GradingResult,
+  Prompt,
   ProviderResponse,
 } from '../types';
 
@@ -307,6 +308,7 @@ function sanitizeRedactionGrade(result: GradingResult): GradingResult {
 export function sanitizeRedactionResult<T extends object>(input: T): T {
   const result = input as T & {
     testCase?: AtomicTestCase;
+    prompt?: Prompt;
     vars?: Record<string, unknown>;
     response?: ProviderResponse | null;
     gradingResult?: GradingResult | null;
@@ -335,8 +337,13 @@ export function sanitizeRedactionResult<T extends object>(input: T): T {
     vars: result.vars,
     gradingResult: result.gradingResult,
     metadata: result.metadata,
+    prompt: result.prompt,
   });
   const { testCase, vars } = publicInputs;
+  const prompt = publicInputs.prompt && {
+    ...publicInputs.prompt,
+    raw: '[Prompt omitted for trace/artifact redaction.]',
+  };
   const metadata = { ...publicInputs.metadata };
   for (const key of Object.keys(response?.metadata ?? {})) {
     if (testCase?.metadata && Object.prototype.hasOwnProperty.call(testCase.metadata, key)) {
@@ -353,13 +360,14 @@ export function sanitizeRedactionResult<T extends object>(input: T): T {
     ? sanitizeRedactionGrade(publicInputs.gradingResult)
     : publicInputs.gradingResult;
   if (!response) {
-    return { ...input, ...accounting, testCase, vars, error, metadata, gradingResult };
+    return { ...input, ...accounting, testCase, vars, prompt, error, metadata, gradingResult };
   }
   return {
     ...input,
     ...accounting,
     testCase,
     vars,
+    prompt,
     error,
     metadata,
     gradingResult,
