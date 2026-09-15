@@ -767,6 +767,39 @@ describe('shared redteam provider utilities', () => {
   });
 
   describe('getTargetResponse', () => {
+    it.each(
+      ['typed-array', 'array-buffer', 'data-view'].flatMap((kind) =>
+        [false, true].map((withError) => ({ kind, withError })),
+      ),
+    )(
+      'preserves binary identity before serializing $kind (withError=$withError)',
+      async ({ kind, withError }) => {
+        const bytes = Uint8Array.from(Buffer.from('PRIVATE_NATIVE_BINARY_RECEIPT'));
+        const output = {
+          'typed-array': bytes,
+          'array-buffer': bytes.buffer,
+          'data-view': new DataView(bytes.buffer),
+        }[kind];
+        const response = { output, ...(withError ? { error: 'Target error' } : {}) };
+        const provider = createMockProvider({ response });
+        const context = {
+          prompt: { raw: 'Inspect report', label: 'fixture' },
+          vars: {},
+          test: { assert: [{ type: 'promptfoo:redteam:coding-agent:trace-redaction' }] },
+        } as CallApiContextParams;
+        const normalized = await getTargetResponse(provider, 'Inspect report', context);
+        const history = await externalizeResponseForRedteamHistory(normalized, context);
+        expect(history).toMatchObject({
+          error: expect.stringMatching(/redaction.*verified/i),
+          metadata: { redactionMediaOmitted: true },
+        });
+        const ordinary = await getTargetResponse(provider, 'Inspect report');
+        expect(ordinary.output).toBe(JSON.stringify(output));
+        expect(ordinary.metadata?.redactionMediaOmitted).toBeUndefined();
+        expect(response.output).toBe(output);
+      },
+    );
+
     it('returns an error before calling the target when the prompt exceeds maxCharsPerMessage', async () => {
       setCliStateConfig({
         redteam: {

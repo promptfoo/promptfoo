@@ -580,6 +580,12 @@ export async function getTargetResponse(
     logger.debug(`Sleeping for ${targetProvider.delay}ms`);
     await sleep(targetProvider.delay);
   }
+  if (
+    requiresTraceRedaction((context?.test as AtomicTestCase | undefined)?.assert) &&
+    hasRedactionMedia(targetRespRaw)
+  ) {
+    targetRespRaw = await externalizeResponseForRedteamHistory(targetRespRaw, context);
+  }
   const tokenUsage = { numRequests: 1, ...targetRespRaw.tokenUsage };
   const hasOutput = targetRespRaw && Object.prototype.hasOwnProperty.call(targetRespRaw, 'output');
   const hasError = targetRespRaw && Object.prototype.hasOwnProperty.call(targetRespRaw, 'error');
