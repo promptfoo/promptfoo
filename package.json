@@ -218,9 +218,6 @@
     "monaco-editor": {
       ".": "0.56.0",
       "dompurify": "3.4.14"
-    },
-    "@apidevtools/json-schema-ref-parser": {
-      "undici": ">=8.10.2 <9"
     }
   },
   "devDependencies": {
@@ -324,7 +321,7 @@
   },
   "dependencies": {
     "@anthropic-ai/sdk": "0.123.0",
-    "@apidevtools/json-schema-ref-parser": "^16.0.0",
+    "@apidevtools/json-schema-ref-parser": "^16.0.2",
     "@hono/node-server": "2.1.1",
     "@inquirer/checkbox": "^5.1.0",
     "@inquirer/confirm": "^6.0.8",

@@ -1191,7 +1191,6 @@ describe('package manifests', () => {
     const packageJson = readPackageJson<
       PackageManifest & {
         engines?: { node?: string };
-        overrides?: Record<string, Record<string, string>>;
       }
     >('package.json');
     const packageLock =
@@ -1200,8 +1199,8 @@ describe('package manifests', () => {
       >('package-lock.json');
     const parserRange = packageJson.dependencies?.['@apidevtools/json-schema-ref-parser'];
     const parser = packageLock.packages['node_modules/@apidevtools/json-schema-ref-parser'];
-    const parserTransportRange =
-      packageJson.overrides?.['@apidevtools/json-schema-ref-parser']?.undici;
+    // Published dependencies do not inherit this repository's npm overrides.
+    const parserTransportRange = parser?.dependencies?.undici;
     const parserTransport =
       packageLock.packages['node_modules/@apidevtools/json-schema-ref-parser/node_modules/undici'];
 
@@ -1209,7 +1208,7 @@ describe('package manifests', () => {
       parserRange,
       'the JSON Schema ref parser must remain a runtime dependency',
     ).toBeDefined();
-    expect(minVersion(parserRange as string)?.compare('16.0.0')).toBeGreaterThanOrEqual(0);
+    expect(minVersion(parserRange as string)?.compare('16.0.2')).toBeGreaterThanOrEqual(0);
     expect(packageLock.packages[''].dependencies?.['@apidevtools/json-schema-ref-parser']).toBe(
       parserRange,
     );
