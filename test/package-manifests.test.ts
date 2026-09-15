@@ -1058,16 +1058,19 @@ describe('package manifests', () => {
     }
   });
 
-  it('keeps Playwright Chromium optional and its locked browser versions aligned', () => {
+  it('keeps Playwright packages optional and their declared and locked versions aligned', () => {
     const packageJson = readPackageJson<PackageManifest>('package.json');
     const packageLock = readPackageJson<PackageLockManifest>('package-lock.json');
     const browserName = '@playwright/browser-chromium';
     const optionalRange = packageJson.optionalDependencies?.[browserName];
 
     expect(optionalRange).toBeDefined();
-    expect(packageJson.dependencies?.[browserName]).toBeUndefined();
-    expect(packageLock.packages[''].dependencies?.[browserName]).toBeUndefined();
-    expect(packageLock.packages[''].optionalDependencies?.[browserName]).toBe(optionalRange);
+    for (const name of ['playwright', browserName]) {
+      expect(packageJson.optionalDependencies?.[name]).toBe(optionalRange);
+      expect(packageJson.dependencies?.[name]).toBeUndefined();
+      expect(packageLock.packages[''].dependencies?.[name]).toBeUndefined();
+      expect(packageLock.packages[''].optionalDependencies?.[name]).toBe(optionalRange);
+    }
 
     const versions = ['playwright', 'playwright-core', browserName].map((name) => {
       const version = packageLock.packages[`node_modules/${name}`]?.version;
