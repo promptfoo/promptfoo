@@ -453,6 +453,7 @@ describe('EvalResult', () => {
     'svg-output',
     'image-input',
     'encoded-image-input',
+    'url-encoded-image-input',
     'quoted-image-input',
   ] as const)('omits private media in supported response shapes: %s', async (mode) => {
     const secret = 'PRIVATE_EMBEDDED_MEDIA_8964';
@@ -478,6 +479,11 @@ describe('EvalResult', () => {
       'encoded-image-input': {
         output: `<input type="im&#97;ge" src="https://example.invalid/${secret}.png">`,
       },
+      'url-encoded-image-input': {
+        output: encodeURIComponent(
+          `<input type="image" src="https://example.invalid/${secret}.png">`,
+        ),
+      },
       'quoted-image-input': {
         output: `<input title="a > b" TYPE='IMAGE' src="https://example.invalid/${secret}.png">`,
       },
@@ -498,6 +504,33 @@ describe('EvalResult', () => {
     });
     expect(saved.response).toMatchObject({ metadata: { redactionMediaOmitted: true } });
     expect(row.response).toMatchObject(media);
+  });
+
+  it('redacts verifier config in result metadata when the response has no metadata', async () => {
+    const secret = 'PRIVATE_RESULT_METADATA_RECEIPT';
+    const metadata = {
+      pluginId: 'coding-agent:trace-redaction',
+      pluginConfig: { secretFileValue: secret },
+      label: 'Public label',
+    };
+    const row = createEvaluateResult({
+      ...mockEvaluateResult,
+      metadata,
+      response: { output: 'Clean' },
+      testCase: {
+        metadata,
+        assert: [{ type: 'promptfoo:redteam:coding-agent:trace-redaction' }],
+      },
+    });
+    const artifact = sanitizeResultForJsonlArtifact(row);
+    const saved = await EvalResult.createFromEvaluateResult('private-result-metadata', row, {
+      persist: false,
+    });
+    for (const result of [artifact, saved]) {
+      expect(JSON.stringify(result.metadata)).not.toContain(secret);
+      expect(result.metadata?.label).toBe('Public label');
+    }
+    expect(row.metadata?.pluginConfig).toEqual({ secretFileValue: secret });
   });
 
   it('omits private raw provider data without changing ordinary raw responses', async () => {

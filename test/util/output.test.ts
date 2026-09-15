@@ -73,15 +73,16 @@ vi.mock('../../src/googleSheets', () => ({
 describe('writeOutput', () => {
   let consoleLogSpy: ReturnType<typeof mockConsole>;
 
-  it('does not publish an incomplete export when trace storage fails', async () => {
+  it('exports results without traces when trace storage fails', async () => {
     const traceSpy = vi
       .spyOn(getTraceStore(), 'getTracesByEvaluation')
       .mockRejectedValue(new Error('Trace storage unavailable'));
     try {
-      await expect(writeOutput('output.json', new Eval({}), null)).rejects.toThrow(
-        'Trace storage unavailable',
-      );
-      expect(fsPromises.writeFile).not.toHaveBeenCalled();
+      await writeOutput('output.json', new Eval({ description: 'Public evaluation' }), null);
+      const output = JSON.parse(vi.mocked(fsPromises.writeFile).mock.calls[0][1] as string);
+      expect(output.results).toBeDefined();
+      expect(output.config.description).toBe('Public evaluation');
+      expect(output.traces).toBeUndefined();
     } finally {
       traceSpy.mockRestore();
     }

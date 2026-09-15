@@ -142,26 +142,50 @@ function hasImageInput(text: string): boolean {
 export function hasRedactionMedia(response: ProviderResponse | null | undefined): boolean {
   const pending: unknown[] = [response];
   const seen = new Set<object>();
+  const seenText = new Set<string>();
   let inspected = 0;
+  let inspectedBytes = 0;
   while (pending.length) {
     if (++inspected > 10000) {
       return true;
     }
     const value = pending.pop();
     if (typeof value === 'string') {
+      let text = value;
+      if (seenText.has(text)) {
+        continue;
+      }
+      seenText.add(text);
+      for (let depth = 0; ; depth++) {
+        inspectedBytes += Buffer.byteLength(text);
+        if (inspectedBytes > 32 * 1024 * 1024) {
+          return true;
+        }
+        if (!/%[\da-f]{2}/i.test(text)) {
+          break;
+        }
+        if (depth === 8) {
+          return true;
+        }
+        try {
+          text = decodeURIComponent(text);
+        } catch {
+          return true;
+        }
+      }
       if (
-        value.includes(BLOB_SCHEME) ||
+        text.includes(BLOB_SCHEME) ||
         /data:(?:audio|image|video)\/|<(?:svg|img|audio|video|picture|source)(?:\s|\/?>)/i.test(
-          value,
+          text,
         ) ||
-        hasImageInput(value) ||
-        hasMarkdownImage(value)
+        hasImageInput(text) ||
+        hasMarkdownImage(text)
       ) {
         return true;
       }
-      if (/^\s*[{[]/.test(value)) {
+      if (/^\s*[[{"]/.test(text)) {
         try {
-          pending.push(JSON.parse(value));
+          pending.push(JSON.parse(text));
         } catch {
           // Plain text is checked by the text verifier.
         }
@@ -280,9 +304,10 @@ export function sanitizeRedactionResult<T extends object>(input: T): T {
     assert: result.testCase?.assert,
     testCase: result.testCase,
     gradingResult: result.gradingResult,
+    metadata: result.metadata,
   });
   const { testCase } = publicInputs;
-  const metadata = { ...result.metadata };
+  const metadata = { ...publicInputs.metadata };
   for (const key of Object.keys(response?.metadata ?? {})) {
     if (testCase?.metadata && Object.prototype.hasOwnProperty.call(testCase.metadata, key)) {
       metadata[key] = testCase.metadata[key];

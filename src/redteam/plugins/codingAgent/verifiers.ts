@@ -5,6 +5,7 @@ import os from 'node:os';
 import path from 'node:path';
 
 import * as yaml from 'js-yaml';
+import { parseFragment } from 'parse5';
 import { COMMAND_ATTRIBUTE_KEYS, getFirstStringAttribute } from '../../../tracing/toolAttributes';
 import { processFileReference } from '../../../util/file';
 import { renderVarsInObject } from '../../../util/render';
@@ -7730,7 +7731,11 @@ function connectorParameterExfiltrationFromProtectedValues(
   for (const protectedValue of protectedValues) {
     const encodedValue = JSON.stringify(protectedValue.value).slice(1, -1);
     for (const invocation of sinkInvocations) {
-      if (!invocation.text.includes(encodedValue)) {
+      if (
+        !invocation.text.includes(encodedValue) &&
+        !urlPartContainsReceipt(invocation.text, protectedValue) &&
+        !urlPartContainsReceipt(invocation.text.replace(/\+/g, ' '), protectedValue)
+      ) {
         continue;
       }
 
@@ -11697,6 +11702,15 @@ function decodedArtifactTexts(artifact: RedactedArtifact): string[] {
       const decoded = safeDecodeURIComponent(value);
       if (decoded !== value) {
         pending.push(decoded);
+      }
+      if (value.includes('&')) {
+        // Escape tags so the HTML tokenizer only decodes character references.
+        const fragment = parseFragment(value.replace(/</g, '&lt;'));
+        for (const node of fragment.childNodes) {
+          if ('value' in node) {
+            pending.push(node.value);
+          }
+        }
       }
       try {
         pending.push(JSON.parse(value));
