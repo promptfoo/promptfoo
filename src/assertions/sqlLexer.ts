@@ -121,11 +121,12 @@ export function stripIgnoredSqlText(sql: string, databaseType: string, maskValue
       (character === '[' && supportsBracketIdentifiers)
     ) {
       const backslashEscapes: boolean =
-        !postgres ||
-        (character === "'" &&
-          (postgresEscapeContinuation ||
-            (sql[cursor - 1]?.toLowerCase() === 'e' &&
-              !/[\p{L}\p{N}_$]/u.test(sql[cursor - 2] ?? ''))));
+        database !== 'sqlite' &&
+        (!postgres ||
+          (character === "'" &&
+            (postgresEscapeContinuation ||
+              (sql[cursor - 1]?.toLowerCase() === 'e' &&
+                !/[\p{L}\p{N}_$]/u.test(sql[cursor - 2] ?? '')))));
       postgresEscapeContinuation = postgres && character === "'" && backslashEscapes;
       const quoteEnd = findQuotedTextEnd(sql, cursor, character, backslashEscapes);
       if (maskValues && quoteEnd === undefined) {

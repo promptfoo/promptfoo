@@ -10,7 +10,7 @@ const assertion: Assertion = {
 
 describe('SQL trace value redaction', () => {
   it.each([
-    ['mysql', '$x$'],
+    ['mysql', 'alias$x$'],
     ['mariadb', '$x$'],
     ['postgresql', 'alias$x$'],
     ['postgres', 'alias$x$'],
@@ -35,7 +35,7 @@ describe('SQL trace value redaction', () => {
     },
   );
 
-  it.each(['postgresql', 'postgres'])(
+  it.each(['postgresql', 'postgres', 'sqlite'])(
     'preserves statements after ordinary backslash literals in %s',
     (database) => {
       const query = String.raw`SELECT 'private\'; DROP TABLE users; -- '`;
@@ -45,6 +45,11 @@ describe('SQL trace value redaction', () => {
       expect(stripIgnoredSqlText(query, database)).toContain('DROP TABLE users');
     },
   );
+
+  it('keeps SQLite doubled-quote string contents private', () => {
+    const query = String.raw`SELECT 'private\''still literal; DROP TABLE users';`;
+    expect(redactSqlLiteralsAndComments(query, 'sqlite')).toBe('SELECT :literal_1 ;');
+  });
 
   it.each([
     ['E', '\n'],
