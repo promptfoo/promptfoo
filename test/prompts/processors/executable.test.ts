@@ -12,6 +12,7 @@ import {
   createPromptSelection,
   getPromptsForReplay,
 } from '../../../src/util/eval/replay';
+import { mockProcessEnv } from '../../util/utils';
 
 import type { ApiProvider } from '../../../src/types/index';
 
@@ -47,6 +48,7 @@ describe('processExecutableFile', () => {
 
   // Cross-platform tests
   it('invalidates cached prompts when a script changes under config.basePath', async () => {
+    const restoreEnv = mockProcessEnv({}, { clear: true });
     fs.mkdirSync('.local', { recursive: true });
     const dir = fs.mkdtempSync(path.join('.local', 'pf-prompt-cache-base-'));
     const script = path.join(dir, 'prompt.cjs');
@@ -69,6 +71,7 @@ describe('processExecutableFile', () => {
       }
       expect(values.size).toBe(2);
     } finally {
+      restoreEnv();
       fs.rmSync(dir, { recursive: true, force: true });
     }
   });
