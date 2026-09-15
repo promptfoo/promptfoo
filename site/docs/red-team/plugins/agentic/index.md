@@ -64,7 +64,7 @@ promptfoo.agentic.evidence_json={"findings":[]}
 The evidence can appear on a span, a span event, or resource attributes. Verifier evidence in resource attributes remains available when a span overrides the same key. When the JSON omits `pluginId`,
 the grader uses the plugin ID attribute in the same namespace on that span or event. Event evidence can
 inherit the enclosing span's plugin ID, but an event cannot reuse the span's evidence
-under a different plugin ID. An explicit plugin ID inside the JSON keeps its own scope. An invalid JSON plugin ID without a valid enclosing scope returns a grading error.
+under a different plugin ID. An explicit plugin ID inside the JSON keeps its own scope. Finding IDs must agree with their enclosing evidence scope; use separate plugin-scoped records for different plugins. Conflicting IDs return a grading error. An invalid JSON plugin ID without a valid enclosing scope returns a grading error.
 An executed tool is not covered by a control that was blocked, denied, rejected, or failed. Tool call ID aliases must contain consistent, nonempty strings. Malformed or conflicting aliases return a grading error. Distinct executions logged in separate OTLP uploads need distinct call IDs or timestamps, because byte-identical records are treated as retries.
 A failed verifier cannot be replaced by another clean result. If supplied, `verifierFailed` must be a boolean; other values fail the verifier. Serialized evidence with duplicate object properties returns a grading error because decoding would discard evidence. Malformed findings for the active plugin also fail the row, including when another record or evidence alias contains a clean result. Evidence aliases are case-insensitive and checked together, including aliases in provider metadata. Malformed branches retain their enclosing plugin scope even beside clean evidence. Inside recognized evidence tags, every decoded layer must contain valid JSON with only JSON whitespace around it; labels outside the tags remain allowed. Conflicting valid and malformed ID aliases fail that scope; unscoped errors do not override a different plugin's evidence. Failed verifiers report `verifierStatus: failed`; `missing-evidence` means no matching verifier evidence was found.
 
@@ -93,7 +93,7 @@ As a fallback for a trusted non-traced harness, the target provider can return J
 
 Do not put verifier evidence in final model text. Promptfoo ignores model-controlled final output so a target cannot forge a clean result.
 
-If `findings` contains a matching `pluginId`, Promptfoo fails the row. If plugin-scoped evidence includes an explicit `findings` array with no matching finding, the row passes. Fields such as `mode`, `trace`, or `evidenceSource` do not count as verifier evidence by themselves. If plugin-scoped evidence is missing, the row fails with `verifierStatus: missing-evidence`; treat that as a harness configuration problem, not an application security pass.
+If `findings` contains a matching `pluginId`, Promptfoo fails the row. If plugin-scoped evidence includes an explicit empty `findings` array, the row passes. Fields such as `mode`, `trace`, or `evidenceSource` do not count as verifier evidence by themselves. If plugin-scoped evidence is missing, the row fails with `verifierStatus: missing-evidence`; treat that as a harness configuration problem, not an application security pass.
 
 ## How Promptfoo Grades
 
@@ -103,7 +103,7 @@ Promptfoo uses a verifier-first grading path:
 2. **Provider evidence fallback**: If trace evidence is unavailable, Promptfoo checks provider-returned `agenticEvidence` or `agentSdkEvidence`.
 3. **Missing evidence**: If neither source is present for the assertion plugin, the row fails as `missing-evidence`.
 
-The grader fails only when the finding's `pluginId` matches the assertion plugin. This lets one target emit several findings in a single trace while each assertion grades its own boundary.
+Each assertion grades evidence scoped to its own plugin. This lets one target emit findings for several plugins in a single trace. Final agentic verification errors remain errors even when earlier strategy turns were graded successfully.
 
 ## Example
 
