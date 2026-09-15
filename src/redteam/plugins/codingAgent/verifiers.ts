@@ -42,13 +42,21 @@ class VerifierArtifactError extends Error {
 }
 
 const MAX_VERIFIER_ARTIFACT_BYTES = 1024 * 1024;
+const MCP_LEDGER_ASSERTIONS = new Set([
+  'promptfoo:redteam:coding-agent:mcp-confused-deputy',
+  'promptfoo:redteam:coding-agent:mcp-config-poisoning',
+  'promptfoo:redteam:coding-agent:connector-data-overreach',
+  'promptfoo:redteam:coding-agent:connector-parameter-exfil',
+]);
 
 function* protectedReceiptAssertions(test: AtomicTestCase): Generator<Assertion> {
   for (const assertion of getAssertionLeaves(test.assert)) {
+    const type = assertion.type.replace(/^not-/, '');
     if (
-      TRACE_REDACTION_ASSERTIONS.has(assertion.type.replace(/^not-/, '')) ||
-      assertion.type.replace(/^not-/, '') === 'promptfoo:redteam:coding-agent:trace-log-exfil' ||
-      assertion.type.replace(/^not-/, '') === 'promptfoo:redteam:coding-agent:markdown-url-exfil'
+      TRACE_REDACTION_ASSERTIONS.has(type) ||
+      MCP_LEDGER_ASSERTIONS.has(type) ||
+      type === 'promptfoo:redteam:coding-agent:trace-log-exfil' ||
+      type === 'promptfoo:redteam:coding-agent:markdown-url-exfil'
     ) {
       yield assertion;
     }
@@ -56,6 +64,9 @@ function* protectedReceiptAssertions(test: AtomicTestCase): Generator<Assertion>
 }
 
 function receiptPaths(assertion: Assertion, value = assertion.value): string[] {
+  if (MCP_LEDGER_ASSERTIONS.has(assertion.type.replace(/^not-/, ''))) {
+    return [];
+  }
   switch (assertion.type.replace(/^not-/, '')) {
     case 'promptfoo:redteam:coding-agent:trace-log-exfil':
       return traceLogReceiptPathsFromAssertion(value);
@@ -185,18 +196,18 @@ export async function withMcpLedgerScope<T>(
   for (const assertion of getAssertionLeaves(test.assert)) {
     const type = assertion.type.replace(/^not-/, '');
     requiresFreshTarget ||= /^promptfoo:redteam:(?:coding-agent|harness):/.test(type);
+    const value = MCP_LEDGER_ASSERTIONS.has(type)
+      ? getProtectedAssertionValue(assertion)
+      : assertion.value;
     const ledgerPaths =
       type === 'promptfoo:redteam:coding-agent:mcp-confused-deputy'
-        ? [
-            ...mcpSourceLedgerPathsFromAssertion(assertion.value),
-            ...mcpSinkLedgerPathsFromAssertion(assertion.value),
-          ]
+        ? [...mcpSourceLedgerPathsFromAssertion(value), ...mcpSinkLedgerPathsFromAssertion(value)]
         : type === 'promptfoo:redteam:coding-agent:mcp-config-poisoning'
-          ? mcpConfigLaunchLedgerPathsFromAssertionAndTest(assertion.value, test)
+          ? mcpConfigLaunchLedgerPathsFromAssertionAndTest(value, test)
           : type === 'promptfoo:redteam:coding-agent:connector-data-overreach'
-            ? connectorReadLedgerPathsFromAssertion(assertion.value)
+            ? connectorReadLedgerPathsFromAssertion(value)
             : type === 'promptfoo:redteam:coding-agent:connector-parameter-exfil'
-              ? connectorSinkLedgerPathsFromAssertion(assertion.value)
+              ? connectorSinkLedgerPathsFromAssertion(value)
               : [];
     for (const filePath of ledgerPaths) {
       paths.add(path.resolve(renderVarsInObject(filePath, vars)));

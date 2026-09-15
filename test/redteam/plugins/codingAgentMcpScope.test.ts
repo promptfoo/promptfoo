@@ -2,11 +2,14 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 
+import { dump } from 'js-yaml';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import {
   verifyCodingAgentResult,
   withMcpLedgerScope,
+  withProtectedReceiptScope,
 } from '../../../src/redteam/plugins/codingAgent/verifiers';
+import { getProtectedAssertionValue } from '../../../src/util/traceRedaction';
 
 import type { AtomicTestCase } from '../../../src/types';
 
@@ -47,6 +50,75 @@ describe('MCP ledger case isolation', () => {
     const assertion = first.type === 'assert-set' ? first.assert[0] : first;
     return verifyCodingAgentResult(plugin, 'Completed', test, assertion.value);
   }
+
+  it.each(
+    ['json', 'yaml', 'yml'].flatMap((extension) =>
+      (
+        [
+          'mcp-confused-deputy',
+          'mcp-config-poisoning',
+          'connector-data-overreach',
+          'connector-parameter-exfil',
+        ] as const
+      ).map((name) => ({ extension, name })),
+    ),
+  )(
+    'isolates and freezes $name ledgers configured through $extension assertion files',
+    async ({ extension, name }) => {
+      const value =
+        name === 'mcp-confused-deputy'
+          ? { mcpSourceLedgerPath: source, mcpSinkLedgerPath: sink }
+          : {
+              [name === 'mcp-config-poisoning'
+                ? 'mcpLaunchLedgerPath'
+                : name === 'connector-data-overreach'
+                  ? 'connectorReadLedgerPath'
+                  : 'connectorSinkLedgerPath']: source,
+            };
+      const row =
+        name === 'mcp-config-poisoning'
+          ? { pid: 123 }
+          : name === 'connector-data-overreach'
+            ? { result: { records: [{ id: 'private-record', protected: true }] } }
+            : { canaryInParameters: true };
+      const appendRecord = () =>
+        name === 'mcp-confused-deputy'
+          ? append('PRIVATE_EXTERNAL_CONFIG_RECEIPT', true)
+          : fs.appendFileSync(source, JSON.stringify(row) + '\n');
+      appendRecord();
+      const configPath = path.join(directory, `assertion.${extension}`);
+      fs.writeFileSync(configPath, extension === 'json' ? JSON.stringify(value) : dump(value));
+      const assertion = {
+        type: `promptfoo:redteam:coding-agent:${name}` as const,
+        value: `file://${configPath}`,
+      };
+      test.assert = [{ type: 'assert-set', assert: [assertion] }];
+      const run = (active: boolean) =>
+        withMcpLedgerScope(test, {}, async (capture) => {
+          await Promise.resolve();
+          if (active) {
+            appendRecord();
+          }
+          capture();
+          fs.writeFileSync(configPath, '{}');
+          return verifyCodingAgentResult(
+            `coding-agent:${name}`,
+            'Done',
+            test,
+            getProtectedAssertionValue(assertion),
+          )?.kind;
+        });
+      const results = await withProtectedReceiptScope([test], () =>
+        Promise.all([run(false), run(true), run(false)]),
+      );
+      expect(results[0]).toBeUndefined();
+      expect(results[1]).toBe(
+        name === 'mcp-config-poisoning' ? 'mcp-config-poisoning-persisted' : name,
+      );
+      expect(results[2]).toBeUndefined();
+      expect(assertion.value).toBe(`file://${configPath}`);
+    },
+  );
 
   it.each(['connector-data-overreach', 'connector-parameter-exfil'] as const)(
     'isolates concurrent connector ledger records for %s',
