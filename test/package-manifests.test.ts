@@ -21,6 +21,36 @@ function readPackageJson<T>(relativePath: string): T {
   return JSON.parse(fs.readFileSync(packageJsonPath, 'utf8')) as T;
 }
 
+// Match individual shell commands, including continued Docker RUN instructions.
+function validateDockerInstallCommands(dockerfile: string): void {
+  const instructions = dockerfile
+    .split('\n')
+    .filter((line) => !line.trimStart().startsWith('#'))
+    .join('\n')
+    .replace(/\\\r?\n/g, ' ')
+    // Normalize literal shell spelling so n\\pm and n'p'm cannot hide npm.
+    // This intentionally errs toward rejecting quoted command-like text.
+    .replace(/\\(.)/g, '$1')
+    .replace(/["']/g, '');
+  const commands = [...instructions.matchAll(/(?<![\w.-])npm\b([^;&|()\n]*)/g)].map(([, text]) =>
+    text.trim().split(/\s+/),
+  );
+  expect(commands.some(([command]) => command === 'ci')).toBe(true);
+  expect(commands.some(([command]) => command === 'rebuild')).toBe(true);
+  for (const [command, ...args] of commands) {
+    // Keep Docker npm commands auditable: global options must follow the subcommand.
+    // Reject unsupported shapes instead of silently skipping a hidden install.
+    expect(['ci', 'rebuild', 'run']).toContain(command);
+    if (command === 'ci') {
+      expect(args).toContain('--ignore-scripts');
+      expect(args.some((arg) => arg.startsWith('--ignore-scripts='))).toBe(false);
+    } else if (command === 'rebuild') {
+      // Package names and globs can rebuild untrusted nested dependencies.
+      expect(args).toEqual(['./node_modules/esbuild', './node_modules/@swc/core']);
+    }
+  }
+}
+
 const SOURCE_FILE_EXTENSIONS = /\.(ts|tsx|mts|cts|js|mjs|cjs)$/;
 const EXPECTED_SHARP_VERSION = '^0.35.4';
 const PATCHED_JS_YAML_RANGE = '^3.15.1 || ^4.3.1 || >=5.2.3';
@@ -514,27 +544,32 @@ describe('package manifests', () => {
   it('blocks dependency install scripts in the Docker build', () => {
     const dockerfile = fs.readFileSync(path.join(process.cwd(), 'Dockerfile'), 'utf8');
 
-    expect(dockerfile).toMatch(/npm ci[^\n]*--ignore-scripts/);
+    expect(() => validateDockerInstallCommands(dockerfile)).not.toThrow();
+  });
 
-    // `npm rebuild <name>` matches every folder of that name anywhere in the tree, so a
-    // nested dependency aliased to `esbuild` would run its install script and defeat
-    // --ignore-scripts. Only exact directory specs for the trusted packages are allowed.
-    // Comments are stripped first so the Dockerfile can explain the rule using the very
-    // command shape this asserts against.
-    const instructions = dockerfile
-      .split('\n')
-      .filter((line) => !line.trimStart().startsWith('#'))
-      .join('\n');
-    const rebuildArgs = instructions.match(/npm rebuild ([^\n]*)/)?.[1];
-
-    expect(rebuildArgs, 'the Docker build must rebuild its native packages').toBeDefined();
-    expect(
-      rebuildArgs!
-        .replace(/\\$/, '')
-        .trim()
-        .split(/\s+/)
-        .filter((arg) => arg !== '&&' && !arg.startsWith('-')),
-    ).toEqual(['./node_modules/esbuild', './node_modules/@swc/core']);
+  it.each([
+    'RUN npm ci',
+    String.raw`RUN n\pm ci`,
+    `RUN n'p'm ci`,
+    'RUN n""pm rebuild esbuild',
+    'RUN (npm ci)',
+    'RUN (npm rebuild esbuild)',
+    'RUN /usr/bin/npm ci',
+    'RUN "npm" ci',
+    'RUN npm --silent ci',
+    'RUN npm "ci"',
+    'RUN npm --prefix /app ci',
+    'RUN npm --silent rebuild esbuild',
+    'RUN npm ci --ignore-scripts=false',
+    'RUN npm rebuild esbuild',
+    'RUN npm rebuild ./node_modules/*',
+  ])('rejects an additional unsafe Docker command: %s', (unsafeCommand) => {
+    const safeCommands =
+      'RUN npm ci --ignore-scripts && npm rebuild ./node_modules/esbuild ./node_modules/@swc/core';
+    expect(() => validateDockerInstallCommands(`${safeCommands}\n${unsafeCommand}`)).toThrow();
+    expect(() =>
+      validateDockerInstallCommands(`${safeCommands} && ${unsafeCommand.replace('RUN ', '')}`),
+    ).toThrow();
   });
 
   it('keeps sharp out of the root install path', () => {
