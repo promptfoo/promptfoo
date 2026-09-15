@@ -74,6 +74,17 @@ describe('Live input', () => {
     expect(decodeWav(convertPcm16ToWav(audio)).audio).toEqual(audio);
   });
 
+  it.each([
+    { encoding: 'PCM', make: convertPcm16ToWav, field: 'byteRate', offset: 28, size: 4 },
+    { encoding: 'PCM', make: convertPcm16ToWav, field: 'blockAlign', offset: 32, size: 2 },
+    { encoding: 'extensible PCM', make: extensibleWav, field: 'byteRate', offset: 28, size: 4 },
+    { encoding: 'extensible PCM', make: extensibleWav, field: 'blockAlign', offset: 32, size: 2 },
+  ])('rejects inconsistent $field in $encoding WAV input', ({ make, offset, size }) => {
+    const wav = make(Buffer.from([1, 0, 2, 0]));
+    wav.writeUIntLE(1, offset, size);
+    expect(() => decodeWav(wav)).toThrow('format chunk');
+  });
+
   it.each(['invalid-first', 'data-first', 'duplicate-format'])(
     'rejects ambiguous WAV format ordering (%s)',
     (kind) => {

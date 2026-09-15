@@ -201,8 +201,13 @@ export class OpenAiLiveProvider extends OpenAiGenericProvider {
       if (config.delegation && !['client', 'responses'].includes(config.delegation.type)) {
         throw new Error('GPT-Live delegation.type must be client or responses.');
       }
-      if (config.delegation?.type === 'responses' && !config.delegation.responses?.model?.trim()) {
-        throw new Error('GPT-Live Responses delegation requires a backend model.');
+      if (config.delegation?.type === 'responses') {
+        const model = config.delegation.responses?.model;
+        if (typeof model !== 'string' || !model.trim() || Buffer.byteLength(model) > 256) {
+          throw new Error(
+            'GPT-Live Responses delegation requires a nonempty backend model of at most 256 UTF-8 bytes.',
+          );
+        }
       }
       const delegationHandler = await resolveHandler(config.delegationHandler);
       const functionCallHandler = await resolveHandler(config.functionCallHandler);
@@ -214,6 +219,7 @@ export class OpenAiLiveProvider extends OpenAiGenericProvider {
         format,
         ...input,
         responseWindowMs,
+        maxAudioBytes: (bytesPerSecond * captureDurationMs) / 1000,
         websocketTimeout,
         closeTimeoutMs,
         requestTimeoutMs,

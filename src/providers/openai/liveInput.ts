@@ -41,6 +41,8 @@ function isMonoPcm16(bytes: Buffer, start: number, size: number, rate: number): 
     pcm &&
     bytes.readUInt16LE(start + 2) === 1 &&
     bytes.readUInt32LE(start + 4) === rate &&
+    bytes.readUInt32LE(start + 8) === rate * 2 &&
+    bytes.readUInt16LE(start + 12) === 2 &&
     bytes.readUInt16LE(start + 14) === 16
   );
 }

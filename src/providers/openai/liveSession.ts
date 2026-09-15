@@ -7,7 +7,6 @@ import { isSecretField, REDACTED, sanitizeObject } from '../../util/sanitizer';
 import { accumulateTokenUsage } from '../../util/tokenUsageUtils';
 import { convertG711ToPcm16, convertPcm16ToWav } from './audio';
 import { calculateOpenAIUsageCost } from './billing';
-import { getLiveBytesPerSecond, LIVE_MAX_CAPTURE_MS } from './liveInput';
 import { getOpenAICompletionTokenDetails, resolveMaxToolIterations } from './util';
 import type OpenAI from 'openai';
 
@@ -55,6 +54,7 @@ interface SessionOptions {
   input: LiveInputMessage[];
   audio: Buffer;
   responseWindowMs: number;
+  maxAudioBytes: number;
   websocketTimeout: number;
   closeTimeoutMs: number;
   requestTimeoutMs: number;
@@ -416,18 +416,6 @@ export class LiveSession {
   private startResponseWindow(): void {
     const elapsedMs = performance.now() - this.streamStartedAt;
     this.captureEndFrame = Math.ceil((elapsedMs + this.options.responseWindowMs) / LIVE_FRAME_MS);
-    if (this.audioBytes > this.getMaxAudioBytes()) {
-      this.fail('GPT-Live audio exceeded the capture limit.');
-    }
-  }
-
-  private getMaxAudioBytes(): number {
-    // Before the opening acknowledgment, startup may still extend a text capture.
-    const frames =
-      this.captureEndFrame ??
-      Math.ceil((this.options.websocketTimeout + this.options.responseWindowMs) / LIVE_FRAME_MS);
-    const durationMs = Math.min(frames * LIVE_FRAME_MS, LIVE_MAX_CAPTURE_MS);
-    return Math.ceil((getLiveBytesPerSecond(this.options.format) * durationMs) / 1000);
   }
 
   private handleEvent(event: LiveEvent): void {
@@ -528,7 +516,8 @@ export class LiveSession {
         // Reject oversized base64 before allocating decoded audio or converting it to WAV.
         if (
           (typeof event.delta === 'string' &&
-            this.audioBytes + Buffer.byteLength(event.delta, 'base64') > this.getMaxAudioBytes()) ||
+            this.audioBytes + Buffer.byteLength(event.delta, 'base64') >
+              this.options.maxAudioBytes) ||
           this.audioChunks.length >= MAX_AUDIO_CHUNKS
         ) {
           this.fail('GPT-Live audio exceeded the capture limit.');
@@ -913,12 +902,11 @@ export class LiveSession {
         this.setError(LATE_WORK_ERROR);
         return;
       }
-      this.backendTurns.set(delegationId, { id: '', calls: new Map() });
-      this.completeTools(turn.calls.values());
+      this.completeTools(delegationId, turn.calls.values());
     }
   }
 
-  private completeTools(calls: Iterable<ToolCall>): void {
+  private completeTools(delegationId: string, calls: Iterable<ToolCall>): void {
     const handler = this.options.functionCallHandler;
     if (!handler) {
       this.setError(
@@ -964,6 +952,7 @@ export class LiveSession {
         });
       }
       if (!this.done && !this.closing) {
+        this.backendTurns.set(delegationId, { id: '', calls: new Map() });
         this.send({ type: 'response.create', event_id: this.registerCommand('response.create') });
       }
     });
@@ -1119,9 +1108,9 @@ export class LiveSession {
         : undefined;
     this.resolve({
       output,
-      error: this.error,
+      error: this.error === undefined ? undefined : this.redact(this.error),
       cached: false,
-      sessionId: this.sessionId,
+      sessionId: this.sessionId === undefined ? undefined : this.redact(this.sessionId),
       tokenUsage: this.tokenUsage,
       cost,
       // Safety interventions are graded as refusals, not provider errors.
@@ -1160,9 +1149,16 @@ export class LiveSession {
         voiceCost,
         backendCost: this.backendCost,
         finalUsageConfirmed: this.finalized,
-        closeReason: this.reason,
-        backendResponses: this.backendResponses,
-        delegations: this.delegations,
+        closeReason: this.reason === undefined ? undefined : this.redact(this.reason),
+        backendResponses: this.backendResponses.map((response) => ({
+          ...response,
+          id: this.redact(response.id),
+          model: this.redact(response.model),
+        })),
+        delegations: this.delegations.map((delegation) => ({
+          ...delegation,
+          id: this.redact(delegation.id),
+        })),
         apiErrors: this.apiErrors,
         responseWindowMs: this.options.responseWindowMs,
       },

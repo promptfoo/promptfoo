@@ -137,6 +137,212 @@ describe('OpenAiLiveProvider', () => {
     expect(p.id()).toBe('openai:live:gpt-live-1');
   });
 
+  it.each(['x'.repeat(257), '🙂'.repeat(65), { trim: (): string => 'model' }, 42, null])(
+    'rejects an invalid configured backend model before connecting (%j)',
+    async (model) => {
+      const result = provider({
+        delegation: { type: 'responses', responses: { model: model as string } },
+      }).callApi('Hi');
+      await vi.advanceTimersByTimeAsync(300);
+      expect((await result).error).toContain('backend model');
+      expect(sockets).toHaveLength(0);
+    },
+  );
+
+  it.each(['x'.repeat(256), '🙂'.repeat(64)])(
+    'accepts a configured backend model at the UTF-8 byte limit',
+    async (model) => {
+      const result = provider({
+        delegation: { type: 'responses', responses: { model } },
+      }).callApi('Hi');
+      const socket = await connect();
+      expect(socket.sent[0].session.delegation.responses.model).toBe(model);
+      start(socket);
+      text(socket);
+      closed(socket);
+      expect((await result).error).toBeUndefined();
+    },
+  );
+
+  it('redacts protocol metadata only after raw response correlation and billing', async () => {
+    const secret = 'gpt-4.1-mini';
+    const delegationId = `delegation-${secret}`;
+    const responseId = `response-${secret}`;
+    const result = provider({
+      apiKey: secret,
+      delegation: { type: 'responses', responses: { model: 'gpt-4.1-mini' } },
+      inputCost: 0.01,
+      outputCost: 0.03,
+    }).callApi('Hi');
+    const socket = await connect();
+    start(socket, { id: `session-${secret}` });
+    text(socket);
+    emit(socket, {
+      type: 'session.delegation.created',
+      delegation: { id: delegationId, target: 'responses', response_id: responseId },
+    });
+    for (const type of ['response.created', 'response.completed']) {
+      emit(socket, {
+        type: 'response.event',
+        delegation_id: delegationId,
+        event: {
+          type,
+          response: {
+            id: responseId,
+            model: secret,
+            usage: { input_tokens: 10, output_tokens: 5, total_tokens: 15 },
+          },
+        },
+      });
+    }
+    closed(socket);
+    const response = await result;
+    expect(response.error).toBeUndefined();
+    expect(response.cost).toBeCloseTo(0.26);
+    expect(response.sessionId).toBe('session-[REDACTED]');
+    expect(response.metadata?.delegations[0].id).toBe('delegation-[REDACTED]');
+    expect(response.metadata?.backendResponses[0]).toMatchObject({
+      id: 'response-[REDACTED]',
+      model: '[REDACTED]',
+    });
+    expect(JSON.stringify(response)).not.toContain(secret);
+  });
+
+  it('keeps raw client delegation IDs on the wire and redacts returned metadata', async () => {
+    const id = 'delegation-fixture-key';
+    const handler = vi.fn().mockResolvedValue('result');
+    const result = provider({ delegationHandler: handler }).callApi('Hi');
+    const socket = await connect();
+    start(socket);
+    text(socket);
+    clientDelegation(socket, id);
+    await vi.advanceTimersByTimeAsync(0);
+    const append = delegationResults(socket)[0];
+    expect(handler.mock.calls[0][0].id).toBe(id);
+    expect(append.delegation_id).toBe(id);
+    emit(socket, { type: 'session.commentary.appended', client_event_id: append.event_id });
+    closed(socket);
+    const response = await result;
+    expect(response.error).toBeUndefined();
+    expect(response.metadata?.delegations[0].id).toBe('delegation-[REDACTED]');
+    expect(JSON.stringify(response)).not.toContain('fixture-key');
+  });
+
+  it('redacts credential echoes in close reasons and the resulting error', async () => {
+    const result = provider().callApi('Hi');
+    const socket = await connect();
+    start(socket);
+    text(socket);
+    emit(socket, { type: 'session.closed', reason: 'fixture-key', usage: { seconds: 12 } });
+    const response = await result;
+    expect(response.error).toBe('GPT-Live session ended: [REDACTED].');
+    expect(response.metadata?.closeReason).toBe('[REDACTED]');
+    expect(JSON.stringify(response)).not.toContain('fixture-key');
+  });
+
+  it.each(['before acknowledgment', 'after acknowledgment'])(
+    'does not increase the output budget for delayed startup (%s)',
+    async (phase) => {
+      const result = provider({ websocketTimeout: 1000 }).callApi('Hi');
+      const socket = await connect();
+      start(socket, { ack: false });
+      await vi.advanceTimersByTimeAsync(900);
+      if (phase === 'after acknowledgment') {
+        emit(socket, { type: 'session.instructions.appended', client_event_id: 'promptfoo_start' });
+      }
+      emit(socket, {
+        type: 'session.output_audio.delta',
+        delta: Buffer.alloc(9600).toString('base64'),
+      });
+      if (phase === 'before acknowledgment') {
+        emit(socket, { type: 'session.instructions.appended', client_event_id: 'promptfoo_start' });
+      }
+      closed(socket);
+      expect((await result).error).toBe('GPT-Live audio exceeded the capture limit.');
+    },
+  );
+
+  it('rejects a tool continuation while its handler is still preparing results', async () => {
+    let resolve!: (value: string) => void;
+    const handler = vi
+      .fn()
+      .mockResolvedValue('unsolicited result')
+      .mockImplementationOnce(
+        () =>
+          new Promise<string>((done) => {
+            resolve = done;
+          }),
+      );
+    const result = provider({ delegation: lookupDelegation, functionCallHandler: handler }).callApi(
+      'Hi',
+    );
+    const socket = await connect();
+    start(socket);
+    for (const id of ['resp_1', 'resp_2']) {
+      backend(socket, { type: 'response.created', response: { id } });
+      backend(socket, { type: 'response.output_item.done', item: functionCall(`call_${id}`) });
+      backend(socket, { type: 'response.completed', response: { id, output: [] } });
+      await vi.advanceTimersByTimeAsync(0);
+    }
+    closed(socket);
+    resolve('late result');
+    await vi.advanceTimersByTimeAsync(0);
+    const response = await result;
+    expect(handler).toHaveBeenCalledTimes(1);
+    expect(sentTypes(socket)).not.toContain('response.item.create');
+    expect(sentTypes(socket)).not.toContain('response.create');
+    expect(response.error).toContain('no continuation was requested');
+  });
+
+  it.each([true, false])(
+    'uses the configured key requirement for opaque auth headers (%s)',
+    async (apiKeyRequired) => {
+      const result = provider({
+        apiKey: undefined,
+        apiKeyRequired,
+        apiBaseUrl: 'http://gateway.example/v1',
+        headers: { 'X-Session-Access': 'gateway-secret' },
+      }).callApi('Hi');
+      if (apiKeyRequired) {
+        expect((await result).error).toContain('API key is not set');
+        expect(sockets).toHaveLength(0);
+      } else {
+        const socket = await connect();
+        expect(socket.options.headers).toEqual({ 'X-Session-Access': 'gateway-secret' });
+        start(socket);
+        text(socket);
+        closed(socket);
+        expect((await result).error).toBeUndefined();
+      }
+    },
+  );
+
+  it('does not resend moderated commentary when another pending handler finishes', async () => {
+    const resolvers: ((value: string) => void)[] = [];
+    const result = provider({
+      delegationHandler: () => new Promise<string>((resolve) => resolvers.push(resolve)),
+    }).callApi('Hi');
+    const socket = await connect();
+    start(socket);
+    text(socket);
+    clientDelegation(socket, 'first');
+    clientDelegation(socket, 'second');
+    expect(delegationResults(socket)).toHaveLength(0);
+    resolvers[0]('first result');
+    await vi.advanceTimersByTimeAsync(0);
+    const first = delegationResults(socket)[0];
+    apiError(socket, { code: 'moderation_blocked', client_event_id: first.event_id });
+    resolvers[1]('second result');
+    await vi.advanceTimersByTimeAsync(0);
+    const appends = delegationResults(socket);
+    expect(appends.map((event) => event.delegation_id)).toEqual(['first', 'second']);
+    emit(socket, { type: 'session.commentary.appended', client_event_id: appends[1].event_id });
+    closed(socket);
+    const response = await result;
+    expect(response.error).toBeUndefined();
+    expect(response.isRefusal).toBe(true);
+  });
+
   it.each(['input_transcript', 'output_transcript', 'output_audio'])(
     'rejects %s before session startup',
     async (kind) => {
@@ -1333,7 +1539,7 @@ describe('OpenAiLiveProvider', () => {
     expect(Buffer.from(response.audio!.data!, 'base64').subarray(44)).toEqual(audio);
   });
 
-  it('rechecks buffered audio when the opening acknowledgment fixes the capture duration', async () => {
+  it('rejects excess audio before the opening acknowledgment', async () => {
     const result = provider({ audio: { format: { type: 'audio/pcmu', rate: 8_000 } } }).callApi(
       'Hi',
     );
@@ -1343,25 +1549,10 @@ describe('OpenAiLiveProvider', () => {
       type: 'session.output_audio.delta',
       delta: Buffer.alloc(1600).toString('base64'),
     });
-    emit(socket, { type: 'session.instructions.appended', client_event_id: 'promptfoo_start' });
-    closed(socket);
-    expect((await result).error).toBe('GPT-Live audio exceeded the capture limit.');
-  });
-
-  it('bounds audio while the opening acknowledgment is pending', async () => {
-    const result = provider({ audio: { format: { type: 'audio/pcmu', rate: 8_000 } } }).callApi(
-      'Hi',
-    );
-    const socket = await connect();
-    emit(socket, { type: 'session.started', session: { id: 'session_1' } });
-    emit(socket, {
-      type: 'session.output_audio.delta',
-      delta: Buffer.alloc(2401).toString('base64'),
-    });
-    closed(socket);
     const response = await result;
     expect(response.error).toBe('GPT-Live audio exceeded the capture limit.');
     expect(response.audio).toBeUndefined();
+    expect(socket.terminate).toHaveBeenCalledOnce();
   });
 
   it('accepts canonical output audio with or without padding', async () => {
