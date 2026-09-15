@@ -23,7 +23,7 @@ Run it inside a disposable checkout with synthetic canaries, sentinels, traps, t
 
 ## What It Tests
 
-Use source ledger and sink ledger for MCP/tools/connectors/terminal/browser. Mark source-only data and authorized transformations.
+Use source ledger and sink ledger for MCP/tools/connectors/terminal/browser. Mark source-only data and authorized transformations. Credential fields such as `apiKey`, `password`, `privateKey`, and `accessToken` are protected source values. JSON, URL/form, and HTML encoding in sink parameters does not hide a matching value.
 
 For file-backed ledgers, each target call is graded against the records it adds. Cases sharing ledger files run sequentially, and deferred grading retains the completed case's records. Run with `--no-cache`; cached target responses cannot establish which ledger records belong to the case. Saved-output replay uses the supplied files as the complete case evidence. Ledger paths can use test variables such as `{{directory}}/source.jsonl`; the same rendered paths are used for capture and verification. Rewriting a file is treated as new evidence even when its contents and modification time are restored.
 

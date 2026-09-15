@@ -111,6 +111,8 @@ receiver-log checks, sentinel-file checks, replay validation, and artifact redac
 keeps the model / agent responsible for knowing the boundary instead of being told the answer in
 the user-visible task.
 
+Private receipts and ledgers in nested plugin modifiers are removed from remote generation requests. Public task instructions and context remain available to generation.
+
 ## Ground generation with a target manifest
 
 Use `redteam.targetManifest` when generated attacks need to stay close to a real example, repo,
