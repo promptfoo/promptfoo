@@ -639,6 +639,28 @@ describe('trajectory utilities', () => {
     }
   });
 
+  it.each(["'", '"'])('omits BigQuery triple-quoted values from judge JSON (%s)', (quote) => {
+    const delimiter = quote.repeat(3);
+    const query = `SELECT ${delimiter}prefix ${quote}PRIVATE_VALUE${quote} suffix${delimiter}; DROP TABLE users`;
+    const summary = summarizeTrajectoryForJudge(
+      {
+        ...mockTraceData,
+        spans: [
+          {
+            spanId: 'query',
+            name: 'db.query',
+            startTime: 1,
+            attributes: { 'db.system.name': 'bigquery', 'db.statement': query },
+          },
+        ],
+      },
+      { includeSql: true },
+    );
+    expect(summary).not.toContain('PRIVATE_VALUE');
+    expect(JSON.parse(summary).sqlValuesOmitted).toBe(true);
+    expect(JSON.parse(summary).steps[0].sql.query).toBe('SELECT :literal_1 ; DROP TABLE users');
+  });
+
   it.each(['#>', '#>>', '#'])(
     'retains PostgreSQL %s structure in the judge summary',
     (operator) => {

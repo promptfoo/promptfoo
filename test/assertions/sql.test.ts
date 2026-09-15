@@ -9,6 +9,33 @@ const assertion: Assertion = {
 };
 
 describe('SQL trace value redaction', () => {
+  it.each(
+    ["'", '"'].flatMap((quote) =>
+      ['', 'b', 'B', 'r', 'br', 'RB'].map((prefix) => ({ quote, prefix })),
+    ),
+  )('omits BigQuery triple-quoted values (prefix=$prefix, quote=$quote)', ({ quote, prefix }) => {
+    const delimiter = quote.repeat(3);
+    const query = `SELECT ${prefix}${delimiter}prefix ${quote}PRIVATE_VALUE${quote} suffix${delimiter} AS data`;
+    expect(redactSqlLiteralsAndComments(query, 'bigquery')).toBe(
+      `SELECT ${prefix ? prefix + ' ' : ''}:literal_1 AS data`,
+    );
+    expect(stripIgnoredSqlText(query, 'bigquery')).not.toContain('PRIVATE_VALUE');
+  });
+
+  it.each(["'", '"'])('preserves BigQuery triple-quote boundaries for %s', (quote) => {
+    const delimiter = quote.repeat(3);
+    const literal = `${delimiter}prefix ${quote}); DROP TABLE hidden; -- ${quote}suffix${delimiter}`;
+    expect(redactSqlLiteralsAndComments(`SELECT ${literal}`, 'bigquery')).toBe('SELECT :literal_1');
+    expect(redactSqlLiteralsAndComments(`SELECT ${literal}; DROP TABLE users`, 'bigquery')).toBe(
+      'SELECT :literal_1 ; DROP TABLE users',
+    );
+    const escaped = `${delimiter}prefix\\${delimiter}PRIVATE_VALUE suffix${delimiter}`;
+    expect(redactSqlLiteralsAndComments(`SELECT ${escaped}`, 'bigquery')).toBe('SELECT :literal_1');
+    expect(() =>
+      redactSqlLiteralsAndComments(`SELECT ${delimiter}PRIVATE_VALUE`, 'bigquery'),
+    ).toThrow('unclosed literal');
+  });
+
   it.each([
     ['mysql', 'alias$x$'],
     ['mariadb', '$x$'],

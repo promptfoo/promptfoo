@@ -32,18 +32,18 @@ function findQuotedTextEnd(
   backslashEscapes: boolean,
 ): number | undefined {
   const closingQuote = quote === '[' ? ']' : quote;
-  let cursor = start + 1;
+  let cursor = start + quote.length;
   while (cursor < sql.length) {
     if (backslashEscapes && closingQuote !== ']' && sql[cursor] === '\\') {
       cursor += 2;
       continue;
     }
-    if (sql[cursor] === closingQuote) {
-      if (sql[cursor + 1] === closingQuote) {
+    if (sql.startsWith(closingQuote, cursor)) {
+      if (quote.length === 1 && sql[cursor + 1] === closingQuote) {
         cursor += 2;
         continue;
       }
-      return cursor + 1;
+      return cursor + closingQuote.length;
     }
     cursor++;
   }
@@ -137,7 +137,13 @@ export function stripIgnoredSqlText(sql: string, databaseType: string, maskValue
               (sql[cursor - 1]?.toLowerCase() === 'e' &&
                 !/[\p{L}\p{N}_$]/u.test(sql[cursor - 2] ?? '')))));
       postgresEscapeContinuation = postgres && character === "'" && backslashEscapes;
-      const quoteEnd = findQuotedTextEnd(sql, cursor, character, backslashEscapes);
+      const quote =
+        database === 'bigquery' &&
+        (character === "'" || character === '"') &&
+        sql.startsWith(character.repeat(3), cursor)
+          ? character.repeat(3)
+          : character;
+      const quoteEnd = findQuotedTextEnd(sql, cursor, quote, backslashEscapes);
       if (maskValues && quoteEnd === undefined) {
         throw new Error(
           'SQL trace has an unclosed literal or identifier and cannot be safely graded.',
