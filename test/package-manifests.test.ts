@@ -786,6 +786,17 @@ describe('package manifests', () => {
     expect(packageLock.packages.site.devDependencies?.['@swc/core']).toBe(
       sitePackageJson.devDependencies?.['@swc/core'],
     );
+
+    const swcCore = packageLock.packages['node_modules/@swc/core'];
+    const nativeBindings = Object.entries(swcCore.optionalDependencies ?? {});
+    expect(nativeBindings.length).toBeGreaterThan(0);
+    for (const [dependencyName, version] of nativeBindings) {
+      expect(version, `${dependencyName} must match SWC core`).toBe(swcCore.version);
+      expect(
+        packageLock.packages[`node_modules/${dependencyName}`]?.version,
+        `${dependencyName} must be present at the required version`,
+      ).toBe(version);
+    }
   });
 
   it('keeps the patched Hono request parser optional and aligned across manifests', () => {
@@ -1324,7 +1335,7 @@ describe('package manifests', () => {
     // No installation anywhere in the tree — including nested copies — may sit on a
     // compromised version.
     for (const [packagePath, installation] of Object.entries(packageLock.packages)) {
-      const name = packagePath.replace(/^.*node_modules\//, '');
+      const name = packagePath.split(/(?:^|\/)node_modules\//).at(-1) ?? packagePath;
       const bad = COMPROMISED[name as keyof typeof COMPROMISED];
       if (!bad || !installation.version) {
         continue;

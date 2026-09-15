@@ -16,8 +16,10 @@ providers:
   - anthropic:messages:claude-opus-4-6
   - openai:gpt-5
   - openai:gpt-5-mini
-  - google:gemini-2.5-pro
-  - vertex:gemini-2.5-pro
+  - google:gemini-3.6-flash
+  - id: vertex:gemini-3.6-flash
+    config:
+      region: global
 ```
 
 ## Available Providers
@@ -35,9 +37,11 @@ providers:
 | [Shell Command](./custom-script.md)                     | Custom - script-based providers                                  | `exec: python chain.py`                                                                                               |
 | [OpenAI ChatKit](./openai-chatkit.md)                   | ChatKit workflows; Agent Builder retires November 30, 2026       | `openai:chatkit:wf_xxxxx`                                                                                             |
 | [OpenAI Agents](./openai-agents.md)                     | OpenAI Agents SDK agents and handoffs                            | `openai:agents:my-agent`                                                                                              |
+| [OpenAI Agents API](./openai-agents-api.md)             | Managed Codex sessions and hosted sandboxes                      | `openai:agents-api:gpt-6-astra`                                                                                       |
 | [OpenAI Codex App Server](./openai-codex-app-server.md) | Experimental Codex app-server provider for streamed agent events | `openai:codex-app-server`                                                                                             |
 | [OpenAI Codex SDK](./openai-codex-sdk.md)               | OpenAI Codex SDK for code generation and analysis                | `openai:codex-sdk`                                                                                                    |
 | [OpenAI Codex Security SDK](./openai-codex-security.md) | Security scans, finding validation, coverage, and cost evals     | `openai:codex-security`                                                                                               |
+| [OpenAI GPT-Live](./openai-live.md)                     | Full-duplex voice with backend delegation                        | `openai:live:gpt-live-1`                                                                                              |
 | [Open Interpreter](./openinterpreter.md)                | Open Interpreter coding agent with sandbox and approval controls | `openinterpreter:gpt-5.4`                                                                                             |
 | [Abliteration](./abliteration.md)                       | OpenAI-compatible chat and multimodal models                     | `abliteration:abliterated-model-large-v2`                                                                             |
 | [AI21 Labs](./ai21.md)                                  | Jamba models                                                     | `ai21:jamba-mini`                                                                                                     |
@@ -62,8 +66,8 @@ providers:
 | [F5](./f5.md)                                           | OpenAI-compatible AI Gateway interface                           | `f5:path-name`                                                                                                        |
 | [fal.ai](./fal.md)                                      | Image Generation Provider                                        | `fal:image:fal-ai/fast-sdxl`                                                                                          |
 | [Fireworks AI](./fireworks.md)                          | Various hosted models                                            | `fireworks:accounts/fireworks/models/gpt-oss-120b`                                                                    |
-| [Google AI Studio](./google.md)                         | Gemini models, Live API, image generation, and Veo video         | `google:gemini-2.5-pro`, `google:gemini-3.1-flash-image`, `google:video:veo-3.1-generate-preview`                     |
-| [Google Vertex AI](./vertex.md)                         | Google Cloud's AI platform, including explicit Veo video routing | `vertex:gemini-2.5-pro`, `vertex:gemini-2.5-flash`, `vertex:video:veo-3.1-generate-preview`                           |
+| [Google AI Studio](./google.md)                         | Gemini models, Live API, image generation, and Veo video         | `google:gemini-3.8-flash`, `google:gemini-3.1-flash-image`, `google:video:veo-3.1-generate-preview`                   |
+| [Google Vertex AI](./vertex.md)                         | Google Cloud's AI platform, including explicit Veo video routing | `vertex:gemini-3.8-flash`, `vertex:gemini-3.5-flash-lite`, `vertex:video:veo-3.1-generate-001`                        |
 | [Groq](./groq.md)                                       | High-performance inference API                                   | `groq:openai/gpt-oss-120b`                                                                                            |
 | [Helicone AI Gateway](./helicone.md)                    | Self-hosted AI gateway for unified provider access               | `helicone:openai/gpt-5`, `helicone:anthropic/claude-sonnet-4`                                                         |
 | [Hyperbolic](./hyperbolic.md)                           | OpenAI-compatible Llama 3 provider                               | `hyperbolic:meta-llama/Llama-3.3-70B-Instruct`                                                                        |
