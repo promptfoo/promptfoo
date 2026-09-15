@@ -143,11 +143,7 @@ function decodeAudio(
       : format.type === 'audio/pcmu'
         ? 'g711_ulaw'
         : 'g711_alaw';
-  if (
-    encoding !== expected ||
-    (format.type === 'audio/pcm' && bytes.length % 2 !== 0) ||
-    bytes.toString('ascii', 0, 4) === 'RIFF'
-  ) {
+  if (encoding !== expected || (format.type === 'audio/pcm' && bytes.length % 2 !== 0)) {
     throw new Error(
       `GPT-Live expects raw ${expected} audio matching audio.format, or a matching PCM16 WAV file.`,
     );

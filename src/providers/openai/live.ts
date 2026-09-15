@@ -4,7 +4,7 @@ import { getRequestTimeoutMs } from '../shared';
 import { hasHeaderOverride, OpenAiGenericProvider } from './index';
 import { getLiveBytesPerSecond, LIVE_MAX_CAPTURE_MS, prepareLiveInput } from './liveInput';
 import { isLiveCredentialHeader, LIVE_FRAME_MS, LiveSession } from './liveSession';
-import { appendOpenAiApiPath } from './util';
+import { appendOpenAiApiPath, assertOpenAiApiModel } from './util';
 
 import type { EnvOverrides } from '../../types/env';
 import type {
@@ -52,6 +52,9 @@ export class OpenAiLiveProvider extends OpenAiGenericProvider {
     modelName: string,
     options: { config?: OpenAiLiveOptions; id?: string; env?: EnvOverrides } = {},
   ) {
+    if (modelName === 'gpt-live-transcribe' || modelName.startsWith('gpt-live-transcribe-')) {
+      assertOpenAiApiModel(modelName);
+    }
     super(modelName, options);
   }
 
@@ -198,9 +201,9 @@ export class OpenAiLiveProvider extends OpenAiGenericProvider {
         throw new Error('GPT-Live input audio plus response window must not exceed five minutes.');
       }
       const requestTimeoutMs = getRequestTimeoutMs();
-      if (websocketTimeout + captureDurationMs + closeTimeoutMs > requestTimeoutMs) {
+      if (websocketTimeout + captureDurationMs + closeTimeoutMs >= requestTimeoutMs) {
         throw new Error(
-          'GPT-Live startup, audio capture, and close timeouts exceed REQUEST_TIMEOUT_MS. Increase REQUEST_TIMEOUT_MS or shorten the capture window.',
+          'GPT-Live startup, audio capture, and close timeouts must be less than REQUEST_TIMEOUT_MS. Increase REQUEST_TIMEOUT_MS or shorten the capture window.',
         );
       }
       if (

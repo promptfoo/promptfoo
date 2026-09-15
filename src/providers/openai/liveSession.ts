@@ -132,9 +132,8 @@ function describeApiError({ code, type, message }: LiveApiError): string {
 /** Accept canonical base64 with or without padding. */
 function decodeBase64(value: string): Buffer | undefined {
   const bytes = Buffer.from(value, 'base64');
-  return bytes.toString('base64').replace(/=+$/, '') === value.replace(/=+$/, '')
-    ? bytes
-    : undefined;
+  const canonical = bytes.toString('base64');
+  return value === canonical || value === canonical.replace(/=+$/, '') ? bytes : undefined;
 }
 
 function readErrorMessage(body: string): string | undefined {
@@ -793,6 +792,13 @@ export class LiveSession {
       this.fail('GPT-Live backend event contradicts the configured delegation mode.');
       return;
     }
+    const owner = this.finishedResponses.get(event.response?.id);
+    if (owner !== undefined) {
+      if (owner !== delegationId) {
+        this.fail('GPT-Live backend response changed delegation.');
+      }
+      return;
+    }
     const responseLimit = 2 * resolveMaxToolIterations(this.options.config.maxToolIterations);
     if (event.type === 'response.created') {
       if (!isBoundedProtocolId(event.response?.id)) {
@@ -800,7 +806,7 @@ export class LiveSession {
         return;
       }
       const turn = this.backendTurns.get(delegationId);
-      if (turn?.id === event.response.id || this.finishedResponses.has(event.response.id)) {
+      if (turn?.id === event.response.id) {
         return;
       }
       if (turn?.id) {
@@ -869,9 +875,6 @@ export class LiveSession {
       const response = event.response;
       if (typeof response?.id !== 'string') {
         this.fail('Invalid GPT-Live backend response.');
-        return;
-      }
-      if (this.finishedResponses.has(response.id)) {
         return;
       }
       const turn = this.backendTurns.get(delegationId);
@@ -1079,6 +1082,14 @@ export class LiveSession {
     const safetyEnded = this.reason === 'content' && this.finalized;
     if (!safetyEnded && this.hasPendingWork()) {
       this.setError('GPT-Live session ended with backend work pending. Increase responseWindowMs.');
+    }
+    if (
+      [...this.finishedResponses.values()].some(
+        (id) => !this.delegations.some((delegation) => delegation.id === id),
+      )
+    ) {
+      this.setError('GPT-Live backend response completed without a matching delegation.');
+      this.backendCost = undefined;
     }
     // Transcripts are grading evidence and must preserve the model's output verbatim.
     const output = this.transcript

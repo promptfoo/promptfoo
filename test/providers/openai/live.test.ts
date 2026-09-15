@@ -137,6 +137,73 @@ describe('OpenAiLiveProvider', () => {
     expect(p.id()).toBe('openai:live:gpt-live-1');
   });
 
+  it.each(['gpt-live-transcribe', 'gpt-live-transcribe-2026-08-25'])(
+    'rejects direct construction with transcription-only model %s',
+    (model) => {
+      expect(() => new OpenAiLiveProvider(model)).toThrow('dedicated Realtime transcription');
+      expect(sockets).toHaveLength(0);
+    },
+  );
+
+  it.each(['response.created', 'response.completed', 'response.failed', 'response.incomplete'])(
+    'rejects a completed response ID reused by another delegation in %s',
+    async (type) => {
+      const result = provider({ delegation: lookupDelegation }).callApi('Hi');
+      const socket = await connect();
+      start(socket);
+      text(socket);
+      emit(socket, {
+        type: 'session.delegation.created',
+        delegation: { id: 'delegation_1', target: 'responses', response_id: 'resp_1' },
+      });
+      backend(socket, { type: 'response.created', response: { id: 'resp_1' } });
+      backend(socket, { type: 'response.completed', response: { id: 'resp_1' } });
+      emit(socket, {
+        type: 'response.event',
+        delegation_id: 'unrelated',
+        event: { type, response: { id: 'resp_1' } },
+      });
+      closed(socket);
+      expect((await result).error).toBe('GPT-Live backend response changed delegation.');
+    },
+  );
+
+  it.each([false, true])(
+    'requires a matching delegation by finalization (late notice: %s)',
+    async (lateNotice) => {
+      const result = provider({ delegation: lookupDelegation }).callApi('Hi');
+      const socket = await connect();
+      start(socket);
+      text(socket);
+      backend(socket, { type: 'response.created', response: { id: 'resp_1' } });
+      backend(socket, {
+        type: 'response.completed',
+        response: { id: 'resp_1', usage: { input_tokens: 10, output_tokens: 5, total_tokens: 15 } },
+      });
+      await vi.advanceTimersByTimeAsync(100);
+      if (lateNotice) {
+        emit(socket, {
+          type: 'session.delegation.created',
+          delegation: { id: 'delegation_1', target: 'responses', response_id: 'resp_1' },
+        });
+      }
+      closed(socket);
+      const response = await result;
+      expect(response.error).toBe(
+        lateNotice
+          ? undefined
+          : 'GPT-Live backend response completed without a matching delegation.',
+      );
+      if (lateNotice) {
+        expect(response.cost).toBeTypeOf('number');
+      } else {
+        expect(response.cost).toBeUndefined();
+        expect(response.metadata?.backendCost).toBeUndefined();
+      }
+      expect(response.tokenUsage).toMatchObject({ numRequests: 2, total: 15 });
+    },
+  );
+
   it('preserves transcript evidence verbatim for grading, including credential-like text', async () => {
     const result = provider().callApi('Hi');
     const socket = await connect();
@@ -915,7 +982,7 @@ describe('OpenAiLiveProvider', () => {
       'REQUEST_TIMEOUT_MS',
     );
     expect(sockets).toHaveLength(0);
-    mockProcessEnv({ REQUEST_TIMEOUT_MS: '420' });
+    mockProcessEnv({ REQUEST_TIMEOUT_MS: '421' });
     const result = provider({ responseWindowMs: 101 }).callApi('Hi');
     const socket = await connect();
     await vi.advanceTimersByTimeAsync(199);
@@ -926,6 +993,14 @@ describe('OpenAiLiveProvider', () => {
     await vi.advanceTimersByTimeAsync(99);
     closed(socket);
     expect((await result).metadata?.finalUsageConfirmed).toBe(true);
+  });
+
+  it('requires the overall request deadline to exceed startup, capture, and finalization', async () => {
+    mockProcessEnv({ REQUEST_TIMEOUT_MS: '400' });
+    const result = provider().callApi('Hi');
+    await vi.runAllTimersAsync();
+    expect((await result).error).toContain('must be less than REQUEST_TIMEOUT_MS');
+    expect(sockets).toHaveLength(0);
   });
 
   it('rejects a five-minute capture unless the overall request budget is increased', async () => {
@@ -1699,6 +1774,20 @@ describe('OpenAiLiveProvider', () => {
     );
   });
 
+  it.each(['AQI===', 'AQI====', 'AQ=', 'AQ=I', 'AQI!', 'AQJ'])(
+    'rejects noncanonical output Base64 %s',
+    async (delta) => {
+      const result = provider().callApi('Hi');
+      const socket = await connect();
+      start(socket);
+      emit(socket, { type: 'session.output_audio.delta', delta });
+      await vi.runAllTimersAsync();
+      const response = await result;
+      expect(response.error).toBe('Invalid GPT-Live audio delta.');
+      expect(response.audio).toBeUndefined();
+    },
+  );
+
   it('reports incomplete PCM16 output samples', async () => {
     const result = provider().callApi('Hi');
     const socket = await connect();
@@ -2337,6 +2426,10 @@ describe('OpenAiLiveProvider', () => {
       }).callApi('Hi', source === 'prompt' ? promptContext(pricing) : undefined);
       const socket = await connect();
       start(socket);
+      emit(socket, {
+        type: 'session.delegation.created',
+        delegation: { id: 'delegation_1', target: 'responses', response_id: 'priced-response' },
+      });
       backend(socket, { type: 'response.created', response: { id: 'priced-response' } });
       backend(socket, {
         type: 'response.completed',
@@ -2430,6 +2523,10 @@ describe('OpenAiLiveProvider', () => {
       }).callApi('Check my order');
       const socket = await connect();
       start(socket);
+      emit(socket, {
+        type: 'session.delegation.created',
+        delegation: { id: 'delegation_1', target: 'responses', response_id: 'resp_1' },
+      });
       backend(socket, { type: 'response.created', response: { id: 'resp_1' } });
       const item = {
         type: 'function_call',

@@ -75,6 +75,17 @@ describe('Live input', () => {
   });
 
   it.each([
+    { encoding: 'pcm16', format },
+    { encoding: 'g711_ulaw', format: { type: 'audio/pcmu', rate: 8_000 } as const },
+    { encoding: 'g711_alaw', format: { type: 'audio/pcma', rate: 8_000 } as const },
+  ])('preserves RIFF-prefixed raw $encoding samples', ({ encoding, format }) => {
+    const audio = Buffer.from('RIFF');
+    expect(prepareLiveInput(audioPrompt(audio.toString('base64'), encoding), format).audio).toEqual(
+      audio,
+    );
+  });
+
+  it.each([
     { encoding: 'pcm16', format, data: 'AQI' },
     { encoding: 'g711_ulaw', format: { type: 'audio/pcmu', rate: 8_000 } as const, data: 'AQ' },
     { encoding: 'g711_alaw', format: { type: 'audio/pcma', rate: 8_000 } as const, data: 'AQ' },
