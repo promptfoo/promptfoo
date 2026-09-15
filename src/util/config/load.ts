@@ -66,9 +66,9 @@ export class ConfigResolutionError extends Error {
   readonly logLevel: ConfigResolutionLogLevel;
 
   constructor(message: string, options: ConfigResolutionErrorOptions = {}) {
-    super(message);
+    super(sanitizeErrorMessage(message));
     this.name = 'ConfigResolutionError';
-    this.cliMessage = options.cliMessage ?? message;
+    this.cliMessage = sanitizeErrorMessage(options.cliMessage ?? message);
     this.logLevel = options.logLevel === 'warn' ? 'warn' : 'error';
   }
 }

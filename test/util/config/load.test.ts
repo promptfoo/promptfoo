@@ -2131,6 +2131,27 @@ describe('ConfigResolutionError', () => {
     vi.clearAllMocks();
   });
 
+  it.each([
+    undefined,
+    '',
+    'Use another config',
+    'Fetch https://user:PRIVATE_OVERRIDE@example.com failed',
+  ])('sanitizes credentials while preserving the CLI message override: %s', (cliMessage) => {
+    const error = new ConfigResolutionError('Fetch https://user:PRIVATE_ERROR@example.com failed', {
+      cliMessage,
+    });
+    expect(error.message).not.toContain('PRIVATE_ERROR');
+    expect(error.message).toContain('example.com');
+    expect(error.cliMessage).not.toContain('PRIVATE_OVERRIDE');
+    if (cliMessage === undefined) {
+      expect(error.cliMessage).toBe(error.message);
+    } else if (!cliMessage.includes('PRIVATE_OVERRIDE')) {
+      expect(error.cliMessage).toBe(cliMessage);
+    }
+    logConfigResolutionError(error);
+    expect(logger.error).toHaveBeenCalledWith(error.cliMessage);
+  });
+
   it('should fall back to error logging for invalid runtime log levels', () => {
     const error = new ConfigResolutionError('invalid log level', {
       logLevel: 'debug' as any,

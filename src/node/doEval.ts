@@ -193,9 +193,7 @@ async function resolveReplayConfigs(
   const regexError = providerFilter ? getProviderFilterRegexError(providerFilter) : undefined;
   if (providerFilter && regexError) {
     throw new ConfigResolutionError(
-      sanitizeErrorMessage(
-        `Could not apply stored provider filter "${providerFilter}" while ${action} evaluation ${evalRecord.id}: ${regexError}. The evaluation was not changed.`,
-      ),
+      `Could not apply stored provider filter "${providerFilter}" while ${action} evaluation ${evalRecord.id}: ${regexError}. The evaluation was not changed.`,
     );
   }
 
