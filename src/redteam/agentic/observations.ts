@@ -742,6 +742,7 @@ function observationsFromTraceAttributes(
   attributes: Record<string, unknown> | undefined,
   baseLocation: string,
   source: AgentObservationSource,
+  controlObservation: AgentObservation | undefined,
   span?: TraceLikeSpan,
   enclosingAttributes?: Record<string, unknown>,
 ): AgentObservation[] {
@@ -763,6 +764,7 @@ function observationsFromTraceAttributes(
           mapped?.kind === 'command' || (mapped?.kind === 'tool_call' && mapped.field !== 'tool')
         );
       })) &&
+      isAllowedControlOutcome(controlObservation?.outcome) &&
       isAllowedControlOutcome(
         controlOutcome(attributes ?? {}, [
           'guardrail.outcome',
@@ -850,7 +852,13 @@ export function observationsFromTraceData(
     const controlObservation = controlObservationFromSpan(traceSpan, spanLocation, spanSource);
     const spanObservations = [
       ...(controlObservation ? [controlObservation] : []),
-      ...observationsFromTraceAttributes(traceSpan.attributes, spanLocation, spanSource, traceSpan),
+      ...observationsFromTraceAttributes(
+        traceSpan.attributes,
+        spanLocation,
+        spanSource,
+        controlObservation,
+        traceSpan,
+      ),
     ];
     const startNanos = isLog
       ? logTimestamp
@@ -914,6 +922,7 @@ export function observationsFromTraceData(
         eventSpan.attributes,
         eventLocation,
         'trace-event',
+        eventControlObservation,
         eventSpan,
         traceSpan.attributes,
       );
