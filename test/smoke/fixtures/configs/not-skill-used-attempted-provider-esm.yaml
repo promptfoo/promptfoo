@@ -1,0 +1,13 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: 'Smoke test - not-skill-used assertion rejects attempted local skill metadata'
+
+providers:
+  - file://../providers/skill-metadata-esm.mjs
+
+prompts:
+  - 'Attempt a forbidden skill'
+
+tests:
+  - assert:
+      - type: not-skill-used
+        value: attempted-smoke-skill
