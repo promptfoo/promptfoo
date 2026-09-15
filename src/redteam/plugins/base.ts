@@ -8,7 +8,11 @@ import { maybeLoadToolsFromExternalFile } from '../../util/index';
 import invariant from '../../util/invariant';
 import { extractVariablesFromTemplate, getNunjucksEngine } from '../../util/templates';
 import { sleep } from '../../util/time';
-import { requiresTraceRedaction, TRACE_REDACTION_ASSERTIONS } from '../../util/traceRedaction';
+import {
+  requiresTraceRedaction,
+  sanitizeRedactionGradingInputs,
+  TRACE_REDACTION_ASSERTIONS,
+} from '../../util/traceRedaction';
 import { materializeInputVariablesWithMetadata } from '../inputVariables';
 import { redteamProviderManager } from '../providers/shared';
 import {
@@ -461,10 +465,10 @@ export abstract class RedteamGraderBase {
     suggestions?: ResultSuggestion[];
   }> {
     invariant(test.metadata?.purpose, 'Test is missing purpose metadata');
-    if (
-      gradingContext &&
-      (TRACE_REDACTION_ASSERTIONS.has(this.id) || requiresTraceRedaction(test.assert))
-    ) {
+    if (TRACE_REDACTION_ASSERTIONS.has(this.id) || requiresTraceRedaction(test.assert)) {
+      const publicInputs = sanitizeRedactionGradingInputs(this.id, test, renderedValue);
+      test = publicInputs.test;
+      renderedValue = publicInputs.value;
       const {
         traceData: _data,
         traceContext: _context,
@@ -472,8 +476,8 @@ export abstract class RedteamGraderBase {
         imageOutputs: _images,
         providerResponse: _response,
         ...publicContext
-      } = gradingContext;
-      gradingContext = publicContext;
+      } = gradingContext ?? {};
+      gradingContext = gradingContext ? publicContext : undefined;
     }
     const {
       providerResponse: gradingProviderResponse,

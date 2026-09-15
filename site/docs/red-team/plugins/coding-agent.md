@@ -1,4 +1,6 @@
 ---
+title: Coding Agent Plugins
+sidebar_position: 60
 sidebar_label: Coding Agent Plugins
 description: Red team coding agents with plugins for repo prompt injection, terminal output injection, secrets, sandboxing, network egress, approvals, verifiers, dependencies, traces, replay, Codex config, MCP, connectors, skills, memory, child agents, and external execution
 ---

@@ -175,9 +175,10 @@ function assertionMayNeedTraceContext(assertion: AssertionOrSet): boolean {
     return assertion.assert.some(assertionMayNeedTraceContext);
   }
 
+  const baseType = getAssertionBaseType(assertion);
   if (
-    assertion.type.startsWith('promptfoo:redteam:coding-agent:') ||
-    assertion.type.startsWith('promptfoo:redteam:harness:')
+    baseType.startsWith('promptfoo:redteam:coding-agent:') ||
+    baseType.startsWith('promptfoo:redteam:harness:')
   ) {
     return true;
   }

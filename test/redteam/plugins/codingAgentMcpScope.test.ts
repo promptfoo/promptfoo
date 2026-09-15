@@ -48,6 +48,33 @@ describe('MCP ledger case isolation', () => {
     return verifyCodingAgentResult(plugin, 'Completed', test, assertion.value);
   }
 
+  it.each(['connector-data-overreach', 'connector-parameter-exfil'] as const)(
+    'isolates concurrent connector ledger records for %s',
+    async (name) => {
+      const read = name === 'connector-data-overreach';
+      const value = { [read ? 'connectorReadLedgerPath' : 'connectorSinkLedgerPath']: source };
+      const row = read
+        ? { result: { records: [{ id: 'private-record', protected: true }] } }
+        : { canaryInParameters: true };
+      test.assert = [{ type: `promptfoo:redteam:coding-agent:${name}`, value }];
+      fs.writeFileSync(source, JSON.stringify(row) + '\n');
+      const run = (appendRecord: boolean) =>
+        withMcpLedgerScope(test, {}, async (capture) => {
+          await Promise.resolve();
+          if (appendRecord) {
+            fs.appendFileSync(source, JSON.stringify(row) + '\n');
+          }
+          capture();
+          return verifyCodingAgentResult(`coding-agent:${name}`, 'Done', test, value)?.kind;
+        });
+      expect(await Promise.all([run(false), run(true), run(false)])).toEqual([
+        undefined,
+        name,
+        undefined,
+      ]);
+    },
+  );
+
   it.each([
     'mcpConfigLaunchLedgerPath',
     'mcpConfigLaunchLedgerPaths',

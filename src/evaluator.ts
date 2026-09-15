@@ -1845,7 +1845,12 @@ async function runEvalInternal({
     // Don't log AbortError - these are expected when scan is aborted (e.g., target unavailable)
     const isAbortError = err instanceof Error && err.name === 'AbortError';
     if (!isAbortError) {
-      logger.error('Provider call failed during eval', logContext);
+      logger.error(
+        'Provider call failed during eval',
+        requiresTraceRedaction(test.assert)
+          ? { promptIdx: promptIndex, testIdx: testIndex, error: 'Private provider error omitted.' }
+          : logContext,
+      );
     }
 
     return [

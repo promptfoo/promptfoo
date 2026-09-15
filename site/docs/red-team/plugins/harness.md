@@ -1,4 +1,6 @@
 ---
+title: Harness Preflight Plugins
+sidebar_position: 61
 sidebar_label: Harness Preflight Plugins
 description: Validate a coding-agent red-team harness with known-good and known-bad agents, canary placement, workspace isolation, network traps, trace and replay coverage, redaction, cleanup, budgets, and result integrity
 ---

@@ -46,6 +46,9 @@ describe('sanitizeCodingAgentVerifierInputs', () => {
     'agentsMdMarkers',
     'repoInstructionMarker',
     'repoInstructionMarkers',
+    'terminalControlText',
+    'fakeAssistantLine',
+    'injectedTerminalInstruction',
   ])('redacts terminal receipt alias %s only in verifier inputs', (key) => {
     const input = {
       id: 'coding-agent:terminal-output-injection',
@@ -120,20 +123,26 @@ describe('sanitizeCodingAgentVerifierInputs', () => {
     },
   );
 
-  it.each(['mcpSourceLedger', 'connectorReadLedger', 'externalizedAgentLedger', 'jobQueueLedgers'])(
-    'redacts the complete inline %s payload',
-    (key) => {
-      const payload = { result: { text: 'PRIVATE_INLINE_LEDGER_PAYLOAD' } };
-      const config = {
-        type: 'promptfoo:redteam:coding-agent:mcp-confused-deputy',
-        value: { [key]: payload },
-      };
-      expect(JSON.stringify(sanitizeCodingAgentVerifierInputs(config))).not.toContain(
-        payload.result.text,
-      );
-      expect(config.value[key]).toBe(payload);
-    },
-  );
+  it.each([
+    'mcpSourceLedger',
+    'connectorReadLedger',
+    'externalizedAgentLedger',
+    'jobQueueLedgers',
+    'connectorDataOverreachReport',
+    'connectorReadReport',
+    'connectorParameterExfilReport',
+    'connectorSinkReport',
+  ])('redacts the complete inline %s payload', (key) => {
+    const payload = { result: { text: 'PRIVATE_INLINE_LEDGER_PAYLOAD' } };
+    const config = {
+      type: 'promptfoo:redteam:coding-agent:mcp-confused-deputy',
+      value: { [key]: payload },
+    };
+    expect(JSON.stringify(sanitizeCodingAgentVerifierInputs(config))).not.toContain(
+      payload.result.text,
+    );
+    expect(config.value[key]).toBe(payload);
+  });
 
   it('bounds deeply nested metadata before general serialization', () => {
     let nested: Record<string, unknown> = { text: 'PRIVATE_DEEP_METADATA' };

@@ -1,7 +1,9 @@
 import { AsyncLocalStorage } from 'node:async_hooks';
 
 import { marked } from 'marked';
+import { type DefaultTreeAdapterMap, parseFragment } from 'parse5';
 import { BLOB_SCHEME } from '../blobs/constants';
+import { sanitizeCodingAgentVerifierInputs } from './sanitizer';
 
 import type {
   Assertion,
@@ -38,6 +40,18 @@ export const TRACE_REDACTION_ASSERTIONS = new Set([
   'promptfoo:redteam:coding-agent:trace-redaction',
   'promptfoo:redteam:harness:artifact-redaction',
 ]);
+
+/** Project model-grading inputs after local verifiers have used the original receipts. */
+export function sanitizeRedactionGradingInputs(
+  type: string,
+  test: AtomicTestCase,
+  value: Assertion['value'],
+) {
+  return sanitizeCodingAgentVerifierInputs(
+    { type, assert: test.assert, test, value },
+    { preservePaths: false },
+  );
+}
 
 // Non-enumerable on wrapper-created assertions; JSON target responses cannot carry this marker.
 export const TRUSTED_REDACTION_GRADER = Symbol.for('promptfoo.trustedRedactionGrader');
@@ -99,6 +113,32 @@ function hasMarkdownImage(text: string): boolean {
   }
 }
 
+function hasImageInput(text: string): boolean {
+  if (!/<input(?:\s|\/?>)/i.test(text)) {
+    return false;
+  }
+  if (text.length > 16 * 1024 * 1024) {
+    return true;
+  }
+  const pending: DefaultTreeAdapterMap['node'][] = [parseFragment(text)];
+  while (pending.length) {
+    const node = pending.pop()!;
+    if (
+      'tagName' in node &&
+      node.tagName === 'input' &&
+      node.attrs.some(({ name, value }) => name === 'type' && value.toLowerCase() === 'image')
+    ) {
+      return true;
+    }
+    if ('childNodes' in node) {
+      for (const child of node.childNodes) {
+        pending.push(child);
+      }
+    }
+  }
+  return false;
+}
+
 export function hasRedactionMedia(response: ProviderResponse | null | undefined): boolean {
   const pending: unknown[] = [response];
   const seen = new Set<object>();
@@ -114,6 +154,7 @@ export function hasRedactionMedia(response: ProviderResponse | null | undefined)
         /data:(?:audio|image|video)\/|<(?:svg|img|audio|video|picture|source)(?:\s|\/?>)/i.test(
           value,
         ) ||
+        hasImageInput(value) ||
         hasMarkdownImage(value)
       ) {
         return true;
@@ -235,13 +276,16 @@ export function sanitizeRedactionResult<T extends object>(input: T): T {
     latencyMs: undefined,
   };
   const mediaOmitted = hasRedactionMedia(response);
+  const publicInputs = sanitizeCodingAgentVerifierInputs({
+    assert: result.testCase?.assert,
+    testCase: result.testCase,
+    gradingResult: result.gradingResult,
+  });
+  const { testCase } = publicInputs;
   const metadata = { ...result.metadata };
   for (const key of Object.keys(response?.metadata ?? {})) {
-    if (
-      result.testCase?.metadata &&
-      Object.prototype.hasOwnProperty.call(result.testCase.metadata, key)
-    ) {
-      metadata[key] = result.testCase.metadata[key];
+    if (testCase?.metadata && Object.prototype.hasOwnProperty.call(testCase.metadata, key)) {
+      metadata[key] = testCase.metadata[key];
     } else {
       delete metadata[key];
     }
@@ -250,15 +294,16 @@ export function sanitizeRedactionResult<T extends object>(input: T): T {
   delete metadata.sessionId;
   delete metadata.redteamHistory;
   const error = result.error ? 'Error details omitted for trace/artifact redaction.' : result.error;
-  const gradingResult = result.gradingResult
-    ? sanitizeRedactionGrade(result.gradingResult)
-    : result.gradingResult;
+  const gradingResult = publicInputs.gradingResult
+    ? sanitizeRedactionGrade(publicInputs.gradingResult)
+    : publicInputs.gradingResult;
   if (!response) {
-    return { ...input, ...accounting, error, metadata, gradingResult };
+    return { ...input, ...accounting, testCase, error, metadata, gradingResult };
   }
   return {
     ...input,
     ...accounting,
+    testCase,
     error,
     metadata,
     gradingResult,

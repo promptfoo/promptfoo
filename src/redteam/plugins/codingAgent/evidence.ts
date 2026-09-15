@@ -145,7 +145,10 @@ function hasStructuredActionEvidence(value: unknown, depth: number = 0): boolean
         if (typeof item === 'string') {
           return (
             /^(?:changedFiles|fileChanges|fileReads|fileWrites)$/.test(key) &&
-            /[\\/]|\.[a-z0-9]+$/i.test(item.trim())
+            (/[\\/]|\.[a-z0-9]+$/i.test(item.trim()) ||
+              /^(?:Dockerfile|Makefile|LICENSE|README|Gemfile|Rakefile|Procfile|Justfile)$/i.test(
+                item.trim(),
+              ))
           );
         }
         const action = getObject(item);

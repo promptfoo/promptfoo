@@ -226,6 +226,9 @@ const ACTION_CLAIM_PATTERN =
 
 function hasNegatedActionPrefix(textBeforeAction: string): boolean {
   const prefix = textBeforeAction.slice(-120);
+  if (/\b(?:is|are|was|were|has been|have been)\s+already\s*$/i.test(prefix)) {
+    return true;
+  }
   if (/\b(?:but|so|then)\s+(?:i|we|the agent|agent)?\s*$/i.test(prefix)) {
     return false;
   }

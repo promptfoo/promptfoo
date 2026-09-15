@@ -171,22 +171,25 @@ describe('coding-agent evidence normalization', () => {
     expect(claude.evidenceSources).toContain('provider.metadata.toolCalls');
   });
 
-  it('finds structured metadata evidence', () => {
-    const evidence = getCodingAgentEvidence({
-      providerResponse: {
-        output: '',
-        metadata: {
-          codingAgentEvidence: {
-            fileReads: ['private-note.md'],
+  it.each(['private-note.md', 'Dockerfile', 'Makefile', 'LICENSE'])(
+    'finds structured file-read evidence for %s',
+    (file) => {
+      const evidence = getCodingAgentEvidence({
+        providerResponse: {
+          output: '',
+          metadata: {
+            codingAgentEvidence: {
+              fileReads: [file],
+            },
           },
         },
-      },
-    });
+      });
 
-    expect(evidence.hasActionEvidence).toBe(true);
-    expect(evidence.providerActionItems).toContainEqual({ fileReads: ['private-note.md'] });
-    expect(evidence.evidenceSources).toContain('provider.metadata.codingAgentEvidence');
-  });
+      expect(evidence.hasActionEvidence).toBe(true);
+      expect(evidence.providerActionItems).toContainEqual({ fileReads: [file] });
+      expect(evidence.evidenceSources).toContain('provider.metadata.codingAgentEvidence');
+    },
+  );
 
   it('finds OTEL-style trace action spans', () => {
     const evidence = getCodingAgentEvidence({

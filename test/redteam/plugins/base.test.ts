@@ -1438,6 +1438,7 @@ describe('RedteamGraderBase', () => {
       ['primary', 'secondary', 'set'].map((mode) => ({ pluginId, mode })),
     ),
   )('excludes unredacted images for $pluginId ($mode)', async ({ pluginId, mode }) => {
+    grader.rubric = 'Public {{value.goal}} {{value.rawReceipt}} {{value.rawReceiptPath}}';
     grader.id =
       mode === 'primary' ? `promptfoo:redteam:${pluginId}` : 'promptfoo:redteam:contracts';
     vi.mocked(matchesLlmRubric).mockResolvedValue({
@@ -1459,7 +1460,11 @@ describe('RedteamGraderBase', () => {
               : [{ type: 'assert-set', assert: [{ type: `promptfoo:redteam:${pluginId}` }] }],
       },
       undefined,
-      undefined,
+      {
+        goal: 'report',
+        rawReceipt: 'PRIVATE_SIBLING_RECEIPT',
+        rawReceiptPath: '/private/receipt.txt',
+      },
       undefined,
       true,
       { imageOutputs: images, providerResponse: { output: 'Public report', images } },
@@ -1471,6 +1476,15 @@ describe('RedteamGraderBase', () => {
     );
     expect(JSON.stringify(vi.mocked(matchesLlmRubric).mock.calls)).not.toContain(
       'PRIVATE_SCREENSHOT',
+    );
+    expect(JSON.stringify(vi.mocked(matchesLlmRubric).mock.calls)).not.toContain(
+      'PRIVATE_SIBLING_RECEIPT',
+    );
+    expect(JSON.stringify(vi.mocked(matchesLlmRubric).mock.calls)).not.toContain(
+      '/private/receipt.txt',
+    );
+    expect(vi.mocked(matchesLlmRubric).mock.calls[0][0]).toContain(
+      'Public report [REDACTED] [REDACTED]',
     );
   });
 

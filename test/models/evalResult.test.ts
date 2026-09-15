@@ -30,6 +30,49 @@ import { createAtomicTestCase, createPrompt } from '../factories/testSuite';
 import { mockProcessEnv } from '../util/utils';
 
 describe('EvalResult', () => {
+  it.each([undefined, 'ordinary-plugin'])(
+    'redacts restored metadata when privacy comes from assertions and pluginId is %s',
+    async (pluginId) => {
+      const secret = 'PRIVATE_RESTORED_METADATA';
+      const metadata = { pluginId, pluginConfig: { rawReceipt: secret }, goal: 'Public goal' };
+      const row = createEvaluateResult({
+        ...mockEvaluateResult,
+        testCase: {
+          assert: [
+            {
+              type: 'assert-set',
+              assert: [{ type: 'promptfoo:redteam:harness:artifact-redaction' }],
+            },
+          ],
+          metadata: metadata as AtomicTestCase['metadata'],
+        },
+        metadata: { pluginConfig: secret },
+        response: { output: 'Clean report', metadata: { pluginConfig: secret } },
+        gradingResult: {
+          pass: false,
+          score: 0,
+          reason: 'Sensitive value found',
+          componentResults: [{ pass: false, score: 0, reason: 'Sensitive value found', metadata }],
+        },
+      });
+      const saved = await EvalResult.createFromEvaluateResult('private-restored-metadata', row);
+      const [bulk] = await EvalResult.createManyFromEvaluateResult(
+        [row],
+        'private-restored-metadata-bulk',
+      );
+      for (const result of [
+        sanitizeResultForJsonlArtifact(row),
+        saved.toEvaluateResult(),
+        bulk.toEvaluateResult(),
+      ]) {
+        expect(JSON.stringify(result)).not.toContain(secret);
+        expect(result.metadata?.pluginConfig).toMatchObject({ rawReceipt: '[REDACTED]' });
+        expect(result.testCase.metadata?.goal).toBe('Public goal');
+      }
+      expect(row.testCase.metadata?.pluginConfig).toEqual({ rawReceipt: secret });
+    },
+  );
+
   it.each(['coding-agent:trace-redaction', 'harness:artifact-redaction'] as const)(
     'retains test-owned metadata after removing %s provider echoes',
     async (pluginId) => {
@@ -408,6 +451,9 @@ describe('EvalResult', () => {
     'a2a-media',
     'blob-output',
     'svg-output',
+    'image-input',
+    'encoded-image-input',
+    'quoted-image-input',
   ] as const)('omits private media in supported response shapes: %s', async (mode) => {
     const secret = 'PRIVATE_EMBEDDED_MEDIA_8964';
     const data = Buffer.from(secret).toString('base64');
@@ -427,6 +473,13 @@ describe('EvalResult', () => {
       'blob-output': { output: `promptfoo://blob/${'a'.repeat(64)}` },
       'svg-output': {
         output: `<svg xmlns="http://www.w3.org/2000/svg"><text>${secret}</text></svg>`,
+      },
+      'image-input': { output: `<input type=image src="https://example.invalid/${secret}.png">` },
+      'encoded-image-input': {
+        output: `<input type="im&#97;ge" src="https://example.invalid/${secret}.png">`,
+      },
+      'quoted-image-input': {
+        output: `<input title="a > b" TYPE='IMAGE' src="https://example.invalid/${secret}.png">`,
       },
     }[mode];
     const row = createEvaluateResult({

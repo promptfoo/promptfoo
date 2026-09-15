@@ -186,6 +186,15 @@ describe('trace assertions', () => {
       );
     });
 
+    it.each(['coding-agent:trace-completeness', 'harness:secret-placement'] as const)(
+      'fetches traces for inverse %s assertions, including nested sets',
+      (plugin) => {
+        const assertion: Assertion = { type: `not-promptfoo:redteam:${plugin}` };
+        expect(hasTraceAwareAssertions([assertion])).toBe(true);
+        expect(hasTraceAwareAssertions([{ type: 'assert-set', assert: [assertion] }])).toBe(true);
+      },
+    );
+
     it('should pass trace data to javascript assertion', async () => {
       mockTraceStore.getTrace.mockResolvedValue(mockTraceData);
 

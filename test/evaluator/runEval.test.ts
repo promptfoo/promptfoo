@@ -7,6 +7,7 @@ import path from 'node:path';
 import { afterAll, afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { clearCache } from '../../src/cache';
 import { runEval } from '../../src/evaluator';
+import logger from '../../src/logger';
 import { buildGraderResultAssertion } from '../../src/redteam/providers/shared';
 import {
   type ApiProvider,
@@ -49,6 +50,71 @@ describe('runEval', () => {
     repeatIndex: 0,
     isRedteam: false,
   };
+
+  it('rejects cached target evidence after a protected receipt rotates', async () => {
+    const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'rotating-receipt-'));
+    try {
+      const receipt = path.join(directory, 'receipt');
+      fs.writeFileSync(receipt, 'PRIVATE_RECEIPT_B');
+      const [result] = await runEval({
+        ...defaultOptions,
+        provider: {
+          id: () => 'cached-target',
+          callApi: async () => ({ output: 'PRIVATE_RECEIPT_A', cached: true }),
+        },
+        prompt: { raw: 'Inspect report', label: 'report' },
+        test: {
+          assert: [
+            {
+              type: 'promptfoo:redteam:coding-agent:trace-redaction',
+              value: { rawReceiptPath: receipt },
+            },
+          ],
+        },
+        conversations: {},
+        registers: {},
+      });
+      expect(result.success).toBe(false);
+      expect(result.failureReason).toBe(ResultFailureReason.ERROR);
+      expect(result.error).toContain('fresh target call');
+    } finally {
+      fs.rmSync(directory, { recursive: true, force: true });
+    }
+  });
+
+  it('omits protected provider errors and response snippets from logs', async () => {
+    const error = Object.assign(new Error('PRIVATE_ERROR_RECEIPT'), {
+      response: { data: 'PRIVATE_BODY_RECEIPT' },
+    });
+    const log = vi.spyOn(logger, 'error');
+    const [result] = await runEval({
+      ...defaultOptions,
+      provider: {
+        id: () => 'private-error-target',
+        callApi: async () => {
+          throw error;
+        },
+      },
+      prompt: { raw: 'Inspect report', label: 'report' },
+      test: {
+        assert: [
+          {
+            type: 'promptfoo:redteam:harness:artifact-redaction',
+            value: { rawReceipt: 'PRIVATE_ERROR_RECEIPT' },
+          },
+        ],
+      },
+      conversations: {},
+      registers: {},
+    });
+    expect(result.success).toBe(false);
+    expect(log).toHaveBeenCalledWith(
+      'Provider call failed during eval',
+      expect.objectContaining({ error: 'Private provider error omitted.' }),
+    );
+    expect(JSON.stringify(log.mock.calls)).not.toContain('PRIVATE_ERROR_RECEIPT');
+    expect(JSON.stringify(log.mock.calls)).not.toContain('PRIVATE_BODY_RECEIPT');
+  });
 
   it('snapshots protected receipts for standalone target calls', async () => {
     const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'standalone-receipt-'));
