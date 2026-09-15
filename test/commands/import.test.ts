@@ -1728,6 +1728,8 @@ describe('importCommand', () => {
         { statusCode: 'error' },
         { statusCode: {} },
         { statusMessage: 1 },
+        { incomplete: true },
+        { incomplete: 'yes' },
       ].map((fields) => ({
         name: JSON.stringify(fields),
         traces: [

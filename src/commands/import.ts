@@ -255,6 +255,7 @@ const importedTraceSchema = z.object({
         attributes: traceAttributesSchema.optional(),
         statusCode: z.number().finite().optional(),
         statusMessage: z.string().optional(),
+        incomplete: z.literal(false).optional(),
         events: z
           .array(
             z.object({
