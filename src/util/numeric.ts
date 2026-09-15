@@ -16,10 +16,19 @@ export function filterFiniteScores(scores: Record<string, unknown>): Record<stri
 /**
  * Bounds a provider-controlled token count to a non-negative safe integer.
  * Usage numbers arrive as untrusted API data and flow into cost/metrics
- * aggregation, so garbage must not pass.
+ * aggregation, so garbage must not pass. The ceiling rejects absurd reports
+ * (a single response never legitimately reaches a billion tokens) that would
+ * otherwise overflow safe-integer accumulation a few rows later.
  */
+const MAX_REASONABLE_TOKEN_COUNT = 1_000_000_000;
+
 export function isSafeTokenCount(value: unknown): value is number {
-  return typeof value === 'number' && Number.isSafeInteger(value) && value >= 0;
+  return (
+    typeof value === 'number' &&
+    Number.isSafeInteger(value) &&
+    value >= 0 &&
+    value <= MAX_REASONABLE_TOKEN_COUNT
+  );
 }
 
 /**

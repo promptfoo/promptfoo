@@ -336,6 +336,21 @@ describe('getTokenUsageWithRequestCount', () => {
     ).toEqual({ prompt: 0, completion: 2, numRequests: 1 });
   });
 
+  it('drops absurd safe-integer token counts that would corrupt aggregation', () => {
+    expect(
+      getTokenUsageWithRequestCount(
+        {
+          usage: {
+            total_tokens: Number.MAX_SAFE_INTEGER,
+            prompt_tokens: Number.MAX_SAFE_INTEGER,
+            completion_tokens: 2,
+          },
+        },
+        false,
+      ),
+    ).toEqual({ prompt: 0, completion: 2, numRequests: 1 });
+  });
+
   it('bounds coercion failures from adversarial nested usage', () => {
     let cachedTokens: unknown = 1;
     for (let i = 0; i < 5_000; i++) {
