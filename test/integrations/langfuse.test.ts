@@ -4,6 +4,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 const mocks = vi.hoisted(() => {
   const mockGetPrompt = vi.fn();
   const constructorCalls: any[] = [];
+  // Set by tests to make importing the SDK or constructing the client fail.
+  const failures: { importError?: Error; constructorError?: Error } = {};
 
   // Create a proper class mock for the Langfuse v5 client.
   class MockLangfuseClient {
@@ -11,6 +13,9 @@ const mocks = vi.hoisted(() => {
 
     constructor(params: any) {
       constructorCalls.push(params);
+      if (failures.constructorError) {
+        throw failures.constructorError;
+      }
       this.prompt = { get: mockGetPrompt };
     }
   }
@@ -42,6 +47,7 @@ const mocks = vi.hoisted(() => {
     mockGetPrompt,
     MockLangfuseClient,
     constructorCalls,
+    failures,
     envStringFor,
     defaultEnvString,
     mockGetEnvString,
@@ -54,7 +60,13 @@ vi.mock('../../src/envars', () => ({
 }));
 
 vi.mock('@langfuse/client', () => ({
-  LangfuseClient: mocks.MockLangfuseClient,
+  // A getter, so a test can make loading the SDK fail with the original error.
+  get LangfuseClient() {
+    if (mocks.failures.importError) {
+      throw mocks.failures.importError;
+    }
+    return mocks.MockLangfuseClient;
+  },
 }));
 
 describe('langfuse integration', () => {
@@ -64,12 +76,146 @@ describe('langfuse integration', () => {
     mocks.mockGetEnvString.mockImplementation(mocks.defaultEnvString);
     // Clear the constructor calls array
     mocks.constructorCalls.length = 0;
+    mocks.failures.importError = undefined;
+    mocks.failures.constructorError = undefined;
     // Reset the module to clear the cached langfuse instance
     vi.resetModules();
   });
 
   afterEach(() => {
     vi.resetAllMocks();
+  });
+
+  describe('client reuse and loading', () => {
+    const compiledPrompt = () => ({ compile: vi.fn().mockReturnValue('compiled') });
+
+    it('should share one client and one request across concurrent fetches of the same prompt', async () => {
+      mocks.mockGetPrompt.mockResolvedValue(compiledPrompt());
+      const { getPrompt } = await import('../../src/integrations/langfuse');
+
+      const results = await Promise.all(
+        Array.from({ length: 5 }, () => getPrompt('greeting', {}, 'text', undefined, 'production')),
+      );
+
+      expect(results).toEqual(Array(5).fill('compiled'));
+      expect(mocks.constructorCalls).toHaveLength(1);
+      expect(mocks.mockGetPrompt).toHaveBeenCalledTimes(1);
+    });
+
+    it('should not share requests between different prompts, types, versions, or labels', async () => {
+      mocks.mockGetPrompt.mockResolvedValue(compiledPrompt());
+      const { getPrompt } = await import('../../src/integrations/langfuse');
+
+      await Promise.all([
+        getPrompt('greeting', {}, 'text', 1),
+        getPrompt('greeting', {}, 'chat', 1),
+        getPrompt('greeting', {}, 'text', 2),
+        getPrompt('greeting', {}, 'text', undefined, 'staging'),
+        getPrompt('farewell', {}, 'text', 1),
+      ]);
+
+      expect(mocks.constructorCalls).toHaveLength(1);
+      expect(mocks.mockGetPrompt).toHaveBeenCalledTimes(5);
+    });
+
+    it('should not share an in-flight request between different credentials', async () => {
+      let resolveFirstRequest!: (prompt: unknown) => void;
+      mocks.mockGetPrompt
+        .mockImplementationOnce(
+          () =>
+            new Promise((resolve) => {
+              resolveFirstRequest = resolve;
+            }),
+        )
+        .mockResolvedValueOnce(compiledPrompt());
+      const { getPrompt } = await import('../../src/integrations/langfuse');
+
+      const first = getPrompt('greeting', {}, 'text', 1);
+      await vi.waitFor(() => expect(mocks.mockGetPrompt).toHaveBeenCalledTimes(1));
+      mocks.mockGetEnvString.mockImplementation(
+        mocks.envStringFor({
+          publicKey: 'other-public-key',
+          secretKey: 'other-secret-key',
+          host: 'https://test.langfuse.com',
+        }),
+      );
+      const second = getPrompt('greeting', {}, 'text', 1);
+      // The first request is still in flight, so the new client only calls the SDK if it isn't reused.
+      await vi.waitFor(() => expect(mocks.mockGetPrompt).toHaveBeenCalledTimes(2));
+      resolveFirstRequest(compiledPrompt());
+      await Promise.all([first, second]);
+
+      expect(mocks.constructorCalls).toHaveLength(2);
+    });
+
+    it('should leave repeat fetches to the SDK cache once a request has settled', async () => {
+      mocks.mockGetPrompt.mockResolvedValue(compiledPrompt());
+      const { getPrompt } = await import('../../src/integrations/langfuse');
+
+      await getPrompt('greeting', {}, 'text', 1);
+      await getPrompt('greeting', {}, 'text', 1);
+
+      expect(mocks.mockGetPrompt).toHaveBeenCalledTimes(2);
+    });
+
+    it('should share a failed request with concurrent callers and retry on the next fetch', async () => {
+      mocks.mockGetPrompt
+        .mockRejectedValueOnce(new Error('Network error'))
+        .mockResolvedValueOnce(compiledPrompt());
+      const { getPrompt } = await import('../../src/integrations/langfuse');
+
+      const results = await Promise.allSettled([
+        getPrompt('greeting', {}, 'text'),
+        getPrompt('greeting', {}, 'text'),
+      ]);
+
+      expect(results.map((result) => result.status)).toEqual(['rejected', 'rejected']);
+      expect(mocks.mockGetPrompt).toHaveBeenCalledTimes(1);
+      await expect(getPrompt('greeting', {}, 'text')).resolves.toBe('compiled');
+      expect(mocks.mockGetPrompt).toHaveBeenCalledTimes(2);
+    });
+
+    it('should explain how to install @langfuse/client when it is missing', async () => {
+      mocks.failures.importError = Object.assign(
+        new Error(
+          "Cannot find package '@langfuse/client' imported from /app/dist/src/integrations/langfuse.js",
+        ),
+        { code: 'ERR_MODULE_NOT_FOUND' },
+      );
+      const { getPrompt } = await import('../../src/integrations/langfuse');
+
+      await expect(getPrompt('greeting', {}, 'text')).rejects.toThrow(
+        'The @langfuse/client package is required for Langfuse integration. Please install it with: npm install @langfuse/client',
+      );
+    });
+
+    it('should surface other errors from loading @langfuse/client unchanged', async () => {
+      // Installing @langfuse/client does not fix a missing dependency of the installed SDK.
+      const importError = Object.assign(
+        new Error(
+          "Cannot find package '@langfuse/core' imported from /app/node_modules/@langfuse/client/dist/index.mjs",
+        ),
+        { code: 'ERR_MODULE_NOT_FOUND' },
+      );
+      mocks.failures.importError = importError;
+      const { getPrompt } = await import('../../src/integrations/langfuse');
+
+      await expect(getPrompt('greeting', {}, 'text')).rejects.toBe(importError);
+    });
+
+    it('should retry creating the client after it fails', async () => {
+      mocks.failures.constructorError = new Error('Invalid Langfuse configuration');
+      mocks.mockGetPrompt.mockResolvedValue(compiledPrompt());
+      const { getPrompt } = await import('../../src/integrations/langfuse');
+
+      await expect(getPrompt('greeting', {}, 'text')).rejects.toThrow(
+        'Invalid Langfuse configuration',
+      );
+      mocks.failures.constructorError = undefined;
+      await expect(getPrompt('greeting', {}, 'text')).resolves.toBe('compiled');
+
+      expect(mocks.constructorCalls).toHaveLength(2);
+    });
   });
 
   describe('getPrompt', () => {
