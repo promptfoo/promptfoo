@@ -46,6 +46,53 @@ describe('TraceStore span persistence', () => {
     return traceStore;
   }
 
+  it.each([false, true])(
+    'preserves untimed log retries when receipt times change (sameBatch=%s)',
+    async (sameBatch) => {
+      const traceId = 'untimed-log-retry';
+      const store = await createTrace(traceId);
+      const first = {
+        spanId: 'log',
+        name: 'audit',
+        startTime: 1,
+        endTime: 2,
+        attributes: { 'otel.log.record': true, 'otel.log.body': 'Public note' },
+      };
+      const retry = { ...first, startTime: 3, endTime: 4 };
+      if (sameBatch) {
+        await store.addSpans(traceId, [first, retry]);
+      } else {
+        await store.addSpans(traceId, [first]);
+        await store.addSpans(traceId, [retry]);
+      }
+      const spans = await store.getSpans(traceId);
+      expect(spans).toHaveLength(1);
+      expect(spans[0]).toMatchObject({ spanId: 'log', startTime: 1 });
+    },
+  );
+
+  it('rejects changed execution times on timed log retries', async () => {
+    const traceId = 'timed-log-retry';
+    const store = await createTrace(traceId);
+    const first = {
+      spanId: 'log',
+      name: 'audit',
+      startTime: 1,
+      endTime: 2,
+      attributes: { 'otel.log.record': true, 'otel.log.time_unix_nano': '1000000' },
+    };
+    await store.addSpans(traceId, [first]);
+    await expect(
+      store.addSpans(traceId, [
+        {
+          ...first,
+          startTime: 3,
+          attributes: { ...first.attributes, 'otel.log.time_unix_nano': '3000000' },
+        },
+      ]),
+    ).rejects.toThrow('conflicting span records');
+  });
+
   it('rejects cumulative redaction payloads over 10 MiB before reading them into the redactor', async () => {
     const store = await createTrace('redaction-size');
     const redactSpans = vi.fn((spans) => spans);

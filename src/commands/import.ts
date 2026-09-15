@@ -268,11 +268,16 @@ function prepareTraces(traces: unknown): TraceData[] {
   }
 
   const preparedTraces: TraceData[] = [];
+  const traceIds = new Set<string>();
   for (const trace of traces) {
     if (!isImportableTrace(trace)) {
       logger.warn('Skipping malformed trace during import');
       continue;
     }
+    if (traceIds.has(trace.traceId)) {
+      throw new Error('Duplicate trace IDs in imported evaluation');
+    }
+    traceIds.add(trace.traceId);
 
     const spans = trace.spans.filter((span): span is TraceSpan => {
       const importable = isImportableTraceSpan(span);
@@ -327,17 +332,15 @@ async function importTraces(
   generateNewTraceIds: boolean,
 ): Promise<Map<string, string>> {
   const traceStore = getTraceStore();
-  const usedTraceIds = new Set<string>();
   const importedTraceIds = new Map<string, string>();
   for (const trace of traces) {
     // Trace IDs are globally unique in the local trace store. Duplicate eval
     // imports and conflicting imports need fresh IDs so spans never attach to
     // another eval's trace.
     let traceId = trace.traceId;
-    if (generateNewTraceIds || usedTraceIds.has(traceId) || (await traceStore.getTrace(traceId))) {
+    if (generateNewTraceIds || (await traceStore.getTrace(traceId))) {
       traceId = crypto.randomUUID().replaceAll('-', '');
     }
-    usedTraceIds.add(traceId);
 
     await traceStore.createTrace({
       traceId,

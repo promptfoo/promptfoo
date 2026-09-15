@@ -868,7 +868,8 @@ export function observationsFromTraceData(
 
     const toolEvents = new Map<string, unknown>();
     traceSpan.events?.forEach((event, eventIndex) => {
-      const timestampNanos = nanosecondTimestamp(event.timestampNanos);
+      let timestamp = event.timestamp;
+      let timestampNanos = nanosecondTimestamp(event.timestampNanos);
       const outsideSpan =
         (timestampNanos && spanStartNanos
           ? BigInt(timestampNanos) < BigInt(spanStartNanos)
@@ -881,8 +882,10 @@ export function observationsFromTraceData(
             traceSpan.endTime !== undefined &&
             traceSpan.endTime > 0 &&
             event.timestamp > traceSpan.endTime);
-      const validTimestamp =
-        !outsideSpan && (event.timestampNanos === undefined || timestampNanos !== undefined);
+      if (outsideSpan || (event.timestampNanos !== undefined && timestampNanos === undefined)) {
+        timestamp = undefined;
+        timestampNanos = undefined;
+      }
       const eventLocation = `${spanLocation} event ${eventIndex + 1}`;
       const callId = getToolCallId(event.attributes) ?? getToolCallId(traceSpan.attributes);
       const eventSpan = {
@@ -893,7 +896,7 @@ export function observationsFromTraceData(
         name: event.name,
         parentSpanId: traceSpan.parentSpanId,
         spanId: traceSpan.spanId,
-        startTime: validTimestamp ? event.timestamp : undefined,
+        startTime: timestamp,
         statusCode: hasErrorStatus(traceSpan) ? 2 : traceSpan.statusCode,
       };
       const eventControlObservation = controlObservationFromSpan(
@@ -902,13 +905,7 @@ export function observationsFromTraceData(
         'trace-event',
       );
       if (eventControlObservation) {
-        append([
-          {
-            ...eventControlObservation,
-            eventId: eventLocation,
-            timestampNanos: validTimestamp ? timestampNanos : undefined,
-          },
-        ]);
+        append([{ ...eventControlObservation, eventId: eventLocation, timestampNanos }]);
       }
       const eventObservations = observationsFromTraceAttributes(
         eventSpan.attributes,
@@ -929,7 +926,7 @@ export function observationsFromTraceData(
         eventObservations.map((observation) => ({
           ...observation,
           eventId: eventLocation,
-          timestampNanos: validTimestamp ? timestampNanos : undefined,
+          timestampNanos,
         })),
       );
     });

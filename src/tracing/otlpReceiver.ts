@@ -307,6 +307,7 @@ export class OTLPReceiver {
   private commandToolNames?: string[];
   private redactAttributePatterns: string[] = [];
   private tracePoliciesByEvaluationId = new Map<string, RegisteredTracePolicy>();
+  private readonly logIdentityKey = crypto.randomBytes(32);
 
   constructor(options: OTLPReceiverOptions = {}) {
     this.app = express();
@@ -826,7 +827,6 @@ export class OTLPReceiver {
 
   private parseOTLPLogsJSONRequest(body: OTLPLogsRequest): ParsedTrace[] {
     const traces: ParsedTrace[] = [];
-    const occurrences = new Map<string, number>();
     const resourceLogs = body?.resourceLogs ?? [];
     logger.debug(`[OtlpReceiver] Parsing logs request with ${resourceLogs.length} resource logs`);
 
@@ -847,16 +847,6 @@ export class OTLPReceiver {
                 ].some((count) => (count ?? 0) > 0)
               ) {
                 parsed.span.incomplete = true;
-              }
-              const id = parsed.span.spanId;
-              const occurrence = occurrences.get(id) ?? 0;
-              occurrences.set(id, occurrence + 1);
-              if (occurrence > 0) {
-                parsed.span.spanId = crypto
-                  .createHash('sha256')
-                  .update(`${id}:${occurrence}`)
-                  .digest('hex')
-                  .slice(0, 16);
               }
               traces.push(parsed);
             }
@@ -936,8 +926,8 @@ export class OTLPReceiver {
 
     // Log's own span_id is the span the log was emitted from, so that span
     // becomes our synthesized span's parent. Fall back to the resource-level
-    // promptfoo.parent_span_id the provider injected. Hash the original record
-    // so retries retain their identity while distinct logs remain separate.
+    // promptfoo.parent_span_id the provider injected. Keyed record IDs keep retries
+    // stable within this receiver without exposing a digest of private log text.
     const hasValidInlineSpanId = !!log.spanId && !isZeroSpanId(log.spanId);
     const rawParentSpanId = hasValidInlineSpanId
       ? log.spanId
@@ -952,7 +942,7 @@ export class OTLPReceiver {
       traceId,
       span: {
         spanId: crypto
-          .createHash('sha256')
+          .createHmac('sha256', this.logIdentityKey)
           .update(
             JSON.stringify(
               [

@@ -1629,6 +1629,46 @@ describe('importCommand', () => {
       },
     );
 
+    it.each([false, true])(
+      'rejects repeated trace IDs before forced replacement (conflict=%s)',
+      async (conflict) => {
+        const sampleFilePath = path.join(__dirname, '../__fixtures__/sample-export.json');
+        const replacement = JSON.parse(fs.readFileSync(sampleFilePath, 'utf8'));
+        importCommand(program);
+        await program.parseAsync(['node', 'test', 'import', sampleFilePath]);
+        const originalIds = (await EvalResult.findManyByEvalId(replacement.evalId))
+          .map((row) => row.id)
+          .sort();
+        const trace = {
+          traceId: 'duplicate-trace',
+          evaluationId: replacement.evalId,
+          testCaseId: 'fixture',
+          spans: [{ spanId: 'span', name: 'tool', startTime: 1 }],
+        };
+        replacement.traces = [
+          trace,
+          {
+            ...trace,
+            ...(conflict && {
+              testCaseId: 'other',
+              spans: [{ spanId: 'other', name: 'other tool', startTime: 2 }],
+            }),
+          },
+        ];
+        tempFilePath = path.join(__dirname, `temp-force-trace-ids-${conflict}-${Date.now()}.json`);
+        fs.writeFileSync(tempFilePath, JSON.stringify(replacement));
+        const second = new Command();
+        importCommand(second);
+        await second.parseAsync(['node', 'test', 'import', '--force', tempFilePath]);
+        expect(process.exitCode).toBe(1);
+        expect(logger.error).toHaveBeenCalledWith(expect.stringMatching(/duplicate trace IDs/i));
+        expect(
+          (await EvalResult.findManyByEvalId(replacement.evalId)).map((row) => row.id).sort(),
+        ).toEqual(originalIds);
+        expect(await new TraceStore().getTracesByEvaluation(replacement.evalId)).toEqual([]);
+      },
+    );
+
     it.each(['count', 'bytes'])(
       'preserves existing result identities when a forced trace exceeds %s limits',
       async (limit) => {

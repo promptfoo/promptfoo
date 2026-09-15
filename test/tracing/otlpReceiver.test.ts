@@ -1,3 +1,4 @@
+import crypto from 'node:crypto';
 import path from 'path';
 
 import protobuf from 'protobufjs';
@@ -510,7 +511,7 @@ describe('OTLPReceiver', () => {
   });
 
   it.each([false, true])(
-    'retains repeated log records and deduplicates batch retries (timed=%s)',
+    'preserves repeated log identities across records and batch retries (timed=%s)',
     async (timed) => {
       const log = {
         traceId: 'a'.repeat(32),
@@ -524,10 +525,96 @@ describe('OTLPReceiver', () => {
       }
       const ids = persistSpans.mock.calls.map((call) => call[1].map((span) => span.spanId));
       expect(ids[0]).toHaveLength(2);
-      expect(new Set(ids[0]).size).toBe(2);
+      expect(new Set(ids[0]).size).toBe(1);
       expect(ids[1]).toEqual(ids[0]);
     },
   );
+
+  it.each([false, true])(
+    'preserves one identity per distinct control record (distinct=%s)',
+    async (distinct) => {
+      const traceId = 'a'.repeat(32);
+      const parentSpanId = 'b'.repeat(16);
+      const log = {
+        traceId,
+        spanId: parentSpanId,
+        timeUnixNano: '1700000000100000000',
+        body: { stringValue: 'guardrail update_seat' },
+        attributes: [{ key: 'guardrail.outcome', value: { stringValue: 'allowed' } }],
+      };
+      await request(receiver.getApp())
+        .post('/v1/logs')
+        .send({
+          resourceLogs: [
+            {
+              scopeLogs: [
+                {
+                  logRecords: [
+                    log,
+                    { ...log, ...(distinct && { timeUnixNano: '1700000000200000000' }) },
+                  ],
+                },
+              ],
+            },
+          ],
+        })
+        .expect(200);
+      const ids = persistSpans.mock.calls[0][1].map((span) => span.spanId);
+      expect(new Set(ids).size).toBe(distinct ? 2 : 1);
+    },
+  );
+
+  it('keeps redacted log values out of public record digests', async () => {
+    const traceId = 'a'.repeat(32),
+      parentSpanId = 'b'.repeat(16),
+      time = '1700000000100000000';
+    const secret = 'hunter2!';
+    receiver.setRedactAttributes(['otel.log.body']);
+    await request(receiver.getApp())
+      .post('/v1/logs')
+      .send({
+        resourceLogs: [
+          {
+            scopeLogs: [
+              {
+                logRecords: [
+                  {
+                    traceId,
+                    spanId: parentSpanId,
+                    timeUnixNano: time,
+                    body: { stringValue: secret },
+                  },
+                ],
+              },
+            ],
+          },
+        ],
+      })
+      .expect(200);
+    const span = persistSpans.mock.calls[0][1][0];
+    expect(JSON.stringify(span)).not.toContain(secret);
+    for (const candidate of ['wrong-password', secret]) {
+      const guess = crypto
+        .createHash('sha256')
+        .update(
+          JSON.stringify([
+            traceId,
+            parentSpanId,
+            time,
+            undefined,
+            undefined,
+            undefined,
+            undefined,
+            candidate,
+            {},
+            {},
+          ]),
+        )
+        .digest('hex')
+        .slice(0, 16);
+      expect(span.spanId).not.toBe(guess);
+    }
+  });
 
   it('preserves unrelated trace text after the redaction history reaches capacity', () => {
     const redactingReceiver = new OTLPReceiver({ redactAttributes: ['authorization'] });

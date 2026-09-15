@@ -59,12 +59,14 @@ const SPAN_HASHES_KEY = 'promptfooSpanHashes';
 export function spanHash(span: SpanData): string {
   const attributes = { ...span.attributes };
   delete attributes['promptfoo.redaction.history'];
+  const untimedLog =
+    attributes['otel.log.record'] === true && attributes['otel.log.time_unix_nano'] === undefined;
   const value = {
     spanId: span.spanId,
     parentSpanId: span.parentSpanId || undefined,
     name: span.name,
-    startTime: span.startTime,
-    endTime: span.endTime ?? undefined,
+    startTime: untimedLog ? undefined : span.startTime,
+    endTime: untimedLog ? undefined : (span.endTime ?? undefined),
     attributes,
     events: (span.events ?? []).map((event) => {
       const attributes = { ...event.attributes };
