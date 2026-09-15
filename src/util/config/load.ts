@@ -40,7 +40,11 @@ import { readFilters, renderEnvOnlyInObject } from '../../util/index';
 import invariant from '../../util/invariant';
 import { PromptSchema } from '../../validators/prompts';
 import { filterPrompts } from '../eval/filterPrompts';
-import { filterProviderConfigs, getProviderIdAndLabel } from '../eval/filterProviders';
+import {
+  filterProviderConfigs,
+  getExcludedProviders,
+  getProviderIdAndLabel,
+} from '../eval/filterProviders';
 import { filterTests } from '../eval/filterTests';
 import { promptfooCommand } from '../promptfooCommand';
 import { preserveTracingCredentialReferences } from '../sanitizer';
@@ -1065,17 +1069,16 @@ export async function resolveConfigs(
     typeof testSuite.defaultTest === 'object' ? testSuite.defaultTest : undefined,
   );
 
-  // Validate provider references in tests and scenarios
+  // Validate provider references in tests and scenarios. A test may reference a provider that
+  // --filter-providers excluded; it just won't run on it.
   validateTestProviderReferences(
     testSuite.tests || [],
-    testSuite.providers,
+    [
+      ...testSuite.providers,
+      ...getExcludedProviders(cliFilteredProviderConfigs, filteredProviderConfigs),
+    ],
     typeof testSuite.defaultTest === 'object' ? testSuite.defaultTest : undefined,
     testSuite.scenarios,
-    {
-      unfilteredProviders: Array.isArray(cliFilteredProviderConfigs)
-        ? cliFilteredProviderConfigs.map((p, i) => getProviderIdAndLabel(p, i))
-        : undefined,
-    },
   );
 
   // Validate that all prompt references in tests exist

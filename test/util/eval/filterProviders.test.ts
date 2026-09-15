@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   filterProviderConfigs,
   filterProviders,
+  getExcludedProviders,
   getPersistedProviderFilterOptions,
   getProviderFilterRegexError,
 } from '../../../src/util/eval/filterProviders';
@@ -312,5 +313,30 @@ describe('filterProviderConfigs', () => {
       expect(result).toHaveLength(1);
       expect((result as Array<Partial<ProviderOptions>>)[0].label).toBe('Provider2');
     });
+  });
+});
+
+describe('getExcludedProviders', () => {
+  const providers: TestSuiteConfig['providers'] = [
+    'openai:gpt-4',
+    { id: 'echo', label: 'gemini' },
+    { id: 'echo', label: 'openrouter:free' },
+  ];
+  const idsAndLabels = (excluded: ReturnType<typeof getExcludedProviders>) =>
+    excluded.map((provider) => ({ id: provider.id(), label: provider.label }));
+
+  it('returns the provider configs that the filter removed', () => {
+    const filtered = filterProviderConfigs(providers, 'openrouter');
+
+    expect(idsAndLabels(getExcludedProviders(providers, filtered))).toEqual([
+      { id: 'openai:gpt-4', label: undefined },
+      { id: 'echo', label: 'gemini' },
+    ]);
+  });
+
+  it('returns nothing when no filter is applied', () => {
+    const filtered = filterProviderConfigs(providers, undefined);
+
+    expect(getExcludedProviders(providers, filtered)).toEqual([]);
   });
 });

@@ -10,44 +10,20 @@ export class ProviderReferenceValidationError extends Error {
   }
 }
 
-export type ProviderDescriptor = {
-  id: string;
-  label?: string;
-};
-
-export type ValidateTestProviderReferencesOptions = {
-  unfilteredProviders?: ProviderDescriptor[];
-};
-
-function doesRefMatchDescriptor(ref: string, desc: ProviderDescriptor): boolean {
-  return doesProviderRefMatch(ref, {
-    id: () => desc.id,
-    label: desc.label,
-  } as ApiProvider);
-}
-
 /**
  * Validates a single provider reference against available providers.
  */
 function validateProviderRef(
   ref: string,
-  providers: ApiProvider[],
+  providers: Pick<ApiProvider, 'id' | 'label'>[],
   context: string,
-  options?: ValidateTestProviderReferencesOptions,
 ): void {
-  if (providers.some((p) => doesProviderRefMatch(ref, p))) {
-    return;
+  if (!providers.some((p) => doesProviderRefMatch(ref, p))) {
+    const available = providers.map(getProviderDescription).join(', ');
+    throw new ProviderReferenceValidationError(
+      `${context} references provider "${ref}" which does not exist. Available providers: ${available}`,
+    );
   }
-  if (
-    options?.unfilteredProviders &&
-    options.unfilteredProviders.some((d) => doesRefMatchDescriptor(ref, d))
-  ) {
-    return;
-  }
-  const available = providers.map(getProviderDescription).join(', ');
-  throw new ProviderReferenceValidationError(
-    `${context} references provider "${ref}" which does not exist. Available providers: ${available}`,
-  );
 }
 
 /**
@@ -55,9 +31,8 @@ function validateProviderRef(
  */
 function validateTestProviders(
   test: TestCase | Partial<TestCase>,
-  providers: ApiProvider[],
+  providers: Pick<ApiProvider, 'id' | 'label'>[],
   context: string,
-  options?: ValidateTestProviderReferencesOptions,
 ): void {
   if (!test.providers) {
     return;
@@ -69,7 +44,7 @@ function validateTestProviders(
 
   const desc = 'description' in test && test.description ? ` ("${test.description}")` : '';
   for (const ref of test.providers) {
-    validateProviderRef(ref, providers, `${context}${desc}`, options);
+    validateProviderRef(ref, providers, `${context}${desc}`);
   }
 }
 
@@ -77,27 +52,25 @@ function validateTestProviders(
  * Validate that test case provider references match available providers.
  *
  * @param tests - Array of test cases to validate
- * @param providers - Array of available providers
+ * @param providers - Providers that test references may match
  * @param defaultTest - Optional default test case to validate
  * @param scenarios - Optional array of scenarios to validate
- * @param options - Optional validation options, including unfilteredProviders for CLI filtered runs
  * @throws ProviderReferenceValidationError if any provider reference is invalid
  */
 export function validateTestProviderReferences(
   tests: TestCase[],
-  providers: ApiProvider[],
+  providers: Pick<ApiProvider, 'id' | 'label'>[],
   defaultTest?: Partial<TestCase>,
   scenarios?: Scenario[],
-  options?: ValidateTestProviderReferencesOptions,
 ): void {
   // Validate defaultTest.providers
   if (defaultTest) {
-    validateTestProviders(defaultTest, providers, 'defaultTest', options);
+    validateTestProviders(defaultTest, providers, 'defaultTest');
   }
 
   // Validate each test's providers
   for (let i = 0; i < tests.length; i++) {
-    validateTestProviders(tests[i], providers, `Test #${i + 1}`, options);
+    validateTestProviders(tests[i], providers, `Test #${i + 1}`);
   }
 
   // Validate scenario tests and config
@@ -112,7 +85,6 @@ export function validateTestProviderReferences(
             configItem,
             providers,
             `Scenario #${i + 1}${scenarioDesc} config[${j}]`,
-            options,
           );
         });
       }
@@ -124,11 +96,9 @@ export function validateTestProviderReferences(
             test,
             providers,
             `Scenario #${i + 1}${scenarioDesc} test #${j + 1}`,
-            options,
           );
         });
       }
     });
   }
 }
-

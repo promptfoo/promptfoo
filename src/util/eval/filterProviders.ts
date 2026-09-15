@@ -91,6 +91,26 @@ export function filterProviderConfigs(
 }
 
 /**
+ * Returns the provider configs that filterProviderConfigs removed, for validating test provider
+ * references. Tests may still reference these providers; they just don't run on them.
+ */
+export function getExcludedProviders(
+  providers: TestSuiteConfig['providers'],
+  filteredProviders: TestSuiteConfig['providers'],
+): Pick<ApiProvider, 'id' | 'label'>[] {
+  if (!Array.isArray(providers) || !Array.isArray(filteredProviders)) {
+    return [];
+  }
+  return providers.flatMap((provider, index) => {
+    if (filteredProviders.includes(provider)) {
+      return [];
+    }
+    const { id, label } = getProviderIdAndLabel(provider, index);
+    return [{ id: () => id, label }];
+  });
+}
+
+/**
  * Filters instantiated providers by id or label.
  * This is kept for backwards compatibility and as a safety net.
  */
