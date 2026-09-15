@@ -28,7 +28,6 @@ import {
   type ParsedTrace,
   type SpanData,
   TraceIncompleteError,
-  TraceLimitError,
   type TraceStore,
 } from './store';
 
@@ -488,7 +487,7 @@ export class OTLPReceiver {
         const rejectedSpans = await this.persistTraces(this.groupTraces(traces));
         res.status(200).json({
           partialSuccess: rejectedSpans
-            ? { rejectedSpans, errorMessage: 'Per-trace limit exceeded' }
+            ? { rejectedSpans, errorMessage: 'One or more traces are incomplete' }
             : {},
         });
         logger.debug('[OtlpReceiver] Successfully processed traces');
@@ -510,7 +509,7 @@ export class OTLPReceiver {
           : 0;
         res.status(200).json({
           partialSuccess: rejectedLogRecords
-            ? { rejectedLogRecords, errorMessage: 'Per-trace limit exceeded' }
+            ? { rejectedLogRecords, errorMessage: 'One or more traces are incomplete' }
             : {},
         });
       } catch (error) {
@@ -668,7 +667,7 @@ export class OTLPReceiver {
           }),
         });
       } catch (error) {
-        if (!(error instanceof TraceLimitError)) {
+        if (!(error instanceof TraceIncompleteError)) {
           throw error;
         }
         rejected += spans.length;

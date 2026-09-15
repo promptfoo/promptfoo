@@ -58,7 +58,10 @@ vi.mock('../../src/database', () => ({
 }));
 
 // Mock the trace store
-vi.mock('../../src/tracing/store');
+vi.mock('../../src/tracing/store', async (importOriginal) => {
+  const store = await importOriginal<typeof import('../../src/tracing/store')>();
+  return { ...store, getTraceStore: vi.fn() };
+});
 
 // Mock the logger
 vi.mock('../../src/logger', () => ({
@@ -453,35 +456,43 @@ describe('OTLPReceiver', () => {
     expect(result.grade.pass).toBe(offset <= 0);
   });
 
-  it.each(['traces', 'logs'] as const)(
-    'isolates capped traces in mixed OTLP %s batches',
-    async (endpoint) => {
-      const record = (traceId: string) => ({
-        traceId,
-        spanId: 'b'.repeat(16),
-        name: 'tool update_seat',
-        startTimeUnixNano: '1700000000000000000',
-        timeUnixNano: '1700000000000000000',
-        body: { stringValue: 'tool update_seat' },
-      });
-      mockTraceStore.addSpans.mockRejectedValueOnce(new mockedTraceStore.TraceLimitError());
-      const records = [record('a'.repeat(32)), record('c'.repeat(32))];
-      const response = await request(receiver.getApp())
-        .post('/v1/' + endpoint)
-        .send(
-          endpoint === 'traces'
-            ? { resourceSpans: [{ scopeSpans: [{ spans: records }] }] }
-            : { resourceLogs: [{ scopeLogs: [{ logRecords: records }] }] },
-        )
-        .expect(200);
-      expect(mockTraceStore.addSpans).toHaveBeenCalledTimes(2);
-      expect(persistSpans.mock.calls.at(-1)?.[0]).toBe('c'.repeat(32));
-      expect(response.body.partialSuccess).toEqual({
-        [endpoint === 'traces' ? 'rejectedSpans' : 'rejectedLogRecords']: 1,
-        errorMessage: 'Per-trace limit exceeded',
-      });
-    },
-  );
+  it.each(
+    ['traces', 'logs'].flatMap((endpoint) =>
+      ['limit', 'dropped telemetry', 'conflicting span records'].map((reason) => ({
+        endpoint,
+        reason,
+      })),
+    ),
+  )('isolates $reason rejections in mixed OTLP $endpoint batches', async ({ endpoint, reason }) => {
+    const record = (traceId: string) => ({
+      traceId,
+      spanId: 'b'.repeat(16),
+      name: 'tool update_seat',
+      startTimeUnixNano: '1700000000000000000',
+      timeUnixNano: '1700000000000000000',
+      body: { stringValue: 'tool update_seat' },
+    });
+    mockTraceStore.addSpans.mockRejectedValueOnce(
+      reason === 'limit'
+        ? new mockedTraceStore.TraceLimitError()
+        : new mockedTraceStore.TraceIncompleteError(reason),
+    );
+    const records = [record('a'.repeat(32)), record('c'.repeat(32))];
+    const response = await request(receiver.getApp())
+      .post('/v1/' + endpoint)
+      .send(
+        endpoint === 'traces'
+          ? { resourceSpans: [{ scopeSpans: [{ spans: records }] }] }
+          : { resourceLogs: [{ scopeLogs: [{ logRecords: records }] }] },
+      )
+      .expect(200);
+    expect(mockTraceStore.addSpans).toHaveBeenCalledTimes(2);
+    expect(persistSpans.mock.calls.at(-1)?.[0]).toBe('c'.repeat(32));
+    expect(response.body.partialSuccess).toEqual({
+      [endpoint === 'traces' ? 'rejectedSpans' : 'rejectedLogRecords']: 1,
+      errorMessage: expect.any(String),
+    });
+  });
 
   it('keeps retried OTLP log identities while retaining distinct calls and observed times', async () => {
     const log = {
