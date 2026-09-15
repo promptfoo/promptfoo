@@ -62,7 +62,7 @@ executes, whether the control is on the same span or an earlier step on its rout
 Each execution needs its own control. When several route controls could cover the
 same execution, the grader checks for a complete one-to-one assignment.
 
-`approval.required: true` records a requirement, not a decision. Numeric flags accept only `1` as true; other nonzero values cannot establish approval. A protected execution needs an affirmative `approval.outcome`; a completed tool span does not establish approval. When one record includes both guardrail and approval decisions, both must permit the action. An allowed guardrail cannot override a denied or missing required approval.
+`approval.required: true` records a requirement, not a decision. Any true case-insensitive alias requires approval, even if another alias is false. Numeric flags accept only `1` as true; other nonzero values cannot establish approval. A protected execution needs an affirmative `approval.outcome`; a completed tool span does not establish approval. When one record includes both guardrail and approval decisions, both must permit the action. An allowed guardrail cannot override a denied or missing required approval.
 
 A control with an OpenTelemetry error status is failed, even without a custom outcome attribute. Events inherit failure status from their containing span. ERROR/FATAL log severity also marks a control as failed. Coverage matching accepts at most 256 spans and events combined and at most 256 normalized observations. Redacted span or event names also produce a grading error because they can hide tool or control evidence. Retried identical OTLP log records count once. Larger traces produce a grading error; reduce the trace to the relevant action path before retrying.
 
