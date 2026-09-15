@@ -49,7 +49,10 @@ export function sanitizeRedactionPrompt<T extends Prompt>(prompt: T): T {
   return {
     ...prompt,
     raw: REDACTED_PROMPT,
-    label: prompt.raw && prompt.label?.includes(prompt.raw) ? REDACTED_PROMPT : prompt.label,
+    label:
+      typeof prompt.label !== 'string' || (prompt.raw && prompt.label.includes(prompt.raw))
+        ? REDACTED_PROMPT
+        : prompt.label,
     ...(prompt.display !== undefined && { display: REDACTED_PROMPT }),
   };
 }

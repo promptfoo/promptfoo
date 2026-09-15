@@ -31,6 +31,21 @@ import { createAtomicTestCase, createPrompt } from '../factories/testSuite';
 import { mockProcessEnv } from '../util/utils';
 
 describe('EvalResult', () => {
+  it.each([undefined, 42, { text: 'PRIVATE_MALFORMED_LABEL' }])(
+    'omits malformed labels from legacy privacy prompts: %j',
+    (label) => {
+      const row = createEvaluateResult({
+        ...mockEvaluateResult,
+        prompt: { raw: 'Private prompt', label: label as unknown as string },
+        testCase: { assert: [{ type: 'promptfoo:redteam:harness:artifact-redaction' }] },
+      });
+      const projected = sanitizeResultForJsonlArtifact(row);
+      expect(projected.prompt.label).toContain('Prompt omitted');
+      expect(JSON.stringify(projected.prompt)).not.toContain('PRIVATE_MALFORMED_LABEL');
+      expect(row.prompt.label).toBe(label);
+    },
+  );
+
   it.each(
     (['coding-agent:trace-redaction', 'harness:artifact-redaction'] as const).flatMap((pluginId) =>
       [false, true].map((wrapped) => ({ pluginId, wrapped })),
