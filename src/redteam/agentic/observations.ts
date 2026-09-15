@@ -424,15 +424,27 @@ function controlObservationFromSpan(
     .map(([, value]) => stringifyValue(value)?.trim().toLowerCase() ?? '');
   const hasSemanticAttribute =
     spanType === 'guardrail' || guardrailNames.length > 0 || triggered.length > 0;
+  const hasControlContext =
+    spanType === 'guardrail' ||
+    triggered.length > 0 ||
+    guardrailDecision !== undefined ||
+    approvalOutcome !== undefined ||
+    (guardrailNames.length > 0 &&
+      !inferredToolFromSpanName(span.name) &&
+      !Object.keys(attributes).some((key) => {
+        const kind = traceAttributeField(key.toLowerCase())?.kind;
+        return kind === 'tool_call' || kind === 'command';
+      }));
   if (name.includes('guardrail') || hasSemanticAttribute || guardrailDecision !== undefined) {
     const explicitOutcome = controlOutcome(attributes, [
       'guardrails.decision',
       'guardrail.decision',
       'guardrail.outcome',
       'approval.outcome',
-      ...(hasSemanticAttribute || guardrailDecision !== undefined ? ['codex.status'] : []),
+      ...(hasControlContext ? ['codex.status'] : []),
     ]);
-    const outcome = explicitOutcome ?? (hasSemanticAttribute ? 'allowed' : undefined);
+    const outcome =
+      explicitOutcome ?? (hasSemanticAttribute && hasControlContext ? 'allowed' : undefined);
     return {
       kind: 'guardrail',
       callId: getToolCallId(attributes),

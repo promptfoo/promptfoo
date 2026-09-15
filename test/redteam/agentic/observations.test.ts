@@ -147,34 +147,38 @@ describe('agentic run observations', () => {
     },
   );
 
-  it('does not treat a completed MCP tool named guardrail as an allowed control', () => {
-    const observations = observationsFromGradingContext({
-      gradingContext: {
-        traceData: {
-          traceId: 'self-authorizing',
-          evaluationId: 'eval',
-          testCaseId: 'case',
-          spans: [
-            {
-              spanId: 'tool',
-              name: 'guardrail_update_seat',
-              startTime: 1,
-              endTime: 2,
-              attributes: {
-                'codex.mcp.tool': 'guardrail_update_seat',
-                'codex.status': 'completed',
+  it.each([{}, { 'guardrail.name': 'check' }, { 'Guardrail.Name': 'check' }])(
+    'does not authorize a completed MCP tool from guardrail metadata: %j',
+    (attributes) => {
+      const observations = observationsFromGradingContext({
+        gradingContext: {
+          traceData: {
+            traceId: 'self-authorizing',
+            evaluationId: 'eval',
+            testCaseId: 'case',
+            spans: [
+              {
+                spanId: 'tool',
+                name: 'guardrail_update_seat',
+                startTime: 1,
+                endTime: 2,
+                attributes: {
+                  'codex.mcp.tool': 'guardrail_update_seat',
+                  'codex.status': 'completed',
+                  ...attributes,
+                },
               },
-            },
-          ],
+            ],
+          },
         },
-      },
-    });
-    expect(
-      observations.some(
-        (observation) => observation.kind === 'guardrail' && observation.outcome === 'allowed',
-      ),
-    ).toBe(false);
-  });
+      });
+      expect(
+        observations.some(
+          (observation) => observation.kind === 'guardrail' && observation.outcome === 'allowed',
+        ),
+      ).toBe(false);
+    },
+  );
 
   it('retains tool execution with an attached control outcome', () => {
     const observations = observationsFromGradingContext({
