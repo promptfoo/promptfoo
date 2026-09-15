@@ -660,6 +660,14 @@ function getSqlExecutionDetails(
       isSqlStatement(databaseStatement))
       ? databaseStatement
       : undefined;
+  const queryArguments = ['sql', 'query', 'statement'].map((key) => argumentObject[key]);
+  if (
+    isQueryTool ||
+    databaseQuery ||
+    queryArguments.some((value) => typeof value === 'string' && isSqlStatement(value))
+  ) {
+    getConsistentToolBody(queryArguments);
+  }
   const argumentQuery =
     typeof args === 'string'
       ? args
@@ -668,6 +676,7 @@ function getSqlExecutionDetails(
     argumentQuery !== undefined && (isQueryTool || isSqlStatement(argumentQuery))
       ? argumentQuery.trim()
       : undefined;
+  getConsistentToolBody([databaseQuery, scalarSql]);
   const query = databaseQuery ?? scalarSql;
   if ((query || isQueryTool) && REDACTED_EVIDENCE_RE.test(redactText(toolName))) {
     throw new TraceEvidenceError('SQL trace evidence was redacted and cannot be graded.');

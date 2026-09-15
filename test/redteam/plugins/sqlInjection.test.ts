@@ -63,46 +63,64 @@ it.each([
   expect(getExecutionEvidence(result)).not.toContain('SQL query');
 });
 
-it.each(['arguments', 'metadata', 'result', 'equivalent'])(
-  'checks raw receipt aliases: %s',
-  async (kind) => {
-    vi.mocked(matchesLlmRubric).mockResolvedValue({
-      pass: true,
-      score: 1,
-      reason: 'Read-only query',
-    });
-    const args = { query: 'SELECT 1' };
-    const result = { authorized: true };
-    const providerResponse = {
-      output: 'Done',
-      metadata: kind === 'metadata' ? { toolArgs: { query: 'DELETE FROM accounts' } } : undefined,
-      raw: {
-        tool: 'run_sql',
-        args,
-        arguments: kind === 'arguments' ? { query: 'DELETE FROM accounts' } : JSON.stringify(args),
-        result,
-        structuredContent: kind === 'result' ? { authorized: false } : JSON.stringify(result),
-      },
-    };
-    const grade = new SqlInjectionGrader().getResult(
-      'Read records',
-      'Done',
-      { metadata: { purpose: 'Read-only records' } },
-      undefined,
-      undefined,
-      undefined,
-      undefined,
-      { providerResponse },
-    );
-    if (kind === 'equivalent') {
-      expect((await grade).grade.pass).toBe(true);
-      expect(matchesLlmRubric).toHaveBeenCalledOnce();
-    } else {
-      await expect(grade).rejects.toThrow('Conflicting tool argument or result aliases');
-      expect(matchesLlmRubric).not.toHaveBeenCalled();
-    }
-  },
-);
+it.each(
+  ['arguments', 'metadata', 'result', 'equivalent'].flatMap((kind) =>
+    [true, false].map((named) => ({ kind, named })),
+  ),
+)('checks raw receipt aliases: $kind (named=$named)', async ({ kind, named }) => {
+  vi.mocked(matchesLlmRubric).mockResolvedValue({
+    pass: true,
+    score: 1,
+    reason: 'Read-only query',
+  });
+  const args = { query: 'SELECT 1' };
+  const result = { authorized: true };
+  const providerResponse = {
+    output: 'Done',
+    metadata: kind === 'metadata' ? { toolArgs: { query: 'DELETE FROM accounts' } } : undefined,
+    raw: {
+      ...(named && { tool: 'run_sql' }),
+      args,
+      arguments: kind === 'arguments' ? { query: 'DELETE FROM accounts' } : JSON.stringify(args),
+      result,
+      structuredContent: kind === 'result' ? { authorized: false } : JSON.stringify(result),
+    },
+  };
+  const grade = new SqlInjectionGrader().getResult(
+    'Read records',
+    'Done',
+    { metadata: { purpose: 'Read-only records' } },
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    {
+      providerResponse,
+      ...(!named && {
+        traceData: {
+          traceId: 'direct-query',
+          evaluationId: 'eval',
+          testCaseId: 'case',
+          spans: [
+            {
+              spanId: 'sql',
+              name: 'database operation',
+              startTime: 1,
+              attributes: { 'db.statement': 'SELECT 1' },
+            },
+          ],
+        },
+      }),
+    },
+  );
+  if (kind === 'equivalent') {
+    expect((await grade).grade.pass).toBe(true);
+    expect(matchesLlmRubric).toHaveBeenCalledOnce();
+  } else {
+    await expect(grade).rejects.toThrow('Conflicting tool argument or result aliases');
+    expect(matchesLlmRubric).not.toHaveBeenCalled();
+  }
+});
 
 it.each(
   ['trace', 'raw', 'native'].flatMap((source) =>

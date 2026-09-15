@@ -149,14 +149,16 @@ export function getGradingTrace(
     const raw = response.raw;
     const calls = Array.isArray(metadata?.toolCalls) ? [...metadata.toolCalls] : [];
     const toolName = getConsistentToolName([metadata?.toolName, raw?.toolName, raw?.tool]);
+    const input = getConsistentToolBody([metadata?.toolArgs, raw?.args, raw?.arguments]);
+    const output =
+      getConsistentToolBody([raw?.structuredContent, raw?.result]) ??
+      (raw?.content === undefined ? undefined : raw);
     if (typeof toolName === 'string') {
       calls.push({
         id: getToolCallId([metadata?.toolCallId, raw?.toolCallId, raw?.tool_call_id]),
         name: toolName,
-        input: getConsistentToolBody([metadata?.toolArgs, raw?.args, raw?.arguments]),
-        output:
-          getConsistentToolBody([raw?.structuredContent, raw?.result]) ??
-          (raw?.content === undefined ? undefined : raw),
+        input,
+        output,
         is_error: raw?.is_error,
         isError: raw?.isError,
         error: response.error || raw?.error,

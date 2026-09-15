@@ -724,6 +724,48 @@ describe('trajectory utilities', () => {
   );
 
   it.each([
+    { statement: 'SELECT 1', args: { query: 'DROP TABLE users' }, conflict: true },
+    { statement: 'DROP TABLE users', args: 'SELECT 1', conflict: true },
+    { statement: undefined, args: { sql: 'SELECT 1', query: 'DROP TABLE users' }, conflict: true },
+    {
+      statement: undefined,
+      args: { query: 'SELECT 1', statement: 'DROP TABLE users' },
+      conflict: true,
+    },
+    { statement: 'SELECT 1', args: { query: ' SELECT 1 ' }, conflict: false },
+    {
+      statement: 'SELECT 1',
+      args: { sql: 'SELECT 1', query: ' SELECT 1 ', statement: 'SELECT 1' },
+      conflict: false,
+    },
+  ])('checks SQL query representations: $statement / $args', ({ statement, args, conflict }) => {
+    const summarize = () =>
+      summarizeTrajectoryForJudge(
+        {
+          traceId: 'query-representations',
+          spans: [
+            {
+              spanId: 'query',
+              name: 'tool.call',
+              startTime: 1,
+              attributes: {
+                'tool.name': 'run_sql',
+                'db.statement': statement,
+                'tool.arguments': args,
+              },
+            },
+          ],
+        },
+        { includeSql: true },
+      );
+    if (conflict) {
+      expect(summarize).toThrow('Conflicting tool argument or result aliases');
+    } else {
+      expect(JSON.parse(summarize()).steps[0].sql.query).toBe('SELECT :literal_1');
+    }
+  });
+
+  it.each([
     [
       'SQL statement after a non-SQL alias',
       { 'db.query.text': 'lookup:accounts', 'db.statement': 'DROP TABLE accounts' },
