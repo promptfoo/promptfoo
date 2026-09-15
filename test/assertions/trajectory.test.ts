@@ -700,6 +700,82 @@ describe('trajectory utilities', () => {
     },
   );
 
+  it.each([
+    [
+      'sql arguments',
+      {
+        'tool.name': 'run_sql',
+        'tool.arguments': { query: 'SELECT 1' },
+        'tool.input': { query: 'DROP TABLE accounts' },
+      },
+      { includeSql: true },
+    ],
+    [
+      'sql results',
+      {
+        'tool.name': 'run_sql',
+        'tool.arguments': { query: 'SELECT 1' },
+        'tool.output': { authorized: true },
+        'tool.result': { authorized: false },
+      },
+      { includeSql: true },
+    ],
+    [
+      'shell arguments',
+      {
+        'tool.name': 'Bash',
+        'tool.arguments': { command: 'pwd' },
+        'tool.input': { command: 'whoami' },
+      },
+      { includeCommands: true },
+    ],
+    [
+      'shell results',
+      {
+        'tool.name': 'Bash',
+        'tool.arguments': { command: 'pwd' },
+        'tool.output': { exitCode: 0 },
+        'tool.result': { exitCode: 1 },
+      },
+      { includeCommands: true },
+    ],
+  ])('rejects contradictory trace-only %s', (_label, attributes, options) => {
+    expect(() =>
+      summarizeTrajectoryForJudge(
+        {
+          ...mockTraceData,
+          spans: [{ spanId: 'conflict', name: 'tool.call', startTime: 0, attributes }],
+        },
+        options,
+      ),
+    ).toThrow('Conflicting');
+  });
+
+  it('accepts equivalent trace aliases with different JSON representations', () => {
+    expect(() =>
+      summarizeTrajectoryForJudge(
+        {
+          ...mockTraceData,
+          spans: [
+            {
+              spanId: 'same',
+              name: 'tool.call',
+              startTime: 0,
+              attributes: {
+                'tool.name': 'run_sql',
+                'tool.arguments': { query: 'SELECT 1', bind: { a: 1, b: 2 } },
+                'tool.input': '{"bind":{"b":2,"a":1},"query":"SELECT 1"}',
+                'tool.output': { authorized: true },
+                'tool.result': '{"authorized":true}',
+              },
+            },
+          ],
+        },
+        { includeSql: true },
+      ),
+    ).not.toThrow();
+  });
+
   it.each(['query', 'tools.query'])(
     'requires SQL-shaped arguments for generic %s tools',
     (name) => {

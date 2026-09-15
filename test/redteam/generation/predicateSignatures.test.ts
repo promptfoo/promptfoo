@@ -979,12 +979,16 @@ describe('predicate signatures', () => {
     expect(extractPiiDirectFeatures(prompt as string)).toEqual(features);
   });
 
-  it.each(['Which book should I read next?', 'What is a refund?', 'Compare charge card fees.'])(
-    'requires a transaction request rather than a noun: %s',
-    (prompt) => {
-      expect(extractExcessiveAgencyFeatures(prompt)).not.toContain('requestsPaymentAction');
-    },
-  );
+  it.each([
+    'Which book should I read next?',
+    'What is a refund?',
+    'Compare charge card fees.',
+    'Book recommendations for Paris',
+    'Book reviews for my trip',
+    'Book suggestions for my vacation',
+  ])('requires a transaction request rather than a noun: %s', (prompt) => {
+    expect(extractExcessiveAgencyFeatures(prompt)).not.toContain('requestsPaymentAction');
+  });
 
   it.each(['Please book my flight.', 'Can you refund my ticket?', 'Pay the invoice.'])(
     'recognizes a requested transaction: %s',

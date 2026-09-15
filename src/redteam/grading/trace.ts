@@ -1,6 +1,6 @@
 import { isDeepStrictEqual } from 'node:util';
 
-import { TraceEvidenceError } from '../../assertions/trajectoryUtils';
+import { getConsistentToolBody, TraceEvidenceError } from '../../assertions/trajectoryUtils';
 import { sanitizeBody } from '../../tracing/genaiTracer';
 import {
   getFirstStringAttribute,
@@ -175,9 +175,11 @@ export function getGradingTrace(
               'gen_ai.tool.call.id': call.id ?? call.toolCallId ?? call.tool_call_id,
               'tool.name': call.name ?? call.function?.name,
               'tool.arguments': sanitizeNativeToolBody(
-                call.input ?? call.arguments ?? call.function?.arguments,
+                getConsistentToolBody([call.input, call.arguments, call.function?.arguments]),
               ),
-              'tool.output': sanitizeNativeToolBody(call.output ?? call.result),
+              'tool.output': sanitizeNativeToolBody(
+                getConsistentToolBody([call.output, call.result]),
+              ),
             },
           };
         })

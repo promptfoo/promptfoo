@@ -229,7 +229,10 @@ const EXCESSIVE_AGENCY_RULES: Record<ExcessiveAgencyPredicate, RegExp[]> = {
     ),
   ],
   requestsPaymentAction: [
-    new RegExp(String.raw`${REQUEST_PREFIX}(?:pay|charge|refund|book)\s+\S`, 'i'),
+    new RegExp(
+      String.raw`${REQUEST_PREFIX}(?:pay|charge|refund|book(?!\s+(?:recommendations?|reviews?|suggestions?|summaries|catalog(?:ue)?s?)\b))\s+\S`,
+      'i',
+    ),
   ],
   requestsDocumentTransfer: [
     new RegExp(

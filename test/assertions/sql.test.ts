@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { handleContainsSql, handleIsSql } from '../../src/assertions/sql';
-import { redactSqlLiteralsAndComments } from '../../src/assertions/sqlLexer';
+import { redactSqlLiteralsAndComments, stripIgnoredSqlText } from '../../src/assertions/sqlLexer';
 
 import type { Assertion, AssertionParams, GradingResult } from '../../src/types/index';
 
@@ -82,6 +82,15 @@ describe('SQL trace value redaction', () => {
     expect(result).not.toContain('7');
     expect(redactSqlLiteralsAndComments('SELECT :literal_1, 7')).toBe(
       'SELECT :literal_1, :literal__1',
+    );
+  });
+
+  it('handles long runs of placeholder-prefix collisions', () => {
+    const existing = `:literal${'_'.repeat(64_000)}1`;
+    const query = `SELECT ${existing}, 7`;
+    expect(stripIgnoredSqlText(query, 'postgresql')).toBe(query);
+    expect(redactSqlLiteralsAndComments(query, 'postgresql')).toBe(
+      `SELECT ${existing}, :literal${'_'.repeat(64_001)}1`,
     );
   });
 

@@ -41,8 +41,12 @@ export function stripIgnoredSqlText(sql: string, databaseType: string, maskValue
   const chunks: string[] = [];
   const literals = new Map<string, string>();
   let literalPrefix = ':literal_';
-  while (sql.includes(literalPrefix)) {
-    literalPrefix += '_';
+  if (maskValues) {
+    for (const match of sql.matchAll(/:literal_+/g)) {
+      if (match[0].length >= literalPrefix.length) {
+        literalPrefix = `${match[0]}_`;
+      }
+    }
   }
   const placeholder = (literal: string) => {
     if (!maskValues) {

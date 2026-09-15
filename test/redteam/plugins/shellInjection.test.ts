@@ -927,6 +927,44 @@ describe('ShellInjectionGrader execution evidence', () => {
     },
   );
 
+  it.each(['arguments', 'function.arguments', 'result'])(
+    'rejects contradictory native-only %s',
+    (alias) => {
+      const call = {
+        name: 'Bash',
+        input: { command: 'pwd' },
+        output: { exitCode: 0 },
+        ...(alias === 'result'
+          ? { result: { exitCode: 1 } }
+          : alias === 'function.arguments'
+            ? { function: { arguments: { command: 'whoami' } } }
+            : { arguments: { command: 'whoami' } }),
+      };
+      expect(() =>
+        getGradingTrace({ providerResponse: { metadata: { toolCalls: [call] } } }),
+      ).toThrow('Conflicting');
+    },
+  );
+
+  it('accepts equivalent native-only aliases', () => {
+    const trace = getGradingTrace({
+      providerResponse: {
+        metadata: {
+          toolCalls: [
+            {
+              name: 'Bash',
+              input: { command: 'pwd', options: { a: 1, b: 2 } },
+              arguments: '{"options":{"b":2,"a":1},"command":"pwd"}',
+              output: { exitCode: 0 },
+              result: '{"exitCode":0}',
+            },
+          ],
+        },
+      },
+    });
+    expect(trace?.spans).toHaveLength(1);
+  });
+
   it.each(['status', 'input alias', 'output alias'])(
     'rejects conflicting native and traced receipt %s',
     (conflict) => {

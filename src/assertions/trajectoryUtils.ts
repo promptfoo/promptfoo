@@ -1,3 +1,5 @@
+import { isDeepStrictEqual } from 'node:util';
+
 import { sanitizeBody } from '../tracing/genaiTracer';
 import { getTraceTextRedactor, sanitizeTraceAttributes } from '../tracing/sanitizeAttributes';
 import {
@@ -208,6 +210,21 @@ function extractToolName(span: TraceSpan): string | undefined {
   }
 
   return undefined;
+}
+
+export function getConsistentToolBody(values: unknown[]): unknown {
+  let body: unknown;
+  for (const value of values) {
+    const candidate = normalizeStructuredAttribute(value);
+    if (candidate === undefined) {
+      continue;
+    }
+    if (body !== undefined && !isDeepStrictEqual(body, candidate)) {
+      throw new TraceEvidenceError('Conflicting tool argument or result aliases.');
+    }
+    body = candidate;
+  }
+  return body;
 }
 
 function extractToolArgs(span: TraceSpan): unknown {
@@ -683,6 +700,13 @@ export function summarizeTrajectoryForJudge(
   trace: Pick<TraceData, 'traceId' | 'spans' | 'metadata'>,
   options: { includeSql?: boolean; includeCommands?: boolean; redactAttributes?: string[] } = {},
 ): string {
+  if (options.includeSql || options.includeCommands) {
+    for (const span of trace.spans) {
+      for (const keys of [TOOL_ARGUMENT_ATTRIBUTE_KEYS, TOOL_RESULT_ATTRIBUTE_KEYS]) {
+        getConsistentToolBody(keys.map((key) => span.attributes?.[key]));
+      }
+    }
+  }
   const spans = trace.spans.map((span) => ({
     ...span,
     attributes: sanitizeTraceAttributes(span.attributes, {
