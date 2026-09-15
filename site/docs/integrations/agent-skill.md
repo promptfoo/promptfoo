@@ -9,7 +9,7 @@ sidebar_position: 99
 
 AI coding agents can write promptfoo configs, but can miss details that make the results useful: correct environment-variable syntax, source evidence for graders, assertions that reject wrong answers, and red-team inputs that preserve the app's trust boundaries.
 
-Promptfoo ships one agent-skill bundle with four focused skills — `promptfoo-evals` for eval authoring, `promptfoo-provider-setup` for connecting targets, and `promptfoo-redteam-setup` plus `promptfoo-redteam-run` for red-team setup and scan triage. The same bundle is published to both the [Claude Code](https://code.claude.com) and [OpenAI Codex](https://openai.com/index/codex) marketplaces.
+Promptfoo ships one agent-skill bundle with five focused skills: Enterprise connection setup, eval authoring, provider setup, red-team setup, and scan triage. The repository includes marketplace catalogs for [Claude Code](https://code.claude.com) and [OpenAI Codex](https://openai.com/index/codex). These Promptfoo-managed catalogs are separate from OpenAI's public plugin directory.
 
 It follows the open [Agent Skills](https://agentskills.io) standard, so the skills should also work with other compatible tools.
 
@@ -38,35 +38,51 @@ produce new attacks; retain their transcripts when comparing results.
 /plugin install promptfoo@promptfoo
 ```
 
-This installs all four skills. Ask the agent to create an eval, connect a
+This installs all five skills; Enterprise Setup currently supports Codex only.
+Ask the agent to create an eval, connect a
 target, or run a red team and it routes to the right skill, or invoke one
 directly with a namespaced slash command such as `/promptfoo:promptfoo-evals`.
 
 :::note
 This plugin was previously published as `promptfoo-evals` (eval skill only). If
 you installed it under that name, reinstall with
-`/plugin install promptfoo@promptfoo` to get the full four-skill bundle and
+`/plugin install promptfoo@promptfoo` to get the full bundle and
 future updates.
 :::
 
 ### Via Codex plugin bundle
 
-For Codex, the same `plugins/promptfoo` bundle is exposed by
-`.agents/plugins/marketplace.json`. Add it to a Codex workspace to install the
-same four skills.
+Add Promptfoo's Git marketplace with the Codex CLI:
 
-### The four skills
+```bash
+codex plugin marketplace add promptfoo/promptfoo
+```
+
+Then open **Plugins** in the Codex app, find **Promptfoo** from the Promptfoo
+marketplace, and install it. Codex fetches the repository; no manual clone is
+required. The catalog at `.agents/plugins/marketplace.json` points to the shared
+`plugins/promptfoo` bundle. Workspace policy may restrict available marketplaces.
+
+For updates, run `codex plugin marketplace upgrade promptfoo`, then apply any
+available plugin update in Codex. See the [Codex plugin documentation](https://developers.openai.com/plugins/build/plugins).
+
+Publishing to OpenAI's public plugin directory is a separate
+[submission and review process](https://developers.openai.com/plugins/deploy/submission).
+Adding a repository marketplace does not publish it to that directory.
+
+### The skills {#the-four-skills}
 
 Both marketplaces install the same bundle at `plugins/promptfoo`, exposed by
 `.claude-plugin/marketplace.json` for Claude Code and
 `.agents/plugins/marketplace.json` for Codex:
 
-| Skill                      | Use it for                                                                 |
-| -------------------------- | -------------------------------------------------------------------------- |
-| `promptfoo-evals`          | Non-redteam eval suites, assertions, test cases, and result inspection     |
-| `promptfoo-provider-setup` | HTTP targets plus JavaScript or Python `file://` providers and wrappers    |
-| `promptfoo-redteam-setup`  | Focused redteam configs from live endpoints, OpenAPI specs, or static code |
-| `promptfoo-redteam-run`    | Running generated scans, triaging failures, and filtered reruns            |
+| Skill                        | Use it for                                                                       |
+| ---------------------------- | -------------------------------------------------------------------------------- |
+| `promptfoo-enterprise-setup` | Connect Codex to an existing Promptfoo Enterprise deployment using OAuth and MCP |
+| `promptfoo-evals`            | Non-redteam eval suites, assertions, test cases, and result inspection           |
+| `promptfoo-provider-setup`   | HTTP targets plus JavaScript or Python `file://` providers and wrappers          |
+| `promptfoo-redteam-setup`    | Focused redteam configs from live endpoints, OpenAPI specs, or static code       |
+| `promptfoo-redteam-run`      | Running generated scans, triaging failures, and filtered reruns                  |
 
 There is intentionally no meta selector skill. The agent routes from each skill's
 description and default prompt.
@@ -125,6 +141,26 @@ Each skill consists of a `SKILL.md` with workflow instructions plus a
 examples (provider and redteam setup also include a `scripts/` directory).
 
 ## Usage
+
+To connect Codex to Promptfoo Enterprise, install the plugin and start a Codex
+task with your Enterprise Server URL:
+
+```text
+Use $promptfoo-enterprise-setup to connect Codex to https://promptfoo.example.com.
+```
+
+Enterprise Setup requires a deployment with Enterprise MCP enabled and a
+registered public OAuth client and callback. With browser controls available,
+the skill can open your server, let you sign in, and collect the settings from
+**Coding Agent Setup**. You can also paste that page's full public connection-settings
+block, including the sign-in command; no reformatting is needed. The skill asks
+only for missing or conflicting values. If the menu is unavailable, ask your
+administrator whether the deployment supports MCP and request its public settings.
+
+The skill preserves other MCP servers, completes Codex's separate MCP sign-in,
+and verifies access with `list_teams` on `promptfoo-enterprise`. It does not
+provision licenses, install the Enterprise server, perform CLI login, or grant
+access. Never paste tokens or client secrets.
 
 Once installed, the agent selects a skill when you ask for eval coverage, a
 target connection, or a redteam workflow. In Claude Code, you can also invoke a skill directly with
