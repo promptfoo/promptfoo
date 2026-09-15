@@ -107,6 +107,7 @@ describe('index.ts exports', () => {
     'evaluate',
     'generateTable',
     'getInputDescription',
+    'getInputRepresentations',
     'getInputType',
     'guardrails',
     'isApiProvider',
