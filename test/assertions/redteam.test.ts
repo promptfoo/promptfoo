@@ -271,7 +271,7 @@ describe('handleRedteam', () => {
         grade: { pass: false, score: 0, reason: 'Falsified total' },
         rubric: 'Policy rubric',
       });
-      const renderedPrompt = `Summarize ${test.vars.document} in ${test.vars.taskLanguage}. Reference ${test.vars.photo} and ${test.vars.contract}. ${question} Code: ${test.vars.referenceCode}`;
+      const renderedPrompt = `Summarize ${test.vars.document} in ${test.vars.taskLanguage}. Reference ${test.vars.photo} and ${test.vars.contract}. ${question} Code: ${test.vars.referenceCode}. Explain data:image/png;base64,SU5MSU5F.`;
       await handleRedteam({
         assertion,
         baseType: getAssertionBaseType(assertion),
@@ -300,7 +300,7 @@ describe('handleRedteam', () => {
       const [prompt, , gradingTest] = grader.mock.calls[0];
       expect(prompt).toContain('Total: $1,250.00');
       expect(JSON.parse(prompt).renderedPrompt).toBe(
-        `Summarize [PDF attachment] in Spanish. Reference [Attachment] and [Attachment]. ${question} Code: ${test.vars.referenceCode}`,
+        `Summarize [PDF attachment] in Spanish. Reference [Attachment] and [Attachment]. ${question} Code: ${test.vars.referenceCode}. Explain data:image/png;base64,SU5MSU5F.`,
       );
       expect(JSON.parse(prompt).inputs.question).toBe(question);
       expect(gradingTest.vars).not.toHaveProperty('taskLanguage');

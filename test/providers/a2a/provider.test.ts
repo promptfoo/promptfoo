@@ -347,6 +347,38 @@ describe('A2AProvider', () => {
   });
 
   it.each(['1.0', '0.3.0'])(
+    'rejects missing selected PDF inputs before sending A2A %s messages',
+    async (version) => {
+      const document = 'data:application/pdf;base64,JVBERi0x';
+      const cases: Record<string, string | number>[] = [
+        {},
+        { invoice: '' },
+        { invoice: '   ' },
+        { invoice: 123 },
+        { document },
+        { prompt: document },
+      ];
+      for (const vars of cases) {
+        vi.mocked(fetchWithTimeout).mockReset();
+        vi.mocked(fetchWithTimeout).mockResolvedValueOnce(
+          jsonResponse({ message: { role: 'ROLE_AGENT', parts: [{ text: 'No document' }] } }),
+        );
+        const result = await provider({ protocolVersion: version }).callApi(
+          `Read the invoice: ${document}`,
+          {
+            prompt: { raw: '{{invoice}}', label: 'Invoice' },
+            vars,
+            test: { metadata: { strategyId: 'pdf', pdf: { input: 'invoice' } } },
+          },
+        );
+        expect(result.error).toContain('PDF strategy requires an attachment in input "invoice"');
+        expect(result.output).toBeUndefined();
+        expect(fetchWithTimeout).not.toHaveBeenCalled();
+      }
+    },
+  );
+
+  it.each(['1.0', '0.3.0'])(
     'preserves declared PDF companion inputs in A2A %s without including auxiliary variables',
     async (version) => {
       const raw = Buffer.from('%PDF-1.7\nPDF attachment bytes').toString('base64');
@@ -418,17 +450,22 @@ describe('A2AProvider', () => {
     'uses the question fallback only without declared PDF inputs in A2A %s',
     async (version) => {
       const document = 'data:application/pdf;base64,JVBERi0x';
-      for (const inputs of [
-        undefined,
-        {},
-        { document: { type: 'pdf' as const, description: 'Invoice' } },
+      for (const { inputs, question } of [
+        { inputs: undefined, question: 'Read the invoice.' },
+        { inputs: {}, question: 'Read the invoice.' },
+        {
+          inputs: { document: { type: 'pdf' as const, description: 'Invoice' } },
+          question: 'Read the invoice.',
+        },
+        { inputs: undefined, question: 'A'.repeat(100) },
+        { inputs: {}, question: 'data:image/png;base64,UE5H' },
       ]) {
         vi.mocked(fetchWithTimeout).mockResolvedValueOnce(
           jsonResponse({ message: { role: 'ROLE_AGENT', parts: [{ text: 'pdf ok' }] } }),
         );
         await provider({ protocolVersion: version }).callApi(document, {
           prompt: { raw: '{{document}}', label: 'PDF' },
-          vars: { document, question: 'Read the invoice.' },
+          vars: { document, question },
           test: {
             metadata: { strategyId: 'pdf', pdf: { input: 'document' }, pluginConfig: { inputs } },
           },
@@ -438,7 +475,7 @@ describe('A2AProvider', () => {
           body.message.parts
             .filter((part: { text?: string }) => part.text)
             .map((part: { text: string }) => part.text),
-        ).toEqual(inputs && Object.keys(inputs).length ? [] : ['Read the invoice.']);
+        ).toEqual(inputs && Object.keys(inputs).length ? [] : [question]);
       }
     },
   );
@@ -556,6 +593,10 @@ describe('A2AProvider', () => {
       const cases = [
         { prompt: longTask, expected: longTask },
         { prompt: 'data: Summarize the invoice', expected: 'data: Summarize the invoice' },
+        {
+          prompt: 'What MIME type is used in data:image/png;base64,UE5H?',
+          expected: 'What MIME type is used in data:image/png;base64,UE5H?',
+        },
         {
           prompt: `Summarize ${document} in Spanish.`,
           expected: 'Summarize [PDF attachment] in Spanish.',

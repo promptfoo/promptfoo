@@ -310,7 +310,10 @@ function getMediaVarName(
     strategyId === 'pdf'
       ? context?.test?.metadata?.pdf?.input
       : getTestMetadata(context)[MEDIA_STRATEGY_DEFAULTS[strategyId].injectVarMetadataKey];
-  if (typeof metadataInjectVar === 'string' && getContextVar(vars, metadataInjectVar)) {
+  if (
+    typeof metadataInjectVar === 'string' &&
+    (strategyId === 'pdf' || getContextVar(vars, metadataInjectVar))
+  ) {
     return metadataInjectVar;
   }
   if (getContextVar(vars, defaults.fallbackVarName)) {
@@ -435,6 +438,9 @@ function getDefaultMediaPart(
   const varName = getMediaVarName(strategyId, contextVars, context);
   const mediaValue = varName ? getContextVar(contextVars, varName) : undefined;
   if (!mediaValue) {
+    if (strategyId === 'pdf') {
+      throw new Error(`PDF strategy requires an attachment in input "${varName ?? 'document'}"`);
+    }
     return undefined;
   }
 
