@@ -101,13 +101,6 @@ export class TraceIncompleteError extends Error {
   }
 }
 
-class TraceConflictError extends TraceIncompleteError {
-  constructor() {
-    super('Cannot grade incomplete trace: conflicting span records');
-    this.name = 'TraceConflictError';
-  }
-}
-
 export class TraceLimitError extends TraceIncompleteError {
   constructor() {
     super('Trace redaction limit exceeded (10,000 spans or 10 MiB per trace)');
@@ -471,7 +464,9 @@ export class TraceStore {
             (existingIds.has(span.spanId) || hashes.has(span.spanId)) &&
             hashes.get(span.spanId) !== hash
           ) {
-            throw new TraceConflictError();
+            throw new TraceIncompleteError(
+              'Cannot grade incomplete trace: conflicting span records',
+            );
           }
           hashes.set(span.spanId, hash);
         }

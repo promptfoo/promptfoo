@@ -1,4 +1,5 @@
-import logger from '../../logger';
+import { isDeepStrictEqual } from 'node:util';
+
 import { parseOtlpAttributes } from '../otlpAttributes';
 import { mergeResourceAttributes } from '../resourceAttributes';
 import {
@@ -169,8 +170,12 @@ function transformSpan(
   resourceAttributes: Record<string, unknown>,
   scopeName: string | undefined,
 ): SpanData | null {
-  if (decodeTraceId(span.traceId) !== traceId.toLowerCase()) {
-    throw new Error('Span trace ID must match the requested trace');
+  const spanTraceId = decodeTraceId(span.traceId);
+  if (!spanTraceId) {
+    throw new Error('Span trace ID must be a valid nonzero sixteen-byte identifier');
+  }
+  if (spanTraceId !== traceId.toLowerCase()) {
+    return null;
   }
 
   const spanId = decodeSpanId(span.spanId);
@@ -296,48 +301,45 @@ export class TempoProvider implements TraceProvider {
   }
 
   private transformSpans(data: TempoTraceResponse, traceId: string): SpanData[] {
-    const spans: SpanData[] = [];
-    const seenSpanIds = new Set<string>();
-    let malformedSpans = 0;
-
-    for (const batch of data.batches ?? []) {
-      if (!batch || !Array.isArray(batch.scopeSpans)) {
-        malformedSpans++;
-        continue;
-      }
-      const resourceAttributes = attributesToRecord(batch.resource?.attributes);
-      for (const scopeSpan of batch.scopeSpans) {
-        if (!scopeSpan || !Array.isArray(scopeSpan.spans)) {
-          malformedSpans++;
-          continue;
+    const spans = new Map<string, SpanData>();
+    try {
+      for (const batch of data.batches ?? []) {
+        if (!batch || !Array.isArray(batch.scopeSpans)) {
+          throw new Error('Tempo batch must contain a scopeSpans array');
         }
-        for (const span of scopeSpan.spans) {
-          try {
-            const normalizedSpan = transformSpan(
+        const resourceAttributes = attributesToRecord(batch.resource?.attributes);
+        for (const scopeSpan of batch.scopeSpans) {
+          if (!scopeSpan || !Array.isArray(scopeSpan.spans)) {
+            throw new Error('Tempo scope must contain a spans array');
+          }
+          for (const span of scopeSpan.spans) {
+            const normalized = transformSpan(
               span,
               traceId,
               resourceAttributes,
               scopeSpan.scope?.name,
             );
-            if (normalizedSpan && !seenSpanIds.has(normalizedSpan.spanId)) {
-              seenSpanIds.add(normalizedSpan.spanId);
-              spans.push(normalizedSpan);
+            if (!normalized) {
+              continue;
             }
-          } catch (error) {
-            if (error instanceof TraceProviderError) {
-              throw error;
+            const previous = spans.get(normalized.spanId);
+            if (previous && !isDeepStrictEqual(previous, normalized)) {
+              throw new Error('Tempo returned conflicting records for one span ID');
             }
-            malformedSpans++;
+            spans.set(normalized.spanId, normalized);
           }
         }
       }
+    } catch (error) {
+      if (error instanceof TraceProviderError) {
+        throw error;
+      }
+      throw new TraceProviderError(
+        error instanceof Error ? error.message : 'Tempo trace decoding failed',
+        { invalidEvidence: true },
+      );
     }
-
-    if (malformedSpans > 0) {
-      logger.warn(`[TempoProvider] Skipped ${malformedSpans} malformed spans`);
-    }
-
-    return spans;
+    return [...spans.values()];
   }
 
   async fetchTrace(traceId: string, options?: FetchTraceOptions): Promise<FetchTraceResult | null> {

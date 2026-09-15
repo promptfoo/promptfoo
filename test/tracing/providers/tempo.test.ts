@@ -5,7 +5,6 @@ vi.mock('../../../src/logger', () => ({
   default: { debug: vi.fn(), warn: vi.fn(), error: vi.fn() },
 }));
 
-import logger from '../../../src/logger';
 import { TempoProvider } from '../../../src/tracing/providers/tempo';
 import { TraceProviderError } from '../../../src/tracing/providers/types';
 import { fetchWithProxy } from '../../../src/util/fetch/index';
@@ -132,6 +131,56 @@ describe('TempoProvider', () => {
       new TempoProvider({ id: 'tempo', endpoint: 'http://tempo:3200' }).fetchTrace(TRACE_ID),
     ).rejects.toMatchObject({ name: 'TraceProviderError', retryable: false });
   });
+
+  it.each([
+    { field: 'name', change: { name: ' ' } },
+    { field: 'timestamp', change: { startTimeUnixNano: 'invalid' } },
+    { field: 'interval', change: { endTimeUnixNano: '1' } },
+    { field: 'status message', change: { status: { message: 3 } } },
+    { field: 'span ID', change: { spanId: '!!!' } },
+    { field: 'parent ID', change: { parentSpanId: '!!!' } },
+  ])('marks a malformed $field as invalid evidence despite a valid sibling', async ({ change }) => {
+    const data = structuredClone(traceResponse);
+    Object.assign(data.batches[0].scopeSpans[0].spans[0], change);
+    mockedFetch.mockResolvedValueOnce(response(data));
+    await expect(
+      new TempoProvider({ id: 'tempo', endpoint: 'http://tempo:3200' }).fetchTrace(TRACE_ID),
+    ).rejects.toMatchObject({ name: 'TraceProviderError', invalidEvidence: true });
+  });
+
+  it.each(['attributes', 'status', 'events', 'equivalent'])(
+    'compares repeated span IDs with %s',
+    async (change) => {
+      const data = structuredClone(traceResponse);
+      const spans = data.batches[0].scopeSpans[0].spans;
+      const duplicate = structuredClone(spans[0]);
+      if (change === 'attributes') {
+        duplicate.attributes = [{ key: 'unsafe', value: { intValue: '1' } }];
+      }
+      if (change === 'status') {
+        duplicate.status = { code: 'STATUS_CODE_ERROR' };
+      }
+      if (change === 'events') {
+        duplicate.events = [];
+      }
+      if (change === 'equivalent') {
+        duplicate.attributes!.reverse();
+      }
+      spans.push(duplicate);
+      mockedFetch.mockResolvedValueOnce(response(data));
+      const result = new TempoProvider({ id: 'tempo', endpoint: 'http://tempo:3200' }).fetchTrace(
+        TRACE_ID,
+      );
+      if (change === 'equivalent') {
+        expect((await result)?.spans).toHaveLength(2);
+      } else {
+        await expect(result).rejects.toMatchObject({
+          name: 'TraceProviderError',
+          invalidEvidence: true,
+        });
+      }
+    },
+  );
 
   it('retains empty AnyValues after JSON persistence', async () => {
     const attributes = [{ key: 'guardrail.triggered', value: {} }];
@@ -429,50 +478,27 @@ describe('TempoProvider', () => {
     },
   );
 
-  it('drops malformed or unrelated spans while preserving valid siblings', async () => {
-    const mixedResponse = structuredClone(traceResponse);
-    const spans = mixedResponse.batches[0].scopeSpans[0].spans;
-    spans.unshift(
-      { ...spans[0], spanId: '!!!', name: 'malformed.span' },
-      { ...spans[0], spanId: '2123456789abcdef', traceId: 'f'.repeat(32) },
-      {
-        ...spans[1],
-        spanId: '3123456789abcdef',
-        parentSpanId: '!!!',
-      } as (typeof spans)[number],
-    );
-    mockedFetch.mockResolvedValueOnce(response(mixedResponse));
-    const provider = new TempoProvider({ id: 'tempo', endpoint: 'http://tempo:3200' });
-
-    const result = await provider.fetchTrace(TRACE_ID);
-
+  it('ignores spans from another trace while preserving matching spans', async () => {
+    const data = structuredClone(traceResponse);
+    const spans = data.batches[0].scopeSpans[0].spans;
+    spans.unshift({ ...spans[0], spanId: '2123456789abcdef', traceId: 'f'.repeat(32) });
+    mockedFetch.mockResolvedValueOnce(response(data));
+    const result = await new TempoProvider({
+      id: 'tempo',
+      endpoint: 'http://tempo:3200',
+    }).fetchTrace(TRACE_ID);
     expect(result?.spans.map((span) => span.name)).toEqual(['target.call', 'internal.setup']);
-    expect(logger.warn).toHaveBeenCalledOnce();
-    expect(logger.warn).toHaveBeenCalledWith('[TempoProvider] Skipped 3 malformed spans');
   });
 
-  it('skips malformed batches and scopes while preserving valid siblings', async () => {
-    const validBatch = structuredClone(traceResponse.batches[0]);
-    mockedFetch.mockResolvedValueOnce(
-      response({
-        batches: [
-          null,
-          { scopeSpans: {} },
-          {
-            ...validBatch,
-            scopeSpans: [null, { spans: {} }, ...validBatch.scopeSpans],
-          },
-        ],
-      }),
-    );
-    const provider = new TempoProvider({ id: 'tempo', endpoint: 'http://tempo:3200' });
-
-    const result = await provider.fetchTrace(TRACE_ID);
-
-    expect(result?.spans.map((span) => span.name)).toEqual(['target.call', 'internal.setup']);
-    expect(result?.services).toEqual(['target-service']);
-    expect(logger.warn).toHaveBeenCalledWith('[TempoProvider] Skipped 4 malformed spans');
-  });
+  it.each([null, { scopeSpans: {} }, { scopeSpans: [null] }, { scopeSpans: [{ spans: {} }] }])(
+    'marks malformed batches and scopes incomplete despite valid siblings: %j',
+    async (invalid) => {
+      mockedFetch.mockResolvedValueOnce(response({ batches: [invalid, traceResponse.batches[0]] }));
+      await expect(
+        new TempoProvider({ id: 'tempo', endpoint: 'http://tempo:3200' }).fetchTrace(TRACE_ID),
+      ).rejects.toMatchObject({ name: 'TraceProviderError', invalidEvidence: true });
+    },
+  );
 
   it('forwards bearer authentication, tenant headers, and cancellation', async () => {
     const controller = new AbortController();

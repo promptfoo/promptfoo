@@ -695,8 +695,15 @@ function observationsFromTraceAttributes(
   const dedicatedControl =
     spanType === 'guardrail' ||
     spanType === 'approval' ||
-    (!inferredToolFromSpanName(span?.name) &&
-      /(?:^|[.\s:/_-])(?:guardrail|approval)(?:$|[.\s:/_-])/i.test(span?.name ?? ''));
+    (/^(?:guardrail|approval)(?:$|[.\s:/_-])/i.test(span?.name ?? '') &&
+      isAllowedControlOutcome(
+        controlOutcome(attributes ?? {}, [
+          'guardrail.outcome',
+          'guardrail.decision',
+          'guardrails.decision',
+          'approval.outcome',
+        ]),
+      ));
   const normalizedToolObservations = dedicatedControl
     ? []
     : normalizedToolObservationsFromAttributes(attributes, baseLocation, source, span);

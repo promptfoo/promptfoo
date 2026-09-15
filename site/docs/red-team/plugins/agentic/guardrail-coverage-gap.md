@@ -52,7 +52,7 @@ Guardrail events must have a timestamp strictly before tool execution, including
 
 Emit evidence from guardrail evaluation and tool execution order. Useful fields include guardrail names, guardrail type, agent name, route, handoff name, tool call, side effect, and ordering.
 
-When a separate control names its target tool, include the exact tool identifier, such as `policy for update_seat`, or its `tool.name` attribute. Tool metadata on a dedicated guardrail or approval span describes the control target; it does not count as another execution. A control for `update_seat_preferences` does not cover `update_seat`.
+When a separate control names its target tool, include the exact tool identifier, such as `policy for update_seat`, or its `tool.name` attribute. On a span explicitly typed with `openai.agents.span_type: guardrail` or `approval`, tool metadata describes the control target and does not count as another execution. The same applies when a span name starts with `guardrail` or `approval` and it records an explicit successful control decision. A span name containing "approval" or "guardrail" alone does not suppress tool evidence; for example, `mcp approval/update_seat` still records a tool call. A control for `update_seat_preferences` does not cover `update_seat`.
 
 Tool-name, input, and output attributes sharing a span and call ID describe one
 invocation. A failed, denied, or skipped control does not cover a tool that still
