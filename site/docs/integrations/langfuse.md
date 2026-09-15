@@ -16,11 +16,14 @@ description: Integrate Langfuse prompts with Promptfoo for LLM testing. Configur
    ```
 
 2. Set the required environment variables:
+
    ```bash
    export LANGFUSE_PUBLIC_KEY="your-public-key"
    export LANGFUSE_SECRET_KEY="your-secret-key"
    export LANGFUSE_HOST="https://cloud.langfuse.com"  # or your self-hosted URL
    ```
+
+   You can also set them in a file passed with `--env-file` or in your config's top-level `env` block. Both take precedence over variables exported in your shell.
 
 ## Using Langfuse prompts
 
