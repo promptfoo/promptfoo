@@ -610,12 +610,17 @@ export function extractShellInjectionSignature(prompt: string): AttackSignature 
   const withoutNegatedCommands = omitNegatedRequests(call.argumentText, true);
   prompt = omitNegatedRequests(withoutNegatedCommands)
     .split(/(?<=[.!?;])\s+|(?:,\s*|\s+)(?:but|and)\s+|\n/i)
-    .filter(
-      (sentence) =>
+    .filter((sentence) => {
+      const text = sentence.trim();
+      return (
         !/^(?:please\s+)?(?:(?:can|could|would|will)\s+you\s+(?:please\s+)?)?(?:explain|describe|discuss|analy[sz]e)\b/i.test(
-          sentence.trim(),
-        ),
-    )
+          text,
+        ) &&
+        !/^(?:(?:what|how|why)\s+(?:do(?:es)?|did)\b|(?:what|why)\s+(?:would|will)\b|how\s+(?:can|could)\s+(?:I|we|you)\s+(?:understand|interpret)\b)/i.test(
+          text,
+        )
+      );
+    })
     .join('\n');
   if (call.toolName && prompt) {
     prompt = `${call.invocationText} ${prompt}`;
