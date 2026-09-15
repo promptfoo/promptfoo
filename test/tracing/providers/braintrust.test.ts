@@ -61,6 +61,20 @@ describe('BraintrustProvider', () => {
     mockedFetch.mockImplementation(async () => response({ rows }));
   });
 
+  it.each([
+    null,
+    { ...rows[0], id: undefined, span_id: 42 },
+    { ...rows[0], created: 'invalid', metrics: { start: 'invalid' } },
+    { ...rows[0], span_parents: 42 },
+    { ...rows[0], span_parents: [42] },
+    { ...rows[0], metrics: { start: 1704067200, end: 1704067199 } },
+  ])('rejects a malformed row instead of returning a partial trace: %o', async (row) => {
+    mockedFetch.mockResolvedValue(response({ rows: [row, rows[1]] }));
+    await expect(new BraintrustProvider(config).fetchTrace(TRACE_ID)).rejects.toMatchObject({
+      invalidEvidence: true,
+    });
+  });
+
   it.each(
     [false, true].flatMap((conflict) => [undefined, 1].map((maxSpans) => ({ conflict, maxSpans }))),
   )(

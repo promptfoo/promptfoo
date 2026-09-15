@@ -1585,6 +1585,50 @@ describe('importCommand', () => {
       expect(await EvalResult.findManyByEvalId(replacement.evalId)).toHaveLength(4);
     });
 
+    it.each(['attributes', 'status', 'events', 'equal'])(
+      'checks duplicate span %s before replacing an existing eval',
+      async (conflict) => {
+        const sampleFilePath = path.join(__dirname, '../__fixtures__/sample-export.json');
+        const replacement = JSON.parse(fs.readFileSync(sampleFilePath, 'utf8'));
+        importCommand(program);
+        await program.parseAsync(['node', 'test', 'import', sampleFilePath]);
+        const originalIds = (await EvalResult.findManyByEvalId(replacement.evalId))
+          .map((row) => row.id)
+          .sort();
+        const span = { spanId: 'span', name: 'verifier', startTime: 1 };
+        const duplicate = {
+          ...span,
+          ...(conflict === 'attributes' && { attributes: { unsafe: true } }),
+          ...(conflict === 'status' && { statusCode: 2 }),
+          ...(conflict === 'events' && { events: [{ name: 'unsafe', timestamp: 2 }] }),
+        };
+        replacement.traces = [
+          {
+            traceId: 'duplicate-spans',
+            evaluationId: replacement.evalId,
+            testCaseId: 'fixture',
+            spans: [span, duplicate],
+          },
+        ];
+        tempFilePath = path.join(__dirname, `temp-force-duplicates-${conflict}-${Date.now()}.json`);
+        fs.writeFileSync(tempFilePath, JSON.stringify(replacement));
+        const second = new Command();
+        importCommand(second);
+        await second.parseAsync(['node', 'test', 'import', '--force', tempFilePath]);
+        if (conflict === 'equal') {
+          expect(process.exitCode).toBeUndefined();
+          const traces = await new TraceStore().getTracesByEvaluation(replacement.evalId);
+          expect(traces[0].spans).toHaveLength(1);
+        } else {
+          expect(process.exitCode).toBe(1);
+          expect(logger.error).toHaveBeenCalledWith(expect.stringMatching(/conflicting/i));
+          expect(
+            (await EvalResult.findManyByEvalId(replacement.evalId)).map((row) => row.id).sort(),
+          ).toEqual(originalIds);
+        }
+      },
+    );
+
     it('should keep the existing eval when a --force replacement fails preflight', async () => {
       const sampleFilePath = path.join(__dirname, '../__fixtures__/sample-export.json');
       const sampleData = JSON.parse(fs.readFileSync(sampleFilePath, 'utf-8'));

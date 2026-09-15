@@ -1,6 +1,5 @@
 import { isDeepStrictEqual } from 'node:util';
 
-import logger from '../../logger';
 import { getNormalizedToolAttributes } from '../toolAttributes';
 import {
   fetchWithProxy,
@@ -262,11 +261,7 @@ function observationAttributes(observation: LangfuseObservation): Record<string,
   };
 }
 
-function transformObservation(
-  observation: LangfuseObservation,
-  traceId: string,
-  options?: FetchTraceOptions,
-): SpanData | null {
+function transformObservation(observation: LangfuseObservation, traceId: string): SpanData | null {
   if (
     typeof observation.id !== 'string' ||
     !observation.id ||
@@ -278,10 +273,7 @@ function transformObservation(
   }
 
   const startTime = Date.parse(observation.startTime);
-  if (
-    Number.isNaN(startTime) ||
-    (options?.earliestStartTime !== undefined && startTime < options.earliestStartTime)
-  ) {
+  if (Number.isNaN(startTime)) {
     return null;
   }
 
@@ -327,13 +319,18 @@ function addObservations(
 ): void {
   for (const observation of observations) {
     if (!observation || typeof observation !== 'object' || Array.isArray(observation)) {
-      logger.warn('[LangfuseProvider] Skipping malformed observation');
-      continue;
+      throw new TraceProviderError('Invalid Langfuse observation', { invalidEvidence: true });
     }
 
-    const span = transformObservation(observation as LangfuseObservation, traceId, options);
+    const row = observation as LangfuseObservation;
+    if (typeof row.traceId === 'string' && row.traceId.toLowerCase() !== traceId) {
+      continue;
+    }
+    const span = transformObservation(row, traceId);
     if (!span) {
-      logger.warn('[LangfuseProvider] Skipping malformed or unrelated observation');
+      throw new TraceProviderError('Invalid Langfuse observation', { invalidEvidence: true });
+    }
+    if (options?.earliestStartTime !== undefined && span.startTime < options.earliestStartTime) {
       continue;
     }
     const previous = spans.get(span.spanId);

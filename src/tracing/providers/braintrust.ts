@@ -1,6 +1,5 @@
 import { isDeepStrictEqual } from 'node:util';
 
-import logger from '../../logger';
 import { getNormalizedToolAttributes } from '../toolAttributes';
 import {
   fetchWithProxy,
@@ -53,20 +52,29 @@ function timestampMs(value: unknown): number | undefined {
   return undefined;
 }
 
-function transformSpan(row: BraintrustSpan, options?: FetchTraceOptions): SpanData | null {
+function transformSpan(row: BraintrustSpan): SpanData {
+  if (!row || typeof row !== 'object' || Array.isArray(row)) {
+    throw new TraceProviderError('Invalid Braintrust span record', { invalidEvidence: true });
+  }
   const spanId = row.span_id || row.id;
   const startTime = timestampMs(row.metrics?.start) ?? timestampMs(row.created);
-  if (!spanId || startTime === undefined) {
-    return null;
-  }
-  if (options?.earliestStartTime !== undefined && startTime < options.earliestStartTime) {
-    return null;
+  const endTime = timestampMs(row.metrics?.end);
+  if (
+    typeof spanId !== 'string' ||
+    !spanId.trim() ||
+    startTime === undefined ||
+    (row.metrics?.end != null && (endTime === undefined || endTime < startTime)) ||
+    (row.span_parents != null &&
+      (!Array.isArray(row.span_parents) ||
+        row.span_parents.some((parent) => typeof parent !== 'string' || !parent.trim())))
+  ) {
+    throw new TraceProviderError('Invalid Braintrust span record', { invalidEvidence: true });
   }
 
   const parentSpanId = row.span_parents
     ?.slice()
     .reverse()
-    .find((parent) => parent && parent !== spanId);
+    .find((parent) => parent !== spanId);
   const name =
     typeof row.span_attributes?.name === 'string' ? row.span_attributes.name : 'braintrust.span';
   const isToolSpan = row.span_attributes?.type === 'tool';
@@ -87,9 +95,7 @@ function transformSpan(row: BraintrustSpan, options?: FetchTraceOptions): SpanDa
     ...(parentSpanId && { parentSpanId }),
     name,
     startTime,
-    ...(timestampMs(row.metrics?.end) !== undefined && {
-      endTime: timestampMs(row.metrics?.end),
-    }),
+    ...(endTime !== undefined && { endTime }),
     attributes,
     statusCode: row.error ? 2 : 1,
     ...(row.error ? { statusMessage: String(row.error) } : {}),
@@ -219,9 +225,8 @@ export class BraintrustProvider implements TraceProvider {
     const spans = new Map<string, SpanData>();
     const services = new Set<string>();
     for (const row of rows) {
-      const span = transformSpan(row, options);
-      if (!span) {
-        logger.warn('[BraintrustProvider] Skipping malformed span');
+      const span = transformSpan(row);
+      if (options?.earliestStartTime !== undefined && span.startTime < options.earliestStartTime) {
         continue;
       }
       const previous = spans.get(span.spanId);

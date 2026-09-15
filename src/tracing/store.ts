@@ -56,7 +56,7 @@ export interface AddSpansOptions {
 
 const SPAN_HASHES_KEY = 'promptfooSpanHashes';
 
-function spanHash(span: SpanData): string {
+export function spanHash(span: SpanData): string {
   const attributes = { ...span.attributes };
   delete attributes['promptfoo.redaction.history'];
   const value = {

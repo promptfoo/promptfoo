@@ -613,21 +613,32 @@ describe('LangfuseProvider', () => {
     expect(new URL(String(mockedFetch.mock.calls[0][0])).searchParams.get('limit')).toBe('1000');
   });
 
-  it('skips malformed, unrelated, and temporally invalid observations', async () => {
+  it.each([
+    null,
+    { ...observations[0], id: '' },
+    { ...observations[0], traceId: undefined },
+    { ...observations[0], startTime: 'not-a-date' },
+    { ...observations[0], endTime: '2023-12-31T23:59:59.000Z' },
+    { ...observations[0], parentObservationId: observations[0].id },
+  ])(
+    'rejects a malformed observation instead of returning a partial trace: %o',
+    async (observation) => {
+      mockedFetch.mockResolvedValue(response({ data: [observation, observations[1]] }));
+      await expect(new LangfuseProvider(config).fetchTrace(TRACE_ID)).rejects.toMatchObject({
+        invalidEvidence: true,
+      });
+    },
+  );
+
+  it('ignores observations from a different trace', async () => {
     mockedFetch.mockResolvedValue(
       response({
         data: [
-          null,
-          { ...observations[0], id: '' },
           { ...observations[0], traceId: 'fedcba9876543210fedcba9876543210' },
-          { ...observations[0], startTime: 'not-a-date' },
-          { ...observations[0], endTime: '2023-12-31T23:59:59.000Z' },
-          { ...observations[0], parentObservationId: observations[0].id },
           observations[1],
         ],
       }),
     );
-
     expect((await new LangfuseProvider(config).fetchTrace(TRACE_ID))?.spans).toEqual([
       expect.objectContaining({ spanId: 'generation-span' }),
     ]);
