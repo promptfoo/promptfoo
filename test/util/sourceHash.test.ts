@@ -71,6 +71,19 @@ describe('source provenance', () => {
     expect(getExecutableSourceHash(parts, root)).not.toBe(before);
   });
 
+  it('fingerprints file arguments supplied as option values', () => {
+    const root = directory();
+    const executable = path.join(root, 'runner');
+    const config = path.join(root, 'settings=local.json');
+    fs.writeFileSync(executable, 'executable', { mode: 0o755 });
+    fs.writeFileSync(config, '{"target":"first"}');
+    const args = [executable, '--config=settings=local.json'];
+    const before = getExecutableSourceHash(args, root);
+    expect(getExecutableSourceHash(args, root)).toBe(before);
+    fs.writeFileSync(config, '{"target":"second"}');
+    expect(getExecutableSourceHash(args, root)).not.toBe(before);
+  });
+
   it('rejects inaccessible executable candidates and argument files', () => {
     const root = directory();
     const executable = path.join(root, 'runner');

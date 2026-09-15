@@ -45,8 +45,13 @@ type PermissionProvider =
       config?: { linkedTargetId: string };
     };
 
-function getRuntimeProviderId(provider: RuntimeProvider): string {
+export function getRuntimeProviderId(provider: RuntimeProvider): string {
   return typeof provider.id === 'function' ? provider.id() : provider.id;
+}
+
+export function getPublicProviderId(provider: RuntimeProvider): string {
+  return redactSecretLeaves({ id: getRuntimeProviderId(provider) }, { redactOpaqueValues: false })
+    .id;
 }
 
 function stableSerialize(value: unknown, seen = new WeakSet<object>()): string {

@@ -118,6 +118,52 @@ describe('runEvaluation tool', () => {
   });
 
   describe('shared execution path', () => {
+    it.each([
+      { matched: false, array: false },
+      { matched: true, array: false },
+      { matched: true, array: true },
+    ])(
+      'redacts provider URL credentials in MCP filter output (matched: $matched, array: $array)',
+      async ({ matched, array }) => {
+        const id =
+          'https://fixture-user:private-password@target.invalid/eval?api_key=private-api-key';
+        const { doEval } = await import('../../../../src/node/doEval');
+        vi.mocked(doEval).mockImplementationOnce(
+          async (_cmd, _config, _path, _options, customization) => {
+            const suite = { ...createMockTestSuite(), providers: [{ id: () => id }] };
+            await customization?.beforeFilterTestSuite?.(
+              suite as any,
+              { providers: [id] },
+              { selectedProviderConfigs: [id] },
+            );
+            expect(suite.providers).toHaveLength(1);
+            expect(suite.providers[0].id()).toBe(id);
+            await customization?.afterFilterTestSuite?.(suite as any, { providers: [id] }, {});
+            const result = createMockEvalResult();
+            const summary = await result.toEvaluateSummary();
+            summary.prompts[0].provider = id;
+            result.toEvaluateSummary.mockResolvedValue(summary);
+            return completeMockEval(result, customization);
+          },
+        );
+        const { registerRunEvaluationTool } = await import(
+          '../../../../src/commands/mcp/tools/runEvaluation'
+        );
+        let handler: any;
+        registerRunEvaluationTool({
+          tool: vi.fn((_name, _schema, fn) => {
+            handler = fn;
+          }),
+        } as any);
+        const filter = matched ? id : 'not-present';
+        const result = await handler({ providerFilter: array ? [filter] : filter });
+        expect(result.isError).toBe(!matched);
+        expect(result.content[0].text).toContain('target.invalid');
+        expect(result.content[0].text).not.toContain('private-password');
+        expect(result.content[0].text).not.toContain('private-api-key');
+      },
+    );
+
     it.each(['promptfooconfig.yml', 'promptfooconfig.json', undefined])(
       'uses the discovered default configuration path: %s',
       async (defaultConfigPath) => {

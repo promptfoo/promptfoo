@@ -6,7 +6,11 @@ import logger from '../../../logger';
 import { doEval } from '../../../node/doEval';
 import { loadDefaultConfig } from '../../../util/config/default';
 import { filterPrompts } from '../../../util/eval/filterPrompts';
-import { createProviderSelection } from '../../../util/eval/providerSelection';
+import {
+  createProviderSelection,
+  getPublicProviderId,
+  getRuntimeProviderId,
+} from '../../../util/eval/providerSelection';
 import { parseFilterRange } from '../../../util/filterRange';
 import { escapeRegExp } from '../../../util/text';
 import { formatEvaluationResults, formatPromptsSummary } from '../lib/resultFormatter';
@@ -50,10 +54,6 @@ class McpEvaluationFilterError extends Error {
 const UNEXPECTED_EVALUATION_ERROR =
   'Evaluation failed. Check the Promptfoo server logs for details.';
 
-function getProviderId(provider: TestSuite['providers'][number]): string {
-  return typeof provider.id === 'function' ? provider.id() : provider.id;
-}
-
 function hasStringFilters(filters?: string | string[]): filters is string | string[] {
   return Array.isArray(filters) ? filters.length > 0 : Boolean(filters);
 }
@@ -73,14 +73,14 @@ function applyProviderFilter(testSuite: TestSuite, providerFilter?: string | str
   }
 
   const filteredProviders = testSuite.providers.filter((provider) => {
-    const providerId = getProviderId(provider);
+    const providerId = getRuntimeProviderId(provider);
     const label = provider.label || providerId || '';
     return filterPattern.test(label) || filterPattern.test(providerId || '');
   });
 
   if (filteredProviders.length === 0) {
     throw new McpEvaluationFilterError(
-      `No providers matched filter: ${filters.join(', ')}. Available providers: ${testSuite.providers.map(getProviderId).join(', ')}`,
+      `No providers matched filter: ${filters.map((id) => getPublicProviderId({ id })).join(', ')}. Available providers: ${testSuite.providers.map(getPublicProviderId).join(', ')}`,
     );
   }
 
@@ -229,7 +229,7 @@ function summarizeFilteredSuite(
     providers: {
       total: totals.providers,
       filtered: testSuite.providers.length,
-      ids: testSuite.providers.map(getProviderId),
+      ids: testSuite.providers.map(getPublicProviderId),
     },
   };
 }
@@ -332,7 +332,10 @@ function buildConfiguration(
   const filters = {
     testCaseIndices: options.testCaseIndices,
     promptFilter: options.promptFilter,
-    providerFilter: options.providerFilter,
+    providerFilter:
+      typeof options.providerFilter === 'string'
+        ? getPublicProviderId({ id: options.providerFilter })
+        : options.providerFilter?.map((id) => getPublicProviderId({ id })),
   };
 
   return {
@@ -664,7 +667,13 @@ export function registerRunEvaluationTool(server: McpServer) {
               ? { warning: 'The evaluation completed, but a shareable URL was not created.' }
               : {}),
           },
-          prompts: formatPromptsSummary(summary),
+          prompts: formatPromptsSummary(summary).map((prompt) => ({
+            ...prompt,
+            provider:
+              prompt.provider === undefined
+                ? undefined
+                : getPublicProviderId({ id: prompt.provider }),
+          })),
         };
 
         return createToolResponse('run_evaluation', true, evalData);

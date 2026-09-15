@@ -72,7 +72,8 @@ export function getExecutableSourceHash(parts: string[], basePath?: string): str
     }
     const files = [executable];
     for (const argument of parts.slice(1)) {
-      const candidate = path.resolve(cwd, argument);
+      const fileArgument = argument.replace(/^--?[^=]+=/, '');
+      const candidate = path.resolve(cwd, fileArgument);
       try {
         if (fs.statSync(candidate).isFile()) {
           files.push(candidate);
