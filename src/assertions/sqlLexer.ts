@@ -1,9 +1,12 @@
-const SQL_SERVER_DATABASES = new Set(['mssql', 'microsoft.sql_server', 'transactsql']);
+const SQL_DATABASE_ALIASES = new Map([
+  ['postgres', 'postgresql'],
+  ['microsoft.sql_server', 'mssql'],
+  ['transactsql', 'mssql'],
+  ['oracle.db', 'oracle'],
+]);
 const DOUBLE_QUOTED_IDENTIFIER_DATABASES = new Set([
   'postgresql',
-  'postgres',
   'oracle',
-  'oracle.db',
   'snowflake',
   'clickhouse',
 ]);
@@ -12,6 +15,11 @@ const HASH_COMMENT_DATABASES = new Set(['mysql', 'mariadb', 'bigquery', 'clickho
 const SQL_EXPRESSION_PLACEHOLDER = ' ? ';
 
 const DOLLAR_QUOTE_DELIMITER_PATTERN = /^\$(?:[A-Za-z_][A-Za-z0-9_]*)?\$/;
+
+export function normalizeSqlDialect(databaseType: string): string {
+  const database = databaseType.toLowerCase();
+  return SQL_DATABASE_ALIASES.get(database) ?? database;
+}
 
 function readDollarQuoteDelimiter(sql: string, start: number): string | undefined {
   return DOLLAR_QUOTE_DELIMITER_PATTERN.exec(sql.slice(start))?.[0];
@@ -61,10 +69,10 @@ export function stripIgnoredSqlText(sql: string, databaseType: string, maskValue
     literals.set(literal, token);
     return ` ${token} `;
   };
-  const database = databaseType.toLowerCase();
-  const postgres = database === 'postgresql' || database === 'postgres';
+  const database = normalizeSqlDialect(databaseType);
+  const postgres = database === 'postgresql';
   const mysql = database === 'mysql' || database === 'mariadb';
-  const sqlServer = SQL_SERVER_DATABASES.has(database);
+  const sqlServer = database === 'mssql';
   const supportsNestedComments = postgres || sqlServer;
   const supportsBracketIdentifiers = sqlServer || database === 'sqlite';
   let plainTextStart = 0;
@@ -240,9 +248,10 @@ export function stripIgnoredSqlText(sql: string, databaseType: string, maskValue
 
 /** Keep SQL structure while omitting captured values and comments from model input. */
 export function redactSqlLiteralsAndComments(sql: string, databaseType = ''): string {
-  const quotedTextOrWhitespace = ['postgresql', 'postgres'].includes(databaseType.toLowerCase())
-    ? /"(?:""|[^"])*"|\s+/g
-    : /"(?:\\.|""|[^"\\])*"|`(?:\\.|``|[^`\\])*`|\[(?:\]\]|[^\]])*\]|\s+/g;
+  const quotedTextOrWhitespace =
+    normalizeSqlDialect(databaseType) === 'postgresql'
+      ? /"(?:""|[^"])*"|\s+/g
+      : /"(?:\\.|""|[^"\\])*"|`(?:\\.|``|[^`\\])*`|\[(?:\]\]|[^\]])*\]|\s+/g;
   return stripIgnoredSqlText(sql, databaseType, true)
     .replace(quotedTextOrWhitespace, (text) => (/^\s/.test(text) ? ' ' : text))
     .trim();

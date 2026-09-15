@@ -12,7 +12,7 @@ import {
   TOOL_NAME_ATTRIBUTE_KEYS,
   TOOL_RESULT_ATTRIBUTE_KEYS,
 } from '../tracing/toolAttributes';
-import { redactSqlLiteralsAndComments } from './sqlLexer';
+import { normalizeSqlDialect, redactSqlLiteralsAndComments } from './sqlLexer';
 import { matchesPattern } from './traceUtils';
 
 import type { TraceData, TraceSpan } from '../types/tracing';
@@ -631,7 +631,14 @@ function getSqlExecutionDetails(
   const attributes = step.attributes;
   getConsistentToolBody([attributes['db.query.text'], attributes['db.statement']]);
   const databaseStatement = getFirstStringAttribute(attributes, ['db.query.text', 'db.statement']);
-  const database = getFirstStringAttribute(attributes, ['db.system.name', 'db.system']);
+  const databases = ['db.system.name', 'db.system']
+    .map((key) => getFirstStringAttribute(attributes, [key]))
+    .filter((value) => value !== undefined)
+    .map(normalizeSqlDialect);
+  if (new Set(databases).size > 1) {
+    throw new TraceEvidenceError('Conflicting SQL database dialect aliases.');
+  }
+  const database = databases[0];
   const args = extractToolArgs({
     spanId: step.spanId,
     name: step.spanName,

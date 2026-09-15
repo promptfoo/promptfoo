@@ -879,6 +879,42 @@ describe('trajectory utilities', () => {
     },
   );
 
+  it.each([
+    ['mysql', 'sqlite', false],
+    ['sqlite', 'mysql', false],
+    ['postgres', 'postgresql', true],
+    ['mssql', 'microsoft.sql_server', true],
+    ['mssql', 'TransactSQL', true],
+    ['oracle', 'oracle.db', true],
+    ['MySQL', 'mysql', true],
+    [' sqlite ', 'sqlite', true],
+  ])('checks SQL dialect aliases %s and %s', (database, legacyDatabase, equivalent) => {
+    const summarize = () =>
+      summarizeTrajectoryForJudge(
+        {
+          ...mockTraceData,
+          spans: [
+            {
+              spanId: 'query',
+              name: 'database query',
+              startTime: 0,
+              attributes: {
+                'db.statement': 'SELECT 1',
+                'db.system.name': database,
+                'db.system': legacyDatabase,
+              },
+            },
+          ],
+        },
+        { includeSql: true },
+      );
+    if (equivalent) {
+      expect(JSON.parse(summarize()).steps[0].sql.query).toBe('SELECT :literal_1');
+    } else {
+      expect(summarize).toThrow('Conflicting SQL database dialect aliases');
+    }
+  });
+
   it('accepts equivalent SQL statements across attributes and tool arguments', () => {
     const summary = JSON.parse(
       summarizeTrajectoryForJudge(
