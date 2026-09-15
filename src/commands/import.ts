@@ -1,6 +1,7 @@
 import crypto from 'crypto';
 import fs from 'fs/promises';
 
+import { z } from 'zod';
 import { BLOB_MAX_SIZE, isSafeInlineBlobMimeType, recordBlobReference, storeBlob } from '../blobs';
 import { BLOB_HASH_REGEX, collectBlobHashes } from '../blobs/blobRefs';
 import { getDb } from '../database/index';
@@ -21,8 +22,6 @@ import type {
   EvaluateSummaryV2,
   EvaluateSummaryV3,
   ExportedBlobAsset,
-  TraceData,
-  TraceSpan,
 } from '../types';
 
 function extractEvalId(evalData: any): string | undefined {
@@ -239,30 +238,56 @@ async function replaceExistingEval(
   return importId;
 }
 
-function isImportableTrace(trace: unknown): trace is TraceData {
-  const candidate = trace as Partial<TraceData>;
-  return (
-    trace !== null &&
-    typeof trace === 'object' &&
-    typeof candidate.traceId === 'string' &&
-    typeof candidate.testCaseId === 'string' &&
-    Array.isArray(candidate.spans)
-  );
+const traceTextSchema = z.string().trim().min(1);
+const traceAttributesSchema = z.record(z.string(), z.unknown());
+const importedTraceSchema = z.object({
+  traceId: traceTextSchema,
+  testCaseId: traceTextSchema,
+  metadata: traceAttributesSchema.optional(),
+  spans: z.array(
+    z
+      .object({
+        spanId: traceTextSchema,
+        parentSpanId: z.string().optional(),
+        name: traceTextSchema,
+        startTime: z.number().finite(),
+        endTime: z.number().finite().optional(),
+        attributes: traceAttributesSchema.optional(),
+        statusCode: z.number().finite().optional(),
+        statusMessage: z.string().optional(),
+        events: z
+          .array(
+            z.object({
+              name: traceTextSchema,
+              timestamp: z.number().finite().nonnegative(),
+              timestampNanos: z
+                .string()
+                .refine((value) => /^\d{1,20}$/.test(value) && BigInt(value) <= 0xffffffffffffffffn)
+                .optional(),
+              attributes: traceAttributesSchema.optional(),
+            }),
+          )
+          .optional(),
+      })
+      .refine((span) => span.endTime === undefined || span.endTime >= span.startTime),
+  ),
+});
+
+type ImportedTrace = z.infer<typeof importedTraceSchema>;
+
+function assertImportableTrace(trace: unknown): asserts trace is ImportedTrace {
+  const result = importedTraceSchema.safeParse(trace);
+  if (!result.success) {
+    const [collection, index, field] = result.error.issues[0].path;
+    let record = 'trace record';
+    if (collection === 'spans' && typeof index === 'number') {
+      record = field === 'events' ? 'trace span events' : 'trace span';
+    }
+    throw new Error(`Invalid ${record} in imported evaluation`);
+  }
 }
 
-function isImportableTraceSpan(span: unknown): span is TraceSpan {
-  const candidate = span as Partial<TraceSpan>;
-  return (
-    span !== null &&
-    typeof span === 'object' &&
-    typeof candidate.spanId === 'string' &&
-    typeof candidate.name === 'string' &&
-    typeof candidate.startTime === 'number' &&
-    Number.isFinite(candidate.startTime)
-  );
-}
-
-function prepareTraces(traces: unknown): TraceData[] {
+function prepareTraces(traces: unknown): ImportedTrace[] {
   if (traces === undefined) {
     return [];
   }
@@ -270,47 +295,16 @@ function prepareTraces(traces: unknown): TraceData[] {
     throw new Error('Invalid trace collection in imported evaluation');
   }
 
-  const preparedTraces: TraceData[] = [];
+  const preparedTraces: ImportedTrace[] = [];
   const traceIds = new Set<string>();
   for (const trace of traces) {
-    if (!isImportableTrace(trace)) {
-      throw new Error('Invalid trace record in imported evaluation');
-    }
+    assertImportableTrace(trace);
     if (traceIds.has(trace.traceId)) {
       throw new Error('Duplicate trace IDs in imported evaluation');
     }
     traceIds.add(trace.traceId);
 
     const spans = trace.spans;
-    for (const span of spans) {
-      if (!isImportableTraceSpan(span)) {
-        throw new Error('Invalid trace span in imported evaluation');
-      }
-      if (
-        span.events !== undefined &&
-        (!Array.isArray(span.events) ||
-          span.events.some(
-            (event) =>
-              !event ||
-              typeof event !== 'object' ||
-              typeof event.name !== 'string' ||
-              !event.name.trim() ||
-              typeof event.timestamp !== 'number' ||
-              !Number.isFinite(event.timestamp) ||
-              event.timestamp < 0 ||
-              (event.timestampNanos !== undefined &&
-                (typeof event.timestampNanos !== 'string' ||
-                  !/^\d{1,20}$/.test(event.timestampNanos) ||
-                  BigInt(event.timestampNanos) > 0xffffffffffffffffn)) ||
-              (event.attributes !== undefined &&
-                (event.attributes === null ||
-                  typeof event.attributes !== 'object' ||
-                  Array.isArray(event.attributes))),
-          ))
-      ) {
-        throw new Error('Invalid trace span events in imported evaluation');
-      }
-    }
     validateTraceBatchSize(spans);
     const hashes = new Map<string, string>();
     for (const span of spans) {
@@ -327,7 +321,7 @@ function prepareTraces(traces: unknown): TraceData[] {
 }
 
 async function importTraces(
-  traces: TraceData[],
+  traces: ImportedTrace[],
   evalId: string,
   generateNewTraceIds: boolean,
 ): Promise<Map<string, string>> {
@@ -397,7 +391,7 @@ function prepareImportArtifacts(
   evalData: any,
   importV3: boolean,
 ): {
-  traces: TraceData[];
+  traces: ImportedTrace[];
   blobAssets: PreparedBlobAsset[];
 } {
   const traces = importV3 ? prepareTraces(evalData.traces) : [];
@@ -419,7 +413,7 @@ function prepareImportArtifacts(
 
 async function createImportedV3Eval(
   evalData: any,
-  traces: TraceData[],
+  traces: ImportedTrace[],
   blobAssets: PreparedBlobAsset[],
   context: ImportedEvalContext,
 ): Promise<string> {
@@ -491,7 +485,7 @@ export function importCommand(program: Command) {
         let importV3 = false;
         let importLegacy = false;
         let artifactsPrepared = false;
-        let traces: TraceData[] = [];
+        let traces: ImportedTrace[] = [];
         let blobAssets: PreparedBlobAsset[] = [];
         const validateImportFormat = () => {
           if (!formatChecked) {

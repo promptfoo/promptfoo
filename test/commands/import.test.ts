@@ -301,7 +301,17 @@ describe('importCommand', () => {
               startTime: 10,
               endTime: 20,
               attributes: { operation: 'search' },
-              statusCode: 1,
+              parentSpanId: '',
+              statusCode: 400,
+              statusMessage: 'tool error',
+              events: [
+                {
+                  name: 'observed',
+                  timestamp: 15,
+                  timestampNanos: '15000000',
+                  attributes: { handled: true },
+                },
+              ],
             },
           ],
         },
@@ -327,7 +337,17 @@ describe('importCommand', () => {
           spanId: 'span-imported',
           name: 'portable span',
           attributes: { operation: 'search' },
-          statusCode: 1,
+          parentSpanId: '',
+          statusCode: 400,
+          statusMessage: 'tool error',
+          events: [
+            {
+              name: 'observed',
+              timestamp: 15,
+              timestampNanos: '15000000',
+              attributes: { handled: true },
+            },
+          ],
         }),
       ]);
       expect(process.exitCode).toBeUndefined();
@@ -1685,6 +1705,39 @@ describe('importCommand', () => {
           },
         ],
       },
+      ...[
+        { traceId: '' },
+        { testCaseId: '   ' },
+        { metadata: null },
+        { metadata: [] },
+        { metadata: 'invalid' },
+      ].map((fields) => ({
+        name: JSON.stringify(fields),
+        traces: [{ traceId: 'trace', testCaseId: 'case', spans: [], ...fields }],
+      })),
+      ...[
+        { spanId: '' },
+        { name: '   ' },
+        { endTime: 'invalid' },
+        { endTime: null },
+        { endTime: 0 },
+        { parentSpanId: 1 },
+        { attributes: null },
+        { attributes: [] },
+        { attributes: 'invalid' },
+        { statusCode: 'error' },
+        { statusCode: {} },
+        { statusMessage: 1 },
+      ].map((fields) => ({
+        name: JSON.stringify(fields),
+        traces: [
+          {
+            traceId: 'trace',
+            testCaseId: 'case',
+            spans: [{ spanId: 'span', name: 'span', startTime: 1, ...fields }],
+          },
+        ],
+      })),
     ])('preserves stored eval and trace data for malformed $name', async ({ traces }) => {
       const sampleFilePath = path.join(__dirname, '../__fixtures__/sample-export.json');
       const original = JSON.parse(fs.readFileSync(sampleFilePath, 'utf8'));
