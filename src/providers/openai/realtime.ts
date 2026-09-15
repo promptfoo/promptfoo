@@ -7,6 +7,7 @@ import { convertPcm16ToWav } from './audio';
 import { calculateOpenAIUsageCost } from './billing';
 import {
   appendOpenAiApiPath,
+  assertOpenAiApiModel,
   NON_CONVERSATIONAL_REALTIME_MODELS,
   OPENAI_REALTIME_MODELS,
   resolveMaxToolIterations,
@@ -454,7 +455,7 @@ export class OpenAiRealtimeProvider extends OpenAiGenericProvider {
     options: { config?: OpenAiRealtimeOptions; id?: string; env?: EnvOverrides } = {},
   ) {
     if (modelName.startsWith('gpt-live-')) {
-      throw new Error(`Use openai:live:${modelName} for GPT-Live sessions.`);
+      assertOpenAiApiModel(modelName);
     }
     if (NON_CONVERSATIONAL_REALTIME_MODELS.has(modelName)) {
       throw new Error(

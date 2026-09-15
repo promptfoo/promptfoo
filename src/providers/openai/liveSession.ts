@@ -86,7 +86,11 @@ const LATE_WORK_ERROR =
   'GPT-Live backend requested work after the capture window ended. Increase responseWindowMs.';
 
 function isBoundedProtocolId(value: unknown): value is string {
-  return typeof value === 'string' && Buffer.byteLength(value) <= MAX_PROTOCOL_ID_BYTES;
+  return (
+    typeof value === 'string' &&
+    value.length > 0 &&
+    Buffer.byteLength(value) <= MAX_PROTOCOL_ID_BYTES
+  );
 }
 
 const CREDENTIAL_HEADER =
@@ -97,19 +101,19 @@ const GUARDRAIL_ERROR_CODES = new Set([
   'content_filter',
 ]);
 
-/** Credential-named headers authenticate compatible gateways and are redacted from diagnostics. */
-export function isLiveCredentialHeader(name: string): boolean {
-  return isSecretField(name) || CREDENTIAL_HEADER.test(name);
+/** Match auth names; when a value is provided, also apply the shared diagnostic policy. */
+export function isLiveCredentialHeader(name: string, value?: string): boolean {
+  return (
+    isSecretField(name) ||
+    CREDENTIAL_HEADER.test(name) ||
+    (value !== undefined &&
+      sanitizeObject({ headers: { [name]: value } }).headers[name] === REDACTED)
+  );
 }
 
 function collectCredentials(headers: Record<string, string>): string[] {
-  const sanitizedHeaders = sanitizeObject({ headers }).headers;
   return Object.entries(headers)
-    .filter(
-      ([name, value]) =>
-        typeof value === 'string' &&
-        (isLiveCredentialHeader(name) || sanitizedHeaders[name] === REDACTED),
-    )
+    .filter(([name, value]) => typeof value === 'string' && isLiveCredentialHeader(name, value))
     .flatMap(([, value]) => credentialForms(value))
     .filter((value) => value.length > 0)
     .sort((left, right) => right.length - left.length);
@@ -708,6 +712,10 @@ export class LiveSession {
     }
     if (delegation.target === 'responses') {
       const turn = this.backendTurns.get(delegation.id);
+      if (turn?.id && delegation.response_id !== undefined && turn.id !== delegation.response_id) {
+        this.fail('Invalid GPT-Live delegation response ID.');
+        return;
+      }
       this.backendTurns.set(
         delegation.id,
         turn ?? {
@@ -1072,6 +1080,7 @@ export class LiveSession {
     if (!safetyEnded && this.hasPendingWork()) {
       this.setError('GPT-Live session ended with backend work pending. Increase responseWindowMs.');
     }
+    // Transcripts are grading evidence and must preserve the model's output verbatim.
     const output = this.transcript
       .filter((part) => part.role === 'assistant')
       .map((part) => part.delta)

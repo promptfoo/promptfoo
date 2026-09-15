@@ -220,6 +220,14 @@ describe('Provider Registry', () => {
     'azureopenai:live:gpt-live-1',
     'openai:realtime:gpt-live-1',
     'openai:realtime:gpt-live-1-2026-09-01',
+    'openai:chat:gpt-live-1',
+    'openai:chat:gpt-live-1-2026-09-01',
+    'openai:responses:gpt-live-1',
+    'openai:responses:gpt-live-1-2026-09-01',
+    'openai:completion:gpt-live-1',
+    'openai:embedding:gpt-live-1',
+    'openai:tts:gpt-live-1',
+    'openai:image:gpt-live-1',
   ])('rejects the incompatible Live route %s', async (providerPath) => {
     const factories = await getProviderFactories(providerPath);
     const factory = factories.find((entry) => entry.test(providerPath));

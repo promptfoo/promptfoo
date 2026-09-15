@@ -75,6 +75,20 @@ describe('Live input', () => {
   });
 
   it.each([
+    { encoding: 'pcm16', format, data: 'AQI' },
+    { encoding: 'g711_ulaw', format: { type: 'audio/pcmu', rate: 8_000 } as const, data: 'AQ' },
+    { encoding: 'g711_alaw', format: { type: 'audio/pcma', rate: 8_000 } as const, data: 'AQ' },
+  ])('accepts canonical unpadded $encoding input', ({ encoding, format, data }) => {
+    expect(prepareLiveInput(audioPrompt(data, encoding), format).audio).toEqual(
+      Buffer.from(data, 'base64'),
+    );
+  });
+
+  it.each(['AQI===', 'AQ=I', 'AQI!', 'AQJ'])('rejects noncanonical input Base64 %s', (data) => {
+    expect(() => prepareLiveInput(audioPrompt(data, 'pcm16'), format)).toThrow('valid base64');
+  });
+
+  it.each([
     { encoding: 'PCM', make: convertPcm16ToWav, field: 'byteRate', offset: 28, size: 4 },
     { encoding: 'PCM', make: convertPcm16ToWav, field: 'blockAlign', offset: 32, size: 2 },
     { encoding: 'extensible PCM', make: extensibleWav, field: 'byteRate', offset: 28, size: 4 },

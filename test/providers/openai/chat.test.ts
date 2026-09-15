@@ -66,19 +66,25 @@ describe('OpenAI Provider', () => {
       vi.clearAllMocks();
     });
 
-    it.each(['gpt-live-transcribe', 'gpt-live-transcribe-2026-09-01'])(
-      'rejects prompt-scoped transcription model %s before making a Chat request',
-      async (model) => {
-        const provider = new OpenAiChatCompletionProvider('gpt-4.1');
-        await expect(
-          provider.callApi('Hi', {
-            vars: {},
-            prompt: { raw: 'Hi', label: 'Hi', config: { passthrough: { model } } },
-          }),
-        ).rejects.toThrow('dedicated Realtime transcription session');
-        expect(mockFetchWithCache).not.toHaveBeenCalled();
-      },
-    );
+    it.each([
+      'gpt-live-transcribe',
+      'gpt-live-transcribe-2026-09-01',
+      'gpt-live-1',
+      'gpt-live-1-2026-09-01',
+    ])('rejects prompt-scoped voice model %s before making a Chat request', async (model) => {
+      const provider = new OpenAiChatCompletionProvider('gpt-4.1');
+      await expect(
+        provider.callApi('Hi', {
+          vars: {},
+          prompt: { raw: 'Hi', label: 'Hi', config: { passthrough: { model } } },
+        }),
+      ).rejects.toThrow(
+        model.startsWith('gpt-live-transcribe')
+          ? 'dedicated Realtime transcription session'
+          : 'openai:live:',
+      );
+      expect(mockFetchWithCache).not.toHaveBeenCalled();
+    });
 
     it('keeps OpenAI provider identity when a custom ID omits a provider prefix', () => {
       const provider = new OpenAiChatCompletionProvider('gpt-4.1', { id: 'customer-judge' });

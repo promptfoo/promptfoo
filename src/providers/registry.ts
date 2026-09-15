@@ -1036,7 +1036,20 @@ export const providerMap: ProviderFactory[] = [
       }
       const requestedApiModel = modelName || configuredModel || modelType;
       const passthrough = providerOptions.config?.passthrough as { model?: unknown } | undefined;
-      if (!['agents', 'chatkit', 'assistant'].includes(modelType)) {
+      if (
+        [modelType, requestedApiModel, passthrough?.model].some(
+          (model) =>
+            typeof model === 'string' &&
+            (model === 'gpt-live-transcribe' || model.startsWith('gpt-live-transcribe-')),
+        )
+      ) {
+        throw new Error(
+          'gpt-live-transcribe requires a dedicated Realtime transcription session, which this provider does not support.',
+        );
+      }
+      const isLiveProvider =
+        modelType === 'live' || /^gpt-live-1(?:-\d{4}-\d{2}-\d{2})?$/.test(modelType);
+      if (!isLiveProvider && !['agents', 'chatkit', 'assistant'].includes(modelType)) {
         const apiHost =
           providerOptions.config?.apiHost ||
           providerOptions.env?.OPENAI_API_HOST ||
@@ -1052,17 +1065,6 @@ export const providerMap: ProviderFactory[] = [
         for (const candidate of [requestedApiModel, configuredModel, passthrough?.model]) {
           assertOpenAiApiModel(candidate, apiUrl);
         }
-      }
-      if (
-        [modelType, requestedApiModel, passthrough?.model].some(
-          (model) =>
-            typeof model === 'string' &&
-            (model === 'gpt-live-transcribe' || model.startsWith('gpt-live-transcribe-')),
-        )
-      ) {
-        throw new Error(
-          'gpt-live-transcribe requires a dedicated Realtime transcription session, which this provider does not support.',
-        );
       }
       if (modelType === 'chat') {
         return new OpenAiChatCompletionProvider(
@@ -1114,7 +1116,7 @@ export const providerMap: ProviderFactory[] = [
         );
       }
       // Conversational GPT-Live snapshots use the Live endpoint.
-      if (modelType === 'live' || /^gpt-live-1(?:-\d{4}-\d{2}-\d{2})?$/.test(modelType)) {
+      if (isLiveProvider) {
         const { OpenAiLiveProvider } = await import('./openai/live');
         return new OpenAiLiveProvider(
           modelType === 'live' ? modelName || configuredModel || 'gpt-live-1' : modelType,

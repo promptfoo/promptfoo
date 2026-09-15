@@ -63,21 +63,27 @@ function mockBackgroundCreateAndPoll(
 }
 
 describe('OpenAiResponsesProvider request building', () => {
-  it.each(['gpt-live-transcribe', 'gpt-live-transcribe-2026-09-01'])(
-    'rejects prompt-scoped transcription model %s before making a Responses request',
-    async (model) => {
-      const provider = new OpenAiResponsesProvider('gpt-4.1', {
-        config: { apiKey: 'fixture-key' },
-      });
-      await expect(
-        provider.callApi('Hi', {
-          vars: {},
-          prompt: { raw: 'Hi', label: 'Hi', config: { passthrough: { model } } },
-        }),
-      ).rejects.toThrow('dedicated Realtime transcription session');
-      expect(cache.fetchWithCache).not.toHaveBeenCalled();
-    },
-  );
+  it.each([
+    'gpt-live-transcribe',
+    'gpt-live-transcribe-2026-09-01',
+    'gpt-live-1',
+    'gpt-live-1-2026-09-01',
+  ])('rejects prompt-scoped voice model %s before making a Responses request', async (model) => {
+    const provider = new OpenAiResponsesProvider('gpt-4.1', {
+      config: { apiKey: 'fixture-key' },
+    });
+    await expect(
+      provider.callApi('Hi', {
+        vars: {},
+        prompt: { raw: 'Hi', label: 'Hi', config: { passthrough: { model } } },
+      }),
+    ).rejects.toThrow(
+      model.startsWith('gpt-live-transcribe')
+        ? 'dedicated Realtime transcription session'
+        : 'openai:live:',
+    );
+    expect(cache.fetchWithCache).not.toHaveBeenCalled();
+  });
 
   it('should format and call the responses API correctly', async () => {
     const mockApiResponse = {

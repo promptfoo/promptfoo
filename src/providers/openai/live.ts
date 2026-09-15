@@ -159,6 +159,17 @@ export class OpenAiLiveProvider extends OpenAiGenericProvider {
         ...(promptConfig?.apiKey !== undefined && { apiKeyEnvar: undefined }),
         ...promptConfig,
       };
+      if (
+        (promptConfig?.apiBaseUrl !== undefined || promptConfig?.apiHost !== undefined) &&
+        promptConfig?.headers === undefined &&
+        config.headers
+      ) {
+        config.headers = Object.fromEntries(
+          Object.entries(config.headers).filter(
+            ([name, value]) => !isLiveCredentialHeader(name, value),
+          ),
+        );
+      }
       const format: LiveAudioFormat = config.audio?.format ?? { type: 'audio/pcm', rate: 24_000 };
       if (
         !(format.type === 'audio/pcm' && [16_000, 24_000].includes(format.rate)) &&

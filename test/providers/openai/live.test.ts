@@ -137,6 +137,135 @@ describe('OpenAiLiveProvider', () => {
     expect(p.id()).toBe('openai:live:gpt-live-1');
   });
 
+  it('preserves transcript evidence verbatim for grading, including credential-like text', async () => {
+    const result = provider().callApi('Hi');
+    const socket = await connect();
+    start(socket);
+    text(socket, 'fixture-key', 'input');
+    text(socket, 'fixture-');
+    text(socket, 'key Bearer sample-output-token');
+    emit(socket, { type: 'session.output_audio.delta', delta: 'AQI=' });
+    closed(socket);
+    const response = await result;
+    expect(response.error).toBeUndefined();
+    expect(response.output).toBe('fixture-key Bearer sample-output-token');
+    expect(response.audio?.transcript).toBe(response.output);
+    expect(response.metadata?.inputTranscript).toBe('fixture-key');
+    expect(response.metadata?.transcript.map((part: { delta: string }) => part.delta)).toEqual([
+      'fixture-key',
+      'fixture-',
+      'key Bearer sample-output-token',
+    ]);
+  });
+
+  it.each(['apiBaseUrl', 'apiHost'] as const)(
+    'does not inherit gateway credential headers when a prompt overrides %s',
+    async (endpoint) => {
+      const headers = {
+        'api-key': 'original-gateway-key',
+        'X-Session-Access': 'opaque-gateway-key',
+        'User-Agent': 'Bearer value-shaped-credential',
+        Accept: 'application/json',
+      };
+      const p = provider({
+        apiKey: undefined,
+        apiKeyRequired: false,
+        apiBaseUrl: 'https://original.example/v1',
+        headers,
+      });
+      const result = p.callApi(
+        'Hi',
+        promptContext({
+          [endpoint]: endpoint === 'apiHost' ? 'other.example' : 'https://api.openai.com/v1',
+        }),
+      );
+      const socket = await connect();
+      for (const name of ['api-key', 'X-Session-Access', 'User-Agent']) {
+        expect(socket.options.headers).not.toHaveProperty(name);
+      }
+      expect(socket.options.headers.Accept).toBe('application/json');
+      expect(p.config.headers).toEqual(headers);
+      start(socket);
+      text(socket);
+      closed(socket);
+      expect((await result).error).toBeUndefined();
+    },
+  );
+
+  it('keeps explicitly supplied prompt credential headers on its selected endpoint', async () => {
+    const result = provider({ headers: { 'api-key': 'provider-key' } }).callApi(
+      'Hi',
+      promptContext({
+        apiBaseUrl: 'https://other.example/v1',
+        headers: { 'api-key': 'prompt-key' },
+      }),
+    );
+    const socket = await connect();
+    expect(socket.options.headers['api-key']).toBe('prompt-key');
+    start(socket);
+    text(socket);
+    closed(socket);
+    expect((await result).error).toBeUndefined();
+  });
+
+  it.each(['session', 'delegation', 'envelope', 'response', 'function ID', 'function name'])(
+    'rejects an empty protocol identifier for %s',
+    async (kind) => {
+      const handler = vi.fn();
+      const result = provider({
+        delegation: lookupDelegation,
+        functionCallHandler: handler,
+      }).callApi('Hi');
+      const socket = await connect();
+      start(socket, { id: kind === 'session' ? '' : 'session_1' });
+      text(socket);
+      if (kind === 'delegation') {
+        emit(socket, {
+          type: 'session.delegation.created',
+          delegation: { id: '', target: 'responses' },
+        });
+      } else if (kind === 'envelope') {
+        emit(socket, {
+          type: 'response.event',
+          delegation_id: '',
+          event: { type: 'response.created', response: { id: 'resp_1' } },
+        });
+      } else if (kind !== 'session') {
+        backend(socket, {
+          type: 'response.created',
+          response: { id: kind === 'response' ? '' : 'resp_1' },
+        });
+        if (kind.startsWith('function')) {
+          backend(socket, {
+            type: 'response.output_item.done',
+            item: {
+              ...functionCall(kind === 'function ID' ? '' : 'call_1'),
+              ...(kind === 'function name' && { name: '' }),
+            },
+          });
+        }
+      }
+      closed(socket);
+      expect((await result).error).toContain('Invalid GPT-Live');
+      expect(handler).not.toHaveBeenCalled();
+    },
+  );
+
+  it('rejects a delegation notice that contradicts an already active response', async () => {
+    const result = provider({ delegation: lookupDelegation }).callApi('Hi');
+    const socket = await connect();
+    start(socket);
+    text(socket);
+    backend(socket, { type: 'response.created', response: { id: 'resp_1' } });
+    emit(socket, {
+      type: 'session.delegation.created',
+      delegation: { id: 'delegation_1', target: 'responses', response_id: 'resp_2' },
+    });
+    backend(socket, { type: 'response.completed', response: { id: 'resp_1' } });
+    closed(socket);
+    expect((await result).error).toBe('Invalid GPT-Live delegation response ID.');
+  });
+
   it.each(['x'.repeat(257), '🙂'.repeat(65), { trim: (): string => 'model' }, 42, null])(
     'rejects an invalid configured backend model before connecting (%j)',
     async (model) => {

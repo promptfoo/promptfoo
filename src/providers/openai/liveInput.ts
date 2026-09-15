@@ -130,7 +130,8 @@ function decodeAudio(
     throw new Error(AUDIO_DURATION_ERROR);
   }
   const bytes = Buffer.from(data, 'base64');
-  if (bytes.toString('base64') !== data) {
+  const canonical = bytes.toString('base64');
+  if (data !== canonical && data !== canonical.replace(/=+$/, '')) {
     throw new Error('GPT-Live audio must contain valid base64 data.');
   }
   if (encoding === 'wav') {
