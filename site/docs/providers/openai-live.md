@@ -11,6 +11,8 @@ Set `OPENAI_API_KEY` to an OpenAI project key with Live access. For a compatible
 
 ## Quickstart
 
+A prompt that overrides the endpoint must supply its required credential headers in that prompt's `config.headers`. Credential headers from the provider configuration are not inherited by endpoint overrides.
+
 ```yaml title="promptfooconfig.yaml"
 # yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
 description: GPT-Live spoken answers
@@ -59,7 +61,7 @@ Use OpenAI chat-format audio content in your prompt:
 ]
 ```
 
-Set the `audio` test variable to `file://sample.wav`. WAV files must contain mono, signed 16-bit PCM matching `audio.format.rate` (24,000 Hz by default). The file must declare one valid format before its audio data, and each data chunk must contain complete PCM16 samples. Promptfoo removes the WAV container before streaming and ignores bytes after its declared RIFF boundary. It accepts streaming headers with unknown sizes, such as OpenAI text-to-speech `wav` output and ffmpeg pipe output, and `WAVE_FORMAT_EXTENSIBLE` PCM. It rejects mismatched rates and compressed formats; it does not resample audio.
+Set the `audio` test variable to `file://sample.wav`. WAV files must contain mono, signed 16-bit PCM matching `audio.format.rate` (24,000 Hz by default). The file must declare one valid format before its audio data, and each data chunk must contain complete PCM16 samples. Promptfoo removes the WAV container before streaming and ignores bytes after its declared RIFF boundary. It accepts streaming headers with unknown sizes, such as OpenAI text-to-speech `wav` output and ffmpeg pipe output, and `WAVE_FORMAT_EXTENSIBLE` PCM. It rejects mismatched rates and compressed formats; it does not resample audio. Base64 input may include or omit padding.
 
 Raw base64 audio accepts `pcm16`, `g711_ulaw`, or `g711_alaw` in `input_audio.format`. Configure the corresponding shared input/output format:
 
@@ -90,7 +92,7 @@ For custom functions, set `functionCallHandler: file://tools.js`. Export an asyn
 
 `maxToolIterations` separately limits each session's function calls and distinct delegations, including client and managed Responses delegations (default: 8 each, allowed range 1 to 64). Repeated delegation IDs do not count again. When either limit is exceeded, Promptfoo ends the capture and reports an error without invoking another client handler. A managed Responses delegation may already be running when its creation event reaches Promptfoo.
 
-Function-call IDs and names are limited to 256 bytes each. Their combined size, including argument strings, is limited to 1 MiB across the session; exceeding this limit ends the capture before the call is buffered or executed.
+Function-call IDs and names must be nonempty and are limited to 256 bytes each. Their combined size, including argument strings, is limited to 1 MiB across the session; exceeding this limit ends the capture before the call is buffered or executed.
 
 Each function-handler result is limited to 1 MiB before it is serialized or sent. Return a summary or a reference for larger results.
 
@@ -134,7 +136,7 @@ Safety interventions are graded as refusals rather than errors. A moderation err
 
 ## Results and cost
 
-`output` is the assistant transcript, concatenated exactly as received. `audio` contains playable PCM16 WAV at the session's sample rate, including decoded G.711 responses. `metadata.transcript` retains both speakers' fragments and `start_ms`/`end_ms` timestamps, including overlap. The request count includes the Live session and each completed backend response.
+`output` is the assistant transcript, concatenated exactly as received. Transcripts preserve model content for grading, including sensitive content returned by the endpoint. `audio` contains playable PCM16 WAV at the session's sample rate, including decoded G.711 responses. `metadata.transcript` retains both speakers' fragments and `start_ms`/`end_ms` timestamps, including overlap. The request count includes the Live session and each completed backend response.
 
 `metadata.voiceSeconds` is the latest cumulative usage snapshot. `metadata.finalUsageConfirmed` is true only when `session.closed` supplies valid final usage. A dropped connection preserves partial output and observed usage, and reports an error.
 
