@@ -823,6 +823,35 @@ describe('trajectory utilities', () => {
     },
   );
 
+  it.each([
+    { name: 'leading comments', query: '/* comment */ -- another comment\n SELECT 1', sql: true },
+    {
+      name: 'repeated comment delimiters',
+      query: '/*' + '*//*'.repeat(10_000) + 'invalid',
+      sql: false,
+    },
+    { name: 'unterminated comment', query: '/* unterminated SELECT 1', sql: false },
+    { name: 'comment only', query: '-- SELECT 1', sql: false },
+  ])('recognizes SQL after comments without ambiguous backtracking ($name)', ({ query, sql }) => {
+    const summary = JSON.parse(
+      summarizeTrajectoryForJudge(
+        {
+          ...mockTraceData,
+          spans: [
+            {
+              spanId: 'database',
+              name: 'database',
+              startTime: 1,
+              attributes: { 'db.statement': query },
+            },
+          ],
+        },
+        { includeSql: true },
+      ),
+    );
+    expect(Boolean(summary.steps[0]?.sql)).toBe(sql);
+  });
+
   it('rejects SQL whose middle would be omitted from the judge summary', () => {
     const query = `SELECT id FROM accounts WHERE note = '${'x'.repeat(400)}' OR 1=1 ${' '.repeat(400)}`;
     expect(() =>

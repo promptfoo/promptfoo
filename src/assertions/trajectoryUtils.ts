@@ -560,8 +560,31 @@ function truncateJudgeTrajectorySteps(
   return summary;
 }
 
-const SQL_STATEMENT_RE =
-  /^\s*(?:(?:--[^\n]*\n|\/\*[\s\S]*?\*\/)\s*)*(?:select|with|insert|update|delete|merge|create|alter|drop|truncate|grant|revoke|explain|pragma|show|describe|call|exec(?:ute)?)\b/i;
+function isSqlStatement(query: string): boolean {
+  let offset = 0;
+  while (offset < query.length) {
+    if (/\s/.test(query[offset])) {
+      offset++;
+    } else if (query.startsWith('--', offset)) {
+      const end = query.indexOf('\n', offset + 2);
+      if (end === -1) {
+        return false;
+      }
+      offset = end + 1;
+    } else if (query.startsWith('/*', offset)) {
+      const end = query.indexOf('*/', offset + 2);
+      if (end === -1) {
+        return false;
+      }
+      offset = end + 2;
+    } else {
+      break;
+    }
+  }
+  return /^(?:select|with|insert|update|delete|merge|create|alter|drop|truncate|grant|revoke|explain|pragma|show|describe|call|exec(?:ute)?)\b/i.test(
+    query.slice(offset),
+  );
+}
 
 function getSqlExecutionDetails(
   step: Pick<TrajectoryStep, 'attributes' | 'spanId' | 'spanName' | 'startTime'>,
@@ -589,7 +612,7 @@ function getSqlExecutionDetails(
       /^(?:other_sql|postgres(?:ql)?|mysql|mariadb|sqlite|mssql|microsoft\.sql_server|transactsql|oracle(?:\.db)?|snowflake|bigquery|clickhouse)$/i.test(
         database ?? '',
       ) ||
-      SQL_STATEMENT_RE.test(databaseStatement))
+      isSqlStatement(databaseStatement))
       ? databaseStatement
       : undefined;
   const argumentQuery =
@@ -597,7 +620,7 @@ function getSqlExecutionDetails(
       ? args
       : getFirstStringAttribute(argumentObject, ['sql', 'query', 'statement']);
   const scalarSql =
-    argumentQuery !== undefined && (isQueryTool || SQL_STATEMENT_RE.test(argumentQuery))
+    argumentQuery !== undefined && (isQueryTool || isSqlStatement(argumentQuery))
       ? argumentQuery.trim()
       : undefined;
   const query = databaseQuery ?? scalarSql;
