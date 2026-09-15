@@ -866,6 +866,13 @@ async function validatePdfArtifact(test: AtomicTestCase, vars: Vars): Promise<vo
           Buffer.byteLength(raw, 'base64') <= 5 * 1024 * 1024,
         'PDF attachment exceeds the 5 MiB limit',
       );
+      invariant(
+        raw === undefined ||
+          (/^[A-Za-z0-9+/]+={0,2}$/.test(raw) &&
+            raw.length % 4 !== 1 &&
+            (!raw.includes('=') || raw.length % 4 === 0)),
+        `PDF attachment contains invalid base64 (${input})`,
+      );
       const bytes = raw === undefined ? undefined : Buffer.from(raw, 'base64');
       invariant(
         expectedHash === null

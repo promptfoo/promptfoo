@@ -59,7 +59,8 @@ function computeHash(data: Buffer): string {
  */
 export class LocalFileSystemProvider implements MediaStorageProvider {
   readonly providerId = 'local';
-  readonly hasImmutableKeys = true;
+  // Short hash prefixes can collide, so existing media URLs must revalidate.
+  readonly hasImmutableKeys = false;
   private basePath: string;
   private hashIndexPath: string;
   private hashIndex: Map<string, string> = new Map();
@@ -137,7 +138,7 @@ export class LocalFileSystemProvider implements MediaStorageProvider {
   private generateKey(hash: string, metadata: MediaMetadata): string {
     const extension = getExtensionFromContentType(metadata.contentType);
     const prefix = metadata.mediaType || 'media';
-    // Use first 12 chars of hash for shorter filenames while maintaining uniqueness
+    // Preserve existing short filenames; these hash prefixes can collide.
     return `${prefix}/${hash.slice(0, 12)}.${extension}`;
   }
 

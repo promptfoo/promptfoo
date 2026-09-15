@@ -58,54 +58,128 @@ describeEvaluator('evaluator transforms', () => {
     },
   );
 
-  it('allows companion transforms and equivalent PDF encodings', async () => {
-    const bytes = Buffer.from('%PDF-1.7\nOriginal invoice');
-    const raw = bytes.toString('base64');
-    const document = `data:application/pdf;base64,${raw}`;
-    vi.mocked(transform).mockImplementationOnce(async (_code, vars) => ({
-      ...(vars as Record<string, unknown>),
-      document: raw,
-      reference: 'T3JpZ2luYWw=',
-      question: 'Explain the payment terms.',
-      __prompt: JSON.stringify({
-        document: raw,
-        reference: 'T3JpZ2luYWw=',
+  it.each(['padded', 'unpadded', 'whitespace'])(
+    'allows companion text transforms and equivalent attachment encodings: %s',
+    async (encoding) => {
+      const bytes = Buffer.from('%PDF-1.7\nOriginal invoice');
+      const raw = bytes.toString('base64');
+      const document = `data:application/pdf;base64,${raw}`;
+      const encode = (value: string) =>
+        encoding === 'unpadded'
+          ? value.replace(/=+$/, '')
+          : encoding === 'whitespace'
+            ? `\n${value.replace(/.{8}/g, '$&\n')}\n`
+            : value;
+      const transformedDocument = encode(raw);
+      const transformedReference = encode('T3JpZ2luYWw=');
+      vi.mocked(transform).mockImplementationOnce(async (_code, vars) => ({
+        ...(vars as Record<string, unknown>),
+        document: transformedDocument,
+        reference: transformedReference,
         question: 'Explain the payment terms.',
-      }),
-    }));
-    const testSuite: TestSuite = {
-      providers: [mockApiProvider],
-      prompts: [toPrompt('{{__prompt}}')],
-      tests: [
-        {
-          vars: {
-            document,
-            reference: 'data:image/png;base64,T3JpZ2luYWw=',
-            __prompt: JSON.stringify({ document }),
-          },
-          metadata: {
-            strategyId: 'pdf',
-            pdf: {
-              input: 'document',
-              contentHash: `sha256:${sha256(bytes)}`,
-              text: 'Original invoice',
-              companionHashes: { reference: `sha256:${sha256('Original')}` },
+        __prompt: JSON.stringify({
+          document: transformedDocument,
+          reference: transformedReference,
+          question: 'Explain the payment terms.',
+        }),
+      }));
+      const testSuite: TestSuite = {
+        providers: [mockApiProvider],
+        prompts: [toPrompt('{{__prompt}}')],
+        tests: [
+          {
+            vars: {
+              document,
+              reference: 'data:image/png;base64,T3JpZ2luYWw=',
+              __prompt: JSON.stringify({ document }),
+            },
+            metadata: {
+              strategyId: 'pdf',
+              pdf: {
+                input: 'document',
+                contentHash: `sha256:${sha256(bytes)}`,
+                text: 'Original invoice',
+                companionHashes: { reference: `sha256:${sha256('Original')}` },
+              },
+            },
+            options: {
+              transformVars:
+                '({ ...vars, document: vars.document.split(",")[1], question: "Explain the payment terms." })',
             },
           },
-          options: {
-            transformVars:
-              '({ ...vars, document: vars.document.split(",")[1], question: "Explain the payment terms." })',
+        ],
+      };
+      const evalRecord = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
+      await evaluate(testSuite, evalRecord, {});
+      const summary = await evalRecord.toEvaluateSummary();
+      expect(summary.results[0].error).toBeUndefined();
+      expect(summary.results[0].success).toBe(true);
+      expect(mockApiProvider.callApi).toHaveBeenCalledOnce();
+    },
+  );
+
+  it.each(
+    ['document', 'reference'].flatMap((input) =>
+      ['vars', 'envelope'].flatMap((scope) =>
+        ['alphabet', 'extra-padding', 'partial-padding'].map((malformed) => ({
+          input,
+          scope,
+          malformed,
+        })),
+      ),
+    ),
+  )(
+    'rejects malformed $input base64 in $scope: $malformed',
+    async ({ input, scope, malformed }) => {
+      const bytes = Buffer.from('%PDF-1.7\nOriginal invoice');
+      const document = `data:application/pdf;base64,${bytes.toString('base64')}`;
+      const reference = `data:image/png;base64,${Buffer.from('Fixture').toString('base64')}`;
+      const inputs = { document, reference };
+      const original = input === 'document' ? document : reference;
+      const changed =
+        malformed === 'alphabet'
+          ? `${original}!`
+          : malformed === 'extra-padding'
+            ? `${original}===`
+            : original.slice(0, -1);
+      // Node's permissive decoder accepts each malformed value as the same bytes.
+      expect(Buffer.from(changed.split(',')[1], 'base64')).toEqual(
+        Buffer.from(original.split(',')[1], 'base64'),
+      );
+      vi.mocked(transform).mockImplementationOnce(async (_code, vars) => ({
+        ...(vars as Record<string, unknown>),
+        ...(scope === 'envelope'
+          ? { __prompt: JSON.stringify({ ...inputs, [input]: changed }) }
+          : { [input]: changed }),
+      }));
+      const testSuite: TestSuite = {
+        providers: [mockApiProvider],
+        prompts: [toPrompt('{{__prompt}}')],
+        tests: [
+          {
+            vars: { ...inputs, __prompt: JSON.stringify(inputs) },
+            metadata: {
+              strategyId: 'pdf',
+              pdf: {
+                input: 'document',
+                contentHash: `sha256:${sha256(bytes)}`,
+                companionHashes: { reference: `sha256:${sha256('Fixture')}` },
+              },
+            },
+            options: { transformVars: '({ ...vars })' },
           },
-        },
-      ],
-    };
-    const evalRecord = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
-    await evaluate(testSuite, evalRecord, {});
-    const summary = await evalRecord.toEvaluateSummary();
-    expect(summary.results[0].error).toBeUndefined();
-    expect(summary.results[0].success).toBe(true);
-    expect(mockApiProvider.callApi).toHaveBeenCalledOnce();
-  });
+        ],
+      };
+      const evalRecord = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
+      await evaluate(testSuite, evalRecord, {});
+      const summary = await evalRecord.toEvaluateSummary();
+      expect(summary.results[0].success).toBe(false);
+      expect(summary.results[0].error).toContain(
+        `PDF attachment contains invalid base64 (${input})`,
+      );
+      expect(mockApiProvider.callApi).not.toHaveBeenCalled();
+    },
+  );
 
   it.each(['vars', 'envelope', 'added', 'removed'])(
     'rejects changed PDF companion evidence before target delivery: %s',

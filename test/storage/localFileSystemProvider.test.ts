@@ -56,6 +56,8 @@ describe('LocalFileSystemProvider', () => {
       mediaType: 'audio',
     });
 
+    expect(provider.hasImmutableKeys).toBe(false);
+    expect(ref.key).toMatch(/^audio\/[a-f0-9]{12}\.wav$/);
     const retrieved = await provider.retrieve(ref.key);
     expect(retrieved.toString('utf8')).toBe('hello');
   });
