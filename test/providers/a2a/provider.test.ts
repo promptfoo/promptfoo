@@ -412,6 +412,35 @@ describe('A2AProvider', () => {
   );
 
   it.each(['1.0', '0.3.0'])(
+    'uses the question fallback only without declared PDF inputs in A2A %s',
+    async (version) => {
+      const document = 'data:application/pdf;base64,JVBERi0x';
+      for (const inputs of [
+        undefined,
+        {},
+        { document: { type: 'pdf' as const, description: 'Invoice' } },
+      ]) {
+        vi.mocked(fetchWithTimeout).mockResolvedValueOnce(
+          jsonResponse({ message: { role: 'ROLE_AGENT', parts: [{ text: 'pdf ok' }] } }),
+        );
+        await provider({ protocolVersion: version }).callApi(document, {
+          prompt: { raw: '{{document}}', label: 'PDF' },
+          vars: { document, question: 'Read the invoice.' },
+          test: {
+            metadata: { strategyId: 'pdf', pdf: { input: 'document' }, pluginConfig: { inputs } },
+          },
+        });
+        const body = JSON.parse(vi.mocked(fetchWithTimeout).mock.lastCall?.[1]?.body as string);
+        expect(
+          body.message.parts
+            .filter((part: { text?: string }) => part.text)
+            .map((part: { text: string }) => part.text),
+        ).toEqual(inputs && Object.keys(inputs).length ? [] : ['Read the invoice.']);
+      }
+    },
+  );
+
+  it.each(['1.0', '0.3.0'])(
     'includes declared companions alongside a static PDF task in A2A %s',
     async (version) => {
       vi.mocked(fetchWithTimeout).mockResolvedValueOnce(
@@ -455,7 +484,12 @@ describe('A2AProvider', () => {
     async (version) => {
       const raw = Buffer.from('%PDF-1.7\nPDF attachment bytes').toString('base64');
       const document = `data:application/pdf;base64,${raw}`;
+      const longTask = 'Read the invoice and report the original total and payment terms '.repeat(
+        3,
+      );
       const cases = [
+        { prompt: longTask, expected: longTask },
+        { prompt: 'data: Summarize the invoice', expected: 'data: Summarize the invoice' },
         {
           prompt: `Summarize ${document} in Spanish.`,
           expected: 'Summarize [PDF attachment] in Spanish.',

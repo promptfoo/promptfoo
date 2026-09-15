@@ -337,7 +337,7 @@ function getPdfPromptText(
     (result, value) => result.split(value).join('[PDF attachment]'),
     prompt,
   );
-  if (text === prompt || values.includes(prompt.trim())) {
+  if (values.includes(prompt.trim())) {
     return undefined;
   }
   try {
@@ -373,7 +373,9 @@ function getDefaultTextPart(
 ): A2APart | undefined {
   const strategyId = getMediaStrategyId(context);
   const mediaVarName = strategyId ? getMediaVarName(strategyId, contextVars, context) : undefined;
-  const inputs = context?.test?.metadata?.pluginConfig?.inputs as Inputs | undefined;
+  const configuredInputs = context?.test?.metadata?.pluginConfig?.inputs as Inputs | undefined;
+  const inputs =
+    configuredInputs && Object.keys(configuredInputs).length ? configuredInputs : undefined;
   let text = shouldUsePromptAsText(prompt, mediaValue) ? prompt : undefined;
   if (strategyId === 'pdf') {
     text = getPdfPromptText(prompt, contextVars, mediaVarName, mediaValue, inputs) ?? text;

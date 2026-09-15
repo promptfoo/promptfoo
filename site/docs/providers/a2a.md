@@ -220,9 +220,9 @@ By default, promptfoo sends a `ROLE_USER` message with a single text part contai
 
 For audio, image, and video redteam strategies, the default message includes the generated file and uses `question` as companion text when present.
 
-For the [PDF strategy](/docs/red-team/strategies/pdf/), the default message includes the selected PDF input with the `application/pdf` media type. Instructions surrounding the PDF in your prompt are preserved, with the file value replaced by `[PDF attachment]`. For example, `Summarize {{document}}` becomes `Summarize [PDF attachment]` alongside the file part.
+For the [PDF strategy](/docs/red-team/strategies/pdf/), the default message includes the selected PDF input with the `application/pdf` media type. Instructions surrounding the PDF in your prompt are preserved, with the file value replaced by `[PDF attachment]`. For example, `Summarize {{document}}` becomes `Summarize [PDF attachment]` alongside the file part. The task prompt can also contain text alone; the selected PDF is still attached separately.
 
-When the prompt contains only the PDF or a JSON object made from declared input fields, companion text comes from the target's declared text inputs: one field is sent as text, and multiple fields are sent as a JSON object preserving their names. Other rendered fields, such as an `instruction` variable, stay in the prompt. Without declared inputs, the provider uses `question` when no rendered task text is available.
+When the prompt contains only the PDF or a JSON object made from declared input fields, companion text comes from the target's declared text inputs: one field is sent as text, and multiple fields are sent as a JSON object preserving their names. Other rendered fields, such as an `instruction` variable, stay in the prompt. Without declared inputs, the provider uses `question` when no rendered task text is available. With declared inputs, include `question` as a text input to send it as a companion.
 
 When a PDF task has both rendered instructions and declared text companions, the text part is a JSON object with `task` and `inputs` fields. This preserves companions even when the prompt does not interpolate them.
 

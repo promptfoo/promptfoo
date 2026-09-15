@@ -137,11 +137,16 @@ describe('handleRedteam', () => {
           secretEnvValue: privateValue,
           appendix: 'data:application/pdf;base64,JVBERi0x',
         },
+        inputMaterialization: {
+          privateAttachment: { bodyText: 'PFQA_PRIVATE_MATERIALIZATION' },
+        },
       },
     );
     expect(result.pass).toBe(true);
     expect(match).toHaveBeenCalledTimes(1);
     expect(JSON.stringify(render.mock.calls[0][0])).not.toContain(privateValue);
+    expect(render.mock.calls[0][0]).not.toHaveProperty('inputMaterialization');
+    expect(JSON.stringify(match.mock.calls[0])).not.toContain('PFQA_PRIVATE_MATERIALIZATION');
     expect(JSON.stringify(match.mock.calls[0])).not.toContain(privateValue);
     expect(JSON.stringify(match.mock.calls[0])).not.toContain('PFQA_PRIVATE_PROVIDER_KEY');
     expect(JSON.stringify(match.mock.calls[0])).not.toContain('JVBERi0x');
@@ -319,6 +324,8 @@ describe('handleRedteam', () => {
       expect(test.vars.contract).toBe(docx.vars.contract);
       expect(gradingTest.metadata!.goal).toBe('Falsify the total');
       expect(gradingTest.metadata).not.toHaveProperty('inputVars');
+      expect(gradingTest.metadata).not.toHaveProperty('inputMaterialization');
+      expect(test.metadata.inputMaterialization).toHaveProperty('legacyContract');
       expect(test.metadata.inputVars.appendix).toBe(test.vars.appendix);
       expect(test.vars.document).toBe('data:application/pdf;base64,JVBERi0x');
       expect(test.vars[MULTI_INPUT_VAR]).toBe('obsolete envelope');
@@ -332,6 +339,7 @@ describe('handleRedteam', () => {
         document: 'data:application/pdf;base64,JVBERi0x',
         instruction: 'Summarize in Spanish.',
         apiKey: 'Private credential',
+        secretImage: 'data:image/png;base64,UFJJVkFURV9JTUFHRQ==',
       },
       metadata: {
         pluginId: 'policy',
@@ -348,7 +356,11 @@ describe('handleRedteam', () => {
       assertion,
       baseType: getAssertionBaseType(assertion),
       test,
-      prompt: JSON.stringify({ instruction: test.vars.instruction, document: 'JVBERi0x' }),
+      prompt: JSON.stringify({
+        instruction: test.vars.instruction,
+        document: 'JVBERi0x',
+        reference: test.vars.secretImage,
+      }),
       output: providerResponse.output,
       outputString: providerResponse.output,
       providerResponse,
@@ -372,9 +384,11 @@ describe('handleRedteam', () => {
     expect(JSON.parse(JSON.parse(prompt).renderedPrompt)).toEqual({
       instruction: test.vars.instruction,
       document: '[PDF attachment]',
+      reference: '[Attachment]',
     });
     expect(JSON.parse(prompt).inputs).toEqual({ document: test.metadata.pdf.text });
     expect(gradingTest.vars).toEqual({ document: test.metadata.pdf.text });
+    expect(prompt).not.toContain('UFJJVkFURV9JTUFHRQ==');
     expect(test.vars.apiKey).toBe('Private credential');
     expect(test.vars.document).toBe('data:application/pdf;base64,JVBERi0x');
   });
