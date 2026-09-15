@@ -440,7 +440,7 @@ export class WatsonXProvider implements ApiProvider {
   }
 
   id(): string {
-    return `watsonx:${this.modelName}`;
+    return this.options.id || `watsonx:${this.modelName}`;
   }
 
   toString(): string {

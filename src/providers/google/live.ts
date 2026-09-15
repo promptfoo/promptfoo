@@ -181,13 +181,19 @@ export const tryGetThenPost = async <T = unknown>(url: string, data?: unknown): 
 };
 
 export class GoogleLiveProvider implements ApiProvider {
-  config: CompletionOptions;
+  config: CompletionOptions & { apiKeyEnvar?: string };
   modelName: string;
+  private env?: ProviderOptions['env'];
   private loadedFunctionCallbacks: Record<string, Function> = {};
 
   constructor(modelName: string, options: ProviderOptions) {
     this.modelName = modelName;
-    this.config = options.config || {};
+    this.config = { apiKeyEnvar: 'GOOGLE_API_KEY', ...options.config };
+    this.env = options.env;
+    const id = options.id;
+    if (id) {
+      this.id = () => id;
+    }
   }
 
   validateFunctionToolCall(output: string | object, vars?: CallApiContextParams['vars']): void {
@@ -233,7 +239,13 @@ export class GoogleLiveProvider implements ApiProvider {
 
   getApiKey(): string | undefined {
     // Priority aligned with Python SDK: GOOGLE_API_KEY > GEMINI_API_KEY
-    return this.config.apiKey || getEnvString('GOOGLE_API_KEY') || getEnvString('GEMINI_API_KEY');
+    return (
+      this.config.apiKey ||
+      this.env?.GOOGLE_API_KEY ||
+      this.env?.GEMINI_API_KEY ||
+      getEnvString('GOOGLE_API_KEY') ||
+      getEnvString('GEMINI_API_KEY')
+    );
   }
 
   /**

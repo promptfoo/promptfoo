@@ -1,4 +1,5 @@
 import { fetchWithCache } from '../cache';
+import { getEnvString } from '../envars';
 import logger from '../logger';
 import { normalizeFinishReason } from '../util/finishReason';
 import { OpenAiChatCompletionProvider } from './openai/chat';
@@ -45,7 +46,9 @@ import type {
 export class SnowflakeCortexProvider extends OpenAiChatCompletionProvider {
   constructor(modelName: string, providerOptions: ProviderOptions) {
     const accountIdentifier =
-      providerOptions.config?.accountIdentifier || process.env.SNOWFLAKE_ACCOUNT_IDENTIFIER;
+      providerOptions.config?.accountIdentifier ||
+      providerOptions.env?.SNOWFLAKE_ACCOUNT_IDENTIFIER ||
+      getEnvString('SNOWFLAKE_ACCOUNT_IDENTIFIER');
 
     if (!accountIdentifier && !providerOptions.config?.apiBaseUrl) {
       throw new Error(
@@ -61,6 +64,7 @@ export class SnowflakeCortexProvider extends OpenAiChatCompletionProvider {
       ...providerOptions,
       config: {
         ...providerOptions.config,
+        apiKey: providerOptions.config?.apiKey || providerOptions.env?.SNOWFLAKE_API_KEY,
         apiBaseUrl,
         apiKeyEnvar: 'SNOWFLAKE_API_KEY',
         passthrough: {
