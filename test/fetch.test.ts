@@ -1336,6 +1336,19 @@ describe('computeRateLimitWaitMs', () => {
     expect(computeRateLimitWaitMs(response)).toBe(7_000);
   });
 
+  it.each([
+    ['25', 25],
+    ['0', 0],
+    ['invalid', 7_000],
+    ['-1', 7_000],
+  ])('reads retry-after-ms=%s with Retry-After as a fallback', (value, expected) => {
+    const response = createMockResponse({
+      headers: new Headers({ 'retry-after-ms': String(value), 'Retry-After': '7' }),
+    });
+
+    expect(computeRateLimitWaitMs(response)).toBe(expected);
+  });
+
   it('prefers OpenAI reset headers when present', () => {
     const response = createMockResponse({
       headers: new Headers({
@@ -1939,6 +1952,34 @@ describe('fetchWithRetries', () => {
       expect(err).toBeInstanceOf(HttpRateLimitError);
       expect((err as HttpRateLimitError).kind).toBe('rate_limit');
       expect(global.fetch).toHaveBeenCalledTimes(2);
+    });
+
+    describe('retry-after-ms backoff', () => {
+      beforeEach(() => {
+        vi.spyOn(Math, 'random').mockReturnValue(0);
+      });
+
+      afterEach(() => {
+        vi.restoreAllMocks();
+      });
+
+      it.each([0, 25])(
+        'waits %i ms before retrying an ambiguous quota response',
+        async (waitMs) => {
+          const throttled = rateLimitedJsonResponse({
+            headers: new Headers({ 'retry-after-ms': String(waitMs) }),
+            body: { error: { code: 'insufficient_quota', message: 'deployment saturated' } },
+          });
+          const success = createMockResponse();
+          vi.mocked(global.fetch).mockResolvedValueOnce(throttled).mockResolvedValueOnce(success);
+
+          const response = await fetchWithRetries('https://example.com', {}, 1000, 1);
+
+          expect(response).toBe(success);
+          expect(global.fetch).toHaveBeenCalledTimes(2);
+          expect(sleep).toHaveBeenCalledExactlyOnceWith(waitMs);
+        },
+      );
     });
 
     it('fails fast on billing_hard_limit_reached', async () => {

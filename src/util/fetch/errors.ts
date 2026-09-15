@@ -26,11 +26,15 @@ export interface SystemError extends Error {
  */
 export const HARD_QUOTA_ERROR_CODES: ReadonlySet<string> = new Set([
   'insufficient_quota',
-  'credit_balance_exhausted',
   'billing_hard_limit_reached',
   'billing_not_active',
   'access_terminated',
   'quota_exceeded',
+  // Returned by OpenAI when a prepaid credit balance is fully consumed
+  // (HTTP 429, no Retry-After header). Without this entry the error falls
+  // through to the per-window retry loop and a single test can take ~20 min
+  // before failing. References: https://github.com/promptfoo/promptfoo/issues/10855
+  'credit_balance_exhausted',
 ]);
 
 /**

@@ -9,7 +9,7 @@ import { DEFAULT_MAX_CONCURRENCY, VERSION } from '../../constants';
 import { getEnvBool, getEnvInt, getEnvString } from '../../envars';
 import logger from '../../logger';
 import { getRequestTimeoutMs } from '../../providers/shared';
-import { parseRateLimitHeaders, parseRetryAfter } from '../../scheduler/headerParser';
+import { parseRateLimitHeaders } from '../../scheduler/headerParser';
 import invariant from '../../util/invariant';
 import { sleep } from '../../util/time';
 import { sanitizeUrl, sanitizeUrlForLogging } from '../sanitizer';
@@ -347,18 +347,17 @@ export function isRateLimited(response: Response): boolean {
 
 /**
  * Compute how long to wait after a rate-limited response.
- * Reads `Retry-After`, `X-RateLimit-Reset`, and OpenAI-style reset headers.
+ * Reads `retry-after-ms`, `Retry-After`, `X-RateLimit-Reset`, and OpenAI-style reset headers.
  * Default: 60s.
  */
 export function computeRateLimitWaitMs(response: Response): number {
+  const parsedHeaders = parseRateLimitHeaders(Object.fromEntries(response.headers.entries()));
   const rateLimitReset = response.headers.get('X-RateLimit-Reset');
-  const retryAfter = response.headers.get('Retry-After');
   const openaiReset =
     response.headers.get('x-ratelimit-reset-requests') ||
     response.headers.get('x-ratelimit-reset-tokens');
 
   if (openaiReset) {
-    const parsedHeaders = parseRateLimitHeaders(Object.fromEntries(response.headers.entries()));
     if (parsedHeaders.resetAt !== undefined) {
       return Math.max(parsedHeaders.resetAt - Date.now(), 0);
     }
@@ -371,7 +370,7 @@ export function computeRateLimitWaitMs(response: Response): number {
     }
   }
 
-  return retryAfter ? (parseRetryAfter(retryAfter) ?? 60_000) : 60_000;
+  return parsedHeaders.retryAfterMs ?? 60_000;
 }
 
 /**
