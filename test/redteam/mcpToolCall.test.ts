@@ -46,6 +46,40 @@ describe('MCP tool call argument envelopes', () => {
     ).toBeUndefined();
   });
 
+  it.each(
+    [
+      'http://json-schema.org/draft-07/schema#',
+      'https://json-schema.org/draft/2019-09/schema',
+      'https://json-schema.org/draft/2020-12/schema',
+    ].flatMap(($schema) => ['root', 'nested'].map((location) => ({ $schema, location }))),
+  )('isolates $location schema IDs between tools using $schema', ({ $schema, location }) => {
+    const sharedId = `https://example.test/${encodeURIComponent($schema)}/${location}`;
+    const typedTools = ['string', 'number'].map((type) => ({
+      name: `lookup_${type}`,
+      inputSchema: {
+        $schema,
+        $id: location === 'root' ? sharedId : `${sharedId}/${type}`,
+        type: 'object',
+        definitions: { value: { ...(location === 'nested' && { $id: sharedId }), type } },
+        properties: { value: { $ref: location === 'nested' ? sharedId : '#/definitions/value' } },
+        required: ['value'],
+        additionalProperties: false,
+      },
+    }));
+    for (const [type, value, invalid] of [
+      ['string', 'Ada', 1],
+      ['number', 1, 'Ada'],
+      ['string', 'Grace', 2],
+      ['number', 2, 'Grace'],
+    ] as const) {
+      const call = { tool: `lookup_${type}`, args: { value } };
+      expect(normalizeMcpToolCall(call, typedTools)).toEqual(call);
+      expect(
+        normalizeMcpToolCall({ ...call, args: { value: invalid } }, typedTools),
+      ).toBeUndefined();
+    }
+  });
+
   it('enforces draft 2020-12 tuple keywords', () => {
     const tupleTools = [
       {

@@ -18,11 +18,11 @@ export type McpToolCall = {
 const TOOL_NAME_FIELDS = ['tool', 'toolName', 'function', 'functionName', 'name'] as const;
 const TOOL_ARGS_FIELDS = ['args', 'arguments', 'params', 'parameters'] as const;
 
-const ajv = new Ajv({ allErrors: true, strictSchema: false });
+const ajv = new Ajv({ allErrors: true, strictSchema: false, addUsedSchema: false });
 addFormats(ajv);
-const ajv2019 = new Ajv2019({ allErrors: true, strictSchema: false });
+const ajv2019 = new Ajv2019({ allErrors: true, strictSchema: false, addUsedSchema: false });
 addFormats(ajv2019);
-const ajv2020 = new Ajv2020({ allErrors: true, strictSchema: false });
+const ajv2020 = new Ajv2020({ allErrors: true, strictSchema: false, addUsedSchema: false });
 addFormats(ajv2020);
 
 export function parseMcpToolCall(
