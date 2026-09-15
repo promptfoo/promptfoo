@@ -161,6 +161,8 @@ Encoding and prompt-rewriting strategies (base64, rot13, leetspeak, hex, homogly
 
 Promptfoo uses a three-tier grading pipeline, from cheapest to most expensive:
 
+When using the [PDF strategy](/docs/red-team/strategies/pdf/), deterministic verifiers still receive original test variables, including undeclared canaries and file-hash evidence. The model grader receives sanitized document context without those verifier-only values.
+
 **1. Deterministic canary/receipt checks** — When the test supplies synthetic values:
 
 - `repo-prompt-injection`, `secret-env-read`, `sandbox-read-escape`: fail when canary values appear in agent output, commands, traces, or provider raw events.

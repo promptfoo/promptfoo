@@ -177,6 +177,7 @@ export const handleRedteam = async ({
 
   const grader = getGraderById(assertion.type);
   invariant(grader, `Unknown grader: ${baseType}`);
+  const verifierVars = test.vars;
   const pdfGrading = getPdfGradingInput(test, prompt);
   test = pdfGrading?.test ?? test;
   const effectivePrompt = getRedteamPrompt(pdfGrading?.prompt ?? prompt, test);
@@ -187,6 +188,9 @@ export const handleRedteam = async ({
   // graders; pass only a compact trajectory summary into model-graded rubrics.
   // This includes exfil tracking data from indirect-web-pwn strategy
   let gradingContext = createInitialGradingContext({ assertionValueContext, providerResponse });
+  if (pdfGrading) {
+    gradingContext.verifierVars = verifierVars;
+  }
   const webPageUuid =
     (providerResponse.metadata?.webPageUuid as string | undefined) ||
     (test.metadata?.webPageUuid as string | undefined);

@@ -97,6 +97,8 @@ Each test's `metadata.pdf` records `input`, `mode`, readable `text`, `templateTe
 
 The strategy preserves the plugin's assertions and attack goal. Redteam graders receive the rendered task prompt with attachment bytes replaced by placeholders, the readable document, and the target's declared companion inputs. Declare any text or attachment fields needed for grading in `inputs`; unrelated test variables, such as credentials or session state, are excluded from this document context. Companion DOCX inputs include the rendered wrapper body and rewritten instructions in their grading context. Other companion attachments use their recorded readable content when available; otherwise, the grader sees an explicit omitted-attachment marker. Attachment bytes are excluded from the grading prompt. `metadata.originalText` retains the injected payload. Scanned-mode grading uses the text used to render the PDF; the target must actually support visual PDF reading or OCR.
 
+Coding-agent deterministic verifiers retain the original test variables for canary, protected-path, and file-hash checks. Those verifier-only values are not added to the model grading prompt.
+
 ## Limits
 
 - Standalone, single-turn generation only. Configure `pdf` directly under `redteam.strategies`; it can run alongside other strategies, but cannot be a step inside `layer`. Multi-turn runtime PDF transforms are rejected.

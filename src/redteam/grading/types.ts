@@ -1,5 +1,5 @@
 import type { TraceContextData } from '../../tracing/traceContext';
-import type { ImageOutput, ProviderResponse } from '../../types/providers';
+import type { CallApiContextParams, ImageOutput, ProviderResponse } from '../../types/providers';
 import type { TraceData } from '../../types/tracing';
 import type { RedteamHistoryEntry } from '../types';
 
@@ -10,6 +10,8 @@ import type { RedteamHistoryEntry } from '../types';
  * between redteam providers and plugin base classes.
  */
 export interface RedteamGradingContext {
+  // Original target vars for in-process verifiers; excluded from model rubrics.
+  verifierVars?: CallApiContextParams['vars'];
   providerResponse?: ProviderResponse;
   imageOutputs?: ImageOutput[];
   traceData?: TraceData | null;

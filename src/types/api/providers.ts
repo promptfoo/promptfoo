@@ -11,6 +11,8 @@ const ProviderOptionsWithIdSchema = ProviderOptionsSchema.extend({
 });
 
 const JsonProviderInputConfigBaseSchema = z.object({
+  // OpenAPI needs an explicit type for ZodNever; `not: {}` rejects every value.
+  template: z.never().meta({ type: 'object', not: {} }).optional(),
   benign: z.boolean().optional(),
   inputPurpose: z.string().min(1).optional(),
 });
