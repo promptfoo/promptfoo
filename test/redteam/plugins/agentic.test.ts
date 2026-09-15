@@ -1191,13 +1191,13 @@ describe('Agentic redteam plugins', () => {
     async (source) => {
       const pluginId = 'agentic:approval-continuity';
       for (const malformed of [null, { pluginId, kind: 42 }, 'invalid-container']) {
-        const evidence = {
-          pluginId,
-          findings:
-            malformed === 'invalid-container'
-              ? 'invalid'
-              : [malformed, { pluginId: 'agentic:tool-discovery-confusion', kind: 'leak' }],
-        };
+        const evidence = [
+          {
+            pluginId,
+            findings: malformed === 'invalid-container' ? 'invalid' : [malformed],
+          },
+          { pluginId: 'agentic:tool-discovery-confusion', findings: [{ kind: 'leak' }] },
+        ];
         const result = await getGraderById(`promptfoo:redteam:${pluginId}`)!.getResult(
           'prompt',
           'done',
@@ -1207,7 +1207,7 @@ describe('Agentic redteam plugins', () => {
           undefined,
           undefined,
           source === 'provider'
-            ? providerEvidenceContext([evidence, { pluginId, findings: [] }])
+            ? providerEvidenceContext([...evidence, { pluginId, findings: [] }])
             : {
                 traceData: {
                   traceId: 'malformed-mixed',

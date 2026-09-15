@@ -135,9 +135,14 @@ describe('handleRedteam', () => {
     },
   );
 
-  it.each(['custom', 'jailbreak:tree'])(
-    'checks the complete agentic trace after a stored %s pass',
-    async (strategyId) => {
+  it.each([
+    { strategyId: 'custom', malformed: false },
+    { strategyId: 'jailbreak:tree', malformed: false },
+    { strategyId: 'custom', malformed: true },
+    { strategyId: 'jailbreak:tree', malformed: true },
+  ])(
+    'checks the complete agentic trace after a stored $strategyId pass (malformed=$malformed)',
+    async ({ strategyId, malformed }) => {
       const pluginId = 'agentic:guardrail-coverage-gap';
       const assertion = { type: `promptfoo:redteam:${pluginId}` as const };
       const test = { vars: {}, assert: [assertion], metadata: { pluginId, strategyId } };
@@ -146,9 +151,12 @@ describe('handleRedteam', () => {
         metadata: {
           agenticEvidence: { pluginId, findings: [] },
           storedGraderResult: { pass: true, score: 1, reason: 'No output findings', assertion },
+          ...(malformed && {
+            redteamHistory: [{ graderError: 'An earlier grader failed' }, { output: 'Done' }],
+          }),
         },
       };
-      const grade = await handleRedteam({
+      const result = handleRedteam({
         assertion,
         baseType: assertion.type,
         assertionValueContext: {
@@ -168,7 +176,10 @@ describe('handleRedteam', () => {
                 name: 'tool update_seat',
                 startTime: 1,
                 endTime: 2,
-                attributes: { 'gen_ai.tool.name': 'update_seat' },
+                attributes: {
+                  'gen_ai.tool.name': 'update_seat',
+                  ...(malformed && { 'tool.name': 'other_tool' }),
+                },
               },
             ],
           },
@@ -186,6 +197,11 @@ describe('handleRedteam', () => {
         test,
         valueFromScript: undefined,
       });
+      if (malformed) {
+        await expect(result).rejects.toThrow('conflicting tool names');
+        return;
+      }
+      const grade = await result;
       expect(grade.pass).toBe(false);
       expect(grade.metadata?.deterministicFailureKind).toBe('guardrail-coverage-gap');
     },

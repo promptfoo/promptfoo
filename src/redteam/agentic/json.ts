@@ -160,12 +160,17 @@ export function parseEvidenceCandidates(
       );
     } else if (next && typeof next === 'object') {
       const record = next as Record<string, unknown>;
+      const explicitPluginId = normalizePluginId(record.pluginId);
+      const pluginId = explicitPluginId ?? inheritedPluginId;
       Object.keys(record).forEach(requireVisibleEvidenceIdentity);
       if (Array.isArray(record.findings)) {
         for (const finding of record.findings) {
           if (finding && typeof finding === 'object') {
             Object.keys(finding).forEach(requireVisibleEvidenceIdentity);
-            requireVisibleEvidenceIdentity(finding.pluginId);
+            const findingPluginId = normalizePluginId(finding.pluginId);
+            if (pluginId && findingPluginId && findingPluginId !== pluginId) {
+              throw new Error('Agentic evidence has conflicting plugin IDs and cannot be graded');
+            }
           }
         }
       }
@@ -174,8 +179,6 @@ export function parseEvidenceCandidates(
       if (records > 1000 || findings > 1000) {
         throw new Error('Agentic evidence exceeds scan limits and cannot be graded');
       }
-      const explicitPluginId = normalizePluginId(record.pluginId);
-      const pluginId = explicitPluginId ?? inheritedPluginId;
       const nested = Object.entries(record).filter(
         ([key, value]) =>
           /^(?:agentic|agentSdk)Evidence$/i.test(key) && (preserveInvalid || value != null),

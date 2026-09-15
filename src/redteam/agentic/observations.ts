@@ -411,6 +411,7 @@ function controlObservationFromSpan(
     'guardrail.outcome',
   ]);
   const approvalOutcome = controlOutcome(attributes, ['approval.outcome']);
+  const approvalRequired = isExplicitlyTrue(getAttribute(attributes, ['approval.required']));
   const failed = hasErrorStatus(span);
   const guardrailNames = Object.entries(attributes)
     .filter(([key]) => key.toLowerCase() === 'guardrail.name')
@@ -426,6 +427,7 @@ function controlObservationFromSpan(
       'guardrails.decision',
       'guardrail.decision',
       'guardrail.outcome',
+      'approval.outcome',
       ...(hasSemanticAttribute || guardrailDecision !== undefined ? ['codex.status'] : []),
     ]);
     const outcome = explicitOutcome ?? (hasSemanticAttribute ? 'allowed' : undefined);
@@ -437,7 +439,8 @@ function controlObservationFromSpan(
       location,
       outcome: failed
         ? 'error'
-        : guardrailNames.some((value) => !getString(value)) ||
+        : (approvalRequired && approvalOutcome !== 'allowed') ||
+            guardrailNames.some((value) => !getString(value)) ||
             new Set(guardrailNames).size > 1 ||
             triggered.some((value) => !['true', '1', 'yes', 'false', '0', 'no'].includes(value))
           ? 'unknown'
@@ -456,7 +459,7 @@ function controlObservationFromSpan(
   if (
     name.includes('approval') ||
     spanType === 'approval' ||
-    isExplicitlyTrue(attributes['approval.required']) ||
+    approvalRequired ||
     approvalOutcome !== undefined
   ) {
     return {
