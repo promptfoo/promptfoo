@@ -80,6 +80,18 @@ const inFlightExternalFetches = new WeakMap<
   Map<string, Promise<TraceContextData | null>>
 >();
 
+async function assertStoredTraceComplete(traceId: string): Promise<void> {
+  const reason = (await getTraceStore().getTraceMetadata(traceId))?.promptfooTraceIncomplete;
+  if (reason === 'conflicting trace evidence') {
+    throw Object.assign(new Error('Cannot grade incomplete trace: conflicting trace evidence.'), {
+      name: 'TraceEvidenceError',
+    });
+  }
+  if (reason) {
+    throw new TraceLimitError();
+  }
+}
+
 const SPAN_KIND_MAP: Record<number, string> = {
   0: 'unspecified',
   1: 'internal',
@@ -431,9 +443,7 @@ async function fetchFromExternalProvider(
       throw createTraceAbortError(abortSignal);
     }
     try {
-      if ((await getTraceStore().getTraceMetadata(traceId))?.promptfooTraceIncomplete) {
-        throw new TraceLimitError();
-      }
+      await assertStoredTraceComplete(traceId);
       const result = await provider.fetchTrace(traceId, providerFetchOptions);
       const validSpans = result ? discardCyclicExternalSpans(result.spans) : [];
 
@@ -591,9 +601,7 @@ async function fetchFromLocalStore(
     }
     try {
       const spans = await traceStore.getSpans(traceId, spanOptions);
-      if ((await traceStore.getTraceMetadata(traceId))?.promptfooTraceIncomplete) {
-        throw new TraceLimitError();
-      }
+      await assertStoredTraceComplete(traceId);
 
       if (requireComplete && attempt < maxRetries) {
         await waitForRetry(retryDelayMs, abortSignal);
@@ -632,7 +640,10 @@ async function fetchFromLocalStore(
 
       return context;
     } catch (error) {
-      if (error instanceof TraceLimitError) {
+      if (
+        error instanceof TraceLimitError ||
+        (error instanceof Error && error.name === 'TraceEvidenceError')
+      ) {
         throw error;
       }
       if (abortSignal?.aborted) {

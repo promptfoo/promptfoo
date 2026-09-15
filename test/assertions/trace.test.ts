@@ -137,20 +137,24 @@ describe('trace assertions', () => {
     ],
   };
 
-  it.each(['javascript', 'not-javascript', 'promptfoo:redteam:sql-injection'] as const)(
-    'rejects incomplete trace evidence for %s',
-    async (type) => {
-      await expect(
-        runAssertion({
-          assertion: { type, value: 'true' },
-          test: { ...mockTest, metadata: { tracing: { enabled: true } } },
-          providerResponse: mockProviderResponse,
-          traceId: 'test-trace-id',
-          traceData: { ...mockTraceData, metadata: { promptfooTraceIncomplete: 'limit exceeded' } },
-        }),
-      ).rejects.toThrow('Cannot grade incomplete trace');
-    },
-  );
+  it.each(
+    (['javascript', 'not-javascript', 'promptfoo:redteam:sql-injection'] as const).flatMap(
+      (type) => [
+        { type, reason: 'limit exceeded', expected: 'per-trace limit' },
+        { type, reason: 'conflicting trace evidence', expected: 'conflicting trace evidence' },
+      ],
+    ),
+  )('rejects incomplete trace evidence for $type: $reason', async ({ type, reason, expected }) => {
+    await expect(
+      runAssertion({
+        assertion: { type, value: 'true' },
+        test: { ...mockTest, metadata: { tracing: { enabled: true } } },
+        providerResponse: mockProviderResponse,
+        traceId: 'test-trace-id',
+        traceData: { ...mockTraceData, metadata: { promptfooTraceIncomplete: reason } },
+      }),
+    ).rejects.toThrow(expected);
+  });
 
   it.each(['explicit', 'provider-url', 'test-url'])(
     'preserves SQL trace evidence when adding exfil tracking from %s',

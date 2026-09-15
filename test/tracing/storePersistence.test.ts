@@ -134,6 +134,66 @@ describe('TraceStore span persistence', () => {
     expect((await store.getTraceMetadata(traceId))?.promptfooExternalSpanIds).toBeUndefined();
   });
 
+  it.each([false, true])('rejects changed external retries after redaction=%s', async (redact) => {
+    const traceId = 'external-retry';
+    const store = await createTrace(traceId);
+    const original = {
+      spanId: 'external',
+      name: 'query',
+      startTime: 1,
+      endTime: 2,
+      attributes: { 'db.statement': 'SELECT 1', 'private.note': 'PRIVATE_RETRY_VALUE' },
+    };
+    const options = {
+      source: 'external' as const,
+      ...(redact && {
+        redactSpans: (spans: SpanData[]) =>
+          spans.map((span) => ({
+            ...span,
+            attributes: { ...span.attributes, 'private.note': '[REDACTED]' },
+          })),
+      }),
+    };
+    await store.addSpans(traceId, [original], options);
+    const reopened = new TraceStore();
+    await reopened.addSpans(traceId, [original], options);
+    const refreshed = { ...original, endTime: 3 };
+    await reopened.addSpans(traceId, [refreshed], { ...options, updateExisting: true });
+    await reopened.addSpans(traceId, [refreshed], options);
+    const stored = await reopened.getSpans(traceId, { sanitizeAttributes: false });
+    await expect(
+      reopened.addSpans(
+        traceId,
+        [
+          {
+            ...original,
+            attributes: { ...original.attributes, 'db.statement': 'DROP TABLE users' },
+          },
+          { spanId: 'new', name: 'query', startTime: 3 },
+        ],
+        options,
+      ),
+    ).rejects.toMatchObject({ name: 'TraceEvidenceError' });
+    expect(await reopened.getSpans(traceId, { sanitizeAttributes: false })).toEqual(stored);
+    expect((await reopened.getTraceMetadata(traceId))?.promptfooTraceIncomplete).toBe(
+      'conflicting trace evidence',
+    );
+    for (const providerConfig of [
+      undefined,
+      { id: 'tempo' as const, endpoint: 'http://localhost:3200' },
+    ]) {
+      await expect(
+        fetchTraceContext(traceId, { providerConfig, maxRetries: 0, queryDelay: 0 }),
+      ).rejects.toMatchObject({
+        name: 'TraceEvidenceError',
+        message: 'Cannot grade incomplete trace: conflicting trace evidence.',
+      });
+    }
+    expect(JSON.stringify(await reopened.getTrace(traceId))).not.toContain(
+      'promptfooLocalSpanHashes',
+    );
+  });
+
   it('persists external span ownership across store instances and allows its refresh', async () => {
     const traceId = 'external-span-refresh';
     const store = await createTrace(traceId, { label: 'kept' });

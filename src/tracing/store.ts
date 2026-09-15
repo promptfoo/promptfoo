@@ -54,7 +54,8 @@ export interface AddSpansOptions {
 }
 
 const EXTERNAL_SPAN_IDS_KEY = 'promptfooExternalSpanIds';
-const LOCAL_SPAN_HASHES_KEY = 'promptfooLocalSpanHashes';
+// Keep the persisted key compatible with traces written before external retry checks.
+const SPAN_HASHES_KEY = 'promptfooLocalSpanHashes';
 
 function comparableSpan(span: SpanData) {
   const attributes = { ...span.attributes };
@@ -92,7 +93,7 @@ function serializeTraceMetadata(metadata: Record<string, unknown> | null | undef
     return undefined;
   }
   const result = { ...metadata };
-  delete result[LOCAL_SPAN_HASHES_KEY];
+  delete result[SPAN_HASHES_KEY];
   return result;
 }
 
@@ -438,18 +439,18 @@ export class TraceStore {
             ? imported.filter((id): id is string => typeof id === 'string' && storedIds.has(id))
             : [],
         );
-        const localHashes = new Map<string, string>(
-          Object.entries((metadata[LOCAL_SPAN_HASHES_KEY] ?? {}) as Record<string, string>),
+        const spanHashes = new Map<string, string>(
+          Object.entries((metadata[SPAN_HASHES_KEY] ?? {}) as Record<string, string>),
         );
         let metadataChanged = false;
         const saveMetadata = async () => {
           if (!metadataChanged) {
             return;
           }
-          if (localHashes.size) {
-            metadata[LOCAL_SPAN_HASHES_KEY] = Object.fromEntries(localHashes);
+          if (spanHashes.size) {
+            metadata[SPAN_HASHES_KEY] = Object.fromEntries(spanHashes);
           } else {
-            delete metadata[LOCAL_SPAN_HASHES_KEY];
+            delete metadata[SPAN_HASHES_KEY];
           }
           await tx
             .update(tracesTable)
@@ -466,29 +467,35 @@ export class TraceStore {
               },
             );
           }
-          const localIds = new Set([...storedIds].filter((id) => !externalIds.has(id)));
-          if (spans.some((span) => localIds.has(span.spanId))) {
+          const immutableIds = new Set(
+            [...storedIds].filter((id) => !externalIds.has(id) || !options.updateExisting),
+          );
+          if (spans.some((span) => immutableIds.has(span.spanId))) {
             const stored = await tx
               .select()
               .from(spansTable)
               .where(eq(spansTable.traceId, traceId));
-            const localSpans = new Map(
+            const storedSpans = new Map(
               serializeSpans(stored, false).map((span) => [span.spanId, span]),
             );
             spans = spans.filter((span) => {
-              if (!localIds.has(span.spanId)) {
+              if (!immutableIds.has(span.spanId)) {
                 return true;
               }
-              const local = localSpans.get(span.spanId)!;
+              const previous = storedSpans.get(span.spanId)!;
               // Never infer raw equality from values that a previous redactor removed.
               const expected =
-                localHashes.get(span.spanId) ??
-                (local.attributes?.['promptfoo.redaction.history'] === '[REDACTED]'
+                spanHashes.get(span.spanId) ??
+                (previous.attributes?.['promptfoo.redaction.history'] === '[REDACTED]'
                   ? undefined
-                  : spanHash(local));
+                  : spanHash(previous));
               if (expected !== spanHash(span)) {
                 throw Object.assign(
-                  new Error('External trace spans conflict with locally owned span IDs.'),
+                  new Error(
+                    externalIds.has(span.spanId)
+                      ? 'Conflicting retry for an externally owned span ID.'
+                      : 'External trace spans conflict with locally owned span IDs.',
+                  ),
                   { name: 'TraceEvidenceError' },
                 );
               }
@@ -497,12 +504,15 @@ export class TraceStore {
           }
           for (const span of spans) {
             externalIds.add(span.spanId);
+            if (options.updateExisting) {
+              spanHashes.delete(span.spanId);
+            }
           }
           metadata[EXTERNAL_SPAN_IDS_KEY] = [...externalIds];
           metadataChanged = true;
         } else if (options?.updateExisting) {
           for (const span of spans) {
-            metadataChanged = localHashes.delete(span.spanId) || metadataChanged;
+            metadataChanged = spanHashes.delete(span.spanId) || metadataChanged;
           }
         }
         if (!redact) {
@@ -527,11 +537,10 @@ export class TraceStore {
           if (redactedSpanIds.has(span.spanId)) {
             const previous = original[index];
             if (
-              !externalIds.has(span.spanId) &&
               previous.attributes?.['promptfoo.redaction.history'] !== '[REDACTED]' &&
               (index < existing.length || !storedIds.has(span.spanId) || options?.updateExisting)
             ) {
-              localHashes.set(span.spanId, spanHash(previous));
+              spanHashes.set(span.spanId, spanHash(previous));
               metadataChanged = true;
             }
             span.attributes = { ...span.attributes, 'promptfoo.redaction.history': '[REDACTED]' };
@@ -562,6 +571,13 @@ export class TraceStore {
     } catch (error) {
       if (error instanceof TraceLimitError) {
         await this.markTraceIncomplete(traceId);
+      } else if (
+        options?.source === 'external' &&
+        !options.updateExisting &&
+        error instanceof Error &&
+        error.name === 'TraceEvidenceError'
+      ) {
+        await this.markTraceIncomplete(traceId, 'conflicting trace evidence');
       }
       logger.error(`[TraceStore] Failed to add spans: ${error}`);
       throw error;
@@ -652,12 +668,12 @@ export class TraceStore {
     }
   }
 
-  async markTraceIncomplete(traceId: string): Promise<void> {
+  async markTraceIncomplete(traceId: string, reason = 'limit exceeded'): Promise<void> {
     const db = await this.getDatabase();
     await db
       .update(tracesTable)
       .set({
-        metadata: sql`json_set(coalesce(${tracesTable.metadata}, '{}'), '$.promptfooTraceIncomplete', 'limit exceeded')`,
+        metadata: sql`json_set(coalesce(${tracesTable.metadata}, '{}'), '$.promptfooTraceIncomplete', ${reason})`,
       })
       .where(eq(tracesTable.traceId, traceId))
       .run();
