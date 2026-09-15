@@ -96,7 +96,8 @@ vi.mock('undici', () => {
   };
 });
 
-vi.mock('../src/envars', () => {
+vi.mock('../src/envars', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../src/envars')>();
   return {
     getEnvString: vi.fn().mockImplementation((key: string, defaultValue: string = '') => {
       if (key === 'HTTPS_PROXY' && process.env.HTTPS_PROXY) {
@@ -130,7 +131,7 @@ vi.mock('../src/envars', () => {
         return (process.env as NodeJS.ProcessEnv).PROMPTFOO_RETRY_5XX_ENABLED === 'true';
       }
       if (key === 'PROMPTFOO_INSECURE_SSL') {
-        return (process.env as NodeJS.ProcessEnv).PROMPTFOO_INSECURE_SSL === 'true';
+        return actual.getEnvBool(key, defaultValue);
       }
       if (key === 'PROMPTFOO_RETRY_5XX') {
         return (process.env as NodeJS.ProcessEnv).PROMPTFOO_RETRY_5XX === 'true';
@@ -500,6 +501,40 @@ describe('fetchWithProxy', () => {
     );
   });
 
+  it.each([
+    [undefined, true],
+    ['false', true],
+    ['true', false],
+    ['', true],
+    ['1', false],
+    ['yes', false],
+  ])('uses insecure SSL=%s with certificate verification=%s', async (insecure, verify) => {
+    const restore = mockProcessEnv({ PROMPTFOO_INSECURE_SSL: insecure });
+    try {
+      const actual = await vi.importActual<typeof import('../src/envars')>('../src/envars');
+      vi.mocked(getEnvBool).mockImplementation(actual.getEnvBool);
+      await fetchWithProxy('https://example.com');
+      expect(Agent).toHaveBeenCalledWith(
+        expect.objectContaining({ connect: { rejectUnauthorized: verify } }),
+      );
+
+      const restoreProxy = mockProcessEnv({ HTTPS_PROXY: 'http://proxy.example.com' });
+      try {
+        await fetchWithProxy('https://example.com');
+        expect(ProxyAgent).toHaveBeenCalledWith(
+          expect.objectContaining({
+            proxyTls: { rejectUnauthorized: verify },
+            requestTls: { rejectUnauthorized: verify },
+          }),
+        );
+      } finally {
+        restoreProxy();
+      }
+    } finally {
+      restore();
+    }
+  });
+
   it('should use custom CA certificate when PROMPTFOO_CA_CERT_PATH is set', async () => {
     const mockCertPath = path.normalize('/path/to/cert.pem');
     const mockCertContent = 'mock-cert-content';
@@ -821,10 +856,10 @@ describe('fetchWithProxy', () => {
       expect(ProxyAgent).toHaveBeenCalledWith({
         uri: testCase.expected.url,
         proxyTls: {
-          rejectUnauthorized: !getEnvBool('PROMPTFOO_INSECURE_SSL', true),
+          rejectUnauthorized: !getEnvBool('PROMPTFOO_INSECURE_SSL', false),
         },
         requestTls: {
-          rejectUnauthorized: !getEnvBool('PROMPTFOO_INSECURE_SSL', true),
+          rejectUnauthorized: !getEnvBool('PROMPTFOO_INSECURE_SSL', false),
         },
         headersTimeout: getRequestTimeoutMs(),
         keepAliveTimeout: 30_000,
@@ -861,10 +896,10 @@ describe('fetchWithProxy', () => {
       expect(ProxyAgent).toHaveBeenCalledWith({
         uri: testCase.expected.url,
         proxyTls: {
-          rejectUnauthorized: !getEnvBool('PROMPTFOO_INSECURE_SSL', true),
+          rejectUnauthorized: !getEnvBool('PROMPTFOO_INSECURE_SSL', false),
         },
         requestTls: {
-          rejectUnauthorized: !getEnvBool('PROMPTFOO_INSECURE_SSL', true),
+          rejectUnauthorized: !getEnvBool('PROMPTFOO_INSECURE_SSL', false),
         },
         headersTimeout: getRequestTimeoutMs(),
         keepAliveTimeout: 30_000,
@@ -962,6 +997,75 @@ describe('fetchWithProxy', () => {
     expect(dispatchers[0]).toBe(dispatchers[2]);
     expect(dispatchers[1]).not.toBe(dispatchers[0]);
   });
+
+  it.each([undefined, 'http://proxy.example.com'])(
+    'separates cached dispatchers by TLS policy with proxy %s',
+    async (proxy) => {
+      const restore = mockProcessEnv({ HTTPS_PROXY: proxy });
+      let insecure = true;
+      vi.mocked(getEnvBool).mockImplementation((key, defaultValue = false) =>
+        key === 'PROMPTFOO_INSECURE_SSL' ? insecure : defaultValue,
+      );
+      try {
+        await fetchWithProxy('https://example.com/insecure');
+        insecure = false;
+        await fetchWithProxy('https://example.com/secure');
+        insecure = true;
+        await fetchWithProxy('https://example.com/insecure-again');
+
+        const dispatchers = vi
+          .mocked(global.fetch)
+          .mock.calls.map(([, options]) => (options as { dispatcher?: unknown })?.dispatcher);
+        expect(dispatchers[1]).not.toBe(dispatchers[0]);
+        expect(dispatchers[2]).toBe(dispatchers[0]);
+        if (proxy) {
+          expect(ProxyAgent).toHaveBeenNthCalledWith(
+            2,
+            expect.objectContaining({
+              proxyTls: { rejectUnauthorized: true },
+              requestTls: { rejectUnauthorized: true },
+            }),
+          );
+        } else {
+          expect(Agent).toHaveBeenNthCalledWith(
+            2,
+            expect.objectContaining({
+              connect: { rejectUnauthorized: true },
+            }),
+          );
+        }
+      } finally {
+        restore();
+      }
+    },
+  );
+
+  it.each([undefined, 'http://proxy.example.com'])(
+    'separates cached dispatchers when CA contents change with proxy %s',
+    async (proxy) => {
+      const restore = mockProcessEnv({ HTTPS_PROXY: proxy, PROMPTFOO_CA_CERT_PATH: 'ca.pem' });
+      const actual = await vi.importActual<typeof import('../src/envars')>('../src/envars');
+      vi.mocked(getEnvString).mockImplementation(actual.getEnvString);
+      vi.mocked(getEnvBool).mockImplementation(actual.getEnvBool);
+      vi.mocked(fsPromises.readFile)
+        .mockResolvedValueOnce('certificate-a')
+        .mockResolvedValueOnce('certificate-b')
+        .mockResolvedValueOnce('certificate-a');
+      try {
+        await fetchWithProxy('https://example.com/first-ca');
+        await fetchWithProxy('https://example.com/replaced-ca');
+        await fetchWithProxy('https://example.com/first-ca-again');
+
+        const dispatchers = vi
+          .mocked(global.fetch)
+          .mock.calls.map(([, options]) => (options as { dispatcher?: unknown })?.dispatcher);
+        expect(dispatchers[1]).not.toBe(dispatchers[0]);
+        expect(dispatchers[2]).toBe(dispatchers[0]);
+      } finally {
+        restore();
+      }
+    },
+  );
 
   it('should compose default Agent dispatchers with response decompression', async () => {
     await fetchWithProxy('https://example.com/api');
