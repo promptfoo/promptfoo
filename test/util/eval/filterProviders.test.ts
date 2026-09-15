@@ -352,7 +352,9 @@ describe('getExcludedProviders', () => {
 
     const filtered = filterProviderConfigs(apiProviders, 'custom:alpha');
 
-    expect((filtered as ApiProvider[]).map((provider) => provider.id())).toEqual(['custom:alpha']);
+    expect((filtered as unknown as ApiProvider[]).map((provider) => provider.id())).toEqual([
+      'custom:alpha',
+    ]);
     expect(idsAndLabels(getExcludedProviders(apiProviders, filtered))).toEqual([
       { id: 'custom:beta', label: undefined },
     ]);
