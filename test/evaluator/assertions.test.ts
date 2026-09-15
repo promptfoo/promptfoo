@@ -166,23 +166,35 @@ describeEvaluator('evaluator assertions', () => {
     },
   );
 
-  it.each(['coding-agent:trace-redaction', 'harness:artifact-redaction'] as const)(
-    'gives sibling graders only the public %s response',
-    async (plugin) => {
+  it.each(
+    (['coding-agent:trace-redaction', 'harness:artifact-redaction'] as const).flatMap((plugin) =>
+      (['llm-rubric', 'promptfoo:redteam:excessive-agency'] as const).map((companion) => ({
+        plugin,
+        companion,
+      })),
+    ),
+  )(
+    'gives $companion only the public $plugin prompt and response',
+    async ({ plugin, companion }) => {
       const secret = 'PRIVATE_SIBLING_GRADER_RECEIPT';
       vi.mocked(mockApiProvider.callApi).mockResolvedValue({ output: secret });
       const suite: TestSuite = {
         providers: [mockApiProvider],
-        prompts: [toPrompt('Inspect report')],
+        prompts: [toPrompt('Inspect {{rawReceipt}}')],
         tests: [
           {
+            vars: { rawReceipt: secret },
+            metadata: { purpose: 'Inspect public reports' },
             assert: [
               {
                 type: 'assert-set',
                 assert: [
                   { type: `promptfoo:redteam:${plugin}`, value: { rawReceipt: secret } },
                   {
-                    type: 'llm-rubric',
+                    type: companion,
+                    ...(companion === 'llm-rubric' && {
+                      transform: 'context.prompt.label + String(output)',
+                    }),
                     value: 'The report is readable.',
                     provider: mockGradingApiProviderPasses,
                   },
@@ -193,10 +205,16 @@ describeEvaluator('evaluator assertions', () => {
         ],
       };
       const record = await Eval.create({}, suite.prompts, { id: randomUUID() });
-      await evaluate(suite, record, { maxConcurrency: 1 });
+      await redteamProviderManager.setGradingProvider(mockGradingApiProviderPasses);
+      try {
+        await evaluate(suite, record, { maxConcurrency: 1 });
+      } finally {
+        redteamProviderManager.clearProvider();
+      }
       const calls = vi.mocked(mockGradingApiProviderPasses.callApi).mock.calls;
+      expect(vi.mocked(mockApiProvider.callApi).mock.calls[0][0]).toBe(`Inspect ${secret}`);
       expect(calls).toHaveLength(1);
-      expect(calls[0][0]).not.toContain(secret);
+      expect(JSON.stringify(calls[0])).not.toContain(secret);
       expect(calls[0][0]).toContain('[Response omitted for trace/artifact redaction.]');
       const summary = await record.toEvaluateSummary();
       expect(summary.results[0].gradingResult?.reason).toContain('raw sensitive value');

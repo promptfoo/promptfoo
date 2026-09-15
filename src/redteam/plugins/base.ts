@@ -9,6 +9,7 @@ import invariant from '../../util/invariant';
 import { extractVariablesFromTemplate, getNunjucksEngine } from '../../util/templates';
 import { sleep } from '../../util/time';
 import {
+  REDACTED_PROMPT,
   requiresTraceRedaction,
   sanitizeRedactionGradingInputs,
   TRACE_REDACTION_ASSERTIONS,
@@ -466,6 +467,7 @@ export abstract class RedteamGraderBase {
   }> {
     invariant(test.metadata?.purpose, 'Test is missing purpose metadata');
     if (TRACE_REDACTION_ASSERTIONS.has(this.id) || requiresTraceRedaction(test.assert)) {
+      prompt = REDACTED_PROMPT;
       const publicInputs = sanitizeRedactionGradingInputs(this.id, test, renderedValue);
       test = publicInputs.test;
       renderedValue = publicInputs.value;

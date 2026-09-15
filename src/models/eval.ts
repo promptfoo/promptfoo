@@ -49,7 +49,11 @@ import {
   accumulateTokenUsage,
   createEmptyTokenUsage,
 } from '../util/tokenUsageUtils';
-import { getAssertionLeaves, requiresTraceRedaction } from '../util/traceRedaction';
+import {
+  getAssertionLeaves,
+  REDACTED_PROMPT,
+  requiresTraceRedaction,
+} from '../util/traceRedaction';
 import {
   invalidateEvaluationCache,
   notifyEvaluationChanged,
@@ -417,9 +421,9 @@ export function sanitizeLegacyResults(
     privatePrompts.has(index)
       ? {
           ...prompt,
-          raw: '[Prompt omitted for trace/artifact redaction.]',
+          raw: REDACTED_PROMPT,
           ...(prompt.display !== undefined && {
-            display: '[Prompt omitted for trace/artifact redaction.]',
+            display: REDACTED_PROMPT,
           }),
         }
       : prompt,

@@ -43,6 +43,8 @@ export const TRACE_REDACTION_ASSERTIONS = new Set([
   'promptfoo:redteam:harness:artifact-redaction',
 ]);
 
+export const REDACTED_PROMPT = '[Prompt omitted for trace/artifact redaction.]';
+
 /** Project model-grading inputs after local verifiers have used the original receipts. */
 export function sanitizeRedactionGradingInputs<T extends AtomicTestCase>(
   type: string,
@@ -342,7 +344,7 @@ export function sanitizeRedactionResult<T extends object>(input: T): T {
   const { testCase, vars } = publicInputs;
   const prompt = publicInputs.prompt && {
     ...publicInputs.prompt,
-    raw: '[Prompt omitted for trace/artifact redaction.]',
+    raw: REDACTED_PROMPT,
   };
   const metadata = { ...publicInputs.metadata };
   for (const key of Object.keys(response?.metadata ?? {})) {

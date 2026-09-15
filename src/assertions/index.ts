@@ -45,6 +45,7 @@ import { getNunjucksEngine } from '../util/templates';
 import { sleep } from '../util/time';
 import {
   getProtectedAssertionValue,
+  REDACTED_PROMPT,
   requiresTraceRedaction,
   sanitizeRedactionResult,
   TRACE_REDACTION_ASSERTIONS,
@@ -444,6 +445,7 @@ async function runAssertionInternal({
     requiresTraceRedaction(test.assert) &&
     !TRACE_REDACTION_ASSERTIONS.has(getAssertionBaseType(assertion))
   ) {
+    prompt = prompt === undefined ? undefined : REDACTED_PROMPT;
     providerResponse = sanitizeRedactionResult({
       response: providerResponse,
       testCase: test,

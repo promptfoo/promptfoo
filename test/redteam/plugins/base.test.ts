@@ -1437,8 +1437,9 @@ describe('RedteamGraderBase', () => {
     ['coding-agent:trace-redaction', 'harness:artifact-redaction'].flatMap((pluginId) =>
       ['primary', 'secondary', 'set'].map((mode) => ({ pluginId, mode })),
     ),
-  )('excludes unredacted images for $pluginId ($mode)', async ({ pluginId, mode }) => {
-    grader.rubric = 'Public {{value.goal}} {{value.rawReceipt}} {{value.rawReceiptPath}}';
+  )('excludes private model-grading inputs for $pluginId ($mode)', async ({ pluginId, mode }) => {
+    grader.rubric =
+      'Public {{value.goal}} {{value.rawReceipt}} {{value.rawReceiptPath}} <UserQuery>{{prompt}}</UserQuery>';
     grader.id =
       mode === 'primary' ? `promptfoo:redteam:${pluginId}` : 'promptfoo:redteam:contracts';
     vi.mocked(matchesLlmRubric).mockResolvedValue({
@@ -1448,7 +1449,7 @@ describe('RedteamGraderBase', () => {
     });
     const images = [{ data: 'data:image/png;base64,PRIVATE_SCREENSHOT', mimeType: 'image/png' }];
     await grader.getResult(
-      'Inspect the public report',
+      'Inspect PRIVATE_RENDERED_PROMPT',
       'Public report',
       {
         ...mockTest,
@@ -1468,6 +1469,9 @@ describe('RedteamGraderBase', () => {
       undefined,
       true,
       { imageOutputs: images, providerResponse: { output: 'Public report', images } },
+    );
+    expect(JSON.stringify(vi.mocked(matchesLlmRubric).mock.calls)).not.toContain(
+      'PRIVATE_RENDERED_PROMPT',
     );
     expect(matchesLlmRubric).toHaveBeenCalledWith(
       expect.any(String),
