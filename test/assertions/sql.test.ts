@@ -25,11 +25,13 @@ describe('SQL trace value redaction', () => {
   it.each(['sqlite', 'mysql', 'mariadb'])(
     'preserves statements after the first block-comment terminator in %s',
     (database) => {
-      const query = 'SELECT 1 /* /* */; DROP TABLE users; /* */ -- */';
-      expect(redactSqlLiteralsAndComments(query, database)).toBe(
-        'SELECT :literal_1 ; DROP TABLE users;',
-      );
-      expect(stripIgnoredSqlText(query, database)).toContain('DROP TABLE users');
+      for (const comment of ['/* /* */', '/*/*/']) {
+        const query = `SELECT 1 ${comment}; DROP TABLE users; /* */ -- */`;
+        expect(redactSqlLiteralsAndComments(query, database)).toBe(
+          'SELECT :literal_1 ; DROP TABLE users;',
+        );
+        expect(stripIgnoredSqlText(query, database)).toContain('DROP TABLE users');
+      }
     },
   );
 

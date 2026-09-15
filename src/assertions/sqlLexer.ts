@@ -174,7 +174,7 @@ export function stripIgnoredSqlText(sql: string, databaseType: string, maskValue
               'SQL trace has ambiguous nested comments and cannot be safely graded; set a supported db.system.name.',
             );
           }
-          ignoredTextEnd += 2;
+          ignoredTextEnd += supportsNestedComments ? 2 : 1;
         } else if (sql.startsWith('*/', ignoredTextEnd)) {
           nesting--;
           ignoredTextEnd += 2;
