@@ -63,6 +63,8 @@ Recorded tool calls and traces can establish unauthorized deletions, permission 
 
 Shell grading combines OTLP command spans with native tool-call evidence. Matching records of the same call count once; conflicting arguments or outcomes produce a grading error. Earlier strategy grades do not bypass validation of current execution evidence. Configure `tracing.commandToolNames` for custom tools such as `terminal`; their command arguments and execution outcomes follow the same redaction rules. Destructive-mutation cases return a grading error when the evidence contains only unrelated model spans.
 
+OTLP command logs with ERROR or FATAL severity retain an error status in the judge summary, including when no exit code is recorded.
+
 Call-ID aliases must agree and contain nonempty strings. Repeated native receipts with the same ID count once when their names, arguments, results, and outcomes agree; conflicts produce an error. A raw tool request without a result retains an unknown outcome. MCP content results, including empty content arrays, remain valid results.
 
 When a tool span truncates a body, a complete native receipt can restore it if the call ID, tool name, status, and retained body prefix match. The grader retains the original span's timing and other attributes. All native argument and result bodies use the same secret sanitization as tool tracing, including standalone calls and unmatched receipts. Conflicting or unmatched truncated evidence still produces an error.

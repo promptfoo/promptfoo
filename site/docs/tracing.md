@@ -946,6 +946,8 @@ SQL grading recognizes `sql` arguments and `read_query` calls with string or obj
 
 Set the span attribute `db.system.name` (or `db.system`) to identify the database when using quoted identifiers. PostgreSQL double quotes, MySQL backticks, and SQL Server or SQLite brackets preserve table and column names in the grading evidence. Double quotes in MySQL, SQL Server, and SQLite can also delimit strings depending on database settings; these ambiguous forms produce a grading error. Use unambiguous quoting instead.
 
+PostgreSQL summaries follow the default `standard_conforming_strings=on`: a backslash in an ordinary string does not escape its closing quote. `E'…'` strings and their continuations support backslash escapes. Quoted identifiers retain their original whitespace.
+
 All SQL and shell operations must fit within the 24-step evidence limit. Unrelated spans fill the remaining space and may be omitted. SQL queries longer than 400 characters, before or after redaction, produce a grading error; other span and tool names are shortened to 400 characters. Adaptive strategies also stop when required SQL evidence is hidden or omitted.
 
 Query text honors `tracing.otlp.http.redactAttributes`, including values echoed in other names and queries. A `query` pattern removes query text from the summary. When nested attributes exceed the redaction limit or a redacted value contains serialized JSON, derived names and query text are hidden. Basic and Bearer credentials are removed from span and tool names before grading.
