@@ -853,15 +853,15 @@ export function observationsFromTraceData(
       ? logTimestamp
       : traceSpan.attributes?.['otel.span.start_time_unix_nano'];
     const endNanos = isLog ? startNanos : traceSpan.attributes?.['otel.span.end_time_unix_nano'];
-    const timestampNanos = nanosecondTimestamp(startNanos);
+    const spanStartNanos = nanosecondTimestamp(startNanos);
     const endTimestampNanos = nanosecondTimestamp(endNanos);
     append(
       spanObservations.map((observation) => ({
         ...observation,
         ...(isLog && { eventId: traceSpan.spanId ?? spanLocation }),
-        ...((isLog || startNanos !== undefined) && !timestampNanos && { timestamp: undefined }),
+        ...((isLog || startNanos !== undefined) && !spanStartNanos && { timestamp: undefined }),
         ...((isLog || endNanos !== undefined) && !endTimestampNanos && { endTimestamp: undefined }),
-        timestampNanos,
+        timestampNanos: spanStartNanos,
         endTimestampNanos,
       })),
     );
@@ -869,6 +869,20 @@ export function observationsFromTraceData(
     const toolEvents = new Map<string, unknown>();
     traceSpan.events?.forEach((event, eventIndex) => {
       const timestampNanos = nanosecondTimestamp(event.timestampNanos);
+      const outsideSpan =
+        (timestampNanos && spanStartNanos
+          ? BigInt(timestampNanos) < BigInt(spanStartNanos)
+          : event.timestamp !== undefined &&
+            traceSpan.startTime !== undefined &&
+            event.timestamp < traceSpan.startTime) ||
+        (timestampNanos && endTimestampNanos
+          ? BigInt(timestampNanos) > BigInt(endTimestampNanos)
+          : event.timestamp !== undefined &&
+            traceSpan.endTime !== undefined &&
+            traceSpan.endTime > 0 &&
+            event.timestamp > traceSpan.endTime);
+      const validTimestamp =
+        !outsideSpan && (event.timestampNanos === undefined || timestampNanos !== undefined);
       const eventLocation = `${spanLocation} event ${eventIndex + 1}`;
       const callId = getToolCallId(event.attributes) ?? getToolCallId(traceSpan.attributes);
       const eventSpan = {
@@ -879,8 +893,7 @@ export function observationsFromTraceData(
         name: event.name,
         parentSpanId: traceSpan.parentSpanId,
         spanId: traceSpan.spanId,
-        startTime:
-          event.timestampNanos !== undefined && !timestampNanos ? undefined : event.timestamp,
+        startTime: validTimestamp ? event.timestamp : undefined,
         statusCode: hasErrorStatus(traceSpan) ? 2 : traceSpan.statusCode,
       };
       const eventControlObservation = controlObservationFromSpan(
@@ -889,7 +902,13 @@ export function observationsFromTraceData(
         'trace-event',
       );
       if (eventControlObservation) {
-        append([{ ...eventControlObservation, eventId: eventLocation, timestampNanos }]);
+        append([
+          {
+            ...eventControlObservation,
+            eventId: eventLocation,
+            timestampNanos: validTimestamp ? timestampNanos : undefined,
+          },
+        ]);
       }
       const eventObservations = observationsFromTraceAttributes(
         eventSpan.attributes,
@@ -910,7 +929,7 @@ export function observationsFromTraceData(
         eventObservations.map((observation) => ({
           ...observation,
           eventId: eventLocation,
-          timestampNanos,
+          timestampNanos: validTimestamp ? timestampNanos : undefined,
         })),
       );
     });

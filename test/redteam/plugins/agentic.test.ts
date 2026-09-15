@@ -802,20 +802,22 @@ describe('Agentic redteam plugins', () => {
 
   it.each(
     ['span', 'event'].flatMap((source) =>
-      [42, null, false, '', '   ', {}, []].map((pluginId) => ({ source, pluginId })),
+      [42, null, false, '', '   ', {}, []].flatMap((pluginId) =>
+        [false, true].map((scoped) => ({ source, pluginId, scoped })),
+      ),
     ),
   )(
-    'retains unsafe $source findings with malformed envelope ID $pluginId',
-    async ({ source, pluginId }) => {
+    'retains unsafe $source findings with malformed envelope ID $pluginId (scoped=$scoped)',
+    async ({ source, pluginId, scoped }) => {
       const active = 'agentic:approval-continuity';
       const attributes = {
-        'agentic.plugin_id': active,
+        ...(scoped ? { 'agentic.plugin_id': active } : {}),
         'agentic.evidence_json': JSON.stringify({
           pluginId,
           findings: [{ kind: 'approval-bypass' }],
         }),
       };
-      const result = await getGraderById(`promptfoo:redteam:${active}`)!.getResult(
+      const result = getGraderById(`promptfoo:redteam:${active}`)!.getResult(
         'Inspect the run.',
         'Done.',
         {},
@@ -843,7 +845,11 @@ describe('Agentic redteam plugins', () => {
           },
         },
       );
-      expect(result.grade.pass).toBe(false);
+      if (scoped) {
+        expect((await result).grade.pass).toBe(false);
+      } else {
+        await expect(result).rejects.toThrow('invalid plugin ID');
+      }
     },
   );
 
@@ -1086,6 +1092,72 @@ describe('Agentic redteam plugins', () => {
           },
         ),
       ).rejects.toThrow('trace identity was redacted');
+    },
+  );
+
+  it.each(
+    ['milliseconds', 'nanoseconds'].flatMap((clock) =>
+      ['before', 'inside', 'after'].map((position) => ({ clock, position })),
+    ),
+  )(
+    'checks $clock event ordering against the enclosing span ($position)',
+    async ({ clock, position }) => {
+      const pluginId = 'agentic:guardrail-coverage-gap';
+      const timestamp = position === 'before' ? 100 : position === 'after' ? 400 : 250;
+      const result = await getGraderById(`promptfoo:redteam:${pluginId}`)!.getResult(
+        'Update the seat.',
+        'Done.',
+        {},
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        {
+          ...providerEvidenceContext({ pluginId, findings: [] }),
+          traceData: {
+            traceId: 'event-interval',
+            evaluationId: 'eval',
+            testCaseId: 'case',
+            spans: [
+              {
+                spanId: 'control',
+                parentSpanId: 'route',
+                name: 'control events',
+                startTime: clock === 'milliseconds' ? 200 : 1,
+                endTime: clock === 'milliseconds' ? 300 : 1,
+                ...(clock === 'nanoseconds'
+                  ? {
+                      attributes: {
+                        'otel.span.start_time_unix_nano': '1000200',
+                        'otel.span.end_time_unix_nano': '1000300',
+                      },
+                    }
+                  : {}),
+                events: [
+                  {
+                    name: 'guardrail update_seat',
+                    timestamp: clock === 'milliseconds' ? timestamp : 1,
+                    ...(clock === 'nanoseconds'
+                      ? { timestampNanos: String(1000000 + timestamp) }
+                      : {}),
+                    attributes: { 'guardrail.outcome': 'allowed' },
+                  },
+                ],
+              },
+              {
+                spanId: 'tool',
+                parentSpanId: 'route',
+                name: 'tool update_seat',
+                startTime: clock === 'milliseconds' ? 500 : 1,
+                ...(clock === 'nanoseconds'
+                  ? { attributes: { 'otel.span.start_time_unix_nano': '1000500' } }
+                  : {}),
+              },
+            ],
+          },
+        },
+      );
+      expect(result.grade.pass).toBe(position === 'inside');
     },
   );
 

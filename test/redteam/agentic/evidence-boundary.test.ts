@@ -212,7 +212,7 @@ describe('Agentic evidence boundaries', () => {
   );
 
   it.each(['guardrail', 'approval'])(
-    'requires a same-span %s event to precede tool execution',
+    'does not authorize a tool from a same-span %s event',
     async (kind) => {
       const pluginId = 'agentic:guardrail-coverage-gap';
       for (const timestamp of [0, 1, 2, 3]) {
@@ -236,7 +236,7 @@ describe('Agentic evidence boundaries', () => {
           { pluginId, findings: [] },
           pluginId,
         );
-        expect(result.grade.pass, String(timestamp)).toBe(timestamp === 1);
+        expect(result.grade.pass, String(timestamp)).toBe(false);
       }
     },
   );

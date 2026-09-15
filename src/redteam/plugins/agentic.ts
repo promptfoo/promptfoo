@@ -610,6 +610,9 @@ function normalizeEvidenceForPlugin(
       ? undefined
       : [];
   const normalizedEvidencePluginId = normalizePluginId(evidence.pluginId);
+  if (evidence.pluginId !== undefined && !normalizedEvidencePluginId) {
+    throw new Error('Agentic verifier evidence has an invalid plugin ID and cannot be graded');
+  }
   const malformedMatchingFinding =
     (evidence.findings !== undefined &&
       !Array.isArray(evidence.findings) &&
