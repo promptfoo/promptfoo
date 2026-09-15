@@ -27,7 +27,11 @@ function validateDockerInstallCommands(dockerfile: string): void {
     .split('\n')
     .filter((line) => !line.trimStart().startsWith('#'))
     .join('\n')
-    .replace(/\\\r?\n/g, ' ');
+    .replace(/\\\r?\n/g, ' ')
+    // Normalize literal shell spelling so n\\pm and n'p'm cannot hide npm.
+    // This intentionally errs toward rejecting quoted command-like text.
+    .replace(/\\(.)/g, '$1')
+    .replace(/["']/g, '');
   const commands = [...instructions.matchAll(/(?<![\w.-])npm\b([^;&|()\n]*)/g)].map(([, text]) =>
     text.trim().split(/\s+/),
   );
@@ -545,6 +549,9 @@ describe('package manifests', () => {
 
   it.each([
     'RUN npm ci',
+    String.raw`RUN n\pm ci`,
+    `RUN n'p'm ci`,
+    'RUN n""pm rebuild esbuild',
     'RUN (npm ci)',
     'RUN (npm rebuild esbuild)',
     'RUN /usr/bin/npm ci',
