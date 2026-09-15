@@ -14,11 +14,12 @@ let langfuseClientParams: LangfuseParams | undefined;
 
 // Read at call time: --env-file and the config's `env:` block are applied after this module is imported.
 // Blank values count as unset; the SDK only falls back to its own env vars and defaults for `undefined`.
+// LANGFUSE_BASE_URL is the SDK's name for the host, so accept it too; LANGFUSE_HOST wins if both are set.
 function getLangfuseParams(): LangfuseParams {
   return {
     publicKey: getEnvString('LANGFUSE_PUBLIC_KEY') || undefined,
     secretKey: getEnvString('LANGFUSE_SECRET_KEY') || undefined,
-    baseUrl: getEnvString('LANGFUSE_HOST') || undefined,
+    baseUrl: getEnvString('LANGFUSE_HOST') || getEnvString('LANGFUSE_BASE_URL') || undefined,
   };
 }
 
