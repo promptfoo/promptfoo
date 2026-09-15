@@ -357,10 +357,14 @@ function getNextCursor(
     return undefined;
   }
   if (typeof cursor !== 'string' || !cursor) {
-    throw new TraceProviderError('Langfuse returned an invalid pagination cursor');
+    throw new TraceProviderError('Langfuse returned an invalid pagination cursor', {
+      invalidEvidence: true,
+    });
   }
   if (seenCursors.has(cursor)) {
-    throw new TraceProviderError('Langfuse returned a repeated pagination cursor');
+    throw new TraceProviderError('Langfuse returned a repeated pagination cursor', {
+      invalidEvidence: true,
+    });
   }
   seenCursors.add(cursor);
   return cursor;
@@ -387,7 +391,9 @@ function getNextPage(response: LangfuseObservationsResponse): number | undefined
     !Number.isSafeInteger(totalPages) ||
     totalPages < page
   ) {
-    throw new TraceProviderError('Langfuse returned invalid pagination metadata');
+    throw new TraceProviderError('Langfuse returned invalid pagination metadata', {
+      invalidEvidence: true,
+    });
   }
 
   return page < totalPages ? page + 1 : undefined;
@@ -491,9 +497,18 @@ export class LangfuseProvider implements TraceProvider {
       }
       const body = await readLimitedResponse(response, 'Langfuse', remainingBytes);
       remainingBytes -= new TextEncoder().encode(body).byteLength;
-      const result = JSON.parse(body) as LangfuseObservationsResponse;
-      if (!Array.isArray(result.data)) {
-        throw new TraceProviderError('Langfuse returned an invalid observations response');
+      let result: LangfuseObservationsResponse;
+      try {
+        result = JSON.parse(body);
+      } catch {
+        throw new TraceProviderError('Langfuse returned an invalid observations response', {
+          invalidEvidence: true,
+        });
+      }
+      if (!Array.isArray(result?.data)) {
+        throw new TraceProviderError('Langfuse returned an invalid observations response', {
+          invalidEvidence: true,
+        });
       }
 
       addObservations(result.data, spans, normalizedTraceId, MAX_SPANS + 1, options);

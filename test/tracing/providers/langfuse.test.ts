@@ -504,9 +504,10 @@ describe('LangfuseProvider', () => {
       response({ data: [observations[0]], meta: { cursor: 'again' } }),
     );
 
-    await expect(new LangfuseProvider(config).fetchTrace(TRACE_ID)).rejects.toThrow(
-      'repeated pagination cursor',
-    );
+    await expect(new LangfuseProvider(config).fetchTrace(TRACE_ID)).rejects.toMatchObject({
+      message: expect.stringContaining('repeated pagination cursor'),
+      invalidEvidence: true,
+    });
     expect(mockedFetch).toHaveBeenCalledTimes(2);
   });
 
@@ -644,6 +645,28 @@ describe('LangfuseProvider', () => {
     ]);
   });
 
+  it.each(['{', 'null', '[]'])(
+    'marks an unreadable observations response as invalid evidence: %s',
+    async (body) => {
+      mockedFetch.mockResolvedValue(new Response(body));
+      await expect(new LangfuseProvider(config).fetchTrace(TRACE_ID)).rejects.toMatchObject({
+        invalidEvidence: true,
+      });
+      expect(mockedFetch).toHaveBeenCalledOnce();
+    },
+  );
+
+  it('rejects malformed JSON on a later page instead of returning a partial trace', async () => {
+    mockedFetch
+      .mockResolvedValueOnce(response({ data: observations, meta: { cursor: 'next-page' } }))
+      .mockResolvedValueOnce(new Response('{'));
+
+    await expect(new LangfuseProvider(config).fetchTrace(TRACE_ID)).rejects.toMatchObject({
+      invalidEvidence: true,
+    });
+    expect(mockedFetch).toHaveBeenCalledTimes(2);
+  });
+
   it.each([
     { result: 'not observations' },
     { data: observations, meta: { cursor: 123 } },
@@ -652,9 +675,9 @@ describe('LangfuseProvider', () => {
   ])('rejects malformed Langfuse response payloads: %o', async (payload) => {
     mockedFetch.mockResolvedValue(response(payload));
 
-    await expect(new LangfuseProvider(config).fetchTrace(TRACE_ID)).rejects.toThrow(
-      TraceProviderError,
-    );
+    await expect(new LangfuseProvider(config).fetchTrace(TRACE_ID)).rejects.toMatchObject({
+      invalidEvidence: true,
+    });
   });
 
   it('rejects responses larger than the configured safety bound', async () => {
