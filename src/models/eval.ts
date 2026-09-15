@@ -51,8 +51,8 @@ import {
 } from '../util/tokenUsageUtils';
 import {
   getAssertionLeaves,
-  REDACTED_PROMPT,
   requiresTraceRedaction,
+  sanitizeRedactionPrompt,
 } from '../util/traceRedaction';
 import {
   invalidateEvaluationCache,
@@ -418,15 +418,7 @@ export function sanitizeLegacyResults(
     };
   });
   const prompts = table?.head?.prompts?.map((prompt, index) =>
-    privatePrompts.has(index)
-      ? {
-          ...prompt,
-          raw: REDACTED_PROMPT,
-          ...(prompt.display !== undefined && {
-            display: REDACTED_PROMPT,
-          }),
-        }
-      : prompt,
+    privatePrompts.has(index) ? sanitizeRedactionPrompt(prompt) : prompt,
   );
   return {
     ...summary,

@@ -217,6 +217,8 @@ describe('evaluator', () => {
       'promptfoo:redteam:harness:artifact-redaction',
     ] as const)('sanitizes legacy privacy copies on read, write and save for %s', async (type) => {
       const original = createLegacyRedactionSummary(type);
+      original.results[0].prompt.label = original.results[0].prompt.raw;
+      original.table.head.prompts[0].label = original.table.head.prompts[0].raw;
       const snapshot = JSON.stringify(original);
       const control = original.results[1];
       const id = await writeResultsToDatabase(original, {});

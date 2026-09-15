@@ -45,6 +45,15 @@ export const TRACE_REDACTION_ASSERTIONS = new Set([
 
 export const REDACTED_PROMPT = '[Prompt omitted for trace/artifact redaction.]';
 
+export function sanitizeRedactionPrompt<T extends Prompt>(prompt: T): T {
+  return {
+    ...prompt,
+    raw: REDACTED_PROMPT,
+    label: prompt.raw && prompt.label?.includes(prompt.raw) ? REDACTED_PROMPT : prompt.label,
+    ...(prompt.display !== undefined && { display: REDACTED_PROMPT }),
+  };
+}
+
 /** Project model-grading inputs after local verifiers have used the original receipts. */
 export function sanitizeRedactionGradingInputs<T extends AtomicTestCase>(
   type: string,
@@ -342,10 +351,7 @@ export function sanitizeRedactionResult<T extends object>(input: T): T {
     prompt: result.prompt,
   });
   const { testCase, vars } = publicInputs;
-  const prompt = publicInputs.prompt && {
-    ...publicInputs.prompt,
-    raw: REDACTED_PROMPT,
-  };
+  const prompt = publicInputs.prompt && sanitizeRedactionPrompt(publicInputs.prompt);
   const metadata = { ...publicInputs.metadata };
   for (const key of Object.keys(response?.metadata ?? {})) {
     if (testCase?.metadata && Object.prototype.hasOwnProperty.call(testCase.metadata, key)) {

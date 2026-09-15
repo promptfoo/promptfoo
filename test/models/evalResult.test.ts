@@ -5,6 +5,7 @@ import EvalResult, {
   sanitizeProvider,
   sanitizeResultForJsonlArtifact,
 } from '../../src/models/evalResult';
+import { processString } from '../../src/prompts/processors/string';
 import { hashPrompt } from '../../src/prompts/utils';
 import { WebSocketProvider } from '../../src/providers/websocket';
 import {
@@ -30,6 +31,45 @@ import { createAtomicTestCase, createPrompt } from '../factories/testSuite';
 import { mockProcessEnv } from '../util/utils';
 
 describe('EvalResult', () => {
+  it.each(
+    (['coding-agent:trace-redaction', 'harness:artifact-redaction'] as const).flatMap((pluginId) =>
+      [false, true].map((wrapped) => ({ pluginId, wrapped })),
+    ),
+  )(
+    'omits mirrored privacy prompt labels for $pluginId with wrapped=$wrapped',
+    async ({ pluginId, wrapped }) => {
+      const raw = 'Inspect PRIVATE_PROMPT_LABEL_RECEIPT';
+      const [prompt] = processString({ raw });
+      if (wrapped) {
+        prompt.label = `Prompt: ${raw}`;
+      }
+      prompt.display = `Legacy: ${raw}`;
+      const row = createEvaluateResult({
+        ...mockEvaluateResult,
+        prompt,
+        testCase: { assert: [{ type: `promptfoo:redteam:${pluginId}` as const }] },
+        response: { output: 'Public report' },
+      });
+      const saved = await EvalResult.createFromEvaluateResult('private-label-' + pluginId, row);
+      const [bulk] = await EvalResult.createManyFromEvaluateResult(
+        [row],
+        'private-label-bulk-' + pluginId,
+      );
+      for (const result of [
+        sanitizeResultForJsonlArtifact(row),
+        saved.toEvaluateResult(),
+        bulk.toEvaluateResult(),
+      ]) {
+        expect(JSON.stringify(result.prompt)).not.toContain('PRIVATE_PROMPT_LABEL_RECEIPT');
+        expect(result.prompt.label).toContain('Prompt omitted');
+      }
+      expect(prompt.label).toContain(raw);
+      expect(sanitizeResultForJsonlArtifact({ ...row, testCase: { assert: [] } }).prompt).toEqual(
+        prompt,
+      );
+    },
+  );
+
   it.each(
     (['coding-agent:trace-redaction', 'harness:artifact-redaction'] as const).flatMap((pluginId) =>
       [false, true].map((hasResponse) => ({ pluginId, hasResponse })),
