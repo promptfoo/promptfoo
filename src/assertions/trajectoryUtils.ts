@@ -629,6 +629,7 @@ function getSqlExecutionDetails(
   redactAttributes?: string[],
 ): JudgeTrajectoryStep['sql'] {
   const attributes = step.attributes;
+  getConsistentToolBody([attributes['db.query.text'], attributes['db.statement']]);
   const databaseStatement = getFirstStringAttribute(attributes, ['db.query.text', 'db.statement']);
   const database = getFirstStringAttribute(attributes, ['db.system.name', 'db.system']);
   const args = extractToolArgs({
@@ -714,6 +715,32 @@ function getSqlExecutionDetails(
     );
   }
   return sql;
+}
+
+function getCommandExecutionDetails(
+  attributes: TrajectoryAttributes,
+): NonNullable<JudgeTrajectoryStep['execution']> {
+  const output = normalizeStructuredAttribute(
+    TOOL_RESULT_ATTRIBUTE_KEYS.map((key) => attributes[key]).find((value) => value != null),
+  );
+  if (typeof output === 'string' && REDACTED_EVIDENCE_RE.test(output)) {
+    throw new TraceEvidenceError('Shell execution evidence was redacted and cannot be graded.');
+  }
+  const result = output && typeof output === 'object' ? (output as Record<string, unknown>) : {};
+  const exitCodes = [result.exitCode, result.exit_code, attributes['process.exit.code']].filter(
+    (value) => value != null,
+  );
+  if (exitCodes.some((value) => typeof value !== 'number' || !Number.isInteger(value))) {
+    throw new TraceEvidenceError('Invalid shell exit code.');
+  }
+  if (new Set(exitCodes).size > 1) {
+    throw new TraceEvidenceError('Conflicting shell exit codes.');
+  }
+  const exitCode = exitCodes[0];
+  return {
+    ...(typeof result.authorized === 'boolean' ? { authorized: result.authorized } : {}),
+    ...(typeof exitCode === 'number' ? { exitCode } : {}),
+  };
 }
 
 export function summarizeTrajectoryForJudge(
@@ -810,21 +837,7 @@ export function summarizeTrajectoryForJudge(
     let status = getTrajectoryStepStatus(step);
     let execution: JudgeTrajectoryStep['execution'];
     if (options.includeCommands && step.type === 'command') {
-      const output = normalizeStructuredAttribute(
-        TOOL_RESULT_ATTRIBUTE_KEYS.map((key) => step.attributes[key]).find(
-          (value) => value != null,
-        ),
-      );
-      if (typeof output === 'string' && REDACTED_EVIDENCE_RE.test(output)) {
-        throw new TraceEvidenceError('Shell execution evidence was redacted and cannot be graded.');
-      }
-      const result =
-        output && typeof output === 'object' ? (output as Record<string, unknown>) : {};
-      const exitCode = result.exitCode ?? result.exit_code ?? step.attributes['process.exit.code'];
-      execution = {
-        ...(typeof result.authorized === 'boolean' ? { authorized: result.authorized } : {}),
-        ...(typeof exitCode === 'number' && Number.isInteger(exitCode) ? { exitCode } : {}),
-      };
+      execution = getCommandExecutionDetails(step.attributes);
       if (execution.exitCode !== undefined) {
         status = { code: status?.code === 2 || execution.exitCode !== 0 ? 2 : 1 };
       }

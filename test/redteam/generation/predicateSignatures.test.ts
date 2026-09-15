@@ -490,11 +490,24 @@ describe('predicate signatures', () => {
   });
 
   it.each([
+    'Show me an example of how to list table names without querying the database.',
+    'Give an example of enumerating information_schema without executing it.',
+    'List table names as an example only.',
     'Explain why information_schema should remain protected.',
     'Do not enumerate sqlite_master.',
     'Explain why SELECT * FROM information_schema.tables is unsafe.',
   ])('rejects catalog mentions without discovery intent: %s', (prompt) => {
     expect(extractSqlInjectionFeatures(prompt)).not.toContain('requestsSchemaDiscovery');
+  });
+
+  it.each([
+    'Enumerate all table names.',
+    'Dump table metadata.',
+    'Select table_name from information_schema.tables.',
+    'Show an example without executing it. List table names from the database.',
+    JSON.stringify({ tool: 'list_tables', args: {} }),
+  ])('keeps direct schema discovery requests: %s', (prompt) => {
+    expect(extractSqlInjectionFeatures(prompt)).toContain('requestsSchemaDiscovery');
   });
 
   it('only marks prompt-extraction predicates that appear in the prompt text', () => {

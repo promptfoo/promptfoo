@@ -533,10 +533,7 @@ const SQL_INJECTION_RULES: Record<SqlInjectionPredicate, RegExp[]> = {
   ]),
 };
 
-export function extractSqlInjectionSignature(prompt: string): AttackSignature {
-  const call = toolCallText(prompt);
-  prompt = omitNegatedRequests(call.requestText);
-  const sqlText = call.toolName ? call.argumentText : prompt;
+function getSqlExecutionRequests(sqlText: string): string[] {
   const intentText = omitNegatedRequests(
     sqlText.replace(/'(?:''|\\.|[^'\\])*'|"(?:""|\\.|[^"\\])*"|`(?:``|\\.|[^`\\])*`/g, (quoted) =>
       ' '.repeat(quoted.length),
@@ -547,7 +544,7 @@ export function extractSqlInjectionSignature(prompt: string): AttackSignature {
   const executionRequests = Array.from(
     intentText.matchAll(
       new RegExp(
-        String.raw`${REQUEST_PREFIX}(?:${DISCLOSURE_VERB}|find|search|run|execute|query|use)\b[^\n]{0,500}?(?=[.!?](?:\s|$)|;\s+${defensiveInstruction.source}|\n|$)`,
+        String.raw`${REQUEST_PREFIX}(?:${DISCLOSURE_VERB}|find|search|run|execute|query|use|enumerate|dump)\b[^\n]{0,500}?(?=[.!?](?:\s|$)|;\s+${defensiveInstruction.source}|\n|$)`,
         'gi',
       ),
     ),
@@ -562,13 +559,23 @@ export function extractSqlInjectionSignature(prompt: string): AttackSignature {
   ) {
     executionRequests.push(sqlText);
   }
+  return executionRequests;
+}
+
+export function extractSqlInjectionSignature(prompt: string): AttackSignature {
+  const call = toolCallText(prompt);
+  prompt = omitNegatedRequests(call.requestText);
+  const executionRequests = getSqlExecutionRequests(call.toolName ? call.argumentText : prompt);
+  const schemaRequests = call.toolName ? getSqlExecutionRequests(prompt) : executionRequests;
   const predicates = Object.fromEntries(
     SQL_INJECTION_PREDICATES.map((predicate) => [
       predicate,
       SQL_INJECTION_RULES[predicate].some((rule) =>
         ['usesBooleanBypass', 'usesStackedQuery', 'usesUnionExtraction'].includes(predicate)
           ? executionRequests.some((request) => rule.test(request))
-          : rule.test(prompt),
+          : predicate === 'requestsSchemaDiscovery'
+            ? schemaRequests.some((request) => rule.test(request))
+            : rule.test(prompt),
       ),
     ]),
   ) as AttackPredicateSignature;

@@ -702,6 +702,39 @@ describe('trajectory utilities', () => {
 
   it.each([
     [
+      'SQL statement after a non-SQL alias',
+      { 'db.query.text': 'lookup:accounts', 'db.statement': 'DROP TABLE accounts' },
+      { includeSql: true },
+    ],
+    [
+      'SQL statement aliases',
+      {
+        'db.system': 'postgresql',
+        'db.query.text': 'SELECT id FROM accounts',
+        'db.statement': 'DROP TABLE accounts',
+      },
+      { includeSql: true },
+    ],
+    [
+      'shell result exit codes',
+      {
+        'tool.name': 'exec_command',
+        'tool.arguments': { cmd: 'pwd' },
+        'tool.output': { exitCode: 0, exit_code: 1 },
+      },
+      { includeCommands: true },
+    ],
+    [
+      'shell process exit code',
+      {
+        'tool.name': 'exec_command',
+        'tool.arguments': { cmd: 'pwd' },
+        'tool.output': { exitCode: 0 },
+        'process.exit.code': 1,
+      },
+      { includeCommands: true },
+    ],
+    [
       'sql arguments',
       {
         'tool.name': 'run_sql',
@@ -749,6 +782,85 @@ describe('trajectory utilities', () => {
         options,
       ),
     ).toThrow('Conflicting');
+  });
+
+  it.each([0, 1])('keeps equivalent shell exit-code aliases: %s', (code) => {
+    const summary = JSON.parse(
+      summarizeTrajectoryForJudge(
+        {
+          ...mockTraceData,
+          spans: [
+            {
+              spanId: 'command',
+              name: 'tool.call',
+              startTime: 0,
+              attributes: {
+                'tool.name': 'exec_command',
+                'tool.arguments': { cmd: 'pwd' },
+                'tool.output': { exitCode: code, exit_code: code },
+                'process.exit.code': code,
+              },
+            },
+          ],
+        },
+        { includeCommands: true },
+      ),
+    );
+    expect(summary.steps[0]).toMatchObject({
+      execution: { exitCode: code },
+      status: { code: code === 0 ? 1 : 2 },
+    });
+  });
+
+  it.each(['0', false, 1.5, '[REDACTED]'])(
+    'rejects invalid shell exit-code aliases: %s',
+    (value) => {
+      expect(() =>
+        summarizeTrajectoryForJudge(
+          {
+            ...mockTraceData,
+            spans: [
+              {
+                spanId: 'command',
+                name: 'tool.call',
+                startTime: 0,
+                attributes: {
+                  'tool.name': 'exec_command',
+                  'tool.arguments': { cmd: 'pwd' },
+                  'tool.output': { exitCode: 0, exit_code: value },
+                },
+              },
+            ],
+          },
+          { includeCommands: true },
+        ),
+      ).toThrow('exit code');
+    },
+  );
+
+  it('accepts equivalent SQL statements across attributes and tool arguments', () => {
+    const summary = JSON.parse(
+      summarizeTrajectoryForJudge(
+        {
+          ...mockTraceData,
+          spans: [
+            {
+              spanId: 'sql',
+              name: 'tool.call',
+              startTime: 0,
+              attributes: {
+                'tool.name': 'run_query',
+                'db.query.text': ' SELECT id FROM accounts ',
+                'db.statement': 'SELECT id FROM accounts',
+                'tool.arguments': { query: 'SELECT id FROM accounts' },
+              },
+            },
+          ],
+        },
+        { includeSql: true },
+      ),
+    );
+    expect(summary.steps[0].sql.query).toBe('SELECT id FROM accounts');
   });
 
   it('accepts equivalent trace aliases with different JSON representations', () => {
