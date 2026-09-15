@@ -54,10 +54,13 @@ export function getProviderIdentifier(provider: ApiProvider): string {
 export function getProviderDescription(provider: Pick<ApiProvider, 'id' | 'label'>): string {
   const label = provider.label;
   const id = provider.id();
+  // HTTP and WebSocket provider IDs are URLs that can carry credentials, so redact them for
+  // display. Other IDs, such as file:// paths, stay exactly as written.
+  const displayId = /^(?:https?|wss?):\/\//i.test(id) ? sanitizeUrl(id) : id;
   if (label && label !== id) {
-    return `${label} (${id})`;
+    return `${label} (${displayId})`;
   }
-  return id;
+  return displayId;
 }
 
 export function sanitizeProviderIdForLog(providerId: string): string {

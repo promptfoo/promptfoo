@@ -2178,6 +2178,25 @@ describe('resolveConfigs', () => {
       ).rejects.toThrow('references provider "gemni" which does not exist');
     });
 
+    it('does not print credentials from an excluded provider URL in the error', async () => {
+      vi.mocked(loadApiProviders).mockResolvedValueOnce([
+        createMockProvider({ id: 'echo', label: 'openrouter:free' }),
+      ]);
+
+      const error = await resolveWithTestProviders(
+        [
+          { id: 'https://api.example.com/v1/chat?api_key=SUPERSECRET123' },
+          { id: 'echo', label: 'openrouter:free' },
+        ],
+        ['gemni'],
+        { filterProviders: 'openrouter' },
+      ).catch((err: unknown) => err);
+
+      expect(error).toBeInstanceOf(Error);
+      expect((error as Error).message).toContain('https://api.example.com/v1/chat?');
+      expect((error as Error).message).not.toContain('SUPERSECRET123');
+    });
+
     it.each([
       { filter: 'no filter', cmdObj: {} },
       { filter: 'a filter that keeps the provider', cmdObj: { filterProviders: 'custom' } },

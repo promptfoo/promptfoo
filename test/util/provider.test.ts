@@ -336,6 +336,30 @@ describe('getProviderDescription', () => {
     const provider = createMockProvider({ id: 'openai:gpt-4', label: 'openai:gpt-4' });
     expect(getProviderDescription(provider)).toBe('openai:gpt-4');
   });
+
+  it.each([
+    { case: 'without a label', label: undefined, prefix: 'https://api.example.com/v1/chat?' },
+    {
+      case: 'with a label',
+      label: 'secure-http',
+      prefix: 'secure-http (https://api.example.com/v1/chat?',
+    },
+  ])('redacts credentials in a URL id $case', ({ label, prefix }) => {
+    const provider = createMockProvider({
+      id: 'https://api.example.com/v1/chat?api_key=SUPERSECRET123',
+      label,
+    });
+
+    const description = getProviderDescription(provider);
+
+    expect(description.startsWith(prefix)).toBe(true);
+    expect(description).not.toContain('SUPERSECRET123');
+  });
+
+  it('leaves non-URL ids such as file:// paths unchanged', () => {
+    const provider = createMockProvider({ id: 'file://providers/custom.js', label: 'custom' });
+    expect(getProviderDescription(provider)).toBe('custom (file://providers/custom.js)');
+  });
 });
 
 describe('sanitizeProviderIdForLog', () => {
