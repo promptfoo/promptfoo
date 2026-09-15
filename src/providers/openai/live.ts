@@ -114,12 +114,6 @@ export class OpenAiLiveProvider extends OpenAiGenericProvider {
         String(value),
       ]),
     );
-    const credentialHeaders = Object.entries(headers).filter(
-      ([name, value]) => isLiveCredentialHeader(name) && value.trim().length > 0,
-    );
-    if (!apiKey && (config.apiKeyRequired ?? true) && !credentialHeaders.length && !userinfo) {
-      throw new Error(this.getMissingApiKeyErrorMessage(config));
-    }
     // Don't forward an ambient OPENAI_API_KEY to a gateway that authenticates with its own
     // credential header or URL userinfo; an explicit apiKey or apiKeyEnvar still sends it.
     const sendApiKey =
@@ -129,14 +123,20 @@ export class OpenAiLiveProvider extends OpenAiGenericProvider {
       apiKey && sendApiKey
         ? `Bearer ${apiKey}`
         : userinfo && `Basic ${Buffer.from(userinfo).toString('base64')}`;
+    if (authorization && !hasHeaderOverride(headers, 'Authorization')) {
+      headers.Authorization = authorization;
+    }
+    if (
+      (config.apiKeyRequired ?? true) &&
+      !Object.entries(headers).some(
+        ([name, value]) => isLiveCredentialHeader(name) && value.trim().length > 0,
+      )
+    ) {
+      throw new Error(this.getMissingApiKeyErrorMessage(config));
+    }
     return {
       url: url.toString(),
-      headers: {
-        ...(authorization && !hasHeaderOverride(headers, 'Authorization')
-          ? { Authorization: authorization }
-          : {}),
-        ...headers,
-      },
+      headers,
     };
   }
 

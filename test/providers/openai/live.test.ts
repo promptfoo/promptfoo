@@ -92,6 +92,12 @@ function closed(socket: Socket, seconds = 12) {
 function backend(socket: Socket, event: object) {
   emit(socket, { type: 'response.event', delegation_id: 'delegation_1', event });
 }
+function delegateResponses(socket: Socket, response_id = 'resp_1') {
+  emit(socket, {
+    type: 'session.delegation.created',
+    delegation: { id: 'delegation_1', target: 'responses', response_id },
+  });
+}
 function apiError(socket: Socket, error: object) {
   emit(socket, { type: 'error', error });
 }
@@ -152,10 +158,7 @@ describe('OpenAiLiveProvider', () => {
       const socket = await connect();
       start(socket);
       text(socket);
-      emit(socket, {
-        type: 'session.delegation.created',
-        delegation: { id: 'delegation_1', target: 'responses', response_id: 'resp_1' },
-      });
+      delegateResponses(socket);
       backend(socket, { type: 'response.created', response: { id: 'resp_1' } });
       backend(socket, { type: 'response.completed', response: { id: 'resp_1' } });
       emit(socket, {
@@ -182,10 +185,7 @@ describe('OpenAiLiveProvider', () => {
       });
       await vi.advanceTimersByTimeAsync(100);
       if (lateNotice) {
-        emit(socket, {
-          type: 'session.delegation.created',
-          delegation: { id: 'delegation_1', target: 'responses', response_id: 'resp_1' },
-        });
+        delegateResponses(socket);
       }
       closed(socket);
       const response = await result;
@@ -201,6 +201,75 @@ describe('OpenAiLiveProvider', () => {
         expect(response.metadata?.backendCost).toBeUndefined();
       }
       expect(response.tokenUsage).toMatchObject({ numRequests: 2, total: 15 });
+    },
+  );
+
+  it.each([
+    'matching',
+    'wrong-response',
+    'wrong-delegation',
+    'after-close',
+    'missing',
+    'late-function',
+  ])(
+    'holds early function calls until their delegation is validated (%s notice)',
+    async (notice) => {
+      const handler = vi.fn().mockResolvedValue('result');
+      const result = provider({
+        delegation: lookupDelegation,
+        functionCallHandler: handler,
+      }).callApi('Hi');
+      const socket = await connect();
+      start(socket);
+      text(socket);
+      backend(socket, { type: 'response.created', response: { id: 'resp_1' } });
+      backend(socket, { type: 'response.output_item.done', item: functionCall('call_1') });
+      backend(socket, { type: 'response.completed', response: { id: 'resp_1' } });
+      if (notice === 'late-function') {
+        backend(socket, { type: 'response.output_item.done', item: functionCall('call_2') });
+      }
+      await vi.advanceTimersByTimeAsync(0);
+      expect(handler).not.toHaveBeenCalled();
+      expect(sentTypes(socket)).not.toContain('response.item.create');
+      expect(sentTypes(socket)).not.toContain('response.create');
+      if (notice === 'after-close') {
+        await vi.advanceTimersByTimeAsync(100);
+      }
+      if (notice !== 'missing') {
+        const event = {
+          type: 'session.delegation.created',
+          delegation: {
+            id: notice === 'wrong-delegation' ? 'other' : 'delegation_1',
+            target: 'responses',
+            response_id: notice === 'wrong-response' ? 'other' : 'resp_1',
+          },
+        };
+        emit(socket, event);
+        emit(socket, event);
+        await vi.advanceTimersByTimeAsync(0);
+      }
+      if (notice === 'matching') {
+        expect(handler).toHaveBeenCalledExactlyOnceWith('lookup', '{}', expect.any(AbortSignal));
+        expect(sentTypes(socket).filter((type) => type === 'response.create')).toHaveLength(1);
+        backend(socket, { type: 'response.created', response: { id: 'resp_2' } });
+        backend(socket, { type: 'response.completed', response: { id: 'resp_2' } });
+      } else {
+        expect(handler).not.toHaveBeenCalled();
+      }
+      await vi.advanceTimersByTimeAsync(100);
+      closed(socket);
+      const response = await result;
+      if (notice === 'matching') {
+        expect(response.error).toBeUndefined();
+      } else {
+        expect(response.error).toContain(
+          notice === 'wrong-response'
+            ? 'delegation response ID'
+            : notice === 'late-function'
+              ? 'without a backend response'
+              : 'backend work pending',
+        );
+      }
     },
   );
 
@@ -324,10 +393,7 @@ describe('OpenAiLiveProvider', () => {
     start(socket);
     text(socket);
     backend(socket, { type: 'response.created', response: { id: 'resp_1' } });
-    emit(socket, {
-      type: 'session.delegation.created',
-      delegation: { id: 'delegation_1', target: 'responses', response_id: 'resp_2' },
-    });
+    delegateResponses(socket, 'resp_2');
     backend(socket, { type: 'response.completed', response: { id: 'resp_1' } });
     closed(socket);
     expect((await result).error).toBe('Invalid GPT-Live delegation response ID.');
@@ -474,6 +540,7 @@ describe('OpenAiLiveProvider', () => {
     );
     const socket = await connect();
     start(socket);
+    delegateResponses(socket);
     for (const id of ['resp_1', 'resp_2']) {
       backend(socket, { type: 'response.created', response: { id } });
       backend(socket, { type: 'response.output_item.done', item: functionCall(`call_${id}`) });
@@ -1795,7 +1862,9 @@ describe('OpenAiLiveProvider', () => {
     emit(socket, { type: 'session.output_audio.delta', delta: 'AQ==' });
     await vi.advanceTimersByTimeAsync(100);
     closed(socket);
-    expect((await result).error).toBe('GPT-Live returned incomplete PCM16 samples.');
+    const response = await result;
+    expect(response.error).toBe('GPT-Live returned incomplete PCM16 samples.');
+    expect(response.audio).toBeUndefined();
   });
 
   it('reports an empty capture', async () => {
@@ -2041,6 +2110,18 @@ describe('OpenAiLiveProvider', () => {
     expect(await upgradeHeaders({})).toMatchObject({ Authorization: 'Bearer ambient-openai-key' });
   });
 
+  it.each([
+    { name: 'ambient key', config: { apiKey: undefined } },
+    { name: 'empty Authorization override', config: { headers: { Authorization: '' } } },
+    { name: 'blank Authorization override', config: { headers: { Authorization: ' ' } } },
+  ])('requires credentials actually sent to the gateway ($name)', async ({ config }) => {
+    mockProcessEnv({ OPENAI_API_KEY: 'ambient-openai-key' });
+    const result = provider({ apiBaseUrl: 'https://gateway.example/v1', ...config }).callApi('Hi');
+    await vi.runAllTimersAsync();
+    expect((await result).error).toContain('API key is not set');
+    expect(sockets).toHaveLength(0);
+  });
+
   it('resolves prompt-level credentials without forwarding the ambient OpenAI key', async () => {
     mockProcessEnv({ OPENAI_API_KEY: 'ambient-openai-key', PROMPT_LIVE_KEY: 'prompt-env-key' });
     const gateway = new OpenAiLiveProvider('gpt-live-1', {
@@ -2136,7 +2217,11 @@ describe('OpenAiLiveProvider', () => {
     const timeouts = { responseWindowMs: 100, websocketTimeout: 200, closeTimeoutMs: 100 };
     const official = new OpenAiLiveProvider('gpt-live-1', { config: timeouts });
     const gateway = new OpenAiLiveProvider('gpt-live-1', {
-      config: { ...timeouts, apiBaseUrl: 'http://provider-gateway.example/v1' },
+      config: {
+        ...timeouts,
+        apiBaseUrl: 'http://provider-gateway.example/v1',
+        apiKeyRequired: false,
+      },
     });
     const connectWith = async (live: OpenAiLiveProvider, config?: OpenAiLiveOptions) => {
       const result = live.callApi('Hi', config && promptContext(config));
@@ -2426,10 +2511,7 @@ describe('OpenAiLiveProvider', () => {
       }).callApi('Hi', source === 'prompt' ? promptContext(pricing) : undefined);
       const socket = await connect();
       start(socket);
-      emit(socket, {
-        type: 'session.delegation.created',
-        delegation: { id: 'delegation_1', target: 'responses', response_id: 'priced-response' },
-      });
+      delegateResponses(socket, 'priced-response');
       backend(socket, { type: 'response.created', response: { id: 'priced-response' } });
       backend(socket, {
         type: 'response.completed',
@@ -2523,10 +2605,7 @@ describe('OpenAiLiveProvider', () => {
       }).callApi('Check my order');
       const socket = await connect();
       start(socket);
-      emit(socket, {
-        type: 'session.delegation.created',
-        delegation: { id: 'delegation_1', target: 'responses', response_id: 'resp_1' },
-      });
+      delegateResponses(socket);
       backend(socket, { type: 'response.created', response: { id: 'resp_1' } });
       const item = {
         type: 'function_call',
@@ -2612,6 +2691,7 @@ describe('OpenAiLiveProvider', () => {
       }).callApi('Hi');
       const socket = await connect();
       start(socket);
+      delegateResponses(socket);
       backend(socket, { type: 'response.created', response: { id: 'resp_1' } });
       backend(socket, {
         type: 'response.output_item.done',
@@ -2663,6 +2743,7 @@ describe('OpenAiLiveProvider', () => {
     }).callApi('Hi');
     const socket = await connect();
     start(socket);
+    delegateResponses(socket);
     for (const round of [1, 2, 3]) {
       backend(socket, { type: 'response.created', response: { id: `resp_${round}` } });
       backend(socket, { type: 'response.output_item.done', item: functionCall(`call_${round}`) });
@@ -2968,6 +3049,7 @@ describe('OpenAiLiveProvider', () => {
     }).callApi('Hi');
     const socket = await connect();
     start(socket);
+    delegateResponses(socket);
     backend(socket, { type: 'response.created', response: { id: 'resp_1' } });
     backend(socket, { type: 'response.output_item.done', item: functionCall('call_1') });
     backend(socket, { type: 'response.completed', response: { id: 'resp_1', output: [] } });

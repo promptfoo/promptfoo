@@ -715,6 +715,11 @@ export class LiveSession {
         this.fail('Invalid GPT-Live delegation response ID.');
         return;
       }
+      if (turn && this.finishedResponses.has(turn.id)) {
+        this.backendTurns.delete(delegation.id);
+        this.completeTools(delegation.id, turn.calls.values());
+        return;
+      }
       this.backendTurns.set(
         delegation.id,
         turn ?? {
@@ -832,7 +837,7 @@ export class LiveSession {
       });
     } else if (event.type === 'response.output_item.done' && event.item?.type === 'function_call') {
       const turn = this.backendTurns.get(delegationId);
-      if (!turn) {
+      if (!turn || this.finishedResponses.has(turn.id)) {
         this.fail('GPT-Live function call arrived without a backend response.');
         return;
       }
@@ -911,6 +916,11 @@ export class LiveSession {
       if (this.closing) {
         // After session.close, function results can no longer continue the backend response.
         this.setError(LATE_WORK_ERROR);
+        return;
+      }
+      if (!this.delegations.some((delegation) => delegation.id === delegationId)) {
+        // Keep early completed calls pending until their delegation is validated.
+        this.backendTurns.set(delegationId, turn);
         return;
       }
       this.completeTools(delegationId, turn.calls.values());
@@ -1145,20 +1155,21 @@ export class LiveSession {
         conversationEnded: true,
         conversationEndReason: 'content',
       }),
-      ...(rawAudio.length && {
-        audio: {
-          data: convertPcm16ToWav(
-            this.options.format.type === 'audio/pcm'
-              ? rawAudio
-              : convertG711ToPcm16(rawAudio, this.options.format.type),
-            this.options.format.rate,
-          ).toString('base64'),
-          format: 'wav',
-          sampleRate: this.options.format.rate,
-          channels: 1,
-          transcript: output,
-        },
-      }),
+      ...(rawAudio.length &&
+        (!pcm || rawAudio.length % 2 === 0) && {
+          audio: {
+            data: convertPcm16ToWav(
+              this.options.format.type === 'audio/pcm'
+                ? rawAudio
+                : convertG711ToPcm16(rawAudio, this.options.format.type),
+              this.options.format.rate,
+            ).toString('base64'),
+            format: 'wav',
+            sampleRate: this.options.format.rate,
+            channels: 1,
+            transcript: output,
+          },
+        }),
       metadata: {
         transcript: this.transcript,
         inputTranscript: this.transcript
