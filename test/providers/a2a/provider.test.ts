@@ -510,6 +510,47 @@ describe('A2AProvider', () => {
   );
 
   it.each(['1.0', '0.3.0'])(
+    'does not repeat a rendered PDF companion in A2A %s',
+    async (protocolVersion) => {
+      const document = 'data:application/pdf;base64,JVBERi0x';
+      const cases: Record<string, string>[] = [
+        { question: 'What is the total?' },
+        { request: 'Read the invoice.' },
+        { question: 'data: ' + 'Read the original total '.repeat(8) },
+        { question: 'What is the total?', locale: 'en' },
+      ];
+      for (const companions of cases) {
+        vi.mocked(fetchWithTimeout).mockResolvedValueOnce(
+          jsonResponse({ message: { role: 'ROLE_AGENT', parts: [{ text: 'PDF received' }] } }),
+        );
+        const values = Object.values(companions);
+        const result = await provider({ protocolVersion }).callApi(values[0], {
+          prompt: { raw: `{{${Object.keys(companions)[0]}}}`, label: 'Companion task' },
+          vars: { document, ...companions },
+          test: {
+            metadata: {
+              strategyId: 'pdf',
+              pdf: { input: 'document' },
+              pluginConfig: {
+                inputs: {
+                  document: { type: 'pdf', description: 'Invoice' },
+                  ...Object.fromEntries(Object.keys(companions).map((key) => [key, 'Text input'])),
+                },
+              },
+            },
+          },
+        });
+        expect(result.output).toBe('PDF received');
+        const body = JSON.parse(vi.mocked(fetchWithTimeout).mock.lastCall?.[1]?.body as string);
+        const text = body.message.parts.filter((part: { text?: string }) => part.text);
+        expect(text.map((part: { text: string }) => part.text)).toEqual([
+          values.length === 1 ? values[0] : JSON.stringify(companions),
+        ]);
+      }
+    },
+  );
+
+  it.each(['1.0', '0.3.0'])(
     'uses the question fallback only without declared PDF inputs in A2A %s',
     async (version) => {
       const document = 'data:application/pdf;base64,JVBERi0x';

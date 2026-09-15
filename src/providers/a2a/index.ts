@@ -416,11 +416,12 @@ function getDefaultTextPart(
     );
     const values = Object.values(companions);
     if (values.length) {
-      text = text
-        ? JSON.stringify({ task: text, inputs: companions })
-        : values.length > 1
-          ? JSON.stringify(companions)
-          : values[0];
+      text =
+        text && !values.includes(text)
+          ? JSON.stringify({ task: text, inputs: companions })
+          : values.length > 1
+            ? JSON.stringify(companions)
+            : values[0];
     }
   } else if (mediaVarName !== 'question') {
     const question = getContextVar(contextVars, 'question');

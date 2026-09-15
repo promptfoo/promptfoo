@@ -66,9 +66,11 @@ describe('PDF strategy', () => {
       handle as unknown as Awaited<ReturnType<typeof fs.open>>,
     );
     await expect(addPdfTestCases([testCase()], '__prompt', {})).rejects.toThrow('regular file');
-    expect(Number(vi.mocked(fs.open).mock.calls[0][1]) & constants.O_NONBLOCK).toBe(
-      constants.O_NONBLOCK,
-    );
+    if (constants.O_NONBLOCK !== undefined) {
+      expect(Number(vi.mocked(fs.open).mock.calls[0][1]) & constants.O_NONBLOCK).toBe(
+        constants.O_NONBLOCK,
+      );
+    }
     expect(handle.close).toHaveBeenCalledOnce();
   });
 
