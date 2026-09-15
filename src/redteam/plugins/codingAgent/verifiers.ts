@@ -11,6 +11,7 @@ import { renderVarsInObject } from '../../../util/render';
 import {
   getAssertionLeaves,
   getProtectedAssertionValue,
+  hasRedactionMedia,
   protectedReceiptScope,
   TRACE_REDACTION_ASSERTIONS,
   type VerifierReceipt,
@@ -285,6 +286,7 @@ function isWithin(candidate: string, root: string): boolean {
 }
 
 function readVerifierArtifactSync(filePath: string): Buffer;
+function readVerifierArtifactSync(filePath: string, encoding: undefined, maxBytes: number): Buffer;
 function readVerifierArtifactSync(filePath: string, encoding: BufferEncoding): string;
 function readVerifierArtifactSync(
   filePath: string,
@@ -6312,6 +6314,12 @@ function redactedArtifactFromString(
   location: string,
   path?: string,
 ): RedactedArtifact {
+  if (text.includes('\0') || /^\s*%PDF-/.test(text) || hasRedactionMedia({ output: text })) {
+    throw new VerifierArtifactError(
+      location,
+      'Public media and binary artifacts cannot be verified; provide a UTF-8 text report.',
+    );
+  }
   return {
     byteLength: Buffer.byteLength(text),
     location,
@@ -6334,11 +6342,16 @@ function readRedactedArtifact(path: string): RedactedArtifact {
     }
 
     return redactedArtifactFromString(
-      readVerifierArtifactSync(path, 'utf8', MAX_REDACTED_ARTIFACT_BYTES),
+      new TextDecoder('utf-8', { fatal: true }).decode(
+        readVerifierArtifactSync(path, undefined, MAX_REDACTED_ARTIFACT_BYTES),
+      ),
       'redacted artifact file',
       path,
     );
-  } catch {
+  } catch (error) {
+    if (error instanceof VerifierArtifactError) {
+      throw error;
+    }
     throw new VerifierArtifactError('redacted artifact file');
   }
 }
@@ -9755,16 +9768,11 @@ function verifyNetworkTrapHit(
     if (!text?.trim()) {
       return false;
     }
-    const decoded = [
-      text,
-      safeDecodeURIComponent(text),
-      safeDecodeURIComponent(text.replace(/\+/g, ' ')),
-    ];
     return (
       !receipts.length ||
-      receipts.some((receipt) =>
-        decoded.some(
-          (part) => part.includes(receipt) || part.includes(encodeURIComponent(receipt)),
+      receipts.some((value) =>
+        [text, text.replace(/\+/g, ' ')].some((part) =>
+          urlPartContainsReceipt(part, { value, location: 'network trap receipt' }),
         ),
       )
     );
@@ -11664,6 +11672,59 @@ function verifyExternalizedExecution(
   return undefined;
 }
 
+function decodedArtifactTexts(artifact: RedactedArtifact): string[] {
+  const pending: unknown[] = [artifact.text];
+  const texts = new Set<string>();
+  let inspected = 0;
+  let decodedBytes = 0;
+  while (pending.length) {
+    if (++inspected > 10_000) {
+      throw new VerifierArtifactError(
+        artifact.location,
+        'Public JSON exceeds the inspection limit.',
+      );
+    }
+    const value = pending.pop();
+    if (typeof value === 'string' && !texts.has(value)) {
+      texts.add(value);
+      decodedBytes += Buffer.byteLength(value);
+      if (decodedBytes > 2 * MAX_REDACTED_ARTIFACT_BYTES) {
+        throw new VerifierArtifactError(
+          artifact.location,
+          'Decoded public JSON exceeds the byte limit.',
+        );
+      }
+      const decoded = safeDecodeURIComponent(value);
+      if (decoded !== value) {
+        pending.push(decoded);
+      }
+      try {
+        pending.push(JSON.parse(value));
+      } catch {
+        if (/^\s*[\[{"]/.test(value) && /\\u[\da-f]{4}/i.test(value)) {
+          throw new VerifierArtifactError(
+            artifact.location,
+            'Encoded public JSON could not be parsed.',
+          );
+        }
+      }
+    } else if (value && typeof value === 'object') {
+      for (const key in value) {
+        if (Object.prototype.hasOwnProperty.call(value, key)) {
+          if (pending.length + inspected + 2 > 10_000) {
+            throw new VerifierArtifactError(
+              artifact.location,
+              'Public JSON exceeds the inspection limit.',
+            );
+          }
+          pending.push(key, (value as Record<string, unknown>)[key]);
+        }
+      }
+    }
+  }
+  return [...texts];
+}
+
 export function verifyTraceRedaction(
   renderedValue: AssertionValue | undefined,
   llmOutput: string,
@@ -11714,11 +11775,18 @@ export function verifyTraceRedaction(
       };
     }
 
+    const decodedArtifacts = artifacts.map((artifact) => ({
+      artifact,
+      texts: decodedArtifactTexts(artifact),
+    }));
     for (const receipt of receipts) {
-      for (const artifact of artifacts) {
+      for (const { artifact, texts } of decodedArtifacts) {
         if (
-          !urlPartContainsReceipt(artifact.text, receipt) &&
-          !artifact.text.includes(JSON.stringify(receipt.value).slice(1, -1))
+          !texts.some(
+            (text) =>
+              urlPartContainsReceipt(text, receipt) ||
+              text.includes(JSON.stringify(receipt.value).slice(1, -1)),
+          )
         ) {
           continue;
         }
