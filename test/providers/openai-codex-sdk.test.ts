@@ -538,6 +538,63 @@ describe('OpenAICodexSDKProvider', () => {
         });
       });
 
+      it('should classify a hard-quota SDK error type next to an unknown code as non-retryable', async () => {
+        vi.spyOn(logger, 'error').mockImplementation(() => {});
+        mockRun.mockRejectedValue(
+          Object.assign(new Error('Request was refused by the billing service.'), {
+            status: 429,
+            code: 'new_billing_code',
+            type: 'insufficient_quota',
+          }),
+        );
+
+        const provider = new OpenAICodexSDKProvider({
+          env: { OPENAI_API_KEY: 'test-api-key' },
+        });
+        const result = await provider.callApi('Test prompt');
+
+        expect(result.error).toContain('Quota exceeded: HTTP 429 Too Many Requests');
+        expect(result.error).toContain('new_billing_code');
+        expect(result.metadata?.rateLimitKind).toBe('quota');
+        expect(result.metadata?.http?.headers).toEqual({});
+      });
+
+      it('should classify credit_balance_exhausted from the SDK error code as non-retryable', async () => {
+        vi.spyOn(logger, 'error').mockImplementation(() => {});
+        mockRun.mockRejectedValue(
+          Object.assign(
+            new Error('You have no credits remaining. Please add credits to your account.'),
+            {
+              status: 429,
+              code: 'credit_balance_exhausted',
+            },
+          ),
+        );
+
+        const provider = new OpenAICodexSDKProvider({
+          env: { OPENAI_API_KEY: 'test-api-key' },
+        });
+        const result = await provider.callApi('Test prompt');
+
+        expect(result.error).toContain('Quota exceeded: HTTP 429 Too Many Requests');
+        expect(result.error).toContain('credit_balance_exhausted');
+        expect(result.metadata?.rateLimitKind).toBe('quota');
+        expect(result.metadata?.http?.headers).toEqual({});
+      });
+
+      it('should classify a "no credits remaining" message without a code as non-retryable', async () => {
+        vi.spyOn(logger, 'error').mockImplementation(() => {});
+        mockRun.mockRejectedValue(new Error('You have no credits remaining ...'));
+
+        const provider = new OpenAICodexSDKProvider({
+          env: { OPENAI_API_KEY: 'test-api-key' },
+        });
+        const result = await provider.callApi('Test prompt');
+
+        expect(result.metadata?.rateLimitKind).toBe('quota');
+        expect(result.error).toContain('Retries will not help');
+      });
+
       it('should ignore non-provider prompt config keys merged from test options', async () => {
         mockRun.mockResolvedValue(createMockResponse('Response'));
 
@@ -2092,6 +2149,32 @@ describe('OpenAICodexSDKProvider', () => {
 
         expect(result.error).toBeUndefined();
         expect(result.output).toBe('Recovered response');
+      });
+
+      it.each([
+        ['insufficient_quota: credit_balance_exhausted', 'credit_balance_exhausted'],
+        ['rate_limit_exceeded: billing_not_active', 'billing_not_active'],
+        ['insufficient_quota: no credits remaining', 'credit_balance_exhausted'],
+      ])('keeps mixed billing messages non-retryable: %s', async (message, code) => {
+        vi.spyOn(logger, 'error').mockImplementation(() => {});
+        const mockEvents = async function* () {
+          yield {
+            type: 'turn.failed',
+            error: { message: `${message}. Please try again in 25ms.` },
+          };
+        };
+        mockRunStreamed.mockResolvedValue({ events: mockEvents() });
+        const provider = new OpenAICodexSDKProvider({
+          config: { enable_streaming: true },
+          env: { OPENAI_API_KEY: 'test-api-key' },
+        });
+
+        const result = await provider.callApi('Test prompt');
+
+        expect(result.metadata?.rateLimitKind).toBe('quota');
+        expect(result.metadata?.http?.headers).toEqual({});
+        expect(result.error).toContain(`(code: ${code})`);
+        expect(result.error).toContain('Retries will not help');
       });
 
       it('should retry if a stream ends after a TPM error event', async () => {
