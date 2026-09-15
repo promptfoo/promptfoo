@@ -104,7 +104,9 @@ export const handleRedteam = async ({
   const canReuseSingularResult =
     !TRACE_REDACTION_ASSERTIONS.has(baseType) ||
     originalAssertions?.filter((item) => item.type.replace(/^not-/, '') === baseType).length === 1;
-  const indexedResults = providerResponse.metadata?.storedGraderResults;
+  const indexedResults = TRACE_REDACTION_ASSERTIONS.has(baseType)
+    ? providerResponse.metadata?.storedGraderResults
+    : undefined;
   const singularResult = providerResponse.metadata?.storedGraderResult;
   const directPrivacyMatch =
     !test.metadata?.pluginId &&

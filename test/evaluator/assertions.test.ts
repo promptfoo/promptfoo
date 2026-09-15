@@ -31,6 +31,8 @@ describeEvaluator('evaluator assertions', () => {
   ] as const)(
     'keeps $plugin evidence while a later setup hook resets its ledger',
     async ({ plugin, pathKey, leak }) => {
+      const { sleep } =
+        await vi.importActual<typeof import('../../src/util/time')>('../../src/util/time');
       const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'concurrent-ledger-hooks-'));
       const ledger = path.join(directory, 'ledger');
       fs.writeFileSync(ledger, '');
@@ -40,7 +42,7 @@ describeEvaluator('evaluator assertions', () => {
         if (phase === 'beforeEach' && 'test' in context) {
           hookCalls++;
           if (context.test.vars?.index === 1) {
-            await new Promise((resolve) => setTimeout(resolve, 50));
+            await sleep(50);
           }
           fs.writeFileSync(ledger, '');
           events.push(`hook-${context.test.vars?.index}`);
@@ -52,7 +54,7 @@ describeEvaluator('evaluator assertions', () => {
         events.push(`target-${index}`);
         if (index === 0) {
           fs.appendFileSync(ledger, leak);
-          await new Promise((resolve) => setTimeout(resolve, 100));
+          await sleep(100);
         }
         return { output: 'Public report' };
       });
