@@ -1,4 +1,5 @@
 import { AsyncLocalStorage } from 'node:async_hooks';
+import { types } from 'node:util';
 
 import { marked } from 'marked';
 import { type DefaultTreeAdapterMap, parseFragment } from 'parse5';
@@ -198,7 +199,7 @@ export function hasRedactionMedia(response: ProviderResponse | null | undefined)
       }
       if (
         text.includes(BLOB_SCHEME) ||
-        /data:(?:audio|image|video)\/|<(?:svg|img|audio|video|picture|source|object|embed)(?:\s|\/?>)/i.test(
+        /\bdata:[^\s,]*,|<(?:svg|img|audio|video|picture|source|object|embed)(?:\s|\/?>)/i.test(
           text,
         ) ||
         hasHtmlMedia(text) ||
@@ -214,6 +215,9 @@ export function hasRedactionMedia(response: ProviderResponse | null | undefined)
         }
       }
     } else if (value && typeof value === 'object' && !seen.has(value)) {
+      if (ArrayBuffer.isView(value) || types.isAnyArrayBuffer(value)) {
+        return true;
+      }
       seen.add(value);
       const record = value as Record<string, unknown>;
       const image = record.image as Record<string, unknown> | undefined;
@@ -222,6 +226,7 @@ export function hasRedactionMedia(response: ProviderResponse | null | undefined)
       if (
         record.redactionMediaOmitted === true ||
         record.isBase64 === true ||
+        (record.type === 'Buffer' && Array.isArray(record.data)) ||
         (typeof record.b64_json === 'string' && record.b64_json.length > 0) ||
         (Array.isArray(record.images) && record.images.length > 0) ||
         ([record.mimeType, record.mime_type, record.mediaType, record.media_type].some(
@@ -360,7 +365,7 @@ export function sanitizeRedactionResult<T extends object>(input: T): T {
     gradingResult,
     response: {
       output: mediaOmitted
-        ? '[Media response omitted: image, audio, or video redaction could not be verified.]'
+        ? '[Media response omitted: binary, image, audio, or video redaction could not be verified.]'
         : '[Response omitted for trace/artifact redaction.]',
       ...(response.error && { error: 'Error details omitted for trace/artifact redaction.' }),
       ...(response.conversationEnded === true && { conversationEnded: true }),

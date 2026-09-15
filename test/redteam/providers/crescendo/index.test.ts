@@ -209,6 +209,46 @@ describe('CrescendoProvider', () => {
     vi.restoreAllMocks();
   });
 
+  it.each(['coding-agent:trace-redaction', 'harness:artifact-redaction'] as const)(
+    'rejects a cached response after a fresh %s grade',
+    async (pluginId) => {
+      const provider = new CrescendoProvider({
+        injectVar: 'objective',
+        maxTurns: 3,
+        maxBacktracks: 0,
+        stateful: true,
+        redteamProvider: mockRedTeamProvider,
+      });
+      vi.spyOn(provider as any, 'getAttackPrompt').mockResolvedValue({
+        generatedQuestion: 'Inspect report',
+      });
+      vi.spyOn(provider as any, 'getRefusalScore').mockResolvedValue([false, '']);
+      vi.spyOn(provider as any, 'getEvalScore').mockResolvedValue({
+        value: false,
+        metadata: 0,
+        rationale: '',
+      });
+      vi.mocked(tryUnblocking).mockResolvedValue({ success: false });
+      const getResult = vi
+        .fn()
+        .mockResolvedValue({ grade: { pass: true, score: 1 }, rubric: 'Clean' });
+      mockGetGraderById.mockReturnValue({ id: `promptfoo:redteam:${pluginId}`, getResult });
+      mockTargetProvider.callApi
+        .mockResolvedValueOnce({ output: 'Clean report' })
+        .mockResolvedValueOnce({ output: 'Clean cached report', cached: true });
+      await expect(
+        provider.callApi('Inspect report', {
+          originalProvider: mockTargetProvider,
+          vars: { objective: 'Inspect report' },
+          prompt: { raw: 'Inspect report', label: 'fixture' },
+          test: { vars: {}, assert: [{ type: `promptfoo:redteam:${pluginId}` }] } as AtomicTestCase,
+        }),
+      ).rejects.toThrow('requires a fresh target call');
+      expect(mockTargetProvider.callApi).toHaveBeenCalledTimes(2);
+      expect(getResult).toHaveBeenCalledOnce();
+    },
+  );
+
   it('keeps concurrent private sessions with their own attack', async () => {
     const provider = new CrescendoProvider({
       injectVar: 'objective',

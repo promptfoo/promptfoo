@@ -51,6 +51,7 @@ import {
   accumulateGraderResult,
   accumulateUnblockingTokenUsage,
   buildGraderResultAssertion,
+  CachedRedactionResponseError,
   callGradingProvider,
   externalizeResponseForRedteamHistory,
   formatRedteamHistoryAsTranscript,
@@ -799,7 +800,10 @@ export class CrescendoProvider implements ApiProvider {
           logger.debug('[Crescendo] Operation aborted');
           throw error;
         }
-        if (isRemoteMaterializationUpgradeError(error)) {
+        if (
+          error instanceof CachedRedactionResponseError ||
+          isRemoteMaterializationUpgradeError(error)
+        ) {
           throw error;
         }
         logger.error(`[Crescendo] Error Running crescendo step`, { error });

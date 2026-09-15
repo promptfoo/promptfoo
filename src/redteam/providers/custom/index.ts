@@ -31,6 +31,7 @@ import {
   accumulateGraderResult,
   accumulateUnblockingTokenUsage,
   buildGraderResultAssertion,
+  CachedRedactionResponseError,
   callGradingProvider,
   externalizeResponseForRedteamHistory,
   getGraderAssertionValue,
@@ -678,6 +679,9 @@ export class CustomProvider implements ApiProvider {
 
         logger.debug('[Custom] Jailbreak Unsuccessful, continuing to next round');
       } catch (error) {
+        if (error instanceof CachedRedactionResponseError) {
+          throw error;
+        }
         // Re-throw abort errors to properly cancel the operation
         if (error instanceof Error && error.name === 'AbortError') {
           logger.debug('[Custom] Operation aborted');

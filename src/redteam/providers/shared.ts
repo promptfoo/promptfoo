@@ -651,6 +651,8 @@ interface TraceableRedteamGrader<TResult, TArgs extends unknown[]> {
 
 const privateRedactionResponses = new WeakMap<ProviderResponse, ProviderResponse>();
 
+export class CachedRedactionResponseError extends Error {}
+
 /** Grade every private target response before strategy control flow can discard it. */
 export async function gradeRedactionResponse(
   prompt: string,
@@ -666,6 +668,11 @@ export async function gradeRedactionResponse(
     const type = assertion.type.replace(/^not-/, '');
     if (!TRACE_REDACTION_ASSERTIONS.has(type)) {
       continue;
+    }
+    if (response.cached) {
+      throw new CachedRedactionResponseError(
+        'Trace/artifact redaction requires a fresh target call; rerun with --no-cache',
+      );
     }
     const grader = getGraderById(type);
     invariant(grader, `Missing privacy grader: ${type}`);
@@ -1007,7 +1014,8 @@ export async function externalizeResponseForRedteamHistory<T extends ProviderRes
     const sanitized = sanitizeRedactionResult({ response, testCase }).response;
     return {
       ...sanitized,
-      error: 'Image, audio, and video redaction cannot be verified; provide a text-only report.',
+      error:
+        'Binary, image, audio, and video redaction cannot be verified; provide a text-only report.',
     };
   }
   if (!isBlobStorageEnabled() && !shouldAttemptRemoteBlobUpload()) {

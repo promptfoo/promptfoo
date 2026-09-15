@@ -442,6 +442,14 @@ describe('EvalResult', () => {
   );
 
   it.each([
+    'output-pdf',
+    'output-encoded-text',
+    'output-buffer',
+    'output-buffer-object',
+    'output-buffer-json',
+    'output-typed-array',
+    'output-array-buffer',
+    'output-data-view',
     'output-image',
     'output-audio',
     'metadata-audio',
@@ -459,7 +467,16 @@ describe('EvalResult', () => {
     const secret = 'PRIVATE_EMBEDDED_MEDIA_8964';
     const data = Buffer.from(secret).toString('base64');
     const image = `data:image/png;base64,${data}`;
+    const bytes = Uint8Array.from(Buffer.from(secret));
     const media = {
+      'output-pdf': { output: `data:application/pdf;base64,${data}` },
+      'output-encoded-text': { output: `data:text/plain;base64,${data}` },
+      'output-buffer': { output: Buffer.from(secret) },
+      'output-buffer-object': { output: Buffer.from(secret).toJSON() },
+      'output-buffer-json': { output: JSON.stringify(Buffer.from(secret)) },
+      'output-typed-array': { output: bytes },
+      'output-array-buffer': { output: bytes.buffer },
+      'output-data-view': { output: new DataView(bytes.buffer) },
       'output-image': { output: image },
       'output-audio': { output: `data:audio/wav;base64,${data}` },
       'metadata-audio': { metadata: { audio: { data, format: 'wav' } } },

@@ -18,6 +18,7 @@ import {
   formatRedteamHistoryAsTranscript,
   getGraderAssertionValue,
   getTargetResponse,
+  gradeRedactionResponse,
   type Message,
   messagesToRedteamHistory,
   redteamProviderManager,
@@ -41,6 +42,7 @@ import type {
   AtomicTestCase,
   CallApiContextParams,
   CallApiOptionsParams,
+  GradingResult,
   Prompt,
 } from '../../../src/types/index';
 
@@ -1858,6 +1860,77 @@ describe('shared redteam provider utilities', () => {
 });
 
 describe('redteam history blob storage', () => {
+  it.each([
+    'pdf',
+    'encoded-text',
+    'buffer',
+    'buffer-object',
+    'buffer-json',
+    'typed-array',
+    'array-buffer',
+    'data-view',
+  ])('rejects opaque %s responses before copying them into privacy history', async (mode) => {
+    const secret = 'PRIVATE_BINARY_HISTORY_RECEIPT';
+    const bytes = Uint8Array.from(Buffer.from(secret));
+    const output = {
+      pdf: `data:application/pdf;base64,${Buffer.from('%PDF-1.4 ' + secret).toString('base64')}`,
+      'encoded-text': `data:text/plain;base64,${Buffer.from(secret).toString('base64')}`,
+      buffer: Buffer.from(secret),
+      'buffer-object': Buffer.from(secret).toJSON(),
+      'buffer-json': JSON.stringify(Buffer.from(secret)),
+      'typed-array': bytes,
+      'array-buffer': bytes.buffer,
+      'data-view': new DataView(bytes.buffer),
+    }[mode];
+    const response = { output };
+    const history = await externalizeResponseForRedteamHistory(response, {
+      test: {
+        assert: [{ type: 'promptfoo:redteam:coding-agent:trace-redaction' }],
+      } as AtomicTestCase,
+    });
+    expect(history).toMatchObject({
+      error: expect.stringMatching(/redaction.*verified/i),
+      metadata: { redactionMediaOmitted: true },
+    });
+    expect(JSON.stringify(history)).not.toContain(secret);
+    expect(JSON.stringify(history)).not.toContain(Buffer.from(secret).toString('base64'));
+    expect(response.output).toBe(output);
+  });
+
+  it.each([
+    'promptfoo:redteam:coding-agent:trace-redaction',
+    'promptfoo:redteam:harness:artifact-redaction',
+  ])('rejects cached target responses before recording %s grades', async (type) => {
+    const graders = await import('../../../src/redteam/graders');
+    const getResult = vi.fn().mockResolvedValue({
+      grade: { pass: true, score: 1, reason: 'Clean fixture' },
+      rubric: 'Privacy',
+    });
+    vi.spyOn(graders, 'getGraderById').mockReturnValue({ id: type, getResult } as never);
+    const test = { assert: [{ type }] } as AtomicTestCase;
+    const results: Record<number, GradingResult> = {};
+    const cached = await externalizeResponseForRedteamHistory(
+      { output: 'Clean report', cached: true },
+      { test },
+    );
+
+    await expect(gradeRedactionResponse('Inspect', cached, test, results)).rejects.toThrow(
+      /fresh target/,
+    );
+    expect(results).toEqual({});
+    expect(getResult).not.toHaveBeenCalled();
+
+    const fresh = await externalizeResponseForRedteamHistory(
+      { output: 'Clean report', cached: false },
+      { test },
+    );
+    await expect(gradeRedactionResponse('Inspect', fresh, test, results)).resolves.toMatchObject({
+      pass: true,
+    });
+    expect(results[0].pass).toBe(true);
+    expect(getResult).toHaveBeenCalledTimes(1);
+  });
+
   afterEach(() => vi.restoreAllMocks());
 
   it.each([

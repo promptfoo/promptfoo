@@ -47,6 +47,7 @@ import {
   accumulateGraderResult,
   accumulateUnblockingTokenUsage,
   buildGraderResultAssertion,
+  CachedRedactionResponseError,
   callTargetProvider,
   externalizeResponseForRedteamHistory,
   getGraderAssertionValue,
@@ -901,7 +902,10 @@ export default class GoatProvider implements ApiProvider {
           logger.debug('[GOAT] Operation aborted');
           throw error;
         }
-        if (isRemoteMaterializationUpgradeError(error)) {
+        if (
+          error instanceof CachedRedactionResponseError ||
+          isRemoteMaterializationUpgradeError(error)
+        ) {
           throw error;
         }
         logger.error(
