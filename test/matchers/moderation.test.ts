@@ -92,11 +92,11 @@ describe('matchesModeration', () => {
       assistantResponse: 'test response',
     });
 
-    expect(openAiSpy).toHaveBeenCalledWith('test prompt', 'test response');
+    expect(openAiSpy).toHaveBeenCalledWith('test prompt', 'test response', undefined, undefined);
   });
 
   it.each([false, true])(
-    'preserves traced context and call arity, signal=%s',
+    'forwards traced context and cancellation, signal=%s',
     async (withSignal) => {
       setTestEnv({ OPENAI_API_KEY: 'test-key' });
       const abortSignal = withSignal ? new AbortController().signal : undefined;
@@ -131,7 +131,8 @@ describe('matchesModeration', () => {
       expect(call.mock.calls[0]).toEqual([
         'test prompt',
         'test response',
-        ...(abortSignal ? [tracedContext, { abortSignal }] : []),
+        tracedContext,
+        abortSignal ? { abortSignal } : undefined,
       ]);
     },
   );
@@ -161,7 +162,7 @@ describe('matchesModeration', () => {
       assistantResponse: 'test response',
     });
 
-    expect(replicateSpy).toHaveBeenCalledWith('test prompt', 'test response');
+    expect(replicateSpy).toHaveBeenCalledWith('test prompt', 'test response', undefined, undefined);
   });
 
   it('should respect provider override in grading config', async () => {
@@ -180,7 +181,7 @@ describe('matchesModeration', () => {
       },
     );
 
-    expect(replicateSpy).toHaveBeenCalledWith('test prompt', 'test response');
+    expect(replicateSpy).toHaveBeenCalledWith('test prompt', 'test response', undefined, undefined);
   });
 
   it('should fail when the moderation API returns an error', async () => {

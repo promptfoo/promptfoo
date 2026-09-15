@@ -51,9 +51,7 @@ export async function matchesModeration(
 
   const callApiOptions = getGradingProviderCallOptions();
   const resp = await callGradingProvider(moderationProvider, 'moderation', (context) =>
-    callApiOptions
-      ? moderationProvider.callModerationApi(userPrompt, assistantResponse, context, callApiOptions)
-      : moderationProvider.callModerationApi(userPrompt, assistantResponse),
+    moderationProvider.callModerationApi(userPrompt, assistantResponse, context, callApiOptions),
   );
   const tokenUsageResult = resp.tokenUsage
     ? { tokensUsed: normalizeMatcherTokenUsage(resp.tokenUsage) }
