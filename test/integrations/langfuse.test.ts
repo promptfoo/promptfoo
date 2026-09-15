@@ -351,6 +351,24 @@ describe('langfuse integration', () => {
       ]);
     });
 
+    it('should treat blank Langfuse settings as unset', async () => {
+      const mockPrompt = {
+        compile: vi.fn().mockReturnValue('Test'),
+      };
+      mocks.mockGetPrompt.mockResolvedValue(mockPrompt);
+      // e.g. `LANGFUSE_HOST=` in an env file. The SDK falls back with `??`, so '' would be used as the base URL.
+      mocks.mockGetEnvString.mockImplementation(
+        mocks.envStringFor({ publicKey: '', secretKey: '', host: '' }),
+      );
+
+      const { getPrompt } = await import('../../src/integrations/langfuse');
+      await getPrompt('test-prompt', {}, 'text', 1);
+
+      expect(mocks.constructorCalls).toEqual([
+        { publicKey: undefined, secretKey: undefined, baseUrl: undefined },
+      ]);
+    });
+
     it('should handle label with latest version', async () => {
       const mockPrompt = {
         compile: vi.fn().mockReturnValue('Latest version content'),

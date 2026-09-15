@@ -13,11 +13,12 @@ let langfuse: LangfuseClient | undefined;
 let langfuseClientParams: LangfuseParams | undefined;
 
 // Read at call time: --env-file and the config's `env:` block are applied after this module is imported.
+// Blank values count as unset; the SDK only falls back to its own env vars and defaults for `undefined`.
 function getLangfuseParams(): LangfuseParams {
   return {
-    publicKey: getEnvString('LANGFUSE_PUBLIC_KEY'),
-    secretKey: getEnvString('LANGFUSE_SECRET_KEY'),
-    baseUrl: getEnvString('LANGFUSE_HOST'),
+    publicKey: getEnvString('LANGFUSE_PUBLIC_KEY') || undefined,
+    secretKey: getEnvString('LANGFUSE_SECRET_KEY') || undefined,
+    baseUrl: getEnvString('LANGFUSE_HOST') || undefined,
   };
 }
 
