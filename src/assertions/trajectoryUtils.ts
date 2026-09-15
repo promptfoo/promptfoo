@@ -749,6 +749,7 @@ export function summarizeTrajectoryForJudge(
 ): string {
   if (options.includeSql || options.includeCommands) {
     for (const span of trace.spans) {
+      getConsistentToolBody(TOOL_RESULT_ATTRIBUTE_KEYS.map((key) => span.attributes?.[key]));
       if (
         !extractToolName(span) &&
         !TOOL_NAME_ATTRIBUTE_KEYS.some((key) => span.attributes?.[key] !== undefined)
@@ -756,12 +757,9 @@ export function summarizeTrajectoryForJudge(
         continue;
       }
       getConsistentToolName(TOOL_NAME_ATTRIBUTE_KEYS.map((key) => span.attributes?.[key]));
-      for (const keys of [
-        getToolArgumentAttributeKeys(span.attributes),
-        TOOL_RESULT_ATTRIBUTE_KEYS,
-      ]) {
-        getConsistentToolBody(keys.map((key) => span.attributes?.[key]));
-      }
+      getConsistentToolBody(
+        getToolArgumentAttributeKeys(span.attributes).map((key) => span.attributes?.[key]),
+      );
     }
   }
   const spans = trace.spans.map((span) => ({

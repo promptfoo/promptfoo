@@ -776,6 +776,24 @@ describe('trajectory utilities', () => {
       { includeSql: true },
     ],
     [
+      'direct SQL results',
+      {
+        'db.statement': 'SELECT 1',
+        'tool.output': { authorized: false },
+        'tool.result': { authorized: true },
+      },
+      { includeSql: true },
+    ],
+    [
+      'direct command results',
+      {
+        command: 'pwd',
+        'tool.output': { exitCode: 0 },
+        'tool.result': { exitCode: 1 },
+      },
+      { includeCommands: true },
+    ],
+    [
       'shell arguments',
       {
         'tool.name': 'Bash',
@@ -883,6 +901,31 @@ describe('trajectory utilities', () => {
       ),
     );
     expect(summary.steps[0].sql.query).toBe('SELECT id FROM accounts');
+  });
+
+  it.each(['SQL', 'command'])('accepts equivalent direct %s result aliases', (kind) => {
+    const summary = JSON.parse(
+      summarizeTrajectoryForJudge(
+        {
+          ...mockTraceData,
+          spans: [
+            {
+              spanId: 'same',
+              name: 'execution',
+              startTime: 0,
+              attributes: {
+                ...(kind === 'SQL' ? { 'db.statement': 'SELECT 1' } : { command: 'pwd' }),
+                'tool.output': { authorized: true, exitCode: 0 },
+                'tool.result': '{"exitCode":0,"authorized":true}',
+              },
+            },
+          ],
+        },
+        { includeSql: true, includeCommands: true },
+      ),
+    );
+    const step = summary.steps[0];
+    expect(kind === 'SQL' ? step.sql : step.execution).toMatchObject({ authorized: true });
   });
 
   it('accepts equivalent trace aliases with different JSON representations', () => {
