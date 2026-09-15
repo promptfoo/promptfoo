@@ -162,18 +162,20 @@ describe('matchesClassification', () => {
     });
   });
 
-  it('tags a transport error as a grader failure, never invertible into a pass', async () => {
+  it('tags a provider error as a grader failure instead of a legitimate score', async () => {
     const grading: GradingConfig = {
       provider: Object.assign(createMockProvider({ id: 'broken-classification-provider' }), {
-        callClassificationApi: vi.fn().mockResolvedValue({ error: 'Simulated timeout' }),
+        callClassificationApi: vi.fn().mockResolvedValue({ error: 'Request timed out' }),
       }),
     };
 
-    const result = await matchesClassification('harmful', 'Sample output', 0.5, grading);
-    expect(result.pass).toBe(false);
-    expect(result.score).toBe(0);
-    expect(result.reason).toBe('Simulated timeout');
-    expect(result.metadata?.graderError).toBe(true);
+    await expect(matchesClassification('classA', 'Sample output', 0.5, grading)).resolves.toEqual({
+      pass: false,
+      score: 0,
+      reason: 'Request timed out',
+      tokensUsed: expect.any(Object),
+      metadata: { graderError: true },
+    });
   });
 
   it('should use the overridden classification grading config', async () => {
