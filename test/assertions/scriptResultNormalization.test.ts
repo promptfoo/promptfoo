@@ -1,5 +1,8 @@
 import { describe, expect, it } from 'vitest';
-import { normalizeScriptAssertionResult } from '../../src/assertions/scriptResultNormalization';
+import {
+  normalizeScriptAssertionResult,
+  normalizeScriptResult,
+} from '../../src/assertions/scriptResultNormalization';
 
 import type { Assertion } from '../../src/types/index';
 
@@ -23,13 +26,31 @@ describe('normalizeScriptAssertionResult', () => {
     expect(result.reason).toBe('Expected output not to contain "foo", but it did.');
   });
 
-  it('falls back to a generic outcome when an inverted GradingResult has no reason', () => {
+  it('falls back to a generic outcome when an inverted GradingResult has an empty reason', () => {
     const result = normalizeScriptAssertionResult(
       pythonAssertion,
       {
         pass: true,
         score: 1,
-        reason: undefined as unknown as string,
+        reason: '',
+      },
+      true,
+      labels,
+    );
+
+    expect(result.pass).toBe(false);
+    expect(result.reason).toBe('Python code returned true');
+  });
+});
+
+describe('normalizeScriptResult', () => {
+  it('falls back to a generic outcome when an inverted object GradingResult has an empty reason', () => {
+    const result = normalizeScriptResult(
+      pythonAssertion,
+      {
+        pass: true,
+        score: 1,
+        reason: '',
       },
       true,
       labels,
