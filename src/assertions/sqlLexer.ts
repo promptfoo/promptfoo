@@ -17,11 +17,16 @@ function readDollarQuoteDelimiter(sql: string, start: number): string | undefine
   return DOLLAR_QUOTE_DELIMITER_PATTERN.exec(sql.slice(start))?.[0];
 }
 
-function findQuotedTextEnd(sql: string, start: number, quote: string): number | undefined {
+function findQuotedTextEnd(
+  sql: string,
+  start: number,
+  quote: string,
+  backslashEscapes: boolean,
+): number | undefined {
   const closingQuote = quote === '[' ? ']' : quote;
   let cursor = start + 1;
   while (cursor < sql.length) {
-    if (closingQuote !== ']' && sql[cursor] === '\\') {
+    if (backslashEscapes && closingQuote !== ']' && sql[cursor] === '\\') {
       cursor += 2;
       continue;
     }
@@ -57,11 +62,13 @@ export function stripIgnoredSqlText(sql: string, databaseType: string, maskValue
     return ` ${token} `;
   };
   const database = databaseType.toLowerCase();
+  const postgres = database === 'postgresql' || database === 'postgres';
   const supportsBracketIdentifiers =
     BRACKET_IDENTIFIER_DATABASES.has(databaseType) ||
     ['mssql', 'microsoft.sql_server', 'transactsql', 'sqlite'].includes(database);
   let plainTextStart = 0;
   let cursor = 0;
+  let postgresEscapeContinuation = false;
 
   while (cursor < sql.length) {
     const character = sql[cursor];
@@ -112,7 +119,14 @@ export function stripIgnoredSqlText(sql: string, databaseType: string, maskValue
       character === '`' ||
       (character === '[' && supportsBracketIdentifiers)
     ) {
-      const quoteEnd = findQuotedTextEnd(sql, cursor, character);
+      const backslashEscapes: boolean =
+        !postgres ||
+        (character === "'" &&
+          (postgresEscapeContinuation ||
+            (sql[cursor - 1]?.toLowerCase() === 'e' &&
+              !/[\p{L}\p{N}_$]/u.test(sql[cursor - 2] ?? ''))));
+      postgresEscapeContinuation = postgres && character === "'" && backslashEscapes;
+      const quoteEnd = findQuotedTextEnd(sql, cursor, character, backslashEscapes);
       if (maskValues && quoteEnd === undefined) {
         throw new Error(
           'SQL trace has an unclosed literal or identifier and cannot be safely graded.',
@@ -167,6 +181,7 @@ export function stripIgnoredSqlText(sql: string, databaseType: string, maskValue
         throw new Error('SQL trace has an unclosed comment and cannot be safely graded.');
       }
     } else if (character === '$') {
+      postgresEscapeContinuation = false;
       const delimiter = readDollarQuoteDelimiter(sql, cursor);
       if (delimiter) {
         const quoteEnd = sql.indexOf(delimiter, cursor + delimiter.length);
@@ -179,6 +194,7 @@ export function stripIgnoredSqlText(sql: string, databaseType: string, maskValue
         replacement = placeholder(sql.slice(cursor, ignoredTextEnd));
       }
     } else if (maskValues && /[\d.]/.test(character) && !/[\w$?:@]/.test(sql[cursor - 1] ?? '')) {
+      postgresEscapeContinuation = false;
       const number =
         /^(?:0[xX][\da-fA-F]+|0[bB][01]+|(?:\d+(?:\.\d*)?|\.\d+)(?:[eE][+-]?\d+)?)/.exec(
           sql.slice(cursor),
@@ -190,6 +206,10 @@ export function stripIgnoredSqlText(sql: string, databaseType: string, maskValue
     }
 
     if (ignoredTextEnd === undefined) {
+      // PostgreSQL E strings can continue across whitespace and comments.
+      if (/\S/.test(character)) {
+        postgresEscapeContinuation = false;
+      }
       cursor++;
       continue;
     }
@@ -205,9 +225,10 @@ export function stripIgnoredSqlText(sql: string, databaseType: string, maskValue
 
 /** Keep SQL structure while omitting captured values and comments from model input. */
 export function redactSqlLiteralsAndComments(sql: string, databaseType = ''): string {
+  const quotedTextOrWhitespace = ['postgresql', 'postgres'].includes(databaseType.toLowerCase())
+    ? /"(?:""|[^"])*"|\s+/g
+    : /"(?:\\.|""|[^"\\])*"|`(?:\\.|``|[^`\\])*`|\[(?:\]\]|[^\]])*\]|\s+/g;
   return stripIgnoredSqlText(sql, databaseType, true)
-    .replace(/"(?:\\.|""|[^"\\])*"|`(?:\\.|``|[^`\\])*`|\[(?:\]\]|[^\]])*\]|\s+/g, (text) =>
-      /^\s/.test(text) ? ' ' : text,
-    )
+    .replace(quotedTextOrWhitespace, (text) => (/^\s/.test(text) ? ' ' : text))
     .trim();
 }

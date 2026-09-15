@@ -9,6 +9,40 @@ const assertion: Assertion = {
 };
 
 describe('SQL trace value redaction', () => {
+  it.each(['postgresql', 'postgres'])(
+    'preserves statements after ordinary backslash literals in %s',
+    (database) => {
+      const query = String.raw`SELECT 'private\'; DROP TABLE users; -- '`;
+      expect(redactSqlLiteralsAndComments(query, database)).toBe(
+        'SELECT :literal_1 ; DROP TABLE users;',
+      );
+      expect(stripIgnoredSqlText(query, database)).toContain('DROP TABLE users');
+    },
+  );
+
+  it.each([
+    ['E', '\n'],
+    ['e', '\n'],
+    ['E', ' -- comment\n'],
+    ['E', ' /* comment */\n'],
+  ])('keeps %s string escapes and continuations private (%j)', (prefix, separator) => {
+    const query = `SELECT ${prefix}'first'${separator}${String.raw`'private\'value'; DROP TABLE users;`}`;
+    const result = redactSqlLiteralsAndComments(query, 'postgresql');
+    expect(result).toContain('DROP TABLE users');
+    expect(result).not.toContain('private');
+    expect(result).not.toContain('value');
+  });
+
+  it.each([String.raw`"path\"`, String.raw`"path  \"`])(
+    'preserves PostgreSQL identifiers ending in a backslash: %s',
+    (identifier) => {
+      const query = `SELECT ${identifier} FROM records; DROP TABLE users; -- "`;
+      expect(redactSqlLiteralsAndComments(query, 'postgresql')).toBe(
+        `SELECT ${identifier} FROM records; DROP TABLE users;`,
+      );
+    },
+  );
+
   it.each(['#>', '#>>', '#-'])('preserves PostgreSQL JSON operator %s', (operator) => {
     const result = redactSqlLiteralsAndComments(
       `SELECT payload ${operator} '{private}' FROM records WHERE owner='private'`,

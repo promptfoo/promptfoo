@@ -844,7 +844,8 @@ export class OTLPReceiver {
     const parentSpanId = rawParentSpanId ? this.convertId(rawParentSpanId, 16) : undefined;
 
     const severityIsError =
-      typeof log.severityNumber === 'number' && log.severityNumber >= SEVERITY_NUMBER_ERROR;
+      (typeof log.severityNumber === 'number' && log.severityNumber >= SEVERITY_NUMBER_ERROR) ||
+      /^(?:ERROR|FATAL)[1-4]?$/i.test(log.severityText ?? '');
 
     return {
       traceId,
@@ -856,7 +857,7 @@ export class OTLPReceiver {
         endTime,
         attributes,
         // OTEL logs don't carry a span status; treat as OK unless severity indicates error.
-        statusCode: 1,
+        statusCode: severityIsError ? 2 : 1,
         statusMessage: severityIsError ? log.severityText : undefined,
       },
     };

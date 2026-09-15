@@ -1898,32 +1898,40 @@ describe('OTLPReceiver', () => {
       expect(response.body.service).toBe('promptfoo-otlp-receiver');
     });
 
-    it('marks log-derived spans as ERROR when severityNumber >= 17', async () => {
-      const req = makeLogsRequest([
-        {
-          timeUnixNano: '1700000000000000000',
-          traceId: hexTraceId,
-          spanId: hexParentSpanId,
-          severityNumber: 17,
-          severityText: 'ERROR',
-          body: { stringValue: 'something failed' },
-          attributes: [{ key: 'event.name', value: { stringValue: 'claude_code.error' } }],
-        },
-      ]);
+    it.each([
+      { severityNumber: 17, severityText: 'ERROR', statusCode: 2 },
+      { severityNumber: 24, severityText: undefined, statusCode: 2 },
+      { severityNumber: undefined, severityText: 'ERROR', statusCode: 2 },
+      { severityNumber: undefined, severityText: 'FATAL4', statusCode: 2 },
+      { severityNumber: 9, severityText: 'INFO', statusCode: 1 },
+    ])(
+      'preserves command log severity as span status: %j',
+      async ({ severityNumber, severityText, statusCode }) => {
+        const req = makeLogsRequest([
+          {
+            timeUnixNano: '1700000000000000000',
+            traceId: hexTraceId,
+            spanId: hexParentSpanId,
+            severityNumber,
+            severityText,
+            body: { stringValue: 'something failed' },
+            attributes: [{ key: 'event.name', value: { stringValue: 'claude_code.error' } }],
+          },
+        ]);
 
-      await request(receiver.getApp())
-        .post('/v1/logs')
-        .set('Content-Type', 'application/json')
-        .send(req)
-        .expect(200);
+        await request(receiver.getApp())
+          .post('/v1/logs')
+          .set('Content-Type', 'application/json')
+          .send(req)
+          .expect(200);
 
-      const [, spans] = persistSpans.mock.calls[0];
-      const span = (spans as any[])[0];
-      expect(span.statusMessage).toBe('ERROR');
-      // The synthesized span still reports statusCode=1 (OK for the OTEL span itself)
-      // while statusMessage surfaces the severity — verifies the mapping contract.
-      expect(span.attributes['otel.log.severity_number']).toBe(17);
-    });
+        const [, spans] = persistSpans.mock.calls[0];
+        const span = spans[0];
+        expect(span.statusCode).toBe(statusCode);
+        expect(span.statusMessage).toBe(statusCode === 2 ? severityText : undefined);
+        expect(span.attributes?.['otel.log.severity_number']).toBe(severityNumber);
+      },
+    );
 
     it('uses claude_code.event.name as a secondary span-name source when event.name is absent', async () => {
       const req = makeLogsRequest([
