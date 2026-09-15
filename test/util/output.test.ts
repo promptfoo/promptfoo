@@ -222,14 +222,15 @@ describe('writeOutput', () => {
               outputs: [
                 {
                   id: 'legacy',
-                  pass: true,
+                  pass: false,
                   score: 1,
                   cost: 0,
-                  failureReason: 0,
+                  failureReason: ResultFailureReason.ERROR,
                   latencyMs: 1,
                   namedScores: {},
                   prompt: 'Summarize',
-                  text: 'Public response',
+                  text: 'Connection failed https://host.test?api_key=table-error-credential',
+                  error: 'Connection failed https://host.test?api_key=table-error-credential',
                   testCase: {},
                   response: {
                     output: 'Public response',
@@ -262,6 +263,7 @@ describe('writeOutput', () => {
       const output = vi.mocked(fsPromises.writeFile).mock.calls[0][1] as string;
       expect(output).not.toContain('legacy-header-7294');
       expect(output).not.toContain('PRIVATE_LEGACY_');
+      expect(output).not.toContain('table-error-credential');
       expect(output).toContain('Public response');
       expect(output).not.toContain('PRIVATE_PROMPT_PROVIDER');
       expect(output).toContain('[REDACTED]');

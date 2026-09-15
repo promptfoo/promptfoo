@@ -155,7 +155,7 @@ describe('runEvaluation tool', () => {
             handler = fn;
           }),
         } as any);
-        const filter = matched ? id : 'not-present';
+        const filter = matched ? id.toUpperCase() : 'not-present';
         const result = await handler({ providerFilter: array ? [filter] : filter });
         expect(result.isError).toBe(!matched);
         expect(result.content[0].text).toContain('target.invalid');
@@ -1205,6 +1205,22 @@ describe('runEvaluation tool', () => {
   );
 
   describe('result formatting', () => {
+    it('redacts and bounds a provider error in the MCP result', async () => {
+      const { formatEvaluationResults } = await import(
+        '../../../../src/commands/mcp/lib/resultFormatter'
+      );
+      const summary = await createMockEvalResult().toEvaluateSummary();
+      const error =
+        'Failed https://user:fixture-error-password@host.test/mcp?api_key=fixture-error-key ' +
+        'retry detail '.repeat(100);
+      summary.results[0].error = error;
+      const formatted = formatEvaluationResults(summary, { maxTextLength: 100 });
+      const publicError = formatted.results[0].eval.error!;
+      expect(publicError).not.toMatch(/fixture-error-(?:password|key)/);
+      expect(publicError.length).toBeLessThanOrEqual(100);
+      expect(summary.results[0].error).toBe(error);
+    });
+
     it('should use shared formatter for pagination', async () => {
       const { formatEvaluationResults } = await import(
         '../../../../src/commands/mcp/lib/resultFormatter'

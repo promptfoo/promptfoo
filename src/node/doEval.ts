@@ -71,6 +71,7 @@ import {
 } from '../util/index';
 import { promptfooCommand } from '../util/promptfooCommand';
 import { checkProviderApiKeys } from '../util/provider';
+import { sanitizeErrorMessage } from '../util/sanitizer';
 import { shouldShareResults } from '../util/sharing';
 import { resolveTestsWatchPaths } from '../util/testCaseReader';
 import { TokenUsageTracker } from '../util/tokenUsage';
@@ -192,7 +193,9 @@ async function resolveReplayConfigs(
   const regexError = providerFilter ? getProviderFilterRegexError(providerFilter) : undefined;
   if (providerFilter && regexError) {
     throw new ConfigResolutionError(
-      `Could not apply stored provider filter "${providerFilter}" while ${action} evaluation ${evalRecord.id}: ${regexError}. The evaluation was not changed.`,
+      sanitizeErrorMessage(
+        `Could not apply stored provider filter "${providerFilter}" while ${action} evaluation ${evalRecord.id}: ${regexError}. The evaluation was not changed.`,
+      ),
     );
   }
 
@@ -681,12 +684,16 @@ async function doEvalWithEnv(
     const cliProviderFilter = cmdObj.filterProviders || cmdObj.filterTargets;
     if (resumeEval && cliProviderFilter && cliProviderFilter !== persistedProviderFilter) {
       logger.warn(
-        `Ignoring --filter-providers/--filter-targets "${cliProviderFilter}": ${describeReplayAction(retryErrors)} evaluation ${resumeEval.id} with stored provider filter ${persistedProviderFilter ? `"${persistedProviderFilter}"` : '(none)'} to preserve test indices.`,
+        sanitizeErrorMessage(
+          `Ignoring --filter-providers/--filter-targets "${cliProviderFilter}": ${describeReplayAction(retryErrors)} evaluation ${resumeEval.id} with stored provider filter ${persistedProviderFilter ? `"${persistedProviderFilter}"` : '(none)'} to preserve test indices.`,
+        ),
       );
     }
     if (resumeEval && persistedProviderFilter && testSuite.providers.length === 0) {
       return failEvalRun(
-        `Stored provider filter "${persistedProviderFilter}" matched no providers while ${describeReplayAction(retryErrors)} evaluation ${resumeEval.id}. The evaluation was not changed.`,
+        sanitizeErrorMessage(
+          `Stored provider filter "${persistedProviderFilter}" matched no providers while ${describeReplayAction(retryErrors)} evaluation ${resumeEval.id}. The evaluation was not changed.`,
+        ),
         isCliInvocation,
       );
     }

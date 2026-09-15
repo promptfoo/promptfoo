@@ -21,7 +21,13 @@ import {
 } from '../types/index';
 import { isApiProvider, isProviderOptions } from '../types/providers';
 import { safeJsonStringify } from '../util/json';
-import { isSecretField, REDACTED, redactSecretLeaves, sanitizeObject } from '../util/sanitizer';
+import {
+  isSecretField,
+  REDACTED,
+  redactSecretLeaves,
+  sanitizeErrorMessage,
+  sanitizeObject,
+} from '../util/sanitizer';
 import { getCurrentTimestamp } from '../util/time';
 import {
   accumulateGradingTokenUsage,
@@ -47,7 +53,9 @@ function projectProviderResponse(
     return response;
   }
 
-  if (!options.stripMetadata && !options.stripOutput) {
+  const error =
+    typeof response.error === 'string' ? sanitizeErrorMessage(response.error) : response.error;
+  if (!options.stripMetadata && !options.stripOutput && error === response.error) {
     return response;
   }
 
@@ -55,6 +63,9 @@ function projectProviderResponse(
     ? (({ metadata: _metadata, ...rest }) => rest)(response)
     : { ...response };
 
+  if (error !== response.error) {
+    projectedResponse.error = error;
+  }
   if (options.stripOutput) {
     projectedResponse.output = '[output stripped]';
   }
@@ -592,6 +603,9 @@ export function sanitizeResultForArtifact<T extends object>(result: T): T {
 
   return {
     ...result,
+    ...(typeof artifactResult.error === 'string'
+      ? { error: sanitizeErrorMessage(artifactResult.error) }
+      : {}),
     ...(artifactResult.testCase
       ? {
           testCase: projectTestCase(

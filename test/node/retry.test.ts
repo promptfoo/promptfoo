@@ -857,6 +857,22 @@ describe('retryCommand', () => {
     expect(dbMocks.deleteRun).not.toHaveBeenCalled();
   });
 
+  it.each(['', '['])('redacts credentials in stored filter errors (%s)', async (suffix) => {
+    const filter = `mcp:https://fixture-user:fixture-filter-password@host.test/mcp?api_key=fixture-filter-key${suffix}`;
+    const originalEval = createEval({ runtimeOptions: { providerFilter: filter } });
+    vi.mocked(Eval.findById).mockResolvedValue(originalEval);
+    dbMocks.errorRows.push({ id: 'error-result-1' });
+    mockResolvedConfig({ providers: [] });
+
+    const error = await retryCommand(originalEval.id, {}).catch((error) => error);
+    expect(error).toBeInstanceOf(Error);
+    expect(error.message).toContain('provider filter');
+    expect(error.message).not.toContain('fixture-filter-password');
+    expect(error.message).not.toContain('fixture-filter-key');
+    expect(evaluate).not.toHaveBeenCalled();
+    expect(dbMocks.deleteRun).not.toHaveBeenCalled();
+  });
+
   it('preserves error results when persisted provider identity has drifted', async () => {
     const originalEval = createEval({
       runtimeOptions: {

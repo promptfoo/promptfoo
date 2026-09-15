@@ -46,7 +46,7 @@ export function getFileHashes(scriptParts: string[], basePath?: string): string[
   const fileHashes: string[] = [];
 
   for (const part of scriptParts) {
-    const cleanPart = part.replace(/^['"]|['"]$/g, '');
+    const cleanPart = part.replace(/^--?[^=]+=/, '').replace(/^['"]|['"]$/g, '');
     const filePath = basePath ? path.resolve(basePath, cleanPart) : cleanPart;
     if (fs.existsSync(filePath) && fs.statSync(filePath).isFile()) {
       const fileContent = fs.readFileSync(filePath);

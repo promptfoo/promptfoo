@@ -146,6 +146,25 @@ describe('getFileHashes', () => {
     },
   );
 
+  it.each(['--config=settings.json', '--config=settings=local.json', '-c=settings.json'])(
+    'invalidates file hashes when %s changes',
+    async (argument) => {
+      const file = path.resolve('/project', argument.slice(argument.indexOf('=') + 1));
+      existsSyncMock.mockImplementation((candidate) => normalizeFsPath(candidate) === file);
+      statSyncMock.mockReturnValue({ isFile: () => true } as fs.Stats);
+      readFileSyncMock.mockReturnValue('first configuration');
+      createHashMock.mockImplementation(
+        (await vi.importActual<typeof import('crypto')>('crypto')).createHash,
+      );
+
+      const initial = getFileHashes(['node', 'target.js', argument], '/project');
+      expect(initial).toHaveLength(1);
+      expect(getFileHashes(['node', 'target.js', argument], '/project')).toEqual(initial);
+      readFileSyncMock.mockReturnValue('changed configuration');
+      expect(getFileHashes(['node', 'target.js', argument], '/project')).not.toEqual(initial);
+    },
+  );
+
   it('should return an empty array for non-existent files', () => {
     const scriptParts = ['nonexistent1.js', 'nonexistent2.js'];
     existsSyncMock.mockReturnValue(false);

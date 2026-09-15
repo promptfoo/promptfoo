@@ -1631,6 +1631,23 @@ export function sanitizeUrl(url: string, redactOpaqueValues = true): string {
   }
 }
 
+/** Keep useful error text while removing transport URLs and credential-bearing details. */
+export function sanitizeErrorMessage(message: string): string {
+  const sanitized = message.replace(/\bhttps?:\/\/[^\s<>"'`]+/gi, (url) =>
+    sanitizeUrlForLogging(url),
+  );
+  // Free-form header/config dumps need not be valid JSON. Avoid guessing where
+  // an unquoted credential ends; keep those details out of public errors.
+  for (const match of sanitized.matchAll(/(?:^|[\s{[,])["']?([a-z_][\w.-]*)["']?\s*[:=]/gi)) {
+    if (isReplaySecretField(match[1])) {
+      return 'Evaluation error details were redacted because they contain credentials.';
+    }
+  }
+  return sanitizeObject(sanitized.replace(/\b(?:Bearer|Basic)\s+[a-z0-9._~+/-]+=*/gi, REDACTED), {
+    redactOpaqueValues: false,
+  });
+}
+
 /**
  * Sanitize a URL specifically for diagnostic output. Opaque path segments can be
  * legitimate resource IDs in persisted provider results, so only logging paths

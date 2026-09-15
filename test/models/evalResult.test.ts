@@ -58,6 +58,26 @@ describe('EvalResult', () => {
     response: undefined,
   });
 
+  it.each([
+    'Connection failed for https://user:fixture-error-password@host.test/path?api_key=fixture-error-key',
+    'Provider rejected Authorization: Bearer fixture-error-token',
+    'Provider rejected {"headers":{"X-Api-Key":"fixture-error-key"}}',
+  ])('redacts credentials from artifact errors: %s', (error) => {
+    const input = { ...mockEvaluateResult, error, response: { error } };
+    const projected = sanitizeResultForArtifact(input);
+    expect(projected.error).toBeTruthy();
+    expect(JSON.stringify(projected)).not.toMatch(/fixture-error-(?:password|key|token)/);
+    expect(input.error).toBe(error);
+    expect(input.response.error).toBe(error);
+  });
+
+  it.each(['Provider returned HTTP 503; try again later', undefined, null])(
+    'preserves a non-sensitive artifact error: %s',
+    (error) => {
+      expect(sanitizeResultForArtifact({ ...mockEvaluateResult, error }).error).toBe(error);
+    },
+  );
+
   it.each(['artifact', 'model'])(
     'strips nested grading metadata from the %s projection without changing live grades',
     async (boundary) => {

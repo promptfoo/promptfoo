@@ -21,6 +21,7 @@ import { applyPromptSelection, getPromptsForReplay } from '../util/eval/replay';
 import { accumulateNamedMetric } from '../util/namedMetrics';
 import { writeMultipleOutputs } from '../util/output';
 import { getOutputFileFormat } from '../util/outputFormats';
+import { sanitizeErrorMessage } from '../util/sanitizer';
 import { shouldShareResults } from '../util/sharing';
 import {
   accumulateGradingTokenUsage,
@@ -59,7 +60,9 @@ function assertRetryProviderFilterMatched(
 
   const configDescription = configPath ? `retry config "${configPath}"` : 'saved evaluation config';
   throw new ConfigResolutionError(
-    `Stored provider filter "${providerFilter}" matched no providers in the ${configDescription}. Existing ERROR results were preserved.`,
+    sanitizeErrorMessage(
+      `Stored provider filter "${providerFilter}" matched no providers in the ${configDescription}. Existing ERROR results were preserved.`,
+    ),
   );
 }
 
@@ -97,7 +100,9 @@ async function resolveRetryConfigs(
       ? `retry config "${cmdObj.config}"`
       : 'saved evaluation config';
     throw new ConfigResolutionError(
-      `Could not resolve the ${configDescription} using stored provider filter "${providerFilter}": ${regexError}. Existing ERROR results were preserved.`,
+      sanitizeErrorMessage(
+        `Could not resolve the ${configDescription} using stored provider filter "${providerFilter}": ${regexError}. Existing ERROR results were preserved.`,
+      ),
     );
   }
 

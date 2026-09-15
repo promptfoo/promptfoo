@@ -44,7 +44,7 @@ import { filterPrompts } from '../eval/filterPrompts';
 import { filterProviderConfigs, getProviderIdAndLabel } from '../eval/filterProviders';
 import { filterTests } from '../eval/filterTests';
 import { promptfooCommand } from '../promptfooCommand';
-import { preserveTracingCredentialReferences } from '../sanitizer';
+import { preserveTracingCredentialReferences, sanitizeErrorMessage } from '../sanitizer';
 import { readTest, readTests } from '../testCaseReader';
 import {
   type PromptReferenceSource,
@@ -1026,7 +1026,9 @@ export async function resolveConfigs(
       filteredProviderConfigs.length === 0
     ) {
       logger.warn(
-        `No providers matched the filter "${filterOption}". Check your --filter-providers/--filter-targets value.`,
+        sanitizeErrorMessage(
+          `No providers matched the filter "${filterOption}". Check your --filter-providers/--filter-targets value.`,
+        ),
       );
     }
 

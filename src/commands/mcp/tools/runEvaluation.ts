@@ -12,7 +12,6 @@ import {
   getRuntimeProviderId,
 } from '../../../util/eval/providerSelection';
 import { parseFilterRange } from '../../../util/filterRange';
-import { escapeRegExp } from '../../../util/text';
 import { formatEvaluationResults, formatPromptsSummary } from '../lib/resultFormatter';
 import { createToolResponse } from '../lib/utils';
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
@@ -64,7 +63,7 @@ function applyProviderFilter(testSuite: TestSuite, providerFilter?: string | str
   }
 
   const filters = Array.isArray(providerFilter) ? providerFilter : [providerFilter];
-  const filterPattern = new RegExp(filters.map(escapeRegExp).join('|'), 'i');
+  const normalizedFilters = filters.map((filter) => filter.toLowerCase());
 
   if (testSuite.providers.length === 0) {
     throw new McpEvaluationFilterError(
@@ -75,7 +74,10 @@ function applyProviderFilter(testSuite: TestSuite, providerFilter?: string | str
   const filteredProviders = testSuite.providers.filter((provider) => {
     const providerId = getRuntimeProviderId(provider);
     const label = provider.label || providerId || '';
-    return filterPattern.test(label) || filterPattern.test(providerId || '');
+    return normalizedFilters.some(
+      (filter) =>
+        label.toLowerCase().includes(filter) || (providerId || '').toLowerCase().includes(filter),
+    );
   });
 
   if (filteredProviders.length === 0) {

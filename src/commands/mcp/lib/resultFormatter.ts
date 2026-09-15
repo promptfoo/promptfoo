@@ -1,4 +1,5 @@
 import { ResultFailureReason as ResultFailureReasonEnum } from '../../../types/index';
+import { sanitizeErrorMessage } from '../../../util/sanitizer';
 import { truncateText } from './utils';
 
 import type {
@@ -165,7 +166,10 @@ function formatSingleResult(
       success: result.success,
       score: result.score,
       namedScores: result.namedScores,
-      error: result.error ?? undefined,
+      error:
+        result.error == null
+          ? undefined
+          : truncateText(sanitizeErrorMessage(result.error), maxTextLength),
       failureReason: formatFailureReason(result.failureReason),
     },
     assertions,

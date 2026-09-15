@@ -31,6 +31,7 @@ import { writeJunitXmlOutput } from './junit';
 import { getOutputFileFormat, SUPPORTED_OUTPUT_FILE_FORMATS } from './outputFormats';
 import {
   redactSecretLeaves,
+  sanitizeErrorMessage,
   sanitizeObject,
   sanitizeRuntimeOptions,
   sanitizeTracesForArtifact,
@@ -381,7 +382,11 @@ function sanitizeOutputTable(table: EvaluateTable): EvaluateTable {
             ...projectedOutput,
             prompt: projectedOutput.prompt.raw,
             provider: projectedOutput.provider?.id,
-            text: stripOutput ? '[output stripped]' : output.text,
+            text: stripOutput
+              ? '[output stripped]'
+              : output.failureReason === ResultFailureReason.ERROR
+                ? sanitizeErrorMessage(output.text)
+                : output.text,
           };
         }),
       };
