@@ -1071,6 +1071,11 @@ export async function resolveConfigs(
     testSuite.providers,
     typeof testSuite.defaultTest === 'object' ? testSuite.defaultTest : undefined,
     testSuite.scenarios,
+    {
+      unfilteredProviders: Array.isArray(cliFilteredProviderConfigs)
+        ? cliFilteredProviderConfigs.map((p, i) => getProviderIdAndLabel(p, i))
+        : undefined,
+    },
   );
 
   // Validate that all prompt references in tests exist

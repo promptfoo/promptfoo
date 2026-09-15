@@ -165,4 +165,47 @@ describe('validateTestProviderReferences', () => {
       );
     });
   });
+
+  describe('CLI filtered providers', () => {
+    it('allows provider references that exist in unfilteredProviders even if filtered out', () => {
+      const tests: TestCase[] = [
+        {
+          description: 'Test with filtered and unfiltered providers',
+          providers: ['gemini', 'openai:gpt-4'],
+        },
+      ];
+      const filteredProviders = [createProvider('openai:gpt-4', 'smart-model')];
+      const unfilteredProviders = [
+        { id: 'gemini' },
+        { id: 'openai:gpt-4', label: 'smart-model' },
+      ];
+
+      expect(() =>
+        validateTestProviderReferences(tests, filteredProviders, undefined, undefined, {
+          unfilteredProviders,
+        }),
+      ).not.toThrow();
+    });
+
+    it('throws if provider reference does not exist in unfilteredProviders either', () => {
+      const tests: TestCase[] = [
+        {
+          description: 'Test with truly nonexistent provider',
+          providers: ['truly-nonexistent', 'openai:gpt-4'],
+        },
+      ];
+      const filteredProviders = [createProvider('openai:gpt-4', 'smart-model')];
+      const unfilteredProviders = [
+        { id: 'gemini' },
+        { id: 'openai:gpt-4', label: 'smart-model' },
+      ];
+
+      expect(() =>
+        validateTestProviderReferences(tests, filteredProviders, undefined, undefined, {
+          unfilteredProviders,
+        }),
+      ).toThrow(ProviderReferenceValidationError);
+    });
+  });
 });
+
