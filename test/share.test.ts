@@ -1203,7 +1203,7 @@ describe('createShareableUrl', () => {
           traceId: 'trace-123',
           evaluationId: mockEvalWithTraces.id as string,
           testCaseId: 'test-case-1',
-          metadata: { test: 'metadata' },
+          metadata: { test: 'metadata', headers: { Authorization: 'PRIVATE_TRACE_CREDENTIAL' } },
           spans: [
             {
               spanId: 'span-1',
@@ -1211,6 +1211,15 @@ describe('createShareableUrl', () => {
               startTime: 1000,
               endTime: 2000,
               statusCode: 1,
+              attributes: {
+                headers: { 'x-api-key': 'PRIVATE_TRACE_CREDENTIAL', 'content-type': 'text/plain' },
+              },
+              events: [
+                {
+                  name: 'request',
+                  attributes: { headers: { Authorization: 'PRIVATE_TRACE_CREDENTIAL' } },
+                },
+              ],
             },
           ],
         },
@@ -1242,6 +1251,8 @@ describe('createShareableUrl', () => {
       // Verify trace data structure is correct
       const firstCall = mockFetch.mock.calls[0];
       const requestBody = JSON.parse(firstCall[1].body);
+      expect(JSON.stringify(requestBody.traces)).not.toContain('PRIVATE_TRACE_CREDENTIAL');
+      expect(JSON.stringify(mockTraces)).toContain('PRIVATE_TRACE_CREDENTIAL');
       expect(requestBody.traces).toHaveLength(1);
       expect(requestBody.traces[0]).toMatchObject({
         traceId: 'trace-123',

@@ -197,7 +197,7 @@ describe('writeOutput', () => {
       const prompt = {
         raw: 'Summarize',
         label: 'gateway',
-        provider: 'openai:agents-api',
+        provider: 'webhook:https://hooks.slack.com/services/T123/B123/PRIVATE_PROMPT_PROVIDER',
         config: { apiHost: 'gateway.example', headers: { 'X-Gateway-Auth': 'legacy-header-7294' } },
       };
       const eval_ = new Eval({}, { prompts: [prompt] });
@@ -215,6 +215,7 @@ describe('writeOutput', () => {
       await writeOutput(`output.${extension}`, eval_, null);
       const output = vi.mocked(fsPromises.writeFile).mock.calls[0][1] as string;
       expect(output).not.toContain('legacy-header-7294');
+      expect(output).not.toContain('PRIVATE_PROMPT_PROVIDER');
       expect(output).toContain('[REDACTED]');
       expect(prompt.config.headers['X-Gateway-Auth']).toBe('legacy-header-7294');
     },
@@ -222,6 +223,7 @@ describe('writeOutput', () => {
 
   it('redacts env and secret config fields in JSON output', async () => {
     const outputPath = 'output.json';
+    const providerId = 'webhook:https://hooks.slack.com/services/T123/B123/PRIVATE_CONFIG_PROVIDER';
     const eval_ = new Eval({
       description: 'Test config',
       tests: 'az://account/container/tests.yaml?sp=r&sig=azure-secret',
@@ -255,6 +257,8 @@ describe('writeOutput', () => {
             },
           },
         },
+        providerId,
+        { id: providerId },
       ],
       tracing: {
         enabled: true,
@@ -312,6 +316,7 @@ describe('writeOutput', () => {
       'X-MCP-Custom': '[REDACTED]',
     });
     for (const credential of [
+      'PRIVATE_CONFIG_PROVIDER',
       'host-credential',
       'url-credential',
       'query-credential',

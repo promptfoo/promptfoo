@@ -75,7 +75,7 @@ export function getScriptCacheKey(
     return undefined;
   }
 
-  const cacheInputs = [inputs, getRuntimeEnv()];
+  const cacheInputs = { inputs, env: getRuntimeEnv() };
   const sanitized = stableStringify(redactSecretLeaves(cacheInputs));
   if (sanitized !== stableStringify(cacheInputs)) {
     return undefined;

@@ -4,7 +4,7 @@
  */
 import safeStringify from 'fast-safe-stringify';
 
-import type { EvalRuntimeOptions, UnifiedConfig } from '../types';
+import type { EvalRuntimeOptions, OutputFile, UnifiedConfig } from '../types';
 
 const MAX_DEPTH = 4;
 const DUMMY_BASE = 'http://placeholder';
@@ -1409,6 +1409,41 @@ export function redactSecretLeaves<T>(
   { redactOpaqueValues = true }: { redactOpaqueValues?: boolean } = {},
 ): T {
   return redactSecretLeavesInner(value, undefined, new WeakSet<object>(), redactOpaqueValues) as T;
+}
+
+/** Redact trace credentials, including provider IDs repeated in span text. */
+export function sanitizeTracesForArtifact(
+  traces: NonNullable<OutputFile['traces']>,
+): NonNullable<OutputFile['traces']> {
+  return traces.map((trace) => {
+    const redacted = redactSecretLeaves(trace, { redactOpaqueValues: false });
+    const replacements = new Map<string, string>();
+    for (const providerId of [
+      trace.metadata?.providerId,
+      ...trace.spans.map((span) => span.attributes?.['promptfoo.provider.id']),
+    ]) {
+      if (typeof providerId === 'string' && providerId) {
+        const id = redactSecretLeaves({ id: providerId }, { redactOpaqueValues: false }).id;
+        if (id !== providerId) {
+          replacements.set(providerId, id);
+        }
+      }
+    }
+    if (replacements.size === 0) {
+      return redacted;
+    }
+    return JSON.parse(
+      JSON.stringify(redacted, (_key, value) => {
+        if (typeof value !== 'string') {
+          return value;
+        }
+        for (const [providerId, id] of replacements) {
+          value = value.split(providerId).join(id);
+        }
+        return value;
+      }),
+    );
+  });
 }
 
 function stableStringifyInner(value: unknown, seen: WeakSet<object>): string {

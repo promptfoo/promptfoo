@@ -21,7 +21,7 @@ import {
 } from '../types/index';
 import { isApiProvider, isProviderOptions } from '../types/providers';
 import { safeJsonStringify } from '../util/json';
-import { isSecretField, REDACTED, sanitizeObject } from '../util/sanitizer';
+import { isSecretField, REDACTED, redactSecretLeaves, sanitizeObject } from '../util/sanitizer';
 import { getCurrentTimestamp } from '../util/time';
 import {
   accumulateGradingTokenUsage,
@@ -90,6 +90,26 @@ function projectTestCase(
   return projectedTestCase;
 }
 
+function projectGradingResult(
+  gradingResult: GradingResult | null | undefined,
+  stripMetadata: boolean,
+): GradingResult | null | undefined {
+  if (!gradingResult || !stripMetadata) {
+    return gradingResult;
+  }
+  const { metadata: _metadata, componentResults, ...rest } = gradingResult;
+  return {
+    ...rest,
+    ...(componentResults && {
+      componentResults: componentResults.map((result) => projectGradingResult(result, true)!),
+    }),
+  };
+}
+
+function sanitizeProviderId(id: string | undefined): string | undefined {
+  return redactSecretLeaves({ id }, { redactOpaqueValues: false }).id;
+}
+
 // Removes circular references from the provider object and ensures consistent format
 export function sanitizeProvider(
   provider: ApiProvider | ProviderOptions | string,
@@ -97,7 +117,7 @@ export function sanitizeProvider(
   try {
     if (isApiProvider(provider)) {
       return {
-        id: provider.id(),
+        id: sanitizeProviderId(provider.id()),
         label: provider.label,
         ...(provider.config && {
           config: sanitizeProviderConfig(provider.config),
@@ -106,7 +126,7 @@ export function sanitizeProvider(
     }
     if (isProviderOptions(provider)) {
       return {
-        id: provider.id,
+        id: sanitizeProviderId(provider.id),
         label: provider.label,
         ...(provider.config && {
           config: sanitizeProviderConfig(provider.config),
@@ -120,7 +140,9 @@ export function sanitizeProvider(
         config?: ProviderConfig;
       };
       return {
-        id: typeof providerObj.id === 'function' ? providerObj.id() : providerObj.id,
+        id: sanitizeProviderId(
+          typeof providerObj.id === 'function' ? providerObj.id() : providerObj.id,
+        ),
         label: providerObj.label,
         ...(providerObj.config && {
           config: sanitizeProviderConfig(providerObj.config),
@@ -128,7 +150,11 @@ export function sanitizeProvider(
       };
     }
   } catch {}
-  return JSON.parse(safeJsonStringify(provider) as string);
+  return JSON.parse(
+    safeJsonStringify(
+      typeof provider === 'string' ? sanitizeProviderId(provider) : provider,
+    ) as string,
+  );
 }
 
 /**
@@ -556,7 +582,7 @@ export function sanitizeResultForArtifact<T extends object>(result: T): T {
   const artifactResult = result as T & Record<string, unknown>;
   const redacted = redactSensitiveResultFieldsForDb({
     response: sanitizeForDb(artifactResult.response as ProviderResponse | null | undefined),
-    gradingResult: sanitizeForDb(artifactResult.gradingResult),
+    gradingResult: sanitizeForDb(artifactResult.gradingResult as GradingResult | null | undefined),
     metadata: sanitizeForDb(artifactResult.metadata),
   });
   const response = projectProviderResponse(redacted.response ?? undefined, {
@@ -598,7 +624,9 @@ export function sanitizeResultForArtifact<T extends object>(result: T): T {
         }
       : {}),
     response,
-    gradingResult: shouldStripGradingResult ? null : redacted.gradingResult,
+    gradingResult: shouldStripGradingResult
+      ? null
+      : projectGradingResult(redacted.gradingResult, shouldStripMetadata),
     namedScores: sanitizeForDb(artifactResult.namedScores),
     metadata: shouldStripMetadata ? {} : redacted.metadata,
   } as T;
@@ -1014,7 +1042,9 @@ export default class EvalResult {
       }),
       description: this.description || undefined,
       error: this.error || undefined,
-      gradingResult: shouldStripGradingResult ? null : this.gradingResult,
+      gradingResult: shouldStripGradingResult
+        ? null
+        : projectGradingResult(this.gradingResult, shouldStripMetadata),
       id: this.id,
       latencyMs: this.latencyMs,
       namedScores: this.namedScores,

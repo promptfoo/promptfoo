@@ -33,6 +33,7 @@ import {
   redactSecretLeaves,
   sanitizeObject,
   sanitizeRuntimeOptions,
+  sanitizeTracesForArtifact,
   sanitizeTracingConfigForPersistence,
 } from './sanitizer';
 import { getNunjucksEngine } from './templates';
@@ -337,20 +338,27 @@ const outputToHtmlReportCell = (output: EvaluateTableOutput) => {
 };
 
 function sanitizeConfigForOutput(config: Eval['config']): OutputFile['config'] {
-  return sanitizeObject(sanitizeTracingConfigForPersistence(config), {
-    context: 'output config',
-    redactOpaqueValues: false,
-    throwOnError: true,
-    maxDepth: Number.POSITIVE_INFINITY,
-  }) as OutputFile['config'];
+  return redactSecretLeaves(
+    sanitizeObject(sanitizeTracingConfigForPersistence(config), {
+      context: 'output config',
+      redactOpaqueValues: false,
+      throwOnError: true,
+      maxDepth: Number.POSITIVE_INFINITY,
+    }),
+    { redactOpaqueValues: false },
+  ) as OutputFile['config'];
 }
 
 async function createOutputSummary(evalRecord: Eval): Promise<OutputFile['results']> {
   const summary = await evalRecord.toEvaluateSummary();
   const results = summary.results.map(sanitizeResultForArtifact);
   const prompts = ('prompts' in summary ? summary.prompts : summary.table.head.prompts).map(
-    (prompt) =>
-      prompt.config ? { ...prompt, config: sanitizeConfigForOutput(prompt.config) } : prompt,
+    (prompt) => ({
+      ...prompt,
+      provider: redactSecretLeaves({ provider: prompt.provider }, { redactOpaqueValues: false })
+        .provider,
+      ...(prompt.config && { config: sanitizeConfigForOutput(prompt.config) }),
+    }),
   );
   return 'prompts' in summary
     ? { ...summary, results, prompts }
@@ -362,6 +370,7 @@ async function createOutputSummary(evalRecord: Eval): Promise<OutputFile['result
 }
 
 function projectTracesForOutput(traces: NonNullable<OutputFile['traces']>) {
+  traces = sanitizeTracesForArtifact(traces);
   const shouldStripMetadata = getEnvBool('PROMPTFOO_STRIP_METADATA', false);
   const shouldStripPromptText = getEnvBool('PROMPTFOO_STRIP_PROMPT_TEXT', false);
   const shouldStripResponseOutput = getEnvBool('PROMPTFOO_STRIP_RESPONSE_OUTPUT', false);

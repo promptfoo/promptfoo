@@ -58,6 +58,41 @@ describe('EvalResult', () => {
     response: undefined,
   });
 
+  it.each(['artifact', 'model'])(
+    'strips nested grading metadata from the %s projection without changing live grades',
+    async (boundary) => {
+      const grade = {
+        pass: true,
+        score: 1,
+        reason: 'kept',
+        metadata: { note: 'PRIVATE_GRADE_NOTE' },
+      };
+      const input = {
+        ...mockEvaluateResult,
+        gradingResult: { ...grade, componentResults: [{ ...grade, componentResults: [grade] }] },
+      };
+      const original = JSON.stringify(input);
+      const result = await EvalResult.createFromEvaluateResult('grade-projection', input, {
+        persist: false,
+      });
+      const restore = mockProcessEnv({ PROMPTFOO_STRIP_METADATA: 'true' });
+      try {
+        const projected =
+          boundary === 'artifact' ? sanitizeResultForArtifact(input) : result.toEvaluateResult();
+        expect(JSON.stringify(projected.gradingResult)).not.toContain('PRIVATE_GRADE_NOTE');
+        expect(projected.gradingResult?.componentResults?.[0].componentResults?.[0]).toEqual({
+          pass: true,
+          score: 1,
+          reason: 'kept',
+        });
+        expect(JSON.stringify(input)).toBe(original);
+        expect(result.gradingResult?.metadata?.note).toBe('PRIVATE_GRADE_NOTE');
+      } finally {
+        restore();
+      }
+    },
+  );
+
   it.each(['single', 'batch', 'artifact'])(
     'redacts assertion provider credentials at the %s grading-result boundary',
     async (boundary) => {
@@ -193,6 +228,31 @@ describe('EvalResult', () => {
   );
 
   describe('sanitizeProvider', () => {
+    it.each(['string', 'options', 'instance'])(
+      'redacts credential-bearing %s provider IDs without changing the provider',
+      (shape) => {
+        for (const id of [
+          'webhook:https://hooks.slack.com/services/T123/B123/PRIVATE_PROVIDER_CREDENTIAL',
+          'http:https://alice:PRIVATE_PROVIDER_CREDENTIAL@example.com/v1?region=west',
+        ]) {
+          const provider =
+            shape === 'string'
+              ? id
+              : shape === 'options'
+                ? { id, label: 'kept' }
+                : { id: () => id, callApi: async () => ({ output: 'ok' }) };
+          const projected = sanitizeProvider(provider);
+          expect(JSON.stringify(projected)).not.toContain('PRIVATE_PROVIDER_CREDENTIAL');
+          expect(
+            typeof provider === 'string'
+              ? provider
+              : typeof provider.id === 'function'
+                ? provider.id()
+                : provider.id,
+          ).toBe(id);
+        }
+      },
+    );
     it('should handle ApiProvider objects', () => {
       const apiProvider = createMockProvider({
         id: 'test-provider',

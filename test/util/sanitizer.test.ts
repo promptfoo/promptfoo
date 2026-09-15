@@ -11,6 +11,7 @@ import {
   sanitizeObject,
   sanitizeQueryParams,
   sanitizeRuntimeOptions,
+  sanitizeTracesForArtifact,
   sanitizeTracingConfigForPersistence,
   sanitizeUrl,
   sanitizeUrlEncodedString,
@@ -29,6 +30,53 @@ beforeEach(() => {
 afterEach(() => {
   consoleErrorSpy.mockRestore();
   consoleWarnSpy.mockRestore();
+});
+
+describe('sanitizeTracesForArtifact', () => {
+  it('redacts trace headers and provider ID echoes while preserving opaque evidence and live data', () => {
+    const providerId = 'webhook:https://hooks.slack.com/services/T123/B123/PRIVATE_TRACE_PROVIDER';
+    const encoded = Buffer.from('ordinary encoded evidence '.repeat(8)).toString('base64');
+    const traces = [
+      {
+        traceId: 'a'.repeat(32),
+        evaluationId: 'eval-1',
+        testCaseId: 'test-1',
+        metadata: {
+          providerId,
+          headers: { Authorization: 'PRIVATE_TRACE_HEADER' },
+          label: 'public trace',
+        },
+        spans: [
+          { spanId: 'parent', name: providerId, startTime: 1 },
+          {
+            spanId: 'child',
+            name: `call ${providerId}`,
+            startTime: 2,
+            statusMessage: `failed ${providerId}`,
+            status: { code: 'error', message: `failed ${providerId}` },
+            attributes: {
+              'promptfoo.provider.id': providerId,
+              encoded,
+              headers: { 'x-api-key': 'PRIVATE_TRACE_HEADER' },
+            },
+            events: [
+              {
+                name: 'request',
+                attributes: { headers: { Authorization: 'PRIVATE_TRACE_HEADER' } },
+              },
+            ],
+          },
+        ],
+      },
+    ];
+    const original = JSON.stringify(traces);
+    const projected = sanitizeTracesForArtifact(traces);
+    expect(JSON.stringify(projected)).not.toMatch(/PRIVATE_TRACE_(?:PROVIDER|HEADER)/);
+    expect(projected[0].spans[1].attributes?.encoded).toBe(encoded);
+    expect(projected[0].traceId).toBe(traces[0].traceId);
+    expect(projected[0].metadata?.label).toBe('public trace');
+    expect(JSON.stringify(traces)).toBe(original);
+  });
 });
 
 describe('redactSecretLeaves', () => {

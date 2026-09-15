@@ -102,7 +102,7 @@ After restarting your AI tool, you should see promptfoo tools available. Try ask
   Filtered runs check access to the selected targets and active graders, including graders loaded from provider files or added by extension hooks. Default assertions disabled by a selected test do not require access to their graders.
   Without `configPath`, it uses the discovered `promptfooconfig.yaml`, `.yml`, or `.json` file.
 - **`share_evaluation`** - Generate publicly shareable URLs for evaluation results
-  Shared result configuration redacts credential values and omits executable function bodies. Runtime callbacks and credentials remain available locally.
+  Shared results redact credentials in configuration, provider IDs, and trace metadata, and omit executable function bodies. Runtime callbacks and credentials remain available locally.
 
 ### Generation Tools
 

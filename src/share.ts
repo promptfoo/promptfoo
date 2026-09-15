@@ -22,6 +22,7 @@ import { createBlobInlineCache, inlineBlobRefsForShare } from './util/inlineBlob
 import {
   redactAzureBlobSasTokens,
   redactSecretLeaves,
+  sanitizeTracesForArtifact,
   sanitizeTracingConfigForPersistence,
 } from './util/sanitizer';
 
@@ -177,7 +178,7 @@ async function sendEvalRecord(
     config: redactedConfig,
     results: [],
     runtimeOptions: evalRecord.runtimeOptions ? remoteRuntimeOptions : undefined,
-    traces,
+    traces: sanitizeTracesForArtifact(traces),
   };
   if (cloudConfig.isEnabled()) {
     const effectiveTeamId = getEffectiveShareTeamId(evalRecord);

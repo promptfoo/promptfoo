@@ -491,7 +491,7 @@ When importing a Promptfoo eval export, the following data is preserved:
 - **Timestamp** - The original creation timestamp is always preserved (even with `--new-id` or `--force`)
 - **Author** - The original author is always preserved (even with `--new-id` or `--force`)
 - **Config, results, prompts, variables, runtime options, and durations** - Preserved for current exports. Config secrets are redacted during export.
-- **Traces** - Preserved for current exports with sensitive trace attributes redacted by the trace store.
+- **Traces** - Preserved for current exports with credentials redacted from trace metadata, attributes, and provider IDs echoed in span text.
 - **Referenced blob media** - Restored when the export includes embedded media assets. Create a portable export with `promptfoo export eval <evalId> --include-media`.
 
 Older exports that do not include newer parity fields still import normally. Local relationships such as tags, dataset links, cache entries, and share state are not reconstructed from an eval export.

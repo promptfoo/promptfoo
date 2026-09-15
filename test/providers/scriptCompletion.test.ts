@@ -184,17 +184,18 @@ describe('script cache environment identity', () => {
     expect(getScriptCacheKey('exec', 'source', ['prompt'])).toBe(first);
   });
 
-  it.each(['account-a', 'account-b'])(
-    'bypasses caching when the child inherits credentials: %s',
-    (credential) => {
-      const restoreCredential = mockProcessEnv({ OPENAI_API_KEY: credential });
-      try {
-        expect(getScriptCacheKey('exec', 'source', ['prompt'])).toBeUndefined();
-      } finally {
-        restoreCredential();
-      }
-    },
-  );
+  it.each(
+    ['OPENAI_API_KEY', 'GITHUB_TOKEN', 'MY_SECRET_KEY'].flatMap((name) =>
+      ['account-a', 'account-b'].map((credential) => ({ name, credential })),
+    ),
+  )('bypasses caching when the child inherits $name: $credential', ({ name, credential }) => {
+    const restoreCredential = mockProcessEnv({ [name]: credential });
+    try {
+      expect(getScriptCacheKey('exec', 'source', ['prompt'])).toBeUndefined();
+    } finally {
+      restoreCredential();
+    }
+  });
 });
 
 describe('ScriptCompletionProvider', () => {
