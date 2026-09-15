@@ -460,7 +460,7 @@ export const providerMap: ProviderFactory[] = [
     ) => {
       return createCerebrasProvider(providerPath, {
         config: providerOptions,
-        env: context.env,
+        env: providerOptions.env ?? context.env,
       });
     },
   },
@@ -515,7 +515,7 @@ export const providerMap: ProviderFactory[] = [
       const { createCloudflareGatewayProvider } = await import('./cloudflare-gateway');
       return createCloudflareGatewayProvider(providerPath, {
         ...providerOptions,
-        env: context.env,
+        env: providerOptions.env ?? context.env,
       });
     },
   },
@@ -582,7 +582,7 @@ export const providerMap: ProviderFactory[] = [
     ) => {
       return createDeepSeekProvider(providerPath, {
         config: providerOptions,
-        env: context.env,
+        env: providerOptions.env ?? context.env,
       });
     },
   },
@@ -1219,7 +1219,7 @@ export const providerMap: ProviderFactory[] = [
     ) => {
       return createPerplexityProvider(providerPath, {
         config: providerOptions,
-        env: context.env,
+        env: providerOptions.env ?? context.env,
       });
     },
   },
@@ -1305,7 +1305,7 @@ export const providerMap: ProviderFactory[] = [
     ) => {
       return createTogetherAiProvider(providerPath, {
         config: providerOptions,
-        env: context.env,
+        env: providerOptions.env ?? context.env,
       });
     },
   },
@@ -1318,7 +1318,7 @@ export const providerMap: ProviderFactory[] = [
     ) => {
       return createTrueFoundryProvider(providerPath, {
         config: providerOptions,
-        env: context.env,
+        env: providerOptions.env ?? context.env,
       });
     },
   },
@@ -1331,7 +1331,7 @@ export const providerMap: ProviderFactory[] = [
     ) => {
       return createLlamaApiProvider(providerPath, {
         config: providerOptions,
-        env: context.env,
+        env: providerOptions.env ?? context.env,
       });
     },
   },
