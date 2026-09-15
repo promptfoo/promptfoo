@@ -13,6 +13,7 @@ import {
   vi,
 } from 'vitest';
 import { getGraderById } from '../../src/redteam/graders';
+import { parseOtlpAttributes } from '../../src/tracing/otlpAttributes';
 import { OTLPReceiver, startOTLPReceiver, stopOTLPReceiver } from '../../src/tracing/otlpReceiver';
 
 import type { TraceStore } from '../../src/tracing/store';
@@ -506,15 +507,49 @@ describe('OTLPReceiver', () => {
   it.each([false, true])(
     'preserves an empty AnyValue as unknown evidence (decoded: %s)',
     (decoded) => {
-      const attributes = (receiver as any).parseAttributes(
-        [{ key: 'guardrail.triggered', value: {} }],
-        decoded,
-      );
+      const attributes = parseOtlpAttributes([{ key: 'guardrail.triggered', value: {} }], decoded);
       expect(attributes).toEqual({ 'guardrail.triggered': null });
     },
   );
 
   describe('Health check', () => {
+    it('propagates event attribute traversal failures from the JSON parser', () => {
+      let value: { stringValue?: string; arrayValue?: { values: unknown[] } } = {
+        stringValue: 'unsafe finding',
+      };
+      for (let depth = 0; depth < 5000; depth++) {
+        value = { arrayValue: { values: [value] } };
+      }
+      expect(() =>
+        receiver['parseOTLPJSONRequest']({
+          resourceSpans: [
+            {
+              scopeSpans: [
+                {
+                  spans: [
+                    {
+                      traceId: 'a'.repeat(32),
+                      spanId: 'b'.repeat(16),
+                      name: 'route',
+                      kind: 1,
+                      startTimeUnixNano: '1000000000',
+                      events: [
+                        {
+                          name: 'unsafe verifier',
+                          timeUnixNano: '1100000000',
+                          attributes: [{ key: 'agentic.evidence_json', value }],
+                        },
+                      ],
+                    },
+                  ],
+                },
+              ],
+            },
+          ],
+        }),
+      ).toThrow(RangeError);
+    });
+
     it.each(['resource', 'span', 'log', 'nested'])(
       'rejects null %s attribute entries before storage',
       async (location) => {

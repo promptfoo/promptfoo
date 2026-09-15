@@ -1,3 +1,5 @@
+import { createHash } from 'node:crypto';
+
 import { asc, eq, sql } from 'drizzle-orm';
 import { getDb } from '../database/index';
 import { spansTable, tracesTable } from '../database/tables';
@@ -50,7 +52,63 @@ export interface AddSpansOptions {
   redactSpans?: (spans: SpanData[]) => SpanData[];
 }
 
-export class TraceLimitError extends Error {
+const SPAN_HASHES_KEY = 'promptfooSpanHashes';
+
+function spanHash(span: SpanData): string {
+  const attributes = { ...span.attributes };
+  delete attributes['promptfoo.redaction.history'];
+  const value = {
+    spanId: span.spanId,
+    parentSpanId: span.parentSpanId || undefined,
+    name: span.name,
+    startTime: span.startTime,
+    endTime: span.endTime ?? undefined,
+    attributes,
+    events: (span.events ?? []).map((event) => {
+      const attributes = { ...event.attributes };
+      delete attributes['promptfoo.redaction.history'];
+      return { ...event, attributes };
+    }),
+    statusCode: span.statusCode ?? 0,
+    statusMessage: span.statusMessage ?? '',
+  };
+  return createHash('sha256')
+    .update(
+      JSON.stringify(value, (_key, item) =>
+        item && typeof item === 'object' && !Array.isArray(item)
+          ? Object.fromEntries(
+              Object.entries(item).sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0)),
+            )
+          : item,
+      ),
+    )
+    .digest('hex');
+}
+
+function publicTraceMetadata(metadata: Record<string, unknown> | null | undefined) {
+  if (!metadata) {
+    return undefined;
+  }
+  const result = { ...metadata };
+  delete result[SPAN_HASHES_KEY];
+  return result;
+}
+
+export class TraceIncompleteError extends Error {
+  constructor(message = 'Cannot grade incomplete trace') {
+    super(message);
+    this.name = 'TraceIncompleteError';
+  }
+}
+
+class TraceConflictError extends TraceIncompleteError {
+  constructor() {
+    super('Cannot grade incomplete trace: conflicting span records');
+    this.name = 'TraceConflictError';
+  }
+}
+
+export class TraceLimitError extends TraceIncompleteError {
   constructor() {
     super('Trace redaction limit exceeded (10,000 spans or 10 MiB per trace)');
     this.name = 'TraceLimitError';
@@ -247,7 +305,7 @@ export class TraceStore {
           evaluationId: trace.evaluationId,
           testCaseId: trace.testCaseId,
           createdAt: Date.now(),
-          metadata: trace.metadata,
+          metadata: publicTraceMetadata(trace.metadata),
         })
         .onConflictDoNothing({ target: tracesTable.traceId })
         .run();
@@ -390,12 +448,44 @@ export class TraceStore {
           .from(spansTable)
           .where(eq(spansTable.traceId, traceId));
         validateTracePayloadSize(spans, options?.updateExisting ?? false, storedSizes);
+        const stored = await tx.select().from(spansTable).where(eq(spansTable.traceId, traceId));
+        const existing = serializeSpans(stored, false);
+        const [trace] = await tx
+          .select({ metadata: tracesTable.metadata })
+          .from(tracesTable)
+          .where(eq(tracesTable.traceId, traceId))
+          .limit(1);
+        const hashes = new Map<string, string>(
+          Object.entries(trace?.metadata?.[SPAN_HASHES_KEY] ?? {}),
+        );
+        const existingIds = new Set(existing.map((span) => span.spanId));
+        for (const span of existing) {
+          if (!hashes.has(span.spanId) && !span.attributes?.['promptfoo.redaction.history']) {
+            hashes.set(span.spanId, spanHash(span));
+          }
+        }
+        for (const span of spans) {
+          const hash = spanHash(span);
+          if (
+            !options?.updateExisting &&
+            (existingIds.has(span.spanId) || hashes.has(span.spanId)) &&
+            hashes.get(span.spanId) !== hash
+          ) {
+            throw new TraceConflictError();
+          }
+          hashes.set(span.spanId, hash);
+        }
+        await tx
+          .update(tracesTable)
+          .set({
+            metadata: sql`json_set(coalesce(${tracesTable.metadata}, '{}'), '$.promptfooSpanHashes', json(${JSON.stringify(Object.fromEntries(hashes))}))`,
+          })
+          .where(eq(tracesTable.traceId, traceId))
+          .run();
         if (!redact) {
           await insertSpans(tx, spans);
           return;
         }
-        const stored = await tx.select().from(spansTable).where(eq(spansTable.traceId, traceId));
-        const existing = serializeSpans(stored, false);
         const original = [...existing, ...spans];
         const sanitized = redact(original);
         const redactedSpanIds = new Set(
@@ -435,8 +525,11 @@ export class TraceStore {
       logger.debug(`[TraceStore] Successfully added ${spans.length} spans to trace ${traceId}`);
       return { stored: true };
     } catch (error) {
-      if (error instanceof TraceLimitError) {
-        await this.markTraceIncomplete(traceId);
+      if (error instanceof TraceIncompleteError) {
+        await this.markTraceIncomplete(
+          traceId,
+          error instanceof TraceLimitError ? 'limit exceeded' : 'conflicting spans',
+        );
       }
       logger.error(`[TraceStore] Failed to add spans: ${error}`);
       throw error;
@@ -474,7 +567,7 @@ export class TraceStore {
             traceId: trace.traceId,
             evaluationId: trace.evaluationId,
             testCaseId: trace.testCaseId,
-            metadata: trace.metadata ?? undefined,
+            metadata: publicTraceMetadata(trace.metadata),
             spans: serializeSpans(spans, shouldSanitize),
           };
         }),
@@ -518,7 +611,7 @@ export class TraceStore {
         traceId: trace.traceId,
         evaluationId: trace.evaluationId,
         testCaseId: trace.testCaseId,
-        metadata: trace.metadata ?? undefined,
+        metadata: publicTraceMetadata(trace.metadata),
         spans: serializeSpans(spans, shouldSanitize),
       };
     } catch (error) {
@@ -527,12 +620,12 @@ export class TraceStore {
     }
   }
 
-  async markTraceIncomplete(traceId: string): Promise<void> {
+  async markTraceIncomplete(traceId: string, reason = 'limit exceeded'): Promise<void> {
     const db = await this.getDatabase();
     await db
       .update(tracesTable)
       .set({
-        metadata: sql`json_set(coalesce(${tracesTable.metadata}, '{}'), '$.promptfooTraceIncomplete', 'limit exceeded')`,
+        metadata: sql`json_set(coalesce(${tracesTable.metadata}, '{}'), '$.promptfooTraceIncomplete', ${reason})`,
       })
       .where(eq(tracesTable.traceId, traceId))
       .run();
@@ -548,7 +641,7 @@ export class TraceStore {
         .where(eq(tracesTable.traceId, traceId))
         .limit(1);
 
-      return traces.length > 0 ? (traces[0].metadata ?? {}) : undefined;
+      return traces.length > 0 ? (publicTraceMetadata(traces[0].metadata) ?? {}) : undefined;
     } catch (error) {
       logger.error(`[TraceStore] Failed to get trace metadata: ${error}`);
       throw error;

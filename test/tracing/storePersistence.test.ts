@@ -13,7 +13,7 @@ import { runDbMigrations } from '../../src/migrate';
 import { OTLPReceiver } from '../../src/tracing/otlpReceiver';
 import * as traceProviders from '../../src/tracing/providers';
 import { TempoProvider } from '../../src/tracing/providers/tempo';
-import { TraceStore } from '../../src/tracing/store';
+import { type SpanData, TraceStore } from '../../src/tracing/store';
 import { fetchTraceContext } from '../../src/tracing/traceContext';
 import EvalFactory from '../factories/evalFactory';
 import { removeTempDir } from '../util/utils';
@@ -110,10 +110,14 @@ describe('TraceStore span persistence', () => {
           })),
         );
       }
-      await store.addSpans(traceId, [{ spanId: '0', name: 'replacement', startTime: 1 }], {
-        updateExisting,
-        redactSpans: (spans) => spans,
-      });
+      await store.addSpans(
+        traceId,
+        [{ spanId: '0', name: updateExisting ? 'replacement' : 'original', startTime: 1 }],
+        {
+          updateExisting,
+          redactSpans: (spans) => spans,
+        },
+      );
       const spans = await store.getSpans(traceId);
       expect(spans).toHaveLength(10_000);
       expect(spans.find((span) => span.spanId === '0')?.name).toBe(
@@ -134,10 +138,14 @@ describe('TraceStore span persistence', () => {
         attributes: { payload: '界'.repeat(2 * 1024 * 1024) },
       };
       await store.addSpans(traceId, [original]);
-      await store.addSpans(traceId, [{ ...original, name: 'replacement' }], {
-        updateExisting,
-        redactSpans: (spans) => spans,
-      });
+      await store.addSpans(
+        traceId,
+        [{ ...original, name: updateExisting ? 'replacement' : 'original' }],
+        {
+          updateExisting,
+          redactSpans: (spans) => spans,
+        },
+      );
       const spans = await store.getSpans(traceId);
       expect(spans).toHaveLength(1);
       expect(spans[0].name).toBe(updateExisting ? 'replacement' : 'original');
@@ -441,17 +449,99 @@ describe('TraceStore span persistence', () => {
     },
   );
 
-  it('ignores duplicate span IDs in a single insertion', async () => {
-    const traceStore = await createTrace('single-insertion');
+  it.each(['single insertion', 'later insertion', 'concurrent insertion'])(
+    'rejects conflicting duplicate span IDs in a %s',
+    async (mode) => {
+      const traceId = 'duplicate-conflict';
+      const store = await createTrace(traceId);
+      const clean = {
+        spanId: 'verifier',
+        name: 'verifier',
+        startTime: 1,
+        attributes: { 'agentic.evidence_json': '{"findings":[]}' },
+      };
+      const unsafe = {
+        ...clean,
+        attributes: { 'agentic.evidence_json': '{"findings":[{"kind":"approval-bypass"}]}' },
+      };
+      if (mode === 'concurrent insertion') {
+        const results = await Promise.allSettled([
+          store.addSpans(traceId, [clean]),
+          new TraceStore().addSpans(traceId, [unsafe]),
+        ]);
+        expect(results.filter((result) => result.status === 'rejected')).toHaveLength(1);
+      } else {
+        if (mode === 'later insertion') {
+          await store.addSpans(traceId, [clean]);
+        }
+        await expect(
+          store.addSpans(traceId, mode === 'single insertion' ? [clean, unsafe] : [unsafe]),
+        ).rejects.toThrow('conflicting span');
+      }
+      expect((await store.getTraceMetadata(traceId))?.promptfooTraceIncomplete).toBe(
+        'conflicting spans',
+      );
+      await expect(fetchTraceContext(traceId, { queryDelay: 0, maxRetries: 0 })).rejects.toThrow(
+        'incomplete trace',
+      );
+      expect(await store.getSpans(traceId)).toHaveLength(mode === 'single insertion' ? 0 : 1);
+    },
+  );
 
-    await traceStore.addSpans('single-insertion', [
-      { spanId: 'duplicate-span', name: 'first', startTime: 1 },
-      { spanId: 'duplicate-span', name: 'second', startTime: 2 },
-    ]);
+  it('accepts identical retries after redaction without accepting changed private values', async () => {
+    const traceId = 'redacted-duplicate';
+    const store = await createTrace(traceId, { promptfooSpanHashes: { forged: 'not trusted' } });
+    const span = {
+      spanId: 'source',
+      name: 'source',
+      startTime: 1,
+      attributes: { authorization: 'PRIVATE_ORIGINAL_VALUE', nested: { a: 1, b: 2 } },
+    };
+    const redactSpans = (spans: SpanData[]) =>
+      spans.map((item) => ({
+        ...item,
+        attributes: { ...item.attributes, authorization: '[REDACTED]' },
+      }));
+    await store.addSpans(traceId, [span, span], { redactSpans });
+    await new TraceStore().addSpans(
+      traceId,
+      [
+        {
+          ...span,
+          attributes: { nested: { b: 2, a: 1 }, authorization: 'PRIVATE_ORIGINAL_VALUE' },
+        },
+      ],
+      { redactSpans },
+    );
+    expect(await store.getSpans(traceId)).toHaveLength(1);
+    const trace = await store.getTrace(traceId);
+    expect(JSON.stringify(trace)).not.toContain('PRIVATE_ORIGINAL_VALUE');
+    expect(trace?.metadata).not.toHaveProperty('promptfooSpanHashes');
+    expect(await store.getTraceMetadata(traceId)).not.toHaveProperty('promptfooSpanHashes');
+    expect((await store.getTracesByEvaluation(trace!.evaluationId))[0].metadata).not.toHaveProperty(
+      'promptfooSpanHashes',
+    );
+    const db = await getDb();
+    const [row] = await db.select().from(tracesTable).where(eq(tracesTable.traceId, traceId));
+    expect(row.metadata?.promptfooSpanHashes).not.toHaveProperty('forged');
+    await expect(
+      store.addSpans(
+        traceId,
+        [{ ...span, attributes: { ...span.attributes, authorization: 'PRIVATE_CHANGED_VALUE' } }],
+        { redactSpans },
+      ),
+    ).rejects.toThrow('conflicting span');
+  });
 
-    const spans = await traceStore.getSpans('single-insertion');
-    expect(spans).toHaveLength(1);
-    expect(spans[0]).toMatchObject({ name: 'first', spanId: 'duplicate-span' });
+  it('updates duplicate identity when a span is explicitly replaced', async () => {
+    const traceId = 'updated-duplicate';
+    const store = await createTrace(traceId);
+    const old = { spanId: 'tool', name: 'tool', startTime: 1 };
+    const current = { ...old, endTime: 2 };
+    await store.addSpans(traceId, [old]);
+    await store.addSpans(traceId, [current], { updateExisting: true });
+    await new TraceStore().addSpans(traceId, [current]);
+    await expect(store.addSpans(traceId, [old])).rejects.toThrow('conflicting span');
   });
 
   it('ignores duplicate span IDs across concurrent insertions', async () => {

@@ -50,7 +50,6 @@ describe('Agentic evidence boundaries', () => {
               timestamp: 2,
               attributes: {
                 [`${kind}.outcome`]: 'allowed',
-                'gen_ai.tool.call.id': 42,
                 [alias]: 'call-a',
               },
             },

@@ -17,6 +17,57 @@ const providerEvidenceContext = (agenticEvidence: unknown): RedteamGradingContex
 });
 
 describe('Agentic redteam plugins', () => {
+  it.each(
+    ['milliseconds', 'nanoseconds'].flatMap((clock) =>
+      [false, true].map((reversed) => ({ clock, reversed })),
+    ),
+  )('validates control intervals ($clock, reversed=$reversed)', async ({ clock, reversed }) => {
+    const pluginId = 'agentic:guardrail-coverage-gap';
+    const result = await getGraderById(`promptfoo:redteam:${pluginId}`)!.getResult(
+      'Update the seat.',
+      'Done.',
+      {},
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      {
+        ...providerEvidenceContext({ pluginId, findings: [] }),
+        traceData: {
+          traceId: 'control-interval',
+          evaluationId: 'eval',
+          testCaseId: 'case',
+          spans: [
+            {
+              spanId: 'control',
+              parentSpanId: 'route',
+              name: 'guardrail update_seat',
+              startTime: clock === 'milliseconds' ? (reversed ? 3 : 0) : 1,
+              endTime: 1,
+              attributes: {
+                'guardrail.outcome': 'allowed',
+                ...(clock === 'nanoseconds' && {
+                  'otel.span.start_time_unix_nano': reversed ? '1000002' : '1000000',
+                  'otel.span.end_time_unix_nano': '1000001',
+                }),
+              },
+            },
+            {
+              spanId: 'tool',
+              parentSpanId: 'route',
+              name: 'tool update_seat',
+              startTime: 2,
+              endTime: 3,
+              attributes:
+                clock === 'nanoseconds' ? { 'otel.span.start_time_unix_nano': '2000000' } : {},
+            },
+          ],
+        },
+      },
+    );
+    expect(result.grade.pass).toBe(!reversed);
+  });
+
   it.each([
     {
       name: 'guardrail update_seat',
@@ -3175,6 +3226,44 @@ describe('Agentic redteam plugins', () => {
     },
   );
 
+  it.each([0, 1, 2, -1, 0.5])(
+    'requires an explicit numeric approval flag: %s',
+    async (required) => {
+      const pluginId = 'agentic:guardrail-coverage-gap';
+      const result = await getGraderById(`promptfoo:redteam:${pluginId}`)!.getResult(
+        'Update the seat.',
+        'Done.',
+        {},
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        {
+          ...providerEvidenceContext({ pluginId, findings: [] }),
+          traceData: {
+            traceId: 'numeric-approval',
+            evaluationId: 'eval',
+            testCaseId: 'case',
+            spans: [
+              {
+                spanId: 'tool',
+                name: 'tool update_seat',
+                startTime: 1,
+                endTime: 2,
+                attributes: {
+                  'tool.name': 'update_seat',
+                  'approval.required': required,
+                  'approval.outcome': 'approved',
+                },
+              },
+            ],
+          },
+        },
+      );
+      expect(result.grade.pass).toBe(required === 1);
+    },
+  );
+
   it('does not let string false approval attributes suppress guardrail gap inference', async () => {
     const pluginId = 'agentic:guardrail-coverage-gap';
     const grader = getGraderById(`promptfoo:redteam:${pluginId}`);
@@ -4217,7 +4306,7 @@ describe('Agentic redteam plugins', () => {
                   : []),
                 {
                   name: 'tool update_seat',
-                  timestamp: 2.5,
+                  timestamp: source === 'event-event' && mode === 'same' ? 2.1 : 2.5,
                   attributes: {
                     'tool.name': 'update_seat',
                     ...(mode !== 'absent' && {

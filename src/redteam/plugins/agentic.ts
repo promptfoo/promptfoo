@@ -320,18 +320,32 @@ function controlRunsBeforeTool(
     );
   }
 
+  if (
+    controlObservation.timestamp === undefined ||
+    !Number.isFinite(controlObservation.timestamp) ||
+    controlObservation.timestamp < 0 ||
+    controlObservation.endTimestamp === undefined ||
+    !Number.isFinite(controlObservation.endTimestamp) ||
+    controlObservation.endTimestamp <= 0 ||
+    controlObservation.endTimestamp < controlObservation.timestamp ||
+    toolObservation.timestamp === undefined ||
+    !Number.isFinite(toolObservation.timestamp)
+  ) {
+    return false;
+  }
+
+  if (
+    controlObservation.timestampNanos &&
+    controlObservation.endTimestampNanos &&
+    BigInt(controlObservation.timestampNanos) > BigInt(controlObservation.endTimestampNanos)
+  ) {
+    return false;
+  }
   if (controlObservation.endTimestampNanos && toolObservation.timestampNanos) {
     return BigInt(controlObservation.endTimestampNanos) <= BigInt(toolObservation.timestampNanos);
   }
 
-  return (
-    controlObservation.endTimestamp !== undefined &&
-    Number.isFinite(controlObservation.endTimestamp) &&
-    controlObservation.endTimestamp > 0 &&
-    toolObservation.timestamp !== undefined &&
-    Number.isFinite(toolObservation.timestamp) &&
-    controlObservation.endTimestamp <= toolObservation.timestamp
-  );
+  return controlObservation.endTimestamp <= toolObservation.timestamp;
 }
 
 function toolInvocationKey(observation: AgentObservation, index: number): string {

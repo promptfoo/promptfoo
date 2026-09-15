@@ -15,6 +15,7 @@ import {
   type AddSpansOptions,
   getTraceStore,
   type SpanData,
+  TraceIncompleteError,
   TraceLimitError,
   type TraceSpanQueryOptions,
 } from './store';
@@ -313,7 +314,7 @@ async function storeExternalSpans(
     logger.debug(`[TraceContext] Stored ${spans.length} spans from external provider`);
     return true;
   } catch (error) {
-    if (error instanceof TraceLimitError) {
+    if (error instanceof TraceIncompleteError) {
       throw error;
     }
     logger.warn(`[TraceContext] Failed to store external spans: ${error}`);
@@ -415,8 +416,10 @@ async function fetchFromExternalProvider(
       throw createTraceAbortError(abortSignal);
     }
     try {
-      if ((await getTraceStore().getTraceMetadata(traceId))?.promptfooTraceIncomplete) {
-        throw new TraceLimitError();
+      const incomplete = (await getTraceStore().getTraceMetadata(traceId))
+        ?.promptfooTraceIncomplete;
+      if (incomplete) {
+        throw incomplete === 'limit exceeded' ? new TraceLimitError() : new TraceIncompleteError();
       }
       const result = await provider.fetchTrace(traceId, providerFetchOptions);
       const validSpans = result ? detachCyclicExternalSpans(result.spans) : [];
@@ -472,7 +475,11 @@ async function fetchFromExternalProvider(
         await getTraceStore().markTraceIncomplete(traceId);
         throw new TraceLimitError();
       }
-      if (error instanceof TraceLimitError) {
+      if (error instanceof TraceProviderError && error.invalidEvidence) {
+        await getTraceStore().markTraceIncomplete(traceId, 'invalid external evidence');
+        throw new TraceIncompleteError();
+      }
+      if (error instanceof TraceIncompleteError) {
         throw error;
       }
       if (abortSignal?.aborted) {
@@ -540,8 +547,9 @@ async function fetchFromLocalStore(
     }
     try {
       const spans = await traceStore.getSpans(traceId, spanOptions);
-      if ((await traceStore.getTraceMetadata(traceId))?.promptfooTraceIncomplete) {
-        throw new TraceLimitError();
+      const incomplete = (await traceStore.getTraceMetadata(traceId))?.promptfooTraceIncomplete;
+      if (incomplete) {
+        throw incomplete === 'limit exceeded' ? new TraceLimitError() : new TraceIncompleteError();
       }
 
       if (spans.length === 0) {
@@ -576,7 +584,7 @@ async function fetchFromLocalStore(
 
       return context;
     } catch (error) {
-      if (error instanceof TraceLimitError) {
+      if (error instanceof TraceIncompleteError) {
         throw error;
       }
       if (abortSignal?.aborted) {

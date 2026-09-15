@@ -62,16 +62,23 @@ export class TraceProviderError extends Error {
   readonly statusCode?: number;
   readonly retryable: boolean;
   readonly limitExceeded: boolean;
+  readonly invalidEvidence: boolean;
 
   constructor(
     message: string,
-    options: { statusCode?: number; retryable?: boolean; limitExceeded?: boolean } = {},
+    options: {
+      statusCode?: number;
+      retryable?: boolean;
+      limitExceeded?: boolean;
+      invalidEvidence?: boolean;
+    } = {},
   ) {
     super(message);
     this.name = 'TraceProviderError';
     this.statusCode = options.statusCode;
     this.retryable = options.retryable ?? false;
     this.limitExceeded = options.limitExceeded ?? false;
+    this.invalidEvidence = options.invalidEvidence ?? false;
   }
 }
 

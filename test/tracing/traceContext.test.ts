@@ -27,7 +27,7 @@ import {
   sanitizeTraceAttributes,
 } from '../../src/tracing/sanitizeAttributes';
 import { isRelevantSpan, matchesSpanFilter } from '../../src/tracing/spanFilter';
-import { TraceLimitError } from '../../src/tracing/store';
+import { TraceIncompleteError, TraceLimitError } from '../../src/tracing/store';
 import { extractTraceIdFromTraceparent, fetchTraceContext } from '../../src/tracing/traceContext';
 
 import type { AddSpansOptions, SpanData, TraceSpanQueryOptions } from '../../src/tracing/store';
@@ -135,6 +135,19 @@ describe('fetchTraceContext', () => {
     ).rejects.toThrow(TraceLimitError);
     expect(fetchTrace).toHaveBeenCalledOnce();
     expect(mocks.markTraceIncomplete).toHaveBeenCalledWith('trace-1');
+    expect(mocks.addSpans).not.toHaveBeenCalled();
+  });
+
+  it('persists invalid external evidence and rejects grading without retrying', async () => {
+    const fetchTrace = vi
+      .fn()
+      .mockRejectedValue(new TraceProviderError('Invalid attributes', { invalidEvidence: true }));
+    mocks.createTraceProvider.mockReturnValue({ id: 'tempo', fetchTrace });
+    await expect(
+      fetchTraceContext('trace-1', { providerConfig, queryDelay: 0, maxRetries: 2 }),
+    ).rejects.toThrow(TraceIncompleteError);
+    expect(fetchTrace).toHaveBeenCalledOnce();
+    expect(mocks.markTraceIncomplete).toHaveBeenCalledWith('trace-1', 'invalid external evidence');
     expect(mocks.addSpans).not.toHaveBeenCalled();
   });
 

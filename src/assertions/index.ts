@@ -481,7 +481,7 @@ async function runAssertionInternal({
   }
 
   if (context.trace?.metadata?.promptfooTraceIncomplete) {
-    throw new Error('Cannot grade incomplete trace: collection exceeded the per-trace limit');
+    throw new Error('Cannot grade incomplete trace');
   }
 
   // Render assertion values

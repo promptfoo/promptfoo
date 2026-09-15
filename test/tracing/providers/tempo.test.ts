@@ -81,6 +81,103 @@ describe('TempoProvider', () => {
     mockedFetch.mockImplementation(async () => response(traceResponse));
   });
 
+  it.each(
+    ['resource', 'span', 'event', 'nested event'].flatMap((location) =>
+      [
+        undefined,
+        null,
+        { stringValue: false },
+        { boolValue: 'false' },
+        { doubleValue: '0' },
+        { intValue: [1] },
+        { boolValue: false, stringValue: 'allowed' },
+        { unsupportedValue: 'allowed' },
+      ].map((value) => ({ location, value })),
+    ),
+  )('rejects malformed $location AnyValue $value', async ({ location, value }) => {
+    const attributes = [{ key: 'guardrail.triggered', value }];
+    const span = traceResponse.batches[0].scopeSpans[0].spans[0];
+    mockedFetch.mockResolvedValueOnce(
+      response({
+        batches: [
+          {
+            resource: { attributes: location === 'resource' ? attributes : [] },
+            scopeSpans: [
+              {
+                spans: [
+                  {
+                    ...span,
+                    attributes: location === 'span' ? attributes : [],
+                    events: [
+                      {
+                        name: 'guardrail update_seat',
+                        timeUnixNano: '1704067200500000000',
+                        attributes:
+                          location === 'nested event'
+                            ? [{ key: 'details', value: { kvlistValue: { values: attributes } } }]
+                            : location === 'event'
+                              ? attributes
+                              : [],
+                      },
+                    ],
+                  },
+                ],
+              },
+            ],
+          },
+        ],
+      }),
+    );
+    await expect(
+      new TempoProvider({ id: 'tempo', endpoint: 'http://tempo:3200' }).fetchTrace(TRACE_ID),
+    ).rejects.toMatchObject({ name: 'TraceProviderError', retryable: false });
+  });
+
+  it('retains empty AnyValues after JSON persistence', async () => {
+    const attributes = [{ key: 'guardrail.triggered', value: {} }];
+    const span = traceResponse.batches[0].scopeSpans[0].spans[0];
+    mockedFetch.mockResolvedValueOnce(
+      response({
+        batches: [
+          {
+            resource: { attributes: [{ key: 'resource.unknown', value: {} }] },
+            scopeSpans: [
+              {
+                spans: [
+                  {
+                    ...span,
+                    attributes,
+                    events: [
+                      {
+                        name: 'guardrail update_seat',
+                        timeUnixNano: '1704067200500000000',
+                        attributes: [
+                          { key: 'details', value: { kvlistValue: { values: attributes } } },
+                        ],
+                      },
+                    ],
+                  },
+                ],
+              },
+            ],
+          },
+        ],
+      }),
+    );
+    const result = await new TempoProvider({
+      id: 'tempo',
+      endpoint: 'http://tempo:3200',
+    }).fetchTrace(TRACE_ID);
+    const persisted = JSON.parse(JSON.stringify(result));
+    expect(persisted.spans[0].attributes).toMatchObject({
+      'resource.unknown': null,
+      'guardrail.triggered': null,
+    });
+    expect(persisted.spans[0].events[0].attributes).toEqual({
+      details: { 'guardrail.triggered': null },
+    });
+  });
+
   it('preserves shadowed resource secrets needed to redact retained events', async () => {
     const secret = 'PRIVATE_TEMPO_RESOURCE_EVENT_SECRET';
     const span = traceResponse.batches[0].scopeSpans[0].spans[0];
@@ -202,7 +299,7 @@ describe('TempoProvider', () => {
       await expect(
         new TempoProvider({ id: 'tempo', endpoint: 'http://tempo:3200' }).fetchTrace(TRACE_ID),
       ).rejects.toMatchObject({
-        message: 'Tempo returned duplicate attribute keys',
+        message: 'Invalid OTLP payload: duplicate attribute keys',
         retryable: false,
       });
     },
@@ -286,7 +383,7 @@ describe('TempoProvider', () => {
   });
 
   it.each([{ kvlistValue: { values: [null] } }, { arrayValue: { values: [null] } }])(
-    'drops a malformed event while keeping its span and valid events: %j',
+    'rejects malformed nested event attributes: %j',
     async (value) => {
       const data = structuredClone(traceResponse);
       data.batches[0].scopeSpans[0].spans[0].events!.unshift({
@@ -295,19 +392,12 @@ describe('TempoProvider', () => {
         attributes: [{ key: 'broken', value }],
       });
       mockedFetch.mockResolvedValueOnce(response(data));
-      const result = await new TempoProvider({
-        id: 'tempo',
-        endpoint: 'http://tempo:3200',
-      }).fetchTrace(TRACE_ID);
-      expect(result?.spans.map((span) => span.name)).toEqual(['target.call', 'internal.setup']);
-      expect(result?.spans[0].events).toEqual([
-        {
-          name: 'tool event',
-          timestamp: 1704067200500,
-          timestampNanos: '1704067200500000000',
-          attributes: { command: 'echo fixture' },
-        },
-      ]);
+      await expect(
+        new TempoProvider({
+          id: 'tempo',
+          endpoint: 'http://tempo:3200',
+        }).fetchTrace(TRACE_ID),
+      ).rejects.toBeInstanceOf(TraceProviderError);
     },
   );
 

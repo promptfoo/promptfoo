@@ -1,4 +1,5 @@
 import logger from '../../logger';
+import { parseOtlpAttributes } from '../otlpAttributes';
 import { mergeResourceAttributes } from '../resourceAttributes';
 import {
   fetchWithProxy,
@@ -73,53 +74,17 @@ function nanoToMs(value: string): number {
   return milliseconds + remainder / 1_000_000;
 }
 
-function extractAttributeValue(value: TempoAttributeValue): unknown {
-  if (value.stringValue !== undefined) {
-    return value.stringValue;
-  }
-  if (value.intValue !== undefined) {
-    const number = Number(value.intValue);
-    return Number.isSafeInteger(number) ? number : value.intValue;
-  }
-  if (value.doubleValue !== undefined) {
-    return value.doubleValue;
-  }
-  if (value.boolValue !== undefined) {
-    return value.boolValue;
-  }
-  if (value.bytesValue !== undefined) {
-    return value.bytesValue;
-  }
-  if (value.arrayValue) {
-    return (value.arrayValue.values ?? []).map(extractAttributeValue);
-  }
-  if (value.kvlistValue) {
-    return attributesToRecord(value.kvlistValue.values);
-  }
-  return undefined;
-}
-
 function attributesToRecord(
   attributes?: Array<{ key: string; value: TempoAttributeValue }>,
 ): Record<string, unknown> {
-  if (attributes != null && !Array.isArray(attributes)) {
-    throw new TraceProviderError('Tempo attributes must be a list');
+  try {
+    return parseOtlpAttributes(attributes ?? undefined);
+  } catch (error) {
+    throw new TraceProviderError(
+      error instanceof Error ? error.message : 'Tempo attribute decoding failed',
+      { invalidEvidence: true },
+    );
   }
-  const keys = new Set<string>();
-  for (const { key } of attributes ?? []) {
-    if (typeof key !== 'string') {
-      throw new TraceProviderError('Tempo attribute keys must be strings');
-    }
-    if (keys.has(key)) {
-      throw new TraceProviderError('Tempo returned duplicate attribute keys');
-    }
-    keys.add(key);
-  }
-  return Object.fromEntries(
-    (attributes ?? [])
-      .filter((attribute) => attribute?.value)
-      .map(({ key, value }) => [key, extractAttributeValue(value)]),
-  );
 }
 
 function decodeSpanId(id: string | undefined): string | undefined {

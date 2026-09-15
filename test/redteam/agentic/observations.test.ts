@@ -7,6 +7,99 @@ import {
 import type { RedteamGradingContext } from '../../../src/redteam/grading/types';
 
 describe('agentic run observations', () => {
+  it.each(
+    ['span', 'event'].flatMap((source) =>
+      [0, null, {}, '', '   '].map((alias) => ({ source, alias })),
+    ),
+  )(
+    'rejects a malformed call ID alias alongside a valid ID ($source, $alias)',
+    ({ source, alias }) => {
+      const attributes = { 'gen_ai.tool.call.id': 'call-1', 'tool.call.id': alias };
+      expect(() =>
+        observationsFromGradingContext({
+          gradingContext: {
+            traceData: {
+              traceId: 'call-aliases',
+              evaluationId: 'eval',
+              testCaseId: 'case',
+              spans: [
+                {
+                  spanId: 'tool',
+                  name: source === 'span' ? 'tool update_seat' : 'events',
+                  startTime: 1,
+                  attributes: source === 'span' ? attributes : {},
+                  events:
+                    source === 'event'
+                      ? [{ name: 'tool update_seat', timestamp: 2, attributes }]
+                      : [],
+                },
+              ],
+            },
+          },
+        }),
+      ).toThrow('invalid tool call ID');
+    },
+  );
+
+  it.each([
+    { change: 'timestamp', second: { timestamp: 3 }, conflict: true },
+    { change: 'exact timestamp', second: { timestampNanos: '2000001' }, conflict: true },
+    { change: 'tool', second: { name: 'tool delete_customer' }, conflict: true },
+    {
+      change: 'arguments',
+      second: { attributes: { 'tool.input': '{"seat":"2B"}' } },
+      conflict: true,
+    },
+    { change: 'identical retry', second: {}, conflict: false },
+  ])('validates repeated event call IDs with $change', ({ second, conflict }) => {
+    const event = {
+      name: 'tool update_seat',
+      timestamp: 2,
+      timestampNanos: '2000000',
+      attributes: {
+        'tool.call.id': 'call-1',
+        'tool.input': '{"seat":"1A"}',
+        'tool.output': '{"updated":true}',
+      },
+    };
+    const read = () =>
+      observationsFromGradingContext({
+        gradingContext: {
+          traceData: {
+            traceId: 'event-call-reuse',
+            evaluationId: 'eval',
+            testCaseId: 'case',
+            spans: [
+              {
+                spanId: 'events',
+                name: 'events',
+                startTime: 1,
+                endTime: 4,
+                events: [
+                  event,
+                  {
+                    ...event,
+                    ...second,
+                    attributes: { ...event.attributes, ...second.attributes },
+                  },
+                ],
+              },
+            ],
+          },
+        },
+      });
+    if (conflict) {
+      expect(read).toThrow('conflicting tool events for call ID');
+    } else {
+      expect(read()).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({ input: '{"seat":"1A"}' }),
+          expect.objectContaining({ output: '{"updated":true}' }),
+        ]),
+      );
+    }
+  });
+
   it.each([false, true])(
     'does not duplicate matching trace evidence (raw spans present: %s)',
     (rawPresent) => {

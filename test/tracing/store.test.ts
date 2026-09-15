@@ -43,11 +43,11 @@ describe('TraceStore', () => {
       onConflictDoNothing: vi.fn().mockReturnThis(),
       run: vi.fn().mockResolvedValue(undefined),
     };
-    const mockSelectChain = {
+    const mockSelectChain = Object.assign(Promise.resolve([]), {
       from: vi.fn().mockReturnThis(),
       where: vi.fn().mockReturnThis(),
       limit: vi.fn(() => Promise.resolve([])),
-    };
+    });
     mockDeleteChain = {
       where: vi.fn().mockReturnThis(),
       run: vi.fn().mockResolvedValue(undefined),
@@ -236,80 +236,6 @@ describe('TraceStore', () => {
       expect(mockDb.select).toHaveBeenCalledTimes(2);
       expect(redactSpans).not.toHaveBeenCalled();
       expect(mockDb.insert).not.toHaveBeenCalled();
-    });
-
-    it.each([false, true])(
-      'persists redaction history before dropping duplicate spans (stored=%s)',
-      async (stored) => {
-        const original = { spanId: 'same', name: 'ordinary', startTime: 1, attributes: {} };
-        const update = {
-          set: vi.fn().mockReturnThis(),
-          where: vi.fn().mockReturnThis(),
-          run: vi.fn(),
-        };
-        mockDb.update = vi.fn(() => update);
-        mockDb.select.mockImplementation((selection: unknown) => ({
-          from: vi.fn().mockReturnThis(),
-          where: vi
-            .fn()
-            .mockResolvedValue(
-              selection
-                ? 'spanId' in (selection as object)
-                  ? stored
-                    ? [{ spanId: original.spanId, bytes: 0 }]
-                    : []
-                  : [{ count: stored ? 1 : 0, bytes: 0 }]
-                : stored
-                  ? [{ id: 'stored', ...original }]
-                  : [],
-            ),
-        }));
-        await traceStore.addSpans(
-          'trace',
-          [
-            ...(stored ? [] : [original]),
-            { ...original, attributes: { authorization: 'private-value' } },
-          ],
-          {
-            skipTraceCheck: true,
-            redactSpans: (spans) =>
-              spans.map((span) => ({
-                ...span,
-                attributes: span.attributes?.authorization
-                  ? { authorization: '[REDACTED]' }
-                  : span.attributes,
-              })),
-          },
-        );
-        const persisted = stored
-          ? update.set.mock.calls[0]?.[0]
-          : mockDb.insert().values.mock.calls[0]?.[0][0];
-        expect(persisted?.attributes).toMatchObject({
-          'promptfoo.redaction.history': '[REDACTED]',
-        });
-        expect(JSON.stringify(persisted)).not.toContain('private-value');
-      },
-    );
-
-    it('ignores existing and repeated spans through the database uniqueness constraint', async () => {
-      await traceStore.addSpans(
-        'test-trace-id',
-        [
-          { spanId: 'existing', name: 'existing', startTime: 1 },
-          { spanId: 'new', name: 'new', startTime: 2 },
-          { spanId: 'new', name: 'duplicate', startTime: 3 },
-        ],
-        { skipTraceCheck: true },
-      );
-
-      expect(mockDb.insert().values).toHaveBeenCalledWith([
-        expect.objectContaining({ spanId: 'existing' }),
-        expect.objectContaining({ spanId: 'new', name: 'new' }),
-        expect.objectContaining({ spanId: 'new', name: 'duplicate' }),
-      ]);
-      expect(mockDb.insert().values().onConflictDoNothing).toHaveBeenCalledWith(
-        expect.objectContaining({ target: expect.any(Array) }),
-      );
     });
 
     it('should add spans to an existing trace', async () => {

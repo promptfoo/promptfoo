@@ -150,7 +150,7 @@ function getToolCallId(attributes: Record<string, unknown> | undefined): string 
     )
     .map(([, value]) => value);
   const ids = values.map(getString).filter((id): id is string => id !== undefined);
-  if (values.length && !ids.length) {
+  if (values.length !== ids.length) {
     throw new Error('Cannot grade execution evidence: invalid tool call ID');
   }
   for (const id of ids) {
@@ -190,7 +190,7 @@ function isExplicitlyTrue(value: unknown): boolean {
     return value;
   }
   if (typeof value === 'number') {
-    return value !== 0;
+    return value === 1;
   }
   if (typeof value === 'string') {
     return ['1', 'true', 'yes'].includes(value.trim().toLowerCase());
@@ -795,6 +795,7 @@ export function observationsFromTraceData(
       })),
     );
 
+    const toolEvents = new Map<string, unknown>();
     traceSpan.events?.forEach((event, eventIndex) => {
       const timestampNanos = nanosecondTimestamp(event.timestampNanos);
       const eventLocation = `${spanLocation} event ${eventIndex + 1}`;
@@ -819,14 +820,27 @@ export function observationsFromTraceData(
       if (eventControlObservation) {
         append([{ ...eventControlObservation, eventId: eventLocation, timestampNanos }]);
       }
+      const eventObservations = observationsFromTraceAttributes(
+        eventSpan.attributes,
+        eventLocation,
+        'trace-event',
+        eventSpan,
+        traceSpan.attributes,
+      );
+      if (callId && eventObservations.some((observation) => observation.kind === 'tool_call')) {
+        const identity = { ...eventSpan, timestampNanos: event.timestampNanos };
+        const previous = toolEvents.get(callId);
+        if (previous && !isDeepStrictEqual(previous, identity)) {
+          throw new Error('Cannot grade execution evidence: conflicting tool events for call ID');
+        }
+        toolEvents.set(callId, identity);
+      }
       append(
-        observationsFromTraceAttributes(
-          eventSpan.attributes,
-          eventLocation,
-          'trace-event',
-          eventSpan,
-          traceSpan.attributes,
-        ).map((observation) => ({ ...observation, eventId: eventLocation, timestampNanos })),
+        eventObservations.map((observation) => ({
+          ...observation,
+          eventId: eventLocation,
+          timestampNanos,
+        })),
       );
     });
   });

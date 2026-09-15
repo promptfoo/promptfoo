@@ -2,9 +2,9 @@ import crypto from 'node:crypto';
 
 import express from 'express';
 import logger from '../logger';
+import { parseOtlpAttributes, parseOtlpAttributeValue } from './otlpAttributes';
 import {
   bytesToHex,
-  type DecodedAttribute,
   type DecodedExportTraceServiceRequest,
   type DecodedResourceSpans,
   type DecodedScopeSpans,
@@ -27,6 +27,7 @@ import {
   getTraceStore,
   type ParsedTrace,
   type SpanData,
+  TraceIncompleteError,
   TraceLimitError,
   type TraceStore,
 } from './store';
@@ -42,15 +43,6 @@ interface OTLPAttribute {
     arrayValue?: { values: any[] };
     kvlistValue?: { values: OTLPAttribute[] };
   };
-}
-
-function assertUniqueAttributeKeys(attributes: { key: string }[]): void {
-  if (attributes.some((attribute) => attribute == null || typeof attribute.key !== 'string')) {
-    throw new SyntaxError('Invalid OTLP payload: attribute keys must be strings');
-  }
-  if (new Set(attributes.map(({ key }) => key)).size !== attributes.length) {
-    throw new SyntaxError('Invalid OTLP payload: duplicate attribute keys');
-  }
 }
 
 interface OTLPSpan {
@@ -699,7 +691,11 @@ export class OTLPReceiver {
     );
 
     const errorMessage = error instanceof Error ? error.message : String(error);
-    if (error instanceof SyntaxError || errorMessage.toLowerCase().includes('invalid protobuf')) {
+    if (
+      error instanceof SyntaxError ||
+      error instanceof TraceIncompleteError ||
+      errorMessage.toLowerCase().includes('invalid protobuf')
+    ) {
       res.status(400).json({ error: errorMessage });
       return;
     }
@@ -715,7 +711,7 @@ export class OTLPReceiver {
 
     for (const resourceSpan of body.resourceSpans) {
       // Extract resource attributes if needed
-      const resourceAttributes = this.parseAttributes(resourceSpan.resource?.attributes);
+      const resourceAttributes = parseOtlpAttributes(resourceSpan.resource?.attributes);
       logger.debug(
         `[OtlpReceiver] Parsed ${Object.keys(resourceAttributes).length} resource attributes`,
       );
@@ -735,7 +731,7 @@ export class OTLPReceiver {
           // Parse attributes
           const spanKindName = SPAN_KIND_MAP[span.kind] ?? 'unspecified';
           const attributes = mergeResourceAttributes(resourceAttributes, {
-            ...this.parseAttributes(span.attributes),
+            ...parseOtlpAttributes(span.attributes),
             'otel.scope.name': scopeSpan.scope?.name,
             'otel.scope.version': scopeSpan.scope?.version,
             'otel.span.kind': spanKindName,
@@ -785,21 +781,14 @@ export class OTLPReceiver {
                 if (!Number.isFinite(timestamp) || timestamp < 0) {
                   return [];
                 }
-                try {
-                  return [
-                    {
-                      name: event.name,
-                      timestamp,
-                      timestampNanos: nanos,
-                      attributes: this.parseAttributes(event.attributes),
-                    },
-                  ];
-                } catch (error) {
-                  if (error instanceof SyntaxError) {
-                    throw error;
-                  }
-                  return [];
-                }
+                return [
+                  {
+                    name: event.name,
+                    timestamp,
+                    timestampNanos: nanos,
+                    attributes: parseOtlpAttributes(event.attributes),
+                  },
+                ];
               }),
               statusCode: span.status?.code,
               statusMessage: span.status?.message,
@@ -819,7 +808,7 @@ export class OTLPReceiver {
     logger.debug(`[OtlpReceiver] Parsing logs request with ${resourceLogs.length} resource logs`);
 
     for (const resourceLog of resourceLogs) {
-      const resourceAttributes = this.parseAttributes(resourceLog.resource?.attributes);
+      const resourceAttributes = parseOtlpAttributes(resourceLog.resource?.attributes);
       for (const scopeLog of resourceLog.scopeLogs ?? []) {
         for (const log of scopeLog.logRecords ?? []) {
           // Log-and-skip on a per-record basis so one malformed record can't
@@ -882,8 +871,8 @@ export class OTLPReceiver {
       return null;
     }
 
-    const logAttributes = this.parseAttributes(log.attributes);
-    const bodyValue = log.body ? this.parseAttributeValue(log.body) : undefined;
+    const logAttributes = parseOtlpAttributes(log.attributes);
+    const bodyValue = log.body ? parseOtlpAttributeValue(log.body) : undefined;
     const attributes = mergeResourceAttributes(resourceAttributes, {
       ...logAttributes,
       'otel.log.record': true,
@@ -947,7 +936,7 @@ export class OTLPReceiver {
                 log.observedTimeUnixNano,
                 scopeLog.scope && {
                   ...scopeLog.scope,
-                  attributes: this.parseAttributes(scopeLog.scope.attributes),
+                  attributes: parseOtlpAttributes(scopeLog.scope.attributes),
                 },
                 log.severityNumber,
                 log.severityText,
@@ -992,7 +981,7 @@ export class OTLPReceiver {
   }
 
   private parseDecodedResourceSpan(resourceSpan: DecodedResourceSpans): ParsedTrace[] {
-    const resourceAttributes = this.parseAttributes(resourceSpan.resource?.attributes, true);
+    const resourceAttributes = parseOtlpAttributes(resourceSpan.resource?.attributes, true);
     logger.debug(
       `[OtlpReceiver] Parsed ${Object.keys(resourceAttributes).length} resource attributes from protobuf`,
     );
@@ -1029,7 +1018,7 @@ export class OTLPReceiver {
         startTime: this.toMilliseconds(span.startTimeUnixNano) ?? 0,
         endTime: this.toMilliseconds(span.endTimeUnixNano),
         attributes: mergeResourceAttributes(resourceAttributes, {
-          ...this.parseAttributes(span.attributes, true),
+          ...parseOtlpAttributes(span.attributes, true),
           'otel.scope.name': scopeSpan.scope?.name,
           'otel.scope.version': scopeSpan.scope?.version,
           'otel.span.kind': spanKindName,
@@ -1047,7 +1036,7 @@ export class OTLPReceiver {
               name: event.name,
               timestamp: Number(nanos) / 1_000_000,
               timestampNanos: nanos,
-              attributes: this.parseAttributes(event.attributes, true),
+              attributes: parseOtlpAttributes(event.attributes, true),
             },
           ];
         }),
@@ -1055,95 +1044,6 @@ export class OTLPReceiver {
         statusMessage: span.status?.message,
       },
     };
-  }
-
-  private parseAttributes(
-    attributes?: Array<OTLPAttribute | DecodedAttribute>,
-    decoded = false,
-  ): Record<string, any> {
-    if (attributes === undefined) {
-      return {};
-    }
-    if (!Array.isArray(attributes)) {
-      throw new SyntaxError('Invalid OTLP payload: attributes must be an array');
-    }
-    assertUniqueAttributeKeys(attributes);
-    return Object.fromEntries(
-      attributes.map((attribute) => [
-        attribute.key,
-        this.parseAttributeValue(attribute.value, decoded),
-      ]),
-    );
-  }
-
-  private parseAttributeValue(
-    value: OTLPAttribute['value'] | DecodedAttribute['value'],
-    decoded = false,
-  ): any {
-    const invalid = () => new SyntaxError('Invalid OTLP payload: malformed attribute value');
-    if (!value || typeof value !== 'object' || Array.isArray(value)) {
-      throw invalid();
-    }
-    const fields = Object.keys(value).filter(
-      (key) => value[key as keyof typeof value] !== undefined,
-    );
-    if (fields.length === 0) {
-      // Empty AnyValue is valid OTLP. Keep its presence so semantic evidence is unknown, not absent.
-      return null;
-    }
-    if (fields.length !== 1) {
-      throw invalid();
-    }
-    if (value.stringValue !== undefined) {
-      if (typeof value.stringValue !== 'string') {
-        throw invalid();
-      }
-      return value.stringValue;
-    }
-    if (value.bytesValue !== undefined) {
-      if (
-        decoded ? !(value.bytesValue instanceof Uint8Array) : typeof value.bytesValue !== 'string'
-      ) {
-        throw invalid();
-      }
-      return decoded
-        ? Buffer.from(value.bytesValue as Uint8Array).toString('base64')
-        : value.bytesValue;
-    }
-    if (value.intValue !== undefined) {
-      const text = String(value.intValue);
-      if (!/^-?\d+$/.test(text)) {
-        throw invalid();
-      }
-      const number = Number(text);
-      return Number.isSafeInteger(number) ? number : text;
-    }
-    if (value.doubleValue !== undefined) {
-      if (typeof value.doubleValue !== 'number' || !Number.isFinite(value.doubleValue)) {
-        throw invalid();
-      }
-      return value.doubleValue;
-    }
-    if (value.boolValue !== undefined) {
-      if (typeof value.boolValue !== 'boolean') {
-        throw invalid();
-      }
-      return value.boolValue;
-    }
-    if (value.arrayValue !== undefined || value.kvlistValue !== undefined) {
-      const container = value.arrayValue ?? value.kvlistValue;
-      if (!container || typeof container !== 'object' || Array.isArray(container)) {
-        throw invalid();
-      }
-      const values = container.values ?? [];
-      if (!Array.isArray(values)) {
-        throw invalid();
-      }
-      return value.arrayValue === undefined
-        ? this.parseAttributes(values as Array<OTLPAttribute | DecodedAttribute>, decoded)
-        : values.map((entry) => this.parseAttributeValue(entry, decoded));
-    }
-    throw invalid();
   }
 
   private convertId(id: string, expectedHexLength: number): string {
