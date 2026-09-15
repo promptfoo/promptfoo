@@ -1,3 +1,5 @@
+import { isDeepStrictEqual } from 'node:util';
+
 import { TraceEvidenceError } from '../../assertions/trajectoryUtils';
 import { sanitizeBody } from '../../tracing/genaiTracer';
 import {
@@ -52,18 +54,21 @@ function toolCallKey(span: TraceData['spans'][number]): string | undefined {
   if (!id) {
     return undefined;
   }
-  return JSON.stringify([
-    id,
-    getToolNameFromAttributes(attributes),
-    // UNSET and OK can describe the same receipt; retain explicit error outcomes.
-    attributes?.['tool.incomplete'] !== true && span.statusCode === 2 ? 2 : 0,
-  ]);
+  return JSON.stringify([id, getToolNameFromAttributes(attributes)]);
 }
 
 function completeToolSpan(
   traced: TraceData['spans'][number],
   native: TraceData['spans'][number],
-): TraceData['spans'][number] | undefined {
+): TraceData['spans'][number] {
+  if (
+    traced.attributes?.['tool.incomplete'] !== true &&
+    traced.statusCode &&
+    native.statusCode &&
+    traced.statusCode !== native.statusCode
+  ) {
+    throw new TraceEvidenceError('Conflicting native and traced tool outcomes.');
+  }
   const attributes = { ...traced.attributes };
   for (const keys of [TOOL_ARGUMENT_ATTRIBUTE_KEYS, TOOL_RESULT_ATTRIBUTE_KEYS]) {
     const nativeKey = keys.find((key) => native.attributes?.[key] != null);
@@ -71,25 +76,36 @@ function completeToolSpan(
       continue;
     }
     const nativeBody = native.attributes![nativeKey];
-    const partial = sanitizeToolBody(
-      keys.map((key) => traced.attributes?.[key]).find((value) => value != null),
-    );
     const complete = sanitizeToolBody(nativeBody);
     // Claude tool spans cap bodies at 4 KiB; the native receipt retains the full body.
     const suffix = '... [truncated]';
-    if (
-      partial !== undefined &&
-      !toolBodiesMatch(partial, complete) &&
-      (!partial?.endsWith(suffix) || !complete?.startsWith(partial.slice(0, -suffix.length)))
-    ) {
-      return undefined;
+    for (const key of keys) {
+      const value = traced.attributes?.[key];
+      if (value == null) {
+        continue;
+      }
+      const partial = sanitizeToolBody(value);
+      if (
+        partial !== undefined &&
+        !toolBodiesMatch(partial, complete) &&
+        (!partial.endsWith(suffix) || !complete?.startsWith(partial.slice(0, -suffix.length)))
+      ) {
+        throw new TraceEvidenceError('Conflicting native and traced tool arguments or results.');
+      }
     }
     const existingKeys = keys.filter((key) => attributes[key] != null);
     for (const key of existingKeys.length ? existingKeys : [nativeKey]) {
       attributes[key] = nativeBody;
     }
   }
-  return { ...traced, attributes };
+  return {
+    ...traced,
+    attributes,
+    statusCode:
+      native.statusCode && (traced.attributes?.['tool.incomplete'] === true || !traced.statusCode)
+        ? native.statusCode
+        : traced.statusCode,
+  };
 }
 
 export function getGradingTrace(
@@ -167,14 +183,11 @@ export function getGradingTrace(
         })
         .filter((span) => {
           const key = toolCallKey(span);
-          for (const index of key === undefined ? [] : (tracedCalls.get(key) ?? [])) {
-            const completed = completeToolSpan(spans[index], span);
-            if (completed) {
-              spans[index] = completed;
-              return false;
-            }
+          const matching = key === undefined ? [] : (tracedCalls.get(key) ?? []);
+          for (const index of matching) {
+            spans[index] = completeToolSpan(spans[index], span);
           }
-          return true;
+          return matching.length === 0;
         });
       trace = {
         ...trace,
@@ -190,5 +203,3 @@ export function getGradingTrace(
   }
   return trace;
 }
-
-import { isDeepStrictEqual } from 'node:util';

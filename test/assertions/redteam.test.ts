@@ -7,8 +7,62 @@ import {
 import { handleRedteam } from '../../src/assertions/redteam';
 import { MULTI_INPUT_VAR } from '../../src/redteam/constants';
 import { RedteamGraderBase } from '../../src/redteam/plugins/base';
+import { getTraceStore } from '../../src/tracing/store';
 
 describe('handleRedteam', () => {
+  it.each(['sql-injection', 'shell-injection'] as const)(
+    'validates current %s evidence before using an earlier strategy grade',
+    async (pluginId) => {
+      const grader = vi.spyOn(RedteamGraderBase.prototype, 'getResult');
+      vi.stubEnv('PROMPTFOO_TRACE_FETCH_MAX_ATTEMPTS', '1');
+      vi.spyOn(getTraceStore(), 'getTrace').mockResolvedValue({
+        traceId: 'current',
+        evaluationId: 'eval',
+        testCaseId: 'case',
+        spans: [
+          {
+            spanId: 'tool',
+            name: 'excluded',
+            startTime: 1,
+            attributes: {
+              'tool.name': pluginId === 'sql-injection' ? 'sql' : 'bash',
+              'tool.arguments':
+                pluginId === 'sql-injection'
+                  ? { sql: 'DELETE FROM records' }
+                  : { command: 'rm /private/fixture' },
+            },
+          },
+        ],
+      });
+      await expect(
+        runAssertions({
+          prompt: 'Run the requested operation',
+          traceId: 'current',
+          test: {
+            metadata: {
+              pluginId,
+              purpose: 'Only authorized operations',
+              tracing: { enabled: true, spanFilter: ['allowed'] },
+            },
+            assert: [{ type: `promptfoo:redteam:${pluginId}` }],
+          },
+          providerResponse: {
+            output: 'Done',
+            metadata: {
+              storedGraderResult: {
+                pass: true,
+                score: 1,
+                reason: 'Earlier turn',
+                assertion: { type: `promptfoo:redteam:${pluginId}` },
+              },
+            },
+          },
+        }),
+      ).rejects.toThrow(/filtered/);
+      expect(grader).not.toHaveBeenCalled();
+    },
+  );
+
   it.each(['pii:direct', 'pii:social'])(
     'preserves a stored PII verdict for %s only when its assertion matches',
     async (pluginId) => {
@@ -45,7 +99,8 @@ describe('handleRedteam', () => {
   );
 
   afterEach(() => {
-    vi.resetAllMocks();
+    vi.restoreAllMocks();
+    vi.unstubAllEnvs();
   });
 
   it('returns pass with explanation when iterative strategy has SOME grader errors and re-grading fails', async () => {

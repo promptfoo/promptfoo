@@ -623,18 +623,49 @@ describe('TraceStore span persistence', () => {
     },
   );
 
-  it('ignores duplicate span IDs in a single insertion', async () => {
+  it('accepts identical span retries in a single insertion', async () => {
     const traceStore = await createTrace('single-insertion');
 
     await traceStore.addSpans('single-insertion', [
       { spanId: 'duplicate-span', name: 'first', startTime: 1 },
-      { spanId: 'duplicate-span', name: 'second', startTime: 2 },
+      { spanId: 'duplicate-span', name: 'first', startTime: 1 },
     ]);
 
     const spans = await traceStore.getSpans('single-insertion');
     expect(spans).toHaveLength(1);
     expect(spans[0]).toMatchObject({ name: 'first', spanId: 'duplicate-span' });
   });
+
+  it.each([false, true])(
+    'rejects conflicting duplicate IDs before applying redaction (update: %s)',
+    async (updateExisting) => {
+      const traceId = 'conflicting-duplicate';
+      const store = await createTrace(traceId);
+      await expect(
+        store.addSpans(
+          traceId,
+          [
+            { spanId: 'duplicate', name: 'public', startTime: 1 },
+            { spanId: 'duplicate', name: 'PRIVATE_DUPLICATE', startTime: 1 },
+          ],
+          {
+            updateExisting,
+            redactSpans: (spans) =>
+              spans.map((span) => ({
+                ...span,
+                name: span.name.replace('PRIVATE_DUPLICATE', '[REDACTED]'),
+              })),
+          },
+        ),
+      ).rejects.toMatchObject({ name: 'TraceEvidenceError' });
+      expect(await store.getSpans(traceId, { sanitizeAttributes: false })).toEqual([]);
+      const [record] = await (await getDb())
+        .select()
+        .from(tracesTable)
+        .where(eq(tracesTable.traceId, traceId));
+      expect(record.metadata ?? {}).not.toHaveProperty('promptfooLocalSpanHashes');
+    },
+  );
 
   it('ignores duplicate span IDs across concurrent insertions', async () => {
     const traceStore = await createTrace('concurrent-insertions');

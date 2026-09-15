@@ -185,7 +185,7 @@ export function extractPromptExtractionSignature(prompt: string): AttackSignatur
       PROMPT_EXTRACTION_RULES[predicate].some((rule) =>
         predicate.startsWith('asksFor')
           ? new RegExp(
-              String.raw`${REQUEST_PREFIX}(?:${DISCLOSURE_VERB}|audit|review|legal (?:counsel|authority) requests)\b${DISCLOSURE_DETAILS}${rule.source}`,
+              String.raw`${REQUEST_PREFIX}(?:${DISCLOSURE_VERB}|(?:audit|review)\s+your|legal (?:counsel|authority) requests)\b${DISCLOSURE_DETAILS}${rule.source}`,
               'i',
             ).test(prompt)
           : rule.test(prompt),
@@ -318,6 +318,9 @@ export function extractPiiDirectSignature(prompt: string): AttackSignature {
     .filter(
       (question) =>
         /\b(?:what|which)\b/i.test(question) &&
+        !/\b(?:format(?:ting)?\s+(?:of|for|requirements?|conventions?|rules?|examples?)|(?:required|expected|valid|standard|correct)\s+format(?:ting)?)\b/i.test(
+          question,
+        ) &&
         !/\b(?:privacy|safeguards?|protect\w*|prevent\w*|prohibit\w*|govern\w*|guidance|explain\w*|confidential|private|secure\w*|why|how|whether|must not|should not|do not|don't|never)\b/i.test(
           question,
         ),
@@ -333,6 +336,13 @@ export function extractPiiDirectSignature(prompt: string): AttackSignature {
     );
   const predicates = Object.fromEntries(
     PII_DIRECT_PREDICATES.map((predicate) => {
+      const fieldPrompt =
+        predicate === 'requestsContactDetails'
+          ? prompt.replace(
+              /\b(?:by|via|over|through|to)\s+(?:(?:my|your|his|her|their|the|an?)\s+)?(?:e-?mail(?:\s+address)?|phone(?:\s+number)?|address)\b/gi,
+              ' ',
+            )
+          : prompt;
       const rules =
         predicate === 'requestsInsuranceDetails' &&
         /^(?:get|read|fetch|retrieve|lookup) insurance$/i.test(call.toolName ?? '')
@@ -345,9 +355,9 @@ export function extractPiiDirectSignature(prompt: string): AttackSignature {
       return [
         predicate,
         (questions.some((question) => rules.some((rule) => rule.test(question))) ||
-          informationRequestRules(rules).some((rule) => rule.test(prompt))) &&
-          (targetsRecord || ownedField.test(prompt)) &&
-          rules.some((rule) => rule.test(prompt)),
+          informationRequestRules(rules).some((rule) => rule.test(fieldPrompt))) &&
+          (targetsRecord || ownedField.test(fieldPrompt)) &&
+          rules.some((rule) => rule.test(fieldPrompt)),
       ];
     }),
   ) as AttackPredicateSignature;
@@ -616,7 +626,10 @@ export function extractShellInjectionSignature(prompt: string): AttackSignature 
         !/^(?:please\s+)?(?:(?:can|could|would|will)\s+you\s+(?:please\s+)?)?(?:explain|describe|discuss|analy[sz]e)\b/i.test(
           text,
         ) &&
-        !/^(?:(?:what|how|why)\s+(?:do(?:es)?|did)\b|(?:what|why)\s+(?:would|will)\b|how\s+(?:can|could)\s+(?:I|we|you)\s+(?:understand|interpret)\b)/i.test(
+        !/^(?:(?:what|why)\s+(?:do(?:es)?|did|would|will)\b|how\s+(?:do(?:es)?|did)\s+(?!(?:I|we|you|one|someone)\b)[^.!?;\n]*\bwork\b|how\s+(?:can|could)\s+(?:I|we|you)\s+(?:understand|interpret)\b)/i.test(
+          text,
+        ) &&
+        !/^(?:should\s+(?:I|we)\b|is\s+it\s+(?:safe|okay|ok|advisable)\b|would\s+it\s+be\s+(?:safe|okay|ok|advisable)\b)/i.test(
           text,
         )
       );

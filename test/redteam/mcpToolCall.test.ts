@@ -22,6 +22,9 @@ describe('MCP tool call argument envelopes', () => {
   it.each([
     'http://json-schema.org/draft-07/schema#',
     'https://json-schema.org/draft/2020-12/schema',
+    'https://json-schema.org/draft/2020-12/schema#',
+    'https://json-schema.org/draft/2019-09/schema',
+    'https://json-schema.org/draft/2019-09/schema#',
   ])('validates the declared schema dialect %s', ($schema) => {
     const typedTools = [
       {

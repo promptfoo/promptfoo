@@ -1,6 +1,7 @@
 import { isDeepStrictEqual } from 'node:util';
 
 import Ajv from 'ajv';
+import Ajv2019 from 'ajv/dist/2019.js';
 import Ajv2020 from 'ajv/dist/2020.js';
 import addFormats from 'ajv-formats';
 
@@ -19,6 +20,8 @@ const TOOL_ARGS_FIELDS = ['args', 'arguments', 'params', 'parameters'] as const;
 
 const ajv = new Ajv({ allErrors: true, strictSchema: false });
 addFormats(ajv);
+const ajv2019 = new Ajv2019({ allErrors: true, strictSchema: false });
+addFormats(ajv2019);
 const ajv2020 = new Ajv2020({ allErrors: true, strictSchema: false });
 addFormats(ajv2020);
 
@@ -97,8 +100,14 @@ export function validateMcpToolCall(
 
   try {
     const schema = tool.inputSchema ?? { type: 'object' };
+    const dialect =
+      typeof schema.$schema === 'string' ? schema.$schema.replace(/#$/, '') : undefined;
     const validator =
-      schema.$schema === 'https://json-schema.org/draft/2020-12/schema' ? ajv2020 : ajv;
+      dialect === 'https://json-schema.org/draft/2020-12/schema'
+        ? ajv2020
+        : dialect === 'https://json-schema.org/draft/2019-09/schema'
+          ? ajv2019
+          : ajv;
     return validator.validate(schema, toolCall.args) === true;
   } catch {
     return false;

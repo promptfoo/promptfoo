@@ -680,7 +680,11 @@ export class OTLPReceiver {
     );
 
     const errorMessage = error instanceof Error ? error.message : String(error);
-    if (error instanceof SyntaxError || errorMessage.toLowerCase().includes('invalid protobuf')) {
+    if (
+      error instanceof SyntaxError ||
+      (error instanceof Error && error.name === 'TraceEvidenceError') ||
+      errorMessage.toLowerCase().includes('invalid protobuf')
+    ) {
       res.status(400).json({ error: errorMessage });
       return;
     }

@@ -560,13 +560,17 @@ function truncateJudgeTrajectorySteps(
   return summary;
 }
 
+const SQL_STATEMENT_RE =
+  /^\s*(?:(?:--[^\n]*\n|\/\*[\s\S]*?\*\/)\s*)*(?:select|with|insert|update|delete|merge|create|alter|drop|truncate|grant|revoke|explain|pragma|show|describe|call|exec(?:ute)?)\b/i;
+
 function getSqlExecutionDetails(
   step: Pick<TrajectoryStep, 'attributes' | 'spanId' | 'spanName' | 'startTime'>,
   redactText: (value: string) => string,
   redactAttributes?: string[],
 ): JudgeTrajectoryStep['sql'] {
   const attributes = step.attributes;
-  const databaseQuery = getFirstStringAttribute(attributes, ['db.query.text', 'db.statement']);
+  const databaseStatement = getFirstStringAttribute(attributes, ['db.query.text', 'db.statement']);
+  const database = getFirstStringAttribute(attributes, ['db.system.name', 'db.system']);
   const args = extractToolArgs({
     spanId: step.spanId,
     name: step.spanName,
@@ -579,16 +583,21 @@ function getSqlExecutionDetails(
     /(^|[\s.:/-])(?:(?:read|run|execute)_query|(?:run|execute)_sql|query_database|sql_query)($|[\s.:/-])/i.test(
       toolName,
     );
+  const databaseQuery =
+    databaseStatement &&
+    (isQueryTool ||
+      /^(?:other_sql|postgres(?:ql)?|mysql|mariadb|sqlite|mssql|microsoft\.sql_server|transactsql|oracle(?:\.db)?|snowflake|bigquery|clickhouse)$/i.test(
+        database ?? '',
+      ) ||
+      SQL_STATEMENT_RE.test(databaseStatement))
+      ? databaseStatement
+      : undefined;
   const argumentQuery =
     typeof args === 'string'
       ? args
       : getFirstStringAttribute(argumentObject, ['sql', 'query', 'statement']);
   const scalarSql =
-    argumentQuery !== undefined &&
-    (isQueryTool ||
-      /^\s*(?:select|with|insert|update|delete|merge|create|alter|drop|truncate|grant|revoke|explain|pragma|show|describe|call|exec(?:ute)?)\b/i.test(
-        argumentQuery,
-      ))
+    argumentQuery !== undefined && (isQueryTool || SQL_STATEMENT_RE.test(argumentQuery))
       ? argumentQuery.trim()
       : undefined;
   const query = databaseQuery ?? scalarSql;
@@ -630,10 +639,7 @@ function getSqlExecutionDetails(
     );
   }
   try {
-    sql.query = redactSqlLiteralsAndComments(
-      redactedQuery,
-      getFirstStringAttribute(attributes, ['db.system.name', 'db.system']),
-    );
+    sql.query = redactSqlLiteralsAndComments(redactedQuery, database);
   } catch (error) {
     throw Object.assign(
       new TraceEvidenceError(

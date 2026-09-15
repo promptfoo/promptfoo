@@ -94,8 +94,15 @@ export const handleRedteam = async ({
   providerResponse,
   assertionValueContext,
 }: AssertionParams): Promise<GradingResult> => {
+  const usesExecutionEvidence =
+    assertion.type === 'promptfoo:redteam:sql-injection' ||
+    assertion.type === 'promptfoo:redteam:shell-injection';
+  const tracing = usesExecutionEvidence
+    ? resolveTracingOptions({ strategyId: test.metadata?.strategyId ?? 'basic', test })
+    : undefined;
   // Skip grading if stored result exists from strategy execution for this specific assertion
   if (
+    !tracing?.includeInGrading &&
     providerResponse.metadata?.storedGraderResult &&
     (providerResponse.metadata.storedGraderResult.assertion?.type === assertion.type ||
       (test.metadata?.pluginId && assertion.type.includes(test.metadata.pluginId)))

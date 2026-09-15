@@ -1,7 +1,8 @@
-import { SpanKind } from '@opentelemetry/api';
+import { SpanKind, TraceFlags } from '@opentelemetry/api';
 import { ExportResultCode } from '@opentelemetry/core';
 import logger from '../logger';
 import { getTraceStore, type SpanData, type TraceStore } from './store';
+import type { SpanContext } from '@opentelemetry/api';
 import type { ExportResult } from '@opentelemetry/core';
 import type { ReadableSpan, SpanExporter } from '@opentelemetry/sdk-trace-base';
 
@@ -16,6 +17,23 @@ function delay(ms: number): Promise<void> {
  * This allows OTEL spans to be stored locally for analysis in the promptfoo UI.
  */
 export class LocalSpanExporter implements SpanExporter {
+  private readonly pendingSpans = new Map<string, () => void>();
+
+  reserveSpan({ traceId, spanId, traceFlags }: SpanContext): void {
+    const key = `${traceId}:${spanId}`;
+    if ((traceFlags & TraceFlags.SAMPLED) !== 0 && !this.pendingSpans.has(key)) {
+      this.pendingSpans.set(key, getTraceStore().reserveLocalSpan(traceId, spanId));
+    }
+  }
+
+  private releaseSpans(traceId: string, spans: SpanData[]): void {
+    for (const { spanId } of spans) {
+      const key = `${traceId}:${spanId}`;
+      this.pendingSpans.get(key)?.();
+      this.pendingSpans.delete(key);
+    }
+  }
+
   /**
    * Export spans to the local TraceStore.
    * Spans are grouped by trace ID and inserted into the database.
@@ -85,6 +103,7 @@ export class LocalSpanExporter implements SpanExporter {
             `[LocalSpanExporter] Skipping ${spanDataList.length} spans for orphan trace ${traceId}: ${result.reason}`,
           );
         }
+        this.releaseSpans(traceId, spanDataList);
       } catch (error) {
         // Handle unexpected errors (e.g., database connection issues)
         const errorMessage = error instanceof Error ? error.message : String(error);
@@ -93,6 +112,7 @@ export class LocalSpanExporter implements SpanExporter {
           logger.debug(
             `[LocalSpanExporter] Skipping ${spanDataList.length} spans for orphan trace ${traceId}`,
           );
+          this.releaseSpans(traceId, spanDataList);
         } else {
           // Track error but continue processing other traces
           logger.error(`[LocalSpanExporter] Failed to add spans to trace ${traceId}`, { error });
@@ -170,10 +190,14 @@ export class LocalSpanExporter implements SpanExporter {
   }
 
   /**
-   * Shutdown the exporter. No-op for local storage.
+   * Release claims for abandoned spans after the processor has flushed ended spans.
    */
   shutdown(): Promise<void> {
     logger.debug('[LocalSpanExporter] Shutting down');
+    for (const release of this.pendingSpans.values()) {
+      release();
+    }
+    this.pendingSpans.clear();
     return Promise.resolve();
   }
 

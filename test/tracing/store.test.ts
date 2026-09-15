@@ -259,7 +259,7 @@ describe('TraceStore', () => {
         await traceStore.addSpans(
           'trace',
           [
-            ...(stored ? [] : [original]),
+            ...(stored ? [] : [{ ...original, attributes: { authorization: 'private-value' } }]),
             { ...original, attributes: { authorization: 'private-value' } },
           ],
           {
@@ -283,13 +283,13 @@ describe('TraceStore', () => {
       },
     );
 
-    it('ignores existing and repeated spans through the database uniqueness constraint', async () => {
+    it('deduplicates identical retries before insertion', async () => {
       await traceStore.addSpans(
         'test-trace-id',
         [
           { spanId: 'existing', name: 'existing', startTime: 1 },
           { spanId: 'new', name: 'new', startTime: 2 },
-          { spanId: 'new', name: 'duplicate', startTime: 3 },
+          { spanId: 'new', name: 'new', startTime: 2 },
         ],
         { skipTraceCheck: true },
       );
@@ -297,7 +297,6 @@ describe('TraceStore', () => {
       expect(mockDb.insert().values).toHaveBeenCalledWith([
         expect.objectContaining({ spanId: 'existing' }),
         expect.objectContaining({ spanId: 'new', name: 'new' }),
-        expect.objectContaining({ spanId: 'new', name: 'duplicate' }),
       ]);
       expect(mockDb.insert().values().onConflictDoNothing).toHaveBeenCalledWith(
         expect.objectContaining({ target: expect.any(Array) }),

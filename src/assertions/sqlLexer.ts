@@ -91,7 +91,11 @@ export function stripIgnoredSqlText(sql: string, databaseType: string, maskValue
       ((character === '"' &&
         !DOUBLE_QUOTED_IDENTIFIER_DATABASES.has(database) &&
         !DOUBLE_QUOTED_LITERAL_DATABASES.has(database)) ||
-        (character === '[' && !database))
+        (character === '[' &&
+          !supportsBracketIdentifiers &&
+          !DOUBLE_QUOTED_IDENTIFIER_DATABASES.has(database) &&
+          !DOUBLE_QUOTED_LITERAL_DATABASES.has(database) &&
+          !HASH_COMMENT_DATABASES.has(database)))
     ) {
       throw new Error(
         'SQL trace has ambiguous quoted text; set db.system.name or use unambiguous quoting before grading.',

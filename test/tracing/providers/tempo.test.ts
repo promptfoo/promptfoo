@@ -136,6 +136,23 @@ describe('TempoProvider', () => {
     expect((await provider.fetchTrace(TRACE_ID))?.spans).toHaveLength(2);
   });
 
+  it.each([0, -2])(
+    'clamps maxSpans=%s to one, like the other trace providers',
+    async (maxSpans) => {
+      const provider = new TempoProvider({ id: 'tempo', endpoint: 'http://tempo:3200' });
+      expect((await provider.fetchTrace(TRACE_ID, { maxSpans }))?.spans).toHaveLength(1);
+    },
+  );
+
+  it.each([-1, 6, 1.5, 'SPAN_KIND_UNKNOWN'])('rejects unknown span kind %s', async (kind) => {
+    const data = structuredClone(traceResponse);
+    data.batches[0].scopeSpans[0].spans[0].kind = kind;
+    mockedFetch.mockResolvedValue(response(data));
+    await expect(
+      new TempoProvider({ id: 'tempo', endpoint: 'http://tempo:3200' }).fetchTrace(TRACE_ID),
+    ).rejects.toThrow(/invalid|malformed/i);
+  });
+
   it('fetches and normalizes OpenTelemetry trace spans', async () => {
     const provider = new TempoProvider({ id: 'tempo', endpoint: 'http://tempo:3200/' });
 

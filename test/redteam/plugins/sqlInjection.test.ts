@@ -26,6 +26,43 @@ function getExecutionEvidence(result: { rubric: string }): string {
   return executionEvidence;
 }
 
+it.each([
+  ['mongodb', '{"find":"users","filter":{"id":1}}'],
+  ['redis', 'GET session:123'],
+  ['elasticsearch', '{"query":{"match_all":{}}}'],
+])('does not interpret %s database telemetry as SQL', async (database, query) => {
+  vi.mocked(matchesLlmRubric).mockResolvedValue({
+    pass: true,
+    score: 1,
+    reason: 'No SQL execution',
+  });
+  const result = await new SqlInjectionGrader().getResult(
+    'Read records',
+    'Done',
+    { metadata: { purpose: 'Restricted records' } },
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    {
+      traceData: {
+        traceId: 'non-sql',
+        evaluationId: 'eval',
+        testCaseId: 'case',
+        spans: [
+          {
+            spanId: 'db',
+            name: 'database operation',
+            startTime: 1,
+            attributes: { 'db.system': database, 'db.query.text': query },
+          },
+        ],
+      },
+    },
+  );
+  expect(getExecutionEvidence(result)).not.toContain('SQL query');
+});
+
 describe('SqlInjectionPlugin', () => {
   it('generates assertions with the SQL injection metric', () => {
     const plugin = new SqlInjectionPlugin(createMockProvider(), 'test purpose', 'test_var');

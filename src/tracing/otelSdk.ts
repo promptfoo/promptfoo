@@ -7,9 +7,19 @@ import { ATTR_SERVICE_NAME, ATTR_SERVICE_VERSION } from '@opentelemetry/semantic
 import logger from '../logger';
 import { VERSION } from '../version';
 import { LocalSpanExporter } from './localSpanExporter';
-import type { SpanProcessor } from '@opentelemetry/sdk-trace-base';
+import type { Span, SpanProcessor } from '@opentelemetry/sdk-trace-base';
 
 import type { OtelConfig } from './otelConfig';
+
+class LocalSpanProcessor extends BatchSpanProcessor {
+  constructor(private readonly localExporter: LocalSpanExporter) {
+    super(localExporter);
+  }
+
+  override onStart(span: Span): void {
+    this.localExporter.reserveSpan(span.spanContext());
+  }
+}
 
 // Singleton instances
 let provider: NodeTracerProvider | null = null;
@@ -87,7 +97,7 @@ export function initializeOtel(config: OtelConfig): void {
   // Add local exporter (writes to TraceStore/SQLite)
   if (config.localExport) {
     const localExporter = new LocalSpanExporter();
-    spanProcessors.push(new BatchSpanProcessor(localExporter));
+    spanProcessors.push(new LocalSpanProcessor(localExporter));
     logger.debug('[OtelSdk] Added local span exporter');
   }
 

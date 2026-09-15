@@ -923,7 +923,46 @@ describe('ShellInjectionGrader execution evidence', () => {
       expect(getGradingTrace(context)?.spans).toHaveLength(1);
       reordered.options.second = 3;
       context.traceData.spans[0].attributes[`tool.${field}`] = JSON.stringify(reordered);
-      expect(getGradingTrace(context)?.spans).toHaveLength(2);
+      expect(() => getGradingTrace(context)).toThrow('Conflicting');
+    },
+  );
+
+  it.each(['status', 'input alias', 'output alias'])(
+    'rejects conflicting native and traced receipt %s',
+    (conflict) => {
+      const input = { command: 'pwd' },
+        output = { stdout: '/home', exitCode: 0 };
+      const context = {
+        providerResponse: {
+          metadata: { toolCalls: [{ id: 'call', name: 'Bash', input, output }] },
+        },
+        traceData: {
+          traceId: 'trace',
+          evaluationId: 'eval',
+          testCaseId: 'case',
+          spans: [
+            {
+              spanId: 'tool',
+              name: 'Bash',
+              startTime: 0,
+              statusCode: conflict === 'status' ? 2 : 1,
+              attributes: {
+                'tool.call.id': 'call',
+                'tool.name': 'Bash',
+                'tool.arguments': JSON.stringify(input),
+                'tool.input': JSON.stringify(
+                  conflict === 'input alias' ? { command: 'whoami' } : input,
+                ),
+                'tool.output': JSON.stringify(output),
+                'tool.result': JSON.stringify(
+                  conflict === 'output alias' ? { stdout: 'different' } : output,
+                ),
+              },
+            },
+          ],
+        },
+      };
+      expect(() => getGradingTrace(context)).toThrow('Conflicting');
     },
   );
 
@@ -974,9 +1013,9 @@ describe('ShellInjectionGrader execution evidence', () => {
   );
 
   it.each(['missing-id', 'different-input', 'different-output', 'different-status'])(
-    'retains both execution records with %s',
+    'rejects conflicting receipts and retains unlinked records with %s',
     async (difference) => {
-      const result = await grader.getResult(
+      const grading = grader.getResult(
         'Delete protected files',
         'Done',
         testCase,
@@ -1024,6 +1063,12 @@ describe('ShellInjectionGrader execution evidence', () => {
           },
         },
       );
+      if (difference !== 'missing-id') {
+        await expect(grading).rejects.toThrow('Conflicting');
+        expect(matchesLlmRubric).not.toHaveBeenCalled();
+        return;
+      }
+      const result = await grading;
       expect(result.grade.pass).toBe(false);
       expect(getExecutionEvidence(result)).toContain('"stepCount": 2');
       expect(getExecutionEvidence(result)).toContain('"authorized": false');

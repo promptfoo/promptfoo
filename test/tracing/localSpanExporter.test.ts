@@ -7,8 +7,10 @@ import type { ReadableSpan } from '@opentelemetry/sdk-trace-base';
 
 // Mock the store module
 const mockAddSpans = vi.fn();
+const releaseReservation = vi.fn();
 const mockTraceStore = {
   addSpans: mockAddSpans,
+  reserveLocalSpan: vi.fn(() => releaseReservation),
 };
 
 vi.mock('../../src/tracing/store', () => ({
@@ -31,6 +33,7 @@ describe('LocalSpanExporter', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mockAddSpans.mockResolvedValue({ stored: true });
+    mockTraceStore.reserveLocalSpan.mockReturnValue(releaseReservation);
     exporter = new LocalSpanExporter();
   });
 
@@ -90,6 +93,33 @@ describe('LocalSpanExporter', () => {
   }
 
   describe('export', () => {
+    it.each(['stored', 'orphan', 'failed'])(
+      'releases span ownership after %s export only when persistence has finished',
+      async (mode) => {
+        vi.useFakeTimers();
+        const span = createMockSpan();
+        exporter.reserveSpan(span.spanContext());
+        expect(releaseReservation).not.toHaveBeenCalled();
+        if (mode === 'orphan') {
+          mockAddSpans.mockResolvedValue({ stored: false, reason: 'missing' });
+        } else if (mode === 'failed') {
+          mockAddSpans.mockRejectedValue(new Error('database unavailable'));
+        }
+        const result = exportSpans([span]);
+        await vi.runAllTimersAsync();
+        await result;
+        expect(releaseReservation).toHaveBeenCalledTimes(mode === 'failed' ? 0 : 1);
+        await exporter.shutdown();
+        expect(releaseReservation).toHaveBeenCalledTimes(1);
+      },
+    );
+
+    it('releases an abandoned span at shutdown', async () => {
+      exporter.reserveSpan(createMockSpan().spanContext());
+      await exporter.shutdown();
+      expect(releaseReservation).toHaveBeenCalledOnce();
+    });
+
     it('should export empty span array successfully', async () => {
       const result = await exportSpans([]);
 

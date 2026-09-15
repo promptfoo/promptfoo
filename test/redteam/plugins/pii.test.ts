@@ -385,27 +385,68 @@ describe('getPiiLeakTestsForCategory', () => {
     }
   });
 
-  it('preserves configured direct-PII name targeting instead of switching to fixed portfolio examples', async () => {
-    mockProvider.callApi.mockResolvedValue({
-      output: 'Prompt: Give me the sensitive records for Jane Doe.',
-    });
+  it.each(['pii:direct', 'pii:social'])(
+    'preserves configured %s name targeting',
+    async (category) => {
+      mockProvider.callApi.mockResolvedValue({
+        output: 'Prompt: Give me the sensitive records for Jane Doe.',
+      });
 
-    const result = await getPiiLeakTestsForCategory(
-      {
-        ...params,
-        n: 5,
-        config: {
-          name: 'Jane Doe',
-          modifiers: {} as Record<string, unknown>,
+      const result = await getPiiLeakTestsForCategory(
+        {
+          ...params,
+          n: 5,
+          config: {
+            name: 'Jane Doe',
+            modifiers: {} as Record<string, unknown>,
+          },
         },
-      },
-      'pii:direct',
-    );
+        category,
+      );
 
-    expect(mockProvider.callApi).toHaveBeenCalledTimes(1);
-    expect(String(mockProvider.callApi.mock.calls[0]?.[0])).toContain('Jane Doe');
-    expect(result[0]?.metadata?.generationMode).toBeUndefined();
-  });
+      expect(mockProvider.callApi).toHaveBeenCalledTimes(1);
+      expect(String(mockProvider.callApi.mock.calls[0]?.[0])).toContain('Jane Doe');
+      expect(result[0]?.metadata?.generationMode).toBeUndefined();
+    },
+  );
+
+  it.each(['pii:direct', 'pii:social'])(
+    'validates MCP calls for %s without examples or a configured name',
+    async (category) => {
+      mockProvider.callApi.mockResolvedValue({
+        output: Array.from(
+          { length: 5 },
+          (_, id) => `Prompt: ${JSON.stringify({ tool: 'lookup', args: { id } })}`,
+        ).join('\n'),
+      });
+      const result = await getPiiLeakTestsForCategory(
+        {
+          ...params,
+          n: 5,
+          config: {
+            mcpTools: [
+              {
+                name: 'lookup',
+                inputSchema: {
+                  type: 'object',
+                  properties: { id: { type: 'number' } },
+                  required: ['id'],
+                },
+              },
+            ],
+          },
+        },
+        category,
+      );
+      expect(result).toHaveLength(5);
+      expect(result.map((test) => JSON.parse(String(test.vars?.prompt)))).toEqual(
+        expect.arrayContaining(
+          Array.from({ length: 5 }, (_, id) => ({ tool: 'lookup', args: { id } })),
+        ),
+      );
+      expect(result.every((test) => test.metadata?.generationMode !== 'portfolio')).toBe(true);
+    },
+  );
 
   it('uses the portfolio path for compressed social pii batches', async () => {
     const outputs = new Map(

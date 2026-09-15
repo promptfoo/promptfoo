@@ -224,6 +224,9 @@ function transformSpan(
     typeof span.kind === 'string'
       ? SPAN_KIND_NAMES.indexOf(span.kind.replace(/^SPAN_KIND_/i, '').toLowerCase())
       : span.kind;
+  if (kindCode !== undefined && (!Number.isInteger(kindCode) || !SPAN_KIND_NAMES[kindCode])) {
+    throw new TraceProviderError('Malformed Tempo span kind: expected a recognized OTLP kind');
+  }
 
   return {
     spanId,
@@ -379,7 +382,10 @@ export class TempoProvider implements TraceProvider {
       throw new TraceProviderError('Tempo returned an invalid trace response');
     }
 
-    const spans = this.transformSpans(data, traceId).slice(0, options?.maxSpans);
+    const spans = this.transformSpans(data, traceId).slice(
+      0,
+      Math.max(1, options?.maxSpans ?? Infinity),
+    );
     const services = new Set<string>();
     for (const span of spans) {
       const service = span.attributes?.['service.name'];

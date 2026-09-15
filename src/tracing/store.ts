@@ -246,6 +246,16 @@ function computeDepth(
 
 export class TraceStore {
   private db: Awaited<ReturnType<typeof getDb>> | null = null;
+  private static readonly pendingLocalSpans = new Set<string>();
+
+  /** Protect SDK-issued IDs until their local export finishes. Shared across store instances. */
+  reserveLocalSpan(traceId: string, spanId: string): () => void {
+    const key = `${traceId}:${spanId}`;
+    TraceStore.pendingLocalSpans.add(key);
+    return () => {
+      TraceStore.pendingLocalSpans.delete(key);
+    };
+  }
 
   private async getDatabase() {
     if (!this.db) {
@@ -400,6 +410,17 @@ export class TraceStore {
         ) {
           throw new TraceLimitError();
         }
+        const uniqueSpans = new Map<string, SpanData>();
+        for (const span of spans) {
+          const previous = uniqueSpans.get(span.spanId);
+          if (previous && spanHash(previous) !== spanHash(span)) {
+            throw Object.assign(new Error('Conflicting duplicate span IDs in one upload.'), {
+              name: 'TraceEvidenceError',
+            });
+          }
+          uniqueSpans.set(span.spanId, span);
+        }
+        spans = [...uniqueSpans.values()];
         const storedSizes = await tx
           .select({ spanId: spansTable.spanId, bytes: payloadBytes })
           .from(spansTable)
@@ -437,6 +458,14 @@ export class TraceStore {
             .run();
         };
         if (options?.source === 'external') {
+          if (spans.some((span) => TraceStore.pendingLocalSpans.has(`${traceId}:${span.spanId}`))) {
+            throw Object.assign(
+              new Error('External trace spans conflict with pending locally owned span IDs.'),
+              {
+                name: 'TraceEvidenceError',
+              },
+            );
+          }
           const localIds = new Set([...storedIds].filter((id) => !externalIds.has(id)));
           if (spans.some((span) => localIds.has(span.spanId))) {
             const stored = await tx

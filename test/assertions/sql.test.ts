@@ -46,6 +46,21 @@ describe('SQL trace value redaction', () => {
     );
   });
 
+  it.each(['', 'unknown'])('rejects ambiguous bracketed text for %s', (database) => {
+    expect(() => redactSqlLiteralsAndComments('SELECT [private value]', database)).toThrow(
+      'ambiguous quoted text',
+    );
+  });
+
+  it.each(['postgresql', 'bigquery'])(
+    'preserves array subscripts in %s trace summaries',
+    (database) => {
+      expect(redactSqlLiteralsAndComments('SELECT arr[1] FROM records', database)).toBe(
+        'SELECT arr[ :literal_1 ] FROM records',
+      );
+    },
+  );
+
   it('preserves MySQL subtraction and removes ClickHouse slash comments', () => {
     expect(redactSqlLiteralsAndComments('SELECT a--b FROM records', 'mysql')).toBe(
       'SELECT a--b FROM records',

@@ -686,8 +686,12 @@ describe('OTLPReceiver', () => {
       expect(response.status).toBe(400);
     });
 
-    it('should handle trace store errors gracefully', async () => {
-      mockTraceStore.addSpans.mockRejectedValueOnce(new Error('Database error'));
+    it.each(['database', 'evidence'])('reports %s trace store errors', async (kind) => {
+      const error =
+        kind === 'database'
+          ? new Error('Database error')
+          : Object.assign(new Error('Conflicting span IDs'), { name: 'TraceEvidenceError' });
+      mockTraceStore.addSpans.mockRejectedValueOnce(error);
 
       const otlpRequest = {
         resourceSpans: [
@@ -714,9 +718,11 @@ describe('OTLPReceiver', () => {
         .post('/v1/traces')
         .set('Content-Type', 'application/json')
         .send(otlpRequest)
-        .expect(500);
+        .expect(kind === 'database' ? 500 : 400);
 
-      expect(response.body).toEqual({ error: 'Internal server error' });
+      expect(response.body).toEqual({
+        error: kind === 'database' ? 'Internal server error' : 'Conflicting span IDs',
+      });
     });
   });
 
