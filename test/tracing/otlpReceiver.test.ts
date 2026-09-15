@@ -2374,7 +2374,7 @@ describe('OTLPReceiver', () => {
     }
 
     it.each(['0', '-1', 'invalid', '1e9', '18446744073709551616', ''])(
-      'drops log controls with invalid timestamp %s',
+      'marks linked logs incomplete for invalid timestamp %s',
       async (timeUnixNano) => {
         await request(receiver.getApp())
           .post('/v1/logs')
@@ -2396,8 +2396,10 @@ describe('OTLPReceiver', () => {
           )
           .expect(200);
         const spans = persistSpans.mock.calls[0][1];
-        expect(spans).toHaveLength(1);
-        expect(spans[0].name).toBe('tool update_seat');
+        expect(spans).toHaveLength(2);
+        expect(spans[0]).toMatchObject({ name: 'guardrail update_seat', incomplete: true });
+        expect(spans[0].attributes).not.toHaveProperty('otel.log.time_unix_nano');
+        expect(spans[1].name).toBe('tool update_seat');
       },
     );
 

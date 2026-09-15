@@ -7,6 +7,106 @@ import {
 import type { RedteamGradingContext } from '../../../src/redteam/grading/types';
 
 describe('agentic run observations', () => {
+  it.each([
+    { attribute: 'guardrail.outcome', value: 'allowed', kind: 'guardrail' },
+    { attribute: 'guardrail.decision', value: 'allowed', kind: 'guardrail' },
+    { attribute: 'guardrails.decision', value: 'allowed', kind: 'guardrail' },
+    { attribute: 'approval.outcome', value: 'approved', kind: 'approval' },
+  ])(
+    'recognizes neutral $attribute controls without inventing tool executions',
+    ({ attribute, value, kind }) => {
+      const observations = observationsFromGradingContext({
+        gradingContext: {
+          traceData: {
+            traceId: 'controls',
+            evaluationId: 'eval',
+            testCaseId: 'case',
+            spans: [
+              {
+                spanId: 'control',
+                name: 'check',
+                startTime: 1,
+                endTime: 2,
+                attributes: { [attribute]: value, 'tool.name': 'update_seat' },
+              },
+              {
+                spanId: 'tool',
+                name: 'tool update_seat',
+                startTime: 3,
+                endTime: 4,
+                attributes: { 'tool.name': 'update_seat', 'tool.arguments': '{"seat":"3A"}' },
+              },
+            ],
+          },
+        },
+      });
+      expect(observations).toContainEqual(
+        expect.objectContaining({ kind, outcome: 'allowed', spanId: 'control' }),
+      );
+      const toolSpans = observations
+        .filter((observation) => observation.kind === 'tool_call' && observation.tool)
+        .map((observation) => observation.spanId);
+      expect(new Set(toolSpans)).toEqual(new Set(['tool']));
+    },
+  );
+
+  it('does not treat a completed MCP tool named guardrail as an allowed control', () => {
+    const observations = observationsFromGradingContext({
+      gradingContext: {
+        traceData: {
+          traceId: 'self-authorizing',
+          evaluationId: 'eval',
+          testCaseId: 'case',
+          spans: [
+            {
+              spanId: 'tool',
+              name: 'guardrail_update_seat',
+              startTime: 1,
+              endTime: 2,
+              attributes: {
+                'codex.mcp.tool': 'guardrail_update_seat',
+                'codex.status': 'completed',
+              },
+            },
+          ],
+        },
+      },
+    });
+    expect(
+      observations.some(
+        (observation) => observation.kind === 'guardrail' && observation.outcome === 'allowed',
+      ),
+    ).toBe(false);
+  });
+
+  it('retains tool execution with an attached control outcome', () => {
+    const observations = observationsFromGradingContext({
+      gradingContext: {
+        traceData: {
+          traceId: 'controls',
+          evaluationId: 'eval',
+          testCaseId: 'case',
+          spans: [
+            {
+              spanId: 'tool',
+              name: 'tool update_seat',
+              startTime: 3,
+              endTime: 4,
+              attributes: {
+                'tool.name': 'update_seat',
+                'tool.arguments': '{"seat":"3A"}',
+                'guardrail.outcome': 'allowed',
+              },
+            },
+          ],
+        },
+      },
+    });
+    expect(observations).toContainEqual(
+      expect.objectContaining({ kind: 'tool_call', tool: 'update_seat' }),
+    );
+  });
+
   it.each([null, '', false, 0, {}, []].map((pluginId) => ({ pluginId })))(
     'rejects a lone invalid verifier plugin ID: $pluginId',
     ({ pluginId }) => {

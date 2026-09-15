@@ -382,29 +382,29 @@ function controlObservationFromSpan(
   const attributes = span.attributes || {};
   const name = span.name?.toLowerCase() || '';
   const spanType = stringifyValue(attributes['openai.agents.span_type'])?.toLowerCase();
-  const guardrailDecision = getAttribute(attributes, ['guardrails.decision', 'guardrail.decision']);
+  const guardrailDecision = getAttribute(attributes, [
+    'guardrails.decision',
+    'guardrail.decision',
+    'guardrail.outcome',
+  ]);
+  const approvalOutcome = controlOutcome(attributes, ['approval.outcome']);
   const failed = hasErrorStatus(span);
   const guardrailNames = Object.entries(attributes)
     .filter(([key]) => key.toLowerCase() === 'guardrail.name')
     .map(([, value]) => value);
 
-  if (
-    name.includes('guardrail') ||
-    spanType === 'guardrail' ||
-    guardrailNames.length > 0 ||
-    guardrailDecision !== undefined
-  ) {
+  const triggered = Object.entries(attributes)
+    .filter(([key, value]) => key.toLowerCase() === 'guardrail.triggered' && value !== undefined)
+    .map(([, value]) => stringifyValue(value)?.trim().toLowerCase() ?? '');
+  const hasSemanticAttribute =
+    spanType === 'guardrail' || guardrailNames.length > 0 || triggered.length > 0;
+  if (name.includes('guardrail') || hasSemanticAttribute || guardrailDecision !== undefined) {
     const explicitOutcome = controlOutcome(attributes, [
       'guardrails.decision',
       'guardrail.decision',
       'guardrail.outcome',
-      'codex.status',
+      ...(hasSemanticAttribute || guardrailDecision !== undefined ? ['codex.status'] : []),
     ]);
-    const triggered = Object.entries(attributes)
-      .filter(([key, value]) => key.toLowerCase() === 'guardrail.triggered' && value !== undefined)
-      .map(([, value]) => stringifyValue(value)?.trim().toLowerCase() ?? '');
-    const hasSemanticAttribute =
-      spanType === 'guardrail' || guardrailNames.length > 0 || triggered.length > 0;
     const outcome = explicitOutcome ?? (hasSemanticAttribute ? 'allowed' : undefined);
     return {
       kind: 'guardrail',
@@ -433,7 +433,8 @@ function controlObservationFromSpan(
   if (
     name.includes('approval') ||
     spanType === 'approval' ||
-    isExplicitlyTrue(attributes['approval.required'])
+    isExplicitlyTrue(attributes['approval.required']) ||
+    approvalOutcome !== undefined
   ) {
     return {
       kind: 'approval',
@@ -441,7 +442,7 @@ function controlObservationFromSpan(
       endTimestamp: span.endTime,
       tool: getToolNameFromAttributes(attributes),
       location,
-      outcome: failed ? 'error' : controlOutcome(attributes, ['approval.outcome']),
+      outcome: failed ? 'error' : approvalOutcome,
       parentSpanId: span.parentSpanId,
       source,
       spanId: span.spanId,
@@ -698,7 +699,13 @@ function observationsFromTraceAttributes(
   const dedicatedControl =
     spanType === 'guardrail' ||
     spanType === 'approval' ||
-    (/^(?:guardrail|approval)(?:$|[.\s:/_-])/i.test(span?.name ?? '') &&
+    ((/^(?:guardrail|approval)(?:$|[.\s:/_-])/i.test(span?.name ?? '') ||
+      !Object.keys(attributes ?? {}).some((key) => {
+        const mapped = traceAttributeField(key.toLowerCase());
+        return (
+          mapped?.kind === 'command' || (mapped?.kind === 'tool_call' && mapped.field !== 'tool')
+        );
+      })) &&
       isAllowedControlOutcome(
         controlOutcome(attributes ?? {}, [
           'guardrail.outcome',

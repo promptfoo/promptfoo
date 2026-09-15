@@ -926,20 +926,19 @@ export class OTLPReceiver {
     }
 
     const timeNano = log.timeUnixNano;
-    delete attributes['otel.log.time_unix_nano'];
-    if (timeNano !== undefined) {
-      if (
-        typeof timeNano !== 'string' ||
+    const invalidTime =
+      timeNano !== undefined &&
+      (typeof timeNano !== 'string' ||
         !/^\d{1,20}$/.test(timeNano) ||
         BigInt(timeNano) === 0n ||
-        BigInt(timeNano) > 0xffffffffffffffffn
-      ) {
-        return null;
-      }
+        BigInt(timeNano) > 0xffffffffffffffffn);
+    delete attributes['otel.log.time_unix_nano'];
+    if (timeNano !== undefined && !invalidTime) {
       attributes['otel.log.time_unix_nano'] = timeNano;
     }
     // Receipt time positions untimed logs in the UI; it is not execution-order evidence.
-    const startTime = timeNano === undefined ? Date.now() : Number(timeNano) / 1_000_000;
+    const startTime =
+      timeNano === undefined || invalidTime ? Date.now() : Number(timeNano) / 1_000_000;
     const endTime = startTime + LOG_SPAN_DURATION_MS;
 
     // Log's own span_id is the span the log was emitted from, so that span
@@ -995,6 +994,7 @@ export class OTLPReceiver {
         startTime,
         endTime,
         attributes,
+        ...(invalidTime && { incomplete: true }),
         // OTEL logs don't carry a span status; treat as OK unless severity indicates error.
         statusCode: severityIsError ? 2 : 1,
         statusMessage: severityIsError ? log.severityText : undefined,

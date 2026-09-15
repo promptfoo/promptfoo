@@ -61,13 +61,15 @@ describe('BraintrustProvider', () => {
     mockedFetch.mockImplementation(async () => response({ rows }));
   });
 
-  it.each([false, true])(
-    'checks duplicate evidence before deduplication (conflict=%s)',
-    async (conflict) => {
+  it.each(
+    [false, true].flatMap((conflict) => [undefined, 1].map((maxSpans) => ({ conflict, maxSpans }))),
+  )(
+    'checks duplicate evidence before truncation (conflict=$conflict, maxSpans=$maxSpans)',
+    async ({ conflict, maxSpans }) => {
       const original = rows[0];
       const duplicate = { ...original, ...(conflict ? { output: { unsafe: true } } : {}) };
       mockedFetch.mockResolvedValueOnce(response({ rows: [original, duplicate], meta: {} }));
-      const result = new BraintrustProvider(config).fetchTrace(TRACE_ID);
+      const result = new BraintrustProvider(config).fetchTrace(TRACE_ID, { maxSpans });
       if (conflict) {
         await expect(result).rejects.toMatchObject({
           message: expect.stringMatching(/conflicting duplicate/i),

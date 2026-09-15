@@ -31,6 +31,10 @@ describe('trace span relevance', () => {
       attributes: { 'guardrails.decision': 'blocked' },
     },
     {
+      description: 'approval outcomes',
+      attributes: { 'approval.outcome': 'approved' },
+    },
+    {
       description: 'approval controls',
       attributes: { 'approval.required': true },
     },
