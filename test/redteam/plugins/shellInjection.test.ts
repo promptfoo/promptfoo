@@ -965,7 +965,7 @@ describe('ShellInjectionGrader execution evidence', () => {
     expect(trace?.spans).toHaveLength(1);
   });
 
-  it.each(['status', 'input alias', 'output alias'])(
+  it.each(['status', 'input alias', 'output alias', 'tool name'])(
     'rejects conflicting native and traced receipt %s',
     (conflict) => {
       const input = { command: 'pwd' },
@@ -986,7 +986,7 @@ describe('ShellInjectionGrader execution evidence', () => {
               statusCode: conflict === 'status' ? 2 : 1,
               attributes: {
                 'tool.call.id': 'call',
-                'tool.name': 'Bash',
+                'tool.name': conflict === 'tool name' ? 'DifferentTool' : 'Bash',
                 'tool.arguments': JSON.stringify(input),
                 'tool.input': JSON.stringify(
                   conflict === 'input alias' ? { command: 'whoami' } : input,

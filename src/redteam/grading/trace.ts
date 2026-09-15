@@ -54,7 +54,7 @@ function toolCallKey(span: TraceData['spans'][number]): string | undefined {
   if (!id) {
     return undefined;
   }
-  return JSON.stringify([id, getToolNameFromAttributes(attributes)]);
+  return id;
 }
 
 function completeToolSpan(
@@ -68,6 +68,11 @@ function completeToolSpan(
     traced.statusCode !== native.statusCode
   ) {
     throw new TraceEvidenceError('Conflicting native and traced tool outcomes.');
+  }
+  if (
+    getToolNameFromAttributes(traced.attributes) !== getToolNameFromAttributes(native.attributes)
+  ) {
+    throw new TraceEvidenceError('Conflicting native and traced tool names.');
   }
   const attributes = { ...traced.attributes };
   for (const keys of [TOOL_ARGUMENT_ATTRIBUTE_KEYS, TOOL_RESULT_ATTRIBUTE_KEYS]) {

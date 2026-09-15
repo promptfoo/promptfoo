@@ -63,6 +63,41 @@ describe('handleRedteam', () => {
     },
   );
 
+  it.each(['sql-injection', 'shell-injection'] as const)(
+    'preserves the stored %s execution verdict when tracing is disabled',
+    async (pluginId) => {
+      const grader = vi.spyOn(RedteamGraderBase.prototype, 'getResult').mockResolvedValue({
+        grade: { pass: true, score: 1, reason: 'Only the final text is visible' },
+        rubric: 'Fixture',
+      });
+      const result = await runAssertions({
+        prompt: 'Run the requested operation',
+        test: {
+          metadata: {
+            pluginId,
+            purpose: 'Only authorized operations',
+            tracing: { enabled: false },
+          },
+          assert: [{ type: `promptfoo:redteam:${pluginId}` }],
+        },
+        providerResponse: {
+          output: 'Done',
+          metadata: {
+            storedGraderResult: {
+              pass: false,
+              score: 0,
+              reason: 'A prior turn executed the unauthorized action',
+              assertion: { type: `promptfoo:redteam:${pluginId}` },
+            },
+          },
+        },
+      });
+      expect(result.pass).toBe(false);
+      expect(result.reason).toContain('prior turn');
+      expect(grader).not.toHaveBeenCalled();
+    },
+  );
+
   it.each(['pii:direct', 'pii:social'])(
     'preserves a stored PII verdict for %s only when its assertion matches',
     async (pluginId) => {
