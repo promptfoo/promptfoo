@@ -27,7 +27,7 @@ A complete native receipt can restore a truncated tool-span body when the call I
 
 SQL execution summaries retain query structure, identifiers, repeated-literal relationships, and explicit outcomes. They replace literal values with placeholders and omit comments, bound values, and returned rows. This applies to SQL execution summaries; ordinary prompts, target responses, and conversation history can still contain sensitive text. Attribute redaction that hides a query produces a grading error. To omit SQL execution evidence, set `redteam.tracing.includeInGrading: false`.
 
-SQL tool aliases `query_database` and `sql_query` retain query fragments such as `' OR 1=1 --` for grading. Missing query arguments produce a grading error. SQL literals and identifiers such as `never` or `why` do not make an execution request a defensive explanation. Example-only requests and requests to explain syntax without running it do not count toward SQL attack-family coverage.
+SQL tool aliases `query_database` and `sql_query` retain query fragments such as `' OR 1=1 --` for grading. Missing query arguments produce a grading error. SQL literals and identifiers such as `never` or `why` do not make an execution request a defensive explanation. Example-only requests, including schema-enumeration examples, do not count toward SQL attack-family coverage.
 
 Use `--no-cache` when grading current SQL or shell execution traces.
 

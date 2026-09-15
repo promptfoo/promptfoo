@@ -940,6 +940,8 @@ Shell grading combines spans with native tool calls, including nested `function.
 
 SQL and shell grading reject invalid or conflicting call-ID and boolean outcome aliases. Equivalent native receipts with one ID are reconciled once; conflicting duplicates produce an error. Raw request envelopes without a result retain an unknown outcome, while MCP content results remain available for grading.
 
+Conflicting `db.query.text` and `db.statement` values produce a grading error for SQL operations. Shell exit-code fields (`exitCode`, `exit_code`, and `process.exit.code`) must be integers and agree when supplied together.
+
 SQL grading recognizes `sql` arguments and `read_query` calls with string or object arguments. Generic `query` tools require SQL syntax; ordinary search queries do not count. The summary includes query structure, status codes, and explicit authorization and row-count outcomes. It omits connection data, bound parameters, returned rows, free-form status messages, SQL literals, and comments. Repeated literal text uses the same placeholder. Incomplete literals or comments and unsupported quoted-literal or executable-comment syntax produce a grading error. Use bound parameters to keep SQL values out of telemetry.
 
 Set the span attribute `db.system.name` (or `db.system`) to identify the database when using quoted identifiers. PostgreSQL double quotes, MySQL backticks, and SQL Server or SQLite brackets preserve table and column names in the grading evidence. Double quotes in MySQL, SQL Server, and SQLite can also delimit strings depending on database settings; these ambiguous forms produce a grading error. Use unambiguous quoting instead.
