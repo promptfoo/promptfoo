@@ -162,7 +162,7 @@ npx vitest providers
 
 When writing tests, please:
 
-- **Use Vitest for all test files.**
+- **Use Vitest for tests in `test/`, `src/app/`, and `site/`.**
 - Ensure proper test isolation by:
   - Using `beforeEach` and `afterEach` to set up and clean up mocks
   - Calling `vi.clearAllMocks()` or `vi.restoreAllMocks()`
