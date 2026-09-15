@@ -191,6 +191,46 @@ describe('writeOutput', () => {
     expect(outputJson).not.toContain('fixture-api-key');
   });
 
+  it.each(['json', 'yaml'])(
+    'preserves empty legacy table cells in %s exports',
+    async (extension) => {
+      const eval_ = new Eval({});
+      const summary = await eval_.toEvaluateSummary();
+      const output = {
+        id: 'populated',
+        pass: true,
+        score: 1,
+        cost: 0,
+        failureReason: ResultFailureReason.NONE,
+        latencyMs: 1,
+        namedScores: {},
+        prompt: 'Prompt',
+        text: 'Public output',
+        testCase: {},
+      };
+      eval_.oldResults = {
+        version: 2,
+        timestamp: summary.timestamp,
+        stats: summary.stats,
+        results: [],
+        table: {
+          head: { vars: [], prompts: [] },
+          body: [{ testIdx: 0, vars: [], test: {}, outputs: [null as never, output] }],
+        },
+      };
+
+      await writeOutput(`output.${extension}`, eval_, null);
+
+      const text = vi.mocked(fsPromises.writeFile).mock.calls[0][1] as string;
+      const exported = extension === 'json' ? JSON.parse(text) : yaml.load(text);
+      expect(exported.results.table.body[0].outputs).toEqual([
+        null,
+        expect.objectContaining(output),
+      ]);
+      expect(eval_.oldResults.table.body[0].outputs).toEqual([null, output]);
+    },
+  );
+
   it.each(['json', 'yaml', 'html', 'xml'])(
     'redacts legacy table credentials and honors strip flags in %s exports',
     async (extension) => {
@@ -208,11 +248,11 @@ describe('writeOutput', () => {
         stats: summary.stats,
         results: [],
         table: {
-          head: { vars: ['value'], prompts: [prompt] },
+          head: { vars: ['value', 'apiKey'], prompts: [prompt] },
           body: [
             {
               testIdx: 0,
-              vars: ['PRIVATE_TABLE_VAR'],
+              vars: ['PRIVATE_TABLE_VAR', 'short-secret'],
               test: {
                 metadata: {
                   headers: { Authorization: 'Bearer PRIVATE_LEGACY_TEST' },
@@ -262,6 +302,9 @@ describe('writeOutput', () => {
       await writeOutput(`output.${extension}`, eval_, null);
       const output = vi.mocked(fsPromises.writeFile).mock.calls[0][1] as string;
       expect(output).not.toContain('legacy-header-7294');
+      expect(output).not.toContain('short-secret');
+      expect(output).toContain('PRIVATE_TABLE_VAR');
+      expect(eval_.oldResults.table.body[0].vars).toEqual(['PRIVATE_TABLE_VAR', 'short-secret']);
       expect(output).not.toContain('PRIVATE_LEGACY_');
       expect(output).not.toContain('table-error-credential');
       expect(output).toContain('Public response');
@@ -281,7 +324,7 @@ describe('writeOutput', () => {
         expect(stripped).not.toContain('Summarize');
         expect(stripped).toContain('[output stripped]');
         expect(eval_.oldResults.table.body[0].outputs[0].prompt).toBe('Summarize');
-        expect(eval_.oldResults.table.body[0].vars).toEqual(['PRIVATE_TABLE_VAR']);
+        expect(eval_.oldResults.table.body[0].vars).toEqual(['PRIVATE_TABLE_VAR', 'short-secret']);
       } finally {
         restoreEnv();
       }
@@ -1947,7 +1990,7 @@ describe('writeOutput', () => {
 
     const eval_ = new Eval({});
     await eval_.addPrompts([{ raw: 'prompt1', label: 'First Prompt', provider: 'openai:gpt-4' }]);
-    eval_.setVars(['input']);
+    eval_.setVars(['input', 'apiKey']);
 
     const result: EvaluateResult = {
       success: true,
@@ -1958,10 +2001,10 @@ describe('writeOutput', () => {
       provider: { id: 'openai:gpt-4' },
       prompt: { raw: 'prompt1', label: 'First Prompt' },
       response: { output: 'Test output' },
-      vars: { input: 'test input' },
+      vars: { input: 'test input', apiKey: 'short-sheet-secret' },
       promptIdx: 0,
       testIdx: 0,
-      testCase: { vars: { input: 'test input' } },
+      testCase: { vars: { input: 'test input', apiKey: 'short-sheet-secret' } },
       promptId: 'prompt1',
     };
     await eval_.addResult(result);
@@ -1971,6 +2014,8 @@ describe('writeOutput', () => {
     expect(googleSheets.writeCsvToGoogleSheet).toHaveBeenCalledTimes(1);
     const rows = vi.mocked(googleSheets.writeCsvToGoogleSheet).mock.calls[0][0];
     expect(rows.length).toBeGreaterThan(0);
+    expect(rows[0]).toMatchObject({ input: 'test input', apiKey: '[REDACTED]' });
+    expect(JSON.stringify(rows)).not.toContain('short-sheet-secret');
 
     const columnKeys = Object.keys(rows[0]);
     expect(columnKeys).toContain('[openai:gpt-4] First Prompt');

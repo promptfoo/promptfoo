@@ -1060,7 +1060,7 @@ describe('runEvaluation tool', () => {
     });
   });
 
-  it.each(['config', 'env file'])(
+  it.each(['config', 'env file', 'comma-separated env files', 'comma-separated env array'])(
     'projects actual MCP results within the %s environment',
     async (source) => {
       const { doEval } = await import('../../../../src/node/doEval');
@@ -1100,13 +1100,22 @@ describe('runEvaluation tool', () => {
             .map(([key, value]) => `${key}=${value}`)
             .join('\n'),
         );
+        const commaPaths = source.startsWith('comma-separated');
+        await writeFile(path.join(directory, 'base.env'), 'PROMPTFOO_STRIP_TEST_VARS=false');
+        const configuredEnvPath = commaPaths
+          ? source === 'comma-separated env array'
+            ? [' base.env, ', ' run.env ']
+            : ' base.env, run.env '
+          : envPath;
         const configPath = path.join(directory, 'config.json');
         await writeFile(
           configPath,
           JSON.stringify({
             prompts: ['{{privateValue}}'],
             providers: ['echo'],
-            ...(source === 'config' ? { env } : { commandLineOptions: { envPath } }),
+            ...(source === 'config'
+              ? { env }
+              : { commandLineOptions: { envPath: configuredEnvPath } }),
             tests: [{ vars: { privateValue: 'PRIVATE_MCP_SCOPED_OUTPUT' } }],
           }),
         );
@@ -1205,6 +1214,26 @@ describe('runEvaluation tool', () => {
   );
 
   describe('result formatting', () => {
+    it('redacts provider credentials in result rows and prompt summaries', async () => {
+      const { formatEvaluationResults, formatPromptsSummary } = await import(
+        '../../../../src/commands/mcp/lib/resultFormatter'
+      );
+      const summary = await createMockEvalResult().toEvaluateSummary();
+      const provider =
+        'https://user:fixture-provider-password@host.test/mcp?api_key=fixture-provider-key';
+      summary.results[0].provider.id = provider;
+      summary.prompts[0].provider = provider;
+
+      const rows = formatEvaluationResults(summary);
+      const prompts = formatPromptsSummary(summary);
+
+      expect(JSON.stringify({ rows, prompts })).not.toMatch(/fixture-provider-(?:password|key)/);
+      expect(rows.results[0].provider.id).toContain('host.test/mcp');
+      expect(prompts[0].provider).toBe(rows.results[0].provider.id);
+      expect(summary.results[0].provider.id).toBe(provider);
+      expect(summary.prompts[0].provider).toBe(provider);
+    });
+
     it('redacts and bounds a provider error in the MCP result', async () => {
       const { formatEvaluationResults } = await import(
         '../../../../src/commands/mcp/lib/resultFormatter'

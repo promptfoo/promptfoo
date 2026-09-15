@@ -669,13 +669,7 @@ export function registerRunEvaluationTool(server: McpServer) {
               ? { warning: 'The evaluation completed, but a shareable URL was not created.' }
               : {}),
           },
-          prompts: formatPromptsSummary(summary).map((prompt) => ({
-            ...prompt,
-            provider:
-              prompt.provider === undefined
-                ? undefined
-                : getPublicProviderId({ id: prompt.provider }),
-          })),
+          prompts: formatPromptsSummary(summary),
         };
 
         return createToolResponse('run_evaluation', true, evalData);

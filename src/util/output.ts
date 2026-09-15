@@ -367,12 +367,20 @@ function sanitizeOutputTable(table: EvaluateTable): EvaluateTable {
     ...table,
     head: { ...table.head, prompts: table.head.prompts.map(sanitizeOutputPrompt) },
     body: table.body.map((row) => {
-      const projected = sanitizeResultForArtifact({ testCase: row.test, vars: row.vars });
+      const vars = Object.fromEntries(
+        row.vars.map((value, index) => [table.head.vars[index] ?? index, value]),
+      );
+      const projected = sanitizeResultForArtifact({ testCase: row.test, vars });
       return {
         ...row,
         test: projected.testCase,
-        vars: stripVars ? row.vars.map(() => '') : projected.vars,
+        vars: row.vars.map((_, index) =>
+          stripVars ? '' : projected.vars[table.head.vars[index] ?? index],
+        ),
         outputs: row.outputs.map((output) => {
+          if (output == null) {
+            return output;
+          }
           const projectedOutput = sanitizeResultForArtifact({
             ...output,
             prompt: { raw: output.prompt, label: '' },

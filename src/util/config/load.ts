@@ -546,12 +546,14 @@ function loadConfiguredEnvFiles(
     'configuration',
   );
   if (options?.envPath) {
-    const paths = Array.isArray(options.envPath) ? options.envPath : [options.envPath];
+    const paths = (Array.isArray(options.envPath) ? options.envPath : [options.envPath])
+      .flatMap((file) => file.split(',').map((part) => part.trim()))
+      .filter(Boolean);
     const resolved = paths.map((file) =>
       basePath && !path.isAbsolute(file) ? path.resolve(basePath, file) : file,
     );
     setupEnv(resolved, { processEnv: cliState.envFileOverrides });
-    return Array.isArray(options.envPath) ? resolved : resolved[0];
+    return Array.isArray(options.envPath) || resolved.length > 1 ? resolved : resolved[0];
   }
 }
 
