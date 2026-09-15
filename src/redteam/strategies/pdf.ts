@@ -81,7 +81,7 @@ async function prepareTemplate(
   }
   if (!text.trim()) {
     throw new Error(
-      'PDF templates must contain extractable text. Use mode: scanned to test rasterized copies',
+      'PDF templates must contain extractable text. Scanned mode rasterizes a text-bearing template',
     );
   }
   const key = await savePdf(bytes, 'template.pdf');

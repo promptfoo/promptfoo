@@ -99,7 +99,7 @@ function getPdfGradingInput(test: AtomicTestCase, targetPrompt: string | undefin
             ? `[DOCX wrapper body was not recorded]\n\n${materialized.injectedInstruction}`
             : test.metadata?.inputVars?.[key];
       vars[key] =
-        typeof readable === 'string' && !readable.startsWith('data:')
+        typeof readable === 'string' && !/^data:[^,]+;base64,/.test(readable)
           ? readable
           : '[Attachment omitted from grading: readable content unavailable]';
     }
