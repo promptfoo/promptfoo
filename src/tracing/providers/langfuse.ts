@@ -320,8 +320,7 @@ function transformObservation(
 
 function addObservations(
   observations: unknown[],
-  spans: SpanData[],
-  seenSpans: Map<string, SpanData>,
+  spans: Map<string, SpanData>,
   traceId: string,
   maxSpans: number,
   options?: FetchTraceOptions,
@@ -337,17 +336,16 @@ function addObservations(
       logger.warn('[LangfuseProvider] Skipping malformed or unrelated observation');
       continue;
     }
-    const previous = seenSpans.get(span.spanId);
+    const previous = spans.get(span.spanId);
     if (previous && !isDeepStrictEqual(previous, span)) {
       throw new TraceProviderError('Conflicting duplicate Langfuse observation IDs', {
         invalidEvidence: true,
       });
     }
     if (!previous) {
-      seenSpans.set(span.spanId, span);
-      spans.push(span);
+      spans.set(span.spanId, span);
     }
-    if (spans.length >= maxSpans) {
+    if (spans.size >= maxSpans) {
       return;
     }
   }
@@ -446,8 +444,7 @@ export class LangfuseProvider implements TraceProvider {
     const signal = options?.abortSignal
       ? AbortSignal.any([timeoutSignal, options.abortSignal])
       : timeoutSignal;
-    const spans: SpanData[] = [];
-    const seenSpans = new Map<string, SpanData>();
+    const spans = new Map<string, SpanData>();
     const seenCursors = new Set<string>();
     let page: number | undefined;
     let cursor: string | undefined;
@@ -502,8 +499,8 @@ export class LangfuseProvider implements TraceProvider {
         throw new TraceProviderError('Langfuse returned an invalid observations response');
       }
 
-      addObservations(result.data, spans, seenSpans, normalizedTraceId, MAX_SPANS + 1, options);
-      if (spans.length > MAX_SPANS) {
+      addObservations(result.data, spans, normalizedTraceId, MAX_SPANS + 1, options);
+      if (spans.size > MAX_SPANS) {
         throw new TraceProviderError('Langfuse trace exceeds the maximum span count', {
           limitExceeded: true,
         });
@@ -512,12 +509,12 @@ export class LangfuseProvider implements TraceProvider {
       cursor = page ? undefined : getNextCursor(result, seenCursors);
     } while (page || cursor);
 
-    if (spans.length === 0) {
+    if (spans.size === 0) {
       return null;
     }
 
     const services = new Set<string>();
-    for (const span of spans) {
+    for (const span of spans.values()) {
       const service = span.attributes?.['service.name'];
       if (typeof service === 'string') {
         services.add(service);
@@ -526,7 +523,7 @@ export class LangfuseProvider implements TraceProvider {
 
     return {
       traceId: normalizedTraceId,
-      spans: spans.slice(0, maxSpans),
+      spans: [...spans.values()].slice(0, maxSpans),
       services: [...services],
       fetchedAt: Date.now(),
     };
