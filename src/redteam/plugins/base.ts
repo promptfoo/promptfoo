@@ -451,7 +451,7 @@ export abstract class RedteamGraderBase {
     const {
       providerResponse: gradingProviderResponse,
       imageOutputs,
-      verifierVars: _verifierVars,
+      verifierTest: _verifierTest,
       ...templateGradingContext
     } = gradingContext ?? {};
 
@@ -472,7 +472,7 @@ export abstract class RedteamGraderBase {
       tools,
       testVars: test.vars ?? {},
       // Spread public grading context properties to make them accessible in rubrics.
-      // Verifier vars, image payloads, and provider internals are excluded above.
+      // Verifier evidence, image payloads, and provider internals are excluded above.
       ...templateGradingContext,
       // Spread renderedValue to make properties accessible at top level (e.g., categoryGuidance)
       // This is done after gradingContext so renderedValue properties take precedence,

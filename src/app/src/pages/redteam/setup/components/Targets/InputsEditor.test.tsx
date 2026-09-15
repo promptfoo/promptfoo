@@ -188,11 +188,14 @@ describe('InputsEditor', () => {
     );
 
     it.each(['text', 'docx', 'image'] as const)(
-      'removes injection placements when changing a %s input to PDF',
+      'preserves compatible placements when changing a %s input to PDF',
       async (type) => {
         const user = userEvent.setup();
         const onChange = vi.fn();
-        const config = { inputPurpose: 'Invoice review', injectionPlacements: ['body'] };
+        const config = {
+          inputPurpose: 'Invoice review',
+          injectionPlacements: ['body', 'header', 'footer'],
+        };
         const initialInputs: Inputs = {
           document: { type, description: 'Invoice', config },
         };
@@ -207,11 +210,39 @@ describe('InputsEditor', () => {
           document: {
             type: 'pdf',
             description: 'Invoice',
-            config: { inputPurpose: 'Invoice review' },
+            config,
           },
         });
         expect(initialInputs.document).toEqual({ type, description: 'Invoice', config });
-        expect(config.injectionPlacements).toEqual(['body']);
+        expect(config.injectionPlacements).toEqual(['body', 'header', 'footer']);
+      },
+    );
+
+    it.each(['text', 'docx'] as const)(
+      'keeps supported placements from a mixed %s configuration when switching to PDF',
+      async (type) => {
+        const user = userEvent.setup();
+        const onChange = vi.fn();
+        const config = { injectionPlacements: ['comment', 'header', 'footnote', 'body'] };
+        renderWithProviders(
+          <ControlledInputsEditor
+            initialInputs={{ document: { type, description: 'Invoice', config } }}
+            onChange={onChange}
+            compact
+          />,
+        );
+
+        await user.click(screen.getByRole('combobox'));
+        await user.click(await screen.findByRole('option', { name: 'PDF' }));
+
+        const updated = onChange.mock.lastCall?.[0].document;
+        expect(updated).toEqual({
+          type: 'pdf',
+          description: 'Invoice',
+          config: { injectionPlacements: ['header', 'body'] },
+        });
+        expect(InputDefinitionSchema.safeParse(updated).success).toBe(true);
+        expect(config.injectionPlacements).toEqual(['comment', 'header', 'footnote', 'body']);
       },
     );
 
@@ -224,7 +255,7 @@ describe('InputsEditor', () => {
             document: {
               type: 'text',
               description: 'Invoice',
-              config: { injectionPlacements: ['body'] },
+              config: { injectionPlacements: ['footnote'] },
             },
           }}
           onChange={onChange}

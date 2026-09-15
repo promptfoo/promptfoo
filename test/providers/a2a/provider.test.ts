@@ -412,6 +412,45 @@ describe('A2AProvider', () => {
   );
 
   it.each(['1.0', '0.3.0'])(
+    'includes declared companions alongside a static PDF task in A2A %s',
+    async (version) => {
+      vi.mocked(fetchWithTimeout).mockResolvedValueOnce(
+        jsonResponse({ message: { role: 'ROLE_AGENT', parts: [{ text: 'pdf ok' }] } }),
+      );
+      const document = 'data:application/pdf;base64,JVBERi0x';
+      await provider({ protocolVersion: version }).callApi(`Summarize ${document}`, {
+        prompt: { raw: `Summarize ${document}`, label: 'PDF task' },
+        vars: {
+          document,
+          question: 'What is the total?',
+          locale: 'en',
+          apiKey: 'Private credential',
+        },
+        test: {
+          metadata: {
+            strategyId: 'pdf',
+            pdf: { input: 'document' },
+            pluginConfig: {
+              inputs: {
+                document: { type: 'pdf', description: 'Invoice' },
+                question: 'Question',
+                locale: 'Language',
+              },
+            },
+          },
+        },
+      });
+      const body = JSON.parse(vi.mocked(fetchWithTimeout).mock.lastCall?.[1]?.body as string);
+      const text = body.message.parts.find((part: { text?: string }) => part.text).text;
+      expect(JSON.parse(text)).toEqual({
+        task: 'Summarize [PDF attachment]',
+        inputs: { question: 'What is the total?', locale: 'en' },
+      });
+      expect(text).not.toContain('Private credential');
+    },
+  );
+
+  it.each(['1.0', '0.3.0'])(
     'preserves static instructions beside PDF attachments in A2A %s',
     async (version) => {
       const raw = Buffer.from('%PDF-1.7\nPDF attachment bytes').toString('base64');
@@ -473,7 +512,13 @@ describe('A2AProvider', () => {
           const body = JSON.parse(vi.mocked(fetchWithTimeout).mock.lastCall?.[1]?.body as string);
           const textParts = body.message.parts.filter((part: { text?: string }) => part.text);
           expect(textParts.map((part: { text: string }) => part.text)).toEqual(
-            expected ? [expected] : [],
+            expected
+              ? [
+                  inputs && request
+                    ? JSON.stringify({ task: expected, inputs: { request } })
+                    : expected,
+                ]
+              : [],
           );
           const filePart = body.message.parts.at(-1);
           expect(version === '0.3.0' ? filePart.file.fileWithBytes : filePart.raw).toBe(raw);

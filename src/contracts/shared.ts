@@ -123,6 +123,11 @@ export const InputDefinitionObjectSchema = z
         message: `Invalid ${inputType.toUpperCase()} injection placements: ${invalidPlacements.join(', ')}. Expected one of: ${placementValues.join(', ')}`,
       });
     }
+  })
+  // JSON Schema cannot infer superRefine's PDF-only template restriction.
+  .meta({
+    if: { properties: { type: { const: 'pdf' } }, required: ['type'] },
+    else: { properties: { config: { properties: { template: false } } } },
   });
 
 export const InputDefinitionSchema = z.union([

@@ -8,6 +8,7 @@ import { isMediaStorageEnabled, storeMedia } from '../../storage';
 import { normalizeInputDefinition, PdfTemplateSchema } from '../../types/shared';
 import { sha256 } from '../../util/createHash';
 import { extractFirstJsonObject } from '../../util/json';
+import { materializeInputValueWithMetadata } from '../inputVariables';
 import { createPdf, inspectPdf, MAX_PDF_BYTES, scanPdf } from '../pdf';
 import { getStrategyGenerationProvider } from './types';
 
@@ -138,14 +139,12 @@ function resolveInput(testCase: TestCaseWithPlugin, injectVar: string, configure
   ) {
     throw new Error(`PDF strategy requires readable attack text for input "${input}"`);
   }
-  const companionVars = Object.fromEntries(
-    Object.entries(inputs ?? {}).flatMap(([key, definition]) =>
-      normalizeInputDefinition(definition).type === 'text' && typeof inputVars?.[key] === 'string'
-        ? [[key, inputVars[key]]]
-        : [],
+  const currentInputs = Object.fromEntries(
+    Object.keys(inputs ?? {}).flatMap((key) =>
+      typeof inputVars?.[key] === 'string' ? [[key, inputVars[key]]] : [],
     ),
   );
-  return { input, inputs, payload, templateConfig, companionVars };
+  return { input, inputs, payload, templateConfig, currentInputs };
 }
 
 export async function addPdfTestCases(
@@ -160,7 +159,7 @@ export async function addPdfTestCases(
 
   const results: TestCase[] = [];
   for (const testCase of testCases) {
-    const { input, inputs, payload, templateConfig, companionVars } = resolveInput(
+    const { input, inputs, payload, templateConfig, currentInputs } = resolveInput(
       testCase,
       injectVar,
       configuredInput,
@@ -176,14 +175,43 @@ export async function addPdfTestCases(
     const rendered = await createPdf(notes, template.bytes);
     const bytes = mode === 'scanned' ? await scanPdf(rendered) : rendered;
     const storageKey = await savePdf(bytes, 'attack.pdf', text);
-    const vars = {
-      ...testCase.vars,
-      ...companionVars,
-      [input]: `data:application/pdf;base64,${bytes.toString('base64')}`,
-    };
+    const vars = { ...testCase.vars };
+    const inputMaterialization = { ...testCase.metadata.inputMaterialization };
+    for (const [key, definition] of Object.entries(inputs ?? {})) {
+      // The current envelope owns declared inputs; preserve auxiliary target vars separately.
+      delete vars[key];
+      delete inputMaterialization[key];
+      const value = currentInputs[key];
+      if (key === input || value === undefined) {
+        continue;
+      }
+      if (
+        normalizeInputDefinition(definition).type === 'text' ||
+        /^data:[^,]+;base64,/.test(value)
+      ) {
+        vars[key] = value;
+      } else if (
+        testCase.metadata.inputVars?.[key] === value &&
+        typeof testCase.vars?.[key] === 'string' &&
+        /^data:[^,]+;base64,/.test(testCase.vars[key])
+      ) {
+        // Reuse a companion only when its recorded source still matches this attack.
+        vars[key] = testCase.vars[key];
+        if (testCase.metadata.inputMaterialization?.[key]) {
+          inputMaterialization[key] = testCase.metadata.inputMaterialization[key];
+        }
+      } else {
+        const materialized = await materializeInputValueWithMetadata(value, definition);
+        vars[key] = materialized.value;
+        if (materialized.metadata) {
+          inputMaterialization[key] = materialized.metadata;
+        }
+      }
+    }
+    vars[input] = `data:application/pdf;base64,${bytes.toString('base64')}`;
     if (inputs) {
       vars[injectVar] = JSON.stringify(
-        Object.fromEntries(Object.keys(inputs).map((key) => [key, vars[key]])),
+        Object.fromEntries(Object.keys(currentInputs).map((key) => [key, vars[key]])),
       );
     }
     results.push({
@@ -195,6 +223,7 @@ export async function addPdfTestCases(
       })),
       metadata: {
         ...testCase.metadata,
+        ...(inputs ? { inputVars: currentInputs, inputMaterialization } : {}),
         strategyId: 'pdf',
         originalText: payload,
         pdf: {

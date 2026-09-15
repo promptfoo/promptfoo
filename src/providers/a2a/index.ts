@@ -388,7 +388,13 @@ function getDefaultTextPart(
       }),
     );
     const values = Object.values(companions);
-    text ??= values.length > 1 ? JSON.stringify(companions) : values[0];
+    if (values.length) {
+      text = text
+        ? JSON.stringify({ task: text, inputs: companions })
+        : values.length > 1
+          ? JSON.stringify(companions)
+          : values[0];
+    }
   } else if (mediaVarName !== 'question') {
     const question = getContextVar(contextVars, 'question');
     text = strategyId === 'pdf' ? (text ?? question) : (question ?? text);

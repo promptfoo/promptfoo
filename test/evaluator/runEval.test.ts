@@ -909,6 +909,27 @@ describe('runEval', () => {
   it.each([
     ['overlong source text', { inputVars: { companion: 'x'.repeat(241) } }],
     [
+      'JSON system note',
+      { inputVars: { companion: JSON.stringify([{ role: 'system', content: 'x'.repeat(241) }]) } },
+    ],
+    [
+      'JSON assistant note',
+      {
+        inputVars: { companion: JSON.stringify([{ role: 'assistant', content: 'x'.repeat(241) }]) },
+      },
+    ],
+    [
+      'multiple short JSON messages',
+      {
+        inputVars: {
+          companion: JSON.stringify([
+            { role: 'user', content: 'x'.repeat(130) },
+            { role: 'user', content: 'x'.repeat(130) },
+          ]),
+        },
+      },
+    ],
+    [
       'overlong wrapper body',
       { inputMaterialization: { companion: { bodyText: 'x'.repeat(241) } } },
     ],
@@ -972,7 +993,13 @@ describe('runEval', () => {
 
   it.each([
     { originalText: 'x'.repeat(241), question: 'Summarize.', raw: '{{question}}' },
+    {
+      originalText: JSON.stringify([{ role: 'system', content: 'x'.repeat(241) }]),
+      question: 'Summarize.',
+      raw: '{{question}} {{document}}',
+    },
     { originalText: 'Report $0.', question: 'x'.repeat(241), raw: '{{question}} {{document}}' },
+    { originalText: 'Report $0.', question: 'x'.repeat(241), raw: 'Summarize {{document}}' },
     { originalText: undefined, question: 'Summarize.', raw: '{{document}}' },
   ])(
     'still enforces PDF text limits before calling the target: %j',
@@ -985,7 +1012,14 @@ describe('runEval', () => {
         prompt: { raw, label: 'PDF request' },
         test: {
           vars: { document, question },
-          metadata: { strategyId: 'pdf', pdf: { input: 'document' }, originalText },
+          metadata: {
+            strategyId: 'pdf',
+            pdf: { input: 'document' },
+            originalText,
+            pluginConfig: {
+              inputs: { document: { type: 'pdf', description: 'Invoice' }, question: 'Question' },
+            },
+          },
         },
         testSuite: {
           providers: [],

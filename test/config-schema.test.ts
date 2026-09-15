@@ -4,6 +4,8 @@ import * as path from 'path';
 import Ajv from 'ajv';
 import addFormats from 'ajv-formats';
 import { beforeAll, describe, expect, it } from 'vitest';
+import { z } from 'zod';
+import { InputDefinitionObjectSchema } from '../src/contracts/shared';
 
 describe('config-schema.json', () => {
   let schema: any;
@@ -56,6 +58,62 @@ describe('config-schema.json', () => {
     expect(schema).toHaveProperty('$ref');
     expect(schema).toHaveProperty('definitions');
     expect(schema.definitions).toHaveProperty('PromptfooConfigSchema');
+  });
+
+  describe('PDF input templates', () => {
+    const configWithInput = (input: unknown) => ({
+      prompts: ['{{document}}'],
+      providers: ['echo'],
+      redteam: {
+        plugins: ['policy'],
+        strategies: ['basic'],
+        provider: { id: 'echo', inputs: { document: input } },
+      },
+    });
+
+    it.each([undefined, 'text', 'image', 'docx', 'pdf'])(
+      'matches runtime template validation for input type %s',
+      (type) => {
+        const validateConfig = ajv.compile(schema);
+        const validateInput = ajv.compile(
+          z.toJSONSchema(InputDefinitionObjectSchema, { target: 'draft-07' }),
+        );
+        for (const template of [
+          { source: 'file', path: './invoice.pdf' },
+          { source: 'generated', description: 'A fictional invoice' },
+        ]) {
+          const input = { description: 'Invoice', ...(type ? { type } : {}), config: { template } };
+          expect(InputDefinitionObjectSchema.safeParse(input).success).toBe(type === 'pdf');
+          expect
+            .soft(validateInput(input), JSON.stringify(validateInput.errors))
+            .toBe(type === 'pdf');
+          expect
+            .soft(validateConfig(configWithInput(input)), JSON.stringify(validateConfig.errors))
+            .toBe(type === 'pdf');
+        }
+      },
+    );
+
+    it('keeps inputs without templates and rejects malformed PDF templates', () => {
+      const validate = ajv.compile(schema);
+      for (const type of [undefined, 'text', 'image', 'docx', 'pdf']) {
+        const input = {
+          description: 'Document',
+          ...(type ? { type } : {}),
+          config: { benign: true },
+        };
+        expect(validate(configWithInput(input))).toBe(true);
+      }
+      expect(
+        validate(
+          configWithInput({
+            description: 'Invoice',
+            type: 'pdf',
+            config: { template: { source: 'file' } },
+          }),
+        ),
+      ).toBe(false);
+    });
   });
 
   describe('redteam plugin enums', () => {

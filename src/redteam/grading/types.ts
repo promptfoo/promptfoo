@@ -10,8 +10,8 @@ import type { RedteamHistoryEntry } from '../types';
  * between redteam providers and plugin base classes.
  */
 export interface RedteamGradingContext {
-  // Original target vars for in-process verifiers; excluded from model rubrics.
-  verifierVars?: CallApiContextParams['vars'];
+  // Original evidence for in-process verifiers; excluded from model rubrics.
+  verifierTest?: Pick<NonNullable<CallApiContextParams['test']>, 'vars' | 'metadata'>;
   providerResponse?: ProviderResponse;
   imageOutputs?: ImageOutput[];
   traceData?: TraceData | null;

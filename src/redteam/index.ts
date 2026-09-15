@@ -500,6 +500,7 @@ function filterOversizedTestCases<T extends TestCase>(
           : (testCase.vars?.[injectVar] ?? ''),
       ),
       testCaseMaxCharsPerMessage,
+      testCase.metadata?.pdf ? 'text' : 'chat',
     );
     if (!violation) {
       return true;

@@ -964,7 +964,14 @@ describe('synthesize', () => {
       );
     });
 
-    it('preserves PDFs rendered by the strategy and applies character limits to the payload', async () => {
+    it.each([
+      'attack',
+      JSON.stringify([{ role: 'system', content: 'x'.repeat(101) }]),
+      JSON.stringify([
+        { role: 'user', content: 'x'.repeat(60) },
+        { role: 'user', content: 'x'.repeat(60) },
+      ]),
+    ])('applies raw PDF payload limits: %s', async (payload) => {
       const inputs = { document: { type: 'pdf', description: 'Invoice' } } satisfies Inputs;
       const originalPrompt = JSON.stringify({ document: 'attack' });
       vi.spyOn(Plugins, 'find').mockReturnValue({
@@ -984,7 +991,7 @@ describe('synthesize', () => {
           vars: { ...test.vars, [MULTI_INPUT_VAR]: materializedPrompt, document: dataUri },
           metadata: {
             ...test.metadata,
-            originalText: 'attack',
+            originalText: payload,
             pdf: { input: 'document', text: 'Invoice\nattack' },
           },
         })),
@@ -1000,10 +1007,15 @@ describe('synthesize', () => {
         prompts: ['{{document}}'],
         provider: mockProvider,
         purpose: 'Review invoices',
+        maxCharsPerMessage: 100,
         strategies: [{ id: 'pdf', config: { maxCharsPerMessage: 100 } }],
         targetIds: ['test-provider'],
       });
       const pdfTest = result.testCases.find((test) => test.metadata?.strategyId === 'pdf');
+      if (payload.length > 100) {
+        expect(pdfTest).toBeUndefined();
+        return;
+      }
       expect(pdfTest?.vars?.document).toBe(dataUri);
       expect(pdfTest?.vars?.[MULTI_INPUT_VAR]).toBe(materializedPrompt);
       expect(pdfTest?.metadata).not.toHaveProperty('__promptfooMaterializedMultiInputPrompt');

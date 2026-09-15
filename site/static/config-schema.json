@@ -625,7 +625,24 @@
               }
             },
             "required": ["description"],
-            "additionalProperties": false
+            "additionalProperties": false,
+            "if": {
+              "properties": {
+                "type": {
+                  "const": "pdf"
+                }
+              },
+              "required": ["type"]
+            },
+            "else": {
+              "properties": {
+                "config": {
+                  "properties": {
+                    "template": false
+                  }
+                }
+              }
+            }
           }
         ]
       }
@@ -1670,7 +1687,24 @@
                           }
                         },
                         "required": ["description"],
-                        "additionalProperties": false
+                        "additionalProperties": false,
+                        "if": {
+                          "properties": {
+                            "type": {
+                              "const": "pdf"
+                            }
+                          },
+                          "required": ["type"]
+                        },
+                        "else": {
+                          "properties": {
+                            "config": {
+                              "properties": {
+                                "template": false
+                              }
+                            }
+                          }
+                        }
                       }
                     ]
                   }
@@ -2213,7 +2247,24 @@
                           }
                         },
                         "required": ["description"],
-                        "additionalProperties": false
+                        "additionalProperties": false,
+                        "if": {
+                          "properties": {
+                            "type": {
+                              "const": "pdf"
+                            }
+                          },
+                          "required": ["type"]
+                        },
+                        "else": {
+                          "properties": {
+                            "config": {
+                              "properties": {
+                                "template": false
+                              }
+                            }
+                          }
+                        }
                       }
                     ]
                   }

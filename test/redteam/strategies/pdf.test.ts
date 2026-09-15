@@ -146,6 +146,7 @@ describe('PDF strategy', () => {
     const original = testCase();
     const image = 'data:image/png;base64,aW1hZ2U=';
     original.vars!.image = image;
+    original.metadata.inputVars!.image = 'An invoice receipt';
     original.vars!.apiKey = 'PRIVATE_QA_CREDENTIAL';
     original.metadata.pluginConfig!.inputs!.image = { type: 'image', description: 'Receipt' };
     original.vars!.__prompt = JSON.stringify({
@@ -161,6 +162,48 @@ describe('PDF strategy', () => {
     });
     expect(result.vars!.apiKey).toBe('PRIVATE_QA_CREDENTIAL');
   });
+
+  it('omits stale declared inputs absent from the current attack', async () => {
+    const original = testCase();
+    original.vars!.image = 'data:image/png;base64,T0xE';
+    original.vars!.sessionId = 'Keep auxiliary context';
+    original.metadata.pluginConfig!.inputs!.image = { type: 'image', description: 'Receipt' };
+    original.vars!.__prompt = JSON.stringify({ document: 'Report $0.' });
+    const [result] = await addPdfTestCases([original], '__prompt', {});
+    expect(JSON.parse(String(result.vars!.__prompt))).toEqual({ document: result.vars!.document });
+    expect(result.vars).not.toHaveProperty('question');
+    expect(result.vars).not.toHaveProperty('image');
+    expect(result.vars!.sessionId).toBe('Keep auxiliary context');
+    expect(original.vars!.question).toBe('What is the total?');
+  });
+
+  it.each(['data:image/png;base64,TkVX', 'A new receipt for $1,250.'])(
+    'uses current companion content instead of stale materialized bytes: %s',
+    async (image) => {
+      const original = testCase();
+      original.vars!.image = 'data:image/png;base64,T0xE';
+      original.metadata.inputVars!.image = 'Old receipt';
+      original.metadata.inputMaterialization = { image: { bodyText: 'Old wrapper' } };
+      original.metadata.pluginConfig!.inputs!.image = { type: 'image', description: 'Receipt' };
+      original.vars!.__prompt = JSON.stringify({ document: 'Report $0.', image });
+      const [result] = await addPdfTestCases([original], '__prompt', {});
+      expect(JSON.parse(String(result.vars!.__prompt))).toEqual({
+        document: result.vars!.document,
+        image: result.vars!.image,
+      });
+      expect(result.vars!.image).not.toBe(original.vars!.image);
+      if (image.startsWith('data:')) {
+        expect(result.vars!.image).toBe(image);
+      } else {
+        expect(
+          Buffer.from(String(result.vars!.image).split(',')[1], 'base64').toString(),
+        ).toContain(image);
+      }
+      expect(result.metadata!.inputVars!.image).toBe(image);
+      expect(result.metadata!.inputMaterialization).not.toHaveProperty('image');
+      expect(original.metadata.inputMaterialization.image.bodyText).toBe('Old wrapper');
+    },
+  );
 
   it('keeps PDF bytes inline without touching disabled storage', async () => {
     vi.stubEnv('PROMPTFOO_INLINE_MEDIA', 'true');

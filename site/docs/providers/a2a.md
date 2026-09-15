@@ -224,6 +224,8 @@ For the [PDF strategy](/docs/red-team/strategies/pdf/), the default message incl
 
 When the prompt contains only the PDF or a JSON object made from declared input fields, companion text comes from the target's declared text inputs: one field is sent as text, and multiple fields are sent as a JSON object preserving their names. Other rendered fields, such as an `instruction` variable, stay in the prompt. Without declared inputs, the provider uses `question` when no rendered task text is available.
 
+When a PDF task has both rendered instructions and declared text companions, the text part is a JSON object with `task` and `inputs` fields. This preserves companions even when the prompt does not interpolate them.
+
 Custom message templates replace this default. Include any required file parts in `config.message`:
 
 ```yaml

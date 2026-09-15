@@ -859,17 +859,27 @@ async function renderRunEvalPrompt({
     skipRenderVars,
   );
   if (isRedteam) {
-    const attachments: { dataUrl: string; text: string }[] = [];
+    const readableInputs: { dataUrl?: string; text: string }[] = [];
     const metadata = test.metadata;
     const pdfInput = metadata?.pdf?.input;
     if (typeof pdfInput === 'string' && typeof metadata?.originalText === 'string') {
       for (const [key, value] of Object.entries(vars)) {
         const input = metadata.pluginConfig?.inputs?.[key];
+        if (typeof value !== 'string') {
+          continue;
+        }
         if (
-          typeof value !== 'string' ||
-          (key === pdfInput
+          key !== pdfInput &&
+          input &&
+          (typeof input === 'string' || !input.type || input.type === 'text')
+        ) {
+          readableInputs.push({ text: value });
+          continue;
+        }
+        if (
+          key === pdfInput
             ? !value.startsWith('data:application/pdf;base64,')
-            : typeof input !== 'object' || !input.type || input.type === 'text')
+            : !input || typeof input !== 'object' || !input.type || input.type === 'text'
         ) {
           continue;
         }
@@ -883,14 +893,14 @@ async function renderRunEvalPrompt({
                   .join('\n\n')
               : (materialized?.injectedInstruction ?? metadata.inputVars?.[key]);
         if (typeof text === 'string' && !/^data:[^,]+;base64,/.test(text)) {
-          attachments.push({ dataUrl: value, text });
+          readableInputs.push({ dataUrl: value, text });
         }
       }
     }
     throwIfTargetPromptExceedsMaxChars(
       renderedPrompt,
       testSuite?.redteam?.maxCharsPerMessage,
-      attachments,
+      readableInputs,
     );
   }
   const promptConfig = mergeProviderPromptConfig(promptForRender.config, test.options);

@@ -87,6 +87,8 @@ const response = await fetch('http://localhost:3100/api/analyze', {
 
 Do not interpolate the URI into a text-only prompt. This tests text handling rather than the application's PDF ingestion. Loading a PDF using `vars: { document: file://invoice.pdf }` normally [extracts its text](/docs/configuration/guide); it is a different workflow.
 
+The combined input contains only declared fields present in the current attack. Unchanged companion attachments retain their bytes; changed readable companions are rendered again with the basic typed-input renderer. Supplied attachment data URIs are forwarded directly. Omitted companions do not retain values from earlier attacks.
+
 ## Artifacts and grading
 
 Clean and attacked PDFs are saved through the configured media storage provider. In local storage, they live under `~/.promptfoo/media/document/`, or `PROMPTFOO_MEDIA_PATH`. Generated test variables also retain the PDF data URI for replay. Storage errors stop generation so a run cannot silently lose its saved artifacts.
@@ -97,14 +99,14 @@ Each test's `metadata.pdf` records `input`, `mode`, readable `text`, `templateTe
 
 The strategy preserves the plugin's assertions and attack goal. Redteam graders receive the rendered task prompt with attachment bytes replaced by placeholders, the readable document, and the target's declared companion inputs. Declare any text or attachment fields needed for grading in `inputs`; unrelated test variables, such as credentials or session state, are excluded from this document context. Companion DOCX inputs include the rendered wrapper body and rewritten instructions in their grading context. Other companion attachments use their recorded readable content when available; otherwise, the grader sees an explicit omitted-attachment marker. Attachment bytes are excluded from the grading prompt. `metadata.originalText` retains the injected payload. Scanned-mode grading uses the text used to render the PDF; the target must actually support visual PDF reading or OCR.
 
-Coding-agent deterministic verifiers retain the original test variables for canary, protected-path, and file-hash checks. Those verifier-only values are not added to the model grading prompt.
+Coding-agent deterministic verifiers retain the original test variables and metadata for canary, protected-path, and file-hash checks. Those verifier-only values are not added to the model grading prompt. The model's metadata copy excludes the raw `inputVars` snapshot.
 
 ## Limits
 
 - Standalone, single-turn generation only. Configure `pdf` directly under `redteam.strategies`; it can run alongside other strategies, but cannot be a step inside `layer`. Multi-turn runtime PDF transforms are rejected.
 - Templates must be unencrypted PDFs with extractable text. Image-only source templates are not supported; generate image-only output with `mode: scanned`.
 - Extracted template text and newly rendered text are each limited to 50,000 characters. Template inspection and scanned rendering run in separate processes with a 15-second deadline and a bounded JavaScript heap.
-- `redteam.maxCharsPerMessage` checks the readable attack notes, each declared companion attachment's recorded text, and the rendered accompanying text separately. Attachment bytes do not count toward this limit when readable content is recorded; ordinary text inputs still count in full.
+- `redteam.maxCharsPerMessage` checks the readable attack notes, each declared companion attachment's recorded text, and the rendered accompanying text separately. Document text is counted in full, including JSON-shaped notes and their role labels. Attachment bytes do not count toward this limit when readable content is recorded; ordinary text inputs still count in full.
 - Files are limited to 5 MiB. Templates can have at most 9 pages, leaving room for review notes within the 10-page output limit. Page dimensions must be between 1 and 20 inches.
 - New text uses Helvetica's Latin character set. Unsupported characters cause an error instead of disappearing. Existing template fonts remain intact in text mode.
 - Rendering and template-generation errors stop the transformation. There is no text-disguised-as-PDF fallback. Editing signed documents invalidates their signatures; forms, annotations, embedded files, and active PDF content are outside this strategy's coverage.
