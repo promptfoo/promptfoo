@@ -128,6 +128,26 @@ describe('MediaGrid', () => {
       expect(screen.getByRole('list')).toHaveAttribute('aria-label', 'Media library - 5 items');
     });
 
+    it('announces how many media items are currently loaded when more exist', () => {
+      const items = createMockItems(5);
+      renderWithProviders(
+        <MediaGrid
+          items={items}
+          total={18}
+          isLoading={false}
+          isLoadingMore={false}
+          hasMore={true}
+          onLoadMore={vi.fn()}
+          onItemClick={vi.fn()}
+        />,
+      );
+
+      expect(screen.getByRole('list')).toHaveAttribute(
+        'aria-label',
+        'Media library - showing 5 of 18 items',
+      );
+    });
+
     it('renders skeletons when loading', () => {
       renderWithProviders(
         <MediaGrid
@@ -193,7 +213,7 @@ describe('MediaGrid', () => {
         />,
       );
 
-      await user.click(getMediaCardAction('Image: Evaluation 2'));
+      await user.click(getMediaCardAction('Image: Evaluation 2, hash-1'));
 
       expect(onItemClick).toHaveBeenCalledWith(items[1]);
     });
@@ -217,9 +237,10 @@ describe('MediaGrid', () => {
         />,
       );
 
-      // Check that selection checkboxes are rendered
-      expect(screen.getByLabelText('Deselect')).toBeInTheDocument(); // hash-1 is selected
-      expect(screen.getAllByLabelText('Select')).toHaveLength(2); // other 2 are not
+      // Check that selection checkboxes are rendered with item-specific labels.
+      expect(screen.getByLabelText('Deselect Evaluation 2, hash-1')).toBeInTheDocument();
+      expect(screen.getByLabelText('Select Evaluation 1, hash-0')).toBeInTheDocument();
+      expect(screen.getByLabelText('Select Evaluation 3, hash-2')).toBeInTheDocument();
     });
 
     it('calls onToggleSelection when checkbox is clicked', async () => {
@@ -240,8 +261,7 @@ describe('MediaGrid', () => {
         />,
       );
 
-      const selectButtons = screen.getAllByLabelText('Select');
-      await user.click(selectButtons[0]);
+      await user.click(screen.getByLabelText('Select Evaluation 1, hash-0'));
 
       expect(onToggleSelection).toHaveBeenCalledWith('hash-0');
     });
@@ -262,7 +282,7 @@ describe('MediaGrid', () => {
         />,
       );
 
-      expect(getCardContainer('Image: Evaluation 2 (currently viewing)')).toHaveClass(
+      expect(getCardContainer('Image: Evaluation 2, hash-1 (currently viewing)')).toHaveClass(
         'border-primary',
       );
     });

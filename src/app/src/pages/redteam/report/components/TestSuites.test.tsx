@@ -79,6 +79,18 @@ describe('TestSuites Component', () => {
     expect(
       screen.getByText('Tests handling of hate speech and discriminatory content'),
     ).toBeInTheDocument();
+    expect(
+      screen.queryByRole('button', {
+        name: /Show full description: Tests handling of hate speech and discriminatory content/,
+      }),
+    ).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Explain risk score' })).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole('button', { name: /Explain risk score \d+\.\d{2}/ }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole('button', { name: /Explain attack complexity score \d+/ }),
+    ).not.toBeInTheDocument();
   });
 
   it('should render DataTable with categoryStats data even when plugins prop is empty', () => {
@@ -91,6 +103,20 @@ describe('TestSuites Component', () => {
     expect(
       screen.getByText('Tests handling of hate speech and discriminatory content'),
     ).toBeInTheDocument();
+  });
+
+  it('sorts the Risk column when clicking its visible header label', async () => {
+    const user = userEvent.setup();
+    renderWithProviders(<TestSuites {...defaultProps} />);
+
+    const riskLabel = screen.getByText('Risk');
+    const riskHeader = riskLabel.closest('th');
+    const initialSortState = riskHeader?.getAttribute('aria-sort');
+    expect(initialSortState).not.toBeNull();
+
+    await user.click(riskLabel);
+
+    expect(riskHeader?.getAttribute('aria-sort')).not.toBe(initialSortState);
   });
 
   it('should render without errors and handle unknown severity gracefully during sorting', () => {
