@@ -141,11 +141,12 @@ function hasHtmlMedia(text: string): boolean {
       if (node.tagName === 'style') {
         styles.push(node.childNodes.map((child) => ('value' in child ? child.value : '')).join(''));
       }
-      // Escaped CSS can hide both loaded media and receipts from the text verifier.
+      // Escaped CSS can hide loaded media. Quoted comment markers may be literal text,
+      // so inspect that CSS conservatively instead of stripping apparent comments.
       if (
         styles.some((style) =>
           /\\|\b(?:url|image|(?:-webkit-)?image-set)\s*\(|@import\b/i.test(
-            style.replace(/\/\*[\s\S]*?\*\//g, ''),
+            /["']/.test(style) ? style : style.replace(/\/\*[\s\S]*?(?:\*\/|$)/g, ''),
           ),
         )
       ) {
