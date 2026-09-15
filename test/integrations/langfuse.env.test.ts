@@ -38,6 +38,7 @@ describe('langfuse integration env resolution', () => {
       LANGFUSE_PUBLIC_KEY: undefined,
       LANGFUSE_SECRET_KEY: undefined,
       LANGFUSE_HOST: undefined,
+      LANGFUSE_BASE_URL: undefined,
     });
   });
 
@@ -85,6 +86,47 @@ describe('langfuse integration env resolution', () => {
         publicKey: 'pk-config',
         secretKey: 'sk-config',
         baseUrl: 'https://config.example.com',
+      },
+    ]);
+  });
+
+  it('uses LANGFUSE_BASE_URL from the config env block when LANGFUSE_HOST is not set', async () => {
+    cliState.config = {
+      env: {
+        LANGFUSE_PUBLIC_KEY: 'pk-base-url',
+        LANGFUSE_SECRET_KEY: 'sk-base-url',
+        LANGFUSE_BASE_URL: 'https://us.cloud.langfuse.com',
+      },
+    };
+
+    await expect(getPrompt('greeting', {}, 'text')).resolves.toBe('compiled');
+
+    expect(mocks.constructorCalls).toEqual([
+      {
+        publicKey: 'pk-base-url',
+        secretKey: 'sk-base-url',
+        baseUrl: 'https://us.cloud.langfuse.com',
+      },
+    ]);
+  });
+
+  it('prefers LANGFUSE_HOST over LANGFUSE_BASE_URL', async () => {
+    cliState.config = {
+      env: {
+        LANGFUSE_PUBLIC_KEY: 'pk-both',
+        LANGFUSE_SECRET_KEY: 'sk-both',
+        LANGFUSE_HOST: 'https://host.example.com',
+        LANGFUSE_BASE_URL: 'https://base-url.example.com',
+      },
+    };
+
+    await expect(getPrompt('greeting', {}, 'text')).resolves.toBe('compiled');
+
+    expect(mocks.constructorCalls).toEqual([
+      {
+        publicKey: 'pk-both',
+        secretKey: 'sk-both',
+        baseUrl: 'https://host.example.com',
       },
     ]);
   });
