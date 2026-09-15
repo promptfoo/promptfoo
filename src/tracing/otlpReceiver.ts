@@ -128,8 +128,6 @@ interface OTLPLogsRequest {
   resourceLogs: OTLPResourceLogs[];
 }
 
-// Log event names we don't want cluttering traces (internal, not actionable).
-const LOG_EVENT_NAME_DENYLIST: ReadonlySet<string> = new Set(['claude_code.tracing']);
 // Nominal span duration for a log-derived span so it renders as a thin bar
 // instead of a zero-width point in trace UIs.
 const LOG_SPAN_DURATION_MS = 1;
@@ -919,11 +917,6 @@ export class OTLPReceiver {
     });
 
     const name = resolveLogSpanName(attributes, bodyValue);
-
-    if (LOG_EVENT_NAME_DENYLIST.has(name)) {
-      logger.debug(`[OtlpReceiver] Dropping log: event '${name}' is in the denylist`);
-      return null;
-    }
 
     const timeNano = log.timeUnixNano;
     const invalidTime =

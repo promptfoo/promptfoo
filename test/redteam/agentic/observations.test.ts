@@ -1,12 +1,109 @@
 import { describe, expect, it, vi } from 'vitest';
 import {
   findingsFromObservations,
+  getTraceEvidenceValues,
   observationsFromGradingContext,
 } from '../../../src/redteam/agentic/observations';
 
 import type { RedteamGradingContext } from '../../../src/redteam/grading/types';
 
 describe('agentic run observations', () => {
+  it('bounds nested resource attribute groups', () => {
+    expect(() =>
+      getTraceEvidenceValues({
+        'otel.resource.attributes': Array.from({ length: 1001 }, () => ({})),
+      }),
+    ).toThrow(/exceeds 1000 attribute groups/);
+  });
+
+  it.each(['tool', null, 1, ''])('rejects inconsistent span-type aliases: %j', (alias) => {
+    expect(() =>
+      observationsFromGradingContext({
+        gradingContext: {
+          traceData: {
+            traceId: 'span-type',
+            evaluationId: 'eval',
+            testCaseId: 'case',
+            spans: [
+              {
+                spanId: 'control',
+                name: 'check',
+                startTime: 1,
+                attributes: {
+                  'openai.agents.span_type': 'guardrail',
+                  'OpenAI.Agents.Span_Type': alias,
+                  'tool.name': 'update_seat',
+                },
+              },
+            ],
+          },
+        },
+      }),
+    ).toThrow(/span type/);
+  });
+
+  it('accepts equivalent span-type aliases', () => {
+    const observations = observationsFromGradingContext({
+      gradingContext: {
+        traceData: {
+          traceId: 'span-type',
+          evaluationId: 'eval',
+          testCaseId: 'case',
+          spans: [
+            {
+              spanId: 'control',
+              name: 'check',
+              startTime: 1,
+              attributes: {
+                'OpenAI.Agents.Span_Type': 'GUARDRAIL',
+                'openai.agents.span_type': 'guardrail',
+                'tool.name': 'update_seat',
+              },
+            },
+          ],
+        },
+      },
+    });
+    expect(observations).toContainEqual(
+      expect.objectContaining({ kind: 'guardrail', outcome: 'allowed' }),
+    );
+  });
+
+  it.each([false, true])('retains shadowed resource verifier findings (nested=%s)', (nested) => {
+    const pluginId = 'agentic:tool-discovery-confusion';
+    const resource = {
+      'promptfoo.agentic.plugin_id': pluginId,
+      'promptfoo.agentic.evidence_json': JSON.stringify({
+        findings: [{ kind: 'tool-discovery-confusion', evidence: 'Hidden tool discovered' }],
+      }),
+    };
+    const observations = observationsFromGradingContext({
+      gradingContext: {
+        traceData: {
+          traceId: 'resource',
+          evaluationId: 'eval',
+          testCaseId: 'case',
+          spans: [
+            {
+              spanId: 'verifier',
+              name: 'verifier',
+              startTime: 1,
+              attributes: {
+                'promptfoo.agentic.evidence_json': JSON.stringify({ pluginId, findings: [] }),
+                'otel.resource.attributes': nested
+                  ? [{ 'otel.resource.attributes': [resource] }]
+                  : [resource],
+              },
+            },
+          ],
+        },
+      },
+    });
+    expect(findingsFromObservations(observations)).toContainEqual(
+      expect.objectContaining({ pluginId, evidence: 'Hidden tool discovered' }),
+    );
+  });
+
   it.each([
     { attribute: 'guardrail.outcome', value: 'allowed', kind: 'guardrail' },
     { attribute: 'guardrail.decision', value: 'allowed', kind: 'guardrail' },

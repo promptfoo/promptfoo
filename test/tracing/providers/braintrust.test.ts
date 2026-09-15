@@ -61,6 +61,17 @@ describe('BraintrustProvider', () => {
     mockedFetch.mockImplementation(async () => response({ rows }));
   });
 
+  it.each([-1, 0, 1])('clamps maxSpans=%s to at least one', async (maxSpans) => {
+    mockedFetch.mockResolvedValueOnce(
+      response({
+        rows: [...rows, { ...rows[1], id: 'third-event', span_id: 'third-span' }],
+      }),
+    );
+    expect(
+      (await new BraintrustProvider(config).fetchTrace(TRACE_ID, { maxSpans }))?.spans,
+    ).toHaveLength(1);
+  });
+
   it.each([
     null,
     { ...rows[0], id: undefined, span_id: 42 },

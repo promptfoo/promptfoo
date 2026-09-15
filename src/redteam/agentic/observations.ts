@@ -162,6 +162,23 @@ function getToolCallId(attributes: Record<string, unknown> | undefined): string 
   return ids[0];
 }
 
+function getSpanType(attributes: Record<string, unknown> | undefined): string | undefined {
+  const types = Object.entries(attributes ?? {})
+    .filter(([key]) => key.toLowerCase() === 'openai.agents.span_type')
+    .map(([, value]) => {
+      requireVisibleEvidenceIdentity(value);
+      const type = getString(value)?.trim().toLowerCase();
+      if (!type) {
+        throw new Error('Cannot grade execution evidence: invalid span type');
+      }
+      return type;
+    });
+  if (new Set(types).size > 1) {
+    throw new Error('Cannot grade execution evidence: conflicting span types');
+  }
+  return types[0];
+}
+
 export function isAllowedControlOutcome(value: unknown): boolean {
   return /^(allow(?:ed)?|approved|pass(?:ed)?|success(?:ful)?|succeeded|completed|ok|true|yes|1)$/i.test(
     stringifyValue(value)?.trim() ?? '',
@@ -270,6 +287,7 @@ function traceAttributeField(
   | undefined {
   if (
     normalizedAttributeName === 'codex.output' ||
+    normalizedAttributeName === 'otel.log.body' ||
     normalizedAttributeName.includes('command.output') ||
     normalizedAttributeName.endsWith('.stdout') ||
     normalizedAttributeName.endsWith('.stderr')
@@ -386,7 +404,7 @@ function controlObservationFromSpan(
 ): AgentObservation | undefined {
   const attributes = span.attributes || {};
   const name = span.name?.toLowerCase() || '';
-  const spanType = stringifyValue(attributes['openai.agents.span_type'])?.toLowerCase();
+  const spanType = getSpanType(attributes);
   const guardrailDecision = getAttribute(attributes, [
     'guardrails.decision',
     'guardrail.decision',
@@ -461,6 +479,37 @@ function controlObservationFromSpan(
 }
 
 export function getTraceEvidenceValues(
+  attributes: Record<string, unknown> | undefined,
+  enclosingAttributes?: Record<string, unknown>,
+): unknown[] {
+  const values: unknown[] = [];
+  const pending: Array<{
+    attributes: unknown;
+    enclosingAttributes?: Record<string, unknown>;
+  }> = [{ attributes, enclosingAttributes }];
+  const seen = new Set<object>();
+  while (pending.length) {
+    const { attributes: source, enclosingAttributes: enclosing } = pending.pop()!;
+    if ((!isRecord(source) && !Array.isArray(source)) || seen.has(source)) {
+      continue;
+    }
+    seen.add(source);
+    if (seen.size + pending.length > 1000 || (Array.isArray(source) && source.length > 1000)) {
+      throw new Error(
+        'Agentic resource evidence exceeds 1000 attribute groups and cannot be graded',
+      );
+    }
+    if (Array.isArray(source)) {
+      pending.push(...source.map((attributes) => ({ attributes, enclosingAttributes: enclosing })));
+      continue;
+    }
+    values.push(...getDirectTraceEvidenceValues(source, enclosing));
+    pending.push({ attributes: source['otel.resource.attributes'], enclosingAttributes: source });
+  }
+  return values;
+}
+
+function getDirectTraceEvidenceValues(
   attributes: Record<string, unknown> | undefined,
   enclosingAttributes?: Record<string, unknown>,
 ): unknown[] {
@@ -700,7 +749,7 @@ function observationsFromTraceAttributes(
     span,
     enclosingAttributes,
   );
-  const spanType = stringifyValue(attributes?.['openai.agents.span_type'])?.toLowerCase();
+  const spanType = getSpanType(attributes);
   const dedicatedControl =
     spanType === 'guardrail' ||
     spanType === 'approval' ||

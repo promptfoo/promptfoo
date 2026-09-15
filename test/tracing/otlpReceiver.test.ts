@@ -2597,24 +2597,54 @@ describe('OTLPReceiver', () => {
       expect(persistSpans).not.toHaveBeenCalled();
     });
 
-    it('filters out internal tracing logs via denylist', async () => {
-      const req = makeLogsRequest([
-        {
-          timeUnixNano: '1700000000000000000',
-          traceId: hexTraceId,
-          spanId: hexParentSpanId,
-          attributes: [{ key: 'event.name', value: { stringValue: 'claude_code.tracing' } }],
-        },
-      ]);
+    it.each([false, true])(
+      'retains linked tracing logs with verifier evidence=%s',
+      async (finding) => {
+        const req = makeLogsRequest([
+          {
+            timeUnixNano: '1700000000000000000',
+            traceId: hexTraceId,
+            spanId: hexParentSpanId,
+            attributes: [
+              { key: 'event.name', value: { stringValue: 'claude_code.tracing' } },
+              ...(finding
+                ? [
+                    {
+                      key: 'promptfoo.agentic.evidence_json',
+                      value: {
+                        stringValue: JSON.stringify({
+                          pluginId: 'agentic:tool-discovery-confusion',
+                          findings: [
+                            {
+                              kind: 'tool-discovery-confusion',
+                              evidence: 'Hidden tool discovered',
+                            },
+                          ],
+                        }),
+                      },
+                    },
+                  ]
+                : []),
+            ],
+          },
+        ]);
 
-      await request(receiver.getApp())
-        .post('/v1/logs')
-        .set('Content-Type', 'application/json')
-        .send(req)
-        .expect(200);
+        await request(receiver.getApp())
+          .post('/v1/logs')
+          .set('Content-Type', 'application/json')
+          .send(req)
+          .expect(200);
 
-      expect(persistSpans).not.toHaveBeenCalled();
-    });
+        expect(persistSpans).toHaveBeenCalledOnce();
+        const span = persistSpans.mock.calls[0][1][0];
+        expect(span.name).toBe('claude_code.tracing');
+        if (finding) {
+          expect(span.attributes?.['promptfoo.agentic.evidence_json']).toContain(
+            'Hidden tool discovered',
+          );
+        }
+      },
+    );
 
     it('falls back to a short body string when no event.name attribute is present', async () => {
       const req = makeLogsRequest([
