@@ -72,9 +72,27 @@ describe('PDF inspection process lifecycle', () => {
   it.each(operations)('reports a $name memory failure without hanging', async ({ operation }) => {
     const result = operation(Buffer.from('%PDF-1.7'));
     child.emit('exit', null, 'SIGABRT');
+    child.emit('close', null, 'SIGABRT');
     await expect(result).rejects.toThrow('document may exceed parser memory limits');
     expect(child.kill).toHaveBeenCalledTimes(1);
   });
+
+  it.each(operations)(
+    'accepts a buffered $name result after process exit',
+    async ({ name, operation }) => {
+      const expected =
+        name === 'inspection' ? { text: 'Invoice', pageCount: 1 } : Buffer.from('%PDF-result');
+      const result = operation(Buffer.from('%PDF-1.7'));
+      child.emit('exit', 0, null);
+      child.emit('message', {
+        result: Buffer.isBuffer(expected) ? expected.toString('base64') : expected,
+      });
+      child.emit('close', 0, null);
+      await expect(result).resolves.toEqual(expected);
+      expect(vi.getTimerCount()).toBe(0);
+      expect(child.kill).toHaveBeenCalledTimes(1);
+    },
+  );
 
   it('stops the process and clears its timeout after success', async () => {
     const result = inspectPdf(Buffer.from('%PDF-1.7'));

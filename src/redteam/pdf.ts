@@ -195,7 +195,8 @@ async function processPdf<T>(
         }
       });
       child.once('error', reject);
-      child.once('exit', (code, signal) =>
+      // IPC can still have a buffered result after exit; close waits for it to drain.
+      child.once('close', (code, signal) =>
         reject(
           new Error(
             `PDF subprocess exited (${signal ?? code}); document may exceed parser memory limits`,
