@@ -48,7 +48,10 @@ describe('processExecutableFile', () => {
 
   // Cross-platform tests
   it('invalidates cached prompts when a script changes under config.basePath', async () => {
-    const restoreEnv = mockProcessEnv({}, { clear: true });
+    const restoreEnv = mockProcessEnv(
+      { SystemRoot: process.env.SystemRoot ?? process.env.SYSTEMROOT },
+      { clear: true },
+    );
     fs.mkdirSync('.local', { recursive: true });
     const dir = fs.mkdtempSync(path.join('.local', 'pf-prompt-cache-base-'));
     const script = path.join(dir, 'prompt.cjs');
