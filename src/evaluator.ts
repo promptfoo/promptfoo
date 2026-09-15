@@ -2539,11 +2539,22 @@ async function buildRunEvalOptions({
 }): Promise<RunEvalOptions[]> {
   const runEvalOptions: RunEvalOptions[] = [];
   const configuredProviderMap = buildConfiguredProviderMap(testSuite.providers);
+  const testsWithoutProviders: string[] = [];
 
   let testIdx = 0;
   for (let index = 0; index < tests.length; index++) {
     const testCase = tests[index];
     await prepareTestCaseForEval(testSuite, testCase, index);
+    // A test whose `providers` all fall outside this eval (e.g. excluded by --filter-providers)
+    // produces no results, so say so instead of skipping it silently.
+    if (
+      testCase.providers?.length &&
+      !testSuite.providers.some((provider) => isProviderAllowed(provider, testCase.providers))
+    ) {
+      testsWithoutProviders.push(
+        testCase.description ? `"${testCase.description}"` : `#${index + 1}`,
+      );
+    }
     resolveRuntimeGradingProviderReferences(testCase, configuredProviderMap, testSuite.env);
     testIdx = appendRunEvalOptionsForTestCase({
       concurrency,
@@ -2559,6 +2570,15 @@ async function buildRunEvalOptions({
       testCase,
       testSuite,
     });
+  }
+
+  if (testsWithoutProviders.length > 0) {
+    const shown = testsWithoutProviders.slice(0, 5).join(', ');
+    const more =
+      testsWithoutProviders.length > 5 ? `, and ${testsWithoutProviders.length - 5} more` : '';
+    logger.warn(
+      `${testsWithoutProviders.length} test(s) will not run because none of their providers are in this eval (for example, --filter-providers excluded them): ${shown}${more}`,
+    );
   }
 
   return runEvalOptions;
