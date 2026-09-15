@@ -54,7 +54,7 @@ function validateDockerInstallCommands(dockerfile: string): void {
 const SOURCE_FILE_EXTENSIONS = /\.(ts|tsx|mts|cts|js|mjs|cjs)$/;
 const EXPECTED_SHARP_VERSION = '^0.35.4';
 const PATCHED_JS_YAML_RANGE = '^3.15.1 || ^4.3.1 || >=5.2.3';
-const PATCHED_UNDICI_RANGE = '^6.28.0 || ^7.29.0 || >=8.9.0';
+const PATCHED_UNDICI_RANGE = '^7.29.1 || >=8.10.2';
 const OPENAI_PACKAGE_NAMES = ['@openai/agents', '@openai/codex-sdk', 'openai'] as const;
 const SWC_PACKAGE_NAMES = [
   '@swc/core',
@@ -848,14 +848,14 @@ describe('package manifests', () => {
     const optionalRange = packageJson.optionalDependencies?.[dependencyName];
 
     expect(optionalRange).toBeDefined();
-    expect(minVersion(optionalRange!)?.compare('4.13.5')).toBeGreaterThanOrEqual(0);
+    expect(minVersion(optionalRange!)?.compare('4.13.7')).toBeGreaterThanOrEqual(0);
     expect(packageJson.dependencies?.[dependencyName]).toBeUndefined();
     expect(packageLock.packages[''].optionalDependencies?.[dependencyName]).toBe(optionalRange);
     expect(packageLock.packages[''].dependencies?.[dependencyName]).toBeUndefined();
     expect(packageLock.packages[`node_modules/${dependencyName}`].version).toBeDefined();
     expect(
       minVersion(packageLock.packages[`node_modules/${dependencyName}`].version!)?.compare(
-        '4.13.5',
+        '4.13.7',
       ),
     ).toBeGreaterThanOrEqual(0);
   });
@@ -1226,15 +1226,18 @@ describe('package manifests', () => {
   });
 
   it('keeps the JSON Schema ref parser and its HTTP transport on patched versions', () => {
-    const packageJson = readPackageJson<PackageManifest & { engines?: { node?: string } }>(
-      'package.json',
-    );
+    const packageJson = readPackageJson<
+      PackageManifest & {
+        engines?: { node?: string };
+      }
+    >('package.json');
     const packageLock =
       readPackageJson<
         PackageLockManifest<PackageManifest & { engines?: { node?: string }; version?: string }>
       >('package-lock.json');
     const parserRange = packageJson.dependencies?.['@apidevtools/json-schema-ref-parser'];
     const parser = packageLock.packages['node_modules/@apidevtools/json-schema-ref-parser'];
+    // Published dependencies do not inherit this repository's npm overrides.
     const parserTransportRange = parser?.dependencies?.undici;
     const parserTransport =
       packageLock.packages['node_modules/@apidevtools/json-schema-ref-parser/node_modules/undici'];
@@ -1243,7 +1246,7 @@ describe('package manifests', () => {
       parserRange,
       'the JSON Schema ref parser must remain a runtime dependency',
     ).toBeDefined();
-    expect(minVersion(parserRange as string)?.compare('16.0.0')).toBeGreaterThanOrEqual(0);
+    expect(minVersion(parserRange as string)?.compare('16.0.2')).toBeGreaterThanOrEqual(0);
     expect(packageLock.packages[''].dependencies?.['@apidevtools/json-schema-ref-parser']).toBe(
       parserRange,
     );
@@ -1260,7 +1263,7 @@ describe('package manifests', () => {
       validRange(parserTransportRange as string),
       'the parser transport dependency must declare a valid semver range',
     ).not.toBeNull();
-    expect(minVersion(parserTransportRange as string)?.compare('8.10.0')).toBeGreaterThanOrEqual(0);
+    expect(minVersion(parserTransportRange as string)?.compare('8.10.2')).toBeGreaterThanOrEqual(0);
     expect(
       parserTransport?.version,
       'the parser must resolve its private HTTP transport',
@@ -1280,12 +1283,8 @@ describe('package manifests', () => {
   });
 
   it('keeps undici patched and aligned across the root and code-scan-action manifests', () => {
-    // The August 2026 undici advisories were fixed in 6.28.0, 7.29.0, and 8.9.0.
-    // GHSA-4cwx-7wf7-3272 affects only 7.x and 8.x, not the patched 6.x line.
-    // The root fix landed in #10269 but code-scan-action/ carries its own lockfile,
-    // so it kept resolving 7.28.0 and stayed on five open Dependabot alerts. Both
-    // projects override undici; assert the floors and the resolved copies together.
-    const PATCHED_UNDICI_FLOOR = '7.29.0';
+    // Keep the September 2026 transport fixes in both independent install graphs.
+    const PATCHED_UNDICI_FLOOR = '7.29.1';
     const rootPackageJson = readPackageJson<{
       overrides?: Record<string, string | Record<string, string>>;
     }>('package.json');

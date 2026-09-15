@@ -40,11 +40,6 @@ import { AzureGenericProvider } from './generic';
 import { calculateAzureCost } from './util';
 import type { Agent, AIProjectClient as AzureAIProjectClient } from '@azure/ai-projects';
 import type { Span } from '@opentelemetry/api';
-import type {
-  Response as OpenAIResponse,
-  ResponseFunctionToolCall,
-  ResponseFunctionToolCallOutputItem,
-} from 'openai/resources/responses/responses';
 
 import type {
   CallApiContextParams,
@@ -55,14 +50,20 @@ import type { CallbackContext, ReasoningEffort } from '../openai/types';
 import type { AzureAssistantOptions, AzureAssistantProviderOptions } from './types';
 
 type FoundryAgent = Agent;
-type FoundryResponseCreateParams = Parameters<
-  ReturnType<AzureAIProjectClient['getOpenAIClient']>['responses']['create']
->[0] & { stream?: false };
+type FoundryResponses = ReturnType<AzureAIProjectClient['getOpenAIClient']>['responses'];
+type FoundryResponseCreateParams = Parameters<FoundryResponses['create']>[0] & { stream?: false };
 type CachedFoundryAgentResponse = ProviderResponse & {
   __promptfooFoundryAgent?: Pick<FoundryAgent, 'id' | 'name'>;
 };
-type FoundryResponse = OpenAIResponse;
-type ResponseFunctionCallItem = ResponseFunctionToolCall;
+// Foundry bundles its own OpenAI SDK, whose response types can differ from ours.
+type FoundryResponse = Extract<
+  Awaited<ReturnType<FoundryResponses['create']>>,
+  { output: unknown[] }
+>;
+type ResponseFunctionCallItem = Extract<
+  FoundryResponse['output'][number],
+  { type: 'function_call' }
+>;
 type EffectiveFoundryConfig = AzureAssistantOptions & Record<string, any>;
 type FunctionToolCallbacks = AzureAssistantOptions['functionToolCallbacks'];
 
@@ -764,7 +765,7 @@ export class AzureFoundryAgentProvider extends AzureGenericProvider {
         try {
           response = await openAIClient.responses.create(
             {
-              input: outputs as ResponseFunctionToolCallOutputItem[],
+              input: outputs,
               previous_response_id: response.id,
             } as FoundryResponseCreateParams,
             responseOptions,
