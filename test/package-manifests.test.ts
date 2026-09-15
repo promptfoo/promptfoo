@@ -28,15 +28,19 @@ function validateDockerInstallCommands(dockerfile: string): void {
     .filter((line) => !line.trimStart().startsWith('#'))
     .join('\n')
     .replace(/\\\r?\n/g, ' ');
-  const commands = [...instructions.matchAll(/\bnpm\s+(ci|rebuild)\b([^;&|\n]*)/g)];
-  expect(commands.some(([, command]) => command === 'ci')).toBe(true);
-  expect(commands.some(([, command]) => command === 'rebuild')).toBe(true);
-  for (const [, command, argumentsText] of commands) {
-    const args = argumentsText.trim().split(/\s+/);
+  const commands = [...instructions.matchAll(/(?:^|[\s;&|])npm[ \t]+([^;&|\n]*)/g)].map(
+    ([, text]) => text.trim().split(/\s+/),
+  );
+  expect(commands.some(([command]) => command === 'ci')).toBe(true);
+  expect(commands.some(([command]) => command === 'rebuild')).toBe(true);
+  for (const [command, ...args] of commands) {
+    // Keep Docker npm commands auditable: global options must follow the subcommand.
+    // Reject unsupported shapes instead of silently skipping a hidden install.
+    expect(['ci', 'rebuild', 'run']).toContain(command);
     if (command === 'ci') {
       expect(args).toContain('--ignore-scripts');
       expect(args.some((arg) => arg.startsWith('--ignore-scripts='))).toBe(false);
-    } else {
+    } else if (command === 'rebuild') {
       // Package names and globs can rebuild untrusted nested dependencies.
       expect(args).toEqual(['./node_modules/esbuild', './node_modules/@swc/core']);
     }
@@ -541,6 +545,10 @@ describe('package manifests', () => {
 
   it.each([
     'RUN npm ci',
+    'RUN npm --silent ci',
+    'RUN npm "ci"',
+    'RUN npm --prefix /app ci',
+    'RUN npm --silent rebuild esbuild',
     'RUN npm ci --ignore-scripts=false',
     'RUN npm rebuild esbuild',
     'RUN npm rebuild ./node_modules/*',

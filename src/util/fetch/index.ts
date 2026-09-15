@@ -466,7 +466,7 @@ async function peekRateLimitBody(
 
   let text: string;
   try {
-    text = await readBoundedText(cloned, RATE_LIMIT_BODY_PEEK_BYTES);
+    text = await readBoundedText(cloned, RATE_LIMIT_BODY_PEEK_BYTES, { requireStream: true });
   } catch (err) {
     logger.debug(`[fetch] peekRateLimitBody: body read failed: ${err}`);
     return { body: undefined, code: undefined, type: undefined };
@@ -494,12 +494,22 @@ async function peekRateLimitBody(
  * Drain a Response's body into a string, but stop reading once `maxBytes`
  * have been collected. Each streamed chunk is bounded to the remaining
  * budget *before* it enters the in-memory buffer, so a single oversized
- * chunk cannot exceed `maxBytes` of retained memory. Without a readable
- * stream, skip the body: Content-Length cannot guarantee a bounded allocation.
+ * chunk cannot exceed `maxBytes` of retained memory. `requireStream` skips
+ * streamless polyfills to guarantee bounded buffering for rate-limit peeking.
+ * Other callers retain the legacy text fallback, which buffers before truncation.
  */
-export async function readBoundedText(response: Response, maxBytes: number): Promise<string> {
+export async function readBoundedText(
+  response: Response,
+  maxBytes: number,
+  options: { requireStream?: boolean } = {},
+): Promise<string> {
   if (!response.body) {
-    return '';
+    const contentLength = Number.parseInt(response.headers?.get?.('content-length') ?? '', 10);
+    if (options.requireStream || (Number.isFinite(contentLength) && contentLength > maxBytes)) {
+      return '';
+    }
+    const text = await response.text();
+    return text.length > maxBytes ? text.slice(0, maxBytes) : text;
   }
   const reader = response.body.getReader();
   const chunks: Uint8Array[] = [];

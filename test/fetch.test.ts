@@ -1848,6 +1848,16 @@ describe('fetchWithRetries', () => {
   });
 
   describe('HttpRateLimitError classification', () => {
+    it('does not inspect a streamless rate-limit body', async () => {
+      const text = vi
+        .fn()
+        .mockResolvedValue(JSON.stringify({ error: { code: 'insufficient_quota' } }));
+      vi.mocked(global.fetch).mockResolvedValue(createMockResponse({ status: 429, text }));
+      const error = await fetchWithRetries('https://example.com', {}, 1000, 0).catch((err) => err);
+      expect(error).toMatchObject({ kind: 'rate_limit' });
+      expect(text).not.toHaveBeenCalled();
+    });
+
     function rateLimitedJsonResponse(opts: {
       headers?: Headers;
       body?: unknown;
@@ -2715,10 +2725,19 @@ describe('readBoundedText', () => {
         headers: new Headers(length ? { 'content-length': length } : {}),
         text,
       } as unknown as Response;
-      expect(await readBoundedText(response, 4)).toBe('');
+      expect(await readBoundedText(response, 4, { requireStream: true })).toBe('');
       expect(text).not.toHaveBeenCalled();
     },
   );
+
+  it('preserves the legacy streamless fallback for ordinary response consumers', async () => {
+    const response = {
+      body: null,
+      headers: new Headers(),
+      text: vi.fn().mockResolvedValue('hello'),
+    } as unknown as Response;
+    expect(await readBoundedText(response, 4)).toBe('hell');
+  });
 
   it('bounds streamed bytes and cancels the reader', async () => {
     const cancel = vi.fn();

@@ -642,7 +642,13 @@ export class AzureFoundryAgentProvider extends AzureGenericProvider {
     const projectScope = hashFoundryAgentCacheValue(this.projectUrl);
     const cacheKey = `azure_foundry_agent:${this.deploymentName}:${projectScope}:${hashFoundryAgentCacheValue(body)}`;
 
-    if (isCacheEnabled()) {
+    // Client-side tool behavior is absent from the serialized request body.
+    // Callback closures cannot be safely represented in a persistent cache key.
+    const useCache =
+      isCacheEnabled() &&
+      !Object.keys(effectiveConfig.functionToolCallbacks ?? {}).length &&
+      effectiveConfig.maxPollTimeMs === undefined;
+    if (useCache) {
       try {
         const cache = await getCache();
         const cachedResult = await cache.get<CachedFoundryAgentResponse>(cacheKey);
@@ -691,7 +697,6 @@ export class AzureFoundryAgentProvider extends AzureGenericProvider {
       const openAIClient = client.getOpenAIClient();
       const responseOptions = this.getAgentReference(agent);
       const maxLoopTimeMs = effectiveConfig.maxPollTimeMs ?? 300000;
-      const startTime = Date.now();
       const tracer = getGenAITracer();
       let turnCount = 0;
 
@@ -739,15 +744,13 @@ export class AzureFoundryAgentProvider extends AzureGenericProvider {
         emitTurnSpan(turnStartedAt, Date.now(), err instanceof Error ? err.message : String(err));
         throw err;
       }
-      while (Date.now() - startTime <= maxLoopTimeMs) {
-        const functionCalls = this.getCallableFunctionCalls(
-          response,
-          effectiveConfig.functionToolCallbacks,
-        );
-        if (functionCalls.length === 0) {
-          break;
-        }
-
+      const startTime = Date.now();
+      let functionCalls = this.getCallableFunctionCalls(
+        response,
+        effectiveConfig.functionToolCallbacks,
+      );
+      const hasToolCalls = functionCalls.length > 0;
+      while (functionCalls.length > 0 && Date.now() - startTime <= maxLoopTimeMs) {
         const outputs = await this.buildFunctionCallOutputs(
           functionCalls,
           response,
@@ -771,16 +774,20 @@ export class AzureFoundryAgentProvider extends AzureGenericProvider {
           emitTurnSpan(turnStartedAt, Date.now(), err instanceof Error ? err.message : String(err));
           throw err;
         }
+        functionCalls = this.getCallableFunctionCalls(
+          response,
+          effectiveConfig.functionToolCallbacks,
+        );
       }
 
-      if (Date.now() - startTime > maxLoopTimeMs) {
+      if (hasToolCalls && Date.now() - startTime > maxLoopTimeMs) {
         return {
           error: `Azure Foundry agent tool-calling loop timed out after ${maxLoopTimeMs}ms.`,
         };
       }
 
       const result = await this.processResponse(response, effectiveConfig);
-      if (isCacheEnabled() && !result.error) {
+      if (useCache && !result.error) {
         try {
           const cache = await getCache();
           await cache.set(cacheKey, {
