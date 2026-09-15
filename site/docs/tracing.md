@@ -547,6 +547,8 @@ tracing:
 
 Promptfoo queries Langfuse's v2 Observations API using the OpenTelemetry trace ID propagated in `traceparent`. It preserves original OpenTelemetry span and resource attributes, normalizes generation, embedding, tool, agent, workflow, and retrieval observations to GenAI semantic conventions, and imports parent-child relationships, inputs, outputs, models, token usage, and costs. Langfuse Python SDK 4.7.0+, JavaScript SDK 5.4.0+, or an OpenTelemetry exporter configured with the `x-langfuse-ingestion-version: 4` header makes new observations available in real time; older ingestion paths can delay visibility by up to ten minutes. This delay makes earlier versions of Langfuse unusable for fetching traces during an evaluation.
 
+Malformed Langfuse JSON, invalid observation response shapes, and invalid pagination data mark the trace incomplete and stop grading. Empty trace responses and HTTP 404 responses remain missing-data cases.
+
 ## Provider Implementation Guide
 
 ### JavaScript/TypeScript
