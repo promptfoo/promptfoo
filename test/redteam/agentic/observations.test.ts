@@ -7,6 +7,40 @@ import {
 import type { RedteamGradingContext } from '../../../src/redteam/grading/types';
 
 describe('agentic run observations', () => {
+  it.each([null, '', false, 0, {}, []].map((pluginId) => ({ pluginId })))(
+    'rejects a lone invalid verifier plugin ID: $pluginId',
+    ({ pluginId }) => {
+      expect(() =>
+        observationsFromGradingContext({
+          gradingContext: {
+            providerResponse: {
+              output: 'Done',
+              metadata: {
+                agenticEvidence: { pluginId: 'agentic:guardrail-coverage-gap', findings: [] },
+              },
+            },
+            traceData: {
+              traceId: 'invalid-plugin',
+              evaluationId: 'fixture',
+              testCaseId: 'fixture',
+              spans: [
+                {
+                  spanId: 'verifier',
+                  name: 'verifier',
+                  startTime: 1,
+                  attributes: {
+                    'promptfoo.agentic.plugin_id': pluginId,
+                    'promptfoo.agentic.finding.kind': 'guardrail-missed-tool',
+                  },
+                },
+              ],
+            },
+          },
+        }),
+      ).toThrow(/invalid.*plugin ID/i);
+    },
+  );
+
   it.each(
     ['span', 'event'].flatMap((source) =>
       [0, null, {}, '', '   '].map((alias) => ({ source, alias })),

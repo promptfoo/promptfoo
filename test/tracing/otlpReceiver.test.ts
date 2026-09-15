@@ -137,6 +137,41 @@ describe('OTLPReceiver', () => {
     );
   });
 
+  it.each(['resource', 'scope', 'record'])(
+    'marks dropped log %s attributes incomplete',
+    async (source) => {
+      await request(receiver.getApp())
+        .post('/v1/logs')
+        .send({
+          resourceLogs: [
+            {
+              resource: { droppedAttributesCount: source === 'resource' ? 1 : 0 },
+              scopeLogs: [
+                {
+                  scope: { droppedAttributesCount: source === 'scope' ? 1 : 0 },
+                  logRecords: [
+                    {
+                      traceId: 'a'.repeat(32),
+                      spanId: 'b'.repeat(16),
+                      timeUnixNano: '1500000',
+                      body: { stringValue: 'verifier evidence' },
+                      droppedAttributesCount: source === 'record' ? 1 : 0,
+                    },
+                  ],
+                },
+              ],
+            },
+          ],
+        })
+        .expect(200);
+      expect(mockTraceStore.addSpans).toHaveBeenCalledWith(
+        'a'.repeat(32),
+        [expect.objectContaining({ incomplete: true })],
+        expect.anything(),
+      );
+    },
+  );
+
   beforeAll(async () => {
     mockedTraceStore = vi.mocked(await import('../../src/tracing/store'));
   });
@@ -514,8 +549,18 @@ describe('OTLPReceiver', () => {
     }
   });
 
-  it.each(['invalid', '-1000000', 'Infinity', 'NaN', '1e9', '18446744073709551616', '', undefined])(
-    'drops an OTLP event with invalid timestamp %s',
+  it.each([
+    'invalid',
+    '-1000000',
+    'Infinity',
+    'NaN',
+    '1e9',
+    '18446744073709551616',
+    '0',
+    '',
+    undefined,
+  ])(
+    'marks evidence incomplete when dropping an event with invalid timestamp %s',
     async (timeUnixNano) => {
       await request(receiver.getApp())
         .post('/v1/traces')
@@ -547,6 +592,7 @@ describe('OTLPReceiver', () => {
         'a'.repeat(32),
         [
           expect.objectContaining({
+            incomplete: true,
             events: [
               { name: 'valid tool', timestamp: 1500, timestampNanos: '1500000000', attributes: {} },
             ],
@@ -886,7 +932,7 @@ describe('OTLPReceiver', () => {
       },
     );
 
-    it('drops malformed OTLP JSON event collections', async () => {
+    it('marks malformed OTLP JSON event collections incomplete', async () => {
       await request(receiver.getApp())
         .post('/v1/traces')
         .set('Content-Type', 'application/json')
@@ -918,6 +964,7 @@ describe('OTLPReceiver', () => {
         })
         .expect(200);
 
+      expect(persistSpans.mock.calls[0][1][0].incomplete).toBe(true);
       expect(persistSpans.mock.calls[0][1][0].events).toEqual([
         expect.objectContaining({ name: 'valid event', attributes: {} }),
       ]);
@@ -1161,7 +1208,7 @@ describe('OTLPReceiver', () => {
       expect(response.body.error).toMatch(/invalid protobuf/i);
     });
 
-    it('drops protobuf events without a nonzero timestamp', async () => {
+    it('marks protobuf evidence incomplete when dropping events without timestamps', async () => {
       const data = {
         resourceSpans: [
           {
@@ -1193,6 +1240,7 @@ describe('OTLPReceiver', () => {
       expect(
         persistSpans.mock.calls[0][1][0].events?.map((event: TraceSpanEvent) => event.name),
       ).toEqual(['tool update_seat']);
+      expect(persistSpans.mock.calls[0][1][0].incomplete).toBe(true);
     });
 
     it.each(['json', 'protobuf'])(

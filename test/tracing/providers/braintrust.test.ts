@@ -61,6 +61,24 @@ describe('BraintrustProvider', () => {
     mockedFetch.mockImplementation(async () => response({ rows }));
   });
 
+  it.each([false, true])(
+    'checks duplicate evidence before deduplication (conflict=%s)',
+    async (conflict) => {
+      const original = rows[0];
+      const duplicate = { ...original, ...(conflict ? { output: { unsafe: true } } : {}) };
+      mockedFetch.mockResolvedValueOnce(response({ rows: [original, duplicate], meta: {} }));
+      const result = new BraintrustProvider(config).fetchTrace(TRACE_ID);
+      if (conflict) {
+        await expect(result).rejects.toMatchObject({
+          message: expect.stringMatching(/conflicting duplicate/i),
+          invalidEvidence: true,
+        });
+      } else {
+        expect((await result)?.spans).toHaveLength(1);
+      }
+    },
+  );
+
   it.each([
     { id: 'braintrust' },
     { ...config, endpoint: 'file:///tmp/traces' },

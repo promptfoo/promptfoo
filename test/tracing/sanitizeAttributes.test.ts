@@ -334,3 +334,15 @@ it('preserves redacted field identities through JSON storage when another value 
   );
   expect(stored).toEqual({ '[REDACTED]': '[TRUNCATED]' });
 });
+
+it('honors persisted incomplete history when a fresh state is supplied', () => {
+  const state = { secrets: new Set<string>(), length: 0, incomplete: false };
+  const attributes = { 'promptfoo.redaction.history': '[REDACTED]' };
+  const redact = getTraceTextRedactor(
+    [{ original: attributes, sanitized: attributes }],
+    '[REDACTED]',
+    state,
+  );
+  expect(redact('previously hidden credential')).toBe('[REDACTED]');
+  expect(state.incomplete).toBe(true);
+});

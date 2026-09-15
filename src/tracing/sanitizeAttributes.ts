@@ -220,17 +220,19 @@ export function getTraceTextRedactor(
   state: TraceTextRedactionState = {
     secrets: new Set(),
     length: 0,
-    incomplete: pairs.some(
-      ({ original }) =>
-        original &&
-        typeof original === 'object' &&
-        (original as Record<string, unknown>)['promptfoo.redaction.history'] === '[REDACTED]',
-    ),
+    incomplete: false,
   },
 ) {
   const pending = [...pairs];
   const secrets = state.secrets;
-  let incomplete = state.incomplete;
+  let incomplete =
+    state.incomplete ||
+    pairs.some(
+      ({ original }) =>
+        original &&
+        typeof original === 'object' &&
+        (original as Record<string, unknown>)['promptfoo.redaction.history'] === '[REDACTED]',
+    );
   let visited = 0;
   while (pending.length && !incomplete) {
     const { original, sanitized } = pending.pop()!;

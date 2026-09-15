@@ -75,6 +75,26 @@ describe('LangfuseProvider', () => {
     vi.resetAllMocks();
   });
 
+  it.each([false, true])(
+    'checks duplicate evidence before deduplication (conflict=%s)',
+    async (conflict) => {
+      const original = observations[0];
+      const duplicate = { ...original, ...(conflict ? { output: { unsafe: true } } : {}) };
+      mockedFetch
+        .mockResolvedValueOnce(response({ data: [original], meta: { cursor: 'next' } }))
+        .mockResolvedValueOnce(response({ data: [duplicate], meta: {} }));
+      const result = new LangfuseProvider(config).fetchTrace(TRACE_ID);
+      if (conflict) {
+        await expect(result).rejects.toMatchObject({
+          message: expect.stringMatching(/conflicting duplicate/i),
+          invalidEvidence: true,
+        });
+      } else {
+        expect((await result)?.spans).toHaveLength(1);
+      }
+    },
+  );
+
   it.each([
     { id: 'langfuse' },
     { ...config, endpoint: 'not-a-url' },

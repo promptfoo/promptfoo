@@ -521,7 +521,10 @@ export function getTraceEvidenceValues(
       throw new Error('Agentic trace evidence has conflicting plugin IDs and cannot be graded');
     }
     const pluginId = pluginIds[0];
-    if (explicitIds.length > 0 && ownIds.length > explicitIds.length) {
+    if (ownIds.length > explicitIds.length) {
+      if (pluginIds.length === 0) {
+        throw new Error('Agentic trace evidence has an invalid plugin ID and cannot be graded');
+      }
       values.push(
         ...[...new Set(inheritedIds.length ? inheritedIds : explicitIds)].map((pluginId) => ({
           pluginId,

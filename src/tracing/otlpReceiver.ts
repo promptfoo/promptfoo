@@ -103,6 +103,7 @@ interface OTLPLogRecord {
   severityText?: string;
   body?: OTLPAttribute['value'];
   attributes?: OTLPAttribute[];
+  droppedAttributesCount?: number;
 }
 
 interface OTLPScopeLogs {
@@ -110,6 +111,7 @@ interface OTLPScopeLogs {
     name: string;
     version?: string;
     attributes?: OTLPAttribute[];
+    droppedAttributesCount?: number;
   };
   logRecords: OTLPLogRecord[];
 }
@@ -117,6 +119,7 @@ interface OTLPScopeLogs {
 interface OTLPResourceLogs {
   resource?: {
     attributes?: OTLPAttribute[];
+    droppedAttributesCount?: number;
   };
   scopeLogs: OTLPScopeLogs[];
 }
@@ -746,7 +749,7 @@ export class OTLPReceiver {
           });
           const startTime = Number(span.startTimeUnixNano) / 1_000_000;
 
-          traces.push({
+          const parsed: ParsedTrace = {
             traceId,
             span: {
               spanId,
@@ -808,7 +811,14 @@ export class OTLPReceiver {
               statusCode: span.status?.code,
               statusMessage: span.status?.message,
             },
-          });
+          };
+          if (
+            span.events !== undefined &&
+            (!Array.isArray(span.events) || parsed.span.events?.length !== span.events.length)
+          ) {
+            parsed.span.incomplete = true;
+          }
+          traces.push(parsed);
         }
       }
     }
@@ -831,6 +841,15 @@ export class OTLPReceiver {
           try {
             const parsed = this.logRecordToParsedTrace(log, scopeLog, resourceAttributes);
             if (parsed) {
+              if (
+                [
+                  resourceLog.resource?.droppedAttributesCount,
+                  scopeLog.scope?.droppedAttributesCount,
+                  log.droppedAttributesCount,
+                ].some((count) => (count ?? 0) > 0)
+              ) {
+                parsed.span.incomplete = true;
+              }
               const id = parsed.span.spanId;
               const occurrence = occurrences.get(id) ?? 0;
               occurrences.set(id, occurrence + 1);
@@ -1030,7 +1049,7 @@ export class OTLPReceiver {
     const spanKindCode = span.kind ?? 0;
     const spanKindName = SPAN_KIND_MAP[spanKindCode] ?? 'unspecified';
 
-    return {
+    const parsed: ParsedTrace = {
       traceId,
       span: {
         spanId,
@@ -1074,6 +1093,10 @@ export class OTLPReceiver {
         statusMessage: span.status?.message,
       },
     };
+    if ((span.events?.length ?? 0) !== parsed.span.events?.length) {
+      parsed.span.incomplete = true;
+    }
+    return parsed;
   }
 
   private convertId(id: string, expectedHexLength: number): string {

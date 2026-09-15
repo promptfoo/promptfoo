@@ -1,3 +1,5 @@
+import { isDeepStrictEqual } from 'node:util';
+
 import logger from '../../logger';
 import { getNormalizedToolAttributes } from '../toolAttributes';
 import {
@@ -319,7 +321,7 @@ function transformObservation(
 function addObservations(
   observations: unknown[],
   spans: SpanData[],
-  seenSpanIds: Set<string>,
+  seenSpans: Map<string, SpanData>,
   traceId: string,
   maxSpans: number,
   options?: FetchTraceOptions,
@@ -335,8 +337,14 @@ function addObservations(
       logger.warn('[LangfuseProvider] Skipping malformed or unrelated observation');
       continue;
     }
-    if (!seenSpanIds.has(span.spanId)) {
-      seenSpanIds.add(span.spanId);
+    const previous = seenSpans.get(span.spanId);
+    if (previous && !isDeepStrictEqual(previous, span)) {
+      throw new TraceProviderError('Conflicting duplicate Langfuse observation IDs', {
+        invalidEvidence: true,
+      });
+    }
+    if (!previous) {
+      seenSpans.set(span.spanId, span);
       spans.push(span);
     }
     if (spans.length >= maxSpans) {
@@ -439,7 +447,7 @@ export class LangfuseProvider implements TraceProvider {
       ? AbortSignal.any([timeoutSignal, options.abortSignal])
       : timeoutSignal;
     const spans: SpanData[] = [];
-    const seenSpanIds = new Set<string>();
+    const seenSpans = new Map<string, SpanData>();
     const seenCursors = new Set<string>();
     let page: number | undefined;
     let cursor: string | undefined;
@@ -494,7 +502,7 @@ export class LangfuseProvider implements TraceProvider {
         throw new TraceProviderError('Langfuse returned an invalid observations response');
       }
 
-      addObservations(result.data, spans, seenSpanIds, normalizedTraceId, MAX_SPANS + 1, options);
+      addObservations(result.data, spans, seenSpans, normalizedTraceId, MAX_SPANS + 1, options);
       if (spans.length > MAX_SPANS) {
         throw new TraceProviderError('Langfuse trace exceeds the maximum span count', {
           limitExceeded: true,

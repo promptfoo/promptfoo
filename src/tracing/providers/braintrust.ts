@@ -1,3 +1,5 @@
+import { isDeepStrictEqual } from 'node:util';
+
 import logger from '../../logger';
 import { getNormalizedToolAttributes } from '../toolAttributes';
 import {
@@ -214,10 +216,10 @@ export class BraintrustProvider implements TraceProvider {
       return null;
     }
 
-    const spans: SpanData[] = [];
+    const spans = new Map<string, SpanData>();
     const services = new Set<string>();
     for (const row of rows) {
-      if (spans.length >= maxSpans) {
+      if (spans.size >= maxSpans) {
         break;
       }
       const span = transformSpan(row, options);
@@ -225,15 +227,26 @@ export class BraintrustProvider implements TraceProvider {
         logger.warn('[BraintrustProvider] Skipping malformed span');
         continue;
       }
+      const previous = spans.get(span.spanId);
+      if (previous && !isDeepStrictEqual(previous, span)) {
+        throw new TraceProviderError('Conflicting duplicate Braintrust span IDs', {
+          invalidEvidence: true,
+        });
+      }
       const service = span.attributes?.['service.name'];
       if (typeof service === 'string') {
         services.add(service);
       }
-      spans.push(span);
+      spans.set(span.spanId, span);
     }
 
-    return spans.length > 0
-      ? { traceId: normalizedTraceId, spans, services: [...services], fetchedAt: Date.now() }
+    return spans.size > 0
+      ? {
+          traceId: normalizedTraceId,
+          spans: [...spans.values()],
+          services: [...services],
+          fetchedAt: Date.now(),
+        }
       : null;
   }
 }
