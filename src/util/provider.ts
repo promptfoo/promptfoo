@@ -1,6 +1,6 @@
 import { isApiProvider, isProviderOptions, type TestCase } from '../types';
 import { canonicalizeProviderId, normalizeProviderRef } from './providerRef';
-import { sanitizeUrl } from './sanitizer';
+import { sanitizeUrl, sanitizeUrlForLogging } from './sanitizer';
 
 import type { ApiProvider } from '../types/providers';
 
@@ -54,9 +54,9 @@ export function getProviderIdentifier(provider: ApiProvider): string {
 export function getProviderDescription(provider: Pick<ApiProvider, 'id' | 'label'>): string {
   const label = provider.label;
   const id = provider.id();
-  // HTTP and WebSocket provider IDs are URLs that can carry credentials, so redact them for
-  // display. Other IDs, such as file:// paths, stay exactly as written.
-  const displayId = /^(?:https?|wss?):\/\//i.test(id) ? sanitizeUrl(id) : id;
+  // HTTP and WebSocket provider IDs are URLs that can carry credentials in the query or path, so
+  // redact them for display. Other IDs, such as file:// paths, stay exactly as written.
+  const displayId = /^(?:https?|wss?):\/\//i.test(id) ? sanitizeUrlForLogging(id) : id;
   if (label && label !== id) {
     return `${label} (${displayId})`;
   }

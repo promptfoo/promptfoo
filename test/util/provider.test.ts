@@ -356,6 +356,17 @@ describe('getProviderDescription', () => {
     expect(description).not.toContain('SUPERSECRET123');
   });
 
+  it('redacts credentials in URL path segments', () => {
+    const provider = createMockProvider({
+      id: 'https://api.example.com/auth/abc12345678901234567890',
+    });
+
+    const description = getProviderDescription(provider);
+
+    expect(description.startsWith('https://api.example.com/auth/')).toBe(true);
+    expect(description).not.toContain('abc12345678901234567890');
+  });
+
   it('leaves non-URL ids such as file:// paths unchanged', () => {
     const provider = createMockProvider({ id: 'file://providers/custom.js', label: 'custom' });
     expect(getProviderDescription(provider)).toBe('custom (file://providers/custom.js)');

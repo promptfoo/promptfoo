@@ -339,4 +339,22 @@ describe('getExcludedProviders', () => {
 
     expect(getExcludedProviders(providers, filtered)).toEqual([]);
   });
+
+  it('uses the id() of ApiProvider instances from a JS/TS config', () => {
+    const makeProvider = (id: string): ApiProvider => ({
+      id: () => id,
+      callApi: async () => ({ output: '' }),
+    });
+    const apiProviders = [
+      makeProvider('custom:alpha'),
+      makeProvider('custom:beta'),
+    ] as unknown as TestSuiteConfig['providers'];
+
+    const filtered = filterProviderConfigs(apiProviders, 'custom:alpha');
+
+    expect((filtered as ApiProvider[]).map((provider) => provider.id())).toEqual(['custom:alpha']);
+    expect(idsAndLabels(getExcludedProviders(apiProviders, filtered))).toEqual([
+      { id: 'custom:beta', label: undefined },
+    ]);
+  });
 });

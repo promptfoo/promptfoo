@@ -1,3 +1,4 @@
+import { isApiProvider } from '../../types/providers';
 import { normalizeProviderRef } from '../../util/providerRef';
 
 import type { ApiProvider, CommandLineOptions, TestSuiteConfig } from '../../types/index';
@@ -43,9 +44,18 @@ export function getProviderFilterRegexError(filter: string): string | undefined 
  * Handles all provider config formats: string, function, ProviderOptions, ProviderOptionsMap.
  */
 export function getProviderIdAndLabel(
-  provider: string | ProviderOptions | ProviderOptionsMap | ((...args: unknown[]) => unknown),
+  provider:
+    | string
+    | ProviderOptions
+    | ProviderOptionsMap
+    | ApiProvider
+    | ((...args: unknown[]) => unknown),
   index: number,
 ): { id: string; label?: string } {
+  // A JS/TS config can pass ApiProvider instances, whose id is a method rather than a config value.
+  if (isApiProvider(provider)) {
+    return { id: provider.id(), label: provider.label };
+  }
   return normalizeProviderRef(provider, { index });
 }
 

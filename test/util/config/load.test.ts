@@ -2197,6 +2197,21 @@ describe('resolveConfigs', () => {
       expect((error as Error).message).not.toContain('SUPERSECRET123');
     });
 
+    it('filters and accepts ApiProvider instances by their id', async () => {
+      const alpha = createMockProvider({ id: 'custom:alpha' });
+      const beta = createMockProvider({ id: 'custom:beta' });
+      vi.mocked(loadApiProviders).mockResolvedValueOnce([alpha]);
+
+      const { testSuite } = await resolveWithTestProviders(
+        [alpha, beta] as unknown as UnifiedConfig['providers'],
+        ['custom:beta', 'custom:alpha'],
+        { filterProviders: 'custom:alpha' },
+      );
+
+      expect(loadApiProviders).toHaveBeenCalledWith([alpha], expect.any(Object));
+      expect(testSuite.providers.map((provider) => provider.id())).toEqual(['custom:alpha']);
+    });
+
     it.each([
       { filter: 'no filter', cmdObj: {} },
       { filter: 'a filter that keeps the provider', cmdObj: { filterProviders: 'custom' } },
