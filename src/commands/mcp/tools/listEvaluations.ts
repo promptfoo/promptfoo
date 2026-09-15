@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import { getEvalSummaries } from '../../../models/eval';
-import { evaluationCache, paginate } from '../lib/performance';
+import { paginate } from '../lib/pagination';
 import { createToolResponse } from '../lib/utils';
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 
@@ -36,19 +36,7 @@ export function registerListEvaluationsTool(server: McpServer) {
       const { datasetId, page, pageSize } = args;
 
       try {
-        // Check cache first
-        const cacheKey = `evals:${datasetId || 'all'}`;
-        let evals = evaluationCache.get(cacheKey);
-
-        if (!evals) {
-          // Fetch from database
-          evals = await getEvalSummaries(datasetId);
-
-          // Cache the results
-          evaluationCache.set(cacheKey, evals);
-        }
-
-        // Apply pagination
+        const evals = await getEvalSummaries(datasetId);
         const paginatedResult = paginate(evals, { page, pageSize });
 
         // Add helpful summary information
@@ -60,7 +48,6 @@ export function registerListEvaluationsTool(server: McpServer) {
             return createdAt > dayAgo;
           }).length,
           datasetId: datasetId || 'all',
-          cacheStats: evaluationCache.getStats(),
         };
 
         return createToolResponse('list_evaluations', true, {
