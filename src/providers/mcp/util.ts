@@ -1,3 +1,7 @@
+import { createHmac, randomBytes } from 'node:crypto';
+
+import { LRUCache } from 'lru-cache';
+import { getRuntimeEnv } from '../../envOverrides';
 import logger from '../../logger';
 import { fetchWithProxy } from '../../util/fetch/index';
 import { renderVarsInObject } from '../../util/index';
@@ -54,7 +58,7 @@ export function renderAuthVars(
   }
 
   // Use process.env as default vars if none provided
-  const renderVars = vars || (process.env as Record<string, string>);
+  const renderVars = vars || (getRuntimeEnv() as Record<string, string>);
 
   return {
     ...server,
@@ -70,7 +74,11 @@ interface OAuthTokenCache {
   expiresAt: number;
 }
 
-const oauthTokenCache = new Map<string, OAuthTokenCache>();
+const oauthTokenCache = new LRUCache<string, OAuthTokenCache>({
+  max: 1000,
+  ttlAutopurge: true,
+});
+const oauthCacheKey = randomBytes(32);
 
 /**
  * Get the cache key for an OAuth config
@@ -79,7 +87,19 @@ function getOAuthCacheKey(
   auth: MCPOAuthClientCredentialsAuth | MCPOAuthPasswordAuth,
   tokenUrl: string,
 ): string {
-  return `${tokenUrl}:${auth.grantType}:${'clientId' in auth ? auth.clientId : ''}:${'username' in auth ? auth.username : ''}:${auth.scopes?.join(' ') ?? ''}`;
+  return createHmac('sha256', oauthCacheKey)
+    .update(
+      JSON.stringify([
+        tokenUrl,
+        auth.grantType,
+        auth.clientId,
+        auth.clientSecret,
+        'username' in auth ? auth.username : undefined,
+        'password' in auth ? auth.password : undefined,
+        auth.scopes?.join(' ') ?? '',
+      ]),
+    )
+    .digest('hex');
 }
 
 // Cache for discovered token endpoints
@@ -192,11 +212,10 @@ export async function getOAuthTokenWithExpiry(
     scopes: auth.scopes,
   });
 
-  // Cache the token
-  oauthTokenCache.set(cacheKey, {
-    accessToken: result.accessToken,
-    expiresAt: result.expiresAt,
-  });
+  const ttl = result.expiresAt - Date.now();
+  if (ttl > 0) {
+    oauthTokenCache.set(cacheKey, { ...result }, { ttl });
+  }
 
   logger.debug('[MCP Auth] Cached OAuth token');
   return result;

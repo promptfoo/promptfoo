@@ -16,7 +16,7 @@ import logger from '../logger';
 import {
   asEvaluateResult,
   getResultIndexKey,
-  sanitizeResultForJsonlArtifact,
+  sanitizeResultForArtifact,
 } from '../models/evalResult';
 import { PromptfooAttributes } from '../tracing/genaiTracer';
 import {
@@ -30,14 +30,17 @@ import invariant from './invariant';
 import { writeJunitXmlOutput } from './junit';
 import { getOutputFileFormat, SUPPORTED_OUTPUT_FILE_FORMATS } from './outputFormats';
 import {
+  redactSecretLeaves,
+  sanitizeErrorMessage,
   sanitizeObject,
   sanitizeRuntimeOptions,
+  sanitizeTracesForArtifact,
   sanitizeTracingConfigForPersistence,
 } from './sanitizer';
 import { getNunjucksEngine } from './templates';
 
 import type Eval from '../models/eval';
-import type { EvaluateResult, EvaluateTableOutput } from '../types';
+import type { CompletedPrompt, EvaluateResult, EvaluateTable, EvaluateTableOutput } from '../types';
 
 export interface OutputOptions {
   includeMedia?: boolean;
@@ -101,7 +104,7 @@ async function appendJsonlResultBatch(outputPath: string, results: EvaluateResul
   }
 
   const text =
-    results.map((result) => JSON.stringify(sanitizeResultForJsonlArtifact(result))).join(os.EOL) +
+    results.map((result) => JSON.stringify(sanitizeResultForArtifact(result))).join(os.EOL) +
     os.EOL;
   await fsPromises.appendFile(outputPath, text);
 }
@@ -336,25 +339,83 @@ const outputToHtmlReportCell = (output: EvaluateTableOutput) => {
 };
 
 function sanitizeConfigForOutput(config: Eval['config']): OutputFile['config'] {
-  return sanitizeObject(sanitizeTracingConfigForPersistence(config), {
-    context: 'output config',
-    throwOnError: true,
-    maxDepth: Number.POSITIVE_INFINITY,
-  }) as OutputFile['config'];
+  return redactSecretLeaves(
+    sanitizeObject(sanitizeTracingConfigForPersistence(config), {
+      context: 'output config',
+      redactOpaqueValues: false,
+      throwOnError: true,
+      maxDepth: Number.POSITIVE_INFINITY,
+    }),
+    { redactOpaqueValues: false },
+  ) as OutputFile['config'];
+}
+
+function sanitizeOutputPrompt(prompt: CompletedPrompt): CompletedPrompt {
+  return {
+    ...prompt,
+    ...(getEnvBool('PROMPTFOO_STRIP_PROMPT_TEXT', false) && { raw: '[prompt stripped]' }),
+    provider: redactSecretLeaves({ provider: prompt.provider }, { redactOpaqueValues: false })
+      .provider,
+    ...(prompt.config && { config: sanitizeConfigForOutput(prompt.config) }),
+  };
+}
+
+function sanitizeOutputTable(table: EvaluateTable): EvaluateTable {
+  const stripVars = getEnvBool('PROMPTFOO_STRIP_TEST_VARS', false);
+  const stripOutput = getEnvBool('PROMPTFOO_STRIP_RESPONSE_OUTPUT', false);
+  return {
+    ...table,
+    head: { ...table.head, prompts: table.head.prompts.map(sanitizeOutputPrompt) },
+    body: table.body.map((row) => {
+      const vars = Object.fromEntries(
+        row.vars.map((value, index) => [table.head.vars[index] ?? index, value]),
+      );
+      const projected = sanitizeResultForArtifact({ testCase: row.test, vars });
+      return {
+        ...row,
+        test: projected.testCase,
+        vars: row.vars.map((_, index) =>
+          stripVars ? '' : projected.vars[table.head.vars[index] ?? index],
+        ),
+        outputs: row.outputs.map((output) => {
+          if (output == null) {
+            return output;
+          }
+          const projectedOutput = sanitizeResultForArtifact({
+            ...output,
+            prompt: { raw: output.prompt, label: '' },
+            provider: output.provider ? { id: output.provider } : undefined,
+          });
+          return {
+            ...projectedOutput,
+            prompt: projectedOutput.prompt.raw,
+            provider: projectedOutput.provider?.id,
+            text: stripOutput
+              ? '[output stripped]'
+              : output.failureReason === ResultFailureReason.ERROR
+                ? sanitizeErrorMessage(output.text)
+                : output.text,
+          };
+        }),
+      };
+    }),
+  };
 }
 
 async function createOutputSummary(evalRecord: Eval): Promise<OutputFile['results']> {
   const summary = await evalRecord.toEvaluateSummary();
-  const prompts = ('prompts' in summary ? summary.prompts : summary.table.head.prompts).map(
-    (prompt) =>
-      prompt.config ? { ...prompt, config: sanitizeConfigForOutput(prompt.config) } : prompt,
-  );
+  const results = summary.results.map(sanitizeResultForArtifact);
   return 'prompts' in summary
-    ? { ...summary, prompts }
-    : { ...summary, table: { ...summary.table, head: { ...summary.table.head, prompts } } };
+    ? { ...summary, results, prompts: summary.prompts.map(sanitizeOutputPrompt) }
+    : {
+        ...summary,
+        results,
+        table: sanitizeOutputTable(summary.table),
+      };
 }
 
 function projectTracesForOutput(traces: NonNullable<OutputFile['traces']>) {
+  traces = sanitizeTracesForArtifact(traces);
   const shouldStripMetadata = getEnvBool('PROMPTFOO_STRIP_METADATA', false);
   const shouldStripPromptText = getEnvBool('PROMPTFOO_STRIP_PROMPT_TEXT', false);
   const shouldStripResponseOutput = getEnvBool('PROMPTFOO_STRIP_RESPONSE_OUTPUT', false);
@@ -488,7 +549,9 @@ export async function createOutputData(
     metadata: createOutputMetadata(evalRecord),
     ...(evalRecord.vars?.length > 0 && { vars: [...evalRecord.vars] }),
     ...(evalRecord.runtimeOptions && {
-      runtimeOptions: sanitizeRuntimeOptions(evalRecord.runtimeOptions),
+      runtimeOptions: redactSecretLeaves(sanitizeRuntimeOptions(evalRecord.runtimeOptions), {
+        redactOpaqueValues: false,
+      }),
     }),
     ...(traces && traces.length > 0 && { traces: projectTracesForOutput(traces) }),
   };
@@ -582,7 +645,7 @@ export async function writeOutput(
   options: OutputOptions = {},
 ) {
   if (outputPath.match(/^https:\/\/docs\.google\.com\/spreadsheets\//)) {
-    const table = await evalRecord.getTable();
+    const table = sanitizeOutputTable(await evalRecord.getTable());
     invariant(table, 'Table is required');
     const rows = table.body.map((row) => {
       const csvRow: CsvRow = {};
@@ -633,9 +696,9 @@ export async function writeOutput(
       yaml.dump(await createOutputData(evalRecord, shareableUrl, options)),
     );
   } else if (outputExtension === 'html') {
-    const table = await evalRecord.getTable();
-    invariant(table, 'Table is required');
     const summary = await createOutputSummary(evalRecord);
+    const table =
+      'table' in summary ? summary.table : sanitizeOutputTable(await evalRecord.getTable());
     const redactedConfig = sanitizeConfigForOutput(evalRecord.config);
     const metadata = createOutputMetadata(evalRecord);
     const template = await fsPromises.readFile(

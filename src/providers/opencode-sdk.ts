@@ -7,6 +7,7 @@ import path from 'path';
 import dedent from 'dedent';
 import cliState from '../cliState';
 import { getEnvString } from '../envars';
+import { getRuntimeEnv } from '../envOverrides';
 import { importModule } from '../esm';
 import logger, { getLogLevel } from '../logger';
 import {
@@ -1058,7 +1059,7 @@ export class OpenCodeSDKProvider implements ApiProvider {
   private buildServerEnv(config: OpenCodeSDKConfig): Record<string, string> {
     const serverEnv: Record<string, string> = {};
 
-    for (const [key, value] of Object.entries(process.env)) {
+    for (const [key, value] of Object.entries(getRuntimeEnv())) {
       if (value !== undefined) {
         serverEnv[key] = value;
       }

@@ -19,6 +19,8 @@ export function describeEvaluator(name: string, defineTests: () => void) {
       vi.mocked(runExtensionHook).mockImplementation(
         async (_extensions, _hookName, context) => context,
       );
+      cliState.config = undefined;
+      cliState.selectedProviderConfigs = undefined;
       cliState.resume = false;
       cliState.retryMode = false;
       cliState.basePath = '';
@@ -29,6 +31,8 @@ export function describeEvaluator(name: string, defineTests: () => void) {
       vi.useRealTimers();
       resetMockProviders();
       vi.clearAllMocks();
+      cliState.config = undefined;
+      cliState.selectedProviderConfigs = undefined;
       cliState.resume = false;
       cliState.retryMode = false;
       cliState.basePath = '';

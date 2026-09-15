@@ -1,8 +1,10 @@
 import crypto from 'node:crypto';
+import path from 'node:path';
 
 import logger from '../../logger';
 import { fetchWithTimeout } from '../../util/fetch/index';
 import { safeJsonStringify } from '../../util/json';
+import { getFileSourceHash } from '../../util/sourceHash';
 import { getNunjucksEngine } from '../../util/templates';
 import { sleep } from '../../util/time';
 import { normalizeRenderedAuth } from '../mcp/auth';
@@ -13,7 +15,11 @@ import {
   getOAuthTokenWithExpiry,
 } from '../mcp/util';
 import { getRequestTimeoutMs } from '../shared';
-import { loadTransformModule } from '../transformUtils';
+import {
+  getTransformBasePath,
+  loadTransformModule,
+  parseFileTransformReference,
+} from '../transformUtils';
 import { createTransformResponse } from './transforms';
 import {
   A2AAgentCardSchema,
@@ -35,7 +41,6 @@ import type {
   MCPOAuthPasswordAuth,
   MCPServerConfig,
 } from '../mcp/types';
-import type { A2ATransformResponseContext } from './transforms';
 import type {
   A2AAgentCard,
   A2AAgentInterface,
@@ -618,13 +623,9 @@ function throwForStreamError(payload: unknown): void {
 export class A2AProvider implements ApiProvider {
   config: A2AProviderConfig;
   private readonly providerId: string;
-  private readonly transformResponse: Promise<
-    (
-      json: A2AFinalResponse,
-      text: string,
-      context: A2ATransformResponseContext,
-    ) => Promise<ProviderResponse>
-  >;
+  private transformResponse?: Promise<ReturnType<typeof createTransformResponse>>;
+  private transformBasePath = getTransformBasePath();
+  private configBasePathLocked = false;
 
   constructor(providerPath: string, options: ProviderOptions = {}) {
     const shorthandUrl = nonEmptyString(
@@ -635,9 +636,26 @@ export class A2AProvider implements ApiProvider {
       ...(options.config ?? {}),
       url: nonEmptyString(options.config?.url) ?? shorthandUrl,
     });
-    this.transformResponse = loadTransformModule(this.config.transformResponse).then(
-      createTransformResponse,
-    );
+  }
+
+  setConfigBasePath(basePath: string): void {
+    const resolved = path.resolve(basePath);
+    if (resolved === this.transformBasePath) {
+      return;
+    }
+    if (this.configBasePathLocked) {
+      throw new Error('Cannot change the configuration directory of an initialized A2A provider');
+    }
+    this.transformBasePath = resolved;
+  }
+
+  getSourceHash(): string {
+    const reference = this.config.transformResponse;
+    if (typeof reference !== 'string' || !reference.startsWith('file://')) {
+      return '';
+    }
+    const { filename, functionName } = parseFileTransformReference(reference);
+    return getFileSourceHash(path.resolve(this.transformBasePath, filename), functionName);
   }
 
   id(): string {
@@ -664,6 +682,7 @@ export class A2AProvider implements ApiProvider {
     context?: CallApiContextParams,
     options?: CallApiOptionsParams,
   ): Promise<ProviderResponse> {
+    this.configBasePathLocked = true;
     try {
       const contextVars = { ...(context?.vars ?? {}) };
       const vars = {
@@ -699,7 +718,11 @@ export class A2AProvider implements ApiProvider {
         raw: final.raw,
         task: final.task,
       };
-      const transformed = await (await this.transformResponse)(final, output, transformContext);
+      const transform = await (this.transformResponse ??= loadTransformModule(
+        this.config.transformResponse,
+        this.transformBasePath,
+      ).then(createTransformResponse));
+      const transformed = await transform(final, output, transformContext);
       const sessionId = getFinalContextId(final);
       return {
         ...transformed,

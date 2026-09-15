@@ -1,3 +1,4 @@
+import { withRuntimeEnv } from '../../envOverrides';
 import { importModule } from '../../esm';
 import invariant from '../../util/invariant';
 
@@ -9,11 +10,11 @@ export const transformContext = (context: {
   config?: Record<string, unknown>;
 }): PromptFunctionContext => {
   invariant(context.provider, 'Provider is required');
-  return {
+  return withRuntimeEnv({
     vars: context.vars,
     provider: { id: context.provider.id(), label: context.provider.label },
     config: context.config ?? {},
-  };
+  });
 };
 
 /**

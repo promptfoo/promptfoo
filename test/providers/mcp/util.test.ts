@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import cliState from '../../../src/cliState';
 import {
   applyQueryParams,
   discoverTokenEndpoint,
@@ -8,15 +9,28 @@ import {
   getOAuthTokenWithExpiry,
   isMcpErrorResult,
   isMcpToolNameFilter,
+  renderAuthVars,
 } from '../../../src/providers/mcp/util';
 
 import type {
   MCPOAuthClientCredentialsAuth,
+  MCPOAuthPasswordAuth,
   MCPServerConfig,
 } from '../../../src/providers/mcp/types';
 
 // Mock fetchWithProxy for discovery tests
 const mockFetch = vi.fn();
+
+it('resolves MCP auth from file defaults unless explicit vars replace them', () => {
+  const server: MCPServerConfig = { auth: { type: 'bearer', token: '{{MCP_TOKEN}}' } };
+  cliState.withEnvFileOverrides({ MCP_TOKEN: 'file-token' }, () => {
+    expect(renderAuthVars(server).auth).toEqual({ type: 'bearer', token: 'file-token' });
+    expect(renderAuthVars(server, { MCP_TOKEN: 'explicit-token' }).auth).toEqual({
+      type: 'bearer',
+      token: 'explicit-token',
+    });
+  });
+});
 vi.mock('../../../src/util/fetch/index', () => ({
   fetchWithProxy: (...args: unknown[]) => mockFetch(...args),
 }));
@@ -370,6 +384,88 @@ describe('getOAuthTokenWithExpiry', () => {
   afterEach(() => {
     vi.clearAllMocks();
   });
+
+  it('bounds retained credential generations while reusing recent equivalent auth objects', async () => {
+    mockFetch.mockImplementation(async () => ({
+      ok: true,
+      json: async () => ({ access_token: 'bounded-token', expires_in: 3600 }),
+    }));
+    const auth: MCPOAuthClientCredentialsAuth = {
+      type: 'oauth',
+      grantType: 'client_credentials',
+      tokenUrl: 'https://auth.example.com/bounded-generations',
+      clientId: 'bounded-client',
+      clientSecret: 'generation-0',
+    };
+    await getOAuthTokenWithExpiry(auth);
+    for (let generation = 1; generation <= 1000; generation++) {
+      await getOAuthTokenWithExpiry({ ...auth, clientSecret: `generation-${generation}` });
+    }
+    await getOAuthTokenWithExpiry({ ...auth, clientSecret: 'generation-1000' });
+    expect(mockFetch).toHaveBeenCalledTimes(1001);
+    await getOAuthTokenWithExpiry({ ...auth });
+    expect(mockFetch).toHaveBeenCalledTimes(1002);
+  });
+
+  it.each(['clientSecret', 'password'] as const)(
+    'fetches a separate token when %s changes',
+    async (field) => {
+      mockFetch
+        .mockResolvedValueOnce({
+          ok: true,
+          json: async () => ({ access_token: 'first-token', expires_in: 3600 }),
+        })
+        .mockResolvedValueOnce({
+          ok: true,
+          json: async () => ({ access_token: 'second-token', expires_in: 3600 }),
+        });
+      const auth: MCPOAuthClientCredentialsAuth | MCPOAuthPasswordAuth = {
+        type: 'oauth',
+        tokenUrl: `https://auth.example.com/rotation/${field}`,
+        clientId: 'shared-client',
+        clientSecret: 'first-secret',
+        ...(field === 'password'
+          ? { grantType: 'password', username: 'shared-user', password: 'first-password' }
+          : { grantType: 'client_credentials' }),
+      };
+      const changed = { ...auth, [field]: 'second-credential' };
+      expect((await getOAuthTokenWithExpiry(auth)).accessToken).toBe('first-token');
+      expect((await getOAuthTokenWithExpiry(auth)).accessToken).toBe('first-token');
+      expect((await getOAuthTokenWithExpiry(changed)).accessToken).toBe('second-token');
+      expect((await getOAuthTokenWithExpiry(changed)).accessToken).toBe('second-token');
+      expect((await getOAuthTokenWithExpiry({ ...changed })).accessToken).toBe('second-token');
+      expect(mockFetch).toHaveBeenCalledTimes(2);
+    },
+  );
+
+  it.each(['clientSecret', 'password'] as const)(
+    'refreshes after mutating %s on the same auth object',
+    async (field) => {
+      mockFetch
+        .mockResolvedValueOnce({
+          ok: true,
+          json: async () => ({ access_token: 'before', expires_in: 3600 }),
+        })
+        .mockResolvedValueOnce({
+          ok: true,
+          json: async () => ({ access_token: 'after', expires_in: 3600 }),
+        });
+      const auth: MCPOAuthPasswordAuth = {
+        type: 'oauth',
+        grantType: 'password',
+        tokenUrl: 'https://auth.example.com/mutation',
+        clientId: `client-${field}`,
+        clientSecret: 'first',
+        username: 'user',
+        password: 'first',
+      };
+      expect((await getOAuthTokenWithExpiry(auth)).accessToken).toBe('before');
+      auth[field] = 'changed';
+      expect((await getOAuthTokenWithExpiry(auth)).accessToken).toBe('after');
+      expect((await getOAuthTokenWithExpiry(auth)).accessToken).toBe('after');
+      expect(mockFetch).toHaveBeenCalledTimes(2);
+    },
+  );
 
   it('scopes cached tokens by the discovered token endpoint', async () => {
     mockFetch.mockImplementation(async (url: string) => {

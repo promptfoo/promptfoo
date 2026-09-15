@@ -1,3 +1,4 @@
+import { getEnvString } from '../envars';
 import { OpenAiChatCompletionProvider } from './openai/chat';
 
 import type { EnvOverrides } from '../types/env';
@@ -44,7 +45,10 @@ export function createEnvoyProvider(
   const { basePath: _, ...configWithoutBasePath } = options.config?.config || {};
 
   // Get the gateway URL from config or environment
-  const apiBaseUrl = configWithoutBasePath.apiBaseUrl || process.env.ENVOY_API_BASE_URL;
+  const apiBaseUrl =
+    configWithoutBasePath.apiBaseUrl ||
+    options.env?.ENVOY_API_BASE_URL ||
+    getEnvString('ENVOY_API_BASE_URL');
 
   if (!apiBaseUrl) {
     throw new Error(

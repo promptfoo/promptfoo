@@ -32,6 +32,7 @@ import {
   sanitizeUrl,
   sanitizeUrlEncodedString,
 } from '../util/sanitizer';
+import { getFileSourceHash } from '../util/sourceHash';
 import { getNunjucksEngine } from '../util/templates';
 import { createEmptyTokenUsage } from '../util/tokenUsageUtils';
 import {
@@ -39,11 +40,7 @@ import {
   type RenderedHttpMultipartBody,
   renderHttpMultipartBody,
 } from './httpMultipart';
-import {
-  createTransformRequest,
-  createTransformResponse,
-  type TransformResponseContext,
-} from './httpTransforms';
+import { createTransformRequest, createTransformResponse } from './httpTransforms';
 import {
   getRequestTimeoutMs,
   type ToolFormat,
@@ -51,7 +48,11 @@ import {
   transformTools,
 } from './shared';
 import { normalizeResponseTransformResult } from './transformResult';
-import { loadTransformModule, parseFileTransformReference } from './transformUtils';
+import {
+  getTransformBasePath,
+  loadTransformModule,
+  parseFileTransformReference,
+} from './transformUtils';
 
 export { loadTransformModule } from './transformUtils';
 
@@ -1223,6 +1224,7 @@ function formatFileAuthFreshness(expiration?: number | null): string {
 
 export async function createSessionParser(
   parser: string | Function | undefined,
+  basePath = getTransformBasePath(),
 ): Promise<(data: SessionParserData) => string> {
   if (!parser) {
     return () => '';
@@ -1232,10 +1234,7 @@ export async function createSessionParser(
   }
   if (typeof parser === 'string' && parser.startsWith('file://')) {
     const { filename, functionName } = parseFileTransformReference(parser);
-    const requiredModule = await importModule(
-      path.resolve(cliState.basePath || '', filename),
-      functionName,
-    );
+    const requiredModule = await importModule(path.resolve(basePath, filename), functionName);
     if (typeof requiredModule === 'function') {
       return requiredModule;
     }
@@ -1687,6 +1686,7 @@ export function determineRequestBody(
 
 export async function createValidateStatus(
   validator: string | ((status: number) => boolean) | undefined,
+  basePath = getTransformBasePath(),
 ): Promise<(status: number) => boolean> {
   if (!validator) {
     return (_status: number) => true;
@@ -1700,10 +1700,7 @@ export async function createValidateStatus(
     if (validator.startsWith('file://')) {
       const { filename, functionName } = parseFileTransformReference(validator);
       try {
-        const requiredModule = await importModule(
-          path.resolve(cliState.basePath || '', filename),
-          functionName,
-        );
+        const requiredModule = await importModule(path.resolve(basePath, filename), functionName);
         if (typeof requiredModule === 'function') {
           return requiredModule;
         }
@@ -1944,14 +1941,12 @@ async function createHttpsAgent(
 export class HttpProvider implements ApiProvider {
   url: string;
   config: HttpProviderConfig;
-  private transformResponse: Promise<
-    (data: any, text: string, context?: TransformResponseContext) => ProviderResponse
-  >;
-  private sessionParser: Promise<(data: SessionParserData) => string>;
-  private transformRequest: Promise<
-    (prompt: string, vars: Record<string, any>, context?: CallApiContextParams) => any
-  >;
-  private validateStatus: Promise<(status: number) => boolean>;
+  private transformResponsePromise?: ReturnType<typeof createTransformResponse>;
+  private transformRequestPromise?: ReturnType<typeof createTransformRequest>;
+  private sessionParserPromise?: ReturnType<typeof createSessionParser>;
+  private validateStatusPromise?: ReturnType<typeof createValidateStatus>;
+  private transformBasePath = getTransformBasePath();
+  private configBasePathLocked = false;
   private lastSignatureTimestamp?: number;
   private lastSignature?: string;
   private authTokenCache = new Map<string, CachedAuthToken>();
@@ -1966,7 +1961,45 @@ export class HttpProvider implements ApiProvider {
   /**
    * Parser for extracting session ID from session endpoint response.
    */
-  private sessionEndpointParser?: Promise<(data: SessionParserData) => string>;
+  private sessionEndpointParserPromise?: ReturnType<typeof createSessionParser>;
+
+  // Replay validates file provenance before executable config is first used.
+  private get transformResponse() {
+    return (this.transformResponsePromise ??= loadTransformModule(
+      this.config.transformResponse || this.config.responseParser,
+      this.transformBasePath,
+    ).then(createTransformResponse));
+  }
+
+  private get transformRequest() {
+    return (this.transformRequestPromise ??= loadTransformModule(
+      this.config.transformRequest,
+      this.transformBasePath,
+    ).then(createTransformRequest));
+  }
+
+  private get sessionParser() {
+    return (this.sessionParserPromise ??= createSessionParser(
+      this.config.sessionParser,
+      this.transformBasePath,
+    ));
+  }
+
+  private get validateStatus() {
+    return (this.validateStatusPromise ??= createValidateStatus(
+      this.config.validateStatus,
+      this.transformBasePath,
+    ));
+  }
+
+  private get sessionEndpointParser() {
+    return this.config.session
+      ? (this.sessionEndpointParserPromise ??= createSessionParser(
+          this.config.session.responseParser,
+          this.transformBasePath,
+        ))
+      : undefined;
+  }
 
   constructor(url: string, options: ProviderOptions) {
     this.config = HttpProviderConfigSchema.parse(options.config);
@@ -1975,22 +2008,6 @@ export class HttpProvider implements ApiProvider {
       this.config.tokenEstimation = { enabled: true, multiplier: 1.3 };
     }
     this.url = this.config.url || url;
-
-    // Pre-load any file:// references before passing to transform functions
-    // This ensures httpTransforms.ts doesn't need to import from ../esm
-    this.transformResponse = loadTransformModule(
-      this.config.transformResponse || this.config.responseParser,
-    ).then(createTransformResponse);
-    this.sessionParser = createSessionParser(this.config.sessionParser);
-    this.transformRequest = loadTransformModule(this.config.transformRequest).then(
-      createTransformRequest,
-    );
-    this.validateStatus = createValidateStatus(this.config.validateStatus);
-
-    // Initialize session endpoint parser if session config is provided
-    if (this.config.session) {
-      this.sessionEndpointParser = createSessionParser(this.config.session.responseParser);
-    }
 
     // Initialize HTTPS agent if TLS configuration is provided
     // Note: We can't use async in constructor, so we'll initialize on first use
@@ -2015,6 +2032,38 @@ export class HttpProvider implements ApiProvider {
     if (this.config.body) {
       this.config.body = maybeLoadConfigFromExternalFile(this.config.body);
     }
+  }
+
+  setConfigBasePath(basePath: string): void {
+    const resolved = path.resolve(basePath);
+    if (resolved === this.transformBasePath) {
+      return;
+    }
+    if (this.configBasePathLocked) {
+      throw new Error('Cannot change the configuration directory of an initialized HTTP provider');
+    }
+    this.transformBasePath = resolved;
+  }
+
+  getSourceHash(): string {
+    const sources = [
+      this.config.transformRequest,
+      this.config.transformResponse || this.config.responseParser,
+      this.config.sessionParser,
+      this.config.session?.responseParser,
+      this.config.validateStatus,
+    ].map((reference) => {
+      if (typeof reference !== 'string' || !reference.startsWith('file://')) {
+        return null;
+      }
+      const { filename, functionName } = parseFileTransformReference(reference);
+      return getFileSourceHash(path.resolve(this.transformBasePath, filename), functionName);
+    });
+    if (this.config.auth?.type === 'file') {
+      const { filePath, functionName } = parseFileAuthReference(this.config.auth.path);
+      sources.push(getFileSourceHash(path.resolve(this.transformBasePath, filePath), functionName));
+    }
+    return crypto.createHash('sha256').update(JSON.stringify(sources)).digest('hex');
   }
 
   id(): string {
@@ -2337,6 +2386,7 @@ export class HttpProvider implements ApiProvider {
         filePath,
         functionName,
         defaultFunctionName,
+        basePath: this.transformBasePath,
       });
       const result = FileAuthResultSchema.parse(await authFn(authContext));
       const cachedToken = this.cacheToken(cacheKey, result.token, result.expiration ?? undefined);
@@ -2644,6 +2694,7 @@ export class HttpProvider implements ApiProvider {
     context?: CallApiContextParams,
     options?: CallApiOptionsParams,
   ): Promise<ProviderResponse> {
+    this.configBasePathLocked = true;
     return this.callApiInternal(prompt, context, options);
   }
 

@@ -639,4 +639,170 @@ describe('defaultTest normalization for extensions', () => {
     const summary = await evalRecord.toEvaluateSummary();
     expect(summary.results[0].testCase.assert).toContainEqual({ type: 'is-json' });
   });
+
+  it('applies test case indices before beforeAll and keeps afterAll on the selected suite', async () => {
+    const selectedSuites: string[][] = [];
+    const mockedRunExtensionHook = vi.mocked(runExtensionHook);
+    mockedRunExtensionHook.mockImplementation(async (_extensions, hookName, context) => {
+      if (hookName === 'beforeAll') {
+        const suite = (context as { suite: TestSuite }).suite;
+        selectedSuites.push((suite.tests || []).map((test) => String(test.vars?.name)));
+        suite.tests?.unshift({ vars: { name: 'inserted-by-extension' } });
+      } else if (hookName === 'afterAll') {
+        const suite = (context as { suite: TestSuite }).suite;
+        selectedSuites.push((suite.tests || []).map((test) => String(test.vars?.name)));
+      }
+      return context;
+    });
+
+    const testSuite: TestSuite = {
+      providers: [mockApiProvider],
+      prompts: [{ raw: '{{name}}', label: 'test' }],
+      tests: [{ vars: { name: 'first' } }, { vars: { name: 'selected' } }],
+      extensions: ['file://test-extension.js'],
+    };
+    const evalRecord = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
+
+    await evaluate(testSuite, evalRecord, { maxConcurrency: 1, testCaseIndices: [1] });
+    const summary = await evalRecord.toEvaluateSummary();
+
+    expect(selectedSuites).toEqual([['selected'], ['inserted-by-extension', 'selected']]);
+    expect(summary.results.map((result) => result.vars.name)).toEqual([
+      'inserted-by-extension',
+      'selected',
+    ]);
+  });
+
+  it('fully applies beforeAll defaultTest mutations to selected scenario rows', async () => {
+    const mockedRunExtensionHook = vi.mocked(runExtensionHook);
+    mockedRunExtensionHook.mockImplementation(async (_extensions, hookName, context) => {
+      if (hookName === 'beforeAll') {
+        const suite = (context as { suite: TestSuite }).suite;
+        if (typeof suite.defaultTest === 'object') {
+          suite.defaultTest.vars = { tenant: 'updated-by-extension' };
+          Object.assign(suite.defaultTest, { description: 'updated description' });
+          suite.defaultTest.providerOutput = 'updated provider output';
+          suite.defaultTest.metadata = {
+            conversationId: 'shared-conversation',
+            source: 'updated-by-extension',
+          };
+        }
+        const serializedMutableFields = JSON.parse(
+          JSON.stringify({ defaultTest: suite.defaultTest, tests: suite.tests }),
+        ) as Pick<TestSuite, 'defaultTest' | 'tests'>;
+        return {
+          ...context,
+          // Python extension hooks cross a JSON boundary for mutable fields while runtime
+          // providers remain in-process. Deferred scenario provenance must survive that trip.
+          suite: { ...suite, ...serializedMutableFields },
+        };
+      }
+      return context;
+    });
+
+    const testSuite: TestSuite = {
+      providers: [mockApiProvider],
+      prompts: [{ raw: '{{tenant}} {{region}} {{role}}', label: 'test' }],
+      defaultTest: {
+        vars: { tenant: 'stale-default' },
+        metadata: { source: 'stale-default' },
+      },
+      scenarios: [
+        {
+          config: [{ vars: { region: 'west' } }, { vars: { region: 'east' } }],
+          tests: [{ vars: { role: 'admin' } }, { vars: { role: 'analyst' } }],
+        },
+      ],
+      extensions: ['file://test-extension.js'],
+    };
+    const evalRecord = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
+
+    await evaluate(testSuite, evalRecord, { maxConcurrency: 1, testCaseIndices: [0, 2] });
+    const summary = await evalRecord.toEvaluateSummary();
+
+    expect(mockApiProvider.callApi).not.toHaveBeenCalled();
+    expect(summary.results).toHaveLength(2);
+    expect(summary.results.map((result) => result.vars)).toEqual([
+      { tenant: 'updated-by-extension', region: 'west', role: 'admin' },
+      { tenant: 'updated-by-extension', region: 'east', role: 'admin' },
+    ]);
+    expect(summary.results.map((result) => result.response?.output)).toEqual([
+      'updated provider output',
+      'updated provider output',
+    ]);
+    for (const result of summary.results) {
+      expect(result.testCase.description).toBe('updated description');
+      expect(result.testCase.metadata).toMatchObject({
+        conversationId: 'shared-conversation',
+        source: 'updated-by-extension',
+      });
+    }
+  });
+
+  it.each(['insert', 'remove'])(
+    'preserves selected scenario conversations when a serialized hook edits and %s rows',
+    async (operation) => {
+      vi.mocked(runExtensionHook).mockImplementation(async (_extensions, hookName, context) => {
+        if (hookName !== 'beforeAll') {
+          return context;
+        }
+        const suite = (context as { suite: TestSuite }).suite;
+        const tests = JSON.parse(JSON.stringify(suite.tests)) as TestSuite['tests'];
+        for (const test of tests!) {
+          test.vars = { ...test.vars, edited: true };
+        }
+        if (operation === 'insert') {
+          tests!.unshift({ vars: { turn: 'inserted' } });
+        } else {
+          tests!.pop();
+        }
+        tests!.reverse();
+        return { ...context, suite: { ...suite, tests } };
+      });
+      const suite: TestSuite = {
+        providers: [mockApiProvider],
+        prompts: [{ raw: '{{turn}}', label: 'test' }],
+        scenarios: [
+          {
+            config: [{ vars: { region: 'west' } }, { vars: { region: 'east' } }],
+            tests: [{ vars: { turn: 'first' } }, { vars: { turn: 'second' } }],
+          },
+        ],
+        extensions: ['file://test-extension.js'],
+      };
+      const evalRecord = await Eval.create({}, suite.prompts, { id: randomUUID() });
+      await evaluate(suite, evalRecord, { maxConcurrency: 1, testCaseIndices: [0, 1, 2, 3] });
+      const { results } = await evalRecord.toEvaluateSummary();
+      const scenarioRows = results.filter((result) => result.vars.region);
+      expect(scenarioRows).toHaveLength(operation === 'insert' ? 4 : 3);
+      for (const row of scenarioRows) {
+        expect(row.vars.edited).toBe(true);
+        expect(row.testCase.metadata?.conversationId).toBe(
+          row.vars.region === 'west' ? '__scenario_0__' : '__scenario_1__',
+        );
+      }
+      expect(JSON.stringify(results)).not.toContain('__promptfoo_deferred_scenario_index');
+    },
+  );
+
+  it('preserves requested test case index order and duplicates', async () => {
+    const testSuite: TestSuite = {
+      providers: [mockApiProvider],
+      prompts: [{ raw: '{{name}}', label: 'test' }],
+      tests: [
+        { vars: { name: 'first' } },
+        { vars: { name: 'second' } },
+        { vars: { name: 'third' } },
+      ],
+    };
+    const evalRecord = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
+
+    await evaluate(testSuite, evalRecord, {
+      maxConcurrency: 1,
+      testCaseIndices: [2, 0, 2],
+    });
+    const summary = await evalRecord.toEvaluateSummary();
+
+    expect(summary.results.map((result) => result.vars.name)).toEqual(['third', 'first', 'third']);
+  });
 });

@@ -246,6 +246,8 @@ describe('evaluator', () => {
       });
       await eval_.setResults(results);
 
+      expect(await eval_.getTotalResultRowCount()).toBe(results.length);
+
       const batches: EvalResult[][] = [];
       for await (const batch of eval_.fetchResultsBatched(2)) {
         batches.push(batch);

@@ -1,6 +1,6 @@
 import { isDeepStrictEqual } from 'node:util';
 
-import { and, eq, gte, inArray, lt, ne } from 'drizzle-orm';
+import { and, eq, gte, inArray, lt } from 'drizzle-orm';
 import { extractAndStoreBinaryData, isBlobStorageEnabled } from '../blobs/extractor';
 import { getDb } from '../database/index';
 import { evalResultsTable } from '../database/tables';
@@ -21,7 +21,13 @@ import {
 } from '../types/index';
 import { isApiProvider, isProviderOptions } from '../types/providers';
 import { safeJsonStringify } from '../util/json';
-import { isSecretField, REDACTED, sanitizeObject } from '../util/sanitizer';
+import {
+  isSecretField,
+  REDACTED,
+  redactSecretLeaves,
+  sanitizeErrorMessage,
+  sanitizeObject,
+} from '../util/sanitizer';
 import { getCurrentTimestamp } from '../util/time';
 import {
   accumulateGradingTokenUsage,
@@ -34,6 +40,7 @@ import { clearCountCache } from './evalPerformance';
 function sanitizeProviderConfig(config: ProviderConfig): ProviderConfig {
   return sanitizeObject(JSON.parse(safeJsonStringify(config) as string), {
     context: 'provider config',
+    redactOpaqueValues: false,
     maxDepth: Number.POSITIVE_INFINITY,
   }) as ProviderConfig;
 }
@@ -46,7 +53,9 @@ function projectProviderResponse(
     return response;
   }
 
-  if (!options.stripMetadata && !options.stripOutput) {
+  const error =
+    typeof response.error === 'string' ? sanitizeErrorMessage(response.error) : response.error;
+  if (!options.stripMetadata && !options.stripOutput && error === response.error) {
     return response;
   }
 
@@ -54,6 +63,9 @@ function projectProviderResponse(
     ? (({ metadata: _metadata, ...rest }) => rest)(response)
     : { ...response };
 
+  if (error !== response.error) {
+    projectedResponse.error = error;
+  }
   if (options.stripOutput) {
     projectedResponse.output = '[output stripped]';
   }
@@ -89,6 +101,26 @@ function projectTestCase(
   return projectedTestCase;
 }
 
+function projectGradingResult(
+  gradingResult: GradingResult | null | undefined,
+  stripMetadata: boolean,
+): GradingResult | null | undefined {
+  if (!gradingResult || !stripMetadata) {
+    return gradingResult;
+  }
+  const { metadata: _metadata, componentResults, ...rest } = gradingResult;
+  return {
+    ...rest,
+    ...(componentResults && {
+      componentResults: componentResults.map((result) => projectGradingResult(result, true)!),
+    }),
+  };
+}
+
+function sanitizeProviderId(id: string | undefined): string | undefined {
+  return redactSecretLeaves({ id }, { redactOpaqueValues: false }).id;
+}
+
 // Removes circular references from the provider object and ensures consistent format
 export function sanitizeProvider(
   provider: ApiProvider | ProviderOptions | string,
@@ -96,7 +128,7 @@ export function sanitizeProvider(
   try {
     if (isApiProvider(provider)) {
       return {
-        id: provider.id(),
+        id: sanitizeProviderId(provider.id()),
         label: provider.label,
         ...(provider.config && {
           config: sanitizeProviderConfig(provider.config),
@@ -105,7 +137,7 @@ export function sanitizeProvider(
     }
     if (isProviderOptions(provider)) {
       return {
-        id: provider.id,
+        id: sanitizeProviderId(provider.id),
         label: provider.label,
         ...(provider.config && {
           config: sanitizeProviderConfig(provider.config),
@@ -119,7 +151,9 @@ export function sanitizeProvider(
         config?: ProviderConfig;
       };
       return {
-        id: typeof providerObj.id === 'function' ? providerObj.id() : providerObj.id,
+        id: sanitizeProviderId(
+          typeof providerObj.id === 'function' ? providerObj.id() : providerObj.id,
+        ),
         label: providerObj.label,
         ...(providerObj.config && {
           config: sanitizeProviderConfig(providerObj.config),
@@ -127,7 +161,11 @@ export function sanitizeProvider(
       };
     }
   } catch {}
-  return JSON.parse(safeJsonStringify(provider) as string);
+  return JSON.parse(
+    safeJsonStringify(
+      typeof provider === 'string' ? sanitizeProviderId(provider) : provider,
+    ) as string,
+  );
 }
 
 /**
@@ -180,6 +218,7 @@ function sanitizeForDbWithSecrets<T>(obj: T): T {
   }
   return sanitizeObject(obj, {
     context: 'evalResult field',
+    redactOpaqueValues: false,
     // Nested provider configs can be deeper than the default maxDepth (4);
     // match the behavior of `sanitizeConfigForOutput` in `src/util/output.ts`.
     maxDepth: Number.POSITIVE_INFINITY,
@@ -340,10 +379,9 @@ function redactHttpHeadersOnMetadata<T>(
   return nextMetadata as T;
 }
 
-// Walk a `GradingResult`-shaped value and redact `metadata.http` on the result and
-// every nested `componentResults[]`. Limits recursion to the documented schema
-// (`componentResults` only) — does not descend into arbitrary subtrees.
-function redactHttpHeadersOnGradingResult<T>(gradingResult: T): T {
+// Redact transport metadata and assertion credentials at each grading-result level.
+// Descend only through the documented componentResults schema.
+function sanitizeGradingResultForDb<T>(gradingResult: T): T {
   if (!gradingResult || typeof gradingResult !== 'object' || Array.isArray(gradingResult)) {
     return gradingResult;
   }
@@ -351,6 +389,11 @@ function redactHttpHeadersOnGradingResult<T>(gradingResult: T): T {
   const gr = gradingResult as Record<string, unknown>;
   let mutated = false;
   const next: Record<string, unknown> = { ...gr };
+
+  if (gr.assertion !== undefined) {
+    next.assertion = sanitizeForDbWithSecrets(gr.assertion);
+    mutated = true;
+  }
 
   if (gr.metadata !== undefined) {
     const redacted = redactHttpHeadersOnMetadata(gr.metadata);
@@ -363,7 +406,7 @@ function redactHttpHeadersOnGradingResult<T>(gradingResult: T): T {
   if (Array.isArray(gr.componentResults)) {
     let componentMutated = false;
     const nextComponents = gr.componentResults.map((component) => {
-      const redacted = redactHttpHeadersOnGradingResult(component);
+      const redacted = sanitizeGradingResultForDb(component);
       if (redacted !== component) {
         componentMutated = true;
       }
@@ -399,10 +442,6 @@ function sanitizeMetadataForDb<T>(metadata: T, responseMetadata?: unknown): T {
   return redactHttpHeadersOnMetadata(metadata, {
     legacyHeadersSource: sanitizeForDb(responseMetadata),
   });
-}
-
-function sanitizeGradingResultForDb<T>(gradingResult: T): T {
-  return redactHttpHeadersOnGradingResult(gradingResult);
 }
 
 // `__promptfoo` is reserved at the metadata top level for promptfoo-internal namespaced data
@@ -501,7 +540,7 @@ function surfaceTraceMetadata(metadata: Record<string, unknown> | null | undefin
 // Apply the credential-header redaction trio to the already-`sanitizeForDb`'d fields bound for
 // the database or a JSONL artifact. Single source of truth for which redactor pairs with which
 // field, shared by DB persistence (`createFromEvaluateResult` / `createManyFromEvaluateResult`)
-// and the JSONL artifact boundary (`sanitizeResultForJsonlArtifact`) so a newly added sensitive
+// and the output artifact boundary (`sanitizeResultForArtifact`) so a newly added sensitive
 // field can't be redacted on one path while leaking from another.
 function redactSensitiveResultFieldsForDb<
   R extends ProviderResponse | null | undefined,
@@ -529,7 +568,7 @@ function redactSensitiveResultFieldsForDb<
   };
 }
 
-// Read the `PROMPTFOO_STRIP_*` output-projection flags. Shared by the JSONL-artifact
+// Read the `PROMPTFOO_STRIP_*` output-projection flags. Shared by the artifact
 // sanitizer and the EvalResult -> EvaluateResult projection so both honor the same env.
 function getStripFlags() {
   return {
@@ -541,15 +580,8 @@ function getStripFlags() {
   };
 }
 
-/**
- * Sanitize a result before it is serialized into a JSONL output artifact. This is the
- * JSONL-boundary equivalent of the database-persistence sanitization and must stay in sync
- * with it: it redacts credential-bearing HTTP headers from the response / grading / metadata
- * and applies the `PROMPTFOO_STRIP_*` projections (prompt text, response output, test vars,
- * grading result, metadata). In-memory rows keep their real values for hooks; only the
- * on-disk copy is sanitized.
- */
-export function sanitizeResultForJsonlArtifact<T extends object>(result: T): T {
+/** Redact credentials and apply strip flags to an artifact copy, preserving live hook inputs. */
+export function sanitizeResultForArtifact<T extends object>(result: T): T {
   const {
     shouldStripPromptText,
     shouldStripResponseOutput,
@@ -561,7 +593,7 @@ export function sanitizeResultForJsonlArtifact<T extends object>(result: T): T {
   const artifactResult = result as T & Record<string, unknown>;
   const redacted = redactSensitiveResultFieldsForDb({
     response: sanitizeForDb(artifactResult.response as ProviderResponse | null | undefined),
-    gradingResult: sanitizeForDb(artifactResult.gradingResult),
+    gradingResult: sanitizeForDb(artifactResult.gradingResult as GradingResult | null | undefined),
     metadata: sanitizeForDb(artifactResult.metadata),
   });
   const response = projectProviderResponse(redacted.response ?? undefined, {
@@ -571,6 +603,9 @@ export function sanitizeResultForJsonlArtifact<T extends object>(result: T): T {
 
   return {
     ...result,
+    ...(typeof artifactResult.error === 'string'
+      ? { error: sanitizeErrorMessage(artifactResult.error) }
+      : {}),
     ...(artifactResult.testCase
       ? {
           testCase: projectTestCase(
@@ -603,7 +638,9 @@ export function sanitizeResultForJsonlArtifact<T extends object>(result: T): T {
         }
       : {}),
     response,
-    gradingResult: shouldStripGradingResult ? null : redacted.gradingResult,
+    gradingResult: shouldStripGradingResult
+      ? null
+      : projectGradingResult(redacted.gradingResult, shouldStripMetadata),
     namedScores: sanitizeForDb(artifactResult.namedScores),
     metadata: shouldStripMetadata ? {} : redacted.metadata,
   } as T;
@@ -791,29 +828,32 @@ export default class EvalResult {
    * Key format: `${testIdx}:${promptIdx}`
    *
    * @param evalId - The evaluation ID to query
-   * @param opts.excludeErrors - If true, excludes results with ERROR failureReason (used in retry mode)
+   * @param opts.excludeErrors - Exclude any pair with an ERROR result so it can be retried.
    */
   static async getCompletedIndexPairs(
     evalId: string,
     opts?: { excludeErrors?: boolean },
   ): Promise<Set<string>> {
     const db = await getDb();
-    const whereClause = opts?.excludeErrors
-      ? and(
-          eq(evalResultsTable.evalId, evalId),
-          // Exclude ERROR results so they can be retried
-          // This prevents resume mode from skipping ERROR results during retry
-          ne(evalResultsTable.failureReason, ResultFailureReason.ERROR),
-        )
-      : eq(evalResultsTable.evalId, evalId);
-
     const rows = await db
-      .select({ testIdx: evalResultsTable.testIdx, promptIdx: evalResultsTable.promptIdx })
+      .select({
+        testIdx: evalResultsTable.testIdx,
+        promptIdx: evalResultsTable.promptIdx,
+        failureReason: evalResultsTable.failureReason,
+      })
       .from(evalResultsTable)
-      .where(whereClause);
+      .where(eq(evalResultsTable.evalId, evalId));
     const ret = new Set<string>();
+    const errorPairs = new Set<string>();
     for (const r of rows) {
-      ret.add(`${r.testIdx}:${r.promptIdx}`);
+      const key = `${r.testIdx}:${r.promptIdx}`;
+      ret.add(key);
+      if (opts?.excludeErrors && r.failureReason === ResultFailureReason.ERROR) {
+        errorPairs.add(key);
+      }
+    }
+    for (const key of errorPairs) {
+      ret.delete(key);
     }
     return ret;
   }
@@ -946,7 +986,20 @@ export default class EvalResult {
     const { traceId: _traceId, evaluationId: _evaluationId, pluginId: _pluginId, ...rest } = this;
     const persistedValues = {
       ...rest,
-      metadata: persistTraceMetadata(this.metadata, this.traceId, this.evaluationId),
+      ...redactSensitiveResultFieldsForDb({
+        response: sanitizeForDb(this.response),
+        gradingResult: sanitizeForDb(this.gradingResult),
+        metadata: sanitizeForDb(
+          persistTraceMetadata(this.metadata, this.traceId, this.evaluationId),
+        ),
+      }),
+      provider: sanitizeProvider(this.provider),
+      prompt: sanitizeForDbWithSecrets(this.prompt),
+      testCase: sanitizeForDbWithSecrets({
+        ...this.testCase,
+        ...(this.testCase.provider && { provider: sanitizeProvider(this.testCase.provider) }),
+      }),
+      namedScores: sanitizeForDb(this.namedScores),
     };
     //check if this exists in the db
     if (this.persisted) {
@@ -1003,7 +1056,9 @@ export default class EvalResult {
       }),
       description: this.description || undefined,
       error: this.error || undefined,
-      gradingResult: shouldStripGradingResult ? null : this.gradingResult,
+      gradingResult: shouldStripGradingResult
+        ? null
+        : projectGradingResult(this.gradingResult, shouldStripMetadata),
       id: this.id,
       latencyMs: this.latencyMs,
       namedScores: this.namedScores,

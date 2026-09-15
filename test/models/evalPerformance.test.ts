@@ -137,6 +137,7 @@ describe('evalPerformance', () => {
       // Should return 6 (total rows), not 3 (distinct test indices)
       const count = await getTotalResultRowCount(eval_.id);
       expect(count).toBe(expectedTotalRowCount);
+      expect(await eval_.getTotalResultRowCount()).toBe(expectedTotalRowCount);
     });
 
     it('should return 0 for an eval with no results', async () => {

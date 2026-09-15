@@ -1,7 +1,10 @@
 import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 import logger from '../../src/logger';
 import { runDbMigrations } from '../../src/migrate';
-import EvalResult, { sanitizeProvider } from '../../src/models/evalResult';
+import EvalResult, {
+  sanitizeProvider,
+  sanitizeResultForArtifact,
+} from '../../src/models/evalResult';
 import { hashPrompt } from '../../src/prompts/utils';
 import { WebSocketProvider } from '../../src/providers/websocket';
 import {
@@ -55,7 +58,221 @@ describe('EvalResult', () => {
     response: undefined,
   });
 
+  it.each([
+    'Connection failed for https://user:fixture-error-password@host.test/path?api_key=fixture-error-key',
+    'Provider rejected Authorization: Bearer fixture-error-token',
+    'Provider rejected {"headers":{"X-Api-Key":"fixture-error-key"}}',
+  ])('redacts credentials from artifact errors: %s', (error) => {
+    const input = { ...mockEvaluateResult, error, response: { error } };
+    const projected = sanitizeResultForArtifact(input);
+    expect(projected.error).toBeTruthy();
+    expect(JSON.stringify(projected)).not.toMatch(/fixture-error-(?:password|key|token)/);
+    expect(input.error).toBe(error);
+    expect(input.response.error).toBe(error);
+  });
+
+  it.each(['Provider returned HTTP 503; try again later', undefined, null])(
+    'preserves a non-sensitive artifact error: %s',
+    (error) => {
+      expect(sanitizeResultForArtifact({ ...mockEvaluateResult, error }).error).toBe(error);
+    },
+  );
+
+  it.each(['artifact', 'model'])(
+    'strips nested grading metadata from the %s projection without changing live grades',
+    async (boundary) => {
+      const grade = {
+        pass: true,
+        score: 1,
+        reason: 'kept',
+        metadata: { note: 'PRIVATE_GRADE_NOTE' },
+      };
+      const input = {
+        ...mockEvaluateResult,
+        gradingResult: { ...grade, componentResults: [{ ...grade, componentResults: [grade] }] },
+      };
+      const original = JSON.stringify(input);
+      const result = await EvalResult.createFromEvaluateResult('grade-projection', input, {
+        persist: false,
+      });
+      const restore = mockProcessEnv({ PROMPTFOO_STRIP_METADATA: 'true' });
+      try {
+        const projected =
+          boundary === 'artifact' ? sanitizeResultForArtifact(input) : result.toEvaluateResult();
+        expect(JSON.stringify(projected.gradingResult)).not.toContain('PRIVATE_GRADE_NOTE');
+        expect(projected.gradingResult?.componentResults?.[0].componentResults?.[0]).toEqual({
+          pass: true,
+          score: 1,
+          reason: 'kept',
+        });
+        expect(JSON.stringify(input)).toBe(original);
+        expect(result.gradingResult?.metadata?.note).toBe('PRIVATE_GRADE_NOTE');
+      } finally {
+        restore();
+      }
+    },
+  );
+
+  it.each(['single', 'batch', 'artifact'])(
+    'redacts assertion provider credentials at the %s grading-result boundary',
+    async (boundary) => {
+      const credential = 'fixture-grading-provider-credential';
+      const assertion = {
+        type: 'equals' as const,
+        value: 'ok',
+        provider: {
+          id: 'echo',
+          label: 'retained-label',
+          config: { apiKey: credential, temperature: 0.4 },
+          env: { OPENAI_API_KEY: credential },
+        },
+      };
+      const grade = { pass: true, score: 1, reason: 'ok', assertion };
+      const input = {
+        ...mockEvaluateResult,
+        gradingResult: { ...grade, componentResults: [{ ...grade, componentResults: [grade] }] },
+      };
+      const original = JSON.stringify(input);
+      const result =
+        boundary === 'artifact'
+          ? sanitizeResultForArtifact(input)
+          : boundary === 'batch'
+            ? (await EvalResult.createManyFromEvaluateResult([input], 'grade-credential-batch'))[0]
+            : await EvalResult.createFromEvaluateResult('grade-credential-single', input);
+      expect(JSON.stringify(result.gradingResult)).not.toContain(credential);
+      expect(result.gradingResult?.assertion).toMatchObject({
+        value: 'ok',
+        provider: { label: 'retained-label', config: { temperature: 0.4 } },
+      });
+      if (boundary !== 'artifact') {
+        const stored = await EvalResult.findById(result.id!);
+        expect(JSON.stringify(stored?.gradingResult)).not.toContain(credential);
+      }
+      expect(JSON.stringify(input)).toBe(original);
+    },
+  );
+
+  it.each(['memory', 'single', 'batch', 'artifact'])(
+    'preserves opaque user payloads while redacting credentials at the %s boundary',
+    async (boundary) => {
+      const opaque = Buffer.from(
+        'An ordinary encoded input for the evaluation. '.repeat(4),
+      ).toString('base64');
+      const revision = 'a'.repeat(64);
+      const credential = 'fixture-private-api-key';
+      const input = {
+        ...mockEvaluateResult,
+        prompt: { ...mockPrompt, raw: opaque, config: { model: revision, apiKey: credential } },
+        testCase: {
+          ...mockTestCase,
+          vars: { encoded: opaque, apiKey: credential },
+          options: { provider: { id: 'echo', config: { model: revision, apiKey: credential } } },
+        },
+        gradingResult: {
+          pass: true,
+          score: 1,
+          reason: 'ok',
+          assertion: { type: 'equals' as const, value: opaque },
+        },
+      };
+      const result =
+        boundary === 'artifact'
+          ? sanitizeResultForArtifact(input)
+          : boundary === 'batch'
+            ? (
+                await EvalResult.createManyFromEvaluateResult([input], 'opaque-batch')
+              )[0].toEvaluateResult()
+            : (
+                await EvalResult.createFromEvaluateResult('opaque-' + boundary, input, {
+                  persist: boundary !== 'memory',
+                })
+              ).toEvaluateResult();
+      expect(result.prompt.raw).toBe(opaque);
+      expect(result.prompt.config?.model).toBe(revision);
+      expect(result.testCase.vars?.encoded).toBe(opaque);
+      expect(result.testCase.options?.provider).toMatchObject({
+        config: { model: revision, apiKey: '[REDACTED]' },
+      });
+      expect(result.gradingResult?.assertion?.value).toBe(opaque);
+      expect(JSON.stringify(result)).not.toContain(credential);
+      expect(input.testCase.vars.apiKey).toBe(credential);
+    },
+  );
+
+  it.each([true, false])(
+    'redacts each save while retaining live values (persisted=%s)',
+    async (persist) => {
+      const result = await EvalResult.createFromEvaluateResult('save-privacy', mockEvaluateResult, {
+        persist,
+      });
+      const secret = 'fixture-save-private-receipt';
+      const metadata = {
+        http: {
+          status: 200,
+          statusText: 'OK',
+          requestHeaders: { Authorization: secret, Cookie: secret, 'x-safe-debug': 'visible' },
+        },
+      };
+      result.response = { output: { password: 'model-output-preserved' }, metadata };
+      result.gradingResult = {
+        pass: true,
+        score: 1,
+        reason: 'ok',
+        metadata,
+        componentResults: [{ pass: true, score: 1, reason: 'ok', metadata }],
+      };
+      result.metadata = metadata;
+      result.provider = { id: 'echo', config: { apiKey: secret, temperature: 0.2 } };
+      result.testCase = { ...result.testCase, options: { provider: result.provider } };
+      const live = JSON.stringify({
+        response: result.response,
+        grade: result.gradingResult,
+        metadata,
+        provider: result.provider,
+      });
+      await result.save();
+      const stored = await EvalResult.findById(result.id);
+      expect(stored).toBeDefined();
+      expect(JSON.stringify(stored)).not.toContain(secret);
+      expect(stored?.response?.output).toEqual({ password: 'model-output-preserved' });
+      expect(stored?.response?.metadata?.http?.requestHeaders?.['x-safe-debug']).toBe('visible');
+      expect(
+        JSON.stringify({
+          response: result.response,
+          grade: result.gradingResult,
+          metadata,
+          provider: result.provider,
+        }),
+      ).toBe(live);
+    },
+  );
+
   describe('sanitizeProvider', () => {
+    it.each(['string', 'options', 'instance'])(
+      'redacts credential-bearing %s provider IDs without changing the provider',
+      (shape) => {
+        for (const id of [
+          'webhook:https://hooks.slack.com/services/T123/B123/PRIVATE_PROVIDER_CREDENTIAL',
+          'http:https://alice:PRIVATE_PROVIDER_CREDENTIAL@example.com/v1?region=west',
+        ]) {
+          const provider =
+            shape === 'string'
+              ? id
+              : shape === 'options'
+                ? { id, label: 'kept' }
+                : { id: () => id, callApi: async () => ({ output: 'ok' }) };
+          const projected = sanitizeProvider(provider);
+          expect(JSON.stringify(projected)).not.toContain('PRIVATE_PROVIDER_CREDENTIAL');
+          expect(
+            typeof provider === 'string'
+              ? provider
+              : typeof provider.id === 'function'
+                ? provider.id()
+                : provider.id,
+          ).toBe(id);
+        }
+      },
+    );
     it('should handle ApiProvider objects', () => {
       const apiProvider = createMockProvider({
         id: 'test-provider',

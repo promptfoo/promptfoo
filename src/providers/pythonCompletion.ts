@@ -1,16 +1,19 @@
+import { isDeepStrictEqual } from 'node:util';
 import fs from 'fs/promises';
 import path from 'path';
 
-import { getCache, isCacheEnabled } from '../cache';
+import { getCache } from '../cache';
 import cliState from '../cliState';
+import { getRuntimeEnv } from '../envOverrides';
 import logger from '../logger';
 import { getConfiguredPythonPath, getEnvInt } from '../python/pythonUtils';
 import { PythonWorkerPool } from '../python/workerPool';
 import { sha256 } from '../util/createHash';
 import { processConfigFileReferences } from '../util/fileReference';
 import { parsePathOrGlob } from '../util/index';
-import { safeJsonStringify } from '../util/json';
+import { getFileSourceHash } from '../util/sourceHash';
 import { providerRegistry } from './providerRegistry';
+import { getScriptCacheKey } from './scriptCompletion';
 import { sanitizeScriptContext } from './scriptContext';
 
 import type {
@@ -180,6 +183,7 @@ export class PythonProvider implements ApiProvider {
   private functionName: string | null;
   private isInitialized: boolean = false;
   private initializationPromise: Promise<void> | null = null;
+  private workerEnv?: NodeJS.ProcessEnv;
   public label: string | undefined;
   private pool: PythonWorkerPool | null = null;
 
@@ -198,6 +202,13 @@ export class PythonProvider implements ApiProvider {
     this.config = options?.config ?? {};
   }
 
+  getSourceHash(): string {
+    return getFileSourceHash(
+      path.resolve(this.options?.config?.basePath || '', this.scriptPath),
+      this.functionName,
+    );
+  }
+
   id() {
     return `python:${this.scriptPath}:${this.functionName || 'default'}`;
   }
@@ -208,6 +219,11 @@ export class PythonProvider implements ApiProvider {
    * @returns A promise that resolves when all file references have been processed
    */
   public async initialize(): Promise<void> {
+    const env = getRuntimeEnv();
+    if (this.workerEnv && !isDeepStrictEqual(this.workerEnv, env)) {
+      throw new Error('Create a separate Python provider instance for each execution environment.');
+    }
+    this.workerEnv = env;
     // If already initialized, return immediately
     if (this.isInitialized) {
       return;
@@ -250,6 +266,7 @@ export class PythonProvider implements ApiProvider {
       } catch (error) {
         // Reset the initialization promise so future calls can retry
         this.initializationPromise = null;
+        this.workerEnv = undefined;
         throw error;
       }
     })();
@@ -320,26 +337,30 @@ export class PythonProvider implements ApiProvider {
     context: CallApiContextParams | undefined,
     apiType: PythonApiType,
   ): Promise<any> {
-    if (!this.isInitialized || !this.pool) {
-      await this.initialize();
-    }
+    await this.initialize();
 
     const absPath = path.resolve(path.join(this.options?.config.basePath || '', this.scriptPath));
     logger.debug(`Computing file hash for script ${absPath}`);
     const fileHash = sha256(await fs.readFile(absPath, 'utf-8'));
 
-    // Create cache key including the function name to ensure different functions don't share caches
-    const cacheKey = `python:${this.scriptPath}:${this.functionName || 'default'}:${apiType}:${fileHash}:${prompt}:${JSON.stringify(
-      this.options,
-    )}:${JSON.stringify(context?.vars)}`;
+    const optionsWithProcessedConfig = {
+      ...this.options,
+      config: { ...this.options?.config, ...this.config },
+    };
+    const cacheKey = getScriptCacheKey(
+      `python:${this.functionName || 'default'}:${apiType}`,
+      fileHash,
+      [this.scriptPath, prompt, optionsWithProcessedConfig, context?.vars],
+      this.options?.env,
+    );
     logger.debug(`PythonProvider cache key: ${cacheKey}`);
 
     const cache = await getCache();
     let cachedResult;
-    const cacheEnabled = isCacheEnabled();
+    const cacheEnabled = cacheKey !== undefined;
     logger.debug(`PythonProvider cache enabled: ${cacheEnabled}`);
 
-    if (cacheEnabled) {
+    if (cacheKey) {
       cachedResult = await cache.get(cacheKey);
       logger.debug(`PythonProvider cache hit: ${Boolean(cachedResult)}`);
     }
@@ -357,16 +378,6 @@ export class PythonProvider implements ApiProvider {
     } else {
       const sanitizedContext = sanitizeScriptContext('PythonProvider', context);
 
-      // Create a new options object with processed file references included in the config
-      // This ensures any file:// references are replaced with their actual content
-      const optionsWithProcessedConfig = {
-        ...this.options,
-        config: {
-          ...this.options?.config,
-          ...this.config, // Merge in the processed config containing resolved file references
-        },
-      };
-
       const args = buildPythonScriptArgs(
         apiType,
         prompt,
@@ -374,11 +385,11 @@ export class PythonProvider implements ApiProvider {
         sanitizedContext,
       );
 
-      logger.debug(
-        `Executing python script ${absPath} via worker pool with args: ${safeJsonStringify(args)}`,
-      );
-
       const functionName = this.functionName || apiType;
+      logger.debug('Executing Python script via worker pool', {
+        scriptPath: absPath,
+        functionName,
+      });
       // Use worker pool instead of runPython
       const result = await this.pool!.execute(functionName, args);
 
@@ -387,12 +398,12 @@ export class PythonProvider implements ApiProvider {
       // Store result in cache if enabled and no errors
       const hasError = hasPythonResultError(result);
 
-      if (isCacheEnabled() && !hasError) {
+      if (cacheKey && !hasError) {
         logger.debug(`PythonProvider caching result: ${cacheKey}`);
         await cache.set(cacheKey, JSON.stringify(result));
       } else {
         logger.debug(
-          `PythonProvider not caching result: ${isCacheEnabled() ? (hasError ? 'has error' : 'unknown reason') : 'cache disabled'}`,
+          `PythonProvider not caching result: ${hasError ? 'has error' : 'cache disabled'}`,
         );
       }
 
@@ -402,23 +413,14 @@ export class PythonProvider implements ApiProvider {
   }
 
   async callApi(prompt: string, context?: CallApiContextParams): Promise<ProviderResponse> {
-    if (!this.isInitialized) {
-      await this.initialize();
-    }
     return this.executePythonScript(prompt, context, 'call_api');
   }
 
   async callEmbeddingApi(prompt: string): Promise<ProviderEmbeddingResponse> {
-    if (!this.isInitialized) {
-      await this.initialize();
-    }
     return this.executePythonScript(prompt, undefined, 'call_embedding_api');
   }
 
   async callClassificationApi(prompt: string): Promise<ProviderClassificationResponse> {
-    if (!this.isInitialized) {
-      await this.initialize();
-    }
     return this.executePythonScript(prompt, undefined, 'call_classification_api');
   }
 
@@ -429,5 +431,7 @@ export class PythonProvider implements ApiProvider {
     }
     providerRegistry.unregister(this);
     this.isInitialized = false;
+    this.initializationPromise = null;
+    this.workerEnv = undefined;
   }
 }

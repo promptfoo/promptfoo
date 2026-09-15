@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { fetchWithCache } from '../../src/cache';
 import { createLiteLLMProvider, LiteLLMProvider } from '../../src/providers/litellm';
+import { renderEnvOnlyInObject } from '../../src/util/render';
 import { mockProcessEnv } from '../util/utils';
 
 vi.mock('../../src/cache', async (importOriginal) => {
@@ -376,6 +377,21 @@ describe('LiteLLM Provider', () => {
       status: 200,
       statusText: 'OK',
     };
+
+    it('renders the delegated config used for LiteLLM requests', async () => {
+      mockFetchWithCache.mockResolvedValue(mockResponse);
+      const provider = createLiteLLMProvider('litellm:chat:gpt-4', {
+        config: { config: { apiBaseUrl: '{{ env.TARGET }}', apiKey: '{{ env.KEY }}' } },
+      });
+      expect(
+        renderEnvOnlyInObject(provider, { TARGET: 'https://fixture.invalid', KEY: 'fixture-key' }),
+      ).toBe(provider);
+      expect((await provider.callApi('hello')).output).toBe('Test output');
+      expect(mockFetchWithCache.mock.calls[0][0]).toBe('https://fixture.invalid/chat/completions');
+      expect(mockFetchWithCache.mock.calls[0][1]).toMatchObject({
+        headers: { Authorization: 'Bearer fixture-key' },
+      });
+    });
 
     it('should omit temperature from request body when not configured', async () => {
       mockFetchWithCache.mockResolvedValue(mockResponse);

@@ -2,7 +2,7 @@ import { AsyncLocalStorage } from 'node:async_hooks';
 
 import { setEnvOverridesProvider } from './envOverrides';
 
-import type { TestSuite, UnifiedConfig } from './types/index';
+import type { EnvOverrides, TestSuite, UnifiedConfig } from './types/index';
 
 export interface ActiveOtlpReceiver {
   host: string;
@@ -45,6 +45,13 @@ interface CliState {
    */
   _retryErrorResultIds?: string[];
 
+  /**
+   * Snapshot of ALL result IDs that existed before a retry ran. Used to count only
+   * rows newly persisted by this retry as replacements, so a pre-existing duplicate
+   * success at the same (evalId, testIdx, promptIdx) is not miscounted.
+   */
+  _retryPreexistingResultIds?: string[];
+
   // debug log file
   debugLogFile?: string;
 
@@ -59,7 +66,14 @@ interface CliState {
   readonly requestTracingConfig?: TestSuite['tracing'];
   readonly activeOtlpReceiver?: ActiveOtlpReceiver;
 
-  withMaxConcurrency<T>(maxConcurrency: number, fn: () => Promise<T>): Promise<T>;
+  withMaxConcurrency<T>(maxConcurrency: number | undefined, fn: () => Promise<T>): Promise<T>;
+  /** The innermost environment scope, or the last config's env outside a scope. */
+  readonly env?: EnvOverrides;
+  readonly envFileOverrides?: EnvOverrides;
+  /** File values act as process defaults beneath each nested suite environment. */
+  withEnvFileOverrides<T>(env: EnvOverrides | undefined, fn: () => T): T;
+  /** Replaces the outer env for this call and its async work; undefined masks config env. */
+  withEnv<T>(env: EnvOverrides | undefined, fn: () => T): T;
   withRequestTracingConfig<T>(
     tracingConfig: NonNullable<TestSuite['tracing']>,
     fn: () => Promise<T>,
@@ -67,14 +81,53 @@ interface CliState {
   setActiveOtlpReceiver(receiver?: ActiveOtlpReceiver): void;
 }
 
-const maxConcurrencyContext = new AsyncLocalStorage<{ maxConcurrency: number | undefined }>();
+const maxConcurrencyContextKey = Symbol.for('promptfoo.maxConcurrencyContext.v1');
+const maxConcurrencyContexts = globalThis as Record<
+  symbol,
+  AsyncLocalStorage<{ maxConcurrency: number | undefined }> | undefined
+>;
+const maxConcurrencyContext = (maxConcurrencyContexts[maxConcurrencyContextKey] ??=
+  new AsyncLocalStorage<{ maxConcurrency: number | undefined }>());
+interface EnvironmentContext {
+  invocation: Pick<CliState, 'basePath' | 'config' | 'selectedProviderConfigs'>;
+  env: EnvOverrides | undefined;
+  envFileOverrides?: EnvOverrides;
+}
+// JS configs can import the SDK alongside the CLI's separately bundled module copy.
+// Both copies access the same invocation through this async context.
+const environmentContextKey = Symbol.for('promptfoo.environmentContext.v1');
+const environmentContexts = globalThis as Record<
+  symbol,
+  AsyncLocalStorage<EnvironmentContext> | undefined
+>;
+const envContext = (environmentContexts[environmentContextKey] ??=
+  new AsyncLocalStorage<EnvironmentContext>());
 const requestTracingConfigContext = new AsyncLocalStorage<{
   tracingConfig: NonNullable<TestSuite['tracing']>;
 }>();
 let globalMaxConcurrency: number | undefined;
+const globalInvocation: EnvironmentContext['invocation'] = {};
 let activeOtlpReceiver: ActiveOtlpReceiver | undefined;
 
 const state: CliState = {
+  get basePath() {
+    return (envContext.getStore()?.invocation ?? globalInvocation).basePath;
+  },
+  set basePath(value: string | undefined) {
+    (envContext.getStore()?.invocation ?? globalInvocation).basePath = value;
+  },
+  get config() {
+    return (envContext.getStore()?.invocation ?? globalInvocation).config;
+  },
+  set config(value: CliState['config']) {
+    (envContext.getStore()?.invocation ?? globalInvocation).config = value;
+  },
+  get selectedProviderConfigs() {
+    return (envContext.getStore()?.invocation ?? globalInvocation).selectedProviderConfigs;
+  },
+  set selectedProviderConfigs(value: CliState['selectedProviderConfigs']) {
+    (envContext.getStore()?.invocation ?? globalInvocation).selectedProviderConfigs = value;
+  },
   get maxConcurrency() {
     const store = maxConcurrencyContext.getStore();
     if (store) {
@@ -90,8 +143,30 @@ const state: CliState = {
     }
     globalMaxConcurrency = value;
   },
-  withMaxConcurrency<T>(maxConcurrency: number, fn: () => Promise<T>): Promise<T> {
+  withMaxConcurrency<T>(maxConcurrency: number | undefined, fn: () => Promise<T>): Promise<T> {
     return maxConcurrencyContext.run({ maxConcurrency }, fn);
+  },
+  get env() {
+    const store = envContext.getStore();
+    return store ? store.env : state.config?.env;
+  },
+  get envFileOverrides() {
+    return envContext.getStore()?.envFileOverrides;
+  },
+  withEnvFileOverrides<T>(env: EnvOverrides | undefined, fn: () => T): T {
+    return envContext.run(
+      {
+        invocation: { ...(envContext.getStore()?.invocation ?? globalInvocation) },
+        env: undefined,
+        envFileOverrides: env,
+      },
+      fn,
+    );
+  },
+  withEnv<T>(env: EnvOverrides | undefined, fn: () => T): T {
+    // Config loading may resolve the path inside a nested environment scope.
+    const invocation = envContext.getStore()?.invocation ?? globalInvocation;
+    return envContext.run({ invocation, env, envFileOverrides: state.envFileOverrides }, fn);
   },
   get requestTracingConfig() {
     return requestTracingConfigContext.getStore()?.tracingConfig;
@@ -112,6 +187,6 @@ const state: CliState = {
   },
 };
 
-setEnvOverridesProvider(() => state.config?.env);
+setEnvOverridesProvider((layer) => (layer === 'file' ? state.envFileOverrides : state.env));
 
 export default state;

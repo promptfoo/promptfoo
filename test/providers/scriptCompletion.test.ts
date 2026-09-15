@@ -1,14 +1,18 @@
 import { execFile } from 'child_process';
 import * as crypto from 'crypto';
 import * as fs from 'fs';
+import path from 'path';
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import * as cacheModule from '../../src/cache';
+import cliState from '../../src/cliState';
 import {
   getFileHashes,
+  getScriptCacheKey,
   parseScriptParts,
   ScriptCompletionProvider,
 } from '../../src/providers/scriptCompletion';
+import { mockProcessEnv } from '../util/utils';
 import type { MockedFunction } from 'vitest';
 
 vi.mock('child_process', async (importOriginal) => {
@@ -89,54 +93,77 @@ describe('getFileHashes', () => {
     createHashMock = vi.mocked(crypto.createHash);
   });
 
-  it('should return file hashes for existing files', () => {
-    const scriptParts = ['file1.js', 'file2.js', 'nonexistent.js'];
-    const mockFileContent1 = 'content1';
-    const mockFileContent2 = 'content2';
-    const mockHash1 = 'hash1';
-    const mockHash2 = 'hash2';
+  it.each([undefined, '/configured/project'])(
+    'hashes existing files relative to %s',
+    (basePath) => {
+      const scriptParts = ['file1.js', 'file2.js', 'nonexistent.js'];
+      const filePaths = scriptParts.map((part) => (basePath ? path.resolve(basePath, part) : part));
+      const mockFileContent1 = 'content1';
+      const mockFileContent2 = 'content2';
+      const mockHash1 = 'hash1';
+      const mockHash2 = 'hash2';
 
-    existsSyncMock.mockImplementation(function (path: fs.PathLike) {
-      return normalizeFsPath(path) !== 'nonexistent.js';
-    });
-    statSyncMock.mockReturnValue({
-      isFile: () => true,
-      isDirectory: () => false,
-      isBlockDevice: () => false,
-      isCharacterDevice: () => false,
-      isSymbolicLink: () => false,
-      isFIFO: () => false,
-      isSocket: () => false,
-    } as fs.Stats);
-    readFileSyncMock.mockImplementation(function (path: fs.PathOrFileDescriptor) {
-      const normalizedPath = normalizeFsPath(path);
-      if (normalizedPath === 'file1.js') {
-        return mockFileContent1;
-      }
-      if (normalizedPath === 'file2.js') {
-        return mockFileContent2;
-      }
-      throw new Error('File not found');
-    });
+      existsSyncMock.mockImplementation(function (path: fs.PathLike) {
+        return filePaths.slice(0, 2).includes(normalizeFsPath(path));
+      });
+      statSyncMock.mockReturnValue({
+        isFile: () => true,
+        isDirectory: () => false,
+        isBlockDevice: () => false,
+        isCharacterDevice: () => false,
+        isSymbolicLink: () => false,
+        isFIFO: () => false,
+        isSocket: () => false,
+      } as fs.Stats);
+      readFileSyncMock.mockImplementation(function (path: fs.PathOrFileDescriptor) {
+        const normalizedPath = normalizeFsPath(path);
+        if (normalizedPath === filePaths[0]) {
+          return mockFileContent1;
+        }
+        if (normalizedPath === filePaths[1]) {
+          return mockFileContent2;
+        }
+        throw new Error('File not found');
+      });
 
-    const mockHashUpdate = {
-      update: vi.fn().mockReturnThis(),
-      digest: vi.fn(),
-    } as unknown as crypto.Hash;
-    vi.mocked(mockHashUpdate.digest)
-      .mockImplementationOnce(function () {
-        return mockHash1;
-      })
-      .mockReturnValueOnce(mockHash2);
-    createHashMock.mockReturnValue(mockHashUpdate);
+      const mockHashUpdate = {
+        update: vi.fn().mockReturnThis(),
+        digest: vi.fn(),
+      } as unknown as crypto.Hash;
+      vi.mocked(mockHashUpdate.digest)
+        .mockImplementationOnce(function () {
+          return mockHash1;
+        })
+        .mockReturnValueOnce(mockHash2);
+      createHashMock.mockReturnValue(mockHashUpdate);
 
-    const result = getFileHashes(scriptParts);
+      const result = getFileHashes(scriptParts, basePath);
 
-    expect(result).toEqual([mockHash1, mockHash2]);
-    expect(existsSyncMock).toHaveBeenCalledTimes(3);
-    expect(readFileSyncMock).toHaveBeenCalledTimes(2);
-    expect(createHashMock).toHaveBeenCalledTimes(2);
-  });
+      expect(result).toEqual([mockHash1, mockHash2]);
+      expect(existsSyncMock).toHaveBeenCalledTimes(3);
+      expect(readFileSyncMock).toHaveBeenCalledTimes(2);
+      expect(createHashMock).toHaveBeenCalledTimes(2);
+    },
+  );
+
+  it.each(['--config=settings.json', '--config=settings=local.json', '-c=settings.json'])(
+    'invalidates file hashes when %s changes',
+    async (argument) => {
+      const file = path.resolve('/project', argument.slice(argument.indexOf('=') + 1));
+      existsSyncMock.mockImplementation((candidate) => normalizeFsPath(candidate) === file);
+      statSyncMock.mockReturnValue({ isFile: () => true } as fs.Stats);
+      readFileSyncMock.mockReturnValue('first configuration');
+      createHashMock.mockImplementation(
+        (await vi.importActual<typeof import('crypto')>('crypto')).createHash,
+      );
+
+      const initial = getFileHashes(['node', 'target.js', argument], '/project');
+      expect(initial).toHaveLength(1);
+      expect(getFileHashes(['node', 'target.js', argument], '/project')).toEqual(initial);
+      readFileSyncMock.mockReturnValue('changed configuration');
+      expect(getFileHashes(['node', 'target.js', argument], '/project')).not.toEqual(initial);
+    },
+  );
 
   it('should return an empty array for non-existent files', () => {
     const scriptParts = ['nonexistent1.js', 'nonexistent2.js'];
@@ -151,10 +178,53 @@ describe('getFileHashes', () => {
   });
 });
 
+describe('script cache environment identity', () => {
+  let restoreEnv: () => void;
+
+  beforeEach(async () => {
+    restoreEnv = mockProcessEnv({ REGION: 'west' }, { clear: true });
+    vi.mocked(cacheModule.isCacheEnabled).mockReset().mockReturnValue(true);
+    vi.mocked(crypto.createHash).mockImplementation(
+      (await vi.importActual<typeof import('crypto')>('crypto')).createHash,
+    );
+  });
+
+  afterEach(() => restoreEnv());
+
+  it('changes the cache identity when a non-secret child environment changes', () => {
+    const first = getScriptCacheKey('exec', 'source', ['prompt']);
+    expect(first).toMatch(/^exec:[a-f0-9]{64}$/);
+    const restoreRegion = mockProcessEnv({ REGION: 'east' });
+    try {
+      expect(getScriptCacheKey('exec', 'source', ['prompt'])).not.toBe(first);
+    } finally {
+      restoreRegion();
+    }
+    expect(getScriptCacheKey('exec', 'source', ['prompt'])).toBe(first);
+  });
+
+  it.each(
+    ['OPENAI_API_KEY', 'GITHUB_TOKEN', 'MY_SECRET_KEY'].flatMap((name) =>
+      ['account-a', 'account-b'].map((credential) => ({ name, credential })),
+    ),
+  )('bypasses caching when the child inherits $name: $credential', ({ name, credential }) => {
+    const restoreCredential = mockProcessEnv({ [name]: credential });
+    try {
+      expect(getScriptCacheKey('exec', 'source', ['prompt'])).toBeUndefined();
+    } finally {
+      restoreCredential();
+    }
+  });
+});
+
 describe('ScriptCompletionProvider', () => {
+  let restoreHostEnv: () => void;
+  afterEach(() => restoreHostEnv());
+
   let provider: ScriptCompletionProvider;
 
   beforeEach(() => {
+    restoreHostEnv = mockProcessEnv({}, { clear: true });
     provider = new ScriptCompletionProvider('node script.js');
     vi.clearAllMocks();
     vi.mocked(cacheModule.getCache).mockReset();
@@ -187,6 +257,29 @@ describe('ScriptCompletionProvider', () => {
 
   it('should return the correct id', () => {
     expect(provider.id()).toBe('exec:node script.js');
+  });
+
+  it('passes file defaults to the child without changing the host environment', async () => {
+    const restore = mockProcessEnv({ PROMPTFOO_REVIEW_ENV_PROBE: 'host' });
+    vi.mocked(execFile).mockImplementation(function (_cmd, _args, options, callback) {
+      const env = (options as { env?: NodeJS.ProcessEnv }).env;
+      (callback as (error: Error | null, stdout: string, stderr: string) => void)(
+        null,
+        env?.PROMPTFOO_REVIEW_ENV_PROBE ?? 'missing',
+        '',
+      );
+      return { stdin: { end: vi.fn() } } as any;
+    });
+    try {
+      const result = await cliState.withEnvFileOverrides(
+        { PROMPTFOO_REVIEW_ENV_PROBE: 'file' },
+        () => provider.callApi('hello'),
+      );
+      expect(result.output).toBe('file');
+      expect(process.env.PROMPTFOO_REVIEW_ENV_PROBE).toBe('host');
+    } finally {
+      restore();
+    }
   });
 
   it('should close stdin on the child process to prevent hanging', async () => {
@@ -265,6 +358,35 @@ describe('ScriptCompletionProvider', () => {
     await expect(provider.callApi('test prompt')).rejects.toThrow(utf8Error);
   });
 
+  it('bypasses cache reads and writes when provider environment is configured', async () => {
+    createHashMock.mockImplementation(
+      (await vi.importActual<typeof import('crypto')>('crypto')).createHash,
+    );
+    vi.mocked(cacheModule.isCacheEnabled).mockReturnValue(true);
+    const cache = {
+      get: vi.fn().mockResolvedValue(JSON.stringify({ output: 'cached' })),
+      set: vi.fn(),
+    };
+    vi.mocked(cacheModule.getCache).mockResolvedValue(cache as never);
+    vi.mocked(execFile).mockImplementation(function (_cmd, _args, _options, callback) {
+      (callback as (error: Error | null, stdout: string, stderr: string) => void)(
+        null,
+        'fresh',
+        '',
+      );
+      return {} as any;
+    });
+    for (const value of ['cache-private-first', 'cache-private-second', 'cache-private-first']) {
+      const provider = new ScriptCompletionProvider('node script.js', {
+        config: {},
+        env: { OPENAI_API_KEY: value },
+      });
+      await provider.callApi('unchanged prompt');
+    }
+    expect(cache.get).not.toHaveBeenCalled();
+    expect(cache.set).not.toHaveBeenCalled();
+  });
+
   it('should use cache when available', async () => {
     const cachedResult = { output: 'cached result' };
     const mockCache = {
@@ -290,9 +412,7 @@ describe('ScriptCompletionProvider', () => {
     const result = await provider.callApi('test prompt');
     expect(result.cached).toBe(true);
     expect(result).toEqual({ ...cachedResult, cached: true });
-    expect(mockCache.get).toHaveBeenCalledWith(
-      'exec:node script.js:mock hash:mock hash:test prompt:undefined',
-    );
+    expect(mockCache.get).toHaveBeenCalledWith('exec:mock hash');
     expect(execFile).not.toHaveBeenCalled();
   });
 

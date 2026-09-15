@@ -6,7 +6,8 @@ import { type Options as CsvOptions, parse as csvParse } from 'csv-parse/sync';
 import { globSync, hasMagic } from 'glob';
 import nunjucks from 'nunjucks';
 import cliState from '../cliState';
-import { getEnvBool } from '../envars';
+import { getEnvBool, isTemplateProcessEnvDisabled } from '../envars';
+import { getProcessEnv } from '../envOverrides';
 import { importModule } from '../esm';
 import logger from '../logger';
 import { runPython } from '../python/pythonUtils';
@@ -51,8 +52,10 @@ export function getNunjucksEngineForFilePath(): nunjucks.Environment {
 
   // Add environment variables as template globals
   env.addGlobal('env', {
-    ...process.env,
-    ...cliState.config?.env,
+    ...(isTemplateProcessEnvDisabled() ? {} : getProcessEnv()),
+    ...Object.fromEntries(
+      Object.entries(cliState.env ?? {}).filter(([, value]) => value !== undefined),
+    ),
   });
 
   return env;

@@ -1,9 +1,90 @@
+import { isDeepStrictEqual } from 'node:util';
+
 import { getEnvBool } from '../envars';
 import logger from '../logger';
+import { type ApiProvider, isApiProvider } from '../types/providers';
 import { getNunjucksEngine } from './templates';
 
 import type { VarValue } from '../types';
 import type { EnvOverrides } from '../types/env';
+
+type ProviderTemplates = WeakMap<
+  ApiProvider,
+  { source: Pick<ApiProvider, 'config' | 'label'>; rendered: Pick<ApiProvider, 'config' | 'label'> }
+>;
+// The CLI and an SDK imported by a JS config must use the same original templates.
+const providerTemplatesKey = Symbol.for('promptfoo.providerTemplates.v1');
+const templateStores = globalThis as Record<symbol, ProviderTemplates | undefined>;
+const providerTemplates = (templateStores[providerTemplatesKey] ??= new WeakMap());
+
+function mapTemplateObject<T>(
+  value: T,
+  visit: (value: unknown, key: string) => unknown,
+  seen: WeakMap<object, unknown>,
+): T {
+  if (!value || typeof value !== 'object' || isApiProvider(value)) {
+    return value;
+  }
+  const prototype = Object.getPrototypeOf(value);
+  if (!Array.isArray(value) && prototype !== Object.prototype && prototype !== null) {
+    return value;
+  }
+  if (seen.has(value)) {
+    return seen.get(value) as T;
+  }
+  const result = Array.isArray(value) ? new Array(value.length) : Object.create(prototype);
+  seen.set(value, result);
+  for (const [key, item] of Object.entries(value)) {
+    Object.defineProperty(result, key, {
+      value: visit(item, key),
+      enumerable: true,
+      writable: true,
+      configurable: true,
+    });
+  }
+  return result;
+}
+
+function snapshotProviderTemplate<T>(
+  value: T,
+  previous?: { rendered: unknown; source: unknown },
+  seen = new WeakMap<object, unknown>(),
+): T {
+  if (!value || typeof value !== 'object') {
+    return previous && value === previous.rendered ? (previous.source as T) : value;
+  }
+  return mapTemplateObject(
+    value,
+    (item, key) =>
+      snapshotProviderTemplate(
+        item,
+        previous && {
+          rendered: (previous.rendered as Record<string, unknown> | undefined)?.[key],
+          source: (previous.source as Record<string, unknown> | undefined)?.[key],
+        },
+        seen,
+      ),
+    seen,
+  );
+}
+
+export function getProviderConfigForEnv<T extends ApiProvider>(
+  provider: T,
+  envOverrides: EnvOverrides,
+): T['config'] {
+  const templates = providerTemplates.get(provider);
+  return renderEnvOnlyInObject(
+    snapshotProviderTemplate(
+      provider.config,
+      templates && {
+        rendered: templates.rendered.config,
+        source: templates.source.config,
+      },
+    ),
+    envOverrides,
+    true,
+  );
+}
 
 /**
  * Renders ONLY environment variable templates in an object, leaving all other templates untouched.
@@ -32,8 +113,50 @@ export function renderEnvOnlyInObject<T>(
   obj: T,
   envOverrides?: EnvOverrides,
   replaceBase?: boolean,
+  seen = new WeakMap<object, unknown>(),
 ): T {
   if (getEnvBool('PROMPTFOO_DISABLE_TEMPLATING')) {
+    return obj;
+  }
+
+  if (obj && typeof obj === 'object' && seen.has(obj)) {
+    return seen.get(obj) as T;
+  }
+  if (isApiProvider(obj)) {
+    seen.set(obj, obj);
+    let templates = providerTemplates.get(obj);
+    if (!templates) {
+      templates = { source: {}, rendered: {} };
+      providerTemplates.set(obj, templates);
+    }
+    for (const key of ['config', 'label'] as const) {
+      templates.source[key] = snapshotProviderTemplate(obj[key], {
+        rendered: templates.rendered[key],
+        source: templates.source[key],
+      });
+      if (templates.source[key] !== undefined) {
+        const rendered = renderEnvOnlyInObject(
+          templates.source[key],
+          envOverrides,
+          replaceBase,
+          seen,
+        );
+        if (!isDeepStrictEqual(rendered, obj[key]) && !Reflect.set(obj, key, rendered)) {
+          if (key === 'config') {
+            // Wrappers can expose a mutable backing config through a getter.
+            Object.assign(obj.config, rendered);
+          } else {
+            Object.defineProperty(obj, key, {
+              value: rendered,
+              writable: true,
+              configurable: true,
+              enumerable: true,
+            });
+          }
+        }
+      }
+      templates.rendered[key] = snapshotProviderTemplate(obj[key]);
+    }
     return obj;
   }
 
@@ -87,31 +210,13 @@ export function renderEnvOnlyInObject<T>(
     }) as unknown as T;
   }
 
-  if (Array.isArray(obj)) {
-    return obj.map((item) =>
-      renderEnvOnlyInObject(item, envOverrides, replaceBase),
-    ) as unknown as T;
-  }
-
-  if (typeof obj === 'object' && obj !== null) {
-    const result: Record<string, unknown> = {};
-    for (const key in obj) {
-      if (key === '_conversation') {
-        // Conversation history is runtime data and may contain untrusted model output.
-        // Preserve it as literal data instead of rendering env templates.
-        result[key] = (obj as Record<string, unknown>)[key];
-        continue;
-      }
-      result[key] = renderEnvOnlyInObject(
-        (obj as Record<string, unknown>)[key],
-        envOverrides,
-        replaceBase,
-      );
-    }
-    return result as T;
-  }
-
-  return obj;
+  return mapTemplateObject(
+    obj,
+    (item, key) =>
+      // Conversation history is untrusted runtime data, not a template.
+      key === '_conversation' ? item : renderEnvOnlyInObject(item, envOverrides, replaceBase, seen),
+    seen,
+  );
 }
 
 export function renderVarsInObject<T>(obj: T, vars?: Record<string, VarValue>): T {

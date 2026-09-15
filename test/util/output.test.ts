@@ -171,7 +171,7 @@ describe('writeOutput', () => {
     expect(fsPromises.writeFile).toHaveBeenCalledTimes(1);
   });
 
-  it('exports very large token-like config values with secret redaction intact', async () => {
+  it('preserves large encoded inputs while redacting named credentials', async () => {
     const eval_ = new Eval({
       tests: [{ vars: { media: 'A'.repeat(16_369_336), message: 'Public fixture text.' } }],
       providers: [{ id: 'echo', config: { apiKey: 'fixture-api-key', max_tokens: 37 } }],
@@ -182,10 +182,8 @@ describe('writeOutput', () => {
     expect(fsPromises.writeFile).toHaveBeenCalledTimes(1);
     const outputJson = vi.mocked(fsPromises.writeFile).mock.calls[0][1] as string;
     const parsed = JSON.parse(outputJson);
-    expect(parsed.config.tests[0].vars).toEqual({
-      media: '[REDACTED]',
-      message: 'Public fixture text.',
-    });
+    expect(parsed.config.tests[0].vars.media === 'A'.repeat(16_369_336)).toBe(true);
+    expect(parsed.config.tests[0].vars.message).toBe('Public fixture text.');
     expect(parsed.config.providers[0].config).toEqual({
       apiKey: '[REDACTED]',
       max_tokens: 37,
@@ -193,13 +191,53 @@ describe('writeOutput', () => {
     expect(outputJson).not.toContain('fixture-api-key');
   });
 
+  it.each(['json', 'yaml'])(
+    'preserves empty legacy table cells in %s exports',
+    async (extension) => {
+      const eval_ = new Eval({});
+      const summary = await eval_.toEvaluateSummary();
+      const output = {
+        id: 'populated',
+        pass: true,
+        score: 1,
+        cost: 0,
+        failureReason: ResultFailureReason.NONE,
+        latencyMs: 1,
+        namedScores: {},
+        prompt: 'Prompt',
+        text: 'Public output',
+        testCase: {},
+      };
+      eval_.oldResults = {
+        version: 2,
+        timestamp: summary.timestamp,
+        stats: summary.stats,
+        results: [],
+        table: {
+          head: { vars: [], prompts: [] },
+          body: [{ testIdx: 0, vars: [], test: {}, outputs: [null as never, output] }],
+        },
+      };
+
+      await writeOutput(`output.${extension}`, eval_, null);
+
+      const text = vi.mocked(fsPromises.writeFile).mock.calls[0][1] as string;
+      const exported = extension === 'json' ? JSON.parse(text) : yaml.load(text);
+      expect(exported.results.table.body[0].outputs).toEqual([
+        null,
+        expect.objectContaining(output),
+      ]);
+      expect(eval_.oldResults.table.body[0].outputs).toEqual([null, output]);
+    },
+  );
+
   it.each(['json', 'yaml', 'html', 'xml'])(
-    'redacts legacy prompt config in %s exports',
+    'redacts legacy table credentials and honors strip flags in %s exports',
     async (extension) => {
       const prompt = {
         raw: 'Summarize',
         label: 'gateway',
-        provider: 'openai:agents-api',
+        provider: 'webhook:https://hooks.slack.com/services/T123/B123/PRIVATE_PROMPT_PROVIDER',
         config: { apiHost: 'gateway.example', headers: { 'X-Gateway-Auth': 'legacy-header-7294' } },
       };
       const eval_ = new Eval({}, { prompts: [prompt] });
@@ -209,21 +247,93 @@ describe('writeOutput', () => {
         timestamp: summary.timestamp,
         stats: summary.stats,
         results: [],
-        table: { head: { vars: [], prompts: [prompt] }, body: [] },
+        table: {
+          head: { vars: ['value', 'apiKey'], prompts: [prompt] },
+          body: [
+            {
+              testIdx: 0,
+              vars: ['PRIVATE_TABLE_VAR', 'short-secret'],
+              test: {
+                metadata: {
+                  headers: { Authorization: 'Bearer PRIVATE_LEGACY_TEST' },
+                  label: 'Public metadata',
+                },
+              },
+              outputs: [
+                {
+                  id: 'legacy',
+                  pass: false,
+                  score: 1,
+                  cost: 0,
+                  failureReason: ResultFailureReason.ERROR,
+                  latencyMs: 1,
+                  namedScores: {},
+                  prompt: 'Summarize',
+                  text: 'Connection failed https://host.test?api_key=table-error-credential',
+                  error: 'Connection failed https://host.test?api_key=table-error-credential',
+                  testCase: {},
+                  response: {
+                    output: 'Public response',
+                    metadata: {
+                      http: {
+                        status: 200,
+                        statusText: 'OK',
+                        requestHeaders: { Authorization: 'Bearer PRIVATE_LEGACY_RESPONSE' },
+                      },
+                    },
+                  },
+                  gradingResult: {
+                    pass: true,
+                    score: 1,
+                    reason: 'Public verdict',
+                    metadata: {
+                      http: { requestHeaders: { Authorization: 'Bearer PRIVATE_LEGACY_GRADE' } },
+                    },
+                  },
+                },
+              ],
+            },
+          ],
+        },
       };
       if (extension === 'html') {
-        vi.mocked(fsPromises.readFile).mockResolvedValue('{{ results | dump }}');
+        vi.mocked(fsPromises.readFile).mockResolvedValue('{{ results | dump }}|{{ table | dump }}');
       }
       await writeOutput(`output.${extension}`, eval_, null);
       const output = vi.mocked(fsPromises.writeFile).mock.calls[0][1] as string;
       expect(output).not.toContain('legacy-header-7294');
+      expect(output).not.toContain('short-secret');
+      expect(output).toContain('PRIVATE_TABLE_VAR');
+      expect(eval_.oldResults.table.body[0].vars).toEqual(['PRIVATE_TABLE_VAR', 'short-secret']);
+      expect(output).not.toContain('PRIVATE_LEGACY_');
+      expect(output).not.toContain('table-error-credential');
+      expect(output).toContain('Public response');
+      expect(output).not.toContain('PRIVATE_PROMPT_PROVIDER');
       expect(output).toContain('[REDACTED]');
       expect(prompt.config.headers['X-Gateway-Auth']).toBe('legacy-header-7294');
+      const restoreEnv = mockProcessEnv({
+        PROMPTFOO_STRIP_PROMPT_TEXT: 'true',
+        PROMPTFOO_STRIP_RESPONSE_OUTPUT: 'true',
+        PROMPTFOO_STRIP_TEST_VARS: 'true',
+      });
+      try {
+        await writeOutput(`stripped.${extension}`, eval_, null);
+        const stripped = vi.mocked(fsPromises.writeFile).mock.calls.at(-1)![1] as string;
+        expect(stripped).not.toContain('Public response');
+        expect(stripped).not.toContain('PRIVATE_TABLE_VAR');
+        expect(stripped).not.toContain('Summarize');
+        expect(stripped).toContain('[output stripped]');
+        expect(eval_.oldResults.table.body[0].outputs[0].prompt).toBe('Summarize');
+        expect(eval_.oldResults.table.body[0].vars).toEqual(['PRIVATE_TABLE_VAR', 'short-secret']);
+      } finally {
+        restoreEnv();
+      }
     },
   );
 
   it('redacts env and secret config fields in JSON output', async () => {
     const outputPath = 'output.json';
+    const providerId = 'webhook:https://hooks.slack.com/services/T123/B123/PRIVATE_CONFIG_PROVIDER';
     const eval_ = new Eval({
       description: 'Test config',
       tests: 'az://account/container/tests.yaml?sp=r&sig=azure-secret',
@@ -257,6 +367,8 @@ describe('writeOutput', () => {
             },
           },
         },
+        providerId,
+        { id: providerId },
       ],
       tracing: {
         enabled: true,
@@ -314,6 +426,7 @@ describe('writeOutput', () => {
       'X-MCP-Custom': '[REDACTED]',
     });
     for (const credential of [
+      'PRIVATE_CONFIG_PROVIDER',
       'host-credential',
       'url-credential',
       'query-credential',
@@ -647,6 +760,58 @@ describe('writeOutput', () => {
     expect(fsPromises.writeFile).toHaveBeenCalledTimes(1);
   });
 
+  it.each(['json', 'yaml', 'yml', 'txt', 'xml'])(
+    'redacts credential-bearing live result fields in %s exports without mutating hooks',
+    async (extension) => {
+      const evaluation = new Eval({});
+      const result = {
+        success: true,
+        score: 1,
+        error: undefined,
+        response: {
+          output: 'visible output',
+          metadata: { headers: { Authorization: 'Bearer response-private' } },
+        },
+        gradingResult: {
+          pass: true,
+          score: 1,
+          reason: 'visible grade',
+          componentResults: [
+            {
+              pass: true,
+              score: 1,
+              metadata: { http: { requestHeaders: { 'X-Auth-Token': 'grade-private' } } },
+            },
+          ],
+        },
+        metadata: {
+          headers: { Authorization: 'Bearer response-private' },
+          http: { requestHeaders: { 'X-Auth-Token': 'metadata-private' } },
+        },
+        testCase: {},
+        vars: {},
+        provider: { id: 'echo' },
+        prompt: { raw: 'hello', label: 'hello' },
+        promptIdx: 0,
+        testIdx: 0,
+      } as unknown as EvaluateResult;
+      const summary = await evaluation.toEvaluateSummary();
+      vi.spyOn(evaluation, 'toEvaluateSummary').mockResolvedValue({
+        ...summary,
+        results: [result],
+      });
+      const original = structuredClone(result);
+      await writeOutput(`output.${extension}`, evaluation, null);
+      const written = vi.mocked(fsPromises.writeFile).mock.calls[0][1] as string;
+      expect(written).toContain('visible output');
+      expect(written).toContain('visible grade');
+      for (const credential of ['response-private', 'grade-private', 'metadata-private']) {
+        expect(written).not.toContain(credential);
+      }
+      expect(result).toEqual(original);
+    },
+  );
+
   it.each(['yaml', 'txt'])(
     'sanitizes runtime options before writing %s output for in-memory evals',
     async (extension) => {
@@ -666,6 +831,25 @@ describe('writeOutput', () => {
       const written = vi.mocked(fsPromises.writeFile).mock.calls[0][1] as string;
       const parsed = yaml.load(written) as { runtimeOptions: Record<string, unknown> };
       expect(parsed.runtimeOptions).toEqual({ cache: false });
+    },
+  );
+
+  it.each(['json', 'yaml'])(
+    'redacts provider selection credentials in %s exports without discarding replay fingerprints',
+    async (extension) => {
+      const id = 'webhook:https://hooks.slack.com/services/T-short/B-short/short-secret';
+      const selection = { providers: [{ index: 0, id, fingerprint: 'a'.repeat(64) }] };
+      const evaluation = new Eval({}, { runtimeOptions: { providerSelection: selection } });
+      await writeOutput(`output.${extension}`, evaluation, null);
+      const written = vi.mocked(fsPromises.writeFile).mock.calls[0][1] as string;
+      const exported = yaml.load(written) as {
+        runtimeOptions: { providerSelection: typeof selection };
+      };
+      expect(JSON.stringify(exported.runtimeOptions)).not.toContain('short-secret');
+      expect(exported.runtimeOptions.providerSelection.providers[0].fingerprint).toBe(
+        'a'.repeat(64),
+      );
+      expect(evaluation.runtimeOptions?.providerSelection).toEqual(selection);
     },
   );
 
@@ -1806,7 +1990,7 @@ describe('writeOutput', () => {
 
     const eval_ = new Eval({});
     await eval_.addPrompts([{ raw: 'prompt1', label: 'First Prompt', provider: 'openai:gpt-4' }]);
-    eval_.setVars(['input']);
+    eval_.setVars(['input', 'apiKey']);
 
     const result: EvaluateResult = {
       success: true,
@@ -1817,10 +2001,10 @@ describe('writeOutput', () => {
       provider: { id: 'openai:gpt-4' },
       prompt: { raw: 'prompt1', label: 'First Prompt' },
       response: { output: 'Test output' },
-      vars: { input: 'test input' },
+      vars: { input: 'test input', apiKey: 'short-sheet-secret' },
       promptIdx: 0,
       testIdx: 0,
-      testCase: { vars: { input: 'test input' } },
+      testCase: { vars: { input: 'test input', apiKey: 'short-sheet-secret' } },
       promptId: 'prompt1',
     };
     await eval_.addResult(result);
@@ -1830,6 +2014,8 @@ describe('writeOutput', () => {
     expect(googleSheets.writeCsvToGoogleSheet).toHaveBeenCalledTimes(1);
     const rows = vi.mocked(googleSheets.writeCsvToGoogleSheet).mock.calls[0][0];
     expect(rows.length).toBeGreaterThan(0);
+    expect(rows[0]).toMatchObject({ input: 'test input', apiKey: '[REDACTED]' });
+    expect(JSON.stringify(rows)).not.toContain('short-sheet-secret');
 
     const columnKeys = Object.keys(rows[0]);
     expect(columnKeys).toContain('[openai:gpt-4] First Prompt');

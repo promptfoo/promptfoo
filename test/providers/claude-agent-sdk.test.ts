@@ -1797,6 +1797,25 @@ describe('ClaudeCodeSDKProvider', () => {
     });
 
     describe('config.env passthrough (OTEL / subprocess env)', () => {
+      it('passes file defaults below explicit subprocess environment values', async () => {
+        mockQuery.mockReturnValue(createMockResponse('ok'));
+        const provider = new ClaudeCodeSDKProvider({
+          env: { ANTHROPIC_API_KEY: 'test-api-key' },
+          config: { env: { PROMPTFOO_REVIEW_ENV_OVERRIDE: 'explicit' } },
+        });
+        await cliState.withEnvFileOverrides(
+          {
+            PROMPTFOO_REVIEW_ENV_PROBE: 'file',
+            PROMPTFOO_REVIEW_ENV_OVERRIDE: 'file',
+          },
+          () => provider.callApi('prompt'),
+        );
+        expect(mockQuery.mock.calls.at(-1)?.[0].options.env).toMatchObject({
+          PROMPTFOO_REVIEW_ENV_PROBE: 'file',
+          PROMPTFOO_REVIEW_ENV_OVERRIDE: 'explicit',
+        });
+      });
+
       it('preserves the previous five-level subagent nesting default', async () => {
         mockQuery.mockReturnValue(createMockResponse('ok'));
 
