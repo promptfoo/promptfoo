@@ -1,5 +1,6 @@
 import { createHash } from 'node:crypto';
 
+import { PDFDocument } from 'pdf-lib';
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createPdf } from '../../src/redteam/pdf';
 import { mockProcessEnv } from '../util/utils';
@@ -33,6 +34,9 @@ describe('PDF upload sample app', () => {
   }
 
   it('forwards identical PDF bytes as native file input and returns the received hash', async () => {
+    vi.spyOn(PDFDocument, 'load').mockRejectedValue(
+      new Error('Parsing in the server is forbidden'),
+    );
     const upstream = vi.spyOn(globalThis, 'fetch').mockResolvedValue(
       Response.json({
         status: 'completed',
@@ -67,6 +71,19 @@ describe('PDF upload sample app', () => {
     expect(
       (await app.request('/api/analyze', { method: 'POST', body: new FormData() })).status,
     ).toBe(400);
+    expect(upstream).not.toHaveBeenCalled();
+  });
+
+  it('rejects corrupt PDFs and excessive page counts before calling the model', async () => {
+    const upstream = vi.spyOn(globalThis, 'fetch');
+    const oversized = await PDFDocument.create();
+    for (let i = 0; i < 11; i++) {
+      oversized.addPage();
+    }
+    for (const bytes of [Buffer.from('%PDF-1.7\ncorrupted'), await oversized.save()]) {
+      const response = await app.request('/api/analyze', { method: 'POST', body: upload(bytes) });
+      expect(response.status).toBe(400);
+    }
     expect(upstream).not.toHaveBeenCalled();
   });
 

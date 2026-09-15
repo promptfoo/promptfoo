@@ -176,13 +176,19 @@ describe('handleRedteam', () => {
         receipt: 'A receipt for $1,250.',
       },
     ].flatMap((test) => [
-      { ...test, rawAttachments: false },
-      { ...test, rawAttachments: true },
+      { ...test, rawAttachments: false, encodedJson: false },
+      { ...test, rawAttachments: true, encodedJson: false },
+      { ...test, rawAttachments: false, encodedJson: true },
     ]),
   )(
     'grades readable PDF content for $question with rawAttachments=$rawAttachments without mutating the attachment',
-    async ({ question, receipt, rawAttachments }) => {
-      const media = (value: string) => (rawAttachments ? value.split(',')[1] : value);
+    async ({ question, receipt, rawAttachments, encodedJson }) => {
+      const media = (value: string) =>
+        rawAttachments
+          ? value.split(',')[1]
+          : encodedJson
+            ? `\n${value.replace(/^data:[^,]+,/, (prefix) => prefix.toUpperCase())}\n`
+            : value;
       const docx = await materializeInputVariablesWithMetadata(
         { contract: 'Stale pre-materialization instruction' },
         {
@@ -271,7 +277,8 @@ describe('handleRedteam', () => {
         grade: { pass: false, score: 0, reason: 'Falsified total' },
         rubric: 'Policy rubric',
       });
-      const renderedPrompt = `Summarize ${test.vars.document} in ${test.vars.taskLanguage}. Reference ${test.vars.photo} and ${test.vars.contract}. ${question} Code: ${test.vars.referenceCode}. Explain data:image/png;base64,SU5MSU5F.`;
+      const task = `Summarize ${test.vars.document} in ${test.vars.taskLanguage}. Reference ${test.vars.photo} and ${test.vars.contract}. ${question} Code: ${test.vars.referenceCode}. Explain data:image/png;base64,SU5MSU5F.`;
+      const renderedPrompt = encodedJson ? JSON.stringify({ task }) : task;
       await handleRedteam({
         assertion,
         baseType: getAssertionBaseType(assertion),
@@ -299,8 +306,9 @@ describe('handleRedteam', () => {
       });
       const [prompt, , gradingTest] = grader.mock.calls[0];
       expect(prompt).toContain('Total: $1,250.00');
+      const expectedTask = `Summarize [PDF attachment] in Spanish. Reference [Attachment] and [Attachment]. ${question} Code: ${test.vars.referenceCode}. Explain data:image/png;base64,SU5MSU5F.`;
       expect(JSON.parse(prompt).renderedPrompt).toBe(
-        `Summarize [PDF attachment] in Spanish. Reference [Attachment] and [Attachment]. ${question} Code: ${test.vars.referenceCode}. Explain data:image/png;base64,SU5MSU5F.`,
+        encodedJson ? JSON.stringify({ task: expectedTask }) : expectedTask,
       );
       expect(JSON.parse(prompt).inputs.question).toBe(question);
       expect(gradingTest.vars).not.toHaveProperty('taskLanguage');

@@ -220,8 +220,24 @@ describe('PDF strategy', () => {
     expect(result.vars).not.toHaveProperty('question');
     expect(result.vars).not.toHaveProperty('image');
     expect(result.vars!.sessionId).toBe('Keep auxiliary context');
+    expect(result.metadata!.pdf.companionHashes).toEqual({ image: null });
     expect(original.vars!.question).toBe('What is the total?');
   });
+
+  it.each(['image', 'docx', 'pdf'] as const)(
+    'records %s companion bytes for later integrity checks',
+    async (type) => {
+      const original = testCase();
+      const attachment = '\nDATA:APPLICATION/OCTET-STREAM;BASE64,T3JpZ2luYWw=\n';
+      original.metadata.pluginConfig!.inputs!.reference = { type, description: 'Reference file' };
+      original.vars!.__prompt = JSON.stringify({ document: 'Report $0.', reference: attachment });
+      const [result] = await addPdfTestCases([original], '__prompt', { input: 'document' });
+      expect(result.vars!.reference).toBe(attachment);
+      expect(result.metadata!.pdf.companionHashes).toEqual({
+        reference: `sha256:${createHash('sha256').update('Original').digest('hex')}`,
+      });
+    },
+  );
 
   it.each(['data:image/png;base64,TkVX', 'A new receipt for $1,250.'])(
     'uses current companion content instead of stale materialized bytes: %s',
@@ -402,13 +418,15 @@ describe('PDF strategy', () => {
       'readable attack text',
     );
     const template = await fs.readFile(path.join(directory, 'invoice.pdf'));
-    await expect(
-      addPdfTestCases(
-        [testCase(`data:application/pdf;base64,${template.toString('base64')}`)],
-        '__prompt',
-        {},
-      ),
-    ).rejects.toThrow('readable attack text');
+    for (const prefix of [
+      'data:application/pdf;base64,',
+      ' data:APPLICATION/PDF;base64,',
+      '\nDATA:APPLICATION/PDF;BASE64,',
+    ]) {
+      await expect(
+        addPdfTestCases([testCase(`${prefix}${template.toString('base64')}\n`)], '__prompt', {}),
+      ).rejects.toThrow('readable attack text');
+    }
     await fs.writeFile(path.join(directory, 'invoice.pdf'), 'corrupted');
     await expect(addPdfTestCases([testCase()], '__prompt', {})).rejects.toThrow('valid PDF');
   });

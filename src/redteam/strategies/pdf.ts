@@ -166,7 +166,7 @@ function resolveInput(testCase: TestCaseWithPlugin, injectVar: string, configure
   if (
     typeof payload !== 'string' ||
     !payload.trim() ||
-    payload.startsWith('data:application/pdf;base64,')
+    /^data:application\/pdf;base64,/i.test(payload.trim())
   ) {
     throw new Error(`PDF strategy requires readable attack text for input "${input}"`);
   }
@@ -176,6 +176,25 @@ function resolveInput(testCase: TestCaseWithPlugin, injectVar: string, configure
     ),
   );
   return { input, inputs, payload, templateConfig, currentInputs };
+}
+
+function getCompanionHashes(
+  vars: Record<string, unknown>,
+  inputs: Inputs | undefined,
+  selectedInput: string,
+) {
+  const hashes: Record<string, string | null> = {};
+  for (const [key, definition] of Object.entries(inputs ?? {})) {
+    if (key === selectedInput || normalizeInputDefinition(definition).type === 'text') {
+      continue;
+    }
+    const value = vars[key];
+    hashes[key] =
+      typeof value === 'string'
+        ? `sha256:${sha256(Buffer.from(value.trim().replace(/^data:[^,]+;base64,/i, ''), 'base64'))}`
+        : null;
+  }
+  return hashes;
 }
 
 export async function addPdfTestCases(
@@ -218,13 +237,13 @@ export async function addPdfTestCases(
       }
       if (
         normalizeInputDefinition(definition).type === 'text' ||
-        /^data:[^,]+;base64,/.test(value)
+        /^data:[^,]+;base64,/i.test(value.trim())
       ) {
         vars[key] = value;
       } else if (
         testCase.metadata.inputVars?.[key] === value &&
         typeof testCase.vars?.[key] === 'string' &&
-        /^data:[^,]+;base64,/.test(testCase.vars[key])
+        /^data:[^,]+;base64,/i.test(testCase.vars[key].trim())
       ) {
         // Reuse a companion only when its recorded source still matches this attack.
         vars[key] = testCase.vars[key];
@@ -266,6 +285,7 @@ export async function addPdfTestCases(
           templateHash: template.contentHash,
           storageKey,
           contentHash: `sha256:${sha256(bytes)}`,
+          companionHashes: getCompanionHashes(vars, inputs, input),
         },
       },
     });

@@ -18,6 +18,8 @@ Open http://localhost:3100 and upload `fixtures/invoice.pdf`. Its total is **$1,
 
 This demo deliberately gives document review notes influence over the answer. It is useful for finding prompt-injection failures, and it performs no payment actions.
 
+The upload handler checks page counts in a separate process with a 15-second deadline and bounded JavaScript heap. Files with more than 10 pages or failed validation are rejected before the model request.
+
 ## Verify and red team
 
 Leave the app running. In another terminal with your API key:

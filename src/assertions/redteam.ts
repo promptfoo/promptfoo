@@ -63,12 +63,15 @@ function getPdfGradingInput(test: AtomicTestCase, targetPrompt: string | undefin
     ) {
       continue;
     }
-    const attachment = value.match(/^data:[^,]+;base64,(.+)$/s);
+    const attachment = value.trim().match(/^data:[^,]+;base64,(.+)$/is);
     if (attachment || key === pdf.input || inputs?.[key]) {
       const placeholder = key === pdf.input ? '[PDF attachment]' : '[Attachment]';
-      renderedPrompt = renderedPrompt?.split(value).join(placeholder);
-      if (attachment) {
-        renderedPrompt = renderedPrompt?.split(attachment[1]).join(placeholder);
+      for (const part of attachment ? [value, attachment[0], attachment[1]] : [value]) {
+        renderedPrompt = renderedPrompt
+          ?.split(part)
+          .join(placeholder)
+          .split(JSON.stringify(part).slice(1, -1))
+          .join(placeholder);
       }
     }
   }
@@ -97,9 +100,12 @@ function getPdfGradingInput(test: AtomicTestCase, targetPrompt: string | undefin
         : typeof materialized?.injectedInstruction === 'string'
           ? `[DOCX wrapper body was not recorded]\n\n${materialized.injectedInstruction}`
           : test.metadata?.inputVars?.[key];
-    const bytes = typeof value === 'string' ? value.replace(/^data:[^,]+;base64,/, '') : value;
+    const bytes =
+      typeof value === 'string' ? value.trim().replace(/^data:[^,]+;base64,/i, '') : value;
     vars[key] =
-      typeof readable === 'string' && readable !== bytes && !/^data:[^,]+;base64,/.test(readable)
+      typeof readable === 'string' &&
+      readable !== bytes &&
+      !/^data:[^,]+;base64,/i.test(readable.trim())
         ? readable
         : '[Attachment omitted from grading: readable content unavailable]';
   }

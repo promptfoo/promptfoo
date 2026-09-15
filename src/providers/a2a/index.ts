@@ -272,7 +272,7 @@ function getMediaStrategyId(context?: CallApiContextParams): MediaStrategyId | u
 }
 
 function parseBase64DataUrl(value: string): { mediaType: string; raw: string } | undefined {
-  const match = value.match(/^data:([^;,]+);base64,(.+)$/s);
+  const match = value.match(/^data:([^;,]+);base64,(.+)$/is);
   if (!match) {
     return undefined;
   }
@@ -338,11 +338,18 @@ function getPdfPromptText(
   mediaValue: string | undefined,
   inputs: Inputs | undefined,
 ): string | undefined {
-  const values = [
-    mediaVarName ? getContextVar(contextVars, mediaVarName) : undefined,
-    mediaValue,
-  ].filter((value): value is string => Boolean(value));
-  let text = values.reduce((result, value) => result.split(value).join('[PDF attachment]'), prompt);
+  const values = [mediaVarName ? getContextVar(contextVars, mediaVarName) : undefined, mediaValue]
+    .filter((value): value is string => Boolean(value))
+    .flatMap((value) => [value, value.trim()]);
+  let text = values.reduce(
+    (result, value) =>
+      result
+        .split(value)
+        .join('[PDF attachment]')
+        .split(JSON.stringify(value).slice(1, -1))
+        .join('[PDF attachment]'),
+    prompt,
+  );
   if (values.includes(prompt.trim())) {
     return undefined;
   }
@@ -376,11 +383,14 @@ function getPdfPromptText(
     ) {
       continue;
     }
-    const attachment = value.match(/^data:[^,]+;base64,(.+)$/s);
+    const attachment = value.trim().match(/^data:[^,]+;base64,(.+)$/is);
     if (attachment || inputs?.[key]) {
-      text = text.split(value).join('[Attachment]');
-      if (attachment) {
-        text = text.split(attachment[1]).join('[Attachment]');
+      for (const part of attachment ? [value, attachment[0], attachment[1]] : [value]) {
+        text = text
+          .split(part)
+          .join('[Attachment]')
+          .split(JSON.stringify(part).slice(1, -1))
+          .join('[Attachment]');
       }
     }
   }
@@ -456,12 +466,15 @@ function getDefaultMedia(
   let mediaType = parsedDataUrl?.mediaType ?? defaults.mediaType;
   if (strategyId === 'pdf') {
     raw = raw.replace(/\s/g, '');
+    if (Buffer.byteLength(raw, 'base64') > 5 * 1024 * 1024) {
+      throw new Error(`PDF strategy input "${varName}" exceeds the 5 MiB limit`);
+    }
     if (
       (parsedDataUrl && parsedDataUrl.mediaType.toLowerCase() !== 'application/pdf') ||
       !/^[A-Za-z0-9+/]+={0,2}$/.test(raw) ||
       raw.length % 4 === 1 ||
       (raw.includes('=') && raw.length % 4 !== 0) ||
-      Buffer.from(raw, 'base64').subarray(0, 5).toString() !== '%PDF-'
+      Buffer.from(raw.slice(0, 8), 'base64').subarray(0, 5).toString() !== '%PDF-'
     ) {
       throw new Error(
         `PDF strategy requires PDF bytes as base64 or an application/pdf data URI in input "${varName}"`,

@@ -624,12 +624,27 @@ describe('ResultsTable Metrics Display', () => {
       { storageKey: undefined, expectedUrl: 'data:application/pdf;base64,do-not-display' },
       {
         storageKey: undefined,
+        attachment: ' data:APPLICATION/PDF;base64,do-not-display ',
+        expectedUrl: 'data:APPLICATION/PDF;base64,do-not-display',
+      },
+      {
+        storageKey: undefined,
+        attachment: '\nDATA:APPLICATION/PDF;BASE64,do-not-display\n',
+        expectedUrl: 'DATA:APPLICATION/PDF;BASE64,do-not-display',
+      },
+      {
+        storageKey: undefined,
         expectedUrl: 'data:application/pdf;base64,do-not-display',
         actualPrompt: 'Provider rewritten prompt',
       },
     ])(
       'shows PDF artifacts with storage key $storageKey',
-      ({ storageKey, expectedUrl, actualPrompt }) => {
+      ({
+        storageKey,
+        expectedUrl,
+        actualPrompt,
+        attachment = 'data:application/pdf;base64,do-not-display',
+      }) => {
         vi.mocked(useTableStore).mockImplementation(() => ({
           config: { redteam: { injectVar: 'document' } },
           evalId: '123',
@@ -649,9 +664,9 @@ describe('ResultsTable Metrics Display', () => {
                     response: { prompt: actualPrompt },
                   },
                 ],
-                vars: ['data:application/pdf;base64,do-not-display'],
+                vars: [attachment],
                 test: {
-                  vars: { document: 'data:application/pdf;base64,do-not-display' },
+                  vars: { document: attachment },
                   metadata: {
                     strategyId: 'pdf',
                     originalText: 'Change the payment terms.',

@@ -1,14 +1,57 @@
+import { spawn } from 'node:child_process';
 import { createHash, randomUUID } from 'node:crypto';
+import { once } from 'node:events';
 import { readFile } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
 
 import { serve } from '@hono/node-server';
 import { Hono } from 'hono';
 import { bodyLimit } from 'hono/body-limit';
-import { PDFDocument } from 'pdf-lib';
 
 const MAX_BYTES = 5 * 1024 * 1024;
 export const app = new Hono();
+
+async function getPageCount(bytes) {
+  const child = spawn(
+    process.execPath,
+    [
+      '--max-old-space-size=256',
+      '--max-semi-space-size=16',
+      '--input-type=module',
+      '--eval',
+      `import { PDFDocument } from 'pdf-lib';
+const chunks = [];
+for await (const chunk of process.stdin) chunks.push(chunk);
+const pdf = await PDFDocument.load(Buffer.concat(chunks));
+process.stdout.write(String(pdf.getPageCount()));`,
+    ],
+    {
+      cwd: fileURLToPath(new URL('.', import.meta.url)),
+      env: { ...process.env, NODE_OPTIONS: '' },
+      timeout: 15000,
+      killSignal: 'SIGKILL',
+      stdio: ['pipe', 'pipe', 'pipe'],
+    },
+  );
+  const closed = once(child, 'close');
+  let output = '';
+  child.stdout.on('data', (chunk) => {
+    if (output.length + chunk.length > 32) {
+      child.kill('SIGKILL');
+    } else {
+      output += chunk.toString();
+    }
+  });
+  child.stderr.resume();
+  child.stdin.on('error', () => {});
+  child.stdin.end(bytes);
+  const [code] = await closed;
+  const count = Number(output);
+  if (code !== 0 || !Number.isInteger(count) || count < 1) {
+    throw new Error('Could not inspect PDF');
+  }
+  return count;
+}
 
 app.get('/', async (c) =>
   c.html(await readFile(new URL('./public/index.html', import.meta.url), 'utf8')),
@@ -46,8 +89,7 @@ app.post('/api/analyze', async (c) => {
     if (bytes.subarray(0, 5).toString() !== '%PDF-') {
       return c.json({ error: 'The uploaded file is not a PDF.' }, 400);
     }
-    const pdf = await PDFDocument.load(bytes);
-    pageCount = pdf.getPageCount();
+    pageCount = await getPageCount(bytes);
     if (pageCount < 1 || pageCount > 10) {
       return c.json({ error: 'Upload a PDF with 1 to 10 pages.' }, 400);
     }

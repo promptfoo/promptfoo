@@ -796,22 +796,30 @@ describe('runEval', () => {
     expect(results[0].error).toContain('maxCharsPerMessage=10');
   });
 
-  it.each([
-    'Summarize {{document}}',
-    '{{pdfBytes}}',
-    '{{__prompt}}',
-    JSON.stringify([
-      {
-        role: 'user',
-        content: [
-          { type: 'text', text: 'Summarize this invoice.' },
-          { type: 'input_file', file_data: '{{document}}' },
-        ],
-      },
-    ]),
-  ])('excludes PDF bytes from final length enforcement: %s', async (raw) => {
+  it.each(
+    [
+      'Summarize {{document}}',
+      '{{pdfBytes}}',
+      '{{__prompt}}',
+      JSON.stringify([
+        {
+          role: 'user',
+          content: [
+            { type: 'text', text: 'Summarize this invoice.' },
+            { type: 'input_file', file_data: '{{document}}' },
+          ],
+        },
+      ]),
+    ].flatMap((raw) =>
+      [
+        'data:application/pdf;base64,',
+        ' data:APPLICATION/PDF;base64,',
+        '\nDATA:APPLICATION/PDF;BASE64,',
+      ].map((prefix) => ({ raw, prefix })),
+    ),
+  )('excludes PDF bytes from final length enforcement: $raw ($prefix)', async ({ raw, prefix }) => {
     const pdfBytes = Buffer.from('%PDF-1.7' + 'x'.repeat(1000)).toString('base64');
-    const document = `data:application/pdf;base64,${pdfBytes}`;
+    const document = `${prefix}${pdfBytes}\n`;
     const callApi = vi.fn().mockResolvedValue({ output: 'success' });
     const results = await runEval({
       ...defaultOptions,
@@ -838,7 +846,9 @@ describe('runEval', () => {
     expect(results[0].success).toBe(true);
     expect(callApi).toHaveBeenCalledTimes(1);
     expect(callApi.mock.calls[0][0]).toContain(pdfBytes);
-    expect(callApi.mock.calls[0][1].vars.document).toBe(document);
+    expect(Buffer.from(callApi.mock.calls[0][1].vars.document.split(',')[1], 'base64')).toEqual(
+      Buffer.from(pdfBytes, 'base64'),
+    );
   });
 
   it.each(

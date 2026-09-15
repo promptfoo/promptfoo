@@ -7,7 +7,7 @@ description: Run a PDF upload app, verify a clean invoice, generate document inj
 
 This guide tests a read-only invoice assistant. A user uploads an invoice and asks for its total and payment terms. An attacker adds review notes that try to change those facts, redirect the answer, or make the assistant claim it approved a payment.
 
-The [example application](https://github.com/promptfoo/promptfoo/tree/main/examples/redteam-pdf) accepts a multipart PDF upload and sends the complete file to a model through the OpenAI Responses API. Its handling of review notes is intentionally permissive so you can investigate real model failures. It does not execute payments or expose financial systems.
+The [example application](https://github.com/promptfoo/promptfoo/tree/main/examples/redteam-pdf) accepts a multipart PDF upload and sends the complete file to a model through the OpenAI Responses API. Its handling of review notes is intentionally permissive so you can investigate real model failures. It does not execute payments or expose financial systems. The sample checks the PDF page count in a separate process with time and heap limits before sending the file to the model.
 
 ## 1. Start the application
 

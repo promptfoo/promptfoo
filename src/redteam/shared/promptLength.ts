@@ -157,10 +157,12 @@ export function throwIfTargetPromptExceedsMaxChars(
         `Target input text exceeds maxCharsPerMessage=${maxCharsPerMessage}: ${text.length} characters.`,
       );
     }
-    const attachment = dataUrl?.match(/^data:[^,]+;base64,(.+)$/s);
+    const attachment = dataUrl?.trim().match(/^data:[^,]+;base64,(.+)$/is);
     if (attachment) {
       // Check readable content separately; only measurement excludes attachment bytes.
-      prompt = prompt.split(attachment[0]).join('').split(attachment[1]).join('');
+      for (const value of [attachment[0], attachment[1]]) {
+        prompt = prompt.split(value).join('').split(JSON.stringify(value).slice(1, -1)).join('');
+      }
     }
   }
   const violation = getPromptLengthViolation(prompt, limit);

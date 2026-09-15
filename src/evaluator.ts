@@ -836,28 +836,46 @@ async function validatePdfArtifact(test: AtomicTestCase, vars: Vars): Promise<vo
   if (typeof pdf?.input !== 'string' || typeof pdf.contentHash !== 'string') {
     return;
   }
-  const values: unknown[] = [vars[pdf.input]];
+  let serializedInputs: Record<string, unknown> | undefined;
   if (typeof vars.__prompt === 'string') {
     try {
       const inputs = JSON.parse(vars.__prompt);
-      if (inputs && typeof inputs === 'object' && Object.hasOwn(inputs, pdf.input)) {
-        values.push(inputs[pdf.input]);
+      if (inputs && typeof inputs === 'object' && !Array.isArray(inputs)) {
+        serializedInputs = inputs;
       }
     } catch {
       // A custom task prompt need not be a serialized input object.
     }
   }
-  for (const value of values) {
-    const bytes =
-      typeof value === 'string'
-        ? Buffer.from(value.trim().replace(/^data:application\/pdf;base64,/i, ''), 'base64')
-        : undefined;
-    invariant(
-      bytes &&
-        `sha256:${Buffer.from(await crypto.subtle.digest('SHA-256', bytes)).toString('hex')}` ===
-          pdf.contentHash,
-      'PDF attachment differs from its generated artifact. Regenerate PDF tests after changing document inputs.',
-    );
+  for (const [input, expectedHash] of Object.entries({
+    ...pdf.companionHashes,
+    [pdf.input]: pdf.contentHash,
+  })) {
+    const values: unknown[] = [vars[input]];
+    if (serializedInputs && Object.hasOwn(serializedInputs, input)) {
+      values.push(serializedInputs[input]);
+    }
+    for (const value of values) {
+      const prefix =
+        input === pdf.input ? /^data:application\/pdf;base64,/i : /^data:[^,]+;base64,/i;
+      const raw =
+        typeof value === 'string' ? value.trim().replace(prefix, '').replace(/\s/g, '') : undefined;
+      invariant(
+        input !== pdf.input ||
+          raw === undefined ||
+          Buffer.byteLength(raw, 'base64') <= 5 * 1024 * 1024,
+        'PDF attachment exceeds the 5 MiB limit',
+      );
+      const bytes = raw === undefined ? undefined : Buffer.from(raw, 'base64');
+      invariant(
+        expectedHash === null
+          ? value === undefined
+          : bytes &&
+              `sha256:${Buffer.from(await crypto.subtle.digest('SHA-256', bytes)).toString('hex')}` ===
+                expectedHash,
+        `PDF attachment differs from its generated artifact (${input}). Regenerate PDF tests after changing document inputs.`,
+      );
+    }
   }
 }
 
@@ -909,7 +927,7 @@ async function renderRunEvalPrompt({
         }
         if (
           key === pdfInput
-            ? !value.startsWith('data:application/pdf;base64,')
+            ? !/^data:application\/pdf;base64,/i.test(value.trim())
             : !input || typeof input !== 'object' || !input.type || input.type === 'text'
         ) {
           continue;
@@ -923,7 +941,7 @@ async function renderRunEvalPrompt({
                   .filter((part) => typeof part === 'string' && part)
                   .join('\n\n')
               : (materialized?.injectedInstruction ?? metadata.inputVars?.[key]);
-        if (typeof text === 'string' && !/^data:[^,]+;base64,/.test(text)) {
+        if (typeof text === 'string' && !/^data:[^,]+;base64,/i.test(text.trim())) {
           readableInputs.push({ dataUrl: value, text });
         }
       }
