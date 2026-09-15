@@ -853,7 +853,7 @@ async function validatePdfArtifact(test: AtomicTestCase, vars: Vars): Promise<vo
     [pdf.input]: pdf.contentHash,
   })) {
     const values: unknown[] = [vars[input]];
-    if (serializedInputs && Object.hasOwn(serializedInputs, input)) {
+    if (serializedInputs) {
       values.push(serializedInputs[input]);
     }
     for (const value of values) {

@@ -12,6 +12,80 @@ import { mockApiProvider, toPrompt } from './helpers';
 import { describeEvaluator } from './lifecycle';
 
 describeEvaluator('evaluator transforms', () => {
+  it.each(
+    ['default', 'test'].flatMap((scope) =>
+      ['remove-pdf', 'remove-companion', 'empty-envelope', 'unchanged', 'plain-task'].map(
+        (scenario) => ({ scope, scenario }),
+      ),
+    ),
+  )(
+    'validates PDF attachment presence after a $scope transform: $scenario',
+    async ({ scope, scenario }) => {
+      const bytes = Buffer.from('%PDF-1.7\nOriginal invoice');
+      const document = `data:application/pdf;base64,${bytes.toString('base64')}`;
+      const reference = 'data:image/png;base64,T3JpZ2luYWw=';
+      const inputs = { document, reference, question: 'What is the total?' };
+      const envelope: Record<string, string> = { ...inputs };
+      if (scenario === 'remove-pdf') {
+        delete envelope.document;
+      } else if (scenario === 'remove-companion') {
+        delete envelope.reference;
+      }
+      const transformedPrompt =
+        scenario === 'plain-task'
+          ? inputs.question
+          : JSON.stringify(scenario === 'empty-envelope' ? {} : envelope);
+      const transformVars = `({ ...vars, __prompt: ${JSON.stringify(transformedPrompt)} })`;
+      vi.mocked(transform).mockImplementationOnce(async (_code, vars) => ({
+        ...(vars as Record<string, unknown>),
+        __prompt: transformedPrompt,
+      }));
+      const testSuite: TestSuite = {
+        providers: [mockApiProvider],
+        prompts: [toPrompt('{{__prompt}}')],
+        defaultTest: scope === 'default' ? { options: { transformVars } } : undefined,
+        tests: [
+          {
+            vars: { ...inputs, __prompt: JSON.stringify(inputs) },
+            metadata: {
+              strategyId: 'pdf',
+              pluginConfig: {
+                inputs: {
+                  document: { type: 'pdf', description: 'Invoice' },
+                  reference: { type: 'image', description: 'Reference' },
+                  optional: { type: 'pdf', description: 'Optional attachment' },
+                  question: 'Question',
+                },
+              },
+              pdf: {
+                input: 'document',
+                contentHash: `sha256:${sha256(bytes)}`,
+                companionHashes: { reference: `sha256:${sha256('Original')}`, optional: null },
+              },
+            },
+            options: scope === 'default' ? undefined : { transformVars },
+          },
+        ],
+      };
+      const evalRecord = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
+      await evaluate(testSuite, evalRecord, {});
+      const summary = await evalRecord.toEvaluateSummary();
+      if (scenario === 'unchanged' || scenario === 'plain-task') {
+        expect(summary.results[0].error).toBeUndefined();
+        expect(summary.results[0].success).toBe(true);
+        expect(mockApiProvider.callApi).toHaveBeenCalledExactlyOnceWith(
+          transformedPrompt,
+          expect.objectContaining({ vars: expect.objectContaining(inputs) }),
+          undefined,
+        );
+      } else {
+        expect(summary.results[0].error).toContain('PDF attachment differs');
+        expect(summary.results[0].success).toBe(false);
+        expect(mockApiProvider.callApi).not.toHaveBeenCalled();
+      }
+    },
+  );
+
   it.each(['default', 'test', 'envelope'])(
     'rejects changed PDF attachments before calling the target: %s transform',
     async (scope) => {
