@@ -25,6 +25,8 @@ description: Integrate Langfuse prompts with Promptfoo for LLM testing. Configur
 
    You can also set them in a file passed with `--env-file` or in your config's top-level `env` block. Both take precedence over variables exported in your shell.
 
+   `LANGFUSE_BASE_URL`, the name the Langfuse SDK uses for the host, works in place of `LANGFUSE_HOST`. If both are set, `LANGFUSE_HOST` is used.
+
 ## Using Langfuse prompts
 
 Use the `langfuse://` prefix in your promptfoo configuration to reference prompts managed in Langfuse.

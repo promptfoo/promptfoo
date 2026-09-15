@@ -42,6 +42,8 @@ The browser provider requires Playwright and the stealth plugin. Install these p
 npm install playwright @playwright/browser-chromium playwright-extra puppeteer-extra-plugin-stealth
 ```
 
+Playwright 1.63 and later no longer support Ubuntu 20.04. Check [Playwright's system requirements](https://playwright.dev/docs/intro#system-requirements) before installing the browser on Linux.
+
 Note: Currently, promptfoo's browser provider only supports Chromium-based browsers (Chrome, Edge). The provider uses `playwright-extra` with the Chromium engine for enhanced stealth capabilities.
 
 ## Configuration
