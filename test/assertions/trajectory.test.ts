@@ -669,6 +669,7 @@ describe('trajectory utilities', () => {
     ['mysql', 'SELECT 1 AS alias$x$; DROP TABLE users; SELECT 1 AS alias$x$'],
     ['sqlite', 'SELECT 1 /* /* */; DROP TABLE users; /* */ -- */'],
     ['sqlite', String.raw`SELECT 'private\'; DROP TABLE users; -- '`],
+    ['mssql', String.raw`SELECT 'private\'; DROP TABLE users; -- '`],
   ])('retains executed statements under %s lexical rules', (database, query) => {
     const summary = summarizeTrajectoryForJudge(
       {

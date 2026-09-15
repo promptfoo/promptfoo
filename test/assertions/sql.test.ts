@@ -35,7 +35,7 @@ describe('SQL trace value redaction', () => {
     },
   );
 
-  it.each(['postgresql', 'postgres', 'sqlite'])(
+  it.each(['postgresql', 'postgres', 'sqlite', 'mssql', 'microsoft.sql_server', 'TransactSQL'])(
     'preserves statements after ordinary backslash literals in %s',
     (database) => {
       const query = String.raw`SELECT 'private\'; DROP TABLE users; -- '`;
@@ -46,9 +46,21 @@ describe('SQL trace value redaction', () => {
     },
   );
 
-  it('keeps SQLite doubled-quote string contents private', () => {
-    const query = String.raw`SELECT 'private\''still literal; DROP TABLE users';`;
-    expect(redactSqlLiteralsAndComments(query, 'sqlite')).toBe('SELECT :literal_1 ;');
+  it.each(['sqlite', 'mssql', 'microsoft.sql_server', 'TransactSQL'])(
+    'keeps %s doubled-quote string contents private',
+    (database) => {
+      const query = String.raw`SELECT 'private\''still literal; DROP TABLE users';`;
+      expect(redactSqlLiteralsAndComments(query, database)).toBe('SELECT :literal_1 ;');
+    },
+  );
+
+  it('preserves SQL Server Unicode string boundaries', () => {
+    expect(
+      redactSqlLiteralsAndComments(String.raw`SELECT N'private\'; DROP TABLE users; -- '`, 'mssql'),
+    ).toBe('SELECT N :literal_1 ; DROP TABLE users;');
+    expect(
+      redactSqlLiteralsAndComments(String.raw`SELECT N'private\''still literal';`, 'mssql'),
+    ).toBe('SELECT N :literal_1 ;');
   });
 
   it.each([

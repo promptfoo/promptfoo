@@ -121,6 +121,7 @@ export function stripIgnoredSqlText(sql: string, databaseType: string, maskValue
       (character === '[' && supportsBracketIdentifiers)
     ) {
       const backslashEscapes: boolean =
+        !sqlServer &&
         database !== 'sqlite' &&
         (!postgres ||
           (character === "'" &&
