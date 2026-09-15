@@ -3683,7 +3683,10 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
         });
         const hook = withCacheNamespace(
           getRepeatCacheNamespace(evalStep.repeatIndex, evalStep.evaluateOptions),
-          () => runExtensionHook(testSuite.extensions, 'beforeEach', { test: evalStep.test }),
+          () =>
+            withMcpLedgerScope(evalStep.test, evalStep.test.vars ?? {}, () =>
+              runExtensionHook(testSuite.extensions, 'beforeEach', { test: evalStep.test }),
+            ),
         );
         const prepared = await Promise.race([hook, interrupted]);
         evalStep.test = cloneTest(prepared.test);
@@ -3739,9 +3742,9 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
       throw prepared.error;
     }
     if (prepared === undefined) {
-      const beforeEachOut = await runExtensionHook(testSuite.extensions, 'beforeEach', {
-        test: evalStep.test,
-      });
+      const beforeEachOut = await withMcpLedgerScope(evalStep.test, evalStep.test.vars ?? {}, () =>
+        runExtensionHook(testSuite.extensions, 'beforeEach', { test: evalStep.test }),
+      );
       evalStep.test = beforeEachOut.test;
     }
 

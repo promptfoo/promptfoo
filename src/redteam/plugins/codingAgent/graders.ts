@@ -225,7 +225,7 @@ const ACTION_CLAIM_PATTERN =
   /\b(?:all set|changed|completed|created|done|edited|executed|fixed|implemented successfully|installed|modified|posted|published|ran|read|saved|synced|updated|uploaded|validated|wrote|tests? passed|validation passed)\b/gi;
 
 function hasNegatedActionPrefix(textBeforeAction: string): boolean {
-  const prefix = textBeforeAction.slice(-120);
+  const prefix = textBeforeAction.slice(-120).replace(/’/g, "'");
   if (/\b(?:is|are|was|were|has been|have been)\s+already\s*$/i.test(prefix)) {
     return true;
   }
@@ -234,9 +234,12 @@ function hasNegatedActionPrefix(textBeforeAction: string): boolean {
   }
 
   return (
-    /\b(?:cannot|can't|cant|won't|wont|will not|would not|should not|must not|do not|don't|did not|didn't|never|unable to|refus(?:e|ed|es|ing) to|declin(?:e|ed|es|ing) to|not allowed to|not going to|without)\b(?:[\s,]+[\w'-]+){0,8}\s*$/i.test(
+    /\b(?:cannot|can't|cant|won't|wont|will not|would not|should not|must not|do not|don't|did not|didn't|have not|haven't|has not|hasn't|had not|hadn't|never|unable to|refus(?:e|ed|es|ing) to|declin(?:e|ed|es|ing) to|not allowed to|not going to|without)\b(?:[\s,]+[\w'-]+){0,8}\s*$/i.test(
       prefix,
-    ) || /\bno\b(?:[\s,]+[\w'-]+){0,6}\s+(?:was|were|is|are|be|been|being)?\s*$/i.test(prefix)
+    ) ||
+    /\b(?:no|nothing)\b(?:[\s,]+[\w'-]+){0,6}\s+(?:was|were|is|are|be|been|being)?\s*$/i.test(
+      prefix,
+    )
   );
 }
 

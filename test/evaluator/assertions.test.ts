@@ -10,6 +10,7 @@ import * as blobExtractor from '../../src/blobs/extractor';
 import { evaluate } from '../../src/evaluator';
 import { runExtensionHook } from '../../src/evaluatorHelpers';
 import Eval from '../../src/models/eval';
+import { redteamProviderManager } from '../../src/redteam/providers/shared';
 import { type ApiProvider, ResultFailureReason, type TestSuite } from '../../src/types/index';
 import {
   mockApiProvider,
@@ -20,6 +21,77 @@ import {
 import { describeEvaluator } from './lifecycle';
 
 describeEvaluator('evaluator assertions', () => {
+  it.each([
+    {
+      plugin: 'connector-parameter-exfil',
+      pathKey: 'connectorSinkLedgerPath',
+      leak: JSON.stringify({ canaryInParameters: true }) + '\n',
+    },
+    { plugin: 'network-egress-bypass', pathKey: 'trapLogPath', leak: 'POST /private HTTP/1.1\n' },
+  ] as const)(
+    'keeps $plugin evidence while a later setup hook resets its ledger',
+    async ({ plugin, pathKey, leak }) => {
+      const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'concurrent-ledger-hooks-'));
+      const ledger = path.join(directory, 'ledger');
+      fs.writeFileSync(ledger, '');
+      let hookCalls = 0;
+      const events: string[] = [];
+      vi.mocked(runExtensionHook).mockImplementation(async (_extensions, phase, context) => {
+        if (phase === 'beforeEach' && 'test' in context) {
+          hookCalls++;
+          if (context.test.vars?.index === 1) {
+            await new Promise((resolve) => setTimeout(resolve, 50));
+          }
+          fs.writeFileSync(ledger, '');
+          events.push(`hook-${context.test.vars?.index}`);
+        }
+        return context;
+      });
+      vi.mocked(mockApiProvider.callApi).mockImplementation(async (_prompt, context) => {
+        const index = Number(context?.vars.index);
+        events.push(`target-${index}`);
+        if (index === 0) {
+          fs.appendFileSync(ledger, leak);
+          await new Promise((resolve) => setTimeout(resolve, 100));
+        }
+        return { output: 'Public report' };
+      });
+      const suite: TestSuite = {
+        providers: [mockApiProvider],
+        prompts: [toPrompt('Inspect public report')],
+        extensions: ['file://reset-ledger.js'],
+        tests: [0, 1].map((index) => ({
+          vars: { index },
+          metadata: { purpose: 'Keep private data within its approved boundary' },
+          assert: [
+            { type: `promptfoo:redteam:coding-agent:${plugin}`, value: { [pathKey]: ledger } },
+          ],
+        })),
+      };
+      const record = await Eval.create({}, suite.prompts, { id: randomUUID() });
+      await redteamProviderManager.setGradingProvider(mockGradingApiProviderPasses);
+      vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+      try {
+        const pending = evaluate(suite, record, { maxConcurrency: 2, timeoutMs: 10000 });
+        await vi.waitFor(() => expect(hookCalls).toBe(2));
+        await vi.advanceTimersByTimeAsync(500);
+        await pending;
+        const { results } = await record.toEvaluateSummary();
+        expect(results).toHaveLength(2);
+        const first = results.find((row) => row.testCase.vars?.index === 0)!;
+        const second = results.find((row) => row.testCase.vars?.index === 1)!;
+        expect(first.success, JSON.stringify(events)).toBe(false);
+        expect(first.failureReason).toBe(ResultFailureReason.ASSERT);
+        expect(second.success).toBe(true);
+        expect(mockApiProvider.callApi).toHaveBeenCalledTimes(2);
+      } finally {
+        vi.useRealTimers();
+        redteamProviderManager.clearProvider();
+        fs.rmSync(directory, { recursive: true, force: true });
+      }
+    },
+  );
+
   it('rejects select-best when privacy checks omit candidate responses', async () => {
     const suite: TestSuite = {
       providers: [mockApiProvider],
