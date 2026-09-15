@@ -16,7 +16,7 @@ import {
 } from '../database/tables';
 import { getAuthor } from '../globalConfig/accounts';
 import logger from '../logger';
-import Eval, { createEvalId } from '../models/eval';
+import Eval, { createEvalId, sanitizeLegacyResults } from '../models/eval';
 import { notifyEvaluationChanged, notifyEvaluationsDeleted } from '../models/evalMutation';
 import { generateIdFromPrompt } from '../models/prompt';
 import {
@@ -53,6 +53,7 @@ export async function writeResultsToDatabase(
   const evalId = createEvalId(createdAt);
   const db = await getDb();
   const persistedConfig = sanitizeConfigForPersistence(config);
+  results = sanitizeLegacyResults(results, config);
 
   await db.transaction(async (tx) => {
     await tx

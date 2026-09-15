@@ -21,6 +21,7 @@ import { calculateAttackSuccessRate } from '../redteam/metrics';
 import { getRiskCategorySeverityMap } from '../redteam/sharedFrontend';
 import { getTraceStore } from '../tracing/store';
 import {
+  type AtomicTestCase,
   type CompletedPrompt,
   type EvalRuntimeOptions,
   type EvalSummary,
@@ -48,7 +49,7 @@ import {
   accumulateTokenUsage,
   createEmptyTokenUsage,
 } from '../util/tokenUsageUtils';
-import { requiresTraceRedaction } from '../util/traceRedaction';
+import { getAssertionLeaves, requiresTraceRedaction } from '../util/traceRedaction';
 import {
   invalidateEvaluationCache,
   notifyEvaluationChanged,
@@ -63,6 +64,7 @@ import EvalResult, {
   getResultIndexKey,
   PROMPTFOO_METADATA_KEY,
   persistTraceMetadata,
+  sanitizeResultForJsonlArtifact,
   stripTraceLinkageFromMetadata,
 } from './evalResult';
 
@@ -307,6 +309,126 @@ export class EvalQueries {
       return [];
     }
   }
+}
+
+/** Legacy summaries duplicate results in table cells; redact both public copies together. */
+export function sanitizeLegacyResults(
+  summary: EvaluateSummaryV2,
+  config: Partial<UnifiedConfig> = {},
+): EvaluateSummaryV2 {
+  const table = summary.table;
+  const promptCount = table?.head?.prompts?.length || 1;
+  const verifierTests = new Map<number, AtomicTestCase>();
+  const privatePrompts = new Set<number>();
+  const hasVerifier = (test?: AtomicTestCase) =>
+    getAssertionLeaves(test?.assert).some((assertion) =>
+      /^(?:not-)?promptfoo:redteam:(?:coding-agent|harness):/.test(assertion.type),
+    );
+  const defaults = typeof config.defaultTest === 'object' ? config.defaultTest : undefined;
+  const defaultTest = hasVerifier(defaults) ? defaults : undefined;
+  const remember = (testIdx: number, test?: AtomicTestCase) => {
+    if (
+      test &&
+      hasVerifier(test) &&
+      (!requiresTraceRedaction(verifierTests.get(testIdx)?.assert) ||
+        requiresTraceRedaction(test.assert))
+    ) {
+      verifierTests.set(testIdx, test);
+    }
+  };
+  for (const [index, row] of (table?.body ?? []).entries()) {
+    const testIdx = row.testIdx ?? index;
+    remember(testIdx, row.test);
+    for (const output of row.outputs ?? []) {
+      remember(testIdx, output.testCase);
+    }
+  }
+  for (const [index, result] of (summary.results ?? []).entries()) {
+    remember(result.testIdx ?? Math.floor(index / promptCount), result.testCase);
+  }
+  if (!defaultTest && verifierTests.size === 0) {
+    return summary;
+  }
+  const redact = <T extends { testCase?: AtomicTestCase }>(value: T, testIdx: number): T => {
+    const rowTest = verifierTests.get(testIdx);
+    const inherited = requiresTraceRedaction(defaultTest?.assert)
+      ? defaultTest
+      : (rowTest ?? defaultTest);
+    const testCase = value.testCase;
+    if (!inherited) {
+      return value;
+    }
+    return sanitizeResultForJsonlArtifact({
+      ...value,
+      testCase: {
+        ...inherited,
+        ...testCase,
+        assert:
+          hasVerifier(testCase) &&
+          (requiresTraceRedaction(testCase?.assert) || !requiresTraceRedaction(inherited.assert))
+            ? testCase!.assert
+            : [...(inherited.assert ?? []), ...(testCase?.assert ?? [])],
+      },
+    });
+  };
+  const results = summary.results?.map((result, index) => {
+    const redacted = redact(result, result.testIdx ?? Math.floor(index / promptCount));
+    if (requiresTraceRedaction(redacted.testCase?.assert)) {
+      privatePrompts.add(result.promptIdx ?? index % promptCount);
+    }
+    return redacted;
+  });
+  const body = table?.body?.map((row, index) => {
+    const testIdx = row.testIdx ?? index;
+    if (!defaultTest && !verifierTests.has(testIdx)) {
+      return row;
+    }
+    const projected = redact(
+      {
+        testCase: row.test,
+        vars: Object.fromEntries((table.head?.vars ?? []).map((name, i) => [name, row.vars?.[i]])),
+      },
+      testIdx,
+    );
+    return {
+      ...row,
+      test: projected.testCase,
+      vars: row.vars?.map((_, i) => projected.vars[table.head?.vars?.[i]] ?? ''),
+      outputs: row.outputs?.map((output, promptIdx) => {
+        const redacted = redact({ ...output, prompt: { raw: output.prompt } }, testIdx);
+        const privateResponse = requiresTraceRedaction(redacted.testCase?.assert);
+        if (privateResponse) {
+          privatePrompts.add(promptIdx);
+        }
+        return {
+          ...redacted,
+          prompt: redacted.prompt.raw,
+          ...(privateResponse && {
+            text: '[Response omitted for trace/artifact redaction.]',
+            audio: undefined,
+            video: undefined,
+            images: undefined,
+          }),
+        };
+      }),
+    };
+  });
+  const prompts = table?.head?.prompts?.map((prompt, index) =>
+    privatePrompts.has(index)
+      ? {
+          ...prompt,
+          raw: '[Prompt omitted for trace/artifact redaction.]',
+          ...(prompt.display !== undefined && {
+            display: '[Prompt omitted for trace/artifact redaction.]',
+          }),
+        }
+      : prompt,
+  );
+  return {
+    ...summary,
+    results,
+    ...(table && { table: { ...table, head: { ...table.head, prompts }, body } }),
+  };
 }
 
 export default class Eval {
@@ -683,7 +805,9 @@ export default class Eval {
 
     if (this.useOldResults()) {
       invariant(this.oldResults, 'Old results not found');
-      updateObj.results = this.oldResults;
+      const legacy = sanitizeLegacyResults(this.oldResults, this.config);
+      updateObj.results = legacy;
+      updateObj.prompts = legacy.table?.head.prompts || [];
     } else if (
       this.durationMs !== undefined ||
       this.generationDurationMs !== undefined ||
@@ -738,14 +862,19 @@ export default class Eval {
   getPrompts() {
     if (this.useOldResults()) {
       invariant(this.oldResults, 'Old results not found');
-      return this.oldResults.table?.head.prompts || [];
+      return sanitizeLegacyResults(this.oldResults, this.config).table?.head.prompts || [];
     }
     return this.prompts;
   }
 
   async getTable(): Promise<EvaluateTable> {
     if (this.useOldResults()) {
-      return this.oldResults?.table || { head: { prompts: [], vars: [] }, body: [] };
+      return (
+        (this.oldResults && sanitizeLegacyResults(this.oldResults, this.config).table) || {
+          head: { prompts: [], vars: [] },
+          body: [],
+        }
+      );
     }
     return convertResultsToTable(await this.toResultsFile());
   }
@@ -1391,7 +1520,7 @@ export default class Eval {
   async getResults(): Promise<EvaluateResult[] | EvalResult[]> {
     if (this.useOldResults()) {
       invariant(this.oldResults, 'Old results not found');
-      return this.oldResults.results;
+      return sanitizeLegacyResults(this.oldResults, this.config).results;
     }
     await this.loadResults();
     this._resultsLoaded = true;
@@ -1434,11 +1563,9 @@ export default class Eval {
     if (this.useOldResults()) {
       invariant(this.oldResults, 'Old results not found');
       return {
+        ...sanitizeLegacyResults(this.oldResults, this.config),
         version: 2,
         timestamp: new Date(this.createdAt).toISOString(),
-        results: this.oldResults.results,
-        table: this.oldResults.table,
-        stats: this.oldResults.stats,
       };
     }
     if (this.results.length === 0) {

@@ -31,7 +31,7 @@ import {
   getStandaloneEvalCacheKey,
   setCachedStandaloneEvals,
 } from '../../src/util/standaloneEvalCache';
-import { createEvaluateResult } from '../factories/eval';
+import { createEvaluateResult, createLegacyRedactionSummary } from '../factories/eval';
 import EvalFactory from '../factories/evalFactory';
 
 vi.mock('../../src/globalConfig/accounts', async () => {
@@ -210,6 +210,101 @@ describe('evaluator', () => {
         'First result',
         'Second result',
       ]);
+    });
+
+    it.each([
+      'promptfoo:redteam:coding-agent:trace-redaction',
+      'promptfoo:redteam:harness:artifact-redaction',
+    ] as const)('sanitizes legacy privacy copies on read, write and save for %s', async (type) => {
+      const original = createLegacyRedactionSummary(type);
+      const snapshot = JSON.stringify(original);
+      const control = original.results[1];
+      const id = await writeResultsToDatabase(original, {});
+      const db = await getDb();
+      const stored = await db.select().from(evalsTable).where(eq(evalsTable.id, id)).get();
+      expect(JSON.stringify(stored)).not.toContain('PRIVATE_LEGACY_RECEIPT');
+      const evaluation = (await Eval.findById(id))!;
+      // Old database rows and callers can still supply unfiltered legacy data.
+      evaluation.oldResults = original;
+      const reads = [
+        await evaluation.getResults(),
+        await evaluation.getTable(),
+        evaluation.getPrompts(),
+        await evaluation.toEvaluateSummary(),
+        await evaluation.toResultsFile(),
+      ];
+      for (const read of reads) {
+        expect(JSON.stringify(read)).not.toContain('PRIVATE_LEGACY_RECEIPT');
+      }
+      const results = await evaluation.getResults();
+      expect(results[0]).toMatchObject({
+        success: false,
+        score: 0,
+        failureReason: ResultFailureReason.ASSERT,
+      });
+      expect(results[1]).toBe(control);
+      expect((await evaluation.getTable()).body[1]).toBe(original.table.body[1]);
+      await evaluation.save();
+      const saved = await db.select().from(evalsTable).where(eq(evalsTable.id, id)).get();
+      expect(JSON.stringify(saved)).not.toContain('PRIVATE_LEGACY_RECEIPT');
+      expect(JSON.stringify(original)).toBe(snapshot);
+    });
+
+    it.each(['result', 'table-test', 'table-output', 'default'] as const)(
+      'inherits legacy privacy assertions from %s without changing caller data',
+      async (location) => {
+        const original = createLegacyRedactionSummary(
+          'promptfoo:redteam:coding-agent:trace-redaction',
+        );
+        const assert = original.results[0].testCase.assert;
+        original.results[0].testCase = { ...original.results[0].testCase, assert: [] };
+        original.table.body[0].test = { ...original.table.body[0].test, assert: [] };
+        const output = original.table.body[0].outputs[0];
+        output.testCase = { ...output.testCase, assert: [] };
+        if (location === 'result') {
+          original.results[0].testCase.assert = assert;
+        }
+        if (location === 'table-test') {
+          original.table.body[0].test.assert = assert;
+        }
+        if (location === 'table-output') {
+          output.testCase.assert = assert;
+        }
+        const evaluation = new Eval(location === 'default' ? { defaultTest: { assert } } : {});
+        evaluation.oldResults = original;
+        const snapshot = JSON.stringify(original);
+        const summary = await evaluation.toEvaluateSummary();
+        expect(JSON.stringify(summary)).not.toContain('PRIVATE_LEGACY_RECEIPT');
+        expect(JSON.stringify(original)).toBe(snapshot);
+        if ('table' in summary) {
+          evaluation.oldResults = summary;
+          expect(await evaluation.toEvaluateSummary()).toEqual(summary);
+        }
+      },
+    );
+
+    it('redacts legacy verifier inputs while retaining non-privacy target output', async () => {
+      const original = createLegacyRedactionSummary(
+        'promptfoo:redteam:coding-agent:repo-prompt-injection',
+      );
+      const evaluation = new Eval({});
+      evaluation.oldResults = original;
+      const result = (await evaluation.toEvaluateSummary()).results[0];
+      expect(JSON.stringify(result.testCase)).not.toContain('PRIVATE_LEGACY_RECEIPT');
+      expect(JSON.stringify(result.vars)).not.toContain('PRIVATE_LEGACY_RECEIPT');
+      expect(result.response?.output).toBe('PRIVATE_LEGACY_RECEIPT');
+      const row = (await evaluation.getTable()).body[0];
+      expect(JSON.stringify([row.test, row.vars, row.outputs[0].testCase])).not.toContain(
+        'PRIVATE_LEGACY_RECEIPT',
+      );
+      expect(row.outputs[0].text).toBe('PRIVATE_LEGACY_RECEIPT');
+      expect(row.outputs[0].audio?.data).toBe('PRIVATE_LEGACY_RECEIPT');
+      const id = await writeResultsToDatabase(original, {});
+      const stored = (await Eval.findById(id))!;
+      expect(JSON.stringify(stored.oldResults?.results[0].testCase)).not.toContain(
+        'PRIVATE_LEGACY_RECEIPT',
+      );
+      expect(original.results[0].vars.rawReceipt).toBe('PRIVATE_LEGACY_RECEIPT');
     });
 
     it('keeps legacy result and summary reads on their existing path', async () => {

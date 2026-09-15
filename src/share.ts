@@ -10,6 +10,7 @@ import { getEnvBool, getEnvInt, getEnvString, isCI } from './envars';
 import { getUserEmail, setUserEmail } from './globalConfig/accounts';
 import { cloudConfig } from './globalConfig/cloud';
 import logger, { isDebugEnabled } from './logger';
+import { sanitizeLegacyResults } from './models/eval';
 import {
   checkCloudPermissions,
   getOrgContext,
@@ -147,6 +148,9 @@ async function sendEvalRecord(
   // other configs, use the current CLI team to avoid falling back to default.
   let evalData: Record<string, unknown> = {
     ...evalRecord,
+    ...(evalRecord.oldResults && {
+      oldResults: sanitizeLegacyResults(evalRecord.oldResults, evalRecord.config),
+    }),
     config: redactedConfig,
     results: [],
     traces,

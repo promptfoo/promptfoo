@@ -7,7 +7,7 @@ import { getDb } from '../database/index';
 import { evalsTable } from '../database/tables';
 import { parseImportFile } from '../importers/parse';
 import logger from '../logger';
-import Eval, { createEvalId } from '../models/eval';
+import Eval, { createEvalId, sanitizeLegacyResults } from '../models/eval';
 import { notifyEvaluationChanged, notifyEvaluationsDeleted } from '../models/evalMutation';
 import EvalResult, { stripTraceLinkageFromMetadata } from '../models/evalResult';
 import telemetry from '../telemetry';
@@ -420,7 +420,7 @@ async function createImportedV2Eval(evalData: any, context: ImportedEvalContext)
       createdAt: context.importCreatedAt.getTime(),
       author: context.importAuthor,
       description: evalData.description || evalData.config?.description,
-      results: evalData.results,
+      results: sanitizeLegacyResults(evalData.results, evalData.config),
       config: sanitizeConfigForPersistence(evalData.config),
       isRedteam: evalData.config?.redteam !== undefined,
     })

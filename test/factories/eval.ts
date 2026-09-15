@@ -1,4 +1,5 @@
 import {
+  type Assertion,
   type CompletedPrompt,
   type EvaluateResult,
   type EvaluateStats,
@@ -140,4 +141,57 @@ export function createEvaluateSummaryV2(
     stats: createEvaluateStats(),
     ...overrides,
   };
+}
+
+export function createLegacyRedactionSummary(type: Assertion['type']): EvaluateSummaryV2 {
+  const privateText = 'PRIVATE_LEGACY_RECEIPT';
+  const result = createEvaluateResult({
+    promptId: 'legacy-prompt',
+    prompt: { raw: privateText, label: 'Privacy check' },
+    testCase: { assert: [{ type }], vars: { rawReceipt: privateText, topic: 'public' } },
+    vars: { rawReceipt: privateText, topic: 'public' },
+    response: { output: privateText, metadata: { diagnostic: privateText } },
+    metadata: { diagnostic: privateText },
+    success: false,
+    score: 0,
+    failureReason: ResultFailureReason.ASSERT,
+    gradingResult: { pass: false, score: 0, reason: 'Protected receipt found.' },
+  });
+  const control = createEvaluateResult({ testIdx: 1, response: { output: 'ordinary output' } });
+  return createEvaluateSummaryV2({
+    results: [result, control],
+    table: createEvaluateTable({
+      head: {
+        prompts: [
+          createCompletedPrompt(privateText, { label: 'Privacy check', display: privateText }),
+        ],
+        vars: ['rawReceipt', 'topic'],
+      },
+      body: [
+        createEvaluateTableRow({
+          test: result.testCase,
+          vars: [privateText, 'public'],
+          outputs: [
+            createEvaluateTableOutput({
+              testCase: result.testCase,
+              prompt: privateText,
+              text: privateText,
+              response: result.response,
+              metadata: result.metadata,
+              audio: { data: privateText },
+              video: { url: privateText },
+              images: [{ data: privateText }],
+              pass: false,
+              score: 0,
+              failureReason: ResultFailureReason.ASSERT,
+            }),
+          ],
+        }),
+        createEvaluateTableRow({
+          testIdx: 1,
+          outputs: [createEvaluateTableOutput({ text: 'ordinary output' })],
+        }),
+      ],
+    }),
+  });
 }

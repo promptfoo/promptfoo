@@ -29,6 +29,7 @@ import { TraceStore } from '../../src/tracing/store';
 import { ResultFailureReason } from '../../src/types/index';
 import { sha256 } from '../../src/util/createHash';
 import { createOutputData } from '../../src/util/output';
+import { createLegacyRedactionSummary } from '../factories/eval';
 import { createTempDir, mockProcessEnv, removeTempDir } from '../util/utils';
 
 vi.mock('../../src/logger', () => ({
@@ -942,6 +943,29 @@ describe('importCommand', () => {
       } finally {
         restoreEnv();
       }
+    });
+
+    it('redacts both result copies when importing legacy privacy checks', async () => {
+      const id = 'eval-legacy-privacy';
+      tempFilePath = path.join(__dirname, `temp-legacy-privacy-${Date.now()}.json`);
+      fs.writeFileSync(
+        tempFilePath,
+        JSON.stringify({
+          id,
+          config: {},
+          results: createLegacyRedactionSummary('promptfoo:redteam:coding-agent:trace-redaction'),
+        }),
+      );
+      importCommand(program);
+      await program.parseAsync(['node', 'test', 'import', tempFilePath]);
+      expect(process.exitCode).toBeUndefined();
+      const db = await getDb();
+      const stored = await db.select().from(evalsTable).where(sql`${evalsTable.id} = ${id}`).get();
+      expect(stored).toBeDefined();
+      expect(JSON.stringify(stored)).not.toContain('PRIVATE_LEGACY_RECEIPT');
+      expect(JSON.stringify(stored)).toContain('ordinary output');
+      const imported = (await Eval.findById(id))!;
+      expect((await imported.toEvaluateSummary()).version).toBe(2);
     });
 
     it('should import legacy table-backed eval exports', async () => {
