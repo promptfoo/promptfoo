@@ -640,7 +640,13 @@ export class LiveSession {
 
   private readUsage(event: LiveEvent): boolean {
     const seconds = event.usage?.seconds;
-    if (typeof seconds === 'number' && Number.isFinite(seconds) && seconds >= 0) {
+    if (
+      typeof seconds === 'number' &&
+      Number.isFinite(seconds) &&
+      seconds >= 0 &&
+      // The overall request deadline bounds session time; allow per-second billing granularity.
+      seconds <= Math.ceil(this.options.requestTimeoutMs / 1000)
+    ) {
       this.voiceSeconds = seconds;
       return true;
     }
@@ -1033,6 +1039,10 @@ export class LiveSession {
       });
       this.backendCost =
         cost !== undefined && this.backendCost !== undefined ? this.backendCost + cost : undefined;
+      if (this.backendCost !== undefined && !Number.isFinite(this.backendCost)) {
+        this.setError('GPT-Live backend cost exceeded the supported numeric range.');
+        this.backendCost = undefined;
+      }
     } else {
       this.backendCost = undefined;
     }
@@ -1123,12 +1133,16 @@ export class LiveSession {
     const rate =
       this.options.config.costPerMinute ??
       (/^gpt-live-1(?:-\d{4}-\d{2}-\d{2})?$/.test(this.options.model) ? 0.05 : undefined);
-    const voiceCost =
+    let voiceCost =
       this.voiceSeconds !== undefined && rate !== undefined
-        ? (this.voiceSeconds * rate) / 60
+        ? (this.voiceSeconds / 60) * rate
         : undefined;
+    if (voiceCost !== undefined && !Number.isFinite(voiceCost)) {
+      this.setError('GPT-Live voice cost exceeded the supported numeric range.');
+      voiceCost = undefined;
+    }
     // Client backend costs and hosted tool fees are not reported by the Live session.
-    const cost =
+    let cost =
       this.finalized &&
       voiceCost !== undefined &&
       this.backendCost !== undefined &&
@@ -1136,6 +1150,10 @@ export class LiveSession {
       !this.hasPendingWork()
         ? voiceCost + this.backendCost
         : undefined;
+    if (cost !== undefined && !Number.isFinite(cost)) {
+      this.setError('GPT-Live total cost exceeded the supported numeric range.');
+      cost = undefined;
+    }
     this.resolve({
       output,
       error: this.error === undefined ? undefined : this.redact(this.error),

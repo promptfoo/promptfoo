@@ -151,6 +151,44 @@ describe('OpenAiLiveProvider', () => {
     },
   );
 
+  it.each(['gpt-realtime-1.5', 'gpt-5.6-terra', 'tts-1', 'text-embedding-3-small', 'gpt-image-1'])(
+    'rejects non-Live model %s on the resolved official endpoint',
+    async (model) => {
+      const p = new OpenAiLiveProvider(model, {
+        config: { apiKey: 'fixture-key', apiBaseUrl: 'https://gateway.example/v1' },
+      });
+      const result = p.callApi('Hi', promptContext({ apiBaseUrl: 'https://api.openai.com/v1' }));
+      await vi.runAllTimersAsync();
+      expect((await result).error).toContain('requires a gpt-live-* model');
+      expect(sockets).toHaveLength(0);
+    },
+  );
+
+  it.each(['gateway-voice', 'gpt-realtime-1.5'])(
+    'allows custom gateway model %s after a prompt endpoint override',
+    async (model) => {
+      const p = new OpenAiLiveProvider(model, { config: { apiKey: 'fixture-key' } });
+      const result = p.callApi('Hi', promptContext({ apiBaseUrl: 'https://gateway.example/v1' }));
+      const socket = await connect();
+      expect(socket.sent[0].session.model).toBe(model);
+      start(socket);
+      text(socket);
+      closed(socket);
+      expect((await result).error).toBeUndefined();
+    },
+  );
+
+  it('does not use ordinary custom headers to satisfy the credential requirement', async () => {
+    const result = provider({
+      apiKey: undefined,
+      apiBaseUrl: 'https://gateway.example/v1',
+      headers: { 'X-Request-ID': 'request-123' },
+    }).callApi('Hi');
+    await vi.runAllTimersAsync();
+    expect((await result).error).toContain('API key is not set');
+    expect(sockets).toHaveLength(0);
+  });
+
   it.each(['response.created', 'response.completed', 'response.failed', 'response.incomplete'])(
     'rejects a completed response ID reused by another delegation in %s',
     async (type) => {
@@ -976,6 +1014,127 @@ describe('OpenAiLiveProvider', () => {
     expect(other.cost).toBeUndefined();
   });
 
+  it.each([301, 1e300, Number.MAX_VALUE])(
+    'withholds final accounting for usage beyond the request deadline (%s)',
+    async (seconds) => {
+      const result = provider().callApi('Hi');
+      const socket = await connect();
+      start(socket);
+      text(socket);
+      emit(socket, { type: 'session.usage.updated', usage: { seconds: 5 } });
+      closed(socket, seconds);
+      const response = await result;
+      expect(response.error).toContain('usage is unconfirmed');
+      expect(response.metadata?.voiceSeconds).toBe(5);
+      expect(response.metadata?.finalUsageConfirmed).toBe(false);
+      expect(response.cost).toBeUndefined();
+    },
+  );
+
+  it.each([false, true])(
+    'ignores impossible interim usage when final usage is available: %s',
+    async (finalize) => {
+      const result = provider().callApi('Hi');
+      const socket = await connect();
+      start(socket);
+      text(socket);
+      emit(socket, { type: 'session.usage.updated', usage: { seconds: 1e300 } });
+      if (finalize) {
+        closed(socket);
+      } else {
+        socket.emit('close');
+      }
+      const response = await result;
+      if (finalize) {
+        expect(response.error).toBeUndefined();
+        expect(response.metadata?.voiceSeconds).toBe(12);
+        expect(response.cost).toBeCloseTo(0.01);
+      } else {
+        expect(response.error).toContain('final usage is unconfirmed');
+        expect(response.metadata?.voiceSeconds).toBeUndefined();
+        expect(response.metadata?.voiceCost).toBeUndefined();
+        expect(response.cost).toBeUndefined();
+      }
+    },
+  );
+
+  it.each([1, 1.001])(
+    'bounds usage by the configured request deadline at second granularity (%s)',
+    async (seconds) => {
+      mockProcessEnv({ REQUEST_TIMEOUT_MS: '500' });
+      const result = provider().callApi('Hi');
+      const socket = await connect();
+      start(socket);
+      text(socket);
+      closed(socket, seconds);
+      const response = await result;
+      expect(response.metadata?.finalUsageConfirmed).toBe(seconds === 1);
+      if (seconds === 1) {
+        expect(response.error).toBeUndefined();
+        expect(response.cost).toBeCloseTo(0.05 / 60);
+      } else {
+        expect(response.error).toContain('usage is unconfirmed');
+        expect(response.metadata?.voiceSeconds).toBeUndefined();
+        expect(response.metadata?.voiceCost).toBeUndefined();
+        expect(response.cost).toBeUndefined();
+      }
+    },
+  );
+
+  it.each([59, 60, 300])(
+    'keeps voice accounting finite with an extreme configured rate (%s seconds)',
+    async (seconds) => {
+      const result = provider({ costPerMinute: Number.MAX_VALUE }).callApi('Hi');
+      const socket = await connect();
+      start(socket);
+      text(socket);
+      closed(socket, seconds);
+      const response = await result;
+      expect(response.metadata?.voiceSeconds).toBe(seconds);
+      if (seconds <= 60) {
+        expect(response.error).toBeUndefined();
+        expect(response.metadata?.voiceCost).toBe((seconds / 60) * Number.MAX_VALUE);
+        expect(response.cost).toBe(response.metadata?.voiceCost);
+      } else {
+        expect(response.error).toContain('voice cost exceeded');
+        expect(response.metadata?.voiceCost).toBeUndefined();
+        expect(response.cost).toBeUndefined();
+      }
+    },
+  );
+
+  it.each(['backend', 'total'])(
+    'withholds %s cost when accounting overflows',
+    async (component) => {
+      const result = provider({
+        delegation: lookupDelegation,
+        inputCost: 1e308,
+        outputCost: 0,
+        costPerMinute: 1e308,
+      }).callApi('Hi');
+      const socket = await connect();
+      start(socket);
+      text(socket);
+      delegateResponses(socket);
+      backend(socket, { type: 'response.created', response: { id: 'resp_1' } });
+      const tokens = component === 'backend' ? 2 : 1;
+      backend(socket, {
+        type: 'response.completed',
+        response: {
+          id: 'resp_1',
+          model: 'gpt-4.1-mini',
+          usage: { input_tokens: tokens, output_tokens: 0, total_tokens: tokens },
+        },
+      });
+      closed(socket, 60);
+      const response = await result;
+      expect(response.error).toContain(`${component} cost exceeded`);
+      expect(response.metadata?.voiceCost).toBe(1e308);
+      expect(response.metadata?.backendCost).toBe(component === 'backend' ? undefined : 1e308);
+      expect(response.cost).toBeUndefined();
+    },
+  );
+
   it('paces input audio and keeps streaming silence after the clip', async () => {
     const audio = Buffer.alloc(1920, 1);
     const result = provider().callApi(audioPrompt(audio));
@@ -1058,7 +1217,7 @@ describe('OpenAiLiveProvider', () => {
     await vi.advanceTimersByTimeAsync(120);
     expect(socket.sent.at(-1)).toEqual({ type: 'session.close' });
     await vi.advanceTimersByTimeAsync(99);
-    closed(socket);
+    closed(socket, 1);
     expect((await result).metadata?.finalUsageConfirmed).toBe(true);
   });
 
@@ -2110,10 +2269,12 @@ describe('OpenAiLiveProvider', () => {
     expect(await upgradeHeaders({})).toMatchObject({ Authorization: 'Bearer ambient-openai-key' });
   });
 
-  it.each([
+  it.each<{ name: string; config: OpenAiLiveOptions }>([
     { name: 'ambient key', config: { apiKey: undefined } },
     { name: 'empty Authorization override', config: { headers: { Authorization: '' } } },
     { name: 'blank Authorization override', config: { headers: { Authorization: ' ' } } },
+    { name: 'scheme-only Bearer override', config: { headers: { Authorization: 'Bearer ' } } },
+    { name: 'scheme-only Basic override', config: { headers: { authorization: ' basic\t' } } },
   ])('requires credentials actually sent to the gateway ($name)', async ({ config }) => {
     mockProcessEnv({ OPENAI_API_KEY: 'ambient-openai-key' });
     const result = provider({ apiBaseUrl: 'https://gateway.example/v1', ...config }).callApi('Hi');

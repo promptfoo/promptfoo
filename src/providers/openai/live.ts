@@ -98,6 +98,11 @@ export class OpenAiLiveProvider extends OpenAiGenericProvider {
     if (url.hash) {
       throw new Error('GPT-Live session URLs do not accept fragments.');
     }
+    if (url.hostname === 'api.openai.com' && !this.modelName.startsWith('gpt-live-')) {
+      throw new Error(
+        'The OpenAI Live API requires a gpt-live-* model. Use the matching provider or configure a compatible apiBaseUrl.',
+      );
+    }
     // Send URL userinfo as an explicit Basic credential, which diagnostics redact, instead of
     // leaving it in the socket URL.
     const userinfo =
@@ -129,7 +134,10 @@ export class OpenAiLiveProvider extends OpenAiGenericProvider {
     if (
       (config.apiKeyRequired ?? true) &&
       !Object.entries(headers).some(
-        ([name, value]) => isLiveCredentialHeader(name) && value.trim().length > 0,
+        ([name, value]) =>
+          isLiveCredentialHeader(name) &&
+          value.trim().length > 0 &&
+          !(name.toLowerCase() === 'authorization' && /^(?:bearer|basic)$/i.test(value.trim())),
       )
     ) {
       throw new Error(this.getMissingApiKeyErrorMessage(config));
