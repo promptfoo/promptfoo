@@ -1,3 +1,4 @@
+import { constants } from 'node:fs';
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -19,6 +20,39 @@ const ConfigSchema = z.object({
   input: z.string().min(1).optional(),
   mode: z.enum(['text', 'scanned']).default('text'),
 });
+
+async function readTemplate(filename: string): Promise<Buffer> {
+  if (!(await fs.stat(filename)).isFile()) {
+    throw new Error('PDF template must be a regular file');
+  }
+  // Nonblocking open also protects against a path swapped to a FIFO after stat.
+  const file = await fs.open(filename, constants.O_RDONLY | constants.O_NONBLOCK);
+  try {
+    const stat = await file.stat();
+    if (!stat.isFile()) {
+      throw new Error('PDF template must be a regular file');
+    }
+    if (stat.size > MAX_PDF_BYTES) {
+      throw new Error('PDF template exceeds the 5 MiB limit');
+    }
+    const buffer = Buffer.alloc(MAX_PDF_BYTES + 1);
+    let length = 0;
+    while (length < buffer.length) {
+      const { bytesRead } = await file.read(buffer, length, buffer.length - length, length);
+      if (bytesRead === 0) {
+        break;
+      }
+      length += bytesRead;
+    }
+    if (length > MAX_PDF_BYTES) {
+      throw new Error('PDF template exceeds the 5 MiB limit');
+    }
+    // The cached template should not retain the entire read-limit allocation.
+    return Buffer.from(buffer.subarray(0, length));
+  } finally {
+    await file.close();
+  }
+}
 
 async function savePdf(bytes: Buffer, filename: string, text?: string) {
   if (!isMediaStorageEnabled()) {
@@ -46,10 +80,7 @@ async function prepareTemplate(
         ? fileURLToPath(config.path)
         : config.path.replace(/^file:\/\//, ''),
     );
-    if ((await fs.stat(filename)).size > MAX_PDF_BYTES) {
-      throw new Error('PDF template exceeds the 5 MiB limit');
-    }
-    bytes = await fs.readFile(filename);
+    bytes = await readTemplate(filename);
   } else {
     const provider = await getStrategyGenerationProvider({
       runtimeContext,

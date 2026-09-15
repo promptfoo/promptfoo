@@ -59,6 +59,11 @@ function provider(config: Record<string, unknown> = {}) {
   return new A2AProvider('a2a:https://agent.example.com/a2a/v1', { config });
 }
 
+const pdfEndpoints = ['1.0', '0.3.0'].flatMap((protocolVersion) => [
+  { protocolVersion },
+  { protocolVersion, agentCardUrl: 'https://agent.example.com/.well-known/agent-card.json' },
+]);
+
 describe('A2AProvider', () => {
   beforeEach(() => {
     vi.resetAllMocks();
@@ -346,9 +351,9 @@ describe('A2AProvider', () => {
     }
   });
 
-  it.each(['1.0', '0.3.0'])(
-    'rejects missing selected PDF inputs before sending A2A %s messages',
-    async (version) => {
+  it.each(pdfEndpoints)(
+    'rejects missing PDFs before discovery or delivery with $protocolVersion/$agentCardUrl',
+    async (config) => {
       const document = 'data:application/pdf;base64,JVBERi0x';
       const cases: Record<string, string | number>[] = [
         {},
@@ -363,20 +368,78 @@ describe('A2AProvider', () => {
         vi.mocked(fetchWithTimeout).mockResolvedValueOnce(
           jsonResponse({ message: { role: 'ROLE_AGENT', parts: [{ text: 'No document' }] } }),
         );
-        const result = await provider({ protocolVersion: version }).callApi(
-          `Read the invoice: ${document}`,
-          {
-            prompt: { raw: '{{invoice}}', label: 'Invoice' },
-            vars,
-            test: { metadata: { strategyId: 'pdf', pdf: { input: 'invoice' } } },
-          },
-        );
+        const result = await provider(config).callApi(`Read the invoice: ${document}`, {
+          prompt: { raw: '{{invoice}}', label: 'Invoice' },
+          vars,
+          test: { metadata: { strategyId: 'pdf', pdf: { input: 'invoice' } } },
+        });
         expect(result.error).toContain('PDF strategy requires an attachment in input "invoice"');
         expect(result.output).toBeUndefined();
         expect(fetchWithTimeout).not.toHaveBeenCalled();
       }
     },
   );
+
+  it.each(pdfEndpoints)(
+    'rejects invalid PDF values before discovery or delivery with $protocolVersion/$agentCardUrl',
+    async (config) => {
+      for (const document of [
+        'data:image/png;base64,JVBERi0x',
+        'data:application/pdf;base64,',
+        'data:application/pdf,JVBERi0x',
+        'data:application/pdf;base64,UE5H',
+        'JVBERi0x!!!!',
+        'JVBERi0xA',
+        'JVBERi0x==',
+        'UE5H',
+      ]) {
+        vi.mocked(fetchWithTimeout).mockReset();
+        vi.mocked(fetchWithTimeout).mockResolvedValueOnce(
+          jsonResponse({ message: { role: 'ROLE_AGENT', parts: [{ text: 'Invalid PDF' }] } }),
+        );
+        const result = await provider(config).callApi('Read the invoice.', {
+          prompt: { raw: '{{question}}', label: 'Question' },
+          vars: { document },
+          test: { metadata: { strategyId: 'pdf', pdf: { input: 'document' } } },
+        });
+        expect(result.error).toContain('PDF strategy requires PDF bytes as base64');
+        expect(result.output).toBeUndefined();
+        expect(fetchWithTimeout).not.toHaveBeenCalled();
+      }
+    },
+  );
+
+  it.each(['1.0', '0.3.0'])('normalizes valid PDF media for A2A %s', async (protocolVersion) => {
+    const raw = Buffer.from('%PDF-1.7\nPDF attachment bytes').toString('base64');
+    for (const document of [
+      raw,
+      raw.replace(/.{8}/g, '$&\n'),
+      ` data:APPLICATION/PDF;base64,${raw} `,
+    ]) {
+      vi.mocked(fetchWithTimeout).mockResolvedValueOnce(
+        jsonResponse({ message: { role: 'ROLE_AGENT', parts: [{ text: 'PDF received' }] } }),
+      );
+      const result = await provider({ protocolVersion }).callApi('Read the invoice.', {
+        prompt: { raw: '{{question}}', label: 'Question' },
+        vars: { document },
+        test: { metadata: { strategyId: 'pdf', pdf: { input: 'document' } } },
+      });
+      expect(result.output).toBe('PDF received');
+      const body = JSON.parse(vi.mocked(fetchWithTimeout).mock.lastCall?.[1]?.body as string);
+      expect(body.message.parts.at(-1)).toEqual(
+        protocolVersion === '0.3.0'
+          ? {
+              kind: 'file',
+              file: {
+                fileWithBytes: raw,
+                mimeType: 'application/pdf',
+                name: 'promptfoo-document.pdf',
+              },
+            }
+          : { filename: 'promptfoo-document.pdf', mediaType: 'application/pdf', raw },
+      );
+    }
+  });
 
   it.each(['1.0', '0.3.0'])(
     'preserves declared PDF companion inputs in A2A %s without including auxiliary variables',

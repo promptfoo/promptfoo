@@ -831,6 +831,36 @@ function createRunEvalSetup({
   };
 }
 
+async function validatePdfArtifact(test: AtomicTestCase, vars: Vars): Promise<void> {
+  const pdf = test.metadata?.pdf;
+  if (typeof pdf?.input !== 'string' || typeof pdf.contentHash !== 'string') {
+    return;
+  }
+  const values: unknown[] = [vars[pdf.input]];
+  if (typeof vars.__prompt === 'string') {
+    try {
+      const inputs = JSON.parse(vars.__prompt);
+      if (inputs && typeof inputs === 'object' && Object.hasOwn(inputs, pdf.input)) {
+        values.push(inputs[pdf.input]);
+      }
+    } catch {
+      // A custom task prompt need not be a serialized input object.
+    }
+  }
+  for (const value of values) {
+    const bytes =
+      typeof value === 'string'
+        ? Buffer.from(value.trim().replace(/^data:application\/pdf;base64,/i, ''), 'base64')
+        : undefined;
+    invariant(
+      bytes &&
+        `sha256:${Buffer.from(await crypto.subtle.digest('SHA-256', bytes)).toString('hex')}` ===
+          pdf.contentHash,
+      'PDF attachment differs from its generated artifact. Regenerate PDF tests after changing document inputs.',
+    );
+  }
+}
+
 async function renderRunEvalPrompt({
   filters,
   isRedteam,
@@ -858,6 +888,7 @@ async function renderRunEvalPrompt({
     provider,
     skipRenderVars,
   );
+  await validatePdfArtifact(test, vars);
   if (isRedteam) {
     const readableInputs: { dataUrl?: string; text: string }[] = [];
     const metadata = test.metadata;

@@ -90,6 +90,12 @@ const MEDIA_STRATEGY_DEFAULTS = {
 
 type MediaStrategyId = keyof typeof MEDIA_STRATEGY_DEFAULTS;
 
+type MediaPayload = {
+  filename: string;
+  mediaType: string;
+  raw: string;
+};
+
 interface A2AEndpoint {
   protocolVersion: string;
   streaming: boolean;
@@ -426,11 +432,10 @@ function getDefaultTextPart(
   return usesLegacyMessageShape(protocolVersion) ? { kind: 'text', text } : { text };
 }
 
-function getDefaultMediaPart(
-  protocolVersion: string,
+function getDefaultMedia(
   contextVars: Record<string, unknown>,
   context?: CallApiContextParams,
-): A2APart | undefined {
+): MediaPayload | undefined {
   const strategyId = getMediaStrategyId(context);
   if (!strategyId) {
     return undefined;
@@ -445,19 +450,23 @@ function getDefaultMediaPart(
   }
 
   const defaults = MEDIA_STRATEGY_DEFAULTS[strategyId];
-  const parsedDataUrl = parseBase64DataUrl(mediaValue);
-  const raw = parsedDataUrl?.raw ?? mediaValue;
-  const mediaType = parsedDataUrl?.mediaType ?? defaults.mediaType;
-
-  if (usesLegacyMessageShape(protocolVersion)) {
-    return {
-      file: {
-        fileWithBytes: raw,
-        mimeType: mediaType,
-        name: defaults.filename,
-      },
-      kind: 'file',
-    };
+  const parsedDataUrl = parseBase64DataUrl(strategyId === 'pdf' ? mediaValue.trim() : mediaValue);
+  let raw = parsedDataUrl?.raw ?? mediaValue;
+  let mediaType = parsedDataUrl?.mediaType ?? defaults.mediaType;
+  if (strategyId === 'pdf') {
+    raw = raw.replace(/\s/g, '');
+    if (
+      (parsedDataUrl && parsedDataUrl.mediaType.toLowerCase() !== 'application/pdf') ||
+      !/^[A-Za-z0-9+/]+={0,2}$/.test(raw) ||
+      raw.length % 4 === 1 ||
+      (raw.includes('=') && raw.length % 4 !== 0) ||
+      Buffer.from(raw, 'base64').subarray(0, 5).toString() !== '%PDF-'
+    ) {
+      throw new Error(
+        `PDF strategy requires PDF bytes as base64 or an application/pdf data URI in input "${varName}"`,
+      );
+    }
+    mediaType = 'application/pdf';
   }
 
   return {
@@ -472,19 +481,16 @@ function getDefaultMessage(
   protocolVersion: string,
   contextVars: Record<string, unknown> = {},
   context?: CallApiContextParams,
+  media?: MediaPayload,
 ): A2AMessage {
-  const mediaPart = getDefaultMediaPart(protocolVersion, contextVars, context);
-  if (mediaPart) {
-    const mediaValue =
-      typeof mediaPart.raw === 'string'
-        ? mediaPart.raw
-        : typeof mediaPart.file === 'object' &&
-            mediaPart.file &&
-            'fileWithBytes' in mediaPart.file &&
-            typeof mediaPart.file.fileWithBytes === 'string'
-          ? mediaPart.file.fileWithBytes
-          : undefined;
-    const textPart = getDefaultTextPart(prompt, protocolVersion, contextVars, mediaValue, context);
+  if (media) {
+    const mediaPart: A2APart = usesLegacyMessageShape(protocolVersion)
+      ? {
+          kind: 'file',
+          file: { fileWithBytes: media.raw, mimeType: media.mediaType, name: media.filename },
+        }
+      : media;
+    const textPart = getDefaultTextPart(prompt, protocolVersion, contextVars, media.raw, context);
     return {
       role: usesLegacyMessageShape(protocolVersion) ? 'user' : 'ROLE_USER',
       parts: textPart ? [textPart, mediaPart] : [mediaPart],
@@ -772,6 +778,7 @@ export class A2AProvider implements ApiProvider {
         ...contextVars,
         prompt,
       } as RequestVars;
+      const media = this.config.message ? undefined : getDefaultMedia(contextVars, context);
       const endpoint = await this.resolveEndpoint(vars, context, options);
       const mode = this.resolveMode(endpoint);
       const message = this.buildMessage(
@@ -780,6 +787,7 @@ export class A2AProvider implements ApiProvider {
         vars,
         context,
         contextVars,
+        media,
       );
       const body = {
         ...(endpoint.tenant ? { tenant: endpoint.tenant } : {}),
@@ -900,10 +908,11 @@ export class A2AProvider implements ApiProvider {
     vars: RequestVars,
     context?: CallApiContextParams,
     contextVars: Record<string, unknown> = context?.vars ?? {},
+    media?: MediaPayload,
   ): A2AMessage {
     const configuredMessage = this.config.message
       ? renderTemplate(this.config.message, vars, context)
-      : getDefaultMessage(prompt, protocolVersion, contextVars, context);
+      : getDefaultMessage(prompt, protocolVersion, contextVars, context, media);
     const message = A2AMessageSchema.parse(configuredMessage);
     return {
       ...message,

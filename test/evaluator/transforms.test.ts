@@ -6,10 +6,97 @@ import { expect, it, vi } from 'vitest';
 import { evaluate } from '../../src/evaluator';
 import Eval from '../../src/models/eval';
 import { type ApiProvider, type TestSuite } from '../../src/types/index';
+import { sha256 } from '../../src/util/createHash';
+import { transform } from '../../src/util/transform';
 import { mockApiProvider, toPrompt } from './helpers';
 import { describeEvaluator } from './lifecycle';
 
 describeEvaluator('evaluator transforms', () => {
+  it.each(['default', 'test', 'envelope'])(
+    'rejects changed PDF attachments before calling the target: %s transform',
+    async (scope) => {
+      const bytes = Buffer.from('%PDF-1.7\nOriginal invoice');
+      const document = `data:application/pdf;base64,${bytes.toString('base64')}`;
+      const changed = `data:application/pdf;base64,${Buffer.from('%PDF-1.7\nChanged invoice').toString('base64')}`;
+      const transformVars =
+        scope === 'envelope'
+          ? `({ ...vars, __prompt: JSON.stringify({ document: ${JSON.stringify(changed)} }) })`
+          : `({ ...vars, document: ${JSON.stringify(changed)} })`;
+      vi.mocked(transform).mockImplementationOnce(async (_code, vars) => ({
+        ...(vars as Record<string, unknown>),
+        ...(scope === 'envelope'
+          ? { __prompt: JSON.stringify({ document: changed }) }
+          : { document: changed }),
+      }));
+      const testSuite: TestSuite = {
+        providers: [mockApiProvider],
+        prompts: [toPrompt('{{__prompt}}')],
+        defaultTest: scope === 'default' ? { options: { transformVars } } : undefined,
+        tests: [
+          {
+            vars: { document, __prompt: JSON.stringify({ document }) },
+            metadata: {
+              strategyId: 'pdf',
+              pdf: {
+                input: 'document',
+                contentHash: `sha256:${sha256(bytes)}`,
+                text: 'Original invoice',
+              },
+            },
+            options: scope === 'default' ? undefined : { transformVars },
+          },
+        ],
+      };
+      const evalRecord = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
+      await evaluate(testSuite, evalRecord, {});
+      const summary = await evalRecord.toEvaluateSummary();
+      expect(summary.results[0].error).toContain(
+        'PDF attachment differs from its generated artifact',
+      );
+      expect(summary.results[0].success).toBe(false);
+      expect(mockApiProvider.callApi).not.toHaveBeenCalled();
+    },
+  );
+
+  it('allows companion transforms and equivalent PDF encodings', async () => {
+    const bytes = Buffer.from('%PDF-1.7\nOriginal invoice');
+    const raw = bytes.toString('base64');
+    const document = `data:application/pdf;base64,${raw}`;
+    vi.mocked(transform).mockImplementationOnce(async (_code, vars) => ({
+      ...(vars as Record<string, unknown>),
+      document: raw,
+      question: 'Explain the payment terms.',
+      __prompt: JSON.stringify({ document: raw, question: 'Explain the payment terms.' }),
+    }));
+    const testSuite: TestSuite = {
+      providers: [mockApiProvider],
+      prompts: [toPrompt('{{__prompt}}')],
+      tests: [
+        {
+          vars: { document, __prompt: JSON.stringify({ document }) },
+          metadata: {
+            strategyId: 'pdf',
+            pdf: {
+              input: 'document',
+              contentHash: `sha256:${sha256(bytes)}`,
+              text: 'Original invoice',
+            },
+          },
+          options: {
+            transformVars:
+              '({ ...vars, document: vars.document.split(",")[1], question: "Explain the payment terms." })',
+          },
+        },
+      ],
+    };
+    const evalRecord = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
+    await evaluate(testSuite, evalRecord, {});
+    const summary = await evalRecord.toEvaluateSummary();
+    expect(summary.results[0].error).toBeUndefined();
+    expect(summary.results[0].success).toBe(true);
+    expect(mockApiProvider.callApi).toHaveBeenCalledOnce();
+  });
+
   it('evaluate with transform option - default test', async () => {
     const testSuite: TestSuite = {
       providers: [mockApiProvider],
