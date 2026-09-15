@@ -438,10 +438,16 @@ function groupControlObservations(observations: AgentObservation[]): AgentObserv
       }
     }
   }
+  const seenEvents = new Set<string>();
   for (const observation of observations) {
     if (observation.source !== 'trace-event') {
       continue;
     }
+    const identity = JSON.stringify({ ...observation, eventId: undefined, location: undefined });
+    if (seenEvents.has(identity)) {
+      continue;
+    }
+    seenEvents.add(identity);
     const key = groupKey(observation);
     const group = key ? spanGroups.get(key) : undefined;
     if (group) {

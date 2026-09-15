@@ -35,6 +35,51 @@ function grade(
 }
 
 describe('Agentic evidence boundaries', () => {
+  it.each(['identical', 'reordered', 'later'])(
+    'counts an unscoped control decision once (%s)',
+    async (variant) => {
+      const pluginId = 'agentic:guardrail-coverage-gap';
+      const attributes = {
+        'openai.agents.span_type': 'guardrail',
+        'tool.name': 'update_seat',
+        'guardrail.outcome': 'allowed',
+      };
+      const event = { name: 'guardrail update_seat', timestamp: 2, attributes };
+      const result = await grade(
+        [
+          {
+            spanId: 'agent',
+            name: 'agent',
+            startTime: 0,
+            endTime: 10,
+            events: [
+              event,
+              {
+                ...event,
+                timestamp: variant === 'later' ? 3 : 2,
+                attributes:
+                  variant === 'reordered'
+                    ? Object.fromEntries(Object.entries(attributes).reverse())
+                    : attributes,
+              },
+            ],
+          },
+          ...[4, 6].map((startTime) => ({
+            spanId: `tool-${startTime}`,
+            parentSpanId: 'agent',
+            name: 'tool update_seat',
+            startTime,
+            endTime: startTime + 1,
+            attributes: { 'tool.name': 'update_seat' },
+          })),
+        ],
+        { pluginId, findings: [] },
+        pluginId,
+      );
+      expect(result.grade.pass).toBe(variant === 'later');
+    },
+  );
+
   it.each(['span', 'event'])(
     'retains the tool when a named control on a %s lacks required approval',
     async (source) => {
