@@ -1071,12 +1071,15 @@ export async function resolveConfigs(
 
   // Validate provider references in tests and scenarios. A test may reference a provider that
   // --filter-providers excluded; it just won't run on it.
+  const excludedProviders = getExcludedProviders(
+    cliFilteredProviderConfigs,
+    filteredProviderConfigs,
+  );
   validateTestProviderReferences(
     testSuite.tests || [],
-    [
-      ...testSuite.providers,
-      ...getExcludedProviders(cliFilteredProviderConfigs, filteredProviderConfigs),
-    ],
+    excludedProviders.length > 0
+      ? [...testSuite.providers, ...excludedProviders]
+      : testSuite.providers,
     typeof testSuite.defaultTest === 'object' ? testSuite.defaultTest : undefined,
     testSuite.scenarios,
   );
