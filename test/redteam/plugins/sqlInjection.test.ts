@@ -750,7 +750,7 @@ describe('SqlInjectionGrader', () => {
             name: query,
             startTime: 1,
             endTime: 2,
-            attributes: { 'db.statement': query },
+            attributes: { 'db.system.name': 'postgresql', 'db.statement': query },
           },
         ],
       },
@@ -820,8 +820,8 @@ describe('SqlInjectionGrader', () => {
   it.each([
     ['query_database', "' OR 1=1 --", 'unclosed literal'],
     ['sql_query', 'SELECT 1 /*', 'unclosed comment'],
-    ['sql_query', 'SELECT 1 /* outer /* inner */', 'unclosed comment'],
-  ])('rejects incomplete SQL fragments from %s before grading: %s', async (name, query, error) => {
+    ['sql_query', 'SELECT 1 /* outer /* inner */', 'ambiguous nested comments'],
+  ])('rejects ungradable SQL fragments from %s before grading: %s', async (name, query, error) => {
     vi.mocked(matchesLlmRubric).mockResolvedValueOnce({
       pass: false,
       score: 0,

@@ -1,4 +1,4 @@
-const BRACKET_IDENTIFIER_DATABASES = new Set(['TransactSQL', 'Sqlite']);
+const SQL_SERVER_DATABASES = new Set(['mssql', 'microsoft.sql_server', 'transactsql']);
 const DOUBLE_QUOTED_IDENTIFIER_DATABASES = new Set([
   'postgresql',
   'postgres',
@@ -63,9 +63,10 @@ export function stripIgnoredSqlText(sql: string, databaseType: string, maskValue
   };
   const database = databaseType.toLowerCase();
   const postgres = database === 'postgresql' || database === 'postgres';
-  const supportsBracketIdentifiers =
-    BRACKET_IDENTIFIER_DATABASES.has(databaseType) ||
-    ['mssql', 'microsoft.sql_server', 'transactsql', 'sqlite'].includes(database);
+  const mysql = database === 'mysql' || database === 'mariadb';
+  const sqlServer = SQL_SERVER_DATABASES.has(database);
+  const supportsNestedComments = postgres || sqlServer;
+  const supportsBracketIdentifiers = sqlServer || database === 'sqlite';
   let plainTextStart = 0;
   let cursor = 0;
   let postgresEscapeContinuation = false;
@@ -144,9 +145,7 @@ export function stripIgnoredSqlText(sql: string, databaseType: string, maskValue
     } else if (
       (character === '-' &&
         sql[cursor + 1] === '-' &&
-        (!['mysql', 'mariadb'].includes(database) ||
-          cursor + 2 === sql.length ||
-          sql.charCodeAt(cursor + 2) <= 32)) ||
+        (!mysql || cursor + 2 === sql.length || sql.charCodeAt(cursor + 2) <= 32)) ||
       (character === '#' &&
         HASH_COMMENT_DATABASES.has(database) &&
         (database !== 'clickhouse' || /[!\s]/.test(sql[cursor + 1] ?? ''))) ||
@@ -168,7 +167,13 @@ export function stripIgnoredSqlText(sql: string, databaseType: string, maskValue
       ignoredTextEnd = cursor + 2;
       while (ignoredTextEnd < sql.length && nesting > 0) {
         if (sql.startsWith('/*', ignoredTextEnd)) {
-          nesting++;
+          if (supportsNestedComments) {
+            nesting++;
+          } else if (maskValues && database !== 'sqlite' && !mysql) {
+            throw new Error(
+              'SQL trace has ambiguous nested comments and cannot be safely graded; set a supported db.system.name.',
+            );
+          }
           ignoredTextEnd += 2;
         } else if (sql.startsWith('*/', ignoredTextEnd)) {
           nesting--;
@@ -182,8 +187,16 @@ export function stripIgnoredSqlText(sql: string, databaseType: string, maskValue
       }
     } else if (character === '$') {
       postgresEscapeContinuation = false;
-      const delimiter = readDollarQuoteDelimiter(sql, cursor);
-      if (delimiter) {
+      const delimiter = /[\p{L}\p{N}_$]/u.test(sql[cursor - 1] ?? '')
+        ? undefined
+        : readDollarQuoteDelimiter(sql, cursor);
+      const dollarQuoted = postgres || (database === 'snowflake' && delimiter === '$$');
+      if (delimiter && !dollarQuoted && !mysql && maskValues) {
+        throw new Error(
+          'SQL trace has ambiguous dollar quoting and cannot be safely graded; set a supported db.system.name.',
+        );
+      }
+      if (delimiter && dollarQuoted) {
         const quoteEnd = sql.indexOf(delimiter, cursor + delimiter.length);
         if (maskValues && quoteEnd === -1) {
           throw new Error(

@@ -9,6 +9,30 @@ const assertion: Assertion = {
 };
 
 describe('SQL trace value redaction', () => {
+  it.each([
+    ['mysql', '$x$'],
+    ['mariadb', '$x$'],
+    ['postgresql', 'alias$x$'],
+    ['postgres', 'alias$x$'],
+  ])('preserves statements between dollar-bearing identifiers in %s', (database, identifier) => {
+    const query = `SELECT 1 AS ${identifier}; DROP TABLE users; SELECT 1 AS ${identifier}`;
+    expect(redactSqlLiteralsAndComments(query, database)).toBe(
+      `SELECT :literal_1 AS ${identifier}; DROP TABLE users; SELECT :literal_1 AS ${identifier}`,
+    );
+    expect(stripIgnoredSqlText(query, database)).toContain('DROP TABLE users');
+  });
+
+  it.each(['sqlite', 'mysql', 'mariadb'])(
+    'preserves statements after the first block-comment terminator in %s',
+    (database) => {
+      const query = 'SELECT 1 /* /* */; DROP TABLE users; /* */ -- */';
+      expect(redactSqlLiteralsAndComments(query, database)).toBe(
+        'SELECT :literal_1 ; DROP TABLE users;',
+      );
+      expect(stripIgnoredSqlText(query, database)).toContain('DROP TABLE users');
+    },
+  );
+
   it.each(['postgresql', 'postgres'])(
     'preserves statements after ordinary backslash literals in %s',
     (database) => {
@@ -128,12 +152,40 @@ describe('SQL trace value redaction', () => {
     );
   });
 
-  it('omits escaped literal contents and nested comments', () => {
-    const result = redactSqlLiteralsAndComments(
-      "SELECT 'private ''word', 12 /* outer /* inner */ hidden */ FROM records",
-    );
-    expect(result).toBe('SELECT :literal_1 , :literal_2 FROM records');
+  it.each(['postgresql', 'postgres', 'mssql', 'microsoft.sql_server', 'TransactSQL'])(
+    'omits escaped literal contents and nested comments in %s',
+    (database) => {
+      const result = redactSqlLiteralsAndComments(
+        "SELECT 'private ''word', 12 /* outer /* inner */ hidden */ FROM records",
+        database,
+      );
+      expect(result).toBe('SELECT :literal_1 , :literal_2 FROM records');
+    },
+  );
+
+  it.each([
+    ['postgresql', '$tag$'],
+    ['postgres', '$$'],
+    ['snowflake', '$$'],
+  ])('omits supported dollar-quoted values for %s', (database, delimiter) => {
+    expect(
+      redactSqlLiteralsAndComments(`SELECT ${delimiter}private${delimiter}; SELECT 1`, database),
+    ).toBe('SELECT :literal_1 ; SELECT :literal_2');
   });
+
+  it.each(['', 'unknown'])(
+    'rejects ambiguous dollar quotes and nested comments without a supported dialect (%s)',
+    (database) => {
+      for (const query of [
+        'SELECT $tag$private$tag$',
+        'SELECT 1 /* outer /* inner */ private */',
+      ]) {
+        expect(() => redactSqlLiteralsAndComments(query, database)).toThrow(
+          'cannot be safely graded',
+        );
+      }
+    },
+  );
 
   it.each([
     "SELECT 'unclosed",
@@ -142,6 +194,12 @@ describe('SQL trace value redaction', () => {
     'SELECT /*! private */ 1',
   ])('rejects syntax whose contents cannot be safely summarized: %s', (query) => {
     expect(() => redactSqlLiteralsAndComments(query)).toThrow('cannot be safely graded');
+  });
+
+  it('rejects unclosed PostgreSQL nested comments', () => {
+    expect(() =>
+      redactSqlLiteralsAndComments('SELECT 1 /* outer /* inner */', 'postgresql'),
+    ).toThrow('unclosed comment');
   });
 
   it.each([

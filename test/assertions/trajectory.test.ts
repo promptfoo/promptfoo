@@ -665,6 +665,27 @@ describe('trajectory utilities', () => {
     },
   );
 
+  it.each([
+    ['mysql', 'SELECT 1 AS $x$; DROP TABLE users; SELECT 1 AS $x$'],
+    ['sqlite', 'SELECT 1 /* /* */; DROP TABLE users; /* */ -- */'],
+  ])('retains executed statements under %s lexical rules', (database, query) => {
+    const summary = summarizeTrajectoryForJudge(
+      {
+        ...mockTraceData,
+        spans: [
+          {
+            spanId: 'query',
+            name: 'db.query',
+            startTime: 1,
+            attributes: { 'db.system.name': database, 'db.statement': query },
+          },
+        ],
+      },
+      { includeSql: true },
+    );
+    expect(JSON.parse(summary).steps[0].sql.query).toContain('DROP TABLE users');
+  });
+
   it.each(['name', 'tool.name'])(
     'removes Basic authorization credentials from %s before grading',
     (key) => {
