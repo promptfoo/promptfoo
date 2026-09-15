@@ -1874,6 +1874,56 @@ describe('evaluator', () => {
       });
     });
 
+    it.each([
+      'promptfoo:redteam:coding-agent:trace-redaction',
+      'promptfoo:redteam:harness:artifact-redaction',
+    ] as const)(
+      'redacts older private %s rows when paging without rewriting storage',
+      async (type) => {
+        const marker = 'PRIVATE_PAGED_RECEIPT';
+        const [original] = await EvalResult.findManyByEvalIdAndTestIndices(evalWithResults.id, [0]);
+        const db = await getDb();
+        await db
+          .update(evalResultsTable)
+          .set({
+            testCase: {
+              vars: { rawReceipt: marker },
+              assert: [{ type, value: { rawReceipt: marker } }],
+            },
+            prompt: { raw: marker, label: 'Public label' },
+            response: { output: marker, raw: marker },
+            error: marker,
+            gradingResult: {
+              pass: false,
+              score: 0,
+              reason: 'Private response detected',
+              metadata: { renderedGradingPrompt: marker },
+            },
+            metadata: { reportText: marker },
+          })
+          .where(eq(evalResultsTable.id, original.id));
+        const stored = await db
+          .select()
+          .from(evalResultsTable)
+          .where(eq(evalResultsTable.id, original.id))
+          .get();
+        const page = await evalWithResults.getTablePage({ testIndices: [0] });
+        expect(JSON.stringify(page)).not.toContain(marker);
+        expect(page.body[0].outputs[original.promptIdx]).toMatchObject({
+          id: original.id,
+          pass: original.success,
+          score: original.score,
+        });
+        expect(
+          await db
+            .select()
+            .from(evalResultsTable)
+            .where(eq(evalResultsTable.id, original.id))
+            .get(),
+        ).toEqual(stored);
+      },
+    );
+
     it('should return paginated results with default parameters', async () => {
       const result = await evalWithResults.getTablePage({ filters: [] });
 

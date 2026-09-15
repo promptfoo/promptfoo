@@ -1,7 +1,10 @@
+import { sanitizeRedactionResult } from '../traceRedaction';
+
 import type EvalResult from '../../models/evalResult';
 import type { EvaluateTableOutput, EvaluateTableRow } from '../../types/index';
 
 export function convertEvalResultToTableCell(result: EvalResult): EvaluateTableOutput {
+  result = sanitizeRedactionResult(result);
   let resultText: string | undefined;
   const rawOutput = result.response?.output;
   let outputTextDisplay: string;
@@ -73,6 +76,7 @@ export function convertTestResultsToTableRow(
   results: EvalResult[],
   varsForHeader: string[],
 ): EvaluateTableRow {
+  results = results.map(sanitizeRedactionResult);
   const row = {
     description: results[0].description || undefined,
     outputs: [] as EvaluateTableRow['outputs'],

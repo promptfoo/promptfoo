@@ -1,5 +1,8 @@
 import { describe, expect, it } from 'vitest';
-import { convertTestResultsToTableRow } from '../../../src/util/exportToFile/index';
+import {
+  convertEvalResultToTableCell,
+  convertTestResultsToTableRow,
+} from '../../../src/util/exportToFile/index';
 
 import type EvalResult from '../../../src/models/evalResult';
 
@@ -59,6 +62,49 @@ function createMockEvalResult(overrides: Partial<EvalResult> = {}): EvalResult {
 }
 
 describe('convertTestResultsToTableRow', () => {
+  it.each(
+    (
+      [
+        'promptfoo:redteam:coding-agent:trace-redaction',
+        'promptfoo:redteam:harness:artifact-redaction',
+      ] as const
+    ).flatMap((type) => ['cell', 'row'].map((surface) => ({ type, surface }))),
+  )('redacts raw $type data in the $surface without mutating its source', ({ type, surface }) => {
+    const marker = 'PRIVATE_TABLE_RECEIPT';
+    const result = createMockEvalResult({
+      testCase: {
+        vars: { rawReceipt: marker, ordinary: 'keep' },
+        assert: [{ type, value: { rawReceipt: marker } }],
+      },
+      prompt: { raw: `Inspect ${marker}`, label: 'Public label' },
+      response: { output: marker, raw: marker, metadata: { reportText: marker } },
+      error: marker,
+      success: false,
+      score: 0,
+      gradingResult: {
+        pass: false,
+        score: 0,
+        reason: 'Private response detected',
+        metadata: { renderedGradingPrompt: marker },
+      },
+      metadata: { sessionId: marker, reportText: marker },
+    });
+    const snapshot = JSON.stringify(result);
+    const row =
+      surface === 'row'
+        ? convertTestResultsToTableRow([result], ['rawReceipt', 'ordinary'])
+        : undefined;
+    const cell = row ? row.outputs[0] : convertEvalResultToTableCell(result);
+    expect(JSON.stringify(row ?? cell)).not.toContain(marker);
+    expect(cell).toMatchObject({ pass: false, score: 0, id: result.id });
+    expect(cell.text).toContain('Response omitted');
+    expect(cell.gradingResult?.metadata?.renderedGradingPrompt).toBeUndefined();
+    if (row) {
+      expect(row.vars).toEqual(['[REDACTED]', 'keep']);
+    }
+    expect(JSON.stringify(result)).toBe(snapshot);
+  });
+
   describe('basic functionality', () => {
     it('should convert results to table row format', () => {
       const results = [
