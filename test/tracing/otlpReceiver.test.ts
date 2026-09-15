@@ -3058,29 +3058,37 @@ describe('OTLPReceiver', () => {
       expect((spans as any[])[0].name).toBe('otel.log');
     });
 
-    it('truncates oversize otel.log.body to prevent trace-DB bloat', async () => {
-      const huge = 'x'.repeat(20_000);
-      const req = makeLogsRequest([
-        {
-          timeUnixNano: '1700000000000000000',
-          traceId: hexTraceId,
-          spanId: hexParentSpanId,
-          body: { stringValue: huge },
-          attributes: [{ key: 'event.name', value: { stringValue: 'claude_code.noise' } }],
-        },
-      ]);
+    it.each([8192, 8193, 20_000])(
+      'marks truncated log bodies incomplete (%s characters)',
+      async (length) => {
+        const body = 'x'.repeat(length);
+        const req = makeLogsRequest([
+          {
+            timeUnixNano: '1700000000000000000',
+            traceId: hexTraceId,
+            spanId: hexParentSpanId,
+            body: { stringValue: body },
+            attributes: [{ key: 'event.name', value: { stringValue: 'claude_code.noise' } }],
+          },
+        ]);
 
-      await request(receiver.getApp())
-        .post('/v1/logs')
-        .set('Content-Type', 'application/json')
-        .send(req)
-        .expect(200);
+        await request(receiver.getApp())
+          .post('/v1/logs')
+          .set('Content-Type', 'application/json')
+          .send(req)
+          .expect(200);
 
-      const [, spans] = persistSpans.mock.calls[0];
-      const storedBody = (spans as any[])[0].attributes['otel.log.body'] as string;
-      expect(storedBody.length).toBeLessThan(huge.length);
-      expect(storedBody.endsWith('... [truncated]')).toBe(true);
-    });
+        const [, spans] = persistSpans.mock.calls[0];
+        const parsed = spans[0];
+        const storedBody = parsed.attributes['otel.log.body'] as string;
+        expect(storedBody.length).toBeLessThanOrEqual(8192);
+        expect(storedBody.endsWith('... [truncated]')).toBe(length > 8192);
+        expect(parsed.incomplete === true).toBe(length > 8192);
+        if (length <= 8192) {
+          expect(storedBody).toBe(body);
+        }
+      },
+    );
 
     it.each([undefined, null, { boolValue: false, stringValue: 'allowed' }])(
       'rejects malformed log values without losing failed verifier evidence: %j',

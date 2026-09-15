@@ -895,6 +895,7 @@ export class OTLPReceiver {
 
     const logAttributes = parseOtlpAttributes(log.attributes);
     const bodyValue = log.body ? parseOtlpAttributeValue(log.body) : undefined;
+    const logBody = truncateLogBody(bodyValue);
     const attributes = mergeResourceAttributes(resourceAttributes, {
       ...logAttributes,
       'otel.log.record': true,
@@ -903,7 +904,7 @@ export class OTLPReceiver {
       'otel.log.severity_number': log.severityNumber,
       'otel.log.severity_text': log.severityText,
       'otel.log.time_unix_nano': undefined,
-      ...(bodyValue !== undefined && { 'otel.log.body': truncateLogBody(bodyValue) }),
+      ...(logBody !== undefined && { 'otel.log.body': logBody }),
     });
 
     const name = resolveLogSpanName(attributes, bodyValue);
@@ -977,7 +978,7 @@ export class OTLPReceiver {
         startTime,
         endTime,
         attributes,
-        ...(invalidTime && { incomplete: true }),
+        ...((invalidTime || logBody !== bodyValue) && { incomplete: true }),
         // OTEL logs don't carry a span status; treat as OK unless severity indicates error.
         statusCode: severityIsError ? 2 : 1,
         statusMessage: severityIsError ? log.severityText : undefined,
