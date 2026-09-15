@@ -1629,6 +1629,54 @@ describe('importCommand', () => {
       },
     );
 
+    it.each(['count', 'bytes'])(
+      'preserves existing result identities when a forced trace exceeds %s limits',
+      async (limit) => {
+        const sampleFilePath = path.join(__dirname, '../__fixtures__/sample-export.json');
+        const replacement = JSON.parse(fs.readFileSync(sampleFilePath, 'utf8'));
+        importCommand(program);
+        await program.parseAsync(['node', 'test', 'import', sampleFilePath]);
+        const originalIds = (await EvalResult.findManyByEvalId(replacement.evalId))
+          .map((row) => row.id)
+          .sort();
+        replacement.traces = [
+          {
+            traceId: 'oversized',
+            evaluationId: replacement.evalId,
+            testCaseId: 'fixture',
+            spans:
+              limit === 'count'
+                ? Array.from({ length: 10_001 }, (_, index) => ({
+                    spanId: `span-${index}`,
+                    name: 'tool',
+                    startTime: 1,
+                  }))
+                : [
+                    {
+                      spanId: 'span',
+                      name: 'tool',
+                      startTime: 1,
+                      attributes: { output: 'x'.repeat(10 * 1024 * 1024) },
+                    },
+                  ],
+          },
+        ];
+        tempFilePath = path.join(__dirname, `temp-force-limit-${limit}-${Date.now()}.json`);
+        fs.writeFileSync(tempFilePath, JSON.stringify(replacement));
+        const second = new Command();
+        importCommand(second);
+        await second.parseAsync(['node', 'test', 'import', '--force', tempFilePath]);
+        expect(process.exitCode).toBe(1);
+        expect(logger.error).toHaveBeenCalledWith(
+          expect.stringContaining('Trace redaction limit exceeded'),
+        );
+        expect(
+          (await EvalResult.findManyByEvalId(replacement.evalId)).map((row) => row.id).sort(),
+        ).toEqual(originalIds);
+        expect(await new TraceStore().getTracesByEvaluation(replacement.evalId)).toEqual([]);
+      },
+    );
+
     it('should keep the existing eval when a --force replacement fails preflight', async () => {
       const sampleFilePath = path.join(__dirname, '../__fixtures__/sample-export.json');
       const sampleData = JSON.parse(fs.readFileSync(sampleFilePath, 'utf-8'));

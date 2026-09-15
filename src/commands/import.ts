@@ -11,7 +11,7 @@ import Eval, { createEvalId } from '../models/eval';
 import { notifyEvaluationChanged, notifyEvaluationsDeleted } from '../models/evalMutation';
 import EvalResult, { stripTraceLinkageFromMetadata } from '../models/evalResult';
 import telemetry from '../telemetry';
-import { getTraceStore, spanHash } from '../tracing/store';
+import { getTraceStore, spanHash, validateTraceBatchSize } from '../tracing/store';
 import { sha256 } from '../util/createHash';
 import { sanitizeTracingConfigForPersistence } from '../util/sanitizer';
 import type { Command } from 'commander';
@@ -306,6 +306,7 @@ function prepareTraces(traces: unknown): TraceData[] {
       }
       return importable;
     });
+    validateTraceBatchSize(spans);
     const hashes = new Map<string, string>();
     for (const span of spans) {
       const hash = spanHash(span);

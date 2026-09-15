@@ -110,6 +110,12 @@ export class TraceLimitError extends TraceIncompleteError {
   }
 }
 
+export function validateTraceBatchSize(spans: SpanData[]): void {
+  if (spans.length > 10_000 || Buffer.byteLength(JSON.stringify(spans)) > 10 * 1024 * 1024) {
+    throw new TraceLimitError();
+  }
+}
+
 function validateTracePayloadSize(
   spans: SpanData[],
   updateExisting: boolean,
@@ -419,6 +425,7 @@ export class TraceStore {
 
       const redact = options?.redactSpans;
       await db.transaction(async (tx) => {
+        validateTraceBatchSize(spans);
         const payloadBytes = sql<number>`
             length(cast(${spansTable.spanId} as blob))
             + coalesce(length(cast(${spansTable.parentSpanId} as blob)), 0)
@@ -435,12 +442,7 @@ export class TraceStore {
           .from(spansTable)
           .where(eq(spansTable.traceId, traceId));
         // Bound each input before hydrating existing payloads, including duplicate uploads.
-        if (
-          size.count > 10_000 ||
-          spans.length > 10_000 ||
-          size.bytes > 10 * 1024 * 1024 ||
-          Buffer.byteLength(JSON.stringify(spans)) > 10 * 1024 * 1024
-        ) {
+        if (size.count > 10_000 || size.bytes > 10 * 1024 * 1024) {
           throw new TraceLimitError();
         }
         const storedSizes = await tx

@@ -369,11 +369,14 @@ describe('BraintrustProvider', () => {
     ).toEqual(['tool.search']);
   });
 
-  it('rejects malformed BTQL response payloads', async () => {
-    mockedFetch.mockResolvedValue(response({ result: 'not span rows' }));
-
-    await expect(new BraintrustProvider(config).fetchTrace(TRACE_ID)).rejects.toThrow(
-      'invalid query response',
-    );
-  });
+  it.each(['{', 'null', '42', '[]', '{"result":"not span rows"}'])(
+    'marks malformed BTQL payload %s as invalid evidence',
+    async (body) => {
+      mockedFetch.mockResolvedValue(new Response(body));
+      await expect(new BraintrustProvider(config).fetchTrace(TRACE_ID)).rejects.toMatchObject({
+        name: 'TraceProviderError',
+        invalidEvidence: true,
+      });
+    },
+  );
 });

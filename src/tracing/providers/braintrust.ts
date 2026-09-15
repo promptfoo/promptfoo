@@ -208,10 +208,19 @@ export class BraintrustProvider implements TraceProvider {
     }
     const body = await readLimitedResponse(response, 'Braintrust');
 
-    const result = JSON.parse(body) as BraintrustQueryResponse;
-    const rows = result.rows ?? result.data;
+    let result: BraintrustQueryResponse;
+    try {
+      result = JSON.parse(body);
+    } catch {
+      throw new TraceProviderError('Braintrust returned an invalid query response', {
+        invalidEvidence: true,
+      });
+    }
+    const rows = result?.rows ?? result?.data;
     if (!Array.isArray(rows)) {
-      throw new TraceProviderError('Braintrust returned an invalid query response');
+      throw new TraceProviderError('Braintrust returned an invalid query response', {
+        invalidEvidence: true,
+      });
     }
     if (rows.length > MAX_SPANS) {
       throw new TraceProviderError('Braintrust trace exceeds the maximum span count', {
