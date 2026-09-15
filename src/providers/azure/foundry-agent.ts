@@ -750,7 +750,7 @@ export class AzureFoundryAgentProvider extends AzureGenericProvider {
         effectiveConfig.functionToolCallbacks,
       );
       const hasToolCalls = functionCalls.length > 0;
-      while (functionCalls.length > 0 && Date.now() - startTime <= maxLoopTimeMs) {
+      while (functionCalls.length > 0 && Date.now() - startTime < maxLoopTimeMs) {
         const outputs = await this.buildFunctionCallOutputs(
           functionCalls,
           response,
@@ -780,7 +780,7 @@ export class AzureFoundryAgentProvider extends AzureGenericProvider {
         );
       }
 
-      if (hasToolCalls && Date.now() - startTime > maxLoopTimeMs) {
+      if (hasToolCalls && Date.now() - startTime >= maxLoopTimeMs) {
         return {
           error: `Azure Foundry agent tool-calling loop timed out after ${maxLoopTimeMs}ms.`,
         };

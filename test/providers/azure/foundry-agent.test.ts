@@ -420,22 +420,25 @@ describe('AzureFoundryAgentProvider', () => {
       mockGetAgent.mockResolvedValue(mockAgent);
       vi.useFakeTimers();
       mockResponsesCreate.mockResolvedValue(createFunctionCallResponse());
+      const toolCallback = vi.fn().mockImplementation(async () => {
+        vi.advanceTimersByTime(maxPollTimeMs + 1);
+        return 'sunny';
+      });
       const provider = new AzureFoundryAgentProvider('weather-agent', {
         config: {
           projectUrl,
           maxPollTimeMs: 1000,
-          functionToolCallbacks: {
-            get_weather: vi.fn().mockImplementation(async () => {
-              vi.advanceTimersByTime(maxPollTimeMs + 1);
-              return 'sunny';
-            }),
-          },
+          functionToolCallbacks: { get_weather: toolCallback },
         },
       });
       const result = await provider.callApi('test prompt', {
         prompt: { config: { maxPollTimeMs } },
       } as any);
       expect(cacheGet).not.toHaveBeenCalled();
+      if (maxPollTimeMs === 0) {
+        expect(mockResponsesCreate).toHaveBeenCalledTimes(1);
+        expect(toolCallback).not.toHaveBeenCalled();
+      }
       expect(result.error).toContain(`tool-calling loop timed out after ${maxPollTimeMs}ms`);
     });
 

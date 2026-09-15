@@ -28,8 +28,8 @@ function validateDockerInstallCommands(dockerfile: string): void {
     .filter((line) => !line.trimStart().startsWith('#'))
     .join('\n')
     .replace(/\\\r?\n/g, ' ');
-  const commands = [...instructions.matchAll(/(?:^|[\s;&|])npm[ \t]+([^;&|\n]*)/g)].map(
-    ([, text]) => text.trim().split(/\s+/),
+  const commands = [...instructions.matchAll(/(?<![\w.-])npm\b([^;&|()\n]*)/g)].map(([, text]) =>
+    text.trim().split(/\s+/),
   );
   expect(commands.some(([command]) => command === 'ci')).toBe(true);
   expect(commands.some(([command]) => command === 'rebuild')).toBe(true);
@@ -545,6 +545,10 @@ describe('package manifests', () => {
 
   it.each([
     'RUN npm ci',
+    'RUN (npm ci)',
+    'RUN (npm rebuild esbuild)',
+    'RUN /usr/bin/npm ci',
+    'RUN "npm" ci',
     'RUN npm --silent ci',
     'RUN npm "ci"',
     'RUN npm --prefix /app ci',
