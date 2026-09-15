@@ -67,6 +67,7 @@ import {
   type EvaluateResult,
   type EvaluateStats,
   type GradingResult,
+  getInputRepresentations,
   MAX_SUGGESTIONS_COUNT,
   type Prompt,
   type ProviderResponse,
@@ -831,6 +832,61 @@ function createRunEvalSetup({
   };
 }
 
+async function validatePdfArtifact(test: AtomicTestCase, vars: Vars): Promise<void> {
+  const pdf = test.metadata?.pdf;
+  if (typeof pdf?.input !== 'string' || typeof pdf.contentHash !== 'string') {
+    return;
+  }
+  let serializedInputs: Record<string, unknown> | undefined;
+  if (typeof vars.__prompt === 'string') {
+    try {
+      const inputs = JSON.parse(vars.__prompt);
+      if (inputs && typeof inputs === 'object' && !Array.isArray(inputs)) {
+        serializedInputs = inputs;
+      }
+    } catch {
+      // A custom task prompt need not be a serialized input object.
+    }
+  }
+  for (const [input, expectedHash] of Object.entries({
+    ...pdf.companionHashes,
+    [pdf.input]: pdf.contentHash,
+  })) {
+    const values: unknown[] = [vars[input]];
+    if (serializedInputs) {
+      values.push(serializedInputs[input]);
+    }
+    for (const value of values) {
+      const prefix =
+        input === pdf.input ? /^data:application\/pdf;base64,/i : /^data:[^,]+;base64,/i;
+      const raw =
+        typeof value === 'string' ? value.trim().replace(prefix, '').replace(/\s/g, '') : undefined;
+      invariant(
+        input !== pdf.input ||
+          raw === undefined ||
+          Buffer.byteLength(raw, 'base64') <= 5 * 1024 * 1024,
+        'PDF attachment exceeds the 5 MiB limit',
+      );
+      invariant(
+        raw === undefined ||
+          (/^[A-Za-z0-9+/]+={0,2}$/.test(raw) &&
+            raw.length % 4 !== 1 &&
+            (!raw.includes('=') || raw.length % 4 === 0)),
+        `PDF attachment contains invalid base64 (${input})`,
+      );
+      const bytes = raw === undefined ? undefined : Buffer.from(raw, 'base64');
+      invariant(
+        expectedHash === null
+          ? value === undefined
+          : bytes &&
+              `sha256:${Buffer.from(await crypto.subtle.digest('SHA-256', bytes)).toString('hex')}` ===
+                expectedHash,
+        `PDF attachment differs from its generated artifact (${input}). Regenerate PDF tests after changing document inputs.`,
+      );
+    }
+  }
+}
+
 async function renderRunEvalPrompt({
   filters,
   isRedteam,
@@ -858,8 +914,54 @@ async function renderRunEvalPrompt({
     provider,
     skipRenderVars,
   );
+  await validatePdfArtifact(test, vars);
   if (isRedteam) {
-    throwIfTargetPromptExceedsMaxChars(renderedPrompt, testSuite?.redteam?.maxCharsPerMessage);
+    const readableInputs: { dataUrl?: string; text: string }[] = [];
+    const metadata = test.metadata;
+    const pdfInput = metadata?.pdf?.input;
+    if (typeof pdfInput === 'string' && typeof metadata?.originalText === 'string') {
+      for (const [key, value] of getInputRepresentations(
+        vars,
+        metadata.pluginConfig?.inputs,
+        pdfInput,
+      )) {
+        const input = metadata.pluginConfig?.inputs?.[key];
+        if (typeof value !== 'string') {
+          continue;
+        }
+        if (
+          key !== pdfInput &&
+          input &&
+          (typeof input === 'string' || !input.type || input.type === 'text')
+        ) {
+          readableInputs.push({ text: value });
+          continue;
+        }
+        if (
+          key !== pdfInput &&
+          (!input || typeof input !== 'object' || !input.type || input.type === 'text')
+        ) {
+          continue;
+        }
+        const materialized = metadata.inputMaterialization?.[key];
+        const text =
+          key === pdfInput
+            ? metadata.originalText
+            : typeof materialized?.bodyText === 'string'
+              ? [materialized.bodyText, materialized.injectedInstruction]
+                  .filter((part) => typeof part === 'string' && part)
+                  .join('\n\n')
+              : (materialized?.injectedInstruction ?? metadata.inputVars?.[key]);
+        if (typeof text === 'string' && !/^data:[^,]+;base64,/i.test(text.trim())) {
+          readableInputs.push({ dataUrl: value, text });
+        }
+      }
+    }
+    throwIfTargetPromptExceedsMaxChars(
+      renderedPrompt,
+      testSuite?.redteam?.maxCharsPerMessage,
+      readableInputs,
+    );
   }
   const promptConfig = mergeProviderPromptConfig(promptForRender.config, test.options);
   const setup = createRunEvalSetup({ provider, prompt: promptForRender, promptConfig, vars });

@@ -84,13 +84,14 @@ function parseChatMessages(prompt: string): ChatMessage[] | undefined {
 function getPromptLengthViolation(
   prompt: string,
   limit?: number,
+  mode: 'chat' | 'text' = 'chat',
 ): { length: number; limit: number; path: string } | undefined {
   const maxCharsPerMessage = getMaxCharsPerMessage(limit);
   if (!maxCharsPerMessage) {
     return undefined;
   }
 
-  const messages = parseChatMessages(prompt);
+  const messages = mode === 'chat' ? parseChatMessages(prompt) : undefined;
   if (messages) {
     const oversizedMessage = messages.find(
       (message) => message.role === 'user' && message.content.length > maxCharsPerMessage,
@@ -128,8 +129,9 @@ export function getMaxCharsPerMessageModifierValue(limit?: number): string | und
 export function getGeneratedPromptOverLimit(
   prompt: string,
   limit?: number,
+  mode: 'chat' | 'text' = 'chat',
 ): { length: number; limit: number } | undefined {
-  const violation = getPromptLengthViolation(prompt, limit);
+  const violation = getPromptLengthViolation(prompt, limit, mode);
   if (!violation) {
     return undefined;
   }
@@ -140,7 +142,29 @@ export function getGeneratedPromptOverLimit(
   };
 }
 
-export function throwIfTargetPromptExceedsMaxChars(prompt: string, limit?: number): void {
+export function throwIfTargetPromptExceedsMaxChars(
+  prompt: string,
+  limit?: number,
+  readableInputs: { dataUrl?: string; text: string }[] = [],
+): void {
+  const maxCharsPerMessage = getMaxCharsPerMessage(limit);
+  if (!maxCharsPerMessage) {
+    return;
+  }
+  for (const { dataUrl, text } of readableInputs) {
+    if (text.length > maxCharsPerMessage) {
+      throw new Error(
+        `Target input text exceeds maxCharsPerMessage=${maxCharsPerMessage}: ${text.length} characters.`,
+      );
+    }
+    const attachment = dataUrl?.trim().match(/^data:[^,]+;base64,(.+)$/is);
+    if (dataUrl) {
+      // Check readable content separately; only measurement excludes attachment bytes.
+      for (const value of attachment ? [attachment[0], attachment[1]] : [dataUrl]) {
+        prompt = prompt.split(value).join('').split(JSON.stringify(value).slice(1, -1)).join('');
+      }
+    }
+  }
   const violation = getPromptLengthViolation(prompt, limit);
   if (!violation) {
     return;

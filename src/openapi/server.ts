@@ -84,7 +84,7 @@ const OpenApiEvalTableJsonResponseSchema = z.union([
   EvalSchemas.Table.JsonExportResponse,
 ]);
 
-export const SERVER_OPENAPI_ROUTE_COUNT = 67;
+export const SERVER_OPENAPI_ROUTE_COUNT = 68;
 
 type OpenApiSchema = NonNullable<ZodMediaTypeObject['schema']>;
 type OpenApiResponse = ResponseConfig & { description: string };
@@ -717,6 +717,23 @@ export function createServerOpenApiRegistry() {
     },
     responses: {
       200: jsonResponse('MediaInfoResponse', MediaSchemas.Info.Response),
+      400: validationError(),
+      404: notFound('Media not found'),
+      500: serverError(),
+    },
+  });
+
+  register({
+    method: 'get',
+    path: '/api/media',
+    operationId: 'getMediaByKey',
+    tags: ['Media'],
+    summary: 'Fetch media bytes by storage provider key',
+    request: {
+      query: query('MediaQuery', MediaSchemas.Get.Query),
+    },
+    responses: {
+      200: binaryResponse('Media bytes'),
       400: validationError(),
       404: notFound('Media not found'),
       500: serverError(),
