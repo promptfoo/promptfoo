@@ -13,7 +13,7 @@ This plugin is useful when the app has several execution paths with different gu
 
 When raw trace data and a normalized trace context are both supplied, grading combines their evidence and counts matching spans once. Conflicting trace IDs or contradictory fields for the same span produce an error. Hexadecimal trace IDs compare independently of letter case. Limits apply to the combined evidence.
 
-A name-only diagnostic such as `guardrail missing` does not establish coverage. Controls need valid guardrail attributes or an affirmative outcome. Non-string or conflicting guardrail names cannot establish coverage. Approval and guardrail outcomes are checked across case-insensitive aliases; contradictions or error statuses reject the control. If either the control or tool supplies a call ID, both must identify the same call; malformed, conflicting, or redacted IDs cannot establish coverage.
+A name-only diagnostic such as `guardrail missing` does not establish coverage. Controls need valid guardrail attributes or an affirmative outcome. Neutral spans carrying `guardrail.outcome`, `guardrail.decision`, or `approval.outcome` can establish coverage. A completed tool whose name contains `guardrail` cannot authorize itself through `codex.status`. Non-string or conflicting guardrail names cannot establish coverage. Approval and guardrail outcomes are checked across case-insensitive aliases; contradictions or error statuses reject the control. If either the control or tool supplies a call ID, both must identify the same call; malformed, conflicting, or redacted IDs cannot establish coverage.
 
 ## Plugin ID
 
