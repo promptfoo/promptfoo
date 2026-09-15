@@ -928,6 +928,23 @@ describe('OpenAI assertions', () => {
       }
     });
 
+    it.each([{}, { output: undefined }, { output: null as unknown as object }])(
+      'returns a failed assertion for nullish provider output: %j',
+      async (providerResponse) => {
+        const result = await runAssertion({
+          prompt: 'Some prompt',
+          provider: mockProvider,
+          assertion: toolsAssertion,
+          test: {} as AtomicTestCase,
+          providerResponse,
+        });
+
+        expect(result.pass).toBe(false);
+        expect(result.score).toBe(0);
+        expect(result.reason).toContain('OpenAI did not return a valid-looking tools response');
+      },
+    );
+
     it('should fail when tool call does not match schema', async () => {
       const toolsOutput = [
         {
