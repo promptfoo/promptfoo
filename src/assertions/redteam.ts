@@ -58,18 +58,18 @@ function getPdfGradingInput(test: AtomicTestCase, targetPrompt: string | undefin
   for (const [key, value] of Object.entries(test.vars ?? {})) {
     if (
       typeof value !== 'string' ||
+      !value ||
       (key !== pdf.input && inputs?.[key] && normalizeInputDefinition(inputs[key]).type === 'text')
     ) {
       continue;
     }
     const attachment = value.match(/^data:[^,]+;base64,(.+)$/s);
-    if (attachment) {
+    if (attachment || key === pdf.input || inputs?.[key]) {
       const placeholder = key === pdf.input ? '[PDF attachment]' : '[Attachment]';
-      renderedPrompt = renderedPrompt
-        ?.split(value)
-        .join(placeholder)
-        .split(attachment[1])
-        .join(placeholder);
+      renderedPrompt = renderedPrompt?.split(value).join(placeholder);
+      if (attachment) {
+        renderedPrompt = renderedPrompt?.split(attachment[1]).join(placeholder);
+      }
     }
   }
   const inputNames = Object.keys(inputs ?? {});
@@ -88,21 +88,20 @@ function getPdfGradingInput(test: AtomicTestCase, targetPrompt: string | undefin
     ) {
       continue;
     }
-    if (typeof value === 'string' && value.startsWith('data:')) {
-      const materialized = test.metadata?.inputMaterialization?.[key];
-      const readable =
-        typeof materialized?.bodyText === 'string'
-          ? [materialized.bodyText, materialized.injectedInstruction]
-              .filter((part) => typeof part === 'string' && part)
-              .join('\n\n')
-          : typeof materialized?.injectedInstruction === 'string'
-            ? `[DOCX wrapper body was not recorded]\n\n${materialized.injectedInstruction}`
-            : test.metadata?.inputVars?.[key];
-      vars[key] =
-        typeof readable === 'string' && !/^data:[^,]+;base64,/.test(readable)
-          ? readable
-          : '[Attachment omitted from grading: readable content unavailable]';
-    }
+    const materialized = test.metadata?.inputMaterialization?.[key];
+    const readable =
+      typeof materialized?.bodyText === 'string'
+        ? [materialized.bodyText, materialized.injectedInstruction]
+            .filter((part) => typeof part === 'string' && part)
+            .join('\n\n')
+        : typeof materialized?.injectedInstruction === 'string'
+          ? `[DOCX wrapper body was not recorded]\n\n${materialized.injectedInstruction}`
+          : test.metadata?.inputVars?.[key];
+    const bytes = typeof value === 'string' ? value.replace(/^data:[^,]+;base64,/, '') : value;
+    vars[key] =
+      typeof readable === 'string' && readable !== bytes && !/^data:[^,]+;base64,/.test(readable)
+        ? readable
+        : '[Attachment omitted from grading: readable content unavailable]';
   }
   const prompt = JSON.stringify({
     renderedPrompt,

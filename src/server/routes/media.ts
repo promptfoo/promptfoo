@@ -149,7 +149,10 @@ async function serveMedia(key: string, res: Response, contentAddressed: boolean)
     res.setHeader('Content-Length', data.length);
     res.setHeader(
       'Cache-Control',
-      contentAddressed && getMediaStorage() instanceof LocalFileSystemProvider
+      contentAddressed &&
+        !key.startsWith('document/') &&
+        contentType !== 'application/pdf' &&
+        getMediaStorage() instanceof LocalFileSystemProvider
         ? 'public, max-age=31536000, immutable'
         : 'private, no-cache',
     );

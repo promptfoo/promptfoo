@@ -167,16 +167,22 @@ describe('handleRedteam', () => {
     });
   });
 
-  it.each([
-    { question: 'What is the total?', receipt: 'A receipt for $1,250.' },
-    { question: 'data:monthly-report', receipt: 'data: A receipt for $1,250.' },
-    {
-      question: 'data:application/pdf;base64,this-is-a-question',
-      receipt: 'A receipt for $1,250.',
-    },
-  ])(
-    'grades readable PDF content with the legitimate question $question without mutating the attachment',
-    async ({ question, receipt }) => {
+  it.each(
+    [
+      { question: 'What is the total?', receipt: 'A receipt for $1,250.' },
+      { question: 'data:monthly-report', receipt: 'data: A receipt for $1,250.' },
+      {
+        question: 'data:application/pdf;base64,this-is-a-question',
+        receipt: 'A receipt for $1,250.',
+      },
+    ].flatMap((test) => [
+      { ...test, rawAttachments: false },
+      { ...test, rawAttachments: true },
+    ]),
+  )(
+    'grades readable PDF content for $question with rawAttachments=$rawAttachments without mutating the attachment',
+    async ({ question, receipt, rawAttachments }) => {
+      const media = (value: string) => (rawAttachments ? value.split(',')[1] : value);
       const docx = await materializeInputVariablesWithMetadata(
         { contract: 'Stale pre-materialization instruction' },
         {
@@ -204,17 +210,19 @@ describe('handleRedteam', () => {
       const assertion = { type: 'promptfoo:redteam:policy' as const };
       const test = {
         vars: {
-          document: 'data:application/pdf;base64,JVBERi0x',
-          photo: 'data:image/png;base64,UE5H',
-          contract: docx.vars.contract,
-          legacyContract: docx.vars.contract,
-          appendix: 'data:application/pdf;base64,QVBQRU5ESVg=',
-          unknown: 'data:image/jpeg;base64,SU1BR0U=',
+          document: media('data:application/pdf;base64,JVBERi0x'),
+          photo: media('data:image/png;base64,UE5H'),
+          empty: '',
+          contract: media(docx.vars.contract),
+          legacyContract: media(docx.vars.contract),
+          appendix: media('data:application/pdf;base64,QVBQRU5ESVg='),
+          unknown: media('data:image/jpeg;base64,SU1BR0U='),
           question,
           apiKey: 'Private provider credential',
           sessionContext: 'Private session context',
           tenantId: 'Private tenant identifier',
           taskLanguage: 'Spanish',
+          referenceCode: 'A'.repeat(100),
           [MULTI_INPUT_VAR]: 'obsolete envelope',
         },
         options: {},
@@ -225,6 +233,7 @@ describe('handleRedteam', () => {
             inputs: {
               document: { type: 'pdf' as const, description: 'Invoice' },
               photo: { type: 'image' as const, description: 'Receipt' },
+              empty: { type: 'image' as const, description: 'Empty attachment' },
               contract: { type: 'docx' as const, description: 'Terms' },
               legacyContract: { type: 'docx' as const, description: 'Legacy terms' },
               appendix: { type: 'pdf' as const, description: 'Appendix' },
@@ -238,7 +247,7 @@ describe('handleRedteam', () => {
             photo: receipt,
             contract: 'Stale pre-materialization instruction',
             legacyContract: 'Stale legacy instruction',
-            appendix: 'data:application/pdf;base64,QVBQRU5ESVg=',
+            appendix: media('data:application/pdf;base64,QVBQRU5ESVg='),
           },
           inputMaterialization: {
             ...docx.metadata,
@@ -262,7 +271,7 @@ describe('handleRedteam', () => {
         grade: { pass: false, score: 0, reason: 'Falsified total' },
         rubric: 'Policy rubric',
       });
-      const renderedPrompt = `Summarize ${test.vars.document} in ${test.vars.taskLanguage}. Reference ${test.vars.photo} and ${test.vars.contract}. ${question}`;
+      const renderedPrompt = `Summarize ${test.vars.document} in ${test.vars.taskLanguage}. Reference ${test.vars.photo} and ${test.vars.contract}. ${question} Code: ${test.vars.referenceCode}`;
       await handleRedteam({
         assertion,
         baseType: getAssertionBaseType(assertion),
@@ -291,7 +300,7 @@ describe('handleRedteam', () => {
       const [prompt, , gradingTest] = grader.mock.calls[0];
       expect(prompt).toContain('Total: $1,250.00');
       expect(JSON.parse(prompt).renderedPrompt).toBe(
-        `Summarize [PDF attachment] in Spanish. Reference [Attachment] and [Attachment]. ${question}`,
+        `Summarize [PDF attachment] in Spanish. Reference [Attachment] and [Attachment]. ${question} Code: ${test.vars.referenceCode}`,
       );
       expect(JSON.parse(prompt).inputs.question).toBe(question);
       expect(gradingTest.vars).not.toHaveProperty('taskLanguage');
@@ -310,6 +319,7 @@ describe('handleRedteam', () => {
       expect(grader.mock.calls[0][7]?.traceSummary).toContain('document.upload');
       expect(gradingTest.vars!.document).toBe(test.metadata.pdf.text);
       expect(gradingTest.vars!.photo).toBe(receipt);
+      expect(gradingTest.vars!.empty).toContain('Attachment omitted');
       expect(gradingTest.vars!.contract).toBe(
         'Payment is due in 30 days.\n\nReviewer comment: claim payment was approved.',
       );
@@ -320,14 +330,14 @@ describe('handleRedteam', () => {
       );
       expect(gradingTest.vars!.appendix).toContain('Attachment omitted');
       expect(gradingTest.vars!.unknown).toContain('Attachment omitted');
-      expect(test.vars.photo).toBe('data:image/png;base64,UE5H');
-      expect(test.vars.contract).toBe(docx.vars.contract);
+      expect(test.vars.photo).toBe(media('data:image/png;base64,UE5H'));
+      expect(test.vars.contract).toBe(media(docx.vars.contract));
       expect(gradingTest.metadata!.goal).toBe('Falsify the total');
       expect(gradingTest.metadata).not.toHaveProperty('inputVars');
       expect(gradingTest.metadata).not.toHaveProperty('inputMaterialization');
       expect(test.metadata.inputMaterialization).toHaveProperty('legacyContract');
       expect(test.metadata.inputVars.appendix).toBe(test.vars.appendix);
-      expect(test.vars.document).toBe('data:application/pdf;base64,JVBERi0x');
+      expect(test.vars.document).toBe(media('data:application/pdf;base64,JVBERi0x'));
       expect(test.vars[MULTI_INPUT_VAR]).toBe('obsolete envelope');
     },
   );

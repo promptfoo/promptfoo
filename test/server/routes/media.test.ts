@@ -88,7 +88,30 @@ describe('Media Routes', () => {
         expect(response.headers['cache-control']).toBe('private, no-cache');
         const legacyResponse = await api.get(`/api/media/${ref.key}`);
         expect(legacyResponse.status).toBe(200);
-        expect(legacyResponse.headers['cache-control']).toBe('public, max-age=31536000, immutable');
+        expect(legacyResponse.headers['cache-control']).toBe('private, no-cache');
+      } finally {
+        removeTempDir(directory);
+      }
+    });
+
+    it.each([
+      { mediaType: 'image' as const, contentType: 'image/png', data: '%PDF-1.7', private: true },
+      { mediaType: 'document' as const, contentType: 'text/plain', data: 'Invoice', private: true },
+      { mediaType: 'audio' as const, contentType: 'audio/wav', data: 'RIFF', private: false },
+      { mediaType: 'image' as const, contentType: 'image/png', data: 'PNG', private: false },
+    ])('uses the correct cache policy for local $mediaType/$contentType', async (fixture) => {
+      const directory = createTempDir('promptfoo-media-cache-');
+      try {
+        const provider = new LocalFileSystemProvider({ basePath: directory });
+        const { ref } = await provider.store(Buffer.from(fixture.data), fixture);
+        mockedGetMediaStorage.mockReturnValue(provider);
+        mockedMediaExists.mockImplementation((key) => provider.exists(key));
+        mockedRetrieveMedia.mockImplementation((key) => provider.retrieve(key));
+        const response = await api.get(`/api/media/${ref.key}`);
+        expect(response.status).toBe(200);
+        expect(response.headers['cache-control']).toBe(
+          fixture.private ? 'private, no-cache' : 'public, max-age=31536000, immutable',
+        );
       } finally {
         removeTempDir(directory);
       }
