@@ -1,6 +1,5 @@
 import { execFile } from 'child_process';
 import fs from 'fs/promises';
-import os from 'os';
 import path from 'path';
 import { promisify } from 'util';
 
@@ -9,18 +8,33 @@ import { getEnvBool, getEnvString } from '../envars';
 import { getWrapperDir } from '../esm';
 import logger from '../logger';
 import { safeJsonStringify } from '../util/json';
+import {
+  createSecureTempDirectory,
+  removeSecureTempDirectory,
+  writeSecureTempFile,
+} from '../util/secureTempFiles';
+import { PythonStderrLogger } from './stderr';
+import type { Options as PythonShellOptions } from 'python-shell';
 
 const execFileAsync = promisify(execFile);
 
 // Marker used by Python's promptfoo_logger to identify structured log messages
 const PYTHON_LOG_MARKER = '__PROMPTFOO_LOG__';
 
+const PYTHON_LOG_LEVELS = ['debug', 'info', 'warn', 'error'] as const;
+
+type PythonLogLevel = (typeof PYTHON_LOG_LEVELS)[number];
+
 interface PythonLogMessage {
   marker: string;
   version?: number;
-  level: 'debug' | 'info' | 'warn' | 'error';
+  level: PythonLogLevel;
   message: string;
   data?: Record<string, unknown>;
+}
+
+function isPythonLogLevel(value: unknown): value is PythonLogLevel {
+  return (PYTHON_LOG_LEVELS as readonly unknown[]).includes(value);
 }
 
 /**
@@ -33,13 +47,15 @@ export function handlePythonLogMessage(line: string): boolean {
   try {
     const parsed = JSON.parse(line) as PythonLogMessage;
     if (parsed.marker === PYTHON_LOG_MARKER) {
-      const logFn = logger[parsed.level] || logger.info;
+      // `level` comes from subprocess output, so only dispatch to known levels:
+      // indexing the logger with an arbitrary string could call an unrelated method.
+      const level = isPythonLogLevel(parsed.level) ? parsed.level : 'info';
       // Format message with structured data included in the message string
       let logMessage = `[Python] ${parsed.message}`;
       if (parsed.data && Object.keys(parsed.data).length > 0) {
         logMessage += ` ${JSON.stringify(parsed.data)}`;
       }
-      logFn.call(logger, logMessage);
+      logger[level](logMessage);
       return true;
     }
   } catch {
@@ -47,8 +63,6 @@ export function handlePythonLogMessage(line: string): boolean {
   }
   return false;
 }
-
-import type { Options as PythonShellOptions } from 'python-shell';
 
 /**
  * Gets an integer value from an environment variable.
@@ -337,68 +351,47 @@ export async function runPython<T = unknown>(
   options: { pythonExecutable?: string } = {},
 ): Promise<T> {
   const absPath = path.resolve(scriptPath);
-  const tempJsonPath = path.join(
-    os.tmpdir(),
-    `promptfoo-python-input-json-${Date.now()}-${Math.random().toString(16).slice(2)}.json`,
-  );
-  const outputPath = path.join(
-    os.tmpdir(),
-    `promptfoo-python-output-json-${Date.now()}-${Math.random().toString(16).slice(2)}.json`,
-  );
   const customPath = getConfiguredPythonPath(options.pythonExecutable);
   let pythonPath = customPath || 'python';
+  let tempDirectory: string | undefined;
 
   pythonPath = await validatePythonPath(pythonPath, typeof customPath === 'string');
 
-  const pythonOptions: PythonShellOptions = {
-    args: [absPath, method, tempJsonPath, outputPath],
-    env: process.env,
-    mode: 'binary',
-    pythonPath,
-    scriptPath: getWrapperDir('python'),
-    // When `inherit` is used, `import pdb; pdb.set_trace()` will work.
-    ...(getEnvBool('PROMPTFOO_PYTHON_DEBUG_ENABLED') && { stdio: 'inherit' }),
-  };
-
   try {
-    await fs.writeFile(tempJsonPath, safeJsonStringify(args) as string, 'utf-8');
-    logger.debug(`Running Python wrapper with args: ${safeJsonStringify(args)}`);
+    tempDirectory = await createSecureTempDirectory('promptfoo-python-');
+    const tempJsonPath = await writeSecureTempFile(
+      tempDirectory,
+      'input.json',
+      safeJsonStringify(args) as string,
+    );
+    const outputPath = await writeSecureTempFile(tempDirectory, 'output.json', '');
+    const pythonOptions: PythonShellOptions = {
+      args: [absPath, method, tempJsonPath, outputPath],
+      env: process.env,
+      mode: 'binary',
+      pythonPath,
+      scriptPath: getWrapperDir('python'),
+      // When `inherit` is used, `import pdb; pdb.set_trace()` will work.
+      ...(getEnvBool('PROMPTFOO_PYTHON_DEBUG_ENABLED') && { stdio: 'inherit' }),
+    };
+
+    logger.debug('[Python] Running script', { scriptPath: absPath, method });
 
     await new Promise<void>((resolve, reject) => {
       try {
         const pyshell = new PythonShell('wrapper.py', pythonOptions);
+        const stderrLogger = new PythonStderrLogger('', handlePythonLogMessage);
 
         pyshell.stdout?.on('data', (chunk: Buffer) => {
           logger.debug(chunk.toString('utf-8').trim());
         });
 
-        let stderrBuffer = '';
         pyshell.stderr?.on('data', (chunk: Buffer) => {
-          // Buffer stderr to handle chunks that split across line boundaries
-          stderrBuffer += chunk.toString('utf-8');
-          const lines = stderrBuffer.split('\n');
-          // Keep the last element (incomplete line) in the buffer
-          stderrBuffer = lines.pop() || '';
-          for (const line of lines) {
-            const trimmed = line.trim();
-            if (!trimmed) {
-              continue;
-            }
-            // Try to parse as structured log message from promptfoo_logger
-            if (!handlePythonLogMessage(trimmed)) {
-              // Fall back to error logging for unstructured stderr output
-              logger.error(trimmed);
-            }
-          }
+          stderrLogger.handleData(chunk);
         });
 
         pyshell.end((err) => {
-          // Flush any remaining buffered stderr
-          if (stderrBuffer.trim()) {
-            if (!handlePythonLogMessage(stderrBuffer.trim())) {
-              logger.error(stderrBuffer.trim());
-            }
-          }
+          stderrLogger.flush();
           if (err) {
             reject(err);
           } else {
@@ -411,19 +404,16 @@ export async function runPython<T = unknown>(
     });
 
     const output = await fs.readFile(outputPath, 'utf-8');
-    logger.debug(`Python script ${absPath} returned: ${output}`);
+    logger.debug('[Python] Script returned a result', { scriptPath: absPath });
 
     let result: { type: 'final_result'; data: T } | undefined;
     try {
       result = JSON.parse(output);
-      logger.debug(
-        `Python script ${absPath} parsed output type: ${typeof result}, structure: ${result ? JSON.stringify(Object.keys(result)) : 'undefined'}`,
-      );
     } catch (error) {
       throw new Error(
-        `Invalid JSON: ${(error as Error).message} when parsing result: ${
-          output
-        }\nStack Trace: ${(error as Error).stack}`,
+        `Invalid JSON returned by Python script: ${(error as Error).message}\nStack Trace: ${
+          (error as Error).stack
+        }`,
       );
     }
     if (result?.type !== 'final_result') {
@@ -432,27 +422,19 @@ export async function runPython<T = unknown>(
 
     return result.data;
   } catch (error) {
-    logger.error(
-      `Error running Python script: ${(error as Error).message}\nStack Trace: ${
-        (error as Error).stack?.replace('--- Python Traceback ---', 'Python Traceback: ') ||
-        'No Python traceback available'
-      }`,
-    );
-    throw new Error(
-      `Error running Python script: ${(error as Error).message}\nStack Trace: ${
-        (error as Error).stack?.replace('--- Python Traceback ---', 'Python Traceback: ') ||
-        'No Python traceback available'
-      }`,
-    );
+    const message = `Error running Python script: ${(error as Error).message}\nStack Trace: ${
+      (error as Error).stack?.replace('--- Python Traceback ---', 'Python Traceback: ') ||
+      'No Python traceback available'
+    }`;
+    logger.error(message);
+    throw new Error(message);
   } finally {
-    await Promise.all(
-      [tempJsonPath, outputPath].map(async (file) => {
-        try {
-          await fs.unlink(file);
-        } catch (error) {
-          logger.error(`Error removing ${file}: ${error}`);
-        }
-      }),
-    );
+    if (tempDirectory) {
+      try {
+        await removeSecureTempDirectory(tempDirectory);
+      } catch (error) {
+        logger.error(`Error removing temporary Python directory: ${error}`);
+      }
+    }
   }
 }

@@ -95,7 +95,7 @@ export const FEATURED_PODCASTS: Podcast[] = [
     date: 'December 2, 2025',
     description:
       'Ian Webster breaks down real-world agent risk: the "lethal trifecta" (untrusted input + sensitive data + an exfiltration channel), and how automated red teaming helps catch issues before production.',
-    link: 'https://a16z.com/podcast/why-social-engineering-now-works-on-machines/',
+    link: 'https://open.spotify.com/episode/6iZPyhhdOgXSjxKsJmiTPn',
   },
   {
     title: "Breaking AI to Fix It: Ian Webster's Journey from Discord's Clyde to Promptfoo",
@@ -103,7 +103,7 @@ export const FEATURED_PODCASTS: Podcast[] = [
     date: 'October 24, 2025',
     description:
       "Ian talks with swyx and Alessio about shipping Discord's Clyde, why Promptfoo shifted from evals to AI security, and what red teaming looks like for agents and RAG applications.",
-    link: 'https://www.latent.space/p/promptfoo',
+    link: 'https://www.youtube.com/watch?v=-uiF1txQxV8',
   },
   {
     title: 'The Metis List of Top AI Researchers',

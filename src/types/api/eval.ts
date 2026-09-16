@@ -146,6 +146,7 @@ export const CreateJobRequestSchema = TestSuiteConfigSchema.extend({
   // Override prompts to require array - evaluate() calls .map() on prompts
   prompts: z.array(z.union([z.string(), z.record(z.string(), z.unknown())])),
   evaluateOptions: EvaluateOptionsSchema.optional(),
+  sourceEvalId: z.string().min(1).optional(),
 }).passthrough();
 
 export const CreateJobResponseSchema = z.object({
