@@ -38,6 +38,7 @@ const BASE_ASSERTION_TYPES = [
   'latency',
   'levenshtein',
   'llm-rubric',
+  'math-equivalent',
   'meteor',
   'model-graded-closedqa',
   'model-graded-factuality',
