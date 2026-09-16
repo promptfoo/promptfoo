@@ -326,6 +326,8 @@ const PromptMetricsSchema = z.object({
   testPassCount: z.number(),
   testFailCount: z.number(),
   testErrorCount: z.number(),
+  /** Number of result rows served from the response cache for this prompt. */
+  cachedRows: z.number().optional(),
   assertPassCount: z.number(),
   assertFailCount: z.number(),
   totalLatencyMs: z.number(),
@@ -487,6 +489,8 @@ export interface EvaluateStats {
   failures: number;
   errors: number;
   tokenUsage: NormalizedTokenUsage;
+  /** Number of result rows served from the response cache. */
+  cachedRows?: number;
   durationMs?: number;
   generationDurationMs?: number;
   evaluationDurationMs?: number;

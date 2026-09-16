@@ -465,6 +465,11 @@ evalRouter.get('/:id/table', async (req: Request, res: Response): Promise<void> 
     }
   }
 
+  const stats = eval_.getStats();
+  if (eval_.hasLegacyCachedRowsMetrics()) {
+    stats.cachedRows = await eval_.getCachedResponseRowsCount();
+  }
+
   const responsePayload = {
     table: returnTable,
     totalCount: table.totalCount,
@@ -474,7 +479,7 @@ evalRouter.get('/:id/table', async (req: Request, res: Response): Promise<void> 
     author: eval_.author || null,
     version: eval_.version(),
     id,
-    stats: eval_.getStats(),
+    stats,
   } as EvalTableDTO;
 
   sendEvalTableResponse(res, id, responsePayload);
