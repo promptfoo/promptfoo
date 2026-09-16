@@ -1988,6 +1988,37 @@ Third line`;
       )?.[0] as { inferenceConfig?: Record<string, unknown> };
       expect(call?.inferenceConfig?.temperature).toBe(0);
     });
+
+    it('preserves sampling and thinking for numbered Claude inference-profile aliases', async () => {
+      const provider = new AwsBedrockConverseProvider(
+        'arn:aws:bedrock:us-east-1:123456789012:application-inference-profile/claude-prod-5',
+        {
+          config: {
+            region: 'us-east-1',
+            max_tokens: 10000,
+            temperature: 0.5,
+            topP: 0.9,
+            thinking: { type: 'enabled', budget_tokens: 8192 },
+          },
+        },
+      );
+
+      mockSend.mockResolvedValueOnce(createMockConverseResponse('Test'));
+
+      await provider.callApi('Test');
+
+      const { ConverseCommand } = (await import(
+        '@aws-sdk/client-bedrock-runtime'
+      )) as unknown as MockBedrockModule;
+      expect(ConverseCommand).toHaveBeenLastCalledWith(
+        expect.objectContaining({
+          inferenceConfig: expect.objectContaining({ temperature: 0.5, topP: 0.9 }),
+          additionalModelRequestFields: {
+            thinking: { type: 'enabled', budget_tokens: 8192 },
+          },
+        }),
+      );
+    });
   });
 
   describe('performance and service tier configuration', () => {
@@ -2559,9 +2590,9 @@ Third line`;
 
       const result = await provider.callApi('Test');
 
-      // Llama 3.3 70B: $0.99/MTok both
-      // (10000/1M * 0.99) + (5000/1M * 0.99) = 0.0099 + 0.00495 = 0.01485
-      expect(result.cost).toBeCloseTo(0.01485, 4);
+      // Llama 3.3 70B: $0.72/MTok both (AWS Price List, us-east-1 on-demand)
+      // (10000/1M * 0.72) + (5000/1M * 0.72) = 0.0072 + 0.0036 = 0.0108
+      expect(result.cost).toBeCloseTo(0.0108, 4);
     });
 
     it('should return undefined cost for unknown models', async () => {
