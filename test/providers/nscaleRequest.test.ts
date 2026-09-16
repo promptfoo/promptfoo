@@ -99,6 +99,19 @@ describe('Nscale request construction', () => {
     expect(body).not.toHaveProperty('apiBaseUrl');
   });
 
+  it('does not send promptfoo bookkeeping in the request body', async () => {
+    // Regression: `loadApiProvider` merges the loaded config file's directory into
+    // every provider config as `basePath`, and the allowlist of local options did
+    // not cover it, so the local filesystem path was shipped to the model.
+    const { body } = await callWithConfig({
+      apiKey: 'tok',
+      basePath: '/Users/someone/secret-project',
+    });
+
+    expect(body).not.toHaveProperty('basePath');
+    expect(JSON.stringify(body)).not.toContain('secret-project');
+  });
+
   it('defaults to the public Nscale endpoint', async () => {
     const { url } = await callWithConfig({ apiKey: 'tok' });
 
