@@ -42,7 +42,7 @@ Or, use the `/api/chat` endpoint for chat-formatted prompts:
 - `ollama:chat:mixtral:8x22b`
 - ...
 
-We also support the `/api/embed` endpoint via `ollama:embeddings:<model name>` (or the singular `ollama:embedding:`) for model-graded assertions such as [similarity](/docs/configuration/expected-outputs/similar/).
+We also support the `/api/embed` endpoint via `ollama:embeddings:<model name>` (or the singular `ollama:embedding:<model name>`) for model-graded assertions such as [similarity](/docs/configuration/expected-outputs/similar/).
 
 Supported environment variables:
 
