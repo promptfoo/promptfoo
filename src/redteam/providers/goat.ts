@@ -374,6 +374,13 @@ export default class GoatProvider implements ApiProvider {
             ...remoteGenerationContextPayload(this.config.targetId),
             modifiers: context?.test?.metadata?.modifiers,
             traceSummary: previousTraceSummary,
+            pluginId: context?.test?.metadata?.pluginId,
+            strategyId: context?.test?.metadata?.strategyId,
+            ...(context?.evaluationId && { evaluationId: context.evaluationId }),
+            ...(context?.evaluationId &&
+              context?.testCaseId && {
+                testRunId: `${context.evaluationId}-${context.testCaseId}`,
+              }),
           });
           logger.debug(`[GOAT] Sending request to ${getRemoteGenerationUrl()}: ${body}`);
           response = await fetchWithProxy(
@@ -418,6 +425,13 @@ export default class GoatProvider implements ApiProvider {
           traceSummary: previousTraceSummary,
           // Pass inputs schema for multi-input mode
           inputs: this.config.inputs,
+          pluginId: context?.test?.metadata?.pluginId,
+          strategyId: context?.test?.metadata?.strategyId,
+          ...(context?.evaluationId && { evaluationId: context.evaluationId }),
+          ...(context?.evaluationId &&
+            context?.testCaseId && {
+              testRunId: `${context.evaluationId}-${context.testCaseId}`,
+            }),
         });
 
         logger.debug(`[GOAT] Sending request to ${getRemoteGenerationUrl()}: ${body}`);

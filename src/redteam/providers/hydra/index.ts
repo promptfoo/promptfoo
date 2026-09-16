@@ -430,6 +430,7 @@ export class HydraProvider implements ApiProvider {
       const agentResp = await this.agentProvider.callApi(
         JSON.stringify(cloudRequest),
         {
+          ...context,
           prompt: {
             raw: JSON.stringify(cloudRequest),
             label: `${this.providerOptions.metadataPrefix}-agent`,
@@ -998,6 +999,7 @@ export class HydraProvider implements ApiProvider {
         const learningResponse = await this.agentProvider.callApi(
           JSON.stringify(learningRequest),
           {
+            ...context,
             prompt: {
               raw: JSON.stringify(learningRequest),
               label: `${this.providerOptions.metadataPrefix}-learning-update`,

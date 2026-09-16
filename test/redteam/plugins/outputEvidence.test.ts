@@ -61,6 +61,10 @@ describe('redteam output evidence', () => {
         ),
         refusal,
         expect.any(Object),
+        undefined,
+        undefined,
+        undefined,
+        expect.any(Object),
       );
       const rubric = vi.mocked(matchesLlmRubric).mock.calls[0][0] as string;
       expect(rubric).toContain('<UserQuery>');
@@ -206,6 +210,10 @@ describe('redteam output evidence', () => {
     expect(matchesLlmRubric).toHaveBeenCalledExactlyOnceWith(
       expect.stringContaining('Target response attribution:'),
       output,
+      expect.any(Object),
+      undefined,
+      undefined,
+      undefined,
       expect.any(Object),
     );
     expect(result.grade).toEqual(grade);

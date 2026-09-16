@@ -416,6 +416,7 @@ async function runAssertionInternal({
   providerResponse,
   traceId,
   traceData,
+  evaluationId,
 }: {
   prompt?: string;
   provider?: ApiProvider;
@@ -427,6 +428,7 @@ async function runAssertionInternal({
   assertIndex?: number;
   traceId?: string;
   traceData?: TraceData | null;
+  evaluationId?: string;
 }): Promise<GradingResult> {
   // Use resolved vars if provided, otherwise fall back to test.vars
   const resolvedVars = vars || test.vars || {};
@@ -618,7 +620,9 @@ async function runAssertionInternal({
         originalProvider: provider,
         prompt: { raw: prompt || '', label: '' },
         vars: resolvedVars,
+        test,
         ...(graderTraceparent && { traceparent: graderTraceparent }),
+        ...(evaluationId && { evaluationId }),
       }
     : undefined;
 
@@ -758,6 +762,7 @@ export async function runAssertions({
   test,
   vars,
   traceId,
+  evaluationId,
 }: {
   assertScoringFunction?: ScoringFunction;
   latencyMs?: number;
@@ -767,6 +772,7 @@ export async function runAssertions({
   test: AtomicTestCase;
   vars?: Record<string, VarValue>;
   traceId?: string;
+  evaluationId?: string;
 }): Promise<GradingResult> {
   if (!test.assert || test.assert.length < 1) {
     return AssertionsResult.noAssertsResult();
@@ -841,6 +847,7 @@ export async function runAssertions({
       assertIndex: index,
       traceId,
       traceData: preloadedTraceData,
+      evaluationId,
     });
 
     assertResult.addResult({

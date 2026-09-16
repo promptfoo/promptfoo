@@ -59,7 +59,11 @@ interface CliState {
   readonly requestTracingConfig?: TestSuite['tracing'];
   readonly activeOtlpReceiver?: ActiveOtlpReceiver;
 
+  // Current evaluation ID, used by remote task and grading calls for tracing.
+  evaluationId?: string;
+
   withMaxConcurrency<T>(maxConcurrency: number, fn: () => Promise<T>): Promise<T>;
+  withEvaluationId<T>(evaluationId: string | undefined, fn: () => Promise<T>): Promise<T>;
   withRequestTracingConfig<T>(
     tracingConfig: NonNullable<TestSuite['tracing']>,
     fn: () => Promise<T>,
@@ -72,9 +76,26 @@ const requestTracingConfigContext = new AsyncLocalStorage<{
   tracingConfig: NonNullable<TestSuite['tracing']>;
 }>();
 let globalMaxConcurrency: number | undefined;
+const evaluationIdContext = new AsyncLocalStorage<{ evaluationId: string | undefined }>();
+let globalEvaluationId: string | undefined;
 let activeOtlpReceiver: ActiveOtlpReceiver | undefined;
 
 const state: CliState = {
+  get evaluationId() {
+    const store = evaluationIdContext.getStore();
+    if (store) {
+      return store.evaluationId;
+    }
+    return globalEvaluationId;
+  },
+  set evaluationId(value: string | undefined) {
+    const store = evaluationIdContext.getStore();
+    if (store) {
+      store.evaluationId = value;
+      return;
+    }
+    globalEvaluationId = value;
+  },
   get maxConcurrency() {
     const store = maxConcurrencyContext.getStore();
     if (store) {
@@ -92,6 +113,9 @@ const state: CliState = {
   },
   withMaxConcurrency<T>(maxConcurrency: number, fn: () => Promise<T>): Promise<T> {
     return maxConcurrencyContext.run({ maxConcurrency }, fn);
+  },
+  withEvaluationId<T>(evaluationId: string | undefined, fn: () => Promise<T>): Promise<T> {
+    return evaluationIdContext.run({ evaluationId }, fn);
   },
   get requestTracingConfig() {
     return requestTracingConfigContext.getStore()?.tracingConfig;

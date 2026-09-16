@@ -2432,12 +2432,17 @@ Evaluate the response
       preferRemote: true,
     });
 
-    expect(remoteGrading.doRemoteGrading).toHaveBeenCalledWith({
-      task: 'llm-rubric',
-      rubric,
-      output: llmOutput,
-      vars: {},
-    });
+    expect(remoteGrading.doRemoteGrading).toHaveBeenCalledWith(
+      {
+        task: 'llm-rubric',
+        rubric,
+        output: llmOutput,
+        vars: {},
+        pluginId: undefined,
+        strategyId: undefined,
+      },
+      { evaluationId: undefined },
+    );
     expect(grading.provider.callApi).not.toHaveBeenCalled();
     expect(result.reason).toBe('Remote grading passed');
   });
@@ -2454,13 +2459,18 @@ Evaluate the response
 
     await matchesLlmRubric(rubric, llmOutput, {});
 
-    expect(remoteGrading.doRemoteGrading).toHaveBeenCalledWith({
-      task: 'llm-rubric',
-      rubric,
-      output: llmOutput,
-      vars: {},
-      targetId: 'cloud-target-123',
-    });
+    expect(remoteGrading.doRemoteGrading).toHaveBeenCalledWith(
+      {
+        task: 'llm-rubric',
+        rubric,
+        output: llmOutput,
+        vars: {},
+        pluginId: undefined,
+        strategyId: undefined,
+        targetId: 'cloud-target-123',
+      },
+      { evaluationId: undefined },
+    );
   });
 
   it('should prefer filtered providers when building remote grading context', async () => {
@@ -2476,13 +2486,18 @@ Evaluate the response
 
     await matchesLlmRubric(rubric, llmOutput, {});
 
-    expect(remoteGrading.doRemoteGrading).toHaveBeenCalledWith({
-      task: 'llm-rubric',
-      rubric,
-      output: llmOutput,
-      vars: {},
-      targetId: 'selected-target',
-    });
+    expect(remoteGrading.doRemoteGrading).toHaveBeenCalledWith(
+      {
+        task: 'llm-rubric',
+        rubric,
+        output: llmOutput,
+        vars: {},
+        pluginId: undefined,
+        strategyId: undefined,
+        targetId: 'selected-target',
+      },
+      { evaluationId: undefined },
+    );
   });
 
   it('should call remote with image outputs when multimodal grading is remote-eligible', async () => {
@@ -2507,13 +2522,18 @@ Evaluate the response
       },
     });
 
-    expect(remoteGrading.doRemoteGrading).toHaveBeenCalledWith({
-      task: 'llm-rubric',
-      rubric,
-      output: llmOutput,
-      vars,
-      images: [{ data: 'data:image/webp;base64,abc123', mimeType: 'image/webp' }],
-    });
+    expect(remoteGrading.doRemoteGrading).toHaveBeenCalledWith(
+      {
+        task: 'llm-rubric',
+        rubric,
+        output: llmOutput,
+        vars,
+        pluginId: undefined,
+        strategyId: undefined,
+        images: [{ data: 'data:image/webp;base64,abc123', mimeType: 'image/webp' }],
+      },
+      { evaluationId: undefined },
+    );
     expect(DefaultGradingProvider.callApi).not.toHaveBeenCalled();
     expect(result.reason).toBe('Remote multimodal grading passed');
   });
@@ -2539,13 +2559,18 @@ Evaluate the response
       },
     });
 
-    expect(remoteGrading.doRemoteGrading).toHaveBeenCalledWith({
-      task: 'llm-rubric',
-      rubric,
-      output: '[Image output attached. Inspect the attached image directly for visual grading.]',
-      vars: {},
-      images: [{ data: 'data:image/webp;base64,abc123', mimeType: 'image/webp' }],
-    });
+    expect(remoteGrading.doRemoteGrading).toHaveBeenCalledWith(
+      {
+        task: 'llm-rubric',
+        rubric,
+        output: '[Image output attached. Inspect the attached image directly for visual grading.]',
+        vars: {},
+        pluginId: undefined,
+        strategyId: undefined,
+        images: [{ data: 'data:image/webp;base64,abc123', mimeType: 'image/webp' }],
+      },
+      { evaluationId: undefined },
+    );
   });
 
   it('should use local multimodal grading when a local grading provider is configured', async () => {
@@ -2614,15 +2639,61 @@ Evaluate the response
     await matchesLlmRubric(rubric, llmOutput, grading);
 
     const { doRemoteGrading } = remoteGrading;
-    expect(doRemoteGrading).toHaveBeenCalledWith({
-      task: 'llm-rubric',
-      rubric,
-      output: llmOutput,
-      vars: {},
-    });
+    expect(doRemoteGrading).toHaveBeenCalledWith(
+      {
+        task: 'llm-rubric',
+        rubric,
+        output: llmOutput,
+        vars: {},
+        pluginId: undefined,
+        strategyId: undefined,
+      },
+      { evaluationId: undefined },
+    );
     expect(remoteGeneration.shouldGenerateRemote).toHaveBeenCalledWith({
       canUseCodexDefaultProvider: true,
     });
+  });
+
+  it('should forward evaluation, plugin, and strategy context to remote grading', async () => {
+    const rubric = 'Test rubric';
+    const llmOutput = 'Test output';
+    const grading = {};
+
+    vi.mocked(remoteGrading.doRemoteGrading).mockClear();
+    vi.mocked(remoteGrading.doRemoteGrading).mockResolvedValue({
+      pass: true,
+      score: 1,
+      reason: 'Remote grading passed',
+    });
+
+    const remoteGeneration = await import('../../src/redteam/remoteGeneration');
+    vi.mocked(remoteGeneration.shouldGenerateRemote).mockReturnValue(true);
+    (cliState as any).config = { redteam: {} };
+
+    await matchesLlmRubric(rubric, llmOutput, grading, undefined, undefined, undefined, {
+      prompt: { raw: 'raw prompt', label: 'redteam-grading' },
+      vars: {},
+      evaluationId: 'eval-abc',
+      test: {
+        metadata: {
+          pluginId: 'contracts',
+          strategyId: 'crescendo',
+        },
+      },
+    });
+
+    expect(remoteGrading.doRemoteGrading).toHaveBeenCalledWith(
+      {
+        task: 'llm-rubric',
+        rubric,
+        output: llmOutput,
+        vars: {},
+        pluginId: 'contracts',
+        strategyId: 'crescendo',
+      },
+      { evaluationId: 'eval-abc' },
+    );
   });
 
   it('should tag remote-grading transport failures with metadata.graderError', async () => {
