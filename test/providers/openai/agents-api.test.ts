@@ -711,6 +711,29 @@ describe('OpenAiAgentsApiProvider', () => {
     ).toEqual(new Set([null]));
   });
 
+  it.each([false, true])(
+    'does not authenticate with fragment-only endpoint credentials: %s',
+    async (ambient) => {
+      mockProcessEnv({ OPENAI_API_KEY: ambient ? 'offline-ambient-key' : undefined });
+      const result = await new OpenAiAgentsApiProvider('', {
+        config: { apiBaseUrl: 'https://gateway.example/v1#access_token=offline-fragment' },
+      }).callApi('hi');
+
+      if (!ambient) {
+        expect(result.error).toContain('API key');
+        expect(fetchWithRetries).not.toHaveBeenCalled();
+        return;
+      }
+      expect(result.output).toBe('42');
+      expect(result.metadata?.sessionDeleted).toBe(true);
+      for (const [, request] of vi.mocked(fetchWithRetries).mock.calls) {
+        expect(new Headers(request!.headers).get('Authorization')).toBe(
+          'Bearer offline-ambient-key',
+        );
+      }
+    },
+  );
+
   describe('prompt setting groups', () => {
     const promptContext = (config: Record<string, unknown>) => ({
       vars: {},
@@ -876,6 +899,8 @@ describe('OpenAiAgentsApiProvider', () => {
           'https://gateway.example/v1?api-key=offline-url-credential',
           'https://offline-user:offline-url-credential@gateway.example/v1',
           'https://gateway.example/v1?api-key=offline%2Durl%2Dcredential',
+          'https://gateway.example/v1#access_token=offline-url-credential',
+          'https://gateway.example/v1#access_token=offline%2Durl%2Dcredential',
         ])('discarded rendered URL header %s', (gatewayUrl) => {
           it.each(['creation', 'turn'])(
             'redacts credential components from %s and cleanup errors',
@@ -986,6 +1011,65 @@ describe('OpenAiAgentsApiProvider', () => {
             }
           },
         );
+
+        describe.each([
+          'https://gateway.example/v1?access_token=offline-url-credential',
+          ' https://gateway.example/v1?access_token=offline-url-credential ',
+          'https://offline-user:offline-url-credential@gateway.example/v1',
+          'https://gateway.example/v1#access_token=offline-url-credential',
+        ])('credential URL in an allowlisted header %s', (gatewayUrl) => {
+          it.each([false, true])(
+            'filters inherited values after rendering: %s',
+            async (templated) => {
+              mockProcessEnv({ OPENAI_API_KEY: 'offline-ambient-key' });
+              const agentProvider = new OpenAiAgentsApiProvider('', {
+                config: {
+                  apiBaseUrl: 'https://gateway.example/v1',
+                  apiKeyRequired: false,
+                  headers: {
+                    'X-Tenant-Id': templated ? '{{ gatewayUrl }}' : gatewayUrl,
+                    'X-Organization-Id': 'https://gateway.example/organizations/tenant-a',
+                    Accept: 'application/json',
+                  },
+                },
+              });
+              const result = await agentProvider.callApi('hi', {
+                ...promptContext(endpointConfig),
+                vars: { gatewayUrl },
+              });
+
+              expect(result.output).toBe('42');
+              expect(result.metadata?.sessionDeleted).toBe(true);
+              expect(calls().length).toBeGreaterThan(1);
+              for (const [url, request] of vi.mocked(fetchWithRetries).mock.calls) {
+                expect(new URL(String(url)).hostname).toBe('prompt.example');
+                const headers = new Headers(request!.headers);
+                expect(headers.get('X-Tenant-Id')).toBeNull();
+                expect(headers.get('Authorization')).toBeNull();
+                expect(headers.get('X-Organization-Id')).toBe(
+                  'https://gateway.example/organizations/tenant-a',
+                );
+                expect(headers.get('Accept')).toBe('application/json');
+              }
+            },
+          );
+
+          it('preserves explicitly supplied replacement values', async () => {
+            const result = await provider({
+              apiBaseUrl: 'https://gateway.example/v1',
+              headers: { 'X-Tenant-Id': 'https://gateway.example/?token=offline-old-key' },
+            }).callApi(
+              'hi',
+              promptContext({ ...endpointConfig, headers: { 'X-Tenant-Id': gatewayUrl } }),
+            );
+
+            expect(result.output).toBe('42');
+            expect(result.metadata?.sessionDeleted).toBe(true);
+            for (const [, request] of vi.mocked(fetchWithRetries).mock.calls) {
+              expect(new Headers(request!.headers).get('X-Tenant-Id')).toBe(gatewayUrl.trim());
+            }
+          });
+        });
 
         it.each([{}, { 'X-Goog-Iap-Jwt-Assertion': 'explicit-replacement-credential' }])(
           'respects explicitly supplied replacement headers %j',

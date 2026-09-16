@@ -133,6 +133,7 @@ function isCredentialHeader(name: string, value: string): boolean {
   return (
     isCredentialName(name) ||
     /(?:^|[-_])auth(?:$|[-_])/i.test(name) ||
+    getUrlCredentials(value).length > 0 ||
     sanitizeObject({ headers: { [name]: value } }).headers[name] === REDACTED
   );
 }
@@ -207,13 +208,14 @@ function splitUserinfo(apiUrl: string): { url: string; userinfo?: string } {
  * credential derived from it, and credential-named query parameters. Raw and decoded spellings
  * are both returned for redaction.
  */
-function getUrlCredentials(value: string): string[] {
-  if (!/^[a-z][a-z\d+.-]*:\/\//i.test(value)) {
+function getUrlCredentials(value: string, includeFragment = true): string[] {
+  const trimmed = value.trim();
+  if (!/^[a-z][a-z\d+.-]*:\/\//i.test(trimmed)) {
     return [];
   }
   let url: URL;
   try {
-    url = new URL(value);
+    url = new URL(trimmed);
   } catch {
     // A malformed credential-bearing URL can be echoed only as one opaque error value.
     return sanitizeUrlForLogging(value) === value ? [] : [value];
@@ -229,7 +231,8 @@ function getUrlCredentials(value: string): string[] {
       found.push(segment, decodeUrlComponent(segment));
     }
   }
-  for (const segment of url.search.slice(1).split(/[&;]/)) {
+  const parameterParts = includeFragment ? [url.search, url.hash] : [url.search];
+  for (const segment of parameterParts.flatMap((part) => part.slice(1).split(/[&;]/))) {
     const separator = segment.indexOf('=');
     const [param] = new URLSearchParams(segment);
     if (
@@ -884,7 +887,7 @@ export class OpenAiAgentsApiProvider extends OpenAiGenericProvider {
     const credentials = new Set<string>(this.inheritedCredentials);
     collectCallCredentials(this, credentials);
     // Userinfo and credential query parameters authenticate a gateway just as headers do.
-    const hasUrlCredential = getUrlCredentials(this.getApiUrl()).length > 0;
+    const hasUrlCredential = getUrlCredentials(this.getApiUrl(), false).length > 0;
     const { hasHeaderCredential, hasCustomHeader } = scanRequestHeaders(headers, credentials);
     this.credentials = sortCredentials(credentials);
     // Only a credential-named header or URL credential replaces the API key requirement.
