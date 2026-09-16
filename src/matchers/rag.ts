@@ -66,7 +66,7 @@ export async function matchesAnswerRelevance(
     );
     accumulateTokenUsage(tokensUsed, resp.tokenUsage);
     if (resp.error || !resp.output) {
-      return fail(resp.error || 'No output', tokensUsed);
+      return graderFail(resp.error || 'No output', tokensUsed);
     }
 
     invariant(
@@ -90,7 +90,7 @@ export async function matchesAnswerRelevance(
   );
   accumulateTokenUsage(tokensUsed, inputEmbeddingResp.tokenUsage);
   if (inputEmbeddingResp.error || !inputEmbeddingResp.embedding) {
-    return fail(inputEmbeddingResp.error || 'No embedding', tokensUsed);
+    return graderFail(inputEmbeddingResp.error || 'No embedding', tokensUsed);
   }
   const inputEmbedding = inputEmbeddingResp.embedding;
 
@@ -106,7 +106,7 @@ export async function matchesAnswerRelevance(
     );
     accumulateTokenUsage(tokensUsed, resp.tokenUsage);
     if (resp.error || !resp.embedding) {
-      return fail(resp.error || 'No embedding', tokensUsed);
+      return graderFail(resp.error || 'No embedding', tokensUsed);
     }
     const questionSimilarity = cosineSimilarity(inputEmbedding, resp.embedding);
     similarities.push(questionSimilarity);
