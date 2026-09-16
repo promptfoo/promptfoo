@@ -150,6 +150,8 @@ export interface ApiProvider extends MinimalApiProvider {
   config?: any;
   delay?: number;
   getSessionId?: () => string;
+  /** Native audio input content format accepted by this provider and its configured model. */
+  getAudioInputFormat?: () => 'openai' | 'google' | undefined;
   inputs?: Inputs;
   label?: ProviderLabel;
   transform?: string | TransformFunction;
@@ -175,7 +177,12 @@ export interface ApiClassificationProvider extends ApiProvider {
 }
 
 export interface ApiModerationProvider extends ApiProvider {
-  callModerationApi: (prompt: string, response: string) => Promise<ProviderModerationResponse>;
+  callModerationApi: (
+    prompt: string,
+    response: string,
+    context?: CallApiContextParams,
+    options?: CallApiOptionsParams,
+  ) => Promise<ProviderModerationResponse>;
 }
 
 export type FilePath = string;

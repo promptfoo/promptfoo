@@ -366,6 +366,39 @@ describe('AzureChatCompletionProvider', () => {
       expect(result.cost).toBeCloseTo((1_500 * 5 + 500 * 0.5 + 1_000 * 30) / 1e6, 12);
     });
 
+    it.each(['claude-fable-5-1', 'claude-mythos-5-1'])(
+      'uses modelName for %s cache pricing without changing the Azure deployment',
+      async (modelName) => {
+        provider = new AzureChatCompletionProvider('prod-claude', {
+          config: { apiHost: 'test.azure.com', apiKey: 'test-key', modelName },
+        });
+        setAuthHeaders(provider);
+        vi.mocked(fetchWithCache).mockResolvedValueOnce({
+          data: {
+            choices: [
+              { index: 0, message: { role: 'assistant', content: 'hello' }, finish_reason: 'stop' },
+            ],
+            usage: {
+              prompt_tokens: 1_000,
+              prompt_tokens_details: { cached_tokens: 500 },
+              completion_tokens: 500,
+              total_tokens: 1_500,
+            },
+          },
+          cached: false,
+          status: 200,
+          statusText: 'OK',
+        });
+
+        const result = await provider.callApi('test prompt');
+
+        expect(result.cost).toBeCloseTo(0.030125, 8);
+        const request = JSON.parse(vi.mocked(fetchWithCache).mock.calls[0][1]?.body as string);
+        expect(request.model).toBe('prod-claude');
+        expect(request).not.toHaveProperty('modelName');
+      },
+    );
+
     it('should parse JSON response with json_schema format when finish_reason is not content_filter', async () => {
       const mockResponse = {
         id: 'mock-id',
@@ -859,21 +892,96 @@ describe('AzureChatCompletionProvider', () => {
       expect(body).not.toHaveProperty('reasoning_effort');
     });
 
-    it('omits sampling params for Claude Fable 5 while keeping the standard chat body', async () => {
-      const provider = new AzureChatCompletionProvider('claude-fable-5', {
+    it.each(['claude-fable-5', 'claude-fable-5-1', 'claude-mythos-5-1'])(
+      'omits sampling params for %s while keeping the standard chat body',
+      async (model) => {
+        const provider = new AzureChatCompletionProvider(model, {
+          config: {
+            apiHost: 'test.azure.com',
+            apiKey: 'test-key',
+            max_tokens: 512,
+            temperature: 0.5,
+            top_p: 0.9,
+          },
+        });
+        const { body } = await (provider as any).getOpenAiBody('hi');
+        expect(body).toHaveProperty('max_tokens', 512);
+        expect(body).not.toHaveProperty('temperature');
+        expect(body).not.toHaveProperty('top_p');
+        expect(body).not.toHaveProperty('reasoning_effort');
+      },
+    );
+
+    it.each(['claude-fable-5-1', 'claude-mythos-5-1'])(
+      'omits forced tool choice for %s',
+      async (model) => {
+        const provider = new AzureChatCompletionProvider(model, {
+          config: {
+            apiHost: 'test.azure.com',
+            apiKey: 'test-key',
+            tools: [
+              {
+                type: 'function',
+                function: { name: 'get_weather', parameters: { type: 'object', properties: {} } },
+              },
+            ],
+            tool_choice: 'required',
+          },
+        });
+        const { body } = await provider.getOpenAiBody('Check the weather');
+        expect(body.tools).toHaveLength(1);
+        expect(body).not.toHaveProperty('tool_choice');
+      },
+    );
+
+    it.each([
+      { modelName: 'claude-fable-5-1', tool_choice: 'required', expected: undefined },
+      {
+        modelName: 'claude-mythos-5-1',
+        tool_choice: { type: 'function', function: { name: 'get_weather' } },
+        expected: undefined,
+      },
+      { modelName: 'claude-fable-5-1', tool_choice: 'auto', expected: 'auto' },
+      { modelName: 'claude-mythos-5-1', tool_choice: 'none', expected: 'none' },
+    ] as const)(
+      'uses $modelName compatibility for an aliased deployment with $tool_choice',
+      async ({ modelName, tool_choice, expected }) => {
+        const provider = new AzureChatCompletionProvider('prod-claude', {
+          config: {
+            apiHost: 'test.azure.com',
+            apiKey: 'test-key',
+            modelName,
+            temperature: 0.5,
+            top_p: 0.9,
+            tools: [
+              {
+                type: 'function',
+                function: { name: 'get_weather', parameters: { type: 'object' } },
+              },
+            ],
+            tool_choice,
+          },
+        });
+        const { body } = await provider.getOpenAiBody('Check the weather');
+        expect(body.model).toBe('prod-claude');
+        expect(body.tools).toHaveLength(1);
+        expect(body.tool_choice).toEqual(expected);
+        expect(body).not.toHaveProperty('temperature');
+        expect(body).not.toHaveProperty('top_p');
+      },
+    );
+
+    it('keeps forced tool choice for an aliased older adaptive model', async () => {
+      const provider = new AzureChatCompletionProvider('prod-claude', {
         config: {
           apiHost: 'test.azure.com',
           apiKey: 'test-key',
-          max_tokens: 512,
-          temperature: 0.5,
-          top_p: 0.9,
+          modelName: 'claude-fable-5',
+          tool_choice: 'required',
         },
       });
-      const { body } = await (provider as any).getOpenAiBody('hi');
-      expect(body).toHaveProperty('max_tokens', 512);
-      expect(body).not.toHaveProperty('temperature');
-      expect(body).not.toHaveProperty('top_p');
-      expect(body).not.toHaveProperty('reasoning_effort');
+      const { body } = await provider.getOpenAiBody('hi');
+      expect(body.tool_choice).toBe('required');
     });
 
     it('omits sampling params for a custom Claude deployment when configured explicitly', async () => {
@@ -910,6 +1018,26 @@ describe('AzureChatCompletionProvider', () => {
       expect(body).toHaveProperty('temperature', 0.5);
       expect(body).toHaveProperty('top_p', 0.9);
     });
+
+    it.each(['claude-prod-5', 'claude-prod-25', 'claude-team-blue-12', 'claude-prod-20260811'])(
+      'keeps sampling params for custom Claude deployment alias %s',
+      async (deploymentName) => {
+        const provider = new AzureChatCompletionProvider(deploymentName, {
+          config: {
+            apiHost: 'test.azure.com',
+            apiKey: 'test-key',
+            max_tokens: 512,
+            temperature: 0.5,
+            top_p: 0.9,
+          },
+        });
+
+        const { body } = await (provider as any).getOpenAiBody('hi');
+
+        expect(body).toHaveProperty('temperature', 0.5);
+        expect(body).toHaveProperty('top_p', 0.9);
+      },
+    );
 
     it('omits sampling params for an opus-4-7-named deployment even without the flag', async () => {
       // Baseline name-match path: deployment name matches opus-4-7, so sampling

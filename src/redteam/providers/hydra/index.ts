@@ -11,7 +11,11 @@ import {
 } from '../../../tracing/traceContext';
 import invariant from '../../../util/invariant';
 import { sleep } from '../../../util/time';
-import { accumulateResponseTokenUsage, createEmptyTokenUsage } from '../../../util/tokenUsageUtils';
+import {
+  accumulateAttackerTokenUsage,
+  accumulateResponseTokenUsage,
+  createEmptyTokenUsage,
+} from '../../../util/tokenUsageUtils';
 import { materializeInputVariablesWithMetadata } from '../../inputVariables';
 import {
   getRemoteGenerationDisabledError,
@@ -39,6 +43,7 @@ import {
   isBasicRefusal,
 } from '../../util';
 import {
+  accumulateGraderResult,
   buildGraderResultAssertion,
   externalizeResponseForRedteamHistory,
   getGraderAssertionValue,
@@ -435,7 +440,7 @@ export class HydraProvider implements ApiProvider {
       );
 
       // Agent coordination calls are internal and should not count as target probes.
-      accumulateResponseTokenUsage(totalTokenUsage, agentResp, { countAsRequest: false });
+      accumulateAttackerTokenUsage(totalTokenUsage, agentResp);
 
       if (this.agentProvider.delay) {
         await sleep(this.agentProvider.delay);
@@ -588,6 +593,9 @@ export class HydraProvider implements ApiProvider {
             goal: test?.metadata?.goal as string | undefined,
           },
         );
+        if (lastTransformResult.tokenUsage) {
+          accumulateAttackerTokenUsage(totalTokenUsage, lastTransformResult);
+        }
 
         // Skip turn if transform failed
         if (lastTransformResult.error) {
@@ -927,10 +935,10 @@ export class HydraProvider implements ApiProvider {
             gradingContext,
           );
           graderResult = grade;
-          storedGraderResult = {
+          storedGraderResult = accumulateGraderResult(storedGraderResult, {
             ...grade,
             assertion: buildGraderResultAssertion(grade.assertion, assertToUse, rubric),
-          };
+          });
 
           logger.debug(`${this.logPrefix} Grader result`, {
             turn,
@@ -999,9 +1007,7 @@ export class HydraProvider implements ApiProvider {
           options,
         );
         // Learning update is an internal cloud call, not a target probe.
-        accumulateResponseTokenUsage(totalTokenUsage, learningResponse, {
-          countAsRequest: false,
-        });
+        accumulateAttackerTokenUsage(totalTokenUsage, learningResponse);
 
         logger.debug(`${this.logPrefix} Scan learnings updated`, { scanId, testRunId });
       } catch (error) {

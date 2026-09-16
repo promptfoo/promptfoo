@@ -11,6 +11,33 @@ describe('loadYaml', () => {
     expect(loadYaml('# comment only')).toBeUndefined();
   });
 
+  it('rejects invalid aliased merge sources and preserves scalar merge tokens', () => {
+    const content = [
+      'sources: &sources',
+      '  - allowed: true',
+      '  - injected',
+      'merged:',
+      '  <<: *sources',
+    ].join('\n');
+
+    expect(() => loadYaml(content)).toThrow(/cannot merge mappings/);
+    expect(loadYaml('values: [<<]\ntext: <<')).toEqual({
+      values: ['<<'],
+      text: '<<',
+    });
+  });
+
+  it('limits empty merge sources and oversized merge sequences', () => {
+    const small = 'merged:\n  <<: [{}, {}, {}]';
+    const large = `merged:\n  <<: [${Array(101).fill('{}').join(', ')}]`;
+
+    expect(() => loadYaml(small, { maxTotalMergeKeys: 2 })).toThrow(/maxTotalMergeKeys/);
+    expect(loadYaml(small, { maxTotalMergeKeys: 3 })).toEqual({ merged: {} });
+    expect(() => loadYaml(large, { maxTotalMergeKeys: -1 })).toThrow(
+      /abnormal merge sequence size/,
+    );
+  });
+
   it('preserves js-yaml v4 legacy standard tags', () => {
     expect(loadYaml('!!binary SGVsbG8=')).toEqual(new Uint8Array([72, 101, 108, 108, 111]));
     expect(loadYaml('2024-01-02')).toEqual(new Date('2024-01-02T00:00:00.000Z'));

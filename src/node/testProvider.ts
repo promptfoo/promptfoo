@@ -151,7 +151,6 @@ export async function testProviderConnectivity({
 
     // Call the agent helper endpoint to evaluate the results (even if there's an error)
     const HOST = cloudConfig.getApiHost();
-    const apiKey = cloudConfig.getApiKey();
 
     try {
       logger.debug('[testProviderConnectivity] Calling agent helper', {
@@ -162,7 +161,7 @@ export async function testProviderConnectivity({
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          Authorization: `Bearer ${apiKey}`,
+          ...(cloudConfig.getAuthHeaders() ?? {}),
         },
         body: JSON.stringify({
           config: provider.config,
