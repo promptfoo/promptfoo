@@ -91,7 +91,7 @@ describe('N8nProvider', () => {
       { method: 'HEAD' } satisfies N8nProviderConfig,
       { method: 'head' },
       { method: 'HeAd' },
-    ])('sends $method requests without a body', async (config) => {
+    ])('sends $method requests with the payload in the query string', async (config) => {
       vi.mocked(fetchWithCache).mockImplementation(async (url, options) => {
         // Use the native Fetch contract without sending a network request.
         new Request(url, options);
@@ -104,8 +104,10 @@ describe('N8nProvider', () => {
       const result = await provider.callApi('Hello');
 
       expect(result.error).toBeUndefined();
+      // HEAD carries no body, so the prompt has to travel in the query string
+      // or the webhook receives nothing at all.
       expect(fetchWithCache).toHaveBeenCalledWith(
-        'https://n8n.example.com/webhook/agent',
+        'https://n8n.example.com/webhook/agent?prompt=Hello',
         expect.objectContaining({ method: 'HEAD' }),
         expect.any(Number),
         'text',
@@ -953,7 +955,7 @@ describe('createN8nProvider', () => {
   it('normalizes lowercase / mixed-case method strings before routing GET vs POST', async () => {
     // YAML happily accepts `method: get` even though the TypeScript union
     // declares uppercase verbs. Without normalization, `method === 'GET'`
-    // misses, buildGetUrl() is skipped, and the body is sent with a GET
+    // misses, buildQueryUrl() is skipped, and the body is sent with a GET
     // request — undici rejects with "Request with GET/HEAD method cannot
     // have body". Normalizing also routes the request through the correct
     // (idempotent vs non-idempotent) retry policy.

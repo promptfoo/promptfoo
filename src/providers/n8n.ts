@@ -430,7 +430,7 @@ export class N8nProvider implements ApiProvider {
     return this.addSessionField(renderValue(this.config.body), context);
   }
 
-  private buildGetUrl(body: N8nRequestBody): string {
+  private buildQueryUrl(body: N8nRequestBody): string {
     const requestUrl = new URL(this.getUrl());
 
     if (typeof body === 'string') {
@@ -531,25 +531,24 @@ export class N8nProvider implements ApiProvider {
     callOptions?: CallApiOptionsParams,
   ): Promise<ProviderResponse> {
     // Normalize method to upper-case so `method: get` (or `Post`) in YAML
-    // doesn't bypass the GET / non-idempotent branches downstream — both the
-    // GET-vs-body decision and the maxRetries policy depend on exact case
+    // doesn't bypass the bodyless / non-idempotent branches downstream — both
+    // the payload placement and the maxRetries policy depend on exact case
     // matches against the standard verb spelling.
     const method = (this.config.method || 'POST').toUpperCase();
     const timeout = this.config.timeout || getRequestTimeoutMs();
 
     const body = this.buildRequestBody(prompt, context);
-    const url = method === 'GET' ? this.buildGetUrl(body) : this.getUrl();
+    // GET and HEAD cannot carry a request body (fetch rejects one outright), so
+    // the rendered payload only reaches the workflow via the query string.
+    const isBodyless = method === 'GET' || method === 'HEAD';
+    const url = isBodyless ? this.buildQueryUrl(body) : this.getUrl();
     const headers = this.buildHeaders(prompt, context);
-    const renderedBody = typeof body === 'string' ? body : JSON.stringify(body);
     const fetchOptions: RequestInit = {
       method,
       headers,
+      ...(!isBodyless && { body: typeof body === 'string' ? body : JSON.stringify(body) }),
       ...(callOptions?.abortSignal && { signal: callOptions.abortSignal }),
     };
-
-    if (method !== 'GET' && method !== 'HEAD') {
-      fetchOptions.body = renderedBody;
-    }
 
     logger.debug('[n8n] Calling webhook', {
       hasBody: fetchOptions.body !== undefined,
