@@ -13,6 +13,7 @@ import invariant from '../util/invariant';
 import type {
   ApiProvider,
   CallApiContextParams,
+  CallApiOptionsParams,
   GradingConfig,
   ProviderOptions,
   ProviderResponse,
@@ -37,6 +38,11 @@ export function shouldUseRemoteGrading(
   options?: Parameters<typeof shouldGenerateRemote>[0],
 ): boolean {
   return shouldGenerateRemote(options);
+}
+
+export function getGradingProviderCallOptions(): CallApiOptionsParams | undefined {
+  const abortSignal = getProviderCallExecutionContext()?.abortSignal;
+  return abortSignal ? { abortSignal } : undefined;
 }
 
 /**
@@ -97,10 +103,7 @@ export function callProviderWithContext(
     },
     vars,
   };
-  const executionContext = getProviderCallExecutionContext();
-  const callApiOptions = executionContext?.abortSignal
-    ? { abortSignal: executionContext.abortSignal }
-    : undefined;
+  const callApiOptions = getGradingProviderCallOptions();
   return callGradingProvider(
     provider,
     label,
