@@ -163,82 +163,79 @@ def _stdout_from_result(res) -> tuple[str, str]:
 
 
 def _run_code_in_sandbox(sbx, code: str):
-    """Try a few run_code signatures safely (SDKs vary)."""
-    # Preferred: named args (limits, disable network)
-    try:
-        return sbx.run_code(
-            code=code,
-            language="python",
-            limits={"cputime": 1, "wall_time": 5, "memory": 128},
-            allow_network=False,
-        )
-    except TypeError:
-        pass
-    except Exception:
-        logger.debug("Preferred sandbox run_code signature failed", exc_info=True)
-    # Try alternate signatures
-    try:
-        return sbx.run_code(
-            code, "python", {"cputime": 1, "wall_time": 5, "memory": 128}
-        )
-    except Exception:
-        logger.debug("Positional sandbox run_code signature failed", exc_info=True)
-    # Last resort
-    return sbx.run_code(code)
+    """Execute Python code with the supported E2B execution timeout."""
+    return sbx.run_code(code, language="python", timeout=5)
+
+
+def _get_test_cases(context) -> list[tuple[str, str]]:
+    """Read one or more hidden input/output checks from assertion variables."""
+    cases = context["vars"].get("test_cases")
+    if cases is None:
+        return [
+            (
+                str(context["vars"]["test_input"]),
+                str(context["vars"]["expected_output"]),
+            )
+        ]
+    if not isinstance(cases, list) or not cases:
+        raise ValueError("test_cases must be a non-empty list")
+
+    normalized = []
+    for case in cases:
+        if not isinstance(case, dict) or "input" not in case or "expected" not in case:
+            raise ValueError("each test_cases entry must include input and expected")
+        normalized.append((str(case["input"]), str(case["expected"])))
+    return normalized
 
 
 def get_assert(output, context):
-    """Execute the generated function in E2B and compare stdout with expected output."""
-    task_id = context.get("id", str(time.time()))
-    provider = context.get("provider", "unknown")
-    model = context.get("model", "unknown")
-
+    """Execute a generated function in E2B and compare its hidden test outputs."""
     fn_name = context["vars"]["function_name"]
-    test_input = context["vars"]["test_input"]
-    expected = str(context["vars"]["expected_output"])
+    task_id = context.get("id") or f"{fn_name}-{time.time_ns()}"
+
+    try:
+        test_cases = _get_test_cases(context)
+    except ValueError as e:
+        write_metrics(task_id, False, 0.0, extra={"reason": "invalid_test_cases"})
+        return {"pass": False, "score": 0, "reason": f"Invalid test cases: {e}"}
 
     function_code = _extract_function(output, fn_name)
     if not function_code:
         snippet = output.strip()[:300].replace("\n", " ")
-        write_metrics(
-            task_id, provider, model, False, 0.0, extra={"reason": "no_code_found"}
-        )
+        write_metrics(task_id, False, 0.0, extra={"reason": "no_code_found"})
         return {
             "pass": False,
             "score": 0,
             "reason": f"No Python code block found (first 300 chars: {snippet})",
         }
 
-    # Pre-exec safety
+    # Defense in depth only; the E2B sandbox is the execution boundary.
     if is_unsafe(function_code):
-        write_metrics(
-            task_id, provider, model, False, 0.0, extra={"reason": "unsafe_pattern"}
-        )
+        write_metrics(task_id, False, 0.0, extra={"reason": "unsafe_pattern"})
         return {
             "pass": False,
             "score": 0,
             "reason": "Unsafe pattern detected in generated code",
         }
 
-    test_program = f"""{function_code}
-
-print({fn_name}({test_input}))
-"""
+    invocations = "\n".join(
+        f"print({fn_name}({test_input}))" for test_input, _ in test_cases
+    )
+    test_program = f"{function_code}\n\n{invocations}\n"
+    expected = "\n".join(expected_output for _, expected_output in test_cases)
 
     start = time.time()
-    with Sandbox.create() as sbx:
-        try:
+    try:
+        with Sandbox.create(allow_internet_access=False) as sbx:
             res = _run_code_in_sandbox(sbx, test_program)
-        except Exception as e:
-            duration = time.time() - start
-            write_metrics(
-                task_id, provider, model, False, duration, extra={"error": str(e)}
-            )
-            return {
-                "pass": False,
-                "score": 0,
-                "reason": f"Sandbox execution error: {e}",
-            }
+    except Exception as e:
+        duration = time.time() - start
+        write_metrics(task_id, False, duration, extra={"error": str(e)})
+        return {
+            "pass": False,
+            "score": 0,
+            "reason": f"Sandbox execution error: {e}",
+        }
 
     duration = time.time() - start
     stdout, stderr = _stdout_from_result(res)
@@ -255,12 +252,7 @@ print({fn_name}({test_input}))
         except Exception:
             dbg = str(getattr(res, "logs", ""))[:800]
         write_metrics(
-            task_id,
-            provider,
-            model,
-            False,
-            duration,
-            extra={"error": err_obj or stderr, "debug": dbg},
+            task_id, False, duration, extra={"error": err_obj or stderr, "debug": dbg}
         )
         return {
             "pass": False,
@@ -270,10 +262,17 @@ print({fn_name}({test_input}))
 
     success = stdout == expected
     write_metrics(
-        task_id, provider, model, success, duration, extra={"stdout": stdout[:500]}
+        task_id,
+        success,
+        duration,
+        extra={"stdout": stdout[:500], "test_cases": len(test_cases)},
     )
     if success:
-        return {"pass": True, "score": 1, "reason": f"Correct output: {stdout}"}
+        return {
+            "pass": True,
+            "score": 1,
+            "reason": f"Correct outputs for {len(test_cases)} cases: {stdout}",
+        }
     logs_preview = getattr(res, "logs", None)
     if isinstance(logs_preview, str) and len(logs_preview) > 400:
         logs_preview = logs_preview[:400] + "...(truncated)"
