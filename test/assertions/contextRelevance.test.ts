@@ -158,7 +158,7 @@ describe('handleContextRelevance', () => {
     );
   });
 
-  it('should use default threshold of 0 when not provided', async () => {
+  it('should use default threshold of 0.5 when not provided', async () => {
     const mockResult = { pass: true, score: 1, reason: 'Perfect relevance' };
     vi.mocked(matchesContextRelevance).mockResolvedValue(mockResult);
     vi.mocked(contextUtils.resolveContext).mockResolvedValue('test context');
@@ -193,12 +193,69 @@ describe('handleContextRelevance', () => {
     expect(matchesContextRelevance).toHaveBeenCalledWith(
       'test query',
       'test context',
-      0,
+      0.5,
       {},
       undefined,
     );
     expect(result.metadata).toEqual({
       context: 'test context',
+    });
+  });
+
+  it('should invert omitted-threshold not-context-relevance results', async () => {
+    const mockResult = {
+      pass: false,
+      score: 0.4,
+      reason: 'Context relevance 0.40 is < 0.5',
+      metadata: {
+        score: 0.4,
+        extractedSentences: [],
+      },
+    };
+    vi.mocked(matchesContextRelevance).mockResolvedValue(mockResult);
+    vi.mocked(contextUtils.resolveContext).mockResolvedValue('test context');
+
+    const result = await handleContextRelevance({
+      assertion: {
+        type: 'not-context-relevance',
+      },
+      test: {
+        vars: {
+          query: 'test query',
+          context: 'test context',
+        },
+        options: {},
+      },
+      output: 'test output',
+      prompt: 'test prompt',
+      baseType: 'context-relevance',
+      assertionValueContext: {
+        prompt: 'test prompt',
+        vars: { query: 'test query', context: 'test context' },
+        test: { vars: { query: 'test query', context: 'test context' }, options: {} },
+        logProbs: undefined,
+        provider: createMockProvider({ id: 'id', config: {} }),
+        providerResponse: { output: 'out', tokenUsage: {} },
+      },
+      inverse: true,
+      outputString: 'test output',
+      providerResponse: { output: 'out', tokenUsage: {} },
+    } as any);
+
+    expect(matchesContextRelevance).toHaveBeenCalledWith(
+      'test query',
+      'test context',
+      0.5,
+      {},
+      undefined,
+    );
+    expect(result.pass).toBe(true);
+    expect(result.score).toBe(0.6);
+    expect(result.reason).toBe('Context relevance 0.40 is < 0.5');
+    expect(result.metadata).toEqual({
+      context: 'test context',
+      score: 0.4,
+      extractedSentences: [],
     });
   });
 
@@ -296,7 +353,7 @@ describe('handleContextRelevance', () => {
       undefined,
       { output: 'out', tokenUsage: {} },
     );
-    expect(matchesContextRelevance).toHaveBeenCalledWith('q', 'cx', 0, {}, undefined);
+    expect(matchesContextRelevance).toHaveBeenCalledWith('q', 'cx', 0.5, {}, undefined);
     expect(result.metadata).toEqual({
       context: 'cx',
     });
