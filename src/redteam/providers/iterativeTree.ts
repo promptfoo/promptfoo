@@ -216,7 +216,7 @@ export async function evaluateResponse(
     },
     vars: {},
   });
-  TokenUsageTracker.getInstance().trackUsage(provider.id(), judgeResp.tokenUsage);
+  TokenUsageTracker.getInstance().trackResponseUsage(provider.id(), judgeResp);
   if (tokenUsage) {
     accumulateGradingResponseTokenUsage(tokenUsage, judgeResp);
   }
@@ -306,7 +306,7 @@ export async function getNewPrompt(
   if (totalTokenUsage) {
     accumulateAttackerTokenUsage(totalTokenUsage, redteamResp);
   }
-  TokenUsageTracker.getInstance().trackUsage(redteamProvider.id(), redteamResp.tokenUsage);
+  TokenUsageTracker.getInstance().trackResponseUsage(redteamProvider.id(), redteamResp);
   if (redteamProvider.delay) {
     logger.debug(`[IterativeTree] Sleeping for ${redteamProvider.delay}ms`);
     await sleep(redteamProvider.delay);

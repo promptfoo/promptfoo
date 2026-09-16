@@ -5,10 +5,7 @@ import path from 'path';
 import { type Attributes, type Span, SpanKind, SpanStatusCode, trace } from '@opentelemetry/api';
 import dedent from 'dedent';
 import { z } from 'zod';
-import cliState from '../../cliState';
 import { getEnvString } from '../../envars';
-import { getDirectory, importModule, resolvePackageEntryPoint } from '../../esm';
-import logger from '../../logger';
 import {
   addActiveSpanRoleAttribute,
   closeTurnSpan,
@@ -21,12 +18,25 @@ import {
   PROMPTFOO_RESOURCE_ATTR_TRACE_ID,
   withGenAISpan,
 } from '../../tracing/genaiTracer';
-import { formatRateLimitErrorMessage, HttpRateLimitError } from '../../util/fetch/errors';
-import { renderVarsInObject } from '../../util/render';
+import {
+  formatRateLimitErrorMessage,
+  HARD_QUOTA_ERROR_CODES,
+  HttpRateLimitError,
+  isDefinitiveBillingCode,
+  isHardQuotaCode,
+} from '../../util/fetch/errors';
 import { normalizeFieldName, REDACTED, sanitizeObject } from '../../util/sanitizer';
 import { resolveAgenticWorkingDir } from '../agentic-utils';
 import { providerRegistry } from '../providerRegistry';
 import { calculateOpenAIUsageCostFromTokenUsage } from './billing';
+import {
+  cliState,
+  getDirectory,
+  importModule,
+  logger,
+  renderVarsInObject,
+  resolvePackageEntryPoint,
+} from './codex-runtime';
 import {
   getCodexTraceEndpoint,
   getCodexTraceProtocol,
@@ -44,11 +54,11 @@ import {
   getCodexSkillRootPrefixes,
 } from './codexSkillMetadata';
 
-import type { EnvOverrides } from '../../types/env';
 import type {
   ApiProvider,
   CallApiContextParams,
   CallApiOptionsParams,
+  EnvOverrides,
   ProviderResponse,
 } from '../../types/index';
 
@@ -121,7 +131,7 @@ export type ApprovalPolicy = 'never' | 'on-request' | 'on-failure' | 'untrusted'
  * Reasoning effort levels for model reasoning intensity.
  *
  * Model support varies:
- * - gpt-5.6-sol / gpt-5.6-terra: 'low', 'medium', 'high', 'xhigh', 'max', and 'ultra'
+ * - gpt-6-astra / gpt-5.6-sol / gpt-5.6-terra: 'low', 'medium', 'high', 'xhigh', 'max', and 'ultra'
  * - gpt-5.6-luna: 'low', 'medium', 'high', 'xhigh', and 'max'
  * - gpt-5.5: 'minimal', 'low', 'medium', 'high', 'xhigh' in the Codex SDK;
  *   the OpenAI API uses 'none' instead of 'minimal'
@@ -130,16 +140,14 @@ export type ApprovalPolicy = 'never' | 'on-request' | 'on-failure' | 'untrusted'
  * - gpt-5.4-pro: 'medium', 'high', 'xhigh'
  * - gpt-5.3-codex: 'low', 'medium', 'high', 'xhigh'
  * - gpt-5.3-codex-spark: 'low', 'medium', 'high'
- * - gpt-5.2 / gpt-5.2-codex: 'low', 'medium', 'high', 'xhigh'
- * - gpt-5.1-codex-max: 'low', 'medium', 'high', 'xhigh'
- * - gpt-5.1-codex/mini: 'low', 'medium', 'high'
+ * - gpt-5.2: 'low', 'medium', 'high', 'xhigh'
  *
  * Values:
  * - 'minimal': Minimal reasoning overhead
  * - 'low': Light reasoning, faster responses
  * - 'medium': Balanced (default for GPT-5.6 Terra and Luna)
  * - 'high': Thorough reasoning for complex tasks
- * - 'xhigh': Maximum reasoning depth (gpt-5.5, gpt-5.4, gpt-5.2, gpt-5.1-codex-max)
+ * - 'xhigh': Maximum reasoning depth (gpt-5.5, gpt-5.4, gpt-5.2)
  * - 'max': Deepest single-agent reasoning for GPT-5.6
  * - 'ultra': Proactive multi-agent reasoning for GPT-5.6 Sol and Terra
  */
@@ -276,7 +284,9 @@ export interface OpenAICodexSDKConfig {
   codex_path_override?: string;
 
   /**
-   * Model to use (e.g., 'gpt-5.5', 'gpt-5.4', 'gpt-5.3-codex', 'gpt-5.2-codex', 'gpt-5.1-codex-mini').
+   * Model to use (e.g., 'gpt-5.6-terra' or 'gpt-5.6-luna').
+   * Availability depends on authentication mode and account access; omitted models
+   * use the installed Codex SDK's default.
    * When routing through a non-OpenAI `model_provider` (such as `amazon-bedrock`), use that
    * provider's model id instead (e.g., 'openai.gpt-5.6-sol' for Amazon Bedrock).
    */
@@ -306,7 +316,7 @@ export interface OpenAICodexSDKConfig {
    * - 'low': Light reasoning, faster responses
    * - 'medium': Balanced (default)
    * - 'high': Thorough reasoning for complex tasks
-   * - 'xhigh': Maximum depth (gpt-5.2, gpt-5.1-codex-max only)
+   * - 'xhigh': Maximum depth (model-dependent)
    */
   model_reasoning_effort?: ReasoningEffort;
 
@@ -476,14 +486,13 @@ function getMinimalProcessEnv(): Record<string, string> {
   return env;
 }
 
-const CODEX_RATE_LIMIT_CODES = [
+// The transient throttle code plus the shared hard-quota set, so a billing code
+// added to HARD_QUOTA_ERROR_CODES (e.g. credit_balance_exhausted) is recognized
+// on the SDK path too instead of falling back to the 60s retry cycle.
+const CODEX_RATE_LIMIT_CODES: readonly string[] = [
   'rate_limit_exceeded',
-  'insufficient_quota',
-  'billing_hard_limit_reached',
-  'billing_not_active',
-  'access_terminated',
-  'quota_exceeded',
-] as const;
+  ...HARD_QUOTA_ERROR_CODES,
+];
 
 // Mirrors the HTTP retry path's fallback when the upstream error carries no reset hint.
 const CODEX_DEFAULT_RATE_LIMIT_WAIT_MS = 60_000;
@@ -499,6 +508,19 @@ const CODEX_RATE_LIMIT_PATTERNS = [
 
 function extractCodexRateLimitCode(message: string): string | undefined {
   const lowerMessage = message.toLowerCase();
+  // Flattened SDK messages can contain both a broad quota type and a specific
+  // billing code. Preserve the definitive billing classification.
+  const billingCode = CODEX_RATE_LIMIT_CODES.find(
+    (code) => isDefinitiveBillingCode(code) && lowerMessage.includes(code),
+  );
+  if (billingCode) {
+    return billingCode;
+  }
+
+  if (/\bno credits remaining\b/i.test(message)) {
+    return 'credit_balance_exhausted';
+  }
+
   const explicitCode = CODEX_RATE_LIMIT_CODES.find((code) => lowerMessage.includes(code));
   if (explicitCode) {
     return explicitCode;
@@ -551,6 +573,11 @@ function buildCodexRateLimitResponse(
         : undefined;
   const rawCode =
     typeof errorRecord?.code === 'string' ? errorRecord.code.toLowerCase() : undefined;
+  // The SDK error's broad class (e.g. `type: "insufficient_quota"` next to a
+  // provider-specific billing code) carries the quota classification when the
+  // code itself is not recognized, exactly as on the fetch and Foundry paths.
+  const rawType =
+    typeof errorRecord?.type === 'string' ? errorRecord.type.toLowerCase() : undefined;
   const code =
     rawCode && CODEX_RATE_LIMIT_CODES.some((knownCode) => knownCode === rawCode)
       ? rawCode
@@ -559,6 +586,7 @@ function buildCodexRateLimitResponse(
   if (
     status !== 429 &&
     code === undefined &&
+    !isHardQuotaCode(rawType) &&
     !CODEX_RATE_LIMIT_PATTERNS.some((pattern) => pattern.test(message))
   ) {
     return undefined;
@@ -568,7 +596,10 @@ function buildCodexRateLimitResponse(
   const rateLimitError = new HttpRateLimitError({
     status: status ?? 429,
     retryAfterMs,
-    code,
+    // Keep the provider's own code for reporting when it is not one we
+    // recognize; `type` decides the quota classification in that case.
+    code: code ?? rawCode,
+    type: rawType,
   });
   const schedulerRetryAfterMs =
     rateLimitError.kind === 'rate_limit'
@@ -647,6 +678,7 @@ async function loadCodexSDK(): Promise<any> {
 
 export class OpenAICodexSDKProvider implements ApiProvider {
   static OPENAI_MODELS = [
+    'gpt-6-astra',
     // GPT-5.6 models (requires Codex 0.144.0 or later)
     'gpt-5.6-sol',
     'gpt-5.6-terra',
@@ -663,13 +695,7 @@ export class OpenAICodexSDKProvider implements ApiProvider {
     // GPT-5.2 models
     // Note: gpt-5.2-pro is not currently supported via Codex SDK.
     'gpt-5.2',
-    'gpt-5.2-codex',
-    // GPT-5.1 Codex models
-    'gpt-5.1-codex',
-    'gpt-5.1-codex-max',
-    'gpt-5.1-codex-mini',
     // GPT-5 Codex models
-    'gpt-5-codex',
     'gpt-5-codex-mini',
     // GPT-5 base
     'gpt-5',
@@ -1377,6 +1403,7 @@ export class OpenAICodexSDKProvider implements ApiProvider {
       const inputTokens = usage.input_tokens ?? usage.inputTokens;
       const outputTokens = usage.output_tokens ?? usage.outputTokens;
       const cachedTokens = usage.cached_input_tokens ?? usage.cachedInputTokens;
+      const cacheWriteTokens = usage.cache_write_input_tokens ?? usage.cacheWriteInputTokens;
       const reasoningTokens = usage.reasoning_output_tokens ?? usage.reasoningOutputTokens;
       if (typeof inputTokens === 'number') {
         attributes['gen_ai.usage.input_tokens'] = inputTokens;
@@ -1386,6 +1413,9 @@ export class OpenAICodexSDKProvider implements ApiProvider {
       }
       if (typeof cachedTokens === 'number') {
         attributes[GenAIAttributes.USAGE_CACHE_READ_INPUT_TOKENS] = cachedTokens;
+      }
+      if (typeof cacheWriteTokens === 'number') {
+        attributes[GenAIAttributes.USAGE_CACHE_CREATION_INPUT_TOKENS] = cacheWriteTokens;
       }
       if (typeof reasoningTokens === 'number') {
         attributes[GenAIAttributes.USAGE_REASONING_OUTPUT_TOKENS] = reasoningTokens;
@@ -2425,8 +2455,18 @@ export class OpenAICodexSDKProvider implements ApiProvider {
       completion: turnUsage.output_tokens,
       total: turnUsage.input_tokens + turnUsage.output_tokens,
       cached: turnUsage.cached_input_tokens || 0,
-      ...(typeof turnUsage.reasoning_output_tokens === 'number'
-        ? { completionDetails: { reasoning: turnUsage.reasoning_output_tokens } }
+      ...(typeof turnUsage.reasoning_output_tokens === 'number' ||
+      typeof turnUsage.cache_write_input_tokens === 'number'
+        ? {
+            completionDetails: {
+              ...(typeof turnUsage.reasoning_output_tokens === 'number'
+                ? { reasoning: turnUsage.reasoning_output_tokens }
+                : {}),
+              ...(typeof turnUsage.cache_write_input_tokens === 'number'
+                ? { cacheCreationInputTokens: turnUsage.cache_write_input_tokens }
+                : {}),
+            },
+          }
         : {}),
     };
   }
