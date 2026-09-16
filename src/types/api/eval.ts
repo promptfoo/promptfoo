@@ -1,4 +1,19 @@
 import { z } from 'zod';
+import {
+  EvalConfigParamsSchema,
+  EvalConfigResponseSchema,
+  EvalResultDetailParamsSchema,
+  EvalResultDetailResponseSchema,
+} from '../../contracts/api/eval';
+
+export {
+  EvalConfigParamsSchema,
+  EvalConfigResponseSchema,
+  EvalResultDetailParamsSchema,
+  EvalResultDetailResponseSchema,
+};
+
+import { EVAL_CONFIG_DETAIL_FIELDS } from '../evalDetailFields';
 import { EvalResultsFilterMode, EvaluateOptionsSchema, TestSuiteConfigSchema } from '../index';
 import { EmailSchema, MessageResponseSchema } from './common';
 
@@ -89,6 +104,7 @@ export const EVAL_TABLE_MAX_PAGE_SIZE = 1000;
 export const EvalTableQuerySchema = z
   .object({
     format: z.enum(['csv', 'json']).optional(),
+    lean: z.literal('true').optional(),
     limit: z.coerce.number().int().positive().prefault(50),
     offset: z.coerce.number().int().nonnegative().prefault(0),
     filterMode: EvalResultsFilterMode.prefault('all'),
@@ -109,6 +125,13 @@ export const EvalTableQuerySchema = z
 
 export type EvalTableQuery = z.infer<typeof EvalTableQuerySchema>;
 
+const EvalConfigDetailFieldSchema = z.enum(EVAL_CONFIG_DETAIL_FIELDS);
+
+const EvalConfigDetailInfoSchema = z.object({
+  available: z.boolean(),
+  omittedFields: z.array(EvalConfigDetailFieldSchema),
+});
+
 const ShallowEvaluateTableSchema = z
   .object({
     head: z
@@ -123,18 +146,26 @@ export const EvalTableResponseSchema = z
     table: ShallowEvaluateTableSchema,
     totalCount: z.number(),
     filteredCount: z.number(),
-    filteredMetrics: z.array(z.unknown()).nullable(),
+    filteredMetrics: z.array(z.record(z.string(), z.unknown())).nullable(),
     config: z.record(z.string(), z.unknown()),
+    configDetail: EvalConfigDetailInfoSchema.optional(),
     author: z.string().nullable(),
     version: z.number(),
     id: z.string(),
-    stats: z.unknown(),
+    stats: z.record(z.string(), z.unknown()).optional(),
   })
   .passthrough();
 
-export const EvalTableJsonExportResponseSchema = z.lazy(() => EvaluateTableSchema);
 export type EvalTableResponse = z.infer<typeof EvalTableResponseSchema>;
 
+// GET /api/eval/:id/config
+
+export type EvalConfigParams = z.infer<typeof EvalConfigParamsSchema>;
+export type EvalConfigResponse = z.infer<typeof EvalConfigResponseSchema>;
+export type EvalResultDetailParams = z.infer<typeof EvalResultDetailParamsSchema>;
+export type EvalResultDetailResponse = z.infer<typeof EvalResultDetailResponseSchema>;
+
+export const EvalTableJsonExportResponseSchema = z.lazy(() => EvaluateTableSchema);
 // POST /api/eval/job
 
 /**
@@ -202,6 +233,7 @@ export const EvaluateTableSchema = z
 export const UpdateEvalRequestSchema = z.object({
   table: EvaluateTableSchema.optional(),
   config: z.record(z.string(), z.unknown()).optional(),
+  configPatch: z.record(z.string(), z.unknown()).optional(),
 });
 
 export const UpdateEvalResponseSchema = MessageResponseSchema;
@@ -371,6 +403,14 @@ export const EvalSchemas = {
     Query: EvalTableQuerySchema,
     Response: EvalTableResponseSchema,
     JsonExportResponse: EvalTableJsonExportResponseSchema,
+  },
+  Config: {
+    Params: EvalConfigParamsSchema,
+    Response: EvalConfigResponseSchema,
+  },
+  ResultDetail: {
+    Params: EvalResultDetailParamsSchema,
+    Response: EvalResultDetailResponseSchema,
   },
   AddResults: {
     Params: AddResultsParamsSchema,
