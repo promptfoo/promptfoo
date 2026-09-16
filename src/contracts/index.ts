@@ -11,6 +11,18 @@ export {
   type McpAuthParsed,
   McpAuthSchema,
 } from './providerConfig/auth.js';
+export {
+  type McpConfig,
+  type McpConfigInput,
+  McpConfigInputJsonSchema,
+  McpConfigInputSchema,
+  type McpConfigParsed,
+  McpConfigSchema,
+  type McpServerInput,
+  McpServerInputSchema,
+  type McpServerParsed,
+  McpServerSchema,
+} from './providerConfig/mcp.js';
 export * from './providers.js';
 export * from './shared.js';
 export * from './transform.js';

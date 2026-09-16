@@ -65,8 +65,7 @@ nor quietly pick up a new npm dependency or Node builtin such as `node:fs`. A
 `promptfoo/contracts` exports `McpAuthInputSchema`, `McpAuthSchema`,
 `McpAuthInputJsonSchema`, and the inferred `McpAuthInput` / `McpAuthParsed` types.
 These cover MCP authentication, including the auth forms shared by A2A. HTTP
-authentication and complete provider configurations have separate semantics and
-are not covered by these schemas.
+authentication has separate semantics and is not covered by these schemas.
 
 ```typescript
 import { z } from 'zod';
@@ -100,6 +99,57 @@ installations can call `.safeParse()` separately without composing schema object
 The older `src/providers/mcp/auth` imports remain available. Its `ApiKeyAuthSchema`
 is now a union; object-specific methods such as `.shape` are not available on it,
 and invalid credentials produce union issues rather than a refinement issue.
+
+## MCP Provider Configuration Contracts
+
+`McpConfigInputSchema` describes the complete serializable MCP configuration:
+`enabled`, singular `server` and plural `servers`, `serverName`, response transform
+strings and the legacy parser alias, timeout/progress/ping controls, tool filters,
+and debug/verbose flags. `McpServerInputSchema` covers command, path, URL, arguments,
+name, auth, headers, and environment variables. Each server must supply at least
+one nonempty command, path, or URL. These are union branches that all validate
+the known fields, including nested auth; an invalid auth object cannot pass by
+selecting another connection branch.
+
+```typescript
+import { McpConfigInputSchema, McpConfigSchema } from 'promptfoo/contracts';
+
+const input = McpConfigInputSchema.parse({
+  servers: [{ url: 'https://mcp.example.test', auth: { type: 'api_key', value: 'key' } }],
+});
+const config = McpConfigSchema.parse(input);
+```
+
+`McpConfigInputJsonSchema` exports the complete input contract as draft-07 JSON
+Schema, including the nested authentication and connection requirements.
+`McpConfigInput` and `McpServerInput` are inferred serialized input types;
+`McpConfig` also permits function-valued transforms for in-process callers.
+`McpConfigParsed` and `McpServerParsed` describe runtime parsing results.
+
+`McpConfigSchema` defaults omitted `enabled` to true and normalizes auth. It accepts
+direct functions for `transformResponse` and `responseParser`, while the input
+schema accepts only strings in those fields. Parsing never calls transforms or
+loads referenced files. Timeouts must be finite nonnegative numbers; zero retains
+the existing runtime fallback behavior. Timeout and credential resolution defaults
+remain in their existing execution helpers. Root and server extension properties
+are preserved; auth retains its existing stripping behavior.
+
+The standalone MCP provider and shared `MCPClient` parse this configuration before
+initializing SDK clients or opening connections. Embedded integrations using that
+client receive the same validation when initialized. The Claude Agent SDK adapter
+uses the same schema and retains its additional tool-filter restrictions.
+Malformed supplied fields are rejected even in disabled or unselected server
+entries. Empty server collections remain valid. The shared client still chooses
+`servers` over `server`, and command over path over URL. The Claude adapter still
+combines both collections and prefers URL over command over path. Schema validation
+does not reorder or discard these fields.
+
+Script suffix checks, URL usability, process execution, OAuth discovery, and
+network connectivity remain execution-time checks. OAuth scope strings and arrays
+are normalized after template rendering and before token requests. Legacy MCP
+type names remain aliases inferred from the contract schemas; `MCPServerConfig`
+retains its optional connection fields for auth-only helper callers, while the
+complete configuration uses the connection-requiring server union.
 
 ## Layer Dependency Ratchet
 
