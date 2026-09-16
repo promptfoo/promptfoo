@@ -75,6 +75,10 @@ export interface Part {
   // thinking tokens rather than per-image output.
   thought?: boolean;
   inlineData?: Blob;
+  inline_data?: {
+    mime_type: string;
+    data: string;
+  };
   functionCall?: FunctionCall | StreamedFunctionCall;
   functionResponse?: FunctionResponse;
   thoughtSignature?: string;

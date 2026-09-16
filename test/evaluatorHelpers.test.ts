@@ -1898,7 +1898,11 @@ describe('evaluatorHelpers', () => {
               JSON.stringify([
                 {
                   role: 'user',
-                  parts: [{ inlineData: { mimeType, data: '{{audio}}' } }, { text: '{{audio}}' }],
+                  parts: [
+                    { inlineData: { mimeType, data: '{{audio}}' } },
+                    { inline_data: { mime_type: mimeType, data: '{{audio}}' } },
+                    { text: '{{audio}}' },
+                  ],
                 },
               ]),
             ),
@@ -1909,7 +1913,16 @@ describe('evaluatorHelpers', () => {
           const { contents } = geminiFormatAndSystemInstructions(rendered, vars);
           const expectedPart = { inlineData: { mimeType, data: audio.toString('base64') } };
 
-          expect(contents).toEqual([{ role: 'user', parts: [expectedPart, expectedPart] }]);
+          expect(contents).toEqual([
+            {
+              role: 'user',
+              parts: [
+                expectedPart,
+                { inline_data: { mime_type: mimeType, data: audio.toString('base64') } },
+                expectedPart,
+              ],
+            },
+          ]);
         },
       );
     });

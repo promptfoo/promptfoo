@@ -1633,6 +1633,14 @@ function processImagesInContents(
               data: extractBase64FromDataUrl(part.inlineData.data),
             },
           });
+        } else if (typeof part.inline_data?.data === 'string') {
+          newParts.push({
+            ...part,
+            inline_data: {
+              ...part.inline_data,
+              data: extractBase64FromDataUrl(part.inline_data.data),
+            },
+          });
         } else {
           newParts.push(part);
         }
