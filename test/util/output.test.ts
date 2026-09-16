@@ -2,7 +2,7 @@ import * as fsPromises from 'fs/promises';
 import * as path from 'path';
 
 import { XMLParser } from 'fast-xml-parser';
-import yaml from 'js-yaml';
+import * as yaml from 'js-yaml';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { getDb } from '../../src/database/index';
 import * as googleSheets from '../../src/googleSheets';
@@ -171,6 +171,57 @@ describe('writeOutput', () => {
     expect(fsPromises.writeFile).toHaveBeenCalledTimes(1);
   });
 
+  it('exports very large token-like config values with secret redaction intact', async () => {
+    const eval_ = new Eval({
+      tests: [{ vars: { media: 'A'.repeat(16_369_336), message: 'Public fixture text.' } }],
+      providers: [{ id: 'echo', config: { apiKey: 'fixture-api-key', max_tokens: 37 } }],
+    });
+
+    await writeOutput('output.json', eval_, null);
+
+    expect(fsPromises.writeFile).toHaveBeenCalledTimes(1);
+    const outputJson = vi.mocked(fsPromises.writeFile).mock.calls[0][1] as string;
+    const parsed = JSON.parse(outputJson);
+    expect(parsed.config.tests[0].vars).toEqual({
+      media: '[REDACTED]',
+      message: 'Public fixture text.',
+    });
+    expect(parsed.config.providers[0].config).toEqual({
+      apiKey: '[REDACTED]',
+      max_tokens: 37,
+    });
+    expect(outputJson).not.toContain('fixture-api-key');
+  });
+
+  it.each(['json', 'yaml', 'html', 'xml'])(
+    'redacts legacy prompt config in %s exports',
+    async (extension) => {
+      const prompt = {
+        raw: 'Summarize',
+        label: 'gateway',
+        provider: 'openai:agents-api',
+        config: { apiHost: 'gateway.example', headers: { 'X-Gateway-Auth': 'legacy-header-7294' } },
+      };
+      const eval_ = new Eval({}, { prompts: [prompt] });
+      const summary = await eval_.toEvaluateSummary();
+      eval_.oldResults = {
+        version: 2,
+        timestamp: summary.timestamp,
+        stats: summary.stats,
+        results: [],
+        table: { head: { vars: [], prompts: [prompt] }, body: [] },
+      };
+      if (extension === 'html') {
+        vi.mocked(fsPromises.readFile).mockResolvedValue('{{ results | dump }}');
+      }
+      await writeOutput(`output.${extension}`, eval_, null);
+      const output = vi.mocked(fsPromises.writeFile).mock.calls[0][1] as string;
+      expect(output).not.toContain('legacy-header-7294');
+      expect(output).toContain('[REDACTED]');
+      expect(prompt.config.headers['X-Gateway-Auth']).toBe('legacy-header-7294');
+    },
+  );
+
   it('redacts env and secret config fields in JSON output', async () => {
     const outputPath = 'output.json';
     const eval_ = new Eval({
@@ -189,21 +240,97 @@ describe('writeOutput', () => {
             max_turns: 2,
           },
         },
+        {
+          id: 'openai:agents-api',
+          config: {
+            apiHost: 'host-credential:@gateway.example',
+            headers: { 'X-Gateway-Auth': 'opaque-gateway-7294', Accept: 'application/json' },
+            apiBaseUrl: 'https://url-credential:@gateway.example/v1',
+            agent: {
+              tools: [
+                {
+                  type: 'mcp',
+                  server_url: 'https://mcp.example?api_key=query-credential',
+                  headers: { 'X-MCP-Custom': 'opaque-value-7294' },
+                },
+              ],
+            },
+          },
+        },
       ],
+      tracing: {
+        enabled: true,
+        provider: {
+          id: 'tempo',
+          endpoint: 'https://tempo.example.com',
+          auth: { token: 'output-tempo-secret' },
+          headers: {
+            'X-Honeycomb-Team': 'output-honeycomb-secret',
+            'X-Tempo-Reader': 'tiny-reader-key',
+            'X-Trace-Access': 'Bearer short-secret',
+            'X-Scope-OrgID': 'tenant-a',
+          },
+        },
+      },
     });
+
+    eval_.prompts = [
+      {
+        raw: 'Literal prompt text',
+        label: 'gateway',
+        provider: 'openai:agents-api',
+        config: {
+          apiBaseUrl: 'https://gateway.example/v1?tenant=a;api-key=prompt-query-secret',
+          headers: { 'X-Gateway-Auth': 'prompt-header-secret' },
+        },
+      },
+    ];
 
     await writeOutput(outputPath, eval_, null);
 
     expect(fsPromises.writeFile).toHaveBeenCalledTimes(1);
     const outputJson = vi.mocked(fsPromises.writeFile).mock.calls[0][1] as string;
     const parsed = JSON.parse(outputJson);
+    expect(parsed.results.prompts[0]).toEqual({
+      raw: 'Literal prompt text',
+      label: 'gateway',
+      provider: 'openai:agents-api',
+      config: {
+        apiBaseUrl: 'https://gateway.example/v1?tenant=%5BREDACTED%5D',
+        headers: { 'X-Gateway-Auth': '[REDACTED]' },
+      },
+    });
+    expect(eval_.prompts[0].config?.headers?.['X-Gateway-Auth']).toBe('prompt-header-secret');
     expect(parsed.config.env.AWS_BEARER_TOKEN_BEDROCK).toBe('[REDACTED]');
     expect(parsed.config.env.ANTHROPIC_API_KEY).toBe('[REDACTED]');
     expect(parsed.config.env.REGION).toBe('us-east-1');
     expect(parsed.config.providers[0].config.apiKey).toBe('[REDACTED]');
     expect(parsed.config.providers[0].config.max_turns).toBe(2);
+    expect(parsed.config.providers[1].config.headers).toEqual({
+      'X-Gateway-Auth': '[REDACTED]',
+      Accept: 'application/json',
+    });
+    expect(parsed.config.providers[1].config.agent.tools[0].headers).toEqual({
+      'X-MCP-Custom': '[REDACTED]',
+    });
+    for (const credential of [
+      'host-credential',
+      'url-credential',
+      'query-credential',
+      'opaque-value-7294',
+      'opaque-gateway-7294',
+      'prompt-query-secret',
+      'prompt-header-secret',
+    ]) {
+      expect(outputJson).not.toContain(credential);
+    }
     expect(parsed.config.description).toBe('Test config');
     expect(parsed.config.tests).toBe('az://account/container/tests.yaml?sp=r&sig=%5BREDACTED%5D');
+    expect(outputJson).not.toContain('output-tempo-secret');
+    expect(outputJson).not.toContain('output-honeycomb-secret');
+    expect(outputJson).not.toContain('short-secret');
+    expect(outputJson).not.toContain('tiny-reader-key');
+    expect(parsed.config.tracing.provider.headers).toEqual({ 'X-Scope-OrgID': 'tenant-a' });
   });
 
   it.each([
@@ -215,56 +342,56 @@ describe('writeOutput', () => {
       extension: 'yaml',
       parse: (value: string) => yaml.load(value) as Record<string, any>,
     },
-  ])('omits nested response metadata from $extension output when metadata stripping is enabled', async ({
-    extension,
-    parse,
-  }) => {
-    const restoreEnv = mockProcessEnv({ PROMPTFOO_STRIP_METADATA: 'true' });
-    try {
-      const eval_ = new Eval({});
-      await eval_.addResult({
-        success: true,
-        failureReason: ResultFailureReason.NONE,
-        score: 1,
-        namedScores: {},
-        latencyMs: 100,
-        provider: { id: 'provider' },
-        prompt: {
-          raw: 'Test prompt',
-          label: 'Test prompt',
-        },
-        response: {
-          output: 'Test output',
-          metadata: {
-            transformedRequest: {
-              headers: {
-                Authorization: 'Bearer nested-secret',
+  ])(
+    'omits nested response metadata from $extension output when metadata stripping is enabled',
+    async ({ extension, parse }) => {
+      const restoreEnv = mockProcessEnv({ PROMPTFOO_STRIP_METADATA: 'true' });
+      try {
+        const eval_ = new Eval({});
+        await eval_.addResult({
+          success: true,
+          failureReason: ResultFailureReason.NONE,
+          score: 1,
+          namedScores: {},
+          latencyMs: 100,
+          provider: { id: 'provider' },
+          prompt: {
+            raw: 'Test prompt',
+            label: 'Test prompt',
+          },
+          response: {
+            output: 'Test output',
+            metadata: {
+              transformedRequest: {
+                headers: {
+                  Authorization: 'Bearer nested-secret',
+                },
               },
             },
           },
-        },
-        vars: {},
-        promptIdx: 0,
-        testIdx: 0,
-        testCase: {},
-        promptId: 'prompt',
-        metadata: {
-          debug: 'top-level-secret',
-        },
-      });
+          vars: {},
+          promptIdx: 0,
+          testIdx: 0,
+          testCase: {},
+          promptId: 'prompt',
+          metadata: {
+            debug: 'top-level-secret',
+          },
+        });
 
-      await writeOutput(`output.${extension}`, eval_, null);
+        await writeOutput(`output.${extension}`, eval_, null);
 
-      const written = vi.mocked(fsPromises.writeFile).mock.calls[0][1] as string;
-      const parsed = parse(written);
-      const result = parsed.results.results[0];
-      expect(result.metadata).toEqual({});
-      expect(result.response.metadata).toBeUndefined();
-      expect(written).not.toContain('nested-secret');
-    } finally {
-      restoreEnv();
-    }
-  });
+        const written = vi.mocked(fsPromises.writeFile).mock.calls[0][1] as string;
+        const parsed = parse(written);
+        const result = parsed.results.results[0];
+        expect(result.metadata).toEqual({});
+        expect(result.response.metadata).toBeUndefined();
+        expect(written).not.toContain('nested-secret');
+      } finally {
+        restoreEnv();
+      }
+    },
+  );
 
   it.each([
     {
@@ -275,69 +402,69 @@ describe('writeOutput', () => {
       extension: 'yaml',
       parse: (value: string) => yaml.load(value) as Record<string, any>,
     },
-  ])('omits test-case metadata from $extension output when metadata stripping is enabled', async ({
-    extension,
-    parse,
-  }) => {
-    const restoreEnv = mockProcessEnv({
-      PROMPTFOO_STRIP_METADATA: 'true',
-      PROMPTFOO_STRIP_TEST_VARS: 'true',
-    });
+  ])(
+    'omits test-case metadata from $extension output when metadata stripping is enabled',
+    async ({ extension, parse }) => {
+      const restoreEnv = mockProcessEnv({
+        PROMPTFOO_STRIP_METADATA: 'true',
+        PROMPTFOO_STRIP_TEST_VARS: 'true',
+      });
 
-    try {
-      const eval_ = new Eval({});
-      await eval_.addResult({
-        success: true,
-        failureReason: ResultFailureReason.NONE,
-        score: 1,
-        namedScores: {},
-        latencyMs: 100,
-        provider: { id: 'provider' },
-        prompt: {
-          raw: 'Test prompt',
-          label: 'Test prompt',
-        },
-        response: {
-          output: 'Test output',
-        },
-        vars: {
-          customerEmail: 'secret@example.com',
-        },
-        promptIdx: 0,
-        testIdx: 0,
-        testCase: {
+      try {
+        const eval_ = new Eval({});
+        await eval_.addResult({
+          success: true,
+          failureReason: ResultFailureReason.NONE,
+          score: 1,
+          namedScores: {},
+          latencyMs: 100,
+          provider: { id: 'provider' },
+          prompt: {
+            raw: 'Test prompt',
+            label: 'Test prompt',
+          },
+          response: {
+            output: 'Test output',
+          },
           vars: {
             customerEmail: 'secret@example.com',
           },
-          metadata: {
-            goal: 'goal testcase-secret',
-            pluginConfig: {
-              policy: 'policy testcase-secret',
+          promptIdx: 0,
+          testIdx: 0,
+          testCase: {
+            vars: {
+              customerEmail: 'secret@example.com',
             },
-            inputMaterialization: {
-              source: 'source testcase-secret',
+            metadata: {
+              goal: 'goal testcase-secret',
+              pluginConfig: {
+                policy: 'policy testcase-secret',
+              },
+              inputMaterialization: {
+                source: 'source testcase-secret',
+              },
             },
           },
-        },
-        promptId: 'prompt',
-        metadata: {
-          debug: 'top-level-secret',
-        },
-      });
+          promptId: 'prompt',
+          metadata: {
+            debug: 'top-level-secret',
+          },
+        });
 
-      await writeOutput(`output.${extension}`, eval_, null);
+        await writeOutput(`output.${extension}`, eval_, null);
 
-      const written = vi.mocked(fsPromises.writeFile).mock.calls[0][1] as string;
-      const parsed = parse(written);
-      const result = parsed.results.results[0];
-      expect(result.metadata).toEqual({});
-      expect(result.testCase.metadata).toBeUndefined();
-      expect(result.testCase.vars).toBeUndefined();
-      expect(written).not.toContain('testcase-secret');
-    } finally {
-      restoreEnv();
-    }
-  });
+        const written = vi.mocked(fsPromises.writeFile).mock.calls[0][1] as string;
+        const parsed = parse(written);
+        const result = parsed.results.results[0];
+        expect(result.metadata).toEqual({});
+        expect(result.testCase.metadata).toBeUndefined();
+        expect(result.testCase.vars).toBeUndefined();
+        expect(written).not.toContain('testcase-secret');
+      } finally {
+        restoreEnv();
+      }
+    },
+  );
 
   it('omits trace vars from JSON output when test variable stripping is enabled', async () => {
     const restoreEnv = mockProcessEnv({ PROMPTFOO_STRIP_TEST_VARS: 'true' });
@@ -520,27 +647,27 @@ describe('writeOutput', () => {
     expect(fsPromises.writeFile).toHaveBeenCalledTimes(1);
   });
 
-  it.each([
-    'yaml',
-    'txt',
-  ])('sanitizes runtime options before writing %s output for in-memory evals', async (extension) => {
-    const eval_ = new Eval(
-      {},
-      {
-        runtimeOptions: {
-          cache: false,
-          abortSignal: new AbortController().signal,
-          progressCallback: vi.fn(),
+  it.each(['yaml', 'txt'])(
+    'sanitizes runtime options before writing %s output for in-memory evals',
+    async (extension) => {
+      const eval_ = new Eval(
+        {},
+        {
+          runtimeOptions: {
+            cache: false,
+            abortSignal: new AbortController().signal,
+            progressCallback: vi.fn(),
+          },
         },
-      },
-    );
+      );
 
-    await writeOutput(`output.${extension}`, eval_, null);
+      await writeOutput(`output.${extension}`, eval_, null);
 
-    const written = vi.mocked(fsPromises.writeFile).mock.calls[0][1] as string;
-    const parsed = yaml.load(written) as { runtimeOptions: Record<string, unknown> };
-    expect(parsed.runtimeOptions).toEqual({ cache: false });
-  });
+      const written = vi.mocked(fsPromises.writeFile).mock.calls[0][1] as string;
+      const parsed = yaml.load(written) as { runtimeOptions: Record<string, unknown> };
+      expect(parsed.runtimeOptions).toEqual({ cache: false });
+    },
+  );
 
   it('redacts env and secret config fields in YAML output', async () => {
     const outputPath = 'output.yaml';
