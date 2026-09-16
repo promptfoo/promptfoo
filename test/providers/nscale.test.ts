@@ -88,7 +88,7 @@ describe('createNscaleProvider', () => {
     expect(OpenAiChatCompletionProvider).toHaveBeenCalledWith('openai/gpt-oss-120b', {
       config: {
         apiBaseUrl: 'https://inference.api.nscale.com/v1',
-        apiKey: undefined, // No API key or service token set
+        apiKeyEnvar: 'NSCALE_SERVICE_TOKEN',
         passthrough: {},
       },
       id: 'custom-id',
@@ -109,7 +109,7 @@ describe('createNscaleProvider', () => {
       'openai/gpt-oss-120b',
       expect.objectContaining({
         config: expect.objectContaining({
-          apiKey: 'service-token-123',
+          apiKeyEnvar: 'NSCALE_SERVICE_TOKEN',
         }),
       }),
     );
@@ -128,7 +128,7 @@ describe('createNscaleProvider', () => {
       'openai/gpt-oss-120b',
       expect.objectContaining({
         config: expect.objectContaining({
-          apiKey: 'api-key-456',
+          apiKeyEnvar: 'NSCALE_API_KEY',
         }),
       }),
     );
@@ -196,7 +196,6 @@ describe('createNscaleProvider', () => {
         expect.objectContaining({
           config: expect.objectContaining({
             apiBaseUrl: 'https://inference.api.nscale.com/v1',
-            apiKey: undefined, // No API key or service token set
             passthrough: expect.objectContaining({
               max_tokens: 4096,
               temperature: 0.7,
@@ -227,7 +226,6 @@ describe('createNscaleProvider', () => {
         expect.objectContaining({
           config: expect.objectContaining({
             apiBaseUrl: 'https://inference.api.nscale.com/v1',
-            apiKey: undefined, // No API key or service token set
             passthrough: expect.objectContaining({
               stop: ['END', 'STOP'],
               frequency_penalty: 0.1,
@@ -266,7 +264,7 @@ describe('createNscaleProvider', () => {
         expect.objectContaining({
           config: expect.objectContaining({
             apiBaseUrl: 'https://inference.api.nscale.com/v1',
-            apiKey: 'test-service-token',
+            apiKeyEnvar: 'NSCALE_SERVICE_TOKEN',
           }),
         }),
       );

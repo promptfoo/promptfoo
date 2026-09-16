@@ -2,6 +2,7 @@ import * as fs from 'fs';
 
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import * as cache from '../../../src/cache';
+import cliState from '../../../src/cliState';
 import { GoogleProvider } from '../../../src/providers/google/provider';
 import * as util from '../../../src/providers/google/util';
 import * as fetchUtil from '../../../src/util/fetch/index';
@@ -98,6 +99,7 @@ vi.mock('fs', async (importOriginal) => {
 
 describe('GoogleProvider', () => {
   beforeEach(() => {
+    cliState.config = undefined;
     vi.clearAllMocks();
     // Reset hoisted mocks to default pass-through behavior
     mockMaybeLoadToolsFromExternalFile.mockReset().mockImplementation((input) => input);
@@ -199,13 +201,15 @@ describe('GoogleProvider', () => {
       expect(endpoint).toContain('/v1alpha/');
     });
 
-    it('should use v1alpha for gemini-3 models', () => {
+    it('should use v1beta for gemini-3 models', () => {
+      // Regression: dash-named gemini-3-* models resolve to v1beta, the same
+      // as dotted gemini-3.x IDs. v1beta is Google's primary Gemini 3 endpoint.
       const gemini3Provider = new GoogleProvider('gemini-3-pro', {
         config: { apiKey: 'test-key' },
       });
 
       const endpoint = gemini3Provider.getApiEndpoint('generateContent');
-      expect(endpoint).toContain('/v1alpha/');
+      expect(endpoint).toContain('/v1beta/');
     });
 
     it('should use v1beta for gemini-3.1 models', () => {
@@ -309,6 +313,90 @@ describe('GoogleProvider', () => {
       });
     });
 
+    it.each(['gemini-3.8-flash', 'gemini-3.7-flash', 'gemini-3.6-flash', 'gemini-3.5-flash-lite'])(
+      'removes deprecated generation controls for %s',
+      async (modelName) => {
+        const latestProvider = new GoogleProvider(modelName, {
+          config: {
+            apiKey: 'test-key',
+            temperature: 0.7,
+            topP: 0.9,
+            topK: 40,
+            generationConfig: {
+              temperature: 0.5,
+              maxOutputTokens: 128,
+              thinkingConfig: { thinkingLevel: 'MEDIUM' },
+              candidateCount: 2,
+            } as any,
+          },
+        });
+        vi.mocked(cache.fetchWithCache).mockResolvedValueOnce({
+          data: {
+            candidates: [{ content: { parts: [{ text: 'response text' }] } }],
+            usageMetadata: {
+              promptTokenCount: 10,
+              candidatesTokenCount: 5,
+              totalTokenCount: 15,
+            },
+          },
+          cached: false,
+          status: 200,
+          statusText: 'OK',
+        });
+
+        await latestProvider.callApi('test prompt');
+
+        const body = JSON.parse(
+          vi.mocked(cache.fetchWithCache).mock.calls.at(-1)?.[1]?.body as string,
+        );
+        expect(body.generationConfig).toEqual({
+          maxOutputTokens: 128,
+          thinkingConfig: { thinkingLevel: 'MEDIUM' },
+        });
+      },
+    );
+
+    it('should normalize Gemini TTS audio and default its generation config', async () => {
+      const ttsProvider = new GoogleProvider('gemini-2.5-pro-preview-tts', {
+        config: { apiKey: 'test-key' },
+      });
+      const pcm = Buffer.from([1, 2, 3, 4]);
+      vi.mocked(cache.fetchWithCache).mockResolvedValueOnce({
+        data: {
+          candidates: [
+            {
+              content: {
+                parts: [
+                  {
+                    inlineData: {
+                      mimeType: 'audio/L16;codec=pcm;rate=24000',
+                      data: pcm.toString('base64'),
+                    },
+                  },
+                ],
+              },
+            },
+          ],
+          usageMetadata: { promptTokenCount: 10, candidatesTokenCount: 5, totalTokenCount: 15 },
+        },
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+      });
+
+      const result = await ttsProvider.callApi('Say hello.');
+
+      expect(result.audio).toMatchObject({ format: 'wav', sampleRate: 24_000, channels: 1 });
+      expect(Buffer.from(result.audio?.data ?? '', 'base64').subarray(44)).toEqual(pcm);
+      const body = JSON.parse(
+        vi.mocked(cache.fetchWithCache).mock.calls.at(-1)?.[1]?.body as string,
+      );
+      expect(body.generationConfig).toMatchObject({
+        responseModalities: ['AUDIO'],
+        speechConfig: { voiceConfig: { prebuiltVoiceConfig: { voiceName: 'Kore' } } },
+      });
+    });
+
     it('should handle safety blocked response', async () => {
       vi.mocked(cache.fetchWithCache).mockResolvedValueOnce({
         data: {
@@ -360,6 +448,22 @@ describe('GoogleProvider', () => {
         });
 
         expect(globalProvider.getApiHost()).toBe('aiplatform.googleapis.com');
+      });
+
+      it.each([
+        ['us', 'aiplatform.us.rep.googleapis.com'],
+        ['eu', 'aiplatform.eu.rep.googleapis.com'],
+      ])('should use the dedicated %s multi-region endpoint', (region, expectedHost) => {
+        const multiRegionProvider = new GoogleProvider('gemini-3.5-flash-lite', {
+          config: {
+            vertexai: true,
+            projectId: 'my-project',
+            region,
+          },
+        });
+
+        expect(multiRegionProvider.getApiHost()).toBe(expectedHost);
+        expect(multiRegionProvider.getApiEndpoint('generateContent')).toContain(expectedHost);
       });
 
       it('should call API using Google client for OAuth mode', async () => {
@@ -485,7 +589,7 @@ describe('GoogleProvider', () => {
       expect(result.tokenUsage).toEqual({
         cached: 15,
         total: 15,
-        numRequests: 0,
+        numRequests: 1,
       });
     });
 
@@ -554,6 +658,292 @@ describe('GoogleProvider', () => {
       expect(result.output).toBe('truncated response');
     });
 
+    it('should ignore metadata-only chunks in streaming responses', async () => {
+      vi.mocked(cache.fetchWithCache).mockResolvedValueOnce({
+        data: [
+          {
+            candidates: [{ content: { parts: [{ text: 'streamed response' }] } }],
+          },
+          {
+            usageMetadata: { promptTokenCount: 10, candidatesTokenCount: 5, totalTokenCount: 15 },
+          },
+        ],
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+      });
+
+      const result = await provider.callApi('test prompt');
+
+      expect(result.error).toBeUndefined();
+      expect(result.output).toBe('streamed response');
+      expect(result.tokenUsage).toEqual({
+        prompt: 10,
+        completion: 5,
+        total: 15,
+        numRequests: 1,
+      });
+    });
+
+    it('should preserve prompt safety ratings from separate streaming chunks', async () => {
+      vi.mocked(cache.fetchWithCache).mockResolvedValueOnce({
+        data: [
+          {
+            promptFeedback: {
+              safetyRatings: [{ category: 'HARM_CATEGORY_HARASSMENT', probability: 'HIGH' }],
+            },
+          },
+          {
+            candidates: [
+              {
+                content: { parts: [{ text: 'streamed response' }] },
+                safetyRatings: [
+                  { category: 'HARM_CATEGORY_HARASSMENT', probability: 'NEGLIGIBLE' },
+                ],
+              },
+            ],
+          },
+          {
+            usageMetadata: { promptTokenCount: 10, candidatesTokenCount: 5, totalTokenCount: 15 },
+          },
+        ],
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+      });
+
+      const result = await provider.callApi('test prompt');
+
+      expect(result.error).toBeUndefined();
+      expect(result.output).toBe('streamed response');
+      expect(result.guardrails).toEqual({
+        flaggedInput: true,
+        flaggedOutput: false,
+        flagged: true,
+      });
+    });
+
+    it('should accumulate incremental chunks in streaming responses', async () => {
+      vi.mocked(cache.fetchWithCache).mockResolvedValueOnce({
+        data: [
+          {
+            candidates: [{ content: { parts: [{ text: 'Hello ' }] } }],
+          },
+          {
+            candidates: [{ content: { parts: [{ text: 'world' }] } }],
+          },
+          {
+            usageMetadata: { promptTokenCount: 10, candidatesTokenCount: 2, totalTokenCount: 12 },
+          },
+        ],
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+      });
+
+      const result = await provider.callApi('test prompt');
+
+      expect(result.error).toBeUndefined();
+      expect(result.output).toBe('Hello world');
+    });
+
+    it('should not mutate raw multipart chunks when accumulating streaming responses', async () => {
+      const firstPart = { functionCall: { name: 'look_up', args: { query: 'weather' } } };
+      const firstChunk = {
+        candidates: [{ content: { parts: [firstPart] } }],
+      };
+      const responseData = [
+        firstChunk,
+        {
+          candidates: [{ content: { parts: [{ text: 'done' }] } }],
+        },
+        {
+          usageMetadata: { promptTokenCount: 10, candidatesTokenCount: 2, totalTokenCount: 12 },
+        },
+      ];
+      vi.mocked(cache.fetchWithCache).mockResolvedValueOnce({
+        data: responseData,
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+      });
+
+      const result = await provider.callApi('test prompt');
+
+      expect(result.error).toBeUndefined();
+      expect(result.output).toEqual([firstPart, { text: 'done' }]);
+      expect(firstChunk.candidates[0].content.parts).toEqual([firstPart]);
+      expect(result.raw).toBe(responseData);
+    });
+
+    it('should reject streaming responses that never provide output', async () => {
+      vi.mocked(cache.fetchWithCache).mockResolvedValueOnce({
+        data: [
+          {
+            usageMetadata: { promptTokenCount: 10, candidatesTokenCount: 0, totalTokenCount: 10 },
+          },
+        ],
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+      });
+
+      const result = await provider.callApi('test prompt');
+
+      expect(result.error).toContain('No output found in response');
+    });
+
+    it('rejects MAX_TOKENS responses that contain only an empty text part', async () => {
+      vi.mocked(cache.fetchWithCache).mockResolvedValueOnce({
+        data: {
+          candidates: [{ content: { parts: [{ text: '' }] }, finishReason: 'MAX_TOKENS' }],
+          usageMetadata: { promptTokenCount: 7, totalTokenCount: 19, thoughtsTokenCount: 12 },
+        },
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+      });
+
+      const result = await provider.callApi('test prompt');
+
+      expect(result.error).toContain('No output found in response');
+      expect(result.output).toBeUndefined();
+    });
+
+    it('should return an error for safety finish reasons outside scorable evaluations', async () => {
+      const responseData = {
+        candidates: [{ content: { parts: [{ text: '' }] }, finishReason: 'SAFETY' }],
+        usageMetadata: { promptTokenCount: 10, candidatesTokenCount: 0, totalTokenCount: 10 },
+      };
+      vi.mocked(cache.fetchWithCache).mockResolvedValueOnce({
+        data: responseData,
+        cached: true,
+        status: 200,
+        statusText: 'OK',
+      });
+
+      const result = await provider.callApi('test prompt');
+
+      expect(result).toEqual(
+        expect.objectContaining({
+          error: 'Content was blocked due to safety settings with finish reason: SAFETY.',
+          guardrails: expect.objectContaining({
+            flagged: true,
+            flaggedOutput: true,
+          }),
+          cached: true,
+          raw: responseData,
+        }),
+      );
+    });
+
+    it('should return safety finish reasons as output during redteam evaluations', async () => {
+      cliState.config = { redteam: {} } as any;
+      vi.mocked(cache.fetchWithCache).mockResolvedValueOnce({
+        data: {
+          candidates: [{ content: { parts: [{ text: '' }] }, finishReason: 'SAFETY' }],
+          usageMetadata: { promptTokenCount: 10, candidatesTokenCount: 0, totalTokenCount: 10 },
+        },
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+      });
+
+      const result = await provider.callApi('test prompt');
+
+      expect(result.error).toBeUndefined();
+      expect(result.output).toBe(
+        'Content was blocked due to safety settings with finish reason: SAFETY.',
+      );
+      expect(result.guardrails?.flagged).toBe(true);
+      expect(result.cached).toBe(false);
+      expect(result.raw).toEqual({
+        candidates: [{ content: { parts: [{ text: '' }] }, finishReason: 'SAFETY' }],
+        usageMetadata: { promptTokenCount: 10, candidatesTokenCount: 0, totalTokenCount: 10 },
+      });
+    });
+
+    it('should expose safety finish reasons to guardrails assertions', async () => {
+      vi.mocked(cache.fetchWithCache).mockResolvedValueOnce({
+        data: {
+          candidates: [{ content: { parts: [{ text: '' }] }, finishReason: 'SAFETY' }],
+          usageMetadata: { promptTokenCount: 10, candidatesTokenCount: 0, totalTokenCount: 10 },
+        },
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+      });
+
+      const result = await provider.callApi('test prompt', {
+        prompt: { raw: 'test prompt', label: 'test prompt' },
+        vars: {},
+        test: { assert: [{ type: 'not-guardrails' }] },
+      } as any);
+
+      expect(result.error).toBeUndefined();
+      expect(result.output).toBe(
+        'Content was blocked due to safety settings with finish reason: SAFETY.',
+      );
+      expect(result.guardrails?.flagged).toBe(true);
+    });
+
+    it('should expose safety finish reasons for exported redteam test metadata', async () => {
+      vi.mocked(cache.fetchWithCache).mockResolvedValueOnce({
+        data: {
+          candidates: [{ content: { parts: [{ text: '' }] }, finishReason: 'SAFETY' }],
+          usageMetadata: { promptTokenCount: 10, candidatesTokenCount: 0, totalTokenCount: 10 },
+        },
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+      });
+
+      const result = await provider.callApi('test prompt', {
+        prompt: { raw: 'test prompt', label: 'test prompt' },
+        vars: {},
+        test: {
+          metadata: { pluginId: 'ascii-smuggling', goal: 'exfiltrate data' },
+        },
+      } as any);
+
+      expect(result.error).toBeUndefined();
+      expect(result.output).toBe(
+        'Content was blocked due to safety settings with finish reason: SAFETY.',
+      );
+      expect(result.guardrails?.flagged).toBe(true);
+    });
+
+    it('should expose safety finish reasons for nested redteam assertions', async () => {
+      vi.mocked(cache.fetchWithCache).mockResolvedValueOnce({
+        data: {
+          candidates: [{ content: { parts: [{ text: '' }] }, finishReason: 'SAFETY' }],
+          usageMetadata: { promptTokenCount: 10, candidatesTokenCount: 0, totalTokenCount: 10 },
+        },
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+      });
+
+      const result = await provider.callApi('test prompt', {
+        prompt: { raw: 'test prompt', label: 'test prompt' },
+        vars: {},
+        test: {
+          assert: [
+            {
+              type: 'assert-set',
+              assert: [{ type: 'promptfoo:redteam:ascii-smuggling' }],
+            },
+          ],
+        },
+      } as any);
+
+      expect(result.error).toBeUndefined();
+      expect(result.output).toBe(
+        'Content was blocked due to safety settings with finish reason: SAFETY.',
+      );
+      expect(result.guardrails?.flagged).toBe(true);
+    });
+
     it('should handle thinking tokens in response', async () => {
       vi.mocked(cache.fetchWithCache).mockResolvedValueOnce({
         data: {
@@ -618,6 +1008,30 @@ describe('GoogleProvider', () => {
       expect(result.cost).toBeCloseTo(0.000035, 10);
     });
 
+    it('prices Vertex Flash-Lite using the resolved environment-configured region', async () => {
+      const provider = new GoogleProvider('gemini-3.5-flash-lite', {
+        config: { vertexai: true, apiKey: 'test-vertex-key' },
+        env: { VERTEX_REGION: 'eu' },
+      });
+
+      vi.mocked(fetchUtil.fetchWithProxy).mockResolvedValueOnce({
+        ok: true,
+        json: vi.fn().mockResolvedValue({
+          candidates: [{ content: { parts: [{ text: 'response' }] } }],
+          usageMetadata: {
+            promptTokenCount: 1000,
+            candidatesTokenCount: 500,
+            totalTokenCount: 1500,
+          },
+        }),
+      } as any);
+
+      const result = await provider.callApi('test prompt');
+
+      expect(provider.getRegion()).toBe('eu');
+      expect(result.cost).toBeCloseTo(0.001705, 10);
+    });
+
     it('should use Vertex-specific pricing when it differs from AI Studio', async () => {
       const provider = new GoogleProvider('gemini-2.0-flash', {
         config: { vertexai: true, apiKey: 'test-vertex-key' },
@@ -639,6 +1053,251 @@ describe('GoogleProvider', () => {
       // Vertex pricing for gemini-2.0-flash: input $0.15/1M, output $0.60/1M
       // 1000 * 0.15/1e6 + 500 * 0.60/1e6 = 0.00045
       expect(result.cost).toBeCloseTo(0.00045, 10);
+    });
+
+    it('should apply Gemini 3.5 Flash-Lite regional pricing in Vertex mode', async () => {
+      const provider = new GoogleProvider('gemini-3.5-flash-lite', {
+        config: { vertexai: true, apiKey: 'test-vertex-key', region: 'us' },
+      });
+      vi.mocked(fetchUtil.fetchWithProxy).mockResolvedValueOnce({
+        ok: true,
+        json: vi.fn().mockResolvedValue({
+          candidates: [{ content: { parts: [{ text: 'response' }] } }],
+          usageMetadata: {
+            promptTokenCount: 1_000,
+            candidatesTokenCount: 100,
+            totalTokenCount: 1_100,
+          },
+        }),
+      } as any);
+
+      const result = await provider.callApi('test prompt');
+
+      expect(result.cost).toBeCloseTo(0.000605, 12);
+    });
+
+    it('normalizes Vertex service tiers and respects the returned processing tier', async () => {
+      const provider = new GoogleProvider('gemini-3.5-flash-lite', {
+        config: {
+          vertexai: true,
+          apiKey: 'test-vertex-key',
+          region: 'global',
+          service_tier: 'priority',
+        },
+      });
+      vi.mocked(fetchUtil.fetchWithProxy).mockResolvedValueOnce({
+        ok: true,
+        headers: new Headers({ 'x-gemini-service-tier': 'standard' }),
+        json: vi.fn().mockResolvedValue({
+          candidates: [{ content: { parts: [{ text: 'response' }] } }],
+          usageMetadata: {
+            promptTokenCount: 1_000,
+            candidatesTokenCount: 100,
+            totalTokenCount: 1_100,
+          },
+        }),
+      } as any);
+
+      const result = await provider.callApi('test prompt');
+      const request = vi.mocked(fetchUtil.fetchWithProxy).mock.calls.at(-1)?.[1];
+      const body = JSON.parse(request?.body as string);
+
+      expect(body.serviceTier).toBe('SERVICE_TIER_PRIORITY');
+      expect(result.cost).toBeCloseTo(0.00055, 12);
+      expect(result.metadata).toMatchObject({ serviceTier: 'standard' });
+    });
+
+    it.each(['gemini-3.6-flash', 'gemini-3.5-flash-lite'])(
+      'should omit deprecated sampling parameters for %s',
+      async (modelId) => {
+        const provider = new GoogleProvider(modelId, {
+          config: {
+            apiKey: 'test-key',
+            temperature: 0.2,
+            topP: 0.3,
+            topK: 10,
+            generationConfig: { temperature: 0.4, topP: 0.5, topK: 20 },
+            passthrough: {
+              generationConfig: {
+                temperature: 0.6,
+                topP: 0.7,
+                topK: 30,
+                top_p: 0.8,
+                top_k: 40,
+                candidateCount: 2,
+                candidate_count: 3,
+                presencePenalty: 0.5,
+                presence_penalty: 0.5,
+                frequencyPenalty: 0.5,
+                frequency_penalty: 0.5,
+                maxOutputTokens: 200,
+              },
+            },
+          },
+        });
+        vi.mocked(cache.fetchWithCache).mockResolvedValueOnce({
+          data: {
+            candidates: [{ content: { parts: [{ text: 'response' }] } }],
+            usageMetadata: {
+              promptTokenCount: 10,
+              candidatesTokenCount: 10,
+              totalTokenCount: 20,
+            },
+          },
+          cached: false,
+          status: 200,
+          statusText: 'OK',
+        });
+
+        await provider.callApi('test prompt');
+
+        const requestBody = JSON.parse(
+          vi.mocked(cache.fetchWithCache).mock.calls.at(-1)?.[1]?.body as string,
+        );
+        expect(requestBody.generationConfig).toEqual({ maxOutputTokens: 200 });
+      },
+    );
+
+    it.each(['gemini-3.6-flash', 'gemini-3.5-flash-lite'])(
+      'should forward Maps retrieval config for %s',
+      async (modelId) => {
+        const provider = new GoogleProvider(modelId, {
+          config: {
+            apiKey: 'test-key',
+            tools: [{ googleMaps: { enableWidget: true } }],
+            toolConfig: {
+              retrievalConfig: { latLng: { latitude: 42.36, longitude: -71.06 } },
+              includeServerSideToolInvocations: true,
+            },
+          },
+        });
+        vi.mocked(cache.fetchWithCache).mockResolvedValueOnce({
+          data: {
+            candidates: [{ content: { parts: [{ text: 'response' }] } }],
+            usageMetadata: { promptTokenCount: 10, candidatesTokenCount: 5, totalTokenCount: 15 },
+          },
+          cached: false,
+          status: 200,
+          statusText: 'OK',
+        });
+
+        await provider.callApi('test prompt');
+
+        const body = JSON.parse(
+          vi.mocked(cache.fetchWithCache).mock.calls.at(-1)?.[1]?.body as string,
+        );
+        expect(body.tools).toEqual([{ googleMaps: { enableWidget: true } }]);
+        expect(body.toolConfig).toEqual({
+          retrievalConfig: { latLng: { latitude: 42.36, longitude: -71.06 } },
+          includeServerSideToolInvocations: true,
+        });
+      },
+    );
+
+    it.each([false, true])(
+      'preserves response accounting when a callback fails (cached=%s)',
+      async (cached) => {
+        const succeed = vi.fn().mockResolvedValue('completed');
+        const fail = vi.fn().mockRejectedValue(new Error('callback failed'));
+        const provider = new GoogleProvider('gemini-3.8-flash', {
+          config: { apiKey: 'test-key', functionToolCallbacks: { succeed, fail } },
+        });
+        vi.mocked(cache.fetchWithCache).mockResolvedValueOnce({
+          data: {
+            candidates: [
+              {
+                content: {
+                  parts: [
+                    { functionCall: { name: 'succeed', args: {} }, thoughtSignature: 'signature' },
+                    { functionCall: { name: 'fail', args: {} } },
+                  ],
+                },
+              },
+            ],
+            usageMetadata: { promptTokenCount: 10, candidatesTokenCount: 5, totalTokenCount: 15 },
+          },
+          cached,
+          status: 200,
+          statusText: 'OK',
+        });
+        vi.mocked(util.maybeCoerceToGeminiFormat).mockReturnValue({
+          contents: [{ role: 'user', parts: [{ text: 'test prompt' }] }],
+          coerced: false,
+          systemInstruction: undefined,
+        });
+
+        const response = await provider.callApi('test prompt');
+
+        expect(response.error).toContain(
+          "Function callback 'fail' failed after 1 completed callback(s)",
+        );
+        expect(response.error).toContain('Check for side effects before retrying');
+        expect(response.output).toBeUndefined();
+        expect(response.cached).toBe(cached);
+        expect(response.tokenUsage).toMatchObject({
+          total: 15,
+          ...(cached ? { cached: 15 } : { prompt: 10, completion: 5 }),
+        });
+        expect(response.cost).toEqual(cached ? undefined : expect.any(Number));
+        expect(response.metadata?.thoughtSignatures).toEqual(['signature']);
+        expect(response.raw).toMatchObject({ usageMetadata: { totalTokenCount: 15 } });
+        expect(succeed).toHaveBeenCalledExactlyOnceWith('{}');
+        expect(fail).toHaveBeenCalledExactlyOnceWith('{}');
+      },
+    );
+
+    it('should execute callbacks from a fresh Gemini function-call response', async () => {
+      const callback = vi.fn().mockResolvedValue('Sunny, 25°C');
+      const provider = new GoogleProvider('gemini-3.5-flash-lite', {
+        config: {
+          apiKey: 'test-key',
+          tools: [
+            {
+              functionDeclarations: [
+                {
+                  name: 'get_weather',
+                  parameters: {
+                    type: 'OBJECT',
+                    properties: { location: { type: 'STRING' } },
+                    required: ['location'],
+                  },
+                },
+              ],
+            },
+          ],
+          functionToolCallbacks: { get_weather: callback },
+        },
+      });
+      vi.mocked(cache.fetchWithCache).mockResolvedValueOnce({
+        data: {
+          candidates: [
+            {
+              content: {
+                parts: [
+                  {
+                    functionCall: {
+                      id: 'call-1',
+                      name: 'get_weather',
+                      args: { location: 'Boston' },
+                    },
+                    thoughtSignature: 'signed-thought',
+                  },
+                ],
+              },
+            },
+          ],
+          usageMetadata: { promptTokenCount: 10, candidatesTokenCount: 5, totalTokenCount: 15 },
+        },
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+      });
+
+      const response = await provider.callApi('test prompt');
+
+      expect(callback).toHaveBeenCalledWith('{"location":"Boston"}');
+      expect(response.output).toBe('Sunny, 25°C');
+      expect(response.metadata?.thoughtSignatures).toEqual(['signed-thought']);
     });
 
     it('should return undefined cost for cached responses', async () => {
@@ -763,6 +1422,97 @@ describe('GoogleProvider', () => {
       expect(result.cost).toBeCloseTo(0.0007655, 10);
     });
 
+    it('should price cached and audio usage for the standard Gemini provider', async () => {
+      const provider = new GoogleProvider('gemini-3.5-flash', {
+        config: { apiKey: 'test-key', passthrough: { service_tier: 'priority' } },
+      });
+      vi.mocked(cache.fetchWithCache).mockResolvedValueOnce({
+        data: {
+          candidates: [{ content: { parts: [{ text: 'response' }] } }],
+          usageMetadata: {
+            promptTokenCount: 1_000,
+            candidatesTokenCount: 500,
+            totalTokenCount: 1_500,
+            cachedContentTokenCount: 500,
+            promptTokensDetails: [
+              { modality: 'TEXT', tokenCount: 600 },
+              { modality: 'AUDIO', tokenCount: 400 },
+            ],
+            cacheTokensDetails: [
+              { modality: 'TEXT', tokenCount: 200 },
+              { modality: 'AUDIO', tokenCount: 300 },
+            ],
+          },
+        },
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+      });
+
+      const result = await provider.callApi('test prompt');
+
+      expect(result.tokenUsage).toMatchObject({ prompt: 1_000, completion: 500, cached: 500 });
+      expect(result.cost).toBeCloseTo(
+        (1.8 * (400 * 1.5 + 200 * 0.15 + 100 * 1.5 + 300 * 0.15 + 500 * 9)) / 1e6,
+        12,
+      );
+      const requestBody = JSON.parse(
+        vi.mocked(cache.fetchWithCache).mock.calls.at(-1)?.[1]?.body as string,
+      );
+      expect(requestBody.service_tier).toBe('priority');
+      expect(requestBody.serviceTier).toBeUndefined();
+    });
+
+    it('prices downgraded priority responses at the actual standard tier', async () => {
+      const provider = new GoogleProvider('gemini-3.5-flash-lite', {
+        config: { apiKey: 'test-key', service_tier: 'priority' },
+      });
+      vi.mocked(cache.fetchWithCache).mockResolvedValueOnce({
+        data: {
+          candidates: [{ content: { parts: [{ text: 'response' }] } }],
+          usageMetadata: {
+            promptTokenCount: 1_000,
+            candidatesTokenCount: 100,
+            totalTokenCount: 1_100,
+          },
+        },
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+        headers: { 'x-gemini-service-tier': 'standard' },
+      });
+
+      const response = await provider.callApi('test prompt');
+
+      expect(response.cost).toBeCloseTo(0.00055, 12);
+      expect(response.metadata).toMatchObject({ serviceTier: 'standard' });
+    });
+
+    it('should not double-count tool-use prompt tokens when pricing a standard Gemini response', async () => {
+      const provider = new GoogleProvider('gemini-2.5-flash', {
+        config: { apiKey: 'test-key' },
+      });
+      vi.mocked(cache.fetchWithCache).mockResolvedValueOnce({
+        data: {
+          candidates: [{ content: { parts: [{ text: 'response' }] } }],
+          usageMetadata: {
+            promptTokenCount: 1_000,
+            toolUsePromptTokenCount: 400,
+            candidatesTokenCount: 500,
+            totalTokenCount: 1_900,
+          },
+        },
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+      });
+
+      const result = await provider.callApi('test prompt');
+
+      expect(result.tokenUsage).toMatchObject({ prompt: 1_400, completion: 500, total: 1_900 });
+      expect(result.cost).toBeCloseTo((1_400 * 0.3 + 500 * 2.5) / 1e6, 12);
+    });
+
     it('should not double-count when thoughtsTokenCount is zero', async () => {
       const provider = new GoogleProvider('gemini-2.5-flash', {
         config: { apiKey: 'test-key' },
@@ -808,6 +1558,7 @@ describe('GoogleProvider', () => {
               ],
             },
           ],
+          passthrough: { tools: [{ googleSearch: {} }] },
         },
       });
 
@@ -827,6 +1578,7 @@ describe('GoogleProvider', () => {
       const body = JSON.parse(calledOptions.body);
       expect(body.tools).toBeDefined();
       expect(body.tools[0].functionDeclarations[0].name).toBe('test_function');
+      expect(body.tools[1]).toEqual({ googleSearch: {} });
     });
 
     it('should include toolConfig in request body', async () => {
@@ -878,6 +1630,13 @@ describe('GoogleProvider', () => {
               ],
             },
           ],
+          passthrough: {
+            tools: [
+              { functionDeclarations: [{ name: 'passthrough_function' }] },
+              { function_declarations: [{ name: 'passthrough_snake_case_function' }] },
+              { googleSearch: {} },
+            ],
+          },
           functionToolCallbacks: { test_function: callback },
           ...toolDisableConfig,
         } as any,
@@ -910,7 +1669,7 @@ describe('GoogleProvider', () => {
       const calledOptions = vi.mocked(cache.fetchWithCache).mock.calls.at(-1)?.[1] as any;
       const body = JSON.parse(calledOptions.body);
       expect(body.toolConfig).toEqual({ functionCallingConfig: { mode: 'NONE' } });
-      expect(body.tools).toBeUndefined();
+      expect(body.tools).toEqual([{ googleSearch: {} }]);
       expect(callback).not.toHaveBeenCalled();
       expect(result.output).toBe(
         JSON.stringify({ functionCall: { name: 'test_function', args: {} } }),
@@ -979,6 +1738,38 @@ describe('GoogleProvider', () => {
 
       const calledOptions = vi.mocked(cache.fetchWithCache).mock.calls.at(-1)?.[1] as any;
       const body = JSON.parse(calledOptions.body);
+      expect(body.toolConfig).toEqual({ functionCallingConfig: { mode: 'NONE' } });
+      expect(body.tools).toEqual([{ googleSearch: {} }]);
+    });
+
+    it('should strip snake_case functions from a single passthrough tool when disabled', async () => {
+      const provider = new GoogleProvider('gemini-pro', {
+        config: {
+          apiKey: 'test-key',
+          tool_choice: 'none',
+          passthrough: {
+            tools: {
+              function_declarations: [{ name: 'passthrough_snake_case_function' }],
+              googleSearch: {},
+            },
+          },
+        } as any,
+      });
+      vi.mocked(cache.fetchWithCache).mockResolvedValueOnce({
+        data: {
+          candidates: [{ content: { parts: [{ text: 'response' }] } }],
+          usageMetadata: { promptTokenCount: 10, candidatesTokenCount: 5, totalTokenCount: 15 },
+        },
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+      });
+
+      await provider.callApi('test prompt');
+
+      const body = JSON.parse(
+        vi.mocked(cache.fetchWithCache).mock.calls.at(-1)![1]!.body as string,
+      );
       expect(body.toolConfig).toEqual({ functionCallingConfig: { mode: 'NONE' } });
       expect(body.tools).toEqual([{ googleSearch: {} }]);
     });
