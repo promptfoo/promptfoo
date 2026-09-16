@@ -479,6 +479,8 @@ Your application must carry the `traceparent` header into its own traces so Prom
 
 For trace-aware assertions, external snapshots are polled until completed spans stop changing or the five-retry limit is reached. SQL and shell redteam grading require completed spans and a snapshot that is stable across polls; incomplete or still-changing evidence produces an error. A later empty response or temporary backend error can reuse an earlier completed, stable snapshot. Increase `queryDelay` if your backend takes longer to ingest a trace.
 
+Snapshot comparisons ignore JSON object key order, including nested attribute values. Changed values and array order still count as changed evidence.
+
 #### Braintrust
 
 Promptfoo can retrieve application spans from a Braintrust project's logs:
