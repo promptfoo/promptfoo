@@ -168,6 +168,19 @@ function getGradingOutputForImages(llmOutput: string, imageOutputs: ProviderResp
   return llmOutput;
 }
 
+function getGradingOutputForAudio(llmOutput: string, audio: ProviderResponse['audio']) {
+  if (!audio?.data) {
+    return llmOutput;
+  }
+  const outputData = llmOutput
+    .trim()
+    .replace(/^data:audio\/[^;,]+;base64,/i, '')
+    .replace(/\s/g, '');
+  return outputData === audio.data.replace(/\s/g, '')
+    ? audio.transcript || '[Audio output]'
+    : llmOutput;
+}
+
 export async function matchesLlmRubric(
   rubric: string | object,
   llmOutput: string,
@@ -194,7 +207,11 @@ export async function matchesLlmRubric(
     (grading as LlmRubricGradingConfig).__promptfooPreferRemote ||
     !grading.provider;
   const { imageOutputs } = materializeImageOutputsForGrading(options?.providerResponse?.images);
-  const gradingOutput = getGradingOutputForImages(llmOutput, imageOutputs);
+  const audio = options?.providerResponse?.audio;
+  const gradingOutput = getGradingOutputForImages(
+    getGradingOutputForAudio(llmOutput, audio),
+    imageOutputs,
+  );
   if (
     !grading.rubricPrompt &&
     shouldPreferRemote &&
@@ -232,6 +249,7 @@ export async function matchesLlmRubric(
       providerCallContext,
       throwOnError: options?.throwOnError,
       images: imageOutputs,
+      audio,
       vars: {
         ...(vars || {}),
         output: tryParse(gradingOutput),

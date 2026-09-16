@@ -93,7 +93,7 @@ prompts:
 
 providers:
   - 'openai:gpt-5'
-  - 'anthropic:messages:claude-sonnet-4-20250514'
+  - 'anthropic:messages:claude-sonnet-5'
 
 tests:
   - vars:
