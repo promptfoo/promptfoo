@@ -79,8 +79,6 @@ redteam:
           includeInAttack: false
           includeInGrading: true
 
-    - id: prompt-injection
-
   strategies:
     - crescendo
     - goat

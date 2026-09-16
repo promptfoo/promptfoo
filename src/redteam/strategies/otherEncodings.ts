@@ -74,50 +74,33 @@ export function toMorseCode(text: string): string {
 }
 
 /**
- * Convert text to Pig Latin
+ * Convert one alphanumeric run to Pig Latin.
+ */
+function pigLatinWord(word: string): string {
+  if (!/^[a-zA-Z]/.test(word)) {
+    return word;
+  }
+
+  if (/^[aeiouAEIOU]/.test(word)) {
+    return word + 'way';
+  }
+
+  const vowelIndex = word.search(/[aeiouAEIOU]/i);
+
+  if (vowelIndex === -1) {
+    return word + 'ay';
+  }
+
+  const prefix = word.substring(0, vowelIndex);
+  const suffix = word.substring(vowelIndex);
+  return suffix + prefix + 'ay';
+}
+
+/**
+ * Convert text to Pig Latin while preserving punctuation in place.
  */
 export function toPigLatin(text: string): string {
-  // Split by spaces to get words
-  return text
-    .split(' ')
-    .map((word) => {
-      // Extract any trailing punctuation
-      const punctuationMatch = word.match(/([a-zA-Z0-9]+)([^a-zA-Z0-9]*)$/);
-      if (
-        !punctuationMatch && // Skip empty strings or non-alphabet characters
-        !word.match(/^[a-zA-Z]/)
-      ) {
-        return word;
-      }
-
-      // Split the word into base and punctuation if there's punctuation
-      const baseWord = punctuationMatch ? punctuationMatch[1] : word;
-      const punctuation = punctuationMatch ? punctuationMatch[2] : '';
-
-      // If the base word doesn't start with a letter, return as is
-      if (!baseWord.match(/^[a-zA-Z]/)) {
-        return word;
-      }
-
-      // Check if word starts with vowel
-      if (/^[aeiouAEIOU]/.test(baseWord)) {
-        return baseWord + 'way' + punctuation;
-      }
-
-      // Find position of first vowel
-      const vowelIndex = baseWord.search(/[aeiouAEIOU]/i);
-
-      // If no vowels, just add 'ay' at the end
-      if (vowelIndex === -1) {
-        return baseWord + 'ay' + punctuation;
-      }
-
-      // Move consonants before first vowel to end and add 'ay'
-      const prefix = baseWord.substring(0, vowelIndex);
-      const suffix = baseWord.substring(vowelIndex);
-      return suffix + prefix + 'ay' + punctuation;
-    })
-    .join(' ');
+  return text.replace(/[a-zA-Z0-9]+/g, (run) => pigLatinWord(run));
 }
 
 /**
@@ -213,7 +196,7 @@ export function addOtherEncodings(
       ...testCase,
       assert: testCase.assert?.map((assertion) => ({
         ...assertion,
-        metric: `${assertion.metric}/${encodingName}`,
+        metric: assertion.metric ? `${assertion.metric}/${encodingName}` : assertion.metric,
       })),
       vars: {
         ...testCase.vars,
