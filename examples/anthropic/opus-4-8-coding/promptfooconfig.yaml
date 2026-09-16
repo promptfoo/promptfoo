@@ -1,23 +1,43 @@
 # yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
-description: Claude Opus 4.8 advanced coding with xhigh effort and adaptive thinking
+description: Opus-tier coding — Opus 5 vs Opus 4.8 at xhigh effort
 
 prompts:
   - |
     {{task}}
 
 providers:
-  - id: anthropic:messages:claude-opus-4-8
+  # Opus 5 — the current Opus. Same $5/$25 pricing as 4.8, so this is a like-for-like
+  # comparison on capability rather than cost.
+  - id: anthropic:messages:claude-opus-5
+    label: opus-5-xhigh
     config:
-      # Opus 4.8 deprecates manual sampling controls (temperature/top_p/top_k) at
-      # the model level — promptfoo omits them automatically, so don't set them here.
+      # Opus 5 deprecates manual sampling controls (temperature/top_p/top_k) at the
+      # model level — promptfoo omits them automatically, so don't set them here.
       #
-      # Adaptive thinking is opt-in: without an explicit `thinking` block the model
-      # runs WITHOUT extended thinking even at high effort. Set it to let the model
-      # decide when and how much to reason per request.
+      # No `thinking` block on purpose: unlike Opus 4.8, Opus 5 runs adaptive thinking
+      # by default. `max_tokens` caps thinking PLUS the answer, so leave real headroom —
+      # at xhigh on these tasks thinking alone used ~4.4k tokens, and an 8k budget
+      # truncated the answer mid-sentence (finishReason: length).
+      effort: xhigh # Recommended starting point for coding/agentic work
+      max_tokens: 16000
+
+  # Opus 5 at the bottom of the effort ladder. Sweep this against xhigh on your own
+  # tasks — effort is the main cost/latency lever, and low is unusually strong here.
+  - id: anthropic:messages:claude-opus-5
+    label: opus-5-low
+    config:
+      effort: low
+      max_tokens: 16000
+
+  - id: anthropic:messages:claude-opus-4-8
+    label: opus-4-8-xhigh
+    config:
+      # Adaptive thinking is opt-in on 4.8: without an explicit `thinking` block the
+      # model runs WITHOUT extended thinking even at high effort.
       thinking:
         type: adaptive
-      effort: xhigh # Recommended starting point for coding/agentic work (between high and max)
-      max_tokens: 8000
+      effort: xhigh
+      max_tokens: 16000
 
 tests:
   # Complex bug diagnosis across multiple systems
