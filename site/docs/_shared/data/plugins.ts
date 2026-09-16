@@ -612,9 +612,9 @@ export const PLUGINS = [
     name: 'Data-Structure Injection',
     pluginId: 'data-structure-injection',
     applicationTypes: {
-      rag: true,
+      rag: false,
       agent: true,
-      chat: true,
+      chat: false,
     },
     vulnerabilityType: 'security',
   },
