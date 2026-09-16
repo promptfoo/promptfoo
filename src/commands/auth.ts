@@ -20,6 +20,7 @@ type LoginCommandOptions = {
   host?: string;
   apiKey?: string;
   team?: string;
+  authHeaderName?: string;
 };
 
 type UserTeam = Awaited<ReturnType<typeof getUserTeams>>[number];
@@ -206,9 +207,11 @@ async function setupTeamContext(
 }
 
 async function loginWithApiKey(cmdObj: LoginCommandOptions, apiHost: string): Promise<void> {
+  const authHeaderName = cmdObj.authHeaderName || cloudConfig.getAuthHeaderName();
   const { user, organization, app, hasActiveLicense } = await cloudConfig.validateApiToken(
     cmdObj.apiKey!,
     apiHost,
+    authHeaderName,
   );
 
   const existingEmail = getUserEmail();
@@ -216,7 +219,7 @@ async function loginWithApiKey(cmdObj: LoginCommandOptions, apiHost: string): Pr
   let organizationTeams: UserTeam[] | undefined;
 
   if (cmdObj.org || cmdObj.team) {
-    const allTeams = await getUserTeams(apiHost, cmdObj.apiKey!);
+    const allTeams = await getUserTeams(apiHost, cmdObj.apiKey!, authHeaderName);
     const resolvedOrganizationTeams = getOrganizationTeams(allTeams, cmdObj.org, organization.id);
     organizationId = resolvedOrganizationTeams.organizationId;
     organizationTeams = resolvedOrganizationTeams.teams;
@@ -232,7 +235,14 @@ async function loginWithApiKey(cmdObj: LoginCommandOptions, apiHost: string): Pr
     }
   }
 
-  cloudConfig.saveValidatedApiToken(cmdObj.apiKey!, apiHost, user, app, hasActiveLicense);
+  cloudConfig.saveValidatedApiToken(
+    cmdObj.apiKey!,
+    apiHost,
+    user,
+    app,
+    hasActiveLicense,
+    authHeaderName,
+  );
   if (existingEmail && existingEmail !== user.email) {
     logger.info(
       chalk.yellow(`Updating local email configuration from ${existingEmail} to ${user.email}`),
@@ -284,6 +294,10 @@ export function authCommand(program: Command) {
     .option(
       '-t, --team <team>',
       'The team to use (name, slug, or ID). Required in CI when multiple teams exist.',
+    )
+    .option(
+      '--auth-header-name <name>',
+      'The header name to use for Cloud API authentication (defaults to Authorization).',
     )
     .action(async (cmdObj: LoginCommandOptions) => {
       // Strip a trailing slash from the --host flag so the login-time validate /
@@ -340,9 +354,7 @@ export function authCommand(program: Command) {
 
         const apiHost = cloudConfig.getApiHost();
         const response = await fetchWithProxy(`${apiHost}/api/v1/users/me`, {
-          headers: {
-            Authorization: `Bearer ${apiKey}`,
-          },
+          headers: { ...(cloudConfig.getAuthHeaders() ?? {}) },
         });
 
         if (!response.ok) {
