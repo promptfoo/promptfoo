@@ -117,3 +117,42 @@ describe('LocalAI temperature handling', () => {
     expect(callBody.temperature).toBe(0.7);
   });
 });
+
+describe('LocalAI cache busting', () => {
+  beforeEach(() => {
+    vi.resetAllMocks();
+  });
+
+  it('forwards bustCache from the call context (chat)', async () => {
+    vi.mocked(fetchWithCache).mockResolvedValue({
+      data: { choices: [{ message: { content: 'Test output' } }] },
+    } as any);
+
+    const provider = new LocalAiChatProvider('test-model', { config: {} });
+    await provider.callApi('Test prompt', { bustCache: true } as any);
+
+    expect(vi.mocked(fetchWithCache).mock.calls[0][4]).toBe(true);
+  });
+
+  it('forwards debug as cache bust (completion)', async () => {
+    vi.mocked(fetchWithCache).mockResolvedValue({
+      data: { choices: [{ text: 'Test output' }] },
+    } as any);
+
+    const provider = new LocalAiCompletionProvider('test-model', { config: {} });
+    await provider.callApi('Test prompt', { debug: true } as any);
+
+    expect(vi.mocked(fetchWithCache).mock.calls[0][4]).toBe(true);
+  });
+
+  it('leaves the cache alone without a bust signal', async () => {
+    vi.mocked(fetchWithCache).mockResolvedValue({
+      data: { choices: [{ message: { content: 'Test output' } }] },
+    } as any);
+
+    const provider = new LocalAiChatProvider('test-model', { config: {} });
+    await provider.callApi('Test prompt');
+
+    expect(vi.mocked(fetchWithCache).mock.calls[0][4]).toBeFalsy();
+  });
+});
