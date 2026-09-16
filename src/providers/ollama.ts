@@ -92,6 +92,58 @@ const OllamaCompletionOptionKeys = new Set<keyof OllamaCompletionOptions>([
   'passthrough',
 ]);
 
+/**
+ * Ollama reports failures as a JSON body like `{"error":"model 'x' not found"}` paired
+ * with a non-2xx status. `fetchWithCache` resolves rather than throws on non-2xx, and
+ * for the `'text'` format it always hands back a string, so the body has to be inspected
+ * explicitly. Otherwise the error body parses as a one-line NDJSON stream with no
+ * `message.content`, and the caller sees an empty string instead of a failure.
+ */
+function extractOllamaErrorMessage(data: unknown): string | undefined {
+  if (typeof data === 'object' && data !== null && 'error' in data) {
+    const { error } = data as { error: unknown };
+    if (typeof error === 'string') {
+      return error;
+    }
+    return error == null ? undefined : JSON.stringify(error);
+  }
+  if (typeof data === 'string') {
+    const trimmed = data.trim();
+    // A successful streaming body is multi-line NDJSON, which never parses as a single
+    // value; only a lone JSON object can be an error payload.
+    if (trimmed === '' || !trimmed.startsWith('{')) {
+      return undefined;
+    }
+    try {
+      return extractOllamaErrorMessage(JSON.parse(trimmed));
+    } catch {
+      return undefined;
+    }
+  }
+  return undefined;
+}
+
+/**
+ * Builds a user-facing error string for a failed Ollama response, or `undefined` when
+ * the response looks successful.
+ */
+function getOllamaResponseError(response: {
+  data: unknown;
+  status: number;
+  statusText: string;
+}): string | undefined {
+  const message = extractOllamaErrorMessage(response.data);
+  if (response.status >= 400) {
+    const detail =
+      message ?? (typeof response.data === 'string' ? response.data.trim().slice(0, 500) : '');
+    return `Ollama API error: ${response.status} ${response.statusText}${detail ? `: ${detail}` : ''}`;
+  }
+  if (message !== undefined) {
+    return `Ollama error: ${message}`;
+  }
+  return undefined;
+}
+
 interface OllamaCompletionJsonL {
   model: string;
   created_at: string;
@@ -237,10 +289,9 @@ export class OllamaCompletionProvider implements ApiProvider {
       };
     }
     logger.debug(`\tOllama generate API response: ${response.data}`);
-    if (typeof response.data === 'object' && response.data !== null && 'error' in response.data) {
-      return {
-        error: `Ollama error: ${(response.data as { error: string }).error}`,
-      };
+    const responseError = getOllamaResponseError(response);
+    if (responseError) {
+      return { error: responseError };
     }
 
     try {
@@ -399,10 +450,9 @@ export class OllamaChatProvider implements ApiProvider {
       dataLength: response.data?.length,
     });
 
-    if (typeof response.data === 'object' && response.data !== null && 'error' in response.data) {
-      return {
-        error: `Ollama error: ${(response.data as { error: string }).error}`,
-      };
+    const responseError = getOllamaResponseError(response);
+    if (responseError) {
+      return { error: responseError };
     }
 
     try {
@@ -524,6 +574,11 @@ export class OllamaEmbeddingProvider extends OllamaCompletionProvider {
       return {
         error: `API call error: ${String(err)}`,
       };
+    }
+
+    const responseError = getOllamaResponseError(response);
+    if (responseError) {
+      return { error: responseError };
     }
 
     try {
