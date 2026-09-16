@@ -142,30 +142,30 @@ describe('baseline-vs-ejentum-harness provider', () => {
     expect(openaiRequest).not.toHaveProperty('temperature');
   });
 
-  it.each([
-    'OPENAI_API_BASE_URL',
-    'OPENAI_BASE_URL',
-  ])('honors the standard %s environment variable', async (apiBaseEnvVar) => {
-    restoreEnv?.();
-    restoreEnv = mockProcessEnv(
-      {
-        EJENTUM_API_KEY: 'ejentum-key',
-        OPENAI_API_KEY: 'openai-key',
-        [apiBaseEnvVar]: 'http://gateway.example.test/openai/v1/',
-      },
-      { clear: true },
-    );
-    fetchMock
-      .mockResolvedValueOnce(mockResponse([{ reasoning: 'check assumptions' }]))
-      .mockResolvedValueOnce(mockResponse({ choices: [{ message: { content: 'answer' } }] }));
+  it.each(['OPENAI_API_BASE_URL', 'OPENAI_BASE_URL'])(
+    'honors the standard %s environment variable',
+    async (apiBaseEnvVar) => {
+      restoreEnv?.();
+      restoreEnv = mockProcessEnv(
+        {
+          EJENTUM_API_KEY: 'ejentum-key',
+          OPENAI_API_KEY: 'openai-key',
+          [apiBaseEnvVar]: 'http://gateway.example.test/openai/v1/',
+        },
+        { clear: true },
+      );
+      fetchMock
+        .mockResolvedValueOnce(mockResponse([{ reasoning: 'check assumptions' }]))
+        .mockResolvedValueOnce(mockResponse({ choices: [{ message: { content: 'answer' } }] }));
 
-    const provider = new EjentumAugmentedProvider();
-    await provider.callApi('solve this');
+      const provider = new EjentumAugmentedProvider();
+      await provider.callApi('solve this');
 
-    expect(fetchMock.mock.calls[1][0]).toBe(
-      'http://gateway.example.test/openai/v1/chat/completions',
-    );
-  });
+      expect(fetchMock.mock.calls[1][0]).toBe(
+        'http://gateway.example.test/openai/v1/chat/completions',
+      );
+    },
+  );
 
   it('prefers a configured OpenAI API base URL to environment fallbacks', async () => {
     restoreEnv?.();
