@@ -56,9 +56,13 @@ export function useTestCounts(): MetricValue[] {
     return table
       ? table.head.prompts.map((prompt, idx) => {
           const totalCount =
-            (prompt.metrics?.testPassCount ?? 0) + (prompt.metrics?.testFailCount ?? 0);
+            (prompt.metrics?.testPassCount ?? 0) +
+            (prompt.metrics?.testFailCount ?? 0) +
+            (prompt.metrics?.testErrorCount ?? 0);
           const filteredCount = filteredMetrics?.[idx]
-            ? (filteredMetrics[idx].testPassCount ?? 0) + (filteredMetrics[idx].testFailCount ?? 0)
+            ? (filteredMetrics[idx].testPassCount ?? 0) +
+              (filteredMetrics[idx].testFailCount ?? 0) +
+              (filteredMetrics[idx].testErrorCount ?? 0)
             : null;
 
           return {

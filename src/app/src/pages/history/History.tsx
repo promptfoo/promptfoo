@@ -29,7 +29,8 @@ interface HistoryProps {
 const calculatePassRate = (evalItem: StandaloneEval): string => {
   const testPassCount = evalItem.metrics?.testPassCount ?? 0;
   const testFailCount = evalItem.metrics?.testFailCount ?? 0;
-  const totalCount = testPassCount + testFailCount;
+  const testErrorCount = evalItem.metrics?.testErrorCount ?? 0;
+  const totalCount = testPassCount + testFailCount + testErrorCount;
   const passRate = totalCount > 0 ? (testPassCount / totalCount) * 100 : 0;
   return passRate?.toFixed(2) ?? '0.00';
 };
