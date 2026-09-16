@@ -277,6 +277,30 @@ describe('OllamaCompletionProvider', () => {
     expect(result.tokenUsage).toEqual({ cached: 30, total: 30 });
   });
 
+  it.each([
+    ['suffix', 'return result'],
+    ['system', 'You are terse.'],
+    ['template', '{{ .Prompt }}'],
+    ['raw', true],
+  ])('should forward /api/generate-only parameter %s', async (key, value) => {
+    vi.mocked(fetchWithCache).mockResolvedValue({
+      data: '{"response":"ok","done":true}\n',
+      cached: false,
+      status: 200,
+      statusText: 'OK',
+      headers: {},
+    });
+
+    const provider = new OllamaCompletionProvider('qwen2.5', {
+      config: { [key]: value } as any,
+    });
+    await provider.callApi('test prompt');
+
+    const body = JSON.parse(vi.mocked(fetchWithCache).mock.calls[0][1]?.body as string);
+    expect(body[key]).toEqual(value);
+    expect(body.options[key]).toBeUndefined();
+  });
+
   it('should omit finishReason when done_reason is absent', async () => {
     vi.mocked(fetchWithCache).mockResolvedValue({
       data: '{"response":"Hi!","done":true}\n',
@@ -705,6 +729,68 @@ describe('OllamaChatProvider', () => {
     expect(body.options.useNUMA).toBeUndefined();
     expect(body.options.max_tokens).toBeUndefined();
     expect(body.max_tokens).toBeUndefined();
+  });
+
+  it.each([['low'], ['medium'], ['high'], ['max'], [true], [false]])(
+    'should forward think level %s as a top-level parameter',
+    async (level) => {
+      vi.mocked(fetchWithCache).mockResolvedValue({
+        data: '{"message":{"role":"assistant","content":"hi"},"done":true}\n',
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+        headers: {},
+      });
+
+      const provider = new OllamaChatProvider('qwen3', { config: { think: level as any } });
+      await provider.callApi('test prompt');
+
+      // Ollama 0.34+ accepts a boolean or a thinking level.
+      const body = JSON.parse(vi.mocked(fetchWithCache).mock.calls[0][1]?.body as string);
+      expect(body.think).toBe(level);
+      expect(body.options.think).toBeUndefined();
+    },
+  );
+
+  it('should send format as a top-level structured-output parameter', async () => {
+    vi.mocked(fetchWithCache).mockResolvedValue({
+      data: '{"message":{"role":"assistant","content":"{}"},"done":true}\n',
+      cached: false,
+      status: 200,
+      statusText: 'OK',
+      headers: {},
+    });
+
+    const schema = { type: 'object', properties: { capital: { type: 'string' } } };
+    const provider = new OllamaChatProvider('qwen3', { config: { format: schema } });
+    await provider.callApi('test prompt');
+
+    // Previously reachable only via passthrough.
+    const body = JSON.parse(vi.mocked(fetchWithCache).mock.calls[0][1]?.body as string);
+    expect(body.format).toEqual(schema);
+    expect(body.options.format).toBeUndefined();
+  });
+
+  it('should surface prompt_eval_cached_count as cacheReadInputTokens', async () => {
+    vi.mocked(fetchWithCache).mockResolvedValue({
+      data: '{"message":{"role":"assistant","content":"hi"},"done":true,"prompt_eval_count":54,"prompt_eval_cached_count":53,"eval_count":25}\n',
+      cached: false,
+      status: 200,
+      statusText: 'OK',
+      headers: {},
+    });
+
+    const provider = new OllamaChatProvider('qwen3');
+    const result = await provider.callApi('test prompt');
+
+    // Ollama's own KV prefix cache -- NOT a promptfoo cache hit, so `cached` stays unset.
+    expect(result.tokenUsage).toEqual({
+      prompt: 54,
+      completion: 25,
+      total: 79,
+      completionDetails: { cacheReadInputTokens: 53 },
+    });
+    expect(result.cached).toBeUndefined();
   });
 
   it('should not report promptfoo-internal keys as dropped config', async () => {

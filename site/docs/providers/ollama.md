@@ -10,10 +10,9 @@ The `ollama` provider is compatible with [Ollama](https://github.com/ollama/olla
 You can use its `/api/generate` endpoint by specifying any of the following providers from the [Ollama library](https://ollama.com/library):
 
 - `ollama:completion:llama3.2`
-- `ollama:completion:llama3.3`
 - `ollama:completion:qwen3`
 - `ollama:completion:gemma3`
-- `ollama:completion:phi4`
+- `ollama:completion:qwen2.5-coder`
 - `ollama:completion:codellama`
 - ...
 
@@ -23,15 +22,21 @@ completion provider.
 Or, use the `/api/chat` endpoint for chat-formatted prompts:
 
 - `ollama:chat:llama3.2`
-- `ollama:chat:llama3.2:1b`
 - `ollama:chat:llama3.3`
 - `ollama:chat:qwen3`
-- `ollama:chat:qwen3:0.6b`
+- `ollama:chat:qwen3.5`
+- `ollama:chat:qwen3-coder`
 - `ollama:chat:gemma3`
-- `ollama:chat:phi4`
+- `ollama:chat:gemma4`
+- `ollama:chat:gpt-oss`
 - `ollama:chat:deepseek-r1`
 - `ollama:chat:mistral`
+- `ollama:chat:phi4`
 - ...
+
+Capability varies by model — check the [library](https://ollama.com/library) for which
+support tools, reasoning, or vision. As of this writing `qwen3`, `qwen3.5`, `gpt-oss`, and
+`deepseek-r1` support reasoning; `gemma3`, `gemma4`, and `llava` support vision.
 
 Small models are useful for smoke-testing a config without a long download —
 `qwen3:0.6b` (~500MB) supports both tools and reasoning, and `all-minilm` (~45MB)
@@ -56,7 +61,7 @@ providers:
       num_predict: 1024
       temperature: 0.7
       top_p: 0.9
-      think: true # Enable thinking/reasoning mode (top-level API parameter)
+      think: true # Enable thinking/reasoning (Ollama 0.34+ also accepts 'low'/'medium'/'high'/'max')
       showThinking: true # Include the reasoning trace in the output (default: true)
       keep_alive: '5m' # How long Ollama keeps the model loaded after the request
 ```
@@ -113,6 +118,42 @@ Options that newer Ollama releases removed (`mirostat`, `mirostat_tau`, `mirosta
 `embedding_only`, `rope_frequency_base`, `rope_frequency_scale`, `penalize_newline`) are
 still forwarded so configs pointed at an older `OLLAMA_BASE_URL` keep working. Current
 servers ignore them, and promptfoo logs a debug notice when you use one.
+
+## Structured outputs
+
+Set `format` to `json`, or to a JSON schema, to constrain the model's output:
+
+```yaml
+providers:
+  - id: ollama:chat:qwen3
+    config:
+      format:
+        type: object
+        properties:
+          capital: { type: string }
+        required: [capital]
+```
+
+This returns clean JSON (`{ "capital": "Paris" }`) rather than a markdown-fenced block,
+so assertions like [`is-json`](/docs/configuration/expected-outputs/deterministic/#is-json)
+work reliably.
+
+## Completion-only parameters
+
+`ollama:completion:*` uses `/api/generate`, which accepts a few parameters the chat
+endpoint does not:
+
+```yaml
+providers:
+  - id: ollama:completion:qwen2.5-coder
+    config:
+      system: 'You are a terse assistant.' # override the model's system prompt
+      suffix: '    return result' # fill-in-the-middle, for models that support insert
+      raw: true # bypass prompt templating
+      template: '{{ .Prompt }}' # override the model's prompt template
+```
+
+`tools` only applies to `ollama:chat:*`; `/api/generate` has no tool support.
 
 You can also pass arbitrary fields directly to the Ollama API using the `passthrough`
 option. A `passthrough.options` object is merged into the computed options rather than
@@ -296,6 +337,7 @@ Popular Ollama embedding models include:
 
 - `ollama:embeddings:nomic-embed-text` - General purpose embeddings
 - `ollama:embeddings:mxbai-embed-large` - High-quality embeddings
+- `ollama:embeddings:bge-m3` - Multilingual, long context
 - `ollama:embeddings:all-minilm` - Lightweight, fast embeddings
 
 ## Using a Remote Ollama Server

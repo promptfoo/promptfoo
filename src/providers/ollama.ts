@@ -58,7 +58,15 @@ interface OllamaCompletionOptions {
 
   // Top-level API parameters (siblings of `options`, not members of it).
   tools?: any[]; // Support for function calling/tools
-  think?: boolean; // Top-level parameter for thinking/reasoning
+  // Ollama 0.34+ accepts a boolean or a thinking level.
+  think?: boolean | 'low' | 'medium' | 'high' | 'max';
+  // Structured outputs: 'json' or a JSON schema object.
+  format?: 'json' | Record<string, any>;
+  // /api/generate only.
+  suffix?: string;
+  system?: string;
+  template?: string;
+  raw?: boolean;
   keep_alive?: string | number;
   truncate?: boolean; // /api/embed only
   dimensions?: number; // /api/embed only
@@ -109,6 +117,11 @@ const OllamaCompletionOptionKeys = new Set<keyof OllamaCompletionOptions>([
   'keep_alive',
   'truncate',
   'dimensions',
+  'format',
+  'suffix',
+  'system',
+  'template',
+  'raw',
   'passthrough',
 ]);
 
@@ -123,6 +136,11 @@ const OllamaNonNestedOptionKeys = new Set<string>([
   'keep_alive',
   'truncate',
   'dimensions',
+  'format',
+  'suffix',
+  'system',
+  'template',
+  'raw',
 ]);
 
 /**
@@ -305,6 +323,7 @@ interface OllamaCompletionJsonL {
   sample_count?: number;
   sample_duration?: number;
   prompt_eval_count?: number;
+  prompt_eval_cached_count?: number;
   prompt_eval_duration?: number;
   eval_count?: number;
   eval_duration?: number;
@@ -333,6 +352,7 @@ interface OllamaChatJsonL {
   sample_count?: number;
   sample_duration?: number;
   prompt_eval_count?: number;
+  prompt_eval_cached_count?: number;
   prompt_eval_duration?: number;
   eval_count?: number;
   eval_duration?: number;
@@ -363,7 +383,11 @@ function collectOllamaToolCalls(lines: OllamaChatJsonL[]) {
  * (see getTokenUsage in src/providers/openai/util.ts).
  */
 function extractOllamaTokenUsage(
-  finalChunk: { prompt_eval_count?: number; eval_count?: number },
+  finalChunk: {
+    prompt_eval_count?: number;
+    prompt_eval_cached_count?: number;
+    eval_count?: number;
+  },
   cached: boolean,
 ): Partial<TokenUsage> | undefined {
   if (finalChunk.prompt_eval_count === undefined && finalChunk.eval_count === undefined) {
@@ -374,6 +398,18 @@ function extractOllamaTokenUsage(
   const total = prompt + completion;
   if (cached) {
     return { cached: total, total };
+  }
+  // Ollama 0.34+ reports prompt tokens served from its own KV cache. This is a server-side
+  // prefix cache hit, not a promptfoo cache hit, so it belongs in completionDetails rather
+  // than tokenUsage.cached (which would make the row look like a promptfoo cache hit).
+  const cacheRead = finalChunk.prompt_eval_cached_count;
+  if (cacheRead) {
+    return {
+      prompt,
+      completion,
+      total,
+      completionDetails: { cacheReadInputTokens: cacheRead },
+    };
   }
   // numRequests is intentionally omitted: tokenUsageUtils increments it by 1 when an
   // update does not specify it, so setting it here would be a no-op.
@@ -456,6 +492,11 @@ export class OllamaCompletionProvider implements ApiProvider {
       options: { ...buildOllamaOptions(this.config), ...passthroughOptions },
       ...(this.config.think === undefined ? {} : { think: this.config.think }),
       ...(this.config.keep_alive === undefined ? {} : { keep_alive: this.config.keep_alive }),
+      ...(this.config.format === undefined ? {} : { format: this.config.format }),
+      ...(this.config.suffix === undefined ? {} : { suffix: this.config.suffix }),
+      ...(this.config.system === undefined ? {} : { system: this.config.system }),
+      ...(this.config.template === undefined ? {} : { template: this.config.template }),
+      ...(this.config.raw === undefined ? {} : { raw: this.config.raw }),
       ...passthroughRest,
     };
 
@@ -607,6 +648,7 @@ export class OllamaChatProvider implements ApiProvider {
       options: { ...buildOllamaOptions(this.config), ...passthroughOptions },
       ...(this.config.think === undefined ? {} : { think: this.config.think }),
       ...(this.config.keep_alive === undefined ? {} : { keep_alive: this.config.keep_alive }),
+      ...(this.config.format === undefined ? {} : { format: this.config.format }),
       ...passthroughRest,
     };
 
