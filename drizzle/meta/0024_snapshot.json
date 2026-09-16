@@ -1,8 +1,8 @@
 {
+  "id": "00fa2978-039b-4dbd-8e05-d962a981755f",
+  "prevId": "516dc2b9-fcef-43c1-88dc-543e422e3f53",
   "version": "6",
   "dialect": "sqlite",
-  "id": "029cba8c-c131-42e3-9c18-16a2b892120e",
-  "prevId": "516dc2b9-fcef-43c1-88dc-543e422e3f53",
   "tables": {
     "blob_assets": {
       "name": "blob_assets",
@@ -161,28 +161,28 @@
         "blob_references_blob_hash_blob_assets_hash_fk": {
           "name": "blob_references_blob_hash_blob_assets_hash_fk",
           "tableFrom": "blob_references",
-          "tableTo": "blob_assets",
           "columnsFrom": [
             "blob_hash"
           ],
+          "tableTo": "blob_assets",
           "columnsTo": [
             "hash"
           ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
+          "onUpdate": "no action",
+          "onDelete": "cascade"
         },
         "blob_references_eval_id_evals_id_fk": {
           "name": "blob_references_eval_id_evals_id_fk",
           "tableFrom": "blob_references",
-          "tableTo": "evals",
           "columnsFrom": [
             "eval_id"
           ],
+          "tableTo": "evals",
           "columnsTo": [
             "id"
           ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
+          "onUpdate": "no action",
+          "onDelete": "cascade"
         }
       },
       "compositePrimaryKeys": {},
@@ -561,28 +561,28 @@
         "eval_results_eval_id_evals_id_fk": {
           "name": "eval_results_eval_id_evals_id_fk",
           "tableFrom": "eval_results",
-          "tableTo": "evals",
           "columnsFrom": [
             "eval_id"
           ],
+          "tableTo": "evals",
           "columnsTo": [
             "id"
           ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
+          "onUpdate": "no action",
+          "onDelete": "no action"
         },
         "eval_results_prompt_id_prompts_id_fk": {
           "name": "eval_results_prompt_id_prompts_id_fk",
           "tableFrom": "eval_results",
-          "tableTo": "prompts",
           "columnsFrom": [
             "prompt_id"
           ],
+          "tableTo": "prompts",
           "columnsTo": [
             "id"
           ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
+          "onUpdate": "no action",
+          "onDelete": "no action"
         }
       },
       "compositePrimaryKeys": {},
@@ -663,14 +663,6 @@
           "notNull": true,
           "autoincrement": false,
           "default": false
-        },
-        "is_favorite": {
-          "name": "is_favorite",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false,
-          "default": false
         }
       },
       "indexes": {
@@ -692,13 +684,6 @@
           "name": "evals_is_redteam_idx",
           "columns": [
             "is_redteam"
-          ],
-          "isUnique": false
-        },
-        "evals_is_favorite_idx": {
-          "name": "evals_is_favorite_idx",
-          "columns": [
-            "is_favorite"
           ],
           "isUnique": false
         }
@@ -746,28 +731,28 @@
         "evals_to_datasets_eval_id_evals_id_fk": {
           "name": "evals_to_datasets_eval_id_evals_id_fk",
           "tableFrom": "evals_to_datasets",
-          "tableTo": "evals",
           "columnsFrom": [
             "eval_id"
           ],
+          "tableTo": "evals",
           "columnsTo": [
             "id"
           ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
+          "onUpdate": "no action",
+          "onDelete": "no action"
         },
         "evals_to_datasets_dataset_id_datasets_id_fk": {
           "name": "evals_to_datasets_dataset_id_datasets_id_fk",
           "tableFrom": "evals_to_datasets",
-          "tableTo": "datasets",
           "columnsFrom": [
             "dataset_id"
           ],
+          "tableTo": "datasets",
           "columnsTo": [
             "id"
           ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
+          "onUpdate": "no action",
+          "onDelete": "no action"
         }
       },
       "compositePrimaryKeys": {
@@ -820,28 +805,28 @@
         "evals_to_prompts_eval_id_evals_id_fk": {
           "name": "evals_to_prompts_eval_id_evals_id_fk",
           "tableFrom": "evals_to_prompts",
-          "tableTo": "evals",
           "columnsFrom": [
             "eval_id"
           ],
+          "tableTo": "evals",
           "columnsTo": [
             "id"
           ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
+          "onUpdate": "no action",
+          "onDelete": "cascade"
         },
         "evals_to_prompts_prompt_id_prompts_id_fk": {
           "name": "evals_to_prompts_prompt_id_prompts_id_fk",
           "tableFrom": "evals_to_prompts",
-          "tableTo": "prompts",
           "columnsFrom": [
             "prompt_id"
           ],
+          "tableTo": "prompts",
           "columnsTo": [
             "id"
           ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
+          "onUpdate": "no action",
+          "onDelete": "no action"
         }
       },
       "compositePrimaryKeys": {
@@ -894,28 +879,28 @@
         "evals_to_tags_eval_id_evals_id_fk": {
           "name": "evals_to_tags_eval_id_evals_id_fk",
           "tableFrom": "evals_to_tags",
-          "tableTo": "evals",
           "columnsFrom": [
             "eval_id"
           ],
+          "tableTo": "evals",
           "columnsTo": [
             "id"
           ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
+          "onUpdate": "no action",
+          "onDelete": "no action"
         },
         "evals_to_tags_tag_id_tags_id_fk": {
           "name": "evals_to_tags_tag_id_tags_id_fk",
           "tableFrom": "evals_to_tags",
-          "tableTo": "tags",
           "columnsFrom": [
             "tag_id"
           ],
+          "tableTo": "tags",
           "columnsTo": [
             "id"
           ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
+          "onUpdate": "no action",
+          "onDelete": "no action"
         }
       },
       "compositePrimaryKeys": {
@@ -1289,15 +1274,15 @@
         "spans_trace_id_traces_trace_id_fk": {
           "name": "spans_trace_id_traces_trace_id_fk",
           "tableFrom": "spans",
-          "tableTo": "traces",
           "columnsFrom": [
             "trace_id"
           ],
+          "tableTo": "traces",
           "columnsTo": [
             "trace_id"
           ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
+          "onUpdate": "no action",
+          "onDelete": "no action"
         }
       },
       "compositePrimaryKeys": {},
@@ -1425,15 +1410,15 @@
         "traces_evaluation_id_evals_id_fk": {
           "name": "traces_evaluation_id_evals_id_fk",
           "tableFrom": "traces",
-          "tableTo": "evals",
           "columnsFrom": [
             "evaluation_id"
           ],
+          "tableTo": "evals",
           "columnsTo": [
             "id"
           ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
+          "onUpdate": "no action",
+          "onDelete": "no action"
         }
       },
       "compositePrimaryKeys": {},
@@ -1444,9 +1429,9 @@
   "views": {},
   "enums": {},
   "_meta": {
+    "columns": {},
     "schemas": {},
-    "tables": {},
-    "columns": {}
+    "tables": {}
   },
   "internal": {
     "indexes": {

@@ -173,8 +173,22 @@
     {
       "idx": 24,
       "version": "6",
-      "when": 1776898824367,
-      "tag": "0024_bouncy_nightmare",
+      "when": 1779816393227,
+      "tag": "0024_repair_eval_redteam_flags",
+      "breakpoints": true
+    },
+    {
+      "idx": 25,
+      "version": "6",
+      "when": 1786213665132,
+      "tag": "0025_broken_emma_frost",
+      "breakpoints": true
+    },
+    {
+      "idx": 26,
+      "version": "6",
+      "when": 1789519567280,
+      "tag": "0026_favorite_evals",
       "breakpoints": true
     }
   ]

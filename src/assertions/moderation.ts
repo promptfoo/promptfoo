@@ -1,3 +1,4 @@
+import { isGraderFailure } from '../matchers/llmGrading';
 import { matchesModeration } from '../matchers/moderation';
 import { parseChatPrompt } from '../providers/shared';
 import invariant from '../util/invariant';
@@ -58,6 +59,7 @@ export const handleModeration = async ({
   outputString,
   providerResponse,
   prompt,
+  inverse,
 }: AssertionParams): Promise<GradingResult> => {
   // Priority: 1) response.prompt (provider-reported), 2) redteamFinalPrompt (legacy), 3) original prompt
   // This allows providers to report the actual prompt they sent (e.g., GenAIScript, dynamic prompts)
@@ -86,11 +88,23 @@ export const handleModeration = async ({
     test.options,
   );
 
-  const pass = moderationResult.pass;
+  // A moderation provider/transport error is not evidence about the content, so
+  // never flip it into a pass for `not-moderation` — propagate it verbatim
+  // (mirrors the inverse-aware llm-rubric/g-eval handlers).
+  if (isGraderFailure(moderationResult)) {
+    return { ...moderationResult, assertion };
+  }
+
+  // `not-moderation` asserts the opposite outcome (e.g. that the output WAS
+  // flagged). Flip pass/score for the inverse case, mirroring handleClassifier.
+  const pass = inverse ? !moderationResult.pass : moderationResult.pass;
+  const score = inverse ? 1 - moderationResult.score : moderationResult.score;
   return {
+    // Preserve provider-reported moderation token usage and any matcher metadata;
+    // inversion changes only the verdict.
+    ...moderationResult,
     pass,
-    score: moderationResult.score,
-    reason: moderationResult.reason,
+    score,
     assertion,
   };
 };
