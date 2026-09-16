@@ -832,6 +832,24 @@ describe('OpenAiAgentsApiProvider', () => {
           );
         });
 
+        it.each([123, false])('normalizes inherited scalar header values: %j', async (value) => {
+          const result = await provider({
+            apiBaseUrl: 'https://gateway.example/v1',
+            headers: {
+              'X-Tenant-Id': value,
+              'X-Goog-Iap-Jwt-Assertion': value,
+            } as unknown as Record<string, string>,
+          }).callApi('hi', promptContext(endpointConfig));
+
+          expect(result.output).toBe('42');
+          expect(result.metadata?.sessionDeleted).toBe(true);
+          for (const [, request] of vi.mocked(fetchWithRetries).mock.calls) {
+            const headers = new Headers(request!.headers);
+            expect(headers.get('X-Tenant-Id')).toBe(String(value));
+            expect(headers.get('X-Goog-Iap-Jwt-Assertion')).toBeNull();
+          }
+        });
+
         it('redacts filtered rendered credentials echoed in a validation error', async () => {
           const credential = 'offline-opaque-gateway-credential';
           vi.mocked(fetchWithRetries).mockResolvedValueOnce(

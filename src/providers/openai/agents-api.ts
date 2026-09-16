@@ -767,13 +767,13 @@ export class OpenAiAgentsApiProvider extends OpenAiGenericProvider {
         if (!hasReplacementCredential) {
           const safeHeaders: Record<string, string> = {};
           for (const [name, originalValue] of Object.entries(this.config.headers)) {
-            let value = originalValue;
+            let value = String(originalValue);
             try {
               if (vars) {
-                value = renderConfigTemplates(originalValue, vars, Object.keys(vars)) as string;
+                value = String(renderConfigTemplates(originalValue, vars, Object.keys(vars)));
               }
             } catch (error) {
-              if (!replacesHeaders && !isCredentialHeader(name, originalValue)) {
+              if (!replacesHeaders && !isCredentialHeader(name, value)) {
                 throw error;
               }
             }
