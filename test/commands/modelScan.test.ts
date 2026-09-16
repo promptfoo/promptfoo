@@ -32,7 +32,6 @@ vi.mock('../../src/models/modelAudit', () => ({
   default: {
     create: vi.fn().mockResolvedValue({ id: 'scan-abc-2025-01-01T00:00:00' }),
     findByRevision: vi.fn().mockResolvedValue(null),
-    findLatestByModelId: vi.fn().mockResolvedValue(null),
   },
 }));
 vi.mock('../../src/updates', async (importOriginal) => {
@@ -131,8 +130,6 @@ async function resetModelScanTestMocks() {
   const ModelAudit = (await import('../../src/models/modelAudit')).default;
   vi.mocked(ModelAudit.findByRevision).mockReset();
   vi.mocked(ModelAudit.findByRevision).mockResolvedValue(null);
-  vi.mocked(ModelAudit.findLatestByModelId).mockReset();
-  vi.mocked(ModelAudit.findLatestByModelId).mockResolvedValue(null);
   vi.mocked(ModelAudit.create).mockReset();
   vi.mocked(ModelAudit.create).mockResolvedValue({ id: 'scan-abc-2025-01-01T00:00:00' } as any);
 
@@ -538,19 +535,22 @@ describe('Signal termination handling', () => {
     vi.resetAllMocks();
   });
 
-  it.each(
-    SIGNAL_TERMINATIONS,
-  )('fails closed in --no-write mode when modelaudit terminates via %s', async (signal) => {
-    (spawn as unknown as Mock).mockReturnValue(createSignalTerminatedProcess(signal));
+  it.each(SIGNAL_TERMINATIONS)(
+    'fails closed in --no-write mode when modelaudit terminates via %s',
+    async (signal) => {
+      (spawn as unknown as Mock).mockReturnValue(createSignalTerminatedProcess(signal));
 
-    modelScanCommand(program);
-    const command = program.commands.find((cmd) => cmd.name() === 'scan-model')!;
+      modelScanCommand(program);
+      const command = program.commands.find((cmd) => cmd.name() === 'scan-model')!;
 
-    await command.parseAsync(['node', 'scan-model', 'model.pkl', '--no-write']);
+      await command.parseAsync(['node', 'scan-model', 'model.pkl', '--no-write']);
 
-    expect(logger.error).toHaveBeenCalledWith(`Model scan process terminated by signal ${signal}`);
-    expect(process.exitCode).toBe(1);
-  });
+      expect(logger.error).toHaveBeenCalledWith(
+        `Model scan process terminated by signal ${signal}`,
+      );
+      expect(process.exitCode).toBe(1);
+    },
+  );
 
   it('forwards parent SIGINT to modelaudit as SIGINT', async () => {
     let closeHandler: ((code: number | null, signal: NodeJS.Signals | null) => void) | undefined;
@@ -610,45 +610,51 @@ describe('Signal termination handling', () => {
     expect(ModelAudit.create).not.toHaveBeenCalled();
   });
 
-  it.each(
-    SIGNAL_TERMINATIONS,
-  )('fails closed in stdout-capture mode after JSON output when modelaudit terminates via %s', async (signal) => {
-    (spawn as unknown as Mock).mockReturnValue(
-      createSignalTerminatedProcess(signal, VALID_SCAN_OUTPUT),
-    );
+  it.each(SIGNAL_TERMINATIONS)(
+    'fails closed in stdout-capture mode after JSON output when modelaudit terminates via %s',
+    async (signal) => {
+      (spawn as unknown as Mock).mockReturnValue(
+        createSignalTerminatedProcess(signal, VALID_SCAN_OUTPUT),
+      );
 
-    modelScanCommand(program);
-    const command = program.commands.find((cmd) => cmd.name() === 'scan-model')!;
-    const ModelAudit = (await import('../../src/models/modelAudit')).default;
+      modelScanCommand(program);
+      const command = program.commands.find((cmd) => cmd.name() === 'scan-model')!;
+      const ModelAudit = (await import('../../src/models/modelAudit')).default;
 
-    await command.parseAsync(['node', 'scan-model', 'model.pkl']);
+      await command.parseAsync(['node', 'scan-model', 'model.pkl']);
 
-    expect(logger.error).toHaveBeenCalledWith(`Model scan process terminated by signal ${signal}`);
-    expect(process.exitCode).toBe(1);
-    expect(ModelAudit.create).not.toHaveBeenCalled();
-  });
+      expect(logger.error).toHaveBeenCalledWith(
+        `Model scan process terminated by signal ${signal}`,
+      );
+      expect(process.exitCode).toBe(1);
+      expect(ModelAudit.create).not.toHaveBeenCalled();
+    },
+  );
 
-  it.each(
-    SIGNAL_TERMINATIONS,
-  )('fails closed in temp-output mode after JSON output when modelaudit terminates via %s', async (signal) => {
-    const { getModelAuditCurrentVersion } = await import('../../src/updates');
-    vi.mocked(getModelAuditCurrentVersion).mockResolvedValue('0.2.20');
-    (spawn as unknown as Mock).mockImplementation((_command: string, args: string[]) => {
-      const outputFlagIndex = args.indexOf('--output');
-      writeFileSync(args[outputFlagIndex + 1], VALID_SCAN_OUTPUT);
-      return createSignalTerminatedProcess(signal);
-    });
+  it.each(SIGNAL_TERMINATIONS)(
+    'fails closed in temp-output mode after JSON output when modelaudit terminates via %s',
+    async (signal) => {
+      const { getModelAuditCurrentVersion } = await import('../../src/updates');
+      vi.mocked(getModelAuditCurrentVersion).mockResolvedValue('0.2.20');
+      (spawn as unknown as Mock).mockImplementation((_command: string, args: string[]) => {
+        const outputFlagIndex = args.indexOf('--output');
+        writeFileSync(args[outputFlagIndex + 1], VALID_SCAN_OUTPUT);
+        return createSignalTerminatedProcess(signal);
+      });
 
-    modelScanCommand(program);
-    const command = program.commands.find((cmd) => cmd.name() === 'scan-model')!;
-    const ModelAudit = (await import('../../src/models/modelAudit')).default;
+      modelScanCommand(program);
+      const command = program.commands.find((cmd) => cmd.name() === 'scan-model')!;
+      const ModelAudit = (await import('../../src/models/modelAudit')).default;
 
-    await command.parseAsync(['node', 'scan-model', 'model.pkl']);
+      await command.parseAsync(['node', 'scan-model', 'model.pkl']);
 
-    expect(logger.error).toHaveBeenCalledWith(`Model scan process terminated by signal ${signal}`);
-    expect(process.exitCode).toBe(1);
-    expect(ModelAudit.create).not.toHaveBeenCalled();
-  });
+      expect(logger.error).toHaveBeenCalledWith(
+        `Model scan process terminated by signal ${signal}`,
+      );
+      expect(process.exitCode).toBe(1);
+      expect(ModelAudit.create).not.toHaveBeenCalled();
+    },
+  );
 
   it('fails closed in temp-output mode after JSON output when modelaudit closes without an exit code or signal', async () => {
     const { getModelAuditCurrentVersion } = await import('../../src/updates');
@@ -859,7 +865,6 @@ describe('Re-scan on version change behavior', () => {
     await command?.parseAsync(['node', 'scan-model', 'hf://test-owner/test-model']);
 
     expect(ModelAudit.findByRevision).toHaveBeenCalledWith('test-owner/test-model', 'abc123');
-    expect(ModelAudit.findLatestByModelId).not.toHaveBeenCalled();
     expect(ModelAudit.create).toHaveBeenCalledWith(
       expect.objectContaining({
         modelId: 'test-owner/test-model',
@@ -1448,6 +1453,28 @@ describe('Command Options Validation', () => {
     invalidOptions.forEach((option) => {
       expect(optionNames).not.toContain(option);
     });
+  });
+
+  it('should reject obsolete options before the action handler', async () => {
+    modelScanCommand(program);
+
+    const command = program.commands.find((cmd) => cmd.name() === 'scan-model')!;
+    const actionReached = vi.fn();
+    command.hook('preAction', actionReached);
+    command.exitOverride();
+    command.configureOutput({
+      writeErr: vi.fn(),
+      writeOut: vi.fn(),
+    });
+
+    await expect(
+      command.parseAsync(['node', 'scan-model', 'model.pkl', '--max-file-size', '500MB']),
+    ).rejects.toMatchObject({
+      code: 'commander.unknownOption',
+      message: "error: unknown option '--max-file-size'",
+    });
+    expect(actionReached).not.toHaveBeenCalled();
+    expect(spawn).not.toHaveBeenCalled();
   });
 
   it('should only pass valid arguments to modelaudit', async () => {

@@ -181,18 +181,6 @@ export default class ModelAudit {
     return new ModelAudit({ ...result, persisted: true });
   }
 
-  static async findByModelPath(modelPath: string): Promise<ModelAudit[]> {
-    const db = await getDb();
-    const results = await db
-      .select()
-      .from(modelAuditsTable)
-      .where(eq(modelAuditsTable.modelPath, modelPath))
-      .orderBy(modelAuditsTable.createdAt)
-      .all();
-
-    return results.map((r) => new ModelAudit({ ...r, persisted: true }));
-  }
-
   /**
    * Find existing model audit by revision information for deduplication.
    * Checks both revision_sha and content_hash based on availability.
@@ -253,18 +241,6 @@ export default class ModelAudit {
 
     logger.debug(`Found existing scan for ${modelId} (id: ${result.id})`);
     return new ModelAudit({ ...result, persisted: true });
-  }
-
-  static async findLatestByModelId(modelId: string): Promise<ModelAudit | null> {
-    const db = await getDb();
-    const result = await db
-      .select()
-      .from(modelAuditsTable)
-      .where(eq(modelAuditsTable.modelId, modelId))
-      .orderBy(desc(modelAuditsTable.createdAt))
-      .get();
-
-    return result ? new ModelAudit({ ...result, persisted: true }) : null;
   }
 
   /**

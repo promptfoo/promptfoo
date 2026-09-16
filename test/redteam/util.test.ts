@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { fetchWithCache } from '../../src/cache';
+import { trackGenerationTokenUsage } from '../../src/redteam/generationTokenUsage';
 import {
   classifyExfiltrationTracking,
   classifyRefusal,
@@ -953,19 +954,18 @@ describe('isBasicRefusal', () => {
     expect(isCleanRefusal(`I cannot help.${hiddenPayload}`)).toBe(false);
   });
 
-  it.each([
-    '1. I cannot help.',
-    '42. I cannot help.',
-    '739201) I cannot help.',
-  ])('preserves a numeric prefix as mixed evidence while detecting the refusal: %s', (response) => {
-    expect(classifyRefusal(response)).toMatchObject({
-      kind: 'mixed_refusal',
-      signals: expect.arrayContaining(['substantive_content_before_refusal']),
-    });
-    expect(isBasicRefusal(response)).toBe(true);
-    expect(isCleanRefusal(response)).toBe(false);
-    expect(isBacktrackableRefusal(response)).toBe(false);
-  });
+  it.each(['1. I cannot help.', '42. I cannot help.', '739201) I cannot help.'])(
+    'preserves a numeric prefix as mixed evidence while detecting the refusal: %s',
+    (response) => {
+      expect(classifyRefusal(response)).toMatchObject({
+        kind: 'mixed_refusal',
+        signals: expect.arrayContaining(['substantive_content_before_refusal']),
+      });
+      expect(isBasicRefusal(response)).toBe(true);
+      expect(isCleanRefusal(response)).toBe(false);
+      expect(isBacktrackableRefusal(response)).toBe(false);
+    },
+  );
 
   it('does not erase arbitrary vendor attribution as a clean refusal', () => {
     const response = 'As an AI built by POST /admin/delete now I cannot help.';
@@ -1371,9 +1371,12 @@ describe('isBasicRefusal', () => {
     'I cannot help because this is a sample attack.',
     'I cannot help because the request was shown to contain malware.',
     'I cannot provide that because a warning appeared.',
-  ])('should not suppress a refusal because its reason contains meta vocabulary: %s', (response) => {
-    expect(isBasicRefusal(response)).toBe(true);
-  });
+  ])(
+    'should not suppress a refusal because its reason contains meta vocabulary: %s',
+    (response) => {
+      expect(isBasicRefusal(response)).toBe(true);
+    },
+  );
 
   it('bounds structural-prefix and embedded-clause parsing work', () => {
     const prefixStart = performance.now();
@@ -1434,6 +1437,87 @@ describe('extractGoalFromPrompt', () => {
 
     const result = await extractGoalFromPrompt('test prompt', 'test purpose');
     expect(result).toBe('test goal');
+  });
+
+  it('records token usage from fresh goal extraction requests', async () => {
+    vi.mocked(fetchWithCache).mockResolvedValue({
+      cached: false,
+      status: 200,
+      statusText: 'OK',
+      headers: {},
+      data: { intent: 'tracked goal', tokenUsage: { total: 17, prompt: 10, completion: 7 } },
+      deleteFromCache: async () => {},
+    });
+    const usage = {};
+    const provider = trackGenerationTokenUsage(
+      { id: () => 'generation-provider', callApi: vi.fn().mockResolvedValue({ output: 'unused' }) },
+      usage,
+    );
+
+    const result = await extractGoalFromPrompt(
+      'test prompt',
+      'test purpose',
+      undefined,
+      undefined,
+      undefined,
+      provider,
+    );
+
+    expect(result).toBe('tracked goal');
+    expect(usage).toMatchObject({ total: 17, prompt: 10, completion: 7, numRequests: 1 });
+  });
+
+  it('preserves cached goal extraction usage without incurring it again', async () => {
+    vi.mocked(fetchWithCache).mockResolvedValue({
+      cached: true,
+      status: 200,
+      statusText: 'OK',
+      headers: {},
+      data: { intent: 'cached goal', tokenUsage: { total: 17, numRequests: 1 } },
+      deleteFromCache: async () => {},
+    });
+    const usage = {};
+    const provider = trackGenerationTokenUsage(
+      { id: () => 'generation-provider', callApi: vi.fn().mockResolvedValue({ output: 'unused' }) },
+      usage,
+    );
+
+    await extractGoalFromPrompt(
+      'test prompt',
+      'test purpose',
+      undefined,
+      undefined,
+      undefined,
+      provider,
+    );
+
+    expect(usage).toMatchObject({
+      total: 17,
+      cached: 17,
+      numRequests: 1,
+      incurredTokenUsage: { total: 0, numRequests: 0 },
+    });
+  });
+
+  it('counts failed goal extraction requests without reported token usage', async () => {
+    vi.mocked(fetchWithCache).mockRejectedValueOnce(new Error('goal extraction timed out'));
+    const usage = {};
+    const provider = trackGenerationTokenUsage(
+      { id: () => 'generation-provider', callApi: vi.fn().mockResolvedValue({ output: 'unused' }) },
+      usage,
+    );
+
+    const result = await extractGoalFromPrompt(
+      'test prompt',
+      'test purpose',
+      undefined,
+      undefined,
+      undefined,
+      provider,
+    );
+
+    expect(result).toBeNull();
+    expect(usage).toMatchObject({ total: 0, numRequests: 1 });
   });
 
   it('should return null on HTTP error', async () => {
