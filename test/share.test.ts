@@ -847,6 +847,30 @@ describe('createShareableUrl', () => {
       expect(mockFetch.mock.calls[0][1].body).not.toContain('azure-secret');
     });
 
+    it('does not share the local config base path', async () => {
+      vi.mocked(cloudConfig.isEnabled).mockReturnValue(false);
+      mockEval.runtimeOptions = {
+        cache: false,
+        configBasePath: '/home/alice/acme/private-evals',
+      };
+
+      mockFetch
+        .mockResolvedValueOnce({
+          ok: true,
+          json: () => Promise.resolve({ id: mockEval.id }),
+        })
+        .mockResolvedValueOnce({
+          ok: true,
+          json: () => Promise.resolve({}),
+        });
+
+      await createShareableUrl(mockEval as Eval);
+
+      const requestBody = JSON.parse(mockFetch.mock.calls[0][1].body);
+      expect(requestBody.runtimeOptions).toEqual({ cache: false });
+      expect(mockFetch.mock.calls[0][1].body).not.toContain('/home/alice');
+    });
+
     it.each([false, true])(
       'removes in-memory tracing credentials before sharing with cloud enabled: %s',
       async (cloudEnabled) => {

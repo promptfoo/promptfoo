@@ -4,7 +4,7 @@ import * as path from 'path';
 import chalk from 'chalk';
 import chokidar from 'chokidar';
 import dedent from 'dedent';
-import { globSync } from 'glob';
+import { globSync, hasMagic } from 'glob';
 import ora from 'ora';
 import { z } from 'zod';
 import { disableCache } from '../cache';
@@ -36,6 +36,7 @@ import { clearConfigCache, loadDefaultConfig } from '../util/config/default';
 import { DEFAULT_CONFIG_EXTENSIONS } from '../util/config/extensions';
 import {
   ConfigResolutionError,
+  getConfigDependencyPaths,
   logConfigResolutionError,
   maybeReadConfig,
   renderConfigEnvTemplates,
@@ -50,6 +51,7 @@ import { filterTests } from '../util/eval/filterTests';
 import { warnIfRedteamConfigHasNoTests } from '../util/eval/redteamWarning';
 import { generateEvalSummary } from '../util/eval/summary';
 import { maybeLoadFromExternalFile } from '../util/file';
+import { parseFileUrl } from '../util/functions/loadFunction';
 import {
   printBorder,
   setupEnv,
@@ -134,7 +136,17 @@ async function resolveReplayConfigs(
     };
   }
 
-  const configs = await resolveConfigs(providerFilterOptions, replayConfig);
+  // Replay against the base path the original run recorded, so relative file://
+  // references in the persisted config still resolve from the declaring config's
+  // directory rather than the current working directory.
+  const configs = evalRecord.runtimeOptions?.configBasePath
+    ? await resolveConfigs(
+        providerFilterOptions,
+        replayConfig,
+        undefined,
+        evalRecord.runtimeOptions.configBasePath,
+      )
+    : await resolveConfigs(providerFilterOptions, replayConfig);
   // The original run filtered twice: raw configs in resolveConfigs, then instantiated
   // providers by live id()/label below in doEval. Replay both stages so the resumed
   // provider set matches the original even when an instantiated id or label diverges
@@ -185,6 +197,91 @@ function handleRecoverableWatchError(error: unknown): boolean {
     return true;
   }
   return false;
+}
+
+function collectVarFilePaths(
+  value: unknown,
+  basePath: string,
+  visited = new WeakSet<object>(),
+): string[] {
+  if (typeof value === 'string') {
+    return value.startsWith('file://')
+      ? [path.resolve(basePath, parseFileUrl(value).filePath)]
+      : [];
+  }
+  if (typeof value !== 'object' || value === null || visited.has(value)) {
+    return [];
+  }
+  visited.add(value);
+
+  return Object.keys(value).flatMap((key) => {
+    const descriptor = Object.getOwnPropertyDescriptor(value, key);
+    return descriptor && 'value' in descriptor
+      ? collectVarFilePaths(descriptor.value, basePath, visited)
+      : [];
+  });
+}
+
+function collectConfigSourcePaths(config: Partial<UnifiedConfig>, basePath: string): string[] {
+  const paths: string[] = [];
+  const addLocalPath = (reference: string): void => {
+    const fileUrl = reference.startsWith('file://') ? reference : `file://${reference}`;
+    const rawPath = parseFileUrl(fileUrl).filePath;
+    if (!/^[A-Za-z][A-Za-z\d+.-]*:\/\//.test(rawPath)) {
+      const resolvedPath = path.resolve(basePath, rawPath);
+      const matches = hasMagic(rawPath, { magicalBraces: true, windowsPathsNoEscape: true })
+        ? globSync(resolvedPath, { windowsPathsNoEscape: true })
+        : [];
+      paths.push(...(matches.length > 0 ? matches : [resolvedPath]));
+    }
+  };
+  const addVarsSources = (vars: unknown): void => {
+    if (typeof vars === 'string') {
+      addLocalPath(vars);
+    } else if (Array.isArray(vars)) {
+      vars
+        .filter((varsPath): varsPath is string => typeof varsPath === 'string')
+        .forEach(addLocalPath);
+    } else {
+      collectVarFilePaths(vars, basePath).forEach(addLocalPath);
+    }
+  };
+  const addTestSources = (tests: UnifiedConfig['tests']): void => {
+    for (const test of Array.isArray(tests) ? tests : tests ? [tests] : []) {
+      if (typeof test === 'string') {
+        addLocalPath(test);
+        continue;
+      }
+      if (typeof test !== 'object' || test === null) {
+        continue;
+      }
+      if ('path' in test && typeof test.path === 'string') {
+        addLocalPath(test.path);
+        continue;
+      }
+      const varsDescriptor = Object.getOwnPropertyDescriptor(test, 'vars');
+      if (!varsDescriptor || !('value' in varsDescriptor)) {
+        continue;
+      }
+      addVarsSources(varsDescriptor.value);
+    }
+  };
+
+  addTestSources(config.tests);
+  if (typeof config.defaultTest === 'string') {
+    addLocalPath(config.defaultTest);
+  } else if (config.defaultTest && typeof config.defaultTest === 'object') {
+    addTestSources([config.defaultTest] as UnifiedConfig['tests']);
+  }
+  const scenarios = config.scenarios as UnifiedConfig['scenarios'] | string | undefined;
+  for (const scenario of Array.isArray(scenarios) ? scenarios : scenarios ? [scenarios] : []) {
+    if (typeof scenario === 'string') {
+      addLocalPath(scenario);
+    } else {
+      addTestSources(scenario.tests as UnifiedConfig['tests']);
+    }
+  }
+  return paths;
 }
 
 /**
@@ -528,7 +625,9 @@ export async function doEval(
         testSuite,
         basePath: _basePath,
         commandLineOptions,
-      } = await resolveConfigs(cmdObj, defaultConfig));
+      } = !cmdObj.config && defaultConfigPath
+        ? await resolveConfigs(cmdObj, defaultConfig, undefined, path.dirname(defaultConfigPath))
+        : await resolveConfigs(cmdObj, defaultConfig));
     }
 
     const describeReplayAction = (isRetryErrors: boolean | undefined) =>
@@ -848,6 +947,7 @@ export async function doEval(
     const runtimeOptions: EvalRuntimeOptions = {
       ...options,
       ...(providerFilter ? { providerFilter } : {}),
+      ...(_basePath ? { configBasePath: path.resolve(_basePath) } : {}),
     };
 
     if (!resumeEval && config.metadata && 'generationAccounting' in config.metadata) {
@@ -1196,14 +1296,14 @@ export async function doEval(
             cliFallback: ret,
           });
         }
-        const basePath = path.dirname(configPaths[0]);
+        const basePath = _basePath ?? path.dirname(configPaths[0]);
         const promptPaths = Array.isArray(config.prompts)
           ? (config.prompts
               .map((p) => {
                 if (typeof p === 'string' && p.startsWith('file://')) {
-                  return path.resolve(basePath, p.slice('file://'.length));
+                  return path.resolve(basePath, parseFileUrl(p).filePath);
                 } else if (typeof p === 'object' && p.id && p.id.startsWith('file://')) {
-                  return path.resolve(basePath, p.id.slice('file://'.length));
+                  return path.resolve(basePath, parseFileUrl(p.id).filePath);
                 }
                 return null;
               })
@@ -1213,7 +1313,7 @@ export async function doEval(
           ? (config.providers
               .map((p) =>
                 typeof p === 'string' && p.startsWith('file://')
-                  ? path.resolve(basePath, p.slice('file://'.length))
+                  ? path.resolve(basePath, parseFileUrl(p).filePath)
                   : null,
               )
               .filter(Boolean) as string[])
@@ -1255,8 +1355,32 @@ export async function doEval(
             }
           }
         }
+        // The resolved `tests` value can still hold a file reference the raw config does
+        // not -- a scalar the command line supplied, or a reference nested inside a var
+        // mapping -- so scan it too.
+        varPaths.push(...collectConfigSourcePaths({ tests: config.tests }, basePath));
+        // Nested references are only visible once the test cases themselves are resolved.
+        varPaths.push(
+          ...(testSuite?.tests ?? []).flatMap((test) => collectVarFilePaths(test.vars, basePath)),
+        );
+        if (testSuite?.defaultTest && typeof testSuite.defaultTest === 'object') {
+          varPaths.push(...collectVarFilePaths(testSuite.defaultTest.vars, basePath));
+        }
+        for (const scenario of testSuite?.scenarios ?? []) {
+          varPaths.push(
+            ...scenario.config.flatMap((test) => collectVarFilePaths(test.vars, basePath)),
+            ...scenario.tests.flatMap((test) => collectVarFilePaths(test.vars, basePath)),
+          );
+        }
         const watchPaths = Array.from(
-          new Set([...configPaths, ...promptPaths, ...providerPaths, ...varPaths]),
+          new Set([
+            ...configPaths,
+            ...getConfigDependencyPaths(config),
+            ...collectConfigSourcePaths(defaultConfig, basePath),
+            ...promptPaths,
+            ...providerPaths,
+            ...varPaths,
+          ]),
         );
         const watcher = chokidar.watch(watchPaths, { ignored: /^\./, persistent: true });
         // Library callers own their own process lifetime, so only the CLI blocks here.
