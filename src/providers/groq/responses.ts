@@ -1,3 +1,4 @@
+import { getEnvString } from '../../envars';
 import { OpenAiResponsesProvider } from '../openai/responses';
 import { groqSupportsTemperature, isGroqReasoningModel } from './util';
 
@@ -25,6 +26,11 @@ export class GroqResponsesProvider extends OpenAiResponsesProvider {
     return this.config?.apiKey;
   }
 
+  override getApiKey(): string | undefined {
+    const apiKeyEnvar = this.config.apiKeyEnvar || 'GROQ_API_KEY';
+    return this.config.apiKey || getEnvString(apiKeyEnvar) || this.env?.[apiKeyEnvar];
+  }
+
   protected isReasoningModel(): boolean {
     return isGroqReasoningModel(this.modelName) || super.isReasoningModel();
   }
@@ -42,8 +48,8 @@ export class GroqResponsesProvider extends OpenAiResponsesProvider {
       ...providerOptions,
       config: {
         ...providerOptions.config,
-        apiKeyEnvar: 'GROQ_API_KEY',
-        apiBaseUrl: GROQ_API_BASE_URL,
+        apiKeyEnvar: providerOptions.config?.apiKeyEnvar || 'GROQ_API_KEY',
+        apiBaseUrl: providerOptions.config?.apiBaseUrl || GROQ_API_BASE_URL,
       },
     });
   }

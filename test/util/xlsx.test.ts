@@ -259,26 +259,25 @@ describe('parseXlsxFile', () => {
       expect(mockReadXlsxFile).toHaveBeenCalledWith('test.xlsx');
     });
 
-    it.each([
-      '2024-Q1',
-      '1H-results',
-      '2.9',
-    ])('should select sheet by name when the name starts with digits: %s', async (sheetName) => {
-      const mockRows = [
-        ['col1', 'col2'],
-        ['data', 'value'],
-      ];
+    it.each(['2024-Q1', '1H-results', '2.9'])(
+      'should select sheet by name when the name starts with digits: %s',
+      async (sheetName) => {
+        const mockRows = [
+          ['col1', 'col2'],
+          ['data', 'value'],
+        ];
 
-      mockReadXlsxFile.mockResolvedValue([
-        createMockSheet('Summary'),
-        createMockSheet(sheetName, mockRows),
-      ]);
+        mockReadXlsxFile.mockResolvedValue([
+          createMockSheet('Summary'),
+          createMockSheet(sheetName, mockRows),
+        ]);
 
-      const result = await parseXlsxFile(`test.xlsx#${sheetName}`);
+        const result = await parseXlsxFile(`test.xlsx#${sheetName}`);
 
-      expect(result).toEqual([{ col1: 'data', col2: 'value' }]);
-      expect(mockReadXlsxFile).toHaveBeenCalledWith('test.xlsx');
-    });
+        expect(result).toEqual([{ col1: 'data', col2: 'value' }]);
+        expect(mockReadXlsxFile).toHaveBeenCalledWith('test.xlsx');
+      },
+    );
 
     it('should throw not-found for a digit-prefixed name instead of out-of-range', async () => {
       mockReadXlsxFile.mockResolvedValue([createMockSheet('Sheet1'), createMockSheet('Sheet2')]);

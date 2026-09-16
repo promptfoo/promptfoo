@@ -11,4 +11,3 @@ export const FILE_METADATA_KEY = '_promptfooFileMetadata';
  * Used to distinguish human ratings from automated assertions.
  */
 export const HUMAN_ASSERTION_TYPE = 'human' as const;
-export type HumanAssertionType = typeof HUMAN_ASSERTION_TYPE;

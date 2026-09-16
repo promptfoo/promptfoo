@@ -10,6 +10,43 @@ const costAtRates = (input: number, output: number) =>
   (INPUT_TOKENS / 1e6) * input + (OUTPUT_TOKENS / 1e6) * output;
 
 describe('calculateBedrockCost', () => {
+  describe('Amazon Nova prompt caching', () => {
+    // AWS Price List (us-east-1, 2026-09-01): every Nova `-cache-read-input-token-count`
+    // meter is exactly 25% of the model's input rate, and every cache-write meter is $0.
+    // Before this, cache reads on Nova were billed at $0 — a silent undercharge.
+    it('bills Nova cache reads at 25% of the input rate', () => {
+      const cost = calculateBedrockCost('amazon.nova-lite-v1:0', 1000, 0, 10_000, 0, 'us-east-1');
+      // 1000 uncached * $0.06/M + 10000 cached * $0.015/M
+      expect(cost).toBeCloseTo((1000 * 0.06 + 10_000 * 0.015) / 1e6, 12);
+    });
+
+    it('treats Nova cache writes as free', () => {
+      const withWrites = calculateBedrockCost(
+        'amazon.nova-pro-v1:0',
+        1000,
+        0,
+        0,
+        50_000,
+        'us-east-1',
+      );
+      const withoutWrites = calculateBedrockCost(
+        'amazon.nova-pro-v1:0',
+        1000,
+        0,
+        0,
+        0,
+        'us-east-1',
+      );
+      expect(withWrites).toBeCloseTo(withoutWrites as number, 12);
+    });
+
+    it('does not apply the Nova ratio to non-Nova, non-Claude models', () => {
+      // No published cache meter: cache tokens stay out of the estimate.
+      const cost = calculateBedrockCost('meta.llama3-3-70b-instruct-v1:0', 1000, 0, 9999, 0);
+      expect(cost).toBeCloseTo((1000 * 0.72) / 1e6, 12);
+    });
+  });
+
   it.each([
     // Z.AI GLM — distinct per variant; -flash must not be priced as -4.7.
     { id: 'zai.glm-5', input: 1.0, output: 3.2 },
@@ -31,6 +68,20 @@ describe('calculateBedrockCost', () => {
     { id: 'google.gemma-3-4b-it', input: 0.04, output: 0.08 },
     { id: 'google.gemma-3-12b-it', input: 0.09, output: 0.29 },
     { id: 'google.gemma-3-27b-it', input: 0.23, output: 0.38 },
+    // Reconciled against the AWS Price List API (us-east-1 plain on-demand meters) on
+    // 2026-09-01. Each of these carried a stale rate before that sweep, so they are pinned
+    // here to catch the next drift.
+    { id: 'amazon.nova-premier-v1:0', input: 2.5, output: 12.5 },
+    { id: 'amazon.nova-2-lite-v1:0', input: 0.33, output: 2.75 },
+    { id: 'amazon.titan-text-express-v1', input: 0.2, output: 0.6 },
+    { id: 'meta.llama3-1-70b-instruct-v1:0', input: 0.72, output: 0.72 },
+    { id: 'meta.llama3-2-11b-instruct-v1:0', input: 0.16, output: 0.16 },
+    { id: 'meta.llama3-2-90b-instruct-v1:0', input: 0.72, output: 0.72 },
+    { id: 'meta.llama3-3-70b-instruct-v1:0', input: 0.72, output: 0.72 },
+    { id: 'meta.llama4-scout-17b-instruct-v1:0', input: 0.17, output: 0.66 },
+    { id: 'meta.llama4-maverick-17b-instruct-v1:0', input: 0.24, output: 0.97 },
+    { id: 'qwen.qwen3-32b-v1:0', input: 0.15, output: 0.6 },
+    { id: 'qwen.qwen3-coder-30b-a3b-v1:0', input: 0.15, output: 0.6 },
     { id: 'writer.palmyra-vision-7b', input: 0.15, output: 0.6 },
     { id: 'us.writer.palmyra-x5-v1:0', input: 0.6, output: 6 },
   ])('uses the base rate for $id', ({ id, input, output }) => {
@@ -41,6 +92,15 @@ describe('calculateBedrockCost', () => {
   });
 
   it.each([
+    // Reconciled against the AWS Price List API per region on 2026-09-01. These five had
+    // been derived from the US rate via a regional uplift rather than read from the real
+    // meters, so they drifted from AWS's published values.
+    { id: 'zai.glm-4.7', region: 'ap-southeast-2', input: 0.62, output: 2.27 },
+    { id: 'zai.glm-4.7-flash', region: 'ap-southeast-2', input: 0.07, output: 0.41 },
+    { id: 'minimax.minimax-m2.1', region: 'ap-southeast-2', input: 0.31, output: 1.24 },
+    { id: 'moonshotai.kimi-k2.5', region: 'ap-southeast-2', input: 0.62, output: 3.09 },
+    { id: 'nvidia.nemotron-nano-12b-v2', region: 'eu-west-1', input: 0.23, output: 0.7 },
+    { id: 'nvidia.nemotron-nano-12b-v2', region: 'eu-south-1', input: 0.23, output: 0.7 },
     { id: 'google.gemma-3-12b-it', region: 'eu-west-2', input: 0.14, output: 0.45 },
     { id: 'minimax.minimax-m2.1', region: 'eu-west-1', input: 0.36, output: 1.44 },
     { id: 'minimax.minimax-m2.5', region: 'eu-south-1', input: 0.36, output: 1.44 },
@@ -84,12 +144,91 @@ describe('calculateBedrockCost', () => {
     expect(calculateBedrockCost('cohere.command-r-plus-v1:0', 1e6, 1e6)).toBeCloseTo(18, 6);
   });
 
-  it('uses Claude Sonnet long-context rates above 200k effective input tokens', () => {
-    // Global endpoint isolates the long-context tier from the regional premium.
+  it('bills Claude Sonnet 4.6 at standard rates above 200k effective input tokens', () => {
+    // The full 1M context bills at the flat $3/$15 — no surcharge above 200K tokens.
     expect(calculateBedrockCost('global.anthropic.claude-sonnet-4-6', 200_001, 1_000)).toBeCloseTo(
-      (200_001 / 1e6) * 6 + (1_000 / 1e6) * 22.5,
+      (200_001 / 1e6) * 3 + (1_000 / 1e6) * 15,
       6,
     );
+  });
+
+  describe('Claude Sonnet 4 long-context tier', () => {
+    // AWS publishes `-long-context-` meters for Claude Sonnet 4 only, at 2x input / 1.5x output
+    // (verified 2026-09-01 across us-east-1, us-east-2, us-west-2, eu-west-1, ap-northeast-1).
+    const ID = 'global.anthropic.claude-sonnet-4-20250514-v1:0';
+
+    it('bills below the threshold at the standard rate', () => {
+      expect(calculateBedrockCost(ID, 199_999, 1_000)).toBeCloseTo(
+        (199_999 / 1e6) * 3 + (1_000 / 1e6) * 15,
+        6,
+      );
+    });
+
+    it('switches to $6/$22.50 at and above 200k input tokens', () => {
+      expect(calculateBedrockCost(ID, 200_000, 1_000)).toBeCloseTo(
+        (200_000 / 1e6) * 6 + (1_000 / 1e6) * 22.5,
+        6,
+      );
+    });
+
+    it('counts cache tokens toward the threshold and prices cache off the tier rate', () => {
+      // 150k uncached + 60k cache reads crosses 200k, so the whole request bills at the tier:
+      // AWS's long-context cache-read meter is 10% of the $6 tier input rate.
+      expect(calculateBedrockCost(ID, 150_000, 1_000, 60_000, 0)).toBeCloseTo(
+        (150_000 / 1e6) * 6 + (60_000 / 1e6) * 6 * 0.1 + (1_000 / 1e6) * 22.5,
+        6,
+      );
+    });
+
+    it('does not leak the tier onto the 4.5 or 4.6 point releases', () => {
+      for (const id of [
+        'global.anthropic.claude-sonnet-4-5-20250929-v1:0',
+        'global.anthropic.claude-sonnet-4-6',
+      ]) {
+        expect(calculateBedrockCost(id, 500_000, 1_000)).toBeCloseTo(
+          (500_000 / 1e6) * 3 + (1_000 / 1e6) * 15,
+          6,
+        );
+      }
+    });
+  });
+
+  it('prices Claude Opus 5 at $5/$25 on the global endpoint (base rate)', () => {
+    expect(calculateBedrockCost('global.anthropic.claude-opus-5', 100_000, 1_000)).toBeCloseTo(
+      (100_000 / 1e6) * 5 + (1_000 / 1e6) * 25,
+      6,
+    );
+  });
+
+  it('bills Claude Opus 5 at the standard rate above 200k tokens (no long-context tier)', () => {
+    expect(calculateBedrockCost('global.anthropic.claude-opus-5', 300_000, 20_000)).toBeCloseTo(
+      (300_000 / 1e6) * 5 + (20_000 / 1e6) * 25,
+      6,
+    );
+  });
+
+  it('does not price Claude Opus 5 at the Opus 4.x rate (prefix-collision guard)', () => {
+    // BEDROCK_PRICING is matched with `includes()` in insertion order, so a new
+    // `anthropic.claude-opus-5` key must not fall through to `anthropic.claude-opus-4`
+    // ($15/$75) and must not steal Opus 4.5's lookup either.
+    expect(calculateBedrockCost('global.anthropic.claude-opus-5', 1_000_000, 0)).toBeCloseTo(5, 6);
+    expect(
+      calculateBedrockCost('global.anthropic.claude-opus-4-5-20251101-v1:0', 1_000_000, 0),
+    ).toBeCloseTo(5, 6);
+    expect(
+      calculateBedrockCost('global.anthropic.claude-opus-4-1-20250805-v1:0', 1_000_000, 0),
+    ).toBeCloseTo(15, 6);
+  });
+
+  it.each([
+    'global.anthropic.claude-fable-5-1',
+    'us.anthropic.claude-fable-5-1',
+    'global.anthropic.claude-mythos-5-1',
+    'us.anthropic.claude-mythos-5-1',
+  ])('prices 5.1 cache reads for %s', (model) => {
+    const expected = 0.0363 * (model.startsWith('global.') ? 1 : 1.1);
+    expect(calculateBedrockCost(model, 1000, 500, 200, 100)).toBeCloseTo(expected, 8);
+    expect(calculateBedrockInvokeModelCost(model, 1000, 500, 200, 100)).toBeCloseTo(expected, 8);
   });
 
   it('prices Claude Sonnet 5 at $3/$15 on the global endpoint (base rate)', () => {
@@ -101,9 +240,8 @@ describe('calculateBedrockCost', () => {
   });
 
   it('bills Claude Sonnet 5 at the standard rate above 200k tokens (no long-context tier)', () => {
-    // Unlike Sonnet 4.5/4.6, Sonnet 5 bills its full 1M context at the standard rate, so a
-    // >200K request must NOT switch to the $6/$22.5 tier. Use the global endpoint to isolate
-    // this from the regional premium.
+    // Sonnet 5 bills its full 1M context at the standard rate. Use the global endpoint to
+    // isolate this from the regional premium.
     expect(calculateBedrockCost('global.anthropic.claude-sonnet-5', 300_000, 20_000)).toBeCloseTo(
       (300_000 / 1e6) * 3 + (20_000 / 1e6) * 15,
       6,
@@ -152,6 +290,28 @@ describe('calculateBedrockCost', () => {
     expect(
       calculateBedrockInvokeModelCost('zai.glm-5', INPUT_TOKENS, OUTPUT_TOKENS, 0, 0, 'us-east-1'),
     ).toBeCloseTo(costAtRates(1, 3.2), 6);
+  });
+
+  it('reports InvokeModel cost for Claude Opus 5 but not legacy Opus 4.x', () => {
+    // Opus 5 is a Claude 5 model with a verified Runtime rate, so the default `bedrock:`
+    // (InvokeModel) path reports cost instead of `cost: 0`. Opus 4.8 stays fail-closed.
+    const base = (100 / 1e6) * 5 + (200 / 1e6) * 25;
+    expect(
+      calculateBedrockInvokeModelCost(
+        'global.anthropic.claude-opus-5',
+        100,
+        200,
+        0,
+        0,
+        'us-east-2',
+      ),
+    ).toBeCloseTo(base, 10);
+    expect(
+      calculateBedrockInvokeModelCost('us.anthropic.claude-opus-5', 100, 200, 0, 0, 'us-east-2'),
+    ).toBeCloseTo(base * 1.1, 10);
+    expect(
+      calculateBedrockInvokeModelCost('anthropic.claude-opus-4-8', 100, 200, 0, 0, 'us-east-2'),
+    ).toBeUndefined();
   });
 
   it('reports InvokeModel cost for Claude Sonnet 5 (a Claude 5 model) but not legacy Sonnet 4.x', () => {
