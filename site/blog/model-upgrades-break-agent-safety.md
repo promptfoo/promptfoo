@@ -98,7 +98,7 @@ If you deploy open models, treat model-level safety as a feature you implement, 
 
 | Model Family               | Core Approach                              | Can Safety Be Removed? |
 | -------------------------- | ------------------------------------------ | ---------------------- |
-| Claude (Sonnet 4, Opus 4)  | Constitutional AI + Classifiers            | No (API-enforced)      |
+| Claude (Sonnet 5, Opus 5)  | Constitutional AI + Classifiers            | No (API-enforced)      |
 | GPT-4o / o1 / o3 / o4-mini | RLHF + RBRMs + Deliberative Alignment      | No (API-enforced)      |
 | Gemini 2.5 / Gemini 3      | Configurable filters + trained classifiers | No (API-enforced)      |
 | Llama 3 / Llama 4          | RLHF + Llama Guard (separate model)        | Yes (open weights)     |
