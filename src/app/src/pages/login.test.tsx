@@ -445,6 +445,25 @@ describe('LoginPage', () => {
     expect(mockNavigate).toHaveBeenCalledWith('/');
   });
 
+  it('should navigate to the default route when redirect has invalid percent encoding', () => {
+    useUserStoreMock.mockReturnValue({
+      email: 'test@example.com',
+      isLoading: false,
+      fetchEmail: vi.fn(),
+      setEmail: vi.fn(),
+    });
+
+    mockLocationSearch = '?redirect=%';
+
+    render(
+      <MemoryRouter>
+        <LoginPage />
+      </MemoryRouter>,
+    );
+
+    expect(mockNavigate).toHaveBeenCalledWith('/');
+  });
+
   it('should handle redirect URLs with query parameters', () => {
     useUserStoreMock.mockReturnValue({
       email: 'test@example.com',
