@@ -275,6 +275,11 @@ tests:
 
 This works at every level where a grader can be set — per-assertion (`assertion.provider`), per-test (`test.options.provider`), and globally (`defaultTest.options.provider`).
 
+If no explicit grader is configured, promptfoo also falls back to `defaultTest.provider` before the
+built-in grading provider. That keeps single-provider configs backwards compatible, but it means the
+same provider may generate and grade the output. Configure `defaultTest.options.provider`,
+`test.options.provider`, `assertion.provider`, or `--grader` when you want a separate judge.
+
 If you configure a full provider object globally, do not also add a shorthand
 `provider: openai:chat:...` to the assertion. Assertion-level providers take precedence, so the
 global provider object's `config` values such as `apiBaseUrl`, `apiKey`, `temperature`, or
