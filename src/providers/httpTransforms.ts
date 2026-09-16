@@ -2,7 +2,7 @@ import { parse, type Token, tokenizer } from 'acorn';
 import logger from '../logger';
 import { safeJsonStringify } from '../util/json';
 import { getProcessShim } from '../util/processShim';
-import { sanitizeObject } from '../util/sanitizer';
+import { sanitizeProviderObject } from './providerLogging';
 import { normalizeResponseTransformResult } from './transformResult';
 
 import type { FetchWithCacheResult } from '../cache';
@@ -153,8 +153,6 @@ export async function createTransformResponse(
   } else if (typeof parser === 'string') {
     const originalParser = parser.trim();
     const functionExpression = getFunctionExpression(originalParser);
-    const parserIsFunction = Boolean(functionExpression);
-    const trimmedParser = functionExpression || originalParser;
     return (data, text, context) => {
       try {
         // Add process parameter for ESM compatibility - allows process.mainModule.require to work
@@ -163,9 +161,9 @@ export async function createTransformResponse(
           'text',
           'context',
           'process',
-          parserIsFunction
-            ? `try { return (${trimmedParser}\n)(json, text, context); } catch(e) { throw new Error('Transform failed: ' + e.message + ' : ' + text + ' : ' + JSON.stringify(json) + ' : ' + JSON.stringify(context)); }`
-            : `try { return (${trimmedParser}); } catch(e) { throw new Error('Transform failed: ' + e.message + ' : ' + text + ' : ' + JSON.stringify(json) + ' : ' + JSON.stringify(context)); }`,
+          functionExpression
+            ? `try { return (${functionExpression}\n)(json, text, context); } catch(e) { throw new Error('Transform failed: ' + e.message + ' : ' + text + ' : ' + JSON.stringify(json) + ' : ' + JSON.stringify(context)); }`
+            : `try { return (${originalParser}); } catch(e) { throw new Error('Transform failed: ' + e.message + ' : ' + text + ' : ' + JSON.stringify(json) + ' : ' + JSON.stringify(context)); }`,
         );
         let resp: ProviderResponse | string;
         const processShim = getProcessShim();
@@ -218,15 +216,14 @@ export async function createTransformRequest(
   } else if (typeof transform === 'string') {
     const trimmedTransform = transform.trim();
     const functionExpression = getFunctionExpression(trimmedTransform, true);
-    const expressionTransform = functionExpression || trimmedTransform;
     return async (prompt, vars, context) => {
       try {
         let transformFn: Function;
         try {
           // Add process parameter for ESM compatibility - allows process.mainModule.require to work
           const functionBody = functionExpression
-            ? `try { return (${expressionTransform}\n)(prompt, vars, context); } catch(e) { throw new Error('Transform failed: ' + e.message) }`
-            : `try { return (${expressionTransform}); } catch(e) { throw new Error('Transform failed: ' + e.message); }`;
+            ? `try { return (${functionExpression}\n)(prompt, vars, context); } catch(e) { throw new Error('Transform failed: ' + e.message) }`
+            : `try { return (${trimmedTransform}); } catch(e) { throw new Error('Transform failed: ' + e.message); }`;
           transformFn = new Function('prompt', 'vars', 'context', 'process', functionBody);
         } catch (error) {
           // Preserve support for raw function bodies while letting valid expressions
@@ -258,7 +255,7 @@ export async function createTransformRequest(
         return result;
       } catch (err) {
         logger.error(
-          `[Http Provider] Error in request transform: ${String(err)}. Prompt: ${prompt}. Vars: ${safeJsonStringify(vars)}. Context: ${safeJsonStringify(sanitizeObject(context, { context: 'request transform' }))}.`,
+          `[Http Provider] Error in request transform: ${String(err)}. Prompt: ${prompt}. Vars: ${safeJsonStringify(vars)}. Context: ${safeJsonStringify(sanitizeProviderObject(context, 'request transform'))}.`,
         );
         throw new Error(`Failed to transform request: ${String(err)}`);
       }

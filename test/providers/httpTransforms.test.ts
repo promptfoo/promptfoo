@@ -267,13 +267,13 @@ describe('createTransformResponse', () => {
     expect(result.output).toBeTypeOf('function');
   });
 
-  it.each([
-    'json = value => value.data;',
-    'json = async (value) => value.data;',
-  ])('should reject semicolon-terminated assignment expression %s', async (code) => {
-    const parser = await createTransformResponse(code);
-    expect(() => parser({ data: 'value' }, '')).toThrow('Failed to transform response');
-  });
+  it.each(['json = value => value.data;', 'json = async (value) => value.data;'])(
+    'should reject semicolon-terminated assignment expression %s',
+    async (code) => {
+      const parser = await createTransformResponse(code);
+      expect(() => parser({ data: 'value' }, '')).toThrow('Failed to transform response');
+    },
+  );
 });
 
 describe('createTransformRequest', () => {
