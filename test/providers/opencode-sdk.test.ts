@@ -949,6 +949,12 @@ describe('OpenCodeSDKProvider', () => {
     });
 
     describe('session management', () => {
+      const contextForTraceparent = (traceparent: string): CallApiContextParams => ({
+        prompt: { raw: 'Test prompt', label: 'Test prompt' },
+        vars: {},
+        traceparent,
+      });
+
       it('should create new session for each call by default', async () => {
         const provider = new OpenCodeSDKProvider({
           env: { ANTHROPIC_API_KEY: 'test-api-key' },
@@ -990,6 +996,80 @@ describe('OpenCodeSDKProvider', () => {
 
         await expect(Promise.all([firstCall, secondCall])).resolves.toHaveLength(2);
         expect(mockCreateOpencode).toHaveBeenCalledTimes(1);
+      });
+
+      it('should restart the local server when the traceparent changes', async () => {
+        const inheritedTraceparents: Array<string | undefined> = [];
+        mockCreateOpencode.mockImplementation(async () => {
+          inheritedTraceparents.push(process.env.OPENCODE_TRACEPARENT);
+          return {
+            client: {
+              session: {
+                create: mockSessionCreate,
+                prompt: mockSessionPrompt,
+                messages: mockSessionMessages,
+                delete: mockSessionDelete,
+                list: mockSessionList,
+                abort: mockSessionAbort,
+              },
+            },
+            server: { url: 'http://127.0.0.1:4096', close: mockServerClose },
+          };
+        });
+        vi.stubEnv('OPENCODE_TRACEPARENT', 'original-traceparent');
+        try {
+          const provider = new OpenCodeSDKProvider({
+            config: { restart_server_per_call: true },
+            env: { ANTHROPIC_API_KEY: 'test-api-key' },
+          });
+
+          await provider.callApi('First', contextForTraceparent('00-first-01'));
+          await provider.callApi('Second', contextForTraceparent('00-second-01'));
+
+          expect(inheritedTraceparents).toEqual(['00-first-01', '00-second-01']);
+          expect(mockCreateOpencode).toHaveBeenCalledTimes(2);
+          expect(mockServerClose).toHaveBeenCalledTimes(1);
+          expect(process.env.OPENCODE_TRACEPARENT).toBe('original-traceparent');
+        } finally {
+          vi.unstubAllEnvs();
+        }
+      });
+
+      it('should reuse the local server when the traceparent is unchanged', async () => {
+        const provider = new OpenCodeSDKProvider({
+          config: { restart_server_per_call: true },
+          env: { ANTHROPIC_API_KEY: 'test-api-key' },
+        });
+
+        await provider.callApi('First', contextForTraceparent('00-shared-01'));
+        await provider.callApi('Second', contextForTraceparent('00-shared-01'));
+
+        expect(mockCreateOpencode).toHaveBeenCalledTimes(1);
+        expect(mockServerClose).not.toHaveBeenCalled();
+      });
+
+      it('should serialize calls while swapping traceparent servers', async () => {
+        const firstPrompt = createDeferred<ReturnType<typeof createMockPromptResponse>>();
+        mockSessionPrompt
+          .mockImplementationOnce(() => firstPrompt.promise)
+          .mockResolvedValueOnce(createMockPromptResponse([{ type: 'text', text: 'Second' }]));
+        const provider = new OpenCodeSDKProvider({
+          config: { restart_server_per_call: true },
+          env: { ANTHROPIC_API_KEY: 'test-api-key' },
+        });
+
+        const firstCall = provider.callApi('First', contextForTraceparent('00-first-01'));
+        await vi.waitFor(() => expect(mockSessionPrompt).toHaveBeenCalledTimes(1));
+        const secondCall = provider.callApi('Second', contextForTraceparent('00-second-01'));
+        await new Promise<void>((resolve) => queueMicrotask(resolve));
+        expect(mockCreateOpencode).toHaveBeenCalledTimes(1);
+
+        firstPrompt.resolve(createMockPromptResponse([{ type: 'text', text: 'First' }]));
+        await firstCall;
+        await secondCall;
+
+        expect(mockCreateOpencode).toHaveBeenCalledTimes(2);
+        expect(mockSessionPrompt).toHaveBeenCalledTimes(2);
       });
 
       it('should resume session when session_id provided', async () => {
@@ -1814,6 +1894,64 @@ describe('OpenCodeSDKProvider', () => {
         ).rejects.toThrow(/baseUrl is provider-level configuration/);
         expect(mockCreateOpencodeClient).not.toHaveBeenCalled();
         expect(mockSessionPrompt).not.toHaveBeenCalled();
+      });
+
+      it('should reject per-prompt restart_server_per_call overrides', async () => {
+        const provider = new OpenCodeSDKProvider();
+
+        await expect(
+          provider.callApi('Test prompt', {
+            prompt: {
+              raw: 'Test prompt',
+              label: 'test',
+              config: { restart_server_per_call: true },
+            },
+            vars: {},
+          }),
+        ).rejects.toThrow(/restart_server_per_call is provider-level configuration/);
+        expect(mockCreateOpencode).not.toHaveBeenCalled();
+      });
+
+      it('should reject restart_server_per_call for remote servers before cache lookup', async () => {
+        const provider = new OpenCodeSDKProvider({
+          config: {
+            baseUrl: 'https://opencode.example.test',
+            restart_server_per_call: true,
+          },
+        });
+
+        await expect(provider.callApi('Test prompt')).rejects.toThrow(
+          /requires a locally managed server/,
+        );
+        expect(mockCreateOpencodeClient).not.toHaveBeenCalled();
+      });
+
+      it('should reject persistent sessions with restart_server_per_call', async () => {
+        const provider = new OpenCodeSDKProvider({
+          config: {
+            persist_sessions: true,
+            restart_server_per_call: true,
+          },
+        });
+
+        await expect(provider.callApi('Test prompt')).rejects.toThrow(
+          /cannot preserve persistent sessions/,
+        );
+        expect(mockCreateOpencode).not.toHaveBeenCalled();
+      });
+
+      it('should reject a fixed port with restart_server_per_call', async () => {
+        const provider = new OpenCodeSDKProvider({
+          config: {
+            port: 4096,
+            restart_server_per_call: true,
+          },
+        });
+
+        await expect(provider.callApi('Test prompt')).rejects.toThrow(
+          /requires an automatically allocated port/,
+        );
+        expect(mockCreateOpencode).not.toHaveBeenCalled();
       });
     });
 
