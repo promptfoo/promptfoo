@@ -734,6 +734,8 @@ describeEvaluator('evaluator execution control', () => {
         cost: 0.05,
         latencyMs: 321,
         sessionId: 'provider-response-session',
+        // A cached response reports its whole total as cached, so the accumulated
+        // `cached` count below is 100 rather than this reported 7.
         tokenUsage: { total: 100, prompt: 80, completion: 20, cached: 7, numRequests: 1 },
         metadata: {
           numTurns: 5,
@@ -774,7 +776,7 @@ describeEvaluator('evaluator execution control', () => {
           total: 100,
           prompt: 80,
           completion: 20,
-          cached: 7,
+          cached: 100,
           numRequests: 1,
         }),
       }),
@@ -793,7 +795,7 @@ describeEvaluator('evaluator execution control', () => {
           total: 100,
           prompt: 80,
           completion: 20,
-          cached: 7,
+          cached: 100,
           numRequests: 1,
         }),
         metadata: expect.objectContaining({
@@ -813,7 +815,7 @@ describeEvaluator('evaluator execution control', () => {
             total: 100,
             prompt: 80,
             completion: 20,
-            cached: 7,
+            cached: 100,
             numRequests: 1,
           }),
           metadata: expect.objectContaining({
@@ -839,7 +841,7 @@ describeEvaluator('evaluator execution control', () => {
               total: 100,
               prompt: 80,
               completion: 20,
-              cached: 7,
+              cached: 100,
               numRequests: 1,
             }),
           }),

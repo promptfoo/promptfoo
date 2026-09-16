@@ -28,17 +28,17 @@ export default function Defcon2025(): React.ReactElement {
   return (
     <Layout
       title="Promptfoo Party at DEF CON 33"
-      description="Join the Promptfoo crew for a party at DEF CON 33. Network with AI security researchers, hackers, and the open source community. Free drinks, great vibes, and security war stories."
+      description="The Promptfoo party at DEF CON 33, where AI security researchers, hackers, and the open source community traded war stories over drinks."
     >
       <Head>
         <meta property="og:title" content="Promptfoo Party at DEF CON 33 | AI Security Community" />
         <meta
           property="og:description"
-          content="The AI security party you don't want to miss at DEF CON 33. Join hackers, researchers, and the Promptfoo team for drinks and demos. August 9, 2025 in Las Vegas."
+          content="The AI security party of DEF CON 33. Hackers, researchers, and the Promptfoo team, drinks and demos. August 9, 2025 in Las Vegas."
         />
         <meta property="og:image" content="https://www.promptfoo.dev/img/events/defcon-2025.jpg" />
-        <meta property="og:image:width" content="1200" />
-        <meta property="og:image:height" content="630" />
+        <meta property="og:image:width" content="1536" />
+        <meta property="og:image:height" content="1024" />
         <meta property="og:url" content="https://www.promptfoo.dev/events/defcon-2025" />
         <meta property="og:type" content="website" />
         <meta property="og:site_name" content="Promptfoo" />
@@ -47,7 +47,7 @@ export default function Defcon2025(): React.ReactElement {
         <meta name="twitter:title" content="Promptfoo Party at DEF CON 33" />
         <meta
           name="twitter:description"
-          content="The AI security party at DEF CON 33. Free drinks, live demos. August 9, Las Vegas."
+          content="The AI security party of DEF CON 33. Drinks were on us. August 9, Las Vegas."
         />
         <meta name="twitter:image" content="https://www.promptfoo.dev/img/events/defcon-2025.jpg" />
         <meta name="twitter:site" content="@promptfoo" />
@@ -74,19 +74,13 @@ export default function Defcon2025(): React.ReactElement {
                 <span className={styles.highlight}>PARTY</span>
               </h1>
               <p className={styles.heroSubtitle}>
-                Join hackers, security researchers, and the open source community for the AI
-                security event of DEF CON at the galaxy's most iconic cantina. RSVP required.
-                Capacity is limited.
+                Hackers, security researchers, and the open source community filled the galaxy's
+                most iconic cantina for the AI security event of DEF CON 33. This one is over.
               </p>
               <div className={styles.heroButtons}>
-                <a
-                  href="https://lu.ma/ljm23pj6?tk=qGE9ez&utm_source=pf-web"
-                  className={styles.primaryButton}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                >
-                  <span className={styles.buttonGlitch}>RSVP NOW</span>
-                </a>
+                <Link to="/events" className={styles.primaryButton}>
+                  <span className={styles.buttonGlitch}>UPCOMING EVENTS</span>
+                </Link>
                 <a
                   href="#party-details"
                   className={styles.secondaryButton}
@@ -165,7 +159,7 @@ export default function Defcon2025(): React.ReactElement {
                     />
                   </svg>
                   <span style={{ fontWeight: 'bold', color: '#00ff00' }}>
-                    Free drinks (while supplies last)
+                    Drinks were on us (until they weren't)
                   </span>
                 </div>
               </div>
@@ -187,7 +181,7 @@ export default function Defcon2025(): React.ReactElement {
                   <div className={styles.partyCardInner}>
                     <div className={styles.partyEmoji}>🍺</div>
                     <h3>Open Bar</h3>
-                    <p>Free drinks on us! Beer, cocktails, and non-alcoholic options.</p>
+                    <p>Drinks were on us. Beer, cocktails, and non-alcoholic options.</p>
                     <div className={styles.partyTag}>[FREE_DRINKS]</div>
                   </div>
                 </div>
@@ -196,8 +190,8 @@ export default function Defcon2025(): React.ReactElement {
                     <div className={styles.partyEmoji}>⚔️</div>
                     <h3>Mos Eisley Vibes</h3>
                     <p>
-                      Party in a wretched hive of scum and villainy. Expect lightsabers and
-                      jailbroken LLMs.
+                      A party in a wretched hive of scum and villainy. There were lightsabers, and
+                      there were jailbroken LLMs.
                     </p>
                     <div className={styles.partyTag}>[CANTINA_MODE]</div>
                   </div>
@@ -206,7 +200,7 @@ export default function Defcon2025(): React.ReactElement {
                   <div className={styles.partyCardInner}>
                     <div className={styles.partyEmoji}>🤖</div>
                     <h3>Rebel Alliance Meetup</h3>
-                    <p>Join the resistance against vulnerable AI systems.</p>
+                    <p>The resistance against vulnerable AI systems, in one room.</p>
                     <div className={styles.partyTag}>[HACK_THE_EMPIRE]</div>
                   </div>
                 </div>
@@ -243,7 +237,7 @@ export default function Defcon2025(): React.ReactElement {
               </div>
               <div className={styles.stat}>
                 <div className={styles.statNumber}>∞</div>
-                <div className={styles.statLabel}>Drinks Available</div>
+                <div className={styles.statLabel}>Drinks Poured</div>
               </div>
               <div className={styles.stat}>
                 <div className={styles.statNumber}>32M+</div>
@@ -261,20 +255,15 @@ export default function Defcon2025(): React.ReactElement {
         <section className={styles.finalCta}>
           <div className={styles.container}>
             <h2>
-              <span className={styles.blink}>_</span> Don't Miss Out
+              <span className={styles.blink}>_</span> That Was DEF CON 33
             </h2>
             <p>
-              Space is limited. RSVP now to secure your spot at the AI security party of DEF CON.
+              The bar closed. The work didn't. Catch us at the next event, or start with the docs.
             </p>
             <div className={styles.ctaButtons}>
-              <a
-                href="https://lu.ma/ljm23pj6?tk=qGE9ez&utm_source=pf-web"
-                className={styles.primaryButton}
-                target="_blank"
-                rel="noopener noreferrer"
-              >
-                <span className={styles.buttonGlitch}>CLAIM YOUR SPOT</span>
-              </a>
+              <Link to="/events" className={styles.primaryButton}>
+                <span className={styles.buttonGlitch}>SEE UPCOMING EVENTS</span>
+              </Link>
               <Link to="/docs/intro" className={styles.secondaryButton}>
                 Learn About Promptfoo
               </Link>
