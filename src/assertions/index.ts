@@ -25,7 +25,7 @@ import {
   getProviderCallTracingContext,
 } from '../scheduler/providerCallExecutionContext';
 import { generateSpanId, generateTraceparent } from '../tracing/evaluatorTracing';
-import { getTraceStore } from '../tracing/store';
+import { getTraceStore, type TraceSpanQueryOptions } from '../tracing/store';
 import {
   type ApiProvider,
   type Assertion,
@@ -79,7 +79,10 @@ import { handleIsValidOpenAiToolsCall } from './openai';
 import { handlePerplexity, handlePerplexityScore } from './perplexity';
 import { handlePiScorer } from './pi';
 import { handlePython } from './python';
-import { handleRedteam } from './redteam';
+import { getRedteamTraceQueryOptions, handleRedteam, shouldIncludeRedteamTrace } from './redteam';
+
+export { getRedteamTraceQueryOptions, shouldIncludeRedteamTrace } from './redteam';
+
 import { handleIsRefusal } from './refusal';
 import { handleRegex } from './regex';
 import { handleRougeScore } from './rouge';
@@ -158,16 +161,22 @@ export function assertionUsesTrace(assertion: AssertionOrSet): boolean {
   return TRACE_AWARE_ASSERTION_TYPES.has(getAssertionBaseType(assertion));
 }
 
-function assertionMayNeedTraceContext(assertion: AssertionOrSet): boolean {
+function assertionMayNeedTraceContext(
+  assertion: AssertionOrSet,
+  includeRedteamTrace = false,
+): boolean {
   if (assertionUsesTrace(assertion)) {
     return true;
   }
 
   if (assertion.type === 'assert-set') {
-    return assertion.assert.some(assertionMayNeedTraceContext);
+    return assertion.assert.some((item) => assertionMayNeedTraceContext(item, includeRedteamTrace));
   }
 
-  if (assertion.type.startsWith('promptfoo:redteam:coding-agent:')) {
+  if (
+    assertion.type.startsWith('promptfoo:redteam:coding-agent:') ||
+    (includeRedteamTrace && assertion.type.startsWith('promptfoo:redteam:'))
+  ) {
     return true;
   }
 
@@ -176,11 +185,19 @@ function assertionMayNeedTraceContext(assertion: AssertionOrSet): boolean {
     : false;
 }
 
-export function hasTraceAwareAssertions(assertions?: AssertionOrSet[]): boolean {
-  return Boolean(assertions?.some(assertionMayNeedTraceContext));
+export function hasTraceAwareAssertions(
+  assertions?: AssertionOrSet[],
+  includeRedteamTrace = false,
+): boolean {
+  return Boolean(
+    assertions?.some((assertion) => assertionMayNeedTraceContext(assertion, includeRedteamTrace)),
+  );
 }
 
-async function loadTraceData(traceId: string): Promise<TraceData | null> {
+async function loadTraceData(
+  traceId: string,
+  options?: TraceSpanQueryOptions,
+): Promise<TraceData | null> {
   const traceStore = getTraceStore();
   const maxAttempts = Math.min(
     MAX_TRACE_FETCH_MAX_ATTEMPTS,
@@ -203,7 +220,10 @@ async function loadTraceData(traceId: string): Promise<TraceData | null> {
   let latestTrace: TraceData | null = null;
 
   for (let attempt = 0; attempt < maxAttempts; attempt++) {
-    latestTrace = await traceStore.getTrace(traceId, { sanitizeAttributes: false });
+    latestTrace = await traceStore.getTrace(traceId, {
+      sanitizeAttributes: false,
+      ...options,
+    });
 
     const spanCount = latestTrace?.spans?.length ?? 0;
     if (spanCount > 0) {
@@ -416,6 +436,8 @@ async function runAssertionInternal({
   providerResponse,
   traceId,
   traceData,
+  includeRedteamTrace,
+  traceOptions,
 }: {
   prompt?: string;
   provider?: ApiProvider;
@@ -427,6 +449,8 @@ async function runAssertionInternal({
   assertIndex?: number;
   traceId?: string;
   traceData?: TraceData | null;
+  includeRedteamTrace?: boolean;
+  traceOptions?: TraceSpanQueryOptions;
 }): Promise<GradingResult> {
   // Use resolved vars if provided, otherwise fall back to test.vars
   const resolvedVars = vars || test.vars || {};
@@ -456,9 +480,23 @@ async function runAssertionInternal({
   };
 
   // Add trace data if traceId is available
-  if (traceId && assertionMayNeedTraceContext(assertion)) {
+  const effectiveIncludeRedteamTrace = includeRedteamTrace ?? shouldIncludeRedteamTrace(test);
+  const needsRedteamTrace =
+    effectiveIncludeRedteamTrace &&
+    getAssertionBaseType(assertion).startsWith('promptfoo:redteam:');
+  if (
+    traceId &&
+    (traceData !== undefined ||
+      assertionMayNeedTraceContext(assertion, effectiveIncludeRedteamTrace))
+  ) {
     try {
-      const resolvedTraceData = traceData === undefined ? await loadTraceData(traceId) : traceData;
+      const resolvedTraceData =
+        traceData === undefined
+          ? await loadTraceData(
+              traceId,
+              traceOptions ?? (needsRedteamTrace ? getRedteamTraceQueryOptions(test) : undefined),
+            )
+          : traceData;
       if (resolvedTraceData) {
         context.trace = {
           traceId: resolvedTraceData.traceId,
@@ -641,6 +679,7 @@ async function runAssertionInternal({
     prompt,
     provider,
     providerResponse,
+    includeRedteamTrace,
     renderedValue,
     test: finalTest,
     valueFromScript,
@@ -758,6 +797,8 @@ export async function runAssertions({
   test,
   vars,
   traceId,
+  includeRedteamTrace,
+  traceOptions,
 }: {
   assertScoringFunction?: ScoringFunction;
   latencyMs?: number;
@@ -767,6 +808,8 @@ export async function runAssertions({
   test: AtomicTestCase;
   vars?: Record<string, VarValue>;
   traceId?: string;
+  includeRedteamTrace?: boolean;
+  traceOptions?: TraceSpanQueryOptions;
 }): Promise<GradingResult> {
   if (!test.assert || test.assert.length < 1) {
     return AssertionsResult.noAssertsResult();
@@ -806,15 +849,33 @@ export async function runAssertions({
     })
     .flat();
 
-  const shouldPreloadTrace =
-    !!traceId && hasTraceAwareAssertions(asserts.map(({ assertion }) => assertion));
+  const effectiveIncludeRedteamTrace = includeRedteamTrace ?? shouldIncludeRedteamTrace(test);
+  const effectiveTraceOptions =
+    traceOptions ?? (effectiveIncludeRedteamTrace ? getRedteamTraceQueryOptions(test) : undefined);
+  const needsRedteamTrace =
+    effectiveIncludeRedteamTrace &&
+    asserts.some(({ assertion }) =>
+      getAssertionBaseType(assertion).startsWith('promptfoo:redteam:'),
+    );
+  const needsOrdinaryTrace = asserts.some(({ assertion }) =>
+    assertionMayNeedTraceContext(assertion, false),
+  );
   let preloadedTraceData: TraceData | null | undefined;
-  if (shouldPreloadTrace && traceId) {
+  let preloadedRedteamTraceData: TraceData | null | undefined;
+  if (traceId && needsOrdinaryTrace) {
     try {
       preloadedTraceData = await loadTraceData(traceId);
     } catch (error) {
       logger.debug(`Failed to preload trace data for assertions: ${error}`);
       preloadedTraceData = null;
+    }
+  }
+  if (traceId && needsRedteamTrace) {
+    try {
+      preloadedRedteamTraceData = await loadTraceData(traceId, effectiveTraceOptions);
+    } catch (error) {
+      logger.debug(`Failed to preload red-team trace data for assertions: ${error}`);
+      preloadedRedteamTraceData = null;
     }
   }
 
@@ -840,7 +901,11 @@ export async function runAssertions({
       latencyMs,
       assertIndex: index,
       traceId,
-      traceData: preloadedTraceData,
+      traceData: getAssertionBaseType(assertion).startsWith('promptfoo:redteam:')
+        ? preloadedRedteamTraceData
+        : preloadedTraceData,
+      includeRedteamTrace: effectiveIncludeRedteamTrace,
+      traceOptions: effectiveTraceOptions,
     });
 
     assertResult.addResult({

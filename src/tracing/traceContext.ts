@@ -425,6 +425,7 @@ async function fetchFromExternalProvider(
     await waitForRetry(queryDelay, abortSignal);
   }
 
+  let previousSpanIds: string | undefined;
   for (let attempt = 0; attempt <= maxRetries; attempt++) {
     if (abortSignal?.aborted) {
       throw createTraceAbortError(abortSignal);
@@ -457,7 +458,21 @@ async function fetchFromExternalProvider(
 
       const spans = await getTraceStore().getSpans(traceId, spanOptions);
       if (spans.length === 0) {
-        return null;
+        if (attempt === maxRetries) {
+          return null;
+        }
+        await waitForRetry(retryDelayMs, abortSignal);
+        continue;
+      }
+
+      const spanIds = spans
+        .map((span) => span.spanId)
+        .sort()
+        .join(',');
+      if (attempt < maxRetries && spanIds !== previousSpanIds) {
+        previousSpanIds = spanIds;
+        await waitForRetry(retryDelayMs, abortSignal);
+        continue;
       }
 
       const traceSpans = createTraceSpans(spans);

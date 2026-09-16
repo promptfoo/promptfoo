@@ -11,6 +11,7 @@ export const COMMAND_ATTRIBUTE_KEYS = [
   'command',
   'command.name',
   'command_name',
+  'process.command_line',
 ] as const;
 
 export const SEARCH_ATTRIBUTE_KEYS = [
@@ -18,6 +19,8 @@ export const SEARCH_ATTRIBUTE_KEYS = [
   'search.query',
   'search_query',
 ] as const;
+
+export const ACTION_ATTRIBUTE_KEYS = ['url.full', 'http.url', 'file.path'] as const;
 
 const TOOL_ATTRIBUTE_FAMILIES: readonly ToolAttributeFamily[] = [
   {
