@@ -872,6 +872,58 @@ describe('OpenAiAgentsApiProvider', () => {
           expect(JSON.parse(request.body as string).agent.instructions).toBe(credential);
         });
 
+        describe.each([
+          'https://gateway.example/v1?api-key=offline-url-credential',
+          'https://offline-user:offline-url-credential@gateway.example/v1',
+          'https://gateway.example/v1?api-key=offline%2Durl%2Dcredential',
+        ])('discarded rendered URL header %s', (gatewayUrl) => {
+          it.each(['creation', 'turn'])(
+            'redacts credential components from %s and cleanup errors',
+            async (phase) => {
+              const credential = 'offline-url-credential';
+              mockApi((pathname, method) => {
+                if (method === 'DELETE') {
+                  return apiError(400, `Cleanup failed: ${credential}`);
+                }
+                if (phase === 'creation' && method === 'POST') {
+                  return apiError(400, `Invalid instructions: ${credential}`);
+                }
+                if (pathname.endsWith('/turns')) {
+                  return json(
+                    page([
+                      {
+                        ...turn,
+                        status: 'failed',
+                        error: { message: `Invalid instructions: ${credential}` },
+                      },
+                    ]),
+                  );
+                }
+                return undefined;
+              });
+              const result = await provider({
+                apiBaseUrl: 'https://gateway.example/v1',
+                headers: { 'X-Gateway-Url': '{{ gatewayUrl }}' },
+                agent: { model: 'gpt-6-astra', instructions: '{{ credential }}' },
+              }).callApi('hi', {
+                ...promptContext(endpointConfig),
+                vars: { gatewayUrl, credential },
+              });
+
+              expect(result.error).toContain('Invalid instructions: [REDACTED]');
+              expect(result.error).not.toContain(credential);
+              if (phase === 'turn') {
+                expect(result.metadata?.cleanupError).toContain('Cleanup failed: [REDACTED]');
+                expect(result.metadata?.cleanupError).not.toContain(credential);
+              }
+              for (const [url, request] of vi.mocked(fetchWithRetries).mock.calls) {
+                expect(new URL(String(url)).hostname).toBe('prompt.example');
+                expect(new Headers(request!.headers).get('X-Gateway-Url')).toBeNull();
+              }
+            },
+          );
+        });
+
         it('still validates templates in retained non-credential headers', async () => {
           const result = await provider({
             apiBaseUrl: 'https://gateway.example/v1',

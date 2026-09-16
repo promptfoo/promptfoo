@@ -780,6 +780,7 @@ export class OpenAiAgentsApiProvider extends OpenAiGenericProvider {
             if (isCredentialHeader(name, value)) {
               removedInheritedHeaders ||= value.trim().length > 0;
               addCredential(removedHeaderCredentials, value);
+              collectConfigCredentials(value, removedHeaderCredentials);
             } else {
               safeHeaders[name] = value;
             }
