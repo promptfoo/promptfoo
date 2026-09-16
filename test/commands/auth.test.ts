@@ -85,25 +85,22 @@ describe('auth command', () => {
       await loginCmd?.parseAsync(['node', 'test', '--api-key', 'test-key']);
 
       expect(setUserEmail).toHaveBeenCalledWith('test@example.com');
-      expect(cloudConfig.validateApiToken).toHaveBeenCalledWith('test-key', undefined);
+      expect(cloudConfig.validateApiToken).toHaveBeenCalledWith('test-key', undefined, undefined);
       expect(cloudConfig.saveValidatedApiToken).toHaveBeenCalledWith(
         'test-key',
         undefined,
         mockCloudUser,
         mockApp,
         false,
+        undefined,
       );
       expect(logger.info).toHaveBeenCalledWith(expect.stringContaining('Successfully logged in'));
     });
 
     it('should prompt for browser opening when no API key is provided in interactive environment', async () => {
       // Mock interactive environment
-      vi.mocked(isNonInteractive).mockImplementation(function () {
-        return false;
-      });
-      vi.mocked(cloudConfig.getAppUrl).mockImplementation(function () {
-        return 'https://www.promptfoo.app';
-      });
+      vi.mocked(isNonInteractive).mockReturnValue(false);
+      vi.mocked(cloudConfig.getAppUrl).mockReturnValue('https://www.promptfoo.app');
 
       const loginCmd = program.commands
         .find((cmd) => cmd.name() === 'auth')
@@ -119,12 +116,8 @@ describe('auth command', () => {
 
     it('should exit with error when no API key is provided in non-interactive environment', async () => {
       // Mock non-interactive environment (CI, cron, SSH without TTY, etc.)
-      vi.mocked(isNonInteractive).mockImplementation(function () {
-        return true;
-      });
-      vi.mocked(cloudConfig.getAppUrl).mockImplementation(function () {
-        return 'https://www.promptfoo.app';
-      });
+      vi.mocked(isNonInteractive).mockReturnValue(true);
+      vi.mocked(cloudConfig.getAppUrl).mockReturnValue('https://www.promptfoo.app');
 
       const loginCmd = program.commands
         .find((cmd) => cmd.name() === 'auth')
@@ -155,9 +148,7 @@ describe('auth command', () => {
 
     it('should use custom host for browser opening when provided in interactive environment', async () => {
       // Mock interactive environment
-      vi.mocked(isNonInteractive).mockImplementation(function () {
-        return false;
-      });
+      vi.mocked(isNonInteractive).mockReturnValue(false);
       const customHost = 'https://custom.promptfoo.com';
 
       const loginCmd = program.commands
@@ -179,13 +170,94 @@ describe('auth command', () => {
         ?.commands.find((cmd) => cmd.name() === 'login');
       await loginCmd?.parseAsync(['node', 'test', '--api-key', 'test-key', '--host', customHost]);
 
-      expect(cloudConfig.validateApiToken).toHaveBeenCalledWith('test-key', customHost);
+      expect(cloudConfig.validateApiToken).toHaveBeenCalledWith('test-key', customHost, undefined);
       expect(cloudConfig.saveValidatedApiToken).toHaveBeenCalledWith(
         'test-key',
         customHost,
         mockCloudUser,
         mockApp,
         false,
+        undefined,
+      );
+    });
+
+    it('should validate and persist an explicit --auth-header-name', async () => {
+      const loginCmd = program.commands
+        .find((cmd) => cmd.name() === 'auth')
+        ?.commands.find((cmd) => cmd.name() === 'login');
+      await loginCmd?.parseAsync([
+        'node',
+        'test',
+        '--api-key',
+        'test-key',
+        '--auth-header-name',
+        'X-Promptfoo-Api-Key',
+      ]);
+
+      expect(cloudConfig.validateApiToken).toHaveBeenCalledWith(
+        'test-key',
+        undefined,
+        'X-Promptfoo-Api-Key',
+      );
+      expect(cloudConfig.saveValidatedApiToken).toHaveBeenCalledWith(
+        'test-key',
+        undefined,
+        mockCloudUser,
+        mockApp,
+        false,
+        'X-Promptfoo-Api-Key',
+      );
+    });
+
+    it('should fall back to the currently configured auth header name when --auth-header-name is omitted', async () => {
+      vi.mocked(cloudConfig.getAuthHeaderName).mockReturnValue('X-Existing-Header');
+
+      const loginCmd = program.commands
+        .find((cmd) => cmd.name() === 'auth')
+        ?.commands.find((cmd) => cmd.name() === 'login');
+      await loginCmd?.parseAsync(['node', 'test', '--api-key', 'test-key']);
+
+      expect(cloudConfig.validateApiToken).toHaveBeenCalledWith(
+        'test-key',
+        undefined,
+        'X-Existing-Header',
+      );
+      // The resolved header name (the one actually used to validate) is what
+      // gets persisted, not the raw (unset) CLI flag value.
+      expect(cloudConfig.saveValidatedApiToken).toHaveBeenCalledWith(
+        'test-key',
+        undefined,
+        mockCloudUser,
+        mockApp,
+        false,
+        'X-Existing-Header',
+      );
+    });
+
+    it('should persist the auth header name resolved from PROMPTFOO_CLOUD_AUTH_HEADER when --auth-header-name is omitted', async () => {
+      // cloudConfig is fully mocked in this file, so getAuthHeaderName() doesn't run the
+      // real resolveAuthHeaderName() env-var fallback — mock it to return what that
+      // fallback would resolve to, reproducing an env-var-only (no --auth-header-name flag)
+      // login so the resolved value (not undefined) is what gets saved.
+      vi.mocked(cloudConfig.getAuthHeaderName).mockReturnValue('X-Env-Header');
+
+      const loginCmd = program.commands
+        .find((cmd) => cmd.name() === 'auth')
+        ?.commands.find((cmd) => cmd.name() === 'login');
+      await loginCmd?.parseAsync(['node', 'test', '--api-key', 'test-key']);
+
+      expect(cloudConfig.validateApiToken).toHaveBeenCalledWith(
+        'test-key',
+        undefined,
+        'X-Env-Header',
+      );
+      expect(cloudConfig.saveValidatedApiToken).toHaveBeenCalledWith(
+        'test-key',
+        undefined,
+        mockCloudUser,
+        mockApp,
+        false,
+        'X-Env-Header',
       );
     });
 
@@ -205,9 +277,7 @@ describe('auth command', () => {
 
     it('should overwrite existing email in config after successful login', async () => {
       const newCloudUser = { ...mockCloudUser, email: 'new@example.com' };
-      vi.mocked(getUserEmail).mockImplementation(function () {
-        return 'old@example.com';
-      });
+      vi.mocked(getUserEmail).mockReturnValue('old@example.com');
       vi.mocked(cloudConfig.validateApiToken).mockResolvedValueOnce({
         user: newCloudUser,
         organization: mockOrganization,
@@ -227,9 +297,9 @@ describe('auth command', () => {
     });
 
     it('should handle non-Error objects in the catch block', async () => {
-      // Mock validateApiToken to throw a non-Error object
       vi.mocked(cloudConfig.validateApiToken).mockImplementationOnce(function () {
-        throw 'String error message'; // This will test line 57 in auth.ts
+        // Intentionally throw a non-Error value to exercise defensive error-message handling.
+        throw 'String error message';
       });
 
       const loginCmd = program.commands
@@ -347,7 +417,7 @@ describe('auth command', () => {
         'security',
       ]);
 
-      expect(getUserTeams).toHaveBeenCalledWith(customHost, 'test-key');
+      expect(getUserTeams).toHaveBeenCalledWith(customHost, 'test-key', undefined);
       expect(cloudConfig.setCurrentOrganization).toHaveBeenCalledWith('org-2');
       expect(cloudConfig.cacheTeams).toHaveBeenCalledWith([mockTeams[1]], 'org-2');
       expect(cloudConfig.setCurrentTeamId).toHaveBeenCalledWith('team-2', 'org-2');
@@ -655,12 +725,8 @@ describe('auth command', () => {
 
   describe('logout', () => {
     it('should unset email and delete cloud config after logout', async () => {
-      vi.mocked(getUserEmail).mockImplementation(function () {
-        return 'test@example.com';
-      });
-      vi.mocked(cloudConfig.getApiKey).mockImplementation(function () {
-        return 'api-key';
-      });
+      vi.mocked(getUserEmail).mockReturnValue('test@example.com');
+      vi.mocked(cloudConfig.getApiKey).mockReturnValue('api-key');
 
       const logoutCmd = program.commands
         .find((cmd) => cmd.name() === 'auth')
@@ -673,12 +739,8 @@ describe('auth command', () => {
     });
 
     it('should show "already logged out" message when no session exists', async () => {
-      vi.mocked(getUserEmail).mockImplementation(function () {
-        return null;
-      });
-      vi.mocked(cloudConfig.getApiKey).mockImplementation(function () {
-        return undefined;
-      });
+      vi.mocked(getUserEmail).mockReturnValue(null);
+      vi.mocked(cloudConfig.getApiKey).mockReturnValue(undefined);
 
       const logoutCmd = program.commands
         .find((cmd) => cmd.name() === 'auth')
@@ -695,18 +757,10 @@ describe('auth command', () => {
 
   describe('whoami', () => {
     it('should show user info when logged in', async () => {
-      vi.mocked(getUserEmail).mockImplementation(function () {
-        return 'test@example.com';
-      });
-      vi.mocked(cloudConfig.getApiKey).mockImplementation(function () {
-        return 'test-api-key';
-      });
-      vi.mocked(cloudConfig.getApiHost).mockImplementation(function () {
-        return 'https://api.example.com';
-      });
-      vi.mocked(cloudConfig.getAppUrl).mockImplementation(function () {
-        return 'https://app.example.com';
-      });
+      vi.mocked(getUserEmail).mockReturnValue('test@example.com');
+      vi.mocked(cloudConfig.getApiKey).mockReturnValue('test-api-key');
+      vi.mocked(cloudConfig.getApiHost).mockReturnValue('https://api.example.com');
+      vi.mocked(cloudConfig.getAppUrl).mockReturnValue('https://app.example.com');
 
       vi.mocked(getDefaultTeam).mockResolvedValueOnce({
         id: 'team-1',
@@ -737,12 +791,8 @@ describe('auth command', () => {
       // Reset logger mock before test
       vi.mocked(logger.info).mockClear();
 
-      vi.mocked(getUserEmail).mockImplementation(function () {
-        return null;
-      });
-      vi.mocked(cloudConfig.getApiKey).mockImplementation(function () {
-        return undefined;
-      });
+      vi.mocked(getUserEmail).mockReturnValue(null);
+      vi.mocked(cloudConfig.getApiKey).mockReturnValue(undefined);
 
       const whoamiCmd = program.commands
         .find((cmd) => cmd.name() === 'auth')
@@ -761,15 +811,9 @@ describe('auth command', () => {
     });
 
     it('should handle API error', async () => {
-      vi.mocked(getUserEmail).mockImplementation(function () {
-        return 'test@example.com';
-      });
-      vi.mocked(cloudConfig.getApiKey).mockImplementation(function () {
-        return 'test-api-key';
-      });
-      vi.mocked(cloudConfig.getApiHost).mockImplementation(function () {
-        return 'https://api.example.com';
-      });
+      vi.mocked(getUserEmail).mockReturnValue('test@example.com');
+      vi.mocked(cloudConfig.getApiKey).mockReturnValue('test-api-key');
+      vi.mocked(cloudConfig.getApiHost).mockReturnValue('https://api.example.com');
 
       vi.mocked(fetchWithProxy).mockResolvedValueOnce(
         createMockResponse({
@@ -794,17 +838,11 @@ describe('auth command', () => {
     });
 
     it('should handle failed API response with empty body', async () => {
-      vi.mocked(getUserEmail).mockImplementation(function () {
-        return 'test@example.com';
-      });
-      vi.mocked(cloudConfig.getApiKey).mockImplementation(function () {
-        return 'test-api-key';
-      });
-      vi.mocked(cloudConfig.getApiHost).mockImplementation(function () {
-        return 'https://api.example.com';
-      });
+      vi.mocked(getUserEmail).mockReturnValue('test@example.com');
+      vi.mocked(cloudConfig.getApiKey).mockReturnValue('test-api-key');
+      vi.mocked(cloudConfig.getApiHost).mockReturnValue('https://api.example.com');
 
-      // Mock response with an empty body to test line 120 in auth.ts
+      // Mock response with an empty body to exercise error-body fallback handling.
       vi.mocked(fetchWithProxy).mockResolvedValueOnce(
         createMockResponse({
           ok: false,
@@ -830,19 +868,13 @@ describe('auth command', () => {
     });
 
     it('should handle non-Error object in the catch block', async () => {
-      vi.mocked(getUserEmail).mockImplementation(function () {
-        return 'test@example.com';
-      });
-      vi.mocked(cloudConfig.getApiKey).mockImplementation(function () {
-        return 'test-api-key';
-      });
-      vi.mocked(cloudConfig.getApiHost).mockImplementation(function () {
-        return 'https://api.example.com';
-      });
+      vi.mocked(getUserEmail).mockReturnValue('test@example.com');
+      vi.mocked(cloudConfig.getApiKey).mockReturnValue('test-api-key');
+      vi.mocked(cloudConfig.getApiHost).mockReturnValue('https://api.example.com');
 
-      // Mock fetchWithProxy to throw a non-Error object to test line 120 in auth.ts
+      // Intentionally throw a non-Error value to exercise defensive error-message handling.
       vi.mocked(fetchWithProxy).mockImplementationOnce(function () {
-        throw 'String error from fetch'; // This is not an Error instance
+        throw 'String error from fetch';
       });
 
       const whoamiCmd = program.commands
