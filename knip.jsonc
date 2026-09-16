@@ -55,7 +55,10 @@
       "ignoreDependencies": [
         // Build-tool/CSS deps invisible to import analysis (Tailwind v4 pipeline).
         "lightningcss",
-        "tailwindcss"
+        "tailwindcss",
+        // Pulled in by `@import 'tw-animate-css'` in src/app/src/index.css; knip
+        // does not follow CSS @import, so it reads as unused.
+        "tw-animate-css"
       ],
       "paths": {
         "@app/*": ["./src/*"],
