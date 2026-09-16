@@ -217,6 +217,7 @@ describe('AIStudioChatProvider', () => {
       const provider = new AIStudioChatProvider('gemini-pro', {
         config: {
           apiKey: 'test-key',
+          maxRetries: 0,
         },
       });
 
@@ -247,6 +248,7 @@ describe('AIStudioChatProvider', () => {
       const provider = new AIStudioChatProvider('gemini-pro', {
         config: {
           apiKey: 'test-key',
+          maxRetries: 0,
         },
       });
 
@@ -549,6 +551,7 @@ describe('AIStudioChatProvider', () => {
       const provider = new AIStudioChatProvider('gemini-pro', {
         config: {
           apiKey: 'test-key',
+          maxRetries: 0,
         },
       });
 
@@ -782,6 +785,7 @@ describe('AIStudioChatProvider', () => {
         expect.any(Number),
         'json',
         false,
+        0,
       );
     });
 
@@ -818,6 +822,7 @@ describe('AIStudioChatProvider', () => {
         expect.any(Number),
         'json',
         true,
+        0,
       );
     });
   });
@@ -1051,6 +1056,7 @@ describe('AIStudioChatProvider', () => {
         expect.any(Number),
         'json',
         false,
+        0,
       );
     });
 
@@ -1117,6 +1123,7 @@ describe('AIStudioChatProvider', () => {
         expect.any(Number),
         'json',
         false,
+        0,
       );
     });
 
@@ -1152,6 +1159,7 @@ describe('AIStudioChatProvider', () => {
           expect.any(Number),
           'json',
           false,
+          0,
         );
       },
     );
@@ -1223,6 +1231,7 @@ describe('AIStudioChatProvider', () => {
         expect.any(Number),
         'json',
         false,
+        0,
       );
     });
 
@@ -1317,6 +1326,7 @@ describe('AIStudioChatProvider', () => {
         expect.any(Number),
         'json',
         false,
+        0,
       );
     });
 
@@ -1353,6 +1363,7 @@ describe('AIStudioChatProvider', () => {
         expect.any(Number),
         'json',
         false,
+        0,
       );
     });
 
@@ -1398,6 +1409,7 @@ describe('AIStudioChatProvider', () => {
         expect.any(Number),
         'json',
         false,
+        0,
       );
     });
 
@@ -1729,6 +1741,7 @@ describe('AIStudioChatProvider', () => {
         expect.any(Number),
         'json',
         false,
+        0,
       );
 
       expect(cache.fetchWithCache).toHaveBeenNthCalledWith(
@@ -1738,6 +1751,7 @@ describe('AIStudioChatProvider', () => {
         expect.any(Number),
         'json',
         false,
+        0,
       );
     });
 
@@ -1775,6 +1789,7 @@ describe('AIStudioChatProvider', () => {
         expect.any(Number),
         'json',
         false,
+        0,
       );
       // Ensure it's not using the auto-detected version
       expect(cache.fetchWithCache).not.toHaveBeenCalledWith(
@@ -1895,9 +1910,10 @@ describe('AIStudioChatProvider', () => {
           headers: { 'Content-Type': 'application/json', 'x-goog-api-key': 'rendered-test-key' },
           method: 'POST',
         },
-        300000,
+        expect.any(Number),
         'json',
         false,
+        0,
       );
     });
 
@@ -2008,9 +2024,10 @@ describe('AIStudioChatProvider', () => {
           headers: { 'Content-Type': 'application/json', 'x-goog-api-key': 'rendered-test-key' },
           method: 'POST',
         },
-        300000,
+        expect.any(Number),
         'json',
         false,
+        0,
       );
     });
 
@@ -2457,9 +2474,10 @@ describe('AIStudioChatProvider', () => {
           headers: { 'Content-Type': 'application/json', 'x-goog-api-key': 'test-key' },
           method: 'POST',
         },
-        300000,
+        expect.any(Number),
         'json',
         false,
+        0,
       );
     });
 
@@ -2563,9 +2581,10 @@ describe('AIStudioChatProvider', () => {
           headers: { 'Content-Type': 'application/json', 'x-goog-api-key': 'test-key' },
           method: 'POST',
         },
-        300000,
+        expect.any(Number),
         'json',
         false,
+        0,
       );
     });
 
@@ -2645,9 +2664,10 @@ describe('AIStudioChatProvider', () => {
           headers: { 'Content-Type': 'application/json', 'x-goog-api-key': 'test-key' },
           method: 'POST',
         },
-        300000,
+        expect.any(Number),
         'json',
         false,
+        0,
       );
     });
 
@@ -2699,6 +2719,7 @@ describe('AIStudioChatProvider', () => {
         expect.any(Number),
         'json',
         false,
+        0,
       );
     });
 
@@ -2753,6 +2774,7 @@ describe('AIStudioChatProvider', () => {
         expect.any(Number),
         'json',
         false,
+        0,
       );
 
       // Verify maybeLoadFromExternalFile was called with the file path

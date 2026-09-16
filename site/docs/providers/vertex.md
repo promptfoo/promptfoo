@@ -66,6 +66,16 @@ controls, which promptfoo removes automatically. Configure reasoning with
 Check the [Vertex AI release notes](https://docs.cloud.google.com/vertex-ai/generative-ai/docs/release-notes) for current Gemini 2.5 retirement dates. Test a supported replacement for each affected target and any explicitly configured grading provider.
 :::
 
+#### Gemini retries
+
+Vertex Gemini text calls retry transient HTTP and connection failures with bounded exponential
+backoff, honor server `Retry-After` guidance, and fail fast on hard quota or safety-blocked
+responses. Configure the number of retries after the initial request with `config.maxRetries`
+(default `3`, or `0` to disable) and the initial delay in milliseconds with
+`config.baseRetryDelay`. All attempts share one request timeout and cancellation signal. See
+the [Google provider retry configuration](/docs/providers/google#configuration-options) for an
+example and the non-idempotency and billing caveat.
+
 ### Claude Models
 
 Anthropic's Claude models are available with the following versions:

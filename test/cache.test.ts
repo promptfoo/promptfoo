@@ -745,6 +745,34 @@ describe('fetchWithCache', () => {
       ).rejects.toThrow('timeout');
     });
 
+    it('should preserve the transport retry loop timeout semantics', async () => {
+      vi.useFakeTimers();
+      mockFetchWithRetries.mockImplementationOnce(
+        (_requestUrl, requestOptions) =>
+          new Promise((resolve, reject) => {
+            const signal = requestOptions?.signal;
+            const timer = setTimeout(
+              () => resolve(mockFetchWithRetriesResponse(true, response)),
+              150,
+            );
+            signal?.addEventListener(
+              'abort',
+              () => {
+                clearTimeout(timer);
+                reject(signal?.reason);
+              },
+              { once: true },
+            );
+          }),
+      );
+
+      const pending = fetchWithCache(url, {}, 100);
+      const result = expect(pending).resolves.toMatchObject({ data: response });
+      await vi.advanceTimersByTimeAsync(150);
+
+      await result;
+    });
+
     it('should handle network errors', async () => {
       mockFetchWithRetries.mockRejectedValueOnce(new Error('Network error'));
       await expect(fetchWithCache(url, {}, 100)).rejects.toThrow('Network error');
