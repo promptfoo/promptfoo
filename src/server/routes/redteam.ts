@@ -8,7 +8,6 @@ import {
   MULTI_INPUT_EXCLUDED_PLUGINS,
   type MultiTurnStrategy,
   DEFAULT_PLUGINS as REDTEAM_DEFAULT_PLUGINS,
-  REDTEAM_MODEL,
 } from '../../redteam/constants';
 import { PluginFactory, Plugins } from '../../redteam/plugins/index';
 import {
@@ -27,7 +26,7 @@ import {
   Strategies,
 } from '../../redteam/strategies/index';
 import { type Strategy as StrategyFactory } from '../../redteam/strategies/types';
-import { TestCaseWithPlugin } from '../../types';
+import { type RedteamFileConfig, TestCaseWithPlugin } from '../../types';
 import { RedteamSchemas } from '../../types/api/redteam';
 import { fetchWithProxy } from '../../util/fetch/index';
 import { sanitizeObject } from '../../util/sanitizer';
@@ -163,6 +162,7 @@ redteamRouter.post('/generate-test', async (req: Request, res: Response): Promis
       plugin,
       strategy,
       config,
+      provider,
       turn,
       maxTurns,
       history,
@@ -225,11 +225,15 @@ redteamRouter.post('/generate-test', async (req: Request, res: Response): Promis
     // be passed in as a configuration option.
     const injectVar = 'query';
 
-    // Get the red team provider
-    const redteamProvider = await redteamProviderManager.getProvider({ provider: REDTEAM_MODEL });
+    // Keep preview generation request-scoped. A form-selected provider wins, followed by
+    // any org/team cache, then the built-in default; previous CLI runs must not leak here.
+    const providerSelection = await redteamProviderManager.getProviderSelection({
+      provider: provider as RedteamFileConfig['provider'],
+      ignoreCliState: true,
+    });
 
     const testCases = await pluginFactory.action({
-      provider: redteamProvider,
+      provider: providerSelection.provider,
       purpose: config.applicationDefinition.purpose ?? 'general AI assistant',
       injectVar,
       n: effectiveCount, // Generate requested number of test cases
@@ -267,8 +271,14 @@ redteamRouter.post('/generate-test', async (req: Request, res: Response): Promis
         const strategyTestCases = await strategyFactory.action(
           applicableTestCases,
           injectVar,
-          strategy.config || {},
+          {
+            ...(strategy.config || {}),
+          },
           strategy.id,
+          {
+            // Provider options stay request-local because they can contain credentials.
+            generationProviderSelection: providerSelection,
+          },
         );
 
         if (!strategyTestCases || strategyTestCases.length === 0) {

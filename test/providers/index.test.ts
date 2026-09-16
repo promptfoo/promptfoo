@@ -733,11 +733,10 @@ describe('loadApiProvider', () => {
     expect(provider.config.apiBaseUrl).toBe('https://proxy.example.com/openrouter/api/v1');
   });
 
-  it('loadApiProvider with github', async () => {
-    const provider = await loadApiProvider('github:gpt-4o-mini');
-    expect(provider).toBeInstanceOf(OpenAiChatCompletionProvider);
-    // Intentionally openai, because it's just a wrapper around openai
-    expect(provider.id()).toBe('gpt-4o-mini');
+  it('rejects retired GitHub Models before inference', async () => {
+    await expect(loadApiProvider('github:gpt-4o-mini')).rejects.toThrow(
+      'GitHub Models was retired',
+    );
   });
 
   it('loadApiProvider with perplexity', async () => {
@@ -764,23 +763,17 @@ describe('loadApiProvider', () => {
     expect(provider.id()).toBe('meta/meta-llama/Meta-Llama-3-8B-Instruct');
   });
 
-  it('loadApiProvider with abliteration', async () => {
-    const provider = await loadApiProvider('abliteration:abliterated-model');
-    expect(provider).toBeInstanceOf(AbliterationProvider);
-    expect(provider.id()).toBe('abliteration:abliterated-model');
-    expect(provider.config.apiBaseUrl).toBe('https://api.abliteration.ai/v1');
-    expect(provider.config.apiKeyEnvar).toBe('ABLIT_KEY');
-    expect(provider.config.showThinking).toBe(false);
-  });
-
-  it('loadApiProvider with abliteration chat format', async () => {
-    const provider = await loadApiProvider('abliteration:chat:abliterated-model');
-    expect(provider).toBeInstanceOf(AbliterationProvider);
-    expect(provider.id()).toBe('abliteration:abliterated-model');
-    expect(provider.config.apiBaseUrl).toBe('https://api.abliteration.ai/v1');
-    expect(provider.config.apiKeyEnvar).toBe('ABLIT_KEY');
-    expect(provider.config.showThinking).toBe(false);
-  });
+  it.each(['abliteration', 'abliteration:chat'])(
+    'loadApiProvider with %s and a custom model',
+    async (prefix) => {
+      const provider = await loadApiProvider(`${prefix}:custom-model`);
+      expect(provider).toBeInstanceOf(AbliterationProvider);
+      expect(provider.id()).toBe('abliteration:custom-model');
+      expect(provider.config.apiBaseUrl).toBe('https://api.abliteration.ai/v1');
+      expect(provider.config.apiKeyEnvar).toBe('ABLIT_KEY');
+      expect(provider.config.showThinking).toBe(false);
+    },
+  );
 
   it('loadApiProvider rejects malformed abliteration routes', async () => {
     await expect(loadApiProvider('abliteration:chat')).rejects.toThrow(
@@ -879,9 +872,9 @@ describe('loadApiProvider', () => {
   });
 
   it('loadApiProvider with vertex:video:modelname', async () => {
-    const provider = await loadApiProvider('vertex:video:veo-3.1-generate-preview');
+    const provider = await loadApiProvider('vertex:video:veo-3.1-generate-001');
     expect(provider).toBeInstanceOf(GoogleVideoProvider);
-    expect(provider.id()).toBe('vertex:video:veo-3.1-generate-preview');
+    expect(provider.id()).toBe('vertex:video:veo-3.1-generate-001');
   });
 
   it('loadApiProvider with replicate:modelname', async () => {
@@ -1406,6 +1399,34 @@ describe('loadApiProvider', () => {
     });
 
     expect(provider.config.apiKey).toBe('secret');
+  });
+
+  it('resolves env templates inside per-server MCP env maps', async () => {
+    const provider = await loadApiProvider('echo', {
+      options: {
+        env: {
+          MY_MCP_TOKEN: 'resolved-secret',
+        } as any,
+        config: {
+          mcp: {
+            enabled: true,
+            servers: [
+              {
+                name: 'local',
+                command: 'node',
+                args: ['server.js'],
+                env: { SERVER_TOKEN: '{{ env.MY_MCP_TOKEN }}', LOG_LEVEL: 'debug' },
+              },
+            ],
+          },
+        },
+      },
+    });
+
+    expect(provider.config.mcp.servers[0].env).toEqual({
+      SERVER_TOKEN: 'resolved-secret',
+      LOG_LEVEL: 'debug',
+    });
   });
 
   it('passes provider env overrides to provider instances', async () => {
@@ -2563,24 +2584,24 @@ inputs:
       localInputs: { context: 'Local context', question: 'Local question' },
       cloudInputs: {} as Record<string, string>,
     },
-  ])('matches runtime and preflight precedence for $label', async ({
-    localInputs,
-    cloudInputs,
-  }) => {
-    const providerId = 'promptfoo://provider/00000000-0000-0000-0000-000000000009';
-    vi.mocked(getProviderFromCloud)
-      .mockResolvedValueOnce({ id: 'echo', inputs: cloudInputs })
-      .mockResolvedValueOnce({ id: 'echo', inputs: cloudInputs });
+  ])(
+    'matches runtime and preflight precedence for $label',
+    async ({ localInputs, cloudInputs }) => {
+      const providerId = 'promptfoo://provider/00000000-0000-0000-0000-000000000009';
+      vi.mocked(getProviderFromCloud)
+        .mockResolvedValueOnce({ id: 'echo', inputs: cloudInputs })
+        .mockResolvedValueOnce({ id: 'echo', inputs: cloudInputs });
 
-    const configuredProvider = { id: providerId, config: { inputs: localInputs } };
-    const provider = await loadApiProvider(providerId, {
-      options: configuredProvider,
-    });
-    const preflightInputs = await resolveProviderInputsForValidation([configuredProvider]);
+      const configuredProvider = { id: providerId, config: { inputs: localInputs } };
+      const provider = await loadApiProvider(providerId, {
+        options: configuredProvider,
+      });
+      const preflightInputs = await resolveProviderInputsForValidation([configuredProvider]);
 
-    expect(provider.inputs).toEqual(localInputs);
-    expect(preflightInputs).toEqual([localInputs]);
-  });
+      expect(provider.inputs).toEqual(localInputs);
+      expect(preflightInputs).toEqual([localInputs]);
+    },
+  );
 
   it('renders legacy local inputs before merging a cloud provider', async () => {
     const providerId = 'promptfoo://provider/00000000-0000-0000-0000-000000000009';

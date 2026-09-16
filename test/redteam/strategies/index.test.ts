@@ -217,15 +217,18 @@ describe('getStrategyCompatibilityError', () => {
       ],
       undefined,
     ],
-  ])('matches config-schema last-wins deduplication for duplicate %s', (_label, strategies, expected) => {
-    expect(
-      getStrategyCompatibilityError(
-        strategies,
-        { context: 'Reference context', question: 'User question' },
-        { plugins: ['harmful:hate'] },
-      ),
-    ).toBe(expected);
-  });
+  ])(
+    'matches config-schema last-wins deduplication for duplicate %s',
+    (_label, strategies, expected) => {
+      expect(
+        getStrategyCompatibilityError(
+          strategies,
+          { context: 'Reference context', question: 'User question' },
+          { plugins: ['harmful:hate'] },
+        ),
+      ).toBe(expected);
+    },
+  );
 
   it.each([
     {
@@ -328,26 +331,25 @@ describe('getStrategyCompatibilityError', () => {
     expect(getStrategyCompatibilityError(strategies, inputs, { plugins })).toBe(expected);
   });
 
-  it.each([
-    'ecommerce',
-    'telecom',
-    'realestate',
-  ])('matches runtime expansion for the %s collection', (collection) => {
-    const config = {
-      plugins: [collection],
-      strategies: ['posterior'],
-    };
-    const parsed = RedteamConfigSchema.parse(config);
+  it.each(['ecommerce', 'telecom', 'realestate'])(
+    'matches runtime expansion for the %s collection',
+    (collection) => {
+      const config = {
+        plugins: [collection],
+        strategies: ['posterior'],
+      };
+      const parsed = RedteamConfigSchema.parse(config);
 
-    expect(
-      getStrategyCompatibilityError(config.strategies, inputs, { plugins: config.plugins }),
-    ).toBe('Posterior strategy does not support multi-input targets');
-    expect(
-      getStrategyCompatibilityError(parsed.strategies ?? [], inputs, {
-        plugins: parsed.plugins,
-      }),
-    ).toBe('Posterior strategy does not support multi-input targets');
-  });
+      expect(
+        getStrategyCompatibilityError(config.strategies, inputs, { plugins: config.plugins }),
+      ).toBe('Posterior strategy does not support multi-input targets');
+      expect(
+        getStrategyCompatibilityError(parsed.strategies ?? [], inputs, {
+          plugins: parsed.plugins,
+        }),
+      ).toBe('Posterior strategy does not support multi-input targets');
+    },
+  );
 
   it('accounts for plugin-level multi-input configuration', () => {
     expect(

@@ -1,11 +1,13 @@
 import logger from '../../logger';
+import { remoteGenerationContextPayload } from '../remoteGenerationContext';
 import { getAttackProviderFullId, isAttackProvider } from '../shared/attackProviders';
 import { assertPosteriorTargetSupported, hasPosteriorStrategy } from './posterior';
+import { withPersistableGenerationProvider } from './types';
 import { pluginMatchesStrategyTargets } from './util';
 
 import type { TestCase, TestCaseWithPlugin } from '../../types/index';
 import type { LayerConfig } from '../shared/runtimeTransform';
-import type { Strategy } from './types';
+import type { Strategy, StrategyRuntimeContext } from './types';
 
 const MAX_EXPANDED_PER_TURN_LAYER_STEPS = 1000;
 export const LAYER_COMPLEXITY_ERROR = `Layer strategy per-turn configuration is too complex; reduce nested or repeated layer steps (maximum ${MAX_EXPANDED_PER_TURN_LAYER_STEPS} expanded steps)`;
@@ -97,6 +99,7 @@ export async function addLayerTestCases(
   config: Record<string, unknown>,
   strategies: Strategy[],
   loadStrategy: (strategyPath: string) => Promise<Strategy>,
+  runtimeContext?: StrategyRuntimeContext,
 ): Promise<TestCase[]> {
   // Compose strategies in-order. Config example:
   // { steps: [ 'base64', { id: 'rot13' } ] }
@@ -131,6 +134,13 @@ export async function addLayerTestCases(
 
       // Get the full provider ID
       const providerId = getAttackProviderFullId(stepObj.id);
+      const shouldPersistGenerationProvider = [
+        'promptfoo:redteam:crescendo',
+        'promptfoo:redteam:custom',
+        'promptfoo:redteam:iterative',
+        'promptfoo:redteam:iterative:meta',
+        'promptfoo:redteam:iterative:tree',
+      ].includes(providerId);
       const metricSuffix = getMetricSuffix(stepObj.id);
       const label = typeof config?.label === 'string' ? config.label : undefined;
       const scanId = crypto.randomUUID();
@@ -167,7 +177,12 @@ export async function addLayerTestCases(
             config: {
               injectVar,
               scanId,
-              ...stepObj.config,
+              ...(shouldPersistGenerationProvider
+                ? withPersistableGenerationProvider(stepObj.config || {}, runtimeContext)
+                : stepObj.config),
+              ...remoteGenerationContextPayload(
+                typeof config?.targetId === 'string' ? config.targetId : undefined,
+              ),
               // Pass per-turn layers for runtime application
               ...(perTurnLayers.length > 0 && { _perTurnLayers: perTurnLayers }),
             },
@@ -188,6 +203,7 @@ export async function addLayerTestCases(
     // ═══════════════════════════════════════════════════════════════════════
     // REGULAR STRATEGY: Apply transform to test cases (existing behavior)
     // ═══════════════════════════════════════════════════════════════════════
+    // Determine applicable test cases for this step using the same targeting rules
     const stepTargets =
       (stepObj.config as Record<string, unknown>)?.plugins ?? (config?.plugins as unknown);
     const applicable = current.filter((testCase) =>
@@ -219,11 +235,13 @@ export async function addLayerTestCases(
       continue;
     }
 
-    // Determine applicable test cases for this step using the same targeting rules
-    const next = await stepAction(applicable, injectVar, {
+    const stepConfig = {
       ...(stepObj.config || {}),
       ...(config || {}),
-    });
+    };
+    const next = runtimeContext
+      ? await stepAction(applicable, injectVar, stepConfig, undefined, runtimeContext)
+      : await stepAction(applicable, injectVar, stepConfig);
 
     // Feed output to next step. If a step yields nothing, subsequent steps operate on empty set.
     current = next as TestCaseWithPlugin[];
@@ -240,6 +258,7 @@ function getMetricSuffix(stepId: string): string {
   const suffixMap: Record<string, string> = {
     // Multi-turn conversational strategies
     hydra: 'Hydra',
+    goblin: 'Goblin',
     crescendo: 'Crescendo',
     goat: 'GOAT',
     custom: 'Custom',

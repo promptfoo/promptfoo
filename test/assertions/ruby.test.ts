@@ -94,41 +94,44 @@ describe('Ruby assertions', () => {
       0.25,
       'Assertion passed',
     ],
-  ])('should honor inverse mode for inline not-ruby assertions with %s results', async (_type, assertionValue, rubyOutput, threshold, expectedPass, expectedScore, expectedReason) => {
-    vi.mocked(runRubyCode).mockResolvedValueOnce(rubyOutput);
+  ])(
+    'should honor inverse mode for inline not-ruby assertions with %s results',
+    async (_type, assertionValue, rubyOutput, threshold, expectedPass, expectedScore, expectedReason) => {
+      vi.mocked(runRubyCode).mockResolvedValueOnce(rubyOutput);
 
-    const assertion: Assertion = {
-      type: 'not-ruby',
-      value: assertionValue,
-      threshold,
-    };
-    const provider = new OpenAiChatCompletionProvider('gpt-4o-mini');
+      const assertion: Assertion = {
+        type: 'not-ruby',
+        value: assertionValue,
+        threshold,
+      };
+      const provider = new OpenAiChatCompletionProvider('gpt-4o-mini');
 
-    const result: GradingResult = await runAssertion({
-      prompt: 'Some prompt',
-      provider,
-      assertion,
-      test: {} as AtomicTestCase,
-      providerResponse: { output: 'Expected output' },
-    });
-
-    expect(runRubyCode).toHaveBeenCalledWith(expect.any(String), 'main', [
-      'Expected output',
-      {
+      const result: GradingResult = await runAssertion({
         prompt: 'Some prompt',
-        test: {},
-        vars: {},
         provider,
+        assertion,
+        test: {} as AtomicTestCase,
         providerResponse: { output: 'Expected output' },
-      },
-    ]);
-    expect(result).toMatchObject({
-      assertion,
-      pass: expectedPass,
-      reason: expect.stringContaining(expectedReason),
-      score: expectedScore,
-    });
-  });
+      });
+
+      expect(runRubyCode).toHaveBeenCalledWith(expect.any(String), 'main', [
+        'Expected output',
+        {
+          prompt: 'Some prompt',
+          test: {},
+          vars: {},
+          provider,
+          providerResponse: { output: 'Expected output' },
+        },
+      ]);
+      expect(result).toMatchObject({
+        assertion,
+        pass: expectedPass,
+        reason: expect.stringContaining(expectedReason),
+        score: expectedScore,
+      });
+    },
+  );
 
   it.each([
     ['boolean', true, undefined, false, 0, 'Ruby code returned true'],
@@ -145,43 +148,46 @@ describe('Ruby assertions', () => {
       0.75,
       'Ruby code returned true',
     ],
-  ])('should honor inverse mode when a file:// not-ruby assertion returns a %s', async (_type, rubyOutput, threshold, expectedPass, expectedScore, expectedReason) => {
-    vi.mocked(path.resolve).mockReturnValue('/path/to/assert.rb');
-    vi.mocked(path.extname).mockReturnValue('.rb');
-    vi.mocked(runRuby).mockResolvedValueOnce(rubyOutput);
+  ])(
+    'should honor inverse mode when a file:// not-ruby assertion returns a %s',
+    async (_type, rubyOutput, threshold, expectedPass, expectedScore, expectedReason) => {
+      vi.mocked(path.resolve).mockReturnValue('/path/to/assert.rb');
+      vi.mocked(path.extname).mockReturnValue('.rb');
+      vi.mocked(runRuby).mockResolvedValueOnce(rubyOutput);
 
-    const assertion: Assertion = {
-      type: 'not-ruby',
-      value: 'file:///path/to/assert.rb',
-      threshold,
-    };
-    const provider = new OpenAiChatCompletionProvider('gpt-4o-mini');
+      const assertion: Assertion = {
+        type: 'not-ruby',
+        value: 'file:///path/to/assert.rb',
+        threshold,
+      };
+      const provider = new OpenAiChatCompletionProvider('gpt-4o-mini');
 
-    const result: GradingResult = await runAssertion({
-      prompt: 'Some prompt',
-      provider,
-      assertion,
-      test: {} as AtomicTestCase,
-      providerResponse: { output: 'Expected output' },
-    });
-
-    expect(runRuby).toHaveBeenCalledWith('/path/to/assert.rb', 'get_assert', [
-      'Expected output',
-      {
+      const result: GradingResult = await runAssertion({
         prompt: 'Some prompt',
-        test: {},
-        vars: {},
         provider,
+        assertion,
+        test: {} as AtomicTestCase,
         providerResponse: { output: 'Expected output' },
-      },
-    ]);
-    expect(result).toMatchObject({
-      assertion,
-      pass: expectedPass,
-      reason: expect.stringContaining(expectedReason),
-      score: expectedScore,
-    });
-  });
+      });
+
+      expect(runRuby).toHaveBeenCalledWith('/path/to/assert.rb', 'get_assert', [
+        'Expected output',
+        {
+          prompt: 'Some prompt',
+          test: {},
+          vars: {},
+          provider,
+          providerResponse: { output: 'Expected output' },
+        },
+      ]);
+      expect(result).toMatchObject({
+        assertion,
+        pass: expectedPass,
+        reason: expect.stringContaining(expectedReason),
+        score: expectedScore,
+      });
+    },
+  );
 
   it('should pass provider metadata shortcut to a ruby assert', async () => {
     vi.mocked(path.resolve).mockReturnValue('/path/to/assert.rb');

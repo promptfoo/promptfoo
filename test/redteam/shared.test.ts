@@ -212,6 +212,42 @@ describe('doRedteamRun', () => {
     );
   });
 
+  it('attributes generation usage only when this run generated the test suite', async () => {
+    const tokenUsage = { total: 42, prompt: 30, completion: 12, numRequests: 3 };
+    vi.mocked(doGenerateRedteam).mockImplementation(async (options) => ({
+      metadata: {
+        generation: { id: options.generationRunId, tokenUsage },
+      },
+    }));
+
+    await doRedteamRun({});
+
+    expect(doEval).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.anything(),
+      expect.anything(),
+      expect.objectContaining({
+        generationEventId: expect.any(String),
+        generationTokenUsage: tokenUsage,
+      }),
+    );
+  });
+
+  it('does not charge an evaluation for a reused generated test suite', async () => {
+    vi.mocked(doGenerateRedteam).mockResolvedValue({
+      metadata: {
+        generation: {
+          id: 'previous-generation',
+          tokenUsage: { total: 42, numRequests: 3 },
+        },
+      },
+    });
+
+    await doRedteamRun({});
+
+    expect(vi.mocked(doEval).mock.calls[0][3]).not.toHaveProperty('generationTokenUsage');
+  });
+
   describe('liveRedteamConfig temporary file handling', () => {
     const mockConfig = {
       prompts: ['Test prompt'],
@@ -355,64 +391,67 @@ describe('doRedteamRun', () => {
       );
     });
 
-    it.each([
-      'filterProviders',
-      'filterTargets',
-    ] as const)('should apply liveRedteamConfig.commandLineOptions.%s to generation and evaluation', async (filterOption) => {
-      const mockConfigWithFilter = {
-        ...mockConfig,
-        commandLineOptions: { [filterOption]: 'selected-provider' },
-      };
+    it.each(['filterProviders', 'filterTargets'] as const)(
+      'should apply liveRedteamConfig.commandLineOptions.%s to generation and evaluation',
+      async (filterOption) => {
+        const mockConfigWithFilter = {
+          ...mockConfig,
+          commandLineOptions: { [filterOption]: 'selected-provider' },
+        };
 
-      await doRedteamRun({
-        liveRedteamConfig: mockConfigWithFilter,
-        loadedFromCloud: true,
-      });
+        await doRedteamRun({
+          liveRedteamConfig: mockConfigWithFilter,
+          loadedFromCloud: true,
+        });
 
-      expect(doGenerateRedteam).toHaveBeenCalledWith(
-        expect.objectContaining({ filterProviders: 'selected-provider' }),
-      );
-      expect(doEval).toHaveBeenCalledWith(
-        expect.objectContaining({ filterProviders: 'selected-provider' }),
-        expect.anything(),
-        expect.anything(),
-        expect.anything(),
-      );
-      expect(vi.mocked(doGenerateRedteam).mock.calls.at(-1)?.[0]).not.toHaveProperty(
-        'filterTargets',
-      );
-      expect(vi.mocked(doEval).mock.calls.at(-1)?.[0]).not.toHaveProperty('filterTargets');
-    });
+        expect(doGenerateRedteam).toHaveBeenCalledWith(
+          expect.objectContaining({ filterProviders: 'selected-provider' }),
+        );
+        expect(doEval).toHaveBeenCalledWith(
+          expect.objectContaining({ filterProviders: 'selected-provider' }),
+          expect.anything(),
+          expect.anything(),
+          expect.anything(),
+        );
+        expect(vi.mocked(doGenerateRedteam).mock.calls.at(-1)?.[0]).not.toHaveProperty(
+          'filterTargets',
+        );
+        expect(vi.mocked(doEval).mock.calls.at(-1)?.[0]).not.toHaveProperty('filterTargets');
+      },
+    );
 
     it.each([
       ['filterProviders', 'filterProviders'],
       ['filterTargets', 'filterTargets'],
       ['filterProviders', 'filterTargets'],
       ['filterTargets', 'filterProviders'],
-    ] as const)('should prefer explicit %s over saved %s', async (explicitFilterOption, savedFilterOption) => {
-      await doRedteamRun({
-        liveRedteamConfig: {
-          ...mockConfig,
-          commandLineOptions: { [savedFilterOption]: 'saved-provider' },
-        },
-        loadedFromCloud: true,
-        [explicitFilterOption]: 'explicit-provider',
-      });
+    ] as const)(
+      'should prefer explicit %s over saved %s',
+      async (explicitFilterOption, savedFilterOption) => {
+        await doRedteamRun({
+          liveRedteamConfig: {
+            ...mockConfig,
+            commandLineOptions: { [savedFilterOption]: 'saved-provider' },
+          },
+          loadedFromCloud: true,
+          [explicitFilterOption]: 'explicit-provider',
+        });
 
-      expect(doGenerateRedteam).toHaveBeenCalledWith(
-        expect.objectContaining({ filterProviders: 'explicit-provider' }),
-      );
-      expect(doEval).toHaveBeenCalledWith(
-        expect.objectContaining({ filterProviders: 'explicit-provider' }),
-        expect.anything(),
-        expect.anything(),
-        expect.anything(),
-      );
-      expect(vi.mocked(doGenerateRedteam).mock.calls.at(-1)?.[0]).not.toHaveProperty(
-        'filterTargets',
-      );
-      expect(vi.mocked(doEval).mock.calls.at(-1)?.[0]).not.toHaveProperty('filterTargets');
-    });
+        expect(doGenerateRedteam).toHaveBeenCalledWith(
+          expect.objectContaining({ filterProviders: 'explicit-provider' }),
+        );
+        expect(doEval).toHaveBeenCalledWith(
+          expect.objectContaining({ filterProviders: 'explicit-provider' }),
+          expect.anything(),
+          expect.anything(),
+          expect.anything(),
+        );
+        expect(vi.mocked(doGenerateRedteam).mock.calls.at(-1)?.[0]).not.toHaveProperty(
+          'filterTargets',
+        );
+        expect(vi.mocked(doEval).mock.calls.at(-1)?.[0]).not.toHaveProperty('filterTargets');
+      },
+    );
 
     it('should log debug information when processing liveRedteamConfig', async () => {
       // Get the mocked logger

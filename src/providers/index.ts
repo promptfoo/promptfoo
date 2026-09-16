@@ -24,7 +24,7 @@ import {
   renderEnvOnlyInObject,
 } from '../util/render';
 import { sanitizeObject } from '../util/sanitizer';
-import { getProviderFactories } from './registry';
+import { getProviderFactories, mergeProviderEnv } from './registry';
 
 import type { EnvOverrides } from '../types/env';
 import type { LoadApiProviderContext, TestSuiteConfig } from '../types/index';
@@ -104,8 +104,12 @@ export async function loadApiProvider(
 
   // Merge environment overrides: context.env (test suite level) is base,
   // options.env (provider-specific) takes precedence for per-provider customization
-  const mergedEnv: EnvOverrides | undefined =
-    env || options.env ? { ...env, ...options.env } : undefined;
+  const renderedProviderPath = renderEnvOnlyInObject(providerPath, { ...env, ...options.env });
+  const mergedEnv: EnvOverrides | undefined = mergeProviderEnv(
+    renderedProviderPath,
+    env,
+    options.env,
+  );
 
   // Render ONLY environment variable templates at load time (e.g., {{ env.AZURE_ENDPOINT }})
   // This allows constructors to access real env values while preserving runtime templates
@@ -131,10 +135,6 @@ export async function loadApiProvider(
     await validateLinkedTargetId(providerOptions.config.linkedTargetId);
   }
 
-  // Render only env templates in provider path to avoid blanking unresolved placeholders.
-  // This keeps behavior consistent with provider id/config rendering and file:// provider refs.
-  const renderedProviderPath = renderEnvOnlyInObject(providerPath, mergedEnv);
-
   if (isCloudProvider(renderedProviderPath)) {
     const cloudDatabaseId = getCloudDatabaseId(renderedProviderPath);
 
@@ -147,6 +147,12 @@ export async function loadApiProvider(
 
     const localTopLevelInputs = getConfiguredProviderInputs({ inputs: options.inputs });
     const localConfigInputs = getConfiguredProviderInputs({ config: options.config });
+
+    const resolvedCloudPath = renderEnvOnlyInObject(cloudProvider.id, {
+      ...env,
+      ...cloudProvider.env,
+      ...options.env,
+    });
 
     // Merge local config overrides with cloud provider config
     // Local config takes precedence to allow per-eval customization
@@ -165,11 +171,7 @@ export async function loadApiProvider(
         localTopLevelInputs ??
         (localConfigInputs === undefined ? getConfiguredProviderInputs(cloudProvider) : undefined),
       // Merge all three env sources: context (base) -> cloud -> local (highest priority)
-      env: {
-        ...env, // Context env (from testSuite.env - proxies, tracing IDs, etc.)
-        ...cloudProvider.env, // Cloud provider env overrides context
-        ...options.env, // Local env overrides everything
-      },
+      env: mergeProviderEnv(resolvedCloudPath, env, cloudProvider.env, options.env),
     };
 
     logger.debug(
@@ -182,7 +184,7 @@ export async function loadApiProvider(
       env: mergedOptions.env,
     };
 
-    return loadApiProvider(cloudProvider.id, mergedContext);
+    return loadApiProvider(resolvedCloudPath, mergedContext);
   }
 
   if (isProviderConfigFileReference(renderedProviderPath)) {
@@ -208,10 +210,19 @@ export async function loadApiProvider(
 
     // Merge file's env with context.env - context.env takes precedence
     // This allows callers to override file-defined defaults
-    const mergedFileEnv: EnvOverrides | undefined =
-      fileContent.env || mergedEnv ? { ...fileContent.env, ...mergedEnv } : undefined;
+    const resolvedFilePath = renderEnvOnlyInObject(fileContent.id, {
+      ...fileContent.env,
+      ...env,
+      ...options.env,
+    });
+    const mergedFileEnv: EnvOverrides | undefined = mergeProviderEnv(
+      resolvedFilePath,
+      fileContent.env,
+      env,
+      options.env,
+    );
 
-    return loadApiProvider(fileContent.id, {
+    return loadApiProvider(resolvedFilePath, {
       basePath,
       options: {
         ...fileContent,

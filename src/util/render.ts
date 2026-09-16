@@ -17,16 +17,6 @@ export function getProcessEnvForTemplates(): EnvOverrides {
   return processEnvDisabled ? {} : (process.env as EnvOverrides);
 }
 
-/** Render config-level environment overrides against process.env before using them as templates. */
-export function renderEnvOverrides(envOverrides?: EnvOverrides): EnvOverrides | undefined {
-  if (!envOverrides) {
-    return undefined;
-  }
-
-  const rendered = renderEnvOnlyInObject(envOverrides, getProcessEnvForTemplates(), true);
-  return Object.fromEntries(Object.entries(rendered).filter(([, value]) => value !== undefined));
-}
-
 /**
  * Renders ONLY environment variable templates in an object, leaving all other templates untouched.
  * This allows env vars to be resolved at provider load time while preserving runtime var templates.

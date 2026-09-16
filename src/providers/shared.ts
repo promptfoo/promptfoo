@@ -40,6 +40,10 @@ export interface ProviderConfig {
   audioCost?: number;
   audioInputCost?: number;
   audioOutputCost?: number;
+  videoOutputCost?: number;
+  imageInputCost?: number;
+  service_tier?: string | null;
+  passthrough?: object;
 }
 
 /**
@@ -81,6 +85,17 @@ export function calculateCost(
   const outputCost =
     config.outputCost ?? config.cost ?? longContextCost?.output ?? model.cost.output;
   return inputCost * promptTokens + outputCost * completionTokens;
+}
+
+/**
+ * Clamp reported cached prompt tokens to [0, promptTokens] for cost billing.
+ *
+ * Providers occasionally report cached token counts that exceed prompt tokens
+ * (rounding) or values that are negative or non-finite; billing those raw would
+ * produce negative or NaN costs.
+ */
+export function clampCachedTokens(cachedTokens: number | undefined, promptTokens: number): number {
+  return Number.isFinite(cachedTokens) ? Math.min(Math.max(cachedTokens!, 0), promptTokens) : 0;
 }
 
 /**

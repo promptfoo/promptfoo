@@ -1,3 +1,4 @@
+import { randomUUID } from 'crypto';
 import fs from 'fs/promises';
 import * as os from 'os';
 import * as path from 'path';
@@ -122,6 +123,7 @@ export async function doRedteamRun(options: RedteamRunOptions): Promise<Eval | u
       configuredFilterProviders ??
       configuredFilterTargets;
 
+    const generationRunId = randomUUID();
     const generationOptions = {
       ...passThroughOptions,
       ...configuredCommandLineOptions,
@@ -135,6 +137,7 @@ export async function doRedteamRun(options: RedteamRunOptions): Promise<Eval | u
       verbose: options.verbose,
       delay: options.delay,
       inRedteamRun: true,
+      generationRunId,
       abortSignal: options.abortSignal,
       progressBar: options.progressBar,
     };
@@ -171,6 +174,8 @@ export async function doRedteamRun(options: RedteamRunOptions): Promise<Eval | u
       filterTargets: _evalFilterTargets,
       ...evalOptions
     } = options;
+    const generation = redteamConfig.metadata?.generation;
+    const generatedDuringRun = generation?.id === generationRunId;
     const evalResult = await doEval(
       {
         ...evalOptions,
@@ -188,6 +193,9 @@ export async function doRedteamRun(options: RedteamRunOptions): Promise<Eval | u
         abortSignal: options.abortSignal,
         progressCallback: options.progressCallback,
         eventSource: options.eventSource,
+        ...(generatedDuringRun && generation.tokenUsage
+          ? { generationEventId: generation.id, generationTokenUsage: generation.tokenUsage }
+          : {}),
       },
     );
 
@@ -236,16 +244,5 @@ export async function doRedteamRun(options: RedteamRunOptions): Promise<Eval | u
     if (verboseToggleCleanup) {
       verboseToggleCleanup();
     }
-  }
-}
-
-/**
- * Custom error class for target permission-related failures.
- * Thrown when users lack necessary permissions to access or create targets.
- */
-export class TargetPermissionError extends Error {
-  constructor(message: string) {
-    super(message);
-    this.name = 'TargetPermissionError';
   }
 }
