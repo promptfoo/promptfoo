@@ -121,9 +121,11 @@ type XAIProviderOptions = Omit<ProviderOptions, 'config'> & {
 // reports USD cents per 100M tokens (equivalent to $1e-10 per-token increments).
 // Response billing uses the same scale in `usage.cost_in_usd_ticks`.
 export const XAI_CHAT_MODELS: XAIModel[] = [
-  // Grok 4.5 Models (500K context; flagship model recommended by xAI's catalog)
+  // Grok 4.6 Models (500K context; flagship model recommended by xAI's catalog).
+  // xAI publishes no aliases for this id — `grok-4.6-latest` 404s on
+  // /v1/language-models — so none are listed here.
   {
-    id: 'grok-4.5',
+    id: 'grok-4.6',
     cost: {
       input: 2.0 / 1e6,
       output: 6.0 / 1e6,
@@ -133,6 +135,24 @@ export const XAI_CHAT_MODELS: XAIModel[] = [
         input: 4.0 / 1e6,
         output: 12.0 / 1e6,
         cache_read: 1.0 / 1e6,
+      },
+    },
+  },
+  // Grok 4.5 Models (500K context)
+  {
+    id: 'grok-4.5',
+    cost: {
+      input: 2.0 / 1e6,
+      output: 6.0 / 1e6,
+      // Verified live 2026-08-31 against usage.cost_in_usd_ticks on a cache hit:
+      // grok-4.5 reads cached prompt tokens at $0.30/1M, not $0.50/1M. The
+      // $0.50 rate belongs to grok-4.6.
+      cache_read: 0.3 / 1e6,
+      longContext: {
+        threshold: 200_000,
+        input: 4.0 / 1e6,
+        output: 12.0 / 1e6,
+        cache_read: 0.6 / 1e6,
       },
     },
     aliases: ['grok-4.5-latest', 'grok-build-latest'],
@@ -391,9 +411,10 @@ export const GROK_3_MINI_MODELS = [
 ];
 
 // Models that support reasoning_effort on the chat-completions-compatible API.
-// grok-4.5 accepts `low`, `medium`, and `high` but rejects `none` (verified live
-// 2026-07-09); grok-4.3 additionally accepts `none`.
+// grok-4.6 and grok-4.5 accept `low`, `medium`, and `high` but reject `none`
+// (verified live 2026-08-31 and 2026-07-09); grok-4.3 additionally accepts `none`.
 export const GROK_REASONING_EFFORT_MODELS = [
+  'grok-4.6',
   'grok-4.5',
   'grok-4.5-latest',
   'grok-build-latest',
@@ -408,7 +429,11 @@ export const GROK_REASONING_EFFORT_MODELS = [
   'grok-3-mini-fast-latest',
 ];
 
+// Grok 4.5 *and newer* models, which accept reasoning_effort `low`/`medium`/`high`
+// but reject `none`. Kept under the original export name because it is part of the
+// package's import surface; membership is "4.5 or later", not "exactly 4.5".
 export const GROK_45_MODELS: ReadonlySet<string> = new Set([
+  'grok-4.6',
   'grok-4.5',
   'grok-4.5-latest',
   'grok-build-latest',
@@ -416,6 +441,8 @@ export const GROK_45_MODELS: ReadonlySet<string> = new Set([
 
 // All reasoning models, including older families that reason without a tunable effort knob.
 export const GROK_REASONING_MODELS = [
+  // Grok 4.6
+  'grok-4.6',
   // Grok 4.5
   'grok-4.5',
   'grok-4.5-latest',
@@ -477,6 +504,8 @@ export const GROK_REASONING_MODELS = [
 
 // Grok-4+ models that have specific sampling-parameter restrictions.
 export const GROK_4_MODELS = [
+  // Grok 4.6 (rejects presence_penalty, frequency_penalty, and stop; verified live 2026-08-31)
+  'grok-4.6',
   // Grok 4.5 (rejects presence_penalty, frequency_penalty, and stop; verified live 2026-07-09)
   'grok-4.5',
   'grok-4.5-latest',

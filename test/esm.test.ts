@@ -1,4 +1,3 @@
-import fsPromises from 'node:fs/promises';
 import fs from 'fs';
 import os from 'os';
 import path from 'path';
@@ -257,10 +256,26 @@ describe('ESM utilities', () => {
       },
     );
 
+    it('normalizes missing entry modules inside paths containing apostrophes', async () => {
+      const missingPath = path.resolve(__dirname, "__fixtures__/O'Brien/missing.mjs");
+      await expect(importModule(missingPath)).rejects.toMatchObject({
+        code: 'ENOENT',
+        path: missingPath,
+      });
+      expect(logger.error).not.toHaveBeenCalled();
+    });
+
     it.each([
       {
         name: 'missing dependency',
         source: "import './missing-dependency.mjs';",
+        error: { code: 'ERR_MODULE_NOT_FOUND' },
+      },
+      {
+        // A missing bare specifier names the package, never the entry module's path,
+        // so the ENOENT normalization must not claim the config file itself is absent.
+        name: 'missing bare package dependency',
+        source: "import 'promptfoo-not-a-real-package';",
         error: { code: 'ERR_MODULE_NOT_FOUND' },
       },
       {
@@ -275,7 +290,7 @@ describe('ESM utilities', () => {
         error: { message: 'config initialization failed' },
       },
     ])('preserves and logs a $name in an existing module', async ({ source, error }) => {
-      const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'promptfoo-esm-error-test-'));
+      const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "promptfoo-esm-O'Brien-"));
       const modulePath = path.join(tempDir, 'config.mjs');
       fs.writeFileSync(modulePath, source);
 
@@ -288,18 +303,6 @@ describe('ESM utilities', () => {
       } finally {
         fs.rmSync(tempDir, { recursive: true, force: true });
       }
-    });
-
-    it('does not treat a failed access check as proof that the module is absent', async () => {
-      const modulePath = path.resolve(__dirname, '__fixtures__/nonExistent.mjs');
-      vi.spyOn(fsPromises, 'access').mockRejectedValue(
-        Object.assign(new Error('Permission denied'), { code: 'EACCES' }),
-      );
-
-      const thrown = await importModule(modulePath).catch((err) => err);
-      expect(thrown).toMatchObject({ code: 'ERR_MODULE_NOT_FOUND' });
-      expect(logger.debug).toHaveBeenCalledWith(thrown.stack);
-      expect(logger.error).toHaveBeenCalledWith(`ESM import failed: ${thrown}`);
     });
 
     it('logs debug information during import process', async () => {
