@@ -54,6 +54,10 @@ interface OllamaCompletionOptions {
   // Promptfoo-side rendering option: prepend the model's reasoning to the output.
   // Deliberately absent from OllamaCompletionOptionKeys so it is never sent to Ollama.
   showThinking?: boolean;
+  // Top-level /api/embed parameters (not members of the nested `options` object).
+  truncate?: boolean;
+  dimensions?: number;
+  keep_alive?: string | number;
   passthrough?: Record<string, any>; // Pass arbitrary fields to the API
 }
 
@@ -95,6 +99,28 @@ const OllamaCompletionOptionKeys = new Set<keyof OllamaCompletionOptions>([
   'think',
   'passthrough',
 ]);
+
+/**
+ * Keys that live in the config block but are NOT members of Ollama's nested `options`
+ * object: they are either top-level API parameters or promptfoo-side settings.
+ */
+const OllamaNonNestedOptionKeys = new Set<string>(['tools', 'think', 'passthrough']);
+
+/**
+ * Builds the nested `options` object Ollama expects, dropping anything that belongs at
+ * the top level. Shared by all three providers so they cannot drift: the chat provider
+ * previously excluded only `tools`, so `think` and the whole `passthrough` object were
+ * also sent as junk `options` members.
+ */
+function buildOllamaOptions(config: OllamaCompletionOptions): Record<string, any> {
+  return Object.keys(config).reduce<Record<string, any>>((options, key) => {
+    const optionName = key as keyof OllamaCompletionOptions;
+    if (OllamaCompletionOptionKeys.has(optionName) && !OllamaNonNestedOptionKeys.has(key)) {
+      options[optionName] = config[optionName];
+    }
+    return options;
+  }, {});
+}
 
 /**
  * Matches `fetchWithCache`'s own `!response.ok` check (src/cache.ts:762): anything
@@ -329,25 +355,10 @@ export class OllamaCompletionProvider implements ApiProvider {
       model: this.modelName,
       prompt,
       stream: false,
-      options: Object.keys(this.config).reduce<Record<string, any>>((options, key) => {
-        const optionName = key as keyof OllamaCompletionOptions;
-        if (
-          OllamaCompletionOptionKeys.has(optionName) &&
-          optionName !== 'think' &&
-          optionName !== 'tools' &&
-          optionName !== 'passthrough'
-        ) {
-          options[optionName] = this.config[optionName];
-        }
-        return options;
-      }, {}),
+      options: buildOllamaOptions(this.config),
       ...(this.config.think === undefined ? {} : { think: this.config.think }),
       ...(this.config.passthrough || {}),
     };
-
-    if (this.config.think !== undefined) {
-      params.think = this.config.think;
-    }
 
     logger.debug('Calling Ollama API', { params });
 
@@ -490,13 +501,7 @@ export class OllamaChatProvider implements ApiProvider {
     const params: any = {
       model: this.modelName,
       messages,
-      options: Object.keys(this.config).reduce<Record<string, any>>((options, key) => {
-        const optionName = key as keyof OllamaCompletionOptions;
-        if (OllamaCompletionOptionKeys.has(optionName) && optionName !== 'tools') {
-          options[optionName] = this.config[optionName];
-        }
-        return options;
-      }, {}),
+      options: buildOllamaOptions(this.config),
       ...(this.config.think === undefined ? {} : { think: this.config.think }),
       ...(this.config.passthrough || {}),
     };
@@ -619,19 +624,30 @@ export class OllamaEmbeddingProvider extends OllamaCompletionProvider {
   async callEmbeddingApi(text: string): Promise<ProviderEmbeddingResponse> {
     const params = {
       model: this.modelName,
-      prompt: text,
+      input: text,
+      // Ollama defaults this to true, which silently embeds only the first num_ctx
+      // tokens and yields a plausible-but-wrong similarity score with no signal to
+      // the user. For an eval tool a loud failure is strictly better, and it also
+      // preserves the /api/embeddings behaviour this replaces, which errored.
+      // Set `truncate: true` explicitly to opt into truncation.
+      truncate: this.config.truncate ?? false,
+      ...(this.config.dimensions === undefined ? {} : { dimensions: this.config.dimensions }),
+      ...(this.config.keep_alive === undefined ? {} : { keep_alive: this.config.keep_alive }),
+      options: buildOllamaOptions(this.config),
+      ...(this.config.passthrough || {}),
     };
 
-    logger.debug('Calling Ollama API', { params });
+    logger.debug('Calling Ollama embeddings API', { params });
 
-    interface OllamaEmbeddingResponse {
-      embedding: number[];
+    interface OllamaEmbedResponse {
+      embeddings?: number[][];
+      prompt_eval_count?: number;
     }
 
-    let response: FetchWithCacheResult<OllamaEmbeddingResponse>;
+    let response: FetchWithCacheResult<OllamaEmbedResponse>;
     try {
-      response = await fetchWithCache<OllamaEmbeddingResponse>(
-        `${getEnvString('OLLAMA_BASE_URL') || 'http://localhost:11434'}/api/embeddings`,
+      response = await fetchWithCache<OllamaEmbedResponse>(
+        `${getEnvString('OLLAMA_BASE_URL') || 'http://localhost:11434'}/api/embed`,
         {
           method: 'POST',
           headers: {
@@ -656,16 +672,41 @@ export class OllamaEmbeddingProvider extends OllamaCompletionProvider {
       // fetchWithCache only detects error keys for the 'json' format, so an HTTP 200
       // error body would otherwise be replayed from cache for the full TTL.
       await response.deleteFromCache?.();
+      // Ollama's context-length message does not say how to fix it.
+      if (responseError.includes('input length exceeds the context length')) {
+        return {
+          error:
+            `${responseError}. Raise \`config.num_ctx\` (up to the model's own maximum, ` +
+            `shown by \`ollama show ${this.modelName}\`), or set \`config.truncate: true\` ` +
+            `to embed only the first num_ctx tokens -- note that truncating silently ` +
+            `changes similarity scores.`,
+        };
+      }
       return { error: responseError };
     }
 
     try {
-      const embedding = response.data.embedding as number[];
+      const embedding = response.data.embeddings?.[0];
       if (!embedding) {
         throw new Error('No embedding found in Ollama embeddings API response');
       }
+      const promptTokens = response.data.prompt_eval_count;
+      // A cache hit is not a new request: report the tokens as cached so repeated
+      // similarity assertions are not counted as fresh usage (src/providers/AGENTS.md).
+      const tokenUsage =
+        promptTokens === undefined
+          ? undefined
+          : response.cached
+            ? { cached: promptTokens, total: promptTokens }
+            : // accumulateTokenUsage defaults incrementRequests to false, and the
+              // similarity matcher calls it with two args, so an omitted numRequests
+              // reports zero. Other embedding providers set it explicitly too
+              // (src/providers/voyage.ts:119, src/providers/cohere.ts:211).
+              { prompt: promptTokens, total: promptTokens, numRequests: 1 };
       return {
         embedding,
+        ...(tokenUsage && { tokenUsage }),
+        ...(response.cached && { cached: true }),
       };
     } catch (err) {
       return {
