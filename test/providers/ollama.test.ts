@@ -258,6 +258,24 @@ describe('OllamaCompletionProvider', () => {
     expect(body.options.showThinking).toBeUndefined();
   });
 
+  it('should set the cached flag and report cached token usage on a completion cache hit', async () => {
+    vi.mocked(fetchWithCache).mockResolvedValue({
+      data: '{"response":"hi","done":true,"prompt_eval_count":10,"eval_count":20}\n',
+      cached: true,
+      status: 200,
+      statusText: 'OK',
+      headers: {},
+    });
+
+    const provider = new OllamaCompletionProvider('llama3.3');
+    const result = await provider.callApi('test prompt');
+
+    // The completion path builds its response separately from the chat path, so it
+    // needs its own cache-hit coverage.
+    expect(result.cached).toBe(true);
+    expect(result.tokenUsage).toEqual({ cached: 30, total: 30 });
+  });
+
   it('should omit finishReason when done_reason is absent', async () => {
     vi.mocked(fetchWithCache).mockResolvedValue({
       data: '{"response":"Hi!","done":true}\n',
@@ -649,7 +667,7 @@ describe('OllamaChatProvider', () => {
     expect(body.options).toEqual({ temperature: 0.5, num_predict: 64, min_p: 0.1 });
   });
 
-  it('should forward min_p and keep_alive, and drop keys Ollama removed', async () => {
+  it('should forward min_p, keep_alive, and legacy options, but drop invalid keys', async () => {
     vi.mocked(fetchWithCache).mockResolvedValue({
       data: '{"message":{"role":"assistant","content":"hi"},"done":true}\n',
       cached: false,
@@ -662,10 +680,15 @@ describe('OllamaChatProvider', () => {
       config: {
         min_p: 0.05,
         keep_alive: '5m',
-        // Removed from Ollama's Options struct; must not be forwarded.
-        tfs_z: 1,
+        // Removed from current Ollama releases but still forwarded, so a config
+        // pointed at an older OLLAMA_BASE_URL keeps working.
         mirostat: 2,
+        tfs_z: 1,
+        // Never a valid wire name: the Go field was UseNUMA with json tag "numa",
+        // and "numa" itself is gone upstream.
         useNUMA: true,
+        // An OpenAI key Ollama ignores.
+        max_tokens: 99,
       } as any,
     });
     await provider.callApi('test prompt');
@@ -674,9 +697,11 @@ describe('OllamaChatProvider', () => {
     expect(body.options.min_p).toBe(0.05);
     expect(body.keep_alive).toBe('5m');
     expect(body.options.keep_alive).toBeUndefined();
-    expect(body.options.tfs_z).toBeUndefined();
-    expect(body.options.mirostat).toBeUndefined();
+    expect(body.options.mirostat).toBe(2);
+    expect(body.options.tfs_z).toBe(1);
     expect(body.options.useNUMA).toBeUndefined();
+    expect(body.options.max_tokens).toBeUndefined();
+    expect(body.max_tokens).toBeUndefined();
   });
 
   it('should not leak think or passthrough into the nested options object', async () => {
