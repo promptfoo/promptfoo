@@ -42,6 +42,42 @@ function mockExternalTrace(spans: SpanData[], traceId = 'trace-1') {
 }
 
 describe('fetchTraceContext', () => {
+  it.each(['required', 'ordinary', 'empty', 'after complete'])(
+    'handles provider-reported incomplete snapshots: %s',
+    async (state) => {
+      const span = { spanId: 'valid', name: 'inventory.lookup', startTime: 1, endTime: 2 };
+      const spans = state === 'empty' ? [] : [span];
+      const fetch = mockExternalTrace(spans);
+      fetch.mockResolvedValue({ traceId: 'trace-1', spans, fetchedAt: 3, incomplete: true });
+      const previousSnapshots = state === 'after complete' ? 2 : 0;
+      for (let index = 0; index < previousSnapshots; index++) {
+        fetch.mockResolvedValueOnce({ traceId: 'trace-1', spans: [span], fetchedAt: index });
+      }
+      const pending = fetchTraceContext('trace-1', {
+        providerConfig,
+        requireComplete: state !== 'ordinary',
+        maxRetries: 2,
+        retryDelayMs: 0,
+        queryDelay: 0,
+      });
+      if (state === 'ordinary') {
+        await expect(pending).resolves.toMatchObject({ spans: [{ spanId: 'valid' }] });
+        expect(mocks.markTraceIncomplete).not.toHaveBeenCalled();
+      } else {
+        await expect(pending).rejects.toMatchObject({
+          name: 'TraceEvidenceError',
+          message: 'Cannot grade incomplete trace: malformed provider snapshot.',
+        });
+        expect(mocks.markTraceIncomplete).toHaveBeenCalledWith(
+          'trace-1',
+          'malformed provider snapshot',
+        );
+        expect(mocks.addSpans).toHaveBeenCalledTimes(previousSnapshots);
+      }
+      expect(fetch).toHaveBeenCalledTimes(previousSnapshots + 1);
+    },
+  );
+
   it.each([false, true])(
     'ignores object key order while checking stability (array changed: %s)',
     async (arrayChanged) => {

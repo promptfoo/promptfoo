@@ -85,6 +85,9 @@ export interface FetchTraceResult {
   /** Spans in the trace */
   spans: SpanData[];
 
+  /** Whether malformed records were omitted from this snapshot. */
+  incomplete?: boolean;
+
   /** Service name(s) observed */
   services?: string[];
 

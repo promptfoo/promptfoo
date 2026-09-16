@@ -296,7 +296,10 @@ export class TempoProvider implements TraceProvider {
     return headers;
   }
 
-  private transformSpans(data: TempoTraceResponse, traceId: string): SpanData[] {
+  private transformSpans(
+    data: TempoTraceResponse,
+    traceId: string,
+  ): { spans: SpanData[]; incomplete: boolean } {
     const spans = new Map<string, SpanData>();
     let malformedSpans = 0;
 
@@ -341,7 +344,7 @@ export class TempoProvider implements TraceProvider {
       logger.warn(`[TempoProvider] Skipped ${malformedSpans} malformed spans`);
     }
 
-    return [...spans.values()];
+    return { spans: [...spans.values()], incomplete: malformedSpans > 0 };
   }
 
   async fetchTrace(traceId: string, options?: FetchTraceOptions): Promise<FetchTraceResult | null> {
@@ -386,10 +389,8 @@ export class TempoProvider implements TraceProvider {
       throw new TraceProviderError('Tempo returned an invalid trace response');
     }
 
-    const spans = this.transformSpans(data, traceId).slice(
-      0,
-      Math.max(1, options?.maxSpans ?? Infinity),
-    );
+    const snapshot = this.transformSpans(data, traceId);
+    const spans = snapshot.spans.slice(0, Math.max(1, options?.maxSpans ?? Infinity));
     const services = new Set<string>();
     for (const span of spans) {
       const service = span.attributes?.['service.name'];
@@ -401,6 +402,7 @@ export class TempoProvider implements TraceProvider {
     return {
       traceId,
       spans,
+      ...(snapshot.incomplete && { incomplete: true }),
       services: [...services],
       fetchedAt: Date.now(),
     };

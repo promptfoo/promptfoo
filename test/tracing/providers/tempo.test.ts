@@ -267,6 +267,7 @@ describe('TempoProvider', () => {
 
     expect(result?.spans.map((span) => span.name)).toEqual(['target.call', 'internal.setup']);
     expect(logger.warn).toHaveBeenCalledOnce();
+    expect(result?.incomplete).toBe(true);
     expect(logger.warn).toHaveBeenCalledWith('[TempoProvider] Skipped 3 malformed spans');
   });
 
@@ -290,6 +291,7 @@ describe('TempoProvider', () => {
 
     expect(result?.spans.map((span) => span.name)).toEqual(['target.call', 'internal.setup']);
     expect(result?.services).toEqual(['target-service']);
+    expect(result?.incomplete).toBe(true);
     expect(logger.warn).toHaveBeenCalledWith('[TempoProvider] Skipped 4 malformed spans');
   });
 

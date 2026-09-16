@@ -446,14 +446,16 @@ async function fetchFromExternalProvider(
       await assertStoredTraceComplete(traceId);
       const result = await provider.fetchTrace(traceId, providerFetchOptions);
       const validSpans = result ? discardCyclicExternalSpans(result.spans) : [];
-      if (requireComplete && result && validSpans.length !== result.spans.length) {
-        await getTraceStore().markTraceIncomplete(traceId, 'cyclic parent relationships');
-        throw Object.assign(
-          new Error('Cannot grade incomplete trace: cyclic parent relationships.'),
-          {
-            name: 'TraceEvidenceError',
-          },
-        );
+      const incompleteReason = result?.incomplete
+        ? 'malformed provider snapshot'
+        : result && validSpans.length !== result.spans.length
+          ? 'cyclic parent relationships'
+          : undefined;
+      if (requireComplete && incompleteReason) {
+        await getTraceStore().markTraceIncomplete(traceId, incompleteReason);
+        throw Object.assign(new Error(`Cannot grade incomplete trace: ${incompleteReason}.`), {
+          name: 'TraceEvidenceError',
+        });
       }
 
       if (!result || validSpans.length === 0) {
