@@ -645,6 +645,31 @@ describe('OpenAI Image Provider Functions', () => {
       expect(result.error).toContain('No image URL found in response');
       expect(mockDeleteFromCache).not.toHaveBeenCalled();
     });
+
+    it('should still evict the cache entry when parsing the response throws', async () => {
+      const mockDeleteFromCache = vi.fn();
+      const data = {
+        // The first entry formats fine, so the failure surfaces later while building
+        // the structured image outputs: a genuine parse failure rather than a
+        // well-formed response that simply carries no image.
+        data: [{ url: 'https://example.com/image.png' }, null],
+        deleteFromCache: mockDeleteFromCache,
+      };
+
+      const result = await processApiResponse(
+        data,
+        'test prompt',
+        'url',
+        false,
+        'dall-e-2',
+        '512x512',
+        undefined,
+      );
+
+      expect(result).toHaveProperty('error');
+      expect(result.error).toContain('API error: TypeError');
+      expect(mockDeleteFromCache).toHaveBeenCalledWith();
+    });
   });
 
   describe('buildStructuredImageOutputs', () => {
