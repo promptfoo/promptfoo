@@ -18,6 +18,7 @@ export const handleContextRelevance = async ({
   assertion,
   test,
   output,
+  inverse,
   prompt,
   providerResponse,
   providerCallContext,
@@ -37,20 +38,35 @@ export const handleContextRelevance = async ({
     providerResponse,
   );
 
+  const threshold = (assertion.threshold as number) ?? 0.7;
+
   const result = await matchesContextRelevance(
     test.vars.query,
     context,
-    (assertion.threshold as number) ?? 0,
+    threshold,
     test.options,
     providerCallContext,
   );
 
+  if (result.metadata?.graderError === true) {
+    return { assertion, ...result, metadata: { ...result.metadata, context } };
+  }
+
+  const pass = inverse ? !result.pass : result.pass;
+
   return {
     assertion,
     ...result,
+    pass,
+    score: inverse ? 1 - result.score : result.score,
+    reason: inverse
+      ? pass
+        ? 'Assertion passed'
+        : `Relevance ${result.score.toFixed(2)} is >= ${threshold}`
+      : result.reason,
     metadata: {
+      ...(typeof result.metadata === 'object' ? result.metadata : {}),
       context,
-      ...(result.metadata || {}),
     },
   };
 };

@@ -17,6 +17,7 @@ import { loadRubricPrompt, renderLlmRubricPrompt } from './rubric';
 import {
   cosineSimilarity,
   fail,
+  graderFail,
   normalizeMatcherTokenUsage,
   splitIntoSentences,
   splitTextIntoSentences,
@@ -179,7 +180,7 @@ export async function matchesContextRecall(
     providerCallContext,
   );
   if (resp.error || !resp.output) {
-    return fail(resp.error || 'No output', resp.tokenUsage);
+    return graderFail(resp.error || 'No output', resp.tokenUsage);
   }
 
   invariant(typeof resp.output === 'string', 'context-recall produced malformed response');
@@ -215,7 +216,28 @@ export async function matchesContextRecall(
     });
   }
 
-  const score = sentences.length > 0 ? numerator / sentences.length : 0;
+  // A well-formed recall response classifies every answer sentence with
+  // [Attributed] / [Not Attributed]. Nonempty output with no classification
+  // lines at all -- a refusal, an apology, an out-of-format explanation -- is a
+  // malformed grading attempt, not a genuine 0.00 recall verdict. Tag it as a
+  // grader error so inverse assertions cannot turn it into a spurious pass.
+  if (sentences.length === 0) {
+    return {
+      pass: false,
+      score: 0,
+      reason: 'Grader returned no [Attributed]/[Not Attributed] classifications',
+      tokensUsed: normalizeMatcherTokenUsage(resp.tokenUsage),
+      metadata: {
+        sentenceAttributions: [],
+        totalSentences: 0,
+        attributedSentences: 0,
+        score: 0,
+        graderError: true,
+      },
+    };
+  }
+
+  const score = numerator / sentences.length;
   const pass = score >= threshold - Number.EPSILON;
 
   const metadata = {
@@ -269,7 +291,7 @@ export async function matchesContextRelevance(
     providerCallContext,
   );
   if (resp.error || !resp.output) {
-    return fail(resp.error || 'No output', resp.tokenUsage);
+    return graderFail(resp.error || 'No output', resp.tokenUsage);
   }
 
   invariant(typeof resp.output === 'string', 'context-relevance produced malformed response');
@@ -304,6 +326,38 @@ export async function matchesContextRelevance(
   // RAGAS CONTEXT RELEVANCE FORMULA: relevant units / total context units
   const score = totalContextUnits > 0 ? numerator / totalContextUnits : 0;
   const pass = score >= threshold - Number.EPSILON;
+
+  // A well-formed relevance response either reports "Insufficient Information"
+  // or echoes sentences taken verbatim from the context (the rubric forbids
+  // rewording). Nonempty output that is neither -- a refusal, an apology, an
+  // out-of-format explanation -- is a malformed grading attempt, not a genuine
+  // low-relevance verdict. Tag it as a grader error so inverse assertions
+  // cannot turn a failed grading attempt into a spurious pass.
+  const normalizeForComparison = (value: string) => value.toLowerCase().replace(/\s+/g, ' ').trim();
+  const contextNormalized = normalizeForComparison(contextString);
+  const graderError =
+    !insufficientInformation &&
+    relevantSentences.length > 0 &&
+    !relevantSentences.some((sentence) =>
+      contextNormalized.includes(
+        normalizeForComparison(sentence.replace(/^\s*(?:\d+[.)]|[-*])\s*/, '')),
+      ),
+    );
+
+  if (graderError) {
+    return {
+      pass: false,
+      score: 0,
+      reason: 'Grader output does not quote the provided context',
+      tokensUsed: normalizeMatcherTokenUsage(resp.tokenUsage),
+      metadata: {
+        graderError: true,
+        graderOutputs: {
+          final: resp.output,
+        },
+      },
+    };
+  }
 
   const metadata = {
     graderOutputs: {
