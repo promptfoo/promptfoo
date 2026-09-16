@@ -1,0 +1,27 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+
+description: Quick demo of the Requesty provider answering geography questions
+
+prompts:
+  - What is the capital of {{country}}?
+
+providers:
+  - requesty:openai/gpt-4o-mini
+  - requesty:anthropic/claude-sonnet-4-5
+
+tests:
+  - vars:
+      country: France
+    assert:
+      - type: icontains
+        value: Paris
+  - vars:
+      country: Germany
+    assert:
+      - type: icontains
+        value: Berlin
+  - vars:
+      country: Italy
+    assert:
+      - type: icontains
+        value: Rome
