@@ -5,6 +5,8 @@ import { randomUUID } from 'crypto';
 import { expect, it, vi } from 'vitest';
 import { clearCache, getCache } from '../../src/cache';
 import { evaluate, runEval } from '../../src/evaluator';
+import { runExtensionHook } from '../../src/evaluatorHelpers';
+import logger from '../../src/logger';
 import Eval from '../../src/models/eval';
 import {
   type ApiProvider,
@@ -13,10 +15,79 @@ import {
   type TestSuite,
 } from '../../src/types/index';
 import { createEmptyTokenUsage } from '../../src/util/tokenUsageUtils';
+import { transform } from '../../src/util/transform';
 import { toPrompt } from './helpers';
 import { describeEvaluator } from './lifecycle';
 
 describeEvaluator('evaluator grading concurrency', () => {
+  it.each(['coding-agent:trace-redaction', 'harness:artifact-redaction'] as const)(
+    'filters deferred privacy assertion errors for %s',
+    async (plugin) => {
+      const marker = 'PRIVATE_DEFERRED_ERROR';
+      const hookErrors: unknown[] = [];
+      vi.mocked(runExtensionHook).mockImplementation(async (_extensions, phase, context) => {
+        if (phase === 'afterEach' && 'result' in context) {
+          hookErrors.push(context.result.error);
+        }
+        return context;
+      });
+      const log = vi.spyOn(logger, 'error').mockImplementation(() => logger);
+      const originalTransform = vi.mocked(transform).getMockImplementation()!;
+      const suite: TestSuite = {
+        providers: [{ id: () => 'private-target', callApi: async () => ({ output: marker }) }],
+        prompts: [toPrompt('Inspect public report')],
+        extensions: ['file://fixture-hook.js'],
+        tests: [
+          {
+            assert: [
+              {
+                type: `promptfoo:redteam:${plugin}`,
+                value: { rawReceipt: marker },
+                transform: 'deferred-error-fixture',
+              },
+              {
+                type: 'llm-rubric',
+                value: 'Check the report',
+                provider: {
+                  id: () => 'local-judge',
+                  callApi: async () => ({ output: '{"pass":true,"score":1,"reason":"Valid"}' }),
+                },
+              },
+            ],
+          },
+        ],
+      };
+      try {
+        const record = await Eval.create({}, suite.prompts, { id: randomUUID() });
+        await vi.mocked(transform).withImplementation(
+          async (...args) => {
+            if (args[0] === 'deferred-error-fixture') {
+              throw new Error(String(args[1]));
+            }
+            return originalTransform(...args);
+          },
+          () => evaluate(suite, record, { maxConcurrency: 1 }),
+        );
+        const summary = await record.toEvaluateSummary();
+        expect(summary.results).toHaveLength(1);
+        expect(summary.results[0]).toMatchObject({
+          success: false,
+          score: 0,
+          failureReason: ResultFailureReason.ERROR,
+          error: 'Error details omitted for trace/artifact redaction.',
+        });
+        expect(hookErrors).toEqual(['Error details omitted for trace/artifact redaction.']);
+        expect(log).toHaveBeenCalledWith(
+          'Assertion grading failed during eval',
+          expect.objectContaining({ error: 'Error details omitted for trace/artifact redaction.' }),
+        );
+        expect(JSON.stringify(log.mock.calls)).not.toContain(marker);
+      } finally {
+        log.mockRestore();
+      }
+    },
+  );
+
   it('schedules model-graded assertion provider calls through the rate limit registry', async () => {
     const abortController = new AbortController();
     const execute = vi.fn(async (_provider: ApiProvider, callFn: () => Promise<unknown>) =>

@@ -641,25 +641,29 @@ function applyGradingError(row: EvaluateResult, error: unknown, abortSignal?: Ab
   // non-aborted run is a real bug, and a real SyntaxError caught microseconds
   // after an unrelated abort is also a real bug.
   const aborted = Boolean(abortSignal?.aborted) && isAbortError(error);
+  const message = sanitizeRedactionResult({
+    testCase: row.testCase,
+    error: errorAsError
+      ? aborted
+        ? errorAsError.message
+        : (errorAsError.stack ?? errorAsError.message)
+      : String(error),
+  }).error;
 
   if (aborted) {
-    // Skip stack serialization on the abort path — debug logs usually go
-    // unread and a noisy shutdown can fire this per row.
-    const shortMessage = errorAsError?.message ?? String(error);
     logger.debug('Assertion grading aborted', {
-      error: shortMessage,
+      error: message,
       promptIdx: row.promptIdx,
       testIdx: row.testIdx,
     });
-    row.error = `${ABORTED_GRADING_PREFIX}${shortMessage}`;
+    row.error = `${ABORTED_GRADING_PREFIX}${message}`;
   } else {
-    const fullMessage = errorAsError ? (errorAsError.stack ?? errorAsError.message) : String(error);
     logger.error('Assertion grading failed during eval', {
-      error: fullMessage,
+      error: message,
       promptIdx: row.promptIdx,
       testIdx: row.testIdx,
     });
-    row.error = fullMessage;
+    row.error = message;
   }
   row.failureReason = ResultFailureReason.ERROR;
   row.success = false;

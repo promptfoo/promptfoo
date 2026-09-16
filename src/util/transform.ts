@@ -247,8 +247,6 @@ export async function transform(
     const message = error instanceof Error ? error.message : String(error);
     const label = getTransformLabel(codeOrFilepathOrFn);
     logger.error('Error in transform function', {
-      error,
-      message,
       transform: label,
     });
     // Wrap with the label so callers (and user-visible row errors) identify
