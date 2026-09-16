@@ -99,7 +99,87 @@ export function tryParse(content: string) {
 }
 
 export function splitIntoSentences(text: string) {
-  return text.split('\n').filter((sentence) => sentence.trim() !== '');
+  const cleaned = stripLeadingHeaders(text);
+  if (!cleaned) {
+    return [];
+  }
+  return cleaned.split('\n').filter((sentence) => sentence.trim() !== '');
+}
+
+const PREAMBLE_LABEL_PATTERN =
+  /^(?:#{1,6}\s+)?(?:\*{1,2}|_{1,2}|`+)?\s*(?:(?:candidate|extracted|relevant|selected)\s+(?:(?:sentences?|context|passages?|information|units?)\b(?:\([sS]\))?)|context\s+relevance\b)(?:\s*[:])?(?:\*{1,2}|_{1,2}|`+)?\s*:?\s*/i;
+
+const MARKDOWN_HEADER_LINE_PATTERN = /^#{1,6}\s+(.*)$/;
+
+/**
+ * Strips leading markdown headers and preamble labels (e.g., "# Extracted sentences",
+ * "## Relevant Context:", "**Candidate sentences:**", "Extracted sentences:") from text
+ * before sentence extraction, preventing grader or context preambles from inflating sentence counts.
+ */
+export function stripLeadingHeaders(text: string): string {
+  if (!text || typeof text !== 'string') {
+    return '';
+  }
+
+  const lines = text.split('\n');
+  let startIdx = 0;
+
+  // Skip leading empty lines
+  while (startIdx < lines.length && lines[startIdx].trim() === '') {
+    startIdx++;
+  }
+
+  while (startIdx < lines.length) {
+    const line = lines[startIdx].trim();
+    if (line === '') {
+      startIdx++;
+      continue;
+    }
+
+    // Check if line starts with a preamble label (e.g. "Extracted sentences:", "# Relevant Context:", "**Candidate sentences:**")
+    const preambleMatch = line.match(PREAMBLE_LABEL_PATTERN);
+    if (preambleMatch) {
+      const rest = line.slice(preambleMatch[0].length).trim();
+      if (rest.length > 0) {
+        // Preamble was inline; replace current line with the content after the preamble label
+        lines[startIdx] = rest;
+        break;
+      } else {
+        // Entire line was just a preamble label; skip it and check next line
+        startIdx++;
+        continue;
+      }
+    }
+
+    // Check if line is a markdown header line (e.g., "# Extracted sentences", "## Analysis")
+    const headerMatch = line.match(MARKDOWN_HEADER_LINE_PATTERN);
+    if (headerMatch) {
+      const hasSubsequentContent = lines.slice(startIdx + 1).some((l) => l.trim().length > 0);
+      if (hasSubsequentContent) {
+        startIdx++;
+        continue;
+      } else {
+        // Single line remaining with markdown header marker
+        const headerContent = headerMatch[1].trim();
+        if (
+          /^(?:candidate|extracted|relevant|context|sentences?|results?|analysis|output)$/i.test(
+            headerContent.replace(/[:*`_#]/g, '').trim(),
+          )
+        ) {
+          startIdx++;
+          continue;
+        } else {
+          lines[startIdx] = headerContent;
+          break;
+        }
+      }
+    }
+
+    // Not a header or preamble label
+    break;
+  }
+
+  return lines.slice(startIdx).join('\n').trim();
 }
 
 /**
@@ -135,8 +215,12 @@ export function splitIntoSentences(text: string) {
 const ENUMERATION_MARKER_ONLY = /^\d+[.)]$/;
 
 export function splitTextIntoSentences(text: string): string[] {
-  const lines = text.split('\n').filter((line) => line.trim() !== '');
-  const segments = lines.length > 1 ? lines : text.split(/(?<=[.!?])\s+/);
+  const cleaned = stripLeadingHeaders(text);
+  if (!cleaned) {
+    return [];
+  }
+  const lines = cleaned.split('\n').filter((line) => line.trim() !== '');
+  const segments = lines.length > 1 ? lines : cleaned.split(/(?<=[.!?])\s+/);
   return segments
     .map((sentence) => sentence.trim())
     .filter((sentence) => sentence.length > 0 && !ENUMERATION_MARKER_ONLY.test(sentence));
