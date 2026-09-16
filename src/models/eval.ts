@@ -323,6 +323,7 @@ export function sanitizeLegacyResults(
   const table = summary.table;
   const promptCount = table?.head?.prompts?.length || 1;
   const verifierTests = new Map<number, AtomicTestCase>();
+  const disabledDefaults = new Set<number>();
   const privatePrompts = new Set<number>();
   const hasVerifier = (test?: AtomicTestCase) =>
     getAssertionLeaves(test?.assert).some((assertion) =>
@@ -331,6 +332,9 @@ export function sanitizeLegacyResults(
   const defaults = typeof config.defaultTest === 'object' ? config.defaultTest : undefined;
   const defaultTest = hasVerifier(defaults) ? defaults : undefined;
   const remember = (testIdx: number, test?: AtomicTestCase) => {
+    if (test?.options?.disableDefaultAsserts === true) {
+      disabledDefaults.add(testIdx);
+    }
     if (
       test &&
       hasVerifier(test) &&
@@ -355,9 +359,10 @@ export function sanitizeLegacyResults(
   }
   const redact = <T extends { testCase?: AtomicTestCase }>(value: T, testIdx: number): T => {
     const rowTest = verifierTests.get(testIdx);
-    const inherited = requiresTraceRedaction(defaultTest?.assert)
-      ? defaultTest
-      : (rowTest ?? defaultTest);
+    const rowDefault = disabledDefaults.has(testIdx) ? undefined : defaultTest;
+    const inherited = requiresTraceRedaction(rowDefault?.assert)
+      ? rowDefault
+      : (rowTest ?? rowDefault);
     const testCase = value.testCase;
     if (!inherited) {
       return value;
@@ -384,7 +389,7 @@ export function sanitizeLegacyResults(
   });
   const body = table?.body?.map((row, index) => {
     const testIdx = row.testIdx ?? index;
-    if (!defaultTest && !verifierTests.has(testIdx)) {
+    if ((!defaultTest || disabledDefaults.has(testIdx)) && !verifierTests.has(testIdx)) {
       return row;
     }
     const projected = redact(

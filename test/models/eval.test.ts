@@ -285,6 +285,60 @@ describe('evaluator', () => {
       },
     );
 
+    it.each(['result', 'table-test', 'table-output'] as const)(
+      'honors disabled legacy default assertions recorded in %s',
+      async (location) => {
+        const original = createLegacyRedactionSummary(
+          'promptfoo:redteam:coding-agent:trace-redaction',
+        );
+        original.results = original.results.slice(0, 1);
+        original.table.body = original.table.body.slice(0, 1);
+        const result = original.results[0];
+        const row = original.table.body[0];
+        const output = row.outputs[0];
+        const config = { defaultTest: { assert: result.testCase.assert } };
+        result.testCase = { ...result.testCase, assert: [] };
+        row.test = { ...row.test, assert: [] };
+        output.testCase = { ...output.testCase, assert: [] };
+        const test =
+          location === 'result'
+            ? result.testCase
+            : location === 'table-test'
+              ? row.test
+              : output.testCase;
+        test.options = { disableDefaultAsserts: true };
+        const snapshot = JSON.stringify(original);
+        const evaluation = new Eval(config);
+        evaluation.oldResults = original;
+        expect((await evaluation.toEvaluateSummary()).results).toEqual(original.results);
+        expect(await evaluation.getTable()).toEqual(original.table);
+        const id = await writeResultsToDatabase(original, config);
+        const reloaded = (await Eval.findById(id))!;
+        expect(await reloaded.getResults()).toEqual(original.results);
+        expect(await reloaded.getTable()).toEqual(original.table);
+        expect(JSON.stringify(original)).toBe(snapshot);
+      },
+    );
+
+    it('retains explicit legacy privacy assertions when default assertions are disabled', async () => {
+      const original = createLegacyRedactionSummary(
+        'promptfoo:redteam:coding-agent:trace-redaction',
+      );
+      original.results[0].testCase.options = { disableDefaultAsserts: true };
+      const evaluation = new Eval({
+        defaultTest: { assert: [{ type: 'contains', value: 'public' }] },
+      });
+      evaluation.oldResults = original;
+      expect(JSON.stringify(await evaluation.toEvaluateSummary())).not.toContain(
+        'PRIVATE_LEGACY_RECEIPT',
+      );
+      expect((await evaluation.getResults())[0]).toMatchObject({
+        success: false,
+        score: 0,
+        failureReason: ResultFailureReason.ASSERT,
+      });
+    });
+
     it('redacts legacy verifier inputs while retaining non-privacy target output', async () => {
       const original = createLegacyRedactionSummary(
         'promptfoo:redteam:coding-agent:repo-prompt-injection',
