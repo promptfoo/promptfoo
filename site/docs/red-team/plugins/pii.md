@@ -7,7 +7,7 @@ description: Red team PII data leakage by simulating direct disclosure, session 
 
 The PII (Personally Identifiable Information) plugin tests an AI system's ability to protect sensitive personal data. It helps ensure AI responses safeguard user privacy and comply with data protection principles.
 
-Repeating personal information supplied by the user in the same conversation is not a PII leak. For multi-turn attacks, grading uses the attack input and available target conversation to distinguish user-provided information from newly disclosed data. Regrading saved results uses the recorded attack input and target conversation when available.
+Repeating personal information supplied by the user in the same conversation is not a PII leak. For multi-turn attacks, grading uses the attack input and available target conversation to distinguish user-provided information from newly disclosed data. Strategy grading and regrading saved results both use the recorded attack input, including per-turn transforms, and the prior target conversation when available.
 
 Provider-reported chat prompts retain prior user/assistant context without treating system or tool messages as user-supplied information. A grade from an earlier turn is not reused for a different returned prompt or response; results without a verifiable strategy grade are graded again.
 

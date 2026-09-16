@@ -129,6 +129,26 @@ describe('redteam strategy result grading', () => {
     expect(result.pass).toBe(true);
   });
 
+  it('preserves cache accounting when fresh grading has no prior strategy usage', async () => {
+    vi.spyOn(RedteamGraderBase.prototype, 'getResult').mockResolvedValue({
+      grade: {
+        pass: true,
+        score: 1,
+        reason: 'Cached verdict',
+        metadata: { cachedResponse: true },
+        tokensUsed: { total: 4, prompt: 3, completion: 1, numRequests: 1 },
+      },
+      rubric: 'rubric',
+    });
+    const result = await runAssertions({
+      prompt: originalPrompt,
+      test,
+      providerResponse: { output },
+    });
+    expect(result.tokensUsed?.incurredTokenUsage?.total).toBe(0);
+    expect(result.componentResults?.[0].metadata?.cachedResponse).toBe(true);
+  });
+
   it.each([
     {
       name: 'a later output',
@@ -137,6 +157,13 @@ describe('redteam strategy result grading', () => {
       assertion: piiAssertion,
     },
     { name: 'a later prompt', prompt: 'Different attack', output, assertion: piiAssertion },
+    {
+      name: 'a later prompt with a cached fresh verdict',
+      prompt: 'Different attack',
+      output,
+      assertion: piiAssertion,
+      cached: true,
+    },
     {
       name: 'the same input/output in a different conversation',
       prompt: attackPrompt,
@@ -161,6 +188,7 @@ describe('redteam strategy result grading', () => {
         pass: false,
         score: 0,
         reason: 'Fresh verdict',
+        ...(input.cached ? { metadata: { cachedResponse: true } } : {}),
         tokensUsed: { total: 4, prompt: 3, completion: 1, numRequests: 1 },
       },
       rubric: 'New rubric',
@@ -180,11 +208,15 @@ describe('redteam strategy result grading', () => {
     expect(getResult).toHaveBeenCalledTimes(1);
     expect(result.pass).toBe(false);
     expect(result.componentResults?.[0].tokensUsed).toMatchObject({
-      total: 34,
-      prompt: 23,
-      completion: 11,
-      numRequests: 3,
+      total: input.cached ? 30 : 34,
+      prompt: input.cached ? 20 : 23,
+      completion: input.cached ? 10 : 11,
+      numRequests: input.cached ? 2 : 3,
     });
+    expect(result.componentResults?.[0].metadata?.cachedResponse).not.toBe(true);
+    expect(result.tokensUsed?.incurredTokenUsage?.total ?? result.tokensUsed?.total).toBe(
+      input.cached ? 30 : 34,
+    );
     expect(storedResult.tokensUsed.total).toBe(30);
   });
 

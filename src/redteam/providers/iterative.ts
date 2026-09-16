@@ -20,6 +20,7 @@ import {
   accumulateResponseTokenUsage,
   createEmptyTokenUsage,
 } from '../../util/tokenUsageUtils';
+import { withGradingUsage } from '../grading/storedResult';
 import {
   buildPromptInputDescriptions,
   materializeInputVariablesWithMetadata,
@@ -626,7 +627,7 @@ export async function runRedteamConversation({
 
         const { grade, rubric } = await runRedteamGrader(
           grader,
-          newInjectVar,
+          finalInjectVar,
           targetResponse.output,
           iterationTest,
           gradingProvider,
@@ -866,7 +867,7 @@ export async function runRedteamConversation({
       redteamHistory: previousOutputs,
       redteamFinalPrompt: bestInjectVar,
       storedGraderResult: bestGraderResult
-        ? { ...bestGraderResult, tokensUsed: storedGraderResult?.tokensUsed }
+        ? withGradingUsage(bestGraderResult, storedGraderResult?.tokensUsed)
         : storedGraderResult,
       stopReason: stopReason,
       sessionIds,

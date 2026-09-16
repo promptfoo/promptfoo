@@ -1,7 +1,11 @@
 import logger from '../logger';
 import { MULTI_INPUT_VAR } from '../redteam/constants';
 import { getGraderById } from '../redteam/graders';
-import { getGradingInputHash } from '../redteam/grading/storedResult';
+import {
+  getGradingInputHash,
+  getTargetConversation,
+  withGradingUsage,
+} from '../redteam/grading/storedResult';
 import { isAttackProvider } from '../redteam/shared/attackProviders';
 import { checkExfilTracking } from '../redteam/strategies/indirectWebPwn';
 import { isApiProvider, isProviderOptions } from '../types/providers';
@@ -89,40 +93,6 @@ function matchesStoredGraderResult(
 
   // Without a recorded assertion, the grade cannot be associated with this check.
   return false;
-}
-
-function getTargetConversation(messages: unknown): {
-  lastUserPrompt?: string;
-  conversationTranscript?: string;
-} {
-  if (!Array.isArray(messages)) {
-    return {};
-  }
-  let lastUserIndex = -1;
-  for (let index = messages.length - 1; index >= 0; index--) {
-    if (messages[index]?.role === 'user' && typeof messages[index].content === 'string') {
-      lastUserIndex = index;
-      break;
-    }
-  }
-  if (lastUserIndex < 0 || !messages[lastUserIndex].content.trim()) {
-    return {};
-  }
-
-  // Only use the saved target conversation. redteamHistory can include unrelated
-  // single-turn attempts or abandoned branches. Keep the current turn separate
-  // from prior context, as Crescendo does when grading during a scan.
-  const conversationTranscript = messages
-    .slice(0, lastUserIndex)
-    .filter(
-      (message) =>
-        (message?.role === 'user' || message?.role === 'assistant') &&
-        typeof message.content === 'string',
-    )
-    .map((message) => `${message.role === 'user' ? 'User' : 'Assistant'}: ${message.content}`)
-    .join('\n\n');
-
-  return { lastUserPrompt: messages[lastUserIndex].content, conversationTranscript };
 }
 
 function getRedteamPrompt(
@@ -303,12 +273,24 @@ export const handleRedteam = async ({
         ? cloneTokenUsageBreakdown(storedResult.tokensUsed)
         : undefined;
     if (tokensUsed && grade.tokensUsed) {
-      accumulateTokenUsage(tokensUsed, grade.tokensUsed);
+      accumulateTokenUsage(
+        tokensUsed,
+        grade.metadata?.cachedResponse === true
+          ? {
+              total: 0,
+              cached:
+                grade.tokensUsed.cached ||
+                grade.tokensUsed.total ||
+                (grade.tokensUsed.prompt ?? 0) + (grade.tokensUsed.completion ?? 0),
+              numRequests: 0,
+            }
+          : grade.tokensUsed,
+      );
     }
 
+    const gradeWithUsage = tokensUsed ? withGradingUsage(grade, tokensUsed) : grade;
     return {
-      ...grade,
-      ...(tokensUsed ? { tokensUsed } : {}),
+      ...gradeWithUsage,
       ...(grade.assertion || assertion
         ? {
             assertion: {
@@ -321,7 +303,7 @@ export const handleRedteam = async ({
       metadata: {
         // Pass through all test metadata for redteam
         ...test.metadata,
-        ...grade.metadata,
+        ...gradeWithUsage.metadata,
       },
     };
   } catch (error) {

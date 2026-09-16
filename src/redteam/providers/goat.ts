@@ -19,6 +19,7 @@ import {
   accumulateResponseTokenUsage,
   createEmptyTokenUsage,
 } from '../../util/tokenUsageUtils';
+import { getTargetConversation } from '../grading/storedResult';
 import { materializeInputVariablesWithMetadata } from '../inputVariables';
 import {
   getRemoteGenerationHeaders,
@@ -508,6 +509,7 @@ export default class GoatProvider implements ApiProvider {
 
         // Get the latest message content for transforms
         const latestMessageContent = messages[messages.length - 1].content;
+        lastFinalAttackPrompt = latestMessageContent;
         let targetPrompt = this.config.stateful ? latestMessageContent : JSON.stringify(messages);
         logger.debug(`GOAT turn ${turn} target prompt: ${renderedAttackerPrompt}`);
 
@@ -753,6 +755,7 @@ export default class GoatProvider implements ApiProvider {
           // Build grading context with image outputs, tracing, and exfil tracking data.
           let gradingContext: RedteamGradingContext | undefined = {
             providerResponse: finalResponse,
+            conversationTranscript: getTargetConversation(messages).conversationTranscript,
             ...(finalResponse.images?.length ? { imageOutputs: finalResponse.images } : {}),
           };
 
@@ -807,7 +810,9 @@ export default class GoatProvider implements ApiProvider {
 
           const { grade, rubric } = await runRedteamGrader(
             grader,
-            attackerMessage.content,
+            lastFinalAttackPrompt ||
+              getLastMessageContent(messages, 'user') ||
+              attackerMessage.content,
             finalOutput,
             test,
             targetProvider,

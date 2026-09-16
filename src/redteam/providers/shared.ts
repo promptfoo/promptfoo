@@ -36,7 +36,7 @@ import {
   accumulateTokenUsage,
 } from '../../util/tokenUsageUtils';
 import { TransformInputType, transform } from '../../util/transform';
-import { getGradingInputHash } from '../grading/storedResult';
+import { getGradingInputHash, withGradingUsage } from '../grading/storedResult';
 import { remoteGenerationContextPayload } from '../remoteGenerationContext';
 import { throwIfTargetPromptExceedsMaxChars } from '../shared/promptLength';
 import { ATTACKER_MODEL, ATTACKER_MODEL_SMALL, TEMPERATURE } from './constants';
@@ -719,10 +719,7 @@ export function accumulateGraderResult(
       return current;
     }
 
-    return {
-      ...current,
-      tokensUsed,
-    };
+    return withGradingUsage(current, tokensUsed);
   }
 
   // The latest verdict can be cached even when the accumulated usage already
@@ -748,7 +745,7 @@ export function accumulateGraderResult(
     accumulateTokenUsage(tokensUsed, currentTokensUsed);
   }
 
-  return { ...current, tokensUsed };
+  return withGradingUsage(current, tokensUsed);
 }
 
 export interface Message {

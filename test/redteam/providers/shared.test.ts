@@ -1767,7 +1767,9 @@ describe('shared redteam provider utilities', () => {
         tokensUsed: { total: 20, prompt: 15, completion: 5, numRequests: 1 },
       };
 
-      const result = accumulateGraderResult(accumulateGraderResult(first, cached), last);
+      const cachedAfterFresh = accumulateGraderResult(first, cached);
+      expect(cachedAfterFresh.metadata?.cachedResponse).not.toBe(true);
+      const result = accumulateGraderResult(cachedAfterFresh, last);
 
       expect(result.tokensUsed).toMatchObject({
         total: 60,

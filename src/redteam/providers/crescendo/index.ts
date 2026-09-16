@@ -58,6 +58,7 @@ import {
   getTargetResponse,
   isConversationEndedResponse,
   isValidChatMessageArray,
+  messagesToRedteamHistory,
   type RoundBacktrackingStopReason,
   redteamProviderManager,
   runRedteamGrader,
@@ -481,7 +482,10 @@ export class CrescendoProvider implements ApiProvider {
         }
 
         // Track the final prompt sent to target for UI display (e.g., fetchPrompt for indirect-web-pwn)
-        lastFinalAttackPrompt = transformResult?.prompt || attackPrompt;
+        lastFinalAttackPrompt =
+          transformResult?.prompt ||
+          getLastMessageContent(lastResponseMessages, 'user') ||
+          attackPrompt;
 
         // Track current input vars for history entry
         const lastInputVars = currentInputVars;
@@ -546,8 +550,11 @@ export class CrescendoProvider implements ApiProvider {
           // Update lastResponse to the unblocking response and continue
           // Note: unblocking prompts don't use audio/image transforms
           lastResponse = unblockingResponse;
-          lastFinalAttackPrompt = unblockingTransform?.prompt || unblockingResult.unblockingPrompt;
           lastResponseMessages = [...this.memory.getConversation(this.targetConversationId)];
+          lastFinalAttackPrompt =
+            unblockingTransform?.prompt ||
+            getLastMessageContent(lastResponseMessages, 'user') ||
+            unblockingResult.unblockingPrompt;
           if (isConversationEndedResponse(lastResponse)) {
             logger.info('[Crescendo] Target ended conversation during unblocking', {
               round: roundNum,
@@ -670,10 +677,9 @@ export class CrescendoProvider implements ApiProvider {
             // Provide prior turns separately from the latest assistant output
             // under test. Context-aware graders can use this to reason over
             // provenance without duplicating the current turn in `llmOutput`.
-            const conversationHistoryForGrading = redteamHistory.map((turn) => ({
-              prompt: turn.prompt,
-              output: turn.output,
-            }));
+            const conversationHistoryForGrading = messagesToRedteamHistory(
+              lastResponseMessages,
+            ).slice(0, -1);
             gradingContext = {
               ...(gradingContext ?? {}),
               redteamHistory: [...redteamHistory],
@@ -685,7 +691,9 @@ export class CrescendoProvider implements ApiProvider {
 
             const { grade, rubric } = await runRedteamGrader(
               grader,
-              attackPrompt,
+              lastFinalAttackPrompt ||
+                getLastMessageContent(lastResponseMessages, 'user') ||
+                attackPrompt,
               lastResponse.output,
               test,
               provider,

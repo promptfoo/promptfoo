@@ -870,6 +870,13 @@ describe('RedteamGoatProvider', () => {
     });
 
     it('should handle mixed success and failure cases with continueAfterSuccess', async () => {
+      mockFetch.mockResolvedValue({
+        ok: true,
+        json: async () => ({
+          materializationHandled: true,
+          message: { role: 'user', content: 'test response' },
+        }),
+      });
       const provider = new RedteamGoatProvider({
         injectVar: 'goal',
         maxTurns: 4,
@@ -909,6 +916,10 @@ describe('RedteamGoatProvider', () => {
       expect(result.metadata?.totalSuccessfulAttacks).toBe(2);
       expect(result.metadata?.successfulAttacks?.[0].response).toBe('harmful response 1');
       expect(result.metadata?.successfulAttacks?.[1].response).toBe('harmful response 2');
+      expect(mockGrader.getResult.mock.calls[1][0]).toBe('test prompt');
+      expect(mockGrader.getResult.mock.calls[1][7]).toMatchObject({
+        conversationTranscript: 'User: test prompt\n\nAssistant: safe response 1',
+      });
     });
   });
 

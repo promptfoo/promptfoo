@@ -29,6 +29,7 @@ import {
   accumulateResponseTokenUsage,
   createEmptyTokenUsage,
 } from '../../util/tokenUsageUtils';
+import { withGradingUsage } from '../grading/storedResult';
 import { shouldGenerateRemote } from '../remoteGeneration';
 import { remoteGenerationContextPayload } from '../remoteGenerationContext';
 import {
@@ -615,7 +616,7 @@ async function runRedteamConversation({
   let bestGraderResult: GradingResult | undefined;
   const getBestGraderResult = () =>
     bestGraderResult
-      ? { ...bestGraderResult, tokensUsed: storedGraderResult?.tokensUsed }
+      ? withGradingUsage(bestGraderResult, storedGraderResult?.tokensUsed)
       : storedGraderResult;
 
   const totalTokenUsage: TokenUsage = createEmptyTokenUsage();
@@ -1009,7 +1010,7 @@ async function runRedteamConversation({
 
             const { grade, rubric } = await runRedteamGrader(
               grader,
-              newInjectVar,
+              finalInjectVar,
               targetResponse.output,
               iterationTest,
               gradingProvider,

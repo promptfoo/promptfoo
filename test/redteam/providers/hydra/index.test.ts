@@ -1308,6 +1308,9 @@ describe('HydraProvider', () => {
         true,
         false,
       ]);
+      expect(mockGetResult.mock.calls[1][7]).toMatchObject({
+        conversationTranscript: `User: ${openingQuestion}\n\nAssistant: ${publicCapabilities}`,
+      });
       expect(response.metadata.successfulAttacks).toEqual([
         expect.objectContaining({ turn: 2, message: followUp, response: disclosure }),
       ]);
@@ -2262,7 +2265,7 @@ describe('HydraProvider', () => {
     it('should include redteamHistory with media fields when perTurnLayers is configured', async () => {
       // Configure the hoisted mock to return audio/image data for this test
       mockApplyRuntimeTransforms.mockResolvedValueOnce({
-        transformedPrompt: 'transformed attack',
+        prompt: 'transformed attack',
         audio: { data: 'base64-audio-data', format: 'mp3' },
         image: { data: 'base64-image-data', format: 'png' },
       });
@@ -2295,6 +2298,10 @@ describe('HydraProvider', () => {
 
       const result = await provider.callApi('', context);
 
+      expect(mockGetGraderById.mock.results[0].value.getResult.mock.calls[0][0]).toBe(
+        'transformed attack',
+      );
+      expect(result.metadata?.redteamFinalPrompt).toBe('transformed attack');
       // Verify redteamHistory is populated
       expect(result.metadata?.redteamHistory).toBeDefined();
       expect(Array.isArray(result.metadata?.redteamHistory)).toBe(true);

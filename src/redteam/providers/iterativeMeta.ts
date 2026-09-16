@@ -604,7 +604,7 @@ export async function runMetaAgentRedteam({
 
         const { grade, rubric } = await runRedteamGrader(
           grader,
-          attackPrompt,
+          finalAttackPrompt,
           targetResponse.output,
           iterationTest,
           gradingProvider,

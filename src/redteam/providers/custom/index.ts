@@ -14,6 +14,7 @@ import {
   accumulateResponseTokenUsage,
   createEmptyTokenUsage,
 } from '../../../util/tokenUsageUtils';
+import { getTargetConversation } from '../../grading/storedResult';
 import { shouldGenerateRemote } from '../../remoteGeneration';
 import { remoteGenerationContextPayload } from '../../remoteGenerationContext';
 import {
@@ -326,6 +327,7 @@ export class CustomProvider implements ApiProvider {
     let lastFeedback = '';
     let lastResponse: TargetResponse = { output: '' };
     let lastResponseMessages: Message[] = [];
+    let lastFinalAttackPrompt: string | undefined;
     let evalFlag = false;
     let evalPercentage: number | null = null;
 
@@ -432,6 +434,10 @@ export class CustomProvider implements ApiProvider {
         lastResponse = response;
         lastResponseMessages = [...this.memory.getConversation(this.targetConversationId)];
         lastTransformResult = transformResult;
+        lastFinalAttackPrompt =
+          transformResult?.prompt ||
+          getLastMessageContent(lastResponseMessages, 'user') ||
+          attackPrompt;
         if (transformResult?.tokenUsage) {
           accumulateAttackerTokenUsage(totalTokenUsage, transformResult);
         }
@@ -502,6 +508,10 @@ export class CustomProvider implements ApiProvider {
           // Note: unblocking prompts don't use audio/image transforms
           lastResponse = unblockingResponse;
           lastResponseMessages = [...this.memory.getConversation(this.targetConversationId)];
+          lastFinalAttackPrompt =
+            unblockingTransform?.prompt ||
+            getLastMessageContent(lastResponseMessages, 'user') ||
+            unblockingResult.unblockingPrompt;
           if (isConversationEndedResponse(lastResponse)) {
             logger.info('[Custom] Target ended conversation during unblocking', {
               round: roundNum,
@@ -572,11 +582,13 @@ export class CustomProvider implements ApiProvider {
           if (grader) {
             const gradingContext: RedteamGradingContext | undefined = {
               providerResponse: lastResponse,
+              conversationTranscript:
+                getTargetConversation(lastResponseMessages).conversationTranscript,
               ...(lastResponse.images?.length ? { imageOutputs: lastResponse.images } : {}),
             };
             const { grade, rubric } = await runRedteamGrader(
               grader,
-              attackPrompt,
+              lastFinalAttackPrompt,
               lastResponse.output,
               test,
               provider,
@@ -593,11 +605,7 @@ export class CustomProvider implements ApiProvider {
                 assertion: buildGraderResultAssertion(grade.assertion, assertToUse, rubric),
               },
               {
-                prompt:
-                  getLastMessageContent(
-                    this.memory.getConversation(this.targetConversationId),
-                    'user',
-                  ) || attackPrompt,
+                prompt: lastFinalAttackPrompt,
                 output: lastResponse.output,
                 messages: lastResponseMessages,
                 pluginId: test.metadata?.pluginId,
@@ -708,7 +716,7 @@ export class CustomProvider implements ApiProvider {
     }
 
     const messages = lastResponseMessages;
-    const finalPrompt = getLastMessageContent(messages, 'user');
+    const finalPrompt = lastFinalAttackPrompt || getLastMessageContent(messages, 'user');
     return {
       output: lastResponse.output,
       prompt: finalPrompt,

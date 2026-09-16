@@ -933,6 +933,9 @@ describe('CrescendoProvider', () => {
   );
 
   it('should grade the latest assistant output while passing prior turns in grading context', async () => {
+    vi.mocked(evaluatorHelpers.renderPrompt).mockImplementation(async (_prompt, vars) =>
+      String(vars.objective),
+    );
     const getResult = vi.fn(async () => ({
       grade: {
         pass: true,
@@ -2907,11 +2910,15 @@ describe('CrescendoProvider - perTurnLayers configuration', () => {
   it('should include promptAudio and promptImage in redteamHistory when transforms are applied', async () => {
     // Configure the hoisted mock to return audio/image data for this test
     mockApplyRuntimeTransforms.mockResolvedValueOnce({
-      transformedPrompt: 'transformed prompt',
+      prompt: 'transformed prompt',
       audio: { data: 'base64-audio-data', format: 'mp3' },
       image: { data: 'base64-image-data', format: 'png' },
     });
 
+    const getResult = vi
+      .fn()
+      .mockResolvedValue({ grade: { pass: false, score: 0, reason: 'graded' } });
+    mockGetGraderById.mockReturnValue({ getResult });
     const provider = new CrescendoProvider({
       injectVar: 'objective',
       maxTurns: 1,
@@ -2934,7 +2941,7 @@ describe('CrescendoProvider - perTurnLayers configuration', () => {
 
     mockScoringProvider.callApi.mockResolvedValue({
       output: JSON.stringify({
-        value: true,
+        value: false,
         metadata: 100,
         rationale: 'Success',
       }),
@@ -2944,10 +2951,13 @@ describe('CrescendoProvider - perTurnLayers configuration', () => {
       originalProvider: mockTargetProvider,
       vars: { objective: 'test objective' },
       prompt: { raw: 'test prompt', label: 'test' },
+      test: { assert: [{ type: 'mock-grader' }], metadata: { pluginId: 'mock' } } as any,
     };
 
     const result = await provider.callApi('test prompt', context);
 
+    expect(getResult.mock.calls[0][0]).toBe('transformed prompt');
+    expect(result.metadata?.redteamFinalPrompt).toBe('transformed prompt');
     // Verify redteamHistory is populated
     expect(result.metadata?.redteamHistory).toBeDefined();
     expect(Array.isArray(result.metadata?.redteamHistory)).toBe(true);

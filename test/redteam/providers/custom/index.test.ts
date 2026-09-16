@@ -655,6 +655,9 @@ describe('CustomProvider', () => {
       expect(result.metadata?.stopReason).toBe('Max rounds reached');
       expect(result.metadata?.successfulAttacks).toEqual([]);
       expect(getResult).toHaveBeenCalledTimes(2);
+      expect(getResult.mock.calls[1][7]).toMatchObject({
+        conversationTranscript: 'User: test prompt\n\nAssistant: first response',
+      });
     });
   });
 
@@ -1536,11 +1539,15 @@ describe('CustomProvider', () => {
     it('should include redteamHistory with media fields when perTurnLayers is configured', async () => {
       // Configure the hoisted mock to return audio/image data for this test
       mockApplyRuntimeTransforms.mockResolvedValueOnce({
-        transformedPrompt: 'transformed prompt',
+        prompt: 'transformed prompt',
         audio: { data: 'base64-audio-data', format: 'mp3' },
         image: { data: 'base64-image-data', format: 'png' },
       });
 
+      const getResult = vi
+        .fn()
+        .mockResolvedValue({ grade: { pass: false, score: 0, reason: 'graded' } });
+      mockGetGraderById.mockReturnValue({ getResult });
       const provider = new CustomProvider({
         injectVar: 'objective',
         strategyText: 'Test strategy',
@@ -1564,7 +1571,7 @@ describe('CustomProvider', () => {
 
       mockScoringProvider.callApi.mockResolvedValue({
         output: JSON.stringify({
-          value: true,
+          value: false,
           metadata: 100,
           rationale: 'Success',
         }),
@@ -1574,10 +1581,13 @@ describe('CustomProvider', () => {
         originalProvider: mockTargetProvider,
         vars: { objective: 'test objective' },
         prompt: { raw: 'test prompt', label: 'test' },
+        test: { assert: [{ type: 'mock-grader' }], metadata: { pluginId: 'mock' } } as any,
       };
 
       const result = await provider.callApi('test prompt', context);
 
+      expect(getResult.mock.calls[0][0]).toBe('transformed prompt');
+      expect(result.metadata?.redteamFinalPrompt).toBe('transformed prompt');
       // Verify redteamHistory is populated
       expect(result.metadata?.redteamHistory).toBeDefined();
       expect(Array.isArray(result.metadata?.redteamHistory)).toBe(true);
