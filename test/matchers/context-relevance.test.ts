@@ -438,4 +438,123 @@ This policy excludes all staff going on any outgoing structured programs, short 
       expect(result.metadata?.relevantSentenceCount).toBe(1);
     });
   });
+  it('should not count the grader echoing the prompt cue as a relevant sentence', async () => {
+    // The rubric ends with a `candidate sentences:` cue; chat models frequently echo it
+    // back before answering. Segmenting the raw completion turned that echo into an
+    // extracted sentence, so the numerator counted it and the score came out double.
+    const input = 'Who created Python?';
+    const context =
+      'Python is a high-level, general-purpose programming language known for readability. ' +
+      'It has a large standard library. ' +
+      'It was created by Guido van Rossum and released in 1991. ' +
+      'Python is widely used in data science, web development, and automation.';
+    const threshold = 0.2;
+
+    const mockCallApi = vi.fn().mockResolvedValue({
+      output: 'candidate sentences:\nIt was created by Guido van Rossum and released in 1991.',
+      tokenUsage: { total: 10, prompt: 5, completion: 5 },
+    });
+    vi.spyOn(DefaultGradingProvider, 'callApi').mockImplementation(mockCallApi);
+
+    const result = await matchesContextRelevance(input, context, threshold);
+
+    // one of four context sentences is relevant
+    expect(result.metadata?.totalContextUnits).toBe(4);
+    expect(result.metadata?.extractedSentences).toEqual([
+      'It was created by Guido van Rossum and released in 1991.',
+    ]);
+    expect(result.metadata?.relevantSentenceCount).toBe(1);
+    expect(result.score).toBeCloseTo(0.25, 2);
+  });
+
+  it('should keep verbatim extractions written in non-Latin scripts', async () => {
+    // The membership check must use Unicode letter/number properties. An ASCII-only
+    // class erases CJK, Arabic and Cyrillic entirely, so every extraction normalizes
+    // to the empty string and a correct grader scores 0.
+    const input = '法国的首都是哪里？';
+    const context = '巴黎是法国的首都。法国位于欧洲大陆。今天天气很好。';
+    const mockCallApi = vi.fn().mockResolvedValue({
+      output: '巴黎是法国的首都。',
+      tokenUsage: { total: 10, prompt: 5, completion: 5 },
+    });
+    vi.spyOn(DefaultGradingProvider, 'callApi').mockImplementation(mockCallApi);
+
+    const result = await matchesContextRelevance(input, context, 0.2);
+
+    expect(result.metadata?.relevantSentenceCount).toBe(1);
+    expect(result.score).toBeGreaterThan(0);
+  });
+
+  it('should still segment by sentence when the grader echoes the cue on its own line', async () => {
+    // The echoed cue adds a second line, which flips splitTextIntoSentences into line
+    // mode for the whole response. Dropping chatter before segmentation keeps the two
+    // relevant sentences on the remaining line counted separately.
+    const input = 'What comes first and second?';
+    const context = 'Alpha is first. Beta is second. Gamma is third.';
+    const mockCallApi = vi.fn().mockResolvedValue({
+      output: 'candidate sentences:\nAlpha is first. Beta is second.',
+      tokenUsage: { total: 10, prompt: 5, completion: 5 },
+    });
+    vi.spyOn(DefaultGradingProvider, 'callApi').mockImplementation(mockCallApi);
+
+    const result = await matchesContextRelevance(input, context, 0.2);
+
+    expect(result.metadata?.totalContextUnits).toBe(3);
+    expect(result.metadata?.relevantSentenceCount).toBe(2);
+    expect(result.score).toBeCloseTo(0.67, 2);
+  });
+
+  it('should accept list markers beyond "1." when matching extractions', async () => {
+    // Graders vary their list formatting; a marker the stripper does not recognise
+    // leaves the candidate unmatchable and silently drops a real extraction.
+    const input = 'Who created Python?';
+    const context =
+      'Python is known for readability. It was created by Guido van Rossum. It is widely used.';
+    const mockCallApi = vi.fn().mockResolvedValue({
+      output: '(1) It was created by Guido van Rossum.',
+      tokenUsage: { total: 10, prompt: 5, completion: 5 },
+    });
+    vi.spyOn(DefaultGradingProvider, 'callApi').mockImplementation(mockCallApi);
+
+    const result = await matchesContextRelevance(input, context, 0.2);
+
+    expect(result.metadata?.relevantSentenceCount).toBe(1);
+    expect(result.score).toBeCloseTo(0.33, 2);
+  });
+
+  it('should count both sentences when the cue shares a line with the first', async () => {
+    // Segmenting leaves the cue attached to the first sentence, so the membership
+    // check rejected an otherwise verbatim extraction and 2/3 became 1/3.
+    const input = 'What comes first and second?';
+    const context = 'Alpha is first. Beta is second. Gamma is third.';
+    const mockCallApi = vi.fn().mockResolvedValue({
+      output: 'candidate sentences: Alpha is first. Beta is second.',
+      tokenUsage: { total: 10, prompt: 5, completion: 5 },
+    });
+    vi.spyOn(DefaultGradingProvider, 'callApi').mockImplementation(mockCallApi);
+
+    const result = await matchesContextRelevance(input, context, 0.2);
+
+    expect(result.metadata?.relevantSentenceCount).toBe(2);
+    expect(result.score).toBeCloseTo(0.67, 2);
+  });
+
+  it('should not count a bare list marker left standing by sentence splitting', async () => {
+    // `A.` splits into its own segment and normalizes to `a`, which is a substring of
+    // nearly any context — counting it inflates the numerator, the very failure this
+    // filter exists to prevent.
+    const input = 'What is the capital of France?';
+    const context = 'Paris is the capital of France. Berlin is the capital of Germany.';
+    const mockCallApi = vi.fn().mockResolvedValue({
+      output: 'A. Paris is the capital of France.',
+      tokenUsage: { total: 10, prompt: 5, completion: 5 },
+    });
+    vi.spyOn(DefaultGradingProvider, 'callApi').mockImplementation(mockCallApi);
+
+    const result = await matchesContextRelevance(input, context, 0.2);
+
+    expect(result.metadata?.extractedSentences).toEqual(['Paris is the capital of France.']);
+    expect(result.metadata?.relevantSentenceCount).toBe(1);
+    expect(result.score).toBeCloseTo(0.5, 2);
+  });
 });
