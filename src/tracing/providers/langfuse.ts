@@ -1,3 +1,5 @@
+import { isDeepStrictEqual } from 'node:util';
+
 import logger from '../../logger';
 import { getNormalizedToolAttributes } from '../toolAttributes';
 import {
@@ -190,6 +192,24 @@ function observationAttributes(observation: LangfuseObservation): Record<string,
   const parsedOutput = parseJsonValue(observation.output);
   const observationName =
     typeof observation.name === 'string' && observation.name.trim() ? observation.name : undefined;
+
+  if (observation.type === 'TOOL') {
+    for (const [key, value] of [
+      ['tool.arguments', parsedInput],
+      ['gen_ai.tool.call.arguments', parsedInput],
+      ['gen_ai.tool.call.result', parsedOutput],
+    ] as const) {
+      if (
+        value !== undefined &&
+        Object.prototype.hasOwnProperty.call(telemetryAttributes, key) &&
+        !isDeepStrictEqual(value, parseJsonValue(telemetryAttributes[key]))
+      ) {
+        throw new TraceProviderError(
+          'Langfuse tool observation has conflicting input or output attributes',
+        );
+      }
+    }
+  }
 
   return {
     ...resourceAttributes,
