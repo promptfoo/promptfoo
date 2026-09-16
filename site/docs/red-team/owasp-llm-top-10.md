@@ -204,6 +204,7 @@ Test for improper output handling with:
 
 - **Output validation**: Define expected output formats and use Promptfoo's [assertion capabilities](/docs/configuration/expected-outputs/).
 - **Sanitization testing**: Generate outputs that may contain malicious content and verify proper sanitization.
+- **Filesystem payload emission**: Use the [`path-traversal-output`](./plugins/path-traversal-output.md) plugin to flag traversal payloads (`../../etc/passwd`, encoded variants, `\\?\C:\…`, `file://`, `php://filter`) emitted at sensitive system files.
 
 Example test case:
 
