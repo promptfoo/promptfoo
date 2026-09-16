@@ -1,26 +1,24 @@
 import fs from 'fs';
+import os from 'os';
 import * as path from 'path';
 
 import dedent from 'dedent';
-import {
-  afterAll,
-  beforeAll,
-  beforeEach,
-  describe,
-  expect,
-  it,
-  type MockedFunction,
-  vi,
-} from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, type MockedFunction, vi } from 'vitest';
+import { evaluate } from '../../src/evaluator';
 import { doEval } from '../../src/node/doEval';
+import { setupEnv as loadEnvFile } from '../../src/util/env';
 import { setupEnv } from '../../src/util/index';
+import { mockProcessEnv } from '../util/utils';
 
 vi.mock('../../src/cache');
-vi.mock('../../src/evaluator');
+vi.mock('../../src/evaluator', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../../src/evaluator')>()),
+  evaluate: vi.fn(),
+}));
 vi.mock('../../src/globalConfig/accounts');
 vi.mock('../../src/globalConfig/cloud', () => ({
   cloudConfig: {
-    isEnabled: vi.fn().mockReturnValue(false),
+    isEnabled: () => false,
   },
 }));
 vi.mock('../../src/migrate');
@@ -43,12 +41,13 @@ vi.mock('../../src/models/eval', () => {
   MockEval.findById = vi.fn().mockResolvedValue(null);
   return { default: MockEval };
 });
-vi.mock('../../src/providers');
 vi.mock('../../src/share');
 vi.mock('../../src/table');
-vi.mock('../../src/util/cloud', () => ({
-  checkCloudPermissions: vi.fn().mockResolvedValue(undefined),
-  getOrgContext: vi.fn().mockResolvedValue(null),
+vi.mock('../../src/telemetry', () => ({ default: { record: vi.fn() } }));
+vi.mock('../../src/util/cloud', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../../src/util/cloud')>()),
+  checkCloudPermissions: async () => undefined,
+  getOrgContext: async () => null,
 }));
 vi.mock('../../src/util', async () => {
   const actual = await vi.importActual('../../src/util');
@@ -65,19 +64,41 @@ describe('Integration: commandLineOptions.envPath', () => {
   let tempDir: string;
   let tempEnvFile: string;
   let tempConfigFile: string;
-
-  beforeAll(() => {
-    tempDir = fs.mkdtempSync(path.join(__dirname, 'test-'));
-    tempEnvFile = path.join(tempDir, '.env.test');
-    tempConfigFile = path.join(tempDir, 'promptfooconfig.yaml');
-  });
-
-  afterAll(() => {
-    fs.rmSync(tempDir, { recursive: true });
-  });
+  let restoreEnv: () => void;
+  const evaluationReached = new Error('Environment loading reached evaluation');
 
   beforeEach(() => {
-    vi.clearAllMocks();
+    tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'promptfoo-env-path-'));
+    tempEnvFile = path.join(tempDir, '.env.test');
+    tempConfigFile = path.join(tempDir, 'promptfooconfig.yaml');
+    restoreEnv = mockProcessEnv({
+      TEST_VAR: undefined,
+      CLI_VAR: undefined,
+      CONFIG_VAR: undefined,
+      REL: undefined,
+      BASE_VAR: undefined,
+      LOCAL_VAR: undefined,
+      VAR1: undefined,
+      VAR2: undefined,
+      CLI_VAR1: undefined,
+      CLI_VAR2: undefined,
+      CONFIG_VAR1: undefined,
+      CONFIG_VAR2: undefined,
+      ENVPATH_PRECEDENCE: undefined,
+    });
+    mockSetupEnv.mockImplementation((envPath) => {
+      // Exercise configured files without loading the checkout's default .env.
+      if (envPath && (!Array.isArray(envPath) || envPath.length > 0)) {
+        loadEnvFile(envPath);
+      }
+    });
+    vi.mocked(evaluate).mockRejectedValue(evaluationReached);
+  });
+
+  afterEach(() => {
+    restoreEnv();
+    fs.rmSync(tempDir, { recursive: true, force: true });
+    vi.resetAllMocks();
   });
 
   it('should load environment from config-specified envPath', async () => {
@@ -105,22 +126,16 @@ tests:
 
     const cmdObj = { config: [tempConfigFile] };
 
-    try {
-      await doEval(cmdObj, {}, undefined, {});
-    } catch {
-      // Expected to fail due to mocked dependencies
-    }
+    await expect(doEval(cmdObj, {}, undefined, {})).rejects.toBe(evaluationReached);
 
-    // Should call setupEnv twice: once for CLI (undefined), once for config
-    expect(mockSetupEnv).toHaveBeenCalledTimes(2);
-    expect(mockSetupEnv).toHaveBeenNthCalledWith(1, undefined); // Phase 1: CLI
-    expect(mockSetupEnv).toHaveBeenNthCalledWith(2, tempEnvFile); // Phase 2: Config
+    expect(mockSetupEnv).toHaveBeenCalledWith(tempEnvFile);
+    expect(process.env.TEST_VAR).toBe('from_config_env');
   });
 
   it('should prioritize CLI envPath over config envPath', async () => {
     const cliEnvFile = path.join(tempDir, '.env.cli');
-    fs.writeFileSync(cliEnvFile, 'CLI_VAR=from_cli');
-    fs.writeFileSync(tempEnvFile, 'CONFIG_VAR=from_config');
+    fs.writeFileSync(cliEnvFile, 'CLI_VAR=from_cli\nENVPATH_PRECEDENCE=cli');
+    fs.writeFileSync(tempEnvFile, 'CONFIG_VAR=from_config\nENVPATH_PRECEDENCE=config');
 
     fs.writeFileSync(
       tempConfigFile,
@@ -145,15 +160,13 @@ tests:
       envPath: cliEnvFile,
     };
 
-    try {
-      await doEval(cmdObj, {}, undefined, {});
-    } catch {
-      // Expected to fail due to mocked dependencies
-    }
+    await expect(doEval(cmdObj, {}, undefined, {})).rejects.toBe(evaluationReached);
 
-    // Should only call setupEnv once with CLI envPath (config envPath ignored)
-    expect(mockSetupEnv).toHaveBeenCalledTimes(1);
     expect(mockSetupEnv).toHaveBeenCalledWith(cliEnvFile);
+    expect(mockSetupEnv).not.toHaveBeenCalledWith(tempEnvFile);
+    expect(process.env.CLI_VAR).toBe('from_cli');
+    expect(process.env.CONFIG_VAR).toBeUndefined();
+    expect(process.env.ENVPATH_PRECEDENCE).toBe('cli');
   });
 
   it('should handle missing commandLineOptions section gracefully', async () => {
@@ -174,21 +187,17 @@ tests:
 
     const cmdObj = { config: [tempConfigFile] };
 
-    try {
-      await doEval(cmdObj, {}, undefined, {});
-    } catch {
-      // Expected to fail due to mocked dependencies
-    }
+    await expect(doEval(cmdObj, {}, undefined, {})).rejects.toBe(evaluationReached);
 
-    // Should only call setupEnv once with undefined (no config envPath)
-    expect(mockSetupEnv).toHaveBeenCalledTimes(1);
     expect(mockSetupEnv).toHaveBeenCalledWith(undefined);
+    expect(process.env.TEST_VAR).toBeUndefined();
   });
 
   it('should handle multiple config files and use first envPath found', async () => {
     const config1File = path.join(tempDir, 'config1.yaml');
     const config2File = path.join(tempDir, 'config2.yaml');
     const envFile2 = path.join(tempDir, '.env2');
+    fs.writeFileSync(envFile2, 'TEST_VAR=from_second_config');
 
     fs.writeFileSync(
       config1File,
@@ -218,16 +227,10 @@ tests:
 
     const cmdObj = { config: [config1File, config2File] };
 
-    try {
-      await doEval(cmdObj, {}, undefined, {});
-    } catch {
-      // Expected to fail due to mocked dependencies
-    }
+    await expect(doEval(cmdObj, {}, undefined, {})).rejects.toBe(evaluationReached);
 
-    // Should call setupEnv twice: CLI + first envPath found (from config2)
-    expect(mockSetupEnv).toHaveBeenCalledTimes(2);
-    expect(mockSetupEnv).toHaveBeenNthCalledWith(1, undefined);
-    expect(mockSetupEnv).toHaveBeenNthCalledWith(2, envFile2);
+    expect(mockSetupEnv).toHaveBeenCalledWith(envFile2);
+    expect(process.env.TEST_VAR).toBe('from_second_config');
   });
 
   it('should resolve relative envPath against the config file directory', async () => {
@@ -253,15 +256,12 @@ tests:
 `,
     );
 
-    try {
-      await doEval({ config: [subConfig] }, {}, undefined, {});
-    } catch {}
+    await expect(doEval({ config: [subConfig] }, {}, undefined, {})).rejects.toBe(
+      evaluationReached,
+    );
 
-    expect(mockSetupEnv).toHaveBeenCalledTimes(2);
-    expect(mockSetupEnv).toHaveBeenNthCalledWith(1, undefined);
-    // Expect absolute resolved path
-    expect(path.isAbsolute((mockSetupEnv as any).mock.calls[1][0])).toBe(true);
-    expect((mockSetupEnv as any).mock.calls[1][0]).toBe(relEnvAbs);
+    expect(mockSetupEnv).toHaveBeenCalledWith(relEnvAbs);
+    expect(process.env.REL).toBe('ok');
   });
 
   describe('multi-file envPath support', () => {
@@ -269,8 +269,8 @@ tests:
       const envFile1 = path.join(tempDir, '.env');
       const envFile2 = path.join(tempDir, '.env.local');
 
-      fs.writeFileSync(envFile1, 'BASE_VAR=base');
-      fs.writeFileSync(envFile2, 'LOCAL_VAR=local');
+      fs.writeFileSync(envFile1, 'BASE_VAR=base\nENVPATH_PRECEDENCE=base');
+      fs.writeFileSync(envFile2, 'LOCAL_VAR=local\nENVPATH_PRECEDENCE=local');
 
       fs.writeFileSync(
         tempConfigFile,
@@ -294,16 +294,12 @@ tests:
 
       const cmdObj = { config: [tempConfigFile] };
 
-      try {
-        await doEval(cmdObj, {}, undefined, {});
-      } catch {
-        // Expected to fail due to mocked dependencies
-      }
+      await expect(doEval(cmdObj, {}, undefined, {})).rejects.toBe(evaluationReached);
 
-      // Should call setupEnv twice: CLI (undefined), then config with array
-      expect(mockSetupEnv).toHaveBeenCalledTimes(2);
-      expect(mockSetupEnv).toHaveBeenNthCalledWith(1, undefined);
-      expect(mockSetupEnv).toHaveBeenNthCalledWith(2, [envFile1, envFile2]);
+      expect(mockSetupEnv).toHaveBeenCalledWith([envFile1, envFile2]);
+      expect(process.env.BASE_VAR).toBe('base');
+      expect(process.env.LOCAL_VAR).toBe('local');
+      expect(process.env.ENVPATH_PRECEDENCE).toBe('local');
     });
 
     it('should resolve relative paths in envPath array against config directory', async () => {
@@ -334,16 +330,13 @@ tests:
 `,
       );
 
-      try {
-        await doEval({ config: [subConfig] }, {}, undefined, {});
-      } catch {}
+      await expect(doEval({ config: [subConfig] }, {}, undefined, {})).rejects.toBe(
+        evaluationReached,
+      );
 
-      expect(mockSetupEnv).toHaveBeenCalledTimes(2);
-      expect(mockSetupEnv).toHaveBeenNthCalledWith(1, undefined);
-      // Should receive resolved absolute paths
-      const envPathArg = (mockSetupEnv as any).mock.calls[1][0];
-      expect(Array.isArray(envPathArg)).toBe(true);
-      expect(envPathArg).toEqual([envFile1, envFile2]);
+      expect(mockSetupEnv).toHaveBeenCalledWith([envFile1, envFile2]);
+      expect(process.env.VAR1).toBe('val1');
+      expect(process.env.VAR2).toBe('val2');
     });
 
     it('should pass CLI envPath array when provided', async () => {
@@ -371,13 +364,11 @@ tests:
         envPath: [envFile1, envFile2],
       };
 
-      try {
-        await doEval(cmdObj, {}, undefined, {});
-      } catch {}
+      await expect(doEval(cmdObj, {}, undefined, {})).rejects.toBe(evaluationReached);
 
-      // CLI envPath should be called once (no config envPath)
-      expect(mockSetupEnv).toHaveBeenCalledTimes(1);
       expect(mockSetupEnv).toHaveBeenCalledWith([envFile1, envFile2]);
+      expect(process.env.CLI_VAR1).toBe('cli1');
+      expect(process.env.CLI_VAR2).toBe('cli2');
     });
 
     it('should load config envPath when CLI envPath defaults to an empty array', async () => {
@@ -407,13 +398,13 @@ tests:
         `,
       );
 
-      try {
-        await doEval({ config: [tempConfigFile], envPath: [] }, {}, undefined, {});
-      } catch {}
+      await expect(
+        doEval({ config: [tempConfigFile], envPath: [] }, {}, undefined, {}),
+      ).rejects.toBe(evaluationReached);
 
-      expect(mockSetupEnv).toHaveBeenCalledTimes(2);
-      expect(mockSetupEnv).toHaveBeenNthCalledWith(1, []);
-      expect(mockSetupEnv).toHaveBeenNthCalledWith(2, [envFile1, envFile2]);
+      expect(mockSetupEnv).toHaveBeenCalledWith([envFile1, envFile2]);
+      expect(process.env.CONFIG_VAR1).toBe('config1');
+      expect(process.env.CONFIG_VAR2).toBe('config2');
     });
   });
 });

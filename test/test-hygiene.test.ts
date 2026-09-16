@@ -180,7 +180,6 @@ const legacyModuleScopePersistentMockFiles = new Set<string>([
   'globalConfig.test.ts',
   'googleSheets.test.ts',
   'index.test.ts',
-  'integration/envPath.test.ts',
   'migrate.test.ts',
   'prompts/index.test.ts',
   'providers/anthropic/completion.test.ts',

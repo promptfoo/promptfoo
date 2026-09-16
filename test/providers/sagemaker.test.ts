@@ -1,7 +1,11 @@
+import { mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import path from 'node:path';
 import crypto from 'crypto';
 
 import { SageMakerRuntimeClient } from '@aws-sdk/client-sagemaker-runtime';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { importModule } from '../../src/esm';
 import logger from '../../src/logger';
 
 // Use vi.hoisted to create mock functions that can be used in vi.mock factories
@@ -23,16 +27,26 @@ vi.mock('../../src/cache', () => ({
   getCache: vi.fn().mockReturnValue(mockCacheObject),
   isCacheEnabled: mockIsCacheEnabled,
 }));
+vi.mock('../../src/telemetry', () => ({ default: { record: vi.fn() } }));
 
 // Mock AWS SDK
 vi.mock('@aws-sdk/client-sagemaker-runtime', () => ({
   SageMakerRuntimeClient: vi.fn().mockImplementation(function ({ region }) {
-    return { send: (command: unknown) => mockSend(command, region) };
+    return { send: (command: unknown) => mockSend(command, region), destroy: vi.fn() };
   }),
   InvokeEndpointCommand: vi.fn().mockImplementation(function (params) {
     return params;
   }),
 }));
+
+vi.mock('@smithy/core/config', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@smithy/core/config')>();
+  return {
+    ...actual,
+    // Keep the mocked SDK fixture from resolving auto defaults through IMDS.
+    resolveDefaultsModeConfig: () => async () => 'legacy' as const,
+  };
+});
 
 import {
   SageMakerCompletionProvider,
@@ -53,6 +67,91 @@ describe('SageMakerCompletionProvider', () => {
     vi.unstubAllEnvs();
     vi.restoreAllMocks();
   });
+
+  it.each(['no later request', 'newer same-key result', 'uncanceled result'])(
+    'guards completion caching across an async file transform with %s',
+    async (scenario) => {
+      const directory = await mkdtemp(path.join(tmpdir(), 'sagemaker-response-transform-'));
+      const transformPath = path.join(directory, 'transform.cjs');
+      await writeFile(
+        transformPath,
+        `let entered, release, exited;
+const started = new Promise(resolve => { entered = resolve; });
+const gate = new Promise(resolve => { release = resolve; });
+const finished = new Promise(resolve => { exited = resolve; });
+async function transform(data) {
+  if (data.output === 'A') { entered(); await gate; exited(); }
+  return data.output;
+}
+Object.assign(transform, { started, release, finished });
+module.exports = transform;
+`,
+      );
+      const fixture: { started: Promise<void>; release: () => void; finished: Promise<void> } =
+        await importModule(transformPath);
+      const entries = new Map<string, string>();
+      mockIsCacheEnabled.mockReturnValue(true);
+      mockCacheGet.mockImplementation(async (key: string) => entries.get(key));
+      mockCacheSet.mockImplementation(async (key: string, value: string) => {
+        entries.set(key, value);
+      });
+      mockSend
+        .mockResolvedValueOnce({ Body: new TextEncoder().encode('{"output":"A"}') })
+        .mockResolvedValueOnce({ Body: new TextEncoder().encode('{"output":"B"}') });
+      const provider = new SageMakerCompletionProvider('async-transform', {
+        config: {
+          accessKeyId: 'SYNTHETIC_TRANSFORM',
+          secretAccessKey: 'synthetic-transform-secret',
+          region: 'us-east-1',
+          modelType: 'custom',
+          responseFormat: { path: `file://${transformPath}` },
+        },
+      });
+      const controller = new AbortController();
+      const request = provider.callApi('same request', undefined, {
+        abortSignal: controller.signal,
+      });
+      void request.catch(() => {});
+      try {
+        await Promise.race([
+          fixture.started,
+          request.then(() => {
+            throw new Error('Request completed without entering the file transform');
+          }),
+        ]);
+        if (scenario !== 'uncanceled result') {
+          const reason = new Error('Synthetic response-transform cancellation');
+          controller.abort(reason);
+          await expect(request).rejects.toBe(reason);
+        }
+        if (scenario === 'newer same-key result') {
+          expect(await provider.callApi('same request')).toMatchObject({ output: 'B' });
+          expect(mockCacheSet).toHaveBeenCalledTimes(1);
+        }
+        fixture.release();
+        await fixture.finished;
+        // Drain the actual parse/cache continuation after the file transform returns.
+        await new Promise<void>((resolve) => setImmediate(resolve));
+        if (scenario === 'no later request') {
+          expect(mockCacheSet).not.toHaveBeenCalled();
+          expect(entries.size).toBe(0);
+        } else {
+          const output = scenario === 'newer same-key result' ? 'B' : 'A';
+          if (scenario === 'uncanceled result') {
+            expect(await request).toMatchObject({ output });
+          }
+          expect(mockCacheSet).toHaveBeenCalledTimes(1);
+          expect(await provider.callApi('same request')).toMatchObject({ output, cached: true });
+          expect(mockSend).toHaveBeenCalledTimes(scenario === 'newer same-key result' ? 2 : 1);
+        }
+      } finally {
+        fixture.release();
+        await Promise.allSettled([request]);
+        provider.cleanup();
+        await rm(directory, { recursive: true, force: true });
+      }
+    },
+  );
 
   describe('cache flag behavior', () => {
     it('should set cached flag when returning cached response from callApi', async () => {
@@ -368,7 +467,8 @@ describe('SageMakerCompletionProvider', () => {
           cached: true,
         });
         expect(mockSend).toHaveBeenCalledTimes(3);
-        expect(SageMakerRuntimeClient).toHaveBeenCalledTimes(2);
+        expect(SageMakerRuntimeClient).toHaveBeenCalledTimes(3);
+        // A new transport in the same region retains its credential provider.
         expect(credentials).toHaveBeenCalledTimes(2);
       },
     );
@@ -519,6 +619,29 @@ describe('SageMakerCompletionProvider', () => {
   });
 
   describe('payload formatting', () => {
+    it('reports invalid configuration without logging configured credential values', () => {
+      const warn = vi.spyOn(logger, 'warn');
+      new SageMakerCompletionProvider('endpoint', {
+        config: {
+          modelType: 'custom',
+          accessKeyId: 'SENTINEL_ACCESS_KEY',
+          secretAccessKey: 'SENTINEL_SECRET_KEY',
+          sessionToken: 'SENTINEL_SESSION_TOKEN',
+          maxTokens: 'invalid-number' as unknown as number,
+        },
+      });
+      const warnings = JSON.stringify(warn.mock.calls);
+      expect(warnings).toContain('maxTokens');
+      expect(warnings).toContain('number');
+      for (const sentinel of [
+        'SENTINEL_ACCESS_KEY',
+        'SENTINEL_SECRET_KEY',
+        'SENTINEL_SESSION_TOKEN',
+      ]) {
+        expect(warnings).not.toContain(sentinel);
+      }
+    });
+
     it('accepts function transforms in config without validation warnings', () => {
       const warnSpy = vi.spyOn(logger, 'warn');
       const transformFn = (output: unknown) => String(output).trim();
@@ -676,6 +799,214 @@ describe('SageMakerEmbeddingProvider', () => {
 
   afterEach(() => {
     vi.clearAllMocks();
+    vi.restoreAllMocks();
+  });
+
+  it.each(['cache lookup', 'SDK response'])(
+    'keeps embedding request, parsing and cache identity stable across %s',
+    async (stage) => {
+      mockIsCacheEnabled.mockReturnValue(true);
+      const cache = new Map<string, string>();
+      let started!: () => void;
+      let finish!: () => void;
+      const held = new Promise<void>((resolve) => {
+        started = resolve;
+      });
+      const gate = new Promise<void>((resolve) => {
+        finish = resolve;
+      });
+      let firstLookup = true;
+      mockCacheGet.mockImplementation(async (key: string) => {
+        if (firstLookup && stage === 'cache lookup') {
+          firstLookup = false;
+          started();
+          await gate;
+        }
+        return cache.get(key);
+      });
+      mockCacheSet.mockImplementation(async (key: string, value: string) => {
+        cache.set(key, value);
+      });
+      mockSend.mockImplementation(async (command, region) => {
+        if (mockSend.mock.calls.length === 1 && stage === 'SDK response') {
+          started();
+          await gate;
+        }
+        const first = command.EndpointName === 'endpoint-A';
+        expect(region).toBe(first ? 'us-east-1' : 'us-west-2');
+        expect(command.ContentType).toBe(first ? 'application/a' : 'application/b');
+        expect(command.Accept).toBe(first ? 'application/a' : 'application/b');
+        expect(JSON.parse(command.Body)).toEqual(
+          first ? { inputs: 'same text' } : { input: 'same text', model: 'embedding' },
+        );
+        return {
+          Body: new TextEncoder().encode(JSON.stringify({ first: [1, 0], second: [0, 1] })),
+        };
+      });
+      const provider = new SageMakerEmbeddingProvider('endpoint-A', {
+        config: {
+          region: 'us-east-1',
+          modelType: 'huggingface',
+          contentType: 'application/a',
+          acceptType: 'application/a',
+          responseFormat: { path: 'json.first' },
+        },
+      });
+      const responseFormat = provider.config.responseFormat;
+      if (!responseFormat) {
+        throw new Error('Missing embedding fixture response format');
+      }
+      const requestA = provider.callEmbeddingApi('same text');
+      void requestA.catch(() => {});
+      try {
+        await Promise.race([
+          held,
+          requestA.then(() => {
+            throw new Error('Request completed before the hold');
+          }),
+        ]);
+        Object.assign(provider.config, {
+          endpoint: 'endpoint-B',
+          region: 'us-west-2',
+          modelType: 'openai',
+          contentType: 'application/b',
+          acceptType: 'application/b',
+        });
+        responseFormat.path = 'json.second';
+        finish();
+        expect(await requestA).toMatchObject({ embedding: [1, 0], tokenUsage: { numRequests: 1 } });
+        expect(mockCacheSet.mock.calls[0][0]).toBe(mockCacheGet.mock.calls[0][0]);
+        expect(await provider.callEmbeddingApi('same text')).toMatchObject({ embedding: [0, 1] });
+        expect(mockSend).toHaveBeenCalledTimes(2);
+        expect(await provider.callEmbeddingApi('same text')).toMatchObject({
+          embedding: [0, 1],
+          cached: true,
+        });
+        expect(mockSend).toHaveBeenCalledTimes(2);
+        Object.assign(provider.config, {
+          endpoint: 'endpoint-A',
+          region: 'us-east-1',
+          modelType: 'huggingface',
+          contentType: 'application/a',
+          acceptType: 'application/a',
+        });
+        responseFormat.path = 'json.first';
+        expect(await provider.callEmbeddingApi('same text')).toMatchObject({
+          embedding: [1, 0],
+          cached: true,
+        });
+        expect(mockSend).toHaveBeenCalledTimes(2);
+        expect(cache.size).toBe(2);
+      } finally {
+        finish();
+        await Promise.allSettled([requestA]);
+        provider.cleanup();
+      }
+    },
+  );
+
+  it('does not cache a late embedding response after caller cancellation', async () => {
+    mockIsCacheEnabled.mockReturnValue(true);
+    mockCacheGet.mockResolvedValue(undefined);
+    let started!: () => void;
+    let finish!: () => void;
+    const held = new Promise<void>((resolve) => {
+      started = resolve;
+    });
+    const gate = new Promise<void>((resolve) => {
+      finish = resolve;
+    });
+    mockSend.mockImplementation(async () => {
+      started();
+      await gate;
+      // Deliberately ignore SDK cancellation to exercise the late-result guard.
+      return { Body: new TextEncoder().encode(JSON.stringify({ embedding: [1, 0] })) };
+    });
+    const provider = new SageMakerEmbeddingProvider('abort-endpoint', {
+      config: { region: 'us-east-1', modelType: 'custom' },
+    });
+    const controller = new AbortController();
+    const request = provider.callEmbeddingApi('text', undefined, {
+      abortSignal: controller.signal,
+    });
+    void request.catch(() => {});
+    try {
+      await Promise.race([
+        held,
+        request.then(() => {
+          throw new Error('Request was not held');
+        }),
+      ]);
+      const error = new Error('Synthetic embedding cancellation');
+      controller.abort(error);
+      await expect(request).rejects.toBe(error);
+      finish();
+      await mockSend.mock.results[0].value;
+      await new Promise<void>((resolve) => setImmediate(resolve));
+      expect(mockCacheSet).not.toHaveBeenCalled();
+    } finally {
+      finish();
+      await Promise.allSettled([request]);
+      provider.cleanup();
+    }
+  });
+
+  it('uses one endpoint snapshot for embedding cache lookup and write', async () => {
+    mockIsCacheEnabled.mockReturnValue(true);
+    mockCacheGet.mockResolvedValue(undefined);
+    const provider = new SageMakerEmbeddingProvider('first-endpoint', {
+      config: { region: 'us-east-1', modelType: 'custom' },
+    });
+    let release!: () => void;
+    const sent = new Promise<void>((resolve) => {
+      mockSend.mockImplementationOnce(async () => {
+        resolve();
+        await new Promise<void>((done) => {
+          release = done;
+        });
+        return { Body: new TextEncoder().encode('{"embedding":[0.1,0.2]}') };
+      });
+    });
+    vi.spyOn(provider, 'getEndpointName')
+      .mockReturnValueOnce('first-endpoint')
+      .mockReturnValue('later-endpoint');
+    vi.spyOn(provider, 'getContentType')
+      .mockReturnValueOnce('application/json')
+      .mockReturnValue('text/plain');
+    vi.spyOn(provider, 'getAcceptType')
+      .mockReturnValueOnce('application/json')
+      .mockReturnValue('text/plain');
+    vi.spyOn(provider, 'getRegion').mockReturnValueOnce('us-east-1').mockReturnValue('us-west-2');
+
+    const result = provider.callEmbeddingApi('text');
+    await sent;
+    release();
+    expect(await result).toMatchObject({ embedding: [0.1, 0.2] });
+    const configHash = crypto
+      .createHash('sha256')
+      .update(
+        JSON.stringify({
+          endpoint: 'first-endpoint',
+          modelType: 'custom',
+          contentType: 'application/json',
+          acceptType: 'application/json',
+          region: 'us-east-1',
+        }),
+      )
+      .digest('hex')
+      .substring(0, 8);
+    const key = mockCacheGet.mock.calls[0][0];
+    expect(key).toMatch(/^sagemaker:embedding:v1:first-endpoint:/);
+    expect(key.endsWith(`:${configHash}`)).toBe(true);
+    expect(mockCacheSet.mock.calls[0][0]).toBe(key);
+    expect(mockSend).toHaveBeenCalledWith(
+      expect.objectContaining({
+        EndpointName: 'first-endpoint',
+        ContentType: 'application/json',
+        Accept: 'application/json',
+      }),
+      'us-east-1',
+    );
   });
 
   describe('cache flag behavior', () => {
@@ -733,3 +1064,173 @@ describe('SageMakerEmbeddingProvider', () => {
     });
   });
 });
+
+describe.each(['completion', 'embedding'] as const)(
+  'SageMaker %s runtime input snapshot',
+  (kind) => {
+    beforeEach(() => {
+      vi.clearAllMocks();
+      mockSend.mockReset();
+      mockCacheGet.mockReset();
+      mockCacheSet.mockReset();
+      mockIsCacheEnabled.mockReturnValue(true);
+    });
+
+    afterEach(() => {
+      mockSend.mockReset();
+      mockCacheGet.mockReset();
+      mockCacheSet.mockReset();
+      mockIsCacheEnabled.mockReset();
+      vi.unstubAllEnvs();
+      vi.restoreAllMocks();
+      vi.useRealTimers();
+    });
+
+    function createProvider(config: SageMakerCompletionProvider['config']) {
+      return kind === 'completion'
+        ? new SageMakerCompletionProvider('snapshot-endpoint', {
+            config: { modelType: 'custom', ...config },
+          })
+        : new SageMakerEmbeddingProvider('snapshot-endpoint', { config });
+    }
+
+    function call(provider: ReturnType<typeof createProvider>) {
+      return 'callEmbeddingApi' in provider
+        ? provider.callEmbeddingApi('same snapshot input')
+        : provider.callApi('same snapshot input');
+    }
+
+    it.each(['cache lookup', 'delay'] as const)(
+      'keeps configured credentials and transport with the serving request across %s',
+      async (boundary) => {
+        const config = {
+          endpoint: 'deployment-a',
+          region: 'us-east-1',
+          modelType: 'custom' as const,
+          accessKeyId: 'CONFIGURED_A',
+          secretAccessKey: 'synthetic-secret-a',
+          sessionToken: 'synthetic-token-a',
+          delay: boundary === 'delay' ? 1000 : undefined,
+        };
+        const provider = createProvider(config);
+        const credentials = vi.spyOn(provider, 'getCredentials');
+        const entries = new Map<string, string>();
+        let enter!: () => void;
+        let release!: () => void;
+        const entered = new Promise<void>((resolve) => {
+          enter = resolve;
+        });
+        const gate = new Promise<void>((resolve) => {
+          release = resolve;
+        });
+        let paused = false;
+        mockCacheGet.mockImplementation(async (key: string) => {
+          if (boundary === 'cache lookup' && !paused) {
+            paused = true;
+            enter();
+            await gate;
+          }
+          return entries.get(key);
+        });
+        mockCacheSet.mockImplementation(async (key: string, value: string) => {
+          entries.set(key, value);
+        });
+        mockSend.mockResolvedValue({
+          Body: new TextEncoder().encode('{"output":"captured A","embedding":[1,2,3]}'),
+        });
+        vi.stubEnv('AWS_ENDPOINT_URL_SAGEMAKER_RUNTIME', 'https://runtime-a.invalid');
+        vi.stubEnv('AWS_SAGEMAKER_MAX_RETRIES', '2');
+        if (boundary === 'delay') {
+          vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+          const schedule = globalThis.setTimeout;
+          vi.spyOn(globalThis, 'setTimeout').mockImplementation(
+            (handler, milliseconds, ...args) => {
+              const timer = schedule(handler, milliseconds, ...args);
+              if (milliseconds === 1000) {
+                enter();
+              }
+              return timer;
+            },
+          );
+        }
+        const first = call(provider);
+        try {
+          await Promise.race([
+            entered,
+            first.then(() => {
+              throw new Error('Request completed before the selected cache/delay boundary');
+            }),
+          ]);
+          provider.config = {
+            ...config,
+            endpoint: 'deployment-b',
+            region: 'us-west-2',
+            accessKeyId: 'CONFIGURED_B',
+            secretAccessKey: 'synthetic-secret-b',
+            sessionToken: 'synthetic-token-b',
+          };
+          vi.stubEnv('AWS_ENDPOINT_URL_SAGEMAKER_RUNTIME', 'https://runtime-b.invalid');
+          vi.stubEnv('AWS_SAGEMAKER_MAX_RETRIES', '4');
+          release();
+          if (boundary === 'delay') {
+            await vi.advanceTimersByTimeAsync(1000);
+          }
+          const expected =
+            kind === 'completion' ? { output: 'captured A' } : { embedding: [1, 2, 3] };
+          expect(await first).toMatchObject(expected);
+          expect(SageMakerRuntimeClient).toHaveBeenCalledTimes(1);
+          expect(vi.mocked(SageMakerRuntimeClient).mock.calls[0][0]).toMatchObject({
+            region: 'us-east-1',
+            endpoint: 'https://runtime-a.invalid',
+            maxAttempts: 2,
+            credentials: {
+              accessKeyId: 'CONFIGURED_A',
+              secretAccessKey: 'synthetic-secret-a',
+              sessionToken: 'synthetic-token-a',
+            },
+          });
+          expect(mockSend.mock.calls[0][0].EndpointName).toBe('deployment-a');
+          expect(mockSend.mock.calls[0][1]).toBe('us-east-1');
+          expect(credentials).toHaveBeenCalledTimes(1);
+          expect(mockCacheSet).toHaveBeenCalledTimes(1);
+
+          // Changing only authentication cannot put secrets into the cache identity.
+          provider.config = {
+            ...provider.config,
+            endpoint: config.endpoint,
+            region: config.region,
+          };
+          expect(await call(provider)).toMatchObject({ ...expected, cached: true });
+          expect(mockCacheGet.mock.calls[1][0]).toBe(mockCacheGet.mock.calls[0][0]);
+          expect(credentials).toHaveBeenCalledTimes(1);
+          expect(SageMakerRuntimeClient).toHaveBeenCalledTimes(1);
+          expect(mockSend).toHaveBeenCalledTimes(1);
+        } finally {
+          release();
+          if (boundary === 'delay') {
+            await vi.runAllTimersAsync();
+          }
+          await Promise.allSettled([first]);
+          provider.cleanup();
+        }
+      },
+    );
+
+    it('does not initialize credentials or a runtime for a cache hit', async () => {
+      const provider = createProvider({ region: 'us-east-1', profile: 'must-not-load' });
+      const credentials = vi.spyOn(provider, 'getCredentials');
+      const runtime = vi.spyOn(provider, 'getSageMakerRuntimeInstance');
+      const expected = kind === 'completion' ? { output: 'cached' } : { embedding: [1, 2, 3] };
+      mockCacheGet.mockResolvedValue(JSON.stringify(expected));
+      try {
+        expect(await call(provider)).toMatchObject({ ...expected, cached: true });
+        expect(credentials).not.toHaveBeenCalled();
+        expect(runtime).not.toHaveBeenCalled();
+        expect(SageMakerRuntimeClient).not.toHaveBeenCalled();
+        expect(mockSend).not.toHaveBeenCalled();
+      } finally {
+        provider.cleanup();
+      }
+    });
+  },
+);
