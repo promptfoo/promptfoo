@@ -29,7 +29,11 @@ import { streamEvalCsv } from './eval/evalTableUtils';
 import invariant from './invariant';
 import { writeJunitXmlOutput } from './junit';
 import { getOutputFileFormat, SUPPORTED_OUTPUT_FILE_FORMATS } from './outputFormats';
-import { sanitizeObject, sanitizeRuntimeOptions } from './sanitizer';
+import {
+  sanitizeObject,
+  sanitizeRuntimeOptions,
+  sanitizeTracingConfigForPersistence,
+} from './sanitizer';
 import { getNunjucksEngine } from './templates';
 
 import type Eval from '../models/eval';
@@ -332,11 +336,22 @@ const outputToHtmlReportCell = (output: EvaluateTableOutput) => {
 };
 
 function sanitizeConfigForOutput(config: Eval['config']): OutputFile['config'] {
-  return sanitizeObject(config, {
+  return sanitizeObject(sanitizeTracingConfigForPersistence(config), {
     context: 'output config',
     throwOnError: true,
     maxDepth: Number.POSITIVE_INFINITY,
   }) as OutputFile['config'];
+}
+
+async function createOutputSummary(evalRecord: Eval): Promise<OutputFile['results']> {
+  const summary = await evalRecord.toEvaluateSummary();
+  const prompts = ('prompts' in summary ? summary.prompts : summary.table.head.prompts).map(
+    (prompt) =>
+      prompt.config ? { ...prompt, config: sanitizeConfigForOutput(prompt.config) } : prompt,
+  );
+  return 'prompts' in summary
+    ? { ...summary, prompts }
+    : { ...summary, table: { ...summary.table, head: { ...summary.table.head, prompts } } };
 }
 
 function projectTracesForOutput(traces: NonNullable<OutputFile['traces']>) {
@@ -452,7 +467,7 @@ export async function createOutputData(
   shareableUrl: string | null,
   options: OutputOptions = {},
 ): Promise<OutputFile> {
-  const summary = await evalRecord.toEvaluateSummary();
+  const summary = await createOutputSummary(evalRecord);
   const redactedConfig = sanitizeConfigForOutput(evalRecord.config);
   let traces;
   try {
@@ -479,7 +494,7 @@ export async function createOutputData(
   };
 
   if (options.includeMedia) {
-    const blobAssets = await exportBlobAssets(summary, output.traces);
+    const blobAssets = await exportBlobAssets(evalRecord.id, summary, output.traces);
     if (blobAssets.length > 0) {
       output.blobAssets = blobAssets;
     }
@@ -489,14 +504,18 @@ export async function createOutputData(
 }
 
 async function exportBlobAssets(
+  evalId: string,
   results: OutputFile['results'],
   traces?: OutputFile['traces'],
 ): Promise<ExportedBlobAsset[]> {
-  const { getBlobByHash } = await import('../blobs');
+  const { getShareAuthorizedBlob } = await import('../blobs');
   const assets: ExportedBlobAsset[] = [];
   for (const hash of collectBlobHashes({ results: resultsForMediaExportScan(results), traces })) {
     try {
-      const blob = await getBlobByHash(hash);
+      const blob = await getShareAuthorizedBlob(hash, evalId);
+      if (!blob) {
+        continue;
+      }
       if (blob.data.length > BLOB_MAX_SIZE) {
         logger.warn('[Output] Skipping oversized blob in eval export', {
           hash,
@@ -616,7 +635,7 @@ export async function writeOutput(
   } else if (outputExtension === 'html') {
     const table = await evalRecord.getTable();
     invariant(table, 'Table is required');
-    const summary = await evalRecord.toEvaluateSummary();
+    const summary = await createOutputSummary(evalRecord);
     const redactedConfig = sanitizeConfigForOutput(evalRecord.config);
     const metadata = createOutputMetadata(evalRecord);
     const template = await fsPromises.readFile(
@@ -730,7 +749,7 @@ export async function writeOutput(
       throw error;
     }
   } else if (outputExtension === 'xml') {
-    const summary = await evalRecord.toEvaluateSummary();
+    const summary = await createOutputSummary(evalRecord);
     const redactedConfig = sanitizeConfigForOutput(evalRecord.config);
 
     // Sanitize data for XML builder to prevent textValue.replace errors
