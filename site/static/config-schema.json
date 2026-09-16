@@ -347,6 +347,9 @@
         "JFROG_API_KEY": {
           "type": "string"
         },
+        "LANGFUSE_BASE_URL": {
+          "type": "string"
+        },
         "LANGFUSE_HOST": {
           "type": "string"
         },
@@ -1811,6 +1814,9 @@
                       "type": "string"
                     },
                     "JFROG_API_KEY": {
+                      "type": "string"
+                    },
+                    "LANGFUSE_BASE_URL": {
                       "type": "string"
                     },
                     "LANGFUSE_HOST": {

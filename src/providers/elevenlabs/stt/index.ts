@@ -213,16 +213,7 @@ export class ElevenLabsSTTProvider implements ApiProvider {
    */
   private resolveAudioFilePath(prompt: string, context?: CallApiContextParams): string | undefined {
     // Priority: prompt (if it's a file path) > config.audioFile > vars.audioFile
-    if (
-      prompt &&
-      (prompt.endsWith('.mp3') ||
-        prompt.endsWith('.wav') ||
-        prompt.endsWith('.flac') ||
-        prompt.endsWith('.m4a') ||
-        prompt.endsWith('.ogg') ||
-        prompt.endsWith('.opus') ||
-        prompt.endsWith('.webm'))
-    ) {
+    if (prompt && /\.(mp3|mp4|mpeg|mpga|wav|flac|m4a|ogg|opus|webm)$/i.test(prompt)) {
       return prompt;
     }
 

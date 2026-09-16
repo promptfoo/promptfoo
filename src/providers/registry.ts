@@ -121,6 +121,27 @@ import type { LoadApiProviderContext } from '../types/index';
 import type { ProviderOptions } from '../types/providers';
 import type { ProviderFactory, ProviderFamily } from './registryTypes';
 
+/** Merge low-to-high priority scopes without letting a lower-priority key alias win. */
+export function mergeProviderEnv(
+  providerPath: string,
+  ...layers: (NonNullable<ProviderOptions['env']> | undefined)[]
+): NonNullable<ProviderOptions['env']> | undefined {
+  const isCodexSDK = /^openai:(?:codex-sdk|codex)(?::|$)/.test(providerPath);
+  let merged: NonNullable<ProviderOptions['env']> | undefined;
+  for (const layer of layers) {
+    if (!layer) {
+      continue;
+    }
+    merged ??= {};
+    if (isCodexSDK && (layer.OPENAI_API_KEY || layer.CODEX_API_KEY)) {
+      delete merged.OPENAI_API_KEY;
+      delete merged.CODEX_API_KEY;
+    }
+    Object.assign(merged, layer);
+  }
+  return merged;
+}
+
 function getConfiguredOpenAiModel(providerOptions: ProviderOptions): string | undefined {
   const configuredModel = providerOptions.config?.model;
   return typeof configuredModel === 'string' && configuredModel.trim().length > 0
@@ -216,7 +237,7 @@ export const providerMap: ProviderFactory[] = [
       // Model selection uses OpenCode configuration or explicit provider_id/model options.
       return new OpenCodeSDKProvider({
         ...providerOptions,
-        id: providerPath,
+        id: providerOptions.id ?? providerPath,
         config: providerOptions.config,
         env: context.env,
       });
@@ -398,6 +419,11 @@ export const providerMap: ProviderFactory[] = [
       }
       if (modelType === 'responses') {
         return new AzureResponsesProvider(deploymentName || 'gpt-4.1-2025-04-14', providerOptions);
+      }
+      if (modelType === 'live') {
+        throw new Error(
+          'GPT-Live is available through openai:live:<model name>, not the Azure provider.',
+        );
       }
       if (modelType === 'realtime') {
         requirePathSegment('realtime', 'a deployment name', 'deployment');
@@ -963,6 +989,14 @@ export const providerMap: ProviderFactory[] = [
       const modelName = splits.slice(2).join(':');
       const configuredModel = getConfiguredOpenAiModel(providerOptions);
 
+      if (modelType === 'agents-api') {
+        const { OpenAiAgentsApiProvider } = await import('./openai/agents-api');
+        return new OpenAiAgentsApiProvider(modelName, {
+          ...providerOptions,
+          env: { ...context.env, ...providerOptions.env },
+        });
+      }
+
       // Codex app-server providers (openai:codex-app-server or openai:codex-desktop)
       if (modelType === 'codex-app-server' || modelType === 'codex-desktop') {
         const { OpenAICodexAppServerProvider } = await import('./openai/codex-app-server');
@@ -998,12 +1032,25 @@ export const providerMap: ProviderFactory[] = [
                 model: codexModel,
               }
             : providerOptions.config,
-          env: context.env,
+          env: mergeProviderEnv(providerPath, context.env, providerOptions.env),
         });
       }
       const requestedApiModel = modelName || configuredModel || modelType;
-      if (!['agents', 'chatkit', 'assistant'].includes(modelType)) {
-        const passthrough = providerOptions.config?.passthrough as { model?: unknown } | undefined;
+      const passthrough = providerOptions.config?.passthrough as { model?: unknown } | undefined;
+      if (
+        [modelType, requestedApiModel, passthrough?.model].some(
+          (model) =>
+            typeof model === 'string' &&
+            (model === 'gpt-live-transcribe' || model.startsWith('gpt-live-transcribe-')),
+        )
+      ) {
+        throw new Error(
+          'gpt-live-transcribe requires a dedicated Realtime transcription session, which this provider does not support.',
+        );
+      }
+      const isLiveProvider =
+        modelType === 'live' || /^gpt-live-1(?:-\d{4}-\d{2}-\d{2})?$/.test(modelType);
+      if (!isLiveProvider && !['agents', 'chatkit', 'assistant'].includes(modelType)) {
         const apiHost =
           providerOptions.config?.apiHost ||
           providerOptions.env?.OPENAI_API_HOST ||
@@ -1069,6 +1116,14 @@ export const providerMap: ProviderFactory[] = [
           providerOptions,
         );
       }
+      // Conversational GPT-Live snapshots use the Live endpoint.
+      if (isLiveProvider) {
+        const { OpenAiLiveProvider } = await import('./openai/live');
+        return new OpenAiLiveProvider(
+          modelType === 'live' ? modelName || configuredModel || 'gpt-live-1' : modelType,
+          providerOptions,
+        );
+      }
       if (shouldDefaultToOpenAiResponses(modelType)) {
         return new OpenAiResponsesProvider(modelType, providerOptions);
       }
@@ -1115,7 +1170,7 @@ export const providerMap: ProviderFactory[] = [
       }
       // Assume user did not provide model type, and it's a chat model
       logger.warn(
-        `Unknown OpenAI model type: ${modelType}. Treating it as a chat model. Use one of the following providers: openai:chat:<model name>, openai:completion:<model name>, openai:embeddings:<model name>, openai:image:<model name>, openai:video:<model name>, openai:tts:<model name>, openai:transcription:<model name>, openai:realtime:<model name>, openai:agents:<agent name>, openai:chatkit:<workflow_id>, openai:codex-sdk`,
+        `Unknown OpenAI model type: ${modelType}. Treating it as a chat model. Use one of the following providers: openai:chat:<model name>, openai:completion:<model name>, openai:embeddings:<model name>, openai:image:<model name>, openai:video:<model name>, openai:tts:<model name>, openai:transcription:<model name>, openai:realtime:<model name>, openai:live:<model name>, openai:agents:<agent name>, openai:chatkit:<workflow_id>, openai:codex-sdk`,
       );
       return new OpenAiChatCompletionProvider(modelType, providerOptions);
     },
