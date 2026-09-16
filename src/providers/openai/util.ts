@@ -44,6 +44,15 @@ export function hasSensitiveOpenAiCachePath(value: string): boolean {
   return hasInlineSecret(value) || OPAQUE_CREDENTIAL_PATH_SEGMENT.test(value);
 }
 
+const DEFAULT_MAX_TOOL_ITERATIONS = 8;
+
+/** Resolve a tool-call cap from 1 to 64, falling back to 8 for missing or out-of-range values. */
+export function resolveMaxToolIterations(value: unknown): number {
+  return typeof value === 'number' && Number.isFinite(value) && value >= 1 && value <= 64
+    ? Math.floor(value)
+    : DEFAULT_MAX_TOOL_ITERATIONS;
+}
+
 export function appendOpenAiApiPath(apiUrl: string, endpoint: string, query?: string): string {
   const fragmentIndex = apiUrl.indexOf('#');
   const fragment = fragmentIndex === -1 ? '' : apiUrl.slice(fragmentIndex);
@@ -375,6 +384,15 @@ export function assertOpenAiApiModel(model: unknown, apiUrl?: string): void {
     return;
   }
 
+  if (model === 'gpt-live-transcribe' || model.startsWith('gpt-live-transcribe-')) {
+    throw new Error(
+      'gpt-live-transcribe requires a dedicated Realtime transcription session, which this provider does not support.',
+    );
+  }
+  if (model.startsWith('gpt-live-')) {
+    throw new Error(`Use openai:live:${model} for GPT-Live sessions.`);
+  }
+
   if (apiUrl) {
     try {
       if (new URL(apiUrl).hostname.toLowerCase() !== 'api.openai.com') {
@@ -653,8 +671,8 @@ export const OPENAI_COMPLETION_MODELS: OpenAIModelInfo[] = [
   {
     id: 'gpt-3.5-turbo-instruct',
     cost: {
-      input: 1.5 / 1000000,
-      output: 2 / 1000000,
+      input: 1.5 / 1e6,
+      output: 2 / 1e6,
     },
   },
   {
@@ -828,6 +846,10 @@ export const OPENAI_TRANSCRIPTION_MODELS: Array<{
   id: string;
   cost: { perMinute: number; input?: number; audioInput?: number; output?: number };
 }> = [
+  {
+    id: 'gpt-transcribe',
+    cost: { perMinute: 0.0045 },
+  },
   {
     id: 'gpt-4o-transcribe',
     cost: {

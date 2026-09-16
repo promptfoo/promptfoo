@@ -334,7 +334,14 @@ const PRIORITY_TEXT_RATES = buildRateTable<OpenAITextRates>([
 
 const IMAGE_MODEL_RATES = buildRateTable<OpenAIModelRates>([
   {
-    models: ['gpt-image-2', 'gpt-image-2-2026-04-21'],
+    models: [
+      'gpt-image-2',
+      'gpt-image-2-2026-04-21',
+      'gpt-image-2.5-sunburst',
+      'gpt-image-2.5-sunburst-2026-09-08',
+      'gpt-image-2.5-flare',
+      'gpt-image-2.5-flare-2026-09-08',
+    ],
     rates: {
       text: { input: perMillion(5), cachedInput: perMillion(1.25) },
       image: {

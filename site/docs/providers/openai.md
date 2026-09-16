@@ -71,8 +71,9 @@ Use an explicit endpoint in each provider ID. This makes the request format pred
 | Audio input and output                 | `openai:chat:gpt-audio-1.5`                | [Audio](#audio-capabilities)                                             |
 | Text to speech                         | `openai:tts:gpt-4o-mini-tts`               | [Text to speech](#text-to-speech)                                        |
 | Conversational Realtime                | `openai:realtime:gpt-realtime-2.1`         | [Realtime](#realtime-api-models)                                         |
+| Full-duplex voice                      | `openai:live:gpt-live-1`                   | [GPT-Live](./openai-live.md)                                             |
 
-For file transcription, see the [current provider limitations](#audio-transcription). For Agents SDK, ChatKit, and Codex workflows, see [agent providers](#agentic-providers).
+For file transcription, see [audio transcription](#audio-transcription). For Agents SDK, ChatKit, and Codex workflows, see [agent providers](#agentic-providers).
 
 <Link id="gpt-51" />
 <Link id="available-models" />
@@ -122,7 +123,7 @@ Bare `openai:<model>` IDs default to Responses for GPT-5.6 and newer GPT models,
 
 Use `openai:chat:<model>` or `openai:responses:<model>` to select the endpoint explicitly, including for a compatible gateway. Existing bare GPT-5.6 configurations with Chat-specific options should either select `openai:chat:gpt-5.6` or switch to Responses options such as `reasoning.effort` and `max_output_tokens`.
 
-Bare `openai:chat` and `openai:responses` currently select `gpt-4.1-2025-04-14`. Specify a model ID, such as `openai:responses:gpt-5.6-luna`, to choose a newer model explicitly. Keeping the existing defaults avoids changing the model for configurations that omit it. When a model has dated snapshots, use one to hold the model version constant across runs. A fixed snapshot does not guarantee identical outputs.
+Bare `openai:chat` and `openai:responses` select `gpt-5.6-terra`. Built-in grading uses `gpt-5.6-sol`; suggestions and web search use `gpt-5.6-terra`. Specify a model ID to override these defaults. When a model has dated snapshots, use one to hold the model version constant across runs. A fixed snapshot does not guarantee identical outputs.
 
 `openai:embedding` and `openai:embeddings` default to `text-embedding-3-large`; both prefixes accept an explicit model. `openai:speech:` is an alias for `openai:tts:`.
 
@@ -265,6 +266,17 @@ Built-in OpenAI API requests include `X-OpenAI-Originator: promptfoo`. Override 
 ### Cost estimates
 
 Promptfoo uses returned token usage and its model pricing catalog to estimate costs. Estimates can be incomplete for new models, tools, or gateways that omit usage. Check [OpenAI's usage dashboard](https://platform.openai.com/usage) for billed usage.
+
+Current standard rates in USD per million tokens, for requests with up to 272,000 input tokens:
+
+| Model                         | Input | Cached input | Cache writes | Output |
+| ----------------------------- | ----- | ------------ | ------------ | ------ |
+| GPT-5.6 Luna                  | $0.20 | $0.02        | $0.25        | $1.20  |
+| GPT-5.6 Terra                 | $2    | $0.20        | $2.50        | $12    |
+| GPT-5.6 Sol (`gpt-5.6` alias) | $4    | $0.40        | $5           | $20    |
+| GPT-6 Astra                   | $10   | $1           | $12.50       | $50    |
+
+Above 272,000 input tokens, input, cached-input, and cache-write rates double; output rates increase by 50%. Batch and Flex cost half the standard rates. Fast mode (`fast` or `priority`) costs twice the standard rates. Regional processing adds 10%; Astra Fast mode is unavailable with EU data residency. Sol's promotional pricing runs at least through November 21, 2026. Rates verified September 9, 2026; see [OpenAI pricing](https://developers.openai.com/api/docs/pricing).
 
 For Chat Completions and Responses, set `inputCost` and `outputCost` to override rates in **dollars per token**, not per million tokens. For audio, use `audioInputCost` and `audioOutputCost`. The older `cost` and `audioCost` options are shared input/output fallbacks. These settings affect Promptfoo's estimates, not API billing.
 
@@ -466,8 +478,8 @@ prompts:
   - 'Look up order {{order_id}}.'
 
 providers:
-  - id: openai:chat:gpt-4.1-mini
-    // highlight-start
+  - id: openai:chat:gpt-5.6-luna
+    # highlight-start
     config:
       tools:
         - type: function
@@ -486,7 +498,7 @@ providers:
         type: function
         function:
           name: get_order_status
-    // highlight-end
+    # highlight-end
 
 tests:
   - vars:
@@ -734,14 +746,14 @@ See the [OpenAI vision example](https://github.com/promptfoo/promptfoo/tree/main
 <Link id="gpt-image-1-mini" />
 <Link id="example" />
 
-`openai:image:gpt-image-2` calls `/v1/images/generations` for text-to-image evals:
+`openai:image:gpt-image-2.5-flare` calls `/v1/images/generations` for text-to-image evals. Use `gpt-image-2.5-sunburst` to compare Sunburst on the same prompts; both aliases and their `2026-09-08` snapshots are supported.
 
 ```yaml title="promptfooconfig.yaml"
 prompts:
   - 'A product photo of {{product}} on a plain white background.'
 
 providers:
-  - id: openai:image:gpt-image-2
+  - id: openai:image:gpt-image-2.5-flare
     config:
       size: 1024x1024
       quality: low
@@ -752,7 +764,9 @@ tests:
       product: a blue ceramic mug
 ```
 
-This provider supports generation only. Image editing, masks, reference images, variations, and streaming are not implemented. It does not yet recognize OpenAI's GPT Image 2.5 models; use a [custom provider](/docs/providers/custom-api/) to evaluate those models with the current [Image API](https://developers.openai.com/api/docs/guides/image-generation).
+GPT Image 2.5 also accepts `quality: xhigh` and `quality: max`. For transparent output, use `background: transparent` with PNG or WebP. Cost comes from the response's token usage; it is left unset when usage is missing because older models' per-image estimates do not apply. See the [Image API guide](https://developers.openai.com/api/docs/guides/image-generation).
+
+This provider supports generation only. Image editing, masks, reference images, variations, and streaming are not implemented.
 
 <details>
 <summary>GPT Image 2 options</summary>
@@ -864,9 +878,20 @@ The binary GPT-4o mini TTS response does not provide token usage, so Promptfoo l
 <Link id="transcription-configuration-options" />
 <Link id="diarization-example" />
 
-OpenAI recommends `gpt-transcribe` for files and `gpt-live-transcribe` for live audio. The built-in `openai:transcription:*` provider still uses the older model-specific request formats: it sends `verbose_json` for an unrecognized model and does not expose the new `languages` or `keywords` fields. Changing its model ID alone is not a supported migration to these models.
+Use `openai:transcription:gpt-transcribe` for recorded audio. The prompt is the path to an audio file. Supply expected languages and literal terms as arrays:
 
-For a new transcription integration, wrap OpenAI's current SDK request in a [custom provider](/docs/providers/custom-api/) and follow the [OpenAI transcription guide](https://developers.openai.com/api/docs/guides/transcription). Existing Whisper and GPT-4o transcription users should check the [deprecation schedule](https://developers.openai.com/api/docs/deprecations#2026-08-26-transcription-models).
+```yaml
+providers:
+  - id: openai:transcription:gpt-transcribe
+    config:
+      languages: [en, fr]
+      keywords: [AC-42, premium plan]
+      prompt: A customer support call.
+```
+
+`gpt-transcribe` uses `languages` instead of `language`. Keywords must be non-empty, single-line strings without `<` or `>`. Detected languages appear in `metadata.languages`; cost uses the API's duration when available. See the [complete transcription example](https://github.com/promptfoo/promptfoo/tree/main/examples/openai-audio-transcription).
+
+Keep `gpt-4o-transcribe-diarize` for speaker labels and `whisper-1` for word timestamps. `gpt-live-transcribe` uses a dedicated Realtime transcription session, which this file-upload provider does not implement. See the [OpenAI transcription guide](https://developers.openai.com/api/docs/guides/transcription) and [deprecation schedule](https://developers.openai.com/api/docs/deprecations#2026-08-26-transcription-models) for migration details.
 
 ## Realtime {#realtime-api-models}
 
@@ -895,7 +920,20 @@ For audio output, set `modalities: [text, audio]` and a top-level `voice`, such 
 
 The legacy `gpt-4o-mini-realtime-preview-2024-12-17` selector still routes to Realtime. Check [OpenAI's lifecycle notices](https://developers.openai.com/api/docs/deprecations) and its [model card](https://developers.openai.com/api/docs/models/gpt-4o-mini-realtime-preview) before using this preview model.
 
-The result includes audio for playback and a transcript for text assertions. The built-in `llm-rubric` assertion grades the transcript; it does not automatically send the generated audio to the grader. Grading voice quality or other acoustic properties requires a custom grading integration.
+The result includes audio for playback and a transcript for text assertions. To grade tone, pacing, or pronunciation, select an audio-capable Chat Completions grader:
+
+```yaml
+defaultTest:
+  assert:
+    - type: llm-rubric
+      value: The speaker sounds calm and speaks at a steady pace.
+      provider:
+        id: openai:chat:gpt-audio-1.5
+        config:
+          modalities: [text]
+```
+
+Promptfoo sends the generated audio to this grader and requests a text grade. Text-only graders continue to evaluate the transcript. Audio must be inline base64 WAV or MP3, up to 20 MiB. Keep the Realtime provider's default `output_audio_format: pcm16`; Promptfoo converts it to WAV for both single requests and persistent conversations. G.711 output requires conversion before audio grading. See [audio grading](/docs/configuration/expected-outputs/model-graded/llm-rubric#audio-output) for limits and transformed outputs.
 
 ### Session settings {#realtime-specific-configuration-options}
 
@@ -1027,6 +1065,7 @@ Choose a provider that matches the application you are testing:
 
 | Application                                         | Provider guide                                                        |
 | --------------------------------------------------- | --------------------------------------------------------------------- |
+| Managed Codex sessions and hosted sandboxes         | [OpenAI Agents API](/docs/providers/openai-agents-api)                |
 | TypeScript Agents SDK tools, handoffs, and sessions | [OpenAI Agents SDK](/docs/providers/openai-agents)                    |
 | Python Agents SDK application                       | [Agents SDK Python guide](/docs/guides/evaluate-openai-agents-python) |
 | ChatKit integration                                 | [OpenAI ChatKit](/docs/providers/openai-chatkit)                      |
