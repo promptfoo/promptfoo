@@ -1150,7 +1150,9 @@ describe('OllamaEmbeddingProvider', () => {
 
     expect(result).toEqual({
       embedding: [0.1, 0.2, 0.3],
-      tokenUsage: { prompt: 4, total: 4 },
+      // numRequests must be explicit: the similarity matcher accumulates usage without
+      // inferring a request count, so omitting it reports zero embedding requests.
+      tokenUsage: { prompt: 4, total: 4, numRequests: 1 },
     });
 
     // /api/embeddings is superseded upstream; it also hard-errors on long inputs.
