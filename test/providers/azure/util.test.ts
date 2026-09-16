@@ -540,6 +540,13 @@ describe('calculateAzureCost', () => {
     expect(calculateAzureCost('claude-fable-5', {}, 1000, 500)).toBeCloseTo(0.035, 6);
   });
 
+  it.each(['claude-fable-5-1', 'claude-mythos-5-1'])(
+    'calculates cached input cost for %s',
+    (model) => {
+      expect(calculateAzureCost(model, {}, 1000, 500, 500)).toBeCloseTo(0.030125, 8);
+    },
+  );
+
   it('returns undefined for unknown model', () => {
     const cost = calculateAzureCost('unknown-model', {}, 100, 50);
     expect(cost).toBeUndefined();
