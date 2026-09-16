@@ -470,27 +470,122 @@ describe('GoogleLiveProvider', () => {
       expect((await provider.callApi('Look up the code')).output).toMatchObject({ text: 'ORCHID' });
     });
 
+    it.each([false, true])(
+      'sends a delayed tool response before processing IDLE (multi-turn: %s)',
+      async (multiTurn) => {
+        let resolveTool!: (value: { code: string }) => void;
+        const callback = vi.fn(
+          () =>
+            new Promise<{ code: string }>((resolve) => {
+              resolveTool = resolve;
+            }),
+        );
+        let finishFrames!: () => void;
+        const framesFinished = new Promise<void>((resolve) => {
+          finishFrames = resolve;
+        });
+        let closedWhileWaiting = false;
+        let sentWhileWaiting = 0;
+        provider = new GoogleLiveProvider(extendedModel, {
+          config: { apiKey: 'test-api-key', functionToolCallbacks: { lookup: callback } },
+        });
+        connect(async () => {
+          const toolFrame = emit({
+            toolCall: { functionCalls: [{ id: '1', name: 'lookup', args: {} }] },
+          });
+          await flushAsyncEvents();
+          const idleFrame = emit({ interactionStatus: 'IDLE' });
+          await flushAsyncEvents();
+          closedWhileWaiting = mockWs.close.mock.calls.length > 0;
+          sentWhileWaiting = mockWs.send.mock.calls.length;
+          resolveTool({ code: 'ORCHID' });
+          await Promise.all([toolFrame, idleFrame]);
+          if (multiTurn) {
+            await emit({
+              serverContent: { outputTranscription: { text: 'Done' } },
+              interactionStatus: 'IDLE',
+            });
+          }
+          finishFrames();
+        });
+        const result = await provider.callApi(
+          multiTurn
+            ? JSON.stringify([
+                { role: 'user', content: 'Look up the code' },
+                { role: 'user', content: 'Next' },
+              ])
+            : 'Look up the code',
+        );
+        await framesFinished;
+        expect(result.error).toBeUndefined();
+        expect(closedWhileWaiting).toBe(false);
+        expect(sentWhileWaiting).toBe(2);
+        expect(JSON.parse(mockWs.send.mock.calls[2][0] as string)).toEqual({
+          toolResponse: {
+            functionResponses: [{ id: '1', name: 'lookup', response: { code: 'ORCHID' } }],
+          },
+        });
+        if (multiTurn) {
+          expect(JSON.parse(mockWs.send.mock.calls[3][0] as string)).toEqual({
+            realtimeInput: { text: 'Next' },
+          });
+        }
+      },
+    );
+
+    it('completes a standard Live tool follow-up containing only binary audio', async () => {
+      const pcm = Buffer.from([1, 0, 2, 0]);
+      provider = new GoogleLiveProvider('gemini-3.8-live', {
+        config: {
+          apiKey: 'test-api-key',
+          timeoutMs: 500,
+          functionToolCallbacks: { lookup: () => ({ code: 'ORCHID' }) },
+        },
+      });
+      connect(async () => {
+        await emit({ toolCall: { functionCalls: [{ id: '1', name: 'lookup', args: {} }] } });
+        await mockWs.onmessage?.({ data: pcm } as WebSocket.MessageEvent);
+        await emit({ serverContent: { generationComplete: true } });
+        await emit({ serverContent: { turnComplete: true } });
+      });
+      const result = await provider.callApi('Look up the code');
+      expect(result.error).toBeUndefined();
+      expect(Buffer.from(result.audio!.data!, 'base64').subarray(44)).toEqual(pcm);
+    });
+
     it.each([
       [
         'gemini-3.8-live',
         { thinkingConfig: { thinkingLevel: 'LOW' as const } },
-        'does not support thinkingConfig',
+        'gemini-3.8-live does not support thinkingConfig. Use gemini-3.8-live-extended-thinking instead.',
       ],
       [
         extendedModel,
         { thinkingConfig: { thinkingLevel: 'MINIMAL' as const } },
-        'supports thinkingLevel',
+        'gemini-3.8-live-extended-thinking supports thinkingLevel LOW, MEDIUM, or HIGH.',
       ],
-      [extendedModel, { thinkingConfig: { thinkingBudget: 100 } }, 'supports thinkingLevel'],
-      ['gemini-3.8-live', { proactivity: { proactiveAudio: false } }, 'permanently enabled'],
-      [extendedModel, { enableAffectiveDialog: true }, 'does not support enableAffectiveDialog'],
+      [
+        extendedModel,
+        { thinkingConfig: { thinkingBudget: 100 } },
+        'gemini-3.8-live-extended-thinking does not support thinkingBudget. Use thinkingLevel LOW, MEDIUM, or HIGH.',
+      ],
+      [
+        'gemini-3.8-live',
+        { proactivity: { proactiveAudio: false } },
+        'Gemini 3.8 Live has permanently enabled proactive audio; proactivity.proactiveAudio cannot be false.',
+      ],
+      [
+        extendedModel,
+        { enableAffectiveDialog: true },
+        'Gemini 3.8 Live does not support enableAffectiveDialog.',
+      ],
     ])(
       'rejects unsupported configuration for %s: %j',
       async (modelName, generationConfig, error) => {
         provider = new GoogleLiveProvider(modelName, {
           config: { apiKey: 'test-api-key', generationConfig },
         });
-        expect((await provider.callApi('Hello')).error).toContain(error);
+        expect((await provider.callApi('Hello')).error).toBe(error);
         expect(WebSocket).not.toHaveBeenCalled();
       },
     );

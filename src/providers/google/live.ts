@@ -156,19 +156,20 @@ const getGemini38ConfigError = (
   if (!extendedThinking && thinking) {
     return 'gemini-3.8-live does not support thinkingConfig. Use gemini-3.8-live-extended-thinking instead.';
   }
-  if (
-    thinking &&
-    (thinking.thinkingBudget !== undefined ||
-      (thinking.thinkingLevel !== undefined &&
-        !['LOW', 'MEDIUM', 'HIGH'].includes(thinking.thinkingLevel)))
-  ) {
-    return 'gemini-3.8-live-extended-thinking supports thinkingLevel LOW, MEDIUM, or HIGH, not thinkingBudget.';
+  if (thinking?.thinkingBudget !== undefined) {
+    return 'gemini-3.8-live-extended-thinking does not support thinkingBudget. Use thinkingLevel LOW, MEDIUM, or HIGH.';
   }
   if (
-    generationConfig?.enableAffectiveDialog !== undefined ||
-    generationConfig?.proactivity?.proactiveAudio === false
+    thinking?.thinkingLevel !== undefined &&
+    !['LOW', 'MEDIUM', 'HIGH'].includes(thinking.thinkingLevel)
   ) {
-    return 'Gemini 3.8 Live has permanently enabled proactive audio and does not support enableAffectiveDialog.';
+    return 'gemini-3.8-live-extended-thinking supports thinkingLevel LOW, MEDIUM, or HIGH.';
+  }
+  if (generationConfig?.enableAffectiveDialog !== undefined) {
+    return 'Gemini 3.8 Live does not support enableAffectiveDialog.';
+  }
+  if (generationConfig?.proactivity?.proactiveAudio === false) {
+    return 'Gemini 3.8 Live has permanently enabled proactive audio; proactivity.proactiveAudio cannot be false.';
   }
   return undefined;
 };
@@ -911,7 +912,7 @@ export class GoogleLiveProvider implements ApiProvider {
         ws.send(JSON.stringify(setupMessage));
       };
 
-      ws.onmessage = async (event) => {
+      const processMessage = async (event: WebSocket.MessageEvent) => {
         // Once the request has been resolved (e.g. by an early onclose or
         // timeout), drop any in-flight messages so they don't trigger side
         // effects like stateful-API fetches after the caller has moved on.
@@ -932,6 +933,7 @@ export class GoogleLiveProvider implements ApiProvider {
             hasAudioContent = true;
             const audioBuffer = Buffer.isBuffer(event.data) ? event.data : Buffer.from(event.data);
             responseAudioChunks.push(audioBuffer);
+            hasPendingToolFollowup = false;
             if (isAudioExpected) {
               hasAudioStreamEnded = false;
             }
@@ -1223,6 +1225,7 @@ export class GoogleLiveProvider implements ApiProvider {
               if (chunk.mimeType?.includes('audio')) {
                 hasAudioContent = true;
                 responseAudioChunks.push(Buffer.from(chunk.data, 'base64'));
+                hasPendingToolFollowup = false;
               }
             }
           } else if (response.candidates?.[0]?.content?.parts) {
@@ -1230,6 +1233,7 @@ export class GoogleLiveProvider implements ApiProvider {
               if (part.inlineData?.mimeType?.includes('audio')) {
                 hasAudioContent = true;
                 responseAudioChunks.push(Buffer.from(part.inlineData.data, 'base64'));
+                hasPendingToolFollowup = false;
               }
             }
           } else if (
@@ -1277,6 +1281,21 @@ export class GoogleLiveProvider implements ApiProvider {
           ws.close();
           safeResolve({ error: `Failed to process WebSocket response: ${message}` });
         }
+      };
+
+      // WebSocket does not await async handlers. Preserve frame order so an IDLE
+      // frame cannot finalize or advance a turn while a tool callback is pending.
+      let messageQueue = Promise.resolve();
+      ws.onmessage = (event) => {
+        if (isResolved) {
+          return;
+        }
+        if (!isGemini38Live) {
+          return processMessage(event);
+        }
+        armIdleTimeout();
+        messageQueue = messageQueue.then(() => processMessage(event));
+        return messageQueue;
       };
 
       ws.onerror = (err) => {
