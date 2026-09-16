@@ -54,6 +54,20 @@ describe.each(schemas)('$name tracing provider configuration', ({ schema }) => {
     ).toBe(true);
   });
 
+  it('accepts a Langfuse endpoint and public and secret keys', () => {
+    expect(
+      schema.safeParse(
+        config({
+          provider: {
+            id: 'langfuse',
+            endpoint: 'https://cloud.langfuse.com',
+            auth: { username: 'public-key', password: 'secret-key' },
+          },
+        }),
+      ).success,
+    ).toBe(true);
+  });
+
   it.each([
     { id: 'jaeger', endpoint: 'https://jaeger.example.com' },
     { id: 'tempo' },
@@ -96,6 +110,27 @@ describe.each(schemas)('$name tracing provider configuration', ({ schema }) => {
       projectId: '12345678-1234-4123-8123-123456789abc',
     },
   ])('rejects invalid Braintrust provider configuration: %o', (provider) => {
+    expect(schema.safeParse(config({ provider })).success).toBe(false);
+  });
+
+  it.each([
+    { id: 'langfuse', endpoint: 'https://cloud.langfuse.com' },
+    {
+      id: 'langfuse',
+      endpoint: 'https://cloud.langfuse.com',
+      auth: { username: 'public-key' },
+    },
+    {
+      id: 'langfuse',
+      endpoint: 'https://cloud.langfuse.com',
+      auth: { password: 'secret-key' },
+    },
+    {
+      id: 'langfuse',
+      endpoint: 'https://cloud.langfuse.com',
+      auth: { username: 'public-key', password: 'secret-key', token: 'token' },
+    },
+  ])('rejects invalid Langfuse provider configuration: %o', (provider) => {
     expect(schema.safeParse(config({ provider })).success).toBe(false);
   });
 

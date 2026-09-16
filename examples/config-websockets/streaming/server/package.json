@@ -18,7 +18,7 @@
     "dotenv": "^17.2.3",
     "express": "^5.2.1",
     "openai": "^7.1.0",
-    "ws": "^8.21.1"
+    "ws": "^8.21.3"
   },
   "devDependencies": {
     "nodemon": "^3.1.11"

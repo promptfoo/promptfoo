@@ -487,7 +487,7 @@ describe('is-sql assertion', () => {
 
   // ------------------------------------------ Allowed Table/Column List Tests ------------------------------------------ //
   describe('Allowed Table/Column List Tests', () => {
-    it('should fail if the output SQL statement violate allowedTables', async () => {
+    it('should fail if the output SQL statement violates allowedTables', async () => {
       const renderedValue = {
         databaseType: 'MySQL',
         allowedTables: ['(select|update|insert|delete)::null::departments'],
@@ -527,7 +527,7 @@ describe('is-sql assertion', () => {
       });
     });
 
-    it('should fail if the output SQL statement violate allowedColumns', async () => {
+    it('should fail if the output SQL statement violates allowedColumns', async () => {
       const renderedValue = {
         databaseType: 'MySQL',
         allowedColumns: ['select::null::name', 'update::null::id'],

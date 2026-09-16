@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { createTraceProvider, isExternalTraceProvider } from '../../../src/tracing/providers';
 import { BraintrustProvider } from '../../../src/tracing/providers/braintrust';
+import { LangfuseProvider } from '../../../src/tracing/providers/langfuse';
 import { TempoProvider } from '../../../src/tracing/providers/tempo';
 
 describe('tracing/providers', () => {
@@ -15,6 +16,17 @@ describe('tracing/providers', () => {
 
       expect(provider).toBeInstanceOf(BraintrustProvider);
       expect(provider.id).toBe('braintrust');
+    });
+
+    it('creates a Langfuse provider using public and secret keys', () => {
+      const provider = createTraceProvider({
+        id: 'langfuse',
+        endpoint: 'https://cloud.langfuse.com',
+        auth: { username: 'public-key', password: 'secret-key' },
+      });
+
+      expect(provider).toBeInstanceOf(LangfuseProvider);
+      expect(provider.id).toBe('langfuse');
     });
 
     it('should create TempoProvider for id "tempo"', () => {
