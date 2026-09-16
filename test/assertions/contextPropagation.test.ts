@@ -81,7 +81,7 @@ describe('Context Propagation in Model-Graded Assertions', () => {
       expect(matchesLlmRubric).toHaveBeenCalledWith(
         'test rubric',
         'test output',
-        undefined,
+        {},
         { testVar: 'value' },
         params.assertion,
         undefined,
@@ -104,7 +104,7 @@ describe('Context Propagation in Model-Graded Assertions', () => {
       expect(matchesLlmRubric).toHaveBeenCalledWith(
         'test rubric',
         'test output',
-        undefined,
+        {},
         { testVar: 'value' },
         params.assertion,
         undefined,

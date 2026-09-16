@@ -15,13 +15,29 @@ import { formatDuration } from '../util/formatDuration';
 import { promptfooCommand } from '../util/promptfooCommand';
 import { initVerboseToggle } from '../util/verboseToggle';
 import { doGenerateRedteam } from './commands/generate';
-import { getRemoteHealthUrl } from './remoteGeneration';
+import { getRemoteHealthUrl, withRemoteGeneration } from './remoteGeneration';
 import { PartialGenerationError } from './types';
 
 import type Eval from '../models/eval';
 import type { RedteamRunOptions } from './types';
 
-export async function doRedteamRun(options: RedteamRunOptions): Promise<Eval | undefined> {
+let envPathRun = Promise.resolve();
+
+export function withRedteamEnvIsolation<T>(run: () => Promise<T>): Promise<T> {
+  const result = envPathRun.then(run);
+  envPathRun = result.then(
+    () => undefined,
+    () => undefined,
+  );
+  return result;
+}
+
+export function doRedteamRun(options: RedteamRunOptions): Promise<Eval | undefined> {
+  const run = () => withRemoteGeneration(options.remote, () => doRedteamRunScoped(options));
+  return withRedteamEnvIsolation(run);
+}
+
+async function doRedteamRunScoped(options: RedteamRunOptions): Promise<Eval | undefined> {
   const isCliInvocation = isCliEventSource(options);
 
   if (options.verbose) {
@@ -104,6 +120,7 @@ export async function doRedteamRun(options: RedteamRunOptions): Promise<Eval | u
         ...(maxConcurrency === undefined ? {} : { maxConcurrency }),
         config: configPath,
         output: redteamPath,
+        ...(options.envPath ? { envFile: options.envPath } : {}),
         force: options.force,
         verbose: options.verbose,
         delay: options.delay,
@@ -134,16 +151,14 @@ export async function doRedteamRun(options: RedteamRunOptions): Promise<Eval | u
     // Run evaluation
     logger.info('Running scan...');
     const { defaultConfig } = await loadDefaultConfig();
-    // Exclude 'description' from options to avoid conflict with Commander's description method
-    const { description: _description, ...evalOptions } = options;
+    const { output: _output, ...evalOptions } = options;
     const generation = redteamConfig.metadata?.generation;
     const generatedDuringRun = generation?.id === generationRunId;
     const evalResult = await doEval(
       {
         ...evalOptions,
         config: [redteamPath],
-        output: options.output ? [options.output] : undefined,
-        cache: true,
+        cache: options.cache ?? true,
         write: true,
         filterPrompts: options.filterPrompts,
         filterProviders: options.filterProviders,

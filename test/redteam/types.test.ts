@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { Severity } from '../../src/redteam/constants';
-import { StrategyConfigSchema } from '../../src/redteam/types';
+import { PluginConfigSchema, StrategyConfigSchema } from '../../src/redteam/types';
 import { createMockProvider } from '../factories/provider';
 
 import type {
@@ -18,6 +18,12 @@ import type {
 } from '../../src/redteam/types';
 
 describe('redteam types', () => {
+  it('preserves plugin-specific configuration while validating known fields', () => {
+    const config = { includePrompt: false, customOptions: { depth: 2 }, language: 'Spanish' };
+    expect(PluginConfigSchema.parse(config)).toEqual(config);
+    expect(PluginConfigSchema.safeParse({ ...config, language: 42 }).success).toBe(false);
+  });
+
   it('should create valid RedteamPluginObject', () => {
     const pluginObj: RedteamPluginObject = {
       id: 'test-plugin',

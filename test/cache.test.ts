@@ -307,6 +307,16 @@ describe('cache configuration', () => {
     rmSync.mockRestore();
   });
 
+  it('does not initialize disk cache while request-local caching is disabled', async () => {
+    mockProcessEnv({ NODE_ENV: 'production' });
+    const cacheModule = await import('../src/cache');
+    await cacheModule.withCacheEnabled(false, async () => cacheModule.getCache());
+    expect(mkdirSyncMock).not.toHaveBeenCalled();
+
+    cacheModule.getCache();
+    expect(mkdirSyncMock).toHaveBeenCalled();
+  });
+
   it('should respect custom cache path', async () => {
     mockProcessEnv({ PROMPTFOO_CACHE_PATH: '/custom/cache/path' });
     mockProcessEnv({ NODE_ENV: 'production' });

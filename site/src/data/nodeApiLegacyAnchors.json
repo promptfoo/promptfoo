@@ -1,0 +1,131 @@
+{
+  "examples": {
+    "Node.js API examples": ["advanced-node-api-examples", "typescript-support"],
+    "Run an eval": ["basic-examples", "example-1-simple-evaluation"],
+    "Compare several providers": [
+      "example-2-multiple-providers",
+      "example-13-llm-evaluation-with-claude"
+    ],
+    "Build providers before an eval": ["example-6-batch-provider-testing"],
+    "Run tests concurrently": ["example-15-parallel-test-execution"],
+    "Use an inline provider": ["advanced-examples", "integration-patterns"],
+    "Generate prompts from code": [
+      "example-3-dynamic-test-generation",
+      "example-11-external-data-integration"
+    ],
+    "Add a custom assertion": ["example-4-custom-assertion-logic"],
+    "Reuse assertion logic": ["example-5-context-aware-assertions"],
+    "Run a batch of assertions": ["example-14-similarity-scoring"],
+    "Track progress": ["example-12-streaming-results-processing", "performance-optimization"],
+    "Isolate caches": ["example-7-cache-management", "example-8-namespaced-cache-for-ab-testing"],
+    "Red team integrations": ["example-9-red-team-generation", "example-10-custom-red-team-plugin"],
+    "Format results": ["utility-functions", "example-16-result-formatting"],
+    "Handle errors": ["error-handling", "example-17-robust-evaluation-with-error-handling"],
+    "Related docs": ["see-also"]
+  },
+  "quickReference": {
+    "Node.js API quick reference": ["node-api-quick-reference"],
+    "Import": ["import-statement"],
+    "Most-used calls": [
+      "most-used-apis",
+      "1-evaluatetestsuite-options-",
+      "2-assertionsrunassertionparams-",
+      "3-loadapiproviderpath-context-",
+      "api-by-category",
+      "evaluation-functions",
+      "provider-functions",
+      "cache-functions",
+      "assertion-functions",
+      "guardrails-functions",
+      "red-team-functions",
+      "utility-functions"
+    ],
+    "Core types": ["typescript-types"],
+    "Runtime options": ["task-save-results", "task-disable-cache", "performance-tips"],
+    "Common snippets": [
+      "common-tasks",
+      "task-test-multiple-providers",
+      "task-custom-grading",
+      "task-isolate-cache",
+      "common-patterns",
+      "pattern-generate-tests-dynamically",
+      "pattern-ab-test-models",
+      "pattern-streaming-results",
+      "pattern-batch-testing-providers"
+    ],
+    "Assertion examples": [
+      "assertion-types-quick-reference",
+      "basic-assertions",
+      "llm-evaluated",
+      "custom-logic"
+    ],
+    "Where to go next": ["getting-help", "next-steps"],
+    "Environment": ["environment-variables"],
+    "Handling errors": ["error-handling", "common-errors"]
+  },
+  "reference": {
+    "Node.js API guide": ["node-module-api-reference"],
+    "Start by goal": ["overview"],
+    "API map": [
+      "core-api",
+      "evaluatetestsuite-options",
+      "provider-apis",
+      "loadapiproviderproviderpath-context",
+      "loadapiprovidersproviders-options",
+      "assertions-api",
+      "assertionsrunassertionparams",
+      "assertionsrunassertionsparams",
+      "cache-api",
+      "enablecache",
+      "disablecache",
+      "iscacheenabled",
+      "clearcache",
+      "withcachenamespacenamespace-fn",
+      "getcache",
+      "fetchwithcacheurl-options-timeout-format-bustoroptions-maxretries",
+      "utilities",
+      "generatetableevaluatetable-tablecellmaxlength-maxrows",
+      "istransformfunctionvalue"
+    ],
+    "Core types": ["type-definitions"],
+    "How the pieces fit": [
+      "advanced-patterns",
+      "pattern-1-programmatic-test-suite-generation",
+      "pattern-2-custom-grading-with-context",
+      "pattern-3-batch-provider-testing",
+      "pattern-4-cache-isolation-for-ab-testing",
+      "api-stability",
+      "stable-apis-safe-for-production",
+      "experimental-apis-may-change",
+      "internal-apis-dont-use-directly"
+    ],
+    "Guardrails": [
+      "guardrails-api",
+      "guardrailsguardinput",
+      "guardrailspiiinput",
+      "guardrailsharminput",
+      "guardrailsadaptiverequest"
+    ],
+    "Red team orchestration": [
+      "red-team-api",
+      "redteamgenerateconfig",
+      "redteamrunconfig",
+      "redteamplugins",
+      "redteamstrategies",
+      "redteamextractors",
+      "redteambaseplugin",
+      "redteambasegrader"
+    ],
+    "Troubleshooting": ["troubleshooting"],
+    "Related docs": ["examples-repository", "see-also"]
+  },
+  "package": {
+    "Using the Node.js API": ["using-the-node-package"],
+    "Install": ["installation"],
+    "Quickstart": ["usage"],
+    "Providers": ["provider-functions"],
+    "Assertions": ["assertion-functions"],
+    "Examples": ["example"],
+    "Caching and persistence": ["sharing-results"]
+  }
+}

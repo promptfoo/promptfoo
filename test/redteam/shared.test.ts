@@ -180,6 +180,53 @@ describe('doRedteamRun', () => {
         output: outputPath,
       }),
     );
+    expect(vi.mocked(doEval).mock.calls[0][0]).toMatchObject({ config: [outputPath] });
+    expect(vi.mocked(doEval).mock.calls[0][0]).not.toHaveProperty('output');
+  });
+
+  it('records the explicit scan description on the evaluation', async () => {
+    await doRedteamRun({ description: 'nightly scan' });
+    expect(vi.mocked(doEval).mock.calls[0][0]).toMatchObject({ description: 'nightly scan' });
+  });
+
+  it('passes the run environment file to generation', async () => {
+    await doRedteamRun({ envPath: 'generation.env' });
+    expect(doGenerateRedteam).toHaveBeenCalledWith(
+      expect.objectContaining({ envFile: 'generation.env' }),
+    );
+    expect(vi.mocked(doEval).mock.calls[0][0]).toMatchObject({ envPath: 'generation.env' });
+  });
+
+  it('serializes env-less runs behind environment-file runs', async () => {
+    let releaseFirst!: () => void;
+    vi.mocked(doGenerateRedteam)
+      .mockImplementationOnce(
+        () =>
+          new Promise((resolve) => {
+            releaseFirst = () => resolve({});
+          }),
+      )
+      .mockResolvedValueOnce({});
+
+    const first = doRedteamRun({ envPath: 'first.env' });
+    await vi.waitFor(() => expect(doGenerateRedteam).toHaveBeenCalledTimes(1));
+    const second = doRedteamRun({});
+
+    await Promise.resolve();
+    expect(doGenerateRedteam).toHaveBeenCalledTimes(1);
+    releaseFirst();
+    await Promise.all([first, second]);
+
+    expect(doGenerateRedteam).toHaveBeenNthCalledWith(
+      2,
+      expect.not.objectContaining({ envFile: expect.anything() }),
+    );
+  });
+
+  it.each([true, false])('honors cache=%s in generation and evaluation', async (cache) => {
+    await doRedteamRun({ cache });
+    expect(doGenerateRedteam).toHaveBeenCalledWith(expect.objectContaining({ cache }));
+    expect(vi.mocked(doEval).mock.calls[0][0]).toMatchObject({ cache });
   });
 
   it('should locate the out file in the same directory as the config file if output is not specified', async () => {

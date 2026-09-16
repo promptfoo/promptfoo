@@ -1,3 +1,5 @@
+import { AsyncLocalStorage } from 'node:async_hooks';
+
 import { context, propagation } from '@opentelemetry/api';
 import cliState from '../cliState';
 import { getEnvBool, getEnvString } from '../envars';
@@ -12,6 +14,15 @@ export { getCloudTargetIdFromProviders } from './remoteGenerationContextFromProv
 interface ShouldGenerateRemoteOptions {
   canUseCodexDefaultProvider?: boolean;
   requireEmbeddingProvider?: boolean;
+}
+
+const remoteGenerationContext = new AsyncLocalStorage<{ remote: boolean | undefined }>();
+
+export function withRemoteGeneration<T>(
+  remote: boolean | undefined,
+  fn: () => Promise<T>,
+): Promise<T> {
+  return remoteGenerationContext.run({ remote }, fn);
 }
 
 // Provider implementations already depend on this module. Re-exporting the leaf helper here
@@ -185,7 +196,9 @@ export function shouldGenerateRemote(options?: ShouldGenerateRemoteOptions): boo
       !options?.requireEmbeddingProvider &&
       hasCodexDefaultCredentials());
 
-  return !hasLocalCredentials || (cliState.remote ?? false);
+  return (
+    !hasLocalCredentials || (remoteGenerationContext.getStore()?.remote ?? cliState.remote ?? false)
+  );
 }
 
 /**
