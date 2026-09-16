@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from 'vitest';
 import {
   recordGenerationTokenUsage,
   trackAdditionalGenerationProvider,
+  trackGenerationErrorTokenUsage,
   trackGenerationTokenUsage,
 } from '../../src/redteam/generationTokenUsage';
 import { createEmptyTokenUsage } from '../../src/util/tokenUsageUtils';
@@ -235,6 +236,23 @@ describe('generation token usage', () => {
     await expect(provider.callApi('generate a test')).rejects.toThrow('generation failed');
 
     expect(usage).toMatchObject({ total: 14, prompt: 9, completion: 5, numRequests: 1 });
+  });
+
+  it('counts separate calls that reuse an error without repeating usage in an outer handler', async () => {
+    const usage: TokenUsage = {};
+    const error = Object.assign(new Error('generation failed'), {
+      tokenUsage: { total: 14, prompt: 9, completion: 5 },
+    });
+    const provider = trackGenerationTokenUsage(
+      createProvider(vi.fn().mockRejectedValue(error)),
+      usage,
+    );
+
+    await expect(provider.callApi('first attempt')).rejects.toBe(error);
+    await expect(provider.callApi('second attempt')).rejects.toBe(error);
+    trackGenerationErrorTokenUsage(usage, error, false);
+
+    expect(usage).toMatchObject({ total: 28, prompt: 18, completion: 10, numRequests: 2 });
   });
 
   it('preserves cached specialized generation without incurring usage', async () => {

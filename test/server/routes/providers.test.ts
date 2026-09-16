@@ -680,6 +680,27 @@ describe('Providers Routes', () => {
   });
 
   describe('POST /providers/discover validation', () => {
+    it('returns incurred discovery usage without exposing internal failure details', async () => {
+      mockedNeverGenerateRemote.mockReturnValue(false);
+      mockedLoadApiProvider.mockResolvedValue({
+        id: () => 'echo',
+        callApi: vi.fn(async () => ({ output: 'unused' })),
+      });
+      mockedDoTargetPurposeDiscovery.mockRejectedValue(
+        Object.assign(new Error('private failure detail'), {
+          tokenUsage: { total: 18, numRequests: 3 },
+        }),
+      );
+
+      const response = await api.post('/api/providers/discover').send({ id: 'echo' });
+
+      expect(response.status).toBe(500);
+      expect(response.body).toEqual({
+        error: "Discovery failed to discover the target's purpose",
+        details: { tokenUsage: { total: 18, numRequests: 3 } },
+      });
+    });
+
     it('should return discovered target metadata for valid provider options', async () => {
       const mockProvider = {
         id: vi.fn(() => 'test-provider'),

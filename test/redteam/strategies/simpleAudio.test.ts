@@ -2,11 +2,13 @@ import { SingleBar } from 'cli-progress';
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { fetchWithCache } from '../../../src/cache';
 import logger from '../../../src/logger';
+import { trackGenerationTokenUsage } from '../../../src/redteam/generationTokenUsage';
 import { neverGenerateRemote } from '../../../src/redteam/remoteGeneration';
+import { Strategies } from '../../../src/redteam/strategies/index';
 import { addAudioToBase64, textToAudio } from '../../../src/redteam/strategies/simpleAudio';
 import { mockConsole } from '../../util/utils';
 
-import type { TestCase } from '../../../src/types/index';
+import type { TestCase, TokenUsage } from '../../../src/types/index';
 
 // Mock the remoteGeneration module
 vi.mock('../../../src/redteam/remoteGeneration', async (importOriginal) => {
@@ -103,10 +105,24 @@ describe('audio strategy', () => {
     });
 
     it('should throw an error if remote API fails', async () => {
-      mockFetchWithCache.mockRejectedValueOnce(new Error('Remote API error'));
+      const usage: TokenUsage = {};
+      const provider = trackGenerationTokenUsage(
+        { id: () => 'audio-generator', callApi: vi.fn(async () => ({ output: 'unused' })) },
+        usage,
+      );
+      mockFetchWithCache.mockRejectedValueOnce(
+        Object.assign(new Error('Remote API error'), {
+          tokenUsage: { total: 10, prompt: 6, completion: 4, numRequests: 1 },
+        }),
+      );
 
       const text = 'Hello, fallback world!';
-      await expect(textToAudio(text, 'en')).rejects.toThrow('Failed to generate audio');
+      await expect(
+        textToAudio(text, 'en', {
+          runtimeContext: { generationProviderSelection: { provider, source: 'default' } },
+        }),
+      ).rejects.toThrow('Failed to generate audio');
+      expect(usage).toMatchObject({ total: 10, prompt: 6, completion: 4, numRequests: 1 });
     });
 
     it('should pass language parameter to API', async () => {
@@ -127,6 +143,34 @@ describe('audio strategy', () => {
   });
 
   describe('addAudioToBase64', () => {
+    it('reports remote audio usage through the strategy registry', async () => {
+      const usage: TokenUsage = {};
+      const provider = trackGenerationTokenUsage(
+        { id: () => 'audio-generator', callApi: vi.fn(async () => ({ output: 'unused' })) },
+        usage,
+      );
+      mockFetchWithCache.mockResolvedValueOnce({
+        data: {
+          audioBase64: 'bW9ja2VkLWF1ZGlv',
+          tokenUsage: { total: 10, prompt: 6, completion: 4, numRequests: 1 },
+        },
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+      });
+
+      const result = await Strategies.find((strategy) => strategy.id === 'audio')!.action(
+        [{ vars: { prompt: 'test' }, metadata: { pluginId: 'policy' } }],
+        'prompt',
+        {},
+        'audio',
+        { generationProviderSelection: { provider, source: 'default' } },
+      );
+
+      expect(result).toHaveLength(1);
+      expect(usage).toMatchObject({ total: 10, prompt: 6, completion: 4, numRequests: 1 });
+    });
+
     it('should convert test cases with the specified variable', async () => {
       // Setup mock to return a predictable response
       mockFetchWithCache.mockResolvedValue({

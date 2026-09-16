@@ -68,21 +68,23 @@ function safeRespond(res: Response, status: number, body: { error: string; detai
 /**
  * Send a standardized error response.
  *
- * The wire shape is `{ error: string }` (with optional `details`/
- * `suggestion`/`success` permitted by `ErrorResponseSchema.passthrough()`,
- * but this helper only emits `error`). `internalError` is logged but
- * never returned to the client.
+ * Only the public message and optional public details reach the client.
+ * The internal error is logged separately.
  */
 export function sendError(
   res: Response,
   status: number,
   publicMessage: string,
   internalError?: unknown,
+  publicDetails?: Record<string, unknown>,
 ): void {
   if (internalError !== undefined) {
     logger.error(publicMessage, toLogContext(internalError));
   }
-  safeRespond(res, status, { error: publicMessage });
+  safeRespond(res, status, {
+    error: publicMessage,
+    ...(publicDetails ? { details: publicDetails } : {}),
+  });
 }
 
 /**
