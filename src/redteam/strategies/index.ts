@@ -12,6 +12,7 @@ import { addCrescendo } from './crescendo';
 import { addCustom } from './custom';
 import { addGcgTestCases } from './gcg';
 import { addGoatTestCases } from './goat';
+import { addGoblin } from './goblin';
 import { addHexEncoding } from './hex';
 import { addHomoglyphs } from './homoglyph';
 import { addHydra } from './hydra';
@@ -31,6 +32,7 @@ import { addAudioToBase64 } from './simpleAudio';
 import { addImageToBase64 } from './simpleImage';
 import { addVideoToBase64 } from './simpleVideo';
 import { addCompositeTestCases } from './singleTurnComposite';
+import { withPersistableGenerationProvider } from './types';
 
 import type { RedteamStrategyObject, TestCase } from '../../types/index';
 import type { Strategy } from './types';
@@ -40,7 +42,7 @@ export type { Strategy };
 export const Strategies: Strategy[] = [
   {
     id: 'layer',
-    action: async (testCases, injectVar, config) => {
+    action: async (testCases, injectVar, config, _strategyId, runtimeContext) => {
       logger.debug(`Adding Layer strategy to ${testCases.length} test cases`);
       const newTestCases = await addLayerTestCases(
         testCases,
@@ -48,6 +50,7 @@ export const Strategies: Strategy[] = [
         config,
         Strategies,
         loadStrategy,
+        runtimeContext,
       );
       logger.debug(`Added ${newTestCases.length} Layer test cases`);
       return newTestCases;
@@ -90,9 +93,9 @@ export const Strategies: Strategy[] = [
   },
   {
     id: 'citation',
-    action: async (testCases, injectVar, config) => {
+    action: async (testCases, injectVar, config, _strategyId, runtimeContext) => {
       logger.debug(`Adding Citation to ${testCases.length} test cases`);
-      const newTestCases = await addCitationTestCases(testCases, injectVar, config);
+      const newTestCases = await addCitationTestCases(testCases, injectVar, config, runtimeContext);
       logger.debug(`Added ${newTestCases.length} Citation test cases`);
       return newTestCases;
     },
@@ -100,9 +103,13 @@ export const Strategies: Strategy[] = [
   {
     id: 'crescendo',
     requiresGoalExtraction: true,
-    action: async (testCases, injectVar, config) => {
+    action: async (testCases, injectVar, config, _strategyId, runtimeContext) => {
       logger.debug(`Adding Crescendo to ${testCases.length} test cases`);
-      const newTestCases = addCrescendo(testCases, injectVar, config);
+      const newTestCases = addCrescendo(
+        testCases,
+        injectVar,
+        withPersistableGenerationProvider(config, runtimeContext),
+      );
       logger.debug(`Added ${newTestCases.length} Crescendo test cases`);
       return newTestCases;
     },
@@ -110,18 +117,23 @@ export const Strategies: Strategy[] = [
   {
     id: 'custom',
     requiresGoalExtraction: true,
-    action: async (testCases, injectVar, config, strategyId = 'custom') => {
+    action: async (testCases, injectVar, config, strategyId = 'custom', runtimeContext) => {
       logger.debug(`Adding Custom to ${testCases.length} test cases`);
-      const newTestCases = addCustom(testCases, injectVar, config, strategyId);
+      const newTestCases = addCustom(
+        testCases,
+        injectVar,
+        withPersistableGenerationProvider(config, runtimeContext),
+        strategyId,
+      );
       logger.debug(`Added ${newTestCases.length} Custom test cases`);
       return newTestCases;
     },
   },
   {
     id: 'gcg',
-    action: async (testCases, injectVar, config) => {
+    action: async (testCases, injectVar, config, _strategyId, runtimeContext) => {
       logger.debug(`Adding GCG test cases to ${testCases.length} test cases`);
-      const newTestCases = await addGcgTestCases(testCases, injectVar, config);
+      const newTestCases = await addGcgTestCases(testCases, injectVar, config, runtimeContext);
       logger.debug(`Added ${newTestCases.length} GCG test cases`);
       return newTestCases;
     },
@@ -194,18 +206,23 @@ export const Strategies: Strategy[] = [
   },
   {
     id: 'jailbreak:composite',
-    action: async (testCases, injectVar, config) => {
+    action: async (testCases, injectVar, config, _strategyId, runtimeContext) => {
       logger.debug(`Adding composite jailbreak test cases to ${testCases.length} test cases`);
-      const newTestCases = await addCompositeTestCases(testCases, injectVar, config);
+      const newTestCases = await addCompositeTestCases(
+        testCases,
+        injectVar,
+        config,
+        runtimeContext,
+      );
       logger.debug(`Added ${newTestCases.length} composite jailbreak test cases`);
       return newTestCases;
     },
   },
   {
     id: 'jailbreak:likert',
-    action: async (testCases, injectVar, config) => {
+    action: async (testCases, injectVar, config, _strategyId, runtimeContext) => {
       logger.debug(`Adding Likert scale jailbreaks to ${testCases.length} test cases`);
-      const newTestCases = await addLikertTestCases(testCases, injectVar, config);
+      const newTestCases = await addLikertTestCases(testCases, injectVar, config, runtimeContext);
       logger.debug(`Added ${newTestCases.length} Likert scale jailbreak test cases`);
       return newTestCases;
     },
@@ -213,9 +230,14 @@ export const Strategies: Strategy[] = [
   {
     id: 'jailbreak:tree',
     requiresGoalExtraction: true,
-    action: async (testCases, injectVar, config) => {
+    action: async (testCases, injectVar, config, _strategyId, runtimeContext) => {
       logger.debug(`Adding experimental tree jailbreaks to ${testCases.length} test cases`);
-      const newTestCases = addIterativeJailbreaks(testCases, injectVar, 'iterative:tree', config);
+      const newTestCases = addIterativeJailbreaks(
+        testCases,
+        injectVar,
+        'iterative:tree',
+        withPersistableGenerationProvider(config, runtimeContext),
+      );
       logger.debug(`Added ${newTestCases.length} experimental tree jailbreak test cases`);
       return newTestCases;
     },
@@ -237,6 +259,16 @@ export const Strategies: Strategy[] = [
       logger.debug(`Adding hydra multi-turn jailbreaks to ${testCases.length} test cases`);
       const newTestCases = addHydra(testCases, injectVar, config);
       logger.debug(`Added ${newTestCases.length} hydra jailbreak test cases`);
+      return newTestCases;
+    },
+  },
+  {
+    id: 'jailbreak:goblin',
+    requiresGoalExtraction: true,
+    action: async (testCases, injectVar, config) => {
+      logger.debug(`Adding goblin multi-turn jailbreaks to ${testCases.length} test cases`);
+      const newTestCases = addGoblin(testCases, injectVar, config);
+      logger.debug(`Added ${newTestCases.length} goblin jailbreak test cases`);
       return newTestCases;
     },
   },
@@ -278,9 +310,9 @@ export const Strategies: Strategy[] = [
   },
   {
     id: 'math-prompt',
-    action: async (testCases, injectVar, config) => {
+    action: async (testCases, injectVar, config, _strategyId, runtimeContext) => {
       logger.debug(`Adding MathPrompt encoding to ${testCases.length} test cases`);
-      const newTestCases = await addMathPrompt(testCases, injectVar, config);
+      const newTestCases = await addMathPrompt(testCases, injectVar, config, runtimeContext);
       logger.debug(`Added ${newTestCases.length} MathPrompt encoded test cases`);
       return newTestCases;
     },

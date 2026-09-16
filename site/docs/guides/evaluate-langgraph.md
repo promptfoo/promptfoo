@@ -50,7 +50,7 @@ npx promptfoo eval
 Before starting, make sure you have:
 
 - Python 3.9-3.12 tested
-- Node.js v22 LTS or newer
+- Node.js `>=22.22.0` (Node.js 24 LTS recommended)
 - OpenAI API access (for GPT-5-mini and other OpenAI models)
 - An OpenAI API key
 
@@ -84,7 +84,7 @@ And check npm (Node package manager):
 npm -v
 ```
 
-You should see something like `v22.x.x` for Node and `10.x.x` for npm. Node.js v22 LTS or newer is recommended for security and performance.
+You should see Node.js `v22.22.0` or newer. Node.js 24 LTS is recommended for security and performance.
 
 **Why do we need these?**
 
@@ -172,7 +172,7 @@ class ResearchState(BaseModel):
     summary: str = ""     # Final summarized result
 
 # Function to create and return the research agent graph
-def get_research_agent(model="gpt-5-mini"):
+def get_research_agent(model="gpt-4o"):
     # Initialize the OpenAI LLM with the specified model and API key
     llm = ChatOpenAI(model=model, api_key=OPENAI_API_KEY)
 
