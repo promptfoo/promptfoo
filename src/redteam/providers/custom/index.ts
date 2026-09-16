@@ -326,6 +326,8 @@ export class CustomProvider implements ApiProvider {
 
     let lastFeedback = '';
     let lastResponse: TargetResponse = { output: '' };
+    let hasTargetResponse = false;
+    let lastAttemptError: string | undefined;
     let lastResponseMessages: Message[] = [];
     let lastFinalAttackPrompt: string | undefined;
     let evalFlag = false;
@@ -432,12 +434,14 @@ export class CustomProvider implements ApiProvider {
           options,
         );
         if (transformResult?.error) {
+          lastAttemptError = transformResult.error;
           if (transformResult.tokenUsage) {
             accumulateAttackerTokenUsage(totalTokenUsage, transformResult);
           }
           continue;
         }
         lastResponse = response;
+        hasTargetResponse = true;
         lastResponseMessages = [...this.memory.getConversation(this.targetConversationId)];
         lastTransformResult = transformResult;
         lastFinalAttackPrompt =
@@ -622,6 +626,7 @@ export class CustomProvider implements ApiProvider {
                 output: lastResponse.output,
                 messages: lastResponseMessages,
                 pluginId: test.metadata?.pluginId,
+                assertion: assertToUse,
               },
             );
           }
@@ -701,6 +706,7 @@ export class CustomProvider implements ApiProvider {
           logger.debug('[Custom] Operation aborted');
           throw error;
         }
+        lastAttemptError = error instanceof Error ? error.message : String(error);
         logger.error(`[Custom] Error Running custom step: ${error}`);
       }
     }
@@ -749,7 +755,11 @@ export class CustomProvider implements ApiProvider {
       },
       tokenUsage: totalTokenUsage,
       guardrails: lastResponse?.guardrails,
-      ...(lastTargetError ? { error: lastTargetError } : {}),
+      ...(lastTargetError
+        ? { error: lastTargetError }
+        : hasTargetResponse
+          ? {}
+          : { error: lastAttemptError || 'No target request was completed.' }),
     };
   }
 

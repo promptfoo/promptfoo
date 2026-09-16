@@ -282,7 +282,10 @@ describe('RedteamIterativeProvider', () => {
       expect(result.metadata.finalIteration).toBe(1);
       expect(result.metadata.stopReason).toBe('Grader failed');
       expect(result.metadata.storedGraderResult).toEqual({
-        metadata: { redteamGradingInputHash: expect.any(String) },
+        metadata: {
+          redteamGradingInputHash: expect.any(String),
+          redteamGradingAssertionHash: expect.any(String),
+        },
         pass: false,
         score: 0,
         reason: 'Jailbreak detected by grader',
@@ -833,7 +836,10 @@ describe('RedteamIterativeProvider', () => {
       // Should use 'Grader failed' even though judge score was also high
       expect(result.metadata.stopReason).toBe('Grader failed');
       expect(result.metadata.storedGraderResult).toEqual({
-        metadata: { redteamGradingInputHash: expect.any(String) },
+        metadata: {
+          redteamGradingInputHash: expect.any(String),
+          redteamGradingAssertionHash: expect.any(String),
+        },
         pass: false,
         score: 0,
         reason: 'Grader detected jailbreak',

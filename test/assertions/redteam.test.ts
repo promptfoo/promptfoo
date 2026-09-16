@@ -6,7 +6,10 @@ import {
 } from '../../src/assertions/index';
 import { handleRedteam } from '../../src/assertions/redteam';
 import { MULTI_INPUT_VAR } from '../../src/redteam/constants';
-import { getGradingInputHash } from '../../src/redteam/grading/storedResult';
+import {
+  getGradingAssertionHash,
+  getGradingInputHash,
+} from '../../src/redteam/grading/storedResult';
 import { RedteamGraderBase } from '../../src/redteam/plugins/base';
 import { getPiiLeakTestsForCategory } from '../../src/redteam/plugins/pii';
 
@@ -28,6 +31,7 @@ describe('redteam strategy result grading', () => {
     reason: 'The response only repeats a user-provided name.',
     assertion: { ...piiAssertion, value: 'Previously rendered rubric' },
     metadata: {
+      redteamGradingAssertionHash: getGradingAssertionHash(piiAssertion),
       redteamGradingInputHash: getGradingInputHash(attackPrompt, output, undefined, 'pii:social'),
     },
     tokensUsed: { total: 30, prompt: 20, completion: 10, numRequests: 2 },
@@ -72,6 +76,7 @@ describe('redteam strategy result grading', () => {
             storedGraderResult: {
               ...storedResult,
               metadata: {
+                redteamGradingAssertionHash: getGradingAssertionHash(assertion),
                 redteamGradingInputHash: getGradingInputHash(
                   attackPrompt,
                   output,
@@ -127,6 +132,58 @@ describe('redteam strategy result grading', () => {
     });
     expect(getResult).not.toHaveBeenCalled();
     expect(result.pass).toBe(true);
+  });
+
+  it.each([
+    { value: { expectedFiles: ['second.txt'] } },
+    { config: { policy: 'second policy' } },
+    { rubricPrompt: 'A different rubric' },
+    { threshold: 0.9 },
+    { provider: 'a-different-grader' },
+  ])('grades assertions with different configurations independently: %j', async (config) => {
+    const secondAssertion = { ...piiAssertion, ...config };
+    const getResult = vi.spyOn(RedteamGraderBase.prototype, 'getResult').mockResolvedValue({
+      grade: {
+        pass: false,
+        score: 0,
+        reason: 'The second check failed',
+        tokensUsed: { total: 4, prompt: 3, completion: 1, numRequests: 1 },
+      },
+      rubric: 'Second rubric',
+    });
+    const result = await runAssertions({
+      prompt: originalPrompt,
+      test: { ...test, assert: [piiAssertion, secondAssertion] },
+      providerResponse: {
+        output,
+        metadata: { redteamFinalPrompt: attackPrompt, storedGraderResult: storedResult },
+      },
+    });
+    expect(getResult).toHaveBeenCalledTimes(1);
+    expect(result.pass).toBe(false);
+    expect(result.componentResults?.map(({ pass }) => pass)).toEqual([true, false]);
+    expect(result.tokensUsed?.total).toBe(34);
+  });
+
+  it('does not reuse configurations containing opaque runtime values', async () => {
+    expect(getGradingAssertionHash({ ...piiAssertion, value: () => true })).toBeUndefined();
+    expect(
+      getGradingAssertionHash({ ...piiAssertion, provider: { id: () => 'grader' } }),
+    ).toBeUndefined();
+    const circular: Record<string, unknown> = {};
+    circular.self = circular;
+    expect(getGradingAssertionHash({ ...piiAssertion, value: circular })).toBeUndefined();
+    class RuntimeProvider {
+      id() {
+        return 'grader';
+      }
+    }
+    expect(
+      getGradingAssertionHash({ ...piiAssertion, provider: new RuntimeProvider() }),
+    ).toBeUndefined();
+    expect(
+      getGradingAssertionHash({ ...piiAssertion, value: { toJSON: () => ({}) } }),
+    ).toBeUndefined();
   });
 
   it('retains prior strategy usage when stale-grade regrading throws', async () => {
@@ -226,7 +283,13 @@ describe('redteam strategy result grading', () => {
         output: input.output,
         metadata: {
           redteamFinalPrompt: input.prompt,
-          storedGraderResult: storedResult,
+          storedGraderResult: {
+            ...storedResult,
+            metadata: {
+              ...storedResult.metadata,
+              redteamGradingAssertionHash: getGradingAssertionHash(input.assertion),
+            },
+          },
           messages: input.messages,
         },
       },

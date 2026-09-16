@@ -805,6 +805,8 @@ export class HydraProvider implements ApiProvider {
         }
       }
 
+      // Externalization can replace the response object. Return the same output we grade.
+      lastTargetResponse = targetResponse;
       const historyOutput =
         isBlobStorageEnabled() || shouldAttemptRemoteBlobUpload()
           ? scrubOutputForHistory(targetResponse.output)
@@ -958,6 +960,7 @@ export class HydraProvider implements ApiProvider {
               output: targetResponse.output,
               messages: this.conversationHistory,
               pluginId: test.metadata?.pluginId,
+              assertion: assertToUse,
             },
           );
 

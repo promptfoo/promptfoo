@@ -325,6 +325,8 @@ export class CrescendoProvider implements ApiProvider {
 
     let lastFeedback = '';
     let lastResponse: TargetResponse = { output: '' };
+    let hasTargetResponse = false;
+    let lastAttemptError: string | undefined;
     let lastResponseMessages: Message[] = [];
     let evalFlag = false;
     let evalPercentage: number | null = null;
@@ -470,12 +472,14 @@ export class CrescendoProvider implements ApiProvider {
           { inputMaterialization, materializationHandled, materializedVars },
         );
         if (transformResult?.error) {
+          lastAttemptError = transformResult.error;
           if (transformResult.tokenUsage) {
             accumulateAttackerTokenUsage(totalTokenUsage, transformResult);
           }
           continue;
         }
         lastResponse = response;
+        hasTargetResponse = true;
         lastResponseMessages = [...this.memory.getConversation(this.targetConversationId)];
         lastTransformResult = transformResult;
         if (transformResult?.tokenUsage) {
@@ -734,6 +738,7 @@ export class CrescendoProvider implements ApiProvider {
                 output: lastResponse.output,
                 messages: lastResponseMessages,
                 pluginId: test.metadata?.pluginId,
+                assertion: assertToUse,
               },
             );
           }
@@ -799,6 +804,7 @@ export class CrescendoProvider implements ApiProvider {
         if (isRemoteMaterializationUpgradeError(error)) {
           throw error;
         }
+        lastAttemptError = error instanceof Error ? error.message : String(error);
         logger.error(`[Crescendo] Error Running crescendo step`, { error });
       }
     }
@@ -830,7 +836,11 @@ export class CrescendoProvider implements ApiProvider {
     const finalPrompt = getLastMessageContent(messages, 'user');
     return {
       output: lastResponse.output,
-      ...(lastResponse.error ? { error: lastResponse.error } : {}),
+      ...(lastResponse.error
+        ? { error: lastResponse.error }
+        : hasTargetResponse
+          ? {}
+          : { error: lastAttemptError || 'No target request was completed.' }),
       prompt: finalPrompt,
       metadata: {
         sessionId: getSessionId(lastResponse, context),

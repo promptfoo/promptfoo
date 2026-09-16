@@ -621,6 +621,7 @@ export async function runMetaAgentRedteam({
           prompt: finalAttackPrompt,
           output: targetResponse.output,
           pluginId: test.metadata?.pluginId,
+          assertion: assertToUse,
         });
 
         logger.debug('[IterativeMeta] Grader result', {

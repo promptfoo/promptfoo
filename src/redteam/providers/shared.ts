@@ -36,7 +36,11 @@ import {
   accumulateTokenUsage,
 } from '../../util/tokenUsageUtils';
 import { TransformInputType, transform } from '../../util/transform';
-import { getGradingInputHash, withGradingUsage } from '../grading/storedResult';
+import {
+  getGradingAssertionHash,
+  getGradingInputHash,
+  withGradingUsage,
+} from '../grading/storedResult';
 import { remoteGenerationContextPayload } from '../remoteGenerationContext';
 import { throwIfTargetPromptExceedsMaxChars } from '../shared/promptLength';
 import { ATTACKER_MODEL, ATTACKER_MODEL_SMALL, TEMPERATURE } from './constants';
@@ -667,13 +671,20 @@ export function runRedteamGrader<TResult, TArgs extends unknown[]>(
 export function accumulateGraderResult(
   previous: GradingResult | undefined,
   current: GradingResult,
-  input?: { prompt: string; output: string; messages?: unknown; pluginId?: string },
+  input?: {
+    prompt: string;
+    output: string;
+    messages?: unknown;
+    pluginId?: string;
+    assertion?: AssertionOrSet;
+  },
 ): GradingResult {
   if (input) {
     current = {
       ...current,
       metadata: {
         ...current.metadata,
+        redteamGradingAssertionHash: getGradingAssertionHash(input.assertion),
         redteamGradingInputHash: getGradingInputHash(
           input.prompt,
           input.output,

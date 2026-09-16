@@ -834,6 +834,7 @@ export default class GoatProvider implements ApiProvider {
               output: finalOutput,
               messages: messages,
               pluginId: test.metadata?.pluginId,
+              assertion: assertToUse,
             },
           );
         }

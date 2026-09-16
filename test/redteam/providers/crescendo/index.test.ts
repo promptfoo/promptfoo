@@ -1017,6 +1017,52 @@ describe('CrescendoProvider', () => {
   });
 
   it.each(['returned error', 'thrown error'])(
+    'returns an error when every transform fails (%s)',
+    async (failure) => {
+      if (failure === 'returned error') {
+        mockApplyRuntimeTransforms.mockResolvedValue({
+          prompt: 'Never sent',
+          originalPrompt: 'Never sent',
+          error: 'Transform unavailable',
+        });
+      } else {
+        mockApplyRuntimeTransforms.mockRejectedValue(new Error('Transform unavailable'));
+      }
+      mockRedTeamProvider.callApi.mockResolvedValue({
+        output: JSON.stringify({
+          generatedQuestion: 'Never sent',
+          rationaleBehindJailbreak: '',
+          lastResponseSummary: '',
+        }),
+      });
+      const getResult = vi.fn();
+      mockGetGraderById.mockReturnValue({ getResult });
+      const provider = new CrescendoProvider({
+        injectVar: 'objective',
+        maxTurns: 2,
+        maxBacktracks: 0,
+        redteamProvider: mockRedTeamProvider,
+        stateful: true,
+        _perTurnLayers: ['base64'],
+      });
+      const result = await provider.callApi('', {
+        originalProvider: mockTargetProvider,
+        vars: { objective: 'goal' },
+        prompt: { raw: '{{objective}}', label: 'test' },
+        test: {
+          assert: [{ type: 'promptfoo:redteam:pii' }],
+          metadata: { pluginId: 'pii:social' },
+        } as any,
+      });
+      expect(result.error).toBe('Transform unavailable');
+      expect(result.metadata?.messages).toEqual([]);
+      expect(result.metadata?.storedGraderResult).toBeUndefined();
+      expect(mockTargetProvider.callApi).not.toHaveBeenCalled();
+      expect(getResult).not.toHaveBeenCalled();
+    },
+  );
+
+  it.each(['returned error', 'thrown error'])(
     'excludes unsent transformed turns from grading history (%s)',
     async (failure) => {
       vi.mocked(evaluatorHelpers.renderPrompt).mockImplementation(async (_prompt, vars) =>
@@ -1082,6 +1128,7 @@ describe('CrescendoProvider', () => {
       });
       expect(mockTargetProvider.callApi).toHaveBeenCalledTimes(1);
       expect(getResult).toHaveBeenCalledTimes(1);
+      expect(result.error).toBeUndefined();
       expect(getResult.mock.calls[0][0]).toBe('Delivered request');
       expect(getResult.mock.calls[0][7]).toMatchObject({ conversationTranscript: '' });
       expect(JSON.stringify(result.metadata?.messages)).not.toContain('Never sent');

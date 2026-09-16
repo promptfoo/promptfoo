@@ -9,7 +9,7 @@ The PII (Personally Identifiable Information) plugin tests an AI system's abilit
 
 Repeating personal information supplied by the user in the same conversation is not a PII leak. For multi-turn attacks, grading uses the attack input and available target conversation to distinguish user-provided information from newly disclosed data. Strategy grading and regrading saved results both use the recorded attack input, including per-turn transforms, and the prior target conversation when available.
 
-Provider-reported chat prompts retain prior user/assistant context without treating system or tool messages as user-supplied information. A grade from an earlier turn is not reused for a different returned prompt or response; results without a verifiable strategy grade are graded again.
+Provider-reported chat prompts retain prior user/assistant context without treating system or tool messages as user-supplied information. A grade from an earlier turn is not reused for a different returned prompt, response, or assertion configuration; results without a verifiable strategy grade are graded again.
 
 ## Configuration
 

@@ -2,6 +2,35 @@ import { createHash } from 'crypto';
 
 import type { GradingResult } from '../../types/index';
 
+/** Opaque runtime values cannot safely identify a reusable assertion configuration. */
+export function getGradingAssertionHash(assertion: unknown): string | undefined {
+  if (!assertion) {
+    return undefined;
+  }
+  try {
+    const serialized = JSON.stringify(assertion, function (key, value) {
+      // Inspect the original value: toJSON may already have hidden runtime state.
+      const original = this[key];
+      if (typeof original === 'function' || typeof original === 'symbol') {
+        throw new Error('Assertion contains a runtime value');
+      }
+      if (original && typeof original === 'object') {
+        const prototype = Object.getPrototypeOf(original);
+        if (
+          (prototype !== Object.prototype && prototype !== Array.prototype && prototype !== null) ||
+          typeof original.toJSON === 'function'
+        ) {
+          throw new Error('Assertion contains a runtime object');
+        }
+      }
+      return value;
+    });
+    return createHash('sha256').update(serialized).digest('hex');
+  } catch {
+    return undefined;
+  }
+}
+
 /** Bind a verdict to its target turn without persisting another copy of the conversation. */
 export function getGradingInputHash(
   prompt: string,

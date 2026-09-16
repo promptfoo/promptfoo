@@ -3,7 +3,10 @@ import { renderMetricName, runAssertions } from '../../src/assertions/index';
 import { OpenAiChatCompletionProvider } from '../../src/providers/openai/chat';
 import { DefaultGradingJsonProvider } from '../../src/providers/openai/defaults';
 import { ReplicateModerationProvider } from '../../src/providers/replicate';
-import { getGradingInputHash } from '../../src/redteam/grading/storedResult';
+import {
+  getGradingAssertionHash,
+  getGradingInputHash,
+} from '../../src/redteam/grading/storedResult';
 import { TestGrader } from '../util/utils';
 
 import type {
@@ -515,6 +518,7 @@ describe('runAssertions', () => {
           assertion: test.assert![0],
           metadata: {
             ...storedResult.metadata,
+            redteamGradingAssertionHash: getGradingAssertionHash(test.assert![0]),
             redteamGradingInputHash: getGradingInputHash(
               'test prompt',
               'Some target response',
@@ -575,6 +579,7 @@ describe('runAssertions', () => {
           assertion: test.assert![0],
           metadata: {
             ...storedResult.metadata,
+            redteamGradingAssertionHash: getGradingAssertionHash(test.assert![0]),
             redteamGradingInputHash: getGradingInputHash(
               'test prompt',
               'Some target response',

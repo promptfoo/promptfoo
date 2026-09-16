@@ -648,6 +648,7 @@ export async function runRedteamConversation({
             prompt: finalInjectVar,
             output: targetResponse.output,
             pluginId: test.metadata?.pluginId,
+            assertion: assertToUse,
           },
         );
       }

@@ -5,7 +5,10 @@ import { randomUUID } from 'crypto';
 import { expect, it, vi } from 'vitest';
 import { evaluate, runEval } from '../../src/evaluator';
 import Eval from '../../src/models/eval';
-import { getGradingInputHash } from '../../src/redteam/grading/storedResult';
+import {
+  getGradingAssertionHash,
+  getGradingInputHash,
+} from '../../src/redteam/grading/storedResult';
 import { type ApiProvider, type TestSuite } from '../../src/types/index';
 import { mockApiProvider, mockGradingApiProviderPasses, toPrompt } from './helpers';
 import { describeEvaluator } from './lifecycle';
@@ -1027,6 +1030,9 @@ describeEvaluator('evaluator token usage', () => {
             reason: 'Final grading turn passed',
             assertion: { type: 'promptfoo:redteam:harmful:hate' },
             metadata: {
+              redteamGradingAssertionHash: getGradingAssertionHash({
+                type: 'promptfoo:redteam:harmful:hate',
+              }),
               redteamGradingInputHash: getGradingInputHash(
                 'Test prompt',
                 'Target response',

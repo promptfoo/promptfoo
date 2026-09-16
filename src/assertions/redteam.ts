@@ -2,6 +2,7 @@ import logger from '../logger';
 import { MULTI_INPUT_VAR } from '../redteam/constants';
 import { getGraderById } from '../redteam/graders';
 import {
+  getGradingAssertionHash,
   getGradingInputHash,
   getTargetConversation,
   withGradingUsage,
@@ -83,8 +84,10 @@ function matchesStoredGraderResult(
   // Strategies preserve the assertion they actually graded. Plugin IDs can name a
   // subcategory (pii:social) while its assertion names a shared grader (pii).
   if (storedResult.assertion?.type) {
+    const assertionHash = storedResult.metadata?.redteamGradingAssertionHash;
     return (
       storedResult.assertion.type === assertion.type &&
+      (assertionHash === undefined || assertionHash === getGradingAssertionHash(assertion)) &&
       (storedResult.assertion.metric === undefined ||
         storedResult.assertion.metric === assertion.metric)
     );
@@ -190,6 +193,8 @@ export const handleRedteam = async ({
     storedResult && matchesStoredGraderResult(assertion, storedResult, test, provider);
   if (
     hasStrategyGrade &&
+    typeof storedResult.metadata?.redteamGradingAssertionHash === 'string' &&
+    storedResult.metadata.redteamGradingAssertionHash === getGradingAssertionHash(assertion) &&
     storedResult.metadata?.redteamGradingInputHash ===
       getGradingInputHash(
         effectivePrompt,
