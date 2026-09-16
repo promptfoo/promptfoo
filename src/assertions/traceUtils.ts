@@ -1,22 +1,21 @@
-/**
- * Shared utilities for trace assertions
- */
-
-/**
- * Match a span name against a glob-like pattern.
- * Supports * (any characters) and ? (single character) wildcards.
- *
- * @param spanName - The span name to match
- * @param pattern - The glob pattern to match against
- * @returns true if the span name matches the pattern
- */
+/** Case-insensitive trace glob matching; * and ? do not consume line terminators. */
 export function matchesPattern(spanName: string, pattern: string): boolean {
-  // Convert glob-like pattern to regex
-  const regexPattern = pattern
-    .replace(/[.+^${}()|[\]\\]/g, '\\$&') // Escape special regex chars
-    .replace(/\*/g, '.*') // Convert * to .*
-    .replace(/\?/g, '.'); // Convert ? to .
+  const parts = pattern.split('*');
+  let cursor = 0;
 
-  const regex = new RegExp(`^${regexPattern}$`, 'i');
-  return regex.test(spanName);
+  // Consume fixed-width segments in order, without backtracking across earlier stars.
+  for (let index = 0; index < parts.length; index++) {
+    const part = parts[index].replace(/[.+^${}()|[\]\\]/g, '\\$&').replace(/\?/g, '.');
+    const regex = new RegExp(
+      `${index === 0 ? '^' : ''}${part}${index === parts.length - 1 ? '$' : ''}`,
+      'gi',
+    );
+    regex.lastIndex = cursor;
+    const match = regex.exec(spanName);
+    if (!match || /[\r\n\u2028\u2029]/.test(spanName.slice(cursor, match.index))) {
+      return false;
+    }
+    cursor = match.index + match[0].length;
+  }
+  return true;
 }
