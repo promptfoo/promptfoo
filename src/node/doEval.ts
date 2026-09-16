@@ -11,7 +11,7 @@ import { disableCache } from '../cache';
 import cliState from '../cliState';
 import { DEFAULT_MAX_CONCURRENCY } from '../constants';
 import { getEnvBool, getEnvFloat, getEnvInt, isCI } from '../envars';
-import { evaluate, PromptSuggestionsRejectedError } from '../evaluator';
+import { evaluate } from '../evaluator';
 import {
   checkEmailStatusAndMaybeExit,
   EmailValidationError,
@@ -171,20 +171,25 @@ function failEvalRun(
   throw new EvalRunError(message);
 }
 
-function handleRecoverableWatchError(error: unknown): boolean {
+/**
+ * Report a failed re-run without ending the watch session.
+ *
+ * chokidar's emitter does not await the change handler, so rethrowing here surfaces as
+ * an unhandled rejection and terminates the process. Every failure is therefore logged
+ * and watching continues, which is also what a watch loop should do with a bad edit.
+ */
+function logWatchError(error: unknown): void {
   if (error instanceof ConfigResolutionError) {
     logConfigResolutionError(error);
-    return true;
+  } else if (!(error instanceof EmailValidationError)) {
+    // Account helpers already render their own user-facing failures.
+    logger.error(error instanceof Error ? error.message : String(error));
+    if (error instanceof Error && error.stack) {
+      // The rejection this replaces printed a stack, the only pointer to where an
+      // unexpected failure came from. Keep it, below the user-facing message.
+      logger.debug(error.stack);
+    }
   }
-  if (error instanceof EmailValidationError) {
-    // Account helpers already render these user-facing failures.
-    return true;
-  }
-  if (error instanceof EvalRunError || error instanceof PromptSuggestionsRejectedError) {
-    logger.error(error.message);
-    return true;
-  }
-  return false;
 }
 
 /**
@@ -1273,10 +1278,7 @@ export async function doEval(
             try {
               await runEvaluation();
             } catch (error) {
-              if (handleRecoverableWatchError(error)) {
-                return;
-              }
-              throw error;
+              logWatchError(error);
             }
           })
           .on('error', (error) => logger.error(`Watcher error: ${error}`))
