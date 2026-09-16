@@ -2,6 +2,7 @@ import type { Server } from 'node:http';
 
 import request from 'supertest';
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
+import Eval from '../../../src/models/eval';
 import { createApp } from '../../../src/server/server';
 
 // Mock dependencies
@@ -15,8 +16,10 @@ const mockedGetTraceStore = vi.mocked(getTraceStore);
 describe('Traces Routes', () => {
   let api: ReturnType<typeof request.agent>;
   let server: Server;
-  let mockGetTracesByEvaluation: ReturnType<typeof vi.fn>;
-  let mockGetTrace: ReturnType<typeof vi.fn>;
+  let mockGetTracesByEvaluation: ReturnType<typeof vi.fn<() => Promise<unknown[]>>>;
+  let mockGetTrace: ReturnType<typeof vi.fn<() => Promise<unknown>>>;
+  let mockPublicTraces: ReturnType<typeof vi.fn>;
+  let mockIsTracePrivate: ReturnType<typeof vi.fn>;
 
   beforeAll(async () => {
     await new Promise<void>((resolve, reject) => {
@@ -42,6 +45,15 @@ describe('Traces Routes', () => {
     // Setup mock trace store methods
     mockGetTracesByEvaluation = vi.fn();
     mockGetTrace = vi.fn();
+    mockPublicTraces = vi.fn().mockImplementation(async () => {
+      const trace = await mockGetTrace();
+      return trace ? [trace] : await mockGetTracesByEvaluation();
+    });
+    mockIsTracePrivate = vi.fn().mockResolvedValue(false);
+    vi.spyOn(Eval, 'findById').mockResolvedValue({
+      getTraces: mockPublicTraces,
+      isTracePrivate: mockIsTracePrivate,
+    } as unknown as Eval);
 
     mockedGetTraceStore.mockReturnValue({
       getTracesByEvaluation: mockGetTracesByEvaluation,
@@ -54,6 +66,36 @@ describe('Traces Routes', () => {
   });
 
   describe('GET /api/traces/evaluation/:evaluationId', () => {
+    it('returns public standalone traces without an eval record', async () => {
+      const publicTrace = {
+        traceId: 'public',
+        evaluationId: 'standalone',
+        testCaseId: '0-0',
+        spans: [],
+      };
+      const privateTrace = {
+        ...publicTrace,
+        traceId: 'private',
+        metadata: { privateForensicEvidence: true },
+      };
+      vi.mocked(Eval.findById).mockResolvedValue(undefined);
+      mockGetTracesByEvaluation.mockResolvedValue([publicTrace, privateTrace]);
+      const response = await api.get('/api/traces/evaluation/standalone');
+      expect(response.status).toBe(200);
+      expect(response.body).toEqual({ traces: [publicTrace] });
+      expect(mockGetTracesByEvaluation).toHaveBeenCalledWith('standalone');
+    });
+    it('uses the same public trace projection as exports', async () => {
+      mockGetTracesByEvaluation.mockResolvedValue([
+        { traceId: 'private', spans: [{ name: 'PRIVATE_FORENSIC_RECEIPT' }] },
+      ]);
+      mockPublicTraces.mockResolvedValue([]);
+      const response = await api.get('/api/traces/evaluation/eval-private');
+      expect(response.status).toBe(200);
+      expect(response.body).toEqual({ traces: [] });
+      expect(mockPublicTraces).toHaveBeenCalledWith({ normalizeSpans: false, throwOnError: true });
+    });
+
     it('should return traces array when traces exist', async () => {
       const mockTraces = [
         {
@@ -80,7 +122,8 @@ describe('Traces Routes', () => {
       expect(response.body).toEqual({
         traces: mockTraces,
       });
-      expect(mockGetTracesByEvaluation).toHaveBeenCalledWith('eval-123');
+      expect(Eval.findById).toHaveBeenCalledWith('eval-123');
+      expect(mockPublicTraces).toHaveBeenCalledWith({ normalizeSpans: false, throwOnError: true });
     });
 
     it('should return empty array when no traces found', async () => {
@@ -92,7 +135,7 @@ describe('Traces Routes', () => {
       expect(response.body).toEqual({
         traces: [],
       });
-      expect(mockGetTracesByEvaluation).toHaveBeenCalledWith('eval-456');
+      expect(Eval.findById).toHaveBeenCalledWith('eval-456');
     });
 
     it('should return 500 on database error', async () => {
@@ -108,6 +151,39 @@ describe('Traces Routes', () => {
   });
 
   describe('GET /api/traces/:traceId', () => {
+    it.each([true, false])(
+      'handles standalone traces with private metadata: %s',
+      async (isPrivate) => {
+        const trace = {
+          traceId: 'standalone',
+          evaluationId: 'eval-synthetic',
+          metadata: { privateForensicEvidence: isPrivate },
+          spans: [],
+        };
+        mockGetTrace.mockResolvedValue(trace);
+        vi.mocked(Eval.findById).mockResolvedValue(undefined);
+        const response = await api.get('/api/traces/standalone');
+        expect(response.status).toBe(isPrivate ? 404 : 200);
+        expect(response.body).toEqual(isPrivate ? { error: 'Trace not found' } : { trace });
+        expect(mockPublicTraces).not.toHaveBeenCalled();
+      },
+    );
+
+    it.each([true, false])('hides a private trace (metadata flag: %s)', async (flag) => {
+      mockGetTrace.mockResolvedValue({
+        traceId: 'private',
+        evaluationId: 'eval-private',
+        testCaseId: 'test-private',
+        metadata: { privateForensicEvidence: flag },
+        spans: [{ name: 'PRIVATE_FORENSIC_RECEIPT' }],
+      });
+      mockPublicTraces.mockResolvedValue([]);
+      mockIsTracePrivate.mockResolvedValue(true);
+      const response = await api.get('/api/traces/private');
+      expect(response.status).toBe(404);
+      expect(JSON.stringify(response.body)).not.toContain('PRIVATE_FORENSIC_RECEIPT');
+    });
+
     it('should return trace when found', async () => {
       const mockTrace = {
         id: '1',
@@ -134,6 +210,9 @@ describe('Traces Routes', () => {
         trace: mockTrace,
       });
       expect(mockGetTrace).toHaveBeenCalledWith('trace-abc');
+      expect(mockIsTracePrivate).toHaveBeenCalledWith(mockTrace);
+      expect(mockPublicTraces).not.toHaveBeenCalled();
+      expect(mockGetTracesByEvaluation).not.toHaveBeenCalled();
     });
 
     it('should return 404 when trace not found', async () => {

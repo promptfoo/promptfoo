@@ -12,14 +12,18 @@ import { maybeLoadFromExternalFile } from '../util/file';
 import invariant from '../util/invariant';
 import { extractVariablesFromTemplates } from '../util/templates';
 import { loadYaml } from '../util/yamlLoad';
+import { buildAgenticStrategyGoal } from './agenticProfile';
 import {
   ALIASED_PLUGIN_MAPPINGS,
   BIAS_PLUGINS,
+  CODEX_AGENT_PLUGINS,
+  CODING_AGENT_PLUGINS,
   DATASET_EXEMPT_PLUGINS,
   FINANCIAL_PLUGINS,
   FOUNDATION_PLUGINS,
   getDefaultNFanout,
   HARM_PLUGINS,
+  HARNESS_PREFLIGHT_PLUGINS,
   INSURANCE_PLUGINS,
   isFanoutStrategy,
   MEDICAL_PLUGINS,
@@ -34,7 +38,7 @@ import {
   TEEN_SAFETY_PLUGINS,
   TELECOM_PLUGINS,
 } from './constants';
-import { CODING_AGENT_CORE_PLUGINS, CODING_AGENT_PLUGINS } from './constants/codingAgents';
+import { CODING_AGENT_CORE_PLUGINS } from './constants/codingAgents';
 import { extractEntities } from './extraction/entities';
 import { extractSystemPurpose } from './extraction/purpose';
 import { trackGenerationTokenUsage } from './generationTokenUsage';
@@ -390,6 +394,8 @@ const categories = {
   harmful: Object.keys(HARM_PLUGINS),
   'coding-agent:core': CODING_AGENT_CORE_PLUGINS,
   'coding-agent:all': CODING_AGENT_PLUGINS,
+  'coding-agent:codex': CODEX_AGENT_PLUGINS,
+  'harness:preflight': HARNESS_PREFLIGHT_PLUGINS,
   bias: BIAS_PLUGINS,
   pii: PII_PLUGINS,
   medical: MEDICAL_PLUGINS,
@@ -463,6 +469,12 @@ function getExpectedPluginTestCount(
   plugin: SynthesizeOptions['plugins'][number],
   language?: string | string[],
 ): number {
+  if (Object.prototype.hasOwnProperty.call(categories, plugin.id)) {
+    return categories[plugin.id as keyof typeof categories].reduce(
+      (sum, id) => sum + getExpectedPluginTestCount({ ...plugin, id }, language),
+      0,
+    );
+  }
   const languageCount = getPluginLanguageCount(plugin, language);
   return (getIntentTestCount(plugin) ?? plugin.numTests ?? 0) * languageCount;
 }
@@ -979,6 +991,7 @@ export async function synthesize({
   targetIds,
   showProgressBar: showProgressBarOverride,
   excludeTargetOutputFromAgenticAttackGeneration,
+  targetManifest,
   testGenerationInstructions,
 }: SynthesizeOptions): Promise<{
   purpose: string;
@@ -1222,7 +1235,7 @@ export async function synthesize({
   for (const [category, categoryPlugins] of Object.entries(categories)) {
     const plugin = plugins.find((p) => p.id === category);
     if (plugin) {
-      plugins.push(...categoryPlugins.map((p) => ({ id: p, numTests: plugin.numTests })));
+      plugins.push(...categoryPlugins.map((p) => ({ ...plugin, id: p })));
     }
   }
 
@@ -1231,9 +1244,7 @@ export async function synthesize({
     plugin: (typeof plugins)[0],
     mapping: { plugins: string[]; strategies: string[] },
   ) => {
-    mapping.plugins.forEach((p: string) =>
-      expandedPlugins.push({ id: p, numTests: plugin.numTests }),
-    );
+    mapping.plugins.forEach((p: string) => expandedPlugins.push({ ...plugin, id: p }));
     strategies.push(...mapping.strategies.map((s: string) => ({ id: s })));
   };
 
@@ -1394,6 +1405,10 @@ export async function synthesize({
       const resultsPerLanguage: Record<string, { requested: number; generated: number }> = {};
 
       const languagePromises = languages.map(async (lang) => {
+        const resolvedPluginConfig = resolvePluginConfigWithMaxChars(
+          plugin.config,
+          maxCharsPerMessage,
+        );
         const pluginTests = await action({
           provider: redteamProvider,
           purpose,
@@ -1403,7 +1418,8 @@ export async function synthesize({
           targetId: cloudTargetId,
           redteamGenerationContext,
           config: {
-            ...resolvePluginConfigWithMaxChars(plugin.config, maxCharsPerMessage),
+            ...resolvedPluginConfig,
+            ...(targetManifest && !resolvedPluginConfig.targetManifest ? { targetManifest } : {}),
             ...(lang ? { language: lang } : {}),
             // Pass inputs to plugin for multi-variable test case generation
             ...(hasMultipleInputs ? { inputs } : {}),
@@ -1503,7 +1519,12 @@ export async function synthesize({
               redteamProvider,
             );
 
-            (testCase.metadata as any).goal = extractedGoal;
+            (testCase.metadata as any).goal = buildAgenticStrategyGoal(
+              prompt,
+              extractedGoal,
+              plugin.id,
+              testCase.metadata,
+            );
           }
         }
 
@@ -1642,7 +1663,12 @@ export async function synthesize({
               redteamProvider,
             );
 
-            (testCase.metadata as any).goal = extractedGoal;
+            (testCase.metadata as any).goal = buildAgenticStrategyGoal(
+              prompt,
+              extractedGoal,
+              plugin.id,
+              testCase.metadata,
+            );
           }
         }
 

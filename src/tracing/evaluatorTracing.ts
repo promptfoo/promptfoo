@@ -5,6 +5,7 @@ import cliState from '../cliState';
 import { getEnvBool } from '../envars';
 import logger from '../logger';
 import telemetry from '../telemetry';
+import { requiresTraceRedaction } from '../util/traceRedaction';
 import { getGenAITracer, PromptfooAttributes } from './genaiTracer';
 import { SPAN_ROLE_ATTRIBUTE } from './spanRoles';
 
@@ -365,7 +366,6 @@ export async function generateTraceContextIfNeeded(
 
   if (tracingEnabled) {
     logger.debug('[EvaluatorTracing] Tracing enabled for test case');
-    logger.debug(`[EvaluatorTracing] Test metadata: ${JSON.stringify(test.metadata)}`);
   }
 
   if (!tracingEnabled) {
@@ -430,6 +430,7 @@ export async function generateTraceContextIfNeeded(
       metadata: {
         testIdx,
         promptIdx,
+        ...(requiresTraceRedaction(test.assert) && { privateForensicEvidence: true }),
         ...(executionMetadata.providerId && { providerId: executionMetadata.providerId }),
         ...(executionMetadata.repeatIndex !== undefined && {
           repeatIndex: executionMetadata.repeatIndex,

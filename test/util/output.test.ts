@@ -17,6 +17,7 @@ import {
   writeMultipleOutputs,
   writeOutput,
 } from '../../src/util/output';
+import { createEvaluateResult } from '../factories/eval';
 import { mockConsole, mockProcessEnv } from './utils';
 
 vi.mock('../../src/database', () => ({
@@ -72,9 +73,25 @@ vi.mock('../../src/googleSheets', () => ({
 describe('writeOutput', () => {
   let consoleLogSpy: ReturnType<typeof mockConsole>;
 
+  it('exports results without traces when trace storage fails', async () => {
+    const traceSpy = vi
+      .spyOn(getTraceStore(), 'getTracesByEvaluation')
+      .mockRejectedValue(new Error('Trace storage unavailable'));
+    try {
+      await writeOutput('output.json', new Eval({ description: 'Public evaluation' }), null);
+      const output = JSON.parse(vi.mocked(fsPromises.writeFile).mock.calls[0][1] as string);
+      expect(output.results).toBeDefined();
+      expect(output.config.description).toBe('Public evaluation');
+      expect(output.traces).toBeUndefined();
+    } finally {
+      traceSpy.mockRestore();
+    }
+  });
+
   beforeEach(() => {
     const fileNotFoundError = Object.assign(new Error('ENOENT'), { code: 'ENOENT' });
     vi.clearAllMocks();
+    vi.spyOn(getTraceStore(), 'getTracesByEvaluation').mockResolvedValue([]);
     // Restore mock implementations that vi.resetAllMocks() clears
     mockFileHandle.write.mockResolvedValue(undefined);
     mockFileHandle.close.mockResolvedValue(undefined);
@@ -462,6 +479,54 @@ describe('writeOutput', () => {
         expect(written).not.toContain('testcase-secret');
       } finally {
         restoreEnv();
+      }
+    },
+  );
+
+  it.each(['json', 'yaml'])(
+    'omits private traces from %s while preserving ordinary span fields',
+    async (extension) => {
+      const evaluation = new Eval({});
+      await evaluation.addResult(
+        createEvaluateResult({
+          testIdx: 0,
+          traceId: 'private-trace',
+          testCase: {
+            assert: [{ type: 'promptfoo:redteam:coding-agent:trace-redaction' }],
+          },
+        }),
+      );
+      const ordinarySpan = {
+        spanId: 'span',
+        name: 'ordinary',
+        startTime: 1,
+        statusCode: 2,
+        statusMessage: 'failed',
+        attributes: {},
+      };
+      const traceSpy = vi.spyOn(getTraceStore(), 'getTracesByEvaluation').mockResolvedValue([
+        {
+          traceId: 'private-trace',
+          evaluationId: evaluation.id,
+          testCaseId: '0-0',
+          spans: [{ ...ordinarySpan, attributes: { diagnostic: 'PRIVATE_EXPORT_TRACE' } }],
+        },
+        {
+          traceId: 'ordinary-trace',
+          evaluationId: evaluation.id,
+          testCaseId: '1-0',
+          spans: [ordinarySpan],
+        },
+      ]);
+      try {
+        await writeOutput(`output.${extension}`, evaluation, null);
+        const written = vi.mocked(fsPromises.writeFile).mock.calls[0][1] as string;
+        const output = extension === 'json' ? JSON.parse(written) : yaml.load(written);
+        expect(written).not.toContain('PRIVATE_EXPORT_TRACE');
+        expect(output.traces).toHaveLength(1);
+        expect(output.traces[0].spans[0]).toEqual(ordinarySpan);
+      } finally {
+        traceSpy.mockRestore();
       }
     },
   );

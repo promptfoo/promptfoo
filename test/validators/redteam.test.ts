@@ -3,11 +3,14 @@ import { z } from 'zod';
 import {
   ALIASED_PLUGIN_MAPPINGS,
   ALIASED_PLUGINS,
+  CODEX_AGENT_PLUGINS,
+  CODING_AGENT_CORE_PLUGINS,
   COLLECTIONS,
   DEFAULT_NUM_TESTS_PER_PLUGIN,
   DEFAULT_PLUGINS,
   FOUNDATION_PLUGINS,
   HARM_PLUGINS,
+  HARNESS_PREFLIGHT_PLUGINS,
   PII_PLUGINS,
   ALL_PLUGINS as REDTEAM_ALL_PLUGINS,
   Severity,
@@ -93,6 +96,27 @@ describe('RedteamConfigSchema', () => {
     expect(result.plugins?.map((plugin) => plugin.id).sort()).toEqual(
       [...TEEN_SAFETY_PLUGINS].sort(),
     );
+  });
+
+  it('should expand coding-agent plugin collections', () => {
+    const core = RedteamConfigSchema.parse({ plugins: ['coding-agent:core'] });
+    expect(core.plugins?.map((p: any) => p.id)).toEqual([...CODING_AGENT_CORE_PLUGINS].sort());
+
+    const codex = RedteamConfigSchema.parse({ plugins: ['coding-agent:codex'] });
+    expect(codex.plugins?.map((p: any) => p.id)).toEqual([...CODEX_AGENT_PLUGINS].sort());
+
+    const harness = RedteamConfigSchema.parse({ plugins: ['harness:preflight'] });
+    expect(harness.plugins?.map((p: any) => p.id)).toEqual([...HARNESS_PREFLIGHT_PLUGINS].sort());
+  });
+
+  it('should validate supported coding-agent replacements used by runnable examples', () => {
+    const result = RedteamConfigSchema.parse({
+      plugins: ['coding-agent:externalized-execution'],
+    });
+
+    expect(result.plugins?.map((plugin) => plugin.id)).toEqual([
+      'coding-agent:externalized-execution',
+    ]);
   });
 
   it('should handle plugin with config and severity', () => {

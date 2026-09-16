@@ -354,6 +354,8 @@ from being stored. Don't rely on `redactAttributes` alone to cover built-in prov
 
 :::
 
+Traces for `coding-agent:trace-redaction` and `harness:artifact-redaction` tests remain in local storage for verification, but are omitted from exports, sharing, and eval trace lists. Direct trace API requests return 404 for these private traces.
+
 Trace retention (`storage.retentionDays`) prunes traces and spans older than the given number
 of days from the local store at the **start of each traced eval**. The default is **30 days**,
 applied only when a `storage` block is present — omit `storage` to keep traces indefinitely, or

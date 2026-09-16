@@ -466,21 +466,17 @@ describe('util', () => {
         expect(result).toBe('search, calculate');
       });
 
-      it('propagates errors thrown by inline functions', async () => {
-        const fn: TransformFunction = () => {
-          throw new Error('user transform error');
+      it('propagates inline errors without logging the transform input', async () => {
+        const marker = 'PRIVATE_TRANSFORM_OUTPUT';
+        const fn: TransformFunction = (output) => {
+          throw new Error(String(output));
         };
 
-        await expect(transform(fn, 'test', { vars: {}, prompt: {} })).rejects.toThrow(
-          'user transform error',
-        );
-        expect(logger.error).toHaveBeenCalledWith(
-          'Error in transform function',
-          expect.objectContaining({
-            message: 'user transform error',
-            transform: expect.stringContaining(INLINE_FUNCTION_LABEL),
-          }),
-        );
+        await expect(transform(fn, marker, { vars: {}, prompt: {} })).rejects.toThrow(marker);
+        expect(logger.error).toHaveBeenCalledWith('Error in transform function', {
+          transform: expect.stringContaining(INLINE_FUNCTION_LABEL),
+        });
+        expect(JSON.stringify(vi.mocked(logger.error).mock.calls)).not.toContain(marker);
       });
 
       it('wraps thrown errors with the transform label and preserves the original via cause', async () => {

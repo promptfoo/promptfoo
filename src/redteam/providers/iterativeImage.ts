@@ -21,6 +21,7 @@ import {
   createIterationContext,
   externalizeResponseForRedteamHistory,
   getTargetResponse,
+  gradeRedactionResponse,
   redteamProviderManager,
   type TargetResponse,
 } from './shared';
@@ -30,6 +31,7 @@ import type {
   AtomicTestCase,
   CallApiContextParams,
   CallApiOptionsParams,
+  GradingResult,
   Inputs,
   NunjucksFilterMap,
   Prompt,
@@ -285,6 +287,9 @@ async function runRedteamConversation({
   let highestScore = 0;
   let bestResponse: BestResponse | null = null;
   let lastResponse: TargetResponse | undefined = undefined;
+  let mediaRedactionError: string | undefined;
+  const storedGraderResults: Record<number, GradingResult> = {};
+  let storedGraderResult: GradingResult | undefined;
   const previousOutputs: ImageGenerationOutput[] = [];
   let finalIteration = 0;
 
@@ -388,11 +393,17 @@ async function runRedteamConversation({
         targetContext,
         options,
       );
-      targetResponse = await externalizeResponseForRedteamHistory(targetResponse, {
-        evalId: context?.evaluationId,
-        testIdx: context?.testIdx,
-        promptIdx: context?.promptIdx,
-      });
+      targetResponse = await externalizeResponseForRedteamHistory(targetResponse, context);
+      storedGraderResult =
+        (await gradeRedactionResponse(
+          targetPrompt,
+          targetResponse,
+          test && { ...test, vars: targetContext?.vars ?? iterationVars },
+          storedGraderResults,
+        )) ?? storedGraderResult;
+      if (targetResponse.metadata?.redactionMediaOmitted === true) {
+        mediaRedactionError ??= targetResponse.error;
+      }
       lastResponse = targetResponse;
       // Count the target request even when the target returns an error.
       accumulateResponseTokenUsage(totalTokenUsage, targetResponse);
@@ -588,6 +599,12 @@ async function runRedteamConversation({
       (typeof lastResponse?.output === 'string' ? lastResponse.output : undefined),
     prompt: targetPrompt || undefined,
     metadata: {
+      ...(mediaRedactionError && { redactionMediaOmitted: true }),
+      ...(storedGraderResult && {
+        storedGraderResult,
+        storedGraderResults,
+        redactionContentOmitted: true,
+      }),
       finalIteration,
       highestScore,
       redteamHistory,
@@ -596,7 +613,9 @@ async function runRedteamConversation({
       bestImageDescription: bestResponse?.imageDescription,
     },
     tokenUsage: totalTokenUsage,
-    ...(lastResponse?.error ? { error: lastResponse.error } : {}),
+    ...(mediaRedactionError || lastResponse?.error
+      ? { error: mediaRedactionError || lastResponse?.error }
+      : {}),
   };
 }
 

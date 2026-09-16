@@ -1,10 +1,16 @@
 import './setup';
 
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
 import { randomUUID } from 'crypto';
 
 import { expect, it, vi } from 'vitest';
+import * as blobExtractor from '../../src/blobs/extractor';
 import { evaluate } from '../../src/evaluator';
+import { runExtensionHook } from '../../src/evaluatorHelpers';
 import Eval from '../../src/models/eval';
+import { redteamProviderManager } from '../../src/redteam/providers/shared';
 import { type ApiProvider, ResultFailureReason, type TestSuite } from '../../src/types/index';
 import {
   mockApiProvider,
@@ -15,6 +21,716 @@ import {
 import { describeEvaluator } from './lifecycle';
 
 describeEvaluator('evaluator assertions', () => {
+  it.each([
+    {
+      plugin: 'connector-parameter-exfil',
+      pathKey: 'connectorSinkLedgerPath',
+      leak: JSON.stringify({ canaryInParameters: true }) + '\n',
+    },
+    { plugin: 'network-egress-bypass', pathKey: 'trapLogPath', leak: 'POST /private HTTP/1.1\n' },
+  ] as const)(
+    'keeps $plugin evidence while a later setup hook resets its ledger',
+    async ({ plugin, pathKey, leak }) => {
+      const { sleep } =
+        await vi.importActual<typeof import('../../src/util/time')>('../../src/util/time');
+      const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'concurrent-ledger-hooks-'));
+      const ledger = path.join(directory, 'ledger');
+      fs.writeFileSync(ledger, '');
+      let hookCalls = 0;
+      const events: string[] = [];
+      vi.mocked(runExtensionHook).mockImplementation(async (_extensions, phase, context) => {
+        if (phase === 'beforeEach' && 'test' in context) {
+          hookCalls++;
+          if (context.test.vars?.index === 1) {
+            await sleep(50);
+          }
+          fs.writeFileSync(ledger, '');
+          events.push(`hook-${context.test.vars?.index}`);
+        }
+        return context;
+      });
+      vi.mocked(mockApiProvider.callApi).mockImplementation(async (_prompt, context) => {
+        const index = Number(context?.vars.index);
+        events.push(`target-${index}`);
+        if (index === 0) {
+          fs.appendFileSync(ledger, leak);
+          await sleep(100);
+        }
+        return { output: 'Public report' };
+      });
+      const suite: TestSuite = {
+        providers: [mockApiProvider],
+        prompts: [toPrompt('Inspect public report')],
+        extensions: ['file://reset-ledger.js'],
+        tests: [0, 1].map((index) => ({
+          vars: { index },
+          metadata: { purpose: 'Keep private data within its approved boundary' },
+          assert: [
+            { type: `promptfoo:redteam:coding-agent:${plugin}`, value: { [pathKey]: ledger } },
+          ],
+        })),
+      };
+      const record = await Eval.create({}, suite.prompts, { id: randomUUID() });
+      await redteamProviderManager.setGradingProvider(mockGradingApiProviderPasses);
+      vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+      try {
+        const pending = evaluate(suite, record, { maxConcurrency: 2, timeoutMs: 10000 });
+        await vi.waitFor(() => expect(hookCalls).toBe(2));
+        await vi.advanceTimersByTimeAsync(500);
+        await pending;
+        const { results } = await record.toEvaluateSummary();
+        expect(results).toHaveLength(2);
+        const first = results.find((row) => row.testCase.vars?.index === 0)!;
+        const second = results.find((row) => row.testCase.vars?.index === 1)!;
+        expect(first.success, JSON.stringify(events)).toBe(false);
+        expect(first.failureReason).toBe(ResultFailureReason.ASSERT);
+        expect(second.success).toBe(true);
+        expect(mockApiProvider.callApi).toHaveBeenCalledTimes(2);
+      } finally {
+        vi.useRealTimers();
+        redteamProviderManager.clearProvider();
+        fs.rmSync(directory, { recursive: true, force: true });
+      }
+    },
+  );
+
+  it('rejects select-best when privacy checks omit candidate responses', async () => {
+    const suite: TestSuite = {
+      providers: [mockApiProvider],
+      prompts: [toPrompt('First'), toPrompt('Second')],
+      tests: [
+        {
+          assert: [
+            {
+              type: 'promptfoo:redteam:coding-agent:trace-redaction',
+              value: { rawReceipt: 'PRIVATE_COMPARISON_RECEIPT' },
+            },
+            { type: 'select-best', value: 'Most helpful' },
+          ],
+        },
+      ],
+    };
+    const record = await Eval.create({}, suite.prompts, { id: randomUUID() });
+    await expect(evaluate(suite, record, {})).rejects.toThrow(/select-best.*redaction/);
+    expect(mockApiProvider.callApi).not.toHaveBeenCalled();
+  });
+
+  it.each(['deadline', 'cancel'] as const)(
+    'stops protected receipt preparation on %s without running later hooks or targets',
+    async (mode) => {
+      const controller = new AbortController();
+      let hookCalls = 0;
+      vi.mocked(runExtensionHook).mockImplementation(async (_extensions, phase, context) => {
+        if (phase === 'beforeEach') {
+          hookCalls++;
+          await new Promise(() => {});
+        }
+        return context;
+      });
+      const suite: TestSuite = {
+        providers: [mockApiProvider],
+        prompts: [toPrompt('Inspect receipts')],
+        extensions: ['file://hook.js'],
+        tests: [0, 1].map(() => ({
+          assert: [
+            {
+              type: 'promptfoo:redteam:coding-agent:trace-redaction',
+              value: { rawReceiptPath: 'missing-receipt' },
+            },
+          ],
+        })),
+      };
+      const record = await Eval.create({}, suite.prompts, { id: randomUUID() });
+      vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+      try {
+        let completed = false;
+        const pending = evaluate(suite, record, {
+          timeoutMs: 10000,
+          maxEvalTimeMs: mode === 'deadline' ? 25 : 0,
+          abortSignal: controller.signal,
+        }).finally(() => {
+          completed = true;
+        });
+        await vi.waitFor(() => expect(hookCalls).toBe(1));
+        if (mode === 'cancel') {
+          controller.abort();
+        }
+        await vi.advanceTimersByTimeAsync(25);
+        await vi.waitFor(() => expect(completed).toBe(true));
+        await pending;
+        expect(hookCalls).toBe(1);
+        expect(mockApiProvider.callApi).not.toHaveBeenCalled();
+      } finally {
+        vi.useRealTimers();
+      }
+    },
+  );
+
+  it.each(
+    (['coding-agent:trace-redaction', 'harness:artifact-redaction'] as const).flatMap((plugin) =>
+      (['llm-rubric', 'promptfoo:redteam:excessive-agency'] as const).map((companion) => ({
+        plugin,
+        companion,
+      })),
+    ),
+  )(
+    'gives $companion only the public $plugin prompt and response',
+    async ({ plugin, companion }) => {
+      const secret = 'PRIVATE_SIBLING_GRADER_RECEIPT';
+      vi.mocked(mockApiProvider.callApi).mockResolvedValue({ output: secret });
+      const suite: TestSuite = {
+        providers: [mockApiProvider],
+        prompts: [toPrompt('Inspect {{rawReceipt}}')],
+        tests: [
+          {
+            vars: { rawReceipt: secret },
+            metadata: { purpose: 'Inspect public reports' },
+            assert: [
+              {
+                type: 'assert-set',
+                assert: [
+                  { type: `promptfoo:redteam:${plugin}`, value: { rawReceipt: secret } },
+                  {
+                    type: companion,
+                    ...(companion === 'llm-rubric' && {
+                      transform: 'context.prompt.label + String(output)',
+                    }),
+                    value: 'The report is readable.',
+                    provider: mockGradingApiProviderPasses,
+                  },
+                ],
+              },
+            ],
+          },
+        ],
+      };
+      const record = await Eval.create({}, suite.prompts, { id: randomUUID() });
+      await redteamProviderManager.setGradingProvider(mockGradingApiProviderPasses);
+      try {
+        await evaluate(suite, record, { maxConcurrency: 1 });
+      } finally {
+        redteamProviderManager.clearProvider();
+      }
+      const calls = vi.mocked(mockGradingApiProviderPasses.callApi).mock.calls;
+      expect(vi.mocked(mockApiProvider.callApi).mock.calls[0][0]).toBe(`Inspect ${secret}`);
+      expect(calls).toHaveLength(1);
+      expect(JSON.stringify(calls[0])).not.toContain(secret);
+      expect(calls[0][0]).toContain('[Response omitted for trace/artifact redaction.]');
+      const summary = await record.toEvaluateSummary();
+      expect(JSON.stringify(summary.results[0].gradingResult)).toContain(
+        '"deterministicFailureKind":"redacted-artifact-sensitive-value"',
+      );
+      expect(JSON.stringify(summary)).not.toContain(secret);
+    },
+  );
+
+  it.each(
+    (
+      [
+        'coding-agent:trace-redaction',
+        'harness:artifact-redaction',
+        'coding-agent:trace-log-exfil',
+      ] as const
+    ).flatMap((plugin) => [1, 2].map((maxConcurrency) => ({ plugin, maxConcurrency }))),
+  )(
+    'snapshots all $plugin receipts before targets run at concurrency $maxConcurrency',
+    async ({ plugin, maxConcurrency }) => {
+      const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'protected-receipts-'));
+      try {
+        const secrets = ['PRIVATE_FIRST_RECEIPT_VALUE', 'PRIVATE_SECOND_RECEIPT_VALUE'];
+        const receipts = secrets.map((secret, index) => {
+          const receipt = path.join(directory, `receipt-${index}`);
+          fs.writeFileSync(receipt, secret);
+          return receipt;
+        });
+        const artifacts = secrets.map((_, index) => path.join(directory, `report-${index}`));
+        let targetCalls = 0;
+        vi.mocked(mockApiProvider.callApi).mockImplementation(async () => {
+          if (targetCalls++ === 0) {
+            receipts.forEach((receipt, index) => {
+              fs.copyFileSync(receipt, artifacts[index]);
+              fs.writeFileSync(receipt, 'DECOY_RECEIPT_FROM_TARGET');
+            });
+          }
+          return { output: 'Clean public report' };
+        });
+        const testSuite: TestSuite = {
+          providers: [mockApiProvider],
+          prompts: [toPrompt('Inspect the public report')],
+          tests: receipts.map((receipt, index) => ({
+            vars: { receipt },
+            assert: [
+              {
+                type: 'assert-set',
+                assert: [
+                  {
+                    type: `promptfoo:redteam:${plugin}`,
+                    value:
+                      plugin === 'coding-agent:trace-log-exfil'
+                        ? { traceLogReceiptPath: receipt, traceLogArtifactPath: artifacts[index] }
+                        : index === 0
+                          ? { rawReceiptPaths: [receipt], redactedArtifactPath: artifacts[index] }
+                          : { redactedArtifact: { receiptPath: receipt, path: artifacts[index] } },
+                  },
+                ],
+              },
+            ],
+          })),
+        };
+        const evalRecord = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
+        await evaluate(testSuite, evalRecord, { maxConcurrency });
+        const summary = await evalRecord.toEvaluateSummary();
+        expect(targetCalls).toBe(2);
+        expect(summary.results).toHaveLength(2);
+        for (const result of summary.results) {
+          expect(result).toMatchObject({
+            success: false,
+            failureReason: ResultFailureReason.ASSERT,
+          });
+          expect(JSON.stringify(result.gradingResult)).toContain(
+            plugin === 'coding-agent:trace-log-exfil'
+              ? '"deterministicFailureKind":"trace-log-sensitive-value"'
+              : '"deterministicFailureKind":"redacted-artifact-sensitive-value"',
+          );
+        }
+        for (const secret of secrets) {
+          expect(JSON.stringify(summary)).not.toContain(secret);
+        }
+      } finally {
+        fs.rmSync(directory, { recursive: true, force: true });
+      }
+    },
+  );
+
+  it.each(
+    (['coding-agent:trace-redaction', 'harness:artifact-redaction'] as const).flatMap((plugin) =>
+      [1, 2].flatMap((maxConcurrency) =>
+        ['missing', 'existing', 'unconfigured', 'declared-shared'].map((initial) => ({
+          plugin,
+          maxConcurrency,
+          initial,
+        })),
+      ),
+    ),
+  )(
+    'captures $initial receipts initialized by beforeEach for $plugin at concurrency $maxConcurrency',
+    async ({ plugin, maxConcurrency, initial }) => {
+      const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'hook-receipts-'));
+      try {
+        const secrets = ['PRIVATE_HOOK_FIRST_RECEIPT', 'PRIVATE_HOOK_SECOND_RECEIPT'];
+        const receipts = secrets.map((_, index) =>
+          path.join(directory, `receipt-${initial === 'declared-shared' ? 'shared' : index}`),
+        );
+        if (initial === 'existing') {
+          receipts.forEach((file) => fs.writeFileSync(file, 'PRIVATE_INITIAL_RECEIPT'));
+        }
+        const events: string[] = [];
+        vi.mocked(runExtensionHook).mockImplementation(async (_extensions, phase, context) => {
+          if (phase === 'beforeEach' && 'test' in context) {
+            const index = Number(context.test.vars?.index);
+            fs.writeFileSync(receipts[index], secrets[index]);
+            if (initial.startsWith('unconfigured')) {
+              context.test.assert = [
+                {
+                  type: `promptfoo:redteam:${plugin}`,
+                  value: { rawReceiptPath: receipts[index] },
+                },
+              ];
+            }
+            events.push(`hook-${index}`);
+          }
+          return context;
+        });
+        vi.mocked(mockApiProvider.callApi).mockImplementation(async (_prompt, context) => {
+          const index = Number(context?.vars.index);
+          events.push(`target-${index}`);
+          receipts.forEach((file) => fs.writeFileSync(file, 'DECOY_FROM_TARGET'));
+          return { output: secrets[index] };
+        });
+        const suite: TestSuite = {
+          providers: [mockApiProvider],
+          prompts: [toPrompt('Inspect protected receipts')],
+          extensions: ['file://initialize-receipts.js'],
+          tests: receipts.map((receipt, index) => ({
+            vars: { index },
+            assert: initial.startsWith('unconfigured')
+              ? undefined
+              : [{ type: `promptfoo:redteam:${plugin}`, value: { rawReceiptPath: receipt } }],
+          })),
+        };
+        const evalRecord = await Eval.create({}, suite.prompts, { id: randomUUID() });
+        await evaluate(suite, evalRecord, { maxConcurrency, timeoutMs: 10000 });
+        const summary = await evalRecord.toEvaluateSummary();
+        expect(summary.results).toHaveLength(2);
+        expect(
+          summary.results.every(
+            (row) => !row.success && row.failureReason === ResultFailureReason.ASSERT,
+          ),
+        ).toBe(true);
+        expect(
+          summary.results.every((row) =>
+            JSON.stringify(row.gradingResult).includes(
+              '"deterministicFailureKind":"redacted-artifact-sensitive-value"',
+            ),
+          ),
+        ).toBe(true);
+        if (!initial.startsWith('unconfigured')) {
+          expect(events.slice(0, 2)).toEqual(['hook-0', 'hook-1']);
+        }
+        expect(events.filter((event) => event.startsWith('hook-'))).toEqual(['hook-0', 'hook-1']);
+      } finally {
+        fs.rmSync(directory, { recursive: true, force: true });
+      }
+    },
+  );
+
+  it.each(
+    ['receipt', 'static plan', 'vars', 'assertion value'].flatMap((source) =>
+      ['repeat', 'prompts', 'providers'].map((expansion) => ({ source, expansion })),
+    ),
+  )(
+    'captures each $source across $expansion with beforeAll extensions',
+    async ({ source, expansion }) => {
+      const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'repeat-hook-receipt-'));
+      try {
+        const receipt = path.join(directory, source === 'static plan' ? 'receipt.json' : 'receipt');
+        let hookCalls = 0;
+        let targetCalls = 0;
+        const secrets = ['PRIVATE_FIRST_REPEAT_RECEIPT', 'PRIVATE_SECOND_REPEAT_RECEIPT'];
+        vi.mocked(runExtensionHook).mockImplementation(async (extensions, phase, context) => {
+          if (phase === 'beforeAll' && 'suite' in context) {
+            return { suite: { ...context.suite, extensions: ['file://prepared-hook.js'] } };
+          }
+          if (phase === 'beforeEach' && 'test' in context) {
+            expect(extensions).toEqual(['file://prepared-hook.js']);
+            const id = hookCalls++;
+            const secret = secrets[id];
+            if (source === 'vars') {
+              context.test.vars!.id = id;
+            }
+            if (source === 'assertion value') {
+              const assertion = context.test.assert![0];
+              if (assertion.type === 'assert-set') {
+                throw new Error('Expected a single privacy assertion');
+              }
+              (assertion.value as { rawReceiptPath: string }).rawReceiptPath = path.join(
+                directory,
+                `receipt-${id}`,
+              );
+            }
+            fs.writeFileSync(
+              source === 'vars' || source === 'assertion value'
+                ? path.join(directory, `receipt-${id}`)
+                : receipt,
+              source === 'static plan' ? JSON.stringify({ rawReceipt: secret }) : secret,
+            );
+          }
+          return context;
+        });
+        vi.mocked(mockApiProvider.callApi).mockImplementation(async () => {
+          expect(hookCalls).toBe(2);
+          fs.writeFileSync(receipt, 'PRIVATE_TARGET_DECOY_RECEIPT');
+          return { output: secrets[targetCalls++] };
+        });
+        const suite: TestSuite = {
+          providers:
+            expansion === 'providers'
+              ? [mockApiProvider, { ...mockApiProvider, id: () => 'second-target' }]
+              : [mockApiProvider],
+          prompts:
+            expansion === 'prompts'
+              ? [toPrompt('Inspect receipts'), toPrompt('Inspect receipts again')]
+              : [toPrompt('Inspect receipts')],
+          extensions: ['file://original-hook.js'],
+          tests: [
+            {
+              vars: { id: 'initial' },
+              assert: [
+                {
+                  type: 'promptfoo:redteam:coding-agent:trace-redaction',
+                  value:
+                    source === 'static plan'
+                      ? `file://${receipt}`
+                      : {
+                          rawReceiptPath:
+                            source === 'vars' ? path.join(directory, 'receipt-{{id}}') : receipt,
+                        },
+                },
+              ],
+            },
+          ],
+        };
+        const record = await Eval.create({}, suite.prompts, { id: randomUUID() });
+        await evaluate(suite, record, {
+          repeat: expansion === 'repeat' ? 2 : 1,
+          maxConcurrency: 2,
+          timeoutMs: 10000,
+        });
+        const summary = await record.toEvaluateSummary();
+        expect(hookCalls).toBe(2);
+        expect(targetCalls).toBe(2);
+        expect(
+          summary.results.every(
+            (result) =>
+              !result.success &&
+              JSON.stringify(result.gradingResult).includes(
+                '"deterministicFailureKind":"redacted-artifact-sensitive-value"',
+              ),
+          ),
+        ).toBe(true);
+      } finally {
+        fs.rmSync(directory, { recursive: true, force: true });
+      }
+    },
+  );
+
+  it.each([false, true])(
+    'preserves hook errors for file receipt tests: %s',
+    async (protectedReceipt) => {
+      const error = new Error('Fixture setup failed');
+      let hookCalls = 0;
+      vi.mocked(runExtensionHook).mockImplementation(async (_extensions, phase, context) => {
+        if (phase === 'beforeEach') {
+          hookCalls++;
+          throw error;
+        }
+        return context;
+      });
+      const suite: TestSuite = {
+        providers: [mockApiProvider],
+        prompts: [toPrompt('Inspect receipts')],
+        extensions: ['file://hook.js'],
+        tests: [
+          {
+            assert: protectedReceipt
+              ? [
+                  {
+                    type: 'promptfoo:redteam:coding-agent:trace-redaction',
+                    value: { rawReceiptPath: 'missing-receipt' },
+                  },
+                ]
+              : [{ type: 'equals', value: 'Clean' }],
+          },
+        ],
+      };
+      const record = await Eval.create({}, suite.prompts, { id: randomUUID() });
+      await expect(
+        evaluate(suite, record, { maxConcurrency: 1, timeoutMs: 10000 }),
+      ).rejects.toThrow(error);
+      expect(hookCalls).toBe(1);
+      expect(mockApiProvider.callApi).not.toHaveBeenCalled();
+    },
+  );
+
+  it('stops all targets when a receipt hook times out and later rewrites the shared file', async () => {
+    const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'late-receipt-hook-'));
+    const receipt = path.join(directory, 'receipt');
+    let hookCalls = 0;
+    let finishHook!: () => void;
+    const lateHook = new Promise<void>((resolve) => {
+      finishHook = resolve;
+    });
+    vi.mocked(runExtensionHook).mockImplementation(async (_extensions, phase, context) => {
+      if (phase === 'beforeEach') {
+        const call = ++hookCalls;
+        if (call === 1) {
+          await lateHook;
+        }
+        fs.writeFileSync(receipt, call === 1 ? 'LATE_UNCAPTURED_RECEIPT' : 'CAPTURED_RECEIPT');
+      }
+      return context;
+    });
+    vi.mocked(mockApiProvider.callApi).mockImplementation(async () => {
+      return { output: fs.readFileSync(receipt, 'utf8') };
+    });
+    const suite: TestSuite = {
+      providers: [mockApiProvider],
+      prompts: [toPrompt('Inspect')],
+      extensions: ['file://hook.js'],
+      tests: [0, 1].map(() => ({
+        assert: [
+          {
+            type: 'promptfoo:redteam:coding-agent:trace-redaction',
+            value: { rawReceiptPath: receipt },
+          },
+        ],
+      })),
+    };
+    const record = await Eval.create({}, suite.prompts, { id: randomUUID() });
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+    try {
+      const pending = evaluate(suite, record, { maxConcurrency: 1, timeoutMs: 25 });
+      await vi.waitFor(() => expect(hookCalls).toBe(1));
+      await vi.advanceTimersByTimeAsync(25);
+      finishHook();
+      await pending;
+      expect(mockApiProvider.callApi).not.toHaveBeenCalled();
+      expect(fs.readFileSync(receipt, 'utf8')).toBe('LATE_UNCAPTURED_RECEIPT');
+      const summary = await record.toEvaluateSummary();
+      expect(summary.results).toHaveLength(2);
+      expect(summary.results.every((row) => row.failureReason === ResultFailureReason.ERROR)).toBe(
+        true,
+      );
+    } finally {
+      vi.useRealTimers();
+      fs.rmSync(directory, { recursive: true, force: true });
+    }
+  });
+
+  it.each([false, true])(
+    'preserves hook timeouts for file receipt tests: %s',
+    async (protectedReceipt) => {
+      let hookCalls = 0;
+      vi.mocked(runExtensionHook).mockImplementation(async (_extensions, phase, context) => {
+        if (phase === 'beforeEach') {
+          hookCalls++;
+          await new Promise(() => {});
+        }
+        return context;
+      });
+      const suite: TestSuite = {
+        providers: [mockApiProvider],
+        prompts: [toPrompt('Inspect receipts')],
+        extensions: ['file://hook.js'],
+        tests: [
+          {
+            assert: protectedReceipt
+              ? [
+                  {
+                    type: 'promptfoo:redteam:coding-agent:trace-redaction',
+                    value: { rawReceiptPath: 'missing-receipt' },
+                  },
+                ]
+              : [{ type: 'equals', value: 'Clean' }],
+          },
+        ],
+      };
+      const record = await Eval.create({}, suite.prompts, { id: randomUUID() });
+      vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+      try {
+        const pending = evaluate(suite, record, { maxConcurrency: 1, timeoutMs: 25 });
+        await vi.waitFor(() => expect(hookCalls).toBe(1));
+        await vi.advanceTimersByTimeAsync(25);
+        await pending;
+      } finally {
+        vi.useRealTimers();
+      }
+      const summary = await record.toEvaluateSummary();
+      expect(summary.results).toHaveLength(1);
+      expect(summary.results[0]).toMatchObject({
+        success: false,
+        failureReason: ResultFailureReason.ERROR,
+      });
+      expect(summary.results[0].error).toContain(
+        protectedReceipt
+          ? 'Error details omitted for trace/artifact redaction.'
+          : 'Evaluation timed out after 25ms',
+      );
+      expect(hookCalls).toBe(1);
+      expect(mockApiProvider.callApi).not.toHaveBeenCalled();
+    },
+  );
+
+  it.each(['missing', 'invalid'])(
+    'rejects a receipt that was %s before the target supplied a decoy',
+    async (initial) => {
+      const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'missing-receipt-'));
+      try {
+        const receipt = path.join(directory, 'receipt');
+        if (initial === 'invalid') {
+          fs.writeFileSync(receipt, '');
+        }
+        vi.mocked(mockApiProvider.callApi).mockImplementation(async () => {
+          fs.writeFileSync(receipt, 'DECOY_RECEIPT_FROM_TARGET');
+          return { output: 'Clean public report' };
+        });
+        const testSuite: TestSuite = {
+          providers: [mockApiProvider],
+          prompts: [toPrompt('Inspect the public report')],
+          tests: [
+            {
+              assert: [
+                {
+                  type: 'promptfoo:redteam:coding-agent:trace-redaction',
+                  value: { rawReceiptPath: receipt },
+                },
+              ],
+            },
+          ],
+        };
+        const evalRecord = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
+        await evaluate(testSuite, evalRecord, { maxConcurrency: 1 });
+        const summary = await evalRecord.toEvaluateSummary();
+        expect(summary.results[0]).toMatchObject({
+          success: false,
+          failureReason: ResultFailureReason.ASSERT,
+        });
+        expect(JSON.stringify(summary)).toContain('verifier-sidecar-failed');
+      } finally {
+        fs.rmSync(directory, { recursive: true, force: true });
+      }
+    },
+  );
+
+  it.each(['coding-agent:trace-redaction', 'harness:artifact-redaction'] as const)(
+    'keeps %s output out of later conversation and register state',
+    async (plugin) => {
+      const secret = 'PRIVATE_STATE_RECEIPT';
+      vi.mocked(mockApiProvider.callApi)
+        .mockResolvedValueOnce({ output: secret })
+        .mockResolvedValueOnce({ output: 'Clean' });
+      const testSuite: TestSuite = {
+        providers: [mockApiProvider],
+        prompts: [toPrompt('Inspect report. {{ saved }} {{ _conversation[0].response.output }}')],
+        tests: [
+          {
+            options: { storeOutputAs: 'saved' },
+            assert: [{ type: `promptfoo:redteam:${plugin}`, value: { rawReceipt: secret } }],
+          },
+          { assert: [{ type: 'equals', value: 'Clean' }] },
+        ],
+      };
+      const evalRecord = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
+      await evaluate(testSuite, evalRecord, { maxConcurrency: 1 });
+      const summary = await evalRecord.toEvaluateSummary();
+      expect(mockApiProvider.callApi).toHaveBeenCalledTimes(2);
+      expect(vi.mocked(mockApiProvider.callApi).mock.calls[1][0]).not.toContain(secret);
+      expect(summary.results[0].failureReason).toBe(ResultFailureReason.ASSERT);
+      expect(summary.results[1].success).toBe(true);
+      expect(JSON.stringify(summary)).not.toContain(secret);
+    },
+  );
+
+  it.each(['coding-agent:trace-redaction', 'harness:artifact-redaction'] as const)(
+    'does not write private output media to blobs for %s',
+    async (plugin) => {
+      const extract = vi.spyOn(blobExtractor, 'extractAndStoreBinaryData');
+      try {
+        const output = `data:image/png;base64,${Buffer.alloc(2048, 1).toString('base64')}`;
+        vi.mocked(mockApiProvider.callApi).mockResolvedValue({ output });
+        const testSuite: TestSuite = {
+          providers: [mockApiProvider],
+          prompts: [toPrompt('Inspect the public report')],
+          tests: [{ assert: [{ type: `promptfoo:redteam:${plugin}` }] }],
+        };
+        const evalRecord = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
+        await evaluate(testSuite, evalRecord, { maxConcurrency: 1 });
+        const summary = await evalRecord.toEvaluateSummary();
+        expect(
+          extract.mock.calls.some(([response]) => JSON.stringify(response)?.includes(output)),
+        ).toBe(false);
+        expect(summary.results[0]).toMatchObject({
+          success: false,
+          failureReason: ResultFailureReason.ERROR,
+        });
+        expect(JSON.stringify(summary)).not.toContain(output);
+        expect(JSON.stringify(summary)).not.toContain('promptfoo://blob/');
+      } finally {
+        extract.mockRestore();
+      }
+    },
+  );
+
   it.each(['failed', 'aborted'])(
     'preserves completed audio output when grading is %s',
     async (outcome) => {

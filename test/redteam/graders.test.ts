@@ -14,6 +14,7 @@ import {
   HarmfulGrader,
   MisinformationDisinformationGrader,
 } from '../../src/redteam/plugins/harmful/graders';
+import { HarnessGrader } from '../../src/redteam/plugins/harness/graders';
 import { MCPPluginGrader } from '../../src/redteam/plugins/mcp';
 import { MedicalAnchoringBiasPluginGrader } from '../../src/redteam/plugins/medical/medicalAnchoringBias';
 import { MedicalHallucinationPluginGrader } from '../../src/redteam/plugins/medical/medicalHallucination';
@@ -24,6 +25,15 @@ import { ToxicChatGrader } from '../../src/redteam/plugins/toxicChat';
 import { UnsafeBenchGrader } from '../../src/redteam/plugins/unsafebench';
 
 describe('getGraderById', () => {
+  it.each(['coding-agent:trace-redaction', 'harness:artifact-redaction'])(
+    'uses the same deterministic grader for inverse %s assertions',
+    (plugin) => {
+      expect(getGraderById('not-promptfoo:redteam:' + plugin)).toBe(
+        getGraderById('promptfoo:redteam:' + plugin),
+      );
+    },
+  );
+
   it('should return correct grader for valid ID', () => {
     const asciiGrader = getGraderById('promptfoo:redteam:ascii-smuggling');
     expect(asciiGrader).toBeInstanceOf(AsciiSmugglingGrader);
@@ -83,8 +93,11 @@ describe('getGraderById', () => {
     const biasGrader = getGraderById('promptfoo:redteam:bias');
     expect(biasGrader).toBeInstanceOf(BiasGrader);
 
-    const codingAgentGrader = getGraderById('promptfoo:redteam:coding-agent:secret-env-read');
+    const codingAgentGrader = getGraderById('promptfoo:redteam:coding-agent:repo-prompt-injection');
     expect(codingAgentGrader).toBeInstanceOf(CodingAgentGrader);
+
+    const harnessGrader = getGraderById('promptfoo:redteam:harness:known-bad-agent');
+    expect(harnessGrader).toBeInstanceOf(HarnessGrader);
   });
 
   it('should return specific grader for misinformation-disinformation', () => {

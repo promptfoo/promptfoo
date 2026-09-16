@@ -22,6 +22,20 @@ type CsvParseOptionsWithColumns<T> = Omit<CsvOptions<T>, 'columns'> & {
   columns: Exclude<CsvOptions['columns'], undefined | false>;
 };
 
+export function processFileReference(fileRef: string): object | string {
+  const basePath = cliState.basePath || '';
+  const filePath = path.resolve(basePath, fileRef.slice('file://'.length));
+  const fileContent = fs.readFileSync(filePath, 'utf8');
+  const extension = path.extname(filePath);
+  if (['.json', '.yaml', '.yml'].includes(extension)) {
+    return loadYaml(fileContent) as object;
+  } else if (extension === '.txt') {
+    return fileContent.trim();
+  } else {
+    throw new Error(`Unsupported file type: ${filePath}`);
+  }
+}
+
 /**
  * Returns true if the path is accessible. ENOENT (and ENOTDIR, which Node
  * surfaces when a path component isn't a directory) yield false; other errors

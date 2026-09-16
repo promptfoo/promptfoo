@@ -14,9 +14,11 @@ import {
   callGradingProvider,
   callTargetProvider,
   createIterationContext,
+  externalizeResponseForRedteamHistory,
   formatRedteamHistoryAsTranscript,
   getGraderAssertionValue,
   getTargetResponse,
+  gradeRedactionResponse,
   type Message,
   messagesToRedteamHistory,
   redteamProviderManager,
@@ -37,8 +39,10 @@ import type {
   ApiProvider,
   Assertion,
   AssertionSet,
+  AtomicTestCase,
   CallApiContextParams,
   CallApiOptionsParams,
+  GradingResult,
   Prompt,
 } from '../../../src/types/index';
 
@@ -763,6 +767,39 @@ describe('shared redteam provider utilities', () => {
   });
 
   describe('getTargetResponse', () => {
+    it.each(
+      ['typed-array', 'array-buffer', 'data-view'].flatMap((kind) =>
+        [false, true].map((withError) => ({ kind, withError })),
+      ),
+    )(
+      'preserves binary identity before serializing $kind (withError=$withError)',
+      async ({ kind, withError }) => {
+        const bytes = Uint8Array.from(Buffer.from('PRIVATE_NATIVE_BINARY_RECEIPT'));
+        const output = {
+          'typed-array': bytes,
+          'array-buffer': bytes.buffer,
+          'data-view': new DataView(bytes.buffer),
+        }[kind];
+        const response = { output, ...(withError ? { error: 'Target error' } : {}) };
+        const provider = createMockProvider({ response });
+        const context = {
+          prompt: { raw: 'Inspect report', label: 'fixture' },
+          vars: {},
+          test: { assert: [{ type: 'promptfoo:redteam:coding-agent:trace-redaction' }] },
+        } as CallApiContextParams;
+        const normalized = await getTargetResponse(provider, 'Inspect report', context);
+        const history = await externalizeResponseForRedteamHistory(normalized, context);
+        expect(history).toMatchObject({
+          error: expect.stringMatching(/redaction.*verified/i),
+          metadata: { redactionMediaOmitted: true },
+        });
+        const ordinary = await getTargetResponse(provider, 'Inspect report');
+        expect(ordinary.output).toBe(JSON.stringify(output));
+        expect(ordinary.metadata?.redactionMediaOmitted).toBeUndefined();
+        expect(response.output).toBe(output);
+      },
+    );
+
     it('returns an error before calling the target when the prompt exceeds maxCharsPerMessage', async () => {
       setCliStateConfig({
         redteam: {
@@ -1852,5 +1889,237 @@ describe('shared redteam provider utilities', () => {
       });
       expect(iterationContext?.vars).toEqual({ goal: 'test' });
     });
+  });
+});
+
+describe('redteam history blob storage', () => {
+  it.each([
+    'pdf',
+    'encoded-text',
+    'buffer',
+    'buffer-object',
+    'buffer-json',
+    'typed-array',
+    'array-buffer',
+    'data-view',
+  ])('rejects opaque %s responses before copying them into privacy history', async (mode) => {
+    const secret = 'PRIVATE_BINARY_HISTORY_RECEIPT';
+    const bytes = Uint8Array.from(Buffer.from(secret));
+    const output = {
+      pdf: `data:application/pdf;base64,${Buffer.from('%PDF-1.4 ' + secret).toString('base64')}`,
+      'encoded-text': `data:text/plain;base64,${Buffer.from(secret).toString('base64')}`,
+      buffer: Buffer.from(secret),
+      'buffer-object': Buffer.from(secret).toJSON(),
+      'buffer-json': JSON.stringify(Buffer.from(secret)),
+      'typed-array': bytes,
+      'array-buffer': bytes.buffer,
+      'data-view': new DataView(bytes.buffer),
+    }[mode];
+    const response = { output };
+    const history = await externalizeResponseForRedteamHistory(response, {
+      test: {
+        assert: [{ type: 'promptfoo:redteam:coding-agent:trace-redaction' }],
+      } as AtomicTestCase,
+    });
+    expect(history).toMatchObject({
+      error: expect.stringMatching(/redaction.*verified/i),
+      metadata: { redactionMediaOmitted: true },
+    });
+    expect(JSON.stringify(history)).not.toContain(secret);
+    expect(JSON.stringify(history)).not.toContain(Buffer.from(secret).toString('base64'));
+    expect(response.output).toBe(output);
+  });
+
+  it.each([
+    'promptfoo:redteam:coding-agent:trace-redaction',
+    'promptfoo:redteam:harness:artifact-redaction',
+  ])('rejects cached target responses before recording %s grades', async (type) => {
+    const graders = await import('../../../src/redteam/graders');
+    const getResult = vi.fn().mockResolvedValue({
+      grade: { pass: true, score: 1, reason: 'Clean fixture' },
+      rubric: 'Privacy',
+    });
+    vi.spyOn(graders, 'getGraderById').mockReturnValue({ id: type, getResult } as never);
+    const test = { assert: [{ type }] } as AtomicTestCase;
+    const results: Record<number, GradingResult> = {};
+    const cached = await externalizeResponseForRedteamHistory(
+      { output: 'Clean report', cached: true },
+      { test },
+    );
+
+    await expect(gradeRedactionResponse('Inspect', cached, test, results)).rejects.toThrow(
+      /fresh target/,
+    );
+    expect(results).toEqual({});
+    expect(getResult).not.toHaveBeenCalled();
+
+    const fresh = await externalizeResponseForRedteamHistory(
+      { output: 'Clean report', cached: false },
+      { test },
+    );
+    await expect(gradeRedactionResponse('Inspect', fresh, test, results)).resolves.toMatchObject({
+      pass: true,
+    });
+    expect(results[0].pass).toBe(true);
+    expect(getResult).toHaveBeenCalledTimes(1);
+  });
+
+  afterEach(() => vi.restoreAllMocks());
+
+  it.each([
+    'promptfoo:redteam:coding-agent:trace-redaction',
+    'promptfoo:redteam:harness:artifact-redaction',
+  ])('keeps %s responses out of blob storage', async (type) => {
+    const blobs = await import('../../../src/blobs/extractor');
+    vi.spyOn(blobs, 'isBlobStorageEnabled').mockReturnValue(true);
+    const store = vi.spyOn(blobs, 'extractAndStoreBinaryData').mockResolvedValue(undefined);
+    const response = {
+      output: 'image',
+      images: [{ data: 'private-image', mimeType: 'image/png' }],
+    };
+    expect(
+      await externalizeResponseForRedteamHistory(response, {
+        test: { assert: [{ type }] } as AtomicTestCase,
+      }),
+    ).toMatchObject({ metadata: { redactionMediaOmitted: true } });
+    expect(store).not.toHaveBeenCalled();
+  });
+
+  it.each(['coding-agent:trace-redaction', 'harness:artifact-redaction'])(
+    'omits audio before copying %s responses into history',
+    async (plugin) => {
+      const blobs = await import('../../../src/blobs/extractor');
+      vi.spyOn(blobs, 'isBlobStorageEnabled').mockReturnValue(true);
+      const store = vi.spyOn(blobs, 'extractAndStoreBinaryData').mockResolvedValue(undefined);
+      const data = Buffer.from('PRIVATE_AUDIO_HISTORY_RECEIPT').toString('base64');
+      const response = {
+        output: data,
+        audio: { data, format: 'wav' },
+        raw: { data },
+        metadata: { audioEcho: data },
+        cost: 0.01,
+      };
+      const history = await externalizeResponseForRedteamHistory(response, {
+        test: { assert: [{ type: `promptfoo:redteam:${plugin}` }] } as AtomicTestCase,
+      });
+      expect(JSON.stringify(history)).not.toContain(data);
+      expect(history).not.toHaveProperty('cost');
+      expect(history).toMatchObject({
+        error: expect.stringMatching(/audio.*redaction.*verified/i),
+        metadata: { redactionMediaOmitted: true },
+      });
+      expect(store).not.toHaveBeenCalled();
+      expect(response.audio.data).toBe(data);
+    },
+  );
+
+  it('omits raw private evidence from text histories without a media error', async () => {
+    const response = { output: 'Clean report', raw: { secret: 'PRIVATE_RAW_HISTORY_8964' } };
+    const history = await externalizeResponseForRedteamHistory(response, {
+      test: {
+        assert: [{ type: 'promptfoo:redteam:coding-agent:trace-redaction' }],
+      } as AtomicTestCase,
+    });
+    expect(history.raw).toBeUndefined();
+    expect(history.output).toBe('[Response omitted for trace/artifact redaction.]');
+    expect(history).not.toHaveProperty('error');
+    expect(response.raw.secret).toBe('PRIVATE_RAW_HISTORY_8964');
+  });
+
+  it('preserves conversation termination without its private reason', async () => {
+    const history = await externalizeResponseForRedteamHistory(
+      {
+        output: 'Clean report',
+        conversationEnded: true,
+        conversationEndReason: 'PRIVATE_CONVERSATION_END_REASON',
+      },
+      {
+        test: {
+          assert: [{ type: 'promptfoo:redteam:coding-agent:trace-redaction' }],
+        } as AtomicTestCase,
+      },
+    );
+    expect(history.conversationEnded).toBe(true);
+    expect(history).not.toHaveProperty('conversationEndReason');
+  });
+
+  it.each(['coding-agent:trace-redaction', 'harness:artifact-redaction'])(
+    'retains %s text only for its local grading call',
+    async (plugin) => {
+      const test: AtomicTestCase = { assert: [{ type: `promptfoo:redteam:${plugin}` }] };
+      const response = {
+        output: 'PRIVATE_TEXT_RECEIPT',
+        metadata: { echo: 'PRIVATE_TEXT_RECEIPT' },
+      };
+      const history = await externalizeResponseForRedteamHistory(response, { test });
+      expect(JSON.stringify(history)).not.toContain('PRIVATE_TEXT_RECEIPT');
+      const grader = {
+        id: `promptfoo:redteam:${plugin}`,
+        getResult: vi.fn().mockResolvedValue({ pass: false }),
+      };
+      await runRedteamGrader(grader, 'Inspect', history.output, test, {
+        providerResponse: history,
+      });
+      expect(grader.getResult).toHaveBeenCalledWith('Inspect', response.output, test, {
+        providerResponse: response,
+      });
+    },
+  );
+
+  it('withholds private verifier inputs and traces from an adaptive sibling grader', async () => {
+    const secret = 'PRIVATE_SIBLING_RECEIPT';
+    const test: AtomicTestCase = {
+      vars: { rawReceipt: secret, rawReceiptPath: '/workspace/private-tenant/receipt.txt' },
+      assert: [
+        {
+          type: 'promptfoo:redteam:coding-agent:trace-redaction',
+          value: {
+            rawReceipt: secret,
+            rawReceiptPath: '/workspace/private-tenant/receipt.txt',
+            redactedArtifact: { path: '/workspace/private-tenant/public.json' },
+          },
+        },
+      ],
+    };
+    const history = await externalizeResponseForRedteamHistory({ output: secret }, { test });
+    const grader = {
+      id: 'promptfoo:redteam:politics',
+      getResult: vi.fn().mockResolvedValue({ pass: true }),
+    };
+    await runRedteamGrader(
+      grader,
+      'Inspect',
+      history.output,
+      test,
+      undefined,
+      { rawReceipt: secret },
+      undefined,
+      undefined,
+      {
+        providerResponse: history,
+        traceData: { spans: [{ name: secret }] },
+        traceContext: { spans: [{ name: secret }] },
+        traceSummary: secret,
+      },
+    );
+    expect(JSON.stringify(grader.getResult.mock.calls)).not.toContain(secret);
+    expect(JSON.stringify(grader.getResult.mock.calls)).not.toContain('/workspace/private-tenant');
+    expect(test.vars?.rawReceipt).toBe(secret);
+  });
+
+  it('preserves eval-scoped blob storage for ordinary responses', async () => {
+    const blobs = await import('../../../src/blobs/extractor');
+    vi.spyOn(blobs, 'isBlobStorageEnabled').mockReturnValue(true);
+    const stored = { output: 'blob://stored-image' };
+    const store = vi.spyOn(blobs, 'extractAndStoreBinaryData').mockResolvedValue(stored);
+    const response = { output: 'original image' };
+    expect(
+      await externalizeResponseForRedteamHistory(response, {
+        evaluationId: 'eval',
+        testIdx: 2,
+        promptIdx: 3,
+      }),
+    ).toBe(stored);
+    expect(store).toHaveBeenCalledWith(response, { evalId: 'eval', testIdx: 2, promptIdx: 3 });
   });
 });

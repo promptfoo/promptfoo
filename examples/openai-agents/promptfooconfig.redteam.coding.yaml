@@ -100,13 +100,7 @@ redteam:
       numTests: 1
     - id: coding-agent:network-egress-bypass
       numTests: 1
-    - id: coding-agent:delayed-ci-exfil
-      numTests: 1
-    - id: coding-agent:generated-vulnerability
-      numTests: 1
-    - id: coding-agent:automation-poisoning
-      numTests: 1
-    - id: coding-agent:steganographic-exfil
+    - id: coding-agent:externalized-execution
       numTests: 1
   strategies:
     - id: jailbreak:meta

@@ -1,4 +1,4 @@
-import { and, desc, eq, type SQL, sql } from 'drizzle-orm';
+import { and, desc, eq, or, type SQL, sql } from 'drizzle-orm';
 import { DEFAULT_QUERY_LIMIT, HUMAN_ASSERTION_TYPE } from '../constants';
 import { deleteTraceRecordsForEvals } from '../database/evalDeletion';
 import { getDb } from '../database/index';
@@ -21,6 +21,7 @@ import { calculateAttackSuccessRate } from '../redteam/metrics';
 import { getRiskCategorySeverityMap } from '../redteam/sharedFrontend';
 import { getTraceStore } from '../tracing/store';
 import {
+  type AtomicTestCase,
   type CompletedPrompt,
   type EvalRuntimeOptions,
   type EvalSummary,
@@ -41,13 +42,18 @@ import { randomSequence, sha256 } from '../util/createHash';
 import { convertTestResultsToTableRow } from '../util/exportToFile/index';
 import { isNonTransientHttpStatus, NON_TRANSIENT_HTTP_STATUSES } from '../util/fetch/errors';
 import invariant from '../util/invariant';
-import { sanitizeRuntimeOptions, sanitizeTracingConfigForPersistence } from '../util/sanitizer';
+import { sanitizeConfigForPersistence, sanitizeRuntimeOptions } from '../util/sanitizer';
 import { getCurrentTimestamp } from '../util/time';
 import {
   accumulateGenerationTokenUsage,
   accumulateTokenUsage,
   createEmptyTokenUsage,
 } from '../util/tokenUsageUtils';
+import {
+  getAssertionLeaves,
+  requiresTraceRedaction,
+  sanitizeRedactionPrompt,
+} from '../util/traceRedaction';
 import {
   invalidateEvaluationCache,
   notifyEvaluationChanged,
@@ -62,6 +68,7 @@ import EvalResult, {
   getResultIndexKey,
   PROMPTFOO_METADATA_KEY,
   persistTraceMetadata,
+  sanitizeResultForJsonlArtifact,
   stripTraceLinkageFromMetadata,
 } from './evalResult';
 
@@ -308,6 +315,123 @@ export class EvalQueries {
   }
 }
 
+/** Legacy summaries duplicate results in table cells; redact both public copies together. */
+export function sanitizeLegacyResults(
+  summary: EvaluateSummaryV2,
+  config: Partial<UnifiedConfig> = {},
+): EvaluateSummaryV2 {
+  const table = summary.table;
+  const promptCount = table?.head?.prompts?.length || 1;
+  const verifierTests = new Map<number, AtomicTestCase>();
+  const disabledDefaults = new Set<number>();
+  const privatePrompts = new Set<number>();
+  const hasVerifier = (test?: AtomicTestCase) =>
+    getAssertionLeaves(test?.assert).some((assertion) =>
+      /^(?:not-)?promptfoo:redteam:(?:coding-agent|harness):/.test(assertion.type),
+    );
+  const defaults = typeof config.defaultTest === 'object' ? config.defaultTest : undefined;
+  const defaultTest = hasVerifier(defaults) ? defaults : undefined;
+  const remember = (testIdx: number, test?: AtomicTestCase) => {
+    if (test?.options?.disableDefaultAsserts === true) {
+      disabledDefaults.add(testIdx);
+    }
+    if (
+      test &&
+      hasVerifier(test) &&
+      (!requiresTraceRedaction(verifierTests.get(testIdx)?.assert) ||
+        requiresTraceRedaction(test.assert))
+    ) {
+      verifierTests.set(testIdx, test);
+    }
+  };
+  for (const [index, row] of (table?.body ?? []).entries()) {
+    const testIdx = row.testIdx ?? index;
+    remember(testIdx, row.test);
+    for (const output of row.outputs ?? []) {
+      remember(testIdx, output.testCase);
+    }
+  }
+  for (const [index, result] of (summary.results ?? []).entries()) {
+    remember(result.testIdx ?? Math.floor(index / promptCount), result.testCase);
+  }
+  if (!defaultTest && verifierTests.size === 0) {
+    return summary;
+  }
+  const redact = <T extends { testCase?: AtomicTestCase }>(value: T, testIdx: number): T => {
+    const rowTest = verifierTests.get(testIdx);
+    const rowDefault = disabledDefaults.has(testIdx) ? undefined : defaultTest;
+    const inherited = requiresTraceRedaction(rowDefault?.assert)
+      ? rowDefault
+      : (rowTest ?? rowDefault);
+    const testCase = value.testCase;
+    if (!inherited) {
+      return value;
+    }
+    return sanitizeResultForJsonlArtifact({
+      ...value,
+      testCase: {
+        ...inherited,
+        ...testCase,
+        assert:
+          hasVerifier(testCase) &&
+          (requiresTraceRedaction(testCase?.assert) || !requiresTraceRedaction(inherited.assert))
+            ? testCase!.assert
+            : [...(inherited.assert ?? []), ...(testCase?.assert ?? [])],
+      },
+    });
+  };
+  const results = summary.results?.map((result, index) => {
+    const redacted = redact(result, result.testIdx ?? Math.floor(index / promptCount));
+    if (requiresTraceRedaction(redacted.testCase?.assert)) {
+      privatePrompts.add(result.promptIdx ?? index % promptCount);
+    }
+    return redacted;
+  });
+  const body = table?.body?.map((row, index) => {
+    const testIdx = row.testIdx ?? index;
+    if ((!defaultTest || disabledDefaults.has(testIdx)) && !verifierTests.has(testIdx)) {
+      return row;
+    }
+    const projected = redact(
+      {
+        testCase: row.test,
+        vars: Object.fromEntries((table.head?.vars ?? []).map((name, i) => [name, row.vars?.[i]])),
+      },
+      testIdx,
+    );
+    return {
+      ...row,
+      test: projected.testCase,
+      vars: row.vars?.map((_, i) => projected.vars[table.head?.vars?.[i]] ?? ''),
+      outputs: row.outputs?.map((output, promptIdx) => {
+        const redacted = redact({ ...output, prompt: { raw: output.prompt } }, testIdx);
+        const privateResponse = requiresTraceRedaction(redacted.testCase?.assert);
+        if (privateResponse) {
+          privatePrompts.add(promptIdx);
+        }
+        return {
+          ...redacted,
+          prompt: redacted.prompt.raw,
+          ...(privateResponse && {
+            text: '[Response omitted for trace/artifact redaction.]',
+            audio: undefined,
+            video: undefined,
+            images: undefined,
+          }),
+        };
+      }),
+    };
+  });
+  const prompts = table?.head?.prompts?.map((prompt, index) =>
+    privatePrompts.has(index) ? sanitizeRedactionPrompt(prompt) : prompt,
+  );
+  return {
+    ...summary,
+    results,
+    ...(table && { table: { ...table, head: { ...table.head, prompts }, body } }),
+  };
+}
+
 export default class Eval {
   id: string;
   createdAt: number;
@@ -484,6 +608,7 @@ export default class Eval {
     const db = await getDb();
 
     const datasetId = sha256(JSON.stringify(config.tests || []));
+    const persistedConfig = sanitizeConfigForPersistence(config);
 
     const durationResults = {
       ...(opts?.durationMs !== undefined && { durationMs: opts.durationMs }),
@@ -503,7 +628,7 @@ export default class Eval {
           createdAt: createdAt.getTime(),
           author,
           description: config.description,
-          config: sanitizeTracingConfigForPersistence(config),
+          config: persistedConfig,
           results: durationResults,
           vars: opts?.vars || [],
           runtimeOptions: sanitizeRuntimeOptions(opts?.runtimeOptions),
@@ -556,9 +681,12 @@ export default class Eval {
         .insert(datasetsTable)
         .values({
           id: datasetId,
-          tests: config.tests,
+          tests: persistedConfig.tests,
         })
-        .onConflictDoNothing()
+        .onConflictDoUpdate({
+          target: datasetsTable.id,
+          set: { tests: sql`excluded.tests` },
+        })
         .run();
 
       await tx
@@ -669,7 +797,7 @@ export default class Eval {
   async save() {
     const db = await getDb();
     const updateObj: Record<string, unknown> = {
-      config: sanitizeTracingConfigForPersistence(this.config),
+      config: sanitizeConfigForPersistence(this.config),
       isRedteam: this.config.redteam !== undefined,
       prompts: this.prompts,
       description: this.config.description,
@@ -681,7 +809,9 @@ export default class Eval {
 
     if (this.useOldResults()) {
       invariant(this.oldResults, 'Old results not found');
-      updateObj.results = this.oldResults;
+      const legacy = sanitizeLegacyResults(this.oldResults, this.config);
+      updateObj.results = legacy;
+      updateObj.prompts = legacy.table?.head.prompts || [];
     } else if (
       this.durationMs !== undefined ||
       this.generationDurationMs !== undefined ||
@@ -736,14 +866,19 @@ export default class Eval {
   getPrompts() {
     if (this.useOldResults()) {
       invariant(this.oldResults, 'Old results not found');
-      return this.oldResults.table?.head.prompts || [];
+      return sanitizeLegacyResults(this.oldResults, this.config).table?.head.prompts || [];
     }
     return this.prompts;
   }
 
   async getTable(): Promise<EvaluateTable> {
     if (this.useOldResults()) {
-      return this.oldResults?.table || { head: { prompts: [], vars: [] }, body: [] };
+      return (
+        (this.oldResults && sanitizeLegacyResults(this.oldResults, this.config).table) || {
+          head: { prompts: [], vars: [] },
+          body: [],
+        }
+      );
     }
     return convertResultsToTable(await this.toResultsFile());
   }
@@ -1389,7 +1524,7 @@ export default class Eval {
   async getResults(): Promise<EvaluateResult[] | EvalResult[]> {
     if (this.useOldResults()) {
       invariant(this.oldResults, 'Old results not found');
-      return this.oldResults.results;
+      return sanitizeLegacyResults(this.oldResults, this.config).results;
     }
     await this.loadResults();
     this._resultsLoaded = true;
@@ -1432,11 +1567,9 @@ export default class Eval {
     if (this.useOldResults()) {
       invariant(this.oldResults, 'Old results not found');
       return {
+        ...sanitizeLegacyResults(this.oldResults, this.config),
         version: 2,
         timestamp: new Date(this.createdAt).toISOString(),
-        results: this.oldResults.results,
-        table: this.oldResults.table,
-        stats: this.oldResults.stats,
       };
     }
     if (this.results.length === 0) {
@@ -1462,13 +1595,96 @@ export default class Eval {
     };
   }
 
-  async getTraces(): Promise<TraceData[]> {
+  private async getPrivateTraceIds(trace?: TraceData) {
+    // Redaction graders need local forensic evidence; exports and sharing must omit it.
+    const privateTraceIds = new Set<string>();
+    const privateTestCaseIds = new Set<string>();
+    const excludePrivateTrace = (
+      result: Pick<EvaluateResult, 'testCase' | 'testIdx' | 'promptIdx'> & {
+        traceId?: string | null;
+      },
+    ) => {
+      if (!requiresTraceRedaction(result.testCase.assert)) {
+        return;
+      }
+      if (result.traceId) {
+        privateTraceIds.add(result.traceId);
+      }
+      privateTestCaseIds.add(`${result.testIdx}-${result.promptIdx}`);
+      const testCaseId = result.testCase.metadata?.testCaseId;
+      if (typeof testCaseId === 'string') {
+        privateTestCaseIds.add(testCaseId);
+      }
+      if ('id' in result.testCase && typeof result.testCase.id === 'string') {
+        privateTestCaseIds.add(result.testCase.id);
+      }
+    };
+    for (const result of this.failedResults.values()) {
+      excludePrivateTrace(result);
+    }
+    const traceIdColumn = sql<string | null>`CASE WHEN json_valid(${evalResultsTable.metadata})
+      THEN json_extract(${evalResultsTable.metadata}, '$.__promptfoo.traceLinkage.traceId') END`;
+    const batches =
+      trace && this.persisted
+        ? [
+            await (await getDb())
+              .select({
+                testCase: evalResultsTable.testCase,
+                traceId: traceIdColumn,
+                testIdx: evalResultsTable.testIdx,
+                promptIdx: evalResultsTable.promptIdx,
+              })
+              .from(evalResultsTable)
+              .where(
+                and(
+                  eq(evalResultsTable.evalId, this.id),
+                  or(
+                    eq(traceIdColumn, trace.traceId),
+                    sql`${evalResultsTable.testIdx} || '-' || ${evalResultsTable.promptIdx} = ${trace.testCaseId}`,
+                    sql`CASE WHEN json_valid(${evalResultsTable.testCase}) THEN
+              json_extract(${evalResultsTable.testCase}, '$.metadata.testCaseId') END = ${trace.testCaseId}`,
+                    sql`CASE WHEN json_valid(${evalResultsTable.testCase}) THEN
+              json_extract(${evalResultsTable.testCase}, '$.id') END = ${trace.testCaseId}`,
+                  ),
+                ),
+              ),
+          ]
+        : this.fetchResultsBatched();
+    for await (const batch of batches) {
+      batch.forEach(excludePrivateTrace);
+    }
+    return { privateTraceIds, privateTestCaseIds };
+  }
+
+  async isTracePrivate(trace: TraceData): Promise<boolean> {
+    if (trace.metadata?.privateForensicEvidence === true) {
+      return true;
+    }
+    const { privateTraceIds, privateTestCaseIds } = await this.getPrivateTraceIds(trace);
+    return privateTraceIds.has(trace.traceId) || privateTestCaseIds.has(trace.testCaseId);
+  }
+
+  async getTraces(
+    options: { normalizeSpans?: boolean; throwOnError?: boolean } = {},
+  ): Promise<TraceData[]> {
     try {
       const traceStore = getTraceStore();
       const tracesData = await traceStore.getTracesByEvaluation(this.id);
+      if (!tracesData.length) {
+        return [];
+      }
+      const { privateTraceIds, privateTestCaseIds } = await this.getPrivateTraceIds();
 
-      // Transform trace data to match the expected schema
-      return tracesData.map((trace: TraceData) => ({
+      const publicTraces = tracesData.filter(
+        (trace) =>
+          trace.metadata?.privateForensicEvidence !== true &&
+          !privateTraceIds.has(trace.traceId) &&
+          !privateTestCaseIds.has(trace.testCaseId),
+      );
+      if (options.normalizeSpans === false) {
+        return publicTraces;
+      }
+      return publicTraces.map((trace: TraceData) => ({
         traceId: trace.traceId,
         evaluationId: trace.evaluationId,
         testCaseId: trace.testCaseId,
@@ -1502,6 +1718,9 @@ export default class Eval {
         }),
       }));
     } catch (error) {
+      if (options.throwOnError) {
+        throw error;
+      }
       logger.debug(`Failed to fetch traces for eval ${this.id}: ${error}`);
       return [];
     }
@@ -1514,7 +1733,7 @@ export default class Eval {
       version: this.version(),
       createdAt: new Date(this.createdAt).toISOString(),
       results: await this.toEvaluateSummary(),
-      config: sanitizeTracingConfigForPersistence(this.config),
+      config: sanitizeConfigForPersistence(this.config),
       author: this.author || null,
       prompts: this.getPrompts(),
       ...(this.vars.length > 0 && { vars: [...this.vars] }),
@@ -1560,7 +1779,7 @@ export default class Eval {
     });
 
     // Deep clone to prevent mutation issues
-    const newConfig = structuredClone(sanitizeTracingConfigForPersistence(this.config));
+    const newConfig = structuredClone(sanitizeConfigForPersistence(this.config));
     newConfig.description = copyDescription;
 
     const newPrompts = structuredClone(this.prompts);
@@ -1580,7 +1799,7 @@ export default class Eval {
           createdAt: Date.now(),
           author,
           description: copyDescription,
-          config: sanitizeTracingConfigForPersistence(newConfig),
+          config: sanitizeConfigForPersistence(newConfig),
           results: {},
           prompts: newPrompts,
           vars: newVars,

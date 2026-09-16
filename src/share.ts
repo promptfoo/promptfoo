@@ -10,6 +10,7 @@ import { getEnvBool, getEnvInt, getEnvString, isCI } from './envars';
 import { getUserEmail, setUserEmail } from './globalConfig/accounts';
 import { cloudConfig } from './globalConfig/cloud';
 import logger, { isDebugEnabled } from './logger';
+import { sanitizeLegacyResults } from './models/eval';
 import {
   checkCloudPermissions,
   getOrgContext,
@@ -17,7 +18,8 @@ import {
 } from './util/cloud';
 import { fetchWithProxy } from './util/fetch/index';
 import { createBlobInlineCache, inlineBlobRefsForShare } from './util/inlineBlobsForShare';
-import { redactAzureBlobSasTokens, sanitizeTracingConfigForPersistence } from './util/sanitizer';
+import { redactAzureBlobSasTokens, sanitizeConfigForPersistence } from './util/sanitizer';
+import { sanitizeRedactionResult } from './util/traceRedaction';
 
 import type Eval from './models/eval';
 import type EvalResult from './models/evalResult';
@@ -141,14 +143,15 @@ async function sendEvalRecord(
 ): Promise<string> {
   // Fetch traces for the eval
   const traces = await evalRecord.getTraces();
-  const redactedConfig = redactAzureBlobSasTokens(
-    sanitizeTracingConfigForPersistence(evalRecord.config),
-  );
+  const redactedConfig = redactAzureBlobSasTokens(sanitizeConfigForPersistence(evalRecord.config));
 
   // Preserve the verified runtime team on server-issued unified configs. For
   // other configs, use the current CLI team to avoid falling back to default.
   let evalData: Record<string, unknown> = {
     ...evalRecord,
+    ...(evalRecord.oldResults && {
+      oldResults: sanitizeLegacyResults(evalRecord.oldResults, evalRecord.config),
+    }),
     config: redactedConfig,
     results: [],
     traces,
@@ -393,6 +396,7 @@ async function prepareChunkForShare(
   inlineCache: ReturnType<typeof createBlobInlineCache> | null,
   remoteBlobUploadCache: ReturnType<typeof createRemoteBlobUploadCache> | null,
 ): Promise<EvalResult[]> {
+  chunk = chunk.map(sanitizeRedactionResult);
   const chunkToSend = inlineCache
     ? await inlineBlobRefsForShare(chunk, inlineCache, localEvalId)
     : chunk;
@@ -432,7 +436,9 @@ async function sendChunkedResults(
   const remoteBlobUploadCache =
     cloudConfig.isEnabled() && !inlineBlobs ? createRemoteBlobUploadCache() : null;
 
-  let sampleResults = (await evalRecord.fetchResultsBatched(100).next()).value ?? [];
+  let sampleResults = ((await evalRecord.fetchResultsBatched(100).next()).value ?? []).map(
+    sanitizeRedactionResult,
+  );
   if (sampleResults.length === 0) {
     logger.debug(`No results found`);
     return null;

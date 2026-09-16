@@ -3,6 +3,7 @@ import { getDb } from '../../src/database/index';
 import { updateSignalFile } from '../../src/database/signal';
 import { datasetsTable, evalsTable, promptsTable, tagsTable } from '../../src/database/tables';
 import { runDbMigrations } from '../../src/migrate';
+import { sha256 } from '../../src/util/createHash';
 import {
   clearStandaloneEvalCache,
   getStandaloneEvals,
@@ -13,6 +14,8 @@ import {
   getStandaloneEvalCacheKey,
 } from '../../src/util/standaloneEvalCache';
 import { createEvaluateSummaryV2 } from '../factories/eval';
+
+import type { UnifiedConfig } from '../../src/types/index';
 
 vi.mock('../../src/database/signal', async () => {
   const actual = await vi.importActual('../../src/database/signal');
@@ -46,6 +49,35 @@ describe('writeResultsToDatabase', () => {
     await db.run('DELETE FROM prompts');
     await db.run('DELETE FROM tags');
     clearStandaloneEvalCache();
+  });
+
+  it('redacts imported dataset receipts without changing dataset identity or source tests', async () => {
+    const secret = 'PRIVATE_IMPORTED_RECEIPT';
+    const config: Partial<UnifiedConfig> = {
+      tests: [
+        {
+          vars: { report: 'Public report' },
+          assert: [
+            {
+              type: 'promptfoo:redteam:coding-agent:trace-redaction',
+              value: { rawReceipt: secret },
+            },
+          ],
+        },
+      ],
+    };
+    const original = structuredClone(config);
+    const datasetId = sha256(JSON.stringify(config.tests));
+    await writeResultsToDatabase(createEvaluateSummaryV2(), config);
+
+    const db = await getDb();
+    const [dataset] = await db.select().from(datasetsTable).all();
+    const [evaluation] = await db.select().from(evalsTable).all();
+    expect(dataset.id).toBe(datasetId);
+    expect(JSON.stringify(dataset.tests)).not.toContain(secret);
+    expect(dataset.tests).toMatchObject([{ vars: { report: 'Public report' } }]);
+    expect(JSON.stringify(evaluation.config)).not.toContain(secret);
+    expect(config).toEqual(original);
   });
 
   it('rolls back related rows when a dependent insert fails', async () => {

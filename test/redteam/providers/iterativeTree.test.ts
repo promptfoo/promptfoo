@@ -421,6 +421,132 @@ describe('RedteamIterativeProvider', () => {
       }
     });
 
+    it.each(['coding-agent:trace-redaction', 'harness:artifact-redaction'])(
+      'retains an earlier media error after the final clean tree probe for %s',
+      async (pluginId) => {
+        const { getGraderById } = await import('../../../src/redteam/graders');
+        vi.mocked(getGraderById).mockReturnValue({
+          id: `promptfoo:redteam:${pluginId}`,
+          getResult: vi
+            .fn()
+            .mockResolvedValue({ grade: { pass: true, score: 1 }, rubric: 'Privacy' }),
+        } as any);
+        const data = Buffer.from('PRIVATE_FINAL_TREE_AUDIO').toString('base64');
+        mockRedteamProvider.callApi.mockResolvedValue({ output: 'invalid attack JSON' });
+        const gradingProvider = createMockProvider({ id: 'mock-grader' });
+        const targetProvider = createMockProvider({ id: 'mock-target' });
+        targetProvider.callApi
+          .mockResolvedValue({ output: 'Clean report' })
+          .mockResolvedValueOnce({ output: data, audio: { data, format: 'wav' } });
+        const remote = vi.spyOn(remoteGeneration, 'shouldGenerateRemote').mockReturnValue(false);
+        const attacker = vi
+          .spyOn(redteamProviderManager, 'getProvider')
+          .mockResolvedValue(mockRedteamProvider);
+        const grading = vi
+          .spyOn(redteamProviderManager, 'getGradingProvider')
+          .mockResolvedValue(gradingProvider);
+        try {
+          const provider = new RedteamIterativeTreeProvider({
+            injectVar: 'goal',
+            maxDepth: 1,
+            branchingFactor: 1,
+          });
+          const result = await provider.callApi('test prompt', {
+            originalProvider: targetProvider,
+            vars: { goal: 'Inspect a report' },
+            prompt: { raw: '{{goal}}', label: 'test' },
+            test: {
+              assert: [{ type: `promptfoo:redteam:${pluginId}` }],
+              metadata: { pluginId },
+            } as AtomicTestCase,
+          });
+          expect(targetProvider.callApi).toHaveBeenCalledTimes(2);
+          expect(result.metadata?.stopReason).toBe('MAX_DEPTH');
+          expect(JSON.stringify(result)).not.toContain(data);
+          expect(result.metadata?.redactionMediaOmitted).toBe(true);
+          expect(result.error).toMatch(/audio.*redaction.*verified/i);
+          expect(result.tokenUsage?.numRequests).toBe(2);
+        } finally {
+          remote.mockRestore();
+          attacker.mockRestore();
+          grading.mockRestore();
+        }
+      },
+    );
+
+    it.each(
+      ['coding-agent:trace-redaction', 'harness:artifact-redaction'].flatMap((pluginId) =>
+        [false, true].map((leak) => ({ pluginId, leak })),
+      ),
+    )('grades the final tree response for $pluginId (leak=$leak)', async ({ pluginId, leak }) => {
+      const { getGraderById } = await import('../../../src/redteam/graders');
+      const getResult = vi.fn(async (_prompt, output) => ({
+        grade: {
+          pass: !output.includes('PRIVATE_TREE_RECEIPT'),
+          score: output.includes('PRIVATE_TREE_RECEIPT') ? 0 : 1,
+        },
+        rubric: 'Privacy',
+      }));
+      vi.mocked(getGraderById).mockReturnValue({
+        id: `promptfoo:redteam:${pluginId}`,
+        getResult,
+      } as any);
+      mockRedteamProvider.callApi.mockResolvedValue({
+        output: JSON.stringify({ prompt: 'Inspect report', improvement: 'Inspect' }),
+      });
+      const gradingProvider = createMockProvider({ id: 'mock-grader' });
+      gradingProvider.callApi.mockResolvedValue({
+        output: JSON.stringify({ rating: 1, reason: 'Continue' }),
+      });
+      const targetProvider = createMockProvider({ id: 'mock-target' });
+      targetProvider.callApi
+        .mockResolvedValue({ output: leak ? 'PRIVATE_TREE_RECEIPT' : 'Clean final report' })
+        .mockResolvedValueOnce({ output: 'Clean exploration report' });
+      const remote = vi.spyOn(remoteGeneration, 'shouldGenerateRemote').mockReturnValue(false);
+      const attacker = vi
+        .spyOn(redteamProviderManager, 'getProvider')
+        .mockResolvedValue(mockRedteamProvider);
+      const grading = vi
+        .spyOn(redteamProviderManager, 'getGradingProvider')
+        .mockResolvedValue(gradingProvider);
+      try {
+        const result = await new RedteamIterativeTreeProvider({
+          injectVar: 'goal',
+          maxDepth: 1,
+          branchingFactor: 1,
+        }).callApi('Inspect report', {
+          originalProvider: targetProvider,
+          vars: { goal: 'Inspect report' },
+          prompt: { raw: '{{goal}}', label: 'fixture' },
+          test: {
+            assert: [
+              {
+                type: 'assert-set',
+                assert: [
+                  {
+                    type: 'assert-set',
+                    assert: [
+                      { type: `promptfoo:redteam:${pluginId}`, value: 'PRIVATE_TREE_RECEIPT' },
+                    ],
+                  },
+                ],
+              },
+            ],
+            metadata: { pluginId },
+          } as unknown as AtomicTestCase,
+        });
+        expect(targetProvider.callApi).toHaveBeenCalledTimes(2);
+        expect(getResult).toHaveBeenCalledTimes(2);
+        expect(result.metadata?.storedGraderResults?.[0].pass).toBe(!leak);
+        expect(result.metadata?.redactionContentOmitted).toBe(true);
+        expect(JSON.stringify(result)).not.toContain('PRIVATE_TREE_RECEIPT');
+      } finally {
+        remote.mockRestore();
+        attacker.mockRestore();
+        grading.mockRestore();
+      }
+    });
+
     it('counts the final target probe even when the target reports no token usage', async () => {
       const gradingProvider = createMockProvider({ id: 'mock-grader' });
       const targetProvider = createMockProvider({ id: 'mock-target' });

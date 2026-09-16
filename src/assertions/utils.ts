@@ -1,11 +1,6 @@
-import fs from 'fs';
-import path from 'path';
-
 import Clone from 'rfdc';
-import cliState from '../cliState';
 import { importModule } from '../esm';
 import { type Assertion, type TestCase } from '../types/index';
-import { loadYaml } from '../util/yamlLoad';
 
 const clone = Clone();
 
@@ -53,20 +48,6 @@ export async function loadFromJavaScriptFile(
     throw new Error(
       `Assertion malformed: ${filePath} must export a function or have a default export as a function`,
     );
-  }
-}
-
-export function processFileReference(fileRef: string): object | string {
-  const basePath = cliState.basePath || '';
-  const filePath = path.resolve(basePath, fileRef.slice('file://'.length));
-  const fileContent = fs.readFileSync(filePath, 'utf8');
-  const extension = path.extname(filePath);
-  if (['.json', '.yaml', '.yml'].includes(extension)) {
-    return loadYaml(fileContent) as object;
-  } else if (extension === '.txt') {
-    return fileContent.trim();
-  } else {
-    throw new Error(`Unsupported file type: ${filePath}`);
   }
 }
 

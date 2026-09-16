@@ -1,7 +1,12 @@
 import * as path from 'path';
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { assertionUsesTrace, runAssertion, runAssertions } from '../../src/assertions/index';
+import {
+  assertionUsesTrace,
+  hasTraceAwareAssertions,
+  runAssertion,
+  runAssertions,
+} from '../../src/assertions/index';
 import cliState from '../../src/cliState';
 import { withProviderCallTracingContext } from '../../src/scheduler/providerCallExecutionContext';
 import { getTraceStore } from '../../src/tracing/store';
@@ -174,6 +179,21 @@ describe('trace assertions', () => {
         }),
       ).toBe(true);
     });
+
+    it('treats harness graders as trace-aware', () => {
+      expect(hasTraceAwareAssertions([{ type: 'promptfoo:redteam:harness:policy-applied' }])).toBe(
+        true,
+      );
+    });
+
+    it.each(['coding-agent:trace-completeness', 'harness:secret-placement'] as const)(
+      'fetches traces for inverse %s assertions, including nested sets',
+      (plugin) => {
+        const assertion: Assertion = { type: `not-promptfoo:redteam:${plugin}` };
+        expect(hasTraceAwareAssertions([assertion])).toBe(true);
+        expect(hasTraceAwareAssertions([{ type: 'assert-set', assert: [assertion] }])).toBe(true);
+      },
+    );
 
     it('should pass trace data to javascript assertion', async () => {
       mockTraceStore.getTrace.mockResolvedValue(mockTraceData);

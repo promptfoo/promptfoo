@@ -35,6 +35,16 @@ import {
   accumulateGradingResponseTokenUsage,
   accumulateTokenUsage,
 } from '../../util/tokenUsageUtils';
+import {
+  getAssertionLeaves,
+  getProtectedAssertionValue,
+  hasRedactionMedia,
+  requiresTraceRedaction,
+  sanitizeRedactionGradingInputs,
+  sanitizeRedactionResult,
+  TRACE_REDACTION_ASSERTIONS,
+  TRUSTED_REDACTION_GRADER,
+} from '../../util/traceRedaction';
 import { TransformInputType, transform } from '../../util/transform';
 import { remoteGenerationContextPayload } from '../remoteGenerationContext';
 import { throwIfTargetPromptExceedsMaxChars } from '../shared/promptLength';
@@ -43,6 +53,7 @@ import { ATTACKER_MODEL, ATTACKER_MODEL_SMALL, TEMPERATURE } from './constants';
 import type { TraceContextData } from '../../tracing/traceContext';
 import type { ProviderOptions } from '../../types/providers';
 import type { TransformContext, TransformFunction } from '../../types/transform';
+import type { RedteamGradingContext } from '../grading/types';
 import type { RedteamHistoryEntry } from '../types';
 
 export const BLOCKING_QUESTION_ANALYSIS_FEATURE_FLAG_TIMESTAMP = '2025-06-16T14:49:11-07:00';
@@ -569,6 +580,12 @@ export async function getTargetResponse(
     logger.debug(`Sleeping for ${targetProvider.delay}ms`);
     await sleep(targetProvider.delay);
   }
+  if (
+    requiresTraceRedaction((context?.test as AtomicTestCase | undefined)?.assert) &&
+    hasRedactionMedia(targetRespRaw)
+  ) {
+    targetRespRaw = await externalizeResponseForRedteamHistory(targetRespRaw, context);
+  }
   const tokenUsage = { numRequests: 1, ...targetRespRaw.tokenUsage };
   const hasOutput = targetRespRaw && Object.prototype.hasOwnProperty.call(targetRespRaw, 'output');
   const hasError = targetRespRaw && Object.prototype.hasOwnProperty.call(targetRespRaw, 'error');
@@ -638,6 +655,56 @@ interface TraceableRedteamGrader<TResult, TArgs extends unknown[]> {
   ) => Promise<TResult>;
 }
 
+const privateRedactionResponses = new WeakMap<ProviderResponse, ProviderResponse>();
+
+export class CachedRedactionResponseError extends Error {}
+
+/** Grade every private target response before strategy control flow can discard it. */
+export async function gradeRedactionResponse(
+  prompt: string,
+  response: ProviderResponse,
+  test: AtomicTestCase | undefined,
+  results: Record<number, GradingResult>,
+): Promise<GradingResult | undefined> {
+  if (!test || response.metadata?.redactionMediaOmitted === true) {
+    return undefined;
+  }
+  const { getGraderById } = await import('../graders');
+  for (const [index, assertion] of getAssertionLeaves(test.assert).entries()) {
+    const type = assertion.type.replace(/^not-/, '');
+    if (!TRACE_REDACTION_ASSERTIONS.has(type)) {
+      continue;
+    }
+    if (response.cached) {
+      throw new CachedRedactionResponseError(
+        'Trace/artifact redaction requires a fresh target call; rerun with --no-cache',
+      );
+    }
+    const grader = getGraderById(type);
+    invariant(grader, `Missing privacy grader: ${type}`);
+    const { grade, rubric } = await runRedteamGrader(
+      grader,
+      prompt,
+      String(response.output ?? ''),
+      test,
+      undefined,
+      getGraderAssertionValue(assertion),
+      undefined,
+      undefined,
+      { providerResponse: response },
+    );
+    const previous = results[index];
+    const current = accumulateGraderResult(previous, {
+      ...grade,
+      assertion: buildGraderResultAssertion(grade.assertion, assertion, rubric),
+    });
+    results[index] =
+      previous?.pass === false ? { ...previous, tokensUsed: current.tokensUsed } : current;
+  }
+  const grades = Object.values(results);
+  return grades.find((grade) => !grade.pass) ?? grades[0];
+}
+
 /** Trace every strategy grader at one boundary, including graders with custom getResult methods. */
 export function runRedteamGrader<TResult, TArgs extends unknown[]>(
   grader: TraceableRedteamGrader<TResult, TArgs>,
@@ -646,6 +713,42 @@ export function runRedteamGrader<TResult, TArgs extends unknown[]>(
   test: AtomicTestCase,
   ...args: TArgs
 ): Promise<TResult> {
+  const context = args[args.length - 1] as RedteamGradingContext | undefined;
+  const privateResponse =
+    context?.providerResponse && privateRedactionResponses.get(context.providerResponse);
+  if (privateResponse && TRACE_REDACTION_ASSERTIONS.has(grader.id)) {
+    output =
+      typeof privateResponse.output === 'string'
+        ? privateResponse.output
+        : (safeJsonStringify(privateResponse.output) ?? '');
+    args = [...args.slice(0, -1), { ...context, providerResponse: privateResponse }] as TArgs;
+  }
+  if (requiresTraceRedaction(test.assert) && !TRACE_REDACTION_ASSERTIONS.has(grader.id)) {
+    const response = sanitizeRedactionResult({
+      response: context?.providerResponse ?? { output },
+      testCase: test,
+    }).response;
+    output = String(response.output ?? '');
+    if (context) {
+      args = [
+        ...args.slice(0, -1),
+        {
+          ...context,
+          providerResponse: response,
+          traceData: undefined,
+          traceContext: undefined,
+          traceSummary: undefined,
+        },
+      ] as TArgs;
+    }
+    const { gradingArguments, ...publicTest } = sanitizeRedactionGradingInputs(
+      grader.id,
+      { ...test, gradingArguments: args },
+      undefined,
+    ).test;
+    test = publicTest;
+    args = gradingArguments;
+  }
   const invoke = () => grader.getResult(prompt, output, test, ...args);
   const tracingContext = getProviderCallTracingContext();
   if (!tracingContext) {
@@ -902,12 +1005,33 @@ export type TurnBacktrackingStopReason = SharedBacktrackingStopReason | 'Max tur
  */
 export async function externalizeResponseForRedteamHistory<T extends ProviderResponse>(
   response: T,
-  context?: { evalId?: string; testIdx?: number; promptIdx?: number },
+  context?: Pick<CallApiContextParams, 'evaluationId' | 'testIdx' | 'promptIdx' | 'test'>,
 ): Promise<T> {
+  const testCase = context?.test as AtomicTestCase | undefined;
+  if (requiresTraceRedaction(testCase?.assert)) {
+    if (!hasRedactionMedia(response)) {
+      const sanitized = sanitizeRedactionResult({ response, testCase }).response;
+      privateRedactionResponses.set(
+        sanitized,
+        response.raw === undefined ? response : { ...response, raw: undefined },
+      );
+      return sanitized;
+    }
+    const sanitized = sanitizeRedactionResult({ response, testCase }).response;
+    return {
+      ...sanitized,
+      error:
+        'Binary, image, audio, and video redaction cannot be verified; provide a text-only report.',
+    };
+  }
   if (!isBlobStorageEnabled() && !shouldAttemptRemoteBlobUpload()) {
     return response;
   }
-  const blobbed = await extractAndStoreBinaryData(response, context);
+  const blobbed = await extractAndStoreBinaryData(response, {
+    evalId: context?.evaluationId,
+    testIdx: context?.testIdx,
+    promptIdx: context?.promptIdx,
+  });
   return (blobbed as T) || response;
 }
 
@@ -1045,13 +1169,18 @@ export function buildGraderResultAssertion(
   assertToUse: AssertionOrSet | undefined,
   rubric: string | undefined,
 ): Assertion | undefined {
-  if (gradeAssertion) {
-    return { ...gradeAssertion, value: rubric };
+  const assertion = gradeAssertion ?? (isSingleAssertion(assertToUse) ? assertToUse : undefined);
+  if (!assertion) {
+    return undefined;
   }
-  if (isSingleAssertion(assertToUse)) {
-    return { ...assertToUse, value: rubric };
+  const storedAssertion = { ...assertion, value: rubric };
+  if (
+    isSingleAssertion(assertToUse) &&
+    TRACE_REDACTION_ASSERTIONS.has(assertToUse.type.replace(/^not-/, ''))
+  ) {
+    Object.defineProperty(storedAssertion, TRUSTED_REDACTION_GRADER, { value: true });
   }
-  return undefined;
+  return storedAssertion;
 }
 
 export function getGraderAssertionValue(
@@ -1061,5 +1190,5 @@ export function getGraderAssertionValue(
     return undefined;
   }
 
-  return assertToUse.value;
+  return getProtectedAssertionValue(assertToUse);
 }
