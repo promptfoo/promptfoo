@@ -490,6 +490,49 @@ describe('LangfuseProvider', () => {
     );
   });
 
+  it.each([
+    ['same-page', false],
+    ['same-page', true],
+    ['page', false],
+    ['page', true],
+    ['cursor', false],
+    ['cursor', true],
+  ] as const)('checks %s duplicate observation contents (conflict: %s)', async (mode, conflict) => {
+    const duplicate = {
+      ...observations[0],
+      metadata: { tenant: 'team-west', 'service.name': 'customer-agent' },
+      output: conflict ? 'A different public record' : observations[0].output,
+    };
+    if (mode === 'same-page') {
+      mockedFetch.mockResolvedValueOnce(response({ data: [observations[0], duplicate] }));
+    } else {
+      mockedFetch
+        .mockResolvedValueOnce(
+          response({
+            data: [observations[0]],
+            meta: mode === 'page' ? { page: 1, totalPages: 2 } : { cursor: 'next-page' },
+          }),
+        )
+        .mockResolvedValueOnce(
+          response({
+            data: [duplicate],
+            meta: mode === 'page' ? { page: 2, totalPages: 2 } : {},
+          }),
+        );
+    }
+    const pending = new LangfuseProvider(config).fetchTrace(TRACE_ID);
+    if (conflict) {
+      await expect(pending).rejects.toMatchObject({
+        name: 'TraceProviderError',
+        message: 'Conflicting duplicate Langfuse observation IDs',
+        retryable: false,
+      });
+    } else {
+      await expect(pending).resolves.toMatchObject({ spans: [{ spanId: observations[0].id }] });
+    }
+    expect(mockedFetch).toHaveBeenCalledTimes(mode === 'same-page' ? 1 : 2);
+  });
+
   it('follows Langfuse page-based pagination and deduplicates observations', async () => {
     mockedFetch
       .mockResolvedValueOnce(
