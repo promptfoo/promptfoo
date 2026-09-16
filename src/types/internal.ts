@@ -1,5 +1,6 @@
 import type { EventSource } from './eventSource';
 import type { EvaluateOptions, GradingResult } from './index';
+import type { TokenUsage } from './shared';
 
 export { isGradingResult, isResultFailureReason, ResultFailureReason } from './index';
 
@@ -56,4 +57,6 @@ export function getNonstandardScoringBaseline(
  */
 export type InternalEvaluateOptions = EvaluateOptions & {
   eventSource?: EventSource;
+  generationEventId?: string;
+  generationTokenUsage?: TokenUsage;
 };

@@ -1,3 +1,4 @@
+import { trace } from '@opentelemetry/api';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { fetchWithCache } from '../../src/cache';
 import logger from '../../src/logger';
@@ -144,6 +145,70 @@ describe('docker model runner provider', () => {
       // Clear mocks
       vi.clearAllMocks();
     });
+
+    it.each([
+      {
+        providerType: 'chat',
+        choices: [{ message: { content: 'test output' } }],
+      },
+      {
+        providerType: 'completion',
+        choices: [{ text: 'test output' }],
+      },
+    ])(
+      'attributes $providerType spans to Docker independently of the configured provider ID',
+      async ({ providerType, choices }) => {
+        const attributes: Record<string, unknown> = {};
+        const getTracer = vi.spyOn(trace, 'getTracer').mockReturnValue({
+          startActiveSpan: (
+            _name: string,
+            options: { attributes: Record<string, unknown> },
+            _context: unknown,
+            callback: any,
+          ) => {
+            Object.assign(attributes, options.attributes);
+            return callback({
+              setAttribute: vi.fn(),
+              setStatus: vi.fn(),
+              recordException: vi.fn(),
+              end: vi.fn(),
+            });
+          },
+        } as any);
+
+        try {
+          vi.mocked(fetchWithCache)
+            .mockResolvedValueOnce({
+              data: { data: [{ id: 'ai/existing-model' }] },
+              cached: false,
+              status: 200,
+              statusText: 'OK',
+            })
+            .mockResolvedValueOnce({
+              data: {
+                choices,
+                usage: { total_tokens: 10, prompt_tokens: 5, completion_tokens: 5 },
+              },
+              cached: false,
+              status: 200,
+              statusText: 'OK',
+            });
+
+          const provider = createDockerProvider(`docker:${providerType}:ai/existing-model`, {
+            id: 'customer:custom-label',
+          });
+
+          await provider.callApi('test prompt');
+
+          expect(attributes).toMatchObject({
+            'gen_ai.provider.name': 'docker',
+            'promptfoo.provider.id': 'customer:custom-label',
+          });
+        } finally {
+          getTracer.mockRestore();
+        }
+      },
+    );
 
     describe('DMRChatCompletionProvider', () => {
       it('warns when model is not found but continues execution', async () => {

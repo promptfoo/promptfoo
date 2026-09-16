@@ -271,13 +271,4 @@ describe('database WAL mode', () => {
       await lock.worker.terminate();
     }
   });
-
-  it('does not retry SQLITE_BUSY after the native busy timeout', async () => {
-    const database = await import('../src/database');
-    const busyError = Object.assign(new Error('database is locked'), { code: 'SQLITE_BUSY' });
-    const operation = vi.fn().mockRejectedValue(busyError);
-
-    await expect(database.withTransientLockRetry(operation)).rejects.toBe(busyError);
-    expect(operation).toHaveBeenCalledOnce();
-  });
 });

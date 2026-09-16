@@ -67,11 +67,11 @@ providers:
                 location: { type: string }
               required: [location]
 
-  - id: anthropic:claude-sonnet-4-20250514
+  - id: anthropic:claude-sonnet-4-6
     config:
       tools: *tools # Alias: reuse the same tools
 
-  - id: google:gemini-2.0-flash
+  - id: google:gemini-2.5-flash
     config:
       tools: *tools # Alias: works here too
 ```
@@ -82,7 +82,7 @@ Define tools in OpenAI format:
 
 ```yaml
 providers:
-  - id: openai:gpt-4
+  - id: openai:gpt-5.6
     config:
       tools:
         - type: function
@@ -181,7 +181,7 @@ Tool choice controls _when_ and _how_ the model uses the tools you've defined. B
 
 ```yaml
 providers:
-  - id: openai:gpt-4
+  - id: openai:gpt-5.6
     config:
       tools:
         - type: function
@@ -250,7 +250,7 @@ You can also use provider-native formats directly. They pass through unchanged w
 ```yaml
 # Anthropic native format - passes through as-is
 providers:
-  - id: anthropic:claude-sonnet-4-20250514
+  - id: anthropic:claude-sonnet-4-6
     config:
       tools:
         - name: get_weather
@@ -269,7 +269,7 @@ Tools can be loaded from external files:
 
 ```yaml
 providers:
-  - id: openai:gpt-4
+  - id: openai:gpt-5.6
     config:
       tools: file://tools/my-tools.json
 ```
@@ -309,7 +309,7 @@ providers:
         Content-Type: application/json
       transformToolsFormat: openai # Tools already in OpenAI format, pass through
       body:
-        model: gpt-4
+        model: gpt-5.6
         messages: '{{ prompt }}'
         tools: '{{ tools }}'
         tool_choice: '{{ tool_choice }}'
@@ -338,7 +338,7 @@ providers:
         anthropic-version: '2023-06-01'
       transformToolsFormat: anthropic # Transforms OpenAI → Anthropic format
       body:
-        model: claude-sonnet-4-20250514
+        model: claude-sonnet-4-6
         max_tokens: 1024
         messages: '{{ prompt }}'
         tools: '{{ tools }}'
@@ -374,7 +374,7 @@ providers:
         Content-Type: application/json
       # No transformToolsFormat - tools pass through as-is
       body:
-        model: claude-sonnet-4-20250514
+        model: claude-sonnet-4-6
         messages: '{{ prompt }}'
         tools: '{{ tools }}'
       tools:

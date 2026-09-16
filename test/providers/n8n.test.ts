@@ -3,6 +3,8 @@ import { fetchWithCache } from '../../src/cache';
 import logger from '../../src/logger';
 import { createN8nProvider, N8nProvider } from '../../src/providers/n8n';
 
+import type { N8nProviderConfig } from '../../src/providers/n8n';
+
 vi.mock('../../src/cache');
 vi.mock('../../src/logger', () => ({
   default: {
@@ -85,6 +87,34 @@ describe('N8nProvider', () => {
   });
 
   describe('callApi', () => {
+    it.each([
+      { method: 'HEAD' } satisfies N8nProviderConfig,
+      { method: 'head' },
+      { method: 'HeAd' },
+    ])('sends $method requests without a body', async (config) => {
+      vi.mocked(fetchWithCache).mockImplementation(async (url, options) => {
+        // Use the native Fetch contract without sending a network request.
+        new Request(url, options);
+        return createMockResponse('');
+      });
+      const provider = new N8nProvider('https://n8n.example.com/webhook/agent', {
+        config,
+      });
+
+      const result = await provider.callApi('Hello');
+
+      expect(result.error).toBeUndefined();
+      expect(fetchWithCache).toHaveBeenCalledWith(
+        'https://n8n.example.com/webhook/agent',
+        expect.objectContaining({ method: 'HEAD' }),
+        expect.any(Number),
+        'text',
+        true,
+        undefined,
+      );
+      expect(vi.mocked(fetchWithCache).mock.calls[0][1]).not.toHaveProperty('body');
+    });
+
     it('should call n8n webhook with default body structure without response caching', async () => {
       const mockResponse = createMockResponse({ output: 'Hello from n8n!' }, { latencyMs: 100 });
       vi.mocked(fetchWithCache).mockResolvedValue(mockResponse);
@@ -645,20 +675,18 @@ describe('N8nProvider', () => {
       });
     });
 
-    it.each([
-      false,
-      null,
-      '',
-      0,
-    ])('should accept successful responses with a falsey error status (%j)', async (error) => {
-      vi.mocked(fetchWithCache).mockResolvedValue(createMockResponse({ output: 'ok', error }));
+    it.each([false, null, '', 0])(
+      'should accept successful responses with a falsey error status (%j)',
+      async (error) => {
+        vi.mocked(fetchWithCache).mockResolvedValue(createMockResponse({ output: 'ok', error }));
 
-      const provider = new N8nProvider('https://n8n.example.com/webhook/agent');
-      const result = await provider.callApi('Hello');
+        const provider = new N8nProvider('https://n8n.example.com/webhook/agent');
+        const result = await provider.callApi('Hello');
 
-      expect(result.output).toBe('ok');
-      expect(result.error).toBeUndefined();
-    });
+        expect(result.output).toBe('ok');
+        expect(result.error).toBeUndefined();
+      },
+    );
 
     it('should avoid putting webhook credentials or rendered prompt content in provider logs', async () => {
       vi.mocked(fetchWithCache).mockResolvedValue(
