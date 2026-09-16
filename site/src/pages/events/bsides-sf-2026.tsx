@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React from 'react';
 
 import Head from '@docusaurus/Head';
 import Link from '@docusaurus/Link';
@@ -6,79 +6,19 @@ import { useForcedTheme } from '@site/src/hooks/useForcedTheme';
 import Layout from '@theme/Layout';
 import styles from './bsides-sf-2026.module.css';
 
-function CountdownTimer(): React.ReactElement {
-  const [timeLeft, setTimeLeft] = useState({
-    days: 0,
-    hours: 0,
-    minutes: 0,
-    seconds: 0,
-  });
-
-  useEffect(() => {
-    const targetDate = new Date('2026-03-21T09:00:00-07:00').getTime();
-
-    const updateCountdown = () => {
-      const now = new Date().getTime();
-      const difference = targetDate - now;
-
-      if (difference > 0) {
-        setTimeLeft({
-          days: Math.floor(difference / (1000 * 60 * 60 * 24)),
-          hours: Math.floor((difference % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60)),
-          minutes: Math.floor((difference % (1000 * 60 * 60)) / (1000 * 60)),
-          seconds: Math.floor((difference % (1000 * 60)) / 1000),
-        });
-      }
-    };
-
-    updateCountdown();
-    const interval = setInterval(updateCountdown, 1000);
-
-    return () => clearInterval(interval);
-  }, []);
-
-  return (
-    <div className={styles.countdown}>
-      <div className={styles.countdownItem}>
-        <span className={styles.countdownNumber}>{timeLeft.days}</span>
-        <span className={styles.countdownLabel}>Days</span>
-      </div>
-      <div className={styles.countdownSeparator}>:</div>
-      <div className={styles.countdownItem}>
-        <span className={styles.countdownNumber}>{timeLeft.hours.toString().padStart(2, '0')}</span>
-        <span className={styles.countdownLabel}>Hours</span>
-      </div>
-      <div className={styles.countdownSeparator}>:</div>
-      <div className={styles.countdownItem}>
-        <span className={styles.countdownNumber}>
-          {timeLeft.minutes.toString().padStart(2, '0')}
-        </span>
-        <span className={styles.countdownLabel}>Minutes</span>
-      </div>
-      <div className={styles.countdownSeparator}>:</div>
-      <div className={styles.countdownItem}>
-        <span className={styles.countdownNumber}>
-          {timeLeft.seconds.toString().padStart(2, '0')}
-        </span>
-        <span className={styles.countdownLabel}>Seconds</span>
-      </div>
-    </div>
-  );
-}
-
 export default function BSidesSF2026(): React.ReactElement {
   useForcedTheme('dark');
 
   return (
     <Layout
       title="Promptfoo at BSides SF 2026"
-      description="Join Promptfoo at BSides San Francisco 2026. Community connections, AI security workshops, and hacker culture during RSA week."
+      description="Recap of Promptfoo at BSides San Francisco 2026. Community connections, AI security workshops, and hacker culture during RSA week."
     >
       <Head>
         <meta property="og:title" content="Promptfoo at BSides SF 2026" />
         <meta
           property="og:description"
-          content="Join Promptfoo at BSides San Francisco 2026. Community-driven security and AI workshops."
+          content="Recap of Promptfoo at BSides San Francisco 2026. Community-driven security and AI workshops."
         />
         <meta property="og:type" content="website" />
         <meta property="og:url" content="https://www.promptfoo.dev/events/bsides-sf-2026" />
@@ -127,11 +67,10 @@ export default function BSidesSF2026(): React.ReactElement {
         <section className={styles.heroContent}>
           <div className={styles.container}>
             <p className={styles.heroSubtitle}>
-              Meet our AI red teaming team and see live demos of how Promptfoo secures AI
-              applications—from pre-deployment testing to production monitoring.
+              Our AI red teaming engineers spent two days on the floor running live demos of how
+              Promptfoo secures AI applications—from pre-deployment testing to production
+              monitoring.
             </p>
-
-            <CountdownTimer />
 
             <div className={styles.eventDetails}>
               <div className={styles.detail}>
@@ -164,9 +103,9 @@ export default function BSidesSF2026(): React.ReactElement {
               </div>
             </div>
             <div className={styles.heroCtas}>
-              <p className={styles.ctaBlurb}>Book a time to talk to us</p>
+              <p className={styles.ctaBlurb}>Missed us at BSides SF?</p>
               <Link to="/contact" className={styles.primaryCta}>
-                Schedule a Meeting
+                Book a Demo
               </Link>
             </div>
           </div>
@@ -177,7 +116,7 @@ export default function BSidesSF2026(): React.ReactElement {
           <div className={styles.container}>
             <div className={styles.sectionHeader}>
               <h2 className={styles.sectionTitle}>What to Expect</h2>
-              <p className={styles.sectionSubtitle}>Community-driven AI security experiences</p>
+              <p className={styles.sectionSubtitle}>Two days of community-driven AI security</p>
             </div>
 
             <div className={styles.highlightsGrid}>
@@ -185,24 +124,24 @@ export default function BSidesSF2026(): React.ReactElement {
                 <div className={styles.cardIcon}>🎯</div>
                 <h3>AI Red Teaming</h3>
                 <p>
-                  Compare notes on LLM attack vectors, jailbreak techniques, and integrating
-                  automated red teaming into your workflow.
+                  We compared notes on LLM attack vectors, jailbreak techniques, and wiring
+                  automated red teaming into an existing workflow.
                 </p>
               </div>
               <div className={styles.highlightCard}>
                 <div className={styles.cardIcon}>🤝</div>
-                <h3>Connect with AI Experts</h3>
+                <h3>Conversations with AI Teams</h3>
                 <p>
-                  Meet AI security professionals working on evals, guardrails, and MCP
-                  security—learn how they're protecting AI applications in production.
+                  We met AI security professionals working on evals, guardrails, and MCP security,
+                  and heard how they protect AI applications in production.
                 </p>
               </div>
               <div className={styles.highlightCard}>
                 <div className={styles.cardIcon}>🎬</div>
-                <h3>See it in Action</h3>
+                <h3>Demos on the Floor</h3>
                 <p>
-                  Quick-fire demos on the latest AI security research, tools, and techniques from
-                  the AI security and red teaming experts.
+                  Quick-fire demos of the latest AI security research, tools, and techniques from
+                  our red teaming engineers.
                 </p>
               </div>
             </div>
@@ -214,12 +153,13 @@ export default function BSidesSF2026(): React.ReactElement {
           <div className={styles.container}>
             <div className={styles.ctaGrid}>
               <div className={styles.ctaCard}>
-                <h3 className={styles.ctaCardTitle}>Attending BSides SF?</h3>
+                <h3 className={styles.ctaCardTitle}>Want the same walkthrough?</h3>
                 <p className={styles.ctaCardText}>
-                  Book a time to meet with our AI security and red teaming experts at the event.
+                  Book time with our AI security and red teaming engineers and we'll run it against
+                  your stack.
                 </p>
                 <Link to="/contact" className={styles.primaryCta}>
-                  Schedule a Meeting
+                  Book a Demo
                 </Link>
               </div>
               <div className={styles.ctaCard}>

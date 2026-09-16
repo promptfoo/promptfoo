@@ -9,7 +9,7 @@ func GetDefaultReasoningEffort() string {
 }
 
 // GetModel returns the model identifier to use for API calls.
-// Currently uses o3-mini, which is optimized for reasoning tasks.
+// Uses GPT-5 mini with configurable reasoning effort.
 func GetModel() string {
-	return "o3-mini"
+	return "gpt-5-mini"
 }

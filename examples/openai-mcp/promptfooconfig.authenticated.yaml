@@ -8,8 +8,10 @@ prompts:
   - 'I need to {{action}} for customer ID {{customer_id}}. Please use the Stripe integration to fetch this data.'
 
 providers:
-  - id: openai:responses:gpt-4.1-2025-04-14
+  - id: openai:responses:gpt-5.6-terra
     config:
+      reasoning:
+        effort: none
       tools:
         - type: mcp
           server_label: stripe
@@ -19,7 +21,6 @@ providers:
           require_approval: never
           allowed_tools: ['create_payment_link', 'list_payment_methods']
       max_output_tokens: 1000
-      temperature: 0.1
       instructions: 'You are a payment processing assistant. Use the Stripe MCP tools to help with payment-related tasks. Always provide clear and accurate information about payment operations.'
 
 tests:

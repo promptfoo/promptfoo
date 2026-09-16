@@ -253,6 +253,25 @@ describe('Eval Routes - Zod Validation', () => {
       expect(response.status).toBe(400);
       expect(response.body.error).toBeDefined();
     });
+
+    it('should return 500 when the eval update write fails', async () => {
+      const mockEval = {
+        id: 'test-id',
+        config: {},
+        save: mockSave,
+        setTable: vi.fn(),
+      };
+
+      mockFindById.mockResolvedValue(mockEval);
+      mockSave.mockRejectedValue(new Error('database write failed'));
+
+      const response = await api.patch('/api/eval/test-id').send({
+        config: { description: 'Updated description' },
+      });
+
+      expect(response.status).toBe(500);
+      expect(response.body).toEqual({ error: 'Failed to update eval table' });
+    });
   });
 
   describe('DELETE /api/eval', () => {
