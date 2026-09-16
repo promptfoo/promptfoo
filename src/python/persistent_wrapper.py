@@ -8,8 +8,13 @@ via a simple control protocol over stdin/stdout.
 Protocol:
   - Node sends: "CALL|<function_name>|<request_file>|<response_file>\n"
   - Worker executes function, writes response to file
-  - Worker sends: "DONE|<response_file>\n"
+  - Worker sends: "\nDONE|<response_file>\n"
   - Node sends: "SHUTDOWN\n" to exit
+
+Control messages (READY, DONE|) are matched line-anchored by Node, so they are
+emitted with a leading newline: user code may leave stdout mid-line (a write
+without a trailing newline), and a control marker glued onto that partial line
+would never match.
 
 Data transfer uses files (proven UTF-8 handling), control uses stdin/stdout.
 Note: Using pipe (|) delimiter to avoid conflicts with Windows drive letters (C:).
@@ -214,15 +219,14 @@ def _traced_call(method_callable, args, function_name):
         # Extract parent context from W3C traceparent header
         parent_ctx = extract({"traceparent": traceparent})
 
-        # Determine span name following GenAI conventions
+        # A custom Python function may orchestrate work without calling a model.
         span_name = f"python {function_name}"
 
         with _tracer.start_as_current_span(
             span_name, context=parent_ctx, kind=SpanKind.CLIENT
         ) as span:
-            # Set GenAI semantic convention attributes
-            span.set_attribute("gen_ai.system", "python")
-            span.set_attribute("gen_ai.operation.name", function_name)
+            span.set_attribute("promptfoo.provider.type", "python")
+            span.set_attribute("promptfoo.provider.function", function_name)
 
             # Set request attributes from prompt (1st arg)
             if len(args) >= 1:
@@ -236,7 +240,7 @@ def _traced_call(method_callable, args, function_name):
                 if isinstance(options, dict):
                     config = options.get("config", {})
                     if config.get("model"):
-                        span.set_attribute("gen_ai.request.model", config["model"])
+                        span.set_attribute("promptfoo.provider.model", config["model"])
                     # Also check for provider id
                     if options.get("id"):
                         span.set_attribute("promptfoo.provider.id", options["id"])
@@ -274,7 +278,7 @@ def _traced_call(method_callable, args, function_name):
                         usage = result["tokenUsage"]
                         if "total" in usage:
                             span.set_attribute(
-                                "gen_ai.usage.total_tokens", usage["total"]
+                                "promptfoo.usage.total_tokens", usage["total"]
                             )
                         if "prompt" in usage:
                             span.set_attribute(
@@ -341,8 +345,9 @@ def main():
         print(traceback.format_exc(), file=sys.stderr, flush=True)
         sys.exit(1)
 
-    # Signal ready
-    print("READY", flush=True)
+    # Signal ready. Leading newline: the user module may have left stdout
+    # mid-line during import (same rationale as the \nDONE| signals below).
+    print("\nREADY", flush=True)
 
     # Main loop - wait for commands
     while True:
@@ -439,7 +444,7 @@ def handle_call(command_line, user_module, default_function_name):
 
         # Signal completion with the response path so provider stdout cannot
         # accidentally satisfy another request's control message.
-        print(f"DONE|{response_file}", flush=True)
+        print(f"\nDONE|{response_file}", flush=True)
 
     except Exception as e:
         print(f"ERROR handling call: {e}", file=sys.stderr, flush=True)
@@ -468,7 +473,7 @@ def handle_call(command_line, user_module, default_function_name):
                 )
 
             # Signal done so Node can read the error response.
-            print(f"DONE|{response_file}", flush=True)
+            print(f"\nDONE|{response_file}", flush=True)
         # No DONE| when response_file is unknown: Node's path match would fail
         # and the call would resolve via timeout anyway; the stderr is the signal.
 

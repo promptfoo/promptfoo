@@ -230,6 +230,11 @@ describe('GoogleImageProvider', async () => {
   it('should return correct cost for different models', async () => {
     // Test costs through actual API responses
     const testCases = [
+      // Imagen 4 GA names
+      { model: 'imagen-4.0-ultra-generate-001', expectedCost: 0.06 },
+      { model: 'imagen-4.0-generate-001', expectedCost: 0.04 },
+      { model: 'imagen-4.0-fast-generate-001', expectedCost: 0.02 },
+      // Imagen 4 preview aliases
       { model: 'imagen-4.0-ultra-generate-preview-06-06', expectedCost: 0.06 },
       { model: 'imagen-4.0-generate-preview-06-06', expectedCost: 0.04 },
       { model: 'imagen-4.0-fast-generate-preview-06-06', expectedCost: 0.02 },
@@ -250,6 +255,22 @@ describe('GoogleImageProvider', async () => {
       const result = await provider.callApi('Test prompt');
       expect(result.cost).toBe(expectedCost);
     }
+  });
+
+  it('should not report cost for cached responses', async () => {
+    const provider = new GoogleImageProvider('imagen-4.0-fast-generate-001');
+    mockFetchWithCache.mockResolvedValueOnce({
+      status: 200,
+      data: {
+        predictions: [{ bytesBase64Encoded: 'base64data', mimeType: 'image/png' }],
+      },
+      cached: true,
+    });
+
+    const result = await provider.callApi('Test prompt');
+
+    expect(result.cached).toBe(true);
+    expect(result.cost).toBeUndefined();
   });
 
   describe('Google AI Studio', () => {

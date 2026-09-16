@@ -132,6 +132,146 @@ describe('BestOfNProvider - Runtime Behavior', () => {
     );
   });
 
+  it('preserves fresh target usage when a cached candidate finishes after a fresh candidate', async () => {
+    const provider = new BestOfNProvider({ injectVar: 'input', maxConcurrency: 1 });
+    mockTargetProvider.callApi
+      .mockResolvedValueOnce({
+        output: 'Fresh candidate failed',
+        error: 'Candidate was rejected',
+        cost: 0.06,
+        tokenUsage: { total: 60, prompt: 40, completion: 20, numRequests: 1 },
+      })
+      .mockResolvedValueOnce({
+        output: 'Cached candidate succeeded',
+        cached: true,
+        cost: 0.1,
+        tokenUsage: { total: 100, prompt: 65, completion: 35, numRequests: 1 },
+      });
+
+    const result = await provider.callApi('test prompt', createMockContext(mockTargetProvider));
+
+    expect(result.cached).toBe(false);
+    expect(result.cost).toBeCloseTo(0.16);
+    expect(result.incurredCost).toBeCloseTo(0.06);
+    expect(result.tokenUsage).toMatchObject({
+      total: 160,
+      prompt: 105,
+      completion: 55,
+      cached: 100,
+      numRequests: 2,
+      incurredTokenUsage: { total: 60, prompt: 40, completion: 20, numRequests: 1 },
+    });
+  });
+
+  it('keeps an aggregate cached when every candidate response was cached', async () => {
+    const provider = new BestOfNProvider({ injectVar: 'input', maxConcurrency: 1 });
+    mockTargetProvider.callApi
+      .mockResolvedValueOnce({
+        output: 'First cached candidate failed',
+        error: 'Candidate was rejected',
+        cached: true,
+        cost: 0.08,
+        tokenUsage: { total: 80, prompt: 50, completion: 30, numRequests: 1 },
+      })
+      .mockResolvedValueOnce({
+        output: 'Second cached candidate succeeded',
+        cached: true,
+        cost: 0.1,
+        tokenUsage: { total: 100, prompt: 65, completion: 35, numRequests: 1 },
+      });
+
+    const result = await provider.callApi('test prompt', createMockContext(mockTargetProvider));
+
+    expect(result.cached).toBe(true);
+    expect(result.cost).toBeCloseTo(0.18);
+    expect(result.incurredCost).toBe(0);
+    expect(result.tokenUsage).toMatchObject({
+      total: 180,
+      cached: 180,
+      numRequests: 2,
+      incurredTokenUsage: { total: 0, numRequests: 0 },
+    });
+  });
+
+  it('preserves fresh target usage when the final failed candidate was cached', async () => {
+    const provider = new BestOfNProvider({ injectVar: 'input', maxConcurrency: 1 });
+    mockTargetProvider.callApi
+      .mockResolvedValueOnce({
+        error: 'Fresh candidate was rejected',
+        cost: 0.06,
+        tokenUsage: { total: 60, prompt: 40, completion: 20, numRequests: 1 },
+      })
+      .mockResolvedValueOnce({
+        error: 'Cached candidate was rejected',
+        cached: true,
+        cost: 0.1,
+        tokenUsage: { total: 100, prompt: 65, completion: 35, numRequests: 1 },
+      });
+
+    const result = await provider.callApi('test prompt', createMockContext(mockTargetProvider));
+
+    expect(result.cached).toBe(false);
+    expect(result.cost).toBeCloseTo(0.16);
+    expect(result.incurredCost).toBeCloseTo(0.06);
+    expect(result.tokenUsage).toMatchObject({
+      total: 160,
+      cached: 100,
+      numRequests: 2,
+      incurredTokenUsage: { total: 60, numRequests: 1 },
+    });
+  });
+
+  it('aggregates all fresh candidate costs without adding an unnecessary incurred-cost split', async () => {
+    const provider = new BestOfNProvider({ injectVar: 'input', maxConcurrency: 1 });
+    mockTargetProvider.callApi
+      .mockResolvedValueOnce({
+        error: 'Fresh candidate was rejected',
+        cost: 0.06,
+        tokenUsage: { total: 60, numRequests: 1 },
+      })
+      .mockResolvedValueOnce({
+        output: 'Fresh candidate succeeded',
+        cost: 0.1,
+        tokenUsage: { total: 100, numRequests: 1 },
+      });
+
+    const result = await provider.callApi('test prompt', createMockContext(mockTargetProvider));
+
+    expect(result.cost).toBeCloseTo(0.16);
+    expect(result.incurredCost).toBeUndefined();
+    expect(result.tokenUsage).toMatchObject({ total: 160, numRequests: 2 });
+  });
+
+  it('preserves incurred costs already reported by composite candidate responses', async () => {
+    const provider = new BestOfNProvider({ injectVar: 'input', maxConcurrency: 1 });
+    mockTargetProvider.callApi
+      .mockResolvedValueOnce({
+        error: 'Composite candidate was rejected',
+        cost: 0.1,
+        incurredCost: 0.04,
+        tokenUsage: {
+          total: 100,
+          numRequests: 2,
+          incurredTokenUsage: { total: 40, numRequests: 1 },
+        },
+      })
+      .mockResolvedValueOnce({
+        output: 'Fresh candidate succeeded',
+        cost: 0.06,
+        tokenUsage: { total: 60, numRequests: 1 },
+      });
+
+    const result = await provider.callApi('test prompt', createMockContext(mockTargetProvider));
+
+    expect(result.cost).toBeCloseTo(0.16);
+    expect(result.incurredCost).toBeCloseTo(0.1);
+    expect(result.tokenUsage).toMatchObject({
+      total: 160,
+      numRequests: 3,
+      incurredTokenUsage: { total: 100, numRequests: 2 },
+    });
+  });
+
   it('should re-throw AbortError and not swallow it', async () => {
     const provider = new BestOfNProvider({
       injectVar: 'input',
@@ -164,33 +304,31 @@ describe('BestOfNProvider - Runtime Behavior', () => {
     expect(result.error).toContain('Network error');
   });
 
-  it.each([
-    42,
-    true,
-    null,
-    { prompt: 'candidate 0' },
-  ])('should skip non-string candidate prompt from remote generation: %j', async (invalidPrompt) => {
-    const provider = new BestOfNProvider({
-      injectVar: 'input',
-    });
-    const context = createMockContext(mockTargetProvider);
+  it.each([42, true, null, { prompt: 'candidate 0' }])(
+    'should skip non-string candidate prompt from remote generation: %j',
+    async (invalidPrompt) => {
+      const provider = new BestOfNProvider({
+        injectVar: 'input',
+      });
+      const context = createMockContext(mockTargetProvider);
 
-    mockFetchWithProxy.mockResolvedValue({
-      json: async () => ({
-        modifiedPrompts: [invalidPrompt, 'candidate 2'],
-      }),
-    });
+      mockFetchWithProxy.mockResolvedValue({
+        json: async () => ({
+          modifiedPrompts: [invalidPrompt, 'candidate 2'],
+        }),
+      });
 
-    await provider.callApi('test prompt', context);
+      await provider.callApi('test prompt', context);
 
-    expect(mockRenderPrompt).toHaveBeenCalledTimes(1);
-    expect(mockTargetProvider.callApi).toHaveBeenCalledTimes(1);
-    expect(mockTargetProvider.callApi).toHaveBeenCalledWith(
-      'candidate 2',
-      expect.any(Object),
-      undefined,
-    );
-  });
+      expect(mockRenderPrompt).toHaveBeenCalledTimes(1);
+      expect(mockTargetProvider.callApi).toHaveBeenCalledTimes(1);
+      expect(mockTargetProvider.callApi).toHaveBeenCalledWith(
+        'candidate 2',
+        expect.any(Object),
+        undefined,
+      );
+    },
+  );
 
   it.each([
     'file://etc/passwd',
