@@ -14,6 +14,8 @@ import { ResultFailureReason } from '../../src/types/index';
 import { calculateFilteredMetrics } from '../../src/util/calculateFilteredMetrics';
 import EvalFactory from '../factories/evalFactory';
 
+import type { TokenUsage } from '../../src/types/index';
+
 describe('calculateFilteredMetrics', () => {
   beforeAll(async () => {
     await runDbMigrations();
@@ -137,6 +139,51 @@ describe('calculateFilteredMetrics', () => {
   });
 
   describe('token usage aggregation', () => {
+    async function addTokenResult(
+      eval_: Awaited<ReturnType<typeof EvalFactory.create>>,
+      {
+        testIdx,
+        promptIdx = 0,
+        tokenUsage,
+        gradingUsage,
+        gradingCached = false,
+        responseCached = false,
+      }: {
+        testIdx: number;
+        promptIdx?: number;
+        tokenUsage: TokenUsage;
+        gradingUsage?: TokenUsage;
+        gradingCached?: boolean;
+        responseCached?: boolean;
+      },
+    ) {
+      await eval_.addResult({
+        promptIdx,
+        testIdx,
+        testCase: { vars: { test: 'value' } },
+        promptId: `prompt-${promptIdx}`,
+        provider: { id: 'test-provider', label: 'test' },
+        prompt: { raw: 'Test prompt', label: 'Test prompt' },
+        vars: { test: 'value' },
+        response: { output: 'test output', ...(responseCached && { cached: true }), tokenUsage },
+        error: null,
+        failureReason: ResultFailureReason.NONE,
+        success: true,
+        score: 1,
+        latencyMs: 100,
+        gradingResult: {
+          pass: true,
+          score: 1,
+          reason: 'Test reason',
+          ...(gradingUsage && { tokensUsed: gradingUsage }),
+          ...(gradingCached && { metadata: { cachedResponse: true } }),
+        },
+        namedScores: {},
+        cost: 0,
+        metadata: {},
+      });
+    }
+
     it('should aggregate token usage correctly', async () => {
       const eval_ = await EvalFactory.create({
         numResults: 5,
@@ -205,6 +252,200 @@ describe('calculateFilteredMetrics', () => {
         completion: 0,
         cached: 0,
         numRequests: 0,
+      });
+    });
+
+    it('aggregates target probes, attacker usage, and both grading sources for filtered rows', async () => {
+      const eval_ = await EvalFactory.create({ numResults: 0 });
+      await addTokenResult(eval_, {
+        testIdx: 0,
+        tokenUsage: {
+          prompt: 10,
+          completion: 5,
+          numRequests: 3,
+          attacker: { prompt: 7, completion: 3, numRequests: 2 },
+          assertions: { prompt: 4, completion: 1, numRequests: 1 },
+        },
+        gradingUsage: { prompt: 6, completion: 2, numRequests: 1 },
+      });
+      await addTokenResult(eval_, {
+        testIdx: 1,
+        tokenUsage: {
+          total: 999,
+          numRequests: 7,
+          attacker: { total: 888, numRequests: 4 },
+        },
+      });
+
+      const metrics = await calculateFilteredMetrics({
+        evalId: eval_.id,
+        numPrompts: 1,
+        whereSql: sql`eval_id = ${eval_.id} AND test_idx = 0`,
+      });
+
+      expect(metrics[0].tokenUsage).toMatchObject({
+        total: 15,
+        prompt: 10,
+        completion: 5,
+        numRequests: 3,
+        attacker: { total: 10, prompt: 7, completion: 3, numRequests: 2 },
+        assertions: { total: 13, prompt: 10, completion: 3, numRequests: 2 },
+      });
+    });
+
+    it('preserves cached grading footprint without counting it as incurred usage', async () => {
+      const eval_ = await EvalFactory.create({ numResults: 0 });
+      await addTokenResult(eval_, {
+        testIdx: 0,
+        tokenUsage: {
+          total: 0,
+          prompt: 20,
+          completion: 10,
+          cached: 30,
+          numRequests: 0,
+          attacker: { total: 0, prompt: 5, completion: 2, cached: 7, numRequests: 0 },
+          assertions: { prompt: 4, completion: 2, cached: 6, numRequests: 0 },
+        },
+        gradingUsage: { total: 12, prompt: 8, completion: 4, numRequests: 1 },
+        gradingCached: true,
+      });
+
+      const metrics = await calculateFilteredMetrics({
+        evalId: eval_.id,
+        numPrompts: 1,
+        whereSql: sql`eval_id = ${eval_.id}`,
+      });
+
+      expect(metrics[0].tokenUsage).toMatchObject({
+        total: 0,
+        cached: 30,
+        numRequests: 0,
+        attacker: { total: 0, cached: 7, numRequests: 0 },
+        assertions: { total: 12, prompt: 12, completion: 6, cached: 18, numRequests: 1 },
+        incurredTokenUsage: { assertions: { total: 0, numRequests: 0 } },
+      });
+    });
+
+    it('preserves both logical and incurred buckets for filtered mixed-cache results', async () => {
+      const eval_ = await EvalFactory.create({ numResults: 0 });
+      await addTokenResult(eval_, {
+        testIdx: 0,
+        tokenUsage: {
+          total: 100,
+          prompt: 60,
+          completion: 40,
+          cached: 70,
+          numRequests: 2,
+          attacker: { total: 40, prompt: 25, completion: 15, cached: 30, numRequests: 2 },
+          assertions: { total: 18, prompt: 11, completion: 7, cached: 12, numRequests: 2 },
+          incurredTokenUsage: {
+            total: 30,
+            prompt: 20,
+            completion: 10,
+            numRequests: 1,
+            attacker: { total: 10, prompt: 7, completion: 3, numRequests: 1 },
+            assertions: { total: 6, prompt: 4, completion: 2, numRequests: 1 },
+          },
+        },
+        gradingUsage: {
+          total: 50,
+          prompt: 30,
+          completion: 20,
+          cached: 30,
+          numRequests: 2,
+          incurredTokenUsage: { total: 20, prompt: 12, completion: 8, numRequests: 1 },
+        },
+      });
+      await addTokenResult(eval_, {
+        testIdx: 1,
+        tokenUsage: { total: 999, numRequests: 7 },
+      });
+
+      const metrics = await calculateFilteredMetrics({
+        evalId: eval_.id,
+        numPrompts: 1,
+        whereSql: sql`eval_id = ${eval_.id} AND test_idx = 0`,
+      });
+
+      expect(metrics[0].tokenUsage).toMatchObject({
+        total: 100,
+        prompt: 60,
+        completion: 40,
+        numRequests: 2,
+        attacker: { total: 40, prompt: 25, completion: 15, numRequests: 2 },
+        assertions: { total: 68, prompt: 41, completion: 27, numRequests: 4 },
+        incurredTokenUsage: {
+          total: 30,
+          prompt: 20,
+          completion: 10,
+          numRequests: 1,
+          attacker: { total: 10, prompt: 7, completion: 3, numRequests: 1 },
+          assertions: { total: 26, prompt: 16, completion: 10, numRequests: 2 },
+        },
+      });
+    });
+
+    it('retains fresh grading in incurred usage when a filtered target was cached', async () => {
+      const eval_ = await EvalFactory.create({ numResults: 0 });
+      await addTokenResult(eval_, {
+        testIdx: 0,
+        responseCached: true,
+        tokenUsage: {
+          total: 100,
+          prompt: 60,
+          completion: 40,
+          cached: 100,
+          numRequests: 1,
+          incurredTokenUsage: { total: 0, numRequests: 0 },
+        },
+        gradingUsage: { total: 37, prompt: 23, completion: 14, numRequests: 1 },
+      });
+
+      const metrics = await calculateFilteredMetrics({
+        evalId: eval_.id,
+        numPrompts: 1,
+        whereSql: sql`eval_id = ${eval_.id}`,
+      });
+
+      expect(metrics[0].tokenUsage).toMatchObject({
+        total: 100,
+        numRequests: 1,
+        assertions: { total: 37, numRequests: 1 },
+        incurredTokenUsage: {
+          total: 0,
+          numRequests: 0,
+          assertions: { total: 37, prompt: 23, completion: 14, numRequests: 1 },
+        },
+      });
+    });
+
+    it('preserves fresh provider-side cached prompts when request counts are omitted', async () => {
+      const eval_ = await EvalFactory.create({ numResults: 0 });
+      await addTokenResult(eval_, {
+        testIdx: 0,
+        tokenUsage: {
+          prompt: 10,
+          completion: 0,
+          cached: 10,
+          attacker: { prompt: 8, completion: 0, cached: 8 },
+          assertions: { prompt: 6, completion: 0, cached: 6 },
+        },
+        gradingUsage: { prompt: 4, completion: 0, cached: 4 },
+      });
+
+      const metrics = await calculateFilteredMetrics({
+        evalId: eval_.id,
+        numPrompts: 1,
+        whereSql: sql`eval_id = ${eval_.id}`,
+      });
+
+      expect(metrics[0].tokenUsage).toMatchObject({
+        total: 10,
+        prompt: 10,
+        cached: 10,
+        numRequests: 1,
+        attacker: { total: 8, cached: 8, numRequests: 1 },
+        assertions: { total: 10, cached: 10, numRequests: 2 },
       });
     });
   });
