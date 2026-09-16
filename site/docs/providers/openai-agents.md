@@ -38,7 +38,7 @@ providers:
     config:
       agent:
         name: Customer Support Agent
-        model: gpt-5-mini
+        model: gpt-5.6-luna
         instructions: You are a helpful customer support agent.
       maxTurns: 10
 ```
@@ -128,7 +128,7 @@ import { Agent } from '@openai/agents';
 
 export default new Agent({
   name: 'Support Agent',
-  model: 'gpt-5-mini',
+  model: 'gpt-5.6-luna',
   instructions: 'You are a helpful customer support agent.',
 });
 ```
@@ -163,19 +163,19 @@ providers:
     config:
       agent:
         name: Triage Agent
-        model: gpt-5-mini
+        model: gpt-5.6-luna
         instructions: Route questions to the appropriate specialist.
       handoffs:
         - agent:
             name: Technical Support
-            model: gpt-5-mini
+            model: gpt-5.6-luna
             instructions: Handle technical troubleshooting.
           description: Transfer for technical issues
 ```
 
 ## Guardrails
 
-Validate tool inputs and outputs with guardrails:
+Validate the initial agent input and final agent output with guardrails:
 
 ```yaml
 providers:
@@ -186,7 +186,9 @@ providers:
       outputGuardrails: file://./guardrails/output-guardrails.ts
 ```
 
-Guardrails run validation logic before tool execution (input) and after (output), enabling content filtering, PII detection, or custom business rules.
+These OpenAI Agents SDK guardrails enforce the initial input and final output; tool guardrails are a separate SDK feature. In Promptfoo, a tripped SDK guardrail currently surfaces as a provider error, while a successful run does not populate the response used by Promptfoo's [`guardrails` assertion](/docs/configuration/expected-outputs/guardrails). Test the application behavior with ordinary assertions, or wrap the provider and normalize tripwires when you need the guardrail assertion.
+
+See OpenAI's [guardrails and human review guide](https://developers.openai.com/api/docs/guides/agents/guardrails-approvals) for the SDK execution model.
 
 ## Sessions
 
@@ -409,6 +411,11 @@ providers:
           tracking: ABC123
 ```
 
+Mock mode supports function tools and direct `Agent` handoffs only. It fails closed for explicit
+`Handoff` objects (their callbacks can have side effects), MCP servers, hosted tools, `SandboxAgent`
+capabilities, reusable prompt templates, and model `providerData` that overrides the request's tools
+or prompt. Use direct agents for side-effect-free mock handoffs.
+
 ## Tracing
 
 Enable OpenTelemetry tracing to debug agent execution:
@@ -467,7 +474,7 @@ tests:
 
       - type: trajectory:goal-success
         value: 'Determine whether order 123 shipped and tell the user the correct status'
-        provider: openai:gpt-5-mini
+        provider: openai:gpt-5.6-luna
 ```
 
 See [Tracing](/docs/tracing/) for the eval-level OTLP setup required when you want Promptfoo to ingest and evaluate these traces directly.
@@ -551,6 +558,7 @@ Tools must be async functions. Synchronous tools will cause runtime errors.
 ## Related Documentation
 
 - [OpenAI Provider](/docs/providers/openai) - Standard OpenAI completions and chat
+- [Codex Security SDK](/docs/providers/openai-codex-security) - Repository scans, finding validation, coverage, and scan cost evals
 - [OpenAI Agents Python SDK Guide](/docs/guides/evaluate-openai-agents-python) - Python SDK example with Promptfoo tracing and framework-specific provider wrapping
 - [Tracing](/docs/tracing) - OTLP ingestion and trajectory assertions
 - [Red Team Guide](/docs/red-team/quickstart) - Test agent safety

@@ -230,6 +230,12 @@ providers:
         startIndex: 10
 ```
 
+### Cost estimates
+
+Cost estimates use pricing metadata for the configured service and account. If required metadata is unavailable or a required pricing tier is unrecognized, the response omits `cost` and still returns the generated output. A token category with a reported count of zero does not require a price.
+
+For account-specific pricing, set `inputCost` and `outputCost` in USD per token, or set `cost` for a shared input/output rate. These values override the built-in tier prices; an explicit zero is supported. Estimates do not determine whether your account can use a model.
+
 ## Chat Mode
 
 WatsonX also supports chat-style interactions using the `textChat` API. Use the `watsonx:chat:` prefix:
