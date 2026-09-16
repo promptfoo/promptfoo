@@ -262,6 +262,29 @@ function getTokenUsageLines(
     lines.push(gradingUsageLine);
   }
 
+  const incurredUsage = tokenUsage.incurredTokenUsage;
+  if (incurredUsage) {
+    const incurredTokens =
+      getTokenUsageTotal(incurredUsage) +
+      getTokenUsageTotal(incurredUsage.attacker) +
+      getTokenUsageTotal(incurredUsage.assertions) +
+      getTokenUsageTotal(incurredUsage.generation);
+    const evaluationTokens =
+      evalTokens.total +
+      attackerTokens +
+      getTokenUsageTotal(tokenUsage.assertions) +
+      generationTokens;
+    const cachedSavings = Math.max(evaluationTokens - incurredTokens, 0);
+
+    if (cachedSavings > 0) {
+      lines.push(
+        `${chalk.bold('Incurred Tokens:')} ${chalk.white.bold(incurredTokens.toLocaleString())}`,
+        `  ${chalk.gray('Cached Savings:')} ${chalk.white(cachedSavings.toLocaleString())}`,
+        `  ${chalk.gray('Actual Target Requests:')} ${chalk.white((incurredUsage.numRequests ?? 0).toLocaleString())}`,
+      );
+    }
+  }
+
   lines.push(...getProviderUsageLines(tracker));
   return lines;
 }
