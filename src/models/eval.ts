@@ -683,7 +683,10 @@ export default class Eval {
           id: datasetId,
           tests: persistedConfig.tests,
         })
-        .onConflictDoNothing()
+        .onConflictDoUpdate({
+          target: datasetsTable.id,
+          set: { tests: sql`excluded.tests` },
+        })
         .run();
 
       await tx

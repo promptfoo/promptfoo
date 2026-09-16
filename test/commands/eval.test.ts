@@ -142,6 +142,9 @@ vi.mock('../../src/database/index', async (importOriginal) => {
         onConflictDoNothing: vi.fn(() => ({
           run: vi.fn(),
         })),
+        onConflictDoUpdate: vi.fn(() => ({
+          run: vi.fn(),
+        })),
         run: vi.fn(),
       })),
     })),

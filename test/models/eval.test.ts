@@ -1764,10 +1764,15 @@ describe('evaluator', () => {
       context?.rootSpan?.end();
     });
 
-    it.each(['rawReceipt', 'sensitiveValue', 'expectedContent'])(
-      'sanitizes %s in saved datasets while preserving original dataset identity',
-      async (key) => {
-        const secret = `PRIVATE_DATASET_RECEIPT_${key}`;
+    it.each([
+      { key: 'rawReceipt', existing: false },
+      { key: 'sensitiveValue', existing: false },
+      { key: 'expectedContent', existing: false },
+      { key: 'rawReceipt', existing: true },
+    ])(
+      'sanitizes $key in saved datasets while preserving identity (existing=$existing)',
+      async ({ key, existing }) => {
+        const secret = `PRIVATE_DATASET_RECEIPT_${key}_${existing}`;
         const tests = [
           {
             assert: [
@@ -1779,8 +1784,11 @@ describe('evaluator', () => {
           },
         ];
         const datasetId = sha256(JSON.stringify(tests));
-        const evaluation = await Eval.create({ tests }, []);
         const db = await getDb();
+        if (existing) {
+          await db.insert(datasetsTable).values({ id: datasetId, tests, createdAt: 123 }).run();
+        }
+        const evaluation = await Eval.create({ tests }, []);
         const dataset = await db
           .select()
           .from(datasetsTable)
@@ -1788,6 +1796,9 @@ describe('evaluator', () => {
           .get();
         expect(dataset).toBeDefined();
         expect(JSON.stringify(dataset?.tests)).not.toContain(secret);
+        if (existing) {
+          expect(dataset?.createdAt).toBe(123);
+        }
         expect(evaluation.config.tests).toEqual(tests);
         expect(JSON.stringify(evaluation.config.tests)).toContain(secret);
       },
