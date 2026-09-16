@@ -158,7 +158,7 @@ describe('handleContextRelevance', () => {
     );
   });
 
-  it('should use default threshold of 0 when not provided', async () => {
+  it('should use default threshold of 0.5 when not provided', async () => {
     const mockResult = { pass: true, score: 1, reason: 'Perfect relevance' };
     vi.mocked(matchesContextRelevance).mockResolvedValue(mockResult);
     vi.mocked(contextUtils.resolveContext).mockResolvedValue('test context');
@@ -193,7 +193,7 @@ describe('handleContextRelevance', () => {
     expect(matchesContextRelevance).toHaveBeenCalledWith(
       'test query',
       'test context',
-      0,
+      0.5,
       {},
       undefined,
     );
@@ -296,7 +296,7 @@ describe('handleContextRelevance', () => {
       undefined,
       { output: 'out', tokenUsage: {} },
     );
-    expect(matchesContextRelevance).toHaveBeenCalledWith('q', 'cx', 0, {}, undefined);
+    expect(matchesContextRelevance).toHaveBeenCalledWith('q', 'cx', 0.5, {}, undefined);
     expect(result.metadata).toEqual({
       context: 'cx',
     });
