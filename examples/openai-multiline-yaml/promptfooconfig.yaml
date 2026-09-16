@@ -4,7 +4,7 @@ description: OpenAI evaluation with multiline YAML prompt formatting
 prompts:
   - file://prompt.yaml
 providers:
-  - openai:chat:gpt-4.1-mini
+  - openai:chat:gpt-5.6-luna
 
 tests:
   - vars:

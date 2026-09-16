@@ -53,6 +53,8 @@ import type {
 // Default read-only tools when working_dir is specified (alphabetically sorted)
 export const FS_READONLY_TOOLS = ['glob', 'grep', 'list', 'read'];
 
+const EDIT_TOOL_ALIASES = new Set(['edit', 'write', 'patch', 'apply_patch']);
+
 /**
  * Tool configuration for OpenCode SDK
  */
@@ -74,7 +76,7 @@ export interface OpenCodeToolConfig {
   skill?: boolean;
   /** Code intelligence queries (experimental - requires OPENCODE_EXPERIMENTAL_LSP_TOOL=true) */
   lsp?: boolean;
-  [key: string]: boolean | undefined; // MCP tools: mcp_*
+  [key: string]: boolean | undefined; // Plugin/MCP tools, e.g. <server>_<tool>
 }
 
 /**
@@ -164,7 +166,7 @@ export interface OpenCodeAgentConfig {
   description: string;
   /** Agent mode: 'primary' for main assistants, 'subagent' for specialized tasks, 'all' for both */
   mode?: 'primary' | 'subagent' | 'all';
-  /** Model ID to use for this agent (overrides global model) */
+  /** Full OpenCode provider/model-id for this agent (e.g., 'anthropic/claude-sonnet-4-6') */
   model?: string;
   /** Temperature for response randomness (0.0-1.0) */
   temperature?: number;
@@ -261,8 +263,8 @@ export interface OpenCodeSDKConfig {
   provider_id?: string;
 
   /**
-   * Model ID to use (e.g., 'claude-sonnet-4-20250514', 'gpt-4o')
-   * Combined with provider_id to specify the exact model
+   * Model ID within provider_id (e.g., 'claude-sonnet-4-6', 'gpt-4o').
+   * Set provider_id separately; custom_agent.model uses the full provider/model-id instead.
    */
   model?: string;
 
@@ -654,7 +656,7 @@ function getSessionPath(sessionId: string): OpenCodeSessionPath {
  * rule-array shape required by the v2 `session.create.permission` API.
  *
  * - `{ bash: 'allow' }` → `[{ permission: 'bash', pattern: '*', action: 'allow' }]`
- * - `{ bash: { 'git *': 'allow', '*': 'ask' } }` → two rules with the
+ * - `{ bash: { '*': 'ask', 'git *': 'allow' } }` → two rules with the
  *   corresponding glob pattern preserved per entry.
  *
  * Returns `undefined` when the config has no usable entries so callers can
@@ -663,25 +665,108 @@ function getSessionPath(sessionId: string): OpenCodeSessionPath {
 export function convertPermissionConfigToRuleset(
   config: OpenCodePermissionConfig | undefined,
 ): OpenCodePermissionRule[] | undefined {
-  if (!config) {
+  if (config === undefined) {
     return undefined;
   }
+  if (
+    !config ||
+    typeof config !== 'object' ||
+    Array.isArray(config) ||
+    ![Object.prototype, null].includes(Object.getPrototypeOf(config))
+  ) {
+    throw new Error('OpenCode permission must be an object mapping tools to permission rules');
+  }
+
   const rules: OpenCodePermissionRule[] = [];
   for (const [tool, value] of Object.entries(config)) {
     if (value === undefined) {
       continue;
     }
-    if (typeof value === 'string') {
+    if (isOpenCodePermissionAction(value)) {
       rules.push({ permission: tool, pattern: '*', action: value });
       continue;
     }
-    if (value && typeof value === 'object') {
-      for (const [pattern, action] of Object.entries(value)) {
-        rules.push({ permission: tool, pattern, action });
+
+    if (
+      !value ||
+      typeof value !== 'object' ||
+      Array.isArray(value) ||
+      ![Object.prototype, null].includes(Object.getPrototypeOf(value))
+    ) {
+      throw new Error(`OpenCode permission.${tool} must be ask, allow, deny, or a pattern mapping`);
+    }
+
+    for (const [pattern, action] of Object.entries(value)) {
+      if (!isOpenCodePermissionAction(action)) {
+        throw new Error(`OpenCode permission.${tool}.${pattern} must be ask, allow, or deny`);
       }
+      rules.push({ permission: tool, pattern, action });
     }
   }
   return rules.length > 0 ? rules : undefined;
+}
+
+function isOpenCodePermissionAction(value: unknown): value is 'ask' | 'allow' | 'deny' {
+  return value === 'ask' || value === 'allow' || value === 'deny';
+}
+
+function convertToolsConfigToRuleset(config: OpenCodeToolConfig): OpenCodePermissionRule[] {
+  return Object.entries(config).map(([permission, enabled]) => ({
+    permission,
+    pattern: '*',
+    action: enabled ? 'allow' : 'deny',
+  }));
+}
+
+function openCodeMcpContainsCacheSensitiveData(
+  config: Record<string, OpenCodeMCPServerConfig> | undefined,
+): boolean {
+  return Object.values(config ?? {}).some((server) => {
+    if (
+      (server.type === 'local' &&
+        (Object.keys(server.environment ?? {}).length > 0 || server.command.length > 1)) ||
+      (server.type === 'remote' &&
+        (Object.keys(server.headers ?? {}).length > 0 || server.oauth !== undefined))
+    ) {
+      return true;
+    }
+    if (server.type !== 'remote') {
+      return false;
+    }
+    try {
+      const url = new URL(server.url);
+      return Boolean(url.username || url.password || url.search);
+    } catch {
+      return server.url.includes('?') || server.url.includes('@');
+    }
+  });
+}
+
+function openCodeBaseUrlContainsCacheSensitiveData(baseUrl: string | undefined): boolean {
+  if (!baseUrl) {
+    return false;
+  }
+  try {
+    const url = new URL(baseUrl);
+    return Boolean(url.username || url.password || url.search);
+  } catch {
+    return baseUrl.includes('?') || baseUrl.includes('@');
+  }
+}
+
+function getCacheSafeOpenCodeBaseUrl(baseUrl: string | undefined): string | undefined {
+  if (!baseUrl || !openCodeBaseUrlContainsCacheSensitiveData(baseUrl)) {
+    return baseUrl;
+  }
+  try {
+    const url = new URL(baseUrl);
+    url.username = '';
+    url.password = '';
+    url.search = '';
+    return url.toString();
+  } catch {
+    return undefined;
+  }
 }
 
 function tryParseJson(value: string): string | undefined {
@@ -763,9 +848,12 @@ export class OpenCodeSDKProvider implements ApiProvider {
   private providerId = 'opencode:sdk';
   private opencodeModule?: LoadedOpenCodeSDKModule;
   private client?: OpenCodeClient;
+  private clientInitialization?: Promise<void>;
   private server?: OpenCodeServer;
   private sessions: Map<string, OpenCodeSessionHandle> = new Map(); // cacheKey -> session info
   private sessionOrder: string[] = []; // Track insertion order for LRU eviction
+  private sessionQueues = new Map<string, Promise<void>>();
+  private readonly credentialCacheScope = crypto.randomUUID();
   private streamingWarningEmitted = false;
 
   constructor(
@@ -814,11 +902,17 @@ export class OpenCodeSDKProvider implements ApiProvider {
     );
   }
 
+  private getCredentialCacheScope(config: OpenCodeSDKConfig): string | undefined {
+    return config.baseUrl ? undefined : this.credentialCacheScope;
+  }
+
   toString(): string {
     return '[OpenCode SDK Provider]';
   }
 
   async cleanup(): Promise<void> {
+    await this.clientInitialization?.catch(() => undefined);
+    this.clientInitialization = undefined;
     for (const session of this.sessions.values()) {
       try {
         await this.deleteSession(session);
@@ -828,6 +922,7 @@ export class OpenCodeSDKProvider implements ApiProvider {
     }
     this.sessions.clear();
     this.sessionOrder = [];
+    this.sessionQueues.clear();
 
     // Close server if we started one
     if (this.server) {
@@ -838,54 +933,90 @@ export class OpenCodeSDKProvider implements ApiProvider {
       }
       this.server = undefined;
     }
+    this.client = undefined;
   }
 
   /**
    * Build the tools configuration based on config and defaults
    */
-  private buildToolsConfig(config: OpenCodeSDKConfig): OpenCodeToolConfig | undefined {
-    // If explicit tools config provided, use it
-    if (config.tools) {
-      return config.tools;
+  private buildToolsConfig(config: OpenCodeSDKConfig, includeDefaults = true): OpenCodeToolConfig {
+    const configuredTools = config.tools;
+    if (
+      configuredTools !== undefined &&
+      (!configuredTools ||
+        typeof configuredTools !== 'object' ||
+        Array.isArray(configuredTools) ||
+        ![Object.prototype, null].includes(Object.getPrototypeOf(configuredTools)))
+    ) {
+      throw new Error('OpenCode tools must be an object mapping tool names to booleans');
     }
 
-    // If no working_dir, disable all tools (chat-only mode)
-    if (!config.working_dir) {
-      return {
-        bash: false,
-        edit: false,
-        write: false,
-        read: false,
-        grep: false,
-        glob: false,
-        list: false,
-        patch: false,
-        todowrite: false,
-        todoread: false,
-        webfetch: false,
-        question: false,
-        skill: false,
-        lsp: false,
-      };
+    const entries = new Map<string, boolean>();
+    if (includeDefaults) {
+      // OpenCode permissions use last-match-wins. A wildcard deny keeps future,
+      // plugin, and MCP tools disabled unless the user explicitly enables them.
+      entries.set('*', false);
+      if (config.working_dir) {
+        for (const tool of FS_READONLY_TOOLS) {
+          entries.set(tool, true);
+        }
+      }
     }
 
-    // With working_dir, enable read-only tools by default
-    return {
-      bash: false,
-      edit: false,
-      write: false,
-      read: true,
-      grep: true,
-      glob: true,
-      list: true,
-      patch: false,
-      todowrite: false,
-      todoread: false,
-      webfetch: false,
-      question: false,
-      skill: false,
-      lsp: false,
-    };
+    let editPermission: boolean | undefined;
+    for (const [tool, enabled] of Object.entries(configuredTools ?? {})) {
+      if (enabled === undefined) {
+        continue;
+      }
+      if (typeof enabled !== 'boolean') {
+        throw new Error(`OpenCode tools.${tool} must be a boolean`);
+      }
+      if (!tool.trim()) {
+        throw new Error('OpenCode tool names must not be empty');
+      }
+      if (EDIT_TOOL_ALIASES.has(tool)) {
+        if (editPermission !== undefined && editPermission !== enabled) {
+          throw new Error(
+            'OpenCode tools edit, write, patch, and apply_patch share one permission and cannot conflict',
+          );
+        }
+        editPermission = enabled;
+        continue;
+      }
+      entries.set(tool, enabled);
+    }
+    if (editPermission !== undefined) {
+      entries.set('edit', editPermission);
+    }
+
+    return Object.fromEntries(entries);
+  }
+
+  private buildEffectiveToolsConfig(config: OpenCodeSDKConfig): OpenCodeToolConfig {
+    const customAgent = config.agent ? undefined : config.custom_agent;
+    const tools = new Map<string, boolean>();
+    for (const [tool, enabled] of Object.entries(this.buildToolsConfig(config))) {
+      if (enabled !== undefined) {
+        tools.set(tool, enabled);
+      }
+    }
+    for (const [tool, enabled] of Object.entries(
+      this.buildToolsConfig({ ...config, tools: customAgent?.tools }, false),
+    )) {
+      if (enabled !== undefined) {
+        tools.delete(tool);
+        tools.set(tool, enabled);
+      }
+    }
+    return Object.fromEntries(tools);
+  }
+
+  private buildConfiguredPermissionRules(config: OpenCodeSDKConfig): OpenCodePermissionRule[] {
+    const customAgent = config.agent ? undefined : config.custom_agent;
+    return [
+      ...(convertPermissionConfigToRuleset(config.permission) ?? []),
+      ...(convertPermissionConfigToRuleset(customAgent?.permission) ?? []),
+    ];
   }
 
   private buildQuery(
@@ -911,6 +1042,7 @@ export class OpenCodeSDKProvider implements ApiProvider {
     return {
       provider_id: config.provider_id,
       model: config.model,
+      baseUrl: getCacheSafeOpenCodeBaseUrl(config.baseUrl),
       tools: this.buildToolsConfig(config),
       permission: config.permission,
       agent: config.agent,
@@ -919,14 +1051,16 @@ export class OpenCodeSDKProvider implements ApiProvider {
       format: config.format,
       variant: config.variant,
       session_id: config.session_id,
+      toolPolicyContractVersion: 2,
       parent_session_id: config.parent_session_id,
+      credentialScope: this.getCredentialCacheScope(config),
+      apiVersion: this.opencodeModule?.apiVersion,
     };
   }
 
   private buildSessionKey(config: OpenCodeSDKConfig, workingDir: string | undefined): string {
     return generateCacheKey('opencode:sdk:session', {
       ...this.historyAffectingInputs(config),
-      baseUrl: config.baseUrl,
       workingDir: config.working_dir ? workingDir : undefined,
       mcp: config.mcp,
     });
@@ -984,7 +1118,10 @@ export class OpenCodeSDKProvider implements ApiProvider {
           model: config.custom_agent.model,
           temperature: config.custom_agent.temperature,
           top_p: config.custom_agent.top_p,
-          tools: config.custom_agent.tools,
+          tools:
+            config.custom_agent.tools === undefined
+              ? undefined
+              : this.buildToolsConfig({ ...config, tools: config.custom_agent.tools }, false),
           permission: config.custom_agent.permission,
           prompt: config.custom_agent.prompt,
           mode: config.custom_agent.mode ?? 'primary',
@@ -1062,10 +1199,10 @@ export class OpenCodeSDKProvider implements ApiProvider {
   }
 
   private async deleteSession(session: OpenCodeSessionHandle | undefined): Promise<void> {
-    if (!session || !this.client?.session?.delete) {
+    if (!session) {
       return;
     }
-    await this.client.session.delete(this.buildDeleteSessionParameters(session));
+    await this.client?.session?.delete?.(this.buildDeleteSessionParameters(session));
   }
 
   private buildAbortSessionParameters(
@@ -1106,6 +1243,17 @@ export class OpenCodeSDKProvider implements ApiProvider {
       ...this.config,
       ...context?.prompt?.config,
     };
+
+    if (config.apiKey !== this.config.apiKey) {
+      throw new Error(
+        'OpenCode SDK apiKey is provider-level configuration and cannot be overridden per prompt',
+      );
+    }
+    if (config.baseUrl !== this.config.baseUrl) {
+      throw new Error(
+        'OpenCode SDK baseUrl is provider-level configuration and cannot be overridden per prompt',
+      );
+    }
 
     if (config.workspace && !config.baseUrl && !config.working_dir) {
       throw new Error('OpenCode SDK workspace support requires either baseUrl or working_dir');
@@ -1152,46 +1300,91 @@ export class OpenCodeSDKProvider implements ApiProvider {
     };
   }
 
-  private async ensureClient(config: OpenCodeSDKConfig): Promise<void> {
+  private async ensureOpenCodeModule(): Promise<LoadedOpenCodeSDKModule> {
     if (!this.opencodeModule) {
       this.opencodeModule = await loadOpenCodeSDK();
     }
+    return this.opencodeModule;
+  }
+
+  private async ensureClient(config: OpenCodeSDKConfig): Promise<void> {
+    const opencodeModule = await this.ensureOpenCodeModule();
+
+    this.validateSessionPolicyConfiguration(config);
 
     if (this.client) {
       return;
     }
+    if (this.clientInitialization !== undefined) {
+      return this.clientInitialization;
+    }
 
-    const { createOpencode, createOpencodeClient } = this.opencodeModule;
+    const { createOpencode, createOpencodeClient } = opencodeModule;
+    let initialization: Promise<void>;
+    initialization = (async () => {
+      if (config.baseUrl) {
+        this.client = createOpencodeClient({
+          baseUrl: config.baseUrl,
+        });
+        return;
+      }
 
-    if (config.baseUrl) {
-      this.client = createOpencodeClient({
-        baseUrl: config.baseUrl,
-      });
+      const serverOptions: {
+        hostname: string;
+        port: number;
+        timeout: number;
+        config?: Record<string, unknown>;
+        env?: Record<string, string>;
+      } = {
+        hostname: config.hostname ?? '127.0.0.1',
+        port: config.port ?? 0,
+        timeout: config.timeout ?? 30000,
+        env: this.buildServerEnv(config),
+      };
+
+      const serverConfig = this.buildServerConfig(config);
+      if (Object.keys(serverConfig).length > 0) {
+        serverOptions.config = serverConfig;
+      }
+
+      const opencode = await createOpencode(serverOptions);
+      this.client = opencode.client;
+      this.server = opencode.server;
+      logger.debug(`OpenCode server started at ${opencode.server.url}`);
+    })();
+    this.clientInitialization = initialization;
+    try {
+      await initialization;
+    } finally {
+      if (this.clientInitialization === initialization) {
+        this.clientInitialization = undefined;
+      }
+    }
+  }
+
+  private validateSessionPolicyConfiguration(config: OpenCodeSDKConfig): void {
+    if (!this.opencodeModule) {
       return;
     }
 
-    const serverOptions: {
-      hostname: string;
-      port: number;
-      timeout: number;
-      config?: Record<string, unknown>;
-      env?: Record<string, string>;
-    } = {
-      hostname: config.hostname ?? '127.0.0.1',
-      port: config.port ?? 0,
-      timeout: config.timeout ?? 30000,
-      env: this.buildServerEnv(config),
-    };
-
-    const serverConfig = this.buildServerConfig(config);
-    if (Object.keys(serverConfig).length > 0) {
-      serverOptions.config = serverConfig;
+    const hasPermissionRules = this.buildConfiguredPermissionRules(config).length > 0;
+    if (this.opencodeModule.apiVersion === 'v2' && config.session_id && hasPermissionRules) {
+      throw new Error(
+        'OpenCode SDK v2 explicit session_id resumes cannot safely rebind permission rules; create a new session to change permission.',
+      );
     }
 
-    const opencode = await createOpencode(serverOptions);
-    this.client = opencode.client;
-    this.server = opencode.server;
-    logger.debug(`OpenCode server started at ${opencode.server.url}`);
+    if (this.opencodeModule.apiVersion !== 'v1' || !hasPermissionRules) {
+      return;
+    }
+    const staticPolicyMatches =
+      JSON.stringify(this.buildEffectivePermissionRules(config)) ===
+      JSON.stringify(this.buildEffectivePermissionRules(this.config));
+    if (config.baseUrl || config.session_id || !staticPolicyMatches) {
+      throw new Error(
+        'OpenCode SDK v1 supports permission rules only for provider-level configuration on sessions started by Promptfoo; use tools for remote, resumed, or per-prompt policies.',
+      );
+    }
   }
 
   private async getOrCreateSession(
@@ -1266,11 +1459,6 @@ export class OpenCodeSDKProvider implements ApiProvider {
       };
     }
 
-    const toolsConfig = this.buildToolsConfig(config);
-    if (toolsConfig) {
-      promptBody.tools = toolsConfig;
-    }
-
     if (config.agent) {
       promptBody.agent = config.agent;
     } else if (config.custom_agent) {
@@ -1286,12 +1474,28 @@ export class OpenCodeSDKProvider implements ApiProvider {
     if (config.variant) {
       promptBody.variant = config.variant;
     }
-    // v1 accepts permission rules on the prompt payload; v2 moved them to session.create.
-    if (config.permission && this.opencodeModule.apiVersion === 'v1') {
-      promptBody.permission = config.permission;
+    // The prompt API atomically replaces boolean tool rules. V1 uses it for
+    // every supported call; v2 uses it for explicit resumes because new v2
+    // sessions receive the full permission ruleset when they are created.
+    if (
+      (this.opencodeModule.apiVersion === 'v1' || Boolean(config.session_id)) &&
+      this.buildConfiguredPermissionRules(config).length === 0
+    ) {
+      promptBody.tools = this.buildEffectiveToolsConfig(config);
     }
-
     return promptBody;
+  }
+
+  private buildEffectivePermissionRules(config: OpenCodeSDKConfig): OpenCodePermissionRule[] {
+    const customAgent = config.agent ? undefined : config.custom_agent;
+    return [
+      ...convertToolsConfigToRuleset(this.buildToolsConfig(config)),
+      ...(convertPermissionConfigToRuleset(config.permission) ?? []),
+      ...convertToolsConfigToRuleset(
+        this.buildToolsConfig({ ...config, tools: customAgent?.tools }, false),
+      ),
+      ...(convertPermissionConfigToRuleset(customAgent?.permission) ?? []),
+    ];
   }
 
   private buildCreateSessionParameters(
@@ -1309,13 +1513,10 @@ export class OpenCodeSDKProvider implements ApiProvider {
     } = {
       title: `promptfoo-${Date.now()}`,
     };
-    // v2 typed contract expects `PermissionRuleset = Array<PermissionRule>`
-    // at `session.create`; convert the user-facing object shape into rules.
-    if (config.permission && this.opencodeModule.apiVersion === 'v2') {
-      const ruleset = convertPermissionConfigToRuleset(config.permission);
-      if (ruleset) {
-        createBody.permission = ruleset;
-      }
+    // OpenCode treats legacy `tools` as permission sugar, then merges explicit
+    // permissions over it. Mirror that ordering in the v2 rule-array contract.
+    if (this.opencodeModule.apiVersion === 'v2') {
+      createBody.permission = this.buildEffectivePermissionRules(config);
     }
 
     // parentID is only honored by the v2 session.create body. v1 has no fork
@@ -1361,6 +1562,24 @@ export class OpenCodeSDKProvider implements ApiProvider {
       body: promptBody,
       query: sessionQuery,
     };
+  }
+
+  /**
+   * Whether the skill tool can run for this config, so the session-history
+   * round trip used for skill tracking can be skipped when it cannot.
+   *
+   * OpenCode permission rules are last-match-wins and the effective ruleset
+   * starts with a wildcard deny, so the final rule covering `skill` decides.
+   */
+  private isSkillToolEnabled(config: OpenCodeSDKConfig): boolean {
+    const rules = this.buildEffectivePermissionRules(config);
+    for (let i = rules.length - 1; i >= 0; i--) {
+      const rule = rules[i];
+      if (rule.permission === 'skill' || rule.permission === '*') {
+        return rule.action !== 'deny';
+      }
+    }
+    return true;
   }
 
   /**
@@ -1427,11 +1646,84 @@ export class OpenCodeSDKProvider implements ApiProvider {
     return relevantMessages.flatMap((m) => m.parts ?? []);
   }
 
+  private getSessionQueueKey(
+    config: OpenCodeSDKConfig,
+    workingDir: string | undefined,
+  ): string | undefined {
+    if (config.session_id) {
+      return generateCacheKey('opencode:sdk:explicit-session', { sessionId: config.session_id });
+    }
+    return config.persist_sessions ? this.buildSessionKey(config, workingDir) : undefined;
+  }
+
+  private async runSerializedSessionCall<T>(
+    queueKey: string | undefined,
+    abortSignal: AbortSignal | undefined,
+    run: () => Promise<T>,
+  ): Promise<T> {
+    if (!queueKey) {
+      return run();
+    }
+
+    const previous = this.sessionQueues.get(queueKey) ?? Promise.resolve();
+    let release: () => void = () => {};
+    const current = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const queued = previous.catch(() => undefined).then(() => current);
+    this.sessionQueues.set(queueKey, queued);
+    void queued.finally(() => {
+      if (this.sessionQueues.get(queueKey) === queued) {
+        this.sessionQueues.delete(queueKey);
+      }
+    });
+
+    try {
+      await this.waitForPreviousSessionCall(previous, abortSignal);
+      return await run();
+    } finally {
+      release();
+    }
+  }
+
+  private async waitForPreviousSessionCall(
+    previous: Promise<void>,
+    abortSignal: AbortSignal | undefined,
+  ): Promise<void> {
+    const previousDone = previous.catch(() => undefined);
+    if (!abortSignal) {
+      await previousDone;
+      return;
+    }
+    if (abortSignal.aborted) {
+      const error = new Error('OpenCode SDK session wait aborted');
+      error.name = 'AbortError';
+      throw error;
+    }
+
+    let onAbort: (() => void) | undefined;
+    const abortPromise = new Promise<void>((_, reject) => {
+      onAbort = () => {
+        const error = new Error('OpenCode SDK session wait aborted');
+        error.name = 'AbortError';
+        reject(error);
+      };
+      abortSignal.addEventListener('abort', onAbort, { once: true });
+    });
+    try {
+      await Promise.race([previousDone, abortPromise]);
+    } finally {
+      if (onAbort) {
+        abortSignal.removeEventListener('abort', onAbort);
+      }
+    }
+  }
+
   private buildProviderResponse(
     config: OpenCodeSDKConfig,
     response: OpenCodeSdkResult<OpenCodePromptResponse>,
     sessionId: string,
-    allSessionParts: OpenCodePromptPart[] = [],
+    allSessionParts: OpenCodePromptPart[],
   ): ProviderResponse {
     const responseData = unwrapOpenCodeResult(response);
     const assistantMessage = responseData?.info;
@@ -1538,123 +1830,143 @@ export class OpenCodeSDKProvider implements ApiProvider {
     callOptions?: CallApiOptionsParams,
   ): Promise<ProviderResponse> {
     const { config, isTempDir, workingDir } = this.prepareCall(context);
-
-    if (config.enable_streaming && !this.streamingWarningEmitted) {
-      this.streamingWarningEmitted = true;
-      logger.warn(
-        '[OpenCode SDK] enable_streaming is currently a no-op for this provider; the prompt will run to completion before returning.',
-      );
-    }
-
-    const mcpConfig = config.mcp && Object.keys(config.mcp).length > 0 ? config.mcp : undefined;
-    const cacheResult = await initializeAgenticCache(
-      {
-        cacheKeyPrefix: 'opencode:sdk',
-        workingDir: config.working_dir ? workingDir : undefined,
-        bustCache: context?.bustCache,
-        mcp: mcpConfig,
-        cacheMcp: config.cache_mcp,
-      },
-      {
-        prompt,
-        ...this.historyAffectingInputs(config),
-      },
-    );
-
-    const cachedResponse = await getCachedResponse(cacheResult, 'OpenCode SDK');
-    if (cachedResponse) {
-      return cachedResponse;
-    }
-
-    if (callOptions?.abortSignal?.aborted) {
-      return { error: 'OpenCode SDK call aborted before it started' };
-    }
-
     let ephemeralSession: OpenCodeSessionHandle | undefined;
     let abortListener: (() => void) | undefined;
 
     try {
-      await this.ensureClient(config);
-      const session = await this.getOrCreateSession(config, workingDir);
-      ephemeralSession = session.ephemeralSession;
+      this.buildEffectivePermissionRules(config);
+      await this.ensureOpenCodeModule();
+      this.validateSessionPolicyConfiguration(config);
 
-      const promptOptions = this.buildPromptParameters(
-        config,
-        prompt,
-        session.sessionId,
-        session.sessionQuery,
-      );
-
-      logger.debug(`OpenCode SDK prompt options:`, promptOptions);
-
-      const client = this.client;
-      if (!client) {
-        throw new Error('OpenCode SDK client is not initialized');
-      }
-
-      // If the caller's abortSignal fires mid-prompt, ask the server to stop
-      // rather than letting it run to completion while we discard the result.
-      // session.abort is only on v2; v1 has no abort primitive, so we still
-      // honor cancellation locally via the response check below.
-      const abortSignal = callOptions?.abortSignal;
-      if (abortSignal && client.session.abort && this.opencodeModule?.apiVersion === 'v2') {
-        const abortParams = this.buildAbortSessionParameters(
-          session.sessionId,
-          session.sessionQuery,
+      if (config.enable_streaming && !this.streamingWarningEmitted) {
+        this.streamingWarningEmitted = true;
+        logger.warn(
+          '[OpenCode SDK] enable_streaming is currently a no-op for this provider; the prompt will run to completion before returning.',
         );
-        abortListener = () => {
-          client.session.abort?.(abortParams).catch((err) => {
-            logger.debug(`[OpenCode SDK] Failed to abort session ${session.sessionId}: ${err}`);
-          });
-        };
-        abortSignal.addEventListener('abort', abortListener, { once: true });
       }
 
-      const response = await client.session.prompt(promptOptions);
-      logger.debug(`OpenCode SDK response received`);
+      const mcpConfig = config.mcp && Object.keys(config.mcp).length > 0 ? config.mcp : undefined;
+      const statefulSession = Boolean(config.session_id || config.persist_sessions);
+      const hasPermissionRules = this.buildConfiguredPermissionRules(config).length > 0;
+      const sensitiveMcpConfig = openCodeMcpContainsCacheSensitiveData(mcpConfig);
+      const sensitiveBaseUrl = openCodeBaseUrlContainsCacheSensitiveData(config.baseUrl);
+      const cacheResult =
+        statefulSession || hasPermissionRules || sensitiveMcpConfig || sensitiveBaseUrl
+          ? { shouldCache: false, shouldReadCache: false, shouldWriteCache: false }
+          : await initializeAgenticCache(
+              {
+                cacheKeyPrefix: 'opencode:sdk',
+                workingDir: config.working_dir ? workingDir : undefined,
+                bustCache: context?.bustCache,
+                mcp: mcpConfig,
+                cacheMcp: config.cache_mcp,
+              },
+              {
+                prompt,
+                ...this.historyAffectingInputs(config),
+              },
+            );
 
-      if (abortListener && abortSignal) {
-        abortSignal.removeEventListener('abort', abortListener);
-        abortListener = undefined;
+      const cachedResponse = await getCachedResponse(cacheResult, 'OpenCode SDK');
+      if (cachedResponse) {
+        return cachedResponse;
       }
 
-      if (abortSignal?.aborted) {
-        return { error: 'OpenCode SDK call aborted' };
+      if (callOptions?.abortSignal?.aborted) {
+        return { error: 'OpenCode SDK call aborted before it started' };
       }
 
-      // Fetch only the parts that belong to the current prompt from the session
-      // history so that deriveSkillCalls captures skill calls from intermediate
-      // turns. Gated on the effective tools config (buildToolsConfig defaults
-      // skill to false), so the extra round trip is skipped whenever the skill
-      // tool is disabled and no skill parts can exist.
-      let allSessionParts: OpenCodePromptPart[] = [];
-      if (this.buildToolsConfig(config)?.skill !== false) {
-        try {
-          allSessionParts = await this.fetchCurrentPromptParts(
-            client,
-            session,
-            response,
-            abortSignal,
+      await this.ensureClient(config);
+      const sessionQueueKey = this.getSessionQueueKey(config, workingDir);
+      return await this.runSerializedSessionCall(
+        sessionQueueKey,
+        callOptions?.abortSignal,
+        async () => {
+          const session = await this.getOrCreateSession(config, workingDir);
+          ephemeralSession = session.ephemeralSession;
+          if (callOptions?.abortSignal?.aborted) {
+            return { error: 'OpenCode SDK call aborted before it started' };
+          }
+
+          const promptOptions = this.buildPromptParameters(
+            config,
+            prompt,
+            session.sessionId,
+            session.sessionQuery,
           );
-        } catch (e) {
-          logger.debug(`[OpenCode SDK] Could not fetch session history for skill tracking: ${e}`);
-        }
-        if (abortSignal?.aborted) {
-          return { error: 'OpenCode SDK call aborted' };
-        }
-      }
+          logger.debug(`OpenCode SDK prompt options:`, promptOptions);
 
-      const providerResponse = this.buildProviderResponse(
-        config,
-        response,
-        session.sessionId,
-        allSessionParts,
+          const client = this.client;
+          if (!client) {
+            throw new Error('OpenCode SDK client is not initialized');
+          }
+
+          // If the caller's abortSignal fires mid-prompt, ask the server to stop
+          // rather than letting it run to completion while we discard the result.
+          // session.abort is only on v2; v1 has no abort primitive, so we still
+          // honor cancellation locally via the response check below.
+          const abortSignal = callOptions?.abortSignal;
+          if (abortSignal && client.session.abort && this.opencodeModule?.apiVersion === 'v2') {
+            const abortParams = this.buildAbortSessionParameters(
+              session.sessionId,
+              session.sessionQuery,
+            );
+            abortListener = () => {
+              client.session.abort?.(abortParams).catch((err) => {
+                logger.debug(`[OpenCode SDK] Failed to abort session ${session.sessionId}: ${err}`);
+              });
+            };
+            abortSignal.addEventListener('abort', abortListener, { once: true });
+          }
+
+          const response = await client.session.prompt(promptOptions);
+          logger.debug(`OpenCode SDK response received`);
+
+          // The prompt has returned, so an abort from here on must not ask the
+          // server to kill the session it already answered.
+          if (abortListener && abortSignal) {
+            abortSignal.removeEventListener('abort', abortListener);
+            abortListener = undefined;
+          }
+
+          if (abortSignal?.aborted) {
+            return { error: 'OpenCode SDK call aborted' };
+          }
+
+          // Fetch only the parts that belong to the current prompt from the session
+          // history so that deriveSkillCalls captures skill calls from intermediate
+          // turns. Gated on the effective tool policy, so the extra round trip is
+          // skipped whenever the skill tool is denied and no skill parts can exist.
+          let allSessionParts: OpenCodePromptPart[] = [];
+          if (this.isSkillToolEnabled(config)) {
+            try {
+              allSessionParts = await this.fetchCurrentPromptParts(
+                client,
+                session,
+                response,
+                abortSignal,
+              );
+            } catch (e) {
+              logger.debug(
+                `[OpenCode SDK] Could not fetch session history for skill tracking: ${e}`,
+              );
+            }
+            if (abortSignal?.aborted) {
+              return { error: 'OpenCode SDK call aborted' };
+            }
+          }
+
+          const providerResponse = this.buildProviderResponse(
+            config,
+            response,
+            session.sessionId,
+            allSessionParts,
+          );
+          await cacheResponse(cacheResult, providerResponse, 'OpenCode SDK');
+          logger.debug(`OpenCode SDK response: ${providerResponse.output.slice(0, 100)}...`);
+          return providerResponse;
+        },
       );
-
-      await cacheResponse(cacheResult, providerResponse, 'OpenCode SDK');
-      logger.debug(`OpenCode SDK response: ${providerResponse.output.slice(0, 100)}...`);
-
-      return providerResponse;
     } catch (error) {
       return this.handleCallError(error, callOptions);
     } finally {
