@@ -104,7 +104,9 @@ import { TokenUsageTracker } from './util/tokenUsage';
 import {
   accumulateAssertionTokenUsage,
   accumulateGradingRequest,
+  accumulateGradingTokenUsage,
   accumulateResponseTokenUsage,
+  cloneTokenUsageBreakdown,
   createEmptyAssertions,
   createEmptyTokenUsage,
 } from './util/tokenUsageUtils';
@@ -379,14 +381,37 @@ export class ProgressBarManager {
 function updateAssertionMetrics(
   metrics: { tokenUsage: Partial<TokenUsage> },
   assertionTokens: Partial<TokenUsage>,
+  options?: { cached?: boolean },
 ): void {
   if (metrics.tokenUsage && assertionTokens) {
+    const reportedTotal =
+      assertionTokens.total ?? (assertionTokens.prompt ?? 0) + (assertionTokens.completion ?? 0);
+    const cachedTokens = assertionTokens.cached ?? 0;
+    const cachedResponse =
+      options?.cached === true ||
+      (options?.cached === undefined &&
+        assertionTokens.numRequests === 0 &&
+        cachedTokens > 0 &&
+        reportedTotal <= cachedTokens);
+
+    if (cachedResponse && !metrics.tokenUsage.incurredTokenUsage) {
+      metrics.tokenUsage.incurredTokenUsage = cloneTokenUsageBreakdown(metrics.tokenUsage);
+    }
+
     if (!metrics.tokenUsage.assertions) {
       metrics.tokenUsage.assertions = createEmptyAssertions();
     }
 
     // Accumulate assertion tokens using the specialized assertion function
     accumulateAssertionTokenUsage(metrics.tokenUsage.assertions, assertionTokens);
+
+    if (metrics.tokenUsage.incurredTokenUsage && !cachedResponse) {
+      metrics.tokenUsage.incurredTokenUsage.assertions ??= createEmptyAssertions();
+      accumulateAssertionTokenUsage(
+        metrics.tokenUsage.incurredTokenUsage.assertions,
+        assertionTokens.incurredTokenUsage ?? assertionTokens,
+      );
+    }
   }
 }
 
@@ -593,10 +618,7 @@ function applyGradingResult(row: EvaluateResult, checkResult: GradingResult) {
   if (!row.tokenUsage) {
     row.tokenUsage = createEmptyTokenUsage();
   }
-  if (!row.tokenUsage.assertions) {
-    row.tokenUsage.assertions = createEmptyAssertions();
-  }
-  accumulateGradingRequest(row.tokenUsage.assertions, checkResult.tokensUsed, {
+  accumulateGradingTokenUsage(row.tokenUsage, checkResult.tokensUsed, {
     cached: checkResult.metadata?.cachedResponse,
   });
   row.gradingResult = checkResult;
@@ -1228,6 +1250,7 @@ function createEvaluateResult({
     namedScores: {},
     latencyMs: response.latencyMs ?? latencyMs,
     cost: response.cost,
+    ...(response.incurredCost !== undefined && { incurredCost: response.incurredCost }),
     metadata: {
       ...test.metadata,
       ...response.metadata,
@@ -1249,6 +1272,24 @@ function createEvaluateResult({
   return ret;
 }
 
+/** Persist both the logical evaluation footprint and the work actually incurred. */
+function normalizeCachedTargetResponse(response: ProviderResponse): ProviderResponse {
+  if (!response.cached && !response.tokenUsage) {
+    return response;
+  }
+
+  const tokenUsage = createEmptyTokenUsage();
+  accumulateResponseTokenUsage(tokenUsage, response);
+  return {
+    ...response,
+    tokenUsage,
+    ...(response.cost !== undefined &&
+      (response.cached || response.incurredCost !== undefined) && {
+        incurredCost: response.incurredCost ?? (response.cached ? 0 : response.cost),
+      }),
+  };
+}
+
 function trackProviderUsage(provider: ApiProvider, response: ProviderResponse) {
   if (!response.tokenUsage) {
     return;
@@ -1257,7 +1298,7 @@ function trackProviderUsage(provider: ApiProvider, response: ProviderResponse) {
   const trackingId = provider.constructor?.name
     ? `${providerId} (${provider.constructor.name})`
     : providerId;
-  TokenUsageTracker.getInstance().trackUsage(trackingId, response.tokenUsage);
+  TokenUsageTracker.getInstance().trackResponseUsage(trackingId, response);
 }
 
 async function applyRunEvalResponseOutcome({
@@ -1400,6 +1441,9 @@ async function gradeRunEvalResponse({
 
   const assertionProviderResponse = {
     ...processedResponse,
+    // Keep generated audio available to graders after persistence replaces its
+    // inline bytes with a blob reference in the saved result.
+    ...(response.audio?.data ? { audio: response.audio } : {}),
     providerTransformedOutput,
   };
 
@@ -1663,7 +1707,7 @@ async function runEvalInternal({
             traceContext: executionTraceContext,
             vars: state.vars,
           });
-          const { response } = providerCall;
+          const response = normalizeCachedTargetResponse(providerCall.response);
           latencyMs = providerCall.latencyMs;
 
           updateConversationHistory({
@@ -1956,13 +2000,13 @@ function updatePromptResultCounts(metrics: PromptMetrics, row: EvaluateResult) {
   }
 }
 
-async function updateDerivedMetrics(
+function updateDerivedMetrics(
   metrics: PromptMetrics,
   derivedMetrics: NonNullable<TestSuite['derivedMetrics']>,
   evalStep: RunEvalOptions,
   promptEvalCount: number,
+  math: typeof import('mathjs'),
 ) {
-  const math = await import('mathjs');
   if (Object.prototype.hasOwnProperty.call(metrics.namedScores, '__count')) {
     logger.warn("Metric name '__count' is reserved for derived metrics and will be overridden.");
   }
@@ -2051,13 +2095,26 @@ function mergeComparisonTokenUsage(
     prompt: 0,
     completion: 0,
   };
-  updateAssertionMetrics(
-    { tokenUsage: { assertions: result.gradingResult.tokensUsed } },
-    gradingResult.tokensUsed,
-  );
+  const rowTokensUsed = result.gradingResult.tokensUsed;
+  const rowMetrics = {
+    tokenUsage: {
+      assertions: rowTokensUsed,
+      ...(rowTokensUsed.incurredTokenUsage && {
+        incurredTokenUsage: { assertions: rowTokensUsed.incurredTokenUsage },
+      }),
+    },
+  };
+  updateAssertionMetrics(rowMetrics, gradingResult.tokensUsed, {
+    cached: gradingResult.metadata?.cachedResponse,
+  });
+  if (rowMetrics.tokenUsage.incurredTokenUsage?.assertions) {
+    rowTokensUsed.incurredTokenUsage = rowMetrics.tokenUsage.incurredTokenUsage.assertions;
+  }
 
   if (resultHasModelGradedAssertion(result)) {
-    updateAssertionMetrics({ tokenUsage: evalTokenUsage }, gradingResult.tokensUsed);
+    updateAssertionMetrics({ tokenUsage: evalTokenUsage }, gradingResult.tokensUsed, {
+      cached: gradingResult.metadata?.cachedResponse,
+    });
   }
 }
 
@@ -2986,6 +3043,7 @@ interface GroupedRows {
 interface EvalProcessingContext {
   assertionTypes: Set<string>;
   concurrency: number;
+  mathjsModule: typeof import('mathjs') | null;
   numComplete: number;
   options: InternalEvaluateOptions;
   promptEvalCounts: number[];
@@ -3362,12 +3420,13 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
     wasSuccess: boolean,
     wasScore: number,
     metrics: CompletedPrompt['metrics'] | undefined,
+    gradingCached?: boolean,
   ): void {
     if (metrics) {
       metrics.assertPassCount += passed ? 1 : 0;
       metrics.assertFailCount += passed ? 0 : 1;
       if (tokensUsed) {
-        updateAssertionMetrics(metrics, tokensUsed);
+        updateAssertionMetrics(metrics, tokensUsed, { cached: gradingCached });
       }
       if (!passed && result.score !== wasScore) {
         metrics.score += result.score - wasScore;
@@ -3427,19 +3486,21 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
     }
   }
 
-  private async updatePromptMetricsForRow({
+  private updatePromptMetricsForRow({
     derivedMetrics,
     evalStep,
+    mathjsModule,
     metrics,
     promptEvalCount,
     row,
   }: {
     derivedMetrics: TestSuite['derivedMetrics'];
     evalStep: RunEvalOptions;
+    mathjsModule: typeof import('mathjs') | null;
     metrics: PromptMetrics;
     promptEvalCount: number;
     row: EvaluateResult;
-  }): Promise<void> {
+  }): void {
     metrics.score += row.score;
     for (const [key, value] of Object.entries(row.namedScores)) {
       accumulateNamedMetric(metrics, {
@@ -3451,7 +3512,8 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
     }
 
     if (derivedMetrics) {
-      await updateDerivedMetrics(metrics, derivedMetrics, evalStep, promptEvalCount);
+      invariant(mathjsModule, 'Expected mathjs to be loaded for derived metrics');
+      updateDerivedMetrics(metrics, derivedMetrics, evalStep, promptEvalCount, mathjsModule);
     }
 
     updatePromptResultCounts(metrics, row);
@@ -3459,12 +3521,20 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
     metrics.assertPassCount += countedAssertResults.filter((r) => r.pass).length;
     metrics.assertFailCount += countedAssertResults.filter((r) => !r.pass).length;
     metrics.totalLatencyMs += row.latencyMs || 0;
-    accumulateResponseTokenUsage(metrics.tokenUsage, row.response);
+    accumulateResponseTokenUsage(metrics.tokenUsage, row.response, {
+      countCachedAsRequest: (row.tokenUsage?.numRequests ?? 0) > 0,
+    });
 
     if (row.gradingResult?.tokensUsed) {
-      updateAssertionMetrics(metrics, row.gradingResult.tokensUsed);
+      accumulateGradingTokenUsage(metrics.tokenUsage, row.gradingResult.tokensUsed, {
+        cached: row.gradingResult.metadata?.cachedResponse,
+      });
     }
 
+    if (row.incurredCost !== undefined || metrics.incurredCost !== undefined) {
+      metrics.incurredCost =
+        (metrics.incurredCost ?? metrics.cost) + (row.incurredCost ?? row.cost ?? 0);
+    }
     metrics.cost += row.cost || 0;
   }
 
@@ -3546,7 +3616,6 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
       // namedScores tracking here, move afterEach above this call.
       this.trackCompletedRow(evalStep, row, context);
       context.numComplete++;
-      const promptEvalCount = reservePromptEvalCount(context, row.promptIdx);
 
       // Apply afterEach hook mutations before persisting. Pass a shallow copy
       // so in-place mutations don't corrupt the row on hook failure.
@@ -3595,11 +3664,12 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
 
       const metrics = context.prompts[row.promptIdx].metrics;
       invariant(metrics, 'Expected prompt.metrics to be set');
-      await this.updatePromptMetricsForRow({
+      this.updatePromptMetricsForRow({
         derivedMetrics: context.testSuite.derivedMetrics,
         evalStep,
+        mathjsModule: context.mathjsModule,
         metrics,
-        promptEvalCount,
+        promptEvalCount: reservePromptEvalCount(context, row.promptIdx),
         row,
       });
 
@@ -3879,8 +3949,10 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
       processedIndices.add(index);
       await flushPromptMetrics();
     };
-    const flushGroupedRows = () =>
-      runGroupedGradingForRows(groupedRows, providerCallQueue, processGroupedRows);
+    const flushGroupedRows = async () => {
+      await runGroupedGradingForRows(groupedRows, providerCallQueue, processGroupedRows);
+      groupedRows.length = 0;
+    };
 
     try {
       for (const evalStep of groupedRunEvalOptions) {
@@ -3913,6 +3985,11 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
           })
         ) {
           break;
+        }
+
+        // Finish audio grading before collecting another inline clip.
+        if (rows.some((row) => row.response?.audio && deferredGradingPromises.has(row))) {
+          await flushGroupedRows();
         }
       }
     } catch (error) {
@@ -4420,7 +4497,33 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
       wasSuccess,
       wasScore,
       metrics,
+      gradingResult.metadata?.cachedResponse,
     );
+    if (
+      result.response?.cached &&
+      result.response.tokenUsage &&
+      (result.response.tokenUsage.numRequests ?? 0) === 0 &&
+      gradingResult.tokensUsed
+    ) {
+      const comparisonUsage = createEmptyAssertions();
+      accumulateGradingRequest(comparisonUsage, gradingResult.tokensUsed, {
+        cached: gradingResult.metadata?.cachedResponse,
+      });
+      if ((comparisonUsage.numRequests ?? 0) > 0) {
+        result.response.tokenUsage.numRequests = 1;
+        const evaluatedResult = this.store.toEvaluateResult(result);
+        if (evaluatedResult.tokenUsage) {
+          evaluatedResult.tokenUsage.numRequests = Math.max(
+            evaluatedResult.tokenUsage.numRequests ?? 0,
+            1,
+          );
+        }
+        this.stats.tokenUsage.numRequests = (this.stats.tokenUsage.numRequests ?? 0) + 1;
+        if (metrics) {
+          metrics.tokenUsage.numRequests = (metrics.tokenUsage.numRequests ?? 0) + 1;
+        }
+      }
+    }
     this.trackFinalJsonlResult(result);
     if (this.store.persisted && !this.store.hasResultPersistenceFailure(result)) {
       await this.store.saveResult(result);
@@ -4759,9 +4862,14 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
     concurrency = concurrencySettings.concurrency;
     const { usesConversationVar } = concurrencySettings;
 
+    // Awaiting after accumulating scores lets other rows change the total
+    // before derived metrics use this row's __count.
+    const mathjsModule = testSuite.derivedMetrics ? await import('mathjs') : null;
+
     const processingContext: EvalProcessingContext = {
       assertionTypes,
       concurrency,
+      mathjsModule,
       numComplete: 0,
       options,
       promptEvalCounts: createPromptEvalCounts(prompts),

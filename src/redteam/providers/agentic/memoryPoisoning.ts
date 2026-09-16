@@ -3,7 +3,11 @@ import { getUserEmail } from '../../../globalConfig/accounts';
 import logger from '../../../logger';
 import { fetchWithProxy } from '../../../util/fetch/index';
 import invariant from '../../../util/invariant';
-import { accumulateResponseTokenUsage, createEmptyTokenUsage } from '../../../util/tokenUsageUtils';
+import {
+  accumulateAttackerTokenUsage,
+  accumulateResponseTokenUsage,
+  createEmptyTokenUsage,
+} from '../../../util/tokenUsageUtils';
 import { REDTEAM_MEMORY_POISONING_PLUGIN_ID } from '../../plugins/agentic/constants';
 import { getRemoteGenerationHeaders, getRemoteGenerationUrl } from '../../remoteGeneration';
 import { remoteGenerationContextPayload } from '../../remoteGenerationContext';
@@ -91,6 +95,9 @@ export class MemoryPoisoningProvider implements ApiProvider {
       context!.test!.metadata['scenario'] = scenario;
 
       const totalTokenUsage = createEmptyTokenUsage();
+      if (scenario.tokenUsage) {
+        accumulateAttackerTokenUsage(totalTokenUsage, { tokenUsage: scenario.tokenUsage });
+      }
 
       // Send the memory message to the provider.
       throwIfTargetPromptExceedsMaxChars(scenario.memory);

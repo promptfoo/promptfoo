@@ -342,6 +342,7 @@ const PromptMetricsSchema = z.object({
     })
     .optional(),
   cost: z.number(),
+  incurredCost: z.number().optional(),
 });
 export type PromptMetrics = z.infer<typeof PromptMetricsSchema>;
 
@@ -407,6 +408,7 @@ export interface EvaluateResult {
   gradingResult?: GradingResult | null;
   namedScores: Record<string, number>;
   cost?: number;
+  incurredCost?: number;
   metadata?: Record<string, any>;
   tokenUsage?: NormalizedTokenUsage;
   /**
@@ -609,7 +611,7 @@ export function countedComponentResults(
   componentResults: (GradingResult | null | undefined)[] | null | undefined,
 ): GradingResult[] {
   return (componentResults ?? []).filter(
-    (result): result is GradingResult => Boolean(result) && !result?.assertion?.metricOnly,
+    (result): result is GradingResult => result != null && !result.assertion?.metricOnly,
   );
 }
 
