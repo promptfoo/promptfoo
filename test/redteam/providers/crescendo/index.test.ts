@@ -1036,15 +1036,13 @@ describe('CrescendoProvider', () => {
         prompt: 'Delivered request',
         originalPrompt: 'Delivered request',
       });
-      const getResult = vi
-        .fn()
-        .mockResolvedValue({
-          grade: {
-            pass: false,
-            score: 0,
-            reason: 'A name not supplied in the target conversation',
-          },
-        });
+      const getResult = vi.fn().mockResolvedValue({
+        grade: {
+          pass: false,
+          score: 0,
+          reason: 'A name not supplied in the target conversation',
+        },
+      });
       mockGetGraderById.mockReturnValue({ getResult });
       mockRedTeamProvider.callApi
         .mockResolvedValueOnce({
