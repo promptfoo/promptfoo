@@ -24,21 +24,21 @@ async function loadEvoLinkProvider(env: EnvOverrides, id = 'openai:chat:evolink/
 }
 
 describe('provider-evolink example', () => {
-  it.each([
-    undefined,
-    '',
-  ])('does not reuse ambient OpenAI settings when the EvoLink key is %s', async (apiKey) => {
-    const provider = await loadEvoLinkProvider({
-      EVOLINK_API_KEY: apiKey,
-      OPENAI_API_HOST: 'ambient-openai.example.test',
-      OPENAI_API_KEY: 'openai-decoy-key',
-      OPENAI_ORGANIZATION: 'openai-decoy-org',
-    });
+  it.each([undefined, ''])(
+    'does not reuse ambient OpenAI settings when the EvoLink key is %s',
+    async (apiKey) => {
+      const provider = await loadEvoLinkProvider({
+        EVOLINK_API_KEY: apiKey,
+        OPENAI_API_HOST: 'ambient-openai.example.test',
+        OPENAI_API_KEY: 'openai-decoy-key',
+        OPENAI_ORGANIZATION: 'openai-decoy-org',
+      });
 
-    expect(provider.getApiUrl()).toBe('https://direct.evolink.ai/v1');
-    expect(provider.getApiKey()).toBe('__EVOLINK_API_KEY_REQUIRED__');
-    expect(provider.getOpenAiRequestHeaders()).not.toHaveProperty('OpenAI-Organization');
-  });
+      expect(provider.getApiUrl()).toBe('https://direct.evolink.ai/v1');
+      expect(provider.getApiKey()).toBe('__EVOLINK_API_KEY_REQUIRED__');
+      expect(provider.getOpenAiRequestHeaders()).not.toHaveProperty('OpenAI-Organization');
+    },
+  );
 
   it('uses the configured EvoLink key', async () => {
     const provider = await loadEvoLinkProvider({

@@ -5,7 +5,7 @@ prompts:
   - file://prompts/name_capitals_concise.txt
   - file://prompts/name_capitals_verbose.txt
 providers:
-  - openai:chat:gpt-5.4-mini
+  - openai:chat:gpt-5.6-luna
 tests:
   - vars:
       location: Sacramento
