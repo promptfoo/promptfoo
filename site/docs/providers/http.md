@@ -347,6 +347,8 @@ transformRequest: 'file://transforms/request.js:transformRequest'
 
 ## Response Transform
 
+Compressed responses are decoded automatically. A request fails if a decompression stage produces more than 64 MiB of data.
+
 The `transformResponse` option allows you to extract and transform the API response. If no `transformResponse` is specified, the provider will attempt to parse the response as JSON. If JSON parsing fails, it will return the raw text response.
 
 You can override this behavior by specifying a `transformResponse` in the provider config. The `transformResponse` can be one of the following:

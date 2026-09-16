@@ -40,7 +40,7 @@ providers:
     config:
       temperature: 0.2
       max_tokens: 1000
-      search_domain_filter: ['wikipedia.org', 'nature.com', '-reddit.com'] # Include wikipedia/nature, exclude reddit
+      search_domain_filter: ['wikipedia.org', 'nature.com'] # Only search these domains
       search_recency_filter: 'week' # Only use recent sources
 ```
 
@@ -50,7 +50,7 @@ providers:
 
 Perplexity models automatically search the internet and cite sources. You can control this with:
 
-- `search_domain_filter`: List of domains to include/exclude (prefix with `-` to exclude)
+- `search_domain_filter`: Use an allowlist of domains or a denylist with each domain prefixed by `-`; [the two modes cannot be mixed](https://docs.perplexity.ai/docs/sonar/filters).
 - `search_recency_filter`: Time filter for sources ('month', 'week', 'day', 'hour')
 - `return_related_questions`: Get follow-up question suggestions
 - `web_search_options.search_context_size`: Control search context amount ('low', 'medium', 'high')
@@ -59,7 +59,7 @@ Perplexity models automatically search the internet and cite sources. You can co
 providers:
   - id: perplexity:sonar-pro
     config:
-      search_domain_filter: ['stackoverflow.com', 'github.com', '-quora.com']
+      search_domain_filter: ['stackoverflow.com', 'github.com']
       search_recency_filter: 'month'
       return_related_questions: true
       web_search_options:
@@ -123,7 +123,7 @@ providers:
       response_format:
         type: 'regex'
         regex:
-          regex: "(?:(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.){3}(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)"
+          regex: '(?:(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.){3}(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)'
 ```
 
 **Note**: First request with a new schema may take 10-30 seconds to prepare. For reasoning models, the response will include a `<think>` section followed by the structured output.
@@ -139,24 +139,13 @@ providers:
       return_images: true
 ```
 
+Perplexity citations are exposed through the standard `metadata.citations` field. The raw `citations`, `search_results`, `images`, and `related_questions` arrays returned by the API are preserved under `metadata.perplexity`; for example, returned image results are available at `metadata.perplexity.images`.
+
 ### Cost Tracking
 
-promptfoo includes built-in cost calculation for Perplexity models based on their official pricing. You can specify the usage tier with the `usage_tier` parameter:
+promptfoo uses the total returned by Perplexity in `usage.cost.total_cost`, including the charges calculated by the API for that request. If the API omits a valid total, cost is unavailable; prompt and completion token counts alone omit request, search, citation, or reasoning charges. For cached responses with known cost, `cost` retains that value for assertions and the evaluator records `incurredCost: 0`. See the [Sonar response schema](https://docs.perplexity.ai/api-reference/sonar-post) and [Perplexity pricing](https://docs.perplexity.ai/docs/getting-started/pricing).
 
-```yaml
-providers:
-  - id: perplexity:sonar-pro
-    config:
-      usage_tier: 'medium' # Options: 'high', 'medium', 'low'
-```
-
-The cost calculation includes:
-
-- Different rates for input and output tokens
-- Model-specific pricing (sonar, sonar-pro, sonar-reasoning, etc.)
-- Usage tier considerations (high, medium, low)
-
-The local token-based cost estimate is partial: it excludes search/request fees and Deep Research citation and reasoning charges. Unknown model names use the Sonar fallback rates, which do not verify pricing for that model. Check [Perplexity pricing](https://docs.perplexity.ai/docs/getting-started/pricing) for all applicable charges.
+The legacy `usage_tier` option does not determine billing. Use the documented search controls, such as `web_search_options.search_context_size`, to configure request behavior.
 
 ## Advanced Use Cases
 
@@ -239,7 +228,7 @@ npx promptfoo@latest init --example provider-perplexity
 
 ## Pricing and Rate Limits
 
-Pricing varies by model and usage tier:
+Token prices are only part of each request's cost:
 
 | Model               | Input Tokens (per million) | Output Tokens (per million) |
 | ------------------- | -------------------------- | --------------------------- |
@@ -250,9 +239,7 @@ Pricing varies by model and usage tier:
 | sonar-deep-research | $2                         | $8                          |
 | r1-1776             | $2                         | $8                          |
 
-Rate limits also vary by usage tier (high, medium, low). Specify your tier with the `usage_tier` parameter to get accurate cost calculations.
-
-Check [Perplexity's pricing page](https://docs.perplexity.ai/docs/pricing) for the latest rates.
+Check [Perplexity's pricing page](https://docs.perplexity.ai/docs/getting-started/pricing) for current rates and additional request charges.
 
 ## Troubleshooting
 
