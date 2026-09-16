@@ -1078,6 +1078,9 @@
           "type": "number"
         },
         "provider": {},
+        "rubricComponents": {
+          "type": "boolean"
+        },
         "rubricPrompt": {},
         "metric": {
           "type": "string"

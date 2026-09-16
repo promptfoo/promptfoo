@@ -13,6 +13,85 @@ const make = (overrides: Partial<Assertion>): Assertion =>
   ({ type: 'contains', value: '', ...overrides }) as Assertion;
 
 describe('getRunnableAssertionValueError', () => {
+  describe.each(['llm-rubric', 'not-llm-rubric'] as const)('%s components', (type) => {
+    it('accepts a runnable structured batch and preserves legacy values', () => {
+      for (const value of [
+        undefined,
+        'rubric',
+        ['rubric'],
+        { custom: 'rubric' },
+        { components: 'Legacy field' },
+        { components: [{ metric: 'quality', value: 'Accurate', weight: 2 }] },
+      ]) {
+        expect(getRunnableAssertionValueError(make({ type, value }))).toBeUndefined();
+      }
+    });
+
+    it('requires a valid component value only with explicit opt-in', () => {
+      expect(
+        getRunnableAssertionValueError(
+          make({
+            type,
+            rubricComponents: true,
+            value: { components: [{ metric: 'quality', value: 'Good answer' }] },
+          }),
+        ),
+      ).toBeUndefined();
+      expect(
+        getRunnableAssertionValueError(
+          make({ type, rubricComponents: true, value: 'file://rubric.cjs:getRubric' }),
+        ),
+      ).toBeUndefined();
+      for (const value of [
+        undefined,
+        'legacy rubric',
+        { components: 'Legacy field' },
+        { components: [] },
+      ]) {
+        expect(
+          getRunnableAssertionValueError(make({ type, rubricComponents: true, value })),
+        ).toContain('Invalid llm-rubric components');
+        expect(
+          getRunnableAssertionValueError(make({ type, rubricComponents: false, value })),
+        ).toBeUndefined();
+      }
+    });
+
+    it.each([
+      { components: [] },
+      {
+        components: [
+          { metric: 'a', value: 'rubric' },
+          { metric: 'a', value: 'another rubric' },
+        ],
+      },
+      { components: [{ metric: '__proto__', value: 'rubric' }] },
+      { components: [{ metric: '__count', value: 'rubric' }] },
+      { components: [{ metric: '{{ metric }}', value: 'rubric' }] },
+      { components: [{ metric: 'a', value: 'rubric', weight: 0 }] },
+      { components: [{ metric: 'a', value: 'rubric', provider: 'PRIVATE_PROVIDER' }] },
+    ])('rejects invalid components at save and run time', (value) => {
+      const assertion = make({ type, value, rubricComponents: true });
+      expect(getAssertionValueError(assertion)).toContain('Invalid llm-rubric components');
+      expect(getRunnableAssertionValueError(assertion)).toEqual(getAssertionValueError(assertion));
+      expect(getAssertionValueError(assertion)).not.toContain('PRIVATE_PROVIDER');
+    });
+
+    it('rejects parent metric collisions, metric templates, and invalid thresholds', () => {
+      const value = { components: [{ metric: 'quality', value: 'rubric' }] };
+      for (const options of [
+        { metric: 'quality' },
+        { metric: '{{ metric }}' },
+        { metric: '__count' },
+        { threshold: 1.1 },
+      ]) {
+        expect(
+          getRunnableAssertionValueError(make({ type, value, rubricComponents: true, ...options })),
+        ).toBeDefined();
+      }
+    });
+  });
+
   describe('required text/number assertions', () => {
     it('rejects an empty contains value', () => {
       expect(getRunnableAssertionValueError(make({ type: 'contains', value: '' }))).toMatch(

@@ -1,4 +1,9 @@
-import type { Assertion, AssertionType } from '@promptfoo/types';
+import {
+  type Assertion,
+  type AssertionType,
+  LLM_RUBRIC_COMPONENTS_CONFIG_ERROR,
+  LlmRubricComponentsAssertionSchema,
+} from '@promptfoo/types';
 
 const BASE_ASSERTION_TYPES = [
   'agent-rubric',
@@ -429,6 +434,15 @@ function getTrajectoryToolSequenceValueError(value: unknown): string | undefined
 }
 
 function getStructuredValueError(assertion: Assertion): string | undefined {
+  if (
+    (assertion.type === 'llm-rubric' || assertion.type === 'not-llm-rubric') &&
+    assertion.rubricComponents === true &&
+    !(typeof assertion.value === 'string' && assertion.value.startsWith('file://')) &&
+    !LlmRubricComponentsAssertionSchema.safeParse(assertion).success
+  ) {
+    return LLM_RUBRIC_COMPONENTS_CONFIG_ERROR;
+  }
+
   if (
     OPTIONAL_SQL_CONFIGURATION_TYPES.has(assertion.type) &&
     assertion.value !== undefined &&
