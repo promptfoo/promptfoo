@@ -60,7 +60,8 @@ function resolveImageObject(image: {
 }
 
 // Mock the media utilities
-vi.mock('@app/utils/media', () => ({
+vi.mock('@app/utils/media', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@app/utils/media')>()),
   normalizeMediaText: (text: string) => {
     // Simplified normalization - replace blob URIs and storage refs with API paths
     return text

@@ -97,6 +97,30 @@ describe('runEval', () => {
     );
   });
 
+  it('passes result coordinates to the provider context', async () => {
+    await runEval({
+      ...defaultOptions,
+      evalId: 'eval-provider-context',
+      promptIdx: 4,
+      provider: mockProvider,
+      prompt: { raw: 'Test prompt', label: 'test-label' },
+      test: {},
+      testIdx: 3,
+      conversations: {},
+      registers: {},
+    });
+
+    expect(mockProvider.callApi).toHaveBeenCalledWith(
+      'Test prompt',
+      expect.objectContaining({
+        evaluationId: 'eval-provider-context',
+        promptIdx: 4,
+        testIdx: 3,
+      }),
+      undefined,
+    );
+  });
+
   it('excludes eval runtime vars from the persisted result', async () => {
     const results = await runEval({
       ...defaultOptions,
