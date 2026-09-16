@@ -13,7 +13,7 @@ This provider integrates [OpenCode](https://opencode.ai/), an open-source AI cod
 - `opencode:sdk` - Uses OpenCode's configured model
 - `opencode` - Same as `opencode:sdk`
 
-The model is configured via the OpenCode CLI or `~/.opencode/config.yaml`.
+When you omit `provider_id` and `model`, OpenCode selects the model using its own configuration and defaults. Set a global model in `~/.config/opencode/opencode.json`; see [OpenCode configuration](https://opencode.ai/docs/config/). Additional suffixes on the promptfoo provider ID identify provider instances; they do not select a model.
 
 ## Installation
 
@@ -77,26 +77,26 @@ prompts:
   - 'Write a Python function that validates email addresses'
 ```
 
-Configure your model via the OpenCode CLI: `opencode config set model openai/gpt-4o`
+Select a model with `/models` in OpenCode, or set `model` in your OpenCode configuration.
 
 By default, OpenCode SDK runs in a temporary directory with no tools enabled. When your test cases finish, the temporary directory is deleted.
 
 ### With Inline Model Configuration
 
-Specify the provider and model directly in your config:
+Set `provider_id` to the OpenCode provider key and `model` to the model ID within that provider:
 
 ```yaml title="promptfooconfig.yaml"
 providers:
   - id: opencode:sdk
     config:
       provider_id: anthropic
-      model: claude-sonnet-4-20250514
+      model: claude-sonnet-4-6
 
 prompts:
   - 'Write a Python function that validates email addresses'
 ```
 
-This overrides the model configured via the OpenCode CLI for this specific eval.
+This overrides OpenCode's model selection for this specific eval. Keep `provider_id` separate from `model`; for example, a custom provider with a model ID of `team/model-name` uses `provider_id: my-provider` and `model: team/model-name`.
 
 ### With Working Directory
 
@@ -199,7 +199,7 @@ When enabling write/edit/bash tools, consider how you will reset files after eac
 | `working_dir`       | string  | Directory for file operations and read-only default tools                  | Temporary directory                    |
 | `workspace`         | string  | Workspace identifier for workspace-aware OpenCode requests                 | None                                   |
 | `provider_id`       | string  | LLM provider (`anthropic`, `openai`, `google`, `ollama`, etc.)             | OpenCode default                       |
-| `model`             | string  | Model to use for this request                                              | OpenCode default                       |
+| `model`             | string  | Model ID within `provider_id`; set both for an explicit selection          | OpenCode default                       |
 | `format`            | object  | Output format, including JSON Schema structured output                     | Text                                   |
 | `variant`           | string  | Provider/model variant defined in OpenCode config                          | Default variant                        |
 | `tools`             | object  | Tool configuration                                                         | None; read-only with `working_dir`     |
@@ -238,18 +238,16 @@ OpenCode supports 75+ LLM providers through [Models.dev](https://models.dev/):
 - LM Studio
 - llama.cpp
 
-Configure your preferred model using the OpenCode CLI:
+Configure your preferred default model in OpenCode's global configuration:
 
-```bash
-# Set your default model
-opencode config set model anthropic/claude-sonnet-4-20250514
-
-# Or for OpenAI
-opencode config set model openai/gpt-4o
-
-# Or for local models
-opencode config set model ollama/llama3
+```json title="~/.config/opencode/opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "model": "anthropic/claude-sonnet-4-6"
+}
 ```
+
+OpenCode's `model` setting uses the full `provider/model-id` format, such as `openai/gpt-4o` or `ollama/llama3`. Use the provider key and model ID configured on your OpenCode server, including any model path segments.
 
 ## Tools and Permissions
 
@@ -505,7 +503,7 @@ providers:
       custom_agent:
         description: Security-focused code reviewer
         mode: primary # 'primary', 'subagent', or 'all'
-        model: claude-sonnet-4-20250514
+        model: anthropic/claude-sonnet-4-6
         temperature: 0.3
         top_p: 0.9 # Nucleus sampling parameter
         steps: 10 # Max iterations before text-only response
@@ -525,11 +523,13 @@ providers:
 
 `custom_agent` is applied when promptfoo starts the OpenCode server itself. If you use `baseUrl`, define that agent on the target server and use `agent` to select it.
 
+`custom_agent.model` uses OpenCode's full [`provider/model-id` format](https://opencode.ai/docs/agents/#model). For example, `anthropic/claude-sonnet-4-6` selects the Anthropic provider. Unlike the top-level `model` field, it includes the provider key; promptfoo passes this string unchanged. Omit it to use OpenCode's agent model defaults.
+
 | Parameter     | Type    | Description                               |
 | ------------- | ------- | ----------------------------------------- |
 | `description` | string  | Required. Explains the agent's purpose    |
 | `mode`        | string  | 'primary', 'subagent', or 'all'           |
-| `model`       | string  | Model ID (overrides global)               |
+| `model`       | string  | Full OpenCode `provider/model-id`         |
 | `temperature` | number  | Response randomness (0.0-1.0)             |
 | `top_p`       | number  | Nucleus sampling (0.0-1.0)                |
 | `steps`       | number  | Max iterations before text-only response  |
