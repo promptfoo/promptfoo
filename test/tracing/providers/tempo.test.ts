@@ -77,6 +77,53 @@ describe('TempoProvider', () => {
     mockedFetch.mockImplementation(async () => response(traceResponse));
   });
 
+  it.each(['{', 'null', '[]', '{"batches":null}', '{"batches":{}}'])(
+    'marks invalid JSON or response shape %s as invalid evidence',
+    async (body) => {
+      mockedFetch.mockResolvedValueOnce(
+        new Response(body, { headers: { 'content-type': 'application/json' } }),
+      );
+      await expect(
+        new TempoProvider({ id: 'tempo', endpoint: 'http://tempo:3200' }).fetchTrace(TRACE_ID),
+      ).rejects.toMatchObject({
+        name: 'TraceProviderError',
+        invalidEvidence: true,
+        retryable: false,
+      });
+      expect(mockedFetch).toHaveBeenCalledTimes(1);
+    },
+  );
+
+  it.each(
+    ['resource', 'span', 'event'].flatMap((location) =>
+      [undefined, null].map((attributes) => ({ location, attributes })),
+    ),
+  )(
+    'distinguishes omitted and null $location attributes: $attributes',
+    async ({ location, attributes }) => {
+      const data = structuredClone(traceResponse);
+      const batch = data.batches[0];
+      const span = batch.scopeSpans[0].spans[0];
+      const item =
+        location === 'resource' ? batch.resource : location === 'span' ? span : span.events![0];
+      Object.assign(item, { attributes });
+      mockedFetch.mockResolvedValueOnce(response(data));
+      const pending = new TempoProvider({ id: 'tempo', endpoint: 'http://tempo:3200' }).fetchTrace(
+        TRACE_ID,
+      );
+      if (attributes === null) {
+        await expect(pending).rejects.toMatchObject({
+          name: 'TraceProviderError',
+          invalidEvidence: true,
+          retryable: false,
+        });
+      } else {
+        expect((await pending)?.spans).toHaveLength(2);
+      }
+      expect(mockedFetch).toHaveBeenCalledTimes(1);
+    },
+  );
+
   it.each(['resource', 'scope', 'span', 'event', 'event count'])(
     'rejects Tempo snapshots with dropped %s evidence',
     async (source) => {

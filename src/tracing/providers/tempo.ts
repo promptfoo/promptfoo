@@ -85,7 +85,7 @@ function attributesToRecord(
   attributes?: Array<{ key: string; value: TempoAttributeValue }>,
 ): Record<string, unknown> {
   try {
-    return parseOtlpAttributes(attributes ?? undefined);
+    return parseOtlpAttributes(attributes);
   } catch (error) {
     throw new TraceProviderError(
       error instanceof Error ? error.message : 'Tempo attribute decoding failed',
@@ -298,10 +298,14 @@ export class TempoProvider implements TraceProvider {
     return headers;
   }
 
-  private transformSpans(data: TempoTraceResponse, traceId: string): SpanData[] {
+  private transformSpans(body: string, traceId: string): SpanData[] {
     const spans = new Map<string, SpanData>();
     try {
-      for (const batch of data.batches ?? []) {
+      const data = JSON.parse(body) as TempoTraceResponse;
+      if (!data || !Array.isArray(data.batches)) {
+        throw new Error('Tempo returned an invalid trace response');
+      }
+      for (const batch of data.batches) {
         if (!batch || !Array.isArray(batch.scopeSpans)) {
           throw new Error('Tempo batch must contain a scopeSpans array');
         }
@@ -388,12 +392,7 @@ export class TempoProvider implements TraceProvider {
       });
     }
     const body = await readLimitedResponse(response, 'Tempo');
-    const data = JSON.parse(body) as TempoTraceResponse;
-    if (!Array.isArray(data.batches)) {
-      throw new TraceProviderError('Tempo returned an invalid trace response');
-    }
-
-    const spans = this.transformSpans(data, traceId);
+    const spans = this.transformSpans(body, traceId);
     const services = new Set<string>();
     for (const span of spans) {
       const service = span.attributes?.['service.name'];
