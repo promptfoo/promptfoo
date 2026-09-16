@@ -455,66 +455,93 @@ describe('OTLPReceiver', () => {
       );
     });
 
-    it('should parse different attribute types', async () => {
-      // Manually override the traceStore property for this test too
-      (receiver as any).traceStore = mockTraceStore;
-      const otlpRequest = {
-        resourceSpans: [
-          {
-            scopeSpans: [
-              {
-                spans: [
-                  {
-                    traceId: Buffer.from('bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb', 'hex').toString(
-                      'base64',
-                    ),
-                    spanId: Buffer.from('3333333333333333', 'hex').toString('base64'),
-                    name: 'test-attributes',
-                    startTimeUnixNano: '1000000000',
-                    attributes: [
-                      { key: 'string.attr', value: { stringValue: 'hello' } },
-                      { key: 'int.attr', value: { intValue: '123' } },
-                      { key: 'double.attr', value: { doubleValue: 3.14 } },
-                      { key: 'bool.attr', value: { boolValue: true } },
-                      {
-                        key: 'array.attr',
-                        value: {
-                          arrayValue: {
-                            values: [{ stringValue: 'a' }, { stringValue: 'b' }],
+    it.each(['json', 'protobuf'])(
+      'should parse different attribute types from %s',
+      async (format) => {
+        // Manually override the traceStore property for this test too
+        (receiver as any).traceStore = mockTraceStore;
+        const id = (hex: string) =>
+          format === 'json' ? Buffer.from(hex, 'hex').toString('base64') : Buffer.from(hex, 'hex');
+        const otlpRequest = {
+          resourceSpans: [
+            {
+              scopeSpans: [
+                {
+                  spans: [
+                    {
+                      traceId: id('bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb'),
+                      spanId: id('3333333333333333'),
+                      name: 'test-attributes',
+                      startTimeUnixNano: '1000000000',
+                      attributes: [
+                        { key: 'string.attr', value: { stringValue: 'hello' } },
+                        { key: 'int.attr', value: { intValue: '123' } },
+                        { key: 'large.attr', value: { intValue: '9007199254740993' } },
+                        { key: 'double.attr', value: { doubleValue: 3.14 } },
+                        { key: 'bool.attr', value: { boolValue: true } },
+                        {
+                          key: 'bytes.attr',
+                          value: { bytesValue: format === 'json' ? 'YWJj' : Buffer.from('abc') },
+                        },
+                        {
+                          key: 'map.attr',
+                          value: {
+                            kvlistValue: {
+                              values: [
+                                {
+                                  key: 'nested',
+                                  value: {
+                                    arrayValue: { values: [{ intValue: '9007199254740993' }] },
+                                  },
+                                },
+                              ],
+                            },
                           },
                         },
-                      },
-                    ],
-                  },
-                ],
-              },
-            ],
-          },
-        ],
-      };
+                        {
+                          key: 'array.attr',
+                          value: {
+                            arrayValue: {
+                              values: [{ stringValue: 'a' }, { stringValue: 'b' }],
+                            },
+                          },
+                        },
+                      ],
+                    },
+                  ],
+                },
+              ],
+            },
+          ],
+        };
 
-      await request(receiver.getApp())
-        .post('/v1/traces')
-        .set('Content-Type', 'application/json')
-        .send(otlpRequest)
-        .expect(200);
+        await request(receiver.getApp())
+          .post('/v1/traces')
+          .set('Content-Type', format === 'json' ? 'application/json' : 'application/x-protobuf')
+          .send(format === 'json' ? otlpRequest : await encodeOTLPRequest(otlpRequest))
+          .expect(200);
 
-      expect(persistSpans).toHaveBeenCalledWith(
-        'bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb',
-        expect.arrayContaining([
-          expect.objectContaining({
-            attributes: expect.objectContaining({
-              'string.attr': 'hello',
-              'int.attr': 123,
-              'double.attr': 3.14,
-              'bool.attr': true,
-              'array.attr': ['a', 'b'],
+        expect(persistSpans).toHaveBeenCalledWith(
+          'bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb',
+          expect.arrayContaining([
+            expect.objectContaining({
+              attributes: expect.objectContaining({
+                'string.attr': 'hello',
+                'int.attr': 123,
+                'large.attr': '9007199254740993',
+                'map.attr': { nested: ['9007199254740993'] },
+                'double.attr': 3.14,
+                'bool.attr': true,
+                'array.attr': ['a', 'b'],
+              }),
             }),
-          }),
-        ]),
-        { source: 'external', skipTraceCheck: false, warnIfMissingTrace: false },
-      );
-    });
+          ]),
+          { source: 'external', skipTraceCheck: false, warnIfMissingTrace: false },
+        );
+        const attributes = persistSpans.mock.calls[0][1][0].attributes;
+        expect(attributes['bytes.attr']).toBe(format === 'protobuf' ? 'YWJj' : undefined);
+      },
+    );
 
     it('should reject unsupported content types', async () => {
       const response = await request(receiver.getApp())

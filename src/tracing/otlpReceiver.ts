@@ -876,7 +876,7 @@ export class OTLPReceiver {
   }
 
   private parseDecodedResourceSpan(resourceSpan: DecodedResourceSpans): ParsedTrace[] {
-    const resourceAttributes = this.parseDecodedAttributes(resourceSpan.resource?.attributes);
+    const resourceAttributes = this.parseAttributes(resourceSpan.resource?.attributes, true);
     logger.debug(
       `[OtlpReceiver] Parsed ${Object.keys(resourceAttributes).length} resource attributes from protobuf`,
     );
@@ -914,7 +914,7 @@ export class OTLPReceiver {
         endTime: this.toMilliseconds(span.endTimeUnixNano),
         attributes: {
           ...resourceAttributes,
-          ...this.parseDecodedAttributes(span.attributes),
+          ...this.parseAttributes(span.attributes, true),
           'otel.scope.name': scopeSpan.scope?.name,
           'otel.scope.version': scopeSpan.scope?.version,
           'otel.span.kind': spanKindName,
@@ -926,7 +926,10 @@ export class OTLPReceiver {
     };
   }
 
-  private parseDecodedAttributes(attributes?: DecodedAttribute[]): Record<string, any> {
+  private parseAttributes(
+    attributes?: (OTLPAttribute | DecodedAttribute)[],
+    decoded = false,
+  ): Record<string, any> {
     if (!attributes) {
       return {};
     }
@@ -935,7 +938,7 @@ export class OTLPReceiver {
     const result: Record<string, any> = {};
 
     for (const attr of attributes) {
-      const value = this.parseDecodedAttributeValue(attr.value);
+      const value = this.parseAttributeValue(attr.value, decoded);
       if (value !== undefined) {
         result[attr.key] = value;
       }
@@ -944,8 +947,11 @@ export class OTLPReceiver {
     return result;
   }
 
-  private parseDecodedAttributeValue(value: DecodedAttribute['value']): any {
-    if (!value) {
+  private parseAttributeValue(
+    value: OTLPAttribute['value'] | DecodedAttribute['value'],
+    decoded = false,
+  ): any {
+    if (decoded && !value) {
       return undefined;
     }
     if (value.stringValue !== undefined) {
@@ -961,55 +967,14 @@ export class OTLPReceiver {
     if (value.boolValue !== undefined) {
       return value.boolValue;
     }
-    if (value.bytesValue !== undefined) {
+    if (decoded && 'bytesValue' in value && value.bytesValue !== undefined) {
       return Buffer.from(value.bytesValue).toString('base64');
     }
     if (value.arrayValue?.values) {
-      return value.arrayValue.values.map((v) => this.parseDecodedAttributeValue(v));
+      return value.arrayValue.values.map((v) => this.parseAttributeValue(v, decoded));
     }
     if (value.kvlistValue?.values) {
-      return this.parseDecodedAttributes(value.kvlistValue.values);
-    }
-    return undefined;
-  }
-
-  private parseAttributes(attributes?: OTLPAttribute[]): Record<string, any> {
-    if (!attributes) {
-      return {};
-    }
-
-    assertUniqueAttributeKeys(attributes);
-    const result: Record<string, any> = {};
-
-    for (const attr of attributes) {
-      const value = this.parseAttributeValue(attr.value);
-      if (value !== undefined) {
-        result[attr.key] = value;
-      }
-    }
-
-    return result;
-  }
-
-  private parseAttributeValue(value: OTLPAttribute['value']): any {
-    if (value.stringValue !== undefined) {
-      return value.stringValue;
-    }
-    if (value.intValue !== undefined) {
-      const number = Number(value.intValue);
-      return Number.isSafeInteger(number) ? number : String(value.intValue);
-    }
-    if (value.doubleValue !== undefined) {
-      return value.doubleValue;
-    }
-    if (value.boolValue !== undefined) {
-      return value.boolValue;
-    }
-    if (value.arrayValue?.values) {
-      return value.arrayValue.values.map((v) => this.parseAttributeValue(v));
-    }
-    if (value.kvlistValue?.values) {
-      return this.parseAttributes(value.kvlistValue.values);
+      return this.parseAttributes(value.kvlistValue.values, decoded);
     }
     return undefined;
   }
