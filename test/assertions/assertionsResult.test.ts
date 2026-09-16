@@ -5,7 +5,12 @@ import {
   GUARDRAIL_BLOCKED_REASON,
 } from '../../src/assertions/assertionsResult';
 import { getEnvBool } from '../../src/envars';
-import { accumulateGradingRequest, createEmptyAssertions } from '../../src/util/tokenUsageUtils';
+import {
+  accumulateGradingRequest,
+  accumulateGradingTokenUsage,
+  createEmptyAssertions,
+  createEmptyTokenUsage,
+} from '../../src/util/tokenUsageUtils';
 
 import type { AssertionSet, GradingResult, ScoringFunction } from '../../src/types/index';
 
@@ -167,7 +172,12 @@ describe('AssertionsResult', () => {
         cached: result.metadata?.cachedResponse === true,
       });
 
-      expect(result.tokensUsed).toMatchObject({ total: 0, cached: 0, numRequests: 0 });
+      expect(result.tokensUsed).toMatchObject({
+        total: 0,
+        cached: 0,
+        numRequests: 1,
+        incurredTokenUsage: { total: 0, numRequests: 0 },
+      });
       expect(result.metadata).toEqual({ cachedResponse: true });
       expect(usage.numRequests).toBe(0);
     });
@@ -202,7 +212,8 @@ describe('AssertionsResult', () => {
       });
 
       expect(result.metadata?.cachedResponse).toBeUndefined();
-      expect(usage.numRequests).toBe(1);
+      expect(usage.numRequests).toBe(2);
+      expect(result.tokensUsed?.incurredTokenUsage?.numRequests).toBe(1);
     });
 
     it('counts fresh matcher calls when avoided cached tokens exceed fresh token usage', async () => {
@@ -234,8 +245,74 @@ describe('AssertionsResult', () => {
         cached: result.metadata?.cachedResponse === true,
       });
 
-      expect(usage).toMatchObject({ total: 50, cached: 97, numRequests: 1 });
+      expect(usage).toMatchObject({ total: 147, cached: 97, numRequests: 2 });
+      expect(result.tokensUsed?.incurredTokenUsage).toMatchObject({
+        total: 50,
+        numRequests: 1,
+      });
       expect(result.metadata?.cachedResponse).toBeUndefined();
+    });
+
+    it('preserves logical and incurred usage when cached and fresh graders are combined', async () => {
+      const assertionsResult = new AssertionsResult({});
+      assertionsResult.addResult({
+        index: 0,
+        result: {
+          pass: true,
+          score: 1,
+          reason: 'Cached grading result',
+          metadata: { cachedResponse: true },
+          tokensUsed: {
+            total: 37,
+            prompt: 23,
+            completion: 14,
+            numRequests: 1,
+            completionDetails: { reasoning: 9 },
+          },
+        },
+      });
+      assertionsResult.addResult({
+        index: 1,
+        result: {
+          pass: true,
+          score: 1,
+          reason: 'Fresh grading result',
+          tokensUsed: {
+            total: 23,
+            prompt: 15,
+            completion: 8,
+            numRequests: 1,
+            completionDetails: { reasoning: 4 },
+          },
+        },
+      });
+
+      const result = await assertionsResult.testResult();
+      const accounting = createEmptyTokenUsage();
+      accumulateGradingTokenUsage(accounting, result.tokensUsed, {
+        cached: result.metadata?.cachedResponse,
+      });
+
+      expect(result.metadata?.cachedResponse).toBeUndefined();
+      expect(result.tokensUsed).toMatchObject({
+        total: 60,
+        prompt: 38,
+        completion: 22,
+        cached: 37,
+        numRequests: 2,
+        completionDetails: { reasoning: 13 },
+        incurredTokenUsage: {
+          total: 23,
+          prompt: 15,
+          completion: 8,
+          numRequests: 1,
+          completionDetails: { reasoning: 4 },
+        },
+      });
+      expect(accounting).toMatchObject({
+        assertions: { total: 60, cached: 37, numRequests: 2 },
+        incurredTokenUsage: { assertions: { total: 23, numRequests: 1 } },
+      });
     });
 
     it('should calculate final result with threshold', async () => {
@@ -469,10 +546,16 @@ describe('AssertionsResult', () => {
 
       expect(result.metadata?.cachedResponse).toBeUndefined();
       expect(usage).toMatchObject({
-        total: 23,
+        total: 120,
         prompt: 15,
         completion: 8,
         cached: 97,
+        numRequests: 2,
+      });
+      expect(result.tokensUsed?.incurredTokenUsage).toMatchObject({
+        total: 23,
+        prompt: 15,
+        completion: 8,
         numRequests: 1,
       });
     });
@@ -482,25 +565,28 @@ describe('AssertionsResult', () => {
         label: 'fresh components and fresh scoring',
         componentCached: false,
         scorerCached: false,
-        expected: { total: 73, prompt: 45, completion: 28, cached: 0, numRequests: 2 },
+        expectedLogical: { total: 73, prompt: 45, completion: 28, cached: 0, numRequests: 2 },
       },
       {
         label: 'fresh components and cached scoring',
         componentCached: false,
         scorerCached: true,
-        expected: { total: 50, prompt: 30, completion: 20, cached: 37, numRequests: 1 },
+        expectedLogical: { total: 87, prompt: 52, completion: 35, cached: 37, numRequests: 2 },
+        expectedIncurred: { total: 50, prompt: 30, completion: 20, numRequests: 1 },
       },
       {
         label: 'cached components and fresh scoring',
         componentCached: true,
         scorerCached: false,
-        expected: { total: 23, prompt: 15, completion: 8, cached: 97, numRequests: 1 },
+        expectedLogical: { total: 120, prompt: 76, completion: 44, cached: 97, numRequests: 2 },
+        expectedIncurred: { total: 23, prompt: 15, completion: 8, numRequests: 1 },
       },
       {
         label: 'cached components and cached scoring',
         componentCached: true,
         scorerCached: true,
-        expected: { total: 0, prompt: 0, completion: 0, cached: 134, numRequests: 0 },
+        expectedLogical: { total: 134, prompt: 83, completion: 51, cached: 134, numRequests: 2 },
+        expectedIncurred: { total: 0, prompt: 0, completion: 0, numRequests: 0 },
       },
     ])('accounts for $label without losing or double-counting usage', async (scenario) => {
       const assertionsResult = new AssertionsResult({});
@@ -527,12 +613,17 @@ describe('AssertionsResult', () => {
       });
 
       const result = await assertionsResult.testResult(scoringFunction);
-      const usage = createEmptyAssertions();
-      accumulateGradingRequest(usage, result.tokensUsed, {
+      const accounting = createEmptyTokenUsage();
+      accumulateGradingTokenUsage(accounting, result.tokensUsed, {
         cached: result.metadata?.cachedResponse,
       });
 
-      expect(usage).toMatchObject(scenario.expected);
+      expect(accounting.assertions).toMatchObject(scenario.expectedLogical);
+      if (scenario.expectedIncurred) {
+        expect(accounting.incurredTokenUsage?.assertions).toMatchObject(scenario.expectedIncurred);
+      } else {
+        expect(accounting.incurredTokenUsage).toBeUndefined();
+      }
       expect(result.metadata?.cachedResponse).toBe(
         scenario.componentCached && scenario.scorerCached ? true : undefined,
       );
