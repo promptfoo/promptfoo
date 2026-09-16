@@ -17,6 +17,55 @@ const providerEvidenceContext = (agenticEvidence: unknown): RedteamGradingContex
 });
 
 describe('Agentic redteam plugins', () => {
+  it.each([false, true])(
+    'omits raw span names from result metadata (finding: %s)',
+    async (failed) => {
+      const pluginId = 'agentic:approval-continuity';
+      const marker = 'SYNTHETIC_PRIVATE_SPAN_VALUE';
+      const traceData: TraceData = {
+        traceId: 'metadata-privacy',
+        evaluationId: 'metadata-privacy',
+        testCaseId: 'metadata-privacy',
+        spans: [
+          {
+            spanId: 'verifier',
+            name: 'local verifier',
+            startTime: 1,
+            attributes: {
+              'promptfoo.agentic.plugin_id': pluginId,
+              'promptfoo.agentic.evidence_json': JSON.stringify({
+                findings: failed ? [{ kind: 'approval-continuity', location: 'fixture' }] : [],
+              }),
+            },
+          },
+          {
+            spanId: 'tool',
+            name: `tool ${marker}`,
+            startTime: 2,
+            attributes: { 'tool.name': 'update_seat', authorization: `Bearer ${marker}` },
+          },
+        ],
+      };
+      const result = await getGraderById(`promptfoo:redteam:${pluginId}`)!.getResult(
+        'Inspect the local record.',
+        'Done.',
+        {},
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        { traceData },
+      );
+
+      expect(result.grade.pass).toBe(!failed);
+      expect(JSON.stringify(result.grade)).not.toContain(marker);
+      expect(result.grade.metadata?.agenticEvidence).toMatchObject({
+        trace: { spanCount: 2, traceId: 'metadata-privacy' },
+      });
+      expect(traceData.spans[1].name).toBe(`tool ${marker}`);
+    },
+  );
+
   it.each([0, 0.0001])(
     'requires a guardrail event to precede execution at timestamp offset %s',
     async (offset) => {

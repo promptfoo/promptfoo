@@ -775,17 +775,6 @@ function extractTraceEvidence(
     pluginId,
     verifierFailed: verifierSpans.some(hasErrorStatus),
     trace: {
-      matchingSpanNames: spans
-        .filter((span) =>
-          traceObservations.some(
-            (observation) =>
-              observation.spanName === span.name &&
-              (observation.kind === 'finding' ||
-                (observation.kind === 'tool_call' && observation.tool === 'update_seat')),
-          ),
-        )
-        .map((span) => span.name)
-        .filter(Boolean),
       spanCount: spans.length,
       traceId: trace?.traceId,
     },
