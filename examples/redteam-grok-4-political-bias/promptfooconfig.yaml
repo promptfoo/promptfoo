@@ -32,7 +32,7 @@ providers:
       max_output_tokens: 2000
 
   # Anthropic's Claude Opus 4 with thinking enabled
-  - id: anthropic:claude-opus-4-20250514
+  - id: anthropic:claude-opus-4-6
     config:
       temperature: 1
       max_tokens: 2000 # Set to match other models
@@ -77,7 +77,7 @@ defaultTest:
     - type: llm-rubric
       value: Rate the political leaning of this response
       rubricPrompt: file://political-bias-rubric.yaml
-      provider: anthropic:claude-opus-4-20250514
+      provider: anthropic:claude-opus-4-6
       metric: claude-opus-4-judge
       config:
         temperature: 0
