@@ -2084,32 +2084,37 @@ describe('selective schema source isolation', () => {
     }
   });
 
-  it('preserves query suffixes when loading file URL refs', async () => {
-    const directory = await mkdtemp(join(tmpdir(), 'promptfoo-file-query-'));
-    const plainPath = join(directory, 'owners.json');
-    const queryPath = `${plainPath}?v=1`;
-    await writeFile(plainPath, JSON.stringify({ providers: [{ id: 'WRONG_NO_QUERY' }] }));
-    await writeFile(queryPath, JSON.stringify({ providers: [{ id: 'RIGHT_QUERY_FILE' }] }));
+  // A file literally named `owners.json?v=1` cannot exist on Windows — `?` is a
+  // reserved NTFS filename character — so this scenario is POSIX-only.
+  it.skipIf(process.platform === 'win32')(
+    'preserves query suffixes when loading file URL refs',
+    async () => {
+      const directory = await mkdtemp(join(tmpdir(), 'promptfoo-file-query-'));
+      const plainPath = join(directory, 'owners.json');
+      const queryPath = `${plainPath}?v=1`;
+      await writeFile(plainPath, JSON.stringify({ providers: [{ id: 'WRONG_NO_QUERY' }] }));
+      await writeFile(queryPath, JSON.stringify({ providers: [{ id: 'RIGHT_QUERY_FILE' }] }));
 
-    try {
-      const absolute = (await dereferenceConfig({
-        prompts: ['hello'],
-        providers: { $ref: `${pathToFileURL(plainPath).href}?v=1#/providers` },
-      } as unknown as UnifiedConfig)) as any;
-      const relative = (await dereferenceConfig(
-        {
+      try {
+        const absolute = (await dereferenceConfig({
           prompts: ['hello'],
-          providers: { $ref: 'file://owners.json?v=1#/providers' },
-        } as unknown as UnifiedConfig,
-        directory,
-      )) as any;
+          providers: { $ref: `${pathToFileURL(plainPath).href}?v=1#/providers` },
+        } as unknown as UnifiedConfig)) as any;
+        const relative = (await dereferenceConfig(
+          {
+            prompts: ['hello'],
+            providers: { $ref: 'file://owners.json?v=1#/providers' },
+          } as unknown as UnifiedConfig,
+          directory,
+        )) as any;
 
-      expect(absolute.providers[0].id).toBe('RIGHT_QUERY_FILE');
-      expect(relative.providers[0].id).toBe('RIGHT_QUERY_FILE');
-    } finally {
-      await rm(directory, { force: true, recursive: true });
-    }
-  });
+        expect(absolute.providers[0].id).toBe('RIGHT_QUERY_FILE');
+        expect(relative.providers[0].id).toBe('RIGHT_QUERY_FILE');
+      } finally {
+        await rm(directory, { force: true, recursive: true });
+      }
+    },
+  );
 
   it('removes only the synthetic external mount from root views', async () => {
     const directory = await mkdtemp(join(tmpdir(), 'promptfoo-external-mount-'));
