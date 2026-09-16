@@ -5,6 +5,7 @@ import { render as rtlRender, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { describe, expect, it, vi } from 'vitest';
 import CustomTargetConfiguration from './CustomTargetConfiguration';
+import { getProviderInitialConfig } from './providerInitialConfig';
 
 import type { ProviderOptions } from '../../types';
 
@@ -33,6 +34,86 @@ const replaceText = async (
 };
 
 describe('CustomTargetConfiguration', () => {
+  it.each(
+    (['llamafile', 'vllm', 'text-generation-webui'] as const).flatMap((type) =>
+      ['false', null].map((value) => ({ type, value })),
+    ),
+  )(
+    'preserves editable $type key selector $value without enabling default credentials',
+    async ({ type, value }) => {
+      const user = userEvent.setup();
+      const updateCustomTarget = vi.fn();
+      render(
+        <CustomTargetConfiguration
+          selectedTarget={{ id: 'openai:chat:local-policy-model', config: { type } }}
+          updateCustomTarget={updateCustomTarget}
+          rawConfigJson="{}"
+          setRawConfigJson={vi.fn()}
+          bodyError={null}
+          providerType={type}
+        />,
+      );
+      await replaceText(
+        user,
+        screen.getByTestId('code-editor'),
+        JSON.stringify({ useDefaultApiKey: value }),
+      );
+      expect(updateCustomTarget).toHaveBeenLastCalledWith(
+        'config',
+        expect.objectContaining({
+          type,
+          apiKeyRequired: false,
+          useDefaultApiKey: typeof value === 'string' ? value : false,
+        }),
+      );
+    },
+  );
+
+  it.each([
+    'together',
+    'huggingface',
+    'bedrock-agent',
+    'fal',
+    'cloudflare-ai',
+    'llama.cpp',
+    'llamafile',
+    'vllm',
+    'text-generation-webui',
+    'ollama',
+    'databricks',
+    'deepseek',
+    'groq',
+    'cerebras',
+  ])(
+    'shows the generated %s configuration without replacing a user target',
+    async (providerType) => {
+      const user = userEvent.setup();
+      const initialConfig = getProviderInitialConfig(providerType)!;
+      const updateCustomTarget = vi.fn();
+      render(
+        <CustomTargetConfiguration
+          selectedTarget={{ id: 'my-existing-target', config: { apiKey: 'my-server-key' } }}
+          updateCustomTarget={updateCustomTarget}
+          rawConfigJson='{"apiKey":"my-server-key"}'
+          setRawConfigJson={vi.fn()}
+          bodyError={null}
+          providerType={providerType}
+        />,
+      );
+      const target = screen.getByLabelText(/Target ID/i);
+      expect(target).toHaveAttribute('placeholder', initialConfig.id);
+      expect(target).toHaveValue('my-existing-target');
+      await user.click(screen.getByRole('button', { name: /Examples/i }));
+      const example = screen.getByText((_, element) => element?.tagName === 'PRE');
+      expect(JSON.parse(example.textContent!)).toEqual(initialConfig.config);
+      expect(updateCustomTarget).not.toHaveBeenCalled();
+      if (providerType === 'llama.cpp') {
+        expect(screen.getByText(/Set LLAMA_BASE_URL/)).toBeInTheDocument();
+        expect(example.textContent).not.toContain('apiBaseUrl');
+      }
+    },
+  );
+
   it('shows valid Open Interpreter target and configuration examples', async () => {
     const user = userEvent.setup();
 
@@ -171,6 +252,36 @@ describe('CustomTargetConfiguration', () => {
   });
 
   describe('file:// prefix handling', () => {
+    it.each([
+      ['openai:chat:tenant/model.js', 'openai:chat:tenant/model.js'],
+      ['openai:chat:tenant/model.py:Q4_K_M', 'openai:chat:tenant/model.py:Q4_K_M'],
+      ['openai:chat:tenant/model.json-v2', 'openai:chat:tenant/model.json-v2'],
+      ['https://example.test/provider.js', 'https://example.test/provider.js'],
+      ['https://example.test/providers.json', 'https://example.test/providers.json'],
+      ['providers-prod.json', 'file://providers-prod.json'],
+      ['./providers-prod.json', 'file://./providers-prod.json'],
+      ['/configs/providers-prod.json', 'file:///configs/providers-prod.json'],
+      ['C:\\configs\\providers-prod.json', 'file://C:\\configs\\providers-prod.json'],
+      ['file://providers-prod.json', 'file://providers-prod.json'],
+      ['providers.json-v2', 'providers.json-v2'],
+      ['provider.js:myFunction', 'file://provider.js:myFunction'],
+      ['C:\\providers\\script.py:call_api', 'file://C:\\providers\\script.py:call_api'],
+    ])('saves %s with its intended provider route', async (value, expectedId) => {
+      const user = userEvent.setup();
+      const updateCustomTarget = vi.fn();
+      render(
+        <CustomTargetConfiguration
+          selectedTarget={{ id: '', config: {} }}
+          updateCustomTarget={updateCustomTarget}
+          rawConfigJson="{}"
+          setRawConfigJson={vi.fn()}
+          bodyError={null}
+        />,
+      );
+      await replaceText(user, screen.getByLabelText(/Target ID/i), value);
+      expect(updateCustomTarget).toHaveBeenLastCalledWith('id', expectedId);
+    });
+
     it('should add file:// prefix to Python file paths', async () => {
       const user = userEvent.setup();
       const mockUpdateCustomTarget = vi.fn();

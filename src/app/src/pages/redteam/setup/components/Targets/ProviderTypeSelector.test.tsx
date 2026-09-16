@@ -20,6 +20,87 @@ vi.mock('@app/hooks/useTelemetry', () => ({
 }));
 
 describe('ProviderTypeSelector', () => {
+  it.each([
+    ['Together AI', 'together', 'togetherai:meta-llama/Llama-3.3-70B-Instruct-Turbo', {}],
+    ['Hugging Face', 'huggingface', 'huggingface:chat:meta-llama/Meta-Llama-3-70B-Instruct', {}],
+    [
+      'AWS Bedrock Agents',
+      'bedrock-agent',
+      'bedrock:agents:your-agent-id',
+      { agentAliasId: 'your-agent-alias-id' },
+    ],
+    ['fal.ai', 'fal', 'fal:image:fal-ai/flux/dev', {}],
+    [
+      'Cloudflare AI',
+      'cloudflare-ai',
+      'cloudflare-ai:chat:@cf/meta/llama-3.3-70b-instruct-fp8-fast',
+      {},
+    ],
+    ['llama.cpp', 'llama.cpp', 'llama:local-model', { n_predict: 1024 }],
+    [
+      'Llamafile',
+      'llamafile',
+      'openai:chat:local-model',
+      {
+        type: 'llamafile',
+        apiBaseUrl: 'http://localhost:8080/v1',
+        apiKeyRequired: false,
+        useDefaultApiKey: false,
+      },
+    ],
+    [
+      'vLLM',
+      'vllm',
+      'openai:chat:your-served-model-name',
+      {
+        type: 'vllm',
+        apiBaseUrl: 'http://localhost:8000/v1',
+        apiKeyRequired: false,
+        useDefaultApiKey: false,
+      },
+    ],
+    [
+      'Text Generation WebUI',
+      'text-generation-webui',
+      'openai:chat:your-served-model-name',
+      {
+        type: 'text-generation-webui',
+        apiBaseUrl: 'http://localhost:5000/v1',
+        apiKeyRequired: false,
+        useDefaultApiKey: false,
+      },
+    ],
+    ['Ollama', 'ollama', 'ollama:llama3.2:3b', {}],
+    ['Databricks', 'databricks', 'databricks:databricks-meta-llama-3-3-70b-instruct', {}],
+    [
+      'DeepSeek',
+      'deepseek',
+      'deepseek:deepseek-v4-flash',
+      { passthrough: { thinking: { type: 'disabled' } } },
+    ],
+    ['Groq', 'groq', 'groq:openai/gpt-oss-120b', {}],
+    ['Cerebras', 'cerebras', 'cerebras:gpt-oss-120b', {}],
+  ])(
+    'emits the runtime configuration for %s and preserves the target label',
+    async (label, providerType, id, config) => {
+      const user = userEvent.setup();
+      const setProvider = vi.fn();
+      renderWithTooltipProvider(
+        <ProviderTypeSelector
+          provider={{ id: '', config: {}, label: 'My application' }}
+          setProvider={setProvider}
+        />,
+      );
+      const card = screen.getByText(label).closest('[role="button"]');
+      expect(card).not.toBeNull();
+      await user.click(card!);
+      expect(setProvider).toHaveBeenCalledWith(
+        { id, config, label: 'My application' },
+        providerType,
+      );
+    },
+  );
+
   it('should update selectedProviderType and call setProvider with the correct provider configuration when a provider type card is selected', async () => {
     const user = userEvent.setup();
     const mockSetProvider = vi.fn();

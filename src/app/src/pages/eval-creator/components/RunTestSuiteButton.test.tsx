@@ -1,4 +1,5 @@
 import { EvalHistoryProvider } from '@app/contexts/EvalHistoryContext';
+import { getProviderInitialConfig } from '@app/pages/redteam/setup/components/Targets/providerInitialConfig';
 import { useStore } from '@app/stores/evalConfig';
 import {
   getCallApiMock,
@@ -44,6 +45,68 @@ describe('RunTestSuiteButton', () => {
     sourceEvalId = undefined;
     timers = useTestTimers();
   });
+
+  it.each(
+    ['llamafile', 'vllm', 'text-generation-webui'].flatMap((type) =>
+      ['none', 'inline', 'selected'].map((auth) => ({ type, auth })),
+    ),
+  )(
+    'submits the rehydrated $type target with its credential policy ($auth)',
+    async ({ type, auth }) => {
+      const initial = getProviderInitialConfig(type)!;
+      const provider = {
+        ...initial,
+        id: 'openai:chat:tenant/private-served-model:Q4_K_M',
+        config: {
+          ...initial.config,
+          apiBaseUrl: 'https://private-inference.example.test/tenant/v1',
+          stop: ['<end>'],
+          passthrough: { chat_template_kwargs: { enable_thinking: false } },
+          ...(auth === 'inline' ? { apiKey: 'private-session-key' } : {}),
+          ...(auth === 'selected' ? { apiKeyEnvar: 'LOCAL_MODEL_KEY' } : {}),
+        },
+      };
+      act(() =>
+        useStore.getState().setConfig({
+          providers: [provider],
+          prompts: ['Hello'],
+          tests: [{}],
+        }),
+      );
+      const persisted = localStorage.getItem('promptfoo')!;
+      expect(persisted).not.toContain('private-session-key');
+      await act(async () => {
+        useStore.setState({ config: {} });
+        localStorage.setItem('promptfoo', persisted);
+        await useStore.persist.rehydrate();
+      });
+      mockCallApiRoutes([{ method: 'POST', path: '/eval/job', response: { id: 'local-job' } }]);
+      renderWithProvider(<RunTestSuiteButton />);
+      await act(async () => {
+        screen
+          .getByRole('button', { name: 'Run Eval' })
+          .dispatchEvent(new MouseEvent('click', { bubbles: true }));
+        await Promise.resolve();
+      });
+      const [, request] = getCallApiMock().mock.calls[0] as [string, RequestInit];
+      const [submitted] = JSON.parse(request.body as string).providers;
+      expect(submitted).toMatchObject({
+        id: provider.id,
+        config: {
+          type,
+          apiBaseUrl: provider.config.apiBaseUrl,
+          apiKeyRequired: false,
+          useDefaultApiKey: false,
+          stop: ['<end>'],
+          passthrough: provider.config.passthrough,
+        },
+      });
+      expect(submitted.config).not.toHaveProperty('apiKey');
+      if (auth === 'selected') {
+        expect(submitted.config.apiKeyEnvar).toBe('LOCAL_MODEL_KEY');
+      }
+    },
+  );
 
   it('should be disabled when there are no prompts or tests', () => {
     renderWithProvider(<RunTestSuiteButton />);

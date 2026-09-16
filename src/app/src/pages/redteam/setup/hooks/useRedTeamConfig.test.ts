@@ -1,5 +1,6 @@
 import { mockBrowserProperty, restoreBrowserMocks } from '@app/tests/browserMocks';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { getRuntimeRedteamConfig } from '../utils/yamlHelpers';
 import { useRedTeamConfig } from './useRedTeamConfig';
 import {
   getCurrentTargetConfigInvalidMarker,
@@ -68,6 +69,28 @@ describe('useRedTeamConfig', () => {
     expect(
       JSON.parse(window.localStorage.getItem('redTeamConfig')!).state.config.target.config,
     ).toEqual({});
+  });
+
+  it.each([
+    ['llamafile', 'http://localhost:8080/v1'],
+    ['vllm', 'http://localhost:8000/v1'],
+    ['text-generation-webui', 'http://localhost:5000/v1'],
+  ] as const)('normalizes an imported %s target before storing it', (type, apiBaseUrl) => {
+    useRedTeamConfig.getState().setFullConfig({
+      ...useRedTeamConfig.getState().config,
+      target: { id: 'openai:chat:local-model', config: { type } },
+    });
+
+    const expected = {
+      type,
+      apiBaseUrl,
+      apiKeyRequired: false,
+      useDefaultApiKey: false,
+    };
+    expect(useRedTeamConfig.getState().config.target.config).toEqual(expected);
+    expect(
+      JSON.parse(window.localStorage.getItem('redTeamConfig')!).state.config.target.config,
+    ).toEqual(expected);
   });
 
   it.each([
@@ -5518,6 +5541,147 @@ describe('useRedTeamConfig', () => {
   });
 
   describe('setFullConfig', () => {
+    const localTypes = [
+      { type: 'vllm', apiBaseUrl: 'http://localhost:8000/v1' },
+      { type: 'llamafile', apiBaseUrl: 'http://localhost:8080/v1' },
+      { type: 'text-generation-webui', apiBaseUrl: 'http://localhost:5000/v1' },
+    ] as const;
+
+    it.each(localTypes)(
+      'normalizes an incomplete $type import before persistence, without editor events',
+      async ({ type, apiBaseUrl }) => {
+        const imported = {
+          ...useRedTeamConfig.getState().config,
+          target: { id: 'openai:chat:gpt-4o', label: 'Imported local target', config: { type } },
+        };
+        useRedTeamConfig.getState().setFullConfig(imported);
+        const target = {
+          ...imported.target,
+          config: { type, apiBaseUrl, apiKeyRequired: false, useDefaultApiKey: false },
+        };
+        expect(useRedTeamConfig.getState().config.target).toEqual(target);
+        expect(useRedTeamConfig.getState().providerType).toBe(type);
+        expect(imported.target.config).toEqual({ type });
+        expect(useRedTeamTargetConfigValidation.getState().targetConfigError).toBeNull();
+        const saved = window.localStorage.getItem('redTeamConfig')!;
+        expect(JSON.parse(saved).state.config.target).toEqual(target);
+        useRedTeamConfig.setState(useRedTeamConfig.getInitialState());
+        window.localStorage.setItem('redTeamConfig', saved);
+        await useRedTeamConfig.persist.rehydrate();
+        expect(useRedTeamConfig.getState().config.target).toEqual(target);
+      },
+    );
+
+    it.each(
+      localTypes.flatMap(({ type }) =>
+        ['false', '{{ env.KEY_SELECTOR }}', null, 0, {}, []].map((value) => ({ type, value })),
+      ),
+    )(
+      'isolates a nonboolean $type key selector $value through import and runtime',
+      async ({ type, value }) => {
+        const target = {
+          id: 'openai:chat:local-policy-model',
+          env: { KEY_SELECTOR: 'false', LOCAL_KEY: 'local-test-key', VISIBLE: 'ordinary' },
+          config: {
+            type,
+            useDefaultApiKey: value,
+            temperature: 0.2,
+            apiBaseUrl: 'https://local.example.test/tenant/v1',
+            apiKey: '{{ env.LOCAL_KEY }}',
+            model: 'tenant/served-model',
+          },
+        };
+        useRedTeamConfig.getState().setFullConfig({
+          ...useRedTeamConfig.getState().config,
+          target: target as unknown as Config['target'],
+        });
+        const live = useRedTeamConfig.getState().config.target;
+        const expected = {
+          ...target,
+          config: {
+            ...target.config,
+            apiKeyRequired: false,
+            useDefaultApiKey: typeof value === 'string' ? value : false,
+          },
+        };
+        expect(live).toEqual(expected);
+        const runtime = getRuntimeRedteamConfig(useRedTeamConfig.getState().config);
+        expect(runtime.targets).toEqual([
+          { ...expected, config: { ...expected.config, useDefaultApiKey: false } },
+        ]);
+        expect(useRedTeamConfig.getState().config.target).toEqual(expected);
+        const saved = window.localStorage.getItem('redTeamConfig')!;
+        expect(JSON.parse(saved).state.config.target).toEqual(expected);
+        useRedTeamConfig.setState(useRedTeamConfig.getInitialState());
+        window.localStorage.setItem('redTeamConfig', saved);
+        await useRedTeamConfig.persist.rehydrate();
+        expect(useRedTeamConfig.getState().config.target).toEqual(expected);
+        expect(getRuntimeRedteamConfig(useRedTeamConfig.getState().config).targets).toEqual(
+          runtime.targets,
+        );
+        expect(target.config.useDefaultApiKey).toBe(value);
+      },
+    );
+
+    it.each(
+      localTypes.flatMap(({ type }) =>
+        [false, true].map((useDefaultApiKey) => ({
+          type,
+          useDefaultApiKey,
+        })),
+      ),
+    )(
+      'preserves explicit $type settings and selector $useDefaultApiKey',
+      ({ type, useDefaultApiKey }) => {
+        const target = {
+          id: 'openai:chat:tenant/private-model:Q4_K_M',
+          label: 'Explicit local target',
+          config: {
+            type,
+            apiBaseUrl: 'https://custom.example.test/tenant/v1',
+            apiHost: 'preferred.example.test',
+            apiKey: 'synthetic-inline-key',
+            apiKeyEnvar: 'LOCAL_MODEL_KEY',
+            apiKeyRequired: true,
+            useDefaultApiKey,
+            model: 'explicit-served-model',
+            stop: ['<end>'],
+            passthrough: { chat_template_kwargs: { enable_thinking: false } },
+          },
+        };
+        useRedTeamConfig
+          .getState()
+          .setFullConfig({ ...useRedTeamConfig.getState().config, target });
+        expect(useRedTeamConfig.getState().config.target).toEqual(target);
+      },
+    );
+
+    it.each([
+      { id: 'openai:chat:gpt-4o', config: {} },
+      { id: 'openai:chat:gpt-4o', config: { apiBaseUrl: 'https://untyped.example.test/v1' } },
+      { id: 'ollama:served-model', config: { type: 'vllm' as const } },
+    ])('leaves nonlocal/untyped import $id unchanged', (target) => {
+      useRedTeamConfig.getState().setFullConfig({ ...useRedTeamConfig.getState().config, target });
+      expect(useRedTeamConfig.getState().config.target).toEqual(target);
+    });
+
+    it.each([{ config: null }, { config: [] }, { config: 'invalid-config' }])(
+      'does not turn malformed OpenAI config $config into a valid local target',
+      ({ config }) => {
+        useRedTeamConfig.getState().setFullConfig({
+          ...useRedTeamConfig.getState().config,
+          target: {
+            id: 'openai:chat:gpt-4o',
+            config: config as unknown as Config['target']['config'],
+          },
+        });
+        expect(useRedTeamConfig.getState().config.target.config).toEqual(config);
+        expect(useRedTeamTargetConfigValidation.getState().targetConfigError).toBe(
+          'Configuration must be a JSON object',
+        );
+      },
+    );
+
     it('should set providerType to the result of getProviderType when called with a config that has a target with an id', () => {
       const newConfig: Config = {
         description: 'Test config with an OpenAI target',
