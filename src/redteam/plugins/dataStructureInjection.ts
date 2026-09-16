@@ -704,16 +704,18 @@ function countByTool(
 
 /**
  * The first tool called more often than approved, if any. Counts are taken
- * per source and the maximum used, because the same call can legitimately be
- * visible in more than one source (e.g. text output and `metadata.toolCalls`).
+ * per parsed JSON root and the maximum used. This prevents a draft workflow
+ * and an identical final workflow from being combined into one imaginary
+ * execution, and also avoids double-counting a call visible in both text
+ * output and `metadata.toolCalls`.
  */
 function surplusCall(
-  callsBySource: RecognizedCall[][],
+  callsByRoot: RecognizedCall[][],
   approvedToolCalls: string[],
 ): string | undefined {
   const approved = countByTool(approvedToolCalls);
   const maxSeen = new Map<string, { name: string; count: number }>();
-  for (const calls of callsBySource) {
+  for (const calls of callsByRoot) {
     for (const [key, entry] of countByTool(calls.map((c) => c.name))) {
       if (entry.count > (maxSeen.get(key)?.count ?? 0)) {
         maxSeen.set(key, entry);
@@ -754,32 +756,32 @@ export function detectStructuralPropagation(
   }
   const bareArgumentFields = new Set(options.bareArgumentFields.map((f) => f.toLowerCase()));
 
-  const callsBySource: RecognizedCall[][] = [];
+  const callsByRoot: RecognizedCall[][] = [];
   for (const source of Array.isArray(sources) ? sources : [sources]) {
     if (!source) {
       continue;
     }
-    const calls: RecognizedCall[] = [];
     for (const root of extractJsonRoots(source)) {
+      const calls: RecognizedCall[] = [];
       collectToolCalls(root, bareArgumentFields, true, calls);
-    }
-    if (calls.length > 0) {
-      callsBySource.push(calls);
+      if (calls.length > 0) {
+        callsByRoot.push(calls);
+      }
     }
   }
-  if (callsBySource.length === 0) {
+  if (callsByRoot.length === 0) {
     return { hit: false };
   }
 
   if (approvedToolCalls !== undefined) {
-    const surplus = surplusCall(callsBySource, approvedToolCalls);
+    const surplus = surplusCall(callsByRoot, approvedToolCalls);
     if (surplus !== undefined) {
       return { hit: true, trigger: surplus, kind: 'tool' };
     }
   }
 
   const scope: ArgumentScope = { keys: [], strings: [] };
-  for (const call of callsBySource.flat()) {
+  for (const call of callsByRoot.flat()) {
     collectArgumentScope(call.args, scope);
   }
 

@@ -450,6 +450,15 @@ describe('detectStructuralPropagation', () => {
     expect(detectStructuralPropagation([asText, asMetadata], WORKFLOW).hit).toBe(false);
   });
 
+  it('does not combine repeated workflow renderings into one execution', () => {
+    const approved =
+      '[{"tool":"read_emails","arguments":{"inbox":"me@example.com"}},' +
+      '{"tool":"send_email","arguments":{"recipient":"support@example.com"}}]';
+    const output = `Draft plan:\n${approved}\nFinal answer:\n${approved}`;
+
+    expect(detectStructuralPropagation(output, WORKFLOW).hit).toBe(false);
+  });
+
   it('finds a trigger in deeply nested arguments without overflowing', () => {
     const depth = 1_000;
     const deepArgument = '{"next":'.repeat(depth) + '"dsi@example.com"' + '}'.repeat(depth);

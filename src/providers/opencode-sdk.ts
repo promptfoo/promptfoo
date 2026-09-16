@@ -1568,21 +1568,16 @@ export class OpenCodeSDKProvider implements ApiProvider {
   }
 
   /**
-   * Whether the skill tool can run for this config, so the session-history
-   * round trip used for skill tracking can be skipped when it cannot.
+   * Whether any tool may run for this config, so the session-history round
+   * trip used for tool-call tracking is skipped only when every effective
+   * rule is a denial.
    *
-   * OpenCode permission rules are last-match-wins and the effective ruleset
-   * starts with a wildcard deny, so the final rule covering `skill` decides.
+   * This is deliberately conservative: pattern and last-match interactions
+   * can make an earlier allow unreachable, but an unnecessary history fetch
+   * is safer than dropping an executed tool call from `metadata.toolCalls`.
    */
-  private isSkillToolEnabled(config: OpenCodeSDKConfig): boolean {
-    const rules = this.buildEffectivePermissionRules(config);
-    for (let i = rules.length - 1; i >= 0; i--) {
-      const rule = rules[i];
-      if (rule.permission === 'skill' || rule.permission === '*') {
-        return rule.action !== 'deny';
-      }
-    }
-    return true;
+  private canAnyToolRun(config: OpenCodeSDKConfig): boolean {
+    return this.buildEffectivePermissionRules(config).some((rule) => rule.action !== 'deny');
   }
 
   /**
@@ -1593,8 +1588,8 @@ export class OpenCodeSDKProvider implements ApiProvider {
    * Returns an empty array — which makes the caller fall back to the
    * final-message parts — whenever the current prompt cannot be located in the
    * history (a start/end anchor is absent from the response or fetched page).
-   * Over-attributing skill calls from earlier or concurrent prompts in a
-   * shared session would be worse than missing intermediate-turn calls.
+   * Over-attributing tool calls from earlier or concurrent prompts in a shared
+   * session would be worse than missing intermediate-turn calls.
    */
   private async fetchCurrentPromptParts(
     client: OpenCodeClient,
@@ -1607,7 +1602,7 @@ export class OpenCodeSDKProvider implements ApiProvider {
     const assistantId = assistantMessage?.id;
     if (!parentId || !assistantId) {
       logger.debug(
-        '[OpenCode SDK] Assistant message is missing a history anchor; skipping session history fetch for skill tracking',
+        '[OpenCode SDK] Assistant message is missing a history anchor; skipping session history fetch for tool-call tracking',
       );
       return [];
     }
@@ -1631,20 +1626,20 @@ export class OpenCodeSDKProvider implements ApiProvider {
     const startIndex = messages.findIndex((m) => m.info?.id === parentId);
     if (startIndex === -1) {
       logger.debug(
-        `[OpenCode SDK] Parent message ${parentId} not found in ${messages.length} fetched messages; falling back to final-message parts for skill tracking`,
+        `[OpenCode SDK] Parent message ${parentId} not found in ${messages.length} fetched messages; falling back to final-message parts for tool-call tracking`,
       );
       return [];
     }
     const endIndex = messages.findIndex((m) => m.info?.id === assistantId);
     if (endIndex < startIndex) {
       logger.debug(
-        `[OpenCode SDK] Assistant message ${assistantId} not found after its parent in ${messages.length} fetched messages; falling back to final-message parts for skill tracking`,
+        `[OpenCode SDK] Assistant message ${assistantId} not found after its parent in ${messages.length} fetched messages; falling back to final-message parts for tool-call tracking`,
       );
       return [];
     }
     const relevantMessages = messages.slice(startIndex, endIndex + 1);
     logger.debug(
-      `[OpenCode SDK] Fetched ${messages.length} messages, using ${relevantMessages.length} (start=${startIndex} end=${endIndex}) for skill tracking`,
+      `[OpenCode SDK] Fetched ${messages.length} messages, using ${relevantMessages.length} (start=${startIndex} end=${endIndex}) for tool-call tracking`,
     );
     return relevantMessages.flatMap((m) => m.parts ?? []);
   }
@@ -1970,11 +1965,10 @@ export class OpenCodeSDKProvider implements ApiProvider {
           }
 
           // Fetch only the parts that belong to the current prompt from the session
-          // history so that deriveSkillCalls captures skill calls from intermediate
-          // turns. Gated on the effective tool policy, so the extra round trip is
-          // skipped whenever the skill tool is denied and no skill parts can exist.
+          // history so tool calls from intermediate turns reach metadata.toolCalls.
+          // Skip the extra round trip only when the effective policy permits no tools.
           let allSessionParts: OpenCodePromptPart[] = [];
-          if (this.isSkillToolEnabled(config)) {
+          if (this.canAnyToolRun(config)) {
             try {
               allSessionParts = await this.fetchCurrentPromptParts(
                 client,
@@ -1984,7 +1978,7 @@ export class OpenCodeSDKProvider implements ApiProvider {
               );
             } catch (e) {
               logger.debug(
-                `[OpenCode SDK] Could not fetch session history for skill tracking: ${e}`,
+                `[OpenCode SDK] Could not fetch session history for tool-call tracking: ${e}`,
               );
             }
             if (abortSignal?.aborted) {
