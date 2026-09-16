@@ -18,7 +18,13 @@ import {
   PROMPTFOO_RESOURCE_ATTR_TRACE_ID,
   withGenAISpan,
 } from '../../tracing/genaiTracer';
-import { formatRateLimitErrorMessage, HttpRateLimitError } from '../../util/fetch/errors';
+import {
+  formatRateLimitErrorMessage,
+  HARD_QUOTA_ERROR_CODES,
+  HttpRateLimitError,
+  isDefinitiveBillingCode,
+  isHardQuotaCode,
+} from '../../util/fetch/errors';
 import { normalizeFieldName, REDACTED, sanitizeObject } from '../../util/sanitizer';
 import { resolveAgenticWorkingDir } from '../agentic-utils';
 import { providerRegistry } from '../providerRegistry';
@@ -134,16 +140,14 @@ export type ApprovalPolicy = 'never' | 'on-request' | 'on-failure' | 'untrusted'
  * - gpt-5.4-pro: 'medium', 'high', 'xhigh'
  * - gpt-5.3-codex: 'low', 'medium', 'high', 'xhigh'
  * - gpt-5.3-codex-spark: 'low', 'medium', 'high'
- * - gpt-5.2 / gpt-5.2-codex: 'low', 'medium', 'high', 'xhigh'
- * - gpt-5.1-codex-max: 'low', 'medium', 'high', 'xhigh'
- * - gpt-5.1-codex/mini: 'low', 'medium', 'high'
+ * - gpt-5.2: 'low', 'medium', 'high', 'xhigh'
  *
  * Values:
  * - 'minimal': Minimal reasoning overhead
  * - 'low': Light reasoning, faster responses
  * - 'medium': Balanced (default for GPT-5.6 Terra and Luna)
  * - 'high': Thorough reasoning for complex tasks
- * - 'xhigh': Maximum reasoning depth (gpt-5.5, gpt-5.4, gpt-5.2, gpt-5.1-codex-max)
+ * - 'xhigh': Maximum reasoning depth (gpt-5.5, gpt-5.4, gpt-5.2)
  * - 'max': Deepest single-agent reasoning for GPT-5.6
  * - 'ultra': Proactive multi-agent reasoning for GPT-5.6 Sol and Terra
  */
@@ -280,7 +284,9 @@ export interface OpenAICodexSDKConfig {
   codex_path_override?: string;
 
   /**
-   * Model to use (e.g., 'gpt-5.5', 'gpt-5.4', 'gpt-5.3-codex', 'gpt-5.2-codex', 'gpt-5.1-codex-mini').
+   * Model to use (e.g., 'gpt-5.6-terra' or 'gpt-5.6-luna').
+   * Availability depends on authentication mode and account access; omitted models
+   * use the installed Codex SDK's default.
    * When routing through a non-OpenAI `model_provider` (such as `amazon-bedrock`), use that
    * provider's model id instead (e.g., 'openai.gpt-5.6-sol' for Amazon Bedrock).
    */
@@ -310,7 +316,7 @@ export interface OpenAICodexSDKConfig {
    * - 'low': Light reasoning, faster responses
    * - 'medium': Balanced (default)
    * - 'high': Thorough reasoning for complex tasks
-   * - 'xhigh': Maximum depth (gpt-5.2, gpt-5.1-codex-max only)
+   * - 'xhigh': Maximum depth (model-dependent)
    */
   model_reasoning_effort?: ReasoningEffort;
 
@@ -480,14 +486,13 @@ function getMinimalProcessEnv(): Record<string, string> {
   return env;
 }
 
-const CODEX_RATE_LIMIT_CODES = [
+// The transient throttle code plus the shared hard-quota set, so a billing code
+// added to HARD_QUOTA_ERROR_CODES (e.g. credit_balance_exhausted) is recognized
+// on the SDK path too instead of falling back to the 60s retry cycle.
+const CODEX_RATE_LIMIT_CODES: readonly string[] = [
   'rate_limit_exceeded',
-  'insufficient_quota',
-  'billing_hard_limit_reached',
-  'billing_not_active',
-  'access_terminated',
-  'quota_exceeded',
-] as const;
+  ...HARD_QUOTA_ERROR_CODES,
+];
 
 // Mirrors the HTTP retry path's fallback when the upstream error carries no reset hint.
 const CODEX_DEFAULT_RATE_LIMIT_WAIT_MS = 60_000;
@@ -503,6 +508,19 @@ const CODEX_RATE_LIMIT_PATTERNS = [
 
 function extractCodexRateLimitCode(message: string): string | undefined {
   const lowerMessage = message.toLowerCase();
+  // Flattened SDK messages can contain both a broad quota type and a specific
+  // billing code. Preserve the definitive billing classification.
+  const billingCode = CODEX_RATE_LIMIT_CODES.find(
+    (code) => isDefinitiveBillingCode(code) && lowerMessage.includes(code),
+  );
+  if (billingCode) {
+    return billingCode;
+  }
+
+  if (/\bno credits remaining\b/i.test(message)) {
+    return 'credit_balance_exhausted';
+  }
+
   const explicitCode = CODEX_RATE_LIMIT_CODES.find((code) => lowerMessage.includes(code));
   if (explicitCode) {
     return explicitCode;
@@ -555,6 +573,11 @@ function buildCodexRateLimitResponse(
         : undefined;
   const rawCode =
     typeof errorRecord?.code === 'string' ? errorRecord.code.toLowerCase() : undefined;
+  // The SDK error's broad class (e.g. `type: "insufficient_quota"` next to a
+  // provider-specific billing code) carries the quota classification when the
+  // code itself is not recognized, exactly as on the fetch and Foundry paths.
+  const rawType =
+    typeof errorRecord?.type === 'string' ? errorRecord.type.toLowerCase() : undefined;
   const code =
     rawCode && CODEX_RATE_LIMIT_CODES.some((knownCode) => knownCode === rawCode)
       ? rawCode
@@ -563,6 +586,7 @@ function buildCodexRateLimitResponse(
   if (
     status !== 429 &&
     code === undefined &&
+    !isHardQuotaCode(rawType) &&
     !CODEX_RATE_LIMIT_PATTERNS.some((pattern) => pattern.test(message))
   ) {
     return undefined;
@@ -572,7 +596,10 @@ function buildCodexRateLimitResponse(
   const rateLimitError = new HttpRateLimitError({
     status: status ?? 429,
     retryAfterMs,
-    code,
+    // Keep the provider's own code for reporting when it is not one we
+    // recognize; `type` decides the quota classification in that case.
+    code: code ?? rawCode,
+    type: rawType,
   });
   const schedulerRetryAfterMs =
     rateLimitError.kind === 'rate_limit'
@@ -668,13 +695,7 @@ export class OpenAICodexSDKProvider implements ApiProvider {
     // GPT-5.2 models
     // Note: gpt-5.2-pro is not currently supported via Codex SDK.
     'gpt-5.2',
-    'gpt-5.2-codex',
-    // GPT-5.1 Codex models
-    'gpt-5.1-codex',
-    'gpt-5.1-codex-max',
-    'gpt-5.1-codex-mini',
     // GPT-5 Codex models
-    'gpt-5-codex',
     'gpt-5-codex-mini',
     // GPT-5 base
     'gpt-5',
