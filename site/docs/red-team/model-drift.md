@@ -100,7 +100,7 @@ jobs:
       - name: Check for regressions
         run: |
           # Extract attack success rate
-          ASR=$(jq '.results.stats.failures / (.results.stats.successes + .results.stats.failures) * 100' results.json)
+          ASR=$(jq 'if (.results.stats.successes + .results.stats.failures) == 0 then 0 else .results.stats.failures / (.results.stats.successes + .results.stats.failures) * 100 end' results.json)
           echo "Attack Success Rate: ${ASR}%"
 
           # Fail if ASR exceeds threshold
@@ -210,7 +210,7 @@ Custom tests provide deterministic pass/fail results that are easy to track:
 
 ```bash
 # Extract pass rate
-PASS_RATE=$(jq '.results.stats.successes / (.results.stats.successes + .results.stats.failures) * 100' results.json)
+PASS_RATE=$(jq 'if (.results.stats.successes + .results.stats.failures) == 0 then 0 else .results.stats.successes / (.results.stats.successes + .results.stats.failures) * 100 end' results.json)
 echo "Pass rate: ${PASS_RATE}%"
 
 # Fail CI if pass rate drops below threshold
@@ -252,7 +252,7 @@ jobs:
 
 ```bash
 # Extract ASR from results
-jq '.results.stats.failures / (.results.stats.successes + .results.stats.failures) * 100' results.json
+jq 'if (.results.stats.successes + .results.stats.failures) == 0 then 0 else .results.stats.failures / (.results.stats.successes + .results.stats.failures) * 100 end' results.json
 ```
 
 **Category-level changes**: Track ASR per vulnerability category to identify which defenses are drifting:
@@ -279,7 +279,7 @@ Define acceptable drift thresholds in your CI scripts:
 
 ```bash
 # Example threshold check in CI
-ASR=$(jq '.results.stats.failures / (.results.stats.successes + .results.stats.failures) * 100' results.json)
+ASR=$(jq 'if (.results.stats.successes + .results.stats.failures) == 0 then 0 else .results.stats.failures / (.results.stats.successes + .results.stats.failures) * 100 end' results.json)
 
 # Block deployment if ASR exceeds 15%
 if (( $(echo "$ASR > 15" | bc -l) )); then

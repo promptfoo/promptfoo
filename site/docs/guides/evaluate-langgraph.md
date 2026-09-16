@@ -172,7 +172,7 @@ class ResearchState(BaseModel):
     summary: str = ""     # Final summarized result
 
 # Function to create and return the research agent graph
-def get_research_agent(model="gpt-5-mini"):
+def get_research_agent(model="gpt-4o"):
     # Initialize the OpenAI LLM with the specified model and API key
     llm = ChatOpenAI(model=model, api_key=OPENAI_API_KEY)
 
