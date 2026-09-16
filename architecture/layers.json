@@ -65,6 +65,7 @@
         "src/util/objectUtils.ts",
         "src/util/sanitizer.ts",
         "src/util/text.ts",
+        "src/util/yamlLoad.ts",
         "src/validators/providers.ts"
       ]
     },
