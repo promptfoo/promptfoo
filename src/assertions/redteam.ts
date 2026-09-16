@@ -6,7 +6,13 @@ import invariant from '../util/invariant';
 import { summarizeTrajectoryForJudge } from './trajectoryUtils';
 
 import type { RedteamGradingContext } from '../redteam/grading/types';
-import type { AssertionParams, AtomicTestCase, GradingResult } from '../types/index';
+import type {
+  Assertion,
+  AssertionParams,
+  AtomicTestCase,
+  GradingResult,
+  ProviderResponse,
+} from '../types/index';
 
 /**
  * Analyzes grader errors in the redteam history.
@@ -30,7 +36,83 @@ function analyzeGraderErrors(redteamHistory: Array<{ graderError?: string }> | u
   return { hasAnyErrors, allTurnsHaveErrors };
 }
 
-function getRedteamPrompt(prompt: string | undefined, test: AtomicTestCase): string | undefined {
+function matchesStoredGraderResult(
+  assertion: Assertion,
+  storedResult: GradingResult,
+  pluginId: string | undefined,
+): boolean {
+  // Strategies preserve the assertion they actually graded. Plugin IDs can name a
+  // subcategory (pii:social) while its assertion names a shared grader (pii).
+  if (storedResult.assertion?.type) {
+    return (
+      storedResult.assertion.type === assertion.type &&
+      (storedResult.assertion.metric === undefined ||
+        storedResult.assertion.metric === assertion.metric)
+    );
+  }
+
+  // Older results did not record the assertion. Accept the plugin's exact type or
+  // its canonical grader, but never a sibling category that shares that grader.
+  if (!pluginId) {
+    return false;
+  }
+  const pluginAssertionType = `promptfoo:redteam:${pluginId}`;
+  return (
+    assertion.type === pluginAssertionType ||
+    assertion.type === getGraderById(pluginAssertionType)?.id
+  );
+}
+
+function getTargetConversation(providerResponse: ProviderResponse): {
+  lastUserPrompt?: string;
+  conversationTranscript?: string;
+} {
+  const messages = providerResponse.metadata?.messages;
+  if (!Array.isArray(messages)) {
+    return {};
+  }
+  let lastUserIndex = -1;
+  for (let index = messages.length - 1; index >= 0; index--) {
+    if (messages[index]?.role === 'user' && typeof messages[index].content === 'string') {
+      lastUserIndex = index;
+      break;
+    }
+  }
+  if (lastUserIndex < 0) {
+    return {};
+  }
+
+  // Only use the saved target conversation. redteamHistory can include unrelated
+  // single-turn attempts or abandoned branches. Keep the current turn separate
+  // from prior context, as Crescendo does when grading during a scan.
+  const conversationTranscript = messages
+    .slice(0, lastUserIndex)
+    .filter(
+      (message) =>
+        (message?.role === 'user' || message?.role === 'assistant') &&
+        typeof message.content === 'string',
+    )
+    .map((message) => `${message.role === 'user' ? 'User' : 'Assistant'}: ${message.content}`)
+    .join('\n\n');
+
+  return { lastUserPrompt: messages[lastUserIndex].content, conversationTranscript };
+}
+
+function getRedteamPrompt(
+  prompt: string | undefined,
+  test: AtomicTestCase,
+  providerResponse: ProviderResponse,
+  lastUserPrompt?: string,
+): string | undefined {
+  const finalPrompt = providerResponse.metadata?.redteamFinalPrompt;
+  if (typeof finalPrompt === 'string' && finalPrompt.trim()) {
+    return finalPrompt;
+  }
+
+  if (lastUserPrompt) {
+    return lastUserPrompt;
+  }
+
   if (prompt) {
     return prompt;
   }
@@ -49,9 +131,13 @@ function getRedteamPrompt(prompt: string | undefined, test: AtomicTestCase): str
 function createInitialGradingContext({
   assertionValueContext,
   providerResponse,
-}: Pick<AssertionParams, 'assertionValueContext' | 'providerResponse'>): RedteamGradingContext {
+  conversationTranscript,
+}: Pick<AssertionParams, 'assertionValueContext' | 'providerResponse'> & {
+  conversationTranscript?: string;
+}): RedteamGradingContext {
   const gradingContext: RedteamGradingContext = {
     providerResponse,
+    ...(conversationTranscript === undefined ? {} : { conversationTranscript }),
   };
 
   if (assertionValueContext.trace) {
@@ -78,13 +164,8 @@ export const handleRedteam = async ({
   assertionValueContext,
 }: AssertionParams): Promise<GradingResult> => {
   // Skip grading if stored result exists from strategy execution for this specific assertion
-  if (
-    providerResponse.metadata?.storedGraderResult &&
-    test.metadata?.pluginId &&
-    assertion.type.includes(test.metadata.pluginId)
-  ) {
-    const storedResult = providerResponse.metadata.storedGraderResult;
-
+  const storedResult = providerResponse.metadata?.storedGraderResult as GradingResult | undefined;
+  if (storedResult && matchesStoredGraderResult(assertion, storedResult, test.metadata?.pluginId)) {
     // Check if any turns had grader errors (even though we have a stored result)
     const redteamHistory = providerResponse.metadata?.redteamHistory as
       | Array<{ graderError?: string }>
@@ -108,14 +189,19 @@ export const handleRedteam = async ({
 
   const grader = getGraderById(assertion.type);
   invariant(grader, `Unknown grader: ${baseType}`);
-  const effectivePrompt = getRedteamPrompt(prompt, test);
+  const { lastUserPrompt, conversationTranscript } = getTargetConversation(providerResponse);
+  const effectivePrompt = getRedteamPrompt(prompt, test, providerResponse, lastUserPrompt);
   invariant(effectivePrompt, `Grader ${baseType} must have a prompt`);
 
   // Build grading context from provider response metadata, test metadata, and locally
   // captured assertion trace data. Keep raw trace data in-process for deterministic
   // graders; pass only a compact trajectory summary into model-graded rubrics.
   // This includes exfil tracking data from indirect-web-pwn strategy
-  let gradingContext = createInitialGradingContext({ assertionValueContext, providerResponse });
+  let gradingContext = createInitialGradingContext({
+    assertionValueContext,
+    providerResponse,
+    conversationTranscript,
+  });
   const webPageUuid =
     (providerResponse.metadata?.webPageUuid as string | undefined) ||
     (test.metadata?.webPageUuid as string | undefined);

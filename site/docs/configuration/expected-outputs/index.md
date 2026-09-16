@@ -21,6 +21,8 @@ Assertions are used to compare the LLM output against expected values or conditi
 
 Different types of assertions can be used to validate the output in various ways, such as checking for equality, JSON structure, similarity, or custom functions.
 
+Red team strategies can grade responses during an attack. The final assertion check reuses the matching strategy grade. When a new grade is needed, red team assertions use the recorded attack input and available target conversation, falling back to the original test prompt only when that information is unavailable.
+
 In machine learning, "Accuracy" is a metric that measures the proportion of correct predictions made by a model out of the total number of predictions. With `promptfoo`, accuracy is defined as the proportion of prompts that produce the expected or desired output.
 
 ## Using assertions
