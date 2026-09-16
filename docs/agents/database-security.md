@@ -8,7 +8,7 @@ This codebase uses Drizzle ORM with SQLite. All database queries must use parame
 - Use `sql.join()` for dynamic lists such as `IN (...)` clauses.
 - Pass `SQL<unknown>` fragments between functions, not strings.
 - Do not build queries with `sql.raw()` or string interpolation.
-- The only exception is SQLite JSON paths. Use the existing vetted helper `buildSafeJsonPath` in `src/models/eval.ts` instead of ad-hoc escaping.
+- Prefer `json_each()` for user-selected JSON keys. When `json_extract()` is appropriate, bind a path built with the vetted `buildSafeJsonPath` helper in `src/models/eval.ts`.
 
 ## Required Pattern: Use `sql` Template Strings
 
@@ -57,17 +57,29 @@ const whereClause = `eval_id = '${evalId}'`;
 const query = sql.raw(`SELECT * FROM eval_results WHERE ${whereClause}`);
 ```
 
-## Special Case: JSON Paths in SQLite
+## JSON Paths in SQLite
 
-SQLite's `json_extract()` requires the JSON path to be a string literal, so this is the one case where `sql.raw()` may be necessary. Do not hand-roll escaping at each callsite. Always use the existing helper in `src/models/eval.ts`, which escapes:
-
-- Backslashes and double quotes for JSON path syntax
-- Single quotes before embedding the path in a SQL string literal
-
-Reuse `buildSafeJsonPath` from `src/models/eval.ts`:
+SQLite's `json_extract()` accepts its JSON path as a bound value. Do not use `sql.raw()` to splice user-controlled JSON paths into SQL. Prefer `json_each()` when filtering by dynamic keys, because the key can be compared as a normal parameter:
 
 ```typescript
 import { sql } from 'drizzle-orm';
+
+const query = sql`
+  SELECT *
+  FROM eval_results
+  WHERE EXISTS (
+    SELECT 1
+    FROM json_each(metadata)
+    WHERE json_each.key = ${field} AND json_each.value = ${value}
+  )
+`;
+```
+
+If you construct a JSON path for `json_extract()`, use `buildSafeJsonPath` from `src/models/eval.ts`, which escapes backslashes and double quotes for JSON path syntax and returns a value to bind:
+
+```typescript
+import { sql } from 'drizzle-orm';
+import { buildSafeJsonPath } from '../../src/models/eval';
 
 const jsonPath = buildSafeJsonPath(userField);
 const query = sql`
@@ -99,3 +111,24 @@ const results = await queryWithFilter(filter);
 - `src/models/eval.ts` - Main eval queries and JSON-path helper
 - `src/util/calculateFilteredMetrics.ts` - Metrics aggregation queries
 - `src/database/index.ts` - Database connection
+
+## Transaction Handles
+
+Inside `db.transaction(async (tx) => ...)`, use `tx` for every query and pass it
+into helpers that need database access. Root `db.run`, `db.all`, query builders,
+and client methods reject inside the callback. Catching that error leaves the
+transaction usable; letting it escape rolls the transaction back. Nested root
+`db.transaction` callbacks reuse the active transaction and do not commit it
+independently. The context expires when the callback settles, so asynchronous
+work that runs later queues as a new top-level operation.
+
+Promptfoo serializes top-level operations and configures libSQL with one pooled
+connection so foreign-key, busy-timeout, and WAL settings survive transaction
+reuse. Reconnecting during a transaction would close its connection and must not
+be used to recover a root call.
+
+For direct libSQL clients in fixtures, hold `await client.transaction('write')`
+(or `'read'`) and call `commit()`, `rollback()`, or `close()` on that handle.
+libSQL 0.18 rolls back unfinished transactions when a client operation returns
+its connection to the pool, so separate `client.execute('BEGIN')` and
+`client.execute('ROLLBACK')` calls cannot hold a lock across operations.

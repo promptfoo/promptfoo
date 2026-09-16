@@ -61,6 +61,93 @@ describe('runEval', () => {
     expect(mockProvider.callApi).toHaveBeenCalledWith('Test prompt', expect.anything(), undefined);
   });
 
+  it('should expose eval runtime vars to prompt and provider rendering', async () => {
+    await runEval({
+      ...defaultOptions,
+      evalId: 'eval-runtime-vars',
+      promptIdx: 4,
+      provider: mockProvider,
+      prompt: {
+        raw: '{{__evalId}} {{__evalStepId}} {{__repeatIndex}}',
+        label: 'test-label',
+      },
+      repeatIndex: 2,
+      test: {
+        vars: {
+          __evalId: 'spoofed-eval-id',
+          __evalStepId: 'spoofed-step-id',
+          __repeatIndex: 99,
+        },
+      },
+      testIdx: 3,
+      conversations: {},
+      registers: {},
+    });
+
+    expect(mockProvider.callApi).toHaveBeenCalledWith(
+      'eval-runtime-vars test-3-prompt-4-repeat-2 2',
+      expect.objectContaining({
+        vars: expect.objectContaining({
+          __evalId: 'eval-runtime-vars',
+          __evalStepId: 'test-3-prompt-4-repeat-2',
+          __repeatIndex: 2,
+        }),
+      }),
+      undefined,
+    );
+  });
+
+  it('excludes eval runtime vars from the persisted result', async () => {
+    const results = await runEval({
+      ...defaultOptions,
+      evalId: 'eval-runtime-vars',
+      promptIdx: 4,
+      provider: mockProvider,
+      prompt: {
+        raw: '{{__evalStepId}} {{topic}}',
+        label: 'test-label',
+      },
+      repeatIndex: 2,
+      test: {
+        vars: { topic: 'weather' },
+      },
+      testIdx: 3,
+      conversations: {},
+      registers: {},
+    });
+
+    // The reserved __eval* runtime vars must not be persisted on result.vars:
+    // they would pollute stored results and, being _-prefixed, be restored
+    // onto re-run test.vars by --filter-* re-runs. Real test vars are kept.
+    expect(results[0].vars).toEqual({ topic: 'weather' });
+  });
+
+  it('excludes eval runtime vars from assertion context', async () => {
+    const results = await runEval({
+      ...defaultOptions,
+      evalId: 'eval-runtime-vars',
+      provider: mockProvider,
+      prompt: { raw: '{{topic}}', label: 'test-label' },
+      test: {
+        vars: { topic: 'weather' },
+        assert: [
+          {
+            type: 'javascript',
+            value:
+              "!('__evalId' in context.vars) && !('__evalStepId' in context.vars) && !('__repeatIndex' in context.vars) && context.vars.topic === 'weather'",
+          },
+        ],
+      },
+      conversations: {},
+      registers: {},
+    });
+
+    // The assertion passes only if context.vars carries the real test var but
+    // none of the reserved __eval* runtime vars.
+    expect(results[0].gradingResult?.pass).toBe(true);
+    expect(results[0].success).toBe(true);
+  });
+
   it('should pass dynamic prompt config from prompt functions to the provider', async () => {
     const dynamicConfig = { temperature: 0.5, tools: [{ name: 'test_tool' }] };
     const promptWithFunction: Prompt = {
@@ -106,14 +193,14 @@ describe('runEval', () => {
       ...defaultOptions,
       provider: mockProvider,
       prompt: promptWithFunction,
-      test: { options: { temperature: 0.9 } },
+      test: { options: { repeat: 3, temperature: 0.9 } },
       conversations: {},
       registers: {},
     });
     const result = results[0];
     expect(result.success).toBe(true);
 
-    // test.options should override dynamic config
+    // Provider options should override dynamic config, while evaluator-only options stay internal.
     const callApiMock = vi.mocked(mockProvider.callApi);
     const callApiArgs = callApiMock.mock.calls[0];
     expect(callApiArgs).toBeDefined();
@@ -233,9 +320,10 @@ describe('runEval', () => {
     });
     const result = results[0];
     expect(result.success).toBe(true);
-    expect(conversations).toHaveProperty('test-provider:undefined');
-    expect(conversations['test-provider:undefined']).toHaveLength(1);
-    expect(conversations['test-provider:undefined'][0]).toEqual({
+    const conversationKey = JSON.stringify(['test-provider', null, 0, null]);
+    expect(conversations).toHaveProperty([conversationKey]);
+    expect(conversations[conversationKey]).toHaveLength(1);
+    expect(conversations[conversationKey][0]).toEqual({
       prompt: 'Hello ',
       input: 'Hello ',
       output: 'Test output',
@@ -255,8 +343,57 @@ describe('runEval', () => {
     });
     const result = results[0];
     expect(result.success).toBe(true);
-    expect(conversations).toHaveProperty('test-provider:custom-id:conv1');
+    expect(conversations).toHaveProperty([
+      JSON.stringify(['test-provider', 'custom-id', 0, 'conv1']),
+    ]);
   });
+
+  it.each([
+    {
+      description: 'legacy provider, prompt, and conversation keys',
+      conversationId: '1:shared',
+      promptIdx: 0,
+    },
+    {
+      description: 'column-aware conversation keys',
+      conversationId: '0:shared',
+      promptIdx: 1,
+    },
+  ])(
+    'keeps colon-delimited identifiers from colliding for $description',
+    async ({ conversationId, promptIdx }) => {
+      const conversations = {};
+      const promptTemplate =
+        '{% if _conversation.length %}prior={{ _conversation[0].output }} {% endif %}now={{ turn }}';
+
+      await runEval({
+        ...defaultOptions,
+        provider: mockProvider,
+        prompt: { raw: promptTemplate, label: 'first prompt', id: 'prompt:1' },
+        test: { metadata: { conversationId: 'shared' }, vars: { turn: 'first' } },
+        conversations,
+        registers: {},
+      });
+
+      await runEval({
+        ...defaultOptions,
+        promptIdx,
+        provider: mockProvider,
+        prompt: { raw: promptTemplate, label: 'second prompt', id: 'prompt' },
+        test: { metadata: { conversationId }, vars: { turn: 'second' } },
+        conversations,
+        registers: {},
+      });
+
+      expect(mockProvider.callApi).toHaveBeenNthCalledWith(
+        2,
+        'now=second',
+        expect.anything(),
+        undefined,
+      );
+      expect(Object.keys(conversations)).toHaveLength(2);
+    },
+  );
 
   it('should include sessionId from response in result metadata', async () => {
     const conversations: Record<string, any[]> = {};
@@ -494,15 +631,43 @@ describe('runEval', () => {
 
     const results = await runEval({
       ...defaultOptions,
+      evalId: 'eval-runtime-vars',
       provider: errorProvider,
-      prompt: { raw: 'Test prompt', label: 'test-label' },
-      test: {},
+      prompt: { raw: '{{__evalStepId}} {{topic}}', label: 'test-label' },
+      test: { vars: { topic: 'weather' } },
       conversations: {},
       registers: {},
     });
     const result = results[0];
     expect(result.success).toBe(false);
     expect(result.error).toContain('API Error');
+    expect(result.failureReason).toBe(ResultFailureReason.ERROR);
+    expect(result.vars).toEqual({ topic: 'weather' });
+  });
+
+  it('should keep trace linkage when a traced provider call fails', async () => {
+    const errorProvider: ApiProvider = {
+      id: vi.fn().mockReturnValue('traced-error-provider'),
+      callApi: vi.fn().mockRejectedValue(new Error('Traced API Error')),
+    };
+
+    const [result] = await runEval({
+      ...defaultOptions,
+      provider: errorProvider,
+      prompt: { raw: 'Test prompt', label: 'test-label' },
+      test: {
+        metadata: {
+          evaluationId: 'eval-provider-error-trace',
+          tracingEnabled: true,
+        },
+      },
+      conversations: {},
+      registers: {},
+    });
+
+    expect(result.traceId).toMatch(/^[0-9a-f]{32}$/);
+    expect(result.evaluationId).toBe('eval-provider-error-trace');
+    expect(result.error).toContain('Traced API Error');
     expect(result.failureReason).toBe(ResultFailureReason.ERROR);
   });
 

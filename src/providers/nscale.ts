@@ -3,6 +3,7 @@ import { createNscaleImageProvider } from './nscale/image';
 import { OpenAiChatCompletionProvider } from './openai/chat';
 import { OpenAiCompletionProvider } from './openai/completion';
 import { OpenAiEmbeddingProvider } from './openai/embedding';
+import { splitLocalOptions } from './openai/localOptions';
 
 import type { EnvOverrides } from '../types/env';
 import type { ApiProvider, ProviderOptions } from '../types/index';
@@ -26,26 +27,30 @@ export function createNscaleProvider(
   const splits = providerPath.split(':');
 
   const config = options.config?.config || {};
+  const { localOptions, modelParameters } = splitLocalOptions(config);
 
-  // Prefer service tokens over API keys (API keys deprecated Oct 30, 2025)
-  const getApiKey = () => {
-    return (
-      config.apiKey ||
-      options.env?.NSCALE_SERVICE_TOKEN ||
-      getEnvString('NSCALE_SERVICE_TOKEN') ||
-      options.env?.NSCALE_API_KEY ||
-      getEnvString('NSCALE_API_KEY')
-    );
+  const getApiKeyEnvar = () => {
+    if (config.apiKeyEnvar) {
+      return config.apiKeyEnvar;
+    }
+    // Select a native namespace without copying its credential into config.
+    for (const envar of ['NSCALE_SERVICE_TOKEN', 'NSCALE_API_KEY']) {
+      if (options.env?.[envar] || getEnvString(envar)) {
+        return envar;
+      }
+    }
+    return 'NSCALE_SERVICE_TOKEN';
   };
 
   const nscaleConfig = {
     ...options,
     config: {
-      apiBaseUrl: 'https://inference.api.nscale.com/v1',
-      apiKey: getApiKey(),
-      passthrough: {
-        ...config,
-      },
+      ...localOptions,
+      apiKeyEnvar: getApiKeyEnvar(),
+      // Honor an explicit apiBaseUrl (private/regional Nscale endpoints) instead
+      // of silently ignoring it while still shipping it in the request body.
+      apiBaseUrl: localOptions.apiBaseUrl || 'https://inference.api.nscale.com/v1',
+      passthrough: { ...modelParameters, ...config.passthrough },
     },
   };
 
@@ -60,7 +65,7 @@ export function createNscaleProvider(
     return new OpenAiEmbeddingProvider(modelName, nscaleConfig);
   } else if (splits[1] === 'image') {
     return createNscaleImageProvider(providerPath, {
-      config: options.config as any, // Allow flexible config type for Nscale image options
+      config,
       id: options.id,
       env: options.env,
     });

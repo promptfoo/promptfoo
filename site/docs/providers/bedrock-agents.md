@@ -6,7 +6,7 @@ sidebar_label: AWS Bedrock Agents
 
 # AWS Bedrock Agents
 
-The AWS Bedrock Agents provider enables you to test and evaluate AI agents built with Amazon Bedrock Agents. Amazon Bedrock Agents uses the reasoning of foundation models (FMs), APIs, and data to break down user requests, gathers relevant information, and efficiently completes tasks—freeing teams to focus on high-value work.
+The AWS Bedrock Agents provider lets you test and evaluate AI agents built with Amazon Bedrock Agents. Bedrock Agents use foundation models, APIs, and your data to break down a user request, gather relevant information, and complete multi-step tasks.
 
 ## Prerequisites
 
@@ -19,15 +19,24 @@ The AWS Bedrock Agents provider enables you to test and evaluate AI agents built
 
 ```yaml
 providers:
-  - bedrock-agent:YOUR_AGENT_ID
+  - id: bedrock-agent:YOUR_AGENT_ID
     config:
-      agentAliasId: PROD_ALIAS_ID  # Required
+      agentAliasId: PROD_ALIAS_ID # Required
       region: us-east-1
 ```
 
 ## Full Configuration Options
 
-The Bedrock Agents provider supports all features of AWS Bedrock agents:
+:::note
+
+Most configs only need `agentId` (from the provider ID) and `agentAliasId`. The options below are optional — see [Features](#features) for per-feature walkthroughs.
+
+:::
+
+The provider exposes the main [`InvokeAgent` options](https://docs.aws.amazon.com/bedrock/latest/APIReference/API_agent-runtime_InvokeAgent.html).
+Legacy inference, guardrail, prompt override, action-group, and input filtering settings
+shown below are accepted for compatibility but are omitted from runtime requests by
+the AWS SDK. Configure those settings on the deployed agent.
 
 ```yaml
 providers:
@@ -82,7 +91,9 @@ providers:
               numberOfResults: 5
               overrideSearchType: HYBRID # or SEMANTIC
               filter:
-                category: 'technical'
+                equals:
+                  key: category
+                  value: 'technical'
         - knowledgeBaseId: KB_ID_2
 
       # Action Groups (Tools)
@@ -129,21 +140,21 @@ Maintain conversation context across multiple interactions:
 ```yaml
 tests:
   - vars:
-      query: "My order number is 12345"
+      query: 'My order number is 12345'
     providers:
-      - bedrock-agent:support-agent
+      - id: bedrock-agent:support-agent
         config:
-          sessionId: "customer-session-001"
+          sessionId: 'customer-session-001'
 
   - vars:
       query: "What's the status of my order?"
     providers:
-      - bedrock-agent:support-agent
+      - id: bedrock-agent:support-agent
         config:
-          sessionId: "customer-session-001"  # Same session
+          sessionId: 'customer-session-001' # Same session
     assert:
       - type: contains
-        value: "12345"  # Agent should remember the order number
+        value: '12345' # Agent should remember the order number
 ```
 
 ### Memory Types
@@ -164,6 +175,10 @@ config:
 
 Connect agents to knowledge bases for RAG capabilities:
 
+Configure the knowledge-base association on the deployed agent first. Entries with `retrievalConfiguration` override retrieval settings for the request. Legacy entries containing only `knowledgeBaseId` use the deployed settings and are omitted from the request's session overrides.
+
+Use the AWS [RetrievalFilter](https://docs.aws.amazon.com/bedrock/latest/APIReference/API_agent-runtime_RetrievalFilter.html) operator format for metadata filters. Flat metadata maps are rejected locally. Combine conditions with `andAll` or `orAll`.
+
 ```yaml
 config:
   knowledgeBaseConfigurations:
@@ -173,8 +188,13 @@ config:
           numberOfResults: 10
           overrideSearchType: HYBRID
           filter:
-            documentType: 'manual'
-            product: 'widget-pro'
+            andAll:
+              - equals:
+                  key: documentType
+                  value: 'manual'
+              - equals:
+                  key: product
+                  value: 'widget-pro'
 ```
 
 ### Action Groups (Tools)
@@ -196,28 +216,17 @@ config:
 
 ### Guardrails
 
-Apply content filtering and safety measures:
-
-```yaml
-config:
-  guardrailConfiguration:
-    guardrailId: 'content-filter-001'
-    guardrailVersion: '2'
-```
+Configure guardrails on the deployed agent. The AWS `InvokeAgent` API does not accept
+`guardrailConfiguration`, so setting that provider option does not apply a guardrail.
+Promptfoo cannot infer whether a guardrail ran from configuration alone; inspect the agent trace.
+The same runtime limitation applies to inference settings, prompt overrides, and action-group definitions.
 
 ### Inference Control
 
-Fine-tune agent response generation:
-
-```yaml
-config:
-  inferenceConfig:
-    temperature: 0.3 # Lower for more deterministic responses
-    topP: 0.95
-    topK: 40
-    maximumLength: 4096
-    stopSequences: ['END_RESPONSE', "\n\n"]
-```
+Set inference parameters when creating or updating the deployed agent. `InvokeAgent`
+does not accept per-request `inferenceConfig`, `promptOverrideConfiguration`, or
+`actionGroups` definitions. Existing provider configuration keys are retained for
+compatibility, but the AWS SDK omits these fields from runtime requests.
 
 ### Trace Information
 
@@ -239,7 +248,11 @@ tests:
           )
 ```
 
-`enableTrace` exposes Amazon Bedrock's native agent trace in `context.providerResponse.metadata.trace`. That is separate from Promptfoo's OpenTelemetry `context.trace`. Use JavaScript assertions against `metadata.trace` for Bedrock-specific action group details, and use [Promptfoo tracing](/docs/tracing/) plus trajectory assertions when you want OTEL-based workflow checks.
+:::note
+
+`enableTrace` exposes Amazon Bedrock's native agent trace in `context.providerResponse.metadata.trace`. That is separate from promptfoo's OpenTelemetry `context.trace`. Use JavaScript assertions against `metadata.trace` for Bedrock-specific action group details, and use [promptfoo tracing](/docs/tracing/) plus trajectory assertions when you want OTEL-based workflow checks.
+
+:::
 
 ## Authentication
 
@@ -281,11 +294,6 @@ The provider returns responses with the following structure:
     sessionId?: string;     // Session identifier
     memoryId?: string;      // Memory type used
     trace?: Array<any>;     // Execution traces (if enableTrace: true)
-    guardrails?: {          // Guardrail application info
-      applied: boolean;
-      guardrailId: string;
-      guardrailVersion: string;
-    };
   };
   cached?: boolean;         // Whether response was cached
   error?: string;           // Error message if failed
@@ -296,12 +304,12 @@ The provider returns responses with the following structure:
 
 ### Basic Agent Testing
 
-```yaml
+```yaml title="promptfooconfig.yaml"
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
 description: 'Test customer support agent'
 
 providers:
-  - id: support-agent
-    provider: bedrock-agent:SUPPORT_AGENT_ID
+  - id: bedrock-agent:SUPPORT_AGENT_ID
     config:
       agentAliasId: PROD_ALIAS
       enableTrace: true
@@ -328,8 +336,7 @@ tests:
   - vars:
       query: "I'm having trouble with product SKU-123"
     providers:
-      - id: agent-session-1
-        provider: bedrock-agent:AGENT_ID
+      - id: bedrock-agent:AGENT_ID
         config:
           sessionId: 'test-session-001'
           sessionState:
@@ -340,8 +347,7 @@ tests:
   - vars:
       query: 'What warranty options are available?'
     providers:
-      - id: agent-session-1
-        provider: bedrock-agent:AGENT_ID
+      - id: bedrock-agent:AGENT_ID
         config:
           sessionId: 'test-session-001' # Same session
     assert:
@@ -356,16 +362,16 @@ tests:
   - vars:
       query: "What's the maximum file upload size?"
     providers:
-      - bedrock-agent:AGENT_ID
+      - id: bedrock-agent:AGENT_ID
         config:
           knowledgeBaseConfigurations:
-            - knowledgeBaseId: "docs-kb"
+            - knowledgeBaseId: 'docs-kb'
               retrievalConfiguration:
                 vectorSearchConfiguration:
                   numberOfResults: 3
     assert:
       - type: contains-any
-        value: ["10MB", "10 megabytes", "ten megabytes"]
+        value: ['10MB', '10 megabytes', 'ten megabytes']
 ```
 
 ### Tool Usage Verification
@@ -375,11 +381,11 @@ tests:
   - vars:
       query: "What's the weather in Seattle?"
     providers:
-      - bedrock-agent:AGENT_ID
+      - id: bedrock-agent:AGENT_ID
         config:
           enableTrace: true
           actionGroups:
-            - actionGroupName: "weather-api"
+            - actionGroupName: 'weather-api'
     assert:
       - type: javascript
         value: |
@@ -400,14 +406,9 @@ The provider includes specific error messages for common issues:
 
 ## Performance Optimization
 
-1. **Use Caching** for identical queries:
-
-   ```yaml
-   providers:
-     - bedrock-agent:AGENT_ID
-       config:
-         cache: true  # Responses are cached by default
-   ```
+1. **Use caching** for identical queries. Responses are cached by default — there is no
+   per-provider flag. Disable caching with `promptfoo eval --no-cache` or
+   `PROMPTFOO_CACHE_ENABLED=false`.
 
 2. **Optimize Knowledge Base Queries**:
 

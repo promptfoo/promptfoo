@@ -3,16 +3,33 @@ import * as fs from 'fs';
 
 import { VERSION } from '../../constants';
 
+import type { RedteamCliGenerateOptions } from '../types';
+
 /**
  * Computes a hash from a config file's contents.
  * Used to detect when the config file has changed.
  *
+ * Provider/target filters are folded into the hash so that changing them
+ * invalidates a previously generated output.
+ *
  * @param configPath - Path to the config file
+ * @param options - Provider/target filters that influence the generated tests
  * @returns MD5 hash of the config file contents prefixed with version
  */
-export function getConfigHash(configPath: string): string {
+export function getConfigHash(
+  configPath: string,
+  options: Pick<RedteamCliGenerateOptions, 'filterProviders' | 'filterTargets'> = {},
+): string {
   const content = fs.readFileSync(configPath, 'utf8');
-  return createHash('md5').update(`${VERSION}:${content}`).digest('hex');
+  const filters = {
+    ...(options.filterProviders ? { filterProviders: options.filterProviders } : {}),
+    ...(options.filterTargets ? { filterTargets: options.filterTargets } : {}),
+  };
+  const hashInput =
+    Object.keys(filters).length > 0
+      ? JSON.stringify({ version: VERSION, content, filters })
+      : `${VERSION}:${content}`;
+  return createHash('md5').update(hashInput).digest('hex');
 }
 
 /**

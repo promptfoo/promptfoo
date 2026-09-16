@@ -5,6 +5,7 @@ import type { getDb } from './index';
 
 // SQLite limits a single statement to 999 bound parameters by default.
 const SQLITE_MAX_BOUND_PARAMETERS = 999;
+type TraceDeletionDb = Pick<Awaited<ReturnType<typeof getDb>>, 'delete'>;
 
 /**
  * Removes spans and traces tied to the given eval ids.
@@ -16,11 +17,15 @@ const SQLITE_MAX_BOUND_PARAMETERS = 999;
  * Spans are removed via a correlated subquery so the query stays within SQLite's
  * bound-parameter limit even when an eval has many traces.
  */
-export function deleteTraceRecordsForEvals(db: ReturnType<typeof getDb>, evalIds: string[]): void {
+export async function deleteTraceRecordsForEvals(
+  db: TraceDeletionDb,
+  evalIds: string[],
+): Promise<void> {
   for (let i = 0; i < evalIds.length; i += SQLITE_MAX_BOUND_PARAMETERS) {
     const evalIdBatch = evalIds.slice(i, i + SQLITE_MAX_BOUND_PARAMETERS);
 
-    db.delete(spansTable)
+    await db
+      .delete(spansTable)
       .where(
         sql`${spansTable.traceId} in (
           select ${tracesTable.traceId}
@@ -30,6 +35,6 @@ export function deleteTraceRecordsForEvals(db: ReturnType<typeof getDb>, evalIds
       )
       .run();
 
-    db.delete(tracesTable).where(inArray(tracesTable.evaluationId, evalIdBatch)).run();
+    await db.delete(tracesTable).where(inArray(tracesTable.evaluationId, evalIdBatch)).run();
   }
 }
