@@ -1271,6 +1271,19 @@ function createEvaluateResult({
   return ret;
 }
 
+function getProviderMetricsForErrorResponse(
+  response: ProviderResponse | undefined,
+): ProviderResponse | undefined {
+  if (!response) {
+    return undefined;
+  }
+
+  // A response transform may be responsible for sanitizing provider output. If it throws,
+  // retain accounting and session context without persisting the untransformed payload.
+  const { cached, cost, latencyMs, metadata, sessionId, tokenUsage } = response;
+  return { cached, cost, latencyMs, metadata, sessionId, tokenUsage };
+}
+
 /** Persist both the logical evaluation footprint and the work actually incurred. */
 function normalizeCachedTargetResponse(response: ProviderResponse): ProviderResponse {
   if (!response.cached && !response.tokenUsage) {
@@ -1655,6 +1668,7 @@ async function runEvalInternal({
 
   let setup = state.setup;
   let latencyMs = 0;
+  let ret: EvaluateResult | undefined;
   let traceContext: Awaited<ReturnType<typeof generateTraceContextIfNeeded>> | undefined;
 
   try {
@@ -1732,7 +1746,7 @@ async function runEvalInternal({
           // with the provider call context.
           const persistedVars = omitEvalRuntimeVars(state.vars);
 
-          const ret = createEvaluateResult({
+          ret = createEvaluateResult({
             fileMetadata: state.fileMetadata,
             latencyMs,
             prompt,
@@ -1750,6 +1764,12 @@ async function runEvalInternal({
           invariant(ret.tokenUsage, 'This is always defined, just doing this to shut TS up');
 
           trackProviderUsage(provider, response);
+
+          // Preserve provider accounting even if response transforms or grading throw below.
+          if (response.tokenUsage) {
+            accumulateResponseTokenUsage(ret.tokenUsage, response);
+          }
+
           await applyRunEvalResponseOutcome({
             abortSignal,
             deferGrading,
@@ -1770,11 +1790,6 @@ async function runEvalInternal({
             traceContext: executionTraceContext,
             vars: persistedVars,
           });
-
-          // Update token usage stats
-          if (response.tokenUsage) {
-            accumulateResponseTokenUsage(ret.tokenUsage, response);
-          }
 
           if (test.options?.storeOutputAs && ret.response?.output && registers) {
             // Save the output in a register for later use
@@ -1821,12 +1836,20 @@ async function runEvalInternal({
         failureReason: ResultFailureReason.ERROR,
         score: 0,
         namedScores: {},
-        latencyMs,
+        latencyMs: ret?.latencyMs ?? latencyMs,
         promptIdx: promptIndex,
         testIdx: testIndex,
         testCase: test,
         promptId: prompt.id || '',
-        metadata,
+        metadata: ret
+          ? {
+              ...ret.metadata,
+              errorContext: metadata.errorContext,
+            }
+          : metadata,
+        cost: ret?.cost,
+        tokenUsage: ret?.tokenUsage,
+        response: getProviderMetricsForErrorResponse(ret?.response),
         ...getTraceLinkage(traceContext, evalId),
       },
     ];
