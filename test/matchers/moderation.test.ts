@@ -3,7 +3,10 @@ import { matchesModeration } from '../../src/matchers/moderation';
 import { OpenAiModerationProvider } from '../../src/providers/openai/moderation';
 import { ReplicateModerationProvider } from '../../src/providers/replicate';
 import { LLAMA_GUARD_REPLICATE_PROVIDER } from '../../src/redteam/constants';
-import { withProviderCallTracingContext } from '../../src/scheduler/providerCallExecutionContext';
+import {
+  withProviderCallExecutionContext,
+  withProviderCallTracingContext,
+} from '../../src/scheduler/providerCallExecutionContext';
 import { mockProcessEnv } from '../util/utils';
 
 import type { ProviderCallTracingContext } from '../../src/scheduler/providerCallExecutionContext';
@@ -47,6 +50,19 @@ describe('matchesModeration', () => {
     restoreProcessEnv = () => {};
   });
 
+  it('forwards the evaluator abort signal to the moderation provider', async () => {
+    const abortSignal = new AbortController().signal;
+    const provider = new ReplicateModerationProvider('fixture/model');
+    const call = vi.spyOn(provider, 'callModerationApi').mockResolvedValue(mockModerationResponse);
+    await withProviderCallExecutionContext({ abortSignal }, () =>
+      matchesModeration(
+        { userPrompt: 'test prompt', assistantResponse: 'test response' },
+        { provider },
+      ),
+    );
+    expect(call).toHaveBeenCalledWith('test prompt', 'test response', undefined, { abortSignal });
+  });
+
   it('should skip moderation when assistant response is empty', async () => {
     const openAiSpy = vi
       .spyOn(OpenAiModerationProvider.prototype, 'callModerationApi')
@@ -79,29 +95,46 @@ describe('matchesModeration', () => {
     expect(openAiSpy).toHaveBeenCalledWith('test prompt', 'test response');
   });
 
-  it('records moderation providers beneath the grading trace', async () => {
-    setTestEnv({ OPENAI_API_KEY: 'test-key' });
-    vi.spyOn(OpenAiModerationProvider.prototype, 'callModerationApi').mockResolvedValue(
-      mockModerationResponse,
-    );
-    const providerSpan = vi.fn<ProviderCallTracingContext['withProviderSpan']>(
-      async ({ callContext }, invoke) => invoke(callContext),
-    );
+  it.each([false, true])(
+    'preserves traced context and call arity, signal=%s',
+    async (withSignal) => {
+      setTestEnv({ OPENAI_API_KEY: 'test-key' });
+      const abortSignal = withSignal ? new AbortController().signal : undefined;
+      const tracedContext = {
+        prompt: { raw: 'test prompt', label: 'moderation' },
+        vars: {},
+        traceparent: '00-0123456789abcdef0123456789abcdef-0123456789abcdef-01',
+      };
+      const call = vi
+        .spyOn(OpenAiModerationProvider.prototype, 'callModerationApi')
+        .mockResolvedValue(mockModerationResponse);
+      const providerSpan = vi.fn<ProviderCallTracingContext['withProviderSpan']>(
+        async (_options, invoke) => invoke(tracedContext),
+      );
 
-    await withProviderCallTracingContext(
-      {
-        getActiveTraceparent: () => undefined,
-        withGraderSpan: async (_options, invoke) => invoke(),
-        withProviderSpan: providerSpan,
-      },
-      () => matchesModeration({ userPrompt: 'test prompt', assistantResponse: 'test response' }),
-    );
+      await withProviderCallExecutionContext({ abortSignal }, () =>
+        withProviderCallTracingContext(
+          {
+            getActiveTraceparent: () => tracedContext.traceparent,
+            withGraderSpan: async (_options, invoke) => invoke(),
+            withProviderSpan: providerSpan,
+          },
+          () =>
+            matchesModeration({ userPrompt: 'test prompt', assistantResponse: 'test response' }),
+        ),
+      );
 
-    expect(providerSpan).toHaveBeenCalledWith(
-      expect.objectContaining({ role: 'grader', promptLabel: 'moderation' }),
-      expect.any(Function),
-    );
-  });
+      expect(providerSpan).toHaveBeenCalledWith(
+        expect.objectContaining({ role: 'grader', promptLabel: 'moderation' }),
+        expect.any(Function),
+      );
+      expect(call.mock.calls[0]).toEqual([
+        'test prompt',
+        'test response',
+        ...(abortSignal ? [tracedContext, { abortSignal }] : []),
+      ]);
+    },
+  );
 
   it('should propagate token usage returned by moderation provider', async () => {
     setTestEnv({ OPENAI_API_KEY: 'test-key' });

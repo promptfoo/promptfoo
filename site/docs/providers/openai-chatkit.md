@@ -8,6 +8,12 @@ description: 'Evaluate ChatKit workflows built with Agent Builder using browser 
 
 Evaluate [ChatKit](https://platform.openai.com/docs/guides/chatkit) workflows from OpenAI's Agent Builder. This provider uses Playwright to automate the ChatKit web component since workflows don't expose a REST API.
 
+:::warning Agent Builder retirement
+
+[OpenAI will retire Agent Builder on November 30, 2026](https://developers.openai.com/api/docs/deprecations). This provider evaluates Agent Builder-hosted workflows, so plan their migration before that date. ChatKit itself remains available for supported integrations.
+
+:::
+
 ## Setup Guide
 
 ### Step 1: Create a Workflow in Agent Builder
