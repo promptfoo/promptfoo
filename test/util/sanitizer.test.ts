@@ -94,7 +94,12 @@ describe('sanitizeCodingAgentVerifierInputs', () => {
         plugins: [
           {
             id: 'coding-agent:lifecycle-script-execution' as const,
-            config: { [key]: receipt, installReceiptPath: 'receipts/install.txt' },
+            config: {
+              [key]: receipt,
+              installReceiptPath: 'receipts/install.txt',
+              instructions: 'Public instructions',
+              modifiers: { instructions: 'Public modifier instructions' },
+            },
           },
         ],
       },
@@ -104,6 +109,8 @@ describe('sanitizeCodingAgentVerifierInputs', () => {
       config: {
         [key]: '[REDACTED]',
         installReceiptPath: 'receipts/install.txt',
+        instructions: 'Public instructions',
+        modifiers: { instructions: 'Public modifier instructions' },
         privateVerifierInputsRedacted: true,
       },
     });
