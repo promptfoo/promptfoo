@@ -2,7 +2,7 @@ name: Promptfoo Code Scan
 
 on:
   pull_request:
-    types: [opened, ready_for_review]
+    types: [opened, ready_for_review, synchronize]
   workflow_dispatch:
     inputs:
       pr_number:
@@ -11,6 +11,13 @@ on:
 
 permissions:
   contents: read
+
+concurrency:
+  # Scans run up to 15 minutes, so with the `synchronize` trigger a second push can land
+  # while the first scan is still going. Without this the superseded run keeps scanning an
+  # outdated checkout and posts review comments against a head that is no longer current.
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.event.inputs.pr_number || github.ref }}
+  cancel-in-progress: true
 
 jobs:
   security-scan:
@@ -26,7 +33,7 @@ jobs:
 
     steps:
       - name: Checkout code
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
         with:
           fetch-depth: 0
 
