@@ -1079,40 +1079,43 @@ describe('database eval deletion', () => {
     it.each([
       ['a string', 'imported-grading-result'],
       ['an array', [{ pass: false }]],
-    ])('ignores non-object grading results (%s) when debiting assertion counts', async (_label, malformedGradingResult) => {
-      // Imported/saved V4 rows accept result records as unknown, so
-      // gradingResult can be a truthy non-object. It must not be read as a
-      // componentless failed assertion, which would debit assertFailCount
-      // owned by surviving rows.
-      const eval_ = await EvalFactory.create({ numResults: 2, resultTypes: ['success'] });
-      const [target, survivor] = await EvalResult.findManyByEvalId(eval_.id);
-      const reloaded = await Eval.findById(eval_.id);
-      if (!reloaded) {
-        throw new Error('expected eval to be findable');
-      }
-      reloaded.prompts = [
-        {
-          ...reloaded.prompts[0],
-          metrics: {
-            ...reloaded.prompts[0].metrics!,
-            assertPassCount: 0,
-            assertFailCount: 1,
+    ])(
+      'ignores non-object grading results (%s) when debiting assertion counts',
+      async (_label, malformedGradingResult) => {
+        // Imported/saved V4 rows accept result records as unknown, so
+        // gradingResult can be a truthy non-object. It must not be read as a
+        // componentless failed assertion, which would debit assertFailCount
+        // owned by surviving rows.
+        const eval_ = await EvalFactory.create({ numResults: 2, resultTypes: ['success'] });
+        const [target, survivor] = await EvalResult.findManyByEvalId(eval_.id);
+        const reloaded = await Eval.findById(eval_.id);
+        if (!reloaded) {
+          throw new Error('expected eval to be findable');
+        }
+        reloaded.prompts = [
+          {
+            ...reloaded.prompts[0],
+            metrics: {
+              ...reloaded.prompts[0].metrics!,
+              assertPassCount: 0,
+              assertFailCount: 1,
+            },
           },
-        },
-      ];
-      await reloaded.save();
-      await dbUpdateResult(target.id, { gradingResult: malformedGradingResult as any });
-      await dbUpdateResult(survivor.id, {
-        gradingResult: { pass: false, score: 0, reason: 'manual fail' } as any,
-      });
+        ];
+        await reloaded.save();
+        await dbUpdateResult(target.id, { gradingResult: malformedGradingResult as any });
+        await dbUpdateResult(survivor.id, {
+          gradingResult: { pass: false, score: 0, reason: 'manual fail' } as any,
+        });
 
-      await deleteEvalResult(eval_.id, target.id);
+        await deleteEvalResult(eval_.id, target.id);
 
-      const after = await Eval.findById(eval_.id);
-      const metrics = after?.prompts[0]?.metrics;
-      expect(metrics?.assertPassCount).toBe(0);
-      expect(metrics?.assertFailCount).toBe(1);
-    });
+        const after = await Eval.findById(eval_.id);
+        const metrics = after?.prompts[0]?.metrics;
+        expect(metrics?.assertPassCount).toBe(0);
+        expect(metrics?.assertFailCount).toBe(1);
+      },
+    );
 
     it('ignores non-numeric named scores when debiting imported rows', async () => {
       const eval_ = await EvalFactory.create({ numResults: 1, resultTypes: ['success'] });
@@ -1391,38 +1394,38 @@ describe('database eval deletion', () => {
       { resultType: 'success' as const, touched: ['testPassCount', 'assertPassCount'] as const },
       { resultType: 'failure' as const, touched: ['testFailCount', 'assertFailCount'] as const },
       { resultType: 'error' as const, touched: ['testErrorCount'] as const },
-    ])('clamps result-count buckets at zero when deleting a $resultType row from an under-credited legacy aggregate', async ({
-      resultType,
-      touched,
-    }) => {
-      const eval_ = await EvalFactory.create({ numResults: 1, resultTypes: [resultType] });
-      const [target] = await EvalResult.findManyByEvalId(eval_.id);
-      const reloaded = await Eval.findById(eval_.id);
-      if (!reloaded) {
-        throw new Error('expected eval to be findable');
-      }
-      reloaded.prompts = [
-        {
-          ...reloaded.prompts[0],
-          metrics: {
-            ...reloaded.prompts[0].metrics!,
-            testPassCount: 0,
-            testFailCount: 0,
-            testErrorCount: 0,
-            assertPassCount: 0,
-            assertFailCount: 0,
+    ])(
+      'clamps result-count buckets at zero when deleting a $resultType row from an under-credited legacy aggregate',
+      async ({ resultType, touched }) => {
+        const eval_ = await EvalFactory.create({ numResults: 1, resultTypes: [resultType] });
+        const [target] = await EvalResult.findManyByEvalId(eval_.id);
+        const reloaded = await Eval.findById(eval_.id);
+        if (!reloaded) {
+          throw new Error('expected eval to be findable');
+        }
+        reloaded.prompts = [
+          {
+            ...reloaded.prompts[0],
+            metrics: {
+              ...reloaded.prompts[0].metrics!,
+              testPassCount: 0,
+              testFailCount: 0,
+              testErrorCount: 0,
+              assertPassCount: 0,
+              assertFailCount: 0,
+            },
           },
-        },
-      ];
-      await reloaded.save();
+        ];
+        await reloaded.save();
 
-      await deleteEvalResult(eval_.id, target.id);
+        await deleteEvalResult(eval_.id, target.id);
 
-      const metrics = (await Eval.findById(eval_.id))?.prompts[0]?.metrics;
-      for (const bucket of touched) {
-        expect(metrics?.[bucket]).toBe(0);
-      }
-    });
+        const metrics = (await Eval.findById(eval_.id))?.prompts[0]?.metrics;
+        for (const bucket of touched) {
+          expect(metrics?.[bucket]).toBe(0);
+        }
+      },
+    );
 
     it('does not create negative named metrics when the aggregate never tracked one', async () => {
       const eval_ = await EvalFactory.create({ numResults: 2, resultTypes: ['success'] });

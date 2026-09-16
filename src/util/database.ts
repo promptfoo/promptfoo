@@ -42,7 +42,7 @@ import {
   type NamedMetricAccumulator,
   subtractNamedMetric,
 } from './namedMetrics';
-import { restoreAzureBlobSasTokens } from './sanitizer';
+import { restoreAzureBlobSasTokens, sanitizeTracingConfigForPersistence } from './sanitizer';
 import {
   getCachedStandaloneEvals,
   getStandaloneEvalCacheKey,
@@ -78,7 +78,7 @@ export async function writeResultsToDatabase(
         createdAt: createdAt.getTime(),
         author: getAuthor(),
         description: config.description,
-        config,
+        config: sanitizeTracingConfigForPersistence(config),
         results,
         isRedteam: config.redteam !== undefined,
       })
@@ -581,7 +581,7 @@ function recomputeNamedMetricsFromResults(
     const testVars = (result.testCase?.vars ?? {}) as Vars;
     for (const metricName of metricNames) {
       const metricValue = namedScores[metricName];
-      if (typeof metricValue !== 'number' || !Number.isFinite(metricValue)) {
+      if (!isFiniteNumber(metricValue)) {
         continue;
       }
       accumulateNamedMetric(recomputed, {
@@ -1084,7 +1084,7 @@ function subtractResultFromPromptMetrics(
   } else {
     const testVars = (result.testCase?.vars ?? {}) as Vars;
     for (const [metricName, metricValue] of Object.entries(namedScores)) {
-      if (typeof metricValue !== 'number' || !Number.isFinite(metricValue)) {
+      if (!isFiniteNumber(metricValue)) {
         continue;
       }
       subtractNamedMetric(metrics, {
