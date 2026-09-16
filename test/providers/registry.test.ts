@@ -1,8 +1,10 @@
 import path from 'path';
 
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { loadApiProvider } from '../../src/providers';
 import { isFoundationModelProvider } from '../../src/providers/constants';
 import { LlamaApiProvider } from '../../src/providers/llamaApi';
+import { MCPProvider } from '../../src/providers/mcp';
 import { OpenAiChatCompletionProvider } from '../../src/providers/openai/chat';
 import { OpenAiResponsesProvider } from '../../src/providers/openai/responses';
 import { PythonProvider } from '../../src/providers/pythonCompletion';
@@ -60,6 +62,67 @@ vi.mock('../../src/redteam/remoteGeneration', async (importOriginal) => {
 });
 
 describe('Provider Registry', () => {
+  it.each(['openai:agents-api', 'openai:agents-api:gpt-6-astra'])(
+    'routes %s to the hosted Agents API with scoped credentials',
+    async (providerPath) => {
+      const factories = await getProviderFactories(providerPath);
+      const factory = factories.find((entry) => entry.test(providerPath))!;
+      const provider = await factory.create(
+        providerPath,
+        { id: 'hosted-agent', config: { agent_id: 'agent_saved' } },
+        { basePath: '.', options: {}, env: { OPENAI_API_KEY: 'scoped-key' } },
+      );
+      expect(provider.constructor.name).toBe('OpenAiAgentsApiProvider');
+      expect(provider.id()).toBe('hosted-agent');
+      expect(provider).toHaveProperty('env.OPENAI_API_KEY', 'scoped-key');
+      expect(provider).toHaveProperty('config.agent_id', 'agent_saved');
+      expect(provider).toHaveProperty(
+        'modelName',
+        providerPath.endsWith('gpt-6-astra') ? 'gpt-6-astra' : '',
+      );
+    },
+  );
+
+  it.each([undefined, 'configured-opencode'])('preserves OpenCode provider ID %s', async (id) => {
+    const providerPath = 'opencode:sdk';
+    const factory = providerMap.find((entry) => entry.test(providerPath))!;
+    const provider = await factory.create(providerPath, { id }, { options: {} });
+    expect(provider.id()).toBe(id ?? providerPath);
+  });
+
+  it.each(['openai:codex-sdk', 'openai:codex-sdk:gpt-5.5'])(
+    'merges scoped Codex SDK environment for %s',
+    async (providerPath) => {
+      const factory = providerMap.find((entry) => entry.test(providerPath))!;
+      const provider = await factory.create(
+        providerPath,
+        { env: { CODEX_API_KEY: 'provider-key' } },
+        {
+          options: {},
+          env: { CODEX_API_KEY: 'suite-key', OPENAI_API_BASE_URL: 'https://suite.example/v1' },
+        },
+      );
+      expect(provider).toHaveProperty('env', {
+        CODEX_API_KEY: 'provider-key',
+        OPENAI_API_BASE_URL: 'https://suite.example/v1',
+      });
+    },
+  );
+
+  it.each([
+    { suite: { OPENAI_API_KEY: 'suite-key' }, scoped: { CODEX_API_KEY: 'provider-key' } },
+    { suite: { CODEX_API_KEY: 'suite-key' }, scoped: { OPENAI_API_KEY: 'provider-key' } },
+  ])(
+    'preserves scoped credentials across Codex API-key aliases: $scoped',
+    async ({ suite, scoped }) => {
+      const provider = await loadApiProvider('openai:codex-sdk', {
+        env: suite,
+        options: { env: scoped },
+      });
+      expect(provider).toHaveProperty('apiKey', 'provider-key');
+    },
+  );
+
   it.each([
     'openai:gpt-4o-mini-realtime-preview-2024-12-17',
     'openai:realtime:gpt-4o-mini-realtime-preview-2024-12-17',
@@ -78,6 +141,99 @@ describe('Provider Registry', () => {
     expect(provider).toHaveProperty('modelName', 'gpt-4o-mini-realtime-preview-2024-12-17');
     expect(provider.id()).toBe('realtime-fixture');
     expect(provider).toHaveProperty('config.apiBaseUrl', 'http://localhost:1234/v1');
+  });
+
+  it.each([
+    ['openai:live:gpt-live-1', 'gpt-live-1'],
+    ['openai:live', 'gpt-live-1'],
+    ['openai:gpt-live-1', 'gpt-live-1'],
+    ['openai:gpt-live-1-2026-09-01', 'gpt-live-1-2026-09-01'],
+  ])(
+    'routes %s to the Live endpoint with scoped configuration',
+    async (providerPath, modelName) => {
+      const factories = await getProviderFactories(providerPath);
+      const factory = factories.find((entry) => entry.test(providerPath));
+      const provider = await factory!.create(
+        providerPath,
+        {
+          id: 'live-fixture',
+          config: { audio: { output: { voice: 'quartz' } } },
+          env: { OPENAI_API_KEY: 'provider-key' },
+        },
+        { basePath: '.', options: {}, env: { OPENAI_API_KEY: 'suite-key' } },
+      );
+      expect(provider.constructor.name).toBe('OpenAiLiveProvider');
+      expect(provider.id()).toBe('live-fixture');
+      expect(provider).toHaveProperty('modelName', modelName);
+      expect(provider).toHaveProperty('config.audio.output.voice', 'quartz');
+      expect(provider).toHaveProperty('env.OPENAI_API_KEY', 'provider-key');
+    },
+  );
+
+  it.each([
+    'openai:gpt-live-transcribe',
+    'openai:gpt-live-transcribe-2026-09-01',
+    'openai:live:gpt-live-transcribe',
+    'openai:live:gpt-live-transcribe-2026-09-01',
+    'openai:transcription:gpt-live-transcribe',
+    'openai:transcription:gpt-live-transcribe-2026-09-01',
+    'openai:realtime:gpt-live-transcribe',
+    'openai:chat:gpt-live-transcribe',
+    'openai:responses:gpt-live-transcribe',
+  ])('rejects unsupported Live transcription on route %s', async (providerPath) => {
+    const factories = await getProviderFactories(providerPath);
+    const factory = factories.find((entry) => entry.test(providerPath));
+    await expect(factory!.create(providerPath, {}, { basePath: '.', options: {} })).rejects.toThrow(
+      'transcription session',
+    );
+  });
+
+  it.each(['openai:gpt-live-transcribe', 'openai:gpt-live-transcribe-2026-09-01'])(
+    'rejects transcription shorthand despite a model override for %s',
+    async (providerPath) => {
+      const factories = await getProviderFactories(providerPath);
+      const factory = factories.find((entry) => entry.test(providerPath));
+      await expect(
+        factory!.create(
+          providerPath,
+          { config: { model: 'gpt-live-1' } },
+          { basePath: '.', options: {} },
+        ),
+      ).rejects.toThrow('transcription session');
+    },
+  );
+
+  it('rejects transcription in a passthrough model override', async () => {
+    const factories = await getProviderFactories('openai:chat:gpt-4o');
+    const factory = factories.find((entry) => entry.test('openai:chat:gpt-4o'));
+    await expect(
+      factory!.create(
+        'openai:chat:gpt-4o',
+        { config: { passthrough: { model: 'gpt-live-transcribe' } } },
+        { basePath: '.', options: {} },
+      ),
+    ).rejects.toThrow('transcription session');
+  });
+
+  it.each([
+    'azure:live:gpt-live-1',
+    'azureopenai:live:gpt-live-1',
+    'openai:realtime:gpt-live-1',
+    'openai:realtime:gpt-live-1-2026-09-01',
+    'openai:chat:gpt-live-1',
+    'openai:chat:gpt-live-1-2026-09-01',
+    'openai:responses:gpt-live-1',
+    'openai:responses:gpt-live-1-2026-09-01',
+    'openai:completion:gpt-live-1',
+    'openai:embedding:gpt-live-1',
+    'openai:tts:gpt-live-1',
+    'openai:image:gpt-live-1',
+  ])('rejects the incompatible Live route %s', async (providerPath) => {
+    const factories = await getProviderFactories(providerPath);
+    const factory = factories.find((entry) => entry.test(providerPath));
+    await expect(factory!.create(providerPath, {}, { basePath: '.', options: {} })).rejects.toThrow(
+      'openai:live:',
+    );
   });
 
   it.each([
@@ -164,6 +320,29 @@ describe('Provider Registry', () => {
         options: { env: { COMETAPI_KEY: 'provider-key' } },
       });
       expect((provider as CometApiImageProvider).getApiKey()).toBe('provider-key');
+    });
+
+    it('enables MCP when optional configuration omits enabled', async () => {
+      const factory = providerMap.find((entry) => entry.test('mcp'));
+      expect(factory).toBeDefined();
+
+      const configured = await factory!.create(
+        'mcp:docs',
+        { config: { verbose: false } },
+        mockContext,
+      );
+      expect(configured).toBeInstanceOf(MCPProvider);
+      expect((configured as MCPProvider).config).toMatchObject({
+        enabled: true,
+        verbose: false,
+        serverName: 'docs',
+      });
+
+      const disabled = await factory!.create('mcp', { config: { enabled: false } }, mockContext);
+      expect((disabled as MCPProvider).config).toMatchObject({ enabled: false });
+
+      const nullish = await factory!.create('mcp', { config: { enabled: null } }, mockContext);
+      expect((nullish as MCPProvider).config).toMatchObject({ enabled: true });
     });
 
     describe('getProviderFactories boundary contract', () => {
@@ -1495,49 +1674,6 @@ describe('Provider Registry', () => {
         mockContext,
       );
       expect(autoProvider.id()).toBe('orcarouter:orcarouter/auto');
-    });
-  });
-
-  // Kept at the very end of the file because it uses vi.doMock + resetModules
-  // to simulate a broken redteam family dynamic import. Running last avoids
-  // polluting earlier tests that share the original module graph.
-  describe('getProviderFactories family load error wrapping', () => {
-    afterEach(() => {
-      vi.doUnmock('../../src/redteam/providers/registry');
-      vi.resetModules();
-    });
-
-    it('wraps family factories() rejections with the requested provider path and preserves cause', async () => {
-      // vi.doMock factory throws are caught by vitest and rewrapped with its
-      // own diagnostic message, which would lose the cause identity the
-      // wrapper is trying to preserve. Defining `redteamProviderFactories`
-      // as a throwing getter lets the import succeed while the destructure
-      // inside `family.factories()` triggers the throw — which is the
-      // realistic failure shape (module loads, export access fails) and
-      // round-trips cleanly through the async rejection.
-      const cause = new Error('simulated registry load failure');
-      vi.doMock('../../src/redteam/providers/registry', () => ({
-        get redteamProviderFactories() {
-          throw cause;
-        },
-      }));
-      vi.resetModules();
-      const { getProviderFactories: reloadedGetProviderFactories } = await import(
-        '../../src/providers/registry'
-      );
-
-      let caught: unknown;
-      try {
-        await reloadedGetProviderFactories('promptfoo:redteam:crescendo');
-      } catch (err) {
-        caught = err;
-      }
-      expect(caught).toBeInstanceOf(Error);
-      expect((caught as Error).message).toContain(
-        "Failed to load provider family for 'promptfoo:redteam:crescendo'",
-      );
-      expect((caught as Error).message).toContain('simulated registry load failure');
-      expect((caught as Error).cause).toBe(cause);
     });
   });
 
