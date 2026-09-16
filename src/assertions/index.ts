@@ -602,24 +602,13 @@ async function runAssertionInternal({
           renderedValue,
         );
       }
-      if (baseType === 'python') {
+      if (baseType === 'python' || baseType === 'ruby') {
+        const language = baseType === 'python' ? 'Python' : 'Ruby';
         return finalizeAssertionResult(
           {
             pass: false,
             score: 0,
-            reason: `Python code execution failed: ${(error as Error).message}`,
-            assertion,
-          },
-          assertion,
-          renderedValue,
-        );
-      }
-      if (baseType === 'ruby') {
-        return finalizeAssertionResult(
-          {
-            pass: false,
-            score: 0,
-            reason: `Ruby code execution failed: ${(error as Error).message}`,
+            reason: `${language} code execution failed: ${(error as Error).message}`,
             assertion,
           },
           assertion,

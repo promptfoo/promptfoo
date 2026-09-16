@@ -66,15 +66,24 @@ type MetaMessagesProviderOptions = Omit<ProviderOptions, 'config'> & {
   config?: MetaMessagesConfig;
 };
 
-// Published Meta Model API pricing in USD per token (the pricing page lists
-// $1.25 / $0.15 (cached) / $4.25 per 1M tokens for muse-spark-1.1; reasoning
-// tokens bill at the output rate). Models missing from this table fall back to
-// user-supplied `cost` / `inputCost` / `outputCost` overrides.
-// https://dev.meta.ai/docs/getting-started/pricing-rate-limits
+// Published Meta Model API pricing in USD per token. Reasoning tokens bill at
+// the output rate. Contributor models permit training on prompts and completions
+// and must be selected explicitly. Unknown models use caller pricing overrides.
+// https://dev.meta.ai/docs/pricing-rate-limits
 export const META_MODEL_PRICES: Record<
   string,
   { input: number; cachedInput: number; output: number }
 > = {
+  'muse-spark-1.3': {
+    input: 1.25 / 1e6,
+    cachedInput: 0.15 / 1e6,
+    output: 4.25 / 1e6,
+  },
+  'muse-spark-1.3-contributor': {
+    input: 0.1 / 1e6,
+    cachedInput: 0.002 / 1e6,
+    output: 0.2 / 1e6,
+  },
   'muse-spark-1.1': {
     input: 1.25 / 1e6,
     cachedInput: 0.15 / 1e6,
@@ -162,20 +171,36 @@ function assertSupportedReasoningEffort(effort: unknown): void {
 // configured — strip a leaked OPENAI_MAX_COMPLETION_TOKENS / OPENAI_MAX_TOKENS
 // env default so reasoning keeps the full output budget. A passthrough
 // max_tokens alias is mapped to the canonical field.
-function applyMetaOutputCap(
+function applyMetaChatOutputCap(
   body: Record<string, unknown>,
   passthrough: Record<string, unknown>,
-  field: 'max_completion_tokens' | 'max_output_tokens',
   value: number | undefined,
 ): void {
-  if (field in passthrough) {
+  if ('max_completion_tokens' in passthrough) {
     return;
   }
   const outputCap = passthrough.max_tokens ?? value;
   if (outputCap === undefined) {
-    delete body[field];
+    delete body.max_completion_tokens;
   } else {
-    body[field] = outputCap;
+    body.max_completion_tokens = outputCap;
+  }
+}
+
+function applyMetaResponsesOutputCap(
+  body: Record<string, unknown>,
+  passthrough: Record<string, unknown>,
+  value: number | undefined,
+): void {
+  delete body.max_completion_tokens;
+  if ('max_output_tokens' in passthrough) {
+    return;
+  }
+  const outputCap = passthrough.max_completion_tokens ?? passthrough.max_tokens ?? value;
+  if (outputCap === undefined) {
+    delete body.max_output_tokens;
+  } else {
+    body.max_output_tokens = outputCap;
   }
 }
 
@@ -189,6 +214,14 @@ function assertSupportedMetaRequest(
     );
   }
   if ('logprobs' in body) {
+    throw new Error('Muse Spark models do not support logprobs.');
+  }
+  if (
+    Array.isArray(body.include) &&
+    body.include.some(
+      (include) => include === 'logprobs' || include === 'message.output_text.logprobs',
+    )
+  ) {
     throw new Error('Muse Spark models do not support logprobs.');
   }
   if ('logit_bias' in body || (config as { logit_bias?: unknown }).logit_bias !== undefined) {
@@ -229,8 +262,13 @@ function applyMetaSamplingHygiene(
     }
   }
   for (const key of samplingKeys) {
-    if (config[key] === undefined && !(key in passthrough)) {
+    if (key in passthrough) {
+      continue;
+    }
+    if (config[key] === undefined) {
       delete body[key];
+    } else {
+      body[key] = config[key];
     }
   }
 }
@@ -386,12 +424,7 @@ class MetaProvider extends OpenAiChatCompletionProvider {
     // The Meta API caps generation with max_completion_tokens (max_tokens is
     // only a deprecated alias); honor an explicit max_tokens as the canonical
     // field rather than silently dropping it.
-    applyMetaOutputCap(
-      body,
-      passthrough,
-      'max_completion_tokens',
-      config.max_completion_tokens ?? config.max_tokens,
-    );
+    applyMetaChatOutputCap(body, passthrough, config.max_completion_tokens ?? config.max_tokens);
     applyMetaSamplingHygiene(body, config, passthrough, [
       'top_p',
       'presence_penalty',
@@ -486,10 +519,9 @@ export class MetaResponsesProvider extends OpenAiResponsesProvider {
 
     // The Responses API caps generation with max_output_tokens; map the
     // chat-style caps across so a config shared with meta:<model> keeps its cap.
-    applyMetaOutputCap(
+    applyMetaResponsesOutputCap(
       body,
       passthrough,
-      'max_output_tokens',
       config.max_output_tokens ?? config.max_completion_tokens ?? config.max_tokens,
     );
     applyMetaSamplingHygiene(body, config, passthrough, ['top_p']);
@@ -561,15 +593,31 @@ export class MetaMessagesProvider extends AnthropicMessagesProvider {
   // gateway/proxy secrets) and must not be sent to Meta; a null value tells
   // the SDK to drop the header.
   protected override buildAnthropicClientOptions(options: ClientOptions): ClientOptions {
-    const suppressedEnvHeaders = getAnthropicEnvHeaderSuppressions();
+    const suppressedEnvHeaders = {
+      ...getAnthropicEnvHeaderSuppressions(this.env),
+      'x-api-key': null,
+    };
+    const suppressedNames = new Set(
+      Object.keys(suppressedEnvHeaders).map((name) => name.toLowerCase()),
+    );
+    const safeDefaultHeaders = Object.fromEntries(
+      Object.entries(options.defaultHeaders ?? {}).filter(
+        ([name]) => !suppressedNames.has(name.toLowerCase()),
+      ),
+    );
+    const authorizationHeaders = Object.fromEntries(
+      Object.keys(suppressedEnvHeaders)
+        .filter((name) => name.toLowerCase() === 'authorization')
+        .map((name) => [name, `Bearer ${this.apiKey}`]),
+    );
     return {
       ...options,
       apiKey: null,
       authToken: this.apiKey ?? null,
       defaultHeaders: {
-        ...options.defaultHeaders,
+        ...safeDefaultHeaders,
         ...suppressedEnvHeaders,
-        ...(this.apiKey ? { Authorization: `Bearer ${this.apiKey}` } : {}),
+        ...(this.apiKey ? { Authorization: `Bearer ${this.apiKey}`, ...authorizationHeaders } : {}),
       },
     };
   }
@@ -583,6 +631,10 @@ export class MetaMessagesProvider extends AnthropicMessagesProvider {
   // Ignore ANTHROPIC_BASE_URL overrides — those are Anthropic-scoped.
   override getApiBaseUrl(): string {
     return (this.config as MetaMessagesConfig).apiBaseUrl || META_MESSAGES_API_BASE_URL;
+  }
+
+  protected override hasCustomHeaders(): boolean {
+    return false;
   }
 
   protected override getGenAISystem(): string {

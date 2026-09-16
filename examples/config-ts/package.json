@@ -11,7 +11,7 @@
   },
   "dependencies": {
     "openai": "^7.1.0",
-    "tsx": "^4.21.0",
+    "tsx": "^4.23.11",
     "zod": "^4.3.6"
   },
   "devDependencies": {

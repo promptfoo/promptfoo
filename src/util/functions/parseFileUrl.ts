@@ -13,9 +13,26 @@ function normalizeFilePath(filePath: string): string {
 }
 
 /**
- * Extracts the file path and function name from a file:// URL
- * @param fileUrl The file:// URL (e.g., "file://path/to/file.js:functionName")
- * @returns The file path and optional function name
+ * Extracts the file path and optional function name from a `file://` URL.
+ *
+ * Splits at the **last** `:` rather than the first so Windows drive-letter
+ * prefixes (`C:`, `D:`, ...) are preserved in `filePath`. The `separatorIndex
+ * > 1` guard prevents splitting at a leading drive-letter colon (`file://C:`
+ * with no function name) or at the empty-path edge case (`file://:fn`). Only
+ * JavaScript, Python, and Ruby callback files support the named-export suffix,
+ * so colons in other valid POSIX paths remain part of the path.
+ *
+ * Examples:
+ *   `file://callbacks.js`             → `{ filePath: 'callbacks.js' }`
+ *   `file://callbacks.js:fn`          → `{ filePath: 'callbacks.js', functionName: 'fn' }`
+ *   `file://C:/cb.js:fn`              → `{ filePath: 'C:/cb.js', functionName: 'fn' }`
+ *   `file://C:`                       → `{ filePath: 'C:' }` (drive-letter colon preserved)
+ *   `file://2026-05-27T12:00:00.js`   → `{ filePath: '2026-05-27T12:00:00.js' }` (colon is part of path)
+ *   `file://check.rb:Checks::check`   → `{ filePath: 'check.rb', functionName: 'Checks::check' }`
+ *
+ * @param fileUrl The `file://` URL.
+ * @returns The file path and optional function name.
+ * @throws If `fileUrl` does not start with `file://`.
  */
 export function parseFileUrl(fileUrl: string): { filePath: string; functionName?: string } {
   if (!fileUrl.startsWith('file://')) {

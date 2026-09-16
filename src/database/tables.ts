@@ -337,49 +337,6 @@ export const configsTable = sqliteTable(
   }),
 );
 
-// ------------ Outputs ------------
-// We're just recording these on eval.results for now...
-
-/*
-export const llmOutputs = sqliteTable(
-  'llm_outputs',
-  {
-    id: text('id')
-      .notNull()
-      .unique(),
-    createdAt: integer('created_at').notNull().default(sql`CURRENT_TIMESTAMP`),
-    evalId: text('eval_id')
-      .notNull()
-      .references(() => evals.id),
-    promptId: text('prompt_id')
-      .notNull()
-      .references(() => prompts.id),
-    providerId: text('provider_id').notNull(),
-    vars: text('vars', {mode: 'json'}),
-    response: text('response', {mode: 'json'}),
-    error: text('error'),
-    latencyMs: integer('latency_ms'),
-    gradingResult: text('grading_result', {mode: 'json'}),
-    namedScores: text('named_scores', {mode: 'json'}),
-    cost: real('cost'),
-  },
-  (t) => ({
-    pk: primaryKey({ columns: [t.id] }),
-  }),
-);
-
-export const llmOutputsRelations = relations(llmOutputs, ({ one }) => ({
-  eval: one(evals, {
-    fields: [llmOutputs.evalId],
-    references: [evals.id],
-  }),
-  prompt: one(prompts, {
-    fields: [llmOutputs.promptId],
-    references: [prompts.id],
-  }),
-}));
-*/
-
 // ------------ Model Audits ------------
 
 export const modelAuditsTable = sqliteTable(
