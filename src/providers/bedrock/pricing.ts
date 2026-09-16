@@ -15,7 +15,7 @@ type BedrockPricing = {
   input: number;
   output: number;
   /**
-   * Rates that replace `input`/`output` once total input tokens reach `threshold`.
+   * Rates that replace `input`/`output` once total input tokens exceed `threshold`.
    * Cache rates are derived from the tier's input rate, matching how AWS prices the
    * `-cache-read/-cache-write-...-long-context-...` meters.
    */
@@ -42,8 +42,9 @@ function isNovaPromptCachingModel(normalizedModelId: string): boolean {
  *
  * Rates are the plain us-east-1 on-demand meters from the AWS Price List API
  * (`aws pricing get-products --service-code AmazonBedrock`), which is the authority — the
- * `-batch`, `-custom-model`, `-flex`, `-priority` and `-cross-region-global` meters carry
- * different rates and must not be used here. Last reconciled 2026-09-01.
+ * `-batch`, `-custom-model`, `-flex` and `-priority` meters carry different rates and must not
+ * be used here; a `-cross-region-global` meter belongs only on a key that spells out the
+ * `global.` profile. Last reconciled 2026-09-01.
  */
 const BEDROCK_PRICING: Record<string, BedrockPricing> = {
   // Claude 5
@@ -93,8 +94,9 @@ const BEDROCK_PRICING: Record<string, BedrockPricing> = {
   'amazon.nova-lite': { input: 0.06, output: 0.24 },
   'amazon.nova-pro': { input: 0.8, output: 3.2 },
   'amazon.nova-premier': { input: 2.5, output: 12.5 },
-  // Amazon Nova 2 (reasoning models). The cross-region global profile is cheaper
-  // ($0.30/$2.50); this is the plain us-east-1 on-demand rate.
+  // Amazon Nova 2 (reasoning models). The cross-region global profile bills at its own cheaper
+  // meter, so its key must stay ahead of the plain us-east-1 one.
+  'global.amazon.nova-2-lite': { input: 0.3, output: 2.5 },
   'amazon.nova-2-lite': { input: 0.33, output: 2.75 },
   // Amazon Titan Text
   'amazon.titan-text-lite': { input: 0.15, output: 0.2 },
@@ -160,11 +162,29 @@ const BEDROCK_PRICING: Record<string, BedrockPricing> = {
   'gemma-3-4b': { input: 0.04, output: 0.08 },
   'gemma-3-12b': { input: 0.09, output: 0.29 },
   'gemma-3-27b': { input: 0.23, output: 0.38 },
-  // OpenAI GPT-OSS (open-weight models served via InvokeModel/Converse). The frontier
-  // gpt-5.x models are not available through Converse — they use the OpenAI-compatible
-  // Responses API (see src/providers/bedrock/openaiResponses.ts).
+  // OpenAI GPT-OSS (open-weight models served via InvokeModel/Converse).
   'openai.gpt-oss-120b': { input: 0.15, output: 0.6 },
   'openai.gpt-oss-20b': { input: 0.07, output: 0.3 },
+  // OpenAI GPT-5.6 frontier models, reachable over Converse through the geo inference
+  // profiles (`bedrock:converse:us.openai.gpt-5.6-sol`). Bedrock lists the first-party rates
+  // plus a 10% regional-processing uplift, and bills the whole request at 2x input /
+  // 1.5x output above 272K input tokens. InvokeModel does not serve these models, so they
+  // stay out of BEDROCK_INVOKE_PRICING_MODEL_PREFIXES.
+  'openai.gpt-5.6-sol': {
+    input: 4.4,
+    output: 22,
+    longContext: { threshold: 272_000, input: 8.8, output: 33 },
+  },
+  'openai.gpt-5.6-terra': {
+    input: 2.2,
+    output: 13.2,
+    longContext: { threshold: 272_000, input: 4.4, output: 19.8 },
+  },
+  'openai.gpt-5.6-luna': {
+    input: 0.22,
+    output: 1.32,
+    longContext: { threshold: 272_000, input: 0.44, output: 1.98 },
+  },
 };
 
 const BEDROCK_REGION_PRICING_MODEL_PREFIXES = [
@@ -368,40 +388,33 @@ const BEDROCK_REGION_PRICING: Record<string, Record<string, BedrockPricing>> = {
   'us-gov-west-1': US_GOV_PRICING,
 };
 
+/** Tables are keyed by model-id substring and matched first-match-wins in insertion order. */
+function matchPricing(
+  table: Record<string, BedrockPricing> | undefined,
+  normalizedModelId: string,
+): BedrockPricing | undefined {
+  return Object.entries(table ?? {}).find(([modelPrefix]) =>
+    normalizedModelId.includes(modelPrefix),
+  )?.[1];
+}
+
 function getBedrockPricing(normalizedModelId: string, region?: string): BedrockPricing | undefined {
   if (normalizedModelId.includes('openai.gpt-oss-') && region) {
-    const pricing = GPT_OSS_REGION_PRICING[region.toLowerCase()];
-    if (!pricing) {
-      return undefined;
-    }
-    for (const [modelPrefix, modelPricing] of Object.entries(pricing)) {
-      if (normalizedModelId.includes(modelPrefix)) {
-        return modelPricing;
-      }
-    }
-    return undefined;
+    return matchPricing(GPT_OSS_REGION_PRICING[region.toLowerCase()], normalizedModelId);
   }
 
   const regionPricing = region ? BEDROCK_REGION_PRICING[region.toLowerCase()] : undefined;
   if (regionPricing) {
-    for (const [modelPrefix, pricing] of Object.entries(regionPricing)) {
-      if (normalizedModelId.includes(modelPrefix)) {
-        return pricing;
-      }
-    }
+    const pricing = matchPricing(regionPricing, normalizedModelId);
     if (
+      pricing ||
       BEDROCK_REGION_PRICING_MODEL_PREFIXES.some((prefix) => normalizedModelId.includes(prefix))
     ) {
-      return undefined;
-    }
-  }
-
-  for (const [modelPrefix, pricing] of Object.entries(BEDROCK_PRICING)) {
-    if (normalizedModelId.includes(modelPrefix)) {
       return pricing;
     }
   }
-  return undefined;
+
+  return matchPricing(BEDROCK_PRICING, normalizedModelId);
 }
 
 const BEDROCK_INVOKE_PRICING_MODEL_PREFIXES = [
@@ -451,7 +464,7 @@ export function calculateBedrockCost(
   // prompt plus any cache reads and writes (`input_tokens` excludes cached tokens).
   const totalInputTokens = promptTokens + cacheReadTokens + cacheWriteTokens;
   const tier =
-    pricing.longContext && totalInputTokens >= pricing.longContext.threshold
+    pricing.longContext && totalInputTokens > pricing.longContext.threshold
       ? pricing.longContext
       : pricing;
 
