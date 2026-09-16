@@ -87,6 +87,7 @@ describe('Strategy IDs', () => {
     // Simple mapping for strategy ID to expected file name
     const expectedFileNameMap: Record<string, string> = {
       base64: 'base64.ts',
+      bijection: 'bijection.ts',
       citation: 'citation.ts',
       crescendo: 'crescendo.ts',
       gcg: 'gcg.ts',
@@ -102,9 +103,14 @@ describe('Strategy IDs', () => {
       multilingual: 'multilingual.ts',
       piglatin: 'otherEncodings.ts',
       'prompt-injection': 'promptInjections/index.ts',
+      'random-case': 'textMutation.ts',
       retry: 'retry.ts',
       rot13: 'rot13.ts',
+      'unicode-noise': 'textMutation.ts',
       video: 'simpleVideo.ts',
+      'whitespace-obfuscation': 'textMutation.ts',
+      zalgo: 'textMutation.ts',
+      'zero-width': 'textMutation.ts',
     };
 
     // Check all defined strategies

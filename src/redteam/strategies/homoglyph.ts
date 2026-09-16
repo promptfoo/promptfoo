@@ -1,3 +1,5 @@
+import { transformStrategyInput } from './textMutation';
+
 import type { TestCase } from '../../types/index';
 
 // Map of standard characters to homoglyph unicode characters
@@ -90,7 +92,7 @@ export function addHomoglyphs(testCases: TestCase[], injectVar: string): TestCas
       })),
       vars: {
         ...testCase.vars,
-        [injectVar]: toHomoglyphs(originalText),
+        [injectVar]: transformStrategyInput(testCase, injectVar, 'homoglyph', toHomoglyphs),
       },
       metadata: {
         ...testCase.metadata,

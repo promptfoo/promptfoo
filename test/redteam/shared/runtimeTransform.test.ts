@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { applyRuntimeTransforms } from '../../../src/redteam/shared/runtimeTransform';
 
 import type { Strategy } from '../../../src/redteam/strategies/types';
-import type { TestCaseWithPlugin } from '../../../src/types';
+import type { Inputs, TestCaseWithPlugin } from '../../../src/types';
 
 describe('runtimeTransform', () => {
   const mockBase64Strategy: Strategy = {
@@ -85,6 +85,33 @@ describe('runtimeTransform', () => {
       expect(result.originalPrompt).toBe('test prompt');
       expect(result.audio).toBeUndefined();
       expect(result.image).toBeUndefined();
+    });
+
+    it('omits unchanged inherited vars from per-turn display data', async () => {
+      const result = await applyRuntimeTransforms('hello', 'input', ['base64'], mockStrategies, {
+        vars: {
+          input: 'previous input',
+          label: 'shared label',
+          document: 'data:text/plain;base64,aGVsbG8=',
+        },
+      });
+      expect(result.prompt).toBe('aGVsbG8=');
+      expect(result.displayVars).toBeUndefined();
+    });
+
+    it('keeps new and changed display vars from a transform', async () => {
+      const strategy: Strategy = {
+        id: 'display',
+        action: async (tests) =>
+          tests.map((test) => ({
+            ...test,
+            vars: { ...test.vars, label: 'changed', transcript: 'new transcript' },
+          })),
+      };
+      const result = await applyRuntimeTransforms('hello', 'input', ['display'], [strategy], {
+        vars: { label: 'original', document: 'unchanged' },
+      });
+      expect(result.displayVars).toEqual({ label: 'changed', transcript: 'new transcript' });
     });
 
     it('should apply single transform layer', async () => {
@@ -299,6 +326,34 @@ describe('runtimeTransform', () => {
       await applyRuntimeTransforms('hello', 'input', ['inspect'], strategies);
 
       expect(capturedTestCase?.metadata?.pluginId).toBe('runtime-transform');
+    });
+
+    it('should pass multi-input definitions to runtime layer strategies', async () => {
+      let capturedTestCase: TestCaseWithPlugin | undefined;
+      const inputs = {
+        user_message: 'Untrusted user message',
+        retrieved_context: {
+          description: 'Trusted support context',
+          config: { benign: true },
+        },
+      } satisfies Inputs;
+      const inspectingStrategy: Strategy = {
+        id: 'inspect',
+        action: vi.fn(async (testCases: TestCaseWithPlugin[]) => {
+          capturedTestCase = testCases[0];
+          return testCases;
+        }),
+      };
+
+      await applyRuntimeTransforms(
+        JSON.stringify({ user_message: 'attack', retrieved_context: 'trusted' }),
+        '__prompt',
+        ['inspect'],
+        [inspectingStrategy],
+        { inputs },
+      );
+
+      expect(capturedTestCase?.metadata?.pluginConfig?.inputs).toEqual(inputs);
     });
 
     it('should handle different inject variable names', async () => {

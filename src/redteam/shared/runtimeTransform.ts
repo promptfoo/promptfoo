@@ -13,7 +13,7 @@ import { accumulateTokenUsage } from '../../util/tokenUsageUtils';
 import { remoteGenerationContextPayload } from '../remoteGenerationContext';
 
 import type { MediaData } from '../../storage/types';
-import type { TestCaseWithPlugin, TokenUsage } from '../../types';
+import type { Inputs, TestCaseWithPlugin, TokenUsage } from '../../types';
 // Import type only to avoid circular dependency - actual Strategies loaded dynamically
 import type { Strategy } from '../strategies/types';
 
@@ -62,6 +62,9 @@ export interface RuntimeTransformContext {
   purpose?: string;
   /** The goal/target of the attack */
   goal?: string;
+  /** Multi-input definitions used to preserve the JSON envelope and benign fields. */
+  inputs?: Inputs;
+  vars?: TestCaseWithPlugin['vars'];
 }
 
 /**
@@ -112,7 +115,7 @@ export async function applyRuntimeTransforms(
   // This reuses the exact same code path as pre-eval transforms
   // Include context metadata so layer strategies (like indirect-web-pwn) can access evalId, purpose, etc.
   let testCase: TestCaseWithPlugin = {
-    vars: { [injectVar]: prompt },
+    vars: { ...context?.vars, [injectVar]: prompt },
     assert: [],
     metadata: {
       pluginId: 'runtime-transform',
@@ -121,6 +124,7 @@ export async function applyRuntimeTransforms(
       testCaseId: context?.testCaseId,
       purpose: context?.purpose,
       goal: context?.goal,
+      ...(context?.inputs && { pluginConfig: { inputs: context.inputs } }),
     },
   };
 
@@ -204,7 +208,7 @@ export async function applyRuntimeTransforms(
   const displayVars: Record<string, string> = {};
   if (testCase.vars) {
     for (const [key, value] of Object.entries(testCase.vars)) {
-      if (key !== injectVar && typeof value === 'string') {
+      if (key !== injectVar && typeof value === 'string' && value !== context?.vars?.[key]) {
         displayVars[key] = value;
       }
     }
