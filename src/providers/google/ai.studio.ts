@@ -22,21 +22,29 @@ import {
   isGeminiRetryableHttpResponse,
   isGeminiRetryableResponseData,
   throwIfGeminiAborted,
+  throwIfGeminiRetryBudgetExhausted,
   waitBeforeGeminiRetry,
 } from './retry';
 import { CHAT_MODELS } from './shared';
 import {
   calculateGoogleCost,
+  calculateGoogleCostFromUsage,
   collectGroundingMetadata,
+  collectThoughtSignatures,
   createAuthCacheDiscriminator,
   formatCandidateContents,
   geminiFormatAndSystemInstructions,
   getCandidate,
+  getGoogleResponseServiceTier,
   getLastPromptSafetyRatings,
   isNonCandidateStreamChunk,
   mergeGoogleCompletionOptions,
+  mergeGoogleRequestTools,
   mergeParts,
+  normalizeGeminiAudio,
+  normalizeGoogleServiceTier,
   normalizeSafetySettings,
+  removeDeprecatedGeminiGenerationParams,
   removeGoogleFunctionDeclarations,
   resolveGoogleToolConfig,
 } from './util';
@@ -264,7 +272,7 @@ export class AIStudioChatProvider extends GoogleGenericProvider {
         ? {
             cached: data.usageMetadata?.totalTokenCount,
             total: data.usageMetadata?.totalTokenCount,
-            numRequests: 0,
+            numRequests: 1,
             ...(data.usageMetadata?.thoughtsTokenCount !== undefined && {
               completionDetails: {
                 reasoning: data.usageMetadata.thoughtsTokenCount,
@@ -274,10 +282,17 @@ export class AIStudioChatProvider extends GoogleGenericProvider {
             }),
           }
         : {
-            prompt: data.usageMetadata?.promptTokenCount,
+            prompt:
+              data.usageMetadata?.promptTokenCount === undefined
+                ? undefined
+                : data.usageMetadata.promptTokenCount +
+                  (data.usageMetadata?.toolUsePromptTokenCount ?? 0),
             completion: data.usageMetadata?.candidatesTokenCount,
             total: data.usageMetadata?.totalTokenCount,
             numRequests: 1,
+            ...(data.usageMetadata?.cachedContentTokenCount !== undefined && {
+              cached: data.usageMetadata.cachedContentTokenCount,
+            }),
             ...(data.usageMetadata?.thoughtsTokenCount !== undefined && {
               completionDetails: {
                 reasoning: data.usageMetadata.thoughtsTokenCount,
@@ -295,11 +310,13 @@ export class AIStudioChatProvider extends GoogleGenericProvider {
           : data.usageMetadata.candidatesTokenCount + (data.usageMetadata?.thoughtsTokenCount ?? 0);
       const cost = cached
         ? undefined
-        : calculateGoogleCost(
+        : calculateGoogleCostFromUsage(
             this.modelName,
             config,
             data.usageMetadata?.promptTokenCount,
             completionForCost,
+            false,
+            data.usageMetadata,
           );
 
       return {
@@ -351,6 +368,25 @@ export class AIStudioChatProvider extends GoogleGenericProvider {
       skipExecutableToolFiles: toolsDisabled,
     });
     const requestTools = toolsDisabled ? removeGoogleFunctionDeclarations(allTools) : allTools;
+    const {
+      service_tier: passthroughServiceTier,
+      serviceTier: camelCasePassthroughServiceTier,
+      tools: passthroughTools,
+      // resolveGoogleToolConfig already folds these in; keeping them in the raw spread would
+      // let a conflicting passthrough mode overwrite a resolved NONE, so the request would
+      // carry mode ANY with the declarations already stripped.
+      toolConfig: _passthroughToolConfig,
+      tool_config: _passthroughToolConfigSnakeCase,
+      ...passthrough
+    } = config.passthrough || {};
+    const serviceTier = normalizeGoogleServiceTier(
+      passthroughServiceTier ?? camelCasePassthroughServiceTier ?? config.service_tier,
+    );
+    const requestPassthroughTools =
+      toolsDisabled && passthroughTools !== undefined
+        ? removeGoogleFunctionDeclarations(passthroughTools)
+        : passthroughTools;
+    const mergedTools = mergeGoogleRequestTools(requestTools, requestPassthroughTools);
 
     const body: Record<string, any> = {
       contents,
@@ -365,12 +401,28 @@ export class AIStudioChatProvider extends GoogleGenericProvider {
           maxOutputTokens: config.maxOutputTokens,
         }),
         ...config.generationConfig,
+        ...(this.modelName.includes('-tts') && {
+          response_modalities: undefined,
+          responseModalities: config.generationConfig?.responseModalities ??
+            config.generationConfig?.response_modalities?.map((modality) =>
+              modality.toUpperCase(),
+            ) ?? ['AUDIO'],
+          speechConfig: config.generationConfig?.speechConfig ?? {
+            voiceConfig: { prebuiltVoiceConfig: { voiceName: 'Kore' } },
+          },
+        }),
       },
       safetySettings: normalizeSafetySettings(config.safetySettings),
       ...(toolConfig ? { toolConfig } : {}),
-      ...(requestTools.length > 0 ? { tools: requestTools } : {}),
+      ...(mergedTools ? { tools: mergedTools } : {}),
       ...(systemInstruction ? { system_instruction: systemInstruction } : {}),
+      ...(serviceTier ? { service_tier: serviceTier } : {}),
+      ...passthrough,
     };
+    body.generationConfig = removeDeprecatedGeminiGenerationParams(
+      this.modelName,
+      body.generationConfig,
+    );
 
     if (config.responseSchema) {
       if (body.generationConfig.response_schema) {
@@ -389,6 +441,7 @@ export class AIStudioChatProvider extends GoogleGenericProvider {
 
     let data: GeminiResponseData | undefined;
     let cached = false;
+    let responseHeaders: unknown;
     const maxRetries = getGeminiMaxRetries(config, logger);
     const requestTimeoutMs = getRequestTimeoutMs();
     const retryDeadline = Date.now() + requestTimeoutMs;
@@ -416,17 +469,11 @@ export class AIStudioChatProvider extends GoogleGenericProvider {
 
     for (let attempt = 0; attempt <= maxRetries; attempt++) {
       try {
-        throwIfGeminiAborted(retrySignal);
-        if (Date.now() >= retryDeadline) {
-          throw new DOMException('The operation timed out', 'TimeoutError');
-        }
+        throwIfGeminiRetryBudgetExhausted(retrySignal, retryDeadline);
         const endpoint = this.getApiEndpoint('generateContent');
         const headers = await this.getAuthHeaders();
         const authDiscriminator = createAuthCacheDiscriminator(headers);
-        throwIfGeminiAborted(retrySignal);
-        if (Date.now() >= retryDeadline) {
-          throw new DOMException('The operation timed out', 'TimeoutError');
-        }
+        throwIfGeminiRetryBudgetExhausted(retrySignal, retryDeadline);
         numRequests++;
         const result = (await fetchWithCache<GeminiResponseData>(
           endpoint,
@@ -454,11 +501,14 @@ export class AIStudioChatProvider extends GoogleGenericProvider {
               usage.candidatesTokenCount !== undefined ||
               usage.thoughtsTokenCount !== undefined)
           ) {
-            const attemptCost = calculateGoogleCost(
+            const attemptCost = calculateGoogleCostFromUsage(
               this.modelName,
               config,
               usage.promptTokenCount ?? 0,
               (usage.candidatesTokenCount ?? 0) + (usage.thoughtsTokenCount ?? 0),
+              false,
+              usage,
+              getGoogleResponseServiceTier(result.headers, usage),
             );
             if (attemptCost !== undefined) {
               knownCost += attemptCost;
@@ -518,6 +568,7 @@ export class AIStudioChatProvider extends GoogleGenericProvider {
 
         data = result.data;
         cached = result.cached;
+        responseHeaders = result.headers;
         break;
       } catch (err) {
         if (options?.abortSignal?.aborted) {
@@ -600,7 +651,7 @@ export class AIStudioChatProvider extends GoogleGenericProvider {
         output = mergeParts(output, formatCandidateContents(candidate));
       }
 
-      if (output === undefined || candidate === undefined) {
+      if (output === undefined || output === '' || candidate === undefined) {
         throw new Error(`No output found in response: ${JSON.stringify(data)}`);
       }
     } catch (err) {
@@ -630,12 +681,17 @@ export class AIStudioChatProvider extends GoogleGenericProvider {
       }
 
       const grounding = collectGroundingMetadata(dataWithResponse);
+      const thoughtSignatures = collectThoughtSignatures(dataWithResponse);
+      const actualServiceTier = getGoogleResponseServiceTier(
+        responseHeaders,
+        lastData.usageMetadata,
+      );
 
       const tokenUsage = cached
         ? {
             cached: lastData.usageMetadata?.totalTokenCount,
             total: lastData.usageMetadata?.totalTokenCount,
-            numRequests: 0,
+            numRequests: 1,
             ...(lastData.usageMetadata?.thoughtsTokenCount !== undefined && {
               completionDetails: {
                 reasoning: lastData.usageMetadata.thoughtsTokenCount,
@@ -645,10 +701,14 @@ export class AIStudioChatProvider extends GoogleGenericProvider {
             }),
           }
         : {
-            prompt: usageTotals.promptTokenCount,
+            prompt:
+              usageTotals.promptTokenCount + (lastData.usageMetadata?.toolUsePromptTokenCount ?? 0),
             completion: usageTotals.candidatesTokenCount,
             total: usageTotals.totalTokenCount,
             numRequests,
+            ...(lastData.usageMetadata?.cachedContentTokenCount !== undefined && {
+              cached: lastData.usageMetadata.cachedContentTokenCount,
+            }),
             ...(usageTotals.hasThoughtsTokenCount && {
               completionDetails: {
                 reasoning: usageTotals.thoughtsTokenCount,
@@ -658,19 +718,31 @@ export class AIStudioChatProvider extends GoogleGenericProvider {
             }),
           };
 
-      // Calculate cost (only for non-cached responses)
-      // Include thinking tokens in output cost - Google bills them as output tokens
+      // Cost is accumulated per attempt above (thinking tokens included, since Google bills
+      // them as output tokens) so a retried call is billed for every request it made.
       const cost = cached || !hasKnownCost ? undefined : knownCost;
+      const audio = normalizeGeminiAudio(output);
 
-      return {
+      const response: ProviderResponse = {
         output,
+        ...(audio && { audio }),
         tokenUsage,
         cost,
         raw: data,
         cached,
         ...(guardrails && { guardrails }),
-        metadata: { ...grounding },
+        metadata: {
+          ...grounding,
+          ...(thoughtSignatures.length > 0 && { thoughtSignatures }),
+          ...(actualServiceTier && { serviceTier: actualServiceTier }),
+        },
       };
+      try {
+        response.output = await this.executeFunctionToolCallbacks(output, config, toolsDisabled);
+      } catch (error) {
+        return { ...response, output: undefined, error: String(error) };
+      }
+      return response;
     } catch (err) {
       return {
         error: `API response error: ${String(err)}: ${JSON.stringify(data)}`,
@@ -783,14 +855,18 @@ export class AIStudioEmbeddingProvider
     return {
       embedding: values,
       tokenUsage: cached
-        ? { cached: promptTokens ?? 0, total: promptTokens ?? 0, numRequests: 0 }
+        ? { cached: promptTokens ?? 0, total: promptTokens ?? 0, numRequests: 1 }
         : { total: promptTokens ?? 0, numRequests: 1 },
       cached,
+      cost:
+        cached || promptTokens === undefined
+          ? undefined
+          : calculateGoogleCost(this.modelName, this.config, promptTokens, 0),
     };
   }
 }
 
-const DEFAULT_AI_STUDIO_MODEL = 'gemini-2.5-pro';
+const DEFAULT_AI_STUDIO_MODEL = 'gemini-3.8-flash';
 
 export function getGoogleAiStudioProviders(env?: EnvOverrides) {
   const gradingProvider = new AIStudioChatProvider(DEFAULT_AI_STUDIO_MODEL, { env });

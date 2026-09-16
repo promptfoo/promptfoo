@@ -12,4 +12,11 @@ export interface FetchOptions extends RequestInit {
    * Used by fetchWithRetries to prevent double-retrying.
    */
   disableTransientRetries?: boolean;
+
+  /**
+   * Skip automatic injection of the saved Cloud auth header (and cloud task
+   * team header). Set by callers that explicitly manage their own Cloud auth
+   * header, e.g. validating/rotating a credential that is not yet saved.
+   */
+  skipCloudAuthInjection?: boolean;
 }

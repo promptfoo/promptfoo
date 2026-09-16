@@ -579,6 +579,17 @@ export function throwIfGeminiAborted(signal: AbortSignal): void {
   throw new Error('cancelled by user');
 }
 
+/**
+ * Guard used between steps of a retry attempt: throws if the caller cancelled or if the
+ * shared request deadline has already elapsed, so no further work is started.
+ */
+export function throwIfGeminiRetryBudgetExhausted(signal: AbortSignal, deadline: number): void {
+  throwIfGeminiAborted(signal);
+  if (Date.now() >= deadline) {
+    throw new DOMException('The operation timed out', 'TimeoutError');
+  }
+}
+
 export async function waitBeforeGeminiRetry(
   config: CompletionOptions,
   attempt: number,
