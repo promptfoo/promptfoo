@@ -565,6 +565,99 @@ describe('CustomProvider', () => {
     expect(result.metadata?.stopReason).toBe('Grader failed');
   });
 
+  describe('when the internal evaluator fails on the round a grade is returned', () => {
+    const runRounds = async (firstGrade: Record<string, unknown>) => {
+      const provider = new CustomProvider({
+        injectVar: 'objective',
+        maxTurns: 2,
+        maxBacktracks: 1,
+        redteamProvider: mockRedTeamProvider,
+        stateful: false,
+        strategyText: 'Test strategy',
+      });
+
+      const getResult = vi
+        .fn<any>()
+        .mockResolvedValueOnce({ grade: firstGrade, rubric: 'test rubric' })
+        .mockResolvedValueOnce({
+          grade: { pass: true, score: 1, reason: 'Benign output' },
+          rubric: 'test rubric',
+        });
+      mockGetGraderById.mockImplementation(function () {
+        return { getResult } as any;
+      });
+
+      mockRedTeamProvider.callApi.mockResolvedValue({
+        output: JSON.stringify({
+          generatedQuestion: 'test question',
+          rationaleBehindJailbreak: 'test rationale',
+          lastResponseSummary: 'test summary',
+        }),
+      });
+      mockTargetProvider.callApi
+        .mockResolvedValueOnce({ output: 'first response' })
+        .mockResolvedValueOnce({ output: 'second response' });
+
+      const notRefused = {
+        output: JSON.stringify({ value: false, metadata: 0, rationale: 'Not a refusal' }),
+      };
+      mockScoringProvider.callApi
+        .mockResolvedValueOnce(notRefused)
+        .mockResolvedValueOnce({ error: 'scoring provider unavailable' })
+        .mockResolvedValueOnce(notRefused)
+        .mockResolvedValueOnce({
+          output: JSON.stringify({ value: false, metadata: 10, rationale: 'Not achieved' }),
+        });
+
+      const result = await provider.callApi('test prompt', {
+        originalProvider: mockTargetProvider,
+        vars: { objective: 'test objective' },
+        prompt: { raw: 'test prompt', label: 'test' },
+        test: {
+          assert: [{ type: 'mock-grader' }],
+          metadata: { pluginId: 'mock' },
+        } as any,
+      });
+      return { getResult, result };
+    };
+
+    it('should keep a failing grade', async () => {
+      const { getResult, result } = await runRounds({
+        pass: false,
+        score: 0,
+        reason: 'Target produced harmful content',
+      });
+
+      // Previously the evaluator error abandoned the round before the grade was acted on,
+      // the next round's passing grade replaced it, and the attack was reported as unsuccessful.
+      expect(result.metadata?.stopReason).toBe('Grader failed');
+      expect(result.metadata?.storedGraderResult).toMatchObject({
+        pass: false,
+        reason: 'Target produced harmful content',
+      });
+      expect(result.metadata?.successfulAttacks).toEqual([
+        expect.objectContaining({ turn: 1, response: 'first response' }),
+      ]);
+      expect(getResult).toHaveBeenCalledTimes(1);
+      expect(mockTargetProvider.callApi).toHaveBeenCalledTimes(1);
+      // The internal evaluator is not called once the grade has ended the attack.
+      expect(mockScoringProvider.callApi).toHaveBeenCalledTimes(1);
+    });
+
+    it('should keep attacking after a grader error, which is not a verdict', async () => {
+      const { getResult, result } = await runRounds({
+        pass: false,
+        score: 0,
+        reason: 'Grading provider returned 503',
+        metadata: { graderError: true },
+      });
+
+      expect(result.metadata?.stopReason).toBe('Max rounds reached');
+      expect(result.metadata?.successfulAttacks).toEqual([]);
+      expect(getResult).toHaveBeenCalledTimes(2);
+    });
+  });
+
   it('should stop when max backtracks reached', async () => {
     // Set up grader to pass (not detect jailbreak)
     mockGetGraderById.mockImplementation(function () {
