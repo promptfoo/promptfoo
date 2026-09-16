@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useRef, useState } from 'react';
+import { useCallback, useMemo, useState } from 'react';
 
 import { Input } from '@app/components/ui/input';
 import { Label } from '@app/components/ui/label';
@@ -29,7 +29,6 @@ interface GraderLanguageInputProps {
 
 function GraderLanguageInput({ value, onChange }: GraderLanguageInputProps) {
   const [open, setOpen] = useState(false);
-  const inputRef = useRef<HTMLInputElement>(null);
 
   const filtered = useMemo(
     () =>
@@ -51,7 +50,6 @@ function GraderLanguageInput({ value, onChange }: GraderLanguageInputProps) {
     <Popover open={open && filtered.length > 0}>
       <PopoverAnchor asChild>
         <Input
-          ref={inputRef}
           value={value}
           onChange={(e) => onChange(e.target.value)}
           onFocus={() => setOpen(true)}

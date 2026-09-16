@@ -289,8 +289,6 @@ export default function RedTeamSetupPage() {
         'error',
       );
     }
-
-    setHasUnsavedChanges(false);
   };
 
   const loadConfigs = async () => {
@@ -370,6 +368,7 @@ export default function RedTeamSetupPage() {
         target = ProviderOptionsSchema.parse({
           id: targetType ? targetType.value : customTargetOption.value,
           label: target,
+          ...(targetType?.value.startsWith('vertex:gemini-3') && { config: { region: 'global' } }),
         });
       }
 
