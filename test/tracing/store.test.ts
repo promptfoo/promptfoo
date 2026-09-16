@@ -599,7 +599,8 @@ describe('TraceStore', () => {
       // Mock spans query
       const spanQuery = {
         from: vi.fn().mockReturnThis(),
-        where: vi.fn(() => Promise.resolve(mockSpans)),
+        where: vi.fn().mockReturnThis(),
+        orderBy: vi.fn(() => Promise.resolve(mockSpans)),
       };
 
       vi.spyOn(mockDb, 'select')
@@ -686,7 +687,8 @@ describe('TraceStore', () => {
       };
       const spanQuery = {
         from: vi.fn().mockReturnThis(),
-        where: vi.fn(() => Promise.resolve(mockSpans)),
+        where: vi.fn().mockReturnThis(),
+        orderBy: vi.fn(() => Promise.resolve(mockSpans)),
       };
 
       vi.spyOn(mockDb, 'select')

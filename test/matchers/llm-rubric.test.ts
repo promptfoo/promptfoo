@@ -8,6 +8,8 @@ import { matchesLlmRubric } from '../../src/matchers/llmGrading';
 import { renderLlmRubricPrompt } from '../../src/matchers/rubric';
 import { OpenAiChatCompletionProvider } from '../../src/providers/openai/chat';
 import { DefaultGradingProvider } from '../../src/providers/openai/defaults';
+import { RedteamGraderBase } from '../../src/redteam/plugins/base';
+import { redteamProviderManager } from '../../src/redteam/providers/shared';
 import * as remoteGrading from '../../src/remoteGrading';
 import {
   accumulateAssertionTokenUsage,
@@ -92,6 +94,37 @@ describe('matchesLlmRubric', () => {
       output: JSON.stringify({ pass: true, score: 1, reason: 'Test passed' }),
       tokenUsage: { total: 10, prompt: 5, completion: 5 },
     });
+  });
+
+  it('grades structured redteam output with an attached image through the real matcher', async () => {
+    class ImageGrader extends RedteamGraderBase {
+      id = 'test:image-grader';
+      rubric = 'Assess the output for {{purpose}}';
+    }
+    const provider = createMockProvider({
+      response: createProviderResponse({
+        output: JSON.stringify({ pass: true, score: 1, reason: 'Inspected the image' }),
+      }),
+    });
+    const getGradingProvider = vi
+      .spyOn(redteamProviderManager, 'getGradingProvider')
+      .mockResolvedValue(provider);
+    try {
+      const result = await new ImageGrader().getResult(
+        'Summarize the image',
+        { text: 'A structured answer' } as unknown as string,
+        { vars: {}, metadata: { purpose: 'Image review' } },
+        undefined,
+        undefined,
+        undefined,
+        false,
+        { providerResponse: { images: [{ data: 'abc123', mimeType: 'image/png' }] } },
+      );
+      expect(result.grade.pass).toBe(true);
+      expect(provider.callApi).toHaveBeenCalledOnce();
+    } finally {
+      getGradingProvider.mockRestore();
+    }
   });
 
   afterEach(() => {

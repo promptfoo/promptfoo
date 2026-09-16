@@ -1,6 +1,7 @@
 import cliState from '../../cliState';
+import { getAttackProviderFullId } from '../shared/attackProviders';
 
-import type { AtomicTestCase, UnifiedConfig } from '../../types/index';
+import type { AtomicTestCase, RedteamFileConfig, UnifiedConfig } from '../../types/index';
 
 type TraceProviderConfig = NonNullable<NonNullable<UnifiedConfig['tracing']>['provider']>;
 
@@ -66,6 +67,7 @@ function mergeTracingConfig(...configs: Array<RawTracingConfig | undefined>): Ra
 function normalizeTracingOptions(
   config: RawTracingConfig,
   rootTracingConfig?: {
+    enabled?: boolean;
     provider?: TraceProviderConfig;
     queryDelay?: number;
     otlp?: { http?: { redactAttributes?: string[] } };
@@ -96,32 +98,43 @@ export function resolveTracingOptions({
   strategyId,
   test,
   config,
+  redteamConfig,
 }: {
   strategyId: string;
   test?: AtomicTestCase;
   config?: Record<string, unknown>;
+  redteamConfig?: RedteamFileConfig;
 }): RedteamTracingOptions {
+  const strategyAlias: Record<string, string> = {
+    iterative: 'jailbreak',
+    'iterative:meta': 'jailbreak:meta',
+    'iterative-meta': 'jailbreak:meta',
+    'jailbreak:meta': 'iterative-meta',
+    hydra: 'jailbreak:hydra',
+    goblin: 'jailbreak:goblin',
+  };
+  const providerStrategyId = getAttackProviderFullId(strategyId).replace('promptfoo:redteam:', '');
+  const strategyIds = [
+    strategyId,
+    providerStrategyId,
+    providerStrategyId.replace(/^iterative/, 'jailbreak'),
+    strategyAlias[strategyId],
+  ].filter((id): id is string => Boolean(id));
   // Read redteam-specific tracing config
-  const redteamConfig = cliState.config?.redteam as Record<string, unknown> | undefined;
-  const globalConfig = (redteamConfig?.tracing as RawTracingConfig | undefined) ?? undefined;
+  const activeRedteamConfig = redteamConfig ?? cliState.config?.redteam;
+  const globalConfig = (activeRedteamConfig?.tracing as RawTracingConfig | undefined) ?? undefined;
   const testConfig = (test?.metadata?.tracing as RawTracingConfig | undefined) ?? undefined;
   const metadataStrategyConfig = (
     test?.metadata?.strategyConfig as Record<string, unknown> | undefined
   )?.tracing as RawTracingConfig | undefined;
   const providerStrategyConfig = (config?.tracing as RawTracingConfig | undefined) ?? undefined;
 
-  const globalStrategyOverride =
-    strategyId && globalConfig?.strategies ? globalConfig.strategies[strategyId] : undefined;
-  const testStrategyOverride =
-    strategyId && testConfig?.strategies ? testConfig.strategies[strategyId] : undefined;
-  const metadataStrategyOverride =
-    strategyId && metadataStrategyConfig?.strategies
-      ? metadataStrategyConfig.strategies[strategyId]
-      : undefined;
-  const providerStrategyOverride =
-    strategyId && providerStrategyConfig?.strategies
-      ? providerStrategyConfig.strategies[strategyId]
-      : undefined;
+  const findOverride = (tracing?: RawTracingConfig) =>
+    strategyIds.map((id) => tracing?.strategies?.[id]).find(Boolean);
+  const globalStrategyOverride = findOverride(globalConfig);
+  const testStrategyOverride = findOverride(testConfig);
+  const metadataStrategyOverride = findOverride(metadataStrategyConfig);
+  const providerStrategyOverride = findOverride(providerStrategyConfig);
 
   const merged = mergeTracingConfig(
     globalConfig,
@@ -137,11 +150,33 @@ export function resolveTracingOptions({
   // Read provider and queryDelay from root tracing config (not redteam config)
   const rootTracingConfig = (cliState.requestTracingConfig ?? cliState.config?.tracing) as
     | {
+        enabled?: boolean;
         provider?: TraceProviderConfig;
         queryDelay?: number;
         otlp?: { http?: { redactAttributes?: string[] } };
       }
     | undefined;
 
-  return normalizeTracingOptions(merged, rootTracingConfig);
+  const codingAgentRootTracing =
+    String(test?.metadata?.pluginId ?? '').includes('coding-agent') &&
+    rootTracingConfig?.enabled === true &&
+    merged.enabled === undefined
+      ? { enabled: true }
+      : {};
+
+  return normalizeTracingOptions({ ...codingAgentRootTracing, ...merged }, rootTracingConfig);
+}
+
+export function resolveTestTracingOptions(
+  test: AtomicTestCase,
+  redteamConfig?: RedteamFileConfig,
+): RedteamTracingOptions {
+  return resolveTracingOptions({
+    strategyId: getAttackProviderFullId(test.metadata?.strategyId ?? '').replace(
+      'promptfoo:redteam:',
+      '',
+    ),
+    test,
+    redteamConfig,
+  });
 }

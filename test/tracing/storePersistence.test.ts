@@ -217,6 +217,24 @@ describe('TraceStore span persistence', () => {
     expect(spans.map((span) => span.name)).toEqual(['chat gpt-4.1-mini', 'execute_tool search']);
   });
 
+  it('computes max depth before name filters remove ancestors', async () => {
+    const traceStore = await createTrace('depth-before-filter');
+    await traceStore.addSpans('depth-before-filter', [
+      { spanId: 'root', name: 'root', startTime: 1 },
+      { spanId: 'middle', parentSpanId: 'root', name: 'middle', startTime: 2 },
+      {
+        spanId: 'tool',
+        parentSpanId: 'middle',
+        name: 'execute_tool search',
+        startTime: 3,
+      },
+    ]);
+
+    await expect(
+      traceStore.getSpans('depth-before-filter', { spanFilter: ['tool'], maxDepth: 2 }),
+    ).resolves.toEqual([]);
+  });
+
   it('excludes descendants of grading spans even when external SDKs omit role attributes', async () => {
     const traceStore = await createTrace('grader-descendants');
     await traceStore.addSpans('grader-descendants', [
@@ -331,6 +349,30 @@ describe('TraceStore span persistence', () => {
       'cccccccccccccccc',
       'aaaaaaaaaaaaaaaa',
     ]);
+  });
+
+  it('does not recurse forever when local spans have cyclic parents', async () => {
+    const traceStore = await createTrace('cyclic-parents');
+    await traceStore.addSpans('cyclic-parents', [
+      { spanId: 'aaaaaaaaaaaaaaaa', parentSpanId: 'bbbbbbbbbbbbbbbb', name: 'first', startTime: 1 },
+      {
+        spanId: 'bbbbbbbbbbbbbbbb',
+        parentSpanId: 'cccccccccccccccc',
+        name: 'second',
+        startTime: 2,
+      },
+      { spanId: 'cccccccccccccccc', parentSpanId: 'dddddddddddddddd', name: 'third', startTime: 3 },
+      {
+        spanId: 'dddddddddddddddd',
+        parentSpanId: 'eeeeeeeeeeeeeeee',
+        name: 'fourth',
+        startTime: 4,
+      },
+      { spanId: 'eeeeeeeeeeeeeeee', parentSpanId: 'ffffffffffffffff', name: 'fifth', startTime: 5 },
+      { spanId: 'ffffffffffffffff', parentSpanId: 'aaaaaaaaaaaaaaaa', name: 'sixth', startTime: 6 },
+    ]);
+
+    await expect(traceStore.getSpans('cyclic-parents', { maxDepth: 5 })).resolves.toHaveLength(6);
   });
 });
 

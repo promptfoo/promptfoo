@@ -46,6 +46,7 @@ vi.mock('../../../../src/util/time', () => ({
 
 vi.mock('../../../../src/redteam/util', () => ({
   isBasicRefusal: vi.fn().mockReturnValue(false),
+  classifyRefusal: () => ({ kind: 'no_refusal', signals: [] }),
 }));
 
 describe('VoiceCrescendoProvider', () => {
