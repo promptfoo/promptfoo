@@ -54,6 +54,29 @@ export interface SkillCallEntry {
   is_error?: boolean;
 }
 
+/**
+ * A single structured MCP tool-call record, preserved alongside a provider's
+ * stringified `output` (as `metadata.toolCalls`) so assertions/graders can
+ * inspect MCP tool-call behavior without re-parsing text markers like
+ * `"MCP Tool Result (...)"`.
+ *
+ * Named distinctly from `claude-agent-sdk.ts`'s own `ToolCallEntry` (an
+ * unrelated, SDK-session-specific shape with `id`/`parentToolUseId`) to avoid
+ * a same-name, different-shape collision; `metadata.toolCalls` is already an
+ * established but per-provider-shaped convention (see also `n8n.ts`,
+ * `elevenlabs/agents/tools.ts`).
+ *
+ * Iteration 1 scope: MCP-sourced calls only (`source: 'mcp'`). Widen the
+ * `source` union if this type is ever generalized beyond MCP.
+ */
+export interface McpToolCallEntry {
+  name: string;
+  arguments?: unknown;
+  result?: unknown;
+  isError?: boolean;
+  source: 'mcp';
+}
+
 export type ProviderTypeMap = Partial<Record<ProviderType, string | ProviderOptions | ApiProvider>>;
 
 // Local interface to avoid circular dependency with src/types/index.ts
