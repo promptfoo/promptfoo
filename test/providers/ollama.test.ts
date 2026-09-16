@@ -1259,6 +1259,28 @@ describe('OllamaEmbeddingProvider', () => {
     },
   );
 
+  it.each([
+    [404, 'Not Found', `model 'llama3.3' not found`],
+    [400, 'Bad Request', 'invalid input'],
+  ])(
+    'should surface a %i embeddings error body instead of a missing-embedding error',
+    async (status, statusText, msg) => {
+      vi.mocked(fetchWithCache).mockResolvedValue({
+        data: { error: msg },
+        cached: false,
+        status,
+        statusText,
+        headers: {},
+      });
+
+      const provider = new OllamaEmbeddingProvider('llama3.3');
+      const result = await provider.callEmbeddingApi('test text');
+
+      expect(result.error).toBe(`Ollama API error: ${status} ${statusText}: ${msg}`);
+      expect(result.embedding).toBeUndefined();
+    },
+  );
+
   it('should preserve a non-2xx JSON body that has no top-level error key', async () => {
     // A gateway in front of Ollama may return e.g. {"message":"invalid token"}; the
     // diagnostic must survive rather than collapsing to just the status line.

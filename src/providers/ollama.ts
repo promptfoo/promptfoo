@@ -669,6 +669,8 @@ export class OllamaEmbeddingProvider extends OllamaCompletionProvider {
 
     const responseError = getOllamaResponseError(response);
     if (responseError) {
+      // fetchWithCache only detects error keys for the 'json' format, so an HTTP 200
+      // error body would otherwise be replayed from cache for the full TTL.
       await response.deleteFromCache?.();
       // Ollama's context-length message does not say how to fix it.
       if (responseError.includes('input length exceeds the context length')) {
