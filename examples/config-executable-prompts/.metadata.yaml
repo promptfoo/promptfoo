@@ -1,0 +1,4 @@
+title: 'Executable Scripts as Prompt Generators'
+description: 'Using shell scripts, Ruby scripts, and other executables to dynamically generate prompts'
+tags:
+  - Configuration

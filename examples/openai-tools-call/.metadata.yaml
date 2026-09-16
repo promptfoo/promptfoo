@@ -1,0 +1,5 @@
+title: 'OpenAI Tools Calling'
+description: 'Validate OpenAI tools call structure and arguments with output transforms'
+tags:
+  - Tool Use
+  - OpenAI

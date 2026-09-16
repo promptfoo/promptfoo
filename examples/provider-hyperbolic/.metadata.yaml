@@ -1,0 +1,6 @@
+title: 'Hyperbolic AI Provider'
+description: 'Evaluate Hyperbolic models for text, vision, image generation, and text-to-speech'
+tags:
+  - Providers
+  - Multimodal
+  - Audio

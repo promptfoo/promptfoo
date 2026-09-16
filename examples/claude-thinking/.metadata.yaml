@@ -1,0 +1,5 @@
+title: 'Claude Extended Thinking'
+description: "Use Claude's extended thinking feature to reveal step-by-step reasoning, comparing thinking output across Anthropic API and AWS Bedrock."
+tags:
+  - Providers
+  - Evaluation

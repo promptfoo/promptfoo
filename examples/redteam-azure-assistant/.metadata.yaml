@@ -1,0 +1,5 @@
+title: 'Red Team Azure OpenAI Assistant'
+description: 'Security test an Azure OpenAI Assistant with HR database function tools for data privacy and access control vulnerabilities'
+tags:
+  - Red Teaming
+  - Tool Use

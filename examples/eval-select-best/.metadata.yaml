@@ -1,0 +1,4 @@
+title: 'Select Best Response'
+description: 'Use the select-best assertion to have an LLM choose the best output from multiple prompts'
+tags:
+  - Evaluation

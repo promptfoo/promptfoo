@@ -1,0 +1,7 @@
+title: 'Pydantic AI Agent Evaluation'
+description: 'Evaluate a PydanticAI weather agent with structured output validation and multiple assertion types'
+tags:
+  - Integrations
+  - Agents
+  - Structured Output
+  - Python
