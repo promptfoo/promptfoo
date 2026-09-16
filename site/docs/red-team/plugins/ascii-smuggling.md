@@ -13,7 +13,7 @@ According to Unicode Technical Standard #51, "a completely tag-unaware implement
 
 This method can be used for prompt injections, exfiltration, and other potential security risks.
 
-## How it works
+## How It Works
 
 1. The plugin generates prompts that contain two parts:
    - A visible, innocent-looking text

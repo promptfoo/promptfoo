@@ -45,7 +45,7 @@ redteam:
   plugins:
     - mitre:atlas
   strategies:
-    - jailbreak
+    - jailbreak:meta
     - jailbreak-templates
 ```
 
@@ -93,7 +93,7 @@ redteam:
     - prompt-extraction
     - rbac
   strategies:
-    - jailbreak
+    - jailbreak:meta
 ```
 
 Or use the ATLAS shorthand:
@@ -180,7 +180,7 @@ redteam:
     - ssrf
   strategies:
     - base64
-    - jailbreak
+    - jailbreak:meta
     - leetspeak
     - jailbreak-templates
     - rot13
@@ -227,7 +227,7 @@ redteam:
     - hallucination
     - indirect-prompt-injection
   strategies:
-    - jailbreak
+    - jailbreak:meta
     - jailbreak:tree
 ```
 
@@ -340,7 +340,7 @@ redteam:
   plugins:
     - mitre:atlas
   strategies:
-    - jailbreak
+    - jailbreak:meta
     - jailbreak-templates
     - base64
     - rot13
@@ -382,7 +382,7 @@ redteam:
     - owasp:llm
     - nist:ai:measure
   strategies:
-    - jailbreak
+    - jailbreak:meta
     - jailbreak-templates
 ```
 

@@ -193,36 +193,36 @@ describe('Bedrock agent-runtime SDK serialization', () => {
       filter: { $unknown: ['futureOperator', { key: 'category', value: 'technical' }] },
       expected: { futureOperator: { key: 'category', value: 'technical' } },
     },
-  ] satisfies { filter: RetrievalFilter; expected: unknown }[])(
-    'preserves SDK union compatibility for $filter',
-    async ({ filter, expected }) => {
-      const provider = new AwsBedrockAgentsProvider('AGENT12345', {
-        config: {
-          agentId: 'AGENT12345',
-          agentAliasId: 'ALIAS12345',
-          sessionId: 'local-fixture-session',
-          knowledgeBaseConfigurations: [
-            {
-              knowledgeBaseId: 'KB12345678',
-              retrievalConfiguration: { vectorSearchConfiguration: { filter } },
-            },
-          ],
-        },
-      });
-      const { client, handle } = captureRequest();
-      vi.spyOn(provider, 'getAgentRuntimeClient').mockResolvedValue(client);
+  ] satisfies {
+    filter: RetrievalFilter;
+    expected: unknown;
+  }[])('preserves SDK union compatibility for $filter', async ({ filter, expected }) => {
+    const provider = new AwsBedrockAgentsProvider('AGENT12345', {
+      config: {
+        agentId: 'AGENT12345',
+        agentAliasId: 'ALIAS12345',
+        sessionId: 'local-fixture-session',
+        knowledgeBaseConfigurations: [
+          {
+            knowledgeBaseId: 'KB12345678',
+            retrievalConfiguration: { vectorSearchConfiguration: { filter } },
+          },
+        ],
+      },
+    });
+    const { client, handle } = captureRequest();
+    vi.spyOn(provider, 'getAgentRuntimeClient').mockResolvedValue(client);
 
-      const result = await provider.callApi('Describe a quiet garden');
+    const result = await provider.callApi('Describe a quiet garden');
 
-      expect(result.error).toContain('Local serialization fixture');
-      expect(handle).toHaveBeenCalledTimes(1);
-      const request = JSON.parse(String(handle.mock.calls[0][0].body));
-      expect(
-        request.sessionState.knowledgeBaseConfigurations[0].retrievalConfiguration
-          .vectorSearchConfiguration.filter,
-      ).toEqual(expected);
-    },
-  );
+    expect(result.error).toContain('Local serialization fixture');
+    expect(handle).toHaveBeenCalledTimes(1);
+    const request = JSON.parse(String(handle.mock.calls[0][0].body));
+    expect(
+      request.sessionState.knowledgeBaseConfigurations[0].retrievalConfiguration
+        .vectorSearchConfiguration.filter,
+    ).toEqual(expected);
+  });
 
   it('serializes knowledge-base generation settings in the AWS request', async () => {
     const provider = new AwsBedrockKnowledgeBaseProvider('custom-model', {

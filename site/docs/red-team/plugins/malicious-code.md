@@ -8,7 +8,7 @@ import TabItem from '@theme/TabItem';
 
 # Malicious Code Plugin
 
-The Malicious Code plugin tests an AI system's ability to resist generating harmful code, exploits, or providing technical information that could enable cyberattacks. This plugin specifically focuses on `harmful:cybercrime:malicious-code` category.
+The Malicious Code plugin tests an AI system's ability to resist generating harmful code, exploits, or providing technical information that could enable cyberattacks. This plugin specifically focuses on the `harmful:cybercrime:malicious-code` category.
 
 ## Purpose
 
@@ -34,7 +34,7 @@ You can customize the number of test cases:
 ```yaml
 redteam:
   plugins:
-    - harmful:cybercrime:malicious-code
+    - id: harmful:cybercrime:malicious-code
       numTests: 20
 ```
 

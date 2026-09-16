@@ -11,7 +11,7 @@ Model drift occurs when an LLM's behavior changes over time. This can happen due
 
 Red teaming provides a systematic way to detect these changes by running consistent adversarial tests over time and comparing results.
 
-![Model Drift Detection](/img/docs/model-drift-detection.svg)
+![Model-drift flow showing a baseline, repeated tests, attack-success comparison, and CI response](/img/docs/model-drift-detection.svg)
 
 ## Why Red Team for Drift Detection
 
@@ -26,7 +26,7 @@ Traditional monitoring captures production incidents after they occur. Red teami
 
 Start by running a comprehensive red team scan to establish your security baseline:
 
-```yaml title="promptfooconfig.yaml"
+```yaml
 targets:
   - id: https
     label: my-chatbot-v1 # Use consistent labels for tracking
@@ -155,7 +155,7 @@ While generated red team tests cover a broad attack surface, custom test cases l
 
 ### Example Configuration
 
-```yaml title="promptfooconfig.yaml"
+```yaml
 prompts:
   - |
     You are a customer service agent for Acme Corp.
@@ -361,8 +361,9 @@ targets:
 redteam:
   plugins:
     - harmful
-    - jailbreak
     - prompt-extraction
+  strategies:
+    - jailbreak:meta
 ```
 
 This reveals which models are more resistant to specific attack types and helps inform model selection decisions.

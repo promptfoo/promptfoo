@@ -29,32 +29,32 @@ Improves: _Attack Success Rate_, _Coverage_
 
 There are many [strategies](/docs/red-team/strategies/) that can improve attack success rate, but we recommend at least enabling these three:
 
-| Strategy                                                                | Why include it?                                               |
-| ----------------------------------------------------------------------- | ------------------------------------------------------------- |
-| [Composite Jailbreaks](/docs/red-team/strategies/composite-jailbreaks/) | Chains top research techniques                                |
-| [Iterative Jailbreak](/docs/red-team/strategies/iterative/)             | LLM‑as‑Judge refines a single prompt until it bypasses safety |
-| [Tree‑Based Jailbreak](/docs/red-team/strategies/tree/)                 | Explores branching attack paths (Tree of Attacks)             |
+| Strategy                                                                | Why include it?                                      |
+| ----------------------------------------------------------------------- | ---------------------------------------------------- |
+| [Meta-Agent Jailbreaks](/docs/red-team/strategies/meta/)                | Adapts across distinct single-turn attack techniques |
+| [Composite Jailbreaks](/docs/red-team/strategies/composite-jailbreaks/) | Chains published jailbreak techniques                |
+| [Hydra Multi-turn](/docs/red-team/strategies/hydra/)                    | Explores adaptive conversational attack paths        |
 
 Apply several [strategies](/docs/red-team/strategies/) together to maximize coverage. Here's what it looks like if you're editing a config directly:
 
 ```yaml
 redteam:
   strategies:
-    - jailbreak
-    - jailbreak:tree
+    - jailbreak:meta
     - jailbreak:composite
+    - jailbreak:hydra
 ```
 
 ## 3. Enable Multi‑Turn Attacks
 
 Improves: _Attack Success Rate_, _Coverage_
 
-If your target supports conversation state, enable:
+If your target accepts conversation context, enable:
 
 - **[Crescendo](/docs/red-team/strategies/multi-turn/)**: Gradually escalates harm over turns (based on research from Microsoft).
 - **[GOAT](/docs/red-team/strategies/goat/)**: Generates adaptive multi‑turn attack conversations (based on research from Meta).
 
-Multi‑turn approaches uncover failures that appear only after context builds up and routinely add 70–90% more successful attacks. Configure them in YAML just like any other strategy:
+Multi-turn approaches uncover failures that appear only after context builds up. Configure them in YAML just like any other strategy:
 
 ```yaml
 redteam:

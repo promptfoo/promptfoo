@@ -886,7 +886,7 @@ redteam:
   plugins:
     - harmful
   strategies:
-    - jailbreak # Iterative strategy that benefits from trace feedback
+    - jailbreak:meta # Iterative strategy that benefits from trace feedback
 ```
 
 Promptfoo automatically selects spans that describe model calls, tool executions, guardrail

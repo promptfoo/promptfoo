@@ -26,7 +26,7 @@ import useCloudConfig from '@app/hooks/useCloudConfig';
 import { cn } from '@app/lib/utils';
 import {
   ADDITIONAL_STRATEGIES,
-  AGENTIC_STRATEGIES,
+  AGENTIC_STRATEGIES_SET,
   MULTI_MODAL_STRATEGIES,
   MULTI_TURN_STRATEGIES,
   type MultiTurnStrategy,
@@ -40,8 +40,10 @@ import type { StrategyCardData } from './strategies/types';
 // ADDITIONAL_STRATEGIES contains transformation strategies (base64, jailbreak, etc.) that modify test cases.
 // We use ADDITIONAL_STRATEGIES (not ALL_STRATEGIES) because ALL_STRATEGIES includes preset strategies
 // like 'default', 'multilingual' which aren't meant to be composed as layer steps.
-// We exclude 'layer' itself to prevent infinite recursion.
-const LAYER_TRANSFORMABLE_STRATEGIES = ADDITIONAL_STRATEGIES.filter((s) => s !== 'layer').sort();
+// We exclude 'layer' itself to prevent infinite recursion and the deprecated bare 'jailbreak' ID.
+const LAYER_TRANSFORMABLE_STRATEGIES = ADDITIONAL_STRATEGIES.filter(
+  (s) => s !== 'layer' && s !== 'jailbreak',
+).sort();
 
 // Type for layer strategy steps (can be strings or objects with nested config)
 type StepType = string | { id: string; config?: Partial<StrategyConfig> };
@@ -111,7 +113,12 @@ export default function StrategyConfigDialog({
   // Helper functions to check strategy types
   const isAgenticStrategy = React.useCallback((step: StepType): boolean => {
     const strategyId = getStepId(step);
-    return (AGENTIC_STRATEGIES as readonly string[]).includes(strategyId);
+    return (
+      strategyId !== 'indirect-web-pwn' &&
+      (AGENTIC_STRATEGIES_SET.has(strategyId) ||
+        strategyId === 'best-of-n' ||
+        strategyId === 'authoritative-markup-injection')
+    );
   }, []);
 
   const isMultiModalStrategy = React.useCallback((step: StepType): boolean => {
@@ -124,13 +131,18 @@ export default function StrategyConfigDialog({
     const hasAgenticStrategy = steps.some(isAgenticStrategy);
     const hasMultiModalStrategy = steps.some(isMultiModalStrategy);
     const lastStepIsMultiModal = steps.length > 0 && isMultiModalStrategy(steps[steps.length - 1]);
+    const lastStepIsAuthoritative =
+      steps.length > 0 && getStepId(steps[steps.length - 1]) === 'authoritative-markup-injection';
 
     // If last step is multi-modal, no more steps can be added
-    if (lastStepIsMultiModal) {
+    if (lastStepIsMultiModal || lastStepIsAuthoritative) {
       return [];
     }
 
     const stepIds = new Set(steps.map(getStepId));
+    const hasIndirectWebPwn = stepIds.has('indirect-web-pwn');
+    const hasProviderWrapper =
+      stepIds.has('best-of-n') || stepIds.has('authoritative-markup-injection');
 
     // Create a Map for O(1) lookup instead of O(n) find
     const strategyConfigMap = new Map(
@@ -146,8 +158,12 @@ export default function StrategyConfigDialog({
         return false;
       }
 
-      // Cannot add multiple agentic strategies
-      if (hasAgenticStrategy && isAgenticStrategy(strategy)) {
+      // Keep one orchestrator and prevent unsupported Indirect Web Pwn combinations.
+      if (
+        ((hasAgenticStrategy || hasIndirectWebPwn) && isAgenticStrategy(strategy)) ||
+        (strategy === 'indirect-web-pwn' &&
+          (hasProviderWrapper || stepIds.has('mischievous-user') || stepIds.has('custom')))
+      ) {
         return false;
       }
 
@@ -370,6 +386,11 @@ export default function StrategyConfigDialog({
           return prev;
         }
 
+        // Keep Indirect Web Pwn after the strategy that orchestrates its turns.
+        if (getStepId(stepToMove) === 'indirect-web-pwn' && isAgenticStrategy(prev[index - 1])) {
+          return prev;
+        }
+
         [newSteps[index - 1], newSteps[index]] = [newSteps[index], newSteps[index - 1]];
         return newSteps;
       });
@@ -381,6 +402,11 @@ export default function StrategyConfigDialog({
       if (index < prev.length - 1) {
         // Prevent moving down if the next step is multi-modal (multi-modal must stay last)
         if (isMultiModalStrategy(prev[index + 1])) {
+          return prev;
+        }
+
+        // Keep the orchestrator before Indirect Web Pwn.
+        if (isAgenticStrategy(prev[index]) && getStepId(prev[index + 1]) === 'indirect-web-pwn') {
           return prev;
         }
 
@@ -1144,10 +1170,12 @@ export default function StrategyConfigDialog({
     const canMoveUp =
       index > 0 &&
       !(isMultiModal && index === steps.length - 1) &&
-      !(index < steps.length - 1 && isMultiModalStrategy(steps[index + 1]));
+      !(index < steps.length - 1 && isMultiModalStrategy(steps[index + 1])) &&
+      !(stepId === 'indirect-web-pwn' && isAgenticStrategy(steps[index - 1]));
     const canMoveDown =
       index < steps.length - 1 &&
-      !(index < steps.length - 1 && isMultiModalStrategy(steps[index + 1]));
+      !(index < steps.length - 1 && isMultiModalStrategy(steps[index + 1])) &&
+      !(isAgentic && getStepId(steps[index + 1]) === 'indirect-web-pwn');
 
     return (
       <div

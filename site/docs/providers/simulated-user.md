@@ -38,7 +38,7 @@ tests:
       instructions: 'You are mia_li_3668...'
 ```
 
-## How it works
+## How It Works
 
 The Simulated User Provider facilitates a back-and-forth conversation between:
 

@@ -16,7 +16,7 @@ By injecting these format-specific tokens into user input, attackers can potenti
 - Manipulate the conversation flow
 - Bypass content filters and safety measures
 
-## How it works
+## How It Works
 
 1. The plugin generates test cases that contain well-formed message injection attacks using various conversation format delimiters
 2. These attacks attempt to break out of the user context and inject new system or assistant messages

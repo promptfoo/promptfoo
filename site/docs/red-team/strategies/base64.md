@@ -19,7 +19,7 @@ The Base64 Encoding strategy tests an AI system's ability to resist encoded inpu
 
 Use it in your `promptfooconfig.yaml`:
 
-```yaml title="promptfooconfig.yaml"
+```yaml
 strategies:
   - base64
 ```
@@ -50,7 +50,7 @@ The strategy helps identify:
 
 ## Related Concepts
 
-- [Prompt Injection](prompt-injection.md) - Similar security bypass technique
+- [Jailbreak Templates](jailbreak-templates.md) - Static jailbreak templates
 - [ROT13 Encoding](rot13.md) - Alternative encoding strategy
 - [Leetspeak](leetspeak.md) - Text obfuscation technique
 - [Hex Encoding](hex.md) - Similar encoding strategy using hexadecimal

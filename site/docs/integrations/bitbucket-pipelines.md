@@ -143,7 +143,7 @@ pipelines:
             script:
               - npm ci
               - npm install -g promptfoo
-              - npx promptfoo eval --providers.0.config.model=claude-3-opus-20240229
+              - npx promptfoo eval --providers.0.config.model=claude-opus-4-8
             artifacts:
               - promptfoo-results-claude.json
 ```

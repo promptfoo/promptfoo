@@ -1,120 +1,39 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 300">
-  <!-- Background -->
-  <rect width="800" height="300" fill="#ffffff"/>
-
-  <!-- Main connector line -->
-  <line x1="150" y1="115" x2="650" y2="115" stroke="#e2e8f0" stroke-width="2"/>
-
-  <!-- Node 1: Baseline -->
-  <g transform="translate(60, 50)">
-    <rect width="120" height="130" fill="#f0fdf4" stroke="#22c55e" stroke-width="1.5" rx="4"/>
-    <text x="60" y="24" font-family="Inter, system-ui, sans-serif" font-size="11" fill="#15803d" text-anchor="middle" font-weight="600">Baseline</text>
-    <line x1="10" y1="36" x2="110" y2="36" stroke="#bbf7d0"/>
-
-    <!-- Bar chart icon -->
-    <g transform="translate(35, 46)">
-      <rect x="0" y="20" width="12" height="20" fill="#22c55e" rx="1"/>
-      <rect x="18" y="12" width="12" height="28" fill="#22c55e" rx="1"/>
-      <rect x="36" y="16" width="12" height="24" fill="#22c55e" rx="1"/>
-    </g>
-
-    <text x="60" y="100" font-family="Inter, system-ui, sans-serif" font-size="10" fill="#64748b" text-anchor="middle">Initial red team</text>
-    <rect x="20" y="108" width="80" height="16" fill="#dcfce7" rx="2"/>
-    <text x="60" y="120" font-family="Inter, system-ui, sans-serif" font-size="9" fill="#16a34a" text-anchor="middle" font-weight="500">ASR: 8%</text>
-  </g>
-
-  <!-- Arrow 1 -->
-  <path d="M185 115 L220 115" stroke="#94a3b8" stroke-width="1.5"/>
-  <polygon points="220,115 213,111 213,119" fill="#94a3b8"/>
-
-  <!-- Node 2: Scheduled Tests -->
-  <g transform="translate(230, 50)">
-    <rect width="130" height="130" fill="#f8fafc" stroke="#cbd5e1" stroke-width="1.5" rx="4"/>
-    <text x="65" y="24" font-family="Inter, system-ui, sans-serif" font-size="11" fill="#1e293b" text-anchor="middle" font-weight="600">Monitor</text>
-    <line x1="10" y1="36" x2="120" y2="36" stroke="#e2e8f0"/>
-
-    <!-- Timeline with dots -->
-    <g transform="translate(20, 52)">
-      <line x1="0" y1="12" x2="90" y2="12" stroke="#cbd5e1" stroke-width="1.5"/>
-      <circle cx="0" cy="12" r="5" fill="#22c55e"/>
-      <circle cx="30" cy="12" r="5" fill="#94a3b8"/>
-      <circle cx="60" cy="12" r="5" fill="#94a3b8"/>
-      <circle cx="90" cy="12" r="5" fill="#f59e0b" stroke="#f59e0b"/>
-      <text x="0" y="32" font-family="Inter, system-ui, sans-serif" font-size="8" fill="#64748b" text-anchor="middle">T0</text>
-      <text x="90" y="32" font-family="Inter, system-ui, sans-serif" font-size="8" fill="#b45309" text-anchor="middle">Tn</text>
-    </g>
-
-    <text x="65" y="100" font-family="Inter, system-ui, sans-serif" font-size="10" fill="#64748b" text-anchor="middle">Scheduled re-tests</text>
-    <rect x="15" y="108" width="100" height="16" fill="#fef3c7" rx="2"/>
-    <text x="65" y="120" font-family="Inter, system-ui, sans-serif" font-size="9" fill="#a16207" text-anchor="middle" font-weight="500">ASR: 8% → 14%</text>
-  </g>
-
-  <!-- Arrow 2 -->
-  <path d="M365 115 L400 115" stroke="#94a3b8" stroke-width="1.5"/>
-  <polygon points="400,115 393,111 393,119" fill="#94a3b8"/>
-
-  <!-- Node 3: Compare -->
-  <g transform="translate(410, 50)">
-    <rect width="120" height="130" fill="#eff6ff" stroke="#3b82f6" stroke-width="1.5" rx="4"/>
-    <text x="60" y="24" font-family="Inter, system-ui, sans-serif" font-size="11" fill="#1d4ed8" text-anchor="middle" font-weight="600">Compare</text>
-    <line x1="10" y1="36" x2="110" y2="36" stroke="#bfdbfe"/>
-
-    <!-- Comparison boxes -->
-    <g transform="translate(20, 46)">
-      <rect width="35" height="40" fill="#dbeafe" stroke="#3b82f6" rx="2"/>
-      <rect x="45" width="35" height="40" fill="#dbeafe" stroke="#3b82f6" rx="2"/>
-      <text x="17" y="16" font-family="Inter, system-ui, sans-serif" font-size="9" fill="#1d4ed8" text-anchor="middle" font-weight="500">Base</text>
-      <text x="17" y="32" font-family="Inter, system-ui, sans-serif" font-size="10" fill="#3b82f6" text-anchor="middle">8%</text>
-      <text x="62" y="16" font-family="Inter, system-ui, sans-serif" font-size="9" fill="#1d4ed8" text-anchor="middle" font-weight="500">Now</text>
-      <text x="62" y="32" font-family="Inter, system-ui, sans-serif" font-size="10" fill="#3b82f6" text-anchor="middle">14%</text>
-    </g>
-
-    <text x="60" y="100" font-family="Inter, system-ui, sans-serif" font-size="10" fill="#64748b" text-anchor="middle">vs threshold</text>
-    <rect x="20" y="108" width="80" height="16" fill="#dbeafe" rx="2"/>
-    <text x="60" y="120" font-family="Inter, system-ui, sans-serif" font-size="9" fill="#1d4ed8" text-anchor="middle" font-weight="500">Δ +6%</text>
-  </g>
-
-  <!-- Arrow 3 -->
-  <path d="M535 115 L570 115" stroke="#94a3b8" stroke-width="1.5"/>
-  <polygon points="570,115 563,111 563,119" fill="#94a3b8"/>
-
-  <!-- Node 4: Outcome -->
-  <g transform="translate(580, 50)">
-    <rect width="120" height="130" fill="#f8fafc" stroke="#cbd5e1" stroke-width="1.5" rx="4"/>
-    <text x="60" y="24" font-family="Inter, system-ui, sans-serif" font-size="11" fill="#1e293b" text-anchor="middle" font-weight="600">Outcome</text>
-    <line x1="10" y1="36" x2="110" y2="36" stroke="#e2e8f0"/>
-
-    <!-- Pass box -->
-    <g transform="translate(15, 48)">
-      <rect width="40" height="32" fill="#dcfce7" stroke="#22c55e" stroke-width="1" rx="2"/>
-      <path d="M12 16 L17 21 L28 10" stroke="#22c55e" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
-      <text x="20" y="28" font-family="Inter, system-ui, sans-serif" font-size="8" fill="#16a34a" text-anchor="middle" font-weight="500">Pass</text>
-    </g>
-
-    <!-- Drift box -->
-    <g transform="translate(65, 48)">
-      <rect width="40" height="32" fill="#fee2e2" stroke="#ef4444" stroke-width="1" rx="2"/>
-      <path d="M14 10 L26 22 M26 10 L14 22" stroke="#ef4444" stroke-width="2" fill="none" stroke-linecap="round"/>
-      <text x="20" y="28" font-family="Inter, system-ui, sans-serif" font-size="8" fill="#dc2626" text-anchor="middle" font-weight="500">Drift</text>
-    </g>
-
-    <text x="60" y="100" font-family="Inter, system-ui, sans-serif" font-size="10" fill="#64748b" text-anchor="middle">CI gate or alert</text>
-    <rect x="20" y="108" width="80" height="16" fill="#f1f5f9" rx="2"/>
-    <text x="60" y="120" font-family="Inter, system-ui, sans-serif" font-size="9" fill="#64748b" text-anchor="middle">Investigate</text>
-  </g>
-
-  <!-- Bottom labels -->
-  <g transform="translate(0, 215)">
-    <text x="120" y="20" font-family="Inter, system-ui, sans-serif" font-size="10" fill="#15803d" text-anchor="middle" font-weight="500">Establish</text>
-    <text x="120" y="36" font-family="Inter, system-ui, sans-serif" font-size="9" fill="#64748b" text-anchor="middle">Security baseline</text>
-
-    <text x="295" y="20" font-family="Inter, system-ui, sans-serif" font-size="10" fill="#475569" text-anchor="middle" font-weight="500">Test Continuously</text>
-    <text x="295" y="36" font-family="Inter, system-ui, sans-serif" font-size="9" fill="#64748b" text-anchor="middle">Same tests over time</text>
-
-    <text x="470" y="20" font-family="Inter, system-ui, sans-serif" font-size="10" fill="#1d4ed8" text-anchor="middle" font-weight="500">Detect Changes</text>
-    <text x="470" y="36" font-family="Inter, system-ui, sans-serif" font-size="9" fill="#64748b" text-anchor="middle">Compare against baseline</text>
-
-    <text x="640" y="20" font-family="Inter, system-ui, sans-serif" font-size="10" fill="#475569" text-anchor="middle" font-weight="500">Respond</text>
-    <text x="640" y="36" font-family="Inter, system-ui, sans-serif" font-size="9" fill="#64748b" text-anchor="middle">Block deploy or alert</text>
-  </g>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 920 290" role="img" aria-labelledby="title desc">
+  <title id="title">Model drift detection flow</title>
+  <desc id="desc">Promptfoo establishes a baseline, repeats the same tests, compares attack success rates, and alerts when the result crosses a threshold.</desc>
+  <defs>
+    <marker id="arrow" markerWidth="10" markerHeight="8" refX="9" refY="4" orient="auto"><path d="M0 0L10 4L0 8Z" fill="#64748b" /></marker>
+    <style>
+      text { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; fill: #0f172a; }
+      .title { font-size: 24px; font-weight: 700; }
+      .heading { font-size: 17px; font-weight: 600; }
+      .body { font-size: 14px; fill: #475569; }
+      .value { font-size: 16px; font-weight: 700; }
+    </style>
+  </defs>
+  <rect width="920" height="290" fill="#ffffff" />
+  <text class="title" x="460" y="42" text-anchor="middle">Detect model drift over time</text>
+  <rect x="28" y="88" width="190" height="150" rx="10" fill="#f0fdf4" stroke="#16a34a" stroke-width="2" />
+  <text class="heading" x="123" y="119" text-anchor="middle">1. Baseline</text>
+  <text class="value" x="123" y="154" text-anchor="middle" fill="#15803d">ASR: 8%</text>
+  <text class="body" x="123" y="184" text-anchor="middle">Run an initial</text>
+  <text class="body" x="123" y="204" text-anchor="middle">red team</text>
+  <path d="M218 162H254" stroke="#64748b" stroke-width="2" marker-end="url(#arrow)" />
+  <rect x="254" y="88" width="190" height="150" rx="10" fill="#f8fafc" stroke="#94a3b8" stroke-width="2" />
+  <text class="heading" x="349" y="119" text-anchor="middle">2. Repeat</text>
+  <text class="value" x="349" y="154" text-anchor="middle">T0 → Tn</text>
+  <text class="body" x="349" y="184" text-anchor="middle">Run the same tests</text>
+  <text class="body" x="349" y="204" text-anchor="middle">on a schedule</text>
+  <path d="M444 162H480" stroke="#64748b" stroke-width="2" marker-end="url(#arrow)" />
+  <rect x="480" y="88" width="190" height="150" rx="10" fill="#eff6ff" stroke="#2563eb" stroke-width="2" />
+  <text class="heading" x="575" y="119" text-anchor="middle">3. Compare</text>
+  <text class="value" x="575" y="154" text-anchor="middle" fill="#1d4ed8">8% → 14%</text>
+  <text class="body" x="575" y="184" text-anchor="middle">Attack success rose</text>
+  <text class="body" x="575" y="204" text-anchor="middle">6 percentage points</text>
+  <path d="M670 162H706" stroke="#64748b" stroke-width="2" marker-end="url(#arrow)" />
+  <rect x="706" y="88" width="186" height="150" rx="10" fill="#fff7ed" stroke="#ea580c" stroke-width="2" />
+  <text class="heading" x="799" y="119" text-anchor="middle">4. Respond</text>
+  <text class="value" x="799" y="154" text-anchor="middle" fill="#c2410c">Threshold</text>
+  <text class="body" x="799" y="184" text-anchor="middle">Alert or block CI</text>
+  <text class="body" x="799" y="204" text-anchor="middle">when drift is detected</text>
 </svg>

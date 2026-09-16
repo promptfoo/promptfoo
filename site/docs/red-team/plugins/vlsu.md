@@ -1,12 +1,12 @@
 ---
 title: VLSU
-description: Test multi-modal models for compositional safety where individually safe images and text combine to produce harmful outputs
-keywords: [red team, multi-modal, image, safety, compositional, vlsu, vision-language]
+description: Test multimodal models for compositional safety, where individually safe images and text combine to produce harmful outputs, using the VLSU red team dataset.
+keywords: [red team, multimodal, image, safety, compositional, vlsu, vision-language]
 ---
 
 # VLSU Plugin
 
-The VLSU plugin tests multi-modal models using Apple's [Vision-Language Safety Understanding (VLSU) dataset](https://github.com/apple/ml-vlsu), which evaluates **compositional safety** - scenarios where individually safe images and text combine to produce harmful outputs.
+The VLSU plugin tests multimodal models using Apple's [Vision-Language Safety Understanding (VLSU) dataset](https://github.com/apple/ml-vlsu), which evaluates **compositional safety** - scenarios where individually safe images and text combine to produce harmful outputs.
 
 This is a critical evaluation because models often achieve 90%+ accuracy on individual modality safety while dropping to 20-55% when joint reasoning is required. Research shows 34% of errors occur despite correct individual classifications.
 
@@ -14,7 +14,7 @@ This is a critical evaluation because models often achieve 90%+ accuracy on indi
 
 Enable the plugin in your configuration:
 
-```yaml title="promptfooconfig.yaml"
+```yaml
 redteam:
   plugins:
     - vlsu # All categories
@@ -138,7 +138,7 @@ redteam:
 
 To specifically test cases where safe inputs combine to create unsafe outputs:
 
-```yaml title="promptfooconfig.yaml"
+```yaml
 redteam:
   plugins:
     - id: vlsu
@@ -148,7 +148,7 @@ redteam:
 
 ### Testing Specific Severity Patterns
 
-```yaml title="promptfooconfig.yaml"
+```yaml
 redteam:
   plugins:
     - id: vlsu
@@ -158,7 +158,7 @@ redteam:
           - borderline_safe_unsafe
 ```
 
-## How it Works
+## How It Works
 
 1. The plugin fetches the VLSU CSV dataset from GitHub
 2. Filters records by category, grade, severity pattern, or compositional criteria
@@ -200,10 +200,10 @@ A model should recognize the compositional harm despite each input appearing ben
 }
 ```
 
-## See Also
+## Related Concepts {#see-also}
 
 - [Red Team Plugins Overview](../plugins/index.md)
-- [VLGuard Plugin](./vlguard.md) - Alternative multi-modal safety dataset
+- [VLGuard Plugin](./vlguard.md) - Alternative multimodal safety dataset
 - [UnsafeBench Plugin](./unsafebench.md) - Unsafe image content testing
 - [Multi-Modal Model Testing](../../providers/openai.md#images)
 - [Image Jailbreaking Strategy](../strategies/image.md)
