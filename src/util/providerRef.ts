@@ -1,13 +1,14 @@
 import fs from 'fs';
 import path from 'path';
 
-import yaml from 'js-yaml';
 import {
   formatFileNotFoundError,
   formatFileReadError,
   maybeLoadConfigFromExternalFile,
+  resolveFileProtocolPath,
 } from './file';
 import invariant from './invariant';
+import { loadYaml } from './yamlLoad';
 
 import type { ProviderOptions, ProviderOptionsMap } from '../types/providers';
 
@@ -145,9 +146,7 @@ export function readProviderConfigFile(
   basePath?: string,
 ): ProviderConfigFile {
   const relativePath = providerPath.slice('file://'.length);
-  const resolvedPath = path.isAbsolute(relativePath)
-    ? relativePath
-    : path.join(basePath || process.cwd(), relativePath);
+  const resolvedPath = resolveFileProtocolPath(providerPath, basePath);
 
   if (!fs.existsSync(resolvedPath)) {
     throw new Error(
@@ -161,7 +160,7 @@ export function readProviderConfigFile(
 
   let rawContent: unknown;
   try {
-    rawContent = yaml.load(fs.readFileSync(resolvedPath, 'utf8'));
+    rawContent = loadYaml(fs.readFileSync(resolvedPath, 'utf8'));
   } catch (err) {
     if ((err as NodeJS.ErrnoException).code === 'ENOENT') {
       throw new Error(

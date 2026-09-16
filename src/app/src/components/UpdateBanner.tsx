@@ -6,6 +6,12 @@ import { useVersionCheck } from '@app/hooks/useVersionCheck';
 import { cn } from '@app/lib/utils';
 import { Check, Copy, ExternalLink, RefreshCw, X } from 'lucide-react';
 
+const COPY_COMMAND_LABELS = {
+  docker: 'Copy Docker Command',
+  npx: 'Copy npx Command',
+  npm: 'Copy Update Command',
+} as const;
+
 export default function UpdateBanner() {
   const { versionInfo, loading, error, dismissed, dismiss } = useVersionCheck();
   const [copied, setCopied] = useState(false);
@@ -83,7 +89,11 @@ export default function UpdateBanner() {
         document.body.appendChild(textarea);
         textarea.select();
         try {
-          document.execCommand('copy');
+          // execCommand reports rejection via its return value, not by throwing. Without this
+          // check a refused copy would still render the "Copied!" success state.
+          if (!document.execCommand('copy')) {
+            throw new Error('Fallback copy command was rejected');
+          }
           onSuccess();
         } catch (fallbackError) {
           console.error('Fallback copy also failed:', fallbackError);
@@ -105,6 +115,11 @@ export default function UpdateBanner() {
     <Alert
       ref={bannerRef}
       variant="info"
+      // An available update is informational, not urgent. `Alert` defaults to role="alert",
+      // which is an assertive live region and interrupts screen readers; role="group" keeps
+      // the banner passive and lets the inner polite live region own announcements.
+      role="group"
+      aria-label="Update available"
       className={cn(
         'relative z-(--z-banner) rounded-none px-4 py-2',
         'flex flex-col items-stretch gap-3 sm:flex-row sm:items-center sm:justify-between sm:gap-4',
@@ -112,7 +127,12 @@ export default function UpdateBanner() {
         'dark:bg-blue-950',
       )}
     >
-      <div className="flex items-start gap-3 sm:items-center">
+      <div
+        role="status"
+        aria-live="polite"
+        aria-atomic="true"
+        className="flex items-start gap-3 sm:items-center"
+      >
         <RefreshCw className="size-4 shrink-0" />
         <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
           <span className="text-sm font-medium">
@@ -121,6 +141,13 @@ export default function UpdateBanner() {
           <span className="text-sm text-muted-foreground">
             (current: v{versionInfo.currentVersion})
           </span>
+          {versionInfo.commandType === 'docker' &&
+            !versionInfo.updateCommands?.isCustomContainer && (
+              <span className="text-sm text-muted-foreground">
+                If this is a derived image, update its Promptfoo base and rebuild before
+                redeploying.
+              </span>
+            )}
         </div>
       </div>
       <div className="flex flex-wrap items-center gap-2 sm:justify-end">
@@ -134,26 +161,37 @@ export default function UpdateBanner() {
             <ExternalLink className="size-3" />
           </a>
         </Button>
-        {versionInfo?.updateCommands?.primary && (
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={handleCopyCommand}
-            title={versionInfo.updateCommands.primary}
-            className="gap-1.5 text-xs"
-          >
-            {copied ? (
-              <Check className="size-3 text-emerald-600 dark:text-emerald-400" />
-            ) : (
-              <Copy className="size-3" />
-            )}
-            {versionInfo.commandType === 'docker'
-              ? 'Copy Docker Command'
-              : versionInfo.commandType === 'npx'
-                ? 'Copy npx Command'
-                : 'Copy Update Command'}
-          </Button>
+        {/* Custom containers have no copyable command: the image owner has to update the
+            Promptfoo source or parent image and rebuild. Without this branch the banner would
+            render version numbers and no instruction at all. */}
+        {versionInfo?.updateCommands?.isCustomContainer ? (
+          <span className="text-xs text-muted-foreground">
+            Update the Promptfoo source, dependency, or parent image, then rebuild and redeploy the
+            container.
+          </span>
+        ) : (
+          versionInfo?.updateCommands?.primary && (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={handleCopyCommand}
+              title={versionInfo.updateCommands.primary}
+              className="gap-1.5 text-xs"
+            >
+              {copied ? (
+                <Check className="size-3 text-emerald-600 dark:text-emerald-400" />
+              ) : (
+                <Copy className="size-3" />
+              )}
+              {copied ? 'Copied' : COPY_COMMAND_LABELS[versionInfo.commandType ?? 'npm']}
+            </Button>
+          )
         )}
+        {/* Polite live region so screen readers get the copy confirmation the icon swap alone
+            does not convey. */}
+        <span aria-live="polite" aria-atomic="true" className="sr-only">
+          {copied ? 'Update command copied to clipboard' : ''}
+        </span>
         <button
           type="button"
           onClick={dismiss}

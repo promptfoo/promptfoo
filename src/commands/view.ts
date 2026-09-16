@@ -36,7 +36,7 @@ export function viewCommand(program: Command) {
 
         if (cmdObj.filterDescription) {
           logger.warn(
-            'The --filter-description option is deprecated and not longer supported. The argument will be ignored.',
+            'The --filter-description option is deprecated and no longer supported. The argument will be ignored.',
           );
         }
 

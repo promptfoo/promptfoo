@@ -158,8 +158,8 @@ export default class ModelAudit {
       sourceLastModified: params.sourceLastModified || null,
       scannerVersion: params.scannerVersion || null,
     };
-    const db = getDb();
-    db.insert(modelAuditsTable).values(data).run();
+    const db = await getDb();
+    await db.insert(modelAuditsTable).values(data).run();
 
     logger.debug(`Created model audit ${id} for ${params.modelPath}`);
 
@@ -167,7 +167,7 @@ export default class ModelAudit {
   }
 
   static async findById(id: string): Promise<ModelAudit | null> {
-    const db = getDb();
+    const db = await getDb();
     const result = await db
       .select()
       .from(modelAuditsTable)
@@ -179,18 +179,6 @@ export default class ModelAudit {
     }
 
     return new ModelAudit({ ...result, persisted: true });
-  }
-
-  static async findByModelPath(modelPath: string): Promise<ModelAudit[]> {
-    const db = getDb();
-    const results = await db
-      .select()
-      .from(modelAuditsTable)
-      .where(eq(modelAuditsTable.modelPath, modelPath))
-      .orderBy(modelAuditsTable.createdAt)
-      .all();
-
-    return results.map((r) => new ModelAudit({ ...r, persisted: true }));
   }
 
   /**
@@ -211,7 +199,7 @@ export default class ModelAudit {
     revisionSha?: string | null,
     contentHash?: string,
   ): Promise<ModelAudit | null> {
-    const db = getDb();
+    const db = await getDb();
 
     // Build query conditions based on available fields
     const conditions = [];
@@ -255,17 +243,6 @@ export default class ModelAudit {
     return new ModelAudit({ ...result, persisted: true });
   }
 
-  static async findLatestByModelId(modelId: string): Promise<ModelAudit | null> {
-    const result = await getDb()
-      .select()
-      .from(modelAuditsTable)
-      .where(eq(modelAuditsTable.modelId, modelId))
-      .orderBy(desc(modelAuditsTable.createdAt))
-      .get();
-
-    return result ? new ModelAudit({ ...result, persisted: true }) : null;
-  }
-
   /**
    * Get multiple model audits with pagination, sorting, and optional search.
    *
@@ -280,7 +257,7 @@ export default class ModelAudit {
     sortOrder: 'asc' | 'desc' = 'desc',
     search?: string,
   ): Promise<ModelAudit[]> {
-    const db = getDb();
+    const db = await getDb();
 
     // Build the base query
     let query = db.select().from(modelAuditsTable);
@@ -322,7 +299,7 @@ export default class ModelAudit {
   }
 
   static async count(search?: string): Promise<number> {
-    const db = getDb();
+    const db = await getDb();
 
     let query = db.select({ value: count() }).from(modelAuditsTable);
 
@@ -342,7 +319,7 @@ export default class ModelAudit {
   }
 
   static async getLatest(limit: number = 10): Promise<ModelAudit[]> {
-    const db = getDb();
+    const db = await getDb();
     const results = await db
       .select()
       .from(modelAuditsTable)
@@ -362,7 +339,7 @@ export default class ModelAudit {
   }
 
   async save(): Promise<void> {
-    const db = getDb();
+    const db = await getDb();
     const now = Date.now();
 
     if (this.persisted) {
@@ -429,8 +406,8 @@ export default class ModelAudit {
       return;
     }
 
-    const db = getDb();
-    db.delete(modelAuditsTable).where(eq(modelAuditsTable.id, this.id)).run();
+    const db = await getDb();
+    await db.delete(modelAuditsTable).where(eq(modelAuditsTable.id, this.id)).run();
 
     this.persisted = false;
   }

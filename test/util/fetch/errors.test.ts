@@ -1,15 +1,36 @@
 import { describe, expect, it } from 'vitest';
 import {
   extractRateLimitErrorCode,
+  extractRateLimitErrorType,
   findTargetErrorStatus,
   formatRateLimitDetail,
   formatRateLimitErrorMessage,
   HttpRateLimitError,
+  isAbortError,
   isHardQuotaCode,
   isHttpRateLimitError,
   isNonTransientHttpStatus,
   isTransientConnectionError,
 } from '../../../src/util/fetch/errors';
+
+describe('isAbortError', () => {
+  it('returns true for AbortError and AbortException', () => {
+    const abortError = new Error('aborted');
+    abortError.name = 'AbortError';
+    const abortException = new Error('aborted');
+    abortException.name = 'AbortException';
+    expect(isAbortError(abortError)).toBe(true);
+    expect(isAbortError(abortException)).toBe(true);
+  });
+
+  it('returns false for other errors and non-errors', () => {
+    expect(isAbortError(new TypeError('terminated'))).toBe(false);
+    expect(isAbortError(new Error('boom'))).toBe(false);
+    expect(isAbortError({ name: 'AbortError' })).toBe(false);
+    expect(isAbortError('AbortError')).toBe(false);
+    expect(isAbortError(undefined)).toBe(false);
+  });
+});
 
 describe('isNonTransientHttpStatus', () => {
   it('returns true for 401 Unauthorized', () => {
@@ -131,6 +152,11 @@ describe('isTransientConnectionError', () => {
     expect(isTransientConnectionError(error)).toBe(true);
   });
 
+  it('returns true for mixed-case ECONNRESET messages', () => {
+    const error = new Error('EConnReset');
+    expect(isTransientConnectionError(error)).toBe(true);
+  });
+
   it('returns true for EPIPE errors', () => {
     const error = new Error('Broken pipe') as Error & { code?: string };
     error.code = 'EPIPE';
@@ -142,13 +168,45 @@ describe('isTransientConnectionError', () => {
     expect(isTransientConnectionError(error)).toBe(true);
   });
 
+  it('returns true for mixed-case socket hang up errors', () => {
+    const error = new Error('Socket Hang Up');
+    expect(isTransientConnectionError(error)).toBe(true);
+  });
+
   it('returns true for bad record mac errors', () => {
     const error = new Error('bad record mac');
     expect(isTransientConnectionError(error)).toBe(true);
   });
 
+  it('returns true for mixed-case bad record mac errors', () => {
+    const error = new Error('Bad Record MAC');
+    expect(isTransientConnectionError(error)).toBe(true);
+  });
+
+  it('returns true for standalone eproto errors', () => {
+    const error = new Error('eproto');
+    expect(isTransientConnectionError(error)).toBe(true);
+  });
+
   it('returns false for permanent TLS config errors', () => {
     const error = new Error('eproto self signed certificate');
+    expect(isTransientConnectionError(error)).toBe(false);
+  });
+
+  it('returns false for eproto unable-to-verify TLS errors', () => {
+    // Must include `eproto` to enter the permanent-error exclusion; otherwise the
+    // message has no transient marker and would return false trivially.
+    const error = new Error('write EPROTO unable to verify the first certificate');
+    expect(isTransientConnectionError(error)).toBe(false);
+  });
+
+  it('returns false for eproto unknown ca TLS errors', () => {
+    const error = new Error('write EPROTO tlsv1 alert unknown ca');
+    expect(isTransientConnectionError(error)).toBe(false);
+  });
+
+  it('returns false for eproto certificate verify TLS errors', () => {
+    const error = new Error('write EPROTO certificate verify failed');
     expect(isTransientConnectionError(error)).toBe(false);
   });
 
@@ -165,6 +223,7 @@ describe('isHardQuotaCode', () => {
     ['billing_not_active', true],
     ['access_terminated', true],
     ['quota_exceeded', true],
+    ['credit_balance_exhausted', true],
     ['rate_limit_exceeded', false],
     ['tokens_per_min', false],
     ['', false],
@@ -192,8 +251,46 @@ describe('extractRateLimitErrorCode', () => {
     );
   });
 
+  it('keeps the specific code when both code and type name a hard quota', () => {
+    expect(
+      extractRateLimitErrorCode({
+        error: {
+          code: 'credit_balance_exhausted',
+          message: 'You have no credits remaining',
+          type: 'insufficient_quota',
+        },
+      }),
+    ).toBe('credit_balance_exhausted');
+  });
+
+  it('keeps error.code when error.type is also present', () => {
+    expect(
+      extractRateLimitErrorCode({
+        error: { code: 'some_new_billing_code', type: 'insufficient_quota' },
+      }),
+    ).toBe('some_new_billing_code');
+  });
+
   it('reads top-level code', () => {
     expect(extractRateLimitErrorCode({ code: 'tokens_per_min' })).toBe('tokens_per_min');
+  });
+
+  it('prefers an actual root code over a nested type alias', () => {
+    expect(
+      extractRateLimitErrorCode({
+        code: 'credit_balance_exhausted',
+        error: { type: 'insufficient_quota' },
+      }),
+    ).toBe('credit_balance_exhausted');
+  });
+
+  it('prefers an actual nested code over a transport code', () => {
+    expect(
+      extractRateLimitErrorCode({
+        code: 'ETIMEDOUT',
+        error: { code: 'rate_limit_exceeded', type: 'insufficient_quota' },
+      }),
+    ).toBe('rate_limit_exceeded');
   });
 
   it('reads top-level type', () => {
@@ -217,6 +314,159 @@ describe('extractRateLimitErrorCode', () => {
   });
 });
 
+describe('extractRateLimitErrorType', () => {
+  it('reads error.type from the OpenAI shape', () => {
+    expect(
+      extractRateLimitErrorType({
+        error: { code: 'credit_balance_exhausted', type: 'insufficient_quota' },
+      }),
+    ).toBe('insufficient_quota');
+  });
+
+  it('reads top-level type', () => {
+    expect(extractRateLimitErrorType({ code: 'x', type: 'quota_exceeded' })).toBe('quota_exceeded');
+  });
+
+  it('falls back to the root type when the nested error has none (SDK wrapper shape)', () => {
+    expect(
+      extractRateLimitErrorType({
+        status: 429,
+        type: 'insufficient_quota',
+        error: { code: 'new_billing_code' },
+      }),
+    ).toBe('insufficient_quota');
+  });
+
+  it('returns undefined when no type is present', () => {
+    expect(extractRateLimitErrorType({ error: { code: 'insufficient_quota' } })).toBeUndefined();
+    expect(extractRateLimitErrorType({ error: { type: '' } })).toBeUndefined();
+    expect(extractRateLimitErrorType('plain text')).toBeUndefined();
+    expect(extractRateLimitErrorType(null)).toBeUndefined();
+  });
+});
+
+describe('HttpRateLimitError: quota classification via type', () => {
+  it('classifies credit_balance_exhausted as quota', () => {
+    const err = new HttpRateLimitError({
+      status: 429,
+      code: 'credit_balance_exhausted',
+      type: 'insufficient_quota',
+    });
+    expect(err.kind).toBe('quota');
+    expect(err.code).toBe('credit_balance_exhausted');
+    expect(err.type).toBe('insufficient_quota');
+    expect(err.message).toContain('Quota exceeded');
+    expect(err.message).toContain('(code: credit_balance_exhausted)');
+  });
+
+  it('uses a hard-quota type when the code is not recognized, keeping the code', () => {
+    const err = new HttpRateLimitError({
+      status: 429,
+      code: 'some_new_billing_code',
+      type: 'insufficient_quota',
+    });
+    expect(err.kind).toBe('quota');
+    expect(err.code).toBe('some_new_billing_code');
+  });
+
+  it('lets a recognized transient code win over a hard-quota type without recovery headers', () => {
+    for (const code of ['rate_limit_exceeded', 'rate_limit_error', 'tokens_per_min']) {
+      const err = new HttpRateLimitError({ status: 429, code, type: 'insufficient_quota' });
+      expect(err.kind, code).toBe('rate_limit');
+      expect(err.code, code).toBe(code);
+      expect(err.type, code).toBe('insufficient_quota');
+    }
+  });
+
+  it('a DEFINITIVE billing type outranks a recognized transient code', () => {
+    // Some gateways pair a generic `code: rate_limit_exceeded` with the
+    // specific billing `type`. Yielding to the code there would spend the whole
+    // retry budget on an account that has no credits left, and the
+    // definitive-billing guard below could not help: it only protects a kind
+    // that is already 'quota'.
+    for (const type of [
+      'credit_balance_exhausted',
+      'billing_hard_limit_reached',
+      'billing_not_active',
+      'access_terminated',
+    ]) {
+      const err = new HttpRateLimitError({ status: 429, code: 'rate_limit_exceeded', type });
+      expect(err.kind, type).toBe('quota');
+      expect(err.code, type).toBe('rate_limit_exceeded');
+      expect(err.type, type).toBe(type);
+    }
+  });
+
+  it('keeps a definitive billing type at quota even with a short Retry-After', () => {
+    const err = new HttpRateLimitError({
+      status: 429,
+      code: 'rate_limit_exceeded',
+      type: 'credit_balance_exhausted',
+      retryAfterMs: 1000,
+    });
+    expect(err.kind).toBe('quota');
+  });
+
+  it('keeps rate_limit when neither code nor type is a hard quota', () => {
+    const err = new HttpRateLimitError({
+      status: 429,
+      code: 'rate_limit_exceeded',
+      type: 'rate_limit_error',
+    });
+    expect(err.kind).toBe('rate_limit');
+  });
+
+  it('still downgrades a hard-quota type to rate_limit on a short Retry-After', () => {
+    const err = new HttpRateLimitError({
+      status: 429,
+      code: 'rate_limit_exceeded',
+      type: 'quota_exceeded',
+      retryAfterMs: 1000,
+    });
+    expect(err.kind).toBe('rate_limit');
+    expect(err.code).toBe('rate_limit_exceeded');
+  });
+
+  it('downgrades a hard-quota type to rate_limit on a near-term reset timestamp', () => {
+    const err = new HttpRateLimitError({
+      status: 429,
+      code: 'rate_limit_exceeded',
+      type: 'insufficient_quota',
+      resetAt: Date.now() + 6_000,
+    });
+    expect(err.kind).toBe('rate_limit');
+    expect(err.code).toBe('rate_limit_exceeded');
+  });
+
+  it('keeps quota when the reset timestamp is far away', () => {
+    const err = new HttpRateLimitError({
+      status: 429,
+      code: 'insufficient_quota',
+      resetAt: Date.now() + 2 * 60 * 60 * 1000,
+    });
+    expect(err.kind).toBe('quota');
+  });
+
+  it('never downgrades a definitive billing code, even with a short Retry-After', () => {
+    for (const code of [
+      'credit_balance_exhausted',
+      'billing_hard_limit_reached',
+      'billing_not_active',
+      'access_terminated',
+    ]) {
+      const err = new HttpRateLimitError({
+        status: 429,
+        code,
+        type: 'insufficient_quota',
+        retryAfterMs: 1000,
+        resetAt: Date.now() + 1000,
+      });
+      expect(err.kind, code).toBe('quota');
+      expect(err.retryAfterMs, code).toBe(1000);
+    }
+  });
+});
+
 describe('HttpRateLimitError', () => {
   it('classifies known quota codes as kind="quota"', () => {
     const err = new HttpRateLimitError({ status: 429, code: 'insufficient_quota' });
@@ -224,6 +474,17 @@ describe('HttpRateLimitError', () => {
     expect(err.message).toContain('Quota exceeded');
     expect(err.message).toContain('429');
     expect(err.message).toContain('insufficient_quota');
+  });
+
+  it('classifies credit_balance_exhausted as kind="quota" (fixes #10855)', () => {
+    // OpenAI returns HTTP 429 with code "credit_balance_exhausted" when a prepaid
+    // account has no credits left. Previously this code was missing from
+    // HARD_QUOTA_ERROR_CODES so the error fell through to the retry loop and a
+    // single test took ~20 minutes before failing.
+    const err = new HttpRateLimitError({ status: 429, code: 'credit_balance_exhausted' });
+    expect(err.kind).toBe('quota');
+    expect(err.message).toContain('Quota exceeded');
+    expect(err.message).toContain('credit_balance_exhausted');
   });
 
   it('classifies unknown / per-window codes as kind="rate_limit"', () => {
@@ -257,6 +518,12 @@ describe('HttpRateLimitError', () => {
     expect(err.statusText).toBe('Too Many Requests');
   });
 
+  it('defaults empty statusText to "Too Many Requests"', () => {
+    const err = new HttpRateLimitError({ status: 429, statusText: '' });
+    expect(err.statusText).toBe('Too Many Requests');
+    expect(formatRateLimitErrorMessage(err)).toContain('Too Many Requests');
+  });
+
   it('produces a message containing the substrings legacy classifiers match on', () => {
     const err = new HttpRateLimitError({ status: 429, code: 'rate_limit_exceeded' });
     const lowered = err.message.toLowerCase();
@@ -284,6 +551,44 @@ describe('HttpRateLimitError', () => {
     const err = new HttpRateLimitError({ status: 429, retryAfterMs: -100 });
     expect(err.retryAfterMs).toBeUndefined();
   });
+
+  it('keeps a valid resetAt even when retryAfterMs is negative (independent validation)', () => {
+    const resetAt = Date.now() + 30_000;
+    const err = new HttpRateLimitError({
+      status: 429,
+      retryAfterMs: -100,
+      resetAt,
+    });
+    expect(err.retryAfterMs).toBeUndefined();
+    expect(err.resetAt).toBe(resetAt);
+  });
+
+  it('drops a negative resetAt when retryAfterMs is valid', () => {
+    const err = new HttpRateLimitError({ status: 429, retryAfterMs: 5000, resetAt: -1 });
+    expect(err.retryAfterMs).toBe(5000);
+    expect(err.resetAt).toBeUndefined();
+  });
+
+  it('drops a non-number resetAt (e.g. string) regardless of retryAfterMs', () => {
+    // Exercises the runtime typeof guard for untyped / `any` callers.
+    const err = new HttpRateLimitError({
+      status: 429,
+      resetAt: '1700000000000' as unknown as number,
+    });
+    expect(err.resetAt).toBeUndefined();
+  });
+
+  it('drops non-finite retry metadata', () => {
+    const err = new HttpRateLimitError({
+      status: 429,
+      retryAfterMs: Number.POSITIVE_INFINITY,
+      resetAt: Number.POSITIVE_INFINITY,
+    });
+
+    expect(err.retryAfterMs).toBeUndefined();
+    expect(err.resetAt).toBeUndefined();
+    expect(formatRateLimitDetail(err)).toBe('');
+  });
 });
 
 describe('formatRateLimitDetail', () => {
@@ -298,6 +603,15 @@ describe('formatRateLimitDetail', () => {
       resetAt: Date.now() + 30_000,
     });
     expect(formatRateLimitDetail(err)).toMatch(/resets in \d+s/);
+  });
+
+  it('prefers retry-after over resetAt when both are present', () => {
+    const err = new HttpRateLimitError({
+      status: 429,
+      retryAfterMs: 12_000,
+      resetAt: Date.now() + 999_000,
+    });
+    expect(formatRateLimitDetail(err)).toBe(' [retry after 12s]');
   });
 
   it('returns empty string when no metadata is present', () => {
@@ -352,11 +666,32 @@ describe('HttpRateLimitError: small Retry-After downgrades quota to rate_limit',
     expect(err.kind).toBe('quota');
   });
 
-  it('downgrades all hard-quota codes when Retry-After is small', () => {
-    for (const code of ['quota_exceeded', 'billing_hard_limit_reached', 'insufficient_quota']) {
+  it('downgrades the ambiguous hard-quota codes when Retry-After is small', () => {
+    for (const code of ['quota_exceeded', 'insufficient_quota']) {
       const err = new HttpRateLimitError({ status: 429, code, retryAfterMs: 5000 });
-      expect(err.kind).toBe('rate_limit');
+      expect(err.kind, code).toBe('rate_limit');
     }
+  });
+
+  it('does not downgrade a definitive billing value received in type', () => {
+    const err = new HttpRateLimitError({
+      status: 429,
+      code: 'some_new_billing_code',
+      type: 'credit_balance_exhausted',
+      retryAfterMs: 1000,
+      resetAt: Date.now() + 1000,
+    });
+    expect(err.kind).toBe('quota');
+    expect(err.code).toBe('some_new_billing_code');
+  });
+
+  it('does not downgrade a definitive billing code when Retry-After is small', () => {
+    const err = new HttpRateLimitError({
+      status: 429,
+      code: 'billing_hard_limit_reached',
+      retryAfterMs: 5000,
+    });
+    expect(err.kind).toBe('quota');
   });
 });
 

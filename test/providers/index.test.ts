@@ -665,6 +665,16 @@ describe('loadApiProvider', () => {
     expect(provider).toBeInstanceOf(WebhookProvider);
   });
 
+  it('loadApiProvider with n8n keeps webhook URLs out of provider IDs', async () => {
+    const provider = await loadApiProvider(
+      'n8n:https://example.com/webhook/private-token?key=secret',
+    );
+
+    expect(provider.id()).toMatch(/^n8n:webhook:[a-f0-9]{12}$/);
+    expect(provider.id()).not.toContain('private-token');
+    expect(provider.id()).not.toContain('secret');
+  });
+
   it('loadApiProvider with huggingface:text-generation', async () => {
     const provider = await loadApiProvider('huggingface:text-generation:foobar/baz');
     expect(provider).toBeInstanceOf(HuggingfaceTextGenerationProvider);
@@ -710,11 +720,10 @@ describe('loadApiProvider', () => {
     expect(provider.config.apiBaseUrl).toBe('https://proxy.example.com/openrouter/api/v1');
   });
 
-  it('loadApiProvider with github', async () => {
-    const provider = await loadApiProvider('github:gpt-4o-mini');
-    expect(provider).toBeInstanceOf(OpenAiChatCompletionProvider);
-    // Intentionally openai, because it's just a wrapper around openai
-    expect(provider.id()).toBe('gpt-4o-mini');
+  it('rejects retired GitHub Models before inference', async () => {
+    await expect(loadApiProvider('github:gpt-4o-mini')).rejects.toThrow(
+      'GitHub Models was retired',
+    );
   });
 
   it('loadApiProvider with perplexity', async () => {
@@ -725,6 +734,14 @@ describe('loadApiProvider', () => {
     expect(provider.config.apiKeyEnvar).toBe('PERPLEXITY_API_KEY');
   });
 
+  it('loadApiProvider with minimax', async () => {
+    const provider = await loadApiProvider('minimax:MiniMax-M3');
+    expect(provider).toBeInstanceOf(OpenAiChatCompletionProvider);
+    expect(provider.id()).toBe('minimax:MiniMax-M3');
+    expect(provider.config.apiBaseUrl).toBe('https://api.minimax.io/v1');
+    expect(provider.config.apiKeyEnvar).toBe('MINIMAX_API_KEY');
+  });
+
   it('loadApiProvider with togetherai', async () => {
     const provider = await loadApiProvider(
       'togetherai:chat:meta/meta-llama/Meta-Llama-3-8B-Instruct',
@@ -733,23 +750,17 @@ describe('loadApiProvider', () => {
     expect(provider.id()).toBe('meta/meta-llama/Meta-Llama-3-8B-Instruct');
   });
 
-  it('loadApiProvider with abliteration', async () => {
-    const provider = await loadApiProvider('abliteration:abliterated-model');
-    expect(provider).toBeInstanceOf(AbliterationProvider);
-    expect(provider.id()).toBe('abliteration:abliterated-model');
-    expect(provider.config.apiBaseUrl).toBe('https://api.abliteration.ai/v1');
-    expect(provider.config.apiKeyEnvar).toBe('ABLIT_KEY');
-    expect(provider.config.showThinking).toBe(false);
-  });
-
-  it('loadApiProvider with abliteration chat format', async () => {
-    const provider = await loadApiProvider('abliteration:chat:abliterated-model');
-    expect(provider).toBeInstanceOf(AbliterationProvider);
-    expect(provider.id()).toBe('abliteration:abliterated-model');
-    expect(provider.config.apiBaseUrl).toBe('https://api.abliteration.ai/v1');
-    expect(provider.config.apiKeyEnvar).toBe('ABLIT_KEY');
-    expect(provider.config.showThinking).toBe(false);
-  });
+  it.each(['abliteration', 'abliteration:chat'])(
+    'loadApiProvider with %s and a custom model',
+    async (prefix) => {
+      const provider = await loadApiProvider(`${prefix}:custom-model`);
+      expect(provider).toBeInstanceOf(AbliterationProvider);
+      expect(provider.id()).toBe('abliteration:custom-model');
+      expect(provider.config.apiBaseUrl).toBe('https://api.abliteration.ai/v1');
+      expect(provider.config.apiKeyEnvar).toBe('ABLIT_KEY');
+      expect(provider.config.showThinking).toBe(false);
+    },
+  );
 
   it('loadApiProvider rejects malformed abliteration routes', async () => {
     await expect(loadApiProvider('abliteration:chat')).rejects.toThrow(
@@ -848,9 +859,9 @@ describe('loadApiProvider', () => {
   });
 
   it('loadApiProvider with vertex:video:modelname', async () => {
-    const provider = await loadApiProvider('vertex:video:veo-3.1-generate-preview');
+    const provider = await loadApiProvider('vertex:video:veo-3.1-generate-001');
     expect(provider).toBeInstanceOf(GoogleVideoProvider);
-    expect(provider.id()).toBe('vertex:video:veo-3.1-generate-preview');
+    expect(provider.id()).toBe('vertex:video:veo-3.1-generate-001');
   });
 
   it('loadApiProvider with replicate:modelname', async () => {
@@ -904,6 +915,15 @@ describe('loadApiProvider', () => {
       env: { MODELSLAB_API_KEY: 'context-key' } as any,
     });
     expect((provider as any).apiKey).toBe('provider-key');
+  });
+
+  it('loadApiProvider with moonshot prefers provider-level env over context env', async () => {
+    const provider = (await loadApiProvider('moonshot:kimi-k2.6', {
+      options: { env: { MOONSHOT_API_KEY: 'provider-key' } },
+      env: { MOONSHOT_API_KEY: 'context-key' },
+    })) as OpenAiChatCompletionProvider;
+
+    expect(provider.getApiKey()).toBe('provider-key');
   });
 
   it('loadApiProvider with file://*.py', async () => {
@@ -1366,6 +1386,34 @@ describe('loadApiProvider', () => {
     });
 
     expect(provider.config.apiKey).toBe('secret');
+  });
+
+  it('resolves env templates inside per-server MCP env maps', async () => {
+    const provider = await loadApiProvider('echo', {
+      options: {
+        env: {
+          MY_MCP_TOKEN: 'resolved-secret',
+        } as any,
+        config: {
+          mcp: {
+            enabled: true,
+            servers: [
+              {
+                name: 'local',
+                command: 'node',
+                args: ['server.js'],
+                env: { SERVER_TOKEN: '{{ env.MY_MCP_TOKEN }}', LOG_LEVEL: 'debug' },
+              },
+            ],
+          },
+        },
+      },
+    });
+
+    expect(provider.config.mcp.servers[0].env).toEqual({
+      SERVER_TOKEN: 'resolved-secret',
+      LOG_LEVEL: 'debug',
+    });
   });
 
   it('passes provider env overrides to provider instances', async () => {
@@ -2052,10 +2100,25 @@ describe('resolveProvider', () => {
     );
   });
 
-  it('should throw error for invalid provider type', async () => {
+  it.each([
+    ['number', 123],
+    ['boolean', false],
+    ['bigint', 1n],
+    ['symbol', Symbol('invalid-provider')],
+  ])('should identify invalid %s provider values', async (type, provider) => {
     const { resolveProvider } = await import('../../src/providers');
 
-    await expect(resolveProvider(123, mockProviderMap)).rejects.toThrow('Invalid provider type');
+    await expect(resolveProvider(provider as any, mockProviderMap)).rejects.toThrow(
+      `Invalid provider type. Expected a string (provider id), an object with an 'id' field, a ProviderOptionsMap, or a function. Got: ${type}`,
+    );
+  });
+
+  it('should report invalid arrays through object-shape diagnostics', async () => {
+    const { resolveProvider } = await import('../../src/providers');
+
+    await expect(resolveProvider([], mockProviderMap)).rejects.toThrow(
+      "Provider object must have an 'id' field or be a ProviderOptionsMap",
+    );
   });
 
   it('should handle function provider', async () => {
