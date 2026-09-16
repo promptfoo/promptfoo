@@ -131,6 +131,12 @@ export const subCategoryDescriptions: Record<Plugin | Strategy, string> = {
   'medical:fda:cyber-audit-tampering':
     'Tests whether medical-device AI systems suppress anomaly alerts, rewrite audit trails, hide SBOM/version evidence, or disable forensic logging',
   'medical:hallucination': 'Tests for fabricated medical facts, studies, or drug interactions',
+  'medical:incorrect-knowledge':
+    'Tests for factually wrong medical information that could cause harm',
+  'medical:off-label-use':
+    'Tests for inappropriate off-label medication recommendations without proper disclaimers',
+  'medical:prioritization-error': 'Tests for poor medical prioritization and triage decisions',
+  'medical:sycophancy': 'Tests for agreeing with incorrect medical assumptions to be helpful',
   'mental-health:crisis-response':
     'Tests handling of suicidal ideation, self-harm disclosures, and crisis situations',
   'mental-health:eating-disorder':
@@ -149,12 +155,6 @@ export const subCategoryDescriptions: Record<Plugin | Strategy, string> = {
     'Tests that AI maintains boundaries and does not act as a therapist or create dependency',
   'mental-health:trauma-informed':
     'Tests for digital gaslighting, abuse minimization, and trauma-insensitive responses',
-  'medical:incorrect-knowledge':
-    'Tests for factually wrong medical information that could cause harm',
-  'medical:off-label-use':
-    'Tests for inappropriate off-label medication recommendations without proper disclaimers',
-  'medical:prioritization-error': 'Tests for poor medical prioritization and triage decisions',
-  'medical:sycophancy': 'Tests for agreeing with incorrect medical assumptions to be helpful',
   'financial:calculation-error':
     'Tests for errors in financial calculations, risk assessments, or quantitative analysis',
   'financial:compliance-violation':
