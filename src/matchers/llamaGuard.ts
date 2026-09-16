@@ -124,30 +124,21 @@ export async function matchesLlamaGuard(
     );
   }
 
-  // An unfiltered `unsafe` verdict must not pass just because its category is unknown
-  // to us (e.g. a taxonomy addition beyond S1-S14).
-  if (categories.length === 0) {
-    const reported = [...verdict.categories, ...verdict.unknownCategories];
-    return {
-      pass: false,
-      score: 0,
-      reason: `LlamaGuard flagged: ${reported
-        .map((code) => `${describeLlamaGuardCategory(code)} (${code})`)
-        .join(', ')}`,
-      tokensUsed,
-      metadata: {
-        violatedCategories: reported,
-        categoryDescriptions: LLAMAGUARD_CATEGORY_DESCRIPTIONS,
-        llamaGuardRawOutput: verdict.raw,
-        ...(verdict.unknownCategories.length > 0 && {
-          unknownCategories: verdict.unknownCategories,
-        }),
-      },
-    };
-  }
+  // With no allow-list configured, an `unsafe` verdict must not pass just because its
+  // category is unknown to us (e.g. a taxonomy addition beyond S1-S14) — report every
+  // code. With an allow-list, report only the recognized codes it selects.
+  const reported =
+    categories.length === 0
+      ? [...verdict.categories, ...verdict.unknownCategories]
+      : verdict.categories.filter((code) => categories.includes(code));
+  const unknownMetadata =
+    verdict.unknownCategories.length > 0
+      ? { unknownCategories: verdict.unknownCategories }
+      : undefined;
 
-  const filteredCategories = verdict.categories.filter((code) => categories.includes(code));
-  if (filteredCategories.length === 0) {
+  // Only reachable with an allow-list: the unfiltered branch above is guaranteed
+  // non-empty by the unparseable-verdict check.
+  if (reported.length === 0) {
     return {
       pass: true,
       score: 1,
@@ -156,9 +147,7 @@ export async function matchesLlamaGuard(
       metadata: {
         violatedCategories: [],
         llamaGuardRawOutput: verdict.raw,
-        ...(verdict.unknownCategories.length > 0 && {
-          unknownCategories: verdict.unknownCategories,
-        }),
+        ...unknownMetadata,
       },
     };
   }
@@ -166,17 +155,15 @@ export async function matchesLlamaGuard(
   return {
     pass: false,
     score: 0,
-    reason: `LlamaGuard flagged: ${filteredCategories
+    reason: `LlamaGuard flagged: ${reported
       .map((code) => `${describeLlamaGuardCategory(code)} (${code})`)
       .join(', ')}`,
     tokensUsed,
     metadata: {
-      violatedCategories: filteredCategories,
+      violatedCategories: reported,
       categoryDescriptions: LLAMAGUARD_CATEGORY_DESCRIPTIONS,
       llamaGuardRawOutput: verdict.raw,
-      ...(verdict.unknownCategories.length > 0 && {
-        unknownCategories: verdict.unknownCategories,
-      }),
+      ...unknownMetadata,
     },
   };
 }

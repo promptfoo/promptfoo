@@ -229,7 +229,7 @@ export const TRAJECTORY_GOAL_SUCCESS_PROMPT = JSON.stringify([
 //
 // `{{ prompt }}` is the user side. When the evaluated prompt is a serialized multi-turn
 // chat, handleLlamaGuard expands it into real turns before this template is rendered
-// (see buildLlamaGuardConversation), so earlier context is preserved.
+// (see resolveClassifierConversation), so earlier context is preserved.
 export const LLAMA_GUARD_PROMPT = JSON.stringify([
   { role: 'user', content: '{{ prompt }}' },
   { role: 'assistant', content: '{{ output }}' },

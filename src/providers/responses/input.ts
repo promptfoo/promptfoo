@@ -66,9 +66,9 @@ function normalizeContentPart(part: unknown, role: unknown): unknown {
  * 'input_image', ..."), so multimodal prompts fail on every `*:responses:*` provider. Rewriting
  * the chat parts here lets the same prompt file target both surfaces.
  *
- * Only role-bearing message objects are touched. Items that carry their own `type` are
- * non-message input items (function calls, tool outputs, reasoning items) whose shape must be
- * preserved verbatim. A non-array input (a plain string prompt) is returned unchanged.
+ * Only role-bearing message objects are touched. Explicit `type: 'message'` input items are
+ * messages too; other typed items (function calls, tool outputs, reasoning items) must keep
+ * their shape verbatim. A non-array input (a plain string prompt) is returned unchanged.
  */
 export function normalizeResponsesInput<T>(input: T): T {
   if (!Array.isArray(input)) {
@@ -80,7 +80,11 @@ export function normalizeResponsesInput<T>(input: T): T {
       return item;
     }
     const message = item as UnknownRecord;
-    if (message.type !== undefined || !('role' in message) || !Array.isArray(message.content)) {
+    if (
+      (message.type !== undefined && message.type !== 'message') ||
+      !('role' in message) ||
+      !Array.isArray(message.content)
+    ) {
       return item;
     }
     return {
