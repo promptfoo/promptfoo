@@ -19,11 +19,11 @@ export interface ProviderFactory {
 /**
  * A lazy-loaded group of provider factories. `canHandle` is a **load gate**,
  * not a dispatcher: if it returns true the family's `factories()` promise is
- * awaited and its factories are appended to the registry for this lookup.
- * Dispatch itself still happens through each factory's `test`. `canHandle` and
- * inner `test` predicates are intentionally duplicated so `canHandle` can stay
- * cheap (a string prefix check) while `test` can be as detailed as the
- * individual factory requires.
+ * awaited and its factories are prepended to the fallback registry for this
+ * lookup. Dispatch itself still happens through each factory's `test`.
+ * `canHandle` and inner `test` predicates are intentionally duplicated so
+ * `canHandle` can stay cheap (a string prefix check) while `test` can be as
+ * detailed as the individual factory requires.
  */
 export interface ProviderFamily {
   canHandle: (providerPath: string) => boolean;

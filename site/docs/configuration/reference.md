@@ -25,7 +25,7 @@ Here is the main structure of the promptfoo configuration file:
 | Property                        | Type                                                                                                                                                  | Required                       | Description                                                                                                                                                                                                                     |
 | ------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | description                     | string                                                                                                                                                | No                             | Optional description of what your LLM is trying to do                                                                                                                                                                           |
-| tags                            | Record\<string, string\>                                                                                                                              | No                             | Optional tags to describe the test suite (e.g. `env: production`, `application: chatbot`)                                                                                                                                       |
+| tags                            | Record\<string, string\>                                                                                                                              | No                             | Optional tags to describe the test suite (e.g. `env: production`, `application: chatbot`). Use `promptfoo eval --tag` for run-specific tags.                                                                                    |
 | providers                       | [ProvidersConfig](#providersconfig)                                                                                                                   | Yes, unless `targets` is set   | One or more [LLM APIs](/docs/providers) to use. Exactly one of `providers` or `targets` must be set.                                                                                                                            |
 | targets                         | [ProvidersConfig](#providersconfig)                                                                                                                   | Yes, unless `providers` is set | Alias for `providers`, commonly used in [red team](/docs/red-team) configs. Exactly one of `targets` or `providers` must be set.                                                                                                |
 | prompts                         | string \| string[] \| Record\<string, string\> \| Prompt[]                                                                                            | Yes                            | One or more [prompts](/docs/configuration/prompts) to load                                                                                                                                                                      |
@@ -192,6 +192,7 @@ Set default values for command-line options. These defaults will be used unless 
 | delay                    | number             | Delay between API calls in milliseconds                                                                                                                                                             |
 | grader                   | string             | [Provider](/docs/providers) that will grade [model-graded](/docs/configuration/expected-outputs/model-graded) outputs                                                                               |
 | var                      | object             | Set test variables as key-value pairs (e.g. `{key1: 'value1', key2: 'value2'}`)                                                                                                                     |
+| tags                     | object             | Default eval tags applied before `--tag` values; runtime tags override top-level `tags` when keys match.                                                                                            |
 | **Filtering**            |                    |                                                                                                                                                                                                     |
 | filterPattern            | string             | Only run tests whose description matches the regular expression pattern                                                                                                                             |
 | filterPrompts            | string             | Only run tests with prompts whose `id` or `label` matches this regex                                                                                                                                |
@@ -200,6 +201,7 @@ Set default values for command-line options. These defaults will be used unless 
 | filterFirstN             | number             | Only run the first N test cases                                                                                                                                                                     |
 | filterRange              | string             | Run test cases in a zero-based `start:end` range. The end index is exclusive                                                                                                                        |
 | filterSample             | number             | Run a random sample of N test cases                                                                                                                                                                 |
+| filterSampleSeed         | number             | Numeric seed used to make `filterSample` select the same test cases on repeated runs                                                                                                                |
 | filterMetadata           | string \| string[] | Only run tests matching metadata filters in `key=value` format. Multiple filters are combined with AND logic.                                                                                       |
 | filterErrorsOnly         | string             | Only run tests that resulted in errors from a previous output path or eval ID                                                                                                                       |
 | filterFailing            | string             | Only run non-passing tests (assertion failures and errors) from a previous output path or eval ID                                                                                                   |
@@ -252,6 +254,7 @@ commandLineOptions:
   filterProviders: 'openai.*' # Only test OpenAI providers
   filterRange: '0:100' # Run tests 0 through 99
   filterSample: 50 # Random sample of 50 tests
+  filterSampleSeed: 42 # Repeat the same random sample
 
   # Prompt modifications
   promptPrefix: 'You are a helpful assistant. '
@@ -622,16 +625,18 @@ The `afterAll` hook is intended for side effects (sending to monitoring, cleanup
 
 ### Guardrails
 
-GuardrailResponse is an object that represents the GuardrailResponse from a provider. It includes flags indicating if prompt or output failed guardrails.
+`GuardrailResponse` is the normalized safety decision returned by a target provider. The [`guardrails` assertion](/docs/configuration/expected-outputs/guardrails) reads `flagged` as the verdict; the directional fields only identify which side triggered the decision.
 
 ```typescript
 interface GuardrailResponse {
-  flagged?: boolean;
+  flagged?: boolean; // Controls guardrails/not-guardrails pass or fail
   flaggedInput?: boolean;
   flaggedOutput?: boolean;
   reason?: string;
 }
 ```
+
+For a custom target, set `flagged` explicitly. `flaggedInput: true` or `flaggedOutput: true` without `flagged: true` is diagnostic only and does not fail the assertion. If both the top-level object and the final `metadata.redteamHistory` guardrail entry are absent, Promptfoo currently treats the response as unflagged; this does not prove that a guardrail ran.
 
 ## Transformation Pipeline
 
@@ -1265,6 +1270,10 @@ interface EvaluateResult {
   cost?: number;
   metadata?: Record<string, any>;
   tokenUsage?: Required<TokenUsage>;
+  // Trace linkage (only set when tracing is enabled for this row).
+  // Pass `evaluationId` to GET /api/traces/evaluation/:evaluationId to fetch all traces for the eval.
+  evaluationId?: string;
+  traceId?: string;
 }
 ```
 

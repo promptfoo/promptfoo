@@ -113,6 +113,12 @@ tests: file://test_cases.csv
 tests: huggingface://datasets/rajpurkar/squad
 ```
 
+**Azure Blob Storage**
+
+```yaml
+tests: az://myaccount/evals/tests.json
+```
+
 **Dynamic generation**
 
 ```yaml
@@ -165,7 +171,7 @@ prompts:
 
 providers:
   - openai:gpt-5-mini
-  - anthropic:claude-3-haiku
+  - anthropic:claude-haiku-4-5
 
 tests:
   # Inline test cases
@@ -206,13 +212,13 @@ Variables use [Nunjucks](https://mozilla.github.io/nunjucks/) templating:
 
 ```yaml
 # Basic substitution
-prompt: "Hello {{name}}"
+prompt: 'Hello {{name}}'
 
 # Filters
-prompt: "URGENT: {{message | upper}}"
+prompt: 'URGENT: {{message | upper}}'
 
 # Conditionals
-prompt: "{% if premium %}Premium support: {% endif %}{{query}}"
+prompt: '{% if premium %}Premium support: {% endif %}{{query}}'
 ```
 
 ### File References
