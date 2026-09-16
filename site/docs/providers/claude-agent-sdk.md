@@ -375,6 +375,8 @@ providers:
           # Process-based server
           - command: node
             args: ['mcp-server.js']
+            env: # Optional: environment variables for the stdio server process
+              MCP_SERVER_TOKEN: '{{ env.MCP_SERVER_TOKEN }}'
             name: local-server
 
       strict_mcp_config: true # Only use configured servers (true by default)
@@ -627,7 +629,7 @@ The `total` field sets the token budget for the task. The model uses this to pac
 
 ## Additional Directories
 
-Grant the agent access to directories beyond the working directory:
+Grant the agent access to directories beyond the working directory. SDK 0.3.257 and newer reject network paths such as UNC shares and `/net/<host>` automounts; on Windows, use a mapped drive letter:
 
 ```yaml
 providers:
@@ -1138,11 +1140,15 @@ providers:
       forward_subagent_text: true
 ```
 
+## Token Usage
+
+With SDK 0.3.257 and newer, reported thinking tokens appear in `tokenUsage.completionDetails.reasoning`. They are already included in completion and total token counts. Sessions resumed from older SDK versions may report only a partial thinking-token count.
+
 ## Error Diagnostics
 
 When the SDK reports a model-call failure, the provider surfaces it in two places so assertions can branch on the underlying cause instead of the generic terminal subtype:
 
-- `metadata.assistantErrors` — array of `{ error, uuid, parentToolUseId, request_id?, subagent_type?, task_description? }` entries collected from `SDKAssistantMessage.error`. The `error` field uses the SDK's discriminated codes (`'model_not_found'`, `'rate_limit'`, `'overloaded'`, `'authentication_failed'`, `'billing_error'`, `'oauth_org_not_allowed'`, `'server_error'`, `'invalid_request'`, `'max_output_tokens'`, `'unknown'`). The `model_not_found` code requires `@anthropic-ai/claude-agent-sdk` 0.3.144 or newer (older SDKs collapse it into `'invalid_request'`), and `overloaded` requires 0.3.161 or newer.
+- `metadata.assistantErrors` — array of `{ error, uuid, parentToolUseId, request_id?, subagent_type?, task_description? }` entries collected from `SDKAssistantMessage.error`. The `error` field uses the SDK's discriminated codes (`'model_not_found'`, `'rate_limit'`, `'overloaded'`, `'authentication_failed'`, `'oauth_org_not_allowed'`, `'account_on_hold'`, `'billing_error'`, `'server_error'`, `'invalid_request'`, `'max_output_tokens'`, `'unknown'`). The `model_not_found` code requires `@anthropic-ai/claude-agent-sdk` 0.3.144 or newer (older SDKs collapse it into `'invalid_request'`), `overloaded` requires 0.3.161 or newer, and `account_on_hold` requires 0.3.235 or newer.
 - `metadata.apiErrorStatus` — HTTP status code reported on successful result messages when an upstream API call hit a transient error (e.g., `529` during overload). Only present when the SDK populates it.
 
 When a run ends in a non-success subtype and the stream included an assistant error, the provider appends the code to the error string: `Claude Agent SDK call failed: error_during_execution (model_not_found)`. Example assertion:
@@ -1239,8 +1245,9 @@ providers:
             name: my-server
 ```
 
-Authenticated MCP configurations, custom headers, URLs containing credentials, signed/query URLs,
-and stdio servers with arguments remain uncached even when `cache_mcp` is true. Stdio arguments can
+Authenticated MCP configurations, custom headers, per-server `env` maps, URLs containing
+credentials, signed/query URLs, and stdio servers with arguments remain uncached even when
+`cache_mcp` is true. Stdio arguments can
 contain positional credentials such as database URLs, so Promptfoo does not put them into persistent
 cache keys.
 

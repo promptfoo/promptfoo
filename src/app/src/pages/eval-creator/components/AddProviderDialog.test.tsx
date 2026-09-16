@@ -12,7 +12,7 @@ vi.mock('@app/pages/redteam/setup/components/Targets/ProviderTypeSelector', () =
   default: ({
     setProvider,
   }: {
-    setProvider: (provider: { id: string; config: Record<string, never> }, type: string) => void;
+    setProvider: (provider: { id: string; config: Record<string, unknown> }, type: string) => void;
   }) => (
     <div>
       provider type selector
@@ -21,6 +21,20 @@ vi.mock('@app/pages/redteam/setup/components/Targets/ProviderTypeSelector', () =
         onClick={() => setProvider({ id: 'openai:gpt-5.5', config: {} }, 'openai')}
       >
         Choose OpenAI
+      </button>
+      <button
+        type="button"
+        onClick={() =>
+          setProvider(
+            {
+              id: 'openai:codex-security:gpt-5.6-luna',
+              config: { operation: 'security-scan', repository: '/repos/service' },
+            },
+            'codex-security',
+          )
+        }
+      >
+        Choose Codex Security SDK
       </button>
     </div>
   ),
@@ -70,7 +84,11 @@ vi.mock('@app/pages/redteam/setup/components/Targets/ProviderConfigEditor', () =
       }
     }, [setError, validateAll, validationError]);
     return (
-      <div>
+      <div
+        data-testid="provider-config-editor"
+        data-provider-type={providerType}
+        data-validate-all={String(validateAll)}
+      >
         provider config editor
         <button
           type="button"
@@ -107,6 +125,8 @@ describe('getProviderTypeFromId', () => {
   });
 
   it.each([
+    ['openai:codex-security', 'codex-security'],
+    ['openai:codex-security:gpt-5.6-luna', 'codex-security'],
     ['openai:gpt-4', 'openai'],
     ['anthropic:claude-3', 'anthropic'],
     ['bedrock:model-id', 'bedrock'],
@@ -208,6 +228,35 @@ describe('AddProviderDialog layout', () => {
     expect(nextScrollBody).toBeDefined();
     expect(nextScrollBody).not.toBe(scrollBody);
     expect(nextScrollBody).toHaveProperty('scrollTop', 0);
+  });
+
+  it('configures and saves Codex Security as a native SDK provider', async () => {
+    const user = userEvent.setup();
+    const onSave = vi.fn();
+    render(
+      <TooltipProvider>
+        <AddProviderDialog open onClose={vi.fn()} onSave={onSave} />
+      </TooltipProvider>,
+    );
+
+    await user.click(screen.getByRole('button', { name: 'Choose Codex Security SDK' }));
+
+    expect(await screen.findByTestId('provider-config-editor')).toHaveAttribute(
+      'data-provider-type',
+      'codex-security',
+    );
+    expect(screen.getByTestId('provider-config-editor')).toHaveAttribute(
+      'data-validate-all',
+      'true',
+    );
+
+    await user.click(screen.getByRole('button', { name: 'Add Provider' }));
+
+    expect(onSave).toHaveBeenCalledWith({
+      id: 'openai:codex-security:gpt-5.6-luna',
+      label: 'openai:codex-security:gpt-5.6-luna',
+      config: { operation: 'security-scan', repository: '/repos/service' },
+    });
   });
 
   it('validates an edited Open Interpreter provider before saving', async () => {

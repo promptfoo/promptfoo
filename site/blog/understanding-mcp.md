@@ -279,7 +279,7 @@ providers:
           args: ['-y', '@modelcontextprotocol/server-memory']
           name: gemini-memory
 
-  - id: anthropic:messages:claude-3-5-sonnet
+  - id: anthropic:messages:claude-sonnet-5
     config:
       mcp:
         enabled: true

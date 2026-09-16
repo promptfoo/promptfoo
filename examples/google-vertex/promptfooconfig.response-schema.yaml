@@ -5,9 +5,9 @@ prompts:
   - 'Write a tweet about {{topic}}'
 
 providers:
-  - id: vertex:gemini-2.5-flash
+  - id: vertex:gemini-3.5-flash-lite
     config:
-      region: us-central1
+      region: global
       responseSchema: file://response-schema.json
 
 tests:
@@ -21,8 +21,8 @@ tests:
   - vars:
       topic: artificial intelligence
     assert:
-      - type: contains
-        value: 'AI'
+      - type: regex
+        value: '\b(?:AI|[Aa]rtificial [Ii]ntelligence)\b'
         transform: JSON.parse(output).tweet
 
   - vars:

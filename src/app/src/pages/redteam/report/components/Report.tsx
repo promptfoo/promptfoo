@@ -29,7 +29,12 @@ import { useTelemetry } from '@app/hooks/useTelemetry';
 import { cn } from '@app/lib/utils';
 import { callApi } from '@app/utils/api';
 import { formatDataGridDate } from '@app/utils/date';
-import { getPrimaryTokenUsageLabel, getTokenUsageTotal } from '@app/utils/tokenUsage';
+import {
+  getCombinedTokenUsageTotal,
+  getIncurredTokenAccounting,
+  getPrimaryTokenUsageLabel,
+  getTokenUsageTotal,
+} from '@app/utils/tokenUsage';
 import {
   type EvaluateResult,
   type EvaluateSummaryV2,
@@ -682,19 +687,12 @@ const App = ({ evalId: evalIdProp, embedded, onActionsReady }: ReportProps = {})
   const generationTokens = getTokenUsageTotal(scanTokenUsage?.generation);
   const generationRequests = scanTokenUsage?.generation?.numRequests ?? 0;
   const evaluationTokens = scanTokenUsage
-    ? getTokenUsageTotal(scanTokenUsage) +
-      getTokenUsageTotal(scanTokenUsage.attacker) +
-      getTokenUsageTotal(scanTokenUsage.assertions)
+    ? getCombinedTokenUsageTotal(scanTokenUsage) - generationTokens
     : prompts.reduce((total, prompt) => {
-        const tokenUsage = prompt.metrics?.tokenUsage;
-        return (
-          total +
-          getTokenUsageTotal(tokenUsage) +
-          getTokenUsageTotal(tokenUsage?.attacker) +
-          getTokenUsageTotal(tokenUsage?.assertions)
-        );
+        return total + getCombinedTokenUsageTotal(prompt.metrics?.tokenUsage);
       }, 0);
   const totalTokens = evaluationTokens + generationTokens;
+  const incurredAccounting = getIncurredTokenAccounting(scanTokenUsage ?? selectedTokenUsage);
   const tableData =
     (evalData.version >= 4
       ? convertResultsToTable(evalData).body
@@ -821,6 +819,22 @@ const App = ({ evalId: evalIdProp, embedded, onActionsReady }: ReportProps = {})
                           <span>
                             <strong>Grading Tokens:</strong> {gradingTokens.toLocaleString()}
                           </span>
+                          {incurredAccounting ? (
+                            <>
+                              <span>
+                                <strong>Incurred Tokens:</strong>{' '}
+                                {incurredAccounting.incurredTokens.toLocaleString()}
+                              </span>
+                              <span>
+                                <strong>Cached Savings:</strong>{' '}
+                                {incurredAccounting.cachedSavings.toLocaleString()}
+                              </span>
+                              <span>
+                                <strong>Actual Target Requests:</strong>{' '}
+                                {incurredAccounting.actualRequests.toLocaleString()}
+                              </span>
+                            </>
+                          ) : null}
                           {prompts.length > 1 || generationTokens > 0 || generationRequests > 0 ? (
                             <>
                               <span>
