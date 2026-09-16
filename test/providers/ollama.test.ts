@@ -1,6 +1,7 @@
 import { trace } from '@opentelemetry/api';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { fetchWithCache } from '../../src/cache';
+import logger from '../../src/logger';
 import {
   OllamaChatProvider,
   OllamaCompletionProvider,
@@ -704,6 +705,30 @@ describe('OllamaChatProvider', () => {
     expect(body.options.useNUMA).toBeUndefined();
     expect(body.options.max_tokens).toBeUndefined();
     expect(body.max_tokens).toBeUndefined();
+  });
+
+  it('should not report promptfoo-internal keys as dropped config', async () => {
+    const debugSpy = vi.spyOn(logger, 'debug').mockImplementation(() => logger);
+    vi.mocked(fetchWithCache).mockResolvedValue({
+      data: '{"message":{"role":"assistant","content":"hi"},"done":true}\n',
+      cached: false,
+      status: 200,
+      statusText: 'OK',
+      headers: {},
+    });
+
+    // loadApiProvider injects basePath into every provider config, so without an
+    // exclusion the diagnostic fires on every request with a key the user never set.
+    const provider = new OllamaChatProvider('llama3.3', {
+      config: { temperature: 0, basePath: '/x', showThinking: false } as any,
+    });
+    await provider.callApi('test prompt');
+
+    const droppedCalls = debugSpy.mock.calls.filter((c) =>
+      String(c[0]).includes('Ignoring unsupported config keys'),
+    );
+    debugSpy.mockRestore();
+    expect(droppedCalls).toHaveLength(0);
   });
 
   it('should not leak think or passthrough into the nested options object', async () => {
