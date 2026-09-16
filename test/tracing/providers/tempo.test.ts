@@ -693,19 +693,36 @@ describe('TempoProvider', () => {
     });
   });
 
-  it('preserves the full snapshot so storage can reject an oversized trace atomically', async () => {
+  it.each([10_000, 10_001])('enforces the trace limit for %i unique spans', async (count) => {
     const provider = new TempoProvider({ id: 'tempo', endpoint: 'http://tempo:3200' });
-    const spans = Array.from({ length: 10_001 }, (_, index) => ({
+    const spans = Array.from({ length: count }, (_, index) => ({
       traceId: TRACE_ID,
       spanId: (index + 1).toString(16).padStart(16, '0'),
       name: 'tool execution',
       startTimeUnixNano: '1000000',
     }));
-    mockedFetch.mockResolvedValueOnce(response({ batches: [{ scopeSpans: [{ spans }] }] }));
+    mockedFetch.mockResolvedValueOnce(
+      response({
+        batches: [
+          { scopeSpans: [{ spans: spans.slice(0, 5_000) }] },
+          { scopeSpans: [{ spans: [...spans.slice(5_000), spans[0]] }] },
+        ],
+      }),
+    );
 
-    const trace = await provider.fetchTrace(TRACE_ID);
-    expect(trace?.spans).toHaveLength(10_001);
-    expect(trace?.spans.at(-1)?.spanId).toBe(spans.at(-1)?.spanId);
+    const pending = provider.fetchTrace(TRACE_ID);
+    if (count > 10_000) {
+      await expect(pending).rejects.toMatchObject({
+        name: 'TraceProviderError',
+        limitExceeded: true,
+        invalidEvidence: false,
+        retryable: false,
+      });
+    } else {
+      const trace = await pending;
+      expect(trace?.spans).toHaveLength(count);
+      expect(trace?.spans.at(-1)?.spanId).toBe(spans.at(-1)?.spanId);
+    }
   });
 
   it('rejects invalid or oversized trace responses', async () => {

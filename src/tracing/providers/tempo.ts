@@ -350,6 +350,11 @@ export class TempoProvider implements TraceProvider {
               throw new Error('Tempo returned conflicting records for one span ID');
             }
             spans.set(normalized.spanId, normalized);
+            if (spans.size > 10_000) {
+              throw new TraceProviderError('Tempo trace exceeds the maximum span count', {
+                limitExceeded: true,
+              });
+            }
           }
         }
       }
