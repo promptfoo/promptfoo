@@ -51,7 +51,19 @@ providers:
         command: node # Command to run the server
         args: ['server.js'] # Arguments for the command
         name: local-server # Optional name for the server
+        env: # Optional environment variables for the server process
+          MY_SERVER_TOKEN: '{{ env.MY_SERVER_TOKEN }}'
+          LOG_LEVEL: debug
 ```
+
+`env` applies to stdio servers only (`command` or `path`). Values are layered on top of
+Promptfoo's own environment, so the server process inherits everything Promptfoo was started
+with and a per-server entry wins on conflict.
+
+Keep secrets out of the config file. `{{ env.VAR }}` placeholders are resolved from the
+environment when the provider loads, so the config stays committable while the credential comes
+from your shell or `--env-file`. A placeholder for an unset variable is preserved verbatim
+rather than collapsing to an empty string, so a missing credential fails visibly.
 
 #### Remote Server (URL-based)
 
@@ -410,6 +422,43 @@ tests:
     assert:
       - type: is-json
 ```
+
+## Asserting on Executed Tool Calls
+
+When a chat provider runs MCP tools on the model's behalf (`mcp.enabled: true` on
+`anthropic:messages` or `openai:chat`), each executed call is published on
+`metadata.toolCalls`, so you can test tool _routing_ rather than only the final answer —
+useful when several tools have overlapping domains and a wrong-but-plausible call still
+produces a plausible-looking answer.
+
+Each entry is `{ id, name, input, output, is_error }`, in call order, and spans every
+continuation round. The key is absent when no MCP tool ran, so guard with `?.`:
+
+```yaml title="promptfooconfig.yaml"
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+providers:
+  - id: anthropic:messages:claude-sonnet-5
+    config:
+      mcp:
+        enabled: true
+        server:
+          command: node
+          args: ['company_server.js']
+
+tests:
+  - vars:
+      prompt: How many people work at Acme Solar?
+    assert:
+      - type: javascript
+        value: |
+          const calls = context.metadata?.toolCalls ?? [];
+          return calls.some((c) => c.name === 'get_headcount' && !c.is_error);
+```
+
+The list is also populated on the failure paths — a run that trips `max_tool_calls`, or
+one where the model mixed MCP and non-MCP tool blocks, still reports the calls that did
+execute before the bail-out. `metadata.toolCalls` uses the same field names as the
+[Claude Agent SDK provider](/docs/providers/claude-agent-sdk), so one assertion reads both.
 
 ## Red Team Testing with MCP
 

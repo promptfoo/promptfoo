@@ -100,18 +100,18 @@ describe('is-sql assertion', () => {
         outputString: 'SELECT $$select distinct first_name last_name from employees$$ AS sample',
         renderedValue: { databaseType: 'PostgreSQL' },
       },
-    ])('should ignore SQL-like text in literals and comments: $outputString', async ({
-      outputString,
-      renderedValue,
-    }) => {
-      const result = await handleIsSql({
-        assertion,
-        renderedValue,
-        outputString,
-        inverse: false,
-      } as AssertionParams);
-      expect(result).toMatchObject({ pass: true, score: 1 });
-    });
+    ])(
+      'should ignore SQL-like text in literals and comments: $outputString',
+      async ({ outputString, renderedValue }) => {
+        const result = await handleIsSql({
+          assertion,
+          renderedValue,
+          outputString,
+          inverse: false,
+        } as AssertionParams);
+        expect(result).toMatchObject({ pass: true, score: 1 });
+      },
+    );
 
     it.each([
       'SELECT a b FROM t',
@@ -133,20 +133,19 @@ describe('is-sql assertion', () => {
       });
     });
 
-    it.each([
-      'PostgreSQL',
-      'TransactSQL',
-      'BigQuery',
-    ])('should not treat MySQL-only modifiers as modifiers in %s', async (databaseType) => {
-      const result = await handleIsSql({
-        assertion,
-        renderedValue: { databaseType },
-        outputString: 'SELECT SQL_NO_CACHE name FROM users',
-        inverse: false,
-      } as AssertionParams);
+    it.each(['PostgreSQL', 'TransactSQL', 'BigQuery'])(
+      'should not treat MySQL-only modifiers as modifiers in %s',
+      async (databaseType) => {
+        const result = await handleIsSql({
+          assertion,
+          renderedValue: { databaseType },
+          outputString: 'SELECT SQL_NO_CACHE name FROM users',
+          inverse: false,
+        } as AssertionParams);
 
-      expect(result).toMatchObject({ pass: false, score: 0 });
-    });
+        expect(result).toMatchObject({ pass: false, score: 0 });
+      },
+    );
 
     it('should preserve MySQL-family modifiers for MariaDB', async () => {
       const result = await handleIsSql({
@@ -159,38 +158,38 @@ describe('is-sql assertion', () => {
       expect(result).toMatchObject({ pass: true, score: 1 });
     });
 
-    it.each([
-      'PostgreSQL',
-      'BigQuery',
-    ])('should preserve square-bracket subscripts in %s', async (databaseType) => {
-      const result = await handleIsSql({
-        assertion,
-        renderedValue: { databaseType },
-        outputString: 'SELECT arr[1] value FROM t',
-        inverse: false,
-      } as AssertionParams);
+    it.each(['PostgreSQL', 'BigQuery'])(
+      'should preserve square-bracket subscripts in %s',
+      async (databaseType) => {
+        const result = await handleIsSql({
+          assertion,
+          renderedValue: { databaseType },
+          outputString: 'SELECT arr[1] value FROM t',
+          inverse: false,
+        } as AssertionParams);
 
-      expect(result).toMatchObject({ pass: true, score: 1 });
-    });
+        expect(result).toMatchObject({ pass: true, score: 1 });
+      },
+    );
 
     it.each([
       { databaseType: 'BigQuery', outputString: "SELECT r'hello' value FROM t" },
       { databaseType: 'TransactSQL', outputString: "SELECT N'hello' value FROM t" },
       // Intentionally `Sqlite` (not `SQLite`) to match node-sql-parser dialect naming.
       { databaseType: 'Sqlite', outputString: "SELECT X'53514C697465' value FROM t" },
-    ])('should preserve prefixed literals in $databaseType', async ({
-      databaseType,
-      outputString,
-    }) => {
-      const result = await handleIsSql({
-        assertion,
-        renderedValue: { databaseType },
-        outputString,
-        inverse: false,
-      } as AssertionParams);
+    ])(
+      'should preserve prefixed literals in $databaseType',
+      async ({ databaseType, outputString }) => {
+        const result = await handleIsSql({
+          assertion,
+          renderedValue: { databaseType },
+          outputString,
+          inverse: false,
+        } as AssertionParams);
 
-      expect(result).toMatchObject({ pass: true, score: 1 });
-    });
+        expect(result).toMatchObject({ pass: true, score: 1 });
+      },
+    );
 
     it.each(['', '   '])('should fail empty SQL: %j', async (outputString) => {
       const result: GradingResult = await handleIsSql({
@@ -488,7 +487,7 @@ describe('is-sql assertion', () => {
 
   // ------------------------------------------ Allowed Table/Column List Tests ------------------------------------------ //
   describe('Allowed Table/Column List Tests', () => {
-    it('should fail if the output SQL statement violate allowedTables', async () => {
+    it('should fail if the output SQL statement violates allowedTables', async () => {
       const renderedValue = {
         databaseType: 'MySQL',
         allowedTables: ['(select|update|insert|delete)::null::departments'],
@@ -528,7 +527,7 @@ describe('is-sql assertion', () => {
       });
     });
 
-    it('should fail if the output SQL statement violate allowedColumns', async () => {
+    it('should fail if the output SQL statement violates allowedColumns', async () => {
       const renderedValue = {
         databaseType: 'MySQL',
         allowedColumns: ['select::null::name', 'update::null::id'],
@@ -778,8 +777,25 @@ describe('contains-sql assertion', () => {
     ['a four-backtick fence', '````sql\nSELECT `id` FROM `users`;\n````'],
     ['a tilde fence', '~~~sql\nSELECT 1;\n~~~'],
     ['a longer closing fence', '```sql\nSELECT 1;\n````'],
+    ['an unlabeled fence', '```\nSELECT 1;\n```'],
+    ['a case-insensitive SQL label', '``` SQL \nSELECT 1;\n```'],
+    ['a three-space indentation', '   ```sql\nSELECT 1;\n   ```'],
+    ['tab-padded fence labels', '```\t\tsql\t\nSELECT 1;\n```\t\t'],
   ])('should extract SQL from %s', async (_description, outputString) => {
     await expect(runContainsSql(outputString)).resolves.toMatchObject({ pass: true, score: 1 });
+  });
+
+  it('parses fence labels with long whitespace runs in linear time', async () => {
+    const padding = '\t'.repeat(50_000);
+    const outputString = `\`\`\`${padding}sql\nSELECT 1;\n\`\`\`${padding}`;
+
+    await expect(runContainsSql(outputString)).resolves.toMatchObject({ pass: true, score: 1 });
+  });
+
+  it('does not close a fence with a different character or a shorter fence', async () => {
+    const outputString = '````sql\nSELECT 1;\n~~~\n```\n````';
+
+    await expect(runContainsSql(outputString)).resolves.toMatchObject({ pass: false, score: 0 });
   });
 
   it.each([
@@ -790,6 +806,8 @@ describe('contains-sql assertion', () => {
     ['an unclosed fenced block', `${fence}sql\nSELECT 1;`],
     ['a non-SQL fenced block', `${fence}python\nprint('hello')\n${fence}`],
     ['a tag that merely starts with sql', `${fence}sqlSELECT\nSELECT 1;\n${fence}`],
+    ['a four-space indentation', `    ${fence}sql\nSELECT 1;\n    ${fence}`],
+    ['a closing fence with an info string', `${fence}sql\nSELECT 1;\n${fence}sql`],
   ])('should reject %s', async (_description, outputString) => {
     const result = await runContainsSql(outputString);
 
