@@ -115,6 +115,8 @@ export const VALID_SCHEMA_TYPES: ReadonlyArray<SchemaType> = [
 export interface FunctionDeclaration {
   name: string;
   description?: string;
+  /** Live API function execution mode. Extended Thinking requires NON_BLOCKING. */
+  behavior?: 'BLOCKING' | 'NON_BLOCKING';
   parameters?: Schema;
   response?: Schema;
 }

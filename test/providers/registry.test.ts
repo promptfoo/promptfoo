@@ -1692,6 +1692,14 @@ describe('Provider Registry', () => {
         async () => (await import('../../src/providers/google/live')).GoogleLiveProvider,
       ],
       [
+        'google:live:gemini-3.8-live',
+        async () => (await import('../../src/providers/google/live')).GoogleLiveProvider,
+      ],
+      [
+        'google:live:gemini-3.8-live-extended-thinking',
+        async () => (await import('../../src/providers/google/live')).GoogleLiveProvider,
+      ],
+      [
         'google:image:imagen-3.0-generate-002',
         async () => (await import('../../src/providers/google/image')).GoogleImageProvider,
       ],

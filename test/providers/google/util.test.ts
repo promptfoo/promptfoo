@@ -3370,16 +3370,12 @@ describe('util', () => {
       expect(cost).toBeCloseTo(0.003, 10);
     });
 
-    it('should calculate mixed text and audio cost for gemini-3.1-flash-live-preview', () => {
-      const cost = calculateGoogleCost(
-        'gemini-3.1-flash-live-preview',
-        {},
-        1_000,
-        500,
-        false,
-        200,
-        100,
-      );
+    it.each([
+      'gemini-3.8-live',
+      'gemini-3.8-live-extended-thinking',
+      'gemini-3.1-flash-live-preview',
+    ])('should calculate mixed text and audio cost for %s', (modelName) => {
+      const cost = calculateGoogleCost(modelName, {}, 1_000, 500, false, 200, 100);
       expect(cost).toBeCloseTo((800 * 0.75 + 200 * 3 + 400 * 4.5 + 100 * 12) / 1e6, 12);
     });
 

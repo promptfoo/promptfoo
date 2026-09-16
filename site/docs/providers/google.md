@@ -292,6 +292,8 @@ See the [Vertex AI provider documentation](/docs/providers/vertex) for detailed 
 - `google:gemini-3.1-pro-preview-customtools` - Gemini 3.1 Pro preview variant for custom tools with the same pricing as Gemini 3.1 Pro
 - `google:gemini-3.1-flash-lite` - Gemini 3.1 Flash-Lite GA model optimized for high-volume, low-latency tasks ($0.25/1M text/image/video input, $1.50/1M output)
 - `google:live:gemini-3.1-flash-live-preview` - Gemini 3.1 Flash Live preview for real-time multimodal interactions ($0.75/1M text input, $1/1M image input, $0.002/minute video input, $4.50/1M text output, $3/1M audio input, $12/1M audio output)
+- `google:live:gemini-3.8-live` - Gemini 3.8 Live for low-latency voice dialogue, with the same Live API pricing as 3.1 Flash Live
+- `google:live:gemini-3.8-live-extended-thinking` - Gemini 3.8 Live with background reasoning and asynchronous tools, with the same Live API pricing as 3.1 Flash Live
 - `google:gemini-3-flash-preview` - Gemini 3.0 Flash preview with frontier intelligence, Pro-grade reasoning at Flash-level speed, thinking, and grounding ($0.50/1M input, $3/1M output)
 - `google:gemini-2.5-pro` - Gemini 2.5 Pro model with enhanced reasoning, coding, and multimodal understanding
 - `google:gemini-2.5-flash` - Gemini 2.5 Flash model with enhanced reasoning and thinking capabilities
@@ -1302,6 +1304,10 @@ For complete working examples of the search grounding, code execution, and url c
 ## Google Live API
 
 Promptfoo now supports Google's WebSocket-based Live API, which enables low-latency bidirectional voice and video interactions with Gemini models. This API provides real-time interactive capabilities beyond what's available in the standard REST API.
+
+Use `google:live:gemini-3.8-live` for low-latency dialogue or `google:live:gemini-3.8-live-extended-thinking` for background reasoning. Both default to the `v1alpha` endpoint, audio output, and output transcription (`output.text`), and accept `GOOGLE_API_KEY` or `GEMINI_API_KEY`. Text response modality requests are converted to audio with transcription and billed at audio rates.
+
+Extended Thinking accepts `generationConfig.thinkingConfig.thinkingLevel: LOW` (default), `MEDIUM`, or `HIGH`. Promptfoo sets function declarations to `behavior: NON_BLOCKING` and waits for `interactionStatus: IDLE` before advancing the conversation or returning a result; intermediate spoken updates are included in the transcript. Blocking tools are rejected. The standard 3.8 Live model does not accept `thinkingConfig`; neither model accepts `enableAffectiveDialog` or disabled proactive audio. Finite PCM audio inputs use explicit activity boundaries instead of automatic voice activity detection. See [Google's migration guide](https://ai.google.dev/gemini-api/docs/live-api/thinking) and the [Gemini 3.8 example](https://github.com/promptfoo/promptfoo/blob/main/examples/google-live/promptfooconfig.gemini-3.8.yaml).
 
 ### Using the Live Provider
 

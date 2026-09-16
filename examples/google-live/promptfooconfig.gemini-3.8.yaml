@@ -1,0 +1,55 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: Gemini 3.8 Live audio and tool calls
+
+prompts:
+  - '{{query}}'
+
+providers:
+  - id: google:live:gemini-3.8-live
+    config: &liveConfig
+      timeoutMs: 60000
+      tools:
+        - functionDeclarations:
+            - name: get_pickup_code
+              description: Look up the current pickup code for a reservation.
+              behavior: NON_BLOCKING
+              parameters:
+                type: OBJECT
+                properties:
+                  reservation:
+                    type: STRING
+                required: [reservation]
+      functionToolCallbacks:
+        get_pickup_code: |
+          (args) => {
+            const { reservation } = JSON.parse(args);
+            return reservation === 'DEMO-42'
+              ? { pickupCode: 'ORCHID' }
+              : { error: 'Reservation not found' };
+          }
+  - id: google:live:gemini-3.8-live-extended-thinking
+    config:
+      <<: *liveConfig
+      generationConfig:
+        thinkingConfig:
+          thinkingLevel: LOW
+
+tests:
+  - description: Spoken answer with a transcript
+    vars:
+      query: In one short sentence, what is the capital of France?
+    assert:
+      - type: icontains
+        value: Paris
+        transform: output.text
+      - type: javascript
+        value: Boolean(context.providerResponse.audio?.data)
+  - description: Finish the tool lookup before returning the answer
+    vars:
+      query: Use get_pickup_code to look up reservation DEMO-42, then tell me its pickup code.
+    assert:
+      - type: javascript
+        value: output.toolCall.functionCalls.some(call => call.name === 'get_pickup_code' && call.args.reservation === 'DEMO-42')
+      - type: icontains
+        value: ORCHID
+        transform: output.text

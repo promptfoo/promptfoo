@@ -171,17 +171,19 @@ export const GOOGLE_MODELS: GoogleModel[] = [
           }),
     },
   })),
-  {
-    id: 'gemini-3.1-flash-live-preview',
-    cost: {
-      input: 0.75 / 1e6,
-      output: 4.5 / 1e6,
-      audioInput: 3.0 / 1e6,
-      audioOutput: 12.0 / 1e6,
-      imageInput: 1.0 / 1e6,
-      videoInputPerSecond: 0.000033333333333333335,
-    },
-  },
+  ...['gemini-3.8-live', 'gemini-3.8-live-extended-thinking', 'gemini-3.1-flash-live-preview'].map(
+    (id) => ({
+      id,
+      cost: {
+        input: 0.75 / 1e6,
+        output: 4.5 / 1e6,
+        audioInput: 3.0 / 1e6,
+        audioOutput: 12.0 / 1e6,
+        imageInput: 1.0 / 1e6,
+        videoInputPerSecond: 0.000033333333333333335,
+      },
+    }),
+  ),
   {
     id: 'gemini-live-2.5-flash-preview-native-audio-09-2025',
     cost: {

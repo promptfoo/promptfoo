@@ -38,6 +38,14 @@ promptfoo view
 
 ### Basic Query Example
 
+For Gemini 3.8 Live and Gemini 3.8 Live Extended Thinking, run:
+
+```bash
+promptfoo eval -c promptfooconfig.gemini-3.8.yaml --no-cache -j 1
+```
+
+This compares spoken answers and a deterministic tool lookup on both models. Audio and output transcription are enabled by default. Extended Thinking waits for `interactionStatus: IDLE`, including any background reasoning and tool calls, before grading the complete transcript. It requires non-blocking tools and accepts `thinkingLevel: LOW` (default), `MEDIUM`, or `HIGH`.
+
 The basic configuration in `promptfooconfig.yaml` demonstrates a simple query to the Gemini model:
 
 ```bash
