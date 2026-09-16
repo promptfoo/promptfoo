@@ -2,7 +2,7 @@ import { Agent } from '@openai/agents';
 
 export default new Agent({
   name: 'Support Agent',
-  model: 'gpt-5-mini',
+  model: 'gpt-5.6-luna',
   instructions: `You are a concise support agent.
 
 - Remember short code words the user gives you.
