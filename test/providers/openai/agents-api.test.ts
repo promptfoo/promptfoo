@@ -853,14 +853,51 @@ describe('OpenAiAgentsApiProvider', () => {
             const result = await new OpenAiAgentsApiProvider('', {
               config: {
                 apiBaseUrl: 'https://gateway.example/v1',
-                apiKeyRequired: ambient,
-                headers: inheritedHeaders,
+                apiKeyRequired: false,
+                headers: { 'X-Goog-Iap-Jwt-Assertion': fakeJwt },
               },
             }).callApi('hi', promptContext(endpointConfig));
 
             expect(result.output).toBe('42');
             for (const [, request] of vi.mocked(fetchWithRetries).mock.calls) {
               expect(new Headers(request!.headers).get('X-Goog-Iap-Jwt-Assertion')).toBeNull();
+              expect(new Headers(request!.headers).get('Authorization')).toBeNull();
+            }
+          },
+        );
+
+        it('requires replacement credentials instead of falling back to an ambient key', async () => {
+          mockProcessEnv({ OPENAI_API_KEY: 'offline-ambient-key' });
+          const result = await new OpenAiAgentsApiProvider('', {
+            config: {
+              apiBaseUrl: 'https://gateway.example/v1',
+              headers: { 'X-Goog-Iap-Jwt-Assertion': fakeJwt },
+            },
+          }).callApi('hi', promptContext(endpointConfig));
+
+          expect(result.error).toContain('API key');
+          expect(fetchWithRetries).not.toHaveBeenCalled();
+        });
+
+        it.each([{ apiKey: 'offline-replacement-key' }, { apiKeyEnvar: 'REPLACEMENT_KEY' }])(
+          'honors an explicitly selected replacement key %j',
+          async (credentialConfig) => {
+            mockProcessEnv({
+              OPENAI_API_KEY: 'offline-ambient-key',
+              REPLACEMENT_KEY: 'offline-replacement-key',
+            });
+            const result = await new OpenAiAgentsApiProvider('', {
+              config: {
+                apiBaseUrl: 'https://gateway.example/v1',
+                headers: { 'X-Goog-Iap-Jwt-Assertion': fakeJwt },
+              },
+            }).callApi('hi', promptContext({ ...endpointConfig, ...credentialConfig }));
+
+            expect(result.output).toBe('42');
+            for (const [, request] of vi.mocked(fetchWithRetries).mock.calls) {
+              const headers = new Headers(request!.headers);
+              expect(headers.get('X-Goog-Iap-Jwt-Assertion')).toBeNull();
+              expect(headers.get('Authorization')).toBe('Bearer offline-replacement-key');
             }
           },
         );
@@ -885,6 +922,28 @@ describe('OpenAiAgentsApiProvider', () => {
         });
       },
     );
+
+    it.each([
+      { apiBaseUrl: 'https://gateway.example/v1', expectedKey: null },
+      { apiHost: 'gateway.example', expectedKey: null },
+      { apiBaseUrl: 'https://api.openai.com/v1', expectedKey: 'Bearer offline-ambient-key' },
+      { apiHost: 'api.openai.com', expectedKey: 'Bearer offline-ambient-key' },
+    ])('preserves ambient-key routing for %j', async ({ expectedKey, ...endpointConfig }) => {
+      mockProcessEnv({ OPENAI_API_KEY: 'offline-ambient-key' });
+      const result = await new OpenAiAgentsApiProvider('', {
+        config: {
+          apiBaseUrl: 'https://gateway.example/v1',
+          apiKeyRequired: false,
+          headers: { 'X-Goog-Iap-Jwt-Assertion': 'fake-gateway-credential' },
+        },
+      }).callApi('hi', promptContext(endpointConfig));
+
+      expect(result.output).toBe('42');
+      for (const [, request] of vi.mocked(fetchWithRetries).mock.calls) {
+        expect(new Headers(request!.headers).get('Authorization')).toBe(expectedKey);
+        expect(new Headers(request!.headers).get('X-Goog-Iap-Jwt-Assertion')).toBeNull();
+      }
+    });
 
     it('redacts both provider and prompt credentials after group overrides', async () => {
       mockProcessEnv({ PROMPT_OPENAI_KEY: 'prompt-envar-key' });

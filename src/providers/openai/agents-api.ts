@@ -740,11 +740,13 @@ export class OpenAiAgentsApiProvider extends OpenAiGenericProvider {
     delete mergedConfig.provider;
     let config = mergedConfig;
     try {
+      let removedInheritedHeaders = false;
       const vars = context?.vars;
       if (vars) {
         config = renderConfigTemplates(mergedConfig, vars, Object.keys(vars)) as AgentsApiOptions;
       }
       if (endpointOverride && promptConfig?.headers === undefined && config.headers) {
+        const inheritedHeaderCount = Object.keys(config.headers).length;
         const sanitizedHeaders = sanitizeObject({ headers: config.headers }).headers;
         config.headers = Object.fromEntries(
           Object.entries(config.headers).filter(
@@ -754,12 +756,16 @@ export class OpenAiAgentsApiProvider extends OpenAiGenericProvider {
               sanitizedHeaders[name] !== REDACTED,
           ),
         );
+        removedInheritedHeaders = Object.keys(config.headers).length < inheritedHeaderCount;
       }
       // Keep request credentials and lifecycle settings isolated across concurrent calls.
       const callProvider = new OpenAiAgentsApiProvider(this.modelOverride, {
         config,
         env: this.env,
       });
+      if (removedInheritedHeaders && !callProvider.sendsToOpenAiApi()) {
+        callProvider.config.useDefaultApiKey = false;
+      }
       collectCallCredentials(this, callProvider.inheritedCredentials);
       const spanContext = buildChatSpanContext({
         system: 'openai',
