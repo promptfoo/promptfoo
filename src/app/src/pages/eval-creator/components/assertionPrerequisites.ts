@@ -1,8 +1,10 @@
 import type { AssertionOrSet } from '@promptfoo/types';
 
 const CONTEXT_ASSERTION_TYPES = new Set([
+  'citation-faithfulness',
   'context-faithfulness',
   'context-relevance',
+  'not-citation-faithfulness',
   'not-context-faithfulness',
   'not-context-relevance',
 ]);

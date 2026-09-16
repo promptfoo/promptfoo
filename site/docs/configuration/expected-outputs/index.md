@@ -182,6 +182,7 @@ See [Model-graded evals](/docs/configuration/expected-outputs/model-graded), [cl
 | [llm-rubric](/docs/configuration/expected-outputs/model-graded)                                      | Grade text, images, or audio against a rubric with a compatible model            |
 | [g-eval](/docs/configuration/expected-outputs/model-graded/g-eval)                                   | Chain-of-thought evaluation based on custom criteria using the G-Eval framework  |
 | [answer-relevance](/docs/configuration/expected-outputs/model-graded)                                | Ensure that LLM output is related to original query                              |
+| [citation-faithfulness](/docs/configuration/expected-outputs/model-graded/citation-faithfulness)     | Ensure that each cited passage supports the claim attributed to it               |
 | [context-faithfulness](/docs/configuration/expected-outputs/model-graded)                            | Ensure that LLM output uses the context                                          |
 | [context-recall](/docs/configuration/expected-outputs/model-graded)                                  | Ensure that ground truth appears in context                                      |
 | [context-relevance](/docs/configuration/expected-outputs/model-graded)                               | Ensure that context is relevant to original query                                |
