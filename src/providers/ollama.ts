@@ -2,6 +2,7 @@ import { type FetchWithCacheResult, fetchWithCache } from '../cache';
 import { getEnvString } from '../envars';
 import logger from '../logger';
 import { type GenAISpanContext, type GenAISpanResult, withGenAISpan } from '../tracing/genaiTracer';
+import { normalizeFinishReason } from '../util/finishReason';
 import { maybeLoadToolsFromExternalFile } from '../util/index';
 import { getRequestTimeoutMs, parseChatPrompt, transformTools } from './shared';
 
@@ -50,6 +51,9 @@ interface OllamaCompletionOptions {
   num_thread?: number;
   tools?: any[]; // Support for function calling/tools
   think?: boolean; // Top-level parameter for thinking/reasoning
+  // Promptfoo-side rendering option: prepend the model's reasoning to the output.
+  // Deliberately absent from OllamaCompletionOptionKeys so it is never sent to Ollama.
+  showThinking?: boolean;
   passthrough?: Record<string, any>; // Pass arbitrary fields to the API
 }
 
@@ -178,7 +182,9 @@ interface OllamaCompletionJsonL {
   model: string;
   created_at: string;
   response?: string;
+  thinking?: string;
   done: boolean;
+  done_reason?: string;
   context?: number[];
 
   total_duration?: number;
@@ -197,6 +203,7 @@ interface OllamaChatJsonL {
   message?: {
     role: string;
     content: string;
+    thinking?: string;
     images: null;
     tool_calls?: Array<{
       function: {
@@ -206,6 +213,7 @@ interface OllamaChatJsonL {
     }>;
   };
   done: boolean;
+  done_reason?: string;
 
   total_duration?: number;
   load_duration?: number;
@@ -215,6 +223,50 @@ interface OllamaChatJsonL {
   prompt_eval_duration?: number;
   eval_count?: number;
   eval_duration?: number;
+}
+
+/**
+ * Collects tool calls from every chunk (they arrive one per chunk before `done: true`)
+ * and normalizes them to the OpenAI shape, where `arguments` is a JSON string rather
+ * than an object.
+ */
+function collectOllamaToolCalls(lines: OllamaChatJsonL[]) {
+  return lines
+    .flatMap((chunk: OllamaChatJsonL) => chunk.message?.tool_calls ?? [])
+    .map((call: { function: { name: string; arguments: any } }) => ({
+      function: {
+        name: call.function.name,
+        arguments:
+          typeof call.function.arguments === 'string'
+            ? call.function.arguments
+            : JSON.stringify(call.function.arguments),
+      },
+    }));
+}
+
+/** Extracts token usage from the chunk carrying `done: true`. */
+function extractOllamaTokenUsage(finalChunk: {
+  prompt_eval_count?: number;
+  eval_count?: number;
+}): Partial<TokenUsage> | undefined {
+  if (finalChunk.prompt_eval_count === undefined && finalChunk.eval_count === undefined) {
+    return undefined;
+  }
+  const prompt = finalChunk.prompt_eval_count || 0;
+  const completion = finalChunk.eval_count || 0;
+  return { prompt, completion, total: prompt + completion };
+}
+
+/**
+ * Prepends the reasoning trace to a string output, matching the `Thinking: ...`
+ * convention used by the OpenAI and Anthropic providers. Non-string outputs (tool
+ * calls) are returned untouched so their structure survives.
+ */
+function applyOllamaThinking(output: unknown, thinking: string, showThinking?: boolean) {
+  if (!thinking || typeof output !== 'string' || !(showThinking ?? true)) {
+    return output;
+  }
+  return output ? `Thinking: ${thinking}\n\n${output}` : `Thinking: ${thinking}`;
 }
 
 export class OllamaCompletionProvider implements ApiProvider {
@@ -262,6 +314,9 @@ export class OllamaCompletionProvider implements ApiProvider {
           completion: response.tokenUsage.completion,
           total: response.tokenUsage.total,
         };
+      }
+      if (response.finishReason) {
+        result.finishReasons = [response.finishReason];
       }
       return result;
     };
@@ -333,7 +388,7 @@ export class OllamaCompletionProvider implements ApiProvider {
         .filter((line: string) => line.trim() !== '')
         .map((line: string) => JSON.parse(line) as OllamaCompletionJsonL);
 
-      const output = lines
+      let output = lines
         .map((parsed: OllamaCompletionJsonL) => {
           if (parsed.response) {
             return parsed.response;
@@ -343,25 +398,24 @@ export class OllamaCompletionProvider implements ApiProvider {
         .filter((s: string | null) => s !== null)
         .join('');
 
+      // Reasoning models stream their trace in `thinking`, separate from `response`.
+      // Without this it is dropped, and a `num_predict` budget spent inside the thinking
+      // block yields an empty output with no explanation.
+      const thinking = lines
+        .map((parsed: OllamaCompletionJsonL) => parsed.thinking ?? null)
+        .filter((s: string | null) => s !== null)
+        .join('');
+
+      output = applyOllamaThinking(output, thinking, this.config.showThinking) as string;
+
       // Extract token usage from the final chunk (where done: true)
       const finalChunk = lines.find((chunk: OllamaCompletionJsonL) => chunk.done);
-      let tokenUsage: Partial<TokenUsage> | undefined;
-
-      if (
-        finalChunk &&
-        (finalChunk.prompt_eval_count !== undefined || finalChunk.eval_count !== undefined)
-      ) {
-        const promptTokens = finalChunk.prompt_eval_count || 0;
-        const completionTokens = finalChunk.eval_count || 0;
-        tokenUsage = {
-          prompt: promptTokens,
-          completion: completionTokens,
-          total: promptTokens + completionTokens,
-        };
-      }
+      const finishReason = normalizeFinishReason(finalChunk?.done_reason);
+      const tokenUsage = finalChunk ? extractOllamaTokenUsage(finalChunk) : undefined;
 
       return {
         output,
+        ...(finishReason && { finishReason }),
         ...(tokenUsage && { tokenUsage }),
       };
     } catch (err) {
@@ -417,6 +471,9 @@ export class OllamaChatProvider implements ApiProvider {
           completion: response.tokenUsage.completion,
           total: response.tokenUsage.total,
         };
+      }
+      if (response.finishReason) {
+        result.finishReasons = [response.finishReason];
       }
       return result;
     };
@@ -499,6 +556,7 @@ export class OllamaChatProvider implements ApiProvider {
 
       // Find the final chunk (with done: true)
       const finalChunk = lines.find((chunk: OllamaChatJsonL) => chunk.done);
+      const finishReason = normalizeFinishReason(finalChunk?.done_reason);
 
       // Collect all content chunks
       const contentParts = lines
@@ -512,60 +570,41 @@ export class OllamaChatProvider implements ApiProvider {
 
       const content = contentParts.join('');
 
-      // Tool calls can arrive in multiple chunks before done: true.
-      let tool_calls = lines.flatMap((chunk: OllamaChatJsonL) => chunk.message?.tool_calls ?? []);
+      // Reasoning models stream their trace in `message.thinking`, separate from
+      // `message.content`. Note qwen3 and friends emit this by default on Ollama 0.13+
+      // with no `think` flag sent, so dropping it silently loses the entire answer
+      // whenever a `num_predict` budget is spent inside the thinking block.
+      const thinking = lines
+        .map((parsed: OllamaChatJsonL) => parsed.message?.thinking ?? null)
+        .filter((s: string | null) => s !== null)
+        .join('');
 
-      // Normalize tool_calls to match OpenAI format (arguments as JSON string, not object)
-      if (tool_calls && tool_calls.length > 0) {
-        tool_calls = tool_calls.map((call: { function: { name: string; arguments: any } }) => ({
-          function: {
-            name: call.function.name,
-            arguments:
-              typeof call.function.arguments === 'string'
-                ? call.function.arguments
-                : JSON.stringify(call.function.arguments),
-          },
-        }));
-      }
+      // Tool calls can arrive in multiple chunks before done: true.
+      const tool_calls = collectOllamaToolCalls(lines);
 
       // Determine output based on message content and tool_calls
       let output: any;
-      if (tool_calls && tool_calls.length > 0) {
+      if (tool_calls.length > 0) {
         // If there are tool calls, return them (similar to OpenAI behavior)
         logger.debug('[Ollama Chat] Tool calls detected', {
           toolCallCount: tool_calls.length,
-          hasContent: !!(content && content.trim()),
+          hasContent: !!content.trim(),
         });
-        if (content && content.trim()) {
-          // If there's also content, return the full message object
-          output = { content, tool_calls };
-        } else {
-          // If only tool calls, return just the tool calls
-          output = tool_calls;
-        }
+        // If there's also content, return the full message object
+        output = content.trim() ? { content, tool_calls } : tool_calls;
       } else {
         // No tool calls, return the content
         output = content;
       }
 
-      // Extract token usage from the final chunk (where done: true)
-      let tokenUsage: Partial<TokenUsage> | undefined;
+      output = applyOllamaThinking(output, thinking, this.config.showThinking);
 
-      if (
-        finalChunk &&
-        (finalChunk.prompt_eval_count !== undefined || finalChunk.eval_count !== undefined)
-      ) {
-        const promptTokens = finalChunk.prompt_eval_count || 0;
-        const completionTokens = finalChunk.eval_count || 0;
-        tokenUsage = {
-          prompt: promptTokens,
-          completion: completionTokens,
-          total: promptTokens + completionTokens,
-        };
-      }
+      // Extract token usage from the final chunk (where done: true)
+      const tokenUsage = finalChunk ? extractOllamaTokenUsage(finalChunk) : undefined;
 
       return {
         output,
+        ...(finishReason && { finishReason }),
         ...(tokenUsage && { tokenUsage }),
       };
     } catch (err) {

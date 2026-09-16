@@ -201,6 +201,79 @@ describe('OllamaCompletionProvider', () => {
     expect(result.error).toContain('Ollama API response error:');
   });
 
+  it('should surface thinking output and finish reason', async () => {
+    vi.mocked(fetchWithCache).mockResolvedValue({
+      data:
+        '{"response":"","thinking":"Let me ","done":false}\n' +
+        '{"response":"","thinking":"reason.","done":true,"done_reason":"length","eval_count":32}\n',
+      cached: false,
+      status: 200,
+      statusText: 'OK',
+      headers: {},
+    });
+
+    const provider = new OllamaCompletionProvider('qwen3:0.6b');
+    const result = await provider.callApi('test prompt');
+
+    // Previously this returned '' because `thinking` was dropped entirely.
+    expect(result.output).toBe('Thinking: Let me reason.');
+    expect(result.finishReason).toBe('length');
+  });
+
+  it('should prepend thinking to response content when both are present', async () => {
+    vi.mocked(fetchWithCache).mockResolvedValue({
+      data: '{"response":"Hi!","thinking":"Short.","done":true,"done_reason":"stop"}\n',
+      cached: false,
+      status: 200,
+      statusText: 'OK',
+      headers: {},
+    });
+
+    const provider = new OllamaCompletionProvider('qwen3:0.6b');
+    const result = await provider.callApi('test prompt');
+
+    expect(result.output).toBe('Thinking: Short.\n\nHi!');
+    expect(result.finishReason).toBe('stop');
+  });
+
+  it('should omit thinking when showThinking is false, without sending it to Ollama', async () => {
+    vi.mocked(fetchWithCache).mockResolvedValue({
+      data: '{"response":"Hi!","thinking":"Short.","done":true,"done_reason":"stop"}\n',
+      cached: false,
+      status: 200,
+      statusText: 'OK',
+      headers: {},
+    });
+
+    const provider = new OllamaCompletionProvider('qwen3:0.6b', {
+      config: { showThinking: false },
+    });
+    const result = await provider.callApi('test prompt');
+
+    expect(result.output).toBe('Hi!');
+
+    // showThinking is a promptfoo-side rendering option; Ollama must never receive it.
+    const body = JSON.parse(vi.mocked(fetchWithCache).mock.calls[0][1]?.body as string);
+    expect(body.showThinking).toBeUndefined();
+    expect(body.options.showThinking).toBeUndefined();
+  });
+
+  it('should omit finishReason when done_reason is absent', async () => {
+    vi.mocked(fetchWithCache).mockResolvedValue({
+      data: '{"response":"Hi!","done":true}\n',
+      cached: false,
+      status: 200,
+      statusText: 'OK',
+      headers: {},
+    });
+
+    const provider = new OllamaCompletionProvider('llama3.3');
+    const result = await provider.callApi('test prompt');
+
+    expect(result.output).toBe('Hi!');
+    expect(result.finishReason).toBeUndefined();
+  });
+
   it('should use default id when not provided', () => {
     const provider = new OllamaCompletionProvider('llama3.3');
     expect(provider.id()).toBe('ollama:completion:llama3.3');
@@ -837,6 +910,88 @@ describe('OllamaChatProvider', () => {
       expect(result.tokenUsage).toEqual({ prompt: 10, completion: 20, total: 30 });
     },
   );
+
+  it('should accumulate message.thinking across chunks and surface finish reason', async () => {
+    vi.mocked(fetchWithCache).mockResolvedValue({
+      data:
+        '{"message":{"role":"assistant","content":"","thinking":"Let me "},"done":false}\n' +
+        '{"message":{"role":"assistant","content":"","thinking":"reason."},"done":false}\n' +
+        '{"message":{"role":"assistant","content":""},"done":true,"done_reason":"length","eval_count":32}\n',
+      cached: false,
+      status: 200,
+      statusText: 'OK',
+      headers: {},
+    });
+
+    const provider = new OllamaChatProvider('qwen3:0.6b');
+    const result = await provider.callApi('test prompt');
+
+    // Previously this returned '' because message.thinking was dropped entirely.
+    expect(result.output).toBe('Thinking: Let me reason.');
+    expect(result.finishReason).toBe('length');
+  });
+
+  it('should prepend thinking to chat content when both are present', async () => {
+    vi.mocked(fetchWithCache).mockResolvedValue({
+      data:
+        '{"message":{"role":"assistant","content":"","thinking":"Short."},"done":false}\n' +
+        '{"message":{"role":"assistant","content":"Hi!"},"done":true,"done_reason":"stop"}\n',
+      cached: false,
+      status: 200,
+      statusText: 'OK',
+      headers: {},
+    });
+
+    const provider = new OllamaChatProvider('qwen3:0.6b');
+    const result = await provider.callApi('test prompt');
+
+    expect(result.output).toBe('Thinking: Short.\n\nHi!');
+    expect(result.finishReason).toBe('stop');
+  });
+
+  it('should omit chat thinking when showThinking is false', async () => {
+    vi.mocked(fetchWithCache).mockResolvedValue({
+      data:
+        '{"message":{"role":"assistant","content":"","thinking":"Short."},"done":false}\n' +
+        '{"message":{"role":"assistant","content":"Hi!"},"done":true,"done_reason":"stop"}\n',
+      cached: false,
+      status: 200,
+      statusText: 'OK',
+      headers: {},
+    });
+
+    const provider = new OllamaChatProvider('qwen3:0.6b', { config: { showThinking: false } });
+    const result = await provider.callApi('test prompt');
+
+    expect(result.output).toBe('Hi!');
+
+    const body = JSON.parse(vi.mocked(fetchWithCache).mock.calls[0][1]?.body as string);
+    expect(body.showThinking).toBeUndefined();
+    expect(body.options.showThinking).toBeUndefined();
+  });
+
+  it('should leave the tool-call output shape untouched when thinking is present', async () => {
+    vi.mocked(fetchWithCache).mockResolvedValue({
+      data:
+        '{"message":{"role":"assistant","content":"","thinking":"Deciding."},"done":false}\n' +
+        '{"message":{"role":"assistant","content":"","tool_calls":[{"function":{"name":"get_weather","arguments":{"city":"Paris"}}}]},"done":false}\n' +
+        '{"message":{"role":"assistant","content":""},"done":true,"done_reason":"stop"}\n',
+      cached: false,
+      status: 200,
+      statusText: 'OK',
+      headers: {},
+    });
+
+    const provider = new OllamaChatProvider('qwen3:0.6b');
+    const result = await provider.callApi('test prompt');
+
+    // Tool calls must stay structured -- prepending a string would break
+    // is-valid-openai-tools-call.
+    expect(result.output).toEqual([
+      { function: { name: 'get_weather', arguments: '{"city":"Paris"}' } },
+    ]);
+    expect(result.finishReason).toBe('stop');
+  });
 
   it('should handle multiple tool calls in response', async () => {
     const mockResponse = {
