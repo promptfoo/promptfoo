@@ -29,10 +29,11 @@ export const predefinedTargets: RedteamUITarget[] = [
   { value: 'claude-fable-5', label: 'Anthropic Claude Fable 5' },
   { value: 'claude-opus-5', label: 'Anthropic Claude Opus 5' },
   { value: 'claude-opus-4-8', label: 'Anthropic Claude 4.8 Opus' },
+  { value: 'claude-opus-4-7', label: 'Anthropic Claude 4.7 Opus' },
   { value: 'claude-sonnet-5', label: 'Anthropic Claude Sonnet 5' },
   { value: 'claude-sonnet-4-6', label: 'Anthropic Claude 4.6 Sonnet' },
   { value: 'claude-opus-4-6', label: 'Anthropic Claude 4.6 Opus' },
-  { value: 'claude-sonnet-4-5-20250929', label: 'Anthropic Claude 4.5 Sonnet' },
+  { value: 'claude-sonnet-4-5', label: 'Anthropic Claude 4.5 Sonnet' },
   { value: 'claude-haiku-4-5', label: 'Anthropic Claude 4.5 Haiku' },
   { value: DEFAULT_GOOGLE_TARGET_ID, label: 'Google Gemini 3.8 Flash' },
   { value: 'google:gemini-3.7-flash', label: 'Google Gemini 3.7 Flash' },
@@ -51,6 +52,9 @@ const legacyPredefinedTargets: RedteamUITarget[] = [
   { value: 'openai:gpt-5-mini', label: 'OpenAI GPT-5 Mini' },
   { value: 'openai:gpt-5-nano', label: 'OpenAI GPT-5 Nano' },
   { value: 'claude-opus-4-1-20250805', label: 'Anthropic Claude 4.1 Opus' },
+  // Previously advertised as a live preset. Kept so a saved config carrying the dated ID
+  // still hydrates to its Anthropic target instead of being rewritten to `custom`.
+  { value: 'claude-sonnet-4-5-20250929', label: 'Anthropic Claude 4.5 Sonnet' },
 ];
 
 export const customTargetOption: RedteamUITarget = { value: 'custom', label: 'Custom Target' };

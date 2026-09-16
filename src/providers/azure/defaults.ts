@@ -940,8 +940,11 @@ export const AZURE_MODELS: AzureModelCost[] = [
     cost: { input: 5 / 1000000, output: 25 / 1000000 },
   },
   {
+    // Foundry bills Claude at Anthropic's standard API rates. Sonnet 5's launch pricing
+    // ($2/$10) became permanent on 2026-08-10 — matches ANTHROPIC_MODELS, and matches the
+    // $0.2/MTok Sonnet 5 cache-read rate in azure/util.ts (10% of a $2 input rate).
     id: 'claude-sonnet-5',
-    cost: { input: 3 / 1000000, output: 15 / 1000000 },
+    cost: { input: 2 / 1000000, output: 10 / 1000000 },
   },
   {
     id: 'claude-sonnet-4-6',

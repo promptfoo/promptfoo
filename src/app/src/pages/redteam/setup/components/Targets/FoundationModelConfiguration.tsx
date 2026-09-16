@@ -148,9 +148,8 @@ const FoundationModelConfiguration = ({
       },
       anthropic: {
         name: 'Anthropic',
-        defaultModel: 'anthropic:messages:claude-sonnet-4-5-20250929',
-        placeholder:
-          'anthropic:messages:claude-sonnet-4-5-20250929, anthropic:messages:claude-haiku-4-5-20251001',
+        defaultModel: 'anthropic:messages:claude-sonnet-5',
+        placeholder: 'anthropic:messages:claude-opus-5, anthropic:messages:claude-sonnet-5',
         docUrl: 'https://www.promptfoo.dev/docs/providers/anthropic',
         envVar: 'ANTHROPIC_API_KEY',
       },
@@ -213,7 +212,7 @@ const FoundationModelConfiguration = ({
       openrouter: {
         name: 'OpenRouter',
         defaultModel: 'openrouter:openai/gpt-5.4',
-        placeholder: 'openrouter:openai/gpt-5.4, openrouter:anthropic/claude-opus-4.7',
+        placeholder: 'openrouter:openai/gpt-5.4, openrouter:anthropic/claude-opus-5',
         docUrl: 'https://www.promptfoo.dev/docs/providers/openrouter',
         envVar: 'OPENROUTER_API_KEY',
       },

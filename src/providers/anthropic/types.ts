@@ -40,10 +40,22 @@ export interface WebFetchToolConfig20260209 extends BaseWebFetchToolConfig {
   type: 'web_fetch_20260209';
 }
 
-// Web fetch tool configuration (latest version with use_cache support)
+// Web fetch tool configuration (2026-03-09 version, adds use_cache)
 export interface WebFetchToolConfigV2 extends BaseWebFetchToolConfig {
   type: 'web_fetch_20260309';
   use_cache?: boolean;
+}
+
+/**
+ * Web fetch tool configuration (latest, 2026-03-18). Adds `response_inclusion`:
+ * `'excluded'` drops the nested server_tool_use/result block pair from the response,
+ * which keeps large fetched pages out of the transcript. Direct calls and paused
+ * code_execution calls are always returned in full so they can be replayed.
+ */
+export interface WebFetchToolConfig20260318 extends BaseWebFetchToolConfig {
+  type: 'web_fetch_20260318';
+  use_cache?: boolean;
+  response_inclusion?: 'full' | 'excluded';
 }
 
 // Web search tool configuration (for reference)
@@ -56,14 +68,22 @@ export interface WebSearchToolConfig20260209 extends BaseWebSearchToolConfig {
   type: 'web_search_20260209';
 }
 
+/** Web search tool configuration (latest, 2026-03-18). See WebFetchToolConfig20260318. */
+export interface WebSearchToolConfig20260318 extends BaseWebSearchToolConfig {
+  type: 'web_search_20260318';
+  response_inclusion?: 'full' | 'excluded';
+}
+
 export type MemoryToolConfig = Anthropic.Messages.MemoryTool20250818;
 
 export type AnthropicToolConfig =
   | WebFetchToolConfig
   | WebFetchToolConfig20260209
   | WebFetchToolConfigV2
+  | WebFetchToolConfig20260318
   | WebSearchToolConfig
   | WebSearchToolConfig20260209
+  | WebSearchToolConfig20260318
   | MemoryToolConfig;
 
 // Structured outputs configuration (JSON schema)
