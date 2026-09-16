@@ -480,6 +480,25 @@ evalRouter.get('/:id/table', async (req: Request, res: Response): Promise<void> 
   sendEvalTableResponse(res, id, responsePayload);
 });
 
+evalRouter.get('/:id/failure-summary', async (req: Request, res: Response): Promise<void> => {
+  const paramsResult = EvalSchemas.FailureSummary.Params.safeParse(req.params);
+  if (!paramsResult.success) {
+    res.status(400).json({ error: z.prettifyError(paramsResult.error) });
+    return;
+  }
+
+  const eval_ = await Eval.findById(paramsResult.data.id);
+  if (!eval_) {
+    res.status(404).json({ error: 'Eval not found' });
+    return;
+  }
+
+  const response = EvalSchemas.FailureSummary.Response.parse({
+    failures: await eval_.getFailureSummary(),
+  });
+  res.json(response);
+});
+
 evalRouter.get('/:id/metadata-keys', async (req: Request, res: Response): Promise<void> => {
   const paramsResult = EvalSchemas.MetadataKeys.Params.safeParse(req.params);
   if (!paramsResult.success) {
