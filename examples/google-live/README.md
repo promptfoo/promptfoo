@@ -2,6 +2,8 @@
 
 Compare Gemini 3.8 Live and Extended Thinking by grading their spoken-response transcripts.
 
+## Run
+
 Set `GOOGLE_API_KEY` or `GEMINI_API_KEY` to your [Google AI Studio API key](https://aistudio.google.com/apikey), then run:
 
 ```bash
