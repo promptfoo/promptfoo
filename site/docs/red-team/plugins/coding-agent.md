@@ -119,6 +119,8 @@ Only the local trace/artifact-redaction verifier receives the original response.
 
 Paginated result rows apply the same redaction when reading older records. The view keeps the original verdict and score without rewriting the stored record.
 
+Privacy checks omit thrown provider exception messages, stacks, and provider error metadata from error results returned to callers or result hooks. These results remain errors with zero scores.
+
 ```yaml
 redteam:
   targetManifest:
