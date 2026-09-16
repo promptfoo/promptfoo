@@ -9,6 +9,7 @@ import {
 } from '../../src/contracts';
 import { HttpProviderConfigFieldsSchema } from '../../src/contracts/providerConfig/http';
 import { HttpMultipartConfigSchema as PortableMultipartSchema } from '../../src/contracts/providerConfig/httpMultipart';
+import { HttpSignatureAuthSchema } from '../../src/contracts/providerConfig/httpSignature';
 import { HttpProviderConfigSchema, SessionEndpointConfigSchema } from '../../src/providers/http';
 import { HttpMultipartConfigSchema } from '../../src/providers/httpMultipart';
 
@@ -85,6 +86,80 @@ const invalidSignatures = [
   { certificateFilename: 'upload.pem', keystorePath: 'wrong-format.jks' },
   { type: 'pem', privateKey: 'key', signatureValidityMs: '300000' },
 ];
+
+describe.each([
+  {
+    type: 'pem',
+    schema: HttpSignatureAuthSchema.options[1],
+    validSources: [
+      { privateKeyPath: 'key.pem' },
+      { privateKey: 'key' },
+      { privateKeyPath: 'key.pem', privateKey: 'key' },
+      { privateKey: '' },
+    ],
+    invalidSources: [{}],
+    error: 'Either privateKeyPath or privateKey must be provided for PEM type',
+  },
+  {
+    type: 'jks',
+    schema: HttpSignatureAuthSchema.options[2],
+    validSources: [
+      { keystorePath: 'keys.jks' },
+      { keystoreContent: 'base64' },
+      { keystorePath: 'keys.jks', keystoreContent: 'base64' },
+      { keystoreContent: '' },
+    ],
+    invalidSources: [{}],
+    error: 'Either keystorePath or keystoreContent must be provided for JKS type',
+  },
+  {
+    type: 'pfx',
+    schema: HttpSignatureAuthSchema.options[3],
+    validSources: [
+      { pfxPath: 'keys.pfx' },
+      { pfxContent: 'base64' },
+      { certPath: 'cert.pem', keyPath: 'key.pem' },
+      { certContent: 'base64-cert', keyContent: 'base64-key' },
+    ],
+    invalidSources: [
+      {},
+      { pfxPath: '' },
+      { pfxContent: '' },
+      { certPath: 'cert.pem' },
+      { keyPath: 'key.pem' },
+      { certContent: 'base64-cert' },
+      { keyContent: 'base64-key' },
+      { certPath: 'cert.pem', keyContent: 'base64-key' },
+      { certContent: 'base64-cert', keyPath: 'key.pem' },
+    ],
+    error:
+      'Either pfxPath, pfxContent, both certPath and keyPath, or both certContent and keyContent must be provided for PFX type',
+  },
+])(
+  'HTTP $type runtime signature variant in isolation',
+  ({ type, schema, validSources, invalidSources, error }) => {
+    it.each<Record<string, string | undefined>>(validSources)(
+      'accepts supported key sources and applies runtime defaults: %j',
+      (source) => {
+        const input = { type, ...source };
+        expect(schema.parse(input)).toEqual({
+          ...input,
+          signatureValidityMs: 300000,
+          signatureDataTemplate: '{{signatureTimestamp}}',
+          signatureAlgorithm: 'SHA256',
+        });
+      },
+    );
+
+    it.each(invalidSources)('reports missing or incomplete key sources: %j', (source) => {
+      const result = schema.safeParse({ type, ...source });
+      expect(result.success).toBe(false);
+      if (!result.success) {
+        expect(result.error.issues).toEqual([{ code: 'custom', path: [], message: error }]);
+      }
+    });
+  },
+);
 
 describe('HTTP authoring contracts', () => {
   const validate = new Ajv({ strict: true, allowUnionTypes: true }).compile(
