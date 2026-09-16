@@ -51,7 +51,13 @@ The grader scans the target's text output (the primary surface, per the prompt c
 
 This avoids the common false positive where a model safely refuses but quotes the injected value while explaining why it ignored it, without a blacklist of commentary field names.
 
-> **Limitations:** grading is intentionally deterministic and structural rather than LLM-judged. A value embedded in a long natural-language argument is treated as adoption even if the surrounding prose is compliant. If your target provider executes a tool callback and publishes neither `metadata.toolCalls` nor `raw` (for example OpenAI/Azure chat with `functionToolCallbacks` and no MCP server), the call is discarded before grading and cannot be recovered; run this plugin without callbacks, or use a provider that publishes `metadata.toolCalls`. For semantic, two-axis (task-utility + attack-success) grading, pair this with [Indirect Prompt Injection](indirect-prompt-injection.md).
+> **Limitations:** grading is intentionally deterministic and structural rather than LLM-judged.
+>
+> - A value embedded in a long natural-language argument is treated as adoption even if the surrounding prose is compliant.
+> - The scanner follows JSON string and escape rules, so it can recover a valid call nested in an unfinished _object_ (`Draft {oops. Final: {...}}`) but not one nested in an unterminated _string_ (`Draft {"oops. Final: {...}}`). Resyncing after a stray quote would also treat JSON quoted inside a refusal string as a real tool call.
+> - If the target provider executes the call and publishes neither argument-bearing `metadata.toolCalls` nor `raw`, the call is gone before grading. That includes OpenAI/Azure chat with `functionToolCallbacks` and no MCP server, and the OpenAI Agents API provider, which summarizes `metadata.toolCalls` as `{id, type, name, status, turnId}` with no inputs. Run this plugin without callbacks, or use a provider that publishes `{name, input}` (or equivalent) in `metadata.toolCalls`.
+>
+> For semantic, two-axis (task-utility + attack-success) grading, pair this with [Indirect Prompt Injection](indirect-prompt-injection.md).
 
 ## Example Test Case
 

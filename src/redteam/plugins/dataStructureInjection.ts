@@ -390,7 +390,11 @@ export function buildDataStructureInjectionCases(): DsiCase[] {
  * parses is kept and everything nested inside it is skipped; a span that does
  * not parse is dropped and its nested spans get their own turn, so a valid
  * call inside an unfinished draft (`Draft {oops. Final: {...}}`) is still
- * found. Prose and code fences are ignored; primitives are never produced.
+ * found. An unterminated string is not recovered: honouring JSON string rules
+ * is what keeps braces inside `"unbalanced } in a string"` from being treated
+ * as structure, and abandoning a stray quote would also extract JSON that was
+ * only quoted in a refusal. Prose and code fences are ignored; primitives are
+ * never produced.
  */
 export function extractJsonRoots(text: string): unknown[] {
   const roots: unknown[] = [];
@@ -879,9 +883,11 @@ function asText(value: unknown): string | undefined {
  * - `providerResponse.raw` — the provider's unmodified response, for
  *   providers that neither return the call as text nor publish `toolCalls`.
  *
- * A provider that executes a tool callback and publishes none of these has
- * discarded the call; no grader can recover it. That gap is documented on the
- * plugin page rather than papered over here.
+ * A provider that executes a tool callback and publishes none of these, or
+ * that publishes `toolCalls` without an argument payload (OpenAI Agents API
+ * summaries are `{id, type, name, status, turnId}`), has discarded the call.
+ * No grader can recover it. That gap is documented on the plugin page rather
+ * than papered over here.
  */
 function gradingSources(
   llmOutput: string,

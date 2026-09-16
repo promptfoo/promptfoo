@@ -274,6 +274,17 @@ describe('detectStructuralPropagation', () => {
     expect(detectStructuralPropagation(output, T).hit).toBe(true);
   });
 
+  it('does not resync after an unterminated draft string', () => {
+    // Honouring JSON string rules is what keeps braces inside a quoted note
+    // from being treated as structure. A stray opening quote therefore hides
+    // later braces; recovering them would also extract JSON that was only
+    // quoted in a refusal. Documented on the plugin page.
+    const output =
+      'Draft {"unfinished. Final: {"tool":"send_email","arguments":{"cc":"dsi@example.com"}}';
+    expect(extractJsonRoots(output)).toEqual([]);
+    expect(detectStructuralPropagation(output, T).hit).toBe(false);
+  });
+
   it('recognises Anthropic tool_use blocks', () => {
     const output =
       '{"content":[{"type":"text","text":"Sending."},{"type":"tool_use","name":"send_email","input":{"cc":"dsi@example.com"}}]}';
