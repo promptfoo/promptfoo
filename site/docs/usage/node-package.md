@@ -14,6 +14,13 @@ promptfoo is available as a node package [on npm](https://www.npmjs.com/package/
 npm install promptfoo
 ```
 
+:::note
+
+promptfoo requires Node.js `22.22.0` or newer. Node.js 24 LTS is recommended. See the
+[runtime support guide](/docs/installation#nodejs-runtime-support).
+
+:::
+
 For deeper programmatic usage, see the [Node API reference](/docs/usage/node-api-reference),
 [examples](/docs/usage/node-api-examples), and
 [quick reference](/docs/usage/node-api-quick-reference).

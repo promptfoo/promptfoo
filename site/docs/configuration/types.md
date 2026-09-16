@@ -174,16 +174,18 @@ interface ProviderEmbeddingResponse {
 
 ### GuardrailResponse {#guardrails}
 
-Represents guardrail results from a provider, indicating if input or output was flagged.
+`GuardrailResponse` is the normalized safety decision returned by a target provider. The [`guardrails` assertion](/docs/configuration/expected-outputs/guardrails) reads `flagged` as the verdict; the directional fields only identify which side triggered the decision.
 
 ```typescript
 interface GuardrailResponse {
-  flagged?: boolean;
+  flagged?: boolean; // Controls guardrails/not-guardrails pass or fail
   flaggedInput?: boolean;
   flaggedOutput?: boolean;
   reason?: string;
 }
 ```
+
+For a custom target, set `flagged` explicitly. `flaggedInput: true` or `flaggedOutput: true` without `flagged: true` is diagnostic only and does not fail the assertion. If both the top-level object and the final `metadata.redteamHistory` guardrail entry are absent, Promptfoo currently treats the response as unflagged; this does not prove that a guardrail ran.
 
 ## Evaluation Input Types
 
@@ -577,6 +579,10 @@ interface EvaluateResult {
   cost?: number;
   metadata?: Record<string, any>;
   tokenUsage?: Required<TokenUsage>;
+  // Trace linkage (only set when tracing is enabled for this row).
+  // Pass `evaluationId` to GET /api/traces/evaluation/:evaluationId to fetch all traces for the eval.
+  evaluationId?: string;
+  traceId?: string;
 }
 ```
 

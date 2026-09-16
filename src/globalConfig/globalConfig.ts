@@ -5,8 +5,9 @@
 import * as fs from 'fs';
 import * as path from 'path';
 
-import yaml from 'js-yaml';
+import * as yaml from 'js-yaml';
 import { getConfigDirectoryPath } from '../util/config/manage';
+import { loadYaml } from '../util/yamlLoad';
 
 import type { GlobalConfig } from '../configTypes';
 
@@ -22,7 +23,7 @@ export function readGlobalConfig(): GlobalConfig {
   const configFilePath = path.join(configDir, 'promptfoo.yaml');
   let globalConfig: GlobalConfig = { id: crypto.randomUUID() };
   if (fs.existsSync(configFilePath)) {
-    globalConfig = (yaml.load(fs.readFileSync(configFilePath, 'utf-8')) as GlobalConfig) || {};
+    globalConfig = (loadYaml(fs.readFileSync(configFilePath, 'utf-8')) as GlobalConfig) || {};
     if (!globalConfig?.id) {
       globalConfig = { ...globalConfig, id: crypto.randomUUID() };
       writeGlobalConfig(globalConfig);

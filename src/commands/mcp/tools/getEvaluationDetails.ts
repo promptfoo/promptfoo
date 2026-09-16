@@ -1,6 +1,7 @@
 import dedent from 'dedent';
 import { z } from 'zod';
 import { readResult } from '../../../util/database';
+import { redactAzureBlobSasTokens } from '../../../util/sanitizer';
 import { createToolResponse } from '../lib/utils';
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 
@@ -49,7 +50,10 @@ export function registerGetEvaluationDetailsTool(server: McpServer) {
         }
 
         // Extract key metrics for easier consumption
-        const evalData = result.result;
+        const evalData = {
+          ...result.result,
+          config: redactAzureBlobSasTokens(result.result.config),
+        };
         const summary = {
           id,
         } as EvaluationDetailsSummary;
