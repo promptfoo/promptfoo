@@ -4,6 +4,8 @@ const mocks = vi.hoisted(() => ({
   addSpans: vi.fn(),
   createTraceProvider: vi.fn(),
   getSpans: vi.fn(),
+  getTraceMetadata: vi.fn(),
+  markTraceIncomplete: vi.fn(),
   getTraceStore: vi.fn(),
   isExternalTraceProvider: vi.fn(),
   logger: { debug: vi.fn(), error: vi.fn(), warn: vi.fn() },
@@ -20,13 +22,17 @@ vi.mock('../../src/tracing/store', async (importOriginal) => ({
 }));
 
 import { TraceProviderError } from '../../src/tracing/providers/types';
-import { sanitizeTraceAttributes } from '../../src/tracing/sanitizeAttributes';
+import {
+  getTraceTextRedactionState,
+  sanitizeTraceAttributes,
+} from '../../src/tracing/sanitizeAttributes';
 import { isRelevantSpan, matchesSpanFilter } from '../../src/tracing/spanFilter';
+import { TraceLimitError } from '../../src/tracing/store';
 import { extractTraceIdFromTraceparent, fetchTraceContext } from '../../src/tracing/traceContext';
 
-import type { SpanData, TraceSpanQueryOptions } from '../../src/tracing/store';
+import type { AddSpansOptions, SpanData, TraceSpanQueryOptions } from '../../src/tracing/store';
 
-const providerConfig = { id: 'tempo' as const, endpoint: 'http://tempo:3200' };
+let providerConfig = { id: 'tempo' as const, endpoint: 'http://tempo:3200' };
 const storedSpans: SpanData[] = [];
 
 function mockExternalTrace(spans: SpanData[], traceId = 'trace-1') {
@@ -36,13 +42,413 @@ function mockExternalTrace(spans: SpanData[], traceId = 'trace-1') {
 }
 
 describe('fetchTraceContext', () => {
+  it.each(['required', 'ordinary', 'empty', 'after complete'])(
+    'handles provider-reported incomplete snapshots: %s',
+    async (state) => {
+      const span = { spanId: 'valid', name: 'inventory.lookup', startTime: 1, endTime: 2 };
+      const spans = state === 'empty' ? [] : [span];
+      const fetch = mockExternalTrace(spans);
+      fetch.mockResolvedValue({ traceId: 'trace-1', spans, fetchedAt: 3, incomplete: true });
+      const previousSnapshots = state === 'after complete' ? 2 : 0;
+      for (let index = 0; index < previousSnapshots; index++) {
+        fetch.mockResolvedValueOnce({ traceId: 'trace-1', spans: [span], fetchedAt: index });
+      }
+      const pending = fetchTraceContext('trace-1', {
+        providerConfig,
+        requireComplete: state !== 'ordinary',
+        maxRetries: 2,
+        retryDelayMs: 0,
+        queryDelay: 0,
+      });
+      if (state === 'ordinary') {
+        await expect(pending).resolves.toMatchObject({ spans: [{ spanId: 'valid' }] });
+        expect(mocks.markTraceIncomplete).not.toHaveBeenCalled();
+      } else {
+        await expect(pending).rejects.toMatchObject({
+          name: 'TraceEvidenceError',
+          message: 'Cannot grade incomplete trace: malformed provider snapshot.',
+        });
+        expect(mocks.markTraceIncomplete).toHaveBeenCalledWith(
+          'trace-1',
+          'malformed provider snapshot',
+        );
+        expect(mocks.addSpans).toHaveBeenCalledTimes(previousSnapshots);
+      }
+      expect(fetch).toHaveBeenCalledTimes(previousSnapshots + 1);
+    },
+  );
+
+  it.each([false, true])(
+    'ignores object key order while checking stability (array changed: %s)',
+    async (arrayChanged) => {
+      const span: SpanData = {
+        spanId: 'lookup',
+        name: 'inventory.search',
+        startTime: 1,
+        endTime: 2,
+        attributes: {
+          'tool.name': 'inventory.search',
+          details: { query: 'public records', limit: 2 },
+          order: ['first', 'second'],
+          records: [{ rows: 2, status: 'ok' }],
+        },
+      };
+      const reordered: SpanData = {
+        ...span,
+        attributes: {
+          order: arrayChanged ? ['second', 'first'] : ['first', 'second'],
+          records: [{ status: 'ok', rows: 2 }],
+          details: { limit: 2, query: 'public records' },
+          'tool.name': 'inventory.search',
+        },
+      };
+      const fetch = mockExternalTrace([span]);
+      fetch
+        .mockResolvedValueOnce({ traceId: 'trace-1', spans: [span], fetchedAt: 1 })
+        .mockResolvedValue({ traceId: 'trace-1', spans: [reordered], fetchedAt: 2 });
+      const pending = fetchTraceContext('trace-1', {
+        providerConfig,
+        requireComplete: true,
+        waitForStableSpans: true,
+        maxRetries: 1,
+        retryDelayMs: 0,
+        queryDelay: 0,
+      });
+      if (arrayChanged) {
+        await expect(pending).rejects.toMatchObject({ name: 'TraceEvidenceError' });
+      } else {
+        await expect(pending).resolves.toMatchObject({
+          spans: [{ spanId: 'lookup', attributes: reordered.attributes }],
+        });
+      }
+      expect(fetch).toHaveBeenCalledTimes(2);
+    },
+  );
+
+  it.each(['open', 'changing', 'empty after open', 'error after open'])(
+    'rejects required external evidence that remains %s',
+    async (state) => {
+      mocks.isExternalTraceProvider.mockReturnValue(true);
+      const span = {
+        spanId: 'target',
+        name: 'tool.call',
+        startTime: 1,
+        ...(state === 'changing' ? { endTime: 2 } : {}),
+      };
+      const fetch = mockExternalTrace([span]);
+      if (state === 'changing') {
+        fetch
+          .mockResolvedValueOnce({ fetchedAt: 1, spans: [span] })
+          .mockResolvedValue({ fetchedAt: 2, spans: [{ ...span, endTime: 3 }] });
+      }
+      if (state === 'empty after open') {
+        fetch
+          .mockResolvedValueOnce({ fetchedAt: 1, spans: [span] })
+          .mockResolvedValue({ fetchedAt: 2, spans: [] });
+      }
+      if (state === 'error after open') {
+        fetch
+          .mockResolvedValueOnce({ fetchedAt: 1, spans: [span] })
+          .mockRejectedValue(new TraceProviderError('temporary failure', { retryable: true }));
+      }
+      await expect(
+        fetchTraceContext('trace-1', {
+          providerConfig,
+          requireComplete: true,
+          waitForStableSpans: true,
+          maxRetries: 1,
+          retryDelayMs: 0,
+          queryDelay: 0,
+        }),
+      ).rejects.toMatchObject({ name: 'TraceEvidenceError' });
+    },
+  );
+
+  it.each([false, true])('rejects missing required evidence (external: %s)', async (external) => {
+    mocks.isExternalTraceProvider.mockReturnValue(external);
+    if (external) {
+      mockExternalTrace([]);
+    } else {
+      mocks.getSpans.mockResolvedValue([]);
+    }
+    await expect(
+      fetchTraceContext('trace-1', {
+        ...(external ? { providerConfig } : {}),
+        requireComplete: true,
+        maxRetries: 0,
+        retryDelayMs: 0,
+        queryDelay: 0,
+      }),
+    ).rejects.toMatchObject({
+      name: 'TraceEvidenceError',
+      message: 'No execution trace evidence was collected for grading',
+    });
+  });
+
+  it.each([false, true])(
+    'propagates required evidence failures (retryable: %s)',
+    async (retryable) => {
+      mocks.isExternalTraceProvider.mockReturnValue(true);
+      const failure = new TraceProviderError('Evidence backend unavailable', { retryable });
+      const fetch = mockExternalTrace([]).mockRejectedValue(failure);
+      await expect(
+        fetchTraceContext('trace-1', {
+          providerConfig,
+          requireComplete: true,
+          maxRetries: 1,
+          retryDelayMs: 0,
+        }),
+      ).rejects.toMatchObject({ name: 'TraceEvidenceError', cause: failure });
+      expect(fetch).toHaveBeenCalledTimes(retryable ? 2 : 1);
+    },
+  );
+
+  it.each([true, false])(
+    'retains required evidence after a transient retry error: %s',
+    async (retryable) => {
+      mocks.isExternalTraceProvider.mockReturnValue(true);
+      const spans = [{ spanId: 'target', name: 'target.call', startTime: 1, endTime: 2 }];
+      const failure = new TraceProviderError('Evidence backend unavailable', { retryable });
+      mockExternalTrace(spans)
+        .mockResolvedValueOnce({ fetchedAt: 123, spans })
+        .mockRejectedValue(failure);
+      const result = fetchTraceContext('trace-1', {
+        providerConfig,
+        requireComplete: true,
+        maxRetries: 1,
+        retryDelayMs: 0,
+        queryDelay: 0,
+      });
+      if (retryable) {
+        expect((await result)?.spans.map((span) => span.spanId)).toEqual(['target']);
+      } else {
+        await expect(result).rejects.toMatchObject({ name: 'TraceEvidenceError', cause: failure });
+      }
+    },
+  );
+
+  it('does not fall back to earlier evidence after a required store read fails', async () => {
+    mocks.isExternalTraceProvider.mockReturnValue(true);
+    mockExternalTrace([{ spanId: 'target', name: 'target.call', startTime: 1, endTime: 2 }]);
+    const failure = new Error('Summary read failed');
+    mocks.getSpans
+      .mockResolvedValueOnce([{ spanId: 'target', name: 'target.call', startTime: 1, endTime: 2 }])
+      .mockRejectedValue(failure);
+    await expect(
+      fetchTraceContext('trace-1', {
+        providerConfig,
+        requireComplete: true,
+        maxRetries: 1,
+        retryDelayMs: 0,
+        queryDelay: 0,
+      }),
+    ).rejects.toMatchObject({ name: 'TraceEvidenceError', cause: failure });
+  });
+
+  it('normalizes malformed required backend responses', async () => {
+    mocks.isExternalTraceProvider.mockReturnValue(true);
+    const failure = new SyntaxError('Malformed trace JSON');
+    mockExternalTrace([]).mockRejectedValue(failure);
+    await expect(
+      fetchTraceContext('trace-1', {
+        providerConfig,
+        requireComplete: true,
+        maxRetries: 0,
+        queryDelay: 0,
+      }),
+    ).rejects.toMatchObject({ name: 'TraceEvidenceError', cause: failure });
+  });
+
+  it('normalizes required summary read failures', async () => {
+    mocks.isExternalTraceProvider.mockReturnValue(true);
+    mockExternalTrace([{ spanId: 'target', name: 'target.call', startTime: 1, endTime: 2 }]);
+    const failure = new Error('Summary read failed');
+    mocks.getSpans.mockRejectedValue(failure);
+    await expect(
+      fetchTraceContext('trace-1', {
+        providerConfig,
+        requireComplete: true,
+        maxRetries: 0,
+        queryDelay: 0,
+      }),
+    ).rejects.toMatchObject({ name: 'TraceEvidenceError', cause: failure });
+  });
+
+  it.each([false, true])(
+    'collects late spans through the complete grading window (external: %s)',
+    async (external) => {
+      const early = [{ spanId: 'target', name: 'target.call', startTime: 1, endTime: 2 }];
+      const complete = [
+        ...early,
+        {
+          spanId: 'sql',
+          name: 'database.query',
+          startTime: 2,
+          endTime: 3,
+          attributes: { 'db.query.text': 'SELECT * FROM secrets' },
+        },
+      ];
+      mocks.isExternalTraceProvider.mockReturnValue(external);
+      let read;
+      if (external) {
+        read = mockExternalTrace(complete);
+        read
+          .mockResolvedValueOnce({ spans: early, fetchedAt: 1 })
+          .mockResolvedValueOnce({ spans: early, fetchedAt: 2 });
+      } else {
+        read = mocks.getSpans;
+        read.mockResolvedValue(complete).mockResolvedValueOnce(early).mockResolvedValueOnce(early);
+      }
+      const result = await fetchTraceContext('trace-1', {
+        ...(external ? { providerConfig } : {}),
+        requireComplete: true,
+        maxRetries: 3,
+        retryDelayMs: 0,
+        queryDelay: 0,
+      });
+      expect(result?.spans.map((span) => span.spanId)).toEqual(['target', 'sql']);
+      expect(read).toHaveBeenCalledTimes(external ? 4 : 5);
+    },
+  );
+
+  it.each([false, true])(
+    'reads complete grading evidence despite view filters (external: %s)',
+    async (external) => {
+      const spans: SpanData[] = [
+        { spanId: 'previous', name: 'previous iteration', startTime: 1, endTime: 2 },
+        {
+          spanId: 'clean',
+          name: 'target.call',
+          startTime: 2,
+          endTime: 3,
+          attributes: { 'gen_ai.operation.name': 'chat' },
+        },
+        {
+          spanId: 'unsafe',
+          name: 'tool update_seat',
+          startTime: 3,
+          endTime: 4,
+          attributes: {
+            'tool.name': 'update_seat',
+            'agentic.evidence_json': JSON.stringify({ padding: 'x'.repeat(500), finding: true }),
+          },
+        },
+      ];
+      mocks.isExternalTraceProvider.mockReturnValue(external);
+      if (external) {
+        mockExternalTrace(spans);
+      } else {
+        storedSpans.push(...spans);
+      }
+      const result = await fetchTraceContext('trace-1', {
+        ...(external ? { providerConfig } : {}),
+        queryDelay: 0,
+        maxRetries: 0,
+        earliestStartTime: 2,
+        requireComplete: true,
+        includeInternalSpans: false,
+        maxSpans: 1,
+        maxDepth: 1,
+        spanFilter: ['target'],
+      });
+      expect(result?.spans.map((span) => span.spanId)).toEqual(['clean', 'unsafe']);
+      expect(result?.spans[1].attributes['agentic.evidence_json']).toBe(
+        spans[2].attributes!['agentic.evidence_json'],
+      );
+      expect(result?.summary?.spans.map((span) => span.spanId)).toEqual(['clean']);
+      expect(result?.summary?.insights.join(' ')).not.toContain('update_seat');
+      expect(mocks.getSpans).toHaveBeenCalledWith(
+        'trace-1',
+        expect.objectContaining({
+          earliestStartTime: 2,
+          includeInternalSpans: true,
+          maxSpans: undefined,
+          maxDepth: undefined,
+          spanFilter: undefined,
+          sanitizeAttributes: false,
+        }),
+      );
+    },
+  );
+
+  it.each([false, true])(
+    'rejects incomplete local traces even with no visible spans (%s)',
+    async (hasSpans) => {
+      mocks.isExternalTraceProvider.mockReturnValue(false);
+      mocks.getTraceMetadata.mockResolvedValue({ promptfooTraceIncomplete: 'limit exceeded' });
+      if (hasSpans) {
+        storedSpans.push({ spanId: 'clean-prefix', name: 'target.call', startTime: 1 });
+      }
+      await expect(fetchTraceContext('trace-1', { maxRetries: 0 })).rejects.toThrow(
+        TraceLimitError,
+      );
+    },
+  );
+
+  it('rejects previously incomplete external traces before fetching a clean snapshot', async () => {
+    const fetchTrace = mockExternalTrace([
+      { spanId: 'clean-prefix', name: 'target.call', startTime: 1 },
+    ]);
+    mocks.getTraceMetadata.mockResolvedValue({ promptfooTraceIncomplete: 'limit exceeded' });
+    await expect(
+      fetchTraceContext('trace-1', { providerConfig, queryDelay: 0, maxRetries: 0 }),
+    ).rejects.toThrow(TraceLimitError);
+    expect(fetchTrace).not.toHaveBeenCalled();
+  });
+
+  it('persists external response limits and rejects grading without retrying', async () => {
+    const fetchTrace = vi
+      .fn()
+      .mockRejectedValue(new TraceProviderError('Response too large', { limitExceeded: true }));
+    mocks.createTraceProvider.mockReturnValue({ id: 'tempo', fetchTrace });
+    await expect(
+      fetchTraceContext('trace-1', { providerConfig, queryDelay: 0, maxRetries: 2 }),
+    ).rejects.toThrow(TraceLimitError);
+    expect(fetchTrace).toHaveBeenCalledOnce();
+    expect(mocks.markTraceIncomplete).toHaveBeenCalledWith('trace-1');
+    expect(mocks.addSpans).not.toHaveBeenCalled();
+  });
+
+  it('propagates external snapshot limits without retrying or falling back to absent evidence', async () => {
+    const fetchTrace = mockExternalTrace([
+      { spanId: 'clean-prefix', name: 'target.call', startTime: 1 },
+    ]);
+    mocks.addSpans.mockRejectedValue(new TraceLimitError());
+    await expect(
+      fetchTraceContext('trace-1', { providerConfig, queryDelay: 0, maxRetries: 2 }),
+    ).rejects.toThrow(TraceLimitError);
+    expect(fetchTrace).toHaveBeenCalledOnce();
+  });
+
+  it('distinguishes raw redaction text from persisted redaction history', () => {
+    expect(
+      getTraceTextRedactionState({}, 'raw', [{ attributes: { note: '[REDACTED]' } }]).incomplete,
+    ).toBe(false);
+    expect(
+      getTraceTextRedactionState({}, 'stored', [
+        { attributes: { 'promptfoo.redaction.history': '[REDACTED]' } },
+      ]).incomplete,
+    ).toBe(true);
+  });
+
   beforeEach(() => {
     vi.resetAllMocks();
     storedSpans.length = 0;
-    mocks.addSpans.mockImplementation(async (_traceId: string, spans: SpanData[]) => {
-      storedSpans.push(...spans);
-      return { stored: true };
-    });
+    providerConfig = { id: 'tempo', endpoint: 'http://tempo:3200' };
+    mocks.addSpans.mockImplementation(
+      async (_traceId: string, spans: SpanData[], options?: AddSpansOptions) => {
+        const combined = [...storedSpans, ...spans];
+        const sanitized = options?.redactSpans ? options.redactSpans(combined) : combined;
+        const byId = new Map<string, SpanData>();
+        for (const span of sanitized) {
+          if (options?.updateExisting || !byId.has(span.spanId)) {
+            byId.set(span.spanId, span);
+          }
+        }
+        storedSpans.splice(0, storedSpans.length, ...byId.values());
+        return { stored: true };
+      },
+    );
     mocks.getSpans.mockImplementation(async (_traceId: string, options: TraceSpanQueryOptions) => {
       let spans = storedSpans.filter((span) => {
         if (options.earliestStartTime && span.startTime < options.earliestStartTime) {
@@ -67,7 +473,12 @@ describe('fetchTraceContext', () => {
             : sanitizeTraceAttributes(span.attributes),
       }));
     });
-    mocks.getTraceStore.mockReturnValue({ addSpans: mocks.addSpans, getSpans: mocks.getSpans });
+    mocks.getTraceStore.mockReturnValue({
+      addSpans: mocks.addSpans,
+      getSpans: mocks.getSpans,
+      getTraceMetadata: mocks.getTraceMetadata,
+      markTraceIncomplete: mocks.markTraceIncomplete,
+    });
     mocks.isExternalTraceProvider.mockReturnValue(true);
   });
 
@@ -98,6 +509,8 @@ describe('fetchTraceContext', () => {
     expect(fetchTrace).toHaveBeenCalledWith('trace-1', undefined);
     expect(mocks.addSpans).toHaveBeenCalledWith('trace-1', [internalSpan, targetSpan], {
       warnIfMissingTrace: false,
+      updateExisting: true,
+      source: 'external',
     });
     expect(mocks.getSpans).toHaveBeenCalledWith('trace-1', {
       includeInternalSpans: false,
@@ -152,6 +565,45 @@ describe('fetchTraceContext', () => {
     ]);
   });
 
+  it('limits an ordinary read and fetches the complete snapshot for later grading', async () => {
+    const spans = [
+      { spanId: 'first', name: 'target.call', startTime: 1, endTime: 2 },
+      {
+        spanId: 'last',
+        name: 'db.query',
+        startTime: 2,
+        endTime: 3,
+        attributes: { 'db.statement': 'unsafe query' },
+      },
+    ];
+    const fetchTrace = mockExternalTrace(spans);
+    fetchTrace.mockImplementation(async (_traceId, options) => ({
+      fetchedAt: 123,
+      traceId: 'trace-1',
+      spans: options?.maxSpans === undefined ? spans : spans.slice(0, options.maxSpans),
+    }));
+    const result = await fetchTraceContext('trace-1', {
+      providerConfig,
+      queryDelay: 0,
+      maxRetries: 0,
+      includeInternalSpans: true,
+      maxSpans: 1,
+    });
+    expect(fetchTrace).toHaveBeenCalledWith('trace-1', { maxSpans: 1 });
+    expect(storedSpans).toEqual(spans.slice(0, 1));
+    expect(result?.spans).toHaveLength(1);
+    const grading = await fetchTraceContext('trace-1', {
+      providerConfig,
+      queryDelay: 0,
+      maxRetries: 0,
+      requireComplete: true,
+      maxSpans: 1,
+    });
+    expect(fetchTrace).toHaveBeenLastCalledWith('trace-1', undefined);
+    expect(storedSpans).toEqual(spans);
+    expect(grading?.spans).toHaveLength(2);
+  });
+
   it('applies wildcard filters to externally fetched spans', async () => {
     mockExternalTrace([
       {
@@ -183,10 +635,17 @@ describe('fetchTraceContext', () => {
     const previousTurn = { spanId: 'previous', name: 'previous.call', startTime: 100 };
     const currentTurn = { spanId: 'current', name: 'current.call', startTime: 200 };
     const fetchTrace = mockExternalTrace([previousTurn, currentTurn]);
+    fetchTrace.mockImplementation(async (_traceId, options) => ({
+      traceId: 'trace-1',
+      fetchedAt: 123,
+      spans: [previousTurn, currentTurn].slice(0, options?.maxSpans),
+    }));
 
     const result = await fetchTraceContext('trace-1', {
       providerConfig,
       earliestStartTime: 150,
+      maxSpans: 1,
+      includeInternalSpans: true,
       maxRetries: 0,
       queryDelay: 0,
     });
@@ -209,7 +668,6 @@ describe('fetchTraceContext', () => {
     await fetchTraceContext('trace-1', {
       providerConfig,
       abortSignal: controller.signal,
-      earliestStartTime: 150,
       includeInternalSpans: true,
       maxRetries: 0,
       maxSpans: 50,
@@ -219,7 +677,6 @@ describe('fetchTraceContext', () => {
 
     expect(fetchTrace).toHaveBeenCalledWith('trace-1', {
       abortSignal: controller.signal,
-      earliestStartTime: 150,
       maxSpans: 50,
     });
   });
@@ -261,6 +718,25 @@ describe('fetchTraceContext', () => {
     expect(result?.spans.map((span) => span.name)).toEqual(['execute_tool search']);
   });
 
+  it.each([
+    { maxDepth: 1 },
+    { redactAttributes: ['credential'] },
+    { requireComplete: true },
+    { waitForStableSpans: true },
+  ])('withholds provider limits when the full snapshot is required: %j', async (options) => {
+    const fetchTrace = mockExternalTrace([
+      { spanId: 'target', name: 'target', startTime: 1, endTime: 2 },
+    ]);
+    await fetchTraceContext('trace-1', {
+      providerConfig,
+      maxSpans: 50,
+      maxRetries: 0,
+      queryDelay: 0,
+      ...options,
+    });
+    expect(fetchTrace).toHaveBeenCalledWith('trace-1', undefined);
+  });
+
   it('preserves time bounds and cancellation when the result limit must be applied locally', async () => {
     const controller = new AbortController();
     const fetchTrace = mockExternalTrace([
@@ -300,6 +776,67 @@ describe('fetchTraceContext', () => {
     expect(result?.spans.map((span) => span.name)).toEqual(['target.call']);
   });
 
+  it.each(['mixed', 'all cyclic', 'all cyclic after complete'])(
+    'rejects required external evidence with cyclic parent relationships: %s',
+    async (snapshot) => {
+      const valid = { spanId: 'valid', name: 'target.call', startTime: 1, endTime: 2 };
+      const cycles = [
+        { spanId: 'a', parentSpanId: 'b', name: 'work.a', startTime: 1, endTime: 2 },
+        { spanId: 'b', parentSpanId: 'a', name: 'work.b', startTime: 1, endTime: 2 },
+      ];
+      const fetch = mockExternalTrace(snapshot === 'mixed' ? [valid, ...cycles] : cycles);
+      const previousSnapshots = snapshot === 'all cyclic after complete' ? 2 : 0;
+      for (let index = 0; index < previousSnapshots; index++) {
+        fetch.mockResolvedValueOnce({ traceId: 'trace-1', fetchedAt: index, spans: [valid] });
+      }
+
+      await expect(
+        fetchTraceContext('trace-1', {
+          providerConfig,
+          requireComplete: true,
+          waitForStableSpans: true,
+          maxRetries: 2,
+          retryDelayMs: 0,
+          queryDelay: 0,
+        }),
+      ).rejects.toMatchObject({
+        name: 'TraceEvidenceError',
+        message: 'Cannot grade incomplete trace: cyclic parent relationships.',
+      });
+      expect(fetch).toHaveBeenCalledTimes(previousSnapshots + 1);
+      expect(mocks.addSpans).toHaveBeenCalledTimes(previousSnapshots);
+      expect(mocks.markTraceIncomplete).toHaveBeenCalledWith(
+        'trace-1',
+        'cyclic parent relationships',
+      );
+    },
+  );
+
+  it.each([false, true])(
+    'rejects previously recorded cyclic trace evidence (external: %s)',
+    async (external) => {
+      mocks.isExternalTraceProvider.mockReturnValue(external);
+      const fetch = mockExternalTrace([
+        { spanId: 'valid', name: 'target.call', startTime: 1, endTime: 2 },
+      ]);
+      mocks.getTraceMetadata.mockResolvedValue({
+        promptfooTraceIncomplete: 'cyclic parent relationships',
+      });
+      await expect(
+        fetchTraceContext('trace-1', {
+          ...(external && { providerConfig }),
+          requireComplete: true,
+          maxRetries: 0,
+          queryDelay: 0,
+        }),
+      ).rejects.toMatchObject({
+        name: 'TraceEvidenceError',
+        message: 'Cannot grade incomplete trace: cyclic parent relationships.',
+      });
+      expect(fetch).not.toHaveBeenCalled();
+    },
+  );
+
   it('redacts configured nested and numeric attribute values before persistence', async () => {
     mockExternalTrace([
       {
@@ -310,6 +847,7 @@ describe('fetchTraceContext', () => {
         attributes: {
           nested: { authorization: 'secret-token' },
           'account.pin': 123456,
+          'account.private': { value: 'SYNTHETIC_PRIVATE_CONTAINER' },
         },
       },
     ]);
@@ -318,7 +856,7 @@ describe('fetchTraceContext', () => {
       providerConfig,
       queryDelay: 0,
       maxRetries: 0,
-      redactAttributes: ['authorization', 'pin'],
+      redactAttributes: ['authorization', 'pin', 'private'],
     });
 
     expect(storedSpans).toEqual([
@@ -328,12 +866,78 @@ describe('fetchTraceContext', () => {
         attributes: {
           nested: { authorization: '[REDACTED]' },
           'account.pin': '[REDACTED]',
+          'account.private': '[REDACTED]',
         },
       }),
     ]);
   });
 
-  it('stores large traces in database-safe batches', async () => {
+  it.each([false, true])(
+    'redacts cross-span output echoes before external persistence (JSON: %s)',
+    async (serialized) => {
+      const secret = 'PRIVATE_EXTERNAL_SQL_RESULT';
+      mockExternalTrace([
+        {
+          spanId: 'source',
+          name: 'sql',
+          startTime: 1,
+          attributes: { 'tool.output': serialized ? JSON.stringify({ rows: [secret] }) : secret },
+        },
+        {
+          spanId: 'echo',
+          name: `process ${secret}`,
+          statusMessage: `received ${secret}`,
+          startTime: 2,
+          attributes: { 'tool.name': `run_query ${secret}`, 'db.statement': `SELECT '${secret}'` },
+        },
+      ]);
+      const result = await fetchTraceContext('trace-1', {
+        providerConfig,
+        queryDelay: 0,
+        maxRetries: 0,
+        redactAttributes: ['tool.output'],
+      });
+      expect(result).not.toBeNull();
+      expect(JSON.stringify(storedSpans)).not.toContain(secret);
+      expect(JSON.stringify(result)).not.toContain(secret);
+    },
+  );
+
+  it.each(['source-first', 'echo-first'])(
+    'redacts SQL echoes across external snapshots (%s)',
+    async (order) => {
+      const secret = 'PRIVATE_EXTERNAL_QUERY_ECHO';
+      const source = {
+        spanId: 'source',
+        name: 'source',
+        startTime: 1,
+        attributes: { authorization: secret },
+      };
+      const echo = {
+        spanId: 'echo',
+        name: 'tool.call',
+        startTime: 2,
+        attributes: { 'tool.name': 'run_query', 'db.statement': `SELECT '${secret}'` },
+      };
+      for (const span of order === 'source-first' ? [source, echo] : [echo, source]) {
+        mockExternalTrace([span]);
+        await fetchTraceContext('trace-1', {
+          providerConfig,
+          queryDelay: 0,
+          maxRetries: 0,
+          sanitizeAttributes: false,
+          redactAttributes: ['authorization'],
+        });
+      }
+      expect(storedSpans).toHaveLength(2);
+      expect(JSON.stringify(storedSpans)).not.toContain(secret);
+      expect(storedSpans.find((span) => span.spanId === 'echo')?.attributes?.['db.statement']).toBe(
+        "SELECT '[REDACTED]'",
+      );
+    },
+  );
+
+  it('submits the complete external snapshot atomically', async () => {
     const spans = Array.from({ length: 501 }, (_, index) => ({
       spanId: String(index),
       name: 'target.call',
@@ -343,9 +947,163 @@ describe('fetchTraceContext', () => {
 
     await fetchTraceContext('trace-1', { providerConfig, queryDelay: 0, maxRetries: 0 });
 
-    expect(mocks.addSpans).toHaveBeenCalledTimes(2);
-    expect(mocks.addSpans.mock.calls[0][1]).toHaveLength(500);
-    expect(mocks.addSpans.mock.calls[1][1]).toHaveLength(1);
+    expect(mocks.addSpans).toHaveBeenCalledOnce();
+    expect(mocks.addSpans.mock.calls[0][1]).toHaveLength(501);
+  });
+
+  it.each(['new-span', 'updated-span'])(
+    'polls a nonempty trace until its %s snapshot settles',
+    async (mode) => {
+      vi.useFakeTimers();
+      try {
+        const model = { spanId: 'model', name: 'model', startTime: 1, endTime: 2 };
+        const initial =
+          mode === 'new-span'
+            ? [model]
+            : [{ ...model, endTime: undefined, attributes: { 'db.query.text': 'SELECT 1' } }];
+        const sql = {
+          spanId: mode === 'new-span' ? 'sql' : 'model',
+          name: 'sql execution',
+          startTime: 1,
+          endTime: 3,
+          attributes: { 'db.query.text': 'SELECT * FROM accounts WHERE id = 1 OR 1=1' },
+        };
+        const completed = mode === 'new-span' ? [model, sql] : [sql];
+        const fetchTrace = vi
+          .fn()
+          .mockResolvedValueOnce({ fetchedAt: 1, traceId: 'trace-1', spans: initial })
+          .mockResolvedValue({ fetchedAt: 2, traceId: 'trace-1', spans: completed });
+        mocks.createTraceProvider.mockReturnValue({ fetchTrace, id: 'tempo' });
+        const pending = fetchTraceContext('trace-1', {
+          providerConfig,
+          queryDelay: 0,
+          maxRetries: 5,
+          retryDelayMs: 1000,
+          waitForStableSpans: true,
+        });
+        await vi.runAllTimersAsync();
+        const result = await pending;
+        expect(fetchTrace).toHaveBeenCalledTimes(3);
+        expect(result?.spans).toEqual(
+          expect.arrayContaining([
+            expect.objectContaining({ spanId: sql.spanId, endTime: 3, attributes: sql.attributes }),
+          ]),
+        );
+      } finally {
+        vi.useRealTimers();
+      }
+    },
+  );
+
+  it.each(['empty', 'error'])(
+    'retains the latest usable snapshot when later stability polls return %s',
+    async (mode) => {
+      vi.useFakeTimers();
+      try {
+        const span = {
+          spanId: 'sql',
+          name: 'sql execution',
+          startTime: 1,
+          endTime: 2,
+          attributes: { 'db.query.text': 'SELECT * FROM accounts WHERE id = 1 OR 1=1' },
+        };
+        const fetchTrace = vi.fn().mockResolvedValueOnce({
+          fetchedAt: 123,
+          traceId: 'trace-1',
+          spans: [span],
+        });
+        if (mode === 'empty') {
+          fetchTrace.mockResolvedValue({ fetchedAt: 456, traceId: 'trace-1', spans: [] });
+        } else {
+          fetchTrace.mockRejectedValue(new Error('temporary backend failure'));
+        }
+        mocks.createTraceProvider.mockReturnValue({ fetchTrace, id: 'tempo' });
+        const pending = fetchTraceContext('trace-1', {
+          providerConfig,
+          queryDelay: 0,
+          maxRetries: 2,
+          retryDelayMs: 1000,
+          waitForStableSpans: true,
+        });
+        await vi.runAllTimersAsync();
+        expect(await pending).toMatchObject({ fetchedAt: 123, spans: [span] });
+        expect(fetchTrace).toHaveBeenCalledTimes(3);
+      } finally {
+        vi.useRealTimers();
+      }
+    },
+  );
+
+  it('keeps polling when the first snapshot has no matching spans', async () => {
+    vi.useFakeTimers();
+    try {
+      const sql = { spanId: 'sql', name: 'sql execution', startTime: 1, endTime: 2 };
+      const fetchTrace = vi
+        .fn()
+        .mockResolvedValueOnce({
+          fetchedAt: 1,
+          traceId: 'trace-1',
+          spans: [{ ...sql, spanId: 'other', name: 'other' }],
+        })
+        .mockResolvedValue({ fetchedAt: 2, traceId: 'trace-1', spans: [sql] });
+      mocks.createTraceProvider.mockReturnValue({ fetchTrace, id: 'tempo' });
+      const pending = fetchTraceContext('trace-1', {
+        providerConfig,
+        queryDelay: 0,
+        maxRetries: 2,
+        retryDelayMs: 1000,
+        waitForStableSpans: true,
+        spanFilter: ['sql*'],
+      });
+      await vi.runAllTimersAsync();
+      expect(await pending).toMatchObject({ fetchedAt: 2, spans: [sql] });
+      expect(fetchTrace).toHaveBeenCalledTimes(3);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('bounds polling when external spans never finish', async () => {
+    vi.useFakeTimers();
+    try {
+      const fetchTrace = mockExternalTrace([{ spanId: 'pending', name: 'pending', startTime: 1 }]);
+      const pending = fetchTraceContext('trace-1', {
+        providerConfig,
+        queryDelay: 0,
+        maxRetries: 2,
+        retryDelayMs: 1000,
+        waitForStableSpans: true,
+      });
+      await vi.runAllTimersAsync();
+      expect((await pending)?.spans).toHaveLength(1);
+      expect(fetchTrace).toHaveBeenCalledTimes(3);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('cancels polling after a partial external snapshot', async () => {
+    vi.useFakeTimers();
+    try {
+      const controller = new AbortController();
+      const fetchTrace = mockExternalTrace([{ spanId: 'pending', name: 'pending', startTime: 1 }]);
+      const pending = fetchTraceContext('trace-1', {
+        providerConfig,
+        queryDelay: 0,
+        maxRetries: 5,
+        retryDelayMs: 1000,
+        waitForStableSpans: true,
+        abortSignal: controller.signal,
+      });
+      const rejected = expect(pending).rejects.toMatchObject({ name: 'AbortError' });
+      await vi.advanceTimersByTimeAsync(0);
+      controller.abort();
+      await rejected;
+      await vi.runAllTimersAsync();
+      expect(fetchTrace).toHaveBeenCalledOnce();
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it('waits before the initial request and retries missing traces', async () => {

@@ -1,3 +1,5 @@
+import { isDeepStrictEqual } from 'node:util';
+
 import logger from '../../logger';
 import {
   fetchWithProxy,
@@ -48,18 +50,19 @@ interface TempoTraceResponse {
   }>;
 }
 
-const MAX_SPANS = 10_000;
 const SPAN_KIND_NAMES = ['unspecified', 'internal', 'server', 'client', 'producer', 'consumer'];
 const TRACE_ID_PATTERN = /^[0-9a-f]{32}$/i;
 const BASE64_TRACE_ID_PATTERN = /^[A-Za-z0-9+/]{22}(?:==)?$/;
 const SPAN_ID_PATTERN = /^[0-9a-f]{16}$/i;
 const BASE64_SPAN_ID_PATTERN = /^[A-Za-z0-9+/]{11}=?$/;
 function nanoToMs(value: string): number {
-  const milliseconds = BigInt(value) / 1_000_000n;
-  if (milliseconds < 0n || milliseconds > BigInt(Number.MAX_SAFE_INTEGER)) {
+  const nanoseconds = BigInt(value);
+  if (nanoseconds < 0n || nanoseconds > BigInt(Number.MAX_SAFE_INTEGER) * 1_000_000n) {
     throw new Error('Span timestamp is outside the supported range');
   }
-  return Number.parseInt(milliseconds.toString(), 10);
+  const seconds: bigint = nanoseconds / 1_000_000_000n;
+  const remainder: bigint = nanoseconds % 1_000_000_000n;
+  return Number(seconds) * 1e3 + Number(remainder) / 1e6;
 }
 
 function extractAttributeValue(value: TempoAttributeValue): unknown {
@@ -91,6 +94,19 @@ function extractAttributeValue(value: TempoAttributeValue): unknown {
 function attributesToRecord(
   attributes?: Array<{ key: string; value: TempoAttributeValue }>,
 ): Record<string, unknown> {
+  if (attributes != null && !Array.isArray(attributes)) {
+    throw new TraceProviderError('Tempo attributes must be a list');
+  }
+  const keys = new Set<string>();
+  for (const { key } of attributes ?? []) {
+    if (typeof key !== 'string') {
+      throw new TraceProviderError('Tempo attribute keys must be strings');
+    }
+    if (keys.has(key)) {
+      throw new TraceProviderError('Tempo returned duplicate attribute keys');
+    }
+    keys.add(key);
+  }
   return Object.fromEntries(
     (attributes ?? []).map(({ key, value }) => [key, extractAttributeValue(value)]),
   );
@@ -177,6 +193,7 @@ function transformSpan(
   traceId: string,
   resourceAttributes: Record<string, unknown>,
   scopeName: string | undefined,
+  scopeVersion: string | undefined,
 ): SpanData | null {
   if (decodeTraceId(span.traceId) !== traceId.toLowerCase()) {
     throw new Error('Span trace ID must match the requested trace');
@@ -205,6 +222,13 @@ function transformSpan(
   if (endTimeUnixNano && BigInt(endTimeUnixNano) < BigInt(span.startTimeUnixNano)) {
     throw new Error('Span end time must not precede its start time');
   }
+  const kindCode =
+    typeof span.kind === 'string'
+      ? SPAN_KIND_NAMES.indexOf(span.kind.replace(/^SPAN_KIND_/i, '').toLowerCase())
+      : span.kind;
+  if (kindCode !== undefined && (!Number.isInteger(kindCode) || !SPAN_KIND_NAMES[kindCode])) {
+    throw new TraceProviderError('Malformed Tempo span kind: expected a recognized OTLP kind');
+  }
 
   return {
     spanId,
@@ -216,12 +240,10 @@ function transformSpan(
       ...resourceAttributes,
       ...attributesToRecord(span.attributes),
       ...(scopeName && { 'otel.scope.name': scopeName }),
-      ...(typeof span.kind === 'number' && {
-        'otel.span.kind': SPAN_KIND_NAMES[span.kind] ?? 'unspecified',
-        'otel.span.kind_code': span.kind,
-      }),
-      ...(typeof span.kind === 'string' && {
-        'otel.span.kind': span.kind.replace(/^SPAN_KIND_/i, '').toLowerCase(),
+      ...(scopeVersion && { 'otel.scope.version': scopeVersion }),
+      ...(kindCode !== undefined && {
+        'otel.span.kind': SPAN_KIND_NAMES[kindCode] ?? 'unspecified',
+        'otel.span.kind_code': kindCode,
       }),
     },
     statusCode: normalizeStatusCode(span.status?.code),
@@ -274,9 +296,11 @@ export class TempoProvider implements TraceProvider {
     return headers;
   }
 
-  private transformSpans(data: TempoTraceResponse, traceId: string): SpanData[] {
-    const spans: SpanData[] = [];
-    const seenSpanIds = new Set<string>();
+  private transformSpans(
+    data: TempoTraceResponse,
+    traceId: string,
+  ): { spans: SpanData[]; incomplete: boolean } {
+    const spans = new Map<string, SpanData>();
     let malformedSpans = 0;
 
     for (const batch of data.batches ?? []) {
@@ -291,22 +315,25 @@ export class TempoProvider implements TraceProvider {
           continue;
         }
         for (const span of scopeSpan.spans) {
-          if (spans.length >= MAX_SPANS) {
-            return spans;
-          }
-
           try {
             const normalizedSpan = transformSpan(
               span,
               traceId,
               resourceAttributes,
               scopeSpan.scope?.name,
+              scopeSpan.scope?.version,
             );
-            if (normalizedSpan && !seenSpanIds.has(normalizedSpan.spanId)) {
-              seenSpanIds.add(normalizedSpan.spanId);
-              spans.push(normalizedSpan);
+            if (normalizedSpan) {
+              const previous = spans.get(normalizedSpan.spanId);
+              if (previous && !isDeepStrictEqual(previous, normalizedSpan)) {
+                throw new TraceProviderError('Conflicting duplicate Tempo span IDs');
+              }
+              spans.set(normalizedSpan.spanId, normalizedSpan);
             }
-          } catch {
+          } catch (error) {
+            if (error instanceof TraceProviderError) {
+              throw error;
+            }
             malformedSpans++;
           }
         }
@@ -317,7 +344,7 @@ export class TempoProvider implements TraceProvider {
       logger.warn(`[TempoProvider] Skipped ${malformedSpans} malformed spans`);
     }
 
-    return spans;
+    return { spans: [...spans.values()], incomplete: malformedSpans > 0 };
   }
 
   async fetchTrace(traceId: string, options?: FetchTraceOptions): Promise<FetchTraceResult | null> {
@@ -352,7 +379,9 @@ export class TempoProvider implements TraceProvider {
     const contentLength = Number(response.headers.get('content-length'));
     if (contentLength > MAX_TRACE_RESPONSE_BYTES) {
       await releaseResponse(response, 'Tempo');
-      throw new TraceProviderError('Tempo trace exceeds the maximum response size');
+      throw new TraceProviderError('Tempo trace exceeds the maximum response size', {
+        limitExceeded: true,
+      });
     }
     const body = await readLimitedResponse(response, 'Tempo');
     const data = JSON.parse(body) as TempoTraceResponse;
@@ -360,7 +389,8 @@ export class TempoProvider implements TraceProvider {
       throw new TraceProviderError('Tempo returned an invalid trace response');
     }
 
-    const spans = this.transformSpans(data, traceId);
+    const snapshot = this.transformSpans(data, traceId);
+    const spans = snapshot.spans.slice(0, Math.max(1, options?.maxSpans ?? Infinity));
     const services = new Set<string>();
     for (const span of spans) {
       const service = span.attributes?.['service.name'];
@@ -372,6 +402,7 @@ export class TempoProvider implements TraceProvider {
     return {
       traceId,
       spans,
+      ...(snapshot.incomplete && { incomplete: true }),
       services: [...services],
       fetchedAt: Date.now(),
     };

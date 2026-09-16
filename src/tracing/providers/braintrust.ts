@@ -51,13 +51,10 @@ function timestampMs(value: unknown): number | undefined {
   return undefined;
 }
 
-function transformSpan(row: BraintrustSpan, options?: FetchTraceOptions): SpanData | null {
+function transformSpan(row: BraintrustSpan): SpanData | null {
   const spanId = row.span_id || row.id;
   const startTime = timestampMs(row.metrics?.start) ?? timestampMs(row.created);
   if (!spanId || startTime === undefined) {
-    return null;
-  }
-  if (options?.earliestStartTime !== undefined && startTime < options.earliestStartTime) {
     return null;
   }
 
@@ -147,7 +144,7 @@ export class BraintrustProvider implements TraceProvider {
     }
 
     const normalizedTraceId = traceId.toLowerCase();
-    const maxSpans = Math.min(options?.maxSpans ?? MAX_SPANS, MAX_SPANS);
+    const maxSpans = Math.min(Math.max(options?.maxSpans ?? MAX_SPANS, 1), MAX_SPANS);
     // Braintrust native root_span_id values do not necessarily match W3C trace IDs.
     // Customers should log the propagated ID as metadata.trace_id or metadata.promptfoo_trace_id.
     // The traces shape returns every span in a matching trace, including child spans that do
@@ -161,7 +158,7 @@ export class BraintrustProvider implements TraceProvider {
       `    OR metadata.promptfoo_trace_id = '${normalizedTraceId}'`,
       `    OR metadata."promptfoo.trace_id" = '${normalizedTraceId}'`,
       `    OR root_span_id = '${normalizedTraceId}')`,
-      `LIMIT ${maxSpans}`,
+      `LIMIT ${options?.maxSpans === undefined || options.earliestStartTime !== undefined ? MAX_SPANS + 1 : maxSpans}`,
     ].join('\n');
 
     const timeoutSignal = AbortSignal.timeout(this.config.timeout ?? 10_000);
@@ -194,7 +191,9 @@ export class BraintrustProvider implements TraceProvider {
 
     if (Number(response.headers.get('content-length')) > MAX_TRACE_RESPONSE_BYTES) {
       await releaseResponse(response, 'Braintrust');
-      throw new TraceProviderError('Braintrust trace exceeds the maximum response size');
+      throw new TraceProviderError('Braintrust trace exceeds the maximum response size', {
+        limitExceeded: true,
+      });
     }
     const body = await readLimitedResponse(response, 'Braintrust');
 
@@ -203,19 +202,29 @@ export class BraintrustProvider implements TraceProvider {
     if (!Array.isArray(rows)) {
       throw new TraceProviderError('Braintrust returned an invalid query response');
     }
+    if (rows.length > MAX_SPANS) {
+      throw new TraceProviderError('Braintrust trace exceeds the maximum span count', {
+        limitExceeded: true,
+      });
+    }
     if (rows.length === 0) {
       return null;
     }
 
     const spans: SpanData[] = [];
     const services = new Set<string>();
+    let incomplete = false;
     for (const row of rows) {
-      if (spans.length >= maxSpans) {
-        break;
-      }
-      const span = transformSpan(row, options);
+      const span = transformSpan(row);
       if (!span) {
+        incomplete = true;
         logger.warn('[BraintrustProvider] Skipping malformed span');
+        continue;
+      }
+      if (
+        spans.length >= maxSpans ||
+        (options?.earliestStartTime !== undefined && span.startTime < options.earliestStartTime)
+      ) {
         continue;
       }
       const service = span.attributes?.['service.name'];
@@ -225,8 +234,14 @@ export class BraintrustProvider implements TraceProvider {
       spans.push(span);
     }
 
-    return spans.length > 0
-      ? { traceId: normalizedTraceId, spans, services: [...services], fetchedAt: Date.now() }
+    return spans.length > 0 || incomplete
+      ? {
+          traceId: normalizedTraceId,
+          spans,
+          ...(incomplete && { incomplete }),
+          services: [...services],
+          fetchedAt: Date.now(),
+        }
       : null;
   }
 }

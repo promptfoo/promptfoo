@@ -71,6 +71,82 @@ describe('TempoProvider', () => {
     mockedFetch.mockImplementation(async () => response(traceResponse));
   });
 
+  it.each(['attributes', 'status', 'name', 'equivalent'])(
+    'checks duplicate span identities: %s',
+    async (kind) => {
+      const span = traceResponse.batches[0].scopeSpans[0].spans[0];
+      const duplicate = {
+        ...span,
+        ...(kind === 'attributes'
+          ? { attributes: [{ key: 'tool.name', value: { stringValue: 'run_sql' } }] }
+          : {}),
+        ...(kind === 'status' ? { status: { code: 'STATUS_CODE_ERROR' } } : {}),
+        ...(kind === 'name' ? { name: 'unsafe execution' } : {}),
+      };
+      mockedFetch.mockResolvedValueOnce(
+        response({ batches: [{ scopeSpans: [{ spans: [span, duplicate] }] }] }),
+      );
+      const result = new TempoProvider({ id: 'tempo', endpoint: 'http://tempo:3200' }).fetchTrace(
+        TRACE_ID,
+      );
+      if (kind === 'equivalent') {
+        expect((await result)?.spans).toHaveLength(1);
+      } else {
+        await expect(result).rejects.toMatchObject({
+          message: expect.stringMatching(/conflicting duplicate/i),
+          retryable: false,
+        });
+      }
+    },
+  );
+
+  it.each(
+    ['resource', 'span', 'nested span', 'array span'].flatMap((location) =>
+      [false, true].map((coerced) => ({ location, coerced })),
+    ),
+  )(
+    'rejects ambiguous $location attributes before they hide a redaction source (coerced=$coerced)',
+    async ({ location, coerced }) => {
+      const duplicates = [
+        { key: coerced ? 1 : 'authorization', value: { stringValue: 'PRIVATE_TEMPO_SOURCE' } },
+        { key: coerced ? '1' : 'authorization', value: { stringValue: 'ordinary' } },
+      ];
+      const nested = { kvlistValue: { values: duplicates } };
+      const attributes =
+        location === 'nested span'
+          ? [{ key: 'details', value: nested }]
+          : location === 'array span'
+            ? [{ key: 'details', value: { arrayValue: { values: [nested] } } }]
+            : duplicates;
+      mockedFetch.mockResolvedValueOnce(
+        response({
+          batches: [
+            {
+              resource: { attributes: location === 'resource' ? duplicates : [] },
+              scopeSpans: [
+                {
+                  spans: [
+                    {
+                      ...traceResponse.batches[0].scopeSpans[0].spans[0],
+                      name: 'echo PRIVATE_TEMPO_SOURCE',
+                      attributes: location === 'resource' ? [] : attributes,
+                    },
+                  ],
+                },
+              ],
+            },
+          ],
+        }),
+      );
+      await expect(
+        new TempoProvider({ id: 'tempo', endpoint: 'http://tempo:3200' }).fetchTrace(TRACE_ID),
+      ).rejects.toMatchObject({
+        message: expect.stringMatching(/attribute keys/i),
+        retryable: false,
+      });
+    },
+  );
+
   it.each([
     { id: 'tempo' },
     { id: 'tempo', endpoint: 'not-a-url' },
@@ -81,6 +157,29 @@ describe('TempoProvider', () => {
     { id: 'tempo', endpoint: 'https://example.com', timeout: -1 },
   ] as const)('rejects invalid endpoint configuration: %o', (config) => {
     expect(() => new TempoProvider(config)).toThrow();
+  });
+
+  it('caps ordinary reads without limiting uncapped snapshots', async () => {
+    const provider = new TempoProvider({ id: 'tempo', endpoint: 'http://tempo:3200' });
+    expect((await provider.fetchTrace(TRACE_ID, { maxSpans: 1 }))?.spans).toHaveLength(1);
+    expect((await provider.fetchTrace(TRACE_ID))?.spans).toHaveLength(2);
+  });
+
+  it.each([0, -2])(
+    'clamps maxSpans=%s to one, like the other trace providers',
+    async (maxSpans) => {
+      const provider = new TempoProvider({ id: 'tempo', endpoint: 'http://tempo:3200' });
+      expect((await provider.fetchTrace(TRACE_ID, { maxSpans }))?.spans).toHaveLength(1);
+    },
+  );
+
+  it.each([-1, 6, 1.5, 'SPAN_KIND_UNKNOWN'])('rejects unknown span kind %s', async (kind) => {
+    const data = structuredClone(traceResponse);
+    data.batches[0].scopeSpans[0].spans[0].kind = kind;
+    mockedFetch.mockResolvedValue(response(data));
+    await expect(
+      new TempoProvider({ id: 'tempo', endpoint: 'http://tempo:3200' }).fetchTrace(TRACE_ID),
+    ).rejects.toThrow(/invalid|malformed/i);
   });
 
   it('fetches and normalizes OpenTelemetry trace spans', async () => {
@@ -168,6 +267,7 @@ describe('TempoProvider', () => {
 
     expect(result?.spans.map((span) => span.name)).toEqual(['target.call', 'internal.setup']);
     expect(logger.warn).toHaveBeenCalledOnce();
+    expect(result?.incomplete).toBe(true);
     expect(logger.warn).toHaveBeenCalledWith('[TempoProvider] Skipped 3 malformed spans');
   });
 
@@ -191,6 +291,7 @@ describe('TempoProvider', () => {
 
     expect(result?.spans.map((span) => span.name)).toEqual(['target.call', 'internal.setup']);
     expect(result?.services).toEqual(['target-service']);
+    expect(result?.incomplete).toBe(true);
     expect(logger.warn).toHaveBeenCalledWith('[TempoProvider] Skipped 4 malformed spans');
   });
 
@@ -253,6 +354,21 @@ describe('TempoProvider', () => {
     });
   });
 
+  it('preserves the full snapshot so storage can reject an oversized trace atomically', async () => {
+    const provider = new TempoProvider({ id: 'tempo', endpoint: 'http://tempo:3200' });
+    const spans = Array.from({ length: 10_001 }, (_, index) => ({
+      traceId: TRACE_ID,
+      spanId: (index + 1).toString(16).padStart(16, '0'),
+      name: 'tool execution',
+      startTimeUnixNano: '1000000',
+    }));
+    mockedFetch.mockResolvedValueOnce(response({ batches: [{ scopeSpans: [{ spans }] }] }));
+
+    const trace = await provider.fetchTrace(TRACE_ID);
+    expect(trace?.spans).toHaveLength(10_001);
+    expect(trace?.spans.at(-1)?.spanId).toBe(spans.at(-1)?.spanId);
+  });
+
   it('rejects invalid or oversized trace responses', async () => {
     const provider = new TempoProvider({ id: 'tempo', endpoint: 'http://tempo:3200' });
     mockedFetch.mockResolvedValueOnce(response({ unexpected: [] }));
@@ -261,7 +377,10 @@ describe('TempoProvider', () => {
     mockedFetch.mockResolvedValueOnce(
       new Response('{}', { headers: { 'content-length': '10485761' } }),
     );
-    await expect(provider.fetchTrace(TRACE_ID)).rejects.toThrow('maximum response size');
+    await expect(provider.fetchTrace(TRACE_ID)).rejects.toMatchObject({
+      message: expect.stringContaining('maximum response size'),
+      limitExceeded: true,
+    });
   });
 
   it('cancels oversized streamed responses before buffering their contents', async () => {
@@ -275,7 +394,10 @@ describe('TempoProvider', () => {
     mockedFetch.mockResolvedValueOnce(new Response(body, { headers: { 'content-length': '1' } }));
     const provider = new TempoProvider({ id: 'tempo', endpoint: 'http://tempo:3200' });
 
-    await expect(provider.fetchTrace(TRACE_ID)).rejects.toThrow('maximum response size');
+    await expect(provider.fetchTrace(TRACE_ID)).rejects.toMatchObject({
+      message: expect.stringContaining('maximum response size'),
+      limitExceeded: true,
+    });
     expect(cancel).toHaveBeenCalledOnce();
   });
 

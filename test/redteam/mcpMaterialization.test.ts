@@ -62,12 +62,11 @@ describe('materializeMcpValue', () => {
     expect(provider.callApi).not.toHaveBeenCalled();
   });
 
-  it('defaults missing or invalid args to an empty object for valid no-arg tools', async () => {
+  it('defaults missing args to an empty object for valid no-arg tools', async () => {
     const result = await materializeMcpValue({
       purpose: 'List industries',
       value: JSON.stringify({
         name: 'list_industries',
-        arguments: ['ignored'],
       }),
       tools: [listIndustriesTool],
     });
@@ -77,6 +76,17 @@ describe('materializeMcpValue', () => {
       args: {},
     });
     expect(provider.callApi).not.toHaveBeenCalled();
+  });
+
+  it('repairs malformed argument envelopes instead of silently discarding them', async () => {
+    vi.mocked(provider.callApi).mockResolvedValueOnce({
+      output: '{"tool":"list_industries","args":{}}',
+    });
+    const value = JSON.stringify({ name: 'list_industries', arguments: ['invalid'] });
+    const result = await materializeMcpValue({ provider, value, tools: [listIndustriesTool] });
+    expect(JSON.parse(result)).toEqual({ tool: 'list_industries', args: {} });
+    expect(provider.callApi).toHaveBeenCalledOnce();
+    expect(provider.callApi).toHaveBeenCalledWith(expect.stringContaining(value));
   });
 
   it('returns the original value when no MCP tools are available', async () => {

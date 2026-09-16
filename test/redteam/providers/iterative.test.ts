@@ -148,6 +148,42 @@ describe('RedteamIterativeProvider', () => {
   });
 
   describe('runRedteamConversation', () => {
+    it.each(['TraceEvidenceError', 'TraceLimitError'])(
+      'propagates %s before judging the target response',
+      async (name) => {
+        const error = Object.assign(new Error('Required trace unavailable'), { name });
+        const fetchTrace = vi.spyOn(traceContext, 'fetchTraceContext').mockRejectedValue(error);
+        try {
+          await expect(
+            runRedteamConversation({
+              context: {
+                prompt: { raw: '', label: '' },
+                vars: {},
+                traceparent: '00-0123456789abcdef0123456789abcdef-0123456789abcdef-01',
+              },
+              filters: undefined,
+              injectVar: 'test',
+              numIterations: 1,
+              options: {},
+              prompt: { raw: 'test', label: 'test' },
+              redteamProvider: mockRedteamProvider,
+              gradingProvider: mockRedteamProvider,
+              targetProvider: mockTargetProvider,
+              test: { metadata: { tracing: { enabled: true, includeInGrading: true } } },
+              vars: { test: 'goal' },
+              excludeTargetOutputFromAgenticAttackGeneration: false,
+            }),
+          ).rejects.toBe(error);
+          expect(fetchTrace).toHaveBeenCalledWith(
+            expect.any(String),
+            expect.objectContaining({ requireComplete: true }),
+          );
+        } finally {
+          fetchTrace.mockRestore();
+        }
+      },
+    );
+
     it('skips trace retrieval when an iterative target response came from cache', async () => {
       mockGetTargetResponse.mockResolvedValue({ output: 'Cached target response', cached: true });
       const test: AtomicTestCase = { metadata: { tracing: { enabled: true } } };

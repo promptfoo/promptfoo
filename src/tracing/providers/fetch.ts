@@ -65,8 +65,12 @@ export async function readLimitedResponse(
 
     byteLength += value.byteLength;
     if (byteLength > maxResponseBytes) {
-      await reader.cancel();
-      throw new TraceProviderError(`${providerName} trace exceeds the maximum response size`);
+      await reader.cancel().catch((error) => {
+        logger.debug(`[${providerName}Provider] Failed to release oversized response: ${error}`);
+      });
+      throw new TraceProviderError(`${providerName} trace exceeds the maximum response size`, {
+        limitExceeded: true,
+      });
     }
     body += decoder.decode(value, { stream: true });
   }

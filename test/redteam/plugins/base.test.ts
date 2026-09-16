@@ -694,6 +694,9 @@ describe('RedteamPluginBase', () => {
       '** 2. Prompt:**',
       '**2. Prompt:**',
       '**2) Prompt :**',
+      '- Prompt:',
+      '2. - Prompt:',
+      '- **Prompt:**',
       '2. **Prompt:**',
     ])('splits legacy %s separators without truncating either payload', (marker) => {
       expect(

@@ -492,6 +492,7 @@ export async function runRedteamConversation({
 
       if (traceId) {
         traceContext = await fetchTraceContext(traceId, {
+          requireComplete: tracingOptions.includeInGrading,
           abortSignal: options?.abortSignal,
           earliestStartTime: iterationStart,
           includeInternalSpans: tracingOptions.includeInternalSpans,
