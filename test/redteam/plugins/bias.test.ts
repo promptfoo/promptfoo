@@ -104,6 +104,13 @@ describe('Bias Plugin', () => {
       expect(grader.rubric).toContain('protected characteristics');
     });
 
+    it('should use standardized purpose tags in rubric', () => {
+      expect(grader.rubric).toContain('<purpose>');
+      expect(grader.rubric).toContain('</purpose>');
+      expect(grader.rubric).not.toContain('<Purpose>');
+      expect(grader.rubric).not.toContain('</Purpose>');
+    });
+
     it('should include evaluation criteria in rubric', () => {
       expect(grader.rubric).toContain('FAIL');
       expect(grader.rubric).toContain('PASS');

@@ -62,13 +62,13 @@
           "$ref": "#/definitions/__schema42"
         },
         "evaluateOptions": {
-          "$ref": "#/definitions/__schema43"
+          "$ref": "#/definitions/__schema47"
         },
         "commandLineOptions": {
-          "$ref": "#/definitions/__schema45"
+          "$ref": "#/definitions/__schema49"
         },
         "targets": {
-          "$ref": "#/definitions/__schema46"
+          "$ref": "#/definitions/__schema50"
         }
       },
       "required": ["prompts"],
@@ -191,7 +191,13 @@
         "ANTHROPIC_BASE_URL": {
           "type": "string"
         },
+        "ANTHROPIC_CUSTOM_HEADERS": {
+          "type": "string"
+        },
         "ATLASCLOUD_API_KEY": {
+          "type": "string"
+        },
+        "AWS_BEARER_TOKEN_BEDROCK": {
           "type": "string"
         },
         "AWS_BEDROCK_REGION": {
@@ -251,6 +257,9 @@
         "CLAUDE_CODE_USE_VERTEX": {
           "type": "string"
         },
+        "CLAUDE_CONFIG_DIR": {
+          "type": "string"
+        },
         "CLOUDFLARE_ACCOUNT_ID": {
           "type": "string"
         },
@@ -288,6 +297,12 @@
           "type": "string"
         },
         "FAL_KEY": {
+          "type": "string"
+        },
+        "FIREWORKS_API_BASE_URL": {
+          "type": "string"
+        },
+        "FIREWORKS_API_KEY": {
           "type": "string"
         },
         "GITHUB_TOKEN": {
@@ -335,6 +350,9 @@
         "JFROG_API_KEY": {
           "type": "string"
         },
+        "LANGFUSE_BASE_URL": {
+          "type": "string"
+        },
         "LANGFUSE_HOST": {
           "type": "string"
         },
@@ -362,19 +380,40 @@
         "MISTRAL_API_KEY": {
           "type": "string"
         },
+        "MINIMAX_API_KEY": {
+          "type": "string"
+        },
+        "MOONSHOT_API_KEY": {
+          "type": "string"
+        },
         "MLFLOW_GATEWAY_API_KEY": {
           "type": "string"
         },
         "MLFLOW_GATEWAY_URL": {
           "type": "string"
         },
+        "MODEL_API_KEY": {
+          "type": "string"
+        },
         "MODELSLAB_API_KEY": {
+          "type": "string"
+        },
+        "N8N_API_KEY": {
           "type": "string"
         },
         "NSCALE_SERVICE_TOKEN": {
           "type": "string"
         },
         "NSCALE_API_KEY": {
+          "type": "string"
+        },
+        "NOVITA_API_KEY": {
+          "type": "string"
+        },
+        "NVIDIA_API_BASE_URL": {
+          "type": "string"
+        },
+        "NVIDIA_API_KEY": {
           "type": "string"
         },
         "OLLAMA_API_KEY": {
@@ -423,6 +462,9 @@
           "type": "string"
         },
         "OPENCLAW_GATEWAY_URL": {
+          "type": "string"
+        },
+        "ORCAROUTER_API_KEY": {
           "type": "string"
         },
         "PALM_API_HOST": {
@@ -474,6 +516,12 @@
           "type": "string"
         },
         "SHAREPOINT_TENANT_ID": {
+          "type": "string"
+        },
+        "SLACK_BOT_TOKEN": {
+          "type": "string"
+        },
+        "TOGETHER_API_KEY": {
           "type": "string"
         },
         "VERCEL_AI_GATEWAY_API_KEY": {
@@ -899,6 +947,7 @@
             {
               "type": "string",
               "enum": [
+                "agent-rubric",
                 "answer-relevance",
                 "bleu",
                 "classifier",
@@ -969,6 +1018,7 @@
             {
               "type": "string",
               "enum": [
+                "agent-rubric",
                 "answer-relevance",
                 "bleu",
                 "classifier",
@@ -1185,6 +1235,11 @@
         },
         "runSerially": {
           "type": "boolean"
+        },
+        "repeat": {
+          "type": "integer",
+          "exclusiveMinimum": 0,
+          "maximum": 9007199254740991
         }
       },
       "additionalProperties": {}
@@ -1225,17 +1280,7 @@
               {
                 "type": "array",
                 "items": {
-                  "anyOf": [
-                    {
-                      "type": "string"
-                    },
-                    {
-                      "type": "number"
-                    },
-                    {
-                      "type": "boolean"
-                    }
-                  ]
+                  "type": ["string", "number", "boolean"]
                 }
               },
               {
@@ -1460,17 +1505,7 @@
             "type": "string"
           },
           "additionalProperties": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "number"
-              },
-              {
-                "type": "boolean"
-              }
-            ]
+            "type": ["string", "number", "boolean"]
           }
         }
       ]
@@ -1665,7 +1700,13 @@
                     "ANTHROPIC_BASE_URL": {
                       "type": "string"
                     },
+                    "ANTHROPIC_CUSTOM_HEADERS": {
+                      "type": "string"
+                    },
                     "ATLASCLOUD_API_KEY": {
+                      "type": "string"
+                    },
+                    "AWS_BEARER_TOKEN_BEDROCK": {
                       "type": "string"
                     },
                     "AWS_BEDROCK_REGION": {
@@ -1725,6 +1766,9 @@
                     "CLAUDE_CODE_USE_VERTEX": {
                       "type": "string"
                     },
+                    "CLAUDE_CONFIG_DIR": {
+                      "type": "string"
+                    },
                     "CLOUDFLARE_ACCOUNT_ID": {
                       "type": "string"
                     },
@@ -1762,6 +1806,12 @@
                       "type": "string"
                     },
                     "FAL_KEY": {
+                      "type": "string"
+                    },
+                    "FIREWORKS_API_BASE_URL": {
+                      "type": "string"
+                    },
+                    "FIREWORKS_API_KEY": {
                       "type": "string"
                     },
                     "GITHUB_TOKEN": {
@@ -1809,6 +1859,9 @@
                     "JFROG_API_KEY": {
                       "type": "string"
                     },
+                    "LANGFUSE_BASE_URL": {
+                      "type": "string"
+                    },
                     "LANGFUSE_HOST": {
                       "type": "string"
                     },
@@ -1836,19 +1889,40 @@
                     "MISTRAL_API_KEY": {
                       "type": "string"
                     },
+                    "MINIMAX_API_KEY": {
+                      "type": "string"
+                    },
+                    "MOONSHOT_API_KEY": {
+                      "type": "string"
+                    },
                     "MLFLOW_GATEWAY_API_KEY": {
                       "type": "string"
                     },
                     "MLFLOW_GATEWAY_URL": {
                       "type": "string"
                     },
+                    "MODEL_API_KEY": {
+                      "type": "string"
+                    },
                     "MODELSLAB_API_KEY": {
+                      "type": "string"
+                    },
+                    "N8N_API_KEY": {
                       "type": "string"
                     },
                     "NSCALE_SERVICE_TOKEN": {
                       "type": "string"
                     },
                     "NSCALE_API_KEY": {
+                      "type": "string"
+                    },
+                    "NOVITA_API_KEY": {
+                      "type": "string"
+                    },
+                    "NVIDIA_API_BASE_URL": {
+                      "type": "string"
+                    },
+                    "NVIDIA_API_KEY": {
                       "type": "string"
                     },
                     "OLLAMA_API_KEY": {
@@ -1897,6 +1971,9 @@
                       "type": "string"
                     },
                     "OPENCLAW_GATEWAY_URL": {
+                      "type": "string"
+                    },
+                    "ORCAROUTER_API_KEY": {
                       "type": "string"
                     },
                     "PALM_API_HOST": {
@@ -1948,6 +2025,12 @@
                       "type": "string"
                     },
                     "SHAREPOINT_TENANT_ID": {
+                      "type": "string"
+                    },
+                    "SLACK_BOT_TOKEN": {
+                      "type": "string"
+                    },
+                    "TOGETHER_API_KEY": {
                       "type": "string"
                     },
                     "VERCEL_AI_GATEWAY_API_KEY": {
@@ -2834,6 +2917,7 @@
                       "jailbreak",
                       "jailbreak-templates",
                       "jailbreak:composite",
+                      "jailbreak:goblin",
                       "jailbreak:hydra",
                       "jailbreak:likert",
                       "jailbreak:meta",
@@ -2888,6 +2972,7 @@
                           "jailbreak",
                           "jailbreak-templates",
                           "jailbreak:composite",
+                          "jailbreak:goblin",
                           "jailbreak:hydra",
                           "jailbreak:likert",
                           "jailbreak:meta",
@@ -2928,7 +3013,7 @@
               }
             ]
           },
-          "description": "Strategies to use for redteam generation.\n\nDefaults to basic, jailbreak:meta, jailbreak:composite\nSupports audio, authoritative-markup-injection, base64, basic, best-of-n, camelcase, citation, crescendo, custom, default, emoji, gcg, goat, hex, homoglyph, image, indirect-web-pwn, jailbreak, jailbreak-templates, jailbreak:composite, jailbreak:hydra, jailbreak:likert, jailbreak:meta, jailbreak:tree, layer, leetspeak, math-prompt, mischievous-user, morse, multilingual, other-encodings, piglatin, prompt-injection, retry, rot13, video"
+          "description": "Strategies to use for redteam generation.\n\nDefaults to basic, jailbreak:meta, jailbreak:composite\nSupports audio, authoritative-markup-injection, base64, basic, best-of-n, camelcase, citation, crescendo, custom, default, emoji, gcg, goat, hex, homoglyph, image, indirect-web-pwn, jailbreak, jailbreak-templates, jailbreak:composite, jailbreak:goblin, jailbreak:hydra, jailbreak:likert, jailbreak:meta, jailbreak:tree, layer, leetspeak, math-prompt, mischievous-user, morse, multilingual, other-encodings, piglatin, prompt-injection, retry, rot13, video"
         },
         "maxConcurrency": {
           "description": "Maximum number of concurrent API calls",
@@ -3058,6 +3143,15 @@
         "enabled": {
           "type": "boolean"
         },
+        "failOnReceiverStartFailure": {
+          "type": "boolean"
+        },
+        "commandToolNames": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
         "otlp": {
           "type": "object",
           "properties": {
@@ -3078,6 +3172,12 @@
                   "items": {
                     "type": "string",
                     "enum": ["protobuf", "json"]
+                  }
+                },
+                "redactAttributes": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
                   }
                 }
               },
@@ -3135,12 +3235,170 @@
           },
           "required": ["enabled", "endpoint"],
           "additionalProperties": false
+        },
+        "provider": {
+          "oneOf": [
+            {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "string",
+                  "const": "tempo"
+                },
+                "endpoint": {
+                  "$ref": "#/definitions/__schema43"
+                },
+                "auth": {
+                  "type": "object",
+                  "properties": {
+                    "token": {
+                      "$ref": "#/definitions/__schema44"
+                    },
+                    "username": {
+                      "$ref": "#/definitions/__schema45"
+                    },
+                    "password": {
+                      "$ref": "#/definitions/__schema46"
+                    }
+                  },
+                  "additionalProperties": false
+                },
+                "headers": {
+                  "type": "object",
+                  "propertyNames": {
+                    "type": "string"
+                  },
+                  "additionalProperties": {
+                    "type": "string"
+                  }
+                },
+                "timeout": {
+                  "type": "integer",
+                  "exclusiveMinimum": 0,
+                  "maximum": 300000
+                }
+              },
+              "required": ["id", "endpoint"],
+              "additionalProperties": false
+            },
+            {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "string",
+                  "const": "braintrust"
+                },
+                "endpoint": {
+                  "$ref": "#/definitions/__schema43"
+                },
+                "projectId": {
+                  "type": "string",
+                  "format": "uuid",
+                  "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                },
+                "auth": {
+                  "type": "object",
+                  "properties": {
+                    "token": {
+                      "type": "string",
+                      "minLength": 1
+                    }
+                  },
+                  "required": ["token"],
+                  "additionalProperties": false
+                },
+                "headers": {
+                  "type": "object",
+                  "propertyNames": {
+                    "type": "string"
+                  },
+                  "additionalProperties": {
+                    "type": "string"
+                  }
+                },
+                "timeout": {
+                  "type": "integer",
+                  "exclusiveMinimum": 0,
+                  "maximum": 300000
+                }
+              },
+              "required": ["id", "endpoint", "projectId", "auth"],
+              "additionalProperties": false
+            },
+            {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "string",
+                  "const": "langfuse"
+                },
+                "endpoint": {
+                  "$ref": "#/definitions/__schema43"
+                },
+                "auth": {
+                  "type": "object",
+                  "properties": {
+                    "username": {
+                      "type": "string",
+                      "minLength": 1
+                    },
+                    "password": {
+                      "type": "string",
+                      "minLength": 1
+                    },
+                    "token": {
+                      "not": {}
+                    }
+                  },
+                  "required": ["username", "password"],
+                  "additionalProperties": false
+                },
+                "headers": {
+                  "type": "object",
+                  "propertyNames": {
+                    "type": "string"
+                  },
+                  "additionalProperties": {
+                    "type": "string"
+                  }
+                },
+                "timeout": {
+                  "type": "integer",
+                  "exclusiveMinimum": 0,
+                  "maximum": 300000
+                }
+              },
+              "required": ["id", "endpoint", "auth"],
+              "additionalProperties": false
+            }
+          ]
+        },
+        "queryDelay": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 300000
         }
       },
       "required": ["enabled"],
       "additionalProperties": false
     },
     "__schema43": {
+      "type": "string",
+      "format": "uri"
+    },
+    "__schema44": {
+      "type": "string",
+      "minLength": 1
+    },
+    "__schema45": {
+      "type": "string",
+      "minLength": 1
+    },
+    "__schema46": {
+      "type": "string",
+      "minLength": 1
+    },
+    "__schema47": {
       "type": "object",
       "properties": {
         "cache": {
@@ -3183,15 +3441,15 @@
           "type": "boolean"
         },
         "filterRange": {
-          "$ref": "#/definitions/__schema44"
+          "$ref": "#/definitions/__schema48"
         }
       },
       "additionalProperties": false
     },
-    "__schema44": {
+    "__schema48": {
       "type": "string"
     },
-    "__schema45": {
+    "__schema49": {
       "type": "object",
       "properties": {
         "description": {
@@ -3319,13 +3577,18 @@
         "filterRange": {
           "allOf": [
             {
-              "$ref": "#/definitions/__schema44"
+              "$ref": "#/definitions/__schema48"
             }
           ]
         },
         "filterSample": {
           "type": "integer",
           "exclusiveMinimum": 0,
+          "maximum": 9007199254740991
+        },
+        "filterSampleSeed": {
+          "type": "integer",
+          "minimum": -9007199254740991,
           "maximum": 9007199254740991
         },
         "filterTargets": {
@@ -3388,7 +3651,7 @@
       },
       "additionalProperties": false
     },
-    "__schema46": {
+    "__schema50": {
       "allOf": [
         {
           "$ref": "#/definitions/__schema3"
