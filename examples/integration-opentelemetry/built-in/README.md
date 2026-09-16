@@ -80,16 +80,16 @@ Each LLM call span includes:
 
 ### GenAI Semantic Conventions
 
-- `gen_ai.system` - Provider system (openai, anthropic, etc.)
+- `gen_ai.provider.name` - Provider name (openai, anthropic, etc.)
 - `gen_ai.operation.name` - Operation type (chat, completion, embedding)
 - `gen_ai.request.model` - Requested model name
 - `gen_ai.request.max_tokens` - Max tokens setting
 - `gen_ai.request.temperature` - Temperature setting
 - `gen_ai.usage.input_tokens` - Prompt tokens used
 - `gen_ai.usage.output_tokens` - Completion tokens used
-- `gen_ai.usage.total_tokens` - Total tokens
-- `gen_ai.usage.cached_tokens` - Cached tokens (Anthropic)
-- `gen_ai.usage.reasoning_tokens` - Reasoning tokens (o1 models)
+- `gen_ai.usage.cache_read.input_tokens` - Provider-cached input tokens
+- `gen_ai.usage.cache_creation.input_tokens` - Input tokens used to create a provider cache entry
+- `gen_ai.usage.reasoning.output_tokens` - Reasoning output tokens
 - `gen_ai.response.model` - Actual model used
 - `gen_ai.response.id` - Provider response ID
 - `gen_ai.response.finish_reasons` - Finish reasons
@@ -97,6 +97,8 @@ Each LLM call span includes:
 ### Promptfoo Attributes
 
 - `promptfoo.provider.id` - Provider identifier
+- `promptfoo.usage.total_tokens` - Total tokens
+- `promptfoo.usage.cached_response_tokens` - Tokens served from the Promptfoo response cache
 - `promptfoo.eval.id` - Evaluation run ID
 - `promptfoo.test.index` - Test case index
 - `promptfoo.prompt.label` - Prompt label
