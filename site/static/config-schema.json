@@ -188,6 +188,9 @@
         "ANTHROPIC_BASE_URL": {
           "type": "string"
         },
+        "ANTHROPIC_CUSTOM_HEADERS": {
+          "type": "string"
+        },
         "ATLASCLOUD_API_KEY": {
           "type": "string"
         },
@@ -342,6 +345,9 @@
           "type": "string"
         },
         "JFROG_API_KEY": {
+          "type": "string"
+        },
+        "LANGFUSE_BASE_URL": {
           "type": "string"
         },
         "LANGFUSE_HOST": {
@@ -507,6 +513,12 @@
           "type": "string"
         },
         "SHAREPOINT_TENANT_ID": {
+          "type": "string"
+        },
+        "SLACK_BOT_TOKEN": {
+          "type": "string"
+        },
+        "TOGETHER_API_KEY": {
           "type": "string"
         },
         "VERCEL_AI_GATEWAY_API_KEY": {
@@ -1238,17 +1250,7 @@
               {
                 "type": "array",
                 "items": {
-                  "anyOf": [
-                    {
-                      "type": "string"
-                    },
-                    {
-                      "type": "number"
-                    },
-                    {
-                      "type": "boolean"
-                    }
-                  ]
+                  "type": ["string", "number", "boolean"]
                 }
               },
               {
@@ -1473,17 +1475,7 @@
             "type": "string"
           },
           "additionalProperties": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "number"
-              },
-              {
-                "type": "boolean"
-              }
-            ]
+            "type": ["string", "number", "boolean"]
           }
         }
       ]
@@ -1662,6 +1654,9 @@
                     "ANTHROPIC_BASE_URL": {
                       "type": "string"
                     },
+                    "ANTHROPIC_CUSTOM_HEADERS": {
+                      "type": "string"
+                    },
                     "ATLASCLOUD_API_KEY": {
                       "type": "string"
                     },
@@ -1816,6 +1811,9 @@
                       "type": "string"
                     },
                     "JFROG_API_KEY": {
+                      "type": "string"
+                    },
+                    "LANGFUSE_BASE_URL": {
                       "type": "string"
                     },
                     "LANGFUSE_HOST": {
@@ -1981,6 +1979,12 @@
                       "type": "string"
                     },
                     "SHAREPOINT_TENANT_ID": {
+                      "type": "string"
+                    },
+                    "SLACK_BOT_TOKEN": {
+                      "type": "string"
+                    },
+                    "TOGETHER_API_KEY": {
                       "type": "string"
                     },
                     "VERCEL_AI_GATEWAY_API_KEY": {
