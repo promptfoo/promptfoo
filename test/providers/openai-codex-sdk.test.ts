@@ -64,6 +64,7 @@ const createMockResponse = (
   usage?: {
     input_tokens?: number;
     cached_input_tokens?: number;
+    cache_write_input_tokens?: number;
     output_tokens?: number;
     reasoning_output_tokens?: number;
   },
@@ -74,6 +75,9 @@ const createMockResponse = (
     ? {
         input_tokens: usage.input_tokens ?? 0,
         cached_input_tokens: usage.cached_input_tokens ?? 0,
+        ...(usage.cache_write_input_tokens === undefined
+          ? {}
+          : { cache_write_input_tokens: usage.cache_write_input_tokens }),
         output_tokens: usage.output_tokens ?? 0,
         ...(usage.reasoning_output_tokens === undefined
           ? {}
@@ -202,22 +206,21 @@ describe('OpenAICodexSDKProvider', () => {
       new OpenAICodexSDKProvider({ config: { model: 'gpt-5.2' } });
       new OpenAICodexSDKProvider({ config: { model: 'gpt-5.5' } });
       new OpenAICodexSDKProvider({ config: { model: 'gpt-5.5-pro' } });
+      new OpenAICodexSDKProvider({ config: { model: 'gpt-6-astra' } });
 
       expect(warnSpy).not.toHaveBeenCalled();
 
       warnSpy.mockRestore();
     });
 
-    it('should not warn about gpt-5.1-codex models', () => {
-      const warnSpy = vi.spyOn(logger, 'warn').mockImplementation(() => {});
-
-      new OpenAICodexSDKProvider({ config: { model: 'gpt-5.1-codex' } });
-      new OpenAICodexSDKProvider({ config: { model: 'gpt-5.1-codex-max' } });
-      new OpenAICodexSDKProvider({ config: { model: 'gpt-5.1-codex-mini' } });
-
-      expect(warnSpy).not.toHaveBeenCalled();
-
-      warnSpy.mockRestore();
+    it.each([
+      'gpt-5-codex',
+      'gpt-5.1-codex',
+      'gpt-5.1-codex-max',
+      'gpt-5.1-codex-mini',
+      'gpt-5.2-codex',
+    ])('does not advertise retired Codex model %s', (model) => {
+      expect(OpenAICodexSDKProvider.OPENAI_MODELS).not.toContain(model);
     });
 
     it('should not warn about provider-specific model ids when routing through a custom model_provider', () => {
@@ -519,6 +522,63 @@ describe('OpenAICodexSDKProvider', () => {
             headers: {},
           },
         });
+      });
+
+      it('should classify a hard-quota SDK error type next to an unknown code as non-retryable', async () => {
+        vi.spyOn(logger, 'error').mockImplementation(() => {});
+        mockRun.mockRejectedValue(
+          Object.assign(new Error('Request was refused by the billing service.'), {
+            status: 429,
+            code: 'new_billing_code',
+            type: 'insufficient_quota',
+          }),
+        );
+
+        const provider = new OpenAICodexSDKProvider({
+          env: { OPENAI_API_KEY: 'test-api-key' },
+        });
+        const result = await provider.callApi('Test prompt');
+
+        expect(result.error).toContain('Quota exceeded: HTTP 429 Too Many Requests');
+        expect(result.error).toContain('new_billing_code');
+        expect(result.metadata?.rateLimitKind).toBe('quota');
+        expect(result.metadata?.http?.headers).toEqual({});
+      });
+
+      it('should classify credit_balance_exhausted from the SDK error code as non-retryable', async () => {
+        vi.spyOn(logger, 'error').mockImplementation(() => {});
+        mockRun.mockRejectedValue(
+          Object.assign(
+            new Error('You have no credits remaining. Please add credits to your account.'),
+            {
+              status: 429,
+              code: 'credit_balance_exhausted',
+            },
+          ),
+        );
+
+        const provider = new OpenAICodexSDKProvider({
+          env: { OPENAI_API_KEY: 'test-api-key' },
+        });
+        const result = await provider.callApi('Test prompt');
+
+        expect(result.error).toContain('Quota exceeded: HTTP 429 Too Many Requests');
+        expect(result.error).toContain('credit_balance_exhausted');
+        expect(result.metadata?.rateLimitKind).toBe('quota');
+        expect(result.metadata?.http?.headers).toEqual({});
+      });
+
+      it('should classify a "no credits remaining" message without a code as non-retryable', async () => {
+        vi.spyOn(logger, 'error').mockImplementation(() => {});
+        mockRun.mockRejectedValue(new Error('You have no credits remaining ...'));
+
+        const provider = new OpenAICodexSDKProvider({
+          env: { OPENAI_API_KEY: 'test-api-key' },
+        });
+        const result = await provider.callApi('Test prompt');
+
+        expect(result.metadata?.rateLimitKind).toBe('quota');
+        expect(result.error).toContain('Retries will not help');
       });
 
       it('should ignore non-provider prompt config keys merged from test options', async () => {
@@ -1786,6 +1846,8 @@ describe('OpenAICodexSDKProvider', () => {
       });
 
       it.each([
+        ['gpt-6-astra', 'max'],
+        ['gpt-6-astra', 'ultra'],
         ['gpt-5.6-sol', 'max'],
         ['gpt-5.6-sol', 'ultra'],
         ['gpt-5.6-terra', 'max'],
@@ -2073,6 +2135,32 @@ describe('OpenAICodexSDKProvider', () => {
 
         expect(result.error).toBeUndefined();
         expect(result.output).toBe('Recovered response');
+      });
+
+      it.each([
+        ['insufficient_quota: credit_balance_exhausted', 'credit_balance_exhausted'],
+        ['rate_limit_exceeded: billing_not_active', 'billing_not_active'],
+        ['insufficient_quota: no credits remaining', 'credit_balance_exhausted'],
+      ])('keeps mixed billing messages non-retryable: %s', async (message, code) => {
+        vi.spyOn(logger, 'error').mockImplementation(() => {});
+        const mockEvents = async function* () {
+          yield {
+            type: 'turn.failed',
+            error: { message: `${message}. Please try again in 25ms.` },
+          };
+        };
+        mockRunStreamed.mockResolvedValue({ events: mockEvents() });
+        const provider = new OpenAICodexSDKProvider({
+          config: { enable_streaming: true },
+          env: { OPENAI_API_KEY: 'test-api-key' },
+        });
+
+        const result = await provider.callApi('Test prompt');
+
+        expect(result.metadata?.rateLimitKind).toBe('quota');
+        expect(result.metadata?.http?.headers).toEqual({});
+        expect(result.error).toContain(`(code: ${code})`);
+        expect(result.error).toContain('Retries will not help');
       });
 
       it('should retry if a stream ends after a TPM error event', async () => {
@@ -3082,7 +3170,28 @@ describe('OpenAICodexSDKProvider', () => {
       });
     });
 
-    describe('GPT-5.2 through GPT-5.6 models', () => {
+    describe('GPT-5.2 through GPT-6 Astra models', () => {
+      it('includes SDK cache-write tokens in Astra usage and cost', async () => {
+        mockRun.mockResolvedValue(
+          createMockResponse('Response', {
+            input_tokens: 2000,
+            cached_input_tokens: 500,
+            cache_write_input_tokens: 250,
+            output_tokens: 1000,
+            reasoning_output_tokens: 200,
+          }),
+        );
+        const provider = new OpenAICodexSDKProvider({ config: { model: 'gpt-6-astra' } });
+
+        const result = await provider.callApi('Test prompt');
+
+        expect(result.tokenUsage?.completionDetails).toEqual({
+          reasoning: 200,
+          cacheCreationInputTokens: 250,
+        });
+        expect(result.cost).toBeCloseTo(0.066125, 10);
+      });
+
       it.each(['gpt-5.6-sol', 'gpt-5.6-terra', 'gpt-5.6-luna'])(
         'should recognize %s as a known model',
         (model) => {
@@ -3095,10 +3204,11 @@ describe('OpenAICodexSDKProvider', () => {
       );
 
       it.each([
-        ['gpt-5.6-sol', 5, 0.5, 30],
+        ['gpt-6-astra', 10, 1, 50],
+        ['gpt-5.6-sol', 4, 0.4, 20],
         ['gpt-5.6-terra', 2, 0.2, 12],
         ['gpt-5.6-luna', 0.2, 0.02, 1.2],
-        ['openai.gpt-5.6-sol', 5.5, 0.55, 33],
+        ['openai.gpt-5.6-sol', 4.4, 0.44, 22],
         ['openai.gpt-5.6-terra', 2.2, 0.22, 13.2],
         ['openai.gpt-5.6-luna', 0.22, 0.022, 1.32],
       ])(
@@ -3337,7 +3447,7 @@ describe('OpenAICodexSDKProvider', () => {
         expect(result.cost).toBeCloseTo(0.24, 6);
       });
 
-      it('should recognize gpt-5.2-codex as a known model', () => {
+      it('should allow an explicitly configured model outside the advertised catalog', () => {
         const provider = new OpenAICodexSDKProvider({
           config: { model: 'gpt-5.2-codex' },
           env: { OPENAI_API_KEY: 'test-api-key' },
@@ -3763,7 +3873,7 @@ describe('OpenAICodexSDKProvider', () => {
         spy.mockRestore();
       });
 
-      it('carries cached and reasoning token usage onto the turn span', async () => {
+      it('carries cache reads, cache writes, and reasoning usage onto the turn span', async () => {
         const { emitted, spy } = await installTurnSpanTracerSpy();
         mockRunStreamed.mockResolvedValue({
           events: (async function* () {
@@ -3774,6 +3884,7 @@ describe('OpenAICodexSDKProvider', () => {
                 input_tokens: 100,
                 output_tokens: 40,
                 cached_input_tokens: 25,
+                cache_write_input_tokens: 10,
                 reasoning_output_tokens: 12,
               },
             };
@@ -3790,6 +3901,7 @@ describe('OpenAICodexSDKProvider', () => {
         expect(turnSpan?.attrs['gen_ai.usage.input_tokens']).toBe(100);
         expect(turnSpan?.attrs['gen_ai.usage.output_tokens']).toBe(40);
         expect(turnSpan?.attrs['gen_ai.usage.cache_read.input_tokens']).toBe(25);
+        expect(turnSpan?.attrs['gen_ai.usage.cache_creation.input_tokens']).toBe(10);
         expect(turnSpan?.attrs['gen_ai.usage.reasoning.output_tokens']).toBe(12);
         spy.mockRestore();
       });
