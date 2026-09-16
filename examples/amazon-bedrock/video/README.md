@@ -9,7 +9,7 @@ cd amazon-bedrock/video
 
 Video generation examples using AWS Bedrock's async invoke API.
 
-> **Legacy example:** Nova Reel (`amazon.nova-reel-v1:1`) has a [Bedrock end-of-life date of September 30, 2026](https://docs.aws.amazon.com/bedrock/latest/userguide/model-lifecycle.html). New customers cannot use this Legacy model; select an Active video model for new evals.
+> **Legacy example:** Nova Reel (`amazon.nova-reel-v1:1`) has a [Bedrock end-of-life date of September 30, 2026](https://docs.aws.amazon.com/bedrock/latest/userguide/model-lifecycle.html). New customers cannot use this Legacy model. Keep the Nova Reel configuration only for existing workloads during the remaining legacy period; no successor using the same API is established for this example.
 
 ## Available Models
 

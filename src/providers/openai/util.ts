@@ -44,6 +44,15 @@ export function hasSensitiveOpenAiCachePath(value: string): boolean {
   return hasInlineSecret(value) || OPAQUE_CREDENTIAL_PATH_SEGMENT.test(value);
 }
 
+const DEFAULT_MAX_TOOL_ITERATIONS = 8;
+
+/** Resolve a tool-call cap from 1 to 64, falling back to 8 for missing or out-of-range values. */
+export function resolveMaxToolIterations(value: unknown): number {
+  return typeof value === 'number' && Number.isFinite(value) && value >= 1 && value <= 64
+    ? Math.floor(value)
+    : DEFAULT_MAX_TOOL_ITERATIONS;
+}
+
 export function appendOpenAiApiPath(apiUrl: string, endpoint: string, query?: string): string {
   const fragmentIndex = apiUrl.indexOf('#');
   const fragment = fragmentIndex === -1 ? '' : apiUrl.slice(fragmentIndex);
@@ -375,6 +384,15 @@ export function assertOpenAiApiModel(model: unknown, apiUrl?: string): void {
     return;
   }
 
+  if (model === 'gpt-live-transcribe' || model.startsWith('gpt-live-transcribe-')) {
+    throw new Error(
+      'gpt-live-transcribe requires a dedicated Realtime transcription session, which this provider does not support.',
+    );
+  }
+  if (model.startsWith('gpt-live-')) {
+    throw new Error(`Use openai:live:${model} for GPT-Live sessions.`);
+  }
+
   if (apiUrl) {
     try {
       if (new URL(apiUrl).hostname.toLowerCase() !== 'api.openai.com') {
@@ -592,7 +610,7 @@ const RETIRED_OPENAI_MODELS: OpenAIModelInfo[] = [
       output: 2 / 1e6,
     },
   },
-  ...['gpt-4o-mini-realtime-preview-2024-12-17', 'gpt-realtime-mini-2025-10-06'].map((model) => ({
+  ...['gpt-realtime-mini-2025-10-06'].map((model) => ({
     id: model,
     type: 'chat',
     cost: {
@@ -602,6 +620,10 @@ const RETIRED_OPENAI_MODELS: OpenAIModelInfo[] = [
       audioOutput: 20 / 1e6,
     },
   })),
+];
+
+/** @deprecated Historical billing metadata only; these native models retired July 23, 2026. */
+export const OPENAI_DEEP_RESEARCH_MODELS: OpenAIModelInfo[] = [
   ...['o3-deep-research', 'o3-deep-research-2025-06-26'].map((model) => ({
     id: model,
     cost: {
@@ -649,8 +671,8 @@ export const OPENAI_COMPLETION_MODELS: OpenAIModelInfo[] = [
   {
     id: 'gpt-3.5-turbo-instruct',
     cost: {
-      input: 1.5 / 1000000,
-      output: 2 / 1000000,
+      input: 1.5 / 1e6,
+      output: 2 / 1e6,
     },
   },
   {
@@ -695,6 +717,19 @@ export const NON_CONVERSATIONAL_REALTIME_MODELS: ReadonlySet<string> = new Set([
 
 // Realtime models for WebSocket API
 export const OPENAI_REALTIME_MODELS: OpenAIModelInfo[] = [
+  // This dated snapshot is still listed on its Realtime model card. The retirement
+  // notice names the undated alias; removing routing metadata must not send this
+  // snapshot to Chat Completions. Availability remains subject to OpenAI's lifecycle.
+  {
+    id: 'gpt-4o-mini-realtime-preview-2024-12-17',
+    type: 'chat',
+    cost: {
+      input: 0.6 / 1e6,
+      output: 2.4 / 1e6,
+      audioInput: 10 / 1e6,
+      audioOutput: 20 / 1e6,
+    },
+  },
   // GA gpt-realtime models
   ...['gpt-realtime', 'gpt-realtime-2025-08-28', 'gpt-realtime-1.5'].map((model) => ({
     id: model,
@@ -803,6 +838,7 @@ export const OPENAI_BILLING_MODELS: OpenAIModelInfo[] = [
   ...RETIRED_OPENAI_REALTIME_MODELS,
   ...OPENAI_RESPONSES_ONLY_MODELS,
   ...OPENAI_CODEX_ONLY_MODELS,
+  ...OPENAI_DEEP_RESEARCH_MODELS,
 ];
 
 // Transcription models for /v1/audio/transcriptions endpoint
@@ -810,6 +846,10 @@ export const OPENAI_TRANSCRIPTION_MODELS: Array<{
   id: string;
   cost: { perMinute: number; input?: number; audioInput?: number; output?: number };
 }> = [
+  {
+    id: 'gpt-transcribe',
+    cost: { perMinute: 0.0045 },
+  },
   {
     id: 'gpt-4o-transcribe',
     cost: {

@@ -24,6 +24,68 @@ describe('OpenRouter', () => {
     vi.clearAllMocks();
   });
 
+  describe('credential selection', () => {
+    let restoreEnv: () => void;
+
+    beforeEach(() => {
+      restoreEnv = mockProcessEnv({
+        OPENROUTER_API_KEY: 'process-router-key',
+        CUSTOM_OPENROUTER_KEY: 'process-custom-key',
+        OPENAI_API_KEY: 'unrelated-openai-key',
+      });
+      mockedFetchWithRetries.mockReset();
+    });
+
+    afterEach(() => {
+      restoreEnv();
+      mockedFetchWithRetries.mockReset();
+    });
+
+    it.each([
+      [undefined, undefined, 'scoped-router-key'],
+      ['CUSTOM_OPENROUTER_KEY', undefined, 'scoped-custom-key'],
+      ['OPENAI_API_KEY', undefined, 'selected-openai-key'],
+      ['CUSTOM_OPENROUTER_KEY', 'explicit-key', 'explicit-key'],
+    ])('sends the selected credential (%s, %s)', async (apiKeyEnvar, apiKey, expectedKey) => {
+      mockedFetchWithRetries.mockResolvedValueOnce(
+        Response.json({ choices: [{ message: { content: 'Hello' } }], usage: { cost: 0.25 } }),
+      );
+      const provider = new OpenRouterProvider('fixture/model', {
+        config: { apiKeyEnvar, apiKey, apiBaseUrl: 'https://proxy.example.com/v1' },
+        env: {
+          OPENROUTER_API_KEY: 'scoped-router-key',
+          CUSTOM_OPENROUTER_KEY: 'scoped-custom-key',
+          OPENAI_API_KEY: 'selected-openai-key',
+        },
+      });
+
+      expect(await provider.callApi('Hello')).toMatchObject({ output: 'Hello', cost: 0.25 });
+      expect(mockedFetchWithRetries).toHaveBeenCalledWith(
+        'https://proxy.example.com/v1/chat/completions',
+        expect.objectContaining({
+          headers: expect.objectContaining({ Authorization: `Bearer ${expectedKey}` }),
+        }),
+        expect.any(Number),
+        undefined,
+      );
+    });
+
+    it.each([undefined, 'CUSTOM_OPENROUTER_KEY'])(
+      'leaves a missing selected credential unavailable (%s)',
+      (apiKeyEnvar) => {
+        mockProcessEnv({ OPENROUTER_API_KEY: undefined, CUSTOM_OPENROUTER_KEY: undefined });
+        const provider = new OpenRouterProvider('fixture/model', {
+          config: { apiKeyEnvar },
+          env: {
+            OPENAI_API_KEY: 'unrelated-scoped-openai-key',
+            OPENROUTER_API_KEY: apiKeyEnvar ? 'nonselected-router-key' : undefined,
+          },
+        });
+        expect(provider.getApiKey()).toBeUndefined();
+      },
+    );
+  });
+
   describe('OpenRouterProvider', () => {
     const provider = new OpenRouterProvider('google/gemini-2.5-pro', {});
 
