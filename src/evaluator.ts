@@ -1854,7 +1854,7 @@ async function runEvalInternal({
     }
 
     return [
-      {
+      sanitizeRedactionResult({
         ...setup,
         // Exclude the __eval* runtime vars from the persisted error result.
         vars: omitEvalRuntimeVars(setup.vars),
@@ -1870,7 +1870,7 @@ async function runEvalInternal({
         promptId: prompt.id || '',
         metadata,
         ...getTraceLinkage(traceContext, evalId),
-      },
+      }),
     ];
   }
 }
