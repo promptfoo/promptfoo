@@ -128,6 +128,7 @@ describe('RedteamIterativeProvider', () => {
     beforeEach(() => {
       mockRedteamProvider = createMockProvider({ id: 'mock-provider' });
       mockRedteamProvider.callApi.mockReset();
+      TokenUsageTracker.getInstance().resetProviderUsage(mockRedteamProvider.id());
     });
 
     it('should evaluate response correctly without penalized phrase', async () => {
@@ -195,6 +196,35 @@ describe('RedteamIterativeProvider', () => {
           completionDetails: { reasoning: 4 },
         },
       });
+    });
+
+    it('keeps cached judge usage in the scan footprint but out of incurred provider totals', async () => {
+      mockRedteamProvider.callApi.mockResolvedValue({
+        cached: true,
+        output: JSON.stringify({
+          currentResponse: { rating: 8, explanation: 'Good response' },
+          previousBestResponse: { rating: 5, explanation: 'Previous response' },
+        }),
+        tokenUsage: { total: 19, prompt: 11, completion: 8, numRequests: 1 },
+      });
+      const tokenUsage = createEmptyTokenUsage();
+
+      await evaluateResponse(
+        mockRedteamProvider,
+        'Judge prompt',
+        'Target response',
+        'Previous response',
+        false,
+        tokenUsage,
+      );
+
+      expect(tokenUsage).toMatchObject({
+        assertions: { total: 19, numRequests: 1 },
+        incurredTokenUsage: { assertions: { total: 0, numRequests: 0 } },
+      });
+      expect(
+        TokenUsageTracker.getInstance().getProviderUsage(mockRedteamProvider.id()),
+      ).toMatchObject({ total: 0, cached: 19, numRequests: 0 });
     });
 
     it('should apply penalty for penalized phrases', async () => {
@@ -324,6 +354,25 @@ describe('RedteamIterativeProvider', () => {
       expect(
         TokenUsageTracker.getInstance().getProviderUsage(mockRedteamProvider.id()),
       ).toMatchObject({ total: 23, prompt: 15, completion: 8, numRequests: 1 });
+    });
+
+    it('keeps cached attacker usage in the scan footprint but out of incurred provider totals', async () => {
+      const usage = createEmptyTokenUsage();
+      mockRedteamProvider.callApi.mockResolvedValue({
+        cached: true,
+        output: JSON.stringify({ improvement: 'Improved aspect', prompt: 'New prompt' }),
+        tokenUsage: { total: 23, prompt: 15, completion: 8, numRequests: 1 },
+      });
+
+      await getNewPrompt(mockRedteamProvider, [], undefined, usage);
+
+      expect(usage).toMatchObject({
+        attacker: { total: 23, numRequests: 1 },
+        incurredTokenUsage: { attacker: { total: 0, numRequests: 0 } },
+      });
+      expect(
+        TokenUsageTracker.getInstance().getProviderUsage(mockRedteamProvider.id()),
+      ).toMatchObject({ total: 0, cached: 23, numRequests: 0 });
     });
 
     it('returns accumulated attacker usage when the tree provider fails', async () => {

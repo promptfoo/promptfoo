@@ -234,16 +234,12 @@ export class SimulatedUser implements ApiProvider {
     tokenUsage: TokenUsage,
     response: ProviderResponse,
   ): void {
-    if (!response.cached) {
-      accumulateResponseTokenUsage(tokenUsage, response);
-    }
+    accumulateResponseTokenUsage(tokenUsage, response);
   }
 
-  /** Accumulate fresh target usage without charging Promptfoo response-cache hits. */
+  /** Preserve logical target usage while separately recording cache-missed requests. */
   private accumulateTargetTokenUsage(tokenUsage: TokenUsage, response: ProviderResponse): void {
-    if (!response.cached) {
-      accumulateResponseTokenUsage(tokenUsage, response);
-    }
+    accumulateResponseTokenUsage(tokenUsage, response);
   }
 
   private async sendMessageToAgent(

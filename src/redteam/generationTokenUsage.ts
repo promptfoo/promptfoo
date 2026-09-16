@@ -1,4 +1,8 @@
-import { accumulateResponseTokenUsage, getErrorTokenUsage } from '../util/tokenUsageUtils';
+import {
+  accumulateResponseTokenUsage,
+  createEmptyTokenUsage,
+  getErrorTokenUsage,
+} from '../util/tokenUsageUtils';
 
 import type { ApiProvider, TokenUsage } from '../types/index';
 
@@ -46,9 +50,18 @@ export function trackGenerationTokenUsage<T extends ApiProvider>(
   tokenUsage: TokenUsage,
 ): T {
   return trackProvider(provider, (response) => {
-    if (!response.cached) {
-      accumulateResponseTokenUsage(tokenUsage, response);
-    }
+    accumulateResponseTokenUsage(
+      tokenUsage,
+      response.cached
+        ? {
+            ...response,
+            tokenUsage: {
+              ...response.tokenUsage,
+              incurredTokenUsage: createEmptyTokenUsage(),
+            },
+          }
+        : response,
+    );
   });
 }
 
