@@ -481,6 +481,20 @@ describe('AbliterationProvider', () => {
 });
 
 describe('createAbliterationProvider', () => {
+  it('accepts providerOptions while preserving the legacy config argument', () => {
+    const options = { config: { apiKey: 'preferred-key' } };
+    const preferred = createAbliterationProvider('abliteration:model', {
+      providerOptions: options,
+      config: { config: { apiKey: 'legacy-key' } },
+    }) as AbliterationProvider;
+    const legacy = createAbliterationProvider('abliteration:model', {
+      config: options,
+    }) as AbliterationProvider;
+
+    expect(preferred.getApiKey()).toBe('preferred-key');
+    expect(legacy.getApiKey()).toBe('preferred-key');
+  });
+
   it('creates a provider from the default syntax', () => {
     const provider = createAbliterationProvider('abliteration:abliterated-model');
 

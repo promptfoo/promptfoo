@@ -110,7 +110,20 @@ export function parseExecutableFileReference(filePath: string): {
  * @returns True if the file has an image extension, false otherwise.
  */
 export function isImageFile(filePath: string): boolean {
-  const imageExtensions = ['jpg', 'jpeg', 'png', 'gif', 'bmp', 'webp', 'svg'];
+  const imageExtensions = [
+    'jpg',
+    'jpeg',
+    'png',
+    'gif',
+    'bmp',
+    'webp',
+    'svg',
+    'heic',
+    'heif',
+    'avif',
+    'tif',
+    'tiff',
+  ];
   const fileExtension = filePath.split('.').pop()?.toLowerCase() || '';
   return imageExtensions.includes(fileExtension);
 }
@@ -122,7 +135,21 @@ export function isImageFile(filePath: string): boolean {
  * @returns True if the file has a video extension, false otherwise.
  */
 export function isVideoFile(filePath: string): boolean {
-  const videoExtensions = ['mp4', 'webm', 'ogg', 'mov', 'avi', 'wmv', 'mkv', 'm4v'];
+  const videoExtensions = [
+    'mp4',
+    'mpeg',
+    'mpg',
+    'webm',
+    'ogg',
+    'mov',
+    'avi',
+    'flv',
+    'wmv',
+    'mkv',
+    'm4v',
+    '3gp',
+    '3gpp',
+  ];
   const fileExtension = filePath.split('.').pop()?.toLowerCase() || '';
   return videoExtensions.includes(fileExtension);
 }
@@ -134,7 +161,19 @@ export function isVideoFile(filePath: string): boolean {
  * @returns True if the file has an audio extension, false otherwise.
  */
 export function isAudioFile(filePath: string): boolean {
-  const audioExtensions = ['wav', 'mp3', 'ogg', 'aac', 'm4a', 'flac', 'wma', 'aiff', 'opus'];
+  const audioExtensions = [
+    'wav',
+    'mp3',
+    'ogg',
+    'aac',
+    'm4a',
+    'flac',
+    'wma',
+    'aif',
+    'aiff',
+    'aifc',
+    'opus',
+  ];
   const fileExtension = filePath.split('.').pop()?.toLowerCase() || '';
   return audioExtensions.includes(fileExtension);
 }
