@@ -9,6 +9,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { type UnifiedConfig } from '../../../src/types/index';
 import { dereferenceWithStandaloneSchemas } from '../../../src/util/config/jsonSchema';
 import { dereferenceConfig, readConfig } from '../../../src/util/config/load';
+import { restoreRefParserTransport, spyOnRefParserFetch } from './refParserTransport';
 
 function sharedSchema() {
   return {
@@ -18,7 +19,7 @@ function sharedSchema() {
 }
 
 describe('selective schema source isolation', () => {
-  afterEach(() => vi.restoreAllMocks());
+  afterEach(() => restoreRefParserTransport());
 
   it('detaches a provider consumer while an ordinary direct consumer uses raw RefParser', async () => {
     const schema = sharedSchema();
@@ -230,7 +231,7 @@ describe('selective schema source isolation', () => {
   });
 
   it('keeps schema-only missing, malformed, and remote refs inert', async () => {
-    const fetchSpy = vi.spyOn(globalThis, 'fetch');
+    const fetchSpy = spyOnRefParserFetch();
     const schema = {
       properties: {
         malformed: { $ref: '#/%ZZ' },
@@ -285,7 +286,7 @@ describe('selective schema source isolation', () => {
       $ref: pathToFileURL(schemaPath).href.replace('file:///', 'file://localhost/'),
     };
     const relativeSchemaRef = { $ref: 'file://schema.json' };
-    const fetchSpy = vi.spyOn(globalThis, 'fetch');
+    const fetchSpy = spyOnRefParserFetch();
 
     try {
       const result = (await dereferenceConfig(
@@ -380,7 +381,7 @@ describe('selective schema source isolation', () => {
       },
       type: 'object',
     };
-    const fetchSpy = vi.spyOn(globalThis, 'fetch').mockImplementation(async (input) => {
+    const fetchSpy = spyOnRefParserFetch().mockImplementation(async (input) => {
       const url = String(input);
       if (url === 'https://example.com/root.json') {
         return new Response(
@@ -440,7 +441,7 @@ describe('selective schema source isolation', () => {
       );
     }
     documents.set(`${baseUrl}/sibling.json`, { value: { loaded: true } });
-    const fetchSpy = vi.spyOn(globalThis, 'fetch').mockImplementation(async (input) => {
+    const fetchSpy = spyOnRefParserFetch().mockImplementation(async (input) => {
       const document = documents.get(String(input));
       return document
         ? new Response(JSON.stringify(document), {
@@ -480,7 +481,7 @@ describe('selective schema source isolation', () => {
             : { $ref: `${baseUrl}/document-${index + 1}.json#/provider/selected` },
       });
     }
-    const fetchSpy = vi.spyOn(globalThis, 'fetch').mockImplementation(async (input) => {
+    const fetchSpy = spyOnRefParserFetch().mockImplementation(async (input) => {
       const document = documents.get(String(input));
       return document
         ? new Response(JSON.stringify(document), {
@@ -508,7 +509,7 @@ describe('selective schema source isolation', () => {
       [`${baseUrl}/second.json`, { selected: { $ref: `${baseUrl}/third.json#/selected` } }],
       [`${baseUrl}/third.json`, { selected: { prompts: ['hello'], providers: ['echo'] } }],
     ]);
-    const fetchSpy = vi.spyOn(globalThis, 'fetch').mockImplementation(async (input) => {
+    const fetchSpy = spyOnRefParserFetch().mockImplementation(async (input) => {
       const document = documents.get(String(input));
       return document
         ? new Response(JSON.stringify(document), {
@@ -681,7 +682,10 @@ describe('selective schema source isolation', () => {
 
   it('preserves reserved path encodings and trailing pointer whitespace', async () => {
     const directory = await mkdtemp(join(tmpdir(), 'promptfoo-ref-spelling-'));
-    const encodedPath = join(directory, 'data%3F.json');
+    // RefParser decodes percent-escapes in a file URL path, so `data%23.json` names the file
+    // `data#.json` on disk. `#` also stands in for a character Windows allows in a filename,
+    // and encoding the fragment delimiter itself proves the ref is split on the real `#`.
+    const encodedPath = join(directory, 'data#.json');
     const pointerPath = join(directory, 'pointer.json');
     await writeFile(encodedPath, JSON.stringify({ value: 'ENCODED' }));
     await writeFile(pointerPath, JSON.stringify({ key: 'NO_SPACE', 'key ': 'SPACE' }));
@@ -694,7 +698,7 @@ describe('selective schema source isolation', () => {
         tests: [
           {
             vars: {
-              encoded: { $ref: `${directoryUrl}/data%3F.json#/value` },
+              encoded: { $ref: `${directoryUrl}/data%23.json#/value` },
               spaced: { $ref: `${pathToFileURL(pointerPath).href}#/key ` },
             },
           },
@@ -933,9 +937,9 @@ describe('selective schema source isolation', () => {
       expect(result.tests[0].vars).toEqual(direct.tests[0].vars);
 
       const remoteUrl = 'https://example.com/percent-fragments.json';
-      const fetchSpy = vi
-        .spyOn(globalThis, 'fetch')
-        .mockResolvedValue(new Response(JSON.stringify(values), { status: 200 }));
+      const fetchSpy = spyOnRefParserFetch().mockResolvedValue(
+        new Response(JSON.stringify(values), { status: 200 }),
+      );
       const remote = (await dereferenceConfig({
         prompts: ['hello'],
         providers: ['echo'],
@@ -1078,7 +1082,7 @@ describe('selective schema source isolation', () => {
     const selfUrl = 'https://example.com/promptfoo-repeated-self-cycle.json';
     await writeFile(secretPath, JSON.stringify({ compromised: true }));
     let fetches = 0;
-    const fetchSpy = vi.spyOn(globalThis, 'fetch').mockImplementation(async () => {
+    const fetchSpy = spyOnRefParserFetch().mockImplementation(async () => {
       fetches++;
       return new Response(
         JSON.stringify(
@@ -1123,7 +1127,7 @@ describe('selective schema source isolation', () => {
     const encodedUrl = `${remoteUrl}%20`;
     await writeFile(secretPath, JSON.stringify({ compromised: true }));
     const fetchUrls: string[] = [];
-    const fetchSpy = vi.spyOn(globalThis, 'fetch').mockImplementation(async (input) => {
+    const fetchSpy = spyOnRefParserFetch().mockImplementation(async (input) => {
       const url = String(input);
       fetchUrls.push(url);
       const document =
@@ -1834,7 +1838,7 @@ describe('selective schema source isolation', () => {
           : { value: { $ref: `${urls[index + 1]}#/value` } },
       ]),
     );
-    const fetchSpy = vi.spyOn(globalThis, 'fetch').mockImplementation(async (input) => {
+    const fetchSpy = spyOnRefParserFetch().mockImplementation(async (input) => {
       const document = documents.get(String(input));
       return document
         ? new Response(JSON.stringify(document), { status: 200 })
@@ -2189,7 +2193,7 @@ describe('selective schema source isolation', () => {
         tests: [{ vars: { status: { $ref: '#/$defs/Status' } } }],
       }),
     );
-    const fetchSpy = vi.spyOn(globalThis, 'fetch');
+    const fetchSpy = spyOnRefParserFetch();
 
     try {
       const result = (await dereferenceConfig(
@@ -2223,7 +2227,7 @@ describe('selective schema source isolation', () => {
       join(directory, 'assertions.json'),
       JSON.stringify([{ type: 'is-json', value: assertionSchema }]),
     );
-    const fetchSpy = vi.spyOn(globalThis, 'fetch');
+    const fetchSpy = spyOnRefParserFetch();
 
     try {
       const result = (await dereferenceConfig(
@@ -2516,7 +2520,7 @@ describe('selective schema source isolation', () => {
         unrelated: { $ref: './must-not-read.json' },
       }),
     );
-    const fetchSpy = vi.spyOn(globalThis, 'fetch');
+    const fetchSpy = spyOnRefParserFetch();
 
     try {
       const result = (await dereferenceConfig({
@@ -2653,37 +2657,35 @@ describe('selective schema source isolation', () => {
     }
   });
 
-  it.each([
-    '##',
-    '#%23',
-    '###',
-    '#%23/foo',
-  ])('normalizes external root fragment %s like the ref parser', async (fragment) => {
-    const directory = await mkdtemp(join(tmpdir(), 'promptfoo-schema-root-fragment-'));
-    const schemaPath = join(directory, 'schema.json');
-    const schema = { properties: { value: { type: 'string' } }, type: 'object' };
-    await writeFile(schemaPath, JSON.stringify(schema));
+  it.each(['##', '#%23', '###', '#%23/foo'])(
+    'normalizes external root fragment %s like the ref parser',
+    async (fragment) => {
+      const directory = await mkdtemp(join(tmpdir(), 'promptfoo-schema-root-fragment-'));
+      const schemaPath = join(directory, 'schema.json');
+      const schema = { properties: { value: { type: 'string' } }, type: 'object' };
+      await writeFile(schemaPath, JSON.stringify(schema));
 
-    try {
-      const result = (await dereferenceConfig({
-        prompts: ['hello'],
-        providers: [
-          {
-            id: 'openai:chat:gpt-4o',
-            config: {
-              response_format: {
-                schema: { $ref: `${pathToFileURL(schemaPath).href}${fragment}` },
+      try {
+        const result = (await dereferenceConfig({
+          prompts: ['hello'],
+          providers: [
+            {
+              id: 'openai:chat:gpt-4o',
+              config: {
+                response_format: {
+                  schema: { $ref: `${pathToFileURL(schemaPath).href}${fragment}` },
+                },
               },
             },
-          },
-        ],
-      } as unknown as UnifiedConfig)) as any;
+          ],
+        } as unknown as UnifiedConfig)) as any;
 
-      expect(result.providers[0].config.response_format.schema).toEqual(schema);
-    } finally {
-      await rm(directory, { force: true, recursive: true });
-    }
-  });
+        expect(result.providers[0].config.response_format.schema).toEqual(schema);
+      } finally {
+        await rm(directory, { force: true, recursive: true });
+      }
+    },
+  );
 
   it('does not follow refs inside a schema loaded from a file', async () => {
     const directory = await mkdtemp(join(tmpdir(), 'promptfoo-inert-schema-file-'));
@@ -2809,7 +2811,7 @@ describe('selective schema source isolation', () => {
   });
 
   it('uses baseline remote resolution once a schema source is ordinary', async () => {
-    const fetchSpy = vi.spyOn(globalThis, 'fetch').mockResolvedValue(
+    const fetchSpy = spyOnRefParserFetch().mockResolvedValue(
       new Response(JSON.stringify({ const: 'REMOTE' }), {
         headers: { 'content-type': 'application/json' },
       }),
@@ -3191,7 +3193,7 @@ describe('selective schema source isolation', () => {
 
   it('preserves canonical remote refs outside a detached provider branch', async () => {
     const remoteRef = 'https://example.com/canonical-body.json';
-    const fetchSpy = vi.spyOn(globalThis, 'fetch').mockResolvedValue(
+    const fetchSpy = spyOnRefParserFetch().mockResolvedValue(
       new Response(JSON.stringify({ value: 'REMOTE' }), {
         headers: { 'content-type': 'application/json' },
       }),

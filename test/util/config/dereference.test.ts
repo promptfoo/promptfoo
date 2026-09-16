@@ -1,8 +1,9 @@
 import { Agent, tool } from '@openai/agents';
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it } from 'vitest';
 import { type UnifiedConfig } from '../../../src/types/index';
 import { dereferenceWithStandaloneSchemas } from '../../../src/util/config/jsonSchema';
 import { dereferenceConfig } from '../../../src/util/config/load';
+import { restoreRefParserTransport, spyOnRefParserFetch } from './refParserTransport';
 
 function statusSchema() {
   return {
@@ -18,7 +19,7 @@ function statusSchema() {
 
 describe('dereferenceConfig JSON Schema isolation', () => {
   afterEach(() => {
-    vi.restoreAllMocks();
+    restoreRefParserTransport();
   });
 
   it('preserves nested response_format schemas while dereferencing config references', async () => {
@@ -219,9 +220,9 @@ describe('dereferenceConfig JSON Schema isolation', () => {
         status: { $ref: '#/$defs/Status' },
       },
     };
-    const fetchSpy = vi
-      .spyOn(globalThis, 'fetch')
-      .mockResolvedValue(new Response(JSON.stringify({ type: 'string' })));
+    const fetchSpy = spyOnRefParserFetch().mockResolvedValue(
+      new Response(JSON.stringify({ type: 'string' })),
+    );
     const result = (await dereferenceConfig({
       $defs: { Status: { const: 'CONFIG_ROOT' } },
       prompts: ['hello world'],
@@ -411,9 +412,9 @@ describe('dereferenceConfig JSON Schema isolation', () => {
   });
 
   it('honors the ref-parser opt-out for direct standalone test callers', async () => {
-    const fetchSpy = vi
-      .spyOn(globalThis, 'fetch')
-      .mockResolvedValue(new Response(JSON.stringify({ type: 'string' })));
+    const fetchSpy = spyOnRefParserFetch().mockResolvedValue(
+      new Response(JSON.stringify({ type: 'string' })),
+    );
     const tests = [
       {
         vars: {
@@ -642,10 +643,71 @@ describe('dereferenceConfig JSON Schema isolation', () => {
     expect(result.polluted).toBeUndefined();
   });
 
+  it('resolves own properties of a value with a plain-data prototype', async () => {
+    const definitions = Object.assign(Object.create({ inherited: 'INHERITED' }), {
+      own: { const: 'OWN' },
+    });
+
+    const result = (await dereferenceConfig({
+      definitions,
+      prompts: ['hello'],
+      providers: ['echo'],
+      tests: [{ vars: { own: { $ref: '#/definitions/own' } } }],
+    } as unknown as UnifiedConfig)) as any;
+
+    // The prototype carries nothing but data, so the value is ordinary JSON: its own properties
+    // resolve, and the chain survives cloning because the clone shares the same prototype object.
+    expect(result.tests[0].vars.own).toEqual({ const: 'OWN' });
+    expect(Object.getPrototypeOf(result.definitions).inherited).toBe('INHERITED');
+    expect(Object.hasOwn(result.definitions, 'inherited')).toBe(false);
+  });
+
+  it('rejects a reference to a property inherited from a plain-data prototype', async () => {
+    const definitions = Object.assign(Object.create({ inherited: 'INHERITED' }), {
+      own: { const: 'OWN' },
+    });
+
+    await expect(
+      dereferenceConfig({
+        definitions,
+        prompts: ['hello'],
+        providers: ['echo'],
+        tests: [{ vars: { sneaky: { $ref: '#/definitions/inherited' } } }],
+      } as unknown as UnifiedConfig),
+    ).rejects.toMatchObject({ code: 'EMISSINGPOINTER' });
+  });
+
+  it('keeps a class instance opaque rather than rebuilding it from its prototype', async () => {
+    class Provider {
+      #secret = 'PRIVATE';
+      id = 'custom:provider';
+      get secret() {
+        return this.#secret;
+      }
+      callApi() {
+        return this.#secret;
+      }
+    }
+    const provider = new Provider();
+
+    const result = (await dereferenceConfig({
+      prompts: ['hello'],
+      providers: [provider],
+      tests: [{ vars: { status: 'ready' } }],
+    } as unknown as UnifiedConfig)) as any;
+
+    // A class prototype is not inert data, so the instance must be passed through by identity.
+    // Re-creating it with `Object.create(prototype)` would leave `#secret` uninitialized and make
+    // every accessor throw.
+    expect(result.providers[0]).toBe(provider);
+    expect(result.providers[0].secret).toBe('PRIVATE');
+    expect(result.providers[0].callApi()).toBe('PRIVATE');
+  });
+
   it('preserves root and composed schema refs without resolving files or URLs', async () => {
-    const fetchSpy = vi
-      .spyOn(globalThis, 'fetch')
-      .mockResolvedValue(new Response(JSON.stringify({ type: 'string' })));
+    const fetchSpy = spyOnRefParserFetch().mockResolvedValue(
+      new Response(JSON.stringify({ type: 'string' })),
+    );
     const schema = {
       $ref: '#/$defs/Node',
       $defs: {
@@ -768,9 +830,9 @@ describe('dereferenceConfig JSON Schema isolation', () => {
   });
 
   it('keeps masking state isolated across concurrent config loads', async () => {
-    const fetchSpy = vi
-      .spyOn(globalThis, 'fetch')
-      .mockResolvedValue(new Response(JSON.stringify({ type: 'string' })));
+    const fetchSpy = spyOnRefParserFetch().mockResolvedValue(
+      new Response(JSON.stringify({ type: 'string' })),
+    );
     const results = await Promise.all(
       Array.from({ length: 8 }, (_, index) =>
         dereferenceConfig({

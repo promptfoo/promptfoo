@@ -188,15 +188,7 @@ function setValue(parent: MutableContainer, key: string, value: unknown): void {
   });
 }
 
-function isJsonContainer(value: object): boolean {
-  const prototype = Object.getPrototypeOf(value);
-  if (
-    Array.isArray(value)
-      ? prototype !== Array.prototype
-      : prototype !== Object.prototype && prototype !== null
-  ) {
-    return false;
-  }
+function hasOnlyJsonDataProperties(value: object): boolean {
   return Reflect.ownKeys(value).every((key) => {
     if (typeof key !== 'string') {
       return false;
@@ -209,6 +201,39 @@ function isJsonContainer(value: object): boolean {
     }
     return Boolean(descriptor?.enumerable && 'value' in descriptor);
   });
+}
+
+/**
+ * A prototype chain is inert when every link up to `Object.prototype` (or a null prototype) holds
+ * nothing but string-keyed enumerable data properties. `Object.create({ defaults })` builds such a
+ * chain, and cloning keeps it intact because every clone is created from the same prototype object,
+ * so inherited data stays inherited and is never copied onto the clone.
+ *
+ * A class prototype never qualifies: `constructor`, methods, and accessors are non-enumerable or
+ * non-data properties. That keeps instances carrying private fields, internal slots, or getters
+ * opaque, which is what this module needs -- re-creating them from their prototype alone would
+ * leave those slots uninitialized.
+ */
+function isInertPrototypeChain(prototype: object | null): boolean {
+  for (let current = prototype; current !== null && current !== Object.prototype; ) {
+    if (
+      typeof current !== 'object' ||
+      Array.isArray(current) ||
+      !hasOnlyJsonDataProperties(current)
+    ) {
+      return false;
+    }
+    current = Object.getPrototypeOf(current);
+  }
+  return true;
+}
+
+function isJsonContainer(value: object): boolean {
+  const prototype = Object.getPrototypeOf(value);
+  if (Array.isArray(value) ? prototype !== Array.prototype : !isInertPrototypeChain(prototype)) {
+    return false;
+  }
+  return hasOnlyJsonDataProperties(value);
 }
 
 function cloneConfigValue<T>(
