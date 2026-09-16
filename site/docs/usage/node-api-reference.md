@@ -188,9 +188,26 @@ for (const provider of providers) {
 
 ## Assertions API
 
+For deterministic checks such as `contains`, `equals`, or `regex`, import the standalone
+runner. It supports ESM and CommonJS without loading Node services or provider packages:
+
+```typescript
+import { runPureAssertion } from 'promptfoo/assertions/pure';
+
+const result = await runPureAssertion({
+  assertion: { type: 'contains', value: 'expected' },
+  providerResponse: { output: 'expected output' },
+});
+```
+
+Pass already-rendered values to this runner; template expressions and file references are
+literal content. Use `assertions.runAssertion` for templates, scripts, and model graders.
+
 ### `assertions.runAssertion(params)`
 
-Execute a single assertion against provider output. **Powerful for custom evaluation logic.**
+Execute a single assertion against provider output. To register custom assertion names,
+parameterize `AssertionParams<Type>` and `GradingResult<Type>` with those names, then pass
+the matching `AssertionRegistry` as `registry`. Custom names require an explicit registry.
 
 ```typescript
 async function runAssertion({
@@ -203,6 +220,7 @@ async function runAssertion({
   providerResponse: ProviderResponse;
   traceId?: string;
   traceData?: TraceData | null;
+  registry?: AssertionRegistry<AssertionParams, GradingResult>;
 }): Promise<GradingResult>
 ```
 

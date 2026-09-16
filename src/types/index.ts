@@ -526,7 +526,7 @@ export interface ResultSuggestion {
   value: string;
 }
 
-export interface GradingResult {
+export interface GradingResult<TType extends string = AssertionType> {
   // Whether the test passed or failed
   pass: boolean;
 
@@ -546,11 +546,11 @@ export interface GradingResult {
   tokensUsed?: TokenUsage;
 
   // List of results for each component of the assertion
-  componentResults?: GradingResult[];
+  componentResults?: GradingResult<TType>[];
 
   // The assertion that was evaluated
   // TODO(Will): Can we move to this being required?
-  assertion?: Assertion;
+  assertion?: Assertion<TType>;
 
   // User comment
   comment?: string;
@@ -749,7 +749,10 @@ export const AssertionSchema = z.object({
   contextTransform: StringOrFunctionSchema.optional(),
 });
 
-export type Assertion = z.infer<typeof AssertionSchema>;
+export type Assertion<TType extends string = AssertionType> = Omit<
+  z.infer<typeof AssertionSchema>,
+  'type'
+> & { type: TType };
 
 /**
  * Schema for validating individual assertions (regular or assert-set).
@@ -780,9 +783,13 @@ export type AssertionValue = string | string[] | number | object | AssertionValu
 
 export type AssertionValueFunctionResult = boolean | number | GradingResult;
 
-export interface AssertionParams {
-  assertion: Assertion;
-  baseType: AssertionType;
+export interface AssertionParams<TType extends string = AssertionType> {
+  assertion: Assertion<TType>;
+  baseType: [AssertionType] extends [TType]
+    ? TType
+    : TType extends `not-${infer Base}`
+      ? Base
+      : TType;
   /** Context passed to provider.callApi() for model-graded assertions */
   providerCallContext?: CallApiContextParams;
   /** Context passed to assertion value functions */

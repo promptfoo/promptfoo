@@ -93,6 +93,7 @@ vi.mock('../src/util/file');
 
 describe('index.ts exports', () => {
   const expectedNamedExports = [
+    'AssertionRegistry',
     'ConfigResolutionError',
     'EmailValidationError',
     'EvalRunError',
@@ -104,6 +105,7 @@ describe('index.ts exports', () => {
     'assertions',
     'buildInputPromptDescription',
     'cache',
+    'createPureAssertionRegistry',
     'evaluate',
     'generateTable',
     'getInputDescription',
@@ -119,7 +121,9 @@ describe('index.ts exports', () => {
     'normalizeInputDefinition',
     'normalizeInputs',
     'ProbeLimitExceededError',
+    'pureAssertionRegistry',
     'redteam',
+    'runPureAssertion',
   ];
 
   const expectedSchemaExports = [
