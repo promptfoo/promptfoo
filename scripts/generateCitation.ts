@@ -2,7 +2,8 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-import yaml from 'js-yaml';
+import * as yaml from 'js-yaml';
+import { loadYaml } from '../src/util/yamlLoad';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -100,7 +101,7 @@ export const updateCitation = async (): Promise<void> => {
 
   let citation: Citation;
   try {
-    citation = yaml.load(await fs.readFile(citationPath, 'utf8')) as Citation;
+    citation = loadYaml(await fs.readFile(citationPath, 'utf8')) as Citation;
   } catch {
     citation = createDefaultCitation(packageJson);
   }
