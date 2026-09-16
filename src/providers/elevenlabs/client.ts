@@ -71,26 +71,29 @@ export class ElevenLabsClient {
         const controller = new AbortController();
         const timeoutId = setTimeout(() => controller.abort(), this.timeout);
 
-        // Handle FormData for multipart uploads
-        const isFormData = body instanceof FormData;
-        headers['xi-api-key'] = this.apiKey;
+        let response: Response;
+        try {
+          // Handle FormData for multipart uploads
+          const isFormData = body instanceof FormData;
+          headers['xi-api-key'] = this.apiKey;
 
-        // Don't set Content-Type for FormData (fetch sets it automatically with boundary)
-        if (isFormData) {
-          delete headers['content-type'];
-        } else {
-          headers['content-type'] = 'application/json';
+          // Don't set Content-Type for FormData (fetch sets it automatically with boundary)
+          if (isFormData) {
+            delete headers['content-type'];
+          } else {
+            headers['content-type'] = 'application/json';
+          }
+
+          response = await fetchWithProxy(url, {
+            method: 'POST',
+            headers,
+            body: isFormData ? body : JSON.stringify(body),
+            signal: controller.signal,
+            ...restOptions,
+          });
+        } finally {
+          clearTimeout(timeoutId);
         }
-
-        const response = await fetchWithProxy(url, {
-          method: 'POST',
-          headers,
-          body: isFormData ? body : JSON.stringify(body),
-          signal: controller.signal,
-          ...restOptions,
-        });
-
-        clearTimeout(timeoutId);
 
         if (!response.ok) {
           await this.handleErrorResponse(response, attempt, effectiveRetries);
@@ -281,6 +284,8 @@ export class ElevenLabsClient {
     const mimeTypes: Record<string, string> = {
       // Audio formats
       mp3: 'audio/mpeg',
+      mpeg: 'audio/mpeg',
+      mpga: 'audio/mpeg',
       wav: 'audio/wav',
       flac: 'audio/flac',
       ogg: 'audio/ogg',

@@ -11,7 +11,6 @@ import { recordGenerationTokenUsage } from './generationTokenUsage';
 import {
   type InputMaterializationContext,
   type MaterializedInputVariablesResult,
-  materializeInputVariables,
   materializeInputVariablesWithMetadata,
 } from './inputVariables';
 import {
@@ -81,13 +80,6 @@ export function extractVariablesFromJson(
     }
   }
   return extractedVars;
-}
-
-export function extractMaterializedVariablesFromJson(
-  parsed: Record<string, unknown>,
-  inputs: Inputs,
-): Record<string, string> {
-  return materializeInputVariables(extractVariablesFromJson(parsed, inputs), inputs);
 }
 
 export async function extractMaterializedVariablesFromJsonWithMetadata(

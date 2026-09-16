@@ -147,14 +147,23 @@ export class MCPClient {
 
     // Initialize servers
     const servers = this.config.servers || (this.config.server ? [this.config.server] : []);
+    const usedKeys = new Set(this.clients.keys());
     for (const server of servers) {
-      logger.info(`connecting to server ${server.name || server.url || server.path || 'default'}`);
-      await this.connectToServer(server);
+      const baseKey = server.name || server.url || server.path || server.command || 'default';
+      let serverKey = baseKey;
+      for (let suffix = 1; usedKeys.has(serverKey); suffix++) {
+        serverKey = `${baseKey}:${suffix}`;
+      }
+      usedKeys.add(serverKey);
+      logger.info(`connecting to server ${serverKey}`);
+      await this.connectToServer(server, serverKey);
     }
   }
 
-  private async connectToServer(server: MCPServerConfig): Promise<void> {
-    const serverKey = server.name || server.url || server.path || 'default';
+  private async connectToServer(
+    server: MCPServerConfig,
+    serverKey = server.name || server.url || server.path || 'default',
+  ): Promise<void> {
     const { Client } = await loadMcpClientSdk();
     const client = new Client({
       name: 'promptfoo-MCP',
@@ -166,12 +175,12 @@ export class MCPClient {
     try {
       const requestOptions = getEffectiveRequestOptions(this.config);
 
-      if (server.command && server.args) {
+      if (server.command) {
         const { StdioClientTransport } = await import('@modelcontextprotocol/sdk/client/stdio.js');
         // NPM package or other command execution
         transport = new StdioClientTransport({
           command: server.command,
-          args: server.args,
+          args: server.args ?? [],
           env: getStdioEnv(server),
         });
         await client.connect(transport, requestOptions);
@@ -273,7 +282,7 @@ export class MCPClient {
           logger.debug('Connected using SSE transport');
         }
       } else {
-        throw new Error('Either command+args or path or url must be specified for MCP server');
+        throw new Error('Either command or path or url must be specified for MCP server');
       }
 
       // Ping server to verify connection if configured
@@ -361,7 +370,9 @@ export class MCPClient {
     oauthConfig: OAuthServerConfig,
     forceRefresh: boolean,
   ): Promise<void> {
-    // If a refresh is already in progress, wait for it instead of starting a new one.
+    // Wait for each active refresh lock. Its owner clears it in finally; once no lock
+    // remains, this caller either uses the refreshed token or starts its own refresh.
+    // Another caller may install a new lock while we wait, so check again each time.
     while (true) {
       const existingRefreshPromise = this.tokenRefreshLocks.get(serverKey)?.promise;
       if (!existingRefreshPromise) {
@@ -375,10 +386,10 @@ export class MCPClient {
         if (this.hasValidToken(serverKey)) {
           return;
         }
-        // Token still needs refresh after waiting, so fall through and try again.
+        // The token is still stale; check for a replacement lock before refreshing.
         logger.debug(`[MCP] Token still needs refresh for ${serverKey}, refreshing again...`);
       } catch {
-        // If the in-progress refresh failed, we'll try again below
+        // The lock owner cleans up even on failure; check for a replacement lock.
         logger.debug(`[MCP] Previous token refresh failed for ${serverKey}, retrying...`);
       }
     }
@@ -425,7 +436,7 @@ export class MCPClient {
     this.transports.delete(serverKey);
 
     // Reconnect with fresh token
-    await this.connectToServer(oauthConfig.serverConfig);
+    await this.connectToServer(oauthConfig.serverConfig, serverKey);
     logger.debug(`[MCP] Successfully refreshed OAuth token for server ${serverKey}`);
   }
 
@@ -467,6 +478,8 @@ export class MCPClient {
         let currentClient = client;
         let retried = false;
 
+        // A successful call returns. Authentication failure allows one refresh and
+        // one retry; all other failures return an error after the catch block.
         while (true) {
           try {
             const result = await currentClient.callTool(
