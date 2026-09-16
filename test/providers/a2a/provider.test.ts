@@ -128,6 +128,39 @@ describe('A2AProvider', () => {
     expect(requestBody.message.messageId).toMatch(/^promptfoo-/);
   });
 
+  it('sends a non-streaming message with templated request metadata', async () => {
+    vi.mocked(fetchWithTimeout).mockResolvedValueOnce(
+      jsonResponse({
+        message: {
+          role: 'ROLE_AGENT',
+          parts: [{ text: 'hello from a2a' }],
+        },
+      }),
+    );
+
+    const result = await provider({
+      message: { role: 'ROLE_USER', parts: [{ text: 'Question: {{prompt}}' }] },
+      metadata: { metadata_field: '{{metadata_field}}' },
+    }).callApi('hi', {
+      prompt: { raw: '{{prompt}}', label: 'prompt' },
+      vars: { metadata_field: 'value-1' },
+      testCaseId: 'case-1',
+    });
+
+    expect(result.output).toBe('hello from a2a');
+    expect(fetchWithTimeout).toHaveBeenCalledWith(
+      'https://agent.example.com/a2a/v1/message:send',
+      expect.objectContaining({
+        body: expect.stringContaining('Question: hi'),
+        method: 'POST',
+      }),
+      expect.any(Number),
+    );
+    const requestBody = JSON.parse(vi.mocked(fetchWithTimeout).mock.calls[0]?.[1]?.body as string);
+    expect(requestBody.message.messageId).toMatch(/^promptfoo-/);
+    expect(requestBody.metadata).toEqual({ metadata_field: 'value-1' });
+  });
+
   it('sends standards-compliant default A2A messages', async () => {
     vi.mocked(fetchWithTimeout).mockResolvedValueOnce(
       jsonResponse({
