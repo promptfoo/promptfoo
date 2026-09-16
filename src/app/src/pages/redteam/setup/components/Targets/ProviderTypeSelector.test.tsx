@@ -40,6 +40,7 @@ describe('ProviderTypeSelector', () => {
     // Provider list is always expanded
     expect(screen.getByText('HTTP/HTTPS Endpoint')).toBeVisible();
     expect(screen.getByText('Python')).toBeVisible();
+    expect(screen.queryByText('GitHub Models')).not.toBeInTheDocument();
 
     // Select Python provider
     const pythonProviderCard = screen.getByText('Python').closest('[role="button"]');
@@ -60,6 +61,30 @@ describe('ProviderTypeSelector', () => {
 
     // List remains expanded after selection
     expect(screen.getByText('Python')).toBeVisible();
+  });
+
+  it.each([
+    ['Google AI Studio', 'google', 'google:gemini-3.8-flash', {}],
+    ['Google Vertex AI', 'vertex', 'vertex:gemini-3.8-flash', { region: 'global' }],
+  ])('defaults %s to Gemini 3.8 Flash', async (label, providerType, expectedModel, config) => {
+    const user = userEvent.setup();
+    const setProvider = vi.fn();
+
+    renderWithTooltipProvider(
+      <ProviderTypeSelector
+        provider={{ id: '', config: {}, label: 'Gemini target' }}
+        setProvider={setProvider}
+      />,
+    );
+
+    const providerCard = screen.getByText(label).closest('[role="button"]');
+    expect(providerCard).not.toBeNull();
+    await user.click(providerCard!);
+
+    expect(setProvider).toHaveBeenCalledWith(
+      { id: expectedModel, config, label: 'Gemini target' },
+      providerType,
+    );
   });
 
   it('should filter provider options by search term when the user enters text in the search box', async () => {
@@ -84,6 +109,41 @@ describe('ProviderTypeSelector', () => {
     expect(screen.getByText('OpenAI')).toBeVisible();
 
     expect(screen.queryByText('HTTP/HTTPS Endpoint')).toBeNull();
+  });
+
+  it('finds Codex Security SDK by security search and configures its native provider', async () => {
+    const user = userEvent.setup();
+    const mockSetProvider = vi.fn();
+
+    renderWithTooltipProvider(
+      <ProviderTypeSelector
+        provider={{ id: '__selecting__', config: {} }}
+        setProvider={mockSetProvider}
+      />,
+    );
+
+    await user.type(screen.getByRole('searchbox', { name: 'Search providers' }), 'security');
+
+    const providerCard = screen.getByText('Codex Security SDK').closest('[role="button"]');
+    expect(providerCard).toBeInTheDocument();
+    expect(screen.queryByText('OpenAI')).toBeNull();
+
+    await user.click(providerCard!);
+
+    expect(mockSetProvider).toHaveBeenCalledWith(
+      {
+        id: 'openai:codex-security:gpt-5.6-luna',
+        label: 'Codex Security SDK',
+        config: {
+          operation: 'security-scan',
+          repository: '',
+          auth: 'auto',
+          model_reasoning_effort: 'high',
+          max_cost_usd: 1,
+        },
+      },
+      'codex-security',
+    );
   });
 
   it('labels provider search and clear controls', async () => {
@@ -136,6 +196,32 @@ describe('ProviderTypeSelector', () => {
     // HTTP should be hidden since it's in 'My Application' tag
     const httpProvider = screen.queryByText('HTTP/HTTPS Endpoint');
     expect(httpProvider).toBeNull();
+  });
+
+  it('updates available providers after the parent changes the allowed IDs', () => {
+    const provider: ProviderOptions = { id: '', config: {} };
+    const setProvider = vi.fn();
+    const { rerender } = renderWithTooltipProvider(
+      <ProviderTypeSelector
+        provider={provider}
+        setProvider={setProvider}
+        availableProviderIds={['http']}
+      />,
+    );
+    expect(screen.getByText('HTTP/HTTPS Endpoint')).toBeVisible();
+    expect(screen.queryByText('Python')).not.toBeInTheDocument();
+
+    rerender(
+      <TooltipProvider>
+        <ProviderTypeSelector
+          provider={provider}
+          setProvider={setProvider}
+          availableProviderIds={['python']}
+        />
+      </TooltipProvider>,
+    );
+    expect(screen.getByText('Python')).toBeVisible();
+    expect(screen.queryByText('HTTP/HTTPS Endpoint')).not.toBeInTheDocument();
   });
 
   it('should only display provider options included in availableProviderIds when availableProviderIds prop is provided', () => {
@@ -308,6 +394,28 @@ describe('ProviderTypeSelector', () => {
     expect(screen.getByText('Custom Go integration')).toBeVisible();
   });
 
+  it('selects the first-class Open Interpreter provider', async () => {
+    const user = userEvent.setup();
+    const setProvider = vi.fn();
+
+    renderWithTooltipProvider(
+      <ProviderTypeSelector
+        provider={{ id: 'http', label: 'Coding target', config: {} }}
+        setProvider={setProvider}
+        providerType="http"
+      />,
+    );
+
+    const card = screen.getByText('Open Interpreter').closest('[role="button"]');
+    expect(card).toBeInTheDocument();
+    await user.click(card!);
+
+    expect(setProvider).toHaveBeenCalledWith(
+      { id: 'openinterpreter', label: 'Coding target', config: {} },
+      'openinterpreter',
+    );
+  });
+
   it('should initialize selectedProviderType from the providerType prop when provided, and show the corresponding provider as selected in the collapsed view', () => {
     const mockSetProvider = vi.fn();
     const initialProvider: ProviderOptions = {
@@ -347,7 +455,7 @@ describe('ProviderTypeSelector', () => {
     );
 
     expect(screen.getByText('OpenAI')).toBeVisible();
-    expect(screen.getByText('GPT-5.5, GPT-5.4, GPT-5.4 Mini and older models')).toBeVisible();
+    expect(screen.getByText('GPT-5.6 Luna, Terra, Sol and GPT-6 Astra')).toBeVisible();
   });
 
   it('should correctly update provider configuration when switching from Go provider to HTTP provider', async () => {
@@ -520,6 +628,7 @@ describe('ProviderTypeSelector', () => {
     expect(screen.getByText('LlamaIndex')).toBeVisible();
     expect(screen.getByText('LangGraph')).toBeVisible();
     expect(screen.getByText('OpenAI Agents SDK')).toBeVisible();
+    expect(screen.getByText('Codex Security SDK')).toBeVisible();
     expect(screen.getByText('PydanticAI')).toBeVisible();
     expect(screen.getByText('Google ADK')).toBeVisible();
     expect(screen.getByText('Other Agent Framework')).toBeVisible();

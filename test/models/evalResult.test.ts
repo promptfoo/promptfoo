@@ -3,6 +3,7 @@ import logger from '../../src/logger';
 import { runDbMigrations } from '../../src/migrate';
 import EvalResult, { sanitizeProvider } from '../../src/models/evalResult';
 import { hashPrompt } from '../../src/prompts/utils';
+import { WebSocketProvider } from '../../src/providers/websocket';
 import {
   type ApiProvider,
   type AtomicTestCase,
@@ -107,6 +108,24 @@ describe('EvalResult', () => {
         label: 'Test Provider',
         config: {
           apiKey: '[REDACTED]',
+        },
+      });
+    });
+
+    it('should redact env-rendered credentials from templated WebSocket provider data', () => {
+      const provider = new WebSocketProvider('websocket', {
+        config: {
+          url: 'ws://127.0.0.1/sessions/{{ sessionId }}?token=runtime-secret',
+          messageTemplate: '{{ prompt }}',
+        },
+      });
+
+      expect(sanitizeProvider(provider)).toEqual({
+        id: 'ws://127.0.0.1/sessions/{{ sessionId }}?token=%5BREDACTED%5D',
+        label: undefined,
+        config: {
+          url: 'ws://127.0.0.1/sessions/{{ sessionId }}?token=%5BREDACTED%5D',
+          messageTemplate: '{{ prompt }}',
         },
       });
     });
@@ -1255,6 +1274,62 @@ describe('EvalResult', () => {
 
       expect(result.toEvaluateResult().tokenUsage?.assertions).toMatchObject({
         numRequests: 1,
+      });
+    });
+
+    it('does not invent grading requests when reconstructing deterministic assertions', () => {
+      const result = new EvalResult({
+        id: 'test-id',
+        evalId: 'test-eval-id',
+        promptIdx: 0,
+        testIdx: 0,
+        testCase: mockTestCase,
+        prompt: mockPrompt,
+        success: true,
+        score: 1,
+        response: null,
+        gradingResult: {
+          pass: true,
+          score: 1,
+          reason: 'Deterministic assertion passed',
+          tokensUsed: { total: 0, prompt: 0, completion: 0, cached: 0, numRequests: 0 },
+        },
+        provider: mockProvider,
+        failureReason: ResultFailureReason.NONE,
+        namedScores: {},
+      });
+
+      expect(result.toEvaluateResult().tokenUsage?.assertions).toMatchObject({
+        total: 0,
+        numRequests: 0,
+      });
+    });
+
+    it('separates logical and incurred requests when legacy grading results imply a cache hit', () => {
+      const result = new EvalResult({
+        id: 'test-id',
+        evalId: 'test-eval-id',
+        promptIdx: 0,
+        testIdx: 0,
+        testCase: mockTestCase,
+        prompt: mockPrompt,
+        success: true,
+        score: 1,
+        response: null,
+        gradingResult: {
+          pass: true,
+          score: 1,
+          reason: 'Legacy cached grading result',
+          tokensUsed: { total: 97, cached: 97, numRequests: 0 },
+        },
+        provider: mockProvider,
+        failureReason: ResultFailureReason.NONE,
+        namedScores: {},
+      });
+
+      expect(result.toEvaluateResult().tokenUsage).toMatchObject({
+        assertions: { total: 97, cached: 97, numRequests: 1 },
+        incurredTokenUsage: { assertions: { total: 0, numRequests: 0 } },
       });
     });
 
