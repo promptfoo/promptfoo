@@ -98,13 +98,20 @@ Ollama's `done_reason`, which you can assert on with
 [`finish-reason`](/docs/configuration/expected-outputs/deterministic/#finish-reason).
 
 Config keys promptfoo does not recognize are **silently dropped** before the request is
-sent (run with `LOG_LEVEL=debug` to see which). The supported `options` keys track
+sent. Run with `LOG_LEVEL=debug` to see which. The supported `options` keys track
 Ollama's current [Options struct](https://github.com/ollama/ollama/blob/main/api/types.go):
 `num_predict`, `num_keep`, `seed`, `top_k`, `top_p`, `min_p`, `typical_p`,
 `repeat_last_n`, `temperature`, `repeat_penalty`, `presence_penalty`,
 `frequency_penalty`, `stop`, `num_ctx`, `num_batch`, `num_gpu`, `main_gpu`,
-`use_mmap`, and `num_thread`. Note that `max_tokens` is an OpenAI key — Ollama ignores
-it, so use `num_predict`.
+`use_mmap`, and `num_thread`.
+
+Note that `max_tokens` is an OpenAI key — Ollama ignores it, so use `num_predict`.
+
+Options that newer Ollama releases removed (`mirostat`, `mirostat_tau`, `mirostat_eta`,
+`tfs_z`, `num_gqa`, `f16_kv`, `logits_all`, `vocab_only`, `low_vram`, `use_mlock`,
+`embedding_only`, `rope_frequency_base`, `rope_frequency_scale`, `penalize_newline`) are
+still forwarded so configs pointed at an older `OLLAMA_BASE_URL` keep working. Current
+servers ignore them, and promptfoo logs a debug notice when you use one.
 
 You can also pass arbitrary fields directly to the Ollama API using the `passthrough`
 option. A `passthrough.options` object is merged into the computed options rather than

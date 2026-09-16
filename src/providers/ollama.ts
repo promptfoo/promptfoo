@@ -37,6 +37,24 @@ interface OllamaCompletionOptions {
   use_mmap?: boolean;
   num_thread?: number;
 
+  // Removed from Ollama's Options struct in newer releases, but still forwarded so
+  // configs pointed at an older OLLAMA_BASE_URL keep working. Modern servers ignore
+  // them; promptfoo logs a deprecation notice when they are used.
+  tfs_z?: number;
+  num_gqa?: number;
+  f16_kv?: boolean;
+  logits_all?: boolean;
+  vocab_only?: boolean;
+  low_vram?: boolean;
+  use_mlock?: boolean;
+  embedding_only?: boolean;
+  rope_frequency_base?: number;
+  rope_frequency_scale?: number;
+  penalize_newline?: boolean;
+  mirostat?: number;
+  mirostat_tau?: number;
+  mirostat_eta?: number;
+
   // Top-level API parameters (siblings of `options`, not members of it).
   tools?: any[]; // Support for function calling/tools
   think?: boolean; // Top-level parameter for thinking/reasoning
@@ -70,6 +88,20 @@ const OllamaCompletionOptionKeys = new Set<keyof OllamaCompletionOptions>([
   'main_gpu',
   'use_mmap',
   'num_thread',
+  'tfs_z',
+  'num_gqa',
+  'f16_kv',
+  'logits_all',
+  'vocab_only',
+  'low_vram',
+  'use_mlock',
+  'embedding_only',
+  'rope_frequency_base',
+  'rope_frequency_scale',
+  'penalize_newline',
+  'mirostat',
+  'mirostat_tau',
+  'mirostat_eta',
   'tools',
   'think',
   'keep_alive',
@@ -92,6 +124,28 @@ const OllamaNonNestedOptionKeys = new Set<string>([
 ]);
 
 /**
+ * Options Ollama has dropped from its Options struct. Still forwarded -- modern servers
+ * ignore unknown option keys, and an older OLLAMA_BASE_URL may still honor them -- but
+ * worth telling the user they are almost certainly doing nothing.
+ */
+const OllamaDeprecatedOptionKeys = new Set<string>([
+  'tfs_z',
+  'num_gqa',
+  'f16_kv',
+  'logits_all',
+  'vocab_only',
+  'low_vram',
+  'use_mlock',
+  'embedding_only',
+  'rope_frequency_base',
+  'rope_frequency_scale',
+  'penalize_newline',
+  'mirostat',
+  'mirostat_tau',
+  'mirostat_eta',
+]);
+
+/**
  * Builds the nested `options` object Ollama expects, dropping anything that belongs at
  * the top level. Shared by all three providers so they cannot drift: the chat provider
  * previously excluded only `tools`, so `think` and the whole `passthrough` object were
@@ -99,11 +153,15 @@ const OllamaNonNestedOptionKeys = new Set<string>([
  */
 function buildOllamaOptions(config: OllamaCompletionOptions): Record<string, any> {
   const dropped: string[] = [];
+  const deprecated: string[] = [];
   const options = Object.keys(config).reduce<Record<string, any>>((acc, key) => {
     const optionName = key as keyof OllamaCompletionOptions;
     if (OllamaCompletionOptionKeys.has(optionName)) {
       if (!OllamaNonNestedOptionKeys.has(key)) {
         acc[optionName] = config[optionName];
+        if (OllamaDeprecatedOptionKeys.has(key)) {
+          deprecated.push(key);
+        }
       }
     } else if (key !== 'showThinking') {
       dropped.push(key);
@@ -116,7 +174,13 @@ function buildOllamaOptions(config: OllamaCompletionOptions): Record<string, any
     // key Ollama ignores) sat unnoticed in this repo's own redteam example.
     logger.debug('[Ollama] Ignoring unsupported config keys', {
       dropped,
-      hint: 'Use `passthrough` to send arbitrary top-level fields to the Ollama API.',
+      hint: 'Generation options belong under `passthrough.options`; other top-level API fields go directly under `passthrough`.',
+    });
+  }
+  if (deprecated.length > 0) {
+    logger.debug('[Ollama] Forwarding options that current Ollama releases ignore', {
+      deprecated,
+      hint: "These were removed from Ollama's Options struct and are kept only for older servers.",
     });
   }
   return options;
