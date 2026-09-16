@@ -7,7 +7,7 @@ prompts:
 providers:
   - id: openai:codex-sdk
     config:
-      model: gpt-5.2
+      model: gpt-5.6-terra
       # Relative working_dir values resolve from this config file's directory.
       # Codex resolves CODEX_HOME itself; set CODEX_HOME_OVERRIDE when running this config from another cwd.
       # sample-codex-home has no auth state; use an API key or point CODEX_HOME_OVERRIDE at ~/.codex.
