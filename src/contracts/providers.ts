@@ -19,6 +19,7 @@ export interface ProviderModerationResponse {
   cached?: boolean;
   error?: string;
   flags?: ModerationFlag[];
+  tokenUsage?: TokenUsage;
 }
 
 export interface GuardrailResponse {
@@ -37,6 +38,8 @@ export interface ImageOutput {
 export interface ProviderResponse {
   cached?: boolean;
   cost?: number;
+  /** Actual target-provider cost incurred during this run, excluding response-cache replays. */
+  incurredCost?: number;
   error?: string;
   /**
    * Indicates that a remote Promptfoo server already materialized multi-input vars

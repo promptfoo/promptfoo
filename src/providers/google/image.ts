@@ -55,6 +55,21 @@ interface ImageGenerationResponse {
   };
 }
 
+/** Per-image cost (USD) by normalized Imagen model path. */
+const IMAGEN_COSTS: Record<string, number> = {
+  // Imagen 4 GA (generally available) names
+  'imagen-4.0-ultra-generate-001': 0.06,
+  'imagen-4.0-generate-001': 0.04,
+  'imagen-4.0-fast-generate-001': 0.02,
+  // Imagen 4 preview aliases
+  'imagen-4.0-ultra-generate-preview-06-06': 0.06,
+  'imagen-4.0-generate-preview-06-06': 0.04,
+  'imagen-4.0-fast-generate-preview-06-06': 0.02,
+  'imagen-3.0-generate-002': 0.04,
+  'imagen-3.0-generate-001': 0.04,
+  'imagen-3.0-fast-generate-001': 0.02,
+};
+
 export class GoogleImageProvider implements ApiProvider {
   modelName: string;
   config: CompletionOptions;
@@ -315,7 +330,8 @@ export class GoogleImageProvider implements ApiProvider {
       images: imageOutputs,
       cached,
       latencyMs,
-      cost: totalCost,
+      // Cached responses were already paid for on the original request.
+      cost: cached ? undefined : totalCost,
     };
   }
 
@@ -352,18 +368,9 @@ export class GoogleImageProvider implements ApiProvider {
   }
 
   private getCost(): number {
-    // Cost per image based on model
-    const costMap: Record<string, number> = {
-      'imagen-4.0-ultra-generate-preview-06-06': 0.06,
-      'imagen-4.0-generate-preview-06-06': 0.04,
-      'imagen-4.0-fast-generate-preview-06-06': 0.02,
-      'imagen-3.0-generate-002': 0.04,
-      'imagen-3.0-generate-001': 0.04,
-      'imagen-3.0-fast-generate-001': 0.02,
-    };
     // Use the normalized model path for cost lookup
     const modelPath = this.getModelPath();
-    return costMap[modelPath] || 0.04; // Default cost
+    return IMAGEN_COSTS[modelPath] || 0.04; // Default cost
   }
 
   private async withRetry<T>(operation: () => Promise<T>, operationName: string): Promise<T> {

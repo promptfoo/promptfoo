@@ -128,6 +128,13 @@ function isZeroSpanId(id: string): boolean {
   return /^0+$/.test(id) || BASE64_ZERO_SPAN_ID.test(id);
 }
 
+// OTEL trace_id is 32 hex chars / 16 bytes. Its base64 representation is
+// 22 `A` characters followed by optional `==` padding.
+const BASE64_ZERO_TRACE_ID = /^A{22}(?:==)?$/;
+function isZeroTraceId(id: string): boolean {
+  return /^0+$/.test(id) || BASE64_ZERO_TRACE_ID.test(id);
+}
+
 function randomSpanId(): string {
   return crypto.randomBytes(8).toString('hex');
 }
@@ -762,11 +769,13 @@ export class OTLPReceiver {
   ): ParsedTrace | null {
     // Prefer an inline traceId on the log record (set when the SDK propagated
     // TRACEPARENT into its logs context). Fall back to the resource attribute
-    // promptfoo.trace_id — the claude-agent-sdk provider injects this via
-    // OTEL_RESOURCE_ATTRIBUTES because Claude Code's logs signal does not
-    // inherit TRACEPARENT. Without either, we can't link anywhere useful.
-    const rawTraceId =
-      log.traceId ?? getStringAttribute(resourceAttributes, PROMPTFOO_RESOURCE_ATTR_TRACE_ID);
+    // promptfoo.trace_id — agent providers inject this via
+    // OTEL_RESOURCE_ATTRIBUTES because some log signals do not inherit
+    // TRACEPARENT. Without either, we can't link anywhere useful.
+    const hasValidInlineTraceId = !!log.traceId && !isZeroTraceId(log.traceId);
+    const rawTraceId = hasValidInlineTraceId
+      ? log.traceId
+      : getStringAttribute(resourceAttributes, PROMPTFOO_RESOURCE_ATTR_TRACE_ID);
     if (!rawTraceId) {
       logger.debug(
         `[OtlpReceiver] Dropping log: no traceId and no ${PROMPTFOO_RESOURCE_ATTR_TRACE_ID} resource attribute (scope=${scopeLog.scope?.name ?? 'unknown'}). Ensure TRACEPARENT is propagated or OTEL_RESOURCE_ATTRIBUTES is set by the provider.`,

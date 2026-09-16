@@ -101,15 +101,16 @@ describe('domainVerification', () => {
       expect(result.exists).toBe(false);
     });
 
-    it.each([
-      401, 403, 405, 429, 500, 502, 503,
-    ])('treats %i as inconclusive (exists=null)', async (status) => {
-      mockedFetch.mockResolvedValue(new Response(null, { status }));
+    it.each([401, 403, 405, 429, 500, 502, 503])(
+      'treats %i as inconclusive (exists=null)',
+      async (status) => {
+        mockedFetch.mockResolvedValue(new Response(null, { status }));
 
-      const result = await verifyHttpUrl('https://example.com');
-      expect(result.status).toBe(status);
-      expect(result.exists).toBeNull();
-    });
+        const result = await verifyHttpUrl('https://example.com');
+        expect(result.status).toBe(status);
+        expect(result.exists).toBeNull();
+      },
+    );
 
     it('times out after specified milliseconds', async () => {
       // Same pattern as the GitHub timeout test: leave the promise pending and

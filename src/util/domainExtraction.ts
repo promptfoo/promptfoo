@@ -149,63 +149,38 @@ export function extractUrls(text: string, source: string = 'model_answer'): Extr
   const results: ExtractedUrl[] = [];
   const seen = new Set<string>();
 
-  for (const match of text.matchAll(URL_PATTERN)) {
-    const raw = match[0];
-    const normalized = normalizeUrl(raw);
-    if (!normalized || seen.has(normalized)) {
-      continue;
-    }
-
-    try {
-      const parsed = new URL(normalized);
-      const host = (parsed.hostname || '').toLowerCase().replace(/^www\./, '');
-      if (!host) {
+  // WWW_PATTERN matches are scheme-less, so `normalizeUrl` gives them `https://`
+  // and `parsed.protocol` reports the same scheme the dedicated branch used to
+  // hard-code. Full URLs are collected before bare `www.` hosts.
+  for (const pattern of [URL_PATTERN, WWW_PATTERN]) {
+    for (const match of text.matchAll(pattern)) {
+      const raw = match[0];
+      const normalized = normalizeUrl(raw);
+      if (!normalized || seen.has(normalized)) {
         continue;
       }
 
-      seen.add(normalized);
-      results.push({
-        raw: cleanUrl(raw),
-        normalized,
-        scheme: parsed.protocol.replace(':', ''),
-        host,
-        path: parsed.pathname,
-        query: parsed.search,
-        fragment: parsed.hash,
-        source,
-      });
-    } catch {
-      // skip invalid
-    }
-  }
+      try {
+        const parsed = new URL(normalized);
+        const host = (parsed.hostname || '').toLowerCase().replace(/^www\./, '');
+        if (!host) {
+          continue;
+        }
 
-  for (const match of text.matchAll(WWW_PATTERN)) {
-    const raw = match[0];
-    const normalized = normalizeUrl(raw);
-    if (!normalized || seen.has(normalized)) {
-      continue;
-    }
-
-    try {
-      const parsed = new URL(normalized);
-      const host = (parsed.hostname || '').toLowerCase().replace(/^www\./, '');
-      if (!host) {
-        continue;
+        seen.add(normalized);
+        results.push({
+          raw: cleanUrl(raw),
+          normalized,
+          scheme: parsed.protocol.replace(':', ''),
+          host,
+          path: parsed.pathname,
+          query: parsed.search,
+          fragment: parsed.hash,
+          source,
+        });
+      } catch {
+        // skip invalid
       }
-
-      seen.add(normalized);
-      results.push({
-        raw: cleanUrl(raw),
-        normalized,
-        scheme: 'https',
-        host,
-        path: parsed.pathname,
-        query: parsed.search,
-        fragment: parsed.hash,
-        source,
-      });
-    } catch {
-      // skip invalid
     }
   }
 

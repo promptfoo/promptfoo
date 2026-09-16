@@ -71,7 +71,13 @@ vi.mock('../../src/util/sharing');
 
 const testSuite = {
   prompts: [],
-  providers: [],
+  providers: [
+    {
+      id: () => 'echo',
+      label: 'selected-target',
+      callApi: vi.fn(),
+    },
+  ],
   tests: [],
 } as unknown as TestSuite;
 
@@ -90,15 +96,17 @@ function createEval(overrides: Partial<Eval> = {}): Eval {
 function mockResolvedConfig({
   commandLineOptions,
   config,
+  providers,
 }: {
   commandLineOptions?: Record<string, unknown>;
   config?: Record<string, unknown>;
+  providers?: TestSuite['providers'];
 } = {}) {
   vi.mocked(resolveConfigs).mockResolvedValue({
     basePath: '/workspace',
     commandLineOptions,
     config: (config ?? {}) as UnifiedConfig,
-    testSuite,
+    testSuite: providers ? { ...testSuite, providers } : testSuite,
   });
 }
 
@@ -256,6 +264,208 @@ describe('retryCommand', () => {
       'Skipping result with invalid promptIdx: 99',
       expect.objectContaining({ resultId: 'invalid-prompt-result' }),
     );
+    expect(prompts[0].metrics).not.toHaveProperty('incurredCost');
+  });
+
+  it.each([
+    {
+      label: 'cached result without actual cost',
+      costs: [{ logical: 0.5, incurred: 0, cached: true }],
+      expectedLogicalCost: 0.5,
+      expectedIncurredCost: 0,
+    },
+    {
+      label: 'legacy cached result without incurred cost',
+      costs: [{ logical: 0.5, cached: true }],
+      expectedLogicalCost: 0.5,
+      expectedIncurredCost: 0,
+    },
+    {
+      label: 'fresh legacy result before a cached result',
+      costs: [
+        { logical: 0.25, cached: false },
+        { logical: 0.5, incurred: 0, cached: true },
+      ],
+      expectedLogicalCost: 0.75,
+      expectedIncurredCost: 0.25,
+    },
+    {
+      label: 'fresh legacy result after a cached result',
+      costs: [
+        { logical: 0.5, incurred: 0, cached: true },
+        { logical: 0.25, cached: false },
+      ],
+      expectedLogicalCost: 0.75,
+      expectedIncurredCost: 0.25,
+    },
+    {
+      label: 'legacy cached result before a newer cached result',
+      costs: [
+        { logical: 0.5, cached: true },
+        { logical: 0.25, incurred: 0, cached: true },
+      ],
+      expectedLogicalCost: 0.75,
+      expectedIncurredCost: 0,
+    },
+    {
+      label: 'legacy cached result after a newer cached result',
+      costs: [
+        { logical: 0.25, incurred: 0, cached: true },
+        { logical: 0.5, cached: true },
+      ],
+      expectedLogicalCost: 0.75,
+      expectedIncurredCost: 0,
+    },
+    {
+      label: 'partially incurred composite result',
+      costs: [{ logical: 0.5, incurred: 0.25, cached: true }],
+      expectedLogicalCost: 0.5,
+      expectedIncurredCost: 0.25,
+    },
+  ])(
+    'preserves logical and incurred cost when retrying a $label',
+    async ({ costs, expectedLogicalCost, expectedIncurredCost }) => {
+      const prompts = [{}] as any[];
+      const evalRecord = createEval({
+        persisted: true,
+        prompts,
+        fetchResultsBatched: vi.fn(async function* () {
+          yield costs.map(({ logical, incurred, cached }, index) => ({
+            id: `retried-result-${index}`,
+            promptIdx: 0,
+            success: true,
+            score: 1,
+            cost: logical,
+            namedScores: {},
+            response: {
+              cached,
+              ...(incurred !== undefined && { incurredCost: incurred }),
+            },
+          })) as any[];
+        }),
+      });
+
+      await recalculatePromptMetrics(evalRecord);
+
+      expect(prompts[0].metrics).toMatchObject({
+        cost: expectedLogicalCost,
+        incurredCost: expectedIncurredCost,
+      });
+      expect(evalRecord.addPrompts).toHaveBeenCalledWith(prompts);
+    },
+  );
+
+  it.each([
+    {
+      label: 'cached target and fresh grader',
+      response: {
+        cached: true,
+        tokenUsage: { total: 100, prompt: 60, completion: 40, numRequests: 1 },
+      },
+      gradingResult: {
+        tokensUsed: { total: 37, prompt: 23, completion: 14, numRequests: 1 },
+      },
+      expected: {
+        total: 100,
+        cached: 100,
+        numRequests: 1,
+        assertions: { total: 37, numRequests: 1 },
+        incurredTokenUsage: {
+          total: 0,
+          numRequests: 0,
+          assertions: { total: 37, numRequests: 1 },
+        },
+      },
+    },
+    {
+      label: 'fresh target and cached grader',
+      response: {
+        tokenUsage: { total: 100, prompt: 60, completion: 40, numRequests: 1 },
+      },
+      gradingResult: {
+        metadata: { cachedResponse: true },
+        tokensUsed: { total: 37, prompt: 23, completion: 14, cached: 37, numRequests: 1 },
+      },
+      expected: {
+        total: 100,
+        numRequests: 1,
+        assertions: { total: 37, cached: 37, numRequests: 1 },
+        incurredTokenUsage: {
+          total: 100,
+          numRequests: 1,
+          assertions: { total: 0, numRequests: 0 },
+        },
+      },
+    },
+    {
+      label: 'mixed cached and fresh graders',
+      response: {
+        tokenUsage: { total: 100, prompt: 60, completion: 40, numRequests: 1 },
+      },
+      gradingResult: {
+        tokensUsed: {
+          total: 60,
+          prompt: 38,
+          completion: 22,
+          cached: 37,
+          numRequests: 2,
+          completionDetails: { reasoning: 13 },
+          incurredTokenUsage: {
+            total: 23,
+            prompt: 15,
+            completion: 8,
+            numRequests: 1,
+            completionDetails: { reasoning: 4 },
+          },
+        },
+      },
+      expected: {
+        total: 100,
+        numRequests: 1,
+        assertions: {
+          total: 60,
+          cached: 37,
+          numRequests: 2,
+          completionDetails: { reasoning: 13 },
+        },
+        incurredTokenUsage: {
+          total: 100,
+          numRequests: 1,
+          assertions: {
+            total: 23,
+            numRequests: 1,
+            completionDetails: { reasoning: 4 },
+          },
+        },
+      },
+    },
+  ])('preserves logical and incurred accounting when retrying $label', async (scenario) => {
+    const prompts = [{}] as any[];
+    const evalRecord = createEval({
+      prompts,
+      fetchResultsBatched: vi.fn(async function* () {
+        yield [
+          {
+            id: 'retried-result',
+            promptIdx: 0,
+            success: true,
+            score: 1,
+            namedScores: {},
+            response: scenario.response,
+            gradingResult: {
+              pass: true,
+              score: 1,
+              reason: 'passed',
+              ...scenario.gradingResult,
+            },
+          },
+        ] as any[];
+      }),
+    });
+
+    await recalculatePromptMetrics(evalRecord);
+
+    expect(prompts[0].metrics.tokenUsage).toMatchObject(scenario.expected);
   });
 
   it('logs and rethrows metric recalculation and persistence failures', async () => {
@@ -290,7 +500,10 @@ describe('retryCommand', () => {
   });
 
   it('retries from the saved config, cleans up old errors, and shares the result', async () => {
-    const originalEval = createEval({ config: { sharing: false } as UnifiedConfig });
+    const originalEval = createEval({
+      config: { sharing: false } as UnifiedConfig,
+      runtimeOptions: { providerFilter: 'selected-target' },
+    });
     const retriedEval = createEval();
     vi.mocked(Eval.findById).mockResolvedValue(originalEval);
     dbMocks.errorRows.push({ id: 'error-result-1' });
@@ -319,7 +532,10 @@ describe('retryCommand', () => {
 
     await expect(retryCommand(originalEval.id, {})).resolves.toBe(retriedEval);
 
-    expect(resolveConfigs).toHaveBeenCalledWith({}, originalEval.config);
+    expect(resolveConfigs).toHaveBeenCalledWith(
+      { filterProviders: 'selected-target' },
+      originalEval.config,
+    );
     expect(dbMocks.deleteRun).toHaveBeenCalledTimes(1);
     expect(notifyEvaluationChanged).toHaveBeenCalledWith(originalEval.id);
     expect(shouldShareResults).toHaveBeenCalledWith({
@@ -334,7 +550,9 @@ describe('retryCommand', () => {
   });
 
   it('uses an explicit config and forces concurrency to one when delay is requested', async () => {
-    const originalEval = createEval();
+    const originalEval = createEval({
+      runtimeOptions: { providerFilter: 'selected-target' },
+    });
     const retriedEval = createEval();
     vi.mocked(Eval.findById).mockResolvedValue(originalEval);
     dbMocks.errorRows.push({ id: 'error-result-1' });
@@ -361,10 +579,64 @@ describe('retryCommand', () => {
       }),
     ).resolves.toBe(retriedEval);
 
-    expect(resolveConfigs).toHaveBeenCalledWith({ config: ['retry.yaml'] }, {});
+    expect(resolveConfigs).toHaveBeenCalledWith(
+      { config: ['retry.yaml'], filterProviders: 'selected-target' },
+      {},
+    );
     expect(logger.info).toHaveBeenCalledWith(
       'Running at concurrency=1 because 25ms delay was requested between API calls',
     );
+  });
+
+  it('preserves error results when an explicit config no longer matches the stored filter', async () => {
+    const originalEval = createEval({
+      runtimeOptions: { providerFilter: 'selected-target' },
+    });
+    vi.mocked(Eval.findById).mockResolvedValue(originalEval);
+    dbMocks.errorRows.push({ id: 'error-result-1' });
+    mockResolvedConfig({ providers: [] });
+
+    await expect(retryCommand(originalEval.id, { config: 'retry.yaml' })).rejects.toThrow(
+      'Stored provider filter "selected-target" matched no providers in the retry config "retry.yaml"',
+    );
+
+    expect(evaluate).not.toHaveBeenCalled();
+    expect(dbMocks.deleteRun).not.toHaveBeenCalled();
+  });
+
+  it('preserves error results when the stored filter cannot be applied to the config', async () => {
+    const originalEval = createEval({
+      runtimeOptions: { providerFilter: '[' },
+    });
+    vi.mocked(Eval.findById).mockResolvedValue(originalEval);
+    dbMocks.errorRows.push({ id: 'error-result-1' });
+
+    await expect(retryCommand(originalEval.id, { config: 'retry.yaml' })).rejects.toThrow(
+      'Could not resolve the retry config "retry.yaml" using stored provider filter "[": Invalid regular expression',
+    );
+
+    // The pattern is validated before any config resolution happens.
+    expect(resolveConfigs).not.toHaveBeenCalled();
+    expect(evaluate).not.toHaveBeenCalled();
+    expect(dbMocks.deleteRun).not.toHaveBeenCalled();
+    expect(cliState.resume).toBe(false);
+    expect(cliState.retryMode).toBe(false);
+  });
+
+  it('fails closed when the persisted provider filter is not a string', async () => {
+    const originalEval = createEval({
+      runtimeOptions: { providerFilter: ['selected-target'] as unknown as string },
+    });
+    vi.mocked(Eval.findById).mockResolvedValue(originalEval);
+    dbMocks.errorRows.push({ id: 'error-result-1' });
+
+    await expect(retryCommand(originalEval.id, {})).rejects.toThrow(
+      'Stored provider filter is invalid',
+    );
+
+    expect(resolveConfigs).not.toHaveBeenCalled();
+    expect(evaluate).not.toHaveBeenCalled();
+    expect(dbMocks.deleteRun).not.toHaveBeenCalled();
   });
 
   it('preserves error results and clears retry state when evaluation fails', async () => {

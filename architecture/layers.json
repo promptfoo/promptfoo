@@ -65,12 +65,13 @@
         "src/util/objectUtils.ts",
         "src/util/sanitizer.ts",
         "src/util/text.ts",
+        "src/util/yamlLoad.ts",
         "src/validators/providers.ts"
       ]
     },
     {
       "name": "cli",
-      "roots": ["src/entrypoint.ts", "src/main.ts", "src/commands"],
+      "roots": ["src/entrypoint.ts", "src/localEntrypoint.ts", "src/main.ts", "src/commands"],
       "allowedDependencies": [
         "core",
         "legacy-contracts",
