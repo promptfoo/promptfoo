@@ -34,4 +34,31 @@ describe('formatTraceSummary', () => {
     expect(summary).toContain('tool=lookup_customer');
     expect(summary).toContain('Tool call lookup_customer via "ai.toolCall"');
   });
+
+  it('includes OpenTelemetry GenAI model names in formatted spans', () => {
+    const trace: TraceContextData = {
+      traceId: '0123456789abcdef',
+      fetchedAt: Date.now(),
+      insights: [],
+      spans: [
+        {
+          spanId: 'model-span',
+          name: 'chat',
+          kind: 'internal',
+          startTime: 0,
+          endTime: 42,
+          durationMs: 42,
+          attributes: {
+            'gen_ai.operation.name': 'chat',
+            'gen_ai.request.model': 'gpt-4.1-mini',
+          },
+          status: { code: 'ok' },
+          depth: 0,
+          events: [],
+        },
+      ],
+    };
+
+    expect(formatTraceSummary(trace)).toContain('model=gpt-4.1-mini');
+  });
 });

@@ -1,14 +1,14 @@
 import fs from 'fs';
 
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, type MockInstance, vi } from 'vitest';
 import logger from '../../../src/logger';
 import { printErrorInformation } from '../../../src/util/errors';
 
 vi.mock('fs');
 
 describe('printErrorInformation', () => {
-  let infoSpy: ReturnType<typeof vi.spyOn>;
-  let debugSpy: ReturnType<typeof vi.spyOn>;
+  let infoSpy: MockInstance<typeof logger.info>;
+  let debugSpy: MockInstance<typeof logger.debug>;
 
   beforeEach(() => {
     vi.resetAllMocks();
@@ -81,7 +81,12 @@ describe('printErrorInformation', () => {
 
     expect(infoSpy).not.toHaveBeenCalled();
     expect(debugSpy).toHaveBeenCalledTimes(1);
-    expect(debugSpy.mock.calls[0][0]).toContain('errorFileHasContents');
+    expect(debugSpy).toHaveBeenCalledWith(
+      expect.stringContaining(
+        '[errorFileHasContents] Error checking if file has contents: /logs/error.log',
+      ),
+      { error: eacces },
+    );
   });
 
   it('prints only the error log path when no debug log is provided', () => {
