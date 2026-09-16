@@ -124,29 +124,52 @@ describe('TempoProvider', () => {
     },
   );
 
-  it.each(['resource', 'scope', 'span', 'event', 'event count'])(
-    'rejects Tempo snapshots with dropped %s evidence',
-    async (source) => {
+  it.each(
+    ['resource', 'scope', 'span', 'event', 'event count'].flatMap((source) =>
+      [1, -1, false, {}, 'invalid'].map((count) => ({ source, count })),
+    ),
+  )('rejects dropped or malformed $source counters: $count', async ({ source, count }) => {
+    const data = structuredClone(traceResponse);
+    const batch = data.batches[0];
+    const scope = batch.scopeSpans[0];
+    const span = scope.spans[0];
+    const item =
+      source === 'resource'
+        ? batch.resource
+        : source === 'scope'
+          ? scope.scope
+          : source === 'event'
+            ? span.events![0]
+            : span;
+    Object.assign(
+      item,
+      source === 'event count' ? { droppedEventsCount: count } : { droppedAttributesCount: count },
+    );
+    mockedFetch.mockResolvedValueOnce(response(data));
+    await expect(
+      new TempoProvider({ id: 'tempo', endpoint: 'http://tempo:3200' }).fetchTrace(TRACE_ID),
+    ).rejects.toMatchObject({ invalidEvidence: true });
+  });
+
+  it.each([undefined, null, 0, '0', '0.0', '0e2'])(
+    'accepts omitted or zero dropped counters: %s',
+    async (count) => {
       const data = structuredClone(traceResponse);
       const batch = data.batches[0];
       const scope = batch.scopeSpans[0];
       const span = scope.spans[0];
-      const item =
-        source === 'resource'
-          ? batch.resource
-          : source === 'scope'
-            ? scope.scope
-            : source === 'event'
-              ? span.events![0]
-              : span;
-      Object.assign(
-        item,
-        source === 'event count' ? { droppedEventsCount: 1 } : { droppedAttributesCount: 1 },
-      );
+      for (const item of [batch.resource, scope.scope, span, span.events![0]]) {
+        Object.assign(item, { droppedAttributesCount: count });
+      }
+      Object.assign(span, { droppedEventsCount: count });
       mockedFetch.mockResolvedValueOnce(response(data));
-      await expect(
-        new TempoProvider({ id: 'tempo', endpoint: 'http://tempo:3200' }).fetchTrace(TRACE_ID),
-      ).rejects.toMatchObject({ invalidEvidence: true });
+      expect(
+        (
+          await new TempoProvider({ id: 'tempo', endpoint: 'http://tempo:3200' }).fetchTrace(
+            TRACE_ID,
+          )
+        )?.spans,
+      ).toHaveLength(2);
     },
   );
 

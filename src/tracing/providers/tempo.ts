@@ -94,6 +94,17 @@ function attributesToRecord(
   }
 }
 
+function hasDroppedTelemetry(count: unknown): boolean {
+  if (count == null) {
+    return false;
+  }
+  try {
+    return (typeof count === 'string' ? JSON.parse(count) : count) !== 0;
+  } catch {
+    return true;
+  }
+}
+
 function decodeSpanId(id: string | undefined): string | undefined {
   if (!id) {
     return undefined;
@@ -340,8 +351,8 @@ export class TempoProvider implements TraceProvider {
                 scopeSpan.scope?.droppedAttributesCount,
                 span.droppedAttributesCount,
                 span.droppedEventsCount,
-              ].some((count) => (count ?? 0) > 0) ||
-              span.events?.some((event) => (event.droppedAttributesCount ?? 0) > 0)
+              ].some(hasDroppedTelemetry) ||
+              span.events?.some((event) => hasDroppedTelemetry(event.droppedAttributesCount))
             ) {
               throw new Error('Tempo returned incomplete trace data: dropped telemetry');
             }
