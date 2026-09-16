@@ -15,10 +15,10 @@ export function getSocketConfig(apiBaseUrl?: string, options: SocketConfigOption
   let socketUrl = '';
 
   if (apiBaseUrl) {
+    const origin = options.origin ?? window.location.origin;
     try {
-      const url = new URL(apiBaseUrl, options.origin ?? window.location.origin);
-      const isSameOrigin = url.origin === (options.origin ?? window.location.origin);
-      if (isSameOrigin) {
+      const url = new URL(apiBaseUrl, origin);
+      if (url.origin === origin) {
         socketPath = socketPathFromBasePath(url.pathname);
       } else {
         socketUrl = apiBaseUrl;

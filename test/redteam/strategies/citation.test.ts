@@ -2,14 +2,16 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { fetchWithCache } from '../../../src/cache';
 import { getUserEmail } from '../../../src/globalConfig/accounts';
 import logger from '../../../src/logger';
+import { trackGenerationTokenUsage } from '../../../src/redteam/generationTokenUsage';
 import {
   getRemoteGenerationExplicitlyDisabledError,
+  getRemoteGenerationHeaders,
   getRemoteGenerationUrl,
   neverGenerateRemote,
 } from '../../../src/redteam/remoteGeneration';
 import { addCitationTestCases } from '../../../src/redteam/strategies/citation';
 
-import type { TestCase } from '../../../src/types/index';
+import type { ApiProvider, TestCase, TokenUsage } from '../../../src/types/index';
 
 vi.mock('../../../src/cache');
 vi.mock('../../../src/globalConfig/accounts');
@@ -40,6 +42,10 @@ describe('citation strategy', () => {
     mockGetUserEmail.mockReturnValue('test@example.com');
     mockNeverGenerateRemote.mockReturnValue(false);
     mockGetRemoteGenerationUrl.mockReturnValue('http://test-url');
+    vi.mocked(getRemoteGenerationHeaders).mockImplementation((extra) => ({
+      'Content-Type': 'application/json',
+      ...extra,
+    }));
     mockGetRemoteGenerationExplicitlyDisabledError.mockImplementation(
       (strategyName) =>
         `${strategyName} requires remote generation, which has been explicitly disabled.`,
@@ -99,15 +105,101 @@ describe('citation strategy', () => {
         },
         body: JSON.stringify({
           task: 'citation',
-          testCases: [testCases[0]],
-          injectVar: 'prompt',
           topic: 'original prompt',
-          config: {},
           email: 'test@example.com',
         }),
       },
       expect.any(Number),
     );
+  });
+
+  it('adds remote citation usage to the request-scoped generation provider', async () => {
+    const usage: TokenUsage = {};
+    const provider: ApiProvider = {
+      id: () => 'generation-provider',
+      callApi: vi.fn().mockResolvedValue({ output: 'unused' }),
+    };
+    mockFetchWithCache.mockResolvedValueOnce({
+      data: {
+        result: {
+          citation: { type: 'Journal Article', content: 'Tracked citation' },
+        },
+        tokenUsage: { total: 18, prompt: 12, completion: 6, numRequests: 1 },
+      },
+      cached: false,
+      status: 200,
+      statusText: 'OK',
+    });
+
+    const result = await addCitationTestCases(
+      testCases,
+      'prompt',
+      {},
+      {
+        generationProviderSelection: {
+          provider: trackGenerationTokenUsage(provider, usage),
+          source: 'default',
+        },
+      },
+    );
+
+    expect(result).toHaveLength(1);
+    expect(usage).toMatchObject({ total: 18, prompt: 12, completion: 6, numRequests: 1 });
+  });
+
+  it('forwards targetId without serializing unrelated config', async () => {
+    mockFetchWithCache.mockResolvedValueOnce({
+      data: {
+        result: {
+          topic: 'test topic',
+          citation: { type: 'Journal Article', content: 'Test citation' },
+        },
+      },
+      cached: false,
+      status: 200,
+      statusText: 'OK',
+    });
+
+    await addCitationTestCases(testCases, 'prompt', {
+      targetId: 'cloud-target-123',
+      env: { CANARY: 'secret' },
+    });
+
+    const body = mockFetchWithCache.mock.calls[0]?.[1]?.body;
+    expect(body).toBeTypeOf('string');
+    expect(JSON.parse(body as string)).toMatchObject({ targetId: 'cloud-target-123' });
+    expect(body).not.toContain('CANARY');
+    expect(body).not.toContain('secret');
+  });
+
+  it('forwards supported citation options without serializing unrelated config', async () => {
+    mockFetchWithCache.mockResolvedValueOnce({
+      data: {
+        result: {
+          topic: 'test topic',
+          citation: { type: 'Journal Article', content: 'Test citation' },
+        },
+      },
+      cached: false,
+      status: 200,
+      statusText: 'OK',
+    });
+
+    await addCitationTestCases(testCases, 'prompt', {
+      useAcademic: true,
+      useJournals: false,
+      useBooks: true,
+      env: { CANARY: 'secret' },
+    });
+
+    const body = mockFetchWithCache.mock.calls[0]?.[1]?.body;
+    expect(body).toBeTypeOf('string');
+    expect(JSON.parse(body as string)).toMatchObject({
+      useAcademic: true,
+      useJournals: false,
+      useBooks: true,
+    });
+    expect(body).not.toContain('secret');
   });
 
   it('should throw error when remote generation is disabled', async () => {

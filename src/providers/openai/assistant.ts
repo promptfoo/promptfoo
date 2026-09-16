@@ -1,14 +1,20 @@
-import path from 'path';
-
 import OpenAI from 'openai';
-import cliState from '../../cliState';
-import { importModule } from '../../esm';
 import logger from '../../logger';
-import { isJavascriptFile } from '../../util/fileExtensions';
+import {
+  CallbackPathTraversalError,
+  loadCallbackFromFileUrl,
+  wrapError,
+} from '../../util/functions/loadFunction';
 import { maybeLoadToolsFromExternalFile } from '../../util/index';
 import { sleep } from '../../util/time';
 import { getRequestTimeoutMs, parseChatPrompt, toTitleCase } from '../shared';
-import { OpenAiGenericProvider } from '.';
+import {
+  buildChatSpanContext,
+  extractProviderResponseAttributes,
+  withGenAISpan,
+  withGenAIToolSpan,
+} from '../tracing';
+import { hasHeaderOverride, OPENAI_ORGANIZATION_HEADER, OpenAiGenericProvider } from '.';
 import { failApiCall, getTokenUsage } from './util';
 import type { Metadata } from 'openai/resources/shared';
 
@@ -102,47 +108,13 @@ export class OpenAiAssistantProvider extends OpenAiGenericProvider {
    * @returns The loaded function
    */
   private async loadExternalFunction(fileRef: string): Promise<Function> {
-    let filePath = fileRef.slice('file://'.length);
-    let functionName: string | undefined;
-
-    if (filePath.includes(':')) {
-      const splits = filePath.split(':');
-      if (splits[0] && isJavascriptFile(splits[0])) {
-        [filePath, functionName] = splits;
-      }
-    }
-
     try {
-      const resolvedPath = path.resolve(cliState.basePath || '', filePath);
-      logger.debug(
-        `Loading function from ${resolvedPath}${functionName ? `:${functionName}` : ''}`,
-      );
-
-      const requiredModule = await importModule(resolvedPath, functionName);
-
-      if (typeof requiredModule === 'function') {
-        return requiredModule;
-      } else if (
-        requiredModule &&
-        typeof requiredModule === 'object' &&
-        functionName &&
-        functionName in requiredModule
-      ) {
-        const fn = requiredModule[functionName];
-        if (typeof fn === 'function') {
-          return fn;
-        }
+      return await loadCallbackFromFileUrl(fileRef);
+    } catch (error) {
+      if (error instanceof CallbackPathTraversalError) {
+        throw error;
       }
-
-      throw new Error(
-        `Function callback malformed: ${filePath} must export ${
-          functionName
-            ? `a named function '${functionName}'`
-            : 'a function or have a default export as a function'
-        }`,
-      );
-    } catch (error: any) {
-      throw new Error(`Error loading function from ${filePath}: ${error.message || String(error)}`);
+      throw wrapError(`Error loading function from ${fileRef}: ${(error as Error).message}`, error);
     }
   }
 
@@ -153,6 +125,7 @@ export class OpenAiAssistantProvider extends OpenAiGenericProvider {
     functionName: string,
     args: string,
     context?: CallbackContext,
+    callId?: string,
   ): Promise<string> {
     try {
       // Check if we've already loaded this function
@@ -197,7 +170,10 @@ export class OpenAiAssistantProvider extends OpenAiGenericProvider {
         parsedArgs = {};
       }
 
-      const result = await callback(parsedArgs, context);
+      const result = await withGenAIToolSpan(
+        { name: functionName, arguments: parsedArgs, callId },
+        () => callback(parsedArgs, context),
+      );
 
       // Format the result
       if (result === undefined || result === null) {
@@ -223,19 +199,54 @@ export class OpenAiAssistantProvider extends OpenAiGenericProvider {
   async callApi(
     prompt: string,
     context?: CallApiContextParams,
+    callApiOptions?: CallApiOptionsParams,
+  ): Promise<ProviderResponse> {
+    const spanContext = buildChatSpanContext({
+      system: 'openai',
+      model: this.assistantConfig.modelName || this.assistantId,
+      providerId: this.id(),
+      prompt,
+      context,
+      request: { temperature: this.assistantConfig.temperature ?? undefined },
+    });
+
+    return withGenAISpan(
+      { ...spanContext, operationName: 'invoke_agent', agentId: this.assistantId },
+      () => this.callApiInternal(prompt, context, callApiOptions),
+      extractProviderResponseAttributes,
+    );
+  }
+
+  private async callApiInternal(
+    prompt: string,
+    context?: CallApiContextParams,
     _callApiOptions?: CallApiOptionsParams,
   ): Promise<ProviderResponse> {
     if (!this.getApiKey()) {
       throw new Error(this.getMissingApiKeyErrorMessage());
     }
 
+    // When the caller supplies an OpenAI-Organization header override (any case), drop
+    // the SDK `organization` option so only the override is sent. The current SDK's
+    // Headers-based merge already lets defaultHeaders beat the organization option
+    // case-insensitively; doing this explicitly keeps the intent visible and independent
+    // of the SDK's merge semantics.
+    const orgHeaderOverridden = hasHeaderOverride(
+      this.assistantConfig.headers,
+      OPENAI_ORGANIZATION_HEADER,
+    );
+    const apiUrl = new URL(this.getApiUrl());
+    const defaultQuery = Object.fromEntries(apiUrl.searchParams.entries());
+    apiUrl.search = '';
+    apiUrl.hash = '';
     const openai = new OpenAI({
       apiKey: this.getApiKey(),
-      organization: this.getOrganization(),
-      baseURL: this.getApiUrl(),
+      organization: orgHeaderOverridden ? undefined : this.getOrganization(),
+      baseURL: apiUrl.toString(),
+      defaultQuery,
       maxRetries: 3,
       timeout: getRequestTimeoutMs(),
-      defaultHeaders: this.assistantConfig.headers,
+      defaultHeaders: this.getOpenAiRequestHeaders(this.assistantConfig.headers),
     });
 
     const messages = parseChatPrompt(prompt, [
@@ -320,6 +331,7 @@ export class OpenAiAssistantProvider extends OpenAiGenericProvider {
               toolCall.function.name,
               toolCall.function.arguments,
               callbackContext,
+              toolCall.id,
             );
             return {
               tool_call_id: toolCall.id,
