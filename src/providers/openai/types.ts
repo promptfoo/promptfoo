@@ -168,6 +168,8 @@ export type OpenAiCompletionOptions = OpenAiSharedOptions & {
   stop?: string[];
   seed?: number;
   passthrough?: object;
+  /** Override reasoning request shaping for an OpenAI-compatible chat or responses deployment. */
+  isReasoningModel?: boolean;
   prompt_cache_key?: string;
   prompt_cache_options?: OpenAiPromptCacheOptions;
   prompt_cache_retention?: OpenAiPromptCacheRetention;
