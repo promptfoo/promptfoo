@@ -598,6 +598,9 @@
         },
         "PROMPTFOO_EVAL_TIMEOUT_MS": {
           "type": "string"
+        },
+        "PROMPTFOO_STRICT_CONFIG": {
+          "type": "string"
         }
       },
       "additionalProperties": false
@@ -2063,6 +2066,9 @@
                       "type": "string"
                     },
                     "PROMPTFOO_EVAL_TIMEOUT_MS": {
+                      "type": "string"
+                    },
+                    "PROMPTFOO_STRICT_CONFIG": {
                       "type": "string"
                     }
                   },

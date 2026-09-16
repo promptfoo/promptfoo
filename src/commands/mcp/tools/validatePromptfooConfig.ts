@@ -2,7 +2,11 @@ import dedent from 'dedent';
 import { z } from 'zod';
 import { TestSuiteSchema, UnifiedConfigSchema } from '../../../types/index';
 import { loadDefaultConfig } from '../../../util/config/default';
-import { ConfigResolutionError, resolveConfigs } from '../../../util/config/load';
+import {
+  ConfigResolutionError,
+  formatUnknownConfigKeyDiagnostic,
+  resolveConfigs,
+} from '../../../util/config/load';
 import { createToolResponse } from '../lib/utils';
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 
@@ -41,7 +45,9 @@ export function registerValidatePromptfooConfigTool(server: McpServer) {
         // Load default configuration
         let defaultConfig;
         try {
-          const result = await loadDefaultConfig();
+          const result = await loadDefaultConfig(undefined, 'promptfooconfig', {
+            deferUnknownKeyValidation: true,
+          });
           defaultConfig = result.defaultConfig;
         } catch (error) {
           return createToolResponse(
@@ -59,7 +65,7 @@ export function registerValidatePromptfooConfigTool(server: McpServer) {
         const configPathsArray =
           configPaths || (process.cwd() ? ['promptfooconfig.yaml'] : undefined);
 
-        const { config, testSuite } = await resolveConfigs(
+        const { config, testSuite, unknownConfigKeyDiagnostics } = await resolveConfigs(
           { config: configPathsArray },
           defaultConfig,
         );
@@ -67,7 +73,7 @@ export function registerValidatePromptfooConfigTool(server: McpServer) {
         const validationResults: ValidationResults = {
           isValid: true,
           errors: [],
-          warnings: [],
+          warnings: (unknownConfigKeyDiagnostics ?? []).map(formatUnknownConfigKeyDiagnostic),
         };
 
         // Validate config schema

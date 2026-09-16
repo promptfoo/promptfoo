@@ -251,6 +251,7 @@ describe('evaluate function', () => {
   afterEach(() => {
     loadApiProvidersSpy.mockRestore();
     loadApiProviderSpy.mockRestore();
+    vi.unstubAllEnvs();
   });
 
   it('should handle function prompts correctly', async () => {
@@ -307,6 +308,74 @@ describe('evaluate function', () => {
         eventSource: 'library',
       }),
     );
+  });
+
+  it('should snapshot strict config from the current suite env', async () => {
+    await evaluate({
+      prompts: ['test prompt'],
+      providers: [],
+      tests: [],
+      env: { PROMPTFOO_STRICT_CONFIG: true as unknown as string },
+    });
+
+    expect(doEvaluate).toHaveBeenLastCalledWith(
+      expect.anything(),
+      expect.anything(),
+      expect.objectContaining({ strictConfigEnabled: true }),
+    );
+
+    vi.stubEnv('PROMPTFOO_STRICT_CONFIG', 'true');
+    await evaluate({
+      prompts: ['test prompt'],
+      providers: [],
+      tests: [],
+      env: { PROMPTFOO_STRICT_CONFIG: 0 as unknown as string },
+    });
+
+    expect(doEvaluate).toHaveBeenLastCalledWith(
+      expect.anything(),
+      expect.anything(),
+      expect.objectContaining({ strictConfigEnabled: false }),
+    );
+  });
+
+  it('should snapshot ambient strictness before asynchronous provider resolution', async () => {
+    vi.stubEnv('PROMPTFOO_STRICT_CONFIG', 'true');
+    loadApiProvidersSpy.mockImplementation(async () => {
+      vi.stubEnv('PROMPTFOO_STRICT_CONFIG', 'false');
+      return [];
+    });
+
+    await evaluate({
+      prompts: ['test prompt'],
+      providers: [],
+      tests: [],
+    });
+
+    expect(doEvaluate).toHaveBeenLastCalledWith(
+      expect.anything(),
+      expect.anything(),
+      expect.objectContaining({ strictConfigEnabled: true }),
+    );
+  });
+
+  it('should not accept internal strict controls through the public evaluate options', async () => {
+    await evaluate(
+      {
+        prompts: ['test prompt'],
+        providers: [],
+        tests: [],
+        env: { PROMPTFOO_STRICT_CONFIG: 'true' },
+      },
+      {
+        skipStrictAssertionValidation: true,
+        strictConfigEnabled: false,
+      } as never,
+    );
+
+    const receivedOptions = vi.mocked(doEvaluate).mock.calls.at(-1)?.[2];
+    expect(receivedOptions).not.toHaveProperty('skipStrictAssertionValidation');
+    expect(receivedOptions).toEqual(expect.objectContaining({ strictConfigEnabled: true }));
   });
 
   it('should process different types of prompts correctly', async () => {

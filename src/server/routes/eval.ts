@@ -655,6 +655,7 @@ evalRouter.post('/replay', async (req: Request, res: Response): Promise<void> =>
         showProgressBar: false,
         eventSource: 'web',
         cache: false, // Always disable cache for replays to get fresh results
+        skipStrictAssertionValidation: true,
       },
     );
 
