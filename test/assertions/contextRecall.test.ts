@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { handleContextRecall } from '../../src/assertions/contextRecall';
 import * as contextUtils from '../../src/assertions/contextUtils';
+import { DEFAULT_RAG_ASSERTION_THRESHOLD } from '../../src/assertions/ragDefaults';
 import * as matchers from '../../src/matchers/rag';
 import { createMockProvider } from '../factories/provider';
 
@@ -376,5 +377,90 @@ describe('handleContextRecall', () => {
     await expect(handleContextRecall(params)).rejects.toThrow(
       'context-recall assertion requires a prompt',
     );
+  });
+
+  it('should fail not-context-recall when recall is at or above the default threshold', async () => {
+    // The companion to the "invert a below-threshold result" case: a passing
+    // grade must invert to a failure. Without this, a regression that only ever
+    // returned `pass: true` from an inverse assertion would go unnoticed.
+    const mockResult = { pass: true, score: 0.9, reason: 'Context contains expected information' };
+    mockMatchesContextRecall.mockResolvedValue(mockResult);
+    vi.mocked(contextUtils.resolveContext).mockResolvedValue('test context');
+
+    const mockProvider = createMockProvider({ response: {} });
+
+    const result = await handleContextRecall({
+      assertion: { type: 'not-context-recall' },
+      renderedValue: 'Expected fact',
+      prompt: 'test prompt',
+      test: { vars: { context: 'test context' }, options: {} },
+      baseType: 'context-recall',
+      assertionValueContext: {
+        prompt: 'test prompt',
+        vars: { context: 'test context' },
+        test: { vars: { context: 'test context' }, options: {} },
+        logProbs: undefined,
+        provider: mockProvider,
+        providerResponse: undefined,
+      },
+      inverse: true,
+      output: 'test output',
+      outputString: 'test output',
+      provider: mockProvider,
+      providerResponse: {} as ProviderResponse,
+    } as AssertionParams);
+
+    expect(result.pass).toBe(false);
+    expect(result.score).toBeCloseTo(0.1);
+    expect(mockMatchesContextRecall).toHaveBeenCalledWith(
+      'test context',
+      'Expected fact',
+      DEFAULT_RAG_ASSERTION_THRESHOLD,
+      {},
+      { context: 'test context' },
+      undefined,
+    );
+  });
+
+  it('should not invert grader errors for not-context-recall', async () => {
+    // A grading provider that errored produced no verdict to invert. Flipping it
+    // would turn an infrastructure failure into a silent pass, so the
+    // grader-error result must survive the inverse untouched.
+    const mockResult = {
+      pass: false,
+      score: 0,
+      reason: 'grading provider failed',
+      metadata: { graderError: true as const },
+    };
+    mockMatchesContextRecall.mockResolvedValue(mockResult);
+    vi.mocked(contextUtils.resolveContext).mockResolvedValue('test context');
+
+    const mockProvider = createMockProvider({ response: {} });
+
+    const result = await handleContextRecall({
+      assertion: { type: 'not-context-recall' },
+      renderedValue: 'val',
+      prompt: 'p',
+      test: { vars: { context: 'ctx' }, options: {} },
+      baseType: 'context-recall',
+      assertionValueContext: {
+        prompt: 'p',
+        vars: { context: 'ctx' },
+        test: { vars: { context: 'ctx' }, options: {} },
+        logProbs: undefined,
+        provider: mockProvider,
+        providerResponse: undefined,
+      },
+      inverse: true,
+      output: 'out',
+      outputString: 'out',
+      provider: mockProvider,
+      providerResponse: {} as ProviderResponse,
+    } as AssertionParams);
+
+    expect(result.pass).toBe(false);
+    expect(result.score).toBe(0);
+    expect(result.reason).toBe('grading provider failed');
+    expect(result.metadata).toEqual({ graderError: true, context: 'test context' });
   });
 });
