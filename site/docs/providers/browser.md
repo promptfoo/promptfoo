@@ -42,6 +42,8 @@ The browser provider requires Playwright and the stealth plugin. Install these p
 npm install playwright @playwright/browser-chromium playwright-extra puppeteer-extra-plugin-stealth
 ```
 
+Playwright 1.63 and later no longer support Ubuntu 20.04. Check [Playwright's system requirements](https://playwright.dev/docs/intro#system-requirements) before installing the browser on Linux.
+
 Note: Currently, promptfoo's browser provider only supports Chromium-based browsers (Chrome, Edge). The provider uses `playwright-extra` with the Chromium engine for enhanced stealth capabilities.
 
 ## Configuration
@@ -102,6 +104,9 @@ providers:
 For multi-turn strategies like Hydra, Crescendo, or GOAT, you can persist the browser session across turns. This keeps the same page open and maintains conversation state in chat-based applications.
 
 ```yaml
+evaluateOptions:
+  maxConcurrency: 1 # Persistent sessions share one stateful browser workflow
+
 providers:
   - id: browser
     config:
@@ -145,7 +150,7 @@ providers:
 
 **Key options:**
 
-- `persistSession: true` - Keep the browser page open between `callApi()` invocations
+- `persistSession: true` - Keep the browser page open between `callApi()` invocations. Because this is a stateful workflow, Promptfoo runs it with concurrency `1`.
 - `runOnce: true` on steps - Execute only on the first turn (skip on subsequent turns)
 
 This is essential for testing multi-turn jailbreak strategies against chat interfaces where you need to maintain conversation context.
@@ -230,15 +235,15 @@ Wait for a specified duration (in milliseconds).
     ms: 3000 # Wait 3 seconds
 ```
 
-#### 6. `waitForNewChildren` - Wait for dynamic content
+#### 6. `waitForNewChildren` - Wait for newly added direct children
 
-Wait for new elements to appear under a parent element. Useful for content loaded via AJAX.
+Use this action to detect dynamic content that adds elements under a parent. It waits for the number of direct child elements to increase, so it does not detect streamed text or nested content updates inside an existing child element.
 
 ```yaml
 - action: waitForNewChildren
   args:
     parentSelector: '#results-container'
-    delay: 500 # Check every 500ms
+    delay: 500 # Wait before capturing the initial child count
     timeout: 10000 # Max wait time 10 seconds
 ```
 
@@ -262,12 +267,12 @@ Take a screenshot of the current page state.
 | type               | `selector`, `text`             | -                  | CSS selector and text to type                |
 | extract            | `selector` OR `script`, `name` | -                  | CSS selector or JS script, and variable name |
 | wait               | `ms`                           | -                  | Milliseconds to wait                         |
-| waitForNewChildren | `parentSelector`               | `delay`, `timeout` | Parent element to watch                      |
+| waitForNewChildren | `parentSelector`               | `delay`, `timeout` | Parent whose direct children are counted     |
 | screenshot         | `path`                         | `fullPage`         | File path to save screenshot                 |
 
 ## Response Parsing
 
-Use the `transformResponse` config option to extract specific data from the results. The parser receives an object with two properties:
+Use the `transformResponse` config option to extract specific data from the results. Function parsers receive two positional arguments; string expressions can access the same variables:
 
 - `extracted`: An object containing named results from `extract` actions
 - `finalHtml`: The final HTML content of the page after all actions are completed
@@ -321,15 +326,15 @@ If you are using promptfoo as a [node library](/docs/usage/node-package/), you c
 
 Supported config options:
 
-| Option            | Type                                                                             | Description                                                                                                                                                                  |
-| ----------------- | -------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| headless          | `boolean`                                                                        | Whether to run the browser in headless mode. Defaults to `true`.                                                                                                             |
-| cookies           | `string` \| `{ name: string; value: string; domain?: string; path?: string; }[]` | A string or array of cookies to set on the browser                                                                                                                           |
-| transformResponse | `string` \| `Function`                                                           | A function or string representation of a function to parse the response. Receives an object with `extracted` and `finalHtml` parameters and should return a ProviderResponse |
-| steps             | `BrowserAction[]`                                                                | An array of actions to perform in the browser                                                                                                                                |
-| timeoutMs         | `number`                                                                         | The maximum time in milliseconds to wait for the browser operations to complete                                                                                              |
-| persistSession    | `boolean`                                                                        | Keep the browser page open across multiple `callApi()` invocations. Required for multi-turn strategies. Defaults to `false`.                                                 |
-| connectOptions    | `object`                                                                         | Options for connecting to an existing browser (`debuggingPort`, `mode`, `wsEndpoint`)                                                                                        |
+| Option            | Type                                                                             | Description                                                                                                                  |
+| ----------------- | -------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------- |
+| headless          | `boolean`                                                                        | Whether to run the browser in headless mode. Defaults to `true`.                                                             |
+| cookies           | `string` \| `{ name: string; value: string; domain?: string; path?: string; }[]` | A string or array of cookies to set on the browser                                                                           |
+| transformResponse | `string` \| `Function`                                                           | A function receiving `(extracted, finalHtml)`, or a string expression using those variables, to parse the response.          |
+| steps             | `BrowserAction[]`                                                                | An array of actions to perform in the browser                                                                                |
+| timeoutMs         | `number`                                                                         | The maximum time in milliseconds to wait for the browser operations to complete                                              |
+| persistSession    | `boolean`                                                                        | Keep the browser page open across multiple `callApi()` invocations. Required for multi-turn strategies. Defaults to `false`. |
+| connectOptions    | `object`                                                                         | Options for connecting to an existing browser (`debuggingPort`, `mode`, `wsEndpoint`)                                        |
 
 Note: All string values in the config support Nunjucks templating. This means you can use the `{{prompt}}` variable or any other variables passed in the test context.
 
@@ -347,15 +352,15 @@ The implementation uses `playwright-extra` with the Chromium engine for enhanced
 
 The `steps` array in the configuration can include the following actions:
 
-| Action             | Description                                          | Required Args                                    | Optional Args                           |
-| ------------------ | ---------------------------------------------------- | ------------------------------------------------ | --------------------------------------- |
-| navigate           | Navigate to a specified URL                          | `url`: string                                    | `runOnce`: boolean                      |
-| click              | Click on an element                                  | `selector`: string                               | `optional`: boolean, `runOnce`: boolean |
-| extract            | Extract text content from element or run JS script   | (`selector` OR `script`): string, `name`: string |                                         |
-| screenshot         | Take a screenshot of the page                        | `path`: string                                   | `fullPage`: boolean                     |
-| type               | Type text into an input field                        | `selector`: string, `text`: string               | `runOnce`: boolean                      |
-| wait               | Wait for a specified amount of time                  | `ms`: number                                     | `runOnce`: boolean                      |
-| waitForNewChildren | Wait for new child elements to appear under a parent | `parentSelector`: string                         | `delay`: number, `timeout`: number      |
+| Action             | Description                                        | Required Args                                    | Optional Args                           |
+| ------------------ | -------------------------------------------------- | ------------------------------------------------ | --------------------------------------- |
+| navigate           | Navigate to a specified URL                        | `url`: string                                    | `runOnce`: boolean                      |
+| click              | Click on an element                                | `selector`: string                               | `optional`: boolean, `runOnce`: boolean |
+| extract            | Extract text content from element or run JS script | (`selector` OR `script`): string, `name`: string |                                         |
+| screenshot         | Take a screenshot of the page                      | `path`: string                                   | `fullPage`: boolean                     |
+| type               | Type text into an input field                      | `selector`: string, `text`: string               | `runOnce`: boolean                      |
+| wait               | Wait for a specified amount of time                | `ms`: number                                     | `runOnce`: boolean                      |
+| waitForNewChildren | Wait for new direct child elements under a parent  | `parentSelector`: string                         | `delay`: number, `timeout`: number      |
 
 Each action in the `steps` array should be an object with the following structure:
 

@@ -4,6 +4,7 @@ import { z } from 'zod';
 import { disableCache } from '../cache';
 import cliState from '../cliState';
 import logger from '../logger';
+import { testProviderConnectivity, testProviderSession } from '../node/testProvider';
 import { loadApiProvider, loadApiProviders } from '../providers/index';
 import { TestSuiteSchema, UnifiedConfigSchema } from '../types/index';
 import { getProviderFromCloud } from '../util/cloud';
@@ -14,8 +15,8 @@ import {
 } from '../util/config/load';
 import { isHttpProvider, patchHttpConfigForValidation } from '../util/httpProvider';
 import { setupEnv } from '../util/index';
+import { safeJsonStringify } from '../util/json';
 import { isUuid } from '../util/uuid';
-import { testProviderConnectivity, testProviderSession } from '../validators/testProvider';
 import type { Command } from 'commander';
 
 import type { UnifiedConfig } from '../types/index';
@@ -23,6 +24,11 @@ import type { ApiProvider } from '../types/providers';
 
 const VALIDATE_FAILURE_PREFIX = 'Failed to validate configuration: ';
 const LOAD_FAILURE_PREFIX = 'Failed to load configuration: ';
+const TEST_RESULT_INDENT = '    ';
+
+type ProviderTestResult = Awaited<ReturnType<typeof testProviderConnectivity>>;
+type SessionTestResult = Awaited<ReturnType<typeof testProviderSession>>;
+type TestResult = ProviderTestResult | SessionTestResult;
 
 interface ValidateOptions {
   config?: string[];
@@ -59,12 +65,14 @@ async function testBasicConnectivity(provider: ApiProvider): Promise<{
       logger.error(chalk.red(`  ✗ Connectivity test`));
       logger.error(chalk.red(`    ${result.error}`));
       return { success: false, error: result.error };
-    } else if (result.output) {
+    } else if (result.output !== null && result.output !== undefined) {
       logger.info(chalk.green(`  ✓ Connectivity test`));
-      const responsePreview = JSON.stringify(result.output).substring(0, 100);
-      logger.info(
-        chalk.dim(`    Response: ${responsePreview}${responsePreview.length >= 100 ? '...' : ''}`),
-      );
+      // safeJsonStringify keeps the preview non-throwing (circular refs, BigInt);
+      // String() covers values it cannot serialize at all.
+      const fullResponse = safeJsonStringify(result.output) ?? String(result.output);
+      const isTruncated = fullResponse.length > 100;
+      const responsePreview = fullResponse.substring(0, 100);
+      logger.info(chalk.dim(`    Response: ${responsePreview}${isTruncated ? '...' : ''}`));
       return { success: true };
     } else {
       logger.warn(chalk.yellow(`  ✗ Connectivity test`));
@@ -80,77 +88,125 @@ async function testBasicConnectivity(provider: ApiProvider): Promise<{
 }
 
 /**
- * Display detailed test results with suggestions
+ * Display a successful test result.
  */
-function displayTestResult(result: any, testName: string): void {
-  const indent = '    ';
+function displaySuccessfulTestResult(
+  result: TestResult,
+  testName: string,
+  sessionId: string | undefined,
+): void {
+  logger.info(chalk.green(`  ✓ ${testName}`));
+  if (result.message && result.message !== 'Test completed') {
+    logger.info(chalk.dim(`${TEST_RESULT_INDENT}${result.message}`));
+  }
+  if (sessionId) {
+    logger.info(chalk.dim(`${TEST_RESULT_INDENT}Session ID: ${sessionId}`));
+  }
+}
 
-  if (result.success) {
-    logger.info(chalk.green(`  ✓ ${testName}`));
-    if (result.message && result.message !== 'Test completed') {
-      logger.info(chalk.dim(`${indent}${result.message}`));
+/**
+ * Display a failed test result.
+ */
+function displayFailedTestResult(
+  result: TestResult,
+  testName: string,
+  analysis: ProviderTestResult['analysis'],
+  reason: string | undefined,
+): void {
+  const hasSuggestions = analysis?.changes_needed;
+  const isHardError = result.error && !hasSuggestions;
+
+  if (isHardError) {
+    logger.error(chalk.red(`  ✗ ${testName}`));
+    if (result.message) {
+      logger.error(chalk.red(`${TEST_RESULT_INDENT}${result.message}`));
     }
-    if (result.sessionId) {
-      logger.info(chalk.dim(`${indent}Session ID: ${result.sessionId}`));
+    if (result.error && result.error !== result.message) {
+      logger.error(chalk.red(`${TEST_RESULT_INDENT}${result.error}`));
+    }
+  } else if (hasSuggestions) {
+    logger.warn(chalk.yellow(`  ⚠ ${testName}`));
+    if (result.message) {
+      logger.info(`${TEST_RESULT_INDENT}${result.message}`);
     }
   } else {
-    // Check if this is a "suggestions" failure (configuration issue) vs a hard error
-    const hasSuggestions = result.analysis?.changes_needed;
-    const isHardError = result.error && !hasSuggestions;
-
-    if (isHardError) {
-      logger.error(chalk.red(`  ✗ ${testName}`));
-      if (result.message) {
-        logger.error(chalk.red(`${indent}${result.message}`));
-      }
-      if (result.error && result.error !== result.message) {
-        logger.error(chalk.red(`${indent}${result.error}`));
-      }
-    } else if (hasSuggestions) {
-      logger.warn(chalk.yellow(`  ⚠ ${testName}`));
-      if (result.message) {
-        logger.info(`${indent}${result.message}`);
-      }
-    } else {
-      logger.warn(chalk.yellow(`  ✗ ${testName}`));
-      if (result.message) {
-        logger.info(`${indent}${result.message}`);
-      }
-    }
-
-    if (result.reason) {
-      logger.info(chalk.dim(`${indent}Reason: ${result.reason}`));
+    logger.warn(chalk.yellow(`  ✗ ${testName}`));
+    if (result.message) {
+      logger.info(`${TEST_RESULT_INDENT}${result.message}`);
     }
   }
 
-  // Display API analysis feedback if available (from testAnalyzerResponse)
-  if (result.analysis?.changes_needed) {
-    const analysis = result.analysis;
+  if (reason) {
+    logger.info(chalk.dim(`${TEST_RESULT_INDENT}Reason: ${reason}`));
+  }
+}
 
+/**
+ * Display API analysis feedback from testAnalyzerResponse.
+ */
+function displayAnalysisFeedback(analysis: ProviderTestResult['analysis']): void {
+  if (!analysis?.changes_needed) {
+    return;
+  }
+
+  logger.info('');
+  logger.info(chalk.cyan(`${TEST_RESULT_INDENT}Suggestions:`));
+  if (analysis.changes_needed_reason) {
+    logger.info(`${TEST_RESULT_INDENT}${analysis.changes_needed_reason}`);
+  }
+  if (Array.isArray(analysis.changes_needed_suggestions)) {
     logger.info('');
-    logger.info(chalk.cyan(`${indent}Suggestions:`));
-    if (analysis.changes_needed_reason) {
-      logger.info(`${indent}${analysis.changes_needed_reason}`);
-    }
-    if (analysis.changes_needed_suggestions && Array.isArray(analysis.changes_needed_suggestions)) {
-      logger.info('');
-      analysis.changes_needed_suggestions.forEach((suggestion: string, idx: number) => {
-        logger.info(`${indent}${chalk.cyan(`${idx + 1}.`)} ${suggestion}`);
-      });
-    }
+    analysis.changes_needed_suggestions.forEach((suggestion, idx) => {
+      logger.info(`${TEST_RESULT_INDENT}${chalk.cyan(`${idx + 1}.`)} ${suggestion}`);
+    });
+  }
+}
+
+function getTransformedRequest(result: TestResult): Record<string, unknown> | undefined {
+  if (
+    !('transformedRequest' in result) ||
+    result.transformedRequest === null ||
+    typeof result.transformedRequest !== 'object'
+  ) {
+    return undefined;
+  }
+  return result.transformedRequest as Record<string, unknown>;
+}
+
+/**
+ * Show transformed request details when available.
+ */
+function displayTransformedRequest(transformedRequest: Record<string, unknown> | undefined): void {
+  if (!transformedRequest) {
+    return;
   }
 
-  // Show transformed request if available (only when verbose or debug)
-  if (result.transformedRequest) {
-    logger.debug('');
-    logger.debug(chalk.dim(`${indent}Request details:`));
-    if (result.transformedRequest.url) {
-      logger.debug(chalk.dim(`${indent}  URL: ${result.transformedRequest.url}`));
-    }
-    if (result.transformedRequest.method) {
-      logger.debug(chalk.dim(`${indent}  Method: ${result.transformedRequest.method}`));
-    }
+  logger.debug('');
+  logger.debug(chalk.dim(`${TEST_RESULT_INDENT}Request details:`));
+  if (transformedRequest.url) {
+    logger.debug(chalk.dim(`${TEST_RESULT_INDENT}  URL: ${transformedRequest.url}`));
   }
+  if (transformedRequest.method) {
+    logger.debug(chalk.dim(`${TEST_RESULT_INDENT}  Method: ${transformedRequest.method}`));
+  }
+}
+
+/**
+ * Display detailed test results with suggestions.
+ */
+function displayTestResult(result: TestResult, testName: string): void {
+  const analysis = 'analysis' in result ? result.analysis : undefined;
+  const sessionId = 'sessionId' in result ? result.sessionId : undefined;
+  const reason = 'reason' in result ? result.reason : undefined;
+
+  if (result.success) {
+    displaySuccessfulTestResult(result, testName, sessionId);
+  } else {
+    displayFailedTestResult(result, testName, analysis, reason);
+  }
+
+  displayAnalysisFeedback(analysis);
+  displayTransformedRequest(getTransformedRequest(result));
 }
 
 interface ProviderTestSummary {

@@ -1,6 +1,6 @@
 import * as fs from 'fs';
 
-import yaml from 'js-yaml';
+import * as yaml from 'js-yaml';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type {
