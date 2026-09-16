@@ -109,6 +109,12 @@ function getRedteamPrompt(
     return finalPrompt;
   }
 
+  // Providers can report input they generated dynamically. Strategy transforms
+  // can still supersede that input, so redteamFinalPrompt takes precedence.
+  if (typeof providerResponse.prompt === 'string' && providerResponse.prompt.trim()) {
+    return providerResponse.prompt;
+  }
+
   if (lastUserPrompt) {
     return lastUserPrompt;
   }

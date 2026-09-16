@@ -92,6 +92,22 @@ describe('redteam strategy result grading', () => {
     expect(result.pass).toBe(true);
   });
 
+  it('grades independently when a legacy result has no assertion or plugin ID', async () => {
+    const getResult = vi.spyOn(RedteamGraderBase.prototype, 'getResult').mockResolvedValue({
+      grade: { pass: false, score: 0, reason: 'Independent verdict' },
+      rubric: 'New rubric',
+    });
+    const { assertion: _assertion, ...legacyResult } = storedResult;
+    const result = await runAssertions({
+      prompt: originalPrompt,
+      test: { ...test, metadata: { purpose: 'An assistant' } },
+      providerResponse: { output, metadata: { storedGraderResult: legacyResult } },
+    });
+
+    expect(getResult).toHaveBeenCalledTimes(1);
+    expect(result.pass).toBe(false);
+  });
+
   it.each([
     { type: 'promptfoo:redteam:pii:social' as const, metric: piiAssertion.metric },
     { type: piiAssertion.type, metric: 'A different assertion' },
@@ -194,6 +210,65 @@ describe('redteam strategy result grading', () => {
       },
     });
     expect(getResult.mock.calls[0]?.[0]).toBe(attackPrompt);
+  });
+
+  it.each<{
+    name: string;
+    reportedPrompt: ProviderResponse['prompt'];
+    metadata?: ProviderResponse['metadata'];
+    expectedPrompt: string;
+  }>([
+    {
+      name: 'uses the provider-reported input without strategy metadata',
+      reportedPrompt: attackPrompt,
+      expectedPrompt: attackPrompt,
+    },
+    {
+      name: 'prefers the provider-reported input over the last saved user message',
+      reportedPrompt: attackPrompt,
+      metadata: { messages: [{ role: 'user', content: 'Before the provider transformed it' }] },
+      expectedPrompt: attackPrompt,
+    },
+    {
+      name: 'preserves the final transformed attack over the provider-reported input',
+      reportedPrompt: 'Before the strategy transformed it',
+      metadata: { redteamFinalPrompt: attackPrompt },
+      expectedPrompt: attackPrompt,
+    },
+    {
+      name: 'falls back to the saved user message for an empty reported input',
+      reportedPrompt: '',
+      metadata: { messages: [{ role: 'user', content: attackPrompt }] },
+      expectedPrompt: attackPrompt,
+    },
+    {
+      name: 'falls back to the original prompt for a blank reported input',
+      reportedPrompt: ' \n\t',
+      expectedPrompt: originalPrompt,
+    },
+    {
+      name: 'falls back to the original prompt for an empty chat array',
+      reportedPrompt: [],
+      expectedPrompt: originalPrompt,
+    },
+    {
+      name: 'does not flatten reported system messages into user input',
+      reportedPrompt: [{ role: 'system', content: 'Private system instructions' }],
+      expectedPrompt: originalPrompt,
+    },
+  ])('$name', async ({ reportedPrompt, metadata, expectedPrompt }) => {
+    const getResult = vi.spyOn(RedteamGraderBase.prototype, 'getResult').mockResolvedValue({
+      grade: { pass: true, score: 1, reason: 'Correct input' },
+      rubric: 'New rubric',
+    });
+    await runAssertions({
+      prompt: originalPrompt,
+      test,
+      providerResponse: { output, prompt: reportedPrompt, metadata },
+    });
+
+    expect(getResult).toHaveBeenCalledTimes(1);
+    expect(getResult.mock.calls[0]?.[0]).toBe(expectedPrompt);
   });
 
   it.each([undefined, {}, [null], [{ prompt: 'An independent attempt', output: 'A response' }]])(
