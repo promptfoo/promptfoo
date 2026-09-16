@@ -3,8 +3,6 @@ import { getRepeatPassRateGroupTestIdx } from './repeatPassRateMetadata';
 import type Eval from '../models/eval';
 import type EvalResult from '../models/evalResult';
 
-export { REPEAT_PASS_RATE_GROUP_METADATA_KEY } from './repeatPassRateMetadata';
-
 /**
  * A single per-test repeat pass-rate violation.
  *

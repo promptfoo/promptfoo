@@ -1,9 +1,9 @@
 import { describe, expect, it } from 'vitest';
+import { REPEAT_PASS_RATE_GROUP_METADATA_KEY } from '../../src/util/repeatPassRateMetadata';
 import {
   computeRepeatPassRateViolations,
   findRepeatPassRateViolations,
   formatRepeatPassRateViolation,
-  REPEAT_PASS_RATE_GROUP_METADATA_KEY,
 } from '../../src/util/repeatPassRateThreshold';
 
 import type Eval from '../../src/models/eval';
@@ -165,7 +165,9 @@ describe('computeRepeatPassRateViolations', () => {
   });
 
   it('returns no violations when the threshold is not finite', () => {
-    const results = [makeResult({ testIdx: 0, repeatGroupTestIdx: 0, promptIdx: 0, success: false })];
+    const results = [
+      makeResult({ testIdx: 0, repeatGroupTestIdx: 0, promptIdx: 0, success: false }),
+    ];
 
     expect(computeRepeatPassRateViolations(results, Number.NaN)).toEqual([]);
     expect(computeRepeatPassRateViolations(results, Number.POSITIVE_INFINITY)).toEqual([]);
@@ -223,9 +225,7 @@ describe('findRepeatPassRateViolations', () => {
   it('returns no violations when the threshold is not finite', async () => {
     const evalRecord = {
       persisted: false,
-      results: [
-        makeResult({ testIdx: 0, repeatGroupTestIdx: 0, promptIdx: 0, success: false }),
-      ],
+      results: [makeResult({ testIdx: 0, repeatGroupTestIdx: 0, promptIdx: 0, success: false })],
     } as unknown as Eval;
 
     expect(await findRepeatPassRateViolations(evalRecord, Number.NaN)).toEqual([]);

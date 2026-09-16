@@ -1,109 +1,14 @@
 import { describe, expect, it } from 'vitest';
 import { ResultFailureReason } from '../../../src/types/index';
-import { getHeaderForTable } from '../../../src/util/exportToFile/getHeaderForTable';
 import {
   convertEvalResultToTableCell,
   convertTestResultsToTableRow,
 } from '../../../src/util/exportToFile/index';
 import { REPEAT_PASS_RATE_GROUP_METADATA_KEY } from '../../../src/util/repeatPassRateMetadata';
 
-import type Eval from '../../../src/models/eval';
 import type EvalResult from '../../../src/models/evalResult';
 
 describe('exportToFile utils', () => {
-  describe('getHeaderForTable', () => {
-    it('should extract vars from defaultTest', () => {
-      const eval_: Partial<Eval> = {
-        id: 'test-id',
-        createdAt: Date.now(),
-        config: {
-          defaultTest: {
-            vars: {
-              var1: 'value1',
-              var2: 'value2',
-            },
-          },
-        },
-        prompts: [],
-        results: [],
-        persisted: false,
-      };
-
-      const result = getHeaderForTable(eval_ as Eval);
-      expect(result.vars).toEqual(['var1', 'var2']);
-    });
-
-    it('should extract vars from tests array', () => {
-      const eval_: Partial<Eval> = {
-        id: 'test-id',
-        createdAt: Date.now(),
-        config: {
-          tests: [
-            {
-              vars: {
-                var3: 'value3',
-                var4: 'value4',
-              },
-            },
-          ],
-        },
-        prompts: [],
-        results: [],
-        persisted: false,
-      };
-
-      const result = getHeaderForTable(eval_ as Eval);
-      expect(result.vars).toEqual(['var3', 'var4']);
-    });
-
-    it('should extract vars from scenarios', () => {
-      const eval_: Partial<Eval> = {
-        id: 'test-id',
-        createdAt: Date.now(),
-        config: {
-          scenarios: [
-            {
-              config: [
-                {
-                  vars: {
-                    var5: 'value5',
-                  },
-                },
-              ],
-              tests: [
-                {
-                  vars: {
-                    var6: 'value6',
-                  },
-                },
-              ],
-            },
-          ],
-        },
-        prompts: [],
-        results: [],
-        persisted: false,
-      };
-
-      const result = getHeaderForTable(eval_ as Eval);
-      expect(result.vars).toEqual(['var5', 'var6']);
-    });
-
-    it('should handle empty config', () => {
-      const eval_: Partial<Eval> = {
-        id: 'test-id',
-        createdAt: Date.now(),
-        config: {},
-        prompts: [],
-        results: [],
-        persisted: false,
-      };
-
-      const result = getHeaderForTable(eval_ as Eval);
-      expect(result.vars).toEqual([]);
-    });
-  });
-
   describe('convertEvalResultToTableCell', () => {
     it('omits internal repeat grouping metadata from table cells', () => {
       const result: Partial<EvalResult> = {

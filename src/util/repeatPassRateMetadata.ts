@@ -1,7 +1,7 @@
 import type { EvaluateResult } from '../types';
 
 export const REPEAT_PASS_RATE_GROUP_METADATA_KEY = '__promptfooRepeatGroupTestIdx';
-export const REPEAT_PASS_RATE_GROUP_RESULT_KEY = Symbol('promptfooRepeatGroupTestIdx');
+const REPEAT_PASS_RATE_GROUP_RESULT_KEY = Symbol('promptfooRepeatGroupTestIdx');
 
 type TaggedRepeatResult = {
   [REPEAT_PASS_RATE_GROUP_RESULT_KEY]?: number;
@@ -29,7 +29,9 @@ export function tagRepeatPassRateResult(result: EvaluateResult, testIdx: number 
 export function getRepeatPassRateGroupTestIdx(
   result: EvaluateResult | { metadata?: Record<string, unknown> },
 ): number | undefined {
-  const symbolTag = (result as EvaluateResult & TaggedRepeatResult)[REPEAT_PASS_RATE_GROUP_RESULT_KEY];
+  const symbolTag = (result as EvaluateResult & TaggedRepeatResult)[
+    REPEAT_PASS_RATE_GROUP_RESULT_KEY
+  ];
   if (typeof symbolTag === 'number' && Number.isSafeInteger(symbolTag)) {
     return symbolTag;
   }
