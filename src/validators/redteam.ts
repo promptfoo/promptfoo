@@ -26,7 +26,7 @@ import {
 } from '../redteam/constants';
 import { CODING_AGENT_CORE_PLUGINS, CODING_AGENT_PLUGINS } from '../redteam/constants/codingAgents';
 import { isCustomStrategy } from '../redteam/constants/strategies';
-import { isJavascriptFile } from '../util/fileExtensions';
+import { isJavascriptFile } from '../validation/fileExtensions';
 import { ProviderSchema } from '../validators/providers';
 
 import type { Collection, FrameworkComplianceId, Plugin, Strategy } from '../redteam/constants';

@@ -9,6 +9,7 @@ model the internal boundaries that would support a future multi-package split.
 | ------------------ | ---------------------------------------------------------------- | ----------------------------------------------- |
 | `facade`           | `src/index.ts`                                                   | Public compatibility surface                    |
 | `contracts`        | `src/contracts`, `src/contracts.ts`                              | Leaf-safe shared contracts and schemas          |
+| `validation`       | `src/validation`                                                 | Portable extension and range validation helpers |
 | `legacy-contracts` | `src/types`, `src/validators`                                    | Transitional mixed runtime types and validators |
 | `core`             | assertions, matchers, prompts, scheduler, test-case logic        | Evaluation domain logic                         |
 | `node`             | database, models, config, storage, `src/evaluate.ts`, `src/node` | Node runtime adapters                           |
@@ -61,6 +62,13 @@ nor quietly pick up a new npm dependency or Node builtin such as `node:fs`. A
 `node:` prefix is ignored when matching, so `"fs"` and `"node:fs"` are equivalent.
 
 ## Layer Dependency Ratchet
+
+`src/validation` owns the pure file-extension and filter-range helpers used by
+configuration schemas. It is a separate leaf with no external dependencies.
+Existing `src/util/fileExtensions` and `src/util/filterRange` imports remain
+compatibility shims that share the same functions and extension array. These
+helpers are not exports of the public contracts barrel. Range warning logging
+remains in the Node adapter, `src/util/filterRangeWarn.ts`.
 
 Each private layer declares its currently allowed dependencies in
 `architecture/layers.json`. The current graph still has transitional edges, so

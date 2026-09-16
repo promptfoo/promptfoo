@@ -1,6 +1,6 @@
 {
   "publicFacade": "src/index.ts",
-  "leafLayers": ["contracts"],
+  "leafLayers": ["contracts", "validation"],
   "aliases": {
     "@app": "src/app/src",
     "@promptfoo": "src"
@@ -8,6 +8,7 @@
   "ignoredRoots": ["src/__mocks__"],
   "tierOrder": [
     "contracts",
+    "validation",
     "legacy-contracts",
     "legacy-runtime",
     "node",
@@ -119,7 +120,14 @@
         "src/storage",
         "src/util"
       ],
-      "allowedDependencies": ["core", "legacy-contracts", "legacy-runtime", "providers", "redteam"]
+      "allowedDependencies": [
+        "core",
+        "legacy-contracts",
+        "legacy-runtime",
+        "providers",
+        "redteam",
+        "validation"
+      ]
     },
     {
       "name": "core",
@@ -136,7 +144,7 @@
     {
       "name": "legacy-contracts",
       "roots": ["src/types", "src/validators"],
-      "allowedDependencies": ["contracts", "legacy-runtime", "node", "providers", "redteam"]
+      "allowedDependencies": ["contracts", "legacy-runtime", "providers", "redteam", "validation"]
     },
     {
       "name": "contracts",
@@ -195,6 +203,12 @@
         "providers",
         "redteam"
       ]
+    },
+    {
+      "name": "validation",
+      "roots": ["src/validation"],
+      "allowedDependencies": [],
+      "allowedExternal": []
     }
   ]
 }
