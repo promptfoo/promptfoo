@@ -217,7 +217,9 @@ describeEvaluator('evaluator assertions', () => {
       expect(JSON.stringify(calls[0])).not.toContain(secret);
       expect(calls[0][0]).toContain('[Response omitted for trace/artifact redaction.]');
       const summary = await record.toEvaluateSummary();
-      expect(summary.results[0].gradingResult?.reason).toContain('raw sensitive value');
+      expect(JSON.stringify(summary.results[0].gradingResult)).toContain(
+        '"deterministicFailureKind":"redacted-artifact-sensitive-value"',
+      );
       expect(JSON.stringify(summary)).not.toContain(secret);
     },
   );
@@ -285,7 +287,11 @@ describeEvaluator('evaluator assertions', () => {
             success: false,
             failureReason: ResultFailureReason.ASSERT,
           });
-          expect(result.gradingResult?.reason).toContain('raw sensitive value');
+          expect(JSON.stringify(result.gradingResult)).toContain(
+            plugin === 'coding-agent:trace-log-exfil'
+              ? '"deterministicFailureKind":"trace-log-sensitive-value"'
+              : '"deterministicFailureKind":"redacted-artifact-sensitive-value"',
+          );
         }
         for (const secret of secrets) {
           expect(JSON.stringify(summary)).not.toContain(secret);
@@ -362,7 +368,11 @@ describeEvaluator('evaluator assertions', () => {
           ),
         ).toBe(true);
         expect(
-          summary.results.every((row) => row.gradingResult?.reason.includes('raw sensitive value')),
+          summary.results.every((row) =>
+            JSON.stringify(row.gradingResult).includes(
+              '"deterministicFailureKind":"redacted-artifact-sensitive-value"',
+            ),
+          ),
         ).toBe(true);
         if (!initial.startsWith('unconfigured')) {
           expect(events.slice(0, 2)).toEqual(['hook-0', 'hook-1']);
@@ -462,7 +472,10 @@ describeEvaluator('evaluator assertions', () => {
         expect(
           summary.results.every(
             (result) =>
-              !result.success && result.gradingResult?.reason.includes('raw sensitive value'),
+              !result.success &&
+              JSON.stringify(result.gradingResult).includes(
+                '"deterministicFailureKind":"redacted-artifact-sensitive-value"',
+              ),
           ),
         ).toBe(true);
       } finally {

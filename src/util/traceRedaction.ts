@@ -292,6 +292,7 @@ function sanitizeRedactionGrade(result: GradingResult): GradingResult {
   const evidence = result.metadata?.verifierEvidence;
   return {
     ...result,
+    reason: 'Grading details omitted for trace/artifact redaction.',
     ...(result.metadata && {
       metadata: {
         ...result.metadata,

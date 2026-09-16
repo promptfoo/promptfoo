@@ -19,6 +19,7 @@ import {
 import { fetchWithProxy } from './util/fetch/index';
 import { createBlobInlineCache, inlineBlobRefsForShare } from './util/inlineBlobsForShare';
 import { redactAzureBlobSasTokens, sanitizeConfigForPersistence } from './util/sanitizer';
+import { sanitizeRedactionResult } from './util/traceRedaction';
 
 import type Eval from './models/eval';
 import type EvalResult from './models/evalResult';
@@ -395,6 +396,7 @@ async function prepareChunkForShare(
   inlineCache: ReturnType<typeof createBlobInlineCache> | null,
   remoteBlobUploadCache: ReturnType<typeof createRemoteBlobUploadCache> | null,
 ): Promise<EvalResult[]> {
+  chunk = chunk.map(sanitizeRedactionResult);
   const chunkToSend = inlineCache
     ? await inlineBlobRefsForShare(chunk, inlineCache, localEvalId)
     : chunk;
@@ -434,7 +436,9 @@ async function sendChunkedResults(
   const remoteBlobUploadCache =
     cloudConfig.isEnabled() && !inlineBlobs ? createRemoteBlobUploadCache() : null;
 
-  let sampleResults = (await evalRecord.fetchResultsBatched(100).next()).value ?? [];
+  let sampleResults = ((await evalRecord.fetchResultsBatched(100).next()).value ?? []).map(
+    sanitizeRedactionResult,
+  );
   if (sampleResults.length === 0) {
     logger.debug(`No results found`);
     return null;

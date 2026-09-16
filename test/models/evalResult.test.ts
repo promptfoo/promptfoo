@@ -419,7 +419,7 @@ describe('EvalResult', () => {
         expect(result.gradingResult).toMatchObject({
           pass: true,
           score: 1,
-          reason: grade.reason,
+          reason: 'Grading details omitted for trace/artifact redaction.',
           metadata: { cachedResponse: false, verifierEvidence: safeEvidence },
         });
       }
@@ -452,7 +452,12 @@ describe('EvalResult', () => {
         },
         tokenUsage: { prompt: secret, completion: 2 } as any,
         testCase: { assert: [{ type: `promptfoo:redteam:${pluginId}` as const }] },
-        gradingResult: { pass: false, score: 0, reason: 'Protected receipt found.' },
+        gradingResult: {
+          pass: false,
+          score: 0,
+          reason: secret,
+          componentResults: [{ pass: false, score: 0, reason: secret }],
+        },
       });
       const artifact = sanitizeResultForJsonlArtifact(row);
       expect(JSON.stringify(artifact)).not.toContain(secret);
@@ -465,7 +470,9 @@ describe('EvalResult', () => {
       for (const result of [saved, bulk]) {
         const persisted = await EvalResult.findById(result.id);
         expect(JSON.stringify(persisted?.toEvaluateResult())).not.toContain(secret);
-        expect(persisted?.gradingResult?.reason).toBe('Protected receipt found.');
+        expect(persisted?.gradingResult?.reason).toBe(
+          'Grading details omitted for trace/artifact redaction.',
+        );
       }
       expect(row.response?.output).toBe(secret);
     },

@@ -164,6 +164,41 @@ it('redacts legacy privacy copies from the initial share payload', async () => {
   expect(JSON.stringify(original)).toBe(snapshot);
 });
 
+it.each([false, true])('redacts historical V3 rows before sharing (cloud=%s)', async (cloud) => {
+  vi.mocked(cloudConfig.isEnabled).mockReturnValue(cloud);
+  vi.mocked(cloudConfig.getApiHost).mockReturnValue('https://api.example.com');
+  vi.mocked(cloudConfig.getAppUrl).mockReturnValue('https://app.example.com');
+  vi.mocked(envars.getEnvBool).mockImplementation((_key, fallback) => fallback ?? false);
+  vi.mocked(createRemoteBlobUploadCache).mockReturnValue(new Map());
+  vi.mocked(inlineBlobRefsForShare).mockImplementation(async (value) => value);
+  const results = createLegacyRedactionSummary(
+    'promptfoo:redteam:harness:artifact-redaction',
+  ).results.map((result, index) => ({ ...result, id: String(index) }));
+  results[0].gradingResult = {
+    pass: false,
+    score: 0,
+    reason: 'PRIVATE_LEGACY_RECEIPT',
+    componentResults: [{ pass: false, score: 0, reason: 'PRIVATE_LEGACY_RECEIPT' }],
+  };
+  const original = JSON.stringify(results);
+  const evaluation = buildMockEval() as Eval;
+  evaluation.fetchResultsBatched = vi.fn(async function* () {
+    yield results as unknown as EvalResult[];
+  });
+  mockFetch.mockResolvedValue({ ok: true, json: async () => ({ id: 'shared-eval' }) });
+  await createShareableUrl(evaluation, { silent: true });
+  const chunk = JSON.parse(mockFetch.mock.calls[1][1].body);
+  expect(JSON.stringify(chunk)).not.toContain('PRIVATE_LEGACY_RECEIPT');
+  expect(chunk[0]).toMatchObject({ id: '0', success: false, score: 0, failureReason: 1 });
+  expect(chunk[1]).toEqual(results[1]);
+  const prepareMedia = cloud ? uploadBlobRefsForShare : inlineBlobRefsForShare;
+  expect(prepareMedia).toHaveBeenCalled();
+  expect(JSON.stringify(vi.mocked(prepareMedia).mock.calls)).not.toContain(
+    'PRIVATE_LEGACY_RECEIPT',
+  );
+  expect(JSON.stringify(results)).toBe(original);
+});
+
 describe('stripAuthFromUrl', () => {
   it('removes username and password from URL', () => {
     const input = 'https://user:pass@example.com/path?query=value#hash';
