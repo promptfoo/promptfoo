@@ -1158,6 +1158,22 @@ describe('OllamaEmbeddingProvider', () => {
     expect(url).toBe('http://localhost:11434/api/embed');
   });
 
+  it('should report a cached embedding as cached usage', async () => {
+    vi.mocked(fetchWithCache).mockResolvedValue({
+      data: { embeddings: [[0.1, 0.2]], prompt_eval_count: 7 },
+      cached: true,
+      status: 200,
+      statusText: 'OK',
+      headers: {},
+    });
+
+    const provider = new OllamaEmbeddingProvider('all-minilm');
+    const result = await provider.callEmbeddingApi('test text');
+
+    expect(result.cached).toBe(true);
+    expect(result.tokenUsage).toEqual({ cached: 7, total: 7 });
+  });
+
   it('should default truncate to false so over-long input fails loudly', async () => {
     vi.mocked(fetchWithCache).mockResolvedValue({
       data: { embeddings: [[0.1]] },
