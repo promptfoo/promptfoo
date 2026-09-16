@@ -723,6 +723,8 @@ export class OllamaEmbeddingProvider extends OllamaCompletionProvider {
         throw new Error('No embedding found in Ollama embeddings API response');
       }
       const promptTokens = response.data.prompt_eval_count;
+      // A cache hit is not a new request: report the tokens as cached so repeated
+      // similarity assertions are not counted as fresh usage (src/providers/AGENTS.md).
       const tokenUsage =
         promptTokens === undefined
           ? undefined
