@@ -34,6 +34,7 @@ export interface OpenAiSharedOptions {
   useDefaultApiKey?: boolean;
   apiHost?: string;
   apiBaseUrl?: string;
+  /** OpenAI organization ID. Set to an empty string to suppress environment fallback. */
   organization?: string;
   /** Custom per-token cost override for both input and output tokens. */
   cost?: number;

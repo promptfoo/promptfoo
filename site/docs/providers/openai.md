@@ -250,7 +250,7 @@ Use the model name and endpoint supported by your gateway. `apiBaseUrl` includes
 | `apiKeyRequired`   | Set to `false` only for endpoints that do not require an API key.                                                                                                                   |
 | `useDefaultApiKey` | Set to `false` to disable fallback to `OPENAI_API_KEY`. Explicit `apiKey` and `apiKeyEnvar` still work. Pair with `apiKeyRequired: false` for an unauthenticated compatible server. |
 | `headers`          | Add request headers, such as `OpenAI-Project`.                                                                                                                                      |
-| `organization`     | Set the OpenAI organization ID.                                                                                                                                                     |
+| `organization`     | Set the OpenAI organization ID. Set it to an empty string to suppress the `OPENAI_ORGANIZATION` environment fallback.                                                               |
 
 Provider `env` overrides take precedence over the corresponding process environment variables. For [Azure OpenAI](/docs/providers/azure/), use the Azure provider and its deployment-specific configuration.
 
