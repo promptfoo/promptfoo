@@ -1,0 +1,41 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: Evaluate models through MLflow AI Gateway
+
+# MLflow AI Gateway routes requests to multiple LLM providers through a single
+# OpenAI-compatible endpoint. Set MLFLOW_GATEWAY_URL to your server address.
+#
+# Setup:
+#   pip install mlflow[genai]
+#   mlflow server --host 127.0.0.1 --port 5000
+#   export MLFLOW_GATEWAY_URL=http://localhost:5000
+
+prompts:
+  - 'You are a helpful assistant. Answer the following question concisely: {{question}}'
+
+providers:
+  - id: mlflow-gateway:my-chat-endpoint
+    config:
+      temperature: 0.7
+      max_tokens: 500
+
+defaultTest:
+  options:
+    provider:
+      text: mlflow-gateway:my-chat-endpoint
+
+tests:
+  - description: Basic knowledge question
+    vars:
+      question: 'What is an LLM gateway?'
+    assert:
+      - type: contains-any
+        value: ['proxy', 'routing', 'provider', 'unified']
+      - type: llm-rubric
+        value: 'The response should accurately describe what an LLM gateway does'
+
+  - description: Follow-up question
+    vars:
+      question: 'What are the benefits of using an LLM gateway?'
+    assert:
+      - type: contains-any
+        value: ['cost', 'fallback', 'routing', 'security', 'key']

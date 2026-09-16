@@ -25,10 +25,10 @@ function createContext(payload: Record<string, unknown>) {
 describe('MCPProvider', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    mcpClientMock.initialize.mockResolvedValue(undefined);
-    mcpClientMock.getAllTools.mockReturnValue([]);
+    mcpClientMock.initialize.mockReset().mockResolvedValue(undefined);
+    mcpClientMock.getAllTools.mockReset().mockReturnValue([]);
     mcpClientMock.callTool.mockReset();
-    mcpClientMock.cleanup.mockResolvedValue(undefined);
+    mcpClientMock.cleanup.mockReset().mockResolvedValue(undefined);
   });
 
   it('should preserve existing output behavior without a response transform', async () => {
@@ -52,6 +52,67 @@ describe('MCPProvider', () => {
         toolArgs: { id: '123' },
         originalPayload: payload,
       },
+    });
+  });
+
+  it('should preserve MCP tool error results as direct provider output', async () => {
+    const rawResult = {
+      content: [{ type: 'text', text: 'Path traversal not allowed' }],
+      isError: true,
+    };
+    mcpClientMock.callTool.mockResolvedValue({
+      content: 'Path traversal not allowed',
+      isError: true,
+      raw: rawResult,
+    });
+
+    const provider = new MCPProvider({ config: { enabled: true } });
+
+    await expect(provider.callTool('read_file', { path: '../../../etc/passwd' })).resolves.toEqual({
+      output: 'Path traversal not allowed',
+      raw: rawResult,
+      metadata: {
+        toolName: 'read_file',
+        toolArgs: { path: '../../../etc/passwd' },
+      },
+    });
+  });
+
+  it('should preserve MCP tool error results as direct provider output via callApi', async () => {
+    const rawResult = {
+      content: [{ type: 'text', text: 'Path traversal not allowed' }],
+      isError: true,
+    };
+    mcpClientMock.callTool.mockResolvedValue({
+      content: 'Path traversal not allowed',
+      isError: true,
+      raw: rawResult,
+    });
+
+    const provider = new MCPProvider({ config: { enabled: true } });
+    const payload = { tool: 'read_file', args: { path: '../../../etc/passwd' } };
+
+    await expect(provider.callApi('', createContext(payload))).resolves.toEqual({
+      output: 'Path traversal not allowed',
+      raw: rawResult,
+      metadata: {
+        toolName: 'read_file',
+        toolArgs: { path: '../../../etc/passwd' },
+        originalPayload: payload,
+      },
+    });
+  });
+
+  it('should surface MCP client failures as a provider error', async () => {
+    const failure = { content: '', error: 'connection lost' };
+    mcpClientMock.callTool.mockResolvedValue(failure);
+
+    const provider = new MCPProvider({ config: { enabled: true } });
+    const payload = { tool: 'lookup_user', args: { id: '123' } };
+
+    await expect(provider.callApi('', createContext(payload))).resolves.toEqual({
+      error: 'MCP tool error: connection lost',
+      raw: failure,
     });
   });
 
