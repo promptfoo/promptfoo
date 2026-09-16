@@ -117,7 +117,7 @@ Remote generation receives these manifest fields, configured fixture paths, scen
 
 Only the local trace/artifact-redaction verifier receives the original response. Other assertions in the same test receive placeholders for the response and rendered prompt, with no private trace. Put checks that need the original prompt or output in a separate test. `select-best` cannot be combined with privacy checks because it would compare omitted responses. Adaptive strategies run each configured local privacy verifier before discarding a reply, including unblocking replies, replies that end a conversation, and the final tree replay. Assertions within an `assert-set` keep separate verdicts for each receipt. A later clean reply does not erase an earlier disclosure. Saved privacy-check grades omit private receipt and artifact paths while retaining the verdict, evidence hashes, and byte counts.
 
-Paginated result rows apply the same redaction when reading older records. The view keeps the original verdict and score without rewriting the stored record.
+Paginated result rows apply the same redaction when reading older records. The view keeps the original verdict and score without rewriting the stored record. Legacy rows with `disableDefaultAsserts: true` retain ordinary prompts and responses; privacy assertions explicitly attached to the row still apply.
 
 Privacy checks omit thrown provider exception messages, stacks, and provider error metadata from error results returned to callers or result hooks. These results remain errors with zero scores.
 
