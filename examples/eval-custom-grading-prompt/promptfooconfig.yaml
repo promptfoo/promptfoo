@@ -49,3 +49,5 @@ tests:
       z: the specific question the user wants to ask
     assert:
       - type: llm-rubric
+        # This rubric records points for analysis but intentionally never fails on its score.
+        threshold: 0

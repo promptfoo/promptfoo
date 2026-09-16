@@ -217,15 +217,22 @@ export async function matchesLlmRubric(
     shouldUseRemoteGrading({ canUseCodexDefaultProvider: true })
   ) {
     try {
+      const remoteResult = await doRemoteGrading({
+        task: 'llm-rubric',
+        rubric,
+        output: gradingOutput,
+        vars: vars || {},
+        ...(imageOutputs.length ? { images: imageOutputs } : {}),
+        ...getRemoteGradingContext(),
+      });
+      const threshold = assertion?.threshold ?? 0.5;
+      const score = Number.isFinite(remoteResult.score)
+        ? remoteResult.score
+        : Number(remoteResult.pass);
       return {
-        ...(await doRemoteGrading({
-          task: 'llm-rubric',
-          rubric,
-          output: gradingOutput,
-          vars: vars || {},
-          ...(imageOutputs.length ? { images: imageOutputs } : {}),
-          ...getRemoteGradingContext(),
-        })),
+        ...remoteResult,
+        pass: remoteResult.pass && score >= threshold,
+        score,
         assertion,
       };
     } catch (error) {
@@ -240,6 +247,7 @@ export async function matchesLlmRubric(
     return await runJsonGradingPrompt({
       assertion,
       checkName: 'llm-rubric check',
+      defaultThreshold: 0.5,
       defaultPrompt: DEFAULT_GRADING_PROMPT,
       grading,
       label: 'llm-rubric',
