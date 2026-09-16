@@ -392,4 +392,179 @@ describe('AdaptiveConcurrency', () => {
       expect(results[5].current).toBe(1); // 3 → 1
     });
   });
+
+  describe('Latency-Gradient AIMD Congestion Control', () => {
+    it('should track minLatency and calculate EMA latency correctly', () => {
+      const ac = new AdaptiveConcurrency(10, 1, { alpha: 0.2 });
+
+      expect(ac.getEmaLatency()).toBeNull();
+      expect(ac.getMinLatency()).toBe(0);
+      expect(ac.getLatencyGradient()).toBeNull();
+
+      // First request: 100ms
+      ac.recordSuccess(100);
+      expect(ac.getMinLatency()).toBe(100);
+      expect(ac.getEmaLatency()).toBe(100);
+      expect(ac.getLatencyGradient()).toBe(1);
+
+      // Second request: 200ms -> EMA = 0.2 * 200 + 0.8 * 100 = 120ms
+      ac.recordSuccess(200);
+      expect(ac.getMinLatency()).toBe(100);
+      expect(ac.getEmaLatency()).toBeCloseTo(120, 2);
+      expect(ac.getLatencyGradient()).toBeCloseTo(1.2, 2);
+    });
+
+    it('should proactively throttle when latency gradient exceeds threshold', () => {
+      const ac = new AdaptiveConcurrency(10, 1, {
+        alpha: 0.5,
+        gradientThreshold: 1.5,
+        latencyBackoffFactor: 0.8,
+      });
+
+      // Establish baseline at 100ms
+      ac.recordSuccess(100);
+      expect(ac.getCurrent()).toBe(10);
+      expect(ac.getMinLatency()).toBe(100);
+
+      // Stable request at 110ms (EMA = 0.5*110 + 0.5*100 = 105, G = 1.05 <= 1.5)
+      const res1 = ac.recordSuccess(110);
+      expect(res1.changed).toBe(false);
+      expect(ac.getCurrent()).toBe(10);
+
+      // Severe latency spike to 400ms (EMA = 0.5*400 + 0.5*105 = 252.5, G = 2.525 > 1.5)
+      const res2 = ac.recordSuccess(400);
+      expect(res2.changed).toBe(true);
+      expect(res2.reason).toBe('proactive');
+      expect(res2.previous).toBe(10);
+      expect(res2.current).toBe(8); // floor(10 * 0.8) = 8
+      expect(ac.getCurrent()).toBe(8);
+    });
+
+    it('should not throttle below minConcurrency on latency gradient spike', () => {
+      const ac = new AdaptiveConcurrency(2, 2, {
+        alpha: 0.5,
+        gradientThreshold: 1.5,
+      });
+
+      ac.recordSuccess(100);
+      // High latency spike
+      const res = ac.recordSuccess(500);
+      expect(res.changed).toBe(false);
+      expect(ac.getCurrent()).toBe(2); // Clamped at min
+    });
+
+    it('should recover normally when latency gradient is within threshold', () => {
+      const ac = new AdaptiveConcurrency(10, 1);
+      ac.recordRateLimit(); // 10 -> 5
+      expect(ac.getCurrent()).toBe(5);
+
+      // 5 successes with stable 100ms latency
+      for (let i = 0; i < 4; i++) {
+        const res = ac.recordSuccess(100);
+        expect(res.changed).toBe(false);
+      }
+      const res5 = ac.recordSuccess(100);
+      expect(res5.changed).toBe(true);
+      expect(res5.reason).toBe('recovery');
+      expect(res5.current).toBe(8); // ceil(5 * 1.5) = 8
+    });
+
+    it('should expire older baseline minimums as new latencies arrive in sliding window', () => {
+      // Window size of 3
+      const ac = new AdaptiveConcurrency(10, 1, {
+        alpha: 0.5,
+        gradientThreshold: 1.5,
+        baselineWindowSize: 3,
+      });
+
+      // Old baseline: 100ms
+      ac.recordSuccess(100);
+      expect(ac.getMinLatency()).toBe(100);
+
+      // Workload shifts to 200ms
+      ac.recordSuccess(200);
+      ac.recordSuccess(200);
+      // 100ms sample is still in the 3-sample window ([100, 200, 200])
+      expect(ac.getMinLatency()).toBe(100);
+
+      // 4th request: 100ms sample is pushed out of the 3-sample window ([200, 200, 200])
+      ac.recordSuccess(200);
+      expect(ac.getMinLatency()).toBe(200);
+      // EMA with alpha=0.5: 100 -> 150 -> 175 -> 187.5
+      expect(ac.getEmaLatency()).toBeCloseTo(187.5, 1);
+      expect(ac.getLatencyGradient()).toBeCloseTo(187.5 / 200, 2);
+    });
+
+    it('should limit proactive backoff to one reduction per congestion wave via cooldown epoch', () => {
+      const ac = new AdaptiveConcurrency(10, 1, {
+        alpha: 0.5,
+        gradientThreshold: 1.5,
+        latencyBackoffFactor: 0.8,
+      });
+
+      ac.recordSuccess(100);
+      expect(ac.getCurrent()).toBe(10);
+
+      // 1st completion in spike: triggers 10 -> 8
+      const res1 = ac.recordSuccess(400);
+      expect(res1.changed).toBe(true);
+      expect(res1.current).toBe(8);
+
+      // Subsequent in-flight completions from the same wave should be in cooldown
+      for (let i = 0; i < 4; i++) {
+        const res = ac.recordSuccess(400);
+        expect(res.changed).toBe(false);
+        expect(ac.getCurrent()).toBe(8);
+      }
+    });
+
+    it('should suppress recovery increment while latency gradient remains congested', () => {
+      const ac = new AdaptiveConcurrency(10, 1, {
+        alpha: 0.5,
+        gradientThreshold: 1.5,
+        latencyBackoffFactor: 0.8,
+      });
+
+      ac.recordSuccess(100);
+      expect(ac.getCurrent()).toBe(10);
+
+      // Trigger reduction: 10 -> 8
+      ac.recordSuccess(400);
+      expect(ac.getCurrent()).toBe(8);
+
+      // 5 subsequent high-latency responses (gradient remains > 1.5, exceeding the 5-success recovery threshold)
+      for (let i = 0; i < 5; i++) {
+        const res = ac.recordSuccess(400);
+        // Recovery must NOT trigger while congested
+        expect(res.changed).toBe(false);
+        expect(ac.getCurrent()).toBe(8);
+      }
+
+      // Wait for EMA to decay back to healthy gradient (<= 1.5):
+      // With alpha=0.5, EMA: 395 -> 247 -> 173.8 -> 136.9 (healthy!)
+      ac.recordSuccess(100);
+      ac.recordSuccess(100);
+
+      // Once gradient is healthy (<= 1.5), 5 consecutive healthy responses trigger recovery (8 -> 10)
+      for (let i = 0; i < 4; i++) {
+        const res = ac.recordSuccess(100);
+        expect(res.changed).toBe(false);
+      }
+      const resRecover = ac.recordSuccess(100);
+      expect(resRecover.changed).toBe(true);
+      expect(resRecover.reason).toBe('recovery');
+      expect(resRecover.current).toBe(10);
+    });
+
+    it('should clamp latency options and never grow concurrency beyond initial ceiling', () => {
+      // Caller passes invalid/excessive backoff factor > 1
+      const ac = new AdaptiveConcurrency(10, 1, {
+        latencyBackoffFactor: 1.5,
+      });
+
+      ac.recordSuccess(100);
+      const res = ac.recordSuccess(500);
+      expect(res.current).toBeLessThanOrEqual(10);
+    });
+  });
 });
