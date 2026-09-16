@@ -277,6 +277,8 @@ Use the model name and endpoint supported by your gateway. `apiBaseUrl` includes
 
 Provider `env` overrides take precedence over the corresponding process environment variables. For [Azure OpenAI](/docs/providers/azure/), use the Azure provider and its deployment-specific configuration.
 
+For a runnable starting point, see the [`openai-compatible-gateway`](https://github.com/promptfoo/promptfoo/tree/main/examples/openai-compatible-gateway) example. [vLLM](/docs/providers/vllm/), [Llamafile](/docs/providers/llamafile/), and [LiteLLM](/docs/providers/litellm/) document setups for those servers.
+
 <details>
 <summary>Base URL precedence and attribution headers</summary>
 
