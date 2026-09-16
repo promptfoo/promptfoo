@@ -42,6 +42,53 @@ function mockExternalTrace(spans: SpanData[], traceId = 'trace-1') {
 }
 
 describe('fetchTraceContext', () => {
+  it.each([false, true])(
+    'ignores object key order while checking stability (array changed: %s)',
+    async (arrayChanged) => {
+      const span: SpanData = {
+        spanId: 'lookup',
+        name: 'inventory.search',
+        startTime: 1,
+        endTime: 2,
+        attributes: {
+          'tool.name': 'inventory.search',
+          details: { query: 'public records', limit: 2 },
+          order: ['first', 'second'],
+          records: [{ rows: 2, status: 'ok' }],
+        },
+      };
+      const reordered: SpanData = {
+        ...span,
+        attributes: {
+          order: arrayChanged ? ['second', 'first'] : ['first', 'second'],
+          records: [{ status: 'ok', rows: 2 }],
+          details: { limit: 2, query: 'public records' },
+          'tool.name': 'inventory.search',
+        },
+      };
+      const fetch = mockExternalTrace([span]);
+      fetch
+        .mockResolvedValueOnce({ traceId: 'trace-1', spans: [span], fetchedAt: 1 })
+        .mockResolvedValue({ traceId: 'trace-1', spans: [reordered], fetchedAt: 2 });
+      const pending = fetchTraceContext('trace-1', {
+        providerConfig,
+        requireComplete: true,
+        waitForStableSpans: true,
+        maxRetries: 1,
+        retryDelayMs: 0,
+        queryDelay: 0,
+      });
+      if (arrayChanged) {
+        await expect(pending).rejects.toMatchObject({ name: 'TraceEvidenceError' });
+      } else {
+        await expect(pending).resolves.toMatchObject({
+          spans: [{ spanId: 'lookup', attributes: reordered.attributes }],
+        });
+      }
+      expect(fetch).toHaveBeenCalledTimes(2);
+    },
+  );
+
   it.each(['open', 'changing', 'empty after open', 'error after open'])(
     'rejects required external evidence that remains %s',
     async (state) => {

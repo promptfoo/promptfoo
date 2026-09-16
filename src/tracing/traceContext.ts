@@ -499,7 +499,17 @@ async function fetchFromExternalProvider(
       }
 
       const snapshot = waitForStableSpans
-        ? JSON.stringify([...validSpans].sort((a, b) => a.spanId.localeCompare(b.spanId)))
+        ? JSON.stringify(
+            [...validSpans].sort((a, b) => a.spanId.localeCompare(b.spanId)),
+            (_key, value) =>
+              value && typeof value === 'object' && !Array.isArray(value)
+                ? Object.fromEntries(
+                    Object.keys(value)
+                      .sort()
+                      .map((key) => [key, value[key]]),
+                  )
+                : value,
+          )
         : undefined;
       latestComplete =
         validSpans.every((span) => span.endTime !== undefined && span.endTime >= span.startTime) &&
