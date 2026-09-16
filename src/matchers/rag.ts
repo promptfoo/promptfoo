@@ -16,7 +16,7 @@ import { callGradingProvider, callProviderWithContext, getAndCheckProvider } fro
 import { loadRubricPrompt, renderLlmRubricPrompt } from './rubric';
 import {
   cosineSimilarity,
-  fail,
+  graderFail,
   normalizeMatcherTokenUsage,
   splitIntoSentences,
   splitTextIntoSentences,
@@ -65,7 +65,7 @@ export async function matchesAnswerRelevance(
     );
     accumulateTokenUsage(tokensUsed, resp.tokenUsage);
     if (resp.error || !resp.output) {
-      return fail(resp.error || 'No output', tokensUsed);
+      return graderFail(resp.error || 'No output', tokensUsed);
     }
 
     invariant(
@@ -89,7 +89,7 @@ export async function matchesAnswerRelevance(
   );
   accumulateTokenUsage(tokensUsed, inputEmbeddingResp.tokenUsage);
   if (inputEmbeddingResp.error || !inputEmbeddingResp.embedding) {
-    return fail(inputEmbeddingResp.error || 'No embedding', tokensUsed);
+    return graderFail(inputEmbeddingResp.error || 'No embedding', tokensUsed);
   }
   const inputEmbedding = inputEmbeddingResp.embedding;
 
@@ -105,7 +105,7 @@ export async function matchesAnswerRelevance(
     );
     accumulateTokenUsage(tokensUsed, resp.tokenUsage);
     if (resp.error || !resp.embedding) {
-      return fail(resp.error || 'No embedding', tokensUsed);
+      return graderFail(resp.error || 'No embedding', tokensUsed);
     }
     const questionSimilarity = cosineSimilarity(inputEmbedding, resp.embedding);
     similarities.push(questionSimilarity);
@@ -179,7 +179,7 @@ export async function matchesContextRecall(
     providerCallContext,
   );
   if (resp.error || !resp.output) {
-    return fail(resp.error || 'No output', resp.tokenUsage);
+    return graderFail(resp.error || 'No output', resp.tokenUsage);
   }
 
   invariant(typeof resp.output === 'string', 'context-recall produced malformed response');
@@ -269,7 +269,7 @@ export async function matchesContextRelevance(
     providerCallContext,
   );
   if (resp.error || !resp.output) {
-    return fail(resp.error || 'No output', resp.tokenUsage);
+    return graderFail(resp.error || 'No output', resp.tokenUsage);
   }
 
   invariant(typeof resp.output === 'string', 'context-relevance produced malformed response');
@@ -381,7 +381,7 @@ export async function matchesContextFaithfulness(
   );
   accumulateTokenUsage(tokensUsed, resp.tokenUsage);
   if (resp.error || !resp.output) {
-    return fail(resp.error || 'No output', tokensUsed);
+    return graderFail(resp.error || 'No output', tokensUsed);
   }
 
   invariant(typeof resp.output === 'string', 'context-faithfulness produced malformed response');
@@ -408,7 +408,7 @@ export async function matchesContextFaithfulness(
   );
   accumulateTokenUsage(tokensUsed, resp.tokenUsage);
   if (resp.error || !resp.output) {
-    return fail(resp.error || 'No output', tokensUsed);
+    return graderFail(resp.error || 'No output', tokensUsed);
   }
 
   invariant(typeof resp.output === 'string', 'context-faithfulness produced malformed response');
