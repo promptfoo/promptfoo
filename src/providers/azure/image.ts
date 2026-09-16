@@ -2,7 +2,7 @@
  * Azure AI Foundry Image Provider for Microsoft MAI image models.
  *
  * Generates images from text prompts using Microsoft's MAI image models
- * (e.g. MAI-Image-2.5, MAI-Image-2.5-Flash, MAI-Image-2e, MAI-Image-2)
+ * (e.g. MAI-Image-2.6, MAI-Image-2.6-Flash, MAI-Image-2.5)
  * deployed in Microsoft Foundry.
  *
  * Unlike Azure OpenAI image models (DALL·E / gpt-image), MAI image models are

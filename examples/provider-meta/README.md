@@ -21,7 +21,7 @@ View the results with `promptfoo view`.
 
 ## What this shows
 
-- `muse-spark-1.1` — Meta's Muse Spark multimodal reasoning model — evaluated at two `reasoning_effort` levels (`minimal` vs `high`) on a short summarisation task, so you can compare answer quality, latency, and cost.
+- `muse-spark-1.3` — Meta's Muse Spark multimodal reasoning model — evaluated at two `reasoning_effort` levels (`minimal` vs `high`) on a short summarisation task, so you can compare answer quality, latency, and cost.
 - Cost is computed automatically from Meta's published pricing, including the cheaper cached-input rate for prompt-cache hits.
 - Plain `icontains` / `icontains-any` assertions, so the example runs with nothing but a `MODEL_API_KEY`.
 
