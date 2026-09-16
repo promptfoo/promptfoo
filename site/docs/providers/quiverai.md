@@ -17,7 +17,7 @@ Two endpoints are supported:
 
 ## Setup
 
-1. Create an API key at [app.quiver.ai](https://app.quiver.ai/settings/api-keys)
+1. Create an API key in the [QuiverAI Developer Platform](https://platform.quiver.ai/api-keys).
 2. Set the environment variable:
 
 ```bash
@@ -26,7 +26,7 @@ export QUIVERAI_API_KEY=your-api-key
 
 ## Models
 
-Run `GET /v1/models` for the live list. The currently released Arrow models are:
+Run `GET /v1/models` for the live list. These Arrow models use the supported SVG endpoints:
 
 | Model         | Provider id              | Use case                                                                |
 | ------------- | ------------------------ | ----------------------------------------------------------------------- |
@@ -34,7 +34,7 @@ Run `GET /v1/models` for the live list. The currently released Arrow models are:
 | Arrow 1.1 Max | `quiverai:arrow-1.1-max` | Higher fidelity for dense illustrations, logos, and technical drawings. |
 | Arrow 1.0     | `quiverai:arrow-1.0`     | Previous-generation model retained for parity.                          |
 
-The default model is `arrow-1.1`.
+The default model is `arrow-1.1`. Arrow 2 uses a separate, organization-gated `/v1/responses` API with token billing and is not supported by these SVG routes. See [QuiverAI API pricing](https://docs.quiver.ai/api/pricing).
 
 ## Provider format
 
@@ -151,7 +151,7 @@ Streaming is on by default. The provider receives `generating`, `reasoning`, and
 
 ## Billing and metadata
 
-QuiverAI bills in **credits**, not USD. Each successful response surfaces credit cost on the response (top-level `credits` for non-streaming, per-output `credits` on streaming `content` events). Promptfoo exposes both fields via response metadata:
+The Arrow 1 models supported by this provider bill in **credits**. Each successful response surfaces credit cost on the response (top-level `credits` for non-streaming, per-output `credits` on streaming `content` events). Promptfoo exposes both fields via response metadata:
 
 ```ts
 result.metadata.responseId; // server-generated request/output id

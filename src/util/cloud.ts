@@ -53,13 +53,12 @@ const PERMISSION_CHECK_SERVER_FEATURE_DATE = '2025-09-03T14:49:11Z';
  */
 export function makeRequest(path: string, method: string, body?: any): Promise<Response> {
   const apiHost = cloudConfig.getApiHost();
-  const apiKey = cloudConfig.getApiKey();
   const url = `${apiHost}/api/v1/${path.startsWith('/') ? path.slice(1) : path}`;
   try {
     return fetchWithProxy(url, {
       method,
       body: JSON.stringify(body),
-      headers: { Authorization: `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
+      headers: { ...(cloudConfig.getAuthHeaders() ?? {}), 'Content-Type': 'application/json' },
     });
   } catch (e) {
     logger.error(`[Cloud] Failed to make request to ${url}: ${e}`);
@@ -456,6 +455,7 @@ export async function getPluginSeverityOverridesFromCloud(cloudProviderId: strin
 export async function getUserTeams(
   apiHost?: string,
   apiKey?: string,
+  authHeaderName?: string,
 ): Promise<
   Array<{
     id: string;
@@ -470,8 +470,9 @@ export async function getUserTeams(
     apiHost && apiKey
       ? await fetchWithProxy(`${apiHost}/api/v1/users/me/teams`, {
           headers: {
-            Authorization: `Bearer ${apiKey}`,
+            [authHeaderName || cloudConfig.getAuthHeaderName()]: `Bearer ${apiKey}`,
           },
+          skipCloudAuthInjection: true,
         })
       : await makeRequest(`/users/me/teams`, 'GET');
   if (!response.ok) {
@@ -931,9 +932,8 @@ export async function getOrgContext(): Promise<{
 
   try {
     const apiHost = cloudConfig.getApiHost();
-    const apiKey = cloudConfig.getApiKey();
     const response = await fetchWithProxy(`${apiHost}/api/v1/users/me`, {
-      headers: { Authorization: `Bearer ${apiKey}` },
+      headers: { ...(cloudConfig.getAuthHeaders() ?? {}) },
     });
 
     if (!response.ok) {
