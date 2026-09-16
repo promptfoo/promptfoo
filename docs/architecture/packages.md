@@ -60,6 +60,47 @@ extracted surface can neither grow back upward into Node, provider, or redteam c
 nor quietly pick up a new npm dependency or Node builtin such as `node:fs`. A
 `node:` prefix is ignored when matching, so `"fs"` and `"node:fs"` are equivalent.
 
+## MCP Authentication Contracts
+
+`promptfoo/contracts` exports `McpAuthInputSchema`, `McpAuthSchema`,
+`McpAuthInputJsonSchema`, and the inferred `McpAuthInput` / `McpAuthParsed` types.
+These cover MCP authentication, including the auth forms shared by A2A. HTTP
+authentication and complete provider configurations have separate semantics and
+are not covered by these schemas.
+
+```typescript
+import { z } from 'zod';
+import { McpAuthInputSchema, McpAuthSchema } from 'promptfoo/contracts';
+
+const RequestSchema = z.object({ auth: McpAuthInputSchema.optional() });
+const request = RequestSchema.parse(input);
+const auth = McpAuthSchema.optional().parse(request.auth);
+```
+
+The input schema leaves an omitted OAuth grant unset and preserves explicit
+no-auth tags. The runtime schema defaults the grant to `client_credentials` and
+maps no-auth tags to `undefined`. Both retain existing unknown-property stripping;
+do not use their parsed output as a lossless round trip for stored configuration.
+Neither schema renders templates, resolves credentials, reads files, discovers
+OAuth endpoints, or makes requests. Scope strings remain strings until runtime
+rendering and normalization.
+
+API-key authentication is a union requiring either a nonempty `value` or a
+nonempty legacy `api_key`. Both may be present; runtime keeps its existing
+`value || api_key` precedence. The union exports this requirement directly as
+JSON Schema without a custom refinement or export override. An empty alias is
+allowed when the other alias supplies a key. Placement and header-name defaults
+remain in the runtime auth helpers.
+
+`McpAuthInputJsonSchema` describes input acceptance using JSON Schema draft-07.
+It does not perform Zod stripping or runtime normalization. Generate other
+supported dialects from `McpAuthInputSchema` with Zod's `toJSONSchema` input mode.
+Compose schemas with compatible Zod versions; consumers with incompatible Zod
+installations can call `.safeParse()` separately without composing schema objects.
+The older `src/providers/mcp/auth` imports remain available. Its `ApiKeyAuthSchema`
+is now a union; object-specific methods such as `.shape` are not available on it,
+and invalid credentials produce union issues rather than a refinement issue.
+
 ## Layer Dependency Ratchet
 
 Each private layer declares its currently allowed dependencies in

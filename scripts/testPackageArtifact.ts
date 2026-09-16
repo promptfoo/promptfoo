@@ -338,11 +338,27 @@ function runInstalledBinVersion(consumerDir: string, configDir: string, binName:
 }
 
 function writeConsumerScripts(consumerDir: string): void {
+  const authAssertions = [
+    "const authInput = { type: 'oauth', clientId: 'client', clientSecret: 'secret' };",
+    "if ('grantType' in McpAuthInputSchema.parse(authInput)) {",
+    "  throw new Error('MCP auth input parsing inserted a runtime default');",
+    '}',
+    "if (McpAuthSchema.parse(authInput)?.grantType !== 'client_credentials') {",
+    "  throw new Error('MCP runtime auth parsing lost its default');",
+    '}',
+    "if (McpAuthInputSchema.safeParse({ type: 'api_key' }).success) {",
+    "  throw new Error('MCP API-key auth accepted missing credentials');",
+    '}',
+    "if (McpAuthInputJsonSchema.$schema !== 'http://json-schema.org/draft-07/schema#') {",
+    "  throw new Error('Missing MCP auth JSON Schema export');",
+    '}',
+  ];
   fs.writeFileSync(
     path.join(consumerDir, 'import-package.mjs'),
     [
       "import { AssertionSchema, AtomicTestCaseSchema, TestSuiteSchema } from 'promptfoo';",
       "import { EmailSchema, GetUserResponseSchema, InputsSchema, PromptSchema, hasFunctionToolCallValidator } from 'promptfoo/contracts';",
+      "import { McpAuthInputJsonSchema, McpAuthInputSchema, McpAuthSchema } from 'promptfoo/contracts';",
       '',
       'for (const value of [AssertionSchema, AtomicTestCaseSchema, EmailSchema, GetUserResponseSchema, InputsSchema, PromptSchema, TestSuiteSchema]) {',
       "  if (!value || typeof value.safeParse !== 'function') {",
@@ -352,6 +368,7 @@ function writeConsumerScripts(consumerDir: string): void {
       'if (!hasFunctionToolCallValidator({ validateFunctionToolCall() {} })) {',
       "  throw new Error('Missing expected ESM provider capability export');",
       '}',
+      ...authAssertions,
       '',
     ].join('\n'),
   );
@@ -360,6 +377,7 @@ function writeConsumerScripts(consumerDir: string): void {
     [
       "const { AssertionSchema, AtomicTestCaseSchema, TestSuiteSchema } = require('promptfoo');",
       "const { EmailSchema, GetUserResponseSchema, InputsSchema, PromptSchema, hasFunctionToolCallValidator } = require('promptfoo/contracts');",
+      "const { McpAuthInputJsonSchema, McpAuthInputSchema, McpAuthSchema } = require('promptfoo/contracts');",
       '',
       'for (const value of [AssertionSchema, AtomicTestCaseSchema, EmailSchema, GetUserResponseSchema, InputsSchema, PromptSchema, TestSuiteSchema]) {',
       "  if (!value || typeof value.safeParse !== 'function') {",
@@ -369,6 +387,7 @@ function writeConsumerScripts(consumerDir: string): void {
       'if (!hasFunctionToolCallValidator({ validateFunctionToolCall() {} })) {',
       "  throw new Error('Missing expected CJS provider capability export');",
       '}',
+      ...authAssertions,
       '',
     ].join('\n'),
   );
@@ -377,6 +396,8 @@ function writeConsumerScripts(consumerDir: string): void {
     [
       "import { GetUserResponseSchema, PromptSchema, hasFunctionToolCallValidator, isTransformFunction } from 'promptfoo/contracts';",
       "import type { BlobRef, FunctionToolCallValidator, GetUserResponse, Prompt, ProviderResponse, TransformFunction } from 'promptfoo/contracts';",
+      "import { McpAuthInputSchema, McpAuthSchema } from 'promptfoo/contracts';",
+      "import type { McpAuthInput, McpAuthParsed } from 'promptfoo/contracts';",
       '',
       "const prompt: Prompt = { label: 'Greeting', raw: 'Hello, world!' };",
       'const transform: TransformFunction<string, string> = (output) => output;',
@@ -384,6 +405,12 @@ function writeConsumerScripts(consumerDir: string): void {
       'const validator: FunctionToolCallValidator = { validateFunctionToolCall() {} };',
       "const blobRef: BlobRef = { hash: 'abc123', mimeType: 'image/png', provider: 'filesystem', sizeBytes: 3, uri: 'promptfoo://blob/abc123' };",
       "const response: ProviderResponse = { images: [{ blobRef }], output: 'ok' };",
+      "const authInput: McpAuthInput = { type: 'oauth', clientId: 'client', clientSecret: 'secret', scopes: 'read write' };",
+      'const auth: McpAuthParsed = McpAuthSchema.parse(McpAuthInputSchema.parse(authInput));',
+      "if (auth?.type === 'oauth') {",
+      "  const grant: 'client_credentials' | 'password' = auth.grantType;",
+      '  void grant;',
+      '}',
       '',
       'GetUserResponseSchema.parse(user);',
       'PromptSchema.parse(prompt);',
@@ -416,6 +443,12 @@ function writeConsumerScripts(consumerDir: string): void {
       'const validator: contracts.FunctionToolCallValidator = { validateFunctionToolCall() {} };',
       "const blobRef: contracts.BlobRef = { hash: 'abc123', mimeType: 'image/png', provider: 'filesystem', sizeBytes: 3, uri: 'promptfoo://blob/abc123' };",
       "const response: contracts.ProviderResponse = { images: [{ blobRef }], output: 'ok' };",
+      "const authInput: contracts.McpAuthInput = { type: 'oauth', clientId: 'client', clientSecret: 'secret', scopes: 'read write' };",
+      'const auth: contracts.McpAuthParsed = contracts.McpAuthSchema.parse(contracts.McpAuthInputSchema.parse(authInput));',
+      "if (auth?.type === 'oauth') {",
+      "  const grant: 'client_credentials' | 'password' = auth.grantType;",
+      '  void grant;',
+      '}',
       'contracts.GetUserResponseSchema.parse(user);',
       'contracts.PromptSchema.parse(prompt);',
       'void response;',

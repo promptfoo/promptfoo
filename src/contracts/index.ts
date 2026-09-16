@@ -4,6 +4,13 @@ export * from './api/user.js';
 export * from './blobs.js';
 export * from './env.js';
 export * from './prompts.js';
+export {
+  type McpAuthInput,
+  McpAuthInputJsonSchema,
+  McpAuthInputSchema,
+  type McpAuthParsed,
+  McpAuthSchema,
+} from './providerConfig/auth.js';
 export * from './providers.js';
 export * from './shared.js';
 export * from './transform.js';

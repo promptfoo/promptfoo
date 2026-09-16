@@ -150,6 +150,11 @@ describeIfBuildExists('Library Exports', () => {
       expect(contractsModule.GetUserResponseSchema).toBeDefined();
       expect(contractsModule.InputsSchema).toBeDefined();
       expect(contractsModule.PromptSchema).toBeDefined();
+      expect(contractsModule.McpAuthInputSchema.safeParse({ type: 'api_key' }).success).toBe(false);
+      expect(contractsModule.McpAuthSchema.parse({ type: 'none' })).toBeUndefined();
+      expect(contractsModule.McpAuthInputJsonSchema.$schema).toBe(
+        'http://json-schema.org/draft-07/schema#',
+      );
     });
   });
 
@@ -196,6 +201,11 @@ describeIfBuildExists('Library Exports', () => {
       expect(contractsModule.GetUserResponseSchema).toBeDefined();
       expect(contractsModule.InputsSchema).toBeDefined();
       expect(contractsModule.PromptSchema).toBeDefined();
+      expect(contractsModule.McpAuthInputSchema.safeParse({ type: 'api_key' }).success).toBe(false);
+      expect(contractsModule.McpAuthSchema.parse({ type: 'none' })).toBeUndefined();
+      expect(contractsModule.McpAuthInputJsonSchema.$schema).toBe(
+        'http://json-schema.org/draft-07/schema#',
+      );
     });
   });
 });
