@@ -394,80 +394,72 @@ export function buildDataStructureInjectionCases(): DsiCase[] {
  * never produced. Multiple JSON values in one output are all returned.
  */
 export function extractJsonRoots(text: string): unknown[] {
-  const scanner = new JsonSpanScanner(text);
-  for (let i = 0; i < text.length; i++) {
-    scanner.step(text[i], i);
+  const roots: unknown[] = [];
+  let i = 0;
+  while (i < text.length) {
+    const ch = text[i];
+    if (ch !== '{' && ch !== '[') {
+      i++;
+      continue;
+    }
+    // Every opener is a candidate. If the span it opens parses, keep it and
+    // skip past it; otherwise move on to the next opener, including openers
+    // nested inside the failed span (e.g. `Draft {unfinished. Final: {...}}`).
+    const end = balancedEnd(text, i);
+    const parsed = end === -1 ? undefined : parseSpan(text.slice(i, end + 1));
+    if (parsed === undefined) {
+      i++;
+    } else {
+      roots.push(parsed);
+      i = end + 1;
+    }
   }
-  return scanner.roots;
+  return roots;
 }
 
 const CLOSER: Record<string, string> = { '{': '}', '[': ']' };
 
-/** Bracket/string state for one pass over a text. */
-class JsonSpanScanner {
-  readonly roots: unknown[] = [];
-  private readonly stack: string[] = [];
-  private start = -1;
-  private inString = false;
-  private escaped = false;
-
-  constructor(private readonly text: string) {}
-
-  step(ch: string, index: number): void {
-    if (this.inString) {
-      this.stepInString(ch);
-    } else if (ch === '"' && this.stack.length > 0) {
-      this.inString = true;
-    } else if (ch === '{' || ch === '[') {
-      this.open(ch, index);
-    } else if (ch === '}' || ch === ']') {
-      this.close(ch, index);
-    }
-  }
-
-  private stepInString(ch: string): void {
-    if (this.escaped) {
-      this.escaped = false;
-    } else if (ch === '\\') {
-      this.escaped = true;
+/**
+ * Index of the bracket that balances the opener at `start`, honouring JSON
+ * string/escape rules, or -1 if the span is unbalanced or mismatched.
+ */
+function balancedEnd(text: string, start: number): number {
+  const stack: string[] = [];
+  let inString = false;
+  let escaped = false;
+  for (let i = start; i < text.length; i++) {
+    const ch = text[i];
+    if (inString) {
+      if (escaped) {
+        escaped = false;
+      } else if (ch === '\\') {
+        escaped = true;
+      } else if (ch === '"') {
+        inString = false;
+      }
     } else if (ch === '"') {
-      this.inString = false;
+      inString = true;
+    } else if (ch === '{' || ch === '[') {
+      stack.push(ch);
+    } else if (ch === '}' || ch === ']') {
+      if (CLOSER[stack.pop() ?? ''] !== ch) {
+        return -1;
+      }
+      if (stack.length === 0) {
+        return i;
+      }
     }
   }
+  return -1;
+}
 
-  private open(ch: string, index: number): void {
-    if (this.stack.length === 0) {
-      this.start = index;
-    }
-    this.stack.push(ch);
-  }
-
-  private close(ch: string, index: number): void {
-    const opener = this.stack.pop();
-    if (opener === undefined) {
-      return; // stray closer outside any span
-    }
-    if (CLOSER[opener] !== ch) {
-      this.abandon(); // mismatched bracket: this span is not JSON
-      return;
-    }
-    if (this.stack.length === 0) {
-      this.emit(index);
-    }
-  }
-
-  private emit(end: number): void {
-    try {
-      this.roots.push(JSON.parse(this.text.slice(this.start, end + 1)));
-    } catch {
-      // Balanced but not valid JSON (e.g. single quotes); skip it.
-    }
-    this.start = -1;
-  }
-
-  private abandon(): void {
-    this.stack.length = 0;
-    this.start = -1;
+/** `JSON.parse` that yields `undefined` instead of throwing (and never a primitive). */
+function parseSpan(span: string): unknown {
+  try {
+    const value = JSON.parse(span);
+    return value !== null && typeof value === 'object' ? value : undefined;
+  } catch {
+    return undefined;
   }
 }
 
@@ -514,31 +506,34 @@ function toolName(node: JsonRecord): string | undefined {
   return typeof name === 'string' ? name : undefined;
 }
 
+/** The call's argument payload: `arguments` (canonical, OpenAI, n8n) or `input` (Anthropic, MCP). */
+function argumentPayload(node: JsonRecord): { present: boolean; value: unknown } {
+  const args = prop(node, 'arguments');
+  return args.present ? args : prop(node, 'input');
+}
+
 /**
- * Recognise a node as a tool call and return its name and arguments, or
- * `undefined`. Only fixed, well-known shapes are accepted:
+ * Recognise a node as a named tool call and return its name and arguments, or
+ * `undefined`. A tool identifier is required — an `arguments` object on its
+ * own is not a call (see `collectToolCalls` for how those are handled).
  *
- * - canonical / direct:  `{ "tool" | "name": ..., "arguments": ... }`
+ * - canonical / n8n:     `{ "tool" | "name": ..., "arguments": ... }`
+ * - Anthropic / MCP:     `{ "name": ..., "input": ... }` (with or without `type: "tool_use"`)
  * - OpenAI function:     `{ "function": { "name": ..., "arguments": ... } }`
- * - Anthropic tool_use:  `{ "type": "tool_use", "name": ..., "input": ... }`
  */
 function recognizeToolCall(node: JsonRecord): RecognizedCall | undefined {
   const fn = asRecord(prop(node, 'function').value);
   if (fn) {
-    const args = prop(fn, 'arguments');
-    if (args.present) {
-      return { name: toolName(fn), args: decodeArguments(args.value) };
+    const name = toolName(fn);
+    const args = argumentPayload(fn);
+    if (name !== undefined && args.present) {
+      return { name, args: decodeArguments(args.value) };
     }
   }
-  const args = prop(node, 'arguments');
-  if (args.present) {
-    return { name: toolName(node), args: decodeArguments(args.value) };
-  }
-  if (prop(node, 'type').value === 'tool_use') {
-    const input = prop(node, 'input');
-    if (input.present) {
-      return { name: toolName(node), args: decodeArguments(input.value) };
-    }
+  const name = toolName(node);
+  const args = argumentPayload(node);
+  if (name !== undefined && args.present) {
+    return { name, args: decodeArguments(args.value) };
   }
   return undefined;
 }
@@ -554,6 +549,21 @@ function isBareArguments(node: JsonRecord, knownFields: Set<string>): boolean {
     return false;
   }
   return Object.keys(node).some((key) => knownFields.has(key.toLowerCase()));
+}
+
+/**
+ * A root object without a tool identifier, judged on its field names: either
+ * the object itself, or the payload of a nameless `{"arguments": {...}}`
+ * wrapper. Returns the argument node, or `undefined` if it shares no field
+ * with the case (e.g. a refusal envelope such as `{"arguments":{"reason":..}}`).
+ */
+function bareArguments(record: JsonRecord, knownFields: Set<string>): unknown {
+  if (isBareArguments(record, knownFields)) {
+    return record;
+  }
+  const payload = argumentPayload(record);
+  const inner = payload.present ? asRecord(decodeArguments(payload.value)) : undefined;
+  return inner && isBareArguments(inner, knownFields) ? inner : undefined;
 }
 
 /**
@@ -583,8 +593,9 @@ function collectToolCalls(
     out.push(call);
     return;
   }
-  if (atRoot && isBareArguments(record, knownFields)) {
-    out.push({ args: record });
+  const bare = atRoot ? bareArguments(record, knownFields) : undefined;
+  if (bare !== undefined) {
+    out.push({ args: bare });
     return;
   }
   for (const child of Object.values(record)) {
