@@ -49,7 +49,9 @@ import * as defaultConfigModule from '../../src/util/config/default';
 import { ConfigResolutionError, maybeReadConfig, resolveConfigs } from '../../src/util/config/load';
 import { writeMultipleOutputs } from '../../src/util/index';
 import { checkProviderApiKeys } from '../../src/util/provider';
+import { tagRepeatPassRateResult } from '../../src/util/repeatPassRateMetadata';
 import { TokenUsageTracker } from '../../src/util/tokenUsage';
+import { createEvaluateResult } from '../factories/eval';
 import { mockProcessEnv } from '../util/utils';
 
 import type { ApiProvider, TestSuite, UnifiedConfig } from '../../src/types/index';
@@ -2341,6 +2343,58 @@ describe('evalCommand', () => {
       expect.anything(),
       expect.objectContaining({ repeat: 3 }),
     );
+  });
+
+  it('cleans up providers when only the repeat pass-rate threshold fails', async () => {
+    const restoreEnv = mockProcessEnv({
+      PROMPTFOO_PASS_RATE_THRESHOLD: '0',
+      PROMPTFOO_TEST_REPEAT_PASS_RATE_THRESHOLD: '100',
+    });
+    const previousExitCode = process.exitCode;
+    process.exitCode = undefined;
+    const cleanup = vi.fn().mockResolvedValue(undefined);
+    const provider = {
+      id: () => 'cleanup-provider',
+      callApi: async () => ({ output: 'test' }),
+      cleanup,
+    } as ApiProvider;
+    const config = {} as UnifiedConfig;
+
+    vi.mocked(resolveConfigs).mockResolvedValue({
+      config,
+      testSuite: { prompts: [], providers: [provider] },
+      basePath: path.resolve('/'),
+    });
+    vi.mocked(evaluate).mockImplementation(async (_testSuite, activeRecord) => {
+      const evalRecord = activeRecord as Eval;
+      evalRecord.prompts = [
+        {
+          metrics: {
+            testPassCount: 1,
+            testFailCount: 1,
+          },
+        },
+      ] as unknown as Eval['prompts'];
+      await evalRecord.addResult(
+        tagRepeatPassRateResult(createEvaluateResult({ testIdx: 0, success: true }), 0),
+      );
+      await evalRecord.addResult(
+        tagRepeatPassRateResult(createEvaluateResult({ testIdx: 0, success: false }), 0),
+      );
+      return evalRecord;
+    });
+
+    try {
+      await doEval({ repeat: 2, write: false }, config, defaultConfigPath, {
+        eventSource: 'cli',
+      });
+
+      expect(process.exitCode).toBe(100);
+      expect(cleanup).toHaveBeenCalledTimes(1);
+    } finally {
+      restoreEnv();
+      process.exitCode = previousExitCode;
+    }
   });
 
   it('should handle delay option', async () => {
