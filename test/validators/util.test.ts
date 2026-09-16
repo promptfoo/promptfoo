@@ -229,6 +229,16 @@ describe('determineEffectiveSessionSource', () => {
     expect(result).toBe('client');
   });
 
+  it('should default to "client" (not throw) when provider.config is undefined', () => {
+    const provider = {
+      id: () => 'test-provider',
+      callApi: vi.fn(),
+    } as unknown as ApiProvider;
+
+    const result = determineEffectiveSessionSource({ provider });
+    expect(result).toBe('client');
+  });
+
   it('should prioritize sessionConfig over provider config', () => {
     const provider = {
       id: () => 'test-provider',
