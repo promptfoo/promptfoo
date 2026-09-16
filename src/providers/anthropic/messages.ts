@@ -697,6 +697,7 @@ export class AnthropicMessagesProvider extends AnthropicGenericProvider {
     config: AnthropicMessageOptions,
     processedOutputFormat: { type?: string } | undefined,
     cached: boolean,
+    log: NonNullable<CallApiContextParams['logger']> = logger,
   ): ProviderResponse {
     const finishReason = normalizeFinishReason(message.stop_reason);
     let output = outputFromMessage(message, config.showThinking ?? true);
@@ -706,13 +707,13 @@ export class AnthropicMessagesProvider extends AnthropicGenericProvider {
       try {
         output = JSON.parse(output);
       } catch (error) {
-        logger.error(`Failed to parse JSON output from structured outputs: ${error}`);
+        log.error(`Failed to parse JSON output from structured outputs: ${error}`);
       }
     }
 
     const refusalDetails = getRefusalDetails(message);
     if (refusalDetails && !cached) {
-      logger.warn(refusalDetails);
+      log.warn(refusalDetails);
     }
 
     return {
@@ -737,6 +738,7 @@ export class AnthropicMessagesProvider extends AnthropicGenericProvider {
       ...this.config,
       ...context?.prompt?.config,
     };
+    const log = context?.logger ?? logger;
 
     const { system, extractedMessages, thinking } = parseMessages(prompt);
 
@@ -788,17 +790,17 @@ export class AnthropicMessagesProvider extends AnthropicGenericProvider {
     // impossible on always-on adaptive thinking models (Fable 5 / Mythos 5).
     if (thinkingEnabled && !samplingParamsDeprecated) {
       if (config.top_k != null) {
-        logger.warn(
+        log.warn(
           'top_k is incompatible with extended thinking and will be omitted. Remove top_k from your config or disable thinking.',
         );
       }
       if (config.temperature != null) {
-        logger.warn(
+        log.warn(
           'temperature is incompatible with extended thinking and will be omitted. Remove temperature from your config or disable thinking.',
         );
       }
       if (config.top_p != null && (config.top_p < 0.95 || config.top_p > 1.0)) {
-        logger.warn(
+        log.warn(
           `top_p must be between 0.95 and 1.0 with extended thinking (got ${config.top_p}). Clamping to valid range.`,
         );
       }
@@ -817,7 +819,7 @@ export class AnthropicMessagesProvider extends AnthropicGenericProvider {
         'anthropic',
       ) as Anthropic.Messages.ToolChoice;
       if (forcedToolChoiceRejected && (transformed.type === 'any' || transformed.type === 'tool')) {
-        logger.warn(
+        log.warn(
           modelRejectsForcedToolChoice
             ? `tool_choice type '${transformed.type}' (forced tool use) is not supported on ${modelWarningName} and will be omitted. Use 'auto' or 'none' instead.`
             : `tool_choice type '${transformed.type}' (forced tool use) is incompatible with extended thinking and will be omitted. Use 'auto' or remove tool_choice.`,
@@ -835,7 +837,7 @@ export class AnthropicMessagesProvider extends AnthropicGenericProvider {
 
     // Warn when temperature is silently omitted due to top_p (even without thinking)
     if (config.temperature != null && resolvedTopP != null && !thinkingEnabled) {
-      logger.warn(
+      log.warn(
         'temperature is incompatible with top_p on Anthropic and will be omitted. Remove one of these parameters.',
       );
     }
@@ -845,7 +847,7 @@ export class AnthropicMessagesProvider extends AnthropicGenericProvider {
     if (isOpus46 && extractedMessages.length > 0) {
       const lastMessage = extractedMessages[extractedMessages.length - 1];
       if (lastMessage.role === 'assistant') {
-        logger.warn(
+        log.warn(
           'Assistant message prefilling is not supported on Claude Opus 4.6 and will cause a 400 error. Remove the trailing assistant message from your prompt.',
         );
       }
@@ -869,7 +871,7 @@ export class AnthropicMessagesProvider extends AnthropicGenericProvider {
       explicitSamplingParam &&
       !this.samplingParamsDeprecationWarned
     ) {
-      logger.warn(
+      log.warn(
         alwaysOnAdaptiveThinking
           ? `temperature, top_p, and top_k are not supported on ${modelWarningName} and will be omitted. Remove these sampling parameters from your config (or unset ANTHROPIC_TEMPERATURE) to silence this warning.`
           : `temperature is deprecated on ${modelWarningName} and will be omitted (along with top_p and top_k). Remove these sampling parameters from your config (or unset ANTHROPIC_TEMPERATURE) to silence this warning.`,
@@ -938,7 +940,7 @@ export class AnthropicMessagesProvider extends AnthropicGenericProvider {
       ...(typeof config?.extra_body === 'object' && config.extra_body ? config.extra_body : {}),
     };
 
-    logger.debug('Calling Anthropic Messages API', {
+    log.debug('Calling Anthropic Messages API', {
       params: getMessagesRequestMetadata(params),
     });
 
@@ -1019,7 +1021,7 @@ export class AnthropicMessagesProvider extends AnthropicGenericProvider {
         cacheClearGeneration,
       );
       if (cachedResponse) {
-        logger.debug('Returning cached Anthropic Messages response', { model: this.modelName });
+        log.debug('Returning cached Anthropic Messages response', { model: this.modelName });
         try {
           // Stays inside this try: the catch below is the legacy plain-string cache fallback,
           // and it must keep covering parse/format failures from the whole build.
@@ -1028,6 +1030,7 @@ export class AnthropicMessagesProvider extends AnthropicGenericProvider {
             config,
             processedOutputFormat,
             true,
+            log,
           );
         } catch {
           // Could be an old cache item, which was just the text content from TextBlock.
@@ -1048,7 +1051,7 @@ export class AnthropicMessagesProvider extends AnthropicGenericProvider {
       if (shouldStream) {
         const stream = await this.anthropic.messages.stream(params, requestOptions);
         initialMessage = await finalMessageWithStreamedStopDetails(stream);
-        logger.debug(`Anthropic Messages API streaming complete`, {
+        log.debug(`Anthropic Messages API streaming complete`, {
           finalMessage: getMessagesResponseMetadata(initialMessage),
         });
       } else {
@@ -1056,7 +1059,7 @@ export class AnthropicMessagesProvider extends AnthropicGenericProvider {
           params,
           requestOptions,
         )) as Anthropic.Messages.Message;
-        logger.debug(`Anthropic Messages API response`, {
+        log.debug(`Anthropic Messages API response`, {
           response: getMessagesResponseMetadata(initialMessage),
         });
       }
@@ -1100,7 +1103,7 @@ export class AnthropicMessagesProvider extends AnthropicGenericProvider {
             JSON.stringify(resolvedMessage),
           );
         } catch (err) {
-          logger.error(`Failed to cache response: ${String(err)}`);
+          log.error(`Failed to cache response: ${String(err)}`);
         }
       }
 
@@ -1109,12 +1112,13 @@ export class AnthropicMessagesProvider extends AnthropicGenericProvider {
         config,
         processedOutputFormat,
         false,
+        log,
       );
       return mcpMetadata
         ? { ...response, metadata: { ...response.metadata, ...mcpMetadata } }
         : response;
     } catch (err) {
-      logger.error(
+      log.error(
         `Anthropic Messages API call error: ${err instanceof Error ? err.message : String(err)}`,
       );
       if (err instanceof APIError && err.error) {
