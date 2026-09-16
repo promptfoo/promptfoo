@@ -33,10 +33,11 @@ function getSnowflakeErrorCode(
 }
 
 function getSnowflakeOutput(message: ValidatedChatCompletionMessage): string | object {
-  if (message.functionCall || message.toolCalls) {
-    return message.functionCall ?? message.toolCalls!;
-  }
-  return typeof message.content === 'string' && message.content.trim() ? message.content : '';
+  return (
+    message.functionCall ??
+    message.toolCalls ??
+    (typeof message.content === 'string' && message.content.trim() ? message.content : '')
+  );
 }
 
 /**

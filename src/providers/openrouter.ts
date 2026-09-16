@@ -75,8 +75,9 @@ function getOpenRouterOutput(
   message: ValidatedChatCompletionMessage,
   showThinking: boolean,
 ): string | object {
-  if (message.functionCall || message.toolCalls) {
-    return message.functionCall ?? message.toolCalls!;
+  const toolOutput = message.functionCall ?? message.toolCalls;
+  if (toolOutput) {
+    return toolOutput;
   }
   if (typeof message.content === 'string' && message.content.trim()) {
     return message.reasoning && showThinking
