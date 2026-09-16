@@ -403,17 +403,20 @@ function extractOllamaTokenUsage(
   // prefix cache hit, not a promptfoo cache hit, so it belongs in completionDetails rather
   // than tokenUsage.cached (which would make the row look like a promptfoo cache hit).
   const cacheRead = finalChunk.prompt_eval_cached_count;
-  if (cacheRead) {
+  if (cacheRead !== undefined) {
     return {
       prompt,
       completion,
       total,
       completionDetails: { cacheReadInputTokens: cacheRead },
+      numRequests: 1,
     };
   }
-  // numRequests is intentionally omitted: tokenUsageUtils increments it by 1 when an
-  // update does not specify it, so setting it here would be a no-op.
-  return { prompt, completion, total };
+  // Explicit: accumulateTokenUsage defaults incrementRequests to false, and matcher
+  // paths (src/matchers/rag.ts, similarity.ts) call the two-arg form, so an omitted
+  // count reports 0 grader requests. Verified this does not double-count on the
+  // evaluator path, which infers 1 when absent.
+  return { prompt, completion, total, numRequests: 1 };
 }
 
 /**

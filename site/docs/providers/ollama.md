@@ -34,8 +34,8 @@ Or, use the `/api/chat` endpoint for chat-formatted prompts:
 - `ollama:chat:phi4`
 - ...
 
-Capability varies by model — check the [library](https://ollama.com/library) for which
-support tools, reasoning, or vision. As of this writing `qwen3`, `qwen3.5`, `gpt-oss`, and
+Capability varies by model — check the [library](https://ollama.com/library) to see which
+models support tools, reasoning, or vision. As of this writing `qwen3`, `qwen3.5`, `gpt-oss`, and
 `deepseek-r1` support reasoning; `gemma3`, `gemma4`, and `llava` support vision.
 
 Small models are useful for smoke-testing a config without a long download —
@@ -127,6 +127,7 @@ Set `format` to `json`, or to a JSON schema, to constrain the model's output:
 providers:
   - id: ollama:chat:qwen3
     config:
+      think: false # see the warning below
       format:
         type: object
         properties:
@@ -138,6 +139,14 @@ This returns clean JSON (`{ "capital": "Paris" }`) rather than a markdown-fenced
 so assertions like [`is-json`](/docs/configuration/expected-outputs/deterministic/#is-json)
 work reliably.
 
+:::warning
+On a reasoning model, combine `format` with `think: false`. Reasoning models emit a trace
+by default, and promptfoo prepends it as `Thinking: ...`, which makes the output no longer
+valid JSON. Note that `showThinking: false` is **not** enough on its own — it hides the
+trace, but the model still spends its `num_predict` budget reasoning, so the JSON content
+can come back empty.
+:::
+
 ## Completion-only parameters
 
 `ollama:completion:*` uses `/api/generate`, which accepts a few parameters the chat
@@ -148,9 +157,19 @@ providers:
   - id: ollama:completion:qwen2.5-coder
     config:
       system: 'You are a terse assistant.' # override the model's system prompt
-      suffix: '    return result' # fill-in-the-middle, for models that support insert
-      raw: true # bypass prompt templating
       template: '{{ .Prompt }}' # override the model's prompt template
+      suffix: '    return result' # fill-in-the-middle, for models that support insert
+```
+
+`raw: true` bypasses prompt templating entirely and is **mutually exclusive** with
+`system` and `template` — Ollama rejects the combination with
+`raw mode does not support template, system, or context` (HTTP 400). Use it alone:
+
+```yaml
+providers:
+  - id: ollama:completion:qwen2.5-coder
+    config:
+      raw: true
 ```
 
 `tools` only applies to `ollama:chat:*`; `/api/generate` has no tool support.

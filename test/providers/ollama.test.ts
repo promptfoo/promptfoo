@@ -277,6 +277,41 @@ describe('OllamaCompletionProvider', () => {
     expect(result.tokenUsage).toEqual({ cached: 30, total: 30 });
   });
 
+  it('should send format as a top-level parameter on the completion path too', async () => {
+    vi.mocked(fetchWithCache).mockResolvedValue({
+      data: '{"response":"{}","done":true}\n',
+      cached: false,
+      status: 200,
+      statusText: 'OK',
+      headers: {},
+    });
+
+    const schema = { type: 'object', properties: { capital: { type: 'string' } } };
+    const provider = new OllamaCompletionProvider('qwen3', { config: { format: schema } });
+    await provider.callApi('test prompt');
+
+    // Chat and completion build separate request objects, so both need coverage.
+    const body = JSON.parse(vi.mocked(fetchWithCache).mock.calls[0][1]?.body as string);
+    expect(body.format).toEqual(schema);
+    expect(body.options.format).toBeUndefined();
+  });
+
+  it('should keep an explicitly reported zero cached-prompt count', async () => {
+    vi.mocked(fetchWithCache).mockResolvedValue({
+      data: '{"response":"hi","done":true,"prompt_eval_count":10,"prompt_eval_cached_count":0,"eval_count":5}\n',
+      cached: false,
+      status: 200,
+      statusText: 'OK',
+      headers: {},
+    });
+
+    const provider = new OllamaCompletionProvider('qwen3');
+    const result = await provider.callApi('test prompt');
+
+    // 0 is a real value Ollama reports, distinct from the field being absent.
+    expect(result.tokenUsage?.completionDetails).toEqual({ cacheReadInputTokens: 0 });
+  });
+
   it.each([
     ['suffix', 'return result'],
     ['system', 'You are terse.'],
@@ -347,6 +382,7 @@ describe('OllamaCompletionProvider', () => {
         prompt: 26,
         completion: 259,
         total: 285,
+        numRequests: 1,
       },
     });
   });
@@ -390,6 +426,7 @@ describe('OllamaCompletionProvider', () => {
         prompt: 26,
         completion: 0,
         total: 26,
+        numRequests: 1,
       },
     });
   });
@@ -414,6 +451,7 @@ describe('OllamaCompletionProvider', () => {
         prompt: 0,
         completion: 259,
         total: 259,
+        numRequests: 1,
       },
     });
   });
@@ -788,6 +826,7 @@ describe('OllamaChatProvider', () => {
       prompt: 54,
       completion: 25,
       total: 79,
+      numRequests: 1,
       completionDetails: { cacheReadInputTokens: 53 },
     });
     expect(result.cached).toBeUndefined();
@@ -916,6 +955,7 @@ describe('OllamaChatProvider', () => {
         prompt: 26,
         completion: 259,
         total: 285,
+        numRequests: 1,
       },
     });
   });
@@ -959,6 +999,7 @@ describe('OllamaChatProvider', () => {
         prompt: 26,
         completion: 0,
         total: 26,
+        numRequests: 1,
       },
     });
   });
@@ -983,6 +1024,7 @@ describe('OllamaChatProvider', () => {
         prompt: 0,
         completion: 259,
         total: 259,
+        numRequests: 1,
       },
     });
   });
@@ -1135,7 +1177,7 @@ describe('OllamaChatProvider', () => {
       expect(result.output).toEqual(
         withContent ? { content: 'Checking weather.', tool_calls: toolCalls } : toolCalls,
       );
-      expect(result.tokenUsage).toEqual({ prompt: 10, completion: 20, total: 30 });
+      expect(result.tokenUsage).toEqual({ prompt: 10, completion: 20, total: 30, numRequests: 1 });
     },
   );
 
