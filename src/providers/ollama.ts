@@ -93,11 +93,38 @@ const OllamaCompletionOptionKeys = new Set<keyof OllamaCompletionOptions>([
 ]);
 
 /**
- * Ollama reports failures as a JSON body like `{"error":"model 'x' not found"}` paired
- * with a non-2xx status. `fetchWithCache` resolves rather than throws on non-2xx, and
- * for the `'text'` format it always hands back a string, so the body has to be inspected
- * explicitly. Otherwise the error body parses as a one-line NDJSON stream with no
- * `message.content`, and the caller sees an empty string instead of a failure.
+ * Matches `fetchWithCache`'s own `!response.ok` check (src/cache.ts:762): anything
+ * outside 2xx is a failure, including an unfollowed 3xx from a gateway.
+ */
+function isOllamaHttpFailure(status: number): boolean {
+  return status < 200 || status >= 300;
+}
+
+/** Best-effort detail for an error body that carries no top-level `error` key. */
+function stringifyOllamaErrorDetail(data: unknown): string {
+  if (typeof data === 'string') {
+    return data.trim().slice(0, 500);
+  }
+  if (data == null) {
+    return '';
+  }
+  try {
+    return JSON.stringify(data).slice(0, 500);
+  } catch {
+    return '';
+  }
+}
+
+/**
+ * Ollama reports failures as a JSON body like `{"error":"model 'x' not found"}`.
+ * `fetchWithCache` resolves rather than throws on non-2xx, and for the `'text'` format
+ * it always hands back a string, so the body has to be inspected explicitly. Otherwise
+ * the error body parses as a one-line NDJSON stream with no `message.content` and the
+ * caller sees an empty string instead of a failure.
+ *
+ * Streaming responses complicate this: `/api/chat` can return HTTP 200, stream several
+ * records, and only then emit `{"error":"..."}`. The whole body is not parseable as a
+ * single JSON value in that case, so scan record by record.
  */
 function extractOllamaErrorMessage(data: unknown): string | undefined {
   if (typeof data === 'object' && data !== null && 'error' in data) {
@@ -108,16 +135,20 @@ function extractOllamaErrorMessage(data: unknown): string | undefined {
     return error == null ? undefined : JSON.stringify(error);
   }
   if (typeof data === 'string') {
-    const trimmed = data.trim();
-    // A successful streaming body is multi-line NDJSON, which never parses as a single
-    // value; only a lone JSON object can be an error payload.
-    if (trimmed === '' || !trimmed.startsWith('{')) {
-      return undefined;
-    }
-    try {
-      return extractOllamaErrorMessage(JSON.parse(trimmed));
-    } catch {
-      return undefined;
+    for (const line of data.split('\n')) {
+      const trimmed = line.trim();
+      // Cheap pre-filter so long successful streams are not re-parsed record by record.
+      if (!trimmed.startsWith('{') || !trimmed.includes('"error"')) {
+        continue;
+      }
+      try {
+        const message = extractOllamaErrorMessage(JSON.parse(trimmed));
+        if (message !== undefined) {
+          return message;
+        }
+      } catch {
+        // Not a complete JSON record; keep scanning.
+      }
     }
   }
   return undefined;
@@ -133,9 +164,8 @@ function getOllamaResponseError(response: {
   statusText: string;
 }): string | undefined {
   const message = extractOllamaErrorMessage(response.data);
-  if (response.status >= 400) {
-    const detail =
-      message ?? (typeof response.data === 'string' ? response.data.trim().slice(0, 500) : '');
+  if (isOllamaHttpFailure(response.status)) {
+    const detail = message ?? stringifyOllamaErrorDetail(response.data);
     return `Ollama API error: ${response.status} ${response.statusText}${detail ? `: ${detail}` : ''}`;
   }
   if (message !== undefined) {
@@ -291,6 +321,9 @@ export class OllamaCompletionProvider implements ApiProvider {
     logger.debug(`\tOllama generate API response: ${response.data}`);
     const responseError = getOllamaResponseError(response);
     if (responseError) {
+      // fetchWithCache only detects error keys for the 'json' format, so an HTTP 200
+      // error body would otherwise be replayed from cache for the full TTL.
+      await response.deleteFromCache?.();
       return { error: responseError };
     }
 
@@ -452,6 +485,9 @@ export class OllamaChatProvider implements ApiProvider {
 
     const responseError = getOllamaResponseError(response);
     if (responseError) {
+      // fetchWithCache only detects error keys for the 'json' format, so an HTTP 200
+      // error body would otherwise be replayed from cache for the full TTL.
+      await response.deleteFromCache?.();
       return { error: responseError };
     }
 
@@ -578,6 +614,9 @@ export class OllamaEmbeddingProvider extends OllamaCompletionProvider {
 
     const responseError = getOllamaResponseError(response);
     if (responseError) {
+      // fetchWithCache only detects error keys for the 'json' format, so an HTTP 200
+      // error body would otherwise be replayed from cache for the full TTL.
+      await response.deleteFromCache?.();
       return { error: responseError };
     }
 
