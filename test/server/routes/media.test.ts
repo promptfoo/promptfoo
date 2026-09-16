@@ -3,11 +3,18 @@ import type { Server } from 'node:http';
 import request from 'supertest';
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createApp } from '../../../src/server/server';
+import { LocalFileSystemProvider } from '../../../src/storage/localFileSystemProvider';
+import { createTempDir, removeTempDir } from '../../util/utils';
 
 import type { MediaStorageProvider } from '../../../src/storage/types';
 
 // Mock dependencies
-vi.mock('../../../src/storage');
+vi.mock('../../../src/storage', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../../../src/storage')>()),
+  getMediaStorage: vi.fn(),
+  mediaExists: vi.fn(),
+  retrieveMedia: vi.fn(),
+}));
 
 // Import after mocking
 import { getMediaStorage, mediaExists, retrieveMedia } from '../../../src/storage';
@@ -40,6 +47,119 @@ describe('Media Routes', () => {
 
   afterEach(() => {
     vi.resetAllMocks();
+  });
+
+  describe('GET /api/media?key=...', () => {
+    const opaqueKeys = [
+      '../private.pdf',
+      'document/../../private.pdf',
+      '/private.pdf',
+      'document/./private.pdf',
+      'document\\..\\private.pdf',
+    ];
+
+    it('serves local PDF bytes while keeping the index and sidecars private', async () => {
+      const directory = createTempDir('promptfoo-media-api-');
+      try {
+        const provider = new LocalFileSystemProvider({ basePath: directory });
+        mockedGetMediaStorage.mockReturnValue(provider);
+        const data = Buffer.from('%PDF-1.7');
+        const { ref } = await provider.store(data, {
+          mediaType: 'document',
+          contentType: 'application/pdf',
+          originalText: 'Private review notes',
+        });
+        mockedMediaExists.mockImplementation((key) => provider.exists(key));
+        mockedRetrieveMedia.mockImplementation((key) => provider.retrieve(key));
+        for (const key of [
+          'hash-index.json',
+          'document/../hash-index.json',
+          `${ref.key}.meta.json`,
+          ...opaqueKeys,
+        ]) {
+          const response = await api.get('/api/media').query({ key });
+          expect(response.status).toBe(404);
+          expect(response.text).not.toContain('Private review notes');
+        }
+        expect(mockedRetrieveMedia).not.toHaveBeenCalled();
+        const response = await api.get('/api/media').query({ key: ref.key });
+        expect(response.status).toBe(200);
+        expect(response.body).toEqual(data);
+        expect(response.headers['cache-control']).toBe('private, no-cache');
+        const legacyResponse = await api.get(`/api/media/${ref.key}`);
+        expect(legacyResponse.status).toBe(200);
+        expect(legacyResponse.headers['cache-control']).toBe('private, no-cache');
+      } finally {
+        removeTempDir(directory);
+      }
+    });
+
+    it.each([
+      { mediaType: 'image' as const, contentType: 'image/png', data: '%PDF-1.7' },
+      { mediaType: 'document' as const, contentType: 'text/plain', data: 'Invoice' },
+      { mediaType: 'audio' as const, contentType: 'audio/wav', data: 'RIFF' },
+      { mediaType: 'image' as const, contentType: 'image/png', data: 'PNG' },
+    ])('revalidates local $mediaType/$contentType bytes', async (fixture) => {
+      const directory = createTempDir('promptfoo-media-cache-');
+      try {
+        const provider = new LocalFileSystemProvider({ basePath: directory });
+        const { ref } = await provider.store(Buffer.from(fixture.data), fixture);
+        mockedGetMediaStorage.mockReturnValue(provider);
+        mockedMediaExists.mockImplementation((key) => provider.exists(key));
+        mockedRetrieveMedia.mockImplementation((key) => provider.retrieve(key));
+        const response = await api.get(`/api/media/${ref.key}`);
+        expect(response.status).toBe(200);
+        expect(response.headers['cache-control']).toBe('private, no-cache');
+      } finally {
+        removeTempDir(directory);
+      }
+    });
+
+    it.each([
+      'tenant/campaign/09d620f6-9b31-4cea-936d-4bdc38ea7bc1.pdf',
+      'document/' + 'a'.repeat(64) + '.pdf',
+      'document/abcdef123456.pdf',
+      'tenant/invoice ?#&%2F.pdf',
+      '09d620f6-9b31-4cea-936d-4bdc38ea7bc1',
+      ...opaqueKeys,
+    ])('serves the exact provider-defined key %s', async (key) => {
+      const data = Buffer.from('%PDF-1.7 test');
+      mockedMediaExists.mockResolvedValue(true);
+      mockedRetrieveMedia.mockResolvedValue(data);
+      const response = await api.get('/api/media').query({ key });
+      expect(response.status).toBe(200);
+      expect(response.body).toEqual(data);
+      expect(response.headers['content-type']).toBe('application/pdf');
+      expect(response.headers['cache-control']).toBe('private, no-cache');
+      expect(response.headers['x-content-type-options']).toBe('nosniff');
+      expect(mockedMediaExists).toHaveBeenCalledWith(key);
+      expect(mockedRetrieveMedia).toHaveBeenCalledWith(key);
+    });
+
+    it.each([undefined, '', 'file\0.pdf', 'a'.repeat(2049), ['first.pdf', 'second.pdf']])(
+      'rejects invalid keys before touching storage: %j',
+      async (key) => {
+        const response = await api.get('/api/media').query({ key });
+        expect(response.status).toBe(400);
+        expect(mockedMediaExists).not.toHaveBeenCalled();
+        expect(mockedRetrieveMedia).not.toHaveBeenCalled();
+      },
+    );
+
+    it('returns 404 for a missing provider key', async () => {
+      mockedMediaExists.mockResolvedValue(false);
+      const response = await api.get('/api/media').query({ key: 'campaign/missing.pdf' });
+      expect(response.status).toBe(404);
+      expect(mockedRetrieveMedia).not.toHaveBeenCalled();
+    });
+
+    it('does not disclose provider errors', async () => {
+      mockedMediaExists.mockResolvedValue(true);
+      mockedRetrieveMedia.mockRejectedValue(new Error('Secret storage credentials'));
+      const response = await api.get('/api/media').query({ key: 'campaign/invoice.pdf' });
+      expect(response.status).toBe(500);
+      expect(response.body).toEqual({ error: 'Failed to serve media' });
+    });
   });
 
   describe('GET /api/media/stats', () => {
@@ -109,7 +229,7 @@ describe('Media Routes', () => {
     });
 
     it('should return 400 for invalid type', async () => {
-      const response = await api.get('/api/media/info/document/abcdef123456.pdf');
+      const response = await api.get('/api/media/info/invalid/abcdef123456.pdf');
 
       expect(response.status).toBe(400);
       expect(response.body).toHaveProperty('error');
@@ -201,21 +321,24 @@ describe('Media Routes', () => {
       expect(mockStorage.getUrl).toHaveBeenCalledWith('audio/abcdef123456.mp3');
     });
 
-    it.each(['video', 'image'] as const)('should accept valid %s type', async (type) => {
-      const ext = type === 'video' ? 'mp4' : 'png';
-      const mockStorage = {
-        providerId: 'local-fs',
-        getUrl: vi.fn().mockResolvedValue(`/media/${type}/abcdef123456.${ext}`),
-      } as unknown as MediaStorageProvider;
+    it.each(['video', 'image', 'document'] as const)(
+      'should accept valid %s type',
+      async (type) => {
+        const ext = { video: 'mp4', image: 'png', document: 'pdf' }[type];
+        const mockStorage = {
+          providerId: 'local-fs',
+          getUrl: vi.fn().mockResolvedValue(`/media/${type}/abcdef123456.${ext}`),
+        } as unknown as MediaStorageProvider;
 
-      mockedMediaExists.mockResolvedValue(true);
-      mockedGetMediaStorage.mockReturnValue(mockStorage);
+        mockedMediaExists.mockResolvedValue(true);
+        mockedGetMediaStorage.mockReturnValue(mockStorage);
 
-      const response = await api.get(`/api/media/info/${type}/abcdef123456.${ext}`);
+        const response = await api.get(`/api/media/info/${type}/abcdef123456.${ext}`);
 
-      expect(response.status).toBe(200);
-      expect(response.body.data.key).toBe(`${type}/abcdef123456.${ext}`);
-    });
+        expect(response.status).toBe(200);
+        expect(response.body.data.key).toBe(`${type}/abcdef123456.${ext}`);
+      },
+    );
 
     it('should return 500 when mediaExists throws error', async () => {
       mockedMediaExists.mockRejectedValue(new Error('Database connection failed'));
@@ -232,7 +355,50 @@ describe('Media Routes', () => {
   describe('GET /api/media/:type/:filename', () => {
     beforeEach(() => {
       vi.resetAllMocks();
+      mockedGetMediaStorage.mockReturnValue({ providerId: 'custom' } as MediaStorageProvider);
     });
+
+    it.each(['image/abcdef123456.png', 'audio/abcdef123456.wav'])(
+      'supports immutable caching for custom providers that declare immutable keys: %s',
+      async (key) => {
+        mockedGetMediaStorage.mockReturnValue({
+          providerId: 'custom',
+          hasImmutableKeys: true,
+        } as MediaStorageProvider);
+        mockedMediaExists.mockResolvedValue(true);
+        mockedRetrieveMedia.mockResolvedValue(Buffer.from('Immutable media'));
+        const response = await api.get(`/api/media/${key}`);
+        expect(response.status).toBe(200);
+        expect(response.headers['cache-control']).toBe('public, max-age=31536000, immutable');
+      },
+    );
+
+    it.each([
+      ['document/abcdef123456.pdf', '%PDF-1.7'],
+      ['image/abcdef123456.png', '%PDF-1.7'],
+      ['image/abcdef123456.png', 'PNG'],
+      ['audio/abcdef123456.wav', 'RIFF'],
+    ])(
+      'revalidates mutable provider keys that resemble local content hashes: %s (%s)',
+      async (key, prefix) => {
+        mockedGetMediaStorage.mockReturnValue({ providerId: 'local-fs' } as MediaStorageProvider);
+        mockedMediaExists.mockResolvedValue(true);
+        const original = Buffer.from(`${prefix} original`);
+        const replacement = Buffer.from(`${prefix} replacement`);
+        mockedRetrieveMedia.mockResolvedValueOnce(original).mockResolvedValueOnce(replacement);
+
+        const first = await api.get(`/api/media/${key}`);
+        expect(first.status).toBe(200);
+        expect(first.headers['cache-control']).toBe('private, no-cache');
+        expect(first.body).toEqual(original);
+
+        const second = await api.get(`/api/media/${key}`).set('If-None-Match', first.headers.etag);
+        expect(second.status).toBe(200);
+        expect(second.headers['cache-control']).toBe('private, no-cache');
+        expect(second.headers.etag).not.toBe(first.headers.etag);
+        expect(second.body).toEqual(replacement);
+      },
+    );
 
     it('should return 400 for invalid type', async () => {
       const response = await api.get('/api/media/text/abcdef123456.txt');
@@ -274,7 +440,7 @@ describe('Media Routes', () => {
       expect(response.status).toBe(200);
       expect(response.headers['content-type']).toBe('audio/wav');
       expect(response.headers['content-length']).toBe(String(mockData.length));
-      expect(response.headers['cache-control']).toBe('public, max-age=31536000, immutable');
+      expect(response.headers['cache-control']).toBe('private, no-cache');
       expect(response.body).toEqual(mockData);
       expect(mockedRetrieveMedia).toHaveBeenCalledWith('audio/abcdef123456.wav');
     });

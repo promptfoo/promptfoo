@@ -1,6 +1,16 @@
 import crypto from 'node:crypto';
 
 import logger from '../../logger';
+import {
+  type ApiProvider,
+  type CallApiContextParams,
+  type CallApiOptionsParams,
+  getInputRepresentations,
+  type Inputs,
+  normalizeInputDefinition,
+  type ProviderOptions,
+  type ProviderResponse,
+} from '../../types/index';
 import { fetchWithTimeout } from '../../util/fetch/index';
 import { safeJsonStringify } from '../../util/json';
 import { getNunjucksEngine } from '../../util/templates';
@@ -23,13 +33,6 @@ import {
   A2ATaskSchema,
 } from './types';
 
-import type {
-  ApiProvider,
-  CallApiContextParams,
-  CallApiOptionsParams,
-  ProviderOptions,
-  ProviderResponse,
-} from '../../types/index';
 import type {
   MCPOAuthClientCredentialsAuth,
   MCPOAuthPasswordAuth,
@@ -73,6 +76,11 @@ const MEDIA_STRATEGY_DEFAULTS = {
     injectVarMetadataKey: 'imageInjectVar',
     mediaType: 'image/png',
   },
+  pdf: {
+    fallbackVarName: 'document',
+    filename: 'promptfoo-document.pdf',
+    mediaType: 'application/pdf',
+  },
   video: {
     fallbackVarName: 'video',
     filename: 'promptfoo-video.mp4',
@@ -82,6 +90,12 @@ const MEDIA_STRATEGY_DEFAULTS = {
 } as const;
 
 type MediaStrategyId = keyof typeof MEDIA_STRATEGY_DEFAULTS;
+
+type MediaPayload = {
+  filename: string;
+  mediaType: string;
+  raw: string;
+};
 
 interface A2AEndpoint {
   protocolVersion: string;
@@ -253,13 +267,13 @@ function getTestMetadata(context?: CallApiContextParams): Record<string, unknown
 
 function getMediaStrategyId(context?: CallApiContextParams): MediaStrategyId | undefined {
   const strategyId = getTestMetadata(context).strategyId;
-  return strategyId === 'audio' || strategyId === 'image' || strategyId === 'video'
-    ? strategyId
+  return typeof strategyId === 'string' && Object.keys(MEDIA_STRATEGY_DEFAULTS).includes(strategyId)
+    ? (strategyId as MediaStrategyId)
     : undefined;
 }
 
 function parseBase64DataUrl(value: string): { mediaType: string; raw: string } | undefined {
-  const match = value.match(/^data:([^;,]+);base64,(.+)$/s);
+  const match = value.match(/^data:([^;,]+);base64,(.+)$/is);
   if (!match) {
     return undefined;
   }
@@ -299,8 +313,14 @@ function getMediaVarName(
   context?: CallApiContextParams,
 ): string | undefined {
   const defaults = MEDIA_STRATEGY_DEFAULTS[strategyId];
-  const metadataInjectVar = getTestMetadata(context)[defaults.injectVarMetadataKey];
-  if (typeof metadataInjectVar === 'string' && getContextVar(vars, metadataInjectVar)) {
+  const metadataInjectVar =
+    strategyId === 'pdf'
+      ? context?.test?.metadata?.pdf?.input
+      : getTestMetadata(context)[MEDIA_STRATEGY_DEFAULTS[strategyId].injectVarMetadataKey];
+  if (
+    typeof metadataInjectVar === 'string' &&
+    (strategyId === 'pdf' || getContextVar(vars, metadataInjectVar))
+  ) {
     return metadataInjectVar;
   }
   if (getContextVar(vars, defaults.fallbackVarName)) {
@@ -312,26 +332,122 @@ function getMediaVarName(
   return undefined;
 }
 
+function getPdfPromptText(
+  prompt: string,
+  contextVars: Record<string, unknown>,
+  mediaVarName: string | undefined,
+  mediaValue: string | undefined,
+  inputs: Inputs | undefined,
+): string | undefined {
+  const entries = getInputRepresentations(contextVars, inputs, mediaVarName);
+  if (mediaVarName && mediaValue) {
+    entries.push([mediaVarName, mediaValue]);
+  }
+  const values = entries
+    .filter(([key]) => key === mediaVarName)
+    .map(([, value]) => nonEmptyString(value))
+    .filter((value): value is string => Boolean(value))
+    .flatMap((value) => [value, value.trim()]);
+  if (values.includes(prompt.trim())) {
+    return undefined;
+  }
+  try {
+    const parsed = JSON.parse(prompt);
+    // Only declared input fields can be reconstructed below. Other rendered
+    // variables may carry task instructions and must remain in the prompt.
+    if (
+      (typeof parsed === 'string' && values.includes(parsed)) ||
+      (parsed &&
+        typeof parsed === 'object' &&
+        !Array.isArray(parsed) &&
+        Object.entries(parsed).every(
+          ([key, value]) =>
+            ((key === mediaVarName || Object.prototype.hasOwnProperty.call(inputs ?? {}, key)) &&
+              entries.some(([name, representation]) => name === key && representation === value)) ||
+            (value === '' && contextVars[key] === undefined),
+        ))
+    ) {
+      return undefined;
+    }
+  } catch {
+    // A plain-text prompt can contain instructions around the attachment.
+  }
+  let text = prompt;
+  for (const [key, input] of entries) {
+    const value = nonEmptyString(input);
+    if (
+      !value ||
+      (key !== mediaVarName &&
+        inputs?.[key] &&
+        normalizeInputDefinition(inputs[key]).type === 'text')
+    ) {
+      continue;
+    }
+    const attachment = value.trim().match(/^data:[^,]+;base64,(.+)$/is);
+    if (attachment || key === mediaVarName || inputs?.[key]) {
+      const placeholder = key === mediaVarName ? '[PDF attachment]' : '[Attachment]';
+      for (const part of attachment ? [value, attachment[0], attachment[1]] : [value]) {
+        text = text
+          .split(part)
+          .join(placeholder)
+          .split(JSON.stringify(part).slice(1, -1))
+          .join(placeholder);
+      }
+    }
+  }
+  return text;
+}
+
 function getDefaultTextPart(
   prompt: string,
   protocolVersion: string,
   contextVars: Record<string, unknown>,
   mediaValue?: string,
+  context?: CallApiContextParams,
 ): A2APart | undefined {
-  const text =
-    getContextVar(contextVars, 'question') ??
-    (shouldUsePromptAsText(prompt, mediaValue) ? prompt : undefined);
+  const strategyId = getMediaStrategyId(context);
+  const mediaVarName = strategyId ? getMediaVarName(strategyId, contextVars, context) : undefined;
+  const configuredInputs = context?.test?.metadata?.pluginConfig?.inputs as Inputs | undefined;
+  const inputs =
+    configuredInputs && Object.keys(configuredInputs).length ? configuredInputs : undefined;
+  let text =
+    strategyId === 'pdf'
+      ? getPdfPromptText(prompt, contextVars, mediaVarName, mediaValue, inputs)
+      : shouldUsePromptAsText(prompt, mediaValue)
+        ? prompt
+        : undefined;
+  if (strategyId === 'pdf' && inputs) {
+    const companions = Object.fromEntries(
+      Object.entries(inputs).flatMap(([key, definition]) => {
+        const value = getContextVar(contextVars, key);
+        return key !== mediaVarName && normalizeInputDefinition(definition).type === 'text' && value
+          ? [[key, value]]
+          : [];
+      }),
+    );
+    const values = Object.values(companions);
+    if (values.length) {
+      text =
+        text && !values.includes(text)
+          ? JSON.stringify({ task: text, inputs: companions })
+          : values.length > 1
+            ? JSON.stringify(companions)
+            : values[0];
+    }
+  } else if (mediaVarName !== 'question') {
+    const question = getContextVar(contextVars, 'question');
+    text = strategyId === 'pdf' ? (text ?? question) : (question ?? text);
+  }
   if (!text) {
     return undefined;
   }
   return usesLegacyMessageShape(protocolVersion) ? { kind: 'text', text } : { text };
 }
 
-function getDefaultMediaPart(
-  protocolVersion: string,
+function getDefaultMedia(
   contextVars: Record<string, unknown>,
   context?: CallApiContextParams,
-): A2APart | undefined {
+): MediaPayload | undefined {
   const strategyId = getMediaStrategyId(context);
   if (!strategyId) {
     return undefined;
@@ -339,23 +455,33 @@ function getDefaultMediaPart(
   const varName = getMediaVarName(strategyId, contextVars, context);
   const mediaValue = varName ? getContextVar(contextVars, varName) : undefined;
   if (!mediaValue) {
+    if (strategyId === 'pdf') {
+      throw new Error(`PDF strategy requires an attachment in input "${varName ?? 'document'}"`);
+    }
     return undefined;
   }
 
   const defaults = MEDIA_STRATEGY_DEFAULTS[strategyId];
-  const parsedDataUrl = parseBase64DataUrl(mediaValue);
-  const raw = parsedDataUrl?.raw ?? mediaValue;
-  const mediaType = parsedDataUrl?.mediaType ?? defaults.mediaType;
-
-  if (usesLegacyMessageShape(protocolVersion)) {
-    return {
-      file: {
-        fileWithBytes: raw,
-        mimeType: mediaType,
-        name: defaults.filename,
-      },
-      kind: 'file',
-    };
+  const parsedDataUrl = parseBase64DataUrl(strategyId === 'pdf' ? mediaValue.trim() : mediaValue);
+  let raw = parsedDataUrl?.raw ?? mediaValue;
+  let mediaType = parsedDataUrl?.mediaType ?? defaults.mediaType;
+  if (strategyId === 'pdf') {
+    raw = raw.replace(/\s/g, '');
+    if (Buffer.byteLength(raw, 'base64') > 5 * 1024 * 1024) {
+      throw new Error(`PDF strategy input "${varName}" exceeds the 5 MiB limit`);
+    }
+    if (
+      (parsedDataUrl && parsedDataUrl.mediaType.toLowerCase() !== 'application/pdf') ||
+      !/^[A-Za-z0-9+/]+={0,2}$/.test(raw) ||
+      raw.length % 4 === 1 ||
+      (raw.includes('=') && raw.length % 4 !== 0) ||
+      Buffer.from(raw.slice(0, 8), 'base64').subarray(0, 5).toString() !== '%PDF-'
+    ) {
+      throw new Error(
+        `PDF strategy requires PDF bytes as base64 or an application/pdf data URI in input "${varName}"`,
+      );
+    }
+    mediaType = 'application/pdf';
   }
 
   return {
@@ -370,19 +496,17 @@ function getDefaultMessage(
   protocolVersion: string,
   contextVars: Record<string, unknown> = {},
   context?: CallApiContextParams,
+  media?: MediaPayload,
 ): A2AMessage {
-  const mediaPart = getDefaultMediaPart(protocolVersion, contextVars, context);
-  if (mediaPart) {
-    const mediaValue =
-      typeof mediaPart.raw === 'string'
-        ? mediaPart.raw
-        : typeof mediaPart.file === 'object' &&
-            mediaPart.file &&
-            'fileWithBytes' in mediaPart.file &&
-            typeof mediaPart.file.fileWithBytes === 'string'
-          ? mediaPart.file.fileWithBytes
-          : undefined;
-    const textPart = getDefaultTextPart(prompt, protocolVersion, contextVars, mediaValue);
+  if (media) {
+    // A2A 1.0 Part uses raw/filename/mediaType directly (specification section 4.1.6).
+    const mediaPart: A2APart = usesLegacyMessageShape(protocolVersion)
+      ? {
+          kind: 'file',
+          file: { fileWithBytes: media.raw, mimeType: media.mediaType, name: media.filename },
+        }
+      : media;
+    const textPart = getDefaultTextPart(prompt, protocolVersion, contextVars, media.raw, context);
     return {
       role: usesLegacyMessageShape(protocolVersion) ? 'user' : 'ROLE_USER',
       parts: textPart ? [textPart, mediaPart] : [mediaPart],
@@ -670,6 +794,7 @@ export class A2AProvider implements ApiProvider {
         ...contextVars,
         prompt,
       } as RequestVars;
+      const media = this.config.message ? undefined : getDefaultMedia(contextVars, context);
       const endpoint = await this.resolveEndpoint(vars, context, options);
       const mode = this.resolveMode(endpoint);
       const message = this.buildMessage(
@@ -678,6 +803,7 @@ export class A2AProvider implements ApiProvider {
         vars,
         context,
         contextVars,
+        media,
       );
       const body = {
         ...(endpoint.tenant ? { tenant: endpoint.tenant } : {}),
@@ -798,10 +924,11 @@ export class A2AProvider implements ApiProvider {
     vars: RequestVars,
     context?: CallApiContextParams,
     contextVars: Record<string, unknown> = context?.vars ?? {},
+    media?: MediaPayload,
   ): A2AMessage {
     const configuredMessage = this.config.message
       ? renderTemplate(this.config.message, vars, context)
-      : getDefaultMessage(prompt, protocolVersion, contextVars, context);
+      : getDefaultMessage(prompt, protocolVersion, contextVars, context, media);
     const message = A2AMessageSchema.parse(configuredMessage);
     return {
       ...message,

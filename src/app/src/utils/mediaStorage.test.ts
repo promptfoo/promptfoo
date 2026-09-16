@@ -33,14 +33,14 @@ describe('mediaStorage', () => {
 
   describe('isStorageRef', () => {
     it('should return true for valid storage references', () => {
-      expect(isStorageRef('storageRef:audio/test.mp3')).toBe(true);
-      expect(isStorageRef('storageRef:image/test.png')).toBe(true);
-      expect(isStorageRef('storageRef:video/test.mp4')).toBe(true);
+      expect(isStorageRef('storageRef:audio/abcdef123456.mp3')).toBe(true);
+      expect(isStorageRef('storageRef:image/abcdef123456.png')).toBe(true);
+      expect(isStorageRef('storageRef:video/abcdef123456.mp4')).toBe(true);
       expect(isStorageRef('storageRef:any/path/here')).toBe(true);
     });
 
     it('should return false for non-storage references', () => {
-      expect(isStorageRef('audio/test.mp3')).toBe(false);
+      expect(isStorageRef('audio/abcdef123456.mp3')).toBe(false);
       expect(isStorageRef('data:audio/mp3;base64,abc')).toBe(false);
       expect(isStorageRef('http://example.com/audio.mp3')).toBe(false);
       expect(isStorageRef('')).toBe(false);
@@ -62,7 +62,7 @@ describe('mediaStorage', () => {
     });
 
     it('should return false for non-blob references', () => {
-      expect(isBlobRef('storageRef:audio/test.mp3')).toBe(false);
+      expect(isBlobRef('storageRef:audio/abcdef123456.mp3')).toBe(false);
       expect(isBlobRef('blob/abc123')).toBe(false);
       expect(isBlobRef('promptfoo://other/path')).toBe(false);
       expect(isBlobRef('')).toBe(false);
@@ -78,16 +78,16 @@ describe('mediaStorage', () => {
 
   describe('parseStorageRef', () => {
     it('should parse valid storage references', () => {
-      expect(parseStorageRef('storageRef:audio/test.mp3')).toBe('audio/test.mp3');
-      expect(parseStorageRef('storageRef:image/test.png')).toBe('image/test.png');
-      expect(parseStorageRef('storageRef:video/test.mp4')).toBe('video/test.mp4');
+      expect(parseStorageRef('storageRef:audio/abcdef123456.mp3')).toBe('audio/abcdef123456.mp3');
+      expect(parseStorageRef('storageRef:image/abcdef123456.png')).toBe('image/abcdef123456.png');
+      expect(parseStorageRef('storageRef:video/abcdef123456.mp4')).toBe('video/abcdef123456.mp4');
       expect(parseStorageRef('storageRef:complex/path/with/slashes.jpg')).toBe(
         'complex/path/with/slashes.jpg',
       );
     });
 
     it('should return null for invalid storage references', () => {
-      expect(parseStorageRef('audio/test.mp3')).toBe(null);
+      expect(parseStorageRef('audio/abcdef123456.mp3')).toBe(null);
       expect(parseStorageRef('data:audio/mp3;base64,abc')).toBe(null);
       expect(parseStorageRef('')).toBe(null);
       expect(parseStorageRef('promptfoo://blob/abc123')).toBe(null);
@@ -102,7 +102,7 @@ describe('mediaStorage', () => {
 
     it('should return null for invalid blob references', () => {
       expect(parseBlobRef('blob/abc123')).toBe(null);
-      expect(parseBlobRef('storageRef:audio/test.mp3')).toBe(null);
+      expect(parseBlobRef('storageRef:audio/abcdef123456.mp3')).toBe(null);
       expect(parseBlobRef('')).toBe(null);
       expect(parseBlobRef('promptfoo://other/path')).toBe(null);
     });
@@ -110,19 +110,31 @@ describe('mediaStorage', () => {
 
   describe('getMediaUrl', () => {
     it('should generate correct media URLs for valid storage refs', () => {
-      expect(getMediaUrl('storageRef:audio/test.mp3')).toBe(
-        'http://localhost:15500/api/media/audio/test.mp3',
+      expect(getMediaUrl('storageRef:audio/abcdef123456.mp3')).toBe(
+        'http://localhost:15500/api/media/audio/abcdef123456.mp3',
       );
-      expect(getMediaUrl('storageRef:image/test.png')).toBe(
-        'http://localhost:15500/api/media/image/test.png',
+      expect(getMediaUrl('storageRef:image/abcdef123456.png')).toBe(
+        'http://localhost:15500/api/media/image/abcdef123456.png',
       );
-      expect(getMediaUrl('storageRef:video/test.mp4')).toBe(
-        'http://localhost:15500/api/media/video/test.mp4',
+      expect(getMediaUrl('storageRef:video/abcdef123456.mp4')).toBe(
+        'http://localhost:15500/api/media/video/abcdef123456.mp4',
       );
     });
 
+    it.each([
+      'tenant/campaign/09d620f6-9b31-4cea-936d-4bdc38ea7bc1.pdf',
+      'document/' + 'a'.repeat(64) + '.pdf',
+      'tenant/invoice ?#&%2F.pdf',
+      'DOCUMENT/abcdef123456.pdf',
+    ])('encodes provider-defined keys without interpreting them as URLs: %s', (key) => {
+      const url = new URL(getMediaUrl(`storageRef:${key}`)!);
+      expect(url.pathname).toBe('/api/media');
+      expect(url.searchParams.get('key')).toBe(key);
+      expect(url.hash).toBe('');
+    });
+
     it('should return null for invalid storage refs', () => {
-      expect(getMediaUrl('audio/test.mp3')).toBe(null);
+      expect(getMediaUrl('audio/abcdef123456.mp3')).toBe(null);
       expect(getMediaUrl('data:audio/mp3;base64,abc')).toBe(null);
       expect(getMediaUrl('')).toBe(null);
     });
@@ -132,8 +144,8 @@ describe('mediaStorage', () => {
         apiBaseUrl: 'https://production.example.com',
       } as ReturnType<typeof useApiConfig.getState>);
 
-      expect(getMediaUrl('storageRef:audio/test.mp3')).toBe(
-        'https://production.example.com/api/media/audio/test.mp3',
+      expect(getMediaUrl('storageRef:audio/abcdef123456.mp3')).toBe(
+        'https://production.example.com/api/media/audio/abcdef123456.mp3',
       );
     });
   });
@@ -146,7 +158,7 @@ describe('mediaStorage', () => {
 
     it('should return null for invalid blob refs', () => {
       expect(getBlobUrl('blob/abc123')).toBe(null);
-      expect(getBlobUrl('storageRef:audio/test.mp3')).toBe(null);
+      expect(getBlobUrl('storageRef:audio/abcdef123456.mp3')).toBe(null);
       expect(getBlobUrl('')).toBe(null);
     });
 
@@ -174,8 +186,8 @@ describe('mediaStorage', () => {
     });
 
     it('should resolve storage references', () => {
-      expect(resolveMediaUrl('storageRef:audio/test.mp3', 'audio/mp3')).toBe(
-        'http://localhost:15500/api/media/audio/test.mp3',
+      expect(resolveMediaUrl('storageRef:audio/abcdef123456.mp3', 'audio/mp3')).toBe(
+        'http://localhost:15500/api/media/audio/abcdef123456.mp3',
       );
     });
 
@@ -210,8 +222,8 @@ describe('mediaStorage', () => {
 
   describe('resolveAudioUrlSync', () => {
     it('should resolve audio with default mp3 format', () => {
-      expect(resolveAudioUrlSync('storageRef:audio/test.mp3')).toBe(
-        'http://localhost:15500/api/media/audio/test.mp3',
+      expect(resolveAudioUrlSync('storageRef:audio/abcdef123456.mp3')).toBe(
+        'http://localhost:15500/api/media/audio/abcdef123456.mp3',
       );
     });
 
@@ -234,8 +246,8 @@ describe('mediaStorage', () => {
 
   describe('resolveImageUrlSync', () => {
     it('should resolve image with default png format', () => {
-      expect(resolveImageUrlSync('storageRef:image/test.png')).toBe(
-        'http://localhost:15500/api/media/image/test.png',
+      expect(resolveImageUrlSync('storageRef:image/abcdef123456.png')).toBe(
+        'http://localhost:15500/api/media/image/abcdef123456.png',
       );
     });
 
@@ -258,8 +270,8 @@ describe('mediaStorage', () => {
 
   describe('resolveVideoUrlSync', () => {
     it('should resolve video with default mp4 format', () => {
-      expect(resolveVideoUrlSync('storageRef:video/test.mp4')).toBe(
-        'http://localhost:15500/api/media/video/test.mp4',
+      expect(resolveVideoUrlSync('storageRef:video/abcdef123456.mp4')).toBe(
+        'http://localhost:15500/api/media/video/abcdef123456.mp4',
       );
     });
 
@@ -283,8 +295,8 @@ describe('mediaStorage', () => {
   describe('async backward compatibility functions', () => {
     describe('resolveMediaValue', () => {
       it('should resolve media value asynchronously', async () => {
-        const result = await resolveMediaValue('storageRef:audio/test.mp3', 'audio/mp3');
-        expect(result).toBe('http://localhost:15500/api/media/audio/test.mp3');
+        const result = await resolveMediaValue('storageRef:audio/abcdef123456.mp3', 'audio/mp3');
+        expect(result).toBe('http://localhost:15500/api/media/audio/abcdef123456.mp3');
       });
 
       it('should return null for undefined', async () => {
@@ -295,8 +307,8 @@ describe('mediaStorage', () => {
 
     describe('resolveAudioUrl', () => {
       it('should resolve audio URL asynchronously with default format', async () => {
-        const result = await resolveAudioUrl('storageRef:audio/test.mp3');
-        expect(result).toBe('http://localhost:15500/api/media/audio/test.mp3');
+        const result = await resolveAudioUrl('storageRef:audio/abcdef123456.mp3');
+        expect(result).toBe('http://localhost:15500/api/media/audio/abcdef123456.mp3');
       });
 
       it('should resolve audio URL asynchronously with custom format', async () => {
@@ -312,8 +324,8 @@ describe('mediaStorage', () => {
 
     describe('resolveImageUrl', () => {
       it('should resolve image URL asynchronously with default format', async () => {
-        const result = await resolveImageUrl('storageRef:image/test.png');
-        expect(result).toBe('http://localhost:15500/api/media/image/test.png');
+        const result = await resolveImageUrl('storageRef:image/abcdef123456.png');
+        expect(result).toBe('http://localhost:15500/api/media/image/abcdef123456.png');
       });
 
       it('should resolve image URL asynchronously with custom format', async () => {
@@ -333,7 +345,7 @@ describe('mediaStorage', () => {
       const complexPath = 'storageRef:nested/very/deep/path/to/file.mp3';
       expect(parseStorageRef(complexPath)).toBe('nested/very/deep/path/to/file.mp3');
       expect(getMediaUrl(complexPath)).toBe(
-        'http://localhost:15500/api/media/nested/very/deep/path/to/file.mp3',
+        'http://localhost:15500/api/media?key=nested%2Fvery%2Fdeep%2Fpath%2Fto%2Ffile.mp3',
       );
     });
 
@@ -349,9 +361,9 @@ describe('mediaStorage', () => {
     });
 
     it('should prioritize storage refs over data URLs in resolveMediaUrl', () => {
-      const storageRef = 'storageRef:audio/test.mp3';
+      const storageRef = 'storageRef:audio/abcdef123456.mp3';
       expect(resolveMediaUrl(storageRef, 'audio/mp3')).toBe(
-        'http://localhost:15500/api/media/audio/test.mp3',
+        'http://localhost:15500/api/media/audio/abcdef123456.mp3',
       );
     });
 
@@ -360,7 +372,9 @@ describe('mediaStorage', () => {
         apiBaseUrl: '',
       } as ReturnType<typeof useApiConfig.getState>);
 
-      expect(getMediaUrl('storageRef:audio/test.mp3')).toBe('/api/media/audio/test.mp3');
+      expect(getMediaUrl('storageRef:audio/abcdef123456.mp3')).toBe(
+        '/api/media/audio/abcdef123456.mp3',
+      );
     });
   });
 });

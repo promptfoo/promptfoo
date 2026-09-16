@@ -34,6 +34,7 @@ function getExtensionFromContentType(contentType: string): string {
     'audio/mpeg': 'mp3',
     'audio/ogg': 'ogg',
     'audio/webm': 'webm',
+    'application/pdf': 'pdf',
     'image/png': 'png',
     'image/jpeg': 'jpg',
     'image/jpg': 'jpg',
@@ -58,6 +59,8 @@ function computeHash(data: Buffer): string {
  */
 export class LocalFileSystemProvider implements MediaStorageProvider {
   readonly providerId = 'local';
+  // Short hash prefixes can collide, so existing media URLs must revalidate.
+  readonly hasImmutableKeys = false;
   private basePath: string;
   private hashIndexPath: string;
   private hashIndex: Map<string, string> = new Map();
@@ -121,6 +124,11 @@ export class LocalFileSystemProvider implements MediaStorageProvider {
         `[LocalStorage] Invalid media key: path traversal attempt detected ("${key}")`,
       );
     }
+    // Only keys emitted by store() identify media. The index and metadata sidecars
+    // share this directory but must never be readable through the media API.
+    if (!/^(audio|image|video|document|media)\/[a-f0-9]{12}\.[a-z0-9]+$/i.test(key)) {
+      throw new Error('[LocalStorage] Invalid local media key');
+    }
     return targetPath;
   }
 
@@ -130,7 +138,7 @@ export class LocalFileSystemProvider implements MediaStorageProvider {
   private generateKey(hash: string, metadata: MediaMetadata): string {
     const extension = getExtensionFromContentType(metadata.contentType);
     const prefix = metadata.mediaType || 'media';
-    // Use first 12 chars of hash for shorter filenames while maintaining uniqueness
+    // Preserve existing short filenames; these hash prefixes can collide.
     return `${prefix}/${hash.slice(0, 12)}.${extension}`;
   }
 

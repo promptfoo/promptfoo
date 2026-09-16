@@ -628,7 +628,24 @@
               }
             },
             "required": ["description"],
-            "additionalProperties": false
+            "additionalProperties": false,
+            "if": {
+              "properties": {
+                "type": {
+                  "const": "pdf"
+                }
+              },
+              "required": ["type"]
+            },
+            "else": {
+              "properties": {
+                "config": {
+                  "properties": {
+                    "template": false
+                  }
+                }
+              }
+            }
           }
         ]
       }
@@ -636,6 +653,41 @@
     "__schema9": {
       "type": "object",
       "properties": {
+        "template": {
+          "oneOf": [
+            {
+              "type": "object",
+              "properties": {
+                "source": {
+                  "type": "string",
+                  "const": "file"
+                },
+                "path": {
+                  "type": "string",
+                  "minLength": 1
+                }
+              },
+              "required": ["source", "path"],
+              "additionalProperties": false
+            },
+            {
+              "type": "object",
+              "properties": {
+                "source": {
+                  "type": "string",
+                  "const": "generated"
+                },
+                "description": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 4000
+                }
+              },
+              "required": ["source", "description"],
+              "additionalProperties": false
+            }
+          ]
+        },
         "benign": {
           "type": "boolean"
         },
@@ -1575,6 +1627,41 @@
                           "config": {
                             "type": "object",
                             "properties": {
+                              "template": {
+                                "oneOf": [
+                                  {
+                                    "type": "object",
+                                    "properties": {
+                                      "source": {
+                                        "type": "string",
+                                        "const": "file"
+                                      },
+                                      "path": {
+                                        "type": "string",
+                                        "minLength": 1
+                                      }
+                                    },
+                                    "required": ["source", "path"],
+                                    "additionalProperties": false
+                                  },
+                                  {
+                                    "type": "object",
+                                    "properties": {
+                                      "source": {
+                                        "type": "string",
+                                        "const": "generated"
+                                      },
+                                      "description": {
+                                        "type": "string",
+                                        "minLength": 1,
+                                        "maxLength": 4000
+                                      }
+                                    },
+                                    "required": ["source", "description"],
+                                    "additionalProperties": false
+                                  }
+                                ]
+                              },
                               "benign": {
                                 "type": "boolean"
                               },
@@ -1603,7 +1690,24 @@
                           }
                         },
                         "required": ["description"],
-                        "additionalProperties": false
+                        "additionalProperties": false,
+                        "if": {
+                          "properties": {
+                            "type": {
+                              "const": "pdf"
+                            }
+                          },
+                          "required": ["type"]
+                        },
+                        "else": {
+                          "properties": {
+                            "config": {
+                              "properties": {
+                                "template": false
+                              }
+                            }
+                          }
+                        }
                       }
                     ]
                   }
@@ -2086,6 +2190,41 @@
                           "config": {
                             "type": "object",
                             "properties": {
+                              "template": {
+                                "oneOf": [
+                                  {
+                                    "type": "object",
+                                    "properties": {
+                                      "source": {
+                                        "type": "string",
+                                        "const": "file"
+                                      },
+                                      "path": {
+                                        "type": "string",
+                                        "minLength": 1
+                                      }
+                                    },
+                                    "required": ["source", "path"],
+                                    "additionalProperties": false
+                                  },
+                                  {
+                                    "type": "object",
+                                    "properties": {
+                                      "source": {
+                                        "type": "string",
+                                        "const": "generated"
+                                      },
+                                      "description": {
+                                        "type": "string",
+                                        "minLength": 1,
+                                        "maxLength": 4000
+                                      }
+                                    },
+                                    "required": ["source", "description"],
+                                    "additionalProperties": false
+                                  }
+                                ]
+                              },
                               "benign": {
                                 "type": "boolean"
                               },
@@ -2114,7 +2253,24 @@
                           }
                         },
                         "required": ["description"],
-                        "additionalProperties": false
+                        "additionalProperties": false,
+                        "if": {
+                          "properties": {
+                            "type": {
+                              "const": "pdf"
+                            }
+                          },
+                          "required": ["type"]
+                        },
+                        "else": {
+                          "properties": {
+                            "config": {
+                              "properties": {
+                                "template": false
+                              }
+                            }
+                          }
+                        }
                       }
                     ]
                   }
@@ -2883,6 +3039,7 @@
                       "morse",
                       "multilingual",
                       "other-encodings",
+                      "pdf",
                       "piglatin",
                       "prompt-injection",
                       "retry",
@@ -2938,6 +3095,7 @@
                           "morse",
                           "multilingual",
                           "other-encodings",
+                          "pdf",
                           "piglatin",
                           "prompt-injection",
                           "retry",
@@ -2967,7 +3125,7 @@
               }
             ]
           },
-          "description": "Strategies to use for redteam generation.\n\nDefaults to basic, jailbreak:meta, jailbreak:composite\nSupports audio, authoritative-markup-injection, base64, basic, best-of-n, camelcase, citation, crescendo, custom, default, emoji, gcg, goat, hex, homoglyph, image, indirect-web-pwn, jailbreak, jailbreak-templates, jailbreak:composite, jailbreak:goblin, jailbreak:hydra, jailbreak:likert, jailbreak:meta, jailbreak:tree, layer, leetspeak, math-prompt, mischievous-user, morse, multilingual, other-encodings, piglatin, prompt-injection, retry, rot13, video"
+          "description": "Strategies to use for redteam generation.\n\nDefaults to basic, jailbreak:meta, jailbreak:composite\nSupports audio, authoritative-markup-injection, base64, basic, best-of-n, camelcase, citation, crescendo, custom, default, emoji, gcg, goat, hex, homoglyph, image, indirect-web-pwn, jailbreak, jailbreak-templates, jailbreak:composite, jailbreak:goblin, jailbreak:hydra, jailbreak:likert, jailbreak:meta, jailbreak:tree, layer, leetspeak, math-prompt, mischievous-user, morse, multilingual, other-encodings, pdf, piglatin, prompt-injection, retry, rot13, video"
         },
         "maxConcurrency": {
           "description": "Maximum number of concurrent API calls",

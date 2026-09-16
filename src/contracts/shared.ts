@@ -64,7 +64,13 @@ export type DocxInjectionPlacement = z.infer<typeof DocxInjectionPlacementSchema
 export const DocumentMediaInjectionPlacementValues = ['body', 'header', 'footer'] as const;
 export const DocumentMediaInjectionPlacementSchema = z.enum(DocumentMediaInjectionPlacementValues);
 
+export const PdfTemplateSchema = z.discriminatedUnion('source', [
+  z.object({ source: z.literal('file'), path: z.string().min(1) }),
+  z.object({ source: z.literal('generated'), description: z.string().min(1).max(4000) }),
+]);
+
 export const InputConfigSchema = z.object({
+  template: PdfTemplateSchema.optional(),
   benign: z.boolean().optional(),
   inputPurpose: z
     .string()
@@ -89,6 +95,13 @@ export const InputDefinitionObjectSchema = z
   })
   .superRefine((input, ctx) => {
     const inputType = input.type ?? 'text';
+    if (input.config?.template && inputType !== 'pdf') {
+      ctx.addIssue({
+        code: 'custom',
+        path: ['config', 'template'],
+        message: 'Templates are supported only for PDF inputs',
+      });
+    }
     const injectionPlacements = input.config?.injectionPlacements ?? [];
 
     if (inputType === 'text' || injectionPlacements.length === 0) {
@@ -110,6 +123,11 @@ export const InputDefinitionObjectSchema = z
         message: `Invalid ${inputType.toUpperCase()} injection placements: ${invalidPlacements.join(', ')}. Expected one of: ${placementValues.join(', ')}`,
       });
     }
+  })
+  // JSON Schema cannot infer superRefine's PDF-only template restriction.
+  .meta({
+    if: { properties: { type: { const: 'pdf' } }, required: ['type'] },
+    else: { properties: { config: { properties: { template: false } } } },
   });
 
 export const InputDefinitionSchema = z.union([
@@ -139,6 +157,39 @@ export function normalizeInputDefinition(input: InputDefinition): NormalizedInpu
     description: input.description,
     type: input.type ?? 'text',
   };
+}
+
+/** Include alternate file encodings retained in a serialized multi-input prompt. */
+export function getInputRepresentations(
+  vars: Record<string, unknown>,
+  inputs: Inputs | undefined,
+  fileInput?: string,
+): [string, unknown][] {
+  const entries = Object.entries(vars);
+  if (typeof vars.__prompt === 'string') {
+    try {
+      const envelope = JSON.parse(vars.__prompt);
+      if (envelope && typeof envelope === 'object' && !Array.isArray(envelope)) {
+        for (const [key, value] of Object.entries(envelope)) {
+          const input = inputs?.[key];
+          if (
+            value !== vars[key] &&
+            (key === fileInput ||
+              (input && typeof input === 'object' && input.type && input.type !== 'text'))
+          ) {
+            entries.push([key, value]);
+          }
+        }
+      }
+    } catch {
+      // Plain task prompts do not contain serialized input fields.
+    }
+  }
+  // Replace whole data URIs before shorter raw encodings of the same file.
+  return entries.sort(
+    ([, a], [, b]) =>
+      (typeof b === 'string' ? b.length : 0) - (typeof a === 'string' ? a.length : 0),
+  );
 }
 
 export function normalizeInputs(

@@ -1,0 +1,16 @@
+{
+  "name": "redteam-pdf",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "start": "node --env-file-if-exists=.env server.js"
+  },
+  "engines": {
+    "node": ">=22.22.0"
+  },
+  "dependencies": {
+    "@hono/node-server": "^2.1.1",
+    "hono": "^4.13.5",
+    "pdf-lib": "^1.17.1"
+  }
+}
