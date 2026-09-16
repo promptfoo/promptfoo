@@ -219,6 +219,26 @@ describe('applyQueryParams', () => {
 });
 
 describe('discoverTokenEndpoint', () => {
+  it.each(['/realms/test/', '/realms/test///'])(
+    'normalizes trailing slashes in discovery: %s',
+    async (path) => {
+      mockFetch.mockResolvedValueOnce({ ok: false, status: 404 });
+      mockFetch.mockResolvedValueOnce({ ok: false, status: 404 });
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ token_endpoint: 'https://trailing.example.com/token' }),
+      });
+      await expect(discoverTokenEndpoint(`https://trailing.example.com${path}`)).resolves.toBe(
+        'https://trailing.example.com/token',
+      );
+      expect(mockFetch.mock.calls.map(([url]) => url)).toEqual([
+        'https://trailing.example.com/realms/test/.well-known/oauth-authorization-server',
+        'https://trailing.example.com/.well-known/oauth-authorization-server/realms/test',
+        'https://trailing.example.com/.well-known/oauth-authorization-server',
+      ]);
+    },
+  );
+
   beforeEach(() => {
     mockFetch.mockReset();
   });

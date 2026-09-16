@@ -117,11 +117,12 @@ export async function discoverTokenEndpoint(serverUrl: string): Promise<string> 
   // 3. Root level: /.well-known/oauth-authorization-server
   const discoveryUrls = [];
 
-  if (url.pathname && url.pathname !== '/') {
+  const pathname = url.pathname.replace(/\/+$/, '');
+  if (pathname) {
     // Path-appended style (e.g., Keycloak: /realms/test/.well-known/oauth-authorization-server)
-    discoveryUrls.push(`${baseUrl}${url.pathname}/.well-known/oauth-authorization-server`);
+    discoveryUrls.push(`${baseUrl}${pathname}/.well-known/oauth-authorization-server`);
     // RFC 8414 path-aware style
-    discoveryUrls.push(`${baseUrl}/.well-known/oauth-authorization-server${url.pathname}`);
+    discoveryUrls.push(`${baseUrl}/.well-known/oauth-authorization-server${pathname}`);
   }
   // Root level discovery
   discoveryUrls.push(`${baseUrl}/.well-known/oauth-authorization-server`);
@@ -205,12 +206,13 @@ export async function getOAuthTokenWithExpiry(
 
 /**
  * Get OAuth token, fetching a new one if needed.
- * Requires tokenUrl to be configured - throws if not provided.
+ * Discovers the token endpoint from serverUrl when tokenUrl is not configured.
  */
 export async function getOAuthToken(
   auth: MCPOAuthClientCredentialsAuth | MCPOAuthPasswordAuth,
+  serverUrl?: string,
 ): Promise<string> {
-  const result = await getOAuthTokenWithExpiry(auth);
+  const result = await getOAuthTokenWithExpiry(auth, serverUrl);
   return result.accessToken;
 }
 

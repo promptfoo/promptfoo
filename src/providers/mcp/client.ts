@@ -28,6 +28,18 @@ import type {
   MCPToolResult,
 } from './types';
 
+async function loadAuthenticationErrorCheck(): Promise<(error: unknown) => boolean> {
+  const [{ UnauthorizedError }, { StreamableHTTPError }, { SseError }] = await Promise.all([
+    import('@modelcontextprotocol/sdk/client/auth.js'),
+    import('@modelcontextprotocol/sdk/client/streamableHttp.js'),
+    import('@modelcontextprotocol/sdk/client/sse.js'),
+  ]);
+  return (error) =>
+    error instanceof UnauthorizedError ||
+    ((error instanceof StreamableHTTPError || error instanceof SseError) &&
+      (error.code === 401 || error.code === 403));
+}
+
 /**
  * Stored OAuth configuration for a server, used for token refresh.
  */
@@ -104,6 +116,7 @@ export class MCPClient {
   private clients: Map<string, Client> = new Map();
   private tools: Map<string, MCPTool[]> = new Map();
   private config: McpConfigParsed;
+  private isAuthenticationError: (error: unknown) => boolean = () => false;
   private transports: Map<
     string,
     StdioClientTransport | SSEClientTransport | StreamableHTTPClientTransport
@@ -166,6 +179,9 @@ export class MCPClient {
     serverKey = server.name || server.url || server.path || 'default',
   ): Promise<void> {
     const { Client } = await loadMcpClientSdk();
+    // Load optional SDK error classes before calls start; classifying a failure
+    // must not yield between concurrent failures and their shared refresh lock.
+    this.isAuthenticationError = await loadAuthenticationErrorCheck();
     const client = new Client({
       name: 'promptfoo-MCP',
       version: '1.0.0',
@@ -517,14 +533,8 @@ export class MCPClient {
 
             // Check if this is an auth error and we have OAuth config for this server
             // This is a fallback in case the proactive refresh didn't catch an expired token
-            const isAuthError =
-              errorMessage.includes('401') ||
-              errorMessage.includes('Unauthorized') ||
-              errorMessage.includes('authorization_endpoint') ||
-              errorMessage.includes('token');
-
             const oauthConfig = this.oauthConfigs.get(serverKey);
-            if (!retried && isAuthError && oauthConfig) {
+            if (!retried && oauthConfig && this.isAuthenticationError(error)) {
               logger.debug(`[MCP] Auth error for ${serverKey}, attempting reactive token refresh`);
               retried = true;
               try {
