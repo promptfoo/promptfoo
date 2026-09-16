@@ -547,11 +547,13 @@ export PROMPTFOO_CACHE_ENABLED=false
 
 ## Guardrails API
 
-Content safety and security layer. Use guardrails to detect PII, harmful content, and other safety concerns.
+Content safety and security helpers. `guard()`, `pii()`, and `harm()` call the configured Promptfoo guardrails service and return classifier results; `adaptive()` returns an adapted prompt and modification list. None returns the flat `ProviderResponse.guardrails` object consumed by the [`guardrails` assertion](/docs/configuration/expected-outputs/guardrails).
+
+Requests use the standard Promptfoo response cache. The service base URL comes from `PROMPTFOO_REMOTE_API_BASE_URL`, the configured Promptfoo Cloud host, or the public API host, in that order. Treat the input as data sent to that service.
 
 ### `guardrails.guard(input)`
 
-Run general content moderation.
+Run the general guardrail classifier.
 
 ```typescript
 async function guard(input: string): Promise<GuardResult>;
@@ -566,6 +568,14 @@ interface GuardResult {
     categories: Record<string, boolean>; // e.g., { hate: false, violence: true }
     category_scores: Record<string, number>; // Scores 0-1
     flagged: boolean; // Any category flagged?
+    payload?: {
+      pii?: Array<{
+        entity_type: string;
+        start: number;
+        end: number;
+        pii: string;
+      }>;
+    };
   }>;
 }
 ```
@@ -610,7 +620,7 @@ if (result.results[0].flagged) {
   console.log('PII detected:');
   if (result.results[0].payload?.pii) {
     result.results[0].payload.pii.forEach((item) => {
-      console.log(`  ${item.type}: ${item.value}`);
+      console.log(`  ${item.entity_type} at offsets ${item.start}-${item.end}`);
     });
   }
 }
@@ -630,10 +640,28 @@ async function harm(input: string): Promise<GuardResult>;
 
 ### `guardrails.adaptive(request)`
 
-Run adaptive guardrails with custom configuration.
+Rewrite a prompt to follow the supplied policies and return the modifications that were applied.
 
 ```typescript
 async function adaptive(request: AdaptiveRequest): Promise<AdaptiveResult>;
+```
+
+```typescript
+interface AdaptiveRequest {
+  prompt: string;
+  policies?: string[];
+}
+
+interface AdaptiveResult {
+  model: string;
+  adaptedPrompt: string;
+  modifications: Array<{
+    type: string;
+    reason: string;
+    original: string;
+    modified: string;
+  }>;
+}
 ```
 
 ---
