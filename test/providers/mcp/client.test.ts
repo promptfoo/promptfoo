@@ -1,5 +1,6 @@
 import path from 'path';
 
+import { SpanStatusCode, trace } from '@opentelemetry/api';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const mockGetEnvInt = vi.hoisted(() => vi.fn().mockReturnValue(undefined));
@@ -216,6 +217,145 @@ describe('MCPClient', () => {
       expect(mockClient.connect).toHaveBeenCalledWith(mockStdioTransport, undefined);
       await mcpClient.cleanup();
       expect(mcpClient.hasInitialized).toBe(false);
+    });
+
+    it('should initialize a zero-argument command server with its configured env', async () => {
+      mcpClient = new MCPClient({
+        enabled: true,
+        server: { command: 'mcp-server', env: { MCP_MODE: 'test' } },
+      });
+
+      await mcpClient.initialize();
+
+      expect(StdioClientTransport).toHaveBeenCalledWith({
+        command: 'mcp-server',
+        args: [],
+        env: { ...process.env, MCP_MODE: 'test' },
+      });
+      expect(mcpClient.hasInitialized).toBe(true);
+      await mcpClient.cleanup();
+    });
+
+    it('keeps unnamed zero-argument command servers distinct', async () => {
+      mockClient.listTools
+        .mockResolvedValueOnce({
+          tools: [{ name: 'first_tool', description: '', inputSchema: {} }],
+        })
+        .mockResolvedValueOnce({
+          tools: [{ name: 'second_tool', description: '', inputSchema: {} }],
+        });
+
+      mcpClient = new MCPClient({
+        enabled: true,
+        servers: [
+          { command: 'mcp-server', env: { MCP_MODE: 'first' } },
+          { command: 'mcp-server', env: { MCP_MODE: 'second' } },
+        ],
+      });
+
+      await mcpClient.initialize();
+
+      expect(mcpClient.connectedServers).toHaveLength(2);
+      expect(mcpClient.getAllTools().map((tool) => tool.name)).toEqual([
+        'first_tool',
+        'second_tool',
+      ]);
+      await mcpClient.cleanup();
+      expect(mockClient.close).toHaveBeenCalledTimes(2);
+    });
+
+    it('does not overwrite an explicitly named server with a generated command key', async () => {
+      mcpClient = new MCPClient({
+        enabled: true,
+        servers: [{ name: 'mcp-server:1', command: 'mcp-server' }, { command: 'mcp-server' }],
+      });
+
+      await mcpClient.initialize();
+
+      expect(mcpClient.connectedServers).toHaveLength(2);
+      await mcpClient.cleanup();
+      expect(mockClient.close).toHaveBeenCalledTimes(2);
+    });
+
+    it('should initialize with per-server env merged into process.env', async () => {
+      mockClient.connect.mockResolvedValueOnce(undefined);
+      mockClient.listTools.mockResolvedValueOnce({
+        tools: [{ name: 'tool1', description: 'desc1', inputSchema: {} }],
+      });
+
+      mcpClient = new MCPClient({
+        enabled: true,
+        server: {
+          name: 'server-with-env',
+          command: 'npm',
+          args: ['start'],
+          env: { CUSTOM_MCP_VAR: 'custom_value' },
+        },
+      });
+
+      await mcpClient.initialize();
+
+      expect(StdioClientTransport).toHaveBeenCalledWith({
+        command: 'npm',
+        args: ['start'],
+        env: {
+          ...(process.env as Record<string, string>),
+          CUSTOM_MCP_VAR: 'custom_value',
+        },
+      });
+      expect(mockClient.connect).toHaveBeenCalledWith(mockStdioTransport, undefined);
+      await mcpClient.cleanup();
+    });
+
+    it('should merge per-server env for path-based stdio servers', async () => {
+      mockClient.connect.mockResolvedValueOnce(undefined);
+      mockClient.listTools.mockResolvedValueOnce({
+        tools: [{ name: 'tool1', description: 'desc1', inputSchema: {} }],
+      });
+
+      mcpClient = new MCPClient({
+        enabled: true,
+        server: { name: 'scripted', path: 'script.js', env: { CUSTOM_MCP_VAR: 'custom_value' } },
+      });
+
+      await mcpClient.initialize();
+
+      expect(StdioClientTransport).toHaveBeenCalledWith({
+        command: process.execPath,
+        args: ['script.js'],
+        env: { ...(process.env as Record<string, string>), CUSTOM_MCP_VAR: 'custom_value' },
+      });
+      await mcpClient.cleanup();
+    });
+
+    it('should let per-server env override an inherited process.env value', async () => {
+      mockClient.connect.mockResolvedValueOnce(undefined);
+      mockClient.listTools.mockResolvedValueOnce({
+        tools: [{ name: 'tool1', description: 'desc1', inputSchema: {} }],
+      });
+      vi.stubEnv('PROMPTFOO_MCP_ENV_FIXTURE', 'inherited');
+
+      mcpClient = new MCPClient({
+        enabled: true,
+        server: {
+          name: 'override',
+          command: 'npm',
+          args: ['start'],
+          env: { PROMPTFOO_MCP_ENV_FIXTURE: 'per-server' },
+        },
+      });
+
+      await mcpClient.initialize();
+
+      const passedEnv = vi.mocked(StdioClientTransport).mock.calls[0][0].env as Record<
+        string,
+        string
+      >;
+      expect(passedEnv.PROMPTFOO_MCP_ENV_FIXTURE).toBe('per-server');
+      // The rest of the parent environment is still inherited.
+      expect(passedEnv.PATH).toBe(process.env.PATH);
+      await mcpClient.cleanup();
+      vi.unstubAllEnvs();
     });
 
     it('should initialize with multiple servers', async () => {
@@ -652,6 +792,94 @@ describe('MCPClient', () => {
   });
 
   describe('callTool', () => {
+    it('records one tool execution span around an MCP request', async () => {
+      mockClient.connect.mockResolvedValueOnce(undefined);
+      mockClient.listTools.mockResolvedValueOnce({
+        tools: [{ name: 'tool1', description: 'desc1', inputSchema: {} }],
+      });
+      mockClient.callTool.mockResolvedValueOnce({ content: 'result' });
+
+      mcpClient = new MCPClient({
+        enabled: true,
+        server: { command: 'npm', args: ['start'] },
+      });
+      await mcpClient.initialize();
+
+      const span = {
+        setAttribute: vi.fn(),
+        setStatus: vi.fn(),
+        end: vi.fn(),
+        recordException: vi.fn(),
+      };
+      const startActiveSpan = vi.fn((_name, _options, callback) => callback(span));
+      const activeSpanSpy = vi.spyOn(trace, 'getActiveSpan').mockReturnValue(span as any);
+      const tracerSpy = vi.spyOn(trace, 'getTracer').mockReturnValue({ startActiveSpan } as any);
+
+      try {
+        expect(await mcpClient.callTool('tool1', { query: 'inventory' })).toEqual({
+          content: 'result',
+          raw: { content: 'result' },
+        });
+
+        expect(startActiveSpan).toHaveBeenCalledExactlyOnceWith(
+          'execute_tool tool1',
+          expect.objectContaining({
+            attributes: expect.objectContaining({
+              'gen_ai.operation.name': 'execute_tool',
+              'gen_ai.tool.name': 'tool1',
+              'tool.arguments': '{"query":"inventory"}',
+            }),
+          }),
+          expect.any(Function),
+        );
+        expect(span.setAttribute).toHaveBeenCalledWith('tool.output', 'result');
+      } finally {
+        activeSpanSpy.mockRestore();
+        tracerSpy.mockRestore();
+      }
+    });
+
+    it('marks caught MCP transport failures as tool execution errors', async () => {
+      mockClient.connect.mockResolvedValueOnce(undefined);
+      mockClient.listTools.mockResolvedValueOnce({
+        tools: [{ name: 'tool1', description: 'desc1', inputSchema: {} }],
+      });
+      mockClient.callTool.mockRejectedValueOnce(new Error('MCP transport disconnected'));
+
+      mcpClient = new MCPClient({
+        enabled: true,
+        server: { command: 'npm', args: ['start'] },
+      });
+      await mcpClient.initialize();
+
+      const span = {
+        setAttribute: vi.fn(),
+        setStatus: vi.fn(),
+        end: vi.fn(),
+        recordException: vi.fn(),
+      };
+      const startActiveSpan = vi.fn((_name, _options, callback) => callback(span));
+      const activeSpanSpy = vi.spyOn(trace, 'getActiveSpan').mockReturnValue(span as any);
+      const tracerSpy = vi.spyOn(trace, 'getTracer').mockReturnValue({ startActiveSpan } as any);
+
+      try {
+        expect(await mcpClient.callTool('tool1', {})).toEqual({
+          content: '',
+          error: 'MCP transport disconnected',
+        });
+        expect(span.setAttribute).toHaveBeenCalledWith('tool.is_error', true);
+        expect(span.setAttribute).toHaveBeenCalledWith('error.type', 'tool_error');
+        expect(span.setStatus).toHaveBeenCalledWith({
+          code: SpanStatusCode.ERROR,
+          message: 'MCP transport disconnected',
+        });
+        expect(span.end).toHaveBeenCalledOnce();
+      } finally {
+        activeSpanSpy.mockRestore();
+        tracerSpy.mockRestore();
+      }
+    });
+
     it('should call tool successfully', async () => {
       // Reset mocks for this test
       mockClient.connect.mockResolvedValueOnce(undefined);
@@ -1442,105 +1670,108 @@ describe('MCPClient', () => {
     it.each([
       ['succeeded', false],
       ['failed', true],
-    ] as const)('should emit one bounded diagnostic when client close fails and transport fallback %s', async (expectedFallback, shouldTransportFail) => {
-      vi.useFakeTimers();
-      vi.setSystemTime(new Date('2026-06-26T00:00:00.000Z'));
-      const sentinels = [
-        'PROMPT_SENTINEL',
-        'PROVIDER_RESPONSE_SENTINEL',
-        '/home/synthetic-user/private/config.yaml',
-        'synthetic-user@example.invalid',
-        'sk-synthetic-credential-1234567890',
-      ];
-      const cause = new Error(sentinels[1]);
-      const clientError = new Error(`${sentinels[0]} ${sentinels[2]}`, { cause });
-      clientError.name = sentinels[3];
-      const transportErrorToJSON = vi.fn(() => ({ prompt: sentinels[0] }));
-      const transportError = {
-        response: `${sentinels[1]} ${sentinels[4]}`,
-        toJSON: transportErrorToJSON,
-      };
-      const debugSpy = vi.spyOn(logger, 'debug');
-      const infoSpy = vi.spyOn(logger, 'info');
-      const warnSpy = vi.spyOn(logger, 'warn');
-      const errorSpy = vi.spyOn(logger, 'error');
+    ] as const)(
+      'should emit one bounded diagnostic when client close fails and transport fallback %s',
+      async (expectedFallback, shouldTransportFail) => {
+        vi.useFakeTimers();
+        vi.setSystemTime(new Date('2026-06-26T00:00:00.000Z'));
+        const sentinels = [
+          'PROMPT_SENTINEL',
+          'PROVIDER_RESPONSE_SENTINEL',
+          '/home/synthetic-user/private/config.yaml',
+          'synthetic-user@example.invalid',
+          'sk-synthetic-credential-1234567890',
+        ];
+        const cause = new Error(sentinels[1]);
+        const clientError = new Error(`${sentinels[0]} ${sentinels[2]}`, { cause });
+        clientError.name = sentinels[3];
+        const transportErrorToJSON = vi.fn(() => ({ prompt: sentinels[0] }));
+        const transportError = {
+          response: `${sentinels[1]} ${sentinels[4]}`,
+          toJSON: transportErrorToJSON,
+        };
+        const debugSpy = vi.spyOn(logger, 'debug');
+        const infoSpy = vi.spyOn(logger, 'info');
+        const warnSpy = vi.spyOn(logger, 'warn');
+        const errorSpy = vi.spyOn(logger, 'error');
 
-      const oldClient = createMockClient();
-      const refreshedClient = createMockClient(vi.fn().mockResolvedValue({ content: 'result' }));
-      oldClient.close.mockRejectedValueOnce(clientError);
-      vi.mocked(Client)
-        .mockImplementationOnce(function () {
-          return oldClient as unknown as Client;
-        })
-        .mockImplementationOnce(function () {
-          return refreshedClient as unknown as Client;
+        const oldClient = createMockClient();
+        const refreshedClient = createMockClient(vi.fn().mockResolvedValue({ content: 'result' }));
+        oldClient.close.mockRejectedValueOnce(clientError);
+        vi.mocked(Client)
+          .mockImplementationOnce(function () {
+            return oldClient as unknown as Client;
+          })
+          .mockImplementationOnce(function () {
+            return refreshedClient as unknown as Client;
+          });
+
+        mockGetOAuthTokenWithExpiry
+          .mockResolvedValueOnce({
+            accessToken: 'initial-token',
+            expiresAt: Date.now() + 30_000,
+          })
+          .mockResolvedValueOnce({
+            accessToken: 'refreshed-token',
+            expiresAt: Date.now() + 3_600_000,
+          });
+
+        mcpClient = new MCPClient({
+          enabled: true,
+          server: {
+            url: 'http://localhost:3000',
+            auth: {
+              type: 'oauth',
+              grantType: 'client_credentials',
+              clientId: 'test-client',
+              clientSecret: 'test-secret',
+              tokenUrl: 'https://auth.example.com/token',
+            },
+          },
         });
 
-      mockGetOAuthTokenWithExpiry
-        .mockResolvedValueOnce({
-          accessToken: 'initial-token',
-          expiresAt: Date.now() + 30_000,
-        })
-        .mockResolvedValueOnce({
-          accessToken: 'refreshed-token',
-          expiresAt: Date.now() + 3_600_000,
+        await mcpClient.initialize();
+        if (shouldTransportFail) {
+          mockStreamableHTTPTransport.close.mockRejectedValueOnce(transportError);
+        }
+
+        await expect(mcpClient.callTool('tool1', {})).resolves.toEqual({
+          content: 'result',
+          raw: { content: 'result' },
         });
+        expect(Client).toHaveBeenCalledTimes(2);
+        expect(mockGetOAuthTokenWithExpiry).toHaveBeenCalledTimes(2);
+        expect(oldClient.close).toHaveBeenCalledOnce();
+        expect(oldClient.callTool).not.toHaveBeenCalled();
+        expect(refreshedClient.callTool).toHaveBeenCalledOnce();
+        expect(mockStreamableHTTPTransport.close).toHaveBeenCalledOnce();
 
-      mcpClient = new MCPClient({
-        enabled: true,
-        server: {
-          url: 'http://localhost:3000',
-          auth: {
-            type: 'oauth',
-            grantType: 'client_credentials',
-            clientId: 'test-client',
-            clientSecret: 'test-secret',
-            tokenUrl: 'https://auth.example.com/token',
-          },
-        },
-      });
-
-      await mcpClient.initialize();
-      if (shouldTransportFail) {
-        mockStreamableHTTPTransport.close.mockRejectedValueOnce(transportError);
-      }
-
-      await expect(mcpClient.callTool('tool1', {})).resolves.toEqual({
-        content: 'result',
-        raw: { content: 'result' },
-      });
-      expect(Client).toHaveBeenCalledTimes(2);
-      expect(mockGetOAuthTokenWithExpiry).toHaveBeenCalledTimes(2);
-      expect(oldClient.close).toHaveBeenCalledOnce();
-      expect(oldClient.callTool).not.toHaveBeenCalled();
-      expect(refreshedClient.callTool).toHaveBeenCalledOnce();
-      expect(mockStreamableHTTPTransport.close).toHaveBeenCalledOnce();
-
-      const diagnostics = debugSpy.mock.calls.filter(
-        ([message]) => message === '[MCP] Failed to close existing client during OAuth refresh',
-      );
-      expect(diagnostics).toEqual([
-        [
-          '[MCP] Failed to close existing client during OAuth refresh',
-          {
-            operation: 'oauth-refresh',
-            resource: 'client',
-            transportFallback: expectedFallback,
-            nextAction: 'reconnect',
-          },
-        ],
-      ]);
-      expect(transportErrorToJSON).not.toHaveBeenCalled();
-      const serializedLogs = JSON.stringify([
-        ...debugSpy.mock.calls,
-        ...infoSpy.mock.calls,
-        ...warnSpy.mock.calls,
-        ...errorSpy.mock.calls,
-      ]);
-      for (const sentinel of sentinels) {
-        expect(serializedLogs).not.toContain(sentinel);
-      }
-    });
+        const diagnostics = debugSpy.mock.calls.filter(
+          ([message]) => message === '[MCP] Failed to close existing client during OAuth refresh',
+        );
+        expect(diagnostics).toEqual([
+          [
+            '[MCP] Failed to close existing client during OAuth refresh',
+            {
+              operation: 'oauth-refresh',
+              resource: 'client',
+              transportFallback: expectedFallback,
+              nextAction: 'reconnect',
+            },
+          ],
+        ]);
+        expect(transportErrorToJSON).not.toHaveBeenCalled();
+        const serializedLogs = JSON.stringify([
+          ...debugSpy.mock.calls,
+          ...infoSpy.mock.calls,
+          ...warnSpy.mock.calls,
+          ...errorSpy.mock.calls,
+        ]);
+        for (const sentinel of sentinels) {
+          expect(serializedLogs).not.toContain(sentinel);
+        }
+      },
+    );
 
     it('should call the reconnected client after a proactive token refresh', async () => {
       const oldClient = createMockClient(vi.fn());
