@@ -139,4 +139,35 @@ describe('handleClassifier', () => {
     );
     expect(mockedMatchesClassification).not.toHaveBeenCalled();
   });
+
+  it.each([false, true])(
+    'preserves the full grader failure result (inverse=%s)',
+    async (inverse) => {
+      mockedMatchesClassification.mockResolvedValue({
+        pass: false,
+        score: 0,
+        reason: 'Unknown error fetching classification',
+        tokensUsed: { total: 5, prompt: 3, completion: 2 },
+        metadata: { graderError: true },
+      });
+      const params = createParams({
+        assertion: {
+          type: inverse ? 'not-classifier' : 'classifier',
+          value: 'harmful',
+          threshold: 0.5,
+        },
+        renderedValue: 'harmful',
+        inverse,
+      });
+
+      await expect(handleClassifier(params)).resolves.toEqual({
+        assertion: params.assertion,
+        pass: false,
+        score: 0,
+        reason: 'Unknown error fetching classification',
+        tokensUsed: { total: 5, prompt: 3, completion: 2 },
+        metadata: { graderError: true },
+      });
+    },
+  );
 });

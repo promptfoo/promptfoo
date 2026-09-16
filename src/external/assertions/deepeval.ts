@@ -13,6 +13,8 @@ import type { AssertionParams, GradingResult } from '../../types/index';
 import type { Message } from '../matchers/deepeval';
 
 const DEFAULT_WINDOW_SIZE = 5;
+// DeepEval's default pass threshold for the conversation relevancy metric.
+const DEFAULT_THRESHOLD = 0.5;
 
 function getNonEmptyTokenUsage(tokensUsed: ReturnType<typeof createEmptyTokenUsage>) {
   return tokensUsed.total > 0 ? tokensUsed : undefined;
@@ -42,6 +44,7 @@ function getConversationMessages({
 
 export const handleConversationRelevance = async ({
   assertion,
+  inverse,
   outputString,
   prompt,
   providerCallContext,
@@ -49,7 +52,7 @@ export const handleConversationRelevance = async ({
 }: AssertionParams): Promise<GradingResult> => {
   const messages = getConversationMessages({ outputString, prompt, test });
   const windowSize = assertion.config?.windowSize || DEFAULT_WINDOW_SIZE;
-  const threshold = assertion.threshold || 0;
+  const threshold = assertion.threshold ?? DEFAULT_THRESHOLD;
   let relevantCount = 0;
   let totalWindows = 0;
   const irrelevancies: string[] = [];
@@ -74,8 +77,8 @@ export const handleConversationRelevance = async ({
     if (result.metadata?.graderError === true) {
       return {
         ...result,
-        tokensUsed: getNonEmptyTokenUsage(tokensUsed),
         assertion,
+        tokensUsed: getNonEmptyTokenUsage(tokensUsed),
       };
     }
 
@@ -92,7 +95,7 @@ export const handleConversationRelevance = async ({
   }
 
   const score = totalWindows > 0 ? relevantCount / totalWindows : 0;
-  const pass = score >= threshold - Number.EPSILON;
+  const pass = score >= threshold - Number.EPSILON !== inverse;
 
   // Generate a comprehensive reason if there are irrelevancies
   let reason: string;
@@ -143,7 +146,7 @@ export const handleConversationRelevance = async ({
   return {
     assertion,
     pass,
-    score,
+    score: inverse ? 1 - score : score,
     reason,
     tokensUsed: getNonEmptyTokenUsage(tokensUsed),
   };

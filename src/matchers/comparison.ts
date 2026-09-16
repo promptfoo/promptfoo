@@ -32,26 +32,44 @@ export async function matchesSelectBest(
   );
 
   const rubricPrompt = await loadRubricPrompt(grading?.rubricPrompt, SELECT_BEST_PROMPT);
-  const promptText = await renderLlmRubricPrompt(rubricPrompt, {
+  const templateVars = {
+    ...(vars || {}),
     criteria,
     outputs: outputs.map((o) => tryParse(o)),
-    ...(vars || {}),
-  });
+  };
+  const promptText = await renderLlmRubricPrompt(rubricPrompt, templateVars);
 
   const resp = await callProviderWithContext(
     textProvider,
     promptText,
     'select-best',
-    {
-      criteria,
-      outputs: outputs.map((o) => tryParse(o)),
-      ...(vars || {}),
-    },
+    templateVars,
     providerCallContext,
   );
+  const tokensUsed = normalizeMatcherTokenUsage(
+    resp.cached
+      ? {
+          ...resp.tokenUsage,
+          cached: Math.max(
+            resp.tokenUsage?.cached ?? 0,
+            resp.tokenUsage?.total ??
+              (resp.tokenUsage?.prompt ?? 0) + (resp.tokenUsage?.completion ?? 0),
+          ),
+        }
+      : resp.tokenUsage,
+  );
+  const cacheMetadataFields = resp.cached ? { cachedResponse: true } : undefined;
+  const cacheMetadata = cacheMetadataFields ? { metadata: cacheMetadataFields } : {};
+  // A grader transport/parse failure is not a verdict about any output, so tag it
+  // with `metadata.graderError` (keeping any cache provenance) rather than letting
+  // inverse- or xfail-aware callers treat it as a real comparison result.
+  const selectBestGraderFail = (reason: string) => {
+    const result = graderFail(reason, tokensUsed);
+    return { ...result, metadata: { ...result.metadata, ...cacheMetadataFields } };
+  };
   if (resp.error || !resp.output) {
     return Array.from({ length: outputs.length }, () =>
-      graderFail(resp.error || 'No output', resp.tokenUsage),
+      selectBestGraderFail(resp.error || 'No output'),
     );
   }
 
@@ -62,11 +80,10 @@ export async function matchesSelectBest(
 
   if (Number.isNaN(verdict) || verdict < 0 || verdict >= outputs.length) {
     return Array.from({ length: outputs.length }, () =>
-      graderFail(`Invalid select-best verdict: ${verdict}`, resp.tokenUsage),
+      selectBestGraderFail(`Invalid select-best verdict: ${verdict}`),
     );
   }
 
-  const tokensUsed = normalizeMatcherTokenUsage(resp.tokenUsage);
   return outputs.map((_output, index) => {
     if (index === verdict) {
       return {
@@ -74,6 +91,7 @@ export async function matchesSelectBest(
         score: 1,
         reason: `Output selected as the best: ${criteria}`,
         tokensUsed,
+        ...cacheMetadata,
       };
     } else {
       return {
@@ -81,6 +99,7 @@ export async function matchesSelectBest(
         score: 0,
         reason: `Output not selected: ${criteria}`,
         tokensUsed,
+        ...cacheMetadata,
       };
     }
   });

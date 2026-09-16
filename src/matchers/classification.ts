@@ -1,4 +1,4 @@
-import { getAndCheckProvider } from './providers';
+import { callGradingProvider, getAndCheckProvider } from './providers';
 import { graderFail } from './shared';
 
 import type { ApiClassificationProvider, GradingConfig, GradingResult } from '../types/index';
@@ -24,17 +24,21 @@ export async function matchesClassification(
     'classification check',
   )) as ApiClassificationProvider;
 
-  const resp = await finalProvider.callClassificationApi(output);
+  const resp = await callGradingProvider(finalProvider, 'classification', () =>
+    finalProvider.callClassificationApi(output),
+  );
 
   if (!resp.classification) {
     return graderFail(resp.error || 'Unknown error fetching classification');
   }
+  const scores = Object.values(resp.classification);
+  if (scores.length === 0) {
+    // No scores means there is no verdict, even when a specific label was requested.
+    return graderFail('No classification scores returned');
+  }
+
   let score: number;
   if (expected === undefined) {
-    const scores = Object.values(resp.classification);
-    if (scores.length === 0) {
-      return graderFail('No classification scores returned');
-    }
     score = Math.max(...scores);
   } else {
     score = resp.classification[expected] || 0;
