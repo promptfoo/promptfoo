@@ -1,3 +1,4 @@
+import { existsSync } from 'fs';
 import fs from 'fs/promises';
 import * as path from 'path';
 
@@ -152,7 +153,7 @@ function editorExists(): boolean {
   // Check if the configured editor exists
   // Handle cases like "code --wait" by extracting just the binary
   const editorBinary = editorPath.split(' ')[0];
-  return fs.existsSync(editorBinary);
+  return existsSync(editorBinary);
 }
 
 async function promptWithEditor(message: string, defaultValue: string): Promise<string> {
