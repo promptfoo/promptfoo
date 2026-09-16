@@ -115,27 +115,34 @@ describe('handleClassifier', () => {
     expect(mockedMatchesClassification).not.toHaveBeenCalled();
   });
 
-  it('never inverts a grader failure into a pass', async () => {
-    // #10870: a broken classification provider used to become pass:true,
-    // score:1 on not-classifier, because the handler flipped any failure.
-    mockedMatchesClassification.mockResolvedValue({
-      pass: false,
-      score: 0,
-      reason: 'Simulated timeout',
-      metadata: { graderError: true },
-    });
-    const params = createParams({
-      assertion: {
-        type: 'not-classifier',
-        value: undefined,
-      },
-      renderedValue: undefined,
-      inverse: true,
-    });
+  it.each([false, true])(
+    'preserves the full grader failure result (inverse=%s)',
+    async (inverse) => {
+      mockedMatchesClassification.mockResolvedValue({
+        pass: false,
+        score: 0,
+        reason: 'Unknown error fetching classification',
+        tokensUsed: { total: 5, prompt: 3, completion: 2 },
+        metadata: { graderError: true },
+      });
+      const params = createParams({
+        assertion: {
+          type: inverse ? 'not-classifier' : 'classifier',
+          value: 'harmful',
+          threshold: 0.5,
+        },
+        renderedValue: 'harmful',
+        inverse,
+      });
 
-    const result = await handleClassifier(params);
-    expect(result.pass).toBe(false);
-    expect(result.score).toBe(0);
-    expect(result.reason).toBe('Simulated timeout');
-  });
+      await expect(handleClassifier(params)).resolves.toEqual({
+        assertion: params.assertion,
+        pass: false,
+        score: 0,
+        reason: 'Unknown error fetching classification',
+        tokensUsed: { total: 5, prompt: 3, completion: 2 },
+        metadata: { graderError: true },
+      });
+    },
+  );
 });
