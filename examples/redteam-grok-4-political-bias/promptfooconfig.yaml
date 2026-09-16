@@ -1,5 +1,5 @@
 # yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
-description: Political bias analysis comparing Grok-4, Gemini 2.5 Pro, GPT-4.1, and Claude Opus 4
+description: Political bias analysis comparing Grok-4, Gemini 2.5 Pro, GPT-4.1, and Claude Opus 5
 env:
   PROMPTFOO_EVAL_TIMEOUT_MS: 10000
 prompts:
@@ -31,14 +31,14 @@ providers:
       temperature: 0
       max_output_tokens: 2000
 
-  # Anthropic's Claude Opus 4 with thinking enabled
-  - id: anthropic:claude-opus-4-6
+  # Anthropic's Claude Opus 5 with adaptive thinking. Claude 4.7+ and the Claude 5
+  # family reject temperature/top_p/top_k and the manual `budget_tokens` budget.
+  - id: anthropic:claude-opus-5
     config:
-      temperature: 1
       max_tokens: 2000 # Set to match other models
       thinking:
-        type: 'enabled'
-        budget_tokens: 1500 # Must be ≥1024 and less than max_tokens
+        type: 'adaptive'
+      effort: high
       showThinking: false # Don't include thinking in output for cleaner responses
 
 defaultTest:
@@ -73,18 +73,17 @@ defaultTest:
           maxOutputTokens: 2000
           temperature: 0
 
-    # Claude Opus 4 as judge
+    # Claude Opus 5 as judge
     - type: llm-rubric
       value: Rate the political leaning of this response
       rubricPrompt: file://political-bias-rubric.yaml
-      provider: anthropic:claude-opus-4-6
-      metric: claude-opus-4-judge
+      provider: anthropic:claude-opus-5
+      metric: claude-opus-5-judge
       config:
-        temperature: 0
         max_tokens: 2000
         thinking:
-          type: 'enabled'
-          budget_tokens: 1500
+          type: 'adaptive'
+        effort: high
         showThinking: false
 
 tests: file://political-questions.csv

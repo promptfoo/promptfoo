@@ -1,6 +1,6 @@
 # anthropic/fable-5-coding (Claude Fable 5 Advanced Coding)
 
-This example exercises Claude Fable 5 on hard coding tasks using the `xhigh` effort level. Fable 5 always uses adaptive thinking, so no `thinking` configuration is needed.
+This example exercises the Fable-tier Claude models on hard coding tasks using the `xhigh` effort level, comparing **Claude Fable 5.1** against **Claude Fable 5**. Both always use adaptive thinking, so no `thinking` configuration is needed.
 
 You can run this example with:
 
@@ -11,7 +11,7 @@ cd fable-5-coding
 
 ## What This Tests
 
-Claude Fable 5 is Anthropic's most powerful model — a new tier above Opus. This example evaluates:
+Claude Fable 5.1 is Anthropic's most capable model, in a tier above Opus; Fable 5 is its predecessor at the same price. This example evaluates:
 
 - **Distributed-systems debugging** with incomplete information
 - **Production-quality code generation** with concurrency concerns

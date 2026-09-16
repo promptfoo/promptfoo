@@ -77,7 +77,7 @@ Use these when the provider is already known and does not need discovery:
 ```yaml
 providers:
   - openai:chat:gpt-4.1-mini
-  - anthropic:messages:claude-sonnet-4-6
+  - anthropic:messages:claude-sonnet-5
   - echo
 ```
 

@@ -4,7 +4,10 @@ description: Compare AI models with AI/ML API
 providers:
   - aimlapi:chat:deepseek-r1
   - aimlapi:chat:gpt-4.1-mini
-  - aimlapi:chat:claude-4-sonnet
+  - id: aimlapi:chat:claude-sonnet-5
+    config:
+      # The gateway wrapper sends `temperature: 0` by default; Claude 5 rejects it.
+      omitDefaults: true
 
 prompts:
   - 'Tell me a joke about {{topic}}'
