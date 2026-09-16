@@ -62,6 +62,8 @@ Hydra manages attacker-side history and backtracking. Your target provider manag
 
 Hydra keeps a per-scan memory so later test cases can reuse successful tactics discovered earlier in the run.
 
+Probe counts include cached target turns. Messages rejected by the configured `maxCharsPerMessage` limit do not count as probes; if every message is rejected, the result is an error.
+
 ## Hydra vs Other Agentic Strategies
 
 | Strategy          | Turn Model           | Best For                          | Cost Profile |

@@ -431,7 +431,7 @@ export class GeminiImageProvider implements ApiProvider {
       ? {
           cached: data.usageMetadata?.totalTokenCount,
           total: data.usageMetadata?.totalTokenCount,
-          numRequests: 1,
+          numRequests: 0,
         }
       : {
           prompt: data.usageMetadata?.promptTokenCount,

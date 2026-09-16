@@ -345,6 +345,8 @@ export class HydraProvider implements ApiProvider {
     }> = [];
 
     const totalTokenUsage: TokenUsage = createEmptyTokenUsage();
+    // Cached target turns count as probes; rejected prompts do not.
+    let targetProbeCount = 0;
     const testRunId = `${context?.evaluationId || 'local'}-tc${context?.testCaseId || crypto.randomUUID().slice(0, 8)}`;
 
     let vulnerabilityAchieved = false;
@@ -681,6 +683,9 @@ export class HydraProvider implements ApiProvider {
         options,
       );
       lastTargetResponse = targetResponse;
+      if (targetResponse.cached || targetResponse.tokenUsage?.numRequests !== 0) {
+        targetProbeCount++;
+      }
       accumulateResponseTokenUsage(totalTokenUsage, targetResponse);
 
       // Fetch trace context if tracing is enabled
@@ -1020,7 +1025,7 @@ export class HydraProvider implements ApiProvider {
       role: msg.role,
       content: msg.content,
     })) as Record<string, any>[];
-    const targetProbeCount = totalTokenUsage.numRequests ?? 0;
+    totalTokenUsage.numRequests = targetProbeCount;
     const roundsCompleted = this.conversationHistory.filter((m) => m.role === 'user').length;
     const failClosedError =
       targetProbeCount === 0

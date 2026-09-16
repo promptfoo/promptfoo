@@ -495,7 +495,7 @@ describe('generateEvalSummary', () => {
 
       expect(output).toContain('Total Tokens: 0');
       expect(output).toContain('Generation: token usage unavailable (1 request)');
-      expect(output).not.toContain('Probes:');
+      expect(output).toContain('Probes: 0');
     });
 
     it('displays attacker-only usage without treating internal requests as target probes', () => {
@@ -525,7 +525,7 @@ describe('generateEvalSummary', () => {
       expect(output).toContain('Attacker: 73 (45 prompt, 28 completion)');
       expect(output).not.toContain('Target:');
       expect(output).not.toContain('Grading:');
-      expect(output).not.toContain('Probes:');
+      expect(output).toContain('Probes: 0');
     });
 
     it('should show 100% cached correctly', () => {
@@ -554,6 +554,30 @@ describe('generateEvalSummary', () => {
 
       expect(output).toContain('Tokens:');
       expect(output).toContain('Provider: 1,000 (cached)');
+    });
+
+    it('should show zero probes for a fully cached redteam evaluation', () => {
+      const params: EvalSummaryParams = {
+        evalId: 'redteam-cached',
+        isRedteam: true,
+        writeToDatabase: false,
+        shareableUrl: null,
+        wantsToShare: false,
+        hasExplicitDisable: false,
+        cloudEnabled: false,
+        tokenUsage: { total: 1000, cached: 1000, numRequests: 0 },
+        successes: 5,
+        failures: 0,
+        errors: 0,
+        duration: 5000,
+        maxConcurrency: 4,
+        tracker: mockTracker,
+      };
+
+      const output = stripAnsi(generateEvalSummary(params).join('\n'));
+
+      expect(output).toContain('Probes: 0');
+      expect(output).toContain('Target: 1,000 (cached)');
     });
 
     it('should show partial cached tokens', () => {
