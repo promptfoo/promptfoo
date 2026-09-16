@@ -1,9 +1,9 @@
 import * as fs from 'fs';
 import * as path from 'path';
 
-import yaml from 'js-yaml';
 import cliState from '../cliState';
 import { parseFileUrl } from '../util/functions/loadFunction';
+import { loadYaml } from '../util/yamlLoad';
 
 import type { AssertionOrSet } from '../types';
 
@@ -101,7 +101,7 @@ function loadAssertionFile(resolvedPath: string): unknown {
     }
   }
   try {
-    return yaml.load(contents);
+    return loadYaml(contents);
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     throw new Error(`Failed to parse YAML assertion file ${resolvedPath}: ${message}`);

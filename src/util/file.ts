@@ -4,7 +4,6 @@ import * as path from 'path';
 
 import { type Options as CsvOptions, parse as csvParse } from 'csv-parse/sync';
 import { globSync, hasMagic } from 'glob';
-import yaml from 'js-yaml';
 import nunjucks from 'nunjucks';
 import cliState from '../cliState';
 import { getEnvBool } from '../envars';
@@ -15,6 +14,7 @@ import { isJavascriptFile } from './fileExtensions';
 import { parseFileUrl } from './functions/loadFunction';
 import { safeResolve } from './pathUtils';
 import { renderVarsInObject } from './render';
+import { loadYaml } from './yamlLoad';
 
 import type { NunjucksFilterMap, OutputFile, VarValue } from '../types';
 
@@ -59,6 +59,14 @@ export function getNunjucksEngineForFilePath(): nunjucks.Environment {
 }
 
 /**
+ * Script files whose `file://` references are executed at runtime by the assertion
+ * system rather than read as data by the generic config loader.
+ */
+function isScriptFileRef(filePath: string): boolean {
+  return isJavascriptFile(filePath) || filePath.endsWith('.py') || filePath.endsWith('.rb');
+}
+
+/**
  * Loads content from an external file if the input is a file path, otherwise
  * returns the input as-is. Supports Nunjucks templating for file paths.
  *
@@ -100,10 +108,7 @@ export function maybeLoadFromExternalFile(
   // In assertion contexts, always preserve Python/JS/Ruby file references
   // This prevents premature dereferencing of assertion files that should be
   // handled by the assertion system, not the generic config loader
-  if (
-    context === 'assertion' &&
-    (cleanPath.endsWith('.py') || isJavascriptFile(cleanPath) || cleanPath.endsWith('.rb'))
-  ) {
+  if (context === 'assertion' && isScriptFileRef(cleanPath)) {
     logger.debug(
       `Preserving Python/JS/Ruby file reference in assertion context: ${renderedFilePath}`,
     );
@@ -122,17 +127,13 @@ export function maybeLoadFromExternalFile(
   // For Python/JS/Ruby files with function names, return the original string unchanged
   // to allow the assertion system to handle function loading at execution time.
   // This prevents premature file existence checks that would fail for function references.
-  if (
-    functionName &&
-    (cleanPath.endsWith('.py') || isJavascriptFile(cleanPath) || cleanPath.endsWith('.rb'))
-  ) {
+  if (functionName && isScriptFileRef(cleanPath)) {
     return renderedFilePath;
   }
 
   // For non-script files, use the original path (ignore potential function name)
   const pathToUse =
-    functionName &&
-    !(cleanPath.endsWith('.py') || isJavascriptFile(cleanPath) || cleanPath.endsWith('.rb'))
+    functionName && !isScriptFileRef(cleanPath)
       ? renderedFilePath.slice('file://'.length) // Use original path for non-script files
       : cleanPath;
 
@@ -171,7 +172,7 @@ export function maybeLoadFromExternalFile(
           allContents.push(parsed);
         }
       } else if (matchedFile.endsWith('.yaml') || matchedFile.endsWith('.yml')) {
-        const parsed = yaml.load(contents);
+        const parsed = loadYaml(contents);
         if (parsed === null || parsed === undefined) {
           continue; // Skip empty files
         }
@@ -220,7 +221,7 @@ export function maybeLoadFromExternalFile(
   }
   if (finalPath.endsWith('.yaml') || finalPath.endsWith('.yml')) {
     try {
-      return yaml.load(contents);
+      return loadYaml(contents);
     } catch (error) {
       throw new Error(`Failed to parse YAML file ${finalPath}: ${error}`);
     }
