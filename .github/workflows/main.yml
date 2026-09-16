@@ -83,6 +83,7 @@ jobs:
         uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
         with:
           fetch-depth: 2
+          persist-credentials: false
 
       - name: Use Node ${{ matrix.node }}
         uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6
@@ -132,6 +133,13 @@ jobs:
           PROMPTFOO_IGNORE_UNHANDLED_TEST_ERRORS: 'true'
         run: npm run test${{ matrix.shard && format(' -- --shard={0}/3', matrix.shard) || '' }}${{ matrix.os == 'ubuntu-latest' && matrix.node == '22.22' && !matrix.shard && ' -- --coverage' || '' }}
 
+      - name: Run built agent skill examples
+        if: matrix.os != 'ubuntu-latest' && (!matrix.shard || matrix.shard == '1')
+        run: |
+          npx tsdown
+          npm run postbuild
+          npm run test:smoke -- test/smoke/agent-skill-examples.test.ts
+
       - name: Check Backend Coverage Ratchets
         if: matrix.os == 'ubuntu-latest' && matrix.node == '22.22' && !matrix.shard
         run: npm run test:coverage:ratchet -- --report backend
@@ -165,6 +173,8 @@ jobs:
     steps:
       - name: Checkout repo
         uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
+        with:
+          persist-credentials: false
 
       - name: Use Node ${{ matrix.node }}
         uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6
@@ -214,6 +224,11 @@ jobs:
         env:
           PROMPTFOO_DISABLE_TELEMETRY: 1
         run: npm run test:package-artifact
+
+      - name: Run built agent skill examples
+        env:
+          PROMPTFOO_POSTHOG_KEY: ''
+        run: npm run test:smoke -- test/smoke/agent-skill-examples.test.ts
 
   style-check:
     name: Style Check

@@ -109,6 +109,7 @@ describe('OpenAiResponsesProvider model registry', () => {
 
   it('should include all expected model names', async () => {
     expect(OpenAiResponsesProvider.OPENAI_RESPONSES_MODEL_NAMES).toContain('gpt-4o');
+    expect(OpenAiResponsesProvider.OPENAI_RESPONSES_MODEL_NAMES).not.toContain('gpt-4o-2024-07-18');
     expect(OpenAiResponsesProvider.OPENAI_RESPONSES_MODEL_NAMES).toContain('gpt-4o-2024-08-06');
     expect(OpenAiResponsesProvider.OPENAI_RESPONSES_MODEL_NAMES).toContain('gpt-4o-2024-11-20');
     expect(OpenAiResponsesProvider.OPENAI_RESPONSES_MODEL_NAMES).toContain('gpt-4o-2024-05-13');

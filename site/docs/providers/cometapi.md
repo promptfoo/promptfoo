@@ -38,7 +38,7 @@ Where `<type>` can be:
 
 You can also use `cometapi:<model>` which defaults to chat mode.
 
-Choose a model that supports the selected endpoint. CometAPI also offers other protocols: its [GPT-6 Astra tool-calling guidance](https://apidoc.cometapi.com/api/text/chat) requires Responses, and its [FLUX.2 Pro quickstart](https://apidoc.cometapi.com/quickstarts/image/flux-api) requires task submission and polling. The `cometapi:` modes above do not implement those flows. A [custom provider](/docs/providers/custom-api/) can use their required endpoints and handle polling.
+Choose a model that supports the selected endpoint. CometAPI's [GPT-6 Astra tool-calling guidance](https://apidoc.cometapi.com/api/text/chat) uses the [OpenAI Responses API](https://apidoc.cometapi.com/api/text/responses) at `/v1/responses`, and its [FLUX.2 Pro quickstart](https://apidoc.cometapi.com/quickstarts/image/flux-api) requires task submission and polling. The `cometapi:` modes above do not implement those flows. A [custom provider](/docs/providers/custom-api/) can use their required endpoints and handle polling.
 
 ### Examples
 
@@ -84,8 +84,7 @@ Each mode accepts its corresponding OpenAI-compatible configuration options. Par
 providers:
   - id: cometapi:chat:gpt-5-mini
     config:
-      temperature: 0.7
-      max_tokens: 512
+      max_completion_tokens: 512
   - id: cometapi:image:dall-e-3
     config:
       n: 1
@@ -115,11 +114,7 @@ npx promptfoo@latest eval --prompts "Write a haiku about AI" -r cometapi:chat:gp
 npx promptfoo@latest eval --prompts "A futuristic robot in a garden" -r cometapi:image:dall-e-3
 ```
 
-**Vision/Multimodal:**
-
-```bash
-npx promptfoo@latest eval --prompts "Describe what's in this image: {{image_url}}" --vars image_url="https://example.com/image.jpg" -r cometapi:chat:gpt-4o
-```
+For image input, use a message with an `image_url` content part, as shown in the vision configuration below. A URL in a plain text prompt is sent as text.
 
 ### Configuration Examples
 
@@ -146,15 +141,20 @@ tests:
 
 **Vision Model Configuration:**
 
-```yaml
+```yaml title="promptfooconfig.yaml"
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+prompts:
+  - |
+    [{"role": "user", "content": [
+      {"type": "text", "text": {{question | dump}}},
+      {"type": "image_url", "image_url": {"url": {{image_url | dump}}}}
+    ]}]
+
 providers:
   - id: cometapi:chat:gpt-4o
     config:
       max_tokens: 1000
       temperature: 0.3
-
-prompts:
-  - file://./vision-prompt.yaml
 
 tests:
   - vars:
@@ -172,15 +172,7 @@ curl -H "Authorization: Bearer $COMETAPI_KEY" https://api.cometapi.com/v1/models
 
 Or browse models on the [CometAPI pricing page](https://api.cometapi.com/pricing).
 
-**Selecting a model:** Use the exact CometAPI model ID with the matching type prefix. A catalog entry alone does not establish support for every endpoint or feature:
-
-- `cometapi:chat:<model>` for Chat Completions models
-- `cometapi:image:<model>` for synchronous Images API models
-- `cometapi:embedding:<model>` for Embeddings API models
-- `cometapi:completion:<model>` for legacy Completions API models
-- `cometapi:<model>` (defaults to chat mode)
-
-For example, the [GPT Image quickstart](https://apidoc.cometapi.com/quickstarts/image/gpt-image-api) returns `b64_json`, while FLUX.2 Pro returns a task ID from a different endpoint. Changing an image model name does not make those response formats interchangeable. Native vendor retirement dates also do not establish whether a CometAPI alias is available; check CometAPI's documentation for that exact ID.
+Use the exact CometAPI model ID with the matching type prefix from the configuration section. Check that model's API reference for endpoint and feature support. For example, the [GPT Image quickstart](https://apidoc.cometapi.com/quickstarts/image/gpt-image-api) returns a completed `b64_json` image, while FLUX.2 Pro requires the asynchronous flow described above.
 
 ## Environment Variables
 

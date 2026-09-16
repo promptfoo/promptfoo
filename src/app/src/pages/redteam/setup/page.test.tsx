@@ -156,6 +156,43 @@ describe('RedTeamSetupPage', () => {
     });
   });
 
+  it.each(['network', 'server', 'success'])(
+    'updates dirty state for the %s save outcome',
+    async (outcome) => {
+      const user = userEvent.setup();
+      render(
+        <MemoryRouter>
+          <RedTeamSetupPage />
+        </MemoryRouter>,
+      );
+      await user.click(screen.getByRole('button', { name: 'Config' }));
+      await user.click(screen.getByRole('menuitem', { name: 'Save Config' }));
+      await user.type(screen.getByLabelText('Configuration Name'), 'Test config');
+      expect(screen.getAllByText(/Unsaved changes/).length).toBeGreaterThan(0);
+      if (outcome === 'network') {
+        mockedCallApi.mockRejectedValueOnce(new Error('Save failed'));
+      } else {
+        mockedCallApi.mockResolvedValueOnce({
+          ok: outcome === 'success',
+          json: async () =>
+            outcome === 'success' ? { createdAt: '2026-09-11' } : { error: 'Save failed' },
+        } as Response);
+      }
+      await user.click(screen.getByRole('button', { name: /^Save$/ }));
+      await waitFor(() =>
+        expect(mockedUseToast().showToast).toHaveBeenCalledWith(
+          outcome === 'success' ? 'Configuration saved successfully' : 'Save failed',
+          outcome === 'success' ? 'success' : 'error',
+        ),
+      );
+      if (outcome === 'success') {
+        expect(screen.queryByText(/Unsaved changes/)).not.toBeInTheDocument();
+      } else {
+        expect(screen.getAllByText(/Unsaved changes/).length).toBeGreaterThan(0);
+      }
+    },
+  );
+
   describe('URL Hash Updates', () => {
     it('should update the URL hash when the tab state changes', async () => {
       const user = userEvent.setup();
@@ -443,5 +480,52 @@ redteam:
         expect(providerType).toBe('openai');
       });
     });
+
+    it.each([
+      ['vertex:gemini-3.1-pro-preview', 'global'],
+      ['vertex:gemini-2.5-pro', undefined],
+      ['vertex:gemini-3.6-flash', 'global'],
+      ['vertex:gemini-3.7-flash', 'global'],
+      ['vertex:gemini-3.8-flash', 'global'],
+    ])(
+      'should preserve legacy Vertex target ID %s when loading a YAML config',
+      async (targetId, region) => {
+        const user = userEvent.setup();
+
+        render(
+          <MemoryRouter initialEntries={['/redteam/setup']}>
+            <RedTeamSetupPage />
+          </MemoryRouter>,
+        );
+
+        const loadButton = screen.getByRole('button', { name: /Load Config/i });
+        await user.click(loadButton);
+
+        const yamlContent = `
+description: Legacy Vertex target config
+targets:
+  - ${targetId}
+prompts:
+  - "{{prompt}}"
+redteam:
+  purpose: Test purpose
+  plugins:
+    - shell-injection
+`;
+        const file = new File([yamlContent], 'config.yaml', { type: 'text/yaml' });
+
+        const fileInput = document.querySelector('input[type="file"]') as HTMLInputElement;
+        expect(fileInput).toBeTruthy();
+        await user.upload(fileInput, file);
+
+        await waitFor(() => {
+          const { config, providerType } = useRedTeamConfig.getState();
+          expect(config.target.id).toBe(targetId);
+          expect(config.target.label).toBe(targetId);
+          expect(config.target.config?.region).toBe(region);
+          expect(providerType).toBe('vertex');
+        });
+      },
+    );
   });
 });
