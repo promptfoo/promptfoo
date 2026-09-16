@@ -86,27 +86,28 @@ describe('provider-tokenlab README', () => {
   // own vendor env vars (ANTHROPIC_API_KEY / GOOGLE_API_KEY / GEMINI_API_KEY), so a
   // snippet that sets `apiBaseUrl` without `apiKey` resolves no credential at all
   // and sends an unauthenticated request.
-  describe.each(
-    providerBlocks.map((block, i) => [i, block] as const),
-  )('yaml snippet #%i', (_index, block) => {
-    it('resolves the TokenLab key for every provider', async () => {
-      const config = await readConfig(writeConfig(block));
-      const providers = (await loadApiProviders(config.providers as any)) as Array<{
-        id: () => string;
-        getApiKey?: () => string | undefined;
-      }>;
+  describe.each(providerBlocks.map((block, i) => [i, block] as const))(
+    'yaml snippet #%i',
+    (_index, block) => {
+      it('resolves the TokenLab key for every provider', async () => {
+        const config = await readConfig(writeConfig(block));
+        const providers = (await loadApiProviders(config.providers as any)) as Array<{
+          id: () => string;
+          getApiKey?: () => string | undefined;
+        }>;
 
-      expect(providers.length).toBeGreaterThan(0);
+        expect(providers.length).toBeGreaterThan(0);
 
-      for (const provider of providers) {
-        expect(
-          provider.getApiKey?.(),
-          `Provider "${provider.id()}" in the README resolves no TokenLab credential. ` +
-            `Add apiKey: '{{env.TOKENLAB_API_KEY}}' to its config.`,
-        ).toBe(TOKENLAB_KEY);
-      }
-    });
-  });
+        for (const provider of providers) {
+          expect(
+            provider.getApiKey?.(),
+            `Provider "${provider.id()}" in the README resolves no TokenLab credential. ` +
+              `Add apiKey: '{{env.TOKENLAB_API_KEY}}' to its config.`,
+          ).toBe(TOKENLAB_KEY);
+        }
+      });
+    },
+  );
 
   it('example promptfooconfig.yaml also authenticates from TOKENLAB_API_KEY alone', async () => {
     const config = await readConfig(
