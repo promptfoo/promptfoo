@@ -8,7 +8,7 @@ import {
   type MockApiProvider,
 } from '../factories/provider';
 
-import type { ApiProvider } from '../../src/types/index';
+import type { ApiProvider, CallApiContextParams } from '../../src/types/index';
 
 vi.mock('../../src/util/time', async (importOriginal) => {
   return {
@@ -21,6 +21,8 @@ vi.mock('../../src/util/fetch/index.ts');
 
 // Mock PromptfooSimulatedUserProvider
 const mockUserProviderCallApi = vi.fn().mockResolvedValue({ output: 'user response' });
+const mockLoadApiProvider = vi.hoisted(() => vi.fn());
+const mockCustomUserProviderCallApi = vi.hoisted(() => vi.fn());
 vi.mock('../../src/providers/promptfoo', async (importOriginal) => {
   return {
     ...(await importOriginal()),
@@ -35,6 +37,10 @@ vi.mock('../../src/providers/promptfoo', async (importOriginal) => {
   };
 });
 
+vi.mock('../../src/providers/index', () => ({
+  loadApiProvider: mockLoadApiProvider,
+}));
+
 describe('SimulatedUser', () => {
   let simulatedUser: SimulatedUser;
   let originalProvider: MockApiProvider;
@@ -42,6 +48,9 @@ describe('SimulatedUser', () => {
   beforeEach(() => {
     mockUserProviderCallApi.mockClear();
     mockUserProviderCallApi.mockResolvedValue({ output: 'user response' });
+    mockLoadApiProvider.mockReset();
+    mockCustomUserProviderCallApi.mockReset();
+    mockCustomUserProviderCallApi.mockResolvedValue({ output: 'custom user response' });
 
     originalProvider = createMockProvider({
       id: 'test-agent',
@@ -98,6 +107,668 @@ describe('SimulatedUser', () => {
       expect(result.tokenUsage?.numRequests).toBe(4);
       expect(originalProvider.callApi).toHaveBeenCalledTimes(2);
       expect(timeUtils.sleep).not.toHaveBeenCalled();
+    });
+
+    it('should load a configured custom user provider', async () => {
+      const customUserProvider = createMockProvider({
+        id: 'custom-user-provider',
+        callApi: mockCustomUserProviderCallApi.mockResolvedValue({
+          output: 'custom user response ###STOP###',
+          tokenUsage: { numRequests: 1 },
+        }),
+      });
+      mockLoadApiProvider.mockResolvedValue(customUserProvider);
+
+      const userWithCustomProvider = new SimulatedUser({
+        config: {
+          instructions: 'Act as a {{role}} user.',
+          maxTurns: 1,
+          userProvider: {
+            id: 'openai:chat:gpt-4.1-mini',
+            config: {
+              temperature: 0.2,
+            },
+          },
+        },
+      });
+
+      const result = await userWithCustomProvider.callApi('test prompt', {
+        originalProvider,
+        vars: { role: 'curious' },
+        prompt: { raw: 'test', display: 'test', label: 'test' },
+      });
+
+      expect(mockLoadApiProvider).toHaveBeenCalledWith('openai:chat:gpt-4.1-mini', {
+        basePath: undefined,
+        env: undefined,
+        options: {
+          id: 'openai:chat:gpt-4.1-mini',
+          config: {
+            temperature: 0.2,
+          },
+        },
+      });
+      expect(mockCustomUserProviderCallApi).toHaveBeenCalledTimes(1);
+      const customUserPrompt = JSON.parse(mockCustomUserProviderCallApi.mock.calls[0][0]);
+      expect(customUserPrompt).toHaveLength(2);
+      expect(customUserPrompt[0]).toMatchObject({ role: 'system' });
+      expect(customUserPrompt[0].content).toContain(
+        'You are simulating the user in a conversation with an assistant.',
+      );
+      expect(customUserPrompt[0].content).toContain('produce only the next user message');
+      expect(customUserPrompt[0].content).toContain('include ###STOP###');
+      expect(customUserPrompt[0].content).toContain('Act as a curious user.');
+      expect(customUserPrompt[1]).toMatchObject({ role: 'user' });
+      expect(originalProvider.callApi).not.toHaveBeenCalled();
+      expect(result.tokenUsage?.numRequests).toBe(1);
+    });
+
+    it('should send a kickoff user message on the first turn so the history is never empty', async () => {
+      const customUserProvider = createMockProvider({
+        id: 'custom-user-provider',
+        callApi: mockCustomUserProviderCallApi
+          .mockResolvedValueOnce({ output: 'first user message' })
+          .mockResolvedValueOnce({ output: 'second user message ###STOP###' }),
+      });
+      mockLoadApiProvider.mockResolvedValue(customUserProvider);
+
+      originalProvider.callApi.mockReset().mockResolvedValue({ output: 'agent reply' });
+
+      const userWithCustomProvider = new SimulatedUser({
+        config: {
+          instructions: 'test instructions',
+          maxTurns: 2,
+          userProvider: 'openai:chat:gpt-4.1-mini',
+        },
+      });
+
+      await userWithCustomProvider.callApi('test prompt', {
+        originalProvider,
+        vars: {},
+        prompt: { raw: 'test', display: 'test', label: 'test' },
+      });
+
+      // First turn: [system, kickoff user message] so chat APIs that hoist the
+      // system prompt (e.g. Anthropic) never see an empty messages array.
+      const firstPrompt = JSON.parse(mockCustomUserProviderCallApi.mock.calls[0][0]);
+      expect(firstPrompt).toHaveLength(2);
+      expect(firstPrompt[1].role).toBe('user');
+      expect(firstPrompt[1].content).toContain('conversation has not started');
+
+      // Later turns: real flipped history replaces the kickoff message.
+      const secondPrompt = JSON.parse(mockCustomUserProviderCallApi.mock.calls[1][0]);
+      expect(secondPrompt.map((m: { role: string }) => m.role)).toEqual([
+        'system',
+        'assistant',
+        'user',
+      ]);
+      expect(JSON.stringify(secondPrompt)).not.toContain('conversation has not started');
+    });
+
+    it('should include custom provider system instructions even when rendered instructions are empty', async () => {
+      const customUserProvider = createMockProvider({
+        id: 'custom-user-provider',
+        callApi: mockCustomUserProviderCallApi.mockResolvedValue({
+          output: 'custom user response ###STOP###',
+        }),
+      });
+      mockLoadApiProvider.mockResolvedValue(customUserProvider);
+
+      const userWithCustomProvider = new SimulatedUser({
+        config: {
+          instructions: '{{instructions}}',
+          maxTurns: 1,
+          userProvider: 'openai:chat:gpt-4.1-mini',
+        },
+      });
+
+      await userWithCustomProvider.callApi('test prompt', {
+        originalProvider,
+        vars: {},
+        prompt: { raw: 'target prompt', display: 'target prompt', label: 'target' },
+      });
+
+      const customUserPrompt = JSON.parse(mockCustomUserProviderCallApi.mock.calls[0][0]);
+      expect(customUserPrompt).toHaveLength(2);
+      expect(customUserPrompt[0]).toMatchObject({ role: 'system' });
+      expect(customUserPrompt[0].content).toContain(
+        'You are simulating the user in a conversation with an assistant.',
+      );
+      expect(customUserPrompt[0].content).toContain('User simulation instructions:');
+      expect(customUserPrompt[1]).toMatchObject({ role: 'user' });
+    });
+
+    it('should preserve replacement tokens literally in custom provider instructions', async () => {
+      const customUserProvider = createMockProvider({
+        id: 'custom-user-provider',
+        callApi: mockCustomUserProviderCallApi.mockResolvedValue({
+          output: 'custom user response ###STOP###',
+        }),
+      });
+      mockLoadApiProvider.mockResolvedValue(customUserProvider);
+
+      const userWithCustomProvider = new SimulatedUser({
+        config: {
+          instructions: "Keep $$, $&, and $' literal.",
+          maxTurns: 1,
+          userProvider: 'openai:chat:gpt-4.1-mini',
+        },
+      });
+
+      await userWithCustomProvider.callApi('test prompt', {
+        originalProvider,
+        vars: {},
+        prompt: { raw: 'target prompt', display: 'target prompt', label: 'target' },
+      });
+
+      const customUserPrompt = JSON.parse(mockCustomUserProviderCallApi.mock.calls[0][0]);
+      expect(customUserPrompt[0].content).toContain("Keep $$, $&, and $' literal.");
+    });
+
+    it('should pass vars to custom user providers without target prompt config', async () => {
+      const customUserProvider = createMockProvider({
+        id: 'custom-user-provider',
+        callApi: mockCustomUserProviderCallApi.mockResolvedValue({
+          output: 'custom user response ###STOP###',
+        }),
+      });
+      mockLoadApiProvider.mockResolvedValue(customUserProvider);
+
+      const userWithCustomProvider = new SimulatedUser({
+        config: {
+          instructions: 'Act as {{role}}.',
+          maxTurns: 1,
+          userProvider: 'file://user-provider.yaml',
+        },
+      });
+
+      await userWithCustomProvider.callApi('test prompt', {
+        originalProvider,
+        vars: { role: 'curious', accountId: 'acct_123' },
+        prompt: {
+          raw: 'target prompt {{accountId}}',
+          display: 'target prompt {{accountId}}',
+          label: 'target',
+          config: {
+            temperature: 0.9,
+          },
+        },
+      });
+
+      expect(mockCustomUserProviderCallApi).toHaveBeenCalledTimes(1);
+      const [customUserPrompt, customUserContext] = mockCustomUserProviderCallApi.mock.calls[0];
+      expect(customUserContext?.vars).toMatchObject({
+        role: 'curious',
+        accountId: 'acct_123',
+      });
+      expect(customUserContext?.prompt.raw).toBe(customUserPrompt);
+      expect(customUserContext?.prompt.label).toBe('simulated-user');
+      expect(customUserContext?.prompt).not.toHaveProperty('config');
+      expect(customUserContext?.prompt.raw).not.toContain('target prompt');
+      expect(customUserContext).not.toHaveProperty('originalProvider');
+    });
+
+    it('should pass call options to custom user providers', async () => {
+      const customUserProvider = createMockProvider({
+        id: 'custom-user-provider',
+        callApi: mockCustomUserProviderCallApi.mockResolvedValue({
+          output: 'custom user response ###STOP###',
+        }),
+      });
+      mockLoadApiProvider.mockResolvedValue(customUserProvider);
+      const abortController = new AbortController();
+
+      const userWithCustomProvider = new SimulatedUser({
+        config: {
+          instructions: 'test instructions',
+          maxTurns: 1,
+          userProvider: 'openai:chat:gpt-4.1-mini',
+        },
+      });
+
+      await userWithCustomProvider.callApi(
+        'test prompt',
+        {
+          originalProvider,
+          vars: {},
+          prompt: { raw: 'test', display: 'test', label: 'test' },
+        },
+        { abortSignal: abortController.signal },
+      );
+
+      expect(mockCustomUserProviderCallApi.mock.calls[0][2]).toEqual({
+        abortSignal: abortController.signal,
+      });
+    });
+
+    it('should preserve custom user provider sessions separately from target sessions', async () => {
+      const customUserProvider = createMockProvider({
+        id: 'custom-user-provider',
+        callApi: mockCustomUserProviderCallApi
+          .mockResolvedValueOnce({
+            output: 'first custom user response',
+            sessionId: 'user-provider-session',
+          })
+          .mockResolvedValueOnce({
+            output: 'second custom user response ###STOP###',
+          }),
+      });
+      mockLoadApiProvider.mockResolvedValue(customUserProvider);
+
+      originalProvider.callApi
+        .mockReset()
+        .mockResolvedValueOnce({
+          output: 'first agent response',
+          sessionId: 'target-session',
+        })
+        .mockResolvedValueOnce({
+          output: 'second agent response',
+        });
+
+      const userWithCustomProvider = new SimulatedUser({
+        config: {
+          instructions: 'test instructions',
+          maxTurns: 2,
+          userProvider: 'openai:chat:gpt-4.1-mini',
+        },
+      });
+      const context: CallApiContextParams = {
+        originalProvider,
+        vars: {},
+        prompt: { raw: 'test', display: 'test', label: 'test' },
+      };
+
+      await userWithCustomProvider.callApi('test prompt', context);
+
+      expect(mockCustomUserProviderCallApi).toHaveBeenCalledTimes(2);
+      expect(mockCustomUserProviderCallApi.mock.calls[0][1]?.vars.sessionId).toBeUndefined();
+      expect(mockCustomUserProviderCallApi.mock.calls[1][1]?.vars.sessionId).toBe(
+        'user-provider-session',
+      );
+      expect(context.vars.sessionId).toBe('target-session');
+    });
+
+    it('should not forward target session ids to custom user providers', async () => {
+      const customUserProvider = createMockProvider({
+        id: 'custom-user-provider',
+        callApi: mockCustomUserProviderCallApi
+          .mockResolvedValueOnce({
+            output: 'first custom user response',
+          })
+          .mockResolvedValueOnce({
+            output: 'second custom user response ###STOP###',
+          }),
+      });
+      mockLoadApiProvider.mockResolvedValue(customUserProvider);
+
+      originalProvider.callApi.mockReset().mockResolvedValueOnce({
+        output: 'first agent response',
+        sessionId: 'target-session',
+      });
+
+      const userWithCustomProvider = new SimulatedUser({
+        config: {
+          instructions: 'test instructions',
+          maxTurns: 2,
+          userProvider: 'openai:chat:gpt-4.1-mini',
+        },
+      });
+
+      await userWithCustomProvider.callApi('test prompt', {
+        originalProvider,
+        vars: {},
+        prompt: { raw: 'test', display: 'test', label: 'test' },
+      });
+
+      expect(mockCustomUserProviderCallApi).toHaveBeenCalledTimes(2);
+      expect(mockCustomUserProviderCallApi.mock.calls[1][1]?.vars.sessionId).toBeUndefined();
+    });
+
+    it('should preserve test-level session ids for custom user providers', async () => {
+      const customUserProvider = createMockProvider({
+        id: 'custom-user-provider',
+        callApi: mockCustomUserProviderCallApi
+          .mockResolvedValueOnce({
+            output: 'first custom user response',
+          })
+          .mockResolvedValueOnce({
+            output: 'second custom user response ###STOP###',
+          }),
+      });
+      mockLoadApiProvider.mockResolvedValue(customUserProvider);
+
+      originalProvider.callApi.mockReset().mockResolvedValueOnce({
+        output: 'first agent response',
+        sessionId: 'target-session',
+      });
+
+      const userWithCustomProvider = new SimulatedUser({
+        config: {
+          instructions: 'test instructions',
+          maxTurns: 2,
+          userProvider: 'openai:chat:gpt-4.1-mini',
+        },
+      });
+
+      await userWithCustomProvider.callApi('test prompt', {
+        originalProvider,
+        vars: { sessionId: 'user-session-from-vars' },
+        prompt: { raw: 'test', display: 'test', label: 'test' },
+      });
+
+      expect(mockCustomUserProviderCallApi).toHaveBeenCalledTimes(2);
+      expect(mockCustomUserProviderCallApi.mock.calls[0][1]?.vars.sessionId).toBe(
+        'user-session-from-vars',
+      );
+      expect(mockCustomUserProviderCallApi.mock.calls[1][1]?.vars.sessionId).toBe(
+        'user-session-from-vars',
+      );
+    });
+
+    it('should apply delay configured on custom user providers', async () => {
+      const customUserProvider = createMockProvider({
+        id: 'custom-user-provider',
+        callApi: mockCustomUserProviderCallApi.mockResolvedValue({
+          output: 'custom user response ###STOP###',
+        }),
+        delay: 250,
+      });
+      mockLoadApiProvider.mockResolvedValue(customUserProvider);
+
+      const userWithCustomProvider = new SimulatedUser({
+        config: {
+          instructions: 'test instructions',
+          maxTurns: 1,
+          userProvider: 'openai:chat:gpt-4.1-mini',
+        },
+      });
+
+      await userWithCustomProvider.callApi('test prompt', {
+        originalProvider,
+        vars: {},
+        prompt: { raw: 'test', display: 'test', label: 'test' },
+      });
+
+      expect(timeUtils.sleep).toHaveBeenCalledWith(250);
+    });
+
+    it('should skip the custom user provider delay for cached responses', async () => {
+      const customUserProvider = createMockProvider({
+        id: 'custom-user-provider',
+        callApi: mockCustomUserProviderCallApi.mockResolvedValue({
+          output: 'custom user response ###STOP###',
+          cached: true,
+        }),
+        delay: 250,
+      });
+      mockLoadApiProvider.mockResolvedValue(customUserProvider);
+
+      const userWithCustomProvider = new SimulatedUser({
+        config: {
+          instructions: 'test instructions',
+          maxTurns: 1,
+          userProvider: 'openai:chat:gpt-4.1-mini',
+        },
+      });
+
+      await userWithCustomProvider.callApi('test prompt', {
+        originalProvider,
+        vars: {},
+        prompt: { raw: 'test', display: 'test', label: 'test' },
+      });
+
+      expect(timeUtils.sleep).not.toHaveBeenCalled();
+    });
+
+    it('should apply the custom user provider delay to error responses like the evaluator does', async () => {
+      const customUserProvider = createMockProvider({
+        id: 'custom-user-provider',
+        callApi: mockCustomUserProviderCallApi.mockResolvedValue({
+          error: 'user provider failed',
+        }),
+        delay: 250,
+      });
+      mockLoadApiProvider.mockResolvedValue(customUserProvider);
+
+      const userWithCustomProvider = new SimulatedUser({
+        config: {
+          instructions: 'test instructions',
+          maxTurns: 1,
+          userProvider: 'openai:chat:gpt-4.1-mini',
+        },
+      });
+
+      const result = await userWithCustomProvider.callApi('test prompt', {
+        originalProvider,
+        vars: {},
+        prompt: { raw: 'test', display: 'test', label: 'test' },
+      });
+
+      expect(result.error).toBe('user provider failed');
+      // Rate-limit pacing still applies when the provider errors (e.g. 429s),
+      // matching the evaluator's applyProviderDelayIfNeeded semantics.
+      expect(timeUtils.sleep).toHaveBeenCalledWith(250);
+    });
+
+    it('should pass call options to target providers', async () => {
+      const abortController = new AbortController();
+
+      await simulatedUser.callApi(
+        'test prompt',
+        {
+          originalProvider,
+          vars: { instructions: 'test instructions' },
+          prompt: { raw: 'test', display: 'test', label: 'test' },
+        },
+        { abortSignal: abortController.signal },
+      );
+
+      expect(originalProvider.callApi).toHaveBeenCalled();
+      for (const call of vi.mocked(originalProvider.callApi).mock.calls) {
+        expect(call[2]).toEqual({ abortSignal: abortController.signal });
+      }
+    });
+
+    it('should support custom user providers configured by id', async () => {
+      const customUserProvider = createMockProvider({
+        id: 'custom-user-provider',
+        callApi: mockCustomUserProviderCallApi.mockResolvedValue({
+          output: 'custom user response ###STOP###',
+        }),
+      });
+      mockLoadApiProvider.mockResolvedValue(customUserProvider);
+
+      const userWithCustomProvider = new SimulatedUser({
+        config: {
+          instructions: 'test instructions',
+          maxTurns: 1,
+          userProvider: 'openai:chat:gpt-4.1-mini',
+        },
+      });
+
+      await userWithCustomProvider.callApi('test prompt', {
+        originalProvider,
+        vars: { instructions: 'test instructions' },
+        prompt: { raw: 'test', display: 'test', label: 'test' },
+      });
+
+      expect(mockLoadApiProvider).toHaveBeenCalledWith('openai:chat:gpt-4.1-mini', {
+        basePath: undefined,
+        env: undefined,
+      });
+    });
+
+    it('should reject promptfoo:simulated-user as a custom user provider', async () => {
+      const recursiveUserProvider = new SimulatedUser({
+        config: {
+          instructions: 'test instructions',
+          userProvider: {
+            id: 'promptfoo:simulated-user',
+          },
+        },
+      });
+
+      await expect(
+        recursiveUserProvider.callApi('test prompt', {
+          originalProvider,
+          vars: { instructions: 'test instructions' },
+          prompt: { raw: 'test', display: 'test', label: 'test' },
+        }),
+      ).rejects.toThrow(
+        'config.userProvider cannot be or resolve to a simulated user provider because it would recursively invoke the simulated user provider',
+      );
+      expect(mockLoadApiProvider).not.toHaveBeenCalled();
+    });
+
+    it('should reject custom user providers that resolve to SimulatedUser', async () => {
+      mockLoadApiProvider.mockResolvedValue(
+        new SimulatedUser({
+          config: {
+            instructions: 'nested instructions',
+          },
+        }),
+      );
+
+      const recursiveUserProvider = new SimulatedUser({
+        config: {
+          instructions: 'test instructions',
+          userProvider: 'file://user-provider.yaml',
+        },
+      });
+
+      await expect(
+        recursiveUserProvider.callApi('test prompt', {
+          originalProvider,
+          vars: { instructions: 'test instructions' },
+          prompt: { raw: 'test', display: 'test', label: 'test' },
+        }),
+      ).rejects.toThrow(
+        'config.userProvider cannot be or resolve to a simulated user provider because it would recursively invoke the simulated user provider',
+      );
+    });
+
+    it('should load the custom user provider once and reuse it across calls', async () => {
+      const customUserProvider = createMockProvider({
+        id: 'custom-user-provider',
+        callApi: mockCustomUserProviderCallApi.mockResolvedValue({
+          output: 'custom user response ###STOP###',
+          tokenUsage: { numRequests: 1 },
+        }),
+      });
+      mockLoadApiProvider.mockResolvedValue(customUserProvider);
+
+      const userWithCustomProvider = new SimulatedUser({
+        config: {
+          instructions: 'test instructions',
+          maxTurns: 1,
+          userProvider: { id: 'openai:chat:gpt-4.1-mini' },
+        },
+      });
+
+      const callContext = {
+        originalProvider,
+        vars: { instructions: 'test instructions' },
+        prompt: { raw: 'test', display: 'test', label: 'test' },
+      };
+      await userWithCustomProvider.callApi('test prompt', callContext);
+      await userWithCustomProvider.callApi('test prompt', callContext);
+
+      expect(mockLoadApiProvider).toHaveBeenCalledTimes(1);
+      expect(mockCustomUserProviderCallApi).toHaveBeenCalledTimes(2);
+    });
+
+    it('should retry loading the custom user provider after a failed load', async () => {
+      mockLoadApiProvider.mockRejectedValueOnce(new Error('transient load failure'));
+
+      const userWithCustomProvider = new SimulatedUser({
+        config: {
+          instructions: 'test instructions',
+          maxTurns: 1,
+          userProvider: { id: 'openai:chat:gpt-4.1-mini' },
+        },
+      });
+
+      const callContext = {
+        originalProvider,
+        vars: { instructions: 'test instructions' },
+        prompt: { raw: 'test', display: 'test', label: 'test' },
+      };
+      await expect(userWithCustomProvider.callApi('test prompt', callContext)).rejects.toThrow(
+        'transient load failure',
+      );
+
+      const customUserProvider = createMockProvider({
+        id: 'custom-user-provider',
+        callApi: mockCustomUserProviderCallApi.mockResolvedValue({
+          output: 'custom user response ###STOP###',
+          tokenUsage: { numRequests: 1 },
+        }),
+      });
+      mockLoadApiProvider.mockResolvedValue(customUserProvider);
+
+      const result = await userWithCustomProvider.callApi('test prompt', callContext);
+      expect(result.error).toBeUndefined();
+      expect(mockLoadApiProvider).toHaveBeenCalledTimes(2);
+    });
+
+    it('should forward config.basePath when loading the custom user provider', async () => {
+      const customUserProvider = createMockProvider({
+        id: 'custom-user-provider',
+        callApi: mockCustomUserProviderCallApi.mockResolvedValue({
+          output: 'custom user response ###STOP###',
+          tokenUsage: { numRequests: 1 },
+        }),
+      });
+      mockLoadApiProvider.mockResolvedValue(customUserProvider);
+
+      const userWithCustomProvider = new SimulatedUser({
+        config: {
+          basePath: '/config/dir',
+          instructions: 'test instructions',
+          maxTurns: 1,
+          userProvider: 'file://user-provider.js',
+        },
+      });
+
+      await userWithCustomProvider.callApi('test prompt', {
+        originalProvider,
+        vars: { instructions: 'test instructions' },
+        prompt: { raw: 'test', display: 'test', label: 'test' },
+      });
+
+      expect(mockLoadApiProvider).toHaveBeenCalledWith(
+        'file://user-provider.js',
+        expect.objectContaining({ basePath: '/config/dir' }),
+      );
+    });
+
+    it('should apply the custom user provider response transform', async () => {
+      const customUserProvider = createMockProvider({
+        id: 'custom-user-provider',
+        callApi: mockCustomUserProviderCallApi.mockResolvedValue({
+          output: { nextUserMessage: 'transformed reply' },
+          tokenUsage: { numRequests: 1 },
+        }),
+      });
+      customUserProvider.transform = 'output.nextUserMessage';
+      mockLoadApiProvider.mockResolvedValue(customUserProvider);
+
+      const userWithCustomProvider = new SimulatedUser({
+        config: {
+          instructions: 'test instructions',
+          maxTurns: 1,
+          userProvider: { id: 'openai:chat:gpt-4.1-mini', transform: 'output.nextUserMessage' },
+        },
+      });
+
+      const result = await userWithCustomProvider.callApi('test prompt', {
+        originalProvider,
+        vars: { instructions: 'test instructions' },
+        prompt: { raw: 'test', display: 'test', label: 'test' },
+      });
+
+      expect(result.output).toContain('User: transformed reply');
+      expect(result.output).not.toContain('nextUserMessage');
     });
 
     it('should accumulate token usage from both agent and user providers', async () => {
@@ -189,6 +860,7 @@ describe('SimulatedUser', () => {
           '{"role":"user","content":"{\\"reply\\":\\"I like that idea\\",\\"preference\\":\\"outdoor\\"}"}',
         ),
         expect.anything(),
+        undefined,
       );
     });
 
@@ -294,6 +966,7 @@ describe('SimulatedUser', () => {
             instructions: 'test instructions',
           }),
         }),
+        undefined,
       );
     });
 
