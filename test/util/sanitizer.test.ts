@@ -32,6 +32,34 @@ afterEach(() => {
 });
 
 describe('sanitizeCodingAgentVerifierInputs', () => {
+  it.each(['installReceiptText', 'installReceiptTexts'])(
+    'redacts inline install receipt field %s from persisted configs',
+    (key) => {
+      const receipt = key.endsWith('Texts') ? ['PRIVATE_INSTALL_RECORD'] : 'PRIVATE_INSTALL_RECORD';
+      const input = {
+        providers: [{ id: 'http', config: { [key]: receipt } }],
+        redteam: {
+          plugins: [
+            {
+              id: 'coding-agent:lifecycle-script-execution' as const,
+              config: { [key]: receipt, installReceiptPath: 'receipts/install.txt' },
+            },
+          ],
+        },
+      };
+      const result = sanitizeConfigForPersistence(input);
+      expect(result.redteam?.plugins?.[0]).toMatchObject({
+        config: {
+          [key]: '[REDACTED]',
+          installReceiptPath: 'receipts/install.txt',
+          privateVerifierInputsRedacted: true,
+        },
+      });
+      expect(result.providers).toEqual(input.providers);
+      expect(input.redteam.plugins[0].config[key]).toBe(receipt);
+    },
+  );
+
   it.each(['privateEnv', 'mcpPrivateEnv'])('redacts private environment map %s', (key) => {
     const environment = { PROD_API_TOKEN: 'PRIVATE_ENV_MAP_VALUE', workspace: 'private-project' };
     const input = {
