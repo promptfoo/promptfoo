@@ -189,10 +189,31 @@ describe('config-schema.json', () => {
         schema.definitions?.PromptfooConfigSchema?.properties?.tracing,
       );
       const provider = resolveRef(tracingConfig.properties.provider);
+      const providers = provider.oneOf;
+      const tempo = providers.find(
+        (option: { properties: { id: { const: string } } }) =>
+          option.properties.id.const === 'tempo',
+      );
+      const braintrust = providers.find(
+        (option: { properties: { id: { const: string } } }) =>
+          option.properties.id.const === 'braintrust',
+      );
+      const langfuse = providers.find(
+        (option: { properties: { id: { const: string } } }) =>
+          option.properties.id.const === 'langfuse',
+      );
 
-      expect(provider.properties.id.const).toBe('tempo');
-      expect(provider.required).toEqual(expect.arrayContaining(['id', 'endpoint']));
-      expect(provider.properties.timeout.exclusiveMinimum).toBe(0);
+      expect(providers).toHaveLength(3);
+      expect(tempo.required).toEqual(expect.arrayContaining(['id', 'endpoint']));
+      expect(tempo.properties.timeout.exclusiveMinimum).toBe(0);
+      expect(braintrust.required).toEqual(
+        expect.arrayContaining(['id', 'endpoint', 'projectId', 'auth']),
+      );
+      expect(braintrust.properties.auth.required).toContain('token');
+      expect(langfuse.required).toEqual(expect.arrayContaining(['id', 'endpoint', 'auth']));
+      expect(langfuse.properties.auth.required).toEqual(
+        expect.arrayContaining(['username', 'password']),
+      );
       expect(tracingConfig.properties.queryDelay.minimum).toBe(0);
     });
 

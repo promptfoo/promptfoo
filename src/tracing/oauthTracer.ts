@@ -200,10 +200,11 @@ export async function withOAuthSpan<T>(
     parentContext = propagation.extract(ROOT_CONTEXT, carrier);
   }
 
-  // Build attributes - start with standard HTTP attributes
+  // Build attributes - start with standard HTTP attributes.
+  // service.name is set once on the OTel resource (see otelSdk.ts), so it is deliberately
+  // not repeated here: a hardcoded span attribute would contradict `tracing.serviceName`.
   const attributes: Record<string, string | number | string[]> = {
     ...extractHttpAttributes(ctx.url, method),
-    'service.name': 'promptfoo-cli',
     [OAuthAttributes.OPERATION]: ctx.operation,
   };
 

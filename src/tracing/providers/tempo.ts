@@ -1,5 +1,11 @@
 import logger from '../../logger';
-import { fetchWithProxy } from '../../util/fetch/index';
+import {
+  fetchWithProxy,
+  MAX_TRACE_RESPONSE_BYTES,
+  readLimitedResponse,
+  releaseResponse,
+  validateTraceProviderEndpoint,
+} from './fetch';
 import { TraceProviderError } from './types';
 
 import type { SpanData } from '../store';
@@ -47,10 +53,14 @@ interface TempoTraceResponse {
   }>;
 }
 
-const MAX_RESPONSE_BYTES = 10 * 1024 * 1024;
 const MAX_SPANS = 10_000;
+/** Cap events retained per span so a pathological trace cannot exhaust memory. */
+const MAX_EVENTS_PER_SPAN = 128;
+const SPAN_KIND_NAMES = ['unspecified', 'internal', 'server', 'client', 'producer', 'consumer'];
 const TRACE_ID_PATTERN = /^[0-9a-f]{32}$/i;
-
+const BASE64_TRACE_ID_PATTERN = /^[A-Za-z0-9+/]{22}(?:==)?$/;
+const SPAN_ID_PATTERN = /^[0-9a-f]{16}$/i;
+const BASE64_SPAN_ID_PATTERN = /^[A-Za-z0-9+/]{11}=?$/;
 function nanoToMs(value: string): number {
   const milliseconds = BigInt(value) / 1_000_000n;
   if (milliseconds < 0n || milliseconds > BigInt(Number.MAX_SAFE_INTEGER)) {
@@ -93,14 +103,54 @@ function attributesToRecord(
   );
 }
 
-function decodeId(id: string | undefined): string | undefined {
+function decodeSpanId(id: string | undefined): string | undefined {
   if (!id) {
     return undefined;
   }
-  if (/^[0-9a-f]+$/i.test(id)) {
-    return id.toLowerCase();
+
+  if (SPAN_ID_PATTERN.test(id)) {
+    return /^0+$/.test(id) ? undefined : id.toLowerCase();
   }
-  return Buffer.from(id, 'base64').toString('hex').toLowerCase();
+
+  if (!BASE64_SPAN_ID_PATTERN.test(id)) {
+    return undefined;
+  }
+
+  const decoded = Buffer.from(id, 'base64');
+  if (
+    decoded.length !== 8 ||
+    decoded.toString('base64').replace(/=+$/, '') !== id.replace(/=+$/, '')
+  ) {
+    return undefined;
+  }
+
+  const spanId = decoded.toString('hex');
+  return /^0+$/.test(spanId) ? undefined : spanId;
+}
+
+function decodeTraceId(id: string | undefined): string | undefined {
+  if (!id) {
+    return undefined;
+  }
+
+  if (TRACE_ID_PATTERN.test(id)) {
+    return /^0+$/.test(id) ? undefined : id.toLowerCase();
+  }
+
+  if (!BASE64_TRACE_ID_PATTERN.test(id)) {
+    return undefined;
+  }
+
+  const decoded = Buffer.from(id, 'base64');
+  if (
+    decoded.length !== 16 ||
+    decoded.toString('base64').replace(/=+$/, '') !== id.replace(/=+$/, '')
+  ) {
+    return undefined;
+  }
+
+  const traceId = decoded.toString('hex');
+  return /^0+$/.test(traceId) ? undefined : traceId;
 }
 
 function normalizeStatusCode(code: number | string | undefined): number | undefined {
@@ -129,51 +179,96 @@ function normalizeStatusCode(code: number | string | undefined): number | undefi
   }
 }
 
-function matchesSpanFilter(name: string, patterns: string[]): boolean {
-  return patterns.some((pattern) => {
-    const escaped = pattern.replace(/[|\\{}()[\]^$+?.]/g, '\\$&');
-    return new RegExp(`^${escaped.replace(/\*/g, '.*').replace(/\\\?/g, '.')}$`, 'i').test(name);
-  });
+/**
+ * Normalize OTLP span events. Malformed individual events are dropped rather than
+ * failing the whole span, so one bad event does not lose an otherwise valid span.
+ */
+function transformSpanEvents(span: TempoSpan): SpanData['events'] {
+  if (!Array.isArray(span.events)) {
+    return undefined;
+  }
+
+  const events: NonNullable<SpanData['events']> = [];
+  for (const event of span.events) {
+    if (events.length >= MAX_EVENTS_PER_SPAN) {
+      break;
+    }
+    if (!event || typeof event.name !== 'string' || event.name.length === 0) {
+      continue;
+    }
+    let timestamp: number;
+    try {
+      timestamp = nanoToMs(event.timeUnixNano);
+    } catch {
+      continue;
+    }
+    events.push({
+      name: event.name,
+      timestamp,
+      attributes: attributesToRecord(event.attributes),
+    });
+  }
+
+  return events.length > 0 ? events : undefined;
 }
 
 function transformSpan(
   span: TempoSpan,
+  traceId: string,
   resourceAttributes: Record<string, unknown>,
   scopeName: string | undefined,
-  options?: FetchTraceOptions,
 ): SpanData | null {
-  const startTime = nanoToMs(span.startTimeUnixNano);
-  if (options?.earliestStartTime !== undefined && startTime < options.earliestStartTime) {
-    return null;
-  }
-  if (options?.spanFilter?.length && !matchesSpanFilter(span.name, options.spanFilter)) {
-    return null;
+  if (decodeTraceId(span.traceId) !== traceId.toLowerCase()) {
+    throw new Error('Span trace ID must match the requested trace');
   }
 
-  const events = span.events?.map((event) => ({
-    name: event.name,
-    timestamp: nanoToMs(event.timeUnixNano),
-    attributes: attributesToRecord(event.attributes),
-  }));
+  const spanId = decodeSpanId(span.spanId);
+  if (!spanId) {
+    throw new Error('Span ID must be a valid nonzero eight-byte identifier');
+  }
+
+  const parentSpanId = decodeSpanId(span.parentSpanId);
+  if (span.parentSpanId && !parentSpanId) {
+    throw new Error('Parent span ID must be a valid nonzero eight-byte identifier');
+  }
+
+  if (typeof span.name !== 'string' || span.name.trim().length === 0) {
+    throw new Error('Span name must be a nonempty string');
+  }
+  if (span.status?.message !== undefined && typeof span.status.message !== 'string') {
+    throw new Error('Span status message must be a string');
+  }
+
+  const events = transformSpanEvents(span);
+
+  const startTime = nanoToMs(span.startTimeUnixNano);
+  const endTimeUnixNano = span.endTimeUnixNano;
+  const endTime = endTimeUnixNano ? nanoToMs(endTimeUnixNano) : undefined;
+  if (endTimeUnixNano && BigInt(endTimeUnixNano) < BigInt(span.startTimeUnixNano)) {
+    throw new Error('Span end time must not precede its start time');
+  }
 
   return {
-    spanId: decodeId(span.spanId) ?? span.spanId,
-    parentSpanId: decodeId(span.parentSpanId),
+    spanId,
+    parentSpanId,
     name: span.name,
     startTime,
-    endTime: span.endTimeUnixNano ? nanoToMs(span.endTimeUnixNano) : undefined,
+    endTime,
     attributes: {
       ...resourceAttributes,
       ...attributesToRecord(span.attributes),
       ...(scopeName && { 'otel.scope.name': scopeName }),
-      ...(typeof span.kind === 'number' && { 'otel.span.kind_code': span.kind }),
+      ...(typeof span.kind === 'number' && {
+        'otel.span.kind': SPAN_KIND_NAMES[span.kind] ?? 'unspecified',
+        'otel.span.kind_code': span.kind,
+      }),
       ...(typeof span.kind === 'string' && {
         'otel.span.kind': span.kind.replace(/^SPAN_KIND_/i, '').toLowerCase(),
       }),
     },
     statusCode: normalizeStatusCode(span.status?.code),
     statusMessage: span.status?.message,
-    ...(events?.length && { events }),
+    ...(events && { events }),
   };
 }
 
@@ -186,19 +281,7 @@ export class TempoProvider implements TraceProvider {
       throw new Error('Tempo provider requires endpoint configuration');
     }
 
-    let endpoint: URL;
-    try {
-      endpoint = new URL(config.endpoint);
-    } catch {
-      throw new Error('Tempo provider endpoint must be a valid HTTP or HTTPS URL');
-    }
-    if (
-      !['http:', 'https:'].includes(endpoint.protocol) ||
-      endpoint.username ||
-      endpoint.password
-    ) {
-      throw new Error('Tempo provider endpoint must be an HTTP or HTTPS URL without credentials');
-    }
+    validateTraceProviderEndpoint(config.endpoint, 'Tempo');
     if (
       config.timeout !== undefined &&
       (!Number.isSafeInteger(config.timeout) || config.timeout <= 0)
@@ -209,10 +292,20 @@ export class TempoProvider implements TraceProvider {
   }
 
   private buildHeaders(): Record<string, string> {
-    const headers: Record<string, string> = {
-      Accept: 'application/json',
-      ...this.config.headers,
-    };
+    const headers: Record<string, string> = { ...this.config.headers };
+    const hasConfiguredAuthentication = Boolean(
+      this.config.auth?.token || (this.config.auth?.username && this.config.auth?.password),
+    );
+    for (const header of Object.keys(headers)) {
+      const normalizedHeader = header.toLowerCase();
+      if (
+        normalizedHeader === 'accept' ||
+        (hasConfiguredAuthentication && normalizedHeader === 'authorization')
+      ) {
+        delete headers[header];
+      }
+    }
+    headers.Accept = 'application/json';
     if (this.config.auth?.token) {
       headers.Authorization = `Bearer ${this.config.auth.token}`;
     } else if (this.config.auth?.username && this.config.auth?.password) {
@@ -224,33 +317,49 @@ export class TempoProvider implements TraceProvider {
     return headers;
   }
 
-  private transformSpans(data: TempoTraceResponse, options?: FetchTraceOptions): SpanData[] {
+  private transformSpans(data: TempoTraceResponse, traceId: string): SpanData[] {
     const spans: SpanData[] = [];
-    const limit = Math.min(options?.maxSpans ?? MAX_SPANS, MAX_SPANS);
+    const seenSpanIds = new Set<string>();
+    let malformedSpans = 0;
 
     for (const batch of data.batches ?? []) {
+      if (!batch || !Array.isArray(batch.scopeSpans)) {
+        malformedSpans++;
+        continue;
+      }
       const resourceAttributes = attributesToRecord(batch.resource?.attributes);
-      for (const scopeSpan of batch.scopeSpans ?? []) {
-        for (const span of scopeSpan.spans ?? []) {
-          if (spans.length >= limit) {
+      for (const scopeSpan of batch.scopeSpans) {
+        if (!scopeSpan || !Array.isArray(scopeSpan.spans)) {
+          malformedSpans++;
+          continue;
+        }
+        for (const span of scopeSpan.spans) {
+          if (spans.length >= MAX_SPANS) {
             return spans;
           }
+
           try {
             const normalizedSpan = transformSpan(
               span,
+              traceId,
               resourceAttributes,
               scopeSpan.scope?.name,
-              options,
             );
-            if (normalizedSpan) {
+            if (normalizedSpan && !seenSpanIds.has(normalizedSpan.spanId)) {
+              seenSpanIds.add(normalizedSpan.spanId);
               spans.push(normalizedSpan);
             }
-          } catch (error) {
-            logger.warn(`[TempoProvider] Skipping malformed span: ${error}`);
+          } catch {
+            malformedSpans++;
           }
         }
       }
     }
+
+    if (malformedSpans > 0) {
+      logger.warn(`[TempoProvider] Skipped ${malformedSpans} malformed spans`);
+    }
+
     return spans;
   }
 
@@ -264,37 +373,40 @@ export class TempoProvider implements TraceProvider {
       ? AbortSignal.any([timeoutSignal, options.abortSignal])
       : timeoutSignal;
     const response = await fetchWithProxy(`${this.baseUrl}/api/traces/${traceId}`, {
+      disableTransientRetries: true,
       method: 'GET',
       headers: this.buildHeaders(),
+      redirect: 'error',
       signal,
     });
 
     if (response.status === 404) {
+      await releaseResponse(response, 'Tempo');
       return null;
     }
     if (!response.ok) {
+      await releaseResponse(response, 'Tempo');
       throw new TraceProviderError(`Tempo returned HTTP ${response.status}`, {
         statusCode: response.status,
-        retryable: response.status === 429 || response.status >= 500,
+        retryable: response.status === 408 || response.status === 429 || response.status >= 500,
       });
     }
 
     const contentLength = Number(response.headers.get('content-length'));
-    if (contentLength > MAX_RESPONSE_BYTES) {
+    if (contentLength > MAX_TRACE_RESPONSE_BYTES) {
+      await releaseResponse(response, 'Tempo');
       throw new TraceProviderError('Tempo trace exceeds the maximum response size');
     }
-    const body = await response.text();
-    if (new TextEncoder().encode(body).byteLength > MAX_RESPONSE_BYTES) {
-      throw new TraceProviderError('Tempo trace exceeds the maximum response size');
-    }
+    const body = await readLimitedResponse(response, 'Tempo');
     const data = JSON.parse(body) as TempoTraceResponse;
     if (!Array.isArray(data.batches)) {
       throw new TraceProviderError('Tempo returned an invalid trace response');
     }
 
+    const spans = this.transformSpans(data, traceId);
     const services = new Set<string>();
-    for (const batch of data.batches) {
-      const service = attributesToRecord(batch.resource?.attributes)['service.name'];
+    for (const span of spans) {
+      const service = span.attributes?.['service.name'];
       if (typeof service === 'string') {
         services.add(service);
       }
@@ -302,7 +414,7 @@ export class TempoProvider implements TraceProvider {
 
     return {
       traceId,
-      spans: this.transformSpans(data, options),
+      spans,
       services: [...services],
       fetchedAt: Date.now(),
     };
@@ -312,8 +424,10 @@ export class TempoProvider implements TraceProvider {
     try {
       const response = await fetchWithProxy(`${this.baseUrl}/ready`, {
         headers: this.buildHeaders(),
+        redirect: 'error',
         signal: AbortSignal.timeout(5_000),
       });
+      await releaseResponse(response, 'Tempo');
       return response.ok;
     } catch {
       return false;

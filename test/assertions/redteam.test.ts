@@ -272,63 +272,6 @@ describe('handleRedteam', () => {
     });
   });
 
-  it('propagates provider trace context into redteam grading', async () => {
-    const assertion = {
-      type: 'promptfoo:redteam:rbac' as const,
-    };
-    const test = {
-      vars: {},
-      options: {},
-      assert: [],
-      metadata: {
-        purpose: 'foo',
-      },
-    };
-    const providerResponse = {};
-    const graderSpy = vi.spyOn(RedteamGraderBase.prototype, 'getResult').mockResolvedValue({
-      grade: {
-        pass: true,
-        score: 1,
-        reason: 'Mock test result',
-      },
-      rubric: 'Mock rubric',
-    });
-
-    await handleRedteam({
-      assertion,
-      baseType: getAssertionBaseType(assertion),
-      assertionValueContext: {
-        prompt: 'test prompt',
-        vars: {},
-        test,
-        logProbs: [],
-        provider: undefined,
-        providerResponse,
-      },
-      cost: 0,
-      inverse: isAssertionInverse(assertion),
-      latencyMs: 0,
-      logProbs: [],
-      output: 'test output',
-      outputString: 'test output',
-      prompt: 'test prompt',
-      provider: undefined,
-      providerCallContext: {
-        prompt: { raw: 'test prompt', label: 'test prompt' },
-        vars: {},
-        traceparent: '00-trace-id-span-id-01',
-      },
-      providerResponse,
-      renderedValue: undefined,
-      test,
-      valueFromScript: undefined,
-    });
-
-    expect(graderSpy.mock.calls[0]?.[7]).toMatchObject({
-      traceparent: '00-trace-id-span-id-01',
-    });
-  });
-
   it('includes captured assertion trace data in redteam grading context', async () => {
     const assertion = {
       type: 'promptfoo:redteam:rbac' as const,

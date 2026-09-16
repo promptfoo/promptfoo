@@ -48,7 +48,7 @@ export interface OAuthTokenResult {
  * @returns Token and expiration timestamp
  */
 export async function fetchOAuthToken(config: OAuthTokenConfig): Promise<OAuthTokenResult> {
-  return withOAuthSpan(
+  const { accessToken, expiresAt } = await withOAuthSpan(
     {
       operation: 'token_fetch',
       url: config.tokenUrl,
@@ -114,16 +114,12 @@ export async function fetchOAuthToken(config: OAuthTokenConfig): Promise<OAuthTo
       return {
         accessToken: tokenData.access_token,
         expiresAt,
-        _expiresIn: expiresInSeconds,
-        _httpStatus: response.status,
+        expiresIn: expiresInSeconds,
+        httpStatusCode: response.status,
       };
     },
-    (result) => ({
-      expiresIn: (result as any)._expiresIn,
-      httpStatusCode: (result as any)._httpStatus,
-    }),
-  ).then((result) => ({
-    accessToken: result.accessToken,
-    expiresAt: result.expiresAt,
-  }));
+    ({ expiresIn, httpStatusCode }) => ({ expiresIn, httpStatusCode }),
+  );
+
+  return { accessToken, expiresAt };
 }

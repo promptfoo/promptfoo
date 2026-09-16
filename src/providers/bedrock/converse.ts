@@ -11,21 +11,25 @@
  * - Cache token tracking
  */
 
-import path from 'path';
-
 import { getCache, isCacheEnabled } from '../../cache';
-import cliState from '../../cliState';
 import { getEnvFloat, getEnvInt, getEnvString } from '../../envars';
-import { importModule } from '../../esm';
 import logger from '../../logger';
 import telemetry from '../../telemetry';
-import { parseFileUrl } from '../../util/functions/loadFunction';
+import {
+  type GenAISpanContext,
+  type GenAISpanResult,
+  withGenAISpan,
+} from '../../tracing/genaiTracer';
 import { maybeLoadToolsFromExternalFile } from '../../util/index';
 import {
   isAlwaysOnAdaptiveThinkingClaudeModel,
   isSamplingParamsDeprecatedClaudeModel,
   normalizeClaudeThinkingConfig,
 } from '../anthropic/util';
+import {
+  executeProviderFunctionCallback,
+  loadProviderCallbackFromFileUrl,
+} from '../functionCallbackUtils';
 import { MCPClient } from '../mcp/client';
 import { getMcpErrorMessage, isMcpErrorResult } from '../mcp/util';
 import { providerRegistry } from '../providerRegistry';
@@ -36,13 +40,6 @@ import {
   openaiToolChoiceToBedrock,
   openaiToolsToBedrock,
 } from '../shared';
-import {
-  type GenAISpanContext,
-  type GenAISpanResult,
-  type TargetSpanContext,
-  withGenAISpan,
-  withTargetSpan,
-} from '../tracing';
 import { AwsBedrockGenericProvider, type BedrockOptions, createBedrockCacheKeyHash } from './base';
 import { calculateBedrockCost } from './pricing';
 import type Anthropic from '@anthropic-ai/sdk';
@@ -827,97 +824,25 @@ export class AwsBedrockConverseProvider extends AwsBedrockGenericProvider implem
    * @returns The loaded function
    */
   private async loadExternalFunction(fileRef: string): Promise<Function> {
-    const { filePath, functionName } = parseFileUrl(fileRef);
-
-    try {
-      const resolvedPath = path.resolve(cliState.basePath || '', filePath);
-      logger.debug(
-        `[Bedrock Converse] Loading function from ${resolvedPath}${functionName ? `:${functionName}` : ''}`,
-      );
-
-      const requiredModule = await importModule(resolvedPath, functionName);
-
-      if (typeof requiredModule === 'function') {
-        return requiredModule;
-      } else if (
-        requiredModule &&
-        typeof requiredModule === 'object' &&
-        functionName &&
-        functionName in requiredModule
-      ) {
-        const fn = requiredModule[functionName];
-        if (typeof fn === 'function') {
-          return fn;
-        }
-      }
-
-      throw new Error(
-        `Function callback malformed: ${filePath} must export ${
-          functionName
-            ? `a named function '${functionName}'`
-            : 'a function or have a default export as a function'
-        }`,
-      );
-    } catch (error: any) {
-      throw new Error(`Error loading function from ${filePath}: ${error.message || String(error)}`);
-    }
+    return loadProviderCallbackFromFileUrl(fileRef, '[Bedrock Converse]');
   }
 
   /**
    * Executes a function callback with proper error handling
    */
-  private async executeFunctionCallback(functionName: string, args: string): Promise<string> {
-    try {
-      // Check if we've already loaded this function
-      let callback = this.loadedFunctionCallbacks[functionName];
-
-      // If not loaded yet, try to load it now
-      if (!callback) {
-        const callbackRef = this.config.functionToolCallbacks?.[functionName];
-
-        if (callbackRef && typeof callbackRef === 'string') {
-          const callbackStr: string = callbackRef;
-          if (callbackStr.startsWith('file://')) {
-            callback = await this.loadExternalFunction(callbackStr);
-          } else {
-            callback = new Function('return ' + callbackStr)();
-          }
-
-          // Cache for future use
-          this.loadedFunctionCallbacks[functionName] = callback;
-        } else if (typeof callbackRef === 'function') {
-          callback = callbackRef;
-          this.loadedFunctionCallbacks[functionName] = callback;
-        }
-      }
-
-      if (!callback) {
-        throw new Error(`No callback found for function '${functionName}'`);
-      }
-
-      // Execute the callback
-      logger.debug(`[Bedrock Converse] Executing function '${functionName}' with args: ${args}`);
-      const result = await callback(args);
-
-      // Format the result
-      if (result === undefined || result === null) {
-        return '';
-      } else if (typeof result === 'object') {
-        try {
-          return JSON.stringify(result);
-        } catch (error) {
-          logger.warn(`Error stringifying result from function '${functionName}': ${error}`);
-          return String(result);
-        }
-      } else {
-        return String(result);
-      }
-    } catch (error: any) {
-      logger.error(
-        `[Bedrock Converse] Error executing function '${functionName}': ${error.message || String(error)}`,
-      );
-      throw error;
-    }
+  private async executeFunctionCallback(
+    functionName: string,
+    args: string,
+    callId?: string,
+  ): Promise<string> {
+    return executeProviderFunctionCallback({
+      functionName,
+      args,
+      callId,
+      callbacks: this.config.functionToolCallbacks,
+      cache: this.loadedFunctionCallbacks,
+      logPrefix: '[Bedrock Converse]',
+    });
   }
 
   /**
@@ -1177,58 +1102,47 @@ export class AwsBedrockConverseProvider extends AwsBedrockGenericProvider implem
 
     const inferenceConfig = this.buildInferenceConfig();
 
-    const targetSpanContext: TargetSpanContext = {
-      targetType: 'llm',
+    // Set up tracing context
+    const spanContext: GenAISpanContext = {
+      system: 'bedrock',
+      operationName: 'chat',
+      model: this.modelName,
       providerId: this.id(),
-      traceparent: context?.traceparent,
+      // Optional request parameters
+      maxTokens: inferenceConfig?.maxTokens,
+      temperature: inferenceConfig?.temperature,
+      topP: inferenceConfig?.topP,
+      stopSequences: inferenceConfig?.stopSequences,
+      // Promptfoo context from test case if available
+      testIndex: context?.testIdx ?? (context?.test?.vars?.__testIdx as number | undefined),
       promptLabel: context?.prompt?.label,
-      evalId: context?.evaluationId || context?.test?.metadata?.evaluationId,
-      testIndex: context?.test?.vars?.__testIdx as number | undefined,
-      iteration: context?.iteration,
+      // W3C Trace Context for linking to evaluation trace
+      traceparent: context?.traceparent,
     };
 
-    return withTargetSpan(targetSpanContext, async () => {
-      const spanContext: GenAISpanContext = {
-        system: 'bedrock',
-        operationName: 'chat',
-        model: this.modelName,
-        providerId: this.id(),
-        maxTokens: inferenceConfig?.maxTokens,
-        temperature: inferenceConfig?.temperature,
-        topP: inferenceConfig?.topP,
-        stopSequences: inferenceConfig?.stopSequences,
-        testIndex: context?.test?.vars?.__testIdx as number | undefined,
-        promptLabel: context?.prompt?.label,
-        evalId: context?.evaluationId || context?.test?.metadata?.evaluationId,
-        iteration: context?.iteration,
-        traceparent: context?.traceparent,
-      };
+    // Result extractor to set response attributes on the span
+    const resultExtractor = (response: ProviderResponse): GenAISpanResult => {
+      const result: GenAISpanResult = {};
 
-      const resultExtractor = (response: ProviderResponse): GenAISpanResult => {
-        const result: GenAISpanResult = {};
+      if (response.tokenUsage) {
+        result.tokenUsage = {
+          prompt: response.tokenUsage.prompt,
+          completion: response.tokenUsage.completion,
+          total: response.tokenUsage.total,
+        };
+      }
 
-        if (response.tokenUsage) {
-          result.tokenUsage = {
-            prompt: response.tokenUsage.prompt,
-            completion: response.tokenUsage.completion,
-            total: response.tokenUsage.total,
-          };
-        }
+      // Extract finish reason if available from metadata
+      const stopReason = (response.metadata as { stopReason?: string } | undefined)?.stopReason;
+      if (stopReason) {
+        result.finishReasons = [stopReason];
+      }
 
-        const stopReason = (response.metadata as { stopReason?: string } | undefined)?.stopReason;
-        if (stopReason) {
-          result.finishReasons = [stopReason];
-        }
+      return result;
+    };
 
-        return result;
-      };
-
-      return withGenAISpan(
-        spanContext,
-        () => this.callApiInternal(prompt, context),
-        resultExtractor,
-      );
-    });
+    // Wrap the API call in a span
+    return withGenAISpan(spanContext, () => this.callApiInternal(prompt, context), resultExtractor);
   }
 
   /**
@@ -1633,7 +1547,11 @@ export class AwsBedrockConverseProvider extends AwsBedrockGenericProvider implem
               typeof block.toolUse.input === 'string'
                 ? block.toolUse.input
                 : JSON.stringify(block.toolUse.input || {});
-            const result = await this.executeFunctionCallback(functionName, args);
+            const result = await this.executeFunctionCallback(
+              functionName,
+              args,
+              block.toolUse.toolUseId,
+            );
             dispatchResults.push(result);
             handledIndexes.add(idx);
           } catch (err) {

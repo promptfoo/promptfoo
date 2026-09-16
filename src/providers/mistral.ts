@@ -3,15 +3,9 @@ import { createHmac } from 'crypto';
 import { fetchWithCache, getCache, getScopedCacheKey, isCacheEnabled } from '../cache';
 import { getEnvString } from '../envars';
 import logger from '../logger';
+import { type GenAISpanContext, type GenAISpanResult, withGenAISpan } from '../tracing/genaiTracer';
 import { maybeLoadToolsFromExternalFile } from '../util';
 import { calculateCost, getRequestTimeoutMs, parseChatPrompt } from './shared';
-import {
-  type GenAISpanContext,
-  type GenAISpanResult,
-  type TargetSpanContext,
-  withGenAISpan,
-  withTargetSpan,
-} from './tracing';
 
 import type { EnvVarKey } from '../envars';
 import type { EnvOverrides } from '../types/env';
@@ -589,50 +583,39 @@ export class MistralChatCompletionProvider implements ApiProvider {
       ...context?.prompt?.config,
     };
 
-    const targetSpanContext: TargetSpanContext = {
-      targetType: 'llm',
+    // Set up tracing context
+    const spanContext: GenAISpanContext = {
+      system: 'mistral',
+      operationName: 'chat',
+      model: this.modelName,
       providerId: this.id(),
-      traceparent: context?.traceparent,
+      temperature: config?.temperature,
+      topP: config?.top_p,
+      maxTokens: config?.max_tokens,
+      testIndex: context?.testIdx ?? (context?.test?.vars?.__testIdx as number | undefined),
       promptLabel: context?.prompt?.label,
-      evalId: context?.evaluationId || context?.test?.metadata?.evaluationId,
-      testIndex: context?.test?.vars?.__testIdx as number | undefined,
-      iteration: context?.iteration,
+      // W3C Trace Context for linking to evaluation trace
+      traceparent: context?.traceparent,
     };
 
-    return withTargetSpan(targetSpanContext, async () => {
-      const spanContext: GenAISpanContext = {
-        system: 'mistral',
-        operationName: 'chat',
-        model: this.modelName,
-        providerId: this.id(),
-        temperature: config?.temperature,
-        topP: config?.top_p,
-        maxTokens: config?.max_tokens,
-        testIndex: context?.test?.vars?.__testIdx as number | undefined,
-        promptLabel: context?.prompt?.label,
-        evalId: context?.evaluationId || context?.test?.metadata?.evaluationId,
-        iteration: context?.iteration,
-        traceparent: context?.traceparent,
-      };
+    // Result extractor to set response attributes on the span
+    const resultExtractor = (response: ProviderResponse): GenAISpanResult => {
+      const result: GenAISpanResult = {};
+      if (response.tokenUsage) {
+        result.tokenUsage = {
+          prompt: response.tokenUsage.prompt,
+          completion: response.tokenUsage.completion,
+          total: response.tokenUsage.total,
+        };
+      }
+      return result;
+    };
 
-      const resultExtractor = (response: ProviderResponse): GenAISpanResult => {
-        const result: GenAISpanResult = {};
-        if (response.tokenUsage) {
-          result.tokenUsage = {
-            prompt: response.tokenUsage.prompt,
-            completion: response.tokenUsage.completion,
-            total: response.tokenUsage.total,
-          };
-        }
-        return result;
-      };
-
-      return withGenAISpan(
-        spanContext,
-        () => this.callApiInternal(prompt, context, config),
-        resultExtractor,
-      );
-    });
+    return withGenAISpan(
+      spanContext,
+      () => this.callApiInternal(prompt, context, config),
+      resultExtractor,
+    );
   }
 
   private async callApiInternal(

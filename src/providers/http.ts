@@ -12,6 +12,7 @@ import cliState from '../cliState';
 import { getEnvString } from '../envars';
 import { importModule } from '../esm';
 import logger from '../logger';
+import { withOAuthSpan } from '../tracing/oauthTracer';
 import { stripDecompressionHeaders } from '../util/fetch/stripDecompressionHeaders';
 import {
   maybeLoadConfigFromExternalFile,
@@ -50,16 +51,7 @@ import {
   transformToolChoice,
   transformTools,
 } from './shared';
-import {
-  type GenAISpanContext,
-  type GenAISpanResult,
-  getTraceparent,
-  type TargetSpanContext,
-  withGenAISpan,
-  withHttpRequestSpan,
-  withOAuthSpan,
-  withTargetSpan,
-} from './tracing';
+import { normalizeResponseTransformResult } from './transformResult';
 import { loadTransformModule, parseFileTransformReference } from './transformUtils';
 
 export { loadTransformModule } from './transformUtils';
@@ -345,6 +337,45 @@ function isBase64(str: string): boolean {
 }
 
 /**
+ * Explain why PEM key material cannot be used for signing, in terms of what the operator
+ * can actually see and act on.
+ *
+ * OpenSSL 3 is the reason this exists: `createSign().sign()` and `createPrivateKey()` both
+ * collapse empty, whitespace-only, malformed, truncated, and public-key-instead-of-private
+ * input into one opaque `error:1E08010C:DECODER routines::unsupported`. The distinction only
+ * survives in the PEM text, so classify that before handing it to crypto.
+ *
+ * Returns `undefined` when the material is structurally sound -- crypto then reports anything
+ * subtler (wrong curve for the algorithm, unsupported key size) with a real diagnostic.
+ *
+ * Uses plain string matching rather than regexes so no user-controlled input reaches a
+ * backtracking matcher, and never echoes key material -- only which marker was found or
+ * missing, so pointing this at the wrong file cannot leak that file's contents.
+ */
+export function diagnosePrivateKeyMaterial(material: unknown): string | undefined {
+  const text = typeof material === 'string' ? material.trim() : '';
+  if (!text) {
+    return 'it is empty';
+  }
+  if (text.includes('BEGIN CERTIFICATE')) {
+    return 'it is a certificate, not a private key';
+  }
+  if (text.includes('PUBLIC KEY-----')) {
+    return 'it is a public key, not a private key';
+  }
+  if (text.includes('ENCRYPTED PRIVATE KEY') || text.includes('Proc-Type: 4,ENCRYPTED')) {
+    return 'it is passphrase-protected; decrypt it first or supply an unencrypted key';
+  }
+  if (!text.includes('PRIVATE KEY-----')) {
+    return 'it is not PEM-encoded (no "-----BEGIN ... PRIVATE KEY-----" header)';
+  }
+  if (!text.includes('-----END')) {
+    return 'it is truncated (no "-----END ... PRIVATE KEY-----" line)';
+  }
+  return undefined;
+}
+
+/**
  * Generate signature using different certificate types
  */
 export async function generateSignature(
@@ -353,6 +384,9 @@ export async function generateSignature(
 ): Promise<string> {
   try {
     let privateKey: string;
+    // Which configured input the key came from, for error messages. Paths are already
+    // resolved; no secret material is recorded here.
+    let keySource: string;
 
     // For backward compatibility, detect type from legacy fields if not explicitly set
     let authType = signatureAuth.type;
@@ -374,11 +408,14 @@ export async function generateSignature(
         if (signatureAuth.privateKeyPath) {
           const resolvedPath = safeResolve(cliState.basePath || '', signatureAuth.privateKeyPath);
           privateKey = await fs.readFile(resolvedPath, 'utf8');
+          keySource = `privateKeyPath ${resolvedPath}`;
         } else if (signatureAuth.privateKey) {
           privateKey = signatureAuth.privateKey;
+          keySource = 'the configured privateKey';
         } else if (signatureAuth.certificateContent) {
           logger.debug(`[Signature Auth] Loading PEM from remote certificate content`);
           privateKey = Buffer.from(signatureAuth.certificateContent, 'base64').toString('utf8');
+          keySource = 'certificateContent';
         } else {
           throw new Error(
             'PEM private key is required. Provide privateKey, privateKeyPath, or certificateContent',
@@ -445,6 +482,7 @@ export async function generateSignature(
         }
 
         privateKey = entry.key;
+        keySource = `JKS alias '${targetAlias}'`;
         break;
       }
       case 'pfx': {
@@ -540,6 +578,10 @@ export async function generateSignature(
             }
 
             privateKey = result.key;
+            keySource =
+              signatureAuth.pfxContent || signatureAuth.certificateContent
+                ? 'pfxContent'
+                : `pfxPath ${safeResolve(cliState.basePath || '', signatureAuth.pfxPath)}`;
             logger.debug(
               `[Signature Auth] Successfully extracted private key from PFX using pem library`,
             );
@@ -564,6 +606,7 @@ export async function generateSignature(
               // Use base64 encoded content from database
               logger.debug(`[Signature Auth] Loading private key from base64 content`);
               privateKey = Buffer.from(signatureAuth.keyContent, 'base64').toString('utf8');
+              keySource = 'keyContent';
               logger.debug(
                 `[Signature Auth][PFX] Decoded keyContent length: ${privateKey.length} characters`,
               );
@@ -583,6 +626,7 @@ export async function generateSignature(
               try {
                 // Read the key directly — readFile surfaces ENOENT with the path.
                 privateKey = await fs.readFile(resolvedKeyPath, 'utf8');
+                keySource = `keyPath ${resolvedKeyPath}`;
               } catch (err) {
                 if ((err as NodeJS.ErrnoException).code === 'ENOENT') {
                   throw new Error(`Key file not found: ${resolvedKeyPath}`);
@@ -611,6 +655,14 @@ export async function generateSignature(
         throw new Error(`Unsupported signature auth type: ${signatureAuth.type}`);
     }
 
+    // Fail with an actionable message before OpenSSL flattens the cause (see
+    // diagnosePrivateKeyMaterial). keySource names which configured input produced this key,
+    // because "which key did it even load?" is the operator's first question.
+    const keyProblem = diagnosePrivateKeyMaterial(privateKey);
+    if (keyProblem) {
+      throw new Error(`Private key from ${keySource} cannot be used: ${keyProblem}`);
+    }
+
     const data = getNunjucksEngine()
       .renderString(signatureAuth.signatureDataTemplate, {
         signatureTimestamp,
@@ -632,13 +684,21 @@ export async function generateSignature(
       return signature.toString('base64');
     } catch (e) {
       logger.error(
-        `[Signature Auth] Signing failed: ${String(e)}; keyLength=${privateKey?.length || 0}, algorithm=${signatureAuth.signatureAlgorithm}`,
+        `[Signature Auth] Signing failed: ${String(e)}; keyLength=${privateKey?.length ?? 0}, algorithm=${signatureAuth.signatureAlgorithm}, keyProvided=${Boolean(privateKey)}`,
       );
       throw e;
     }
   } catch (err) {
     logger.error(`Error generating signature: ${String(err)}`);
-    throw new Error(`Failed to generate signature: ${String(err)}`);
+    // Unwrap to err.message so the rethrow does not read "...: Error: Error: ...".
+    const wrapped = new Error(
+      `Failed to generate signature: ${err instanceof Error ? err.message : String(err)}`,
+    );
+    // Preserve the original for anyone catching this. Assigned rather than passed to the
+    // constructor because src/app typechecks this file under `lib: ES2020`, which predates
+    // the `ErrorOptions` overload -- `new Error(msg, { cause })` fails that build.
+    (wrapped as Error & { cause?: unknown }).cause = err;
+    throw wrapped;
   }
 }
 
@@ -1885,7 +1945,6 @@ async function createHttpsAgent(
 export class HttpProvider implements ApiProvider {
   url: string;
   config: HttpProviderConfig;
-  label?: string;
   private transformResponse: Promise<
     (data: any, text: string, context?: TransformResponseContext) => ProviderResponse
   >;
@@ -1912,7 +1971,6 @@ export class HttpProvider implements ApiProvider {
 
   constructor(url: string, options: ProviderOptions) {
     this.config = HttpProviderConfigSchema.parse(options.config);
-    this.label = options.label;
     validateMultipartConfig(this.config);
     if (!this.config.tokenEstimation && cliState.config?.redteam) {
       this.config.tokenEstimation = { enabled: true, multiplier: 1.3 };
@@ -2044,7 +2102,17 @@ export class HttpProvider implements ApiProvider {
 
     logger.debug('[HTTP Provider Auth]: Starting or waiting for OAuth token refresh');
     return this.refreshTokenWithLock(cacheKey, () =>
-      this.performTokenRefresh(oauthConfig, cacheKey),
+      withOAuthSpan(
+        {
+          operation: 'token_refresh',
+          url: oauthConfig.tokenUrl,
+          grantType: oauthConfig.grantType,
+          clientId: oauthConfig.clientId,
+          scopes: oauthConfig.scopes,
+          providerType: 'http',
+        },
+        () => this.performTokenRefresh(oauthConfig, cacheKey),
+      ),
     );
   }
 
@@ -2060,99 +2128,77 @@ export class HttpProvider implements ApiProvider {
     },
     cacheKey: string,
   ): Promise<CachedAuthToken> {
-    const result = await withOAuthSpan(
-      {
-        operation: 'token_refresh',
-        url: oauthConfig.tokenUrl,
-        grantType: oauthConfig.grantType,
-        clientId: oauthConfig.clientId,
-        scopes: oauthConfig.scopes,
-        providerType: 'http',
-      },
-      async () => {
-        try {
-          // Prepare the token request body
-          const tokenRequestBody = new URLSearchParams();
-          tokenRequestBody.append('grant_type', oauthConfig.grantType);
-          if (oauthConfig.clientId) {
-            tokenRequestBody.append('client_id', oauthConfig.clientId);
-          }
-          if (oauthConfig.clientSecret) {
-            tokenRequestBody.append('client_secret', oauthConfig.clientSecret);
-          }
+    try {
+      // Prepare the token request body
+      const tokenRequestBody = new URLSearchParams();
+      tokenRequestBody.append('grant_type', oauthConfig.grantType);
+      if (oauthConfig.clientId) {
+        tokenRequestBody.append('client_id', oauthConfig.clientId);
+      }
+      if (oauthConfig.clientSecret) {
+        tokenRequestBody.append('client_secret', oauthConfig.clientSecret);
+      }
 
-          // Add username and password for password grant type
-          if (oauthConfig.grantType === 'password') {
-            if (!oauthConfig.username || !oauthConfig.password) {
-              throw new Error('Username and password are required for password grant type');
-            }
-            tokenRequestBody.append('username', oauthConfig.username);
-            tokenRequestBody.append('password', oauthConfig.password);
-          }
-
-          if (oauthConfig.scopes && oauthConfig.scopes.length > 0) {
-            tokenRequestBody.append('scope', oauthConfig.scopes.join(' '));
-          }
-
-          // Make the token request
-          const httpsAgent = await this.getHttpsAgent();
-          const fetchOptions: any = {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/x-www-form-urlencoded',
-            },
-            body: tokenRequestBody.toString(),
-          };
-
-          if (httpsAgent) {
-            fetchOptions.dispatcher = httpsAgent;
-          }
-
-          const response = await fetchWithCache(
-            oauthConfig.tokenUrl,
-            fetchOptions,
-            getRequestTimeoutMs(),
-            'text',
-            true, // Always bust cache for token requests
-            0, // No retries for token requests
-          );
-
-          if (response.status < 200 || response.status >= 300) {
-            throw new Error(
-              `OAuth token request failed with status ${response.status} ${response.statusText}: ${response.data}`,
-            );
-          }
-
-          const tokenData = JSON.parse(response.data as string);
-
-          if (!tokenData.access_token) {
-            throw new Error('OAuth token response missing access_token');
-          }
-
-          // Calculate expiration time
-          // expires_in is typically in seconds, default to 3600 (1 hour) if not provided
-          const expiresInSeconds = tokenData.expires_in || 3600;
-          const expiresAt = Date.now() + expiresInSeconds * 1000;
-          const cachedToken = this.cacheToken(cacheKey, tokenData.access_token, expiresAt);
-
-          logger.debug('[HTTP Provider Auth]: Successfully refreshed OAuth token');
-          return {
-            cachedToken,
-            httpStatusCode: response.status,
-            expiresIn: expiresInSeconds,
-          };
-        } catch (err) {
-          logger.error(`[HTTP Provider Auth]: Failed to refresh OAuth token: ${String(err)}`);
-          throw new Error(`Failed to refresh OAuth token: ${String(err)}`);
+      // Add username and password for password grant type
+      if (oauthConfig.grantType === 'password') {
+        if (!oauthConfig.username || !oauthConfig.password) {
+          throw new Error('Username and password are required for password grant type');
         }
-      },
-      (refreshResult) => ({
-        httpStatusCode: refreshResult.httpStatusCode,
-        expiresIn: refreshResult.expiresIn,
-      }),
-    );
+        tokenRequestBody.append('username', oauthConfig.username);
+        tokenRequestBody.append('password', oauthConfig.password);
+      }
 
-    return result.cachedToken;
+      if (oauthConfig.scopes && oauthConfig.scopes.length > 0) {
+        tokenRequestBody.append('scope', oauthConfig.scopes.join(' '));
+      }
+
+      // Make the token request
+      const httpsAgent = await this.getHttpsAgent();
+      const fetchOptions: any = {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/x-www-form-urlencoded',
+        },
+        body: tokenRequestBody.toString(),
+      };
+
+      if (httpsAgent) {
+        fetchOptions.dispatcher = httpsAgent;
+      }
+
+      const response = await fetchWithCache(
+        oauthConfig.tokenUrl,
+        fetchOptions,
+        getRequestTimeoutMs(),
+        'text',
+        true, // Always bust cache for token requests
+        0, // No retries for token requests
+      );
+
+      if (response.status < 200 || response.status >= 300) {
+        throw new Error(
+          `OAuth token request failed with status ${response.status} ${response.statusText}: ${response.data}`,
+        );
+      }
+
+      const tokenData = JSON.parse(response.data as string);
+
+      if (!tokenData.access_token) {
+        throw new Error('OAuth token response missing access_token');
+      }
+
+      // Calculate expiration time
+      // expires_in is typically in seconds, default to 3600 (1 hour) if not provided
+      const expiresInSeconds = tokenData.expires_in || 3600;
+      const expiresAt = Date.now() + expiresInSeconds * 1000;
+      const cachedToken = this.cacheToken(cacheKey, tokenData.access_token, expiresAt);
+
+      logger.debug('[HTTP Provider Auth]: Successfully refreshed OAuth token');
+      return cachedToken;
+    } catch (err) {
+      logger.error(`[HTTP Provider Auth]: Failed to refresh OAuth token: ${String(err)}`);
+      throw new Error(`Failed to refresh OAuth token: ${String(err)}`);
+    }
   }
 
   private cacheToken(cacheKey: string, token: string, expiresAt?: number): CachedAuthToken {
@@ -2609,50 +2655,7 @@ export class HttpProvider implements ApiProvider {
     context?: CallApiContextParams,
     options?: CallApiOptionsParams,
   ): Promise<ProviderResponse> {
-    const targetSpanContext: TargetSpanContext = {
-      targetType: 'http',
-      url: this.url,
-      providerId: this.id(),
-      label: this.label,
-      traceparent: context?.traceparent,
-      promptLabel: context?.prompt?.label,
-      evalId: context?.evaluationId || context?.test?.metadata?.evaluationId,
-      testIndex: context?.test?.vars?.__testIdx as number | undefined,
-      iteration: context?.iteration,
-    };
-
-    // Set up tracing context
-    const spanContext: GenAISpanContext = {
-      system: 'http',
-      operationName: 'chat',
-      model: this.url,
-      providerId: this.id(),
-      testIndex: context?.test?.vars?.__testIdx as number | undefined,
-      promptLabel: context?.prompt?.label,
-      // W3C Trace Context for linking to evaluation trace
-      traceparent: context?.traceparent,
-    };
-
-    // Result extractor to set response attributes on the span
-    const resultExtractor = (response: ProviderResponse): GenAISpanResult => {
-      const result: GenAISpanResult = {};
-      if (response.tokenUsage) {
-        result.tokenUsage = {
-          prompt: response.tokenUsage.prompt,
-          completion: response.tokenUsage.completion,
-          total: response.tokenUsage.total,
-        };
-      }
-      return result;
-    };
-
-    return withTargetSpan(targetSpanContext, () =>
-      withGenAISpan(
-        spanContext,
-        () => this.callApiInternal(prompt, context, options),
-        resultExtractor,
-      ),
-    );
+    return this.callApiInternal(prompt, context, options);
   }
 
   private async callApiInternal(
@@ -2895,39 +2898,31 @@ export class HttpProvider implements ApiProvider {
       logger.debug('[HTTP Provider]: Using custom HTTPS agent for TLS connection');
     }
 
-    const { data, cached, status, statusText, responseHeaders, latencyMs } =
-      await withHttpRequestSpan(
-        { method, url },
-        async () => {
-          const traceparent = getTraceparent();
-          if (traceparent) {
-            headers.traceparent = traceparent;
-            logger.debug(`[HTTP Provider]: Adding traceparent header: ${traceparent}`);
-          }
-          if (context?.tracestate) {
-            headers.tracestate = context.tracestate;
-          }
-
-          const result = await fetchWithCache(
-            url,
-            fetchOptions,
-            getRequestTimeoutMs(),
-            'text',
-            multipartBody ? true : (context?.bustCache ?? context?.debug),
-            this.config.maxRetries,
-          );
-
-          return {
-            data: result.data,
-            cached: result.cached,
-            status: result.status,
-            statusText: result.statusText,
-            responseHeaders: result.headers,
-            latencyMs: result.latencyMs,
-          };
-        },
-        (httpResult) => ({ httpStatusCode: httpResult.status }),
-      );
+    let data,
+      cached = false,
+      status,
+      statusText,
+      responseHeaders,
+      latencyMs: number | undefined;
+    try {
+      ({
+        data,
+        cached,
+        status,
+        statusText,
+        headers: responseHeaders,
+        latencyMs,
+      } = await fetchWithCache(
+        url,
+        fetchOptions,
+        getRequestTimeoutMs(),
+        'text',
+        multipartBody ? true : (context?.bustCache ?? context?.debug),
+        this.config.maxRetries,
+      ));
+    } catch (err) {
+      throw err;
+    }
 
     if (!(await this.validateStatus)(status)) {
       throw new Error(`HTTP call failed with status ${status} ${statusText}: ${data}`);
@@ -3007,6 +3002,7 @@ export class HttpProvider implements ApiProvider {
       rawText,
       transformedPrompt,
       prompt,
+      parsedData,
     );
   }
 
@@ -3144,39 +3140,31 @@ export class HttpProvider implements ApiProvider {
       logger.debug('[HTTP Provider]: Using custom HTTPS agent for TLS connection');
     }
 
-    const { data, cached, status, statusText, responseHeaders, latencyMs } =
-      await withHttpRequestSpan(
-        { method: parsedRequest.method, url },
-        async () => {
-          const traceparent = getTraceparent();
-          if (traceparent) {
-            parsedRequest.headers.traceparent = traceparent;
-            logger.debug(`[HTTP Provider]: Adding traceparent header: ${traceparent}`);
-          }
-          if (context?.tracestate) {
-            parsedRequest.headers.tracestate = context.tracestate;
-          }
-
-          const result = await fetchWithCache(
-            url,
-            fetchOptions,
-            getRequestTimeoutMs(),
-            'text',
-            context?.bustCache ?? context?.debug,
-            this.config.maxRetries,
-          );
-
-          return {
-            data: result.data,
-            cached: result.cached,
-            status: result.status,
-            statusText: result.statusText,
-            responseHeaders: result.headers,
-            latencyMs: result.latencyMs,
-          };
-        },
-        (httpResult) => ({ httpStatusCode: httpResult.status }),
-      );
+    let data,
+      cached = false,
+      status,
+      statusText,
+      responseHeaders,
+      latencyMs: number | undefined;
+    try {
+      ({
+        data,
+        cached,
+        status,
+        statusText,
+        headers: responseHeaders,
+        latencyMs,
+      } = await fetchWithCache(
+        url,
+        fetchOptions,
+        getRequestTimeoutMs(),
+        'text',
+        context?.bustCache ?? context?.debug,
+        this.config.maxRetries,
+      ));
+    } catch (err) {
+      throw err;
+    }
 
     logger.debug('[HTTP Provider]: Response received', {
       length: typeof data === 'string' ? data.length : undefined,
@@ -3260,6 +3248,7 @@ export class HttpProvider implements ApiProvider {
       rawText,
       transformedPrompt,
       prompt,
+      parsedData,
     );
   }
 
@@ -3285,7 +3274,16 @@ export class HttpProvider implements ApiProvider {
     rawText: string,
     transformedPrompt: any,
     prompt: string,
+    originalResponse?: unknown,
   ): Promise<ProviderResponse> {
+    const originalTokenUsage =
+      originalResponse &&
+      typeof originalResponse === 'object' &&
+      'tokenUsage' in originalResponse &&
+      originalResponse.tokenUsage &&
+      typeof originalResponse.tokenUsage === 'object'
+        ? (originalResponse.tokenUsage as Partial<TokenUsage>)
+        : undefined;
     // Estimate tokens if enabled
     let estimatedTokenUsage: Partial<TokenUsage> | undefined;
     if (this.config.tokenEstimation?.enabled) {
@@ -3294,29 +3292,16 @@ export class HttpProvider implements ApiProvider {
       estimatedTokenUsage = await this.estimateTokenUsage(promptText, completionText);
     }
 
-    if (parsedOutput?.output) {
-      const result = {
-        ...ret,
-        ...parsedOutput,
-      };
-      // Add estimated token usage if available and not already present
-      if (!result.tokenUsage) {
-        if (estimatedTokenUsage) {
-          result.tokenUsage = estimatedTokenUsage;
-        } else {
-          result.tokenUsage = { ...createEmptyTokenUsage(), numRequests: 1 };
-        }
-      }
-      return result;
-    }
-
+    const normalizedOutput = normalizeResponseTransformResult(parsedOutput);
     const result = {
       ...ret,
-      output: parsedOutput,
+      ...normalizedOutput,
     };
     // Add estimated token usage if available
     if (!result.tokenUsage) {
-      if (estimatedTokenUsage) {
+      if (originalTokenUsage) {
+        result.tokenUsage = originalTokenUsage;
+      } else if (estimatedTokenUsage) {
         result.tokenUsage = estimatedTokenUsage;
       } else {
         result.tokenUsage = { ...createEmptyTokenUsage(), numRequests: 1 };

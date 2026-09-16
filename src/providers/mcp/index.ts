@@ -1,5 +1,4 @@
 import logger from '../../logger';
-import { type TargetSpanContext, withTargetSpan } from '../tracing';
 import { loadTransformModule } from '../transformUtils';
 import { MCPClient } from './client';
 import { createTransformResponse, type MCPTransformResponseContext } from './transforms';
@@ -15,7 +14,6 @@ import type { MCPConfig } from './types';
 interface MCPProviderOptions {
   config?: MCPConfig;
   id?: string;
-  label?: string;
   // Default args to pass to tools
   defaultArgs?: Record<string, unknown>;
 }
@@ -23,7 +21,6 @@ interface MCPProviderOptions {
 export class MCPProvider implements ApiProvider {
   private mcpClient: MCPClient;
   config: MCPConfig;
-  label?: string;
   private defaultArgs?: Record<string, unknown>;
   private initializationPromise: Promise<void>;
   private transformResponse: Promise<
@@ -36,7 +33,6 @@ export class MCPProvider implements ApiProvider {
 
   constructor(options: MCPProviderOptions = {}) {
     this.config = options.config || { enabled: true };
-    this.label = options.label;
     this.defaultArgs = options.defaultArgs || {};
 
     this.mcpClient = new MCPClient(this.config);
@@ -77,27 +73,6 @@ export class MCPProvider implements ApiProvider {
     prompt: string,
     context?: CallApiContextParams,
     _options?: CallApiOptionsParams,
-  ): Promise<ProviderResponse> {
-    // Set up tracing context for target span
-    const spanContext: TargetSpanContext = {
-      targetType: 'mcp',
-      providerId: this.id(),
-      label: this.label,
-      // W3C Trace Context for linking to evaluation trace
-      traceparent: context?.traceparent,
-      // Promptfoo context from test case if available
-      promptLabel: context?.prompt?.label,
-      evalId: context?.evaluationId || context?.test?.metadata?.evaluationId,
-      testIndex: context?.test?.vars?.__testIdx as number | undefined,
-      iteration: context?.iteration,
-    };
-
-    return withTargetSpan(spanContext, () => this.callApiInternal(prompt, context));
-  }
-
-  private async callApiInternal(
-    prompt: string,
-    context?: CallApiContextParams,
   ): Promise<ProviderResponse> {
     try {
       // Ensure initialization is complete

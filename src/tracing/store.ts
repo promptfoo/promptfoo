@@ -1,7 +1,10 @@
-import { and, asc, eq, inArray, sql } from 'drizzle-orm';
+import { asc, eq, sql } from 'drizzle-orm';
 import { getDb } from '../database/index';
 import { spansTable, tracesTable } from '../database/tables';
 import logger from '../logger';
+import { sanitizeTraceAttributes } from './sanitizeAttributes';
+import { isRelevantSpan, matchesSpanFilter } from './spanFilter';
+import { SPAN_ROLE_ATTRIBUTE } from './spanRoles';
 
 import type { TraceData } from '../types/tracing';
 
@@ -47,107 +50,27 @@ export interface TraceSpanQueryOptions extends TraceAttributeSanitizationOptions
 export interface AddSpansOptions {
   skipTraceCheck?: boolean;
   warnIfMissingTrace?: boolean;
-  deduplicate?: boolean;
 }
 
-export interface AttributeSanitizationOptions {
-  redactAttributes?: string[];
-  sanitizeSensitiveAttributes?: boolean;
-}
-
+/**
+ * Span events are persisted inside the span's JSON attributes under this key, since the
+ * spans table has no dedicated events column.
+ */
 const SPAN_EVENTS_ATTRIBUTE = 'otel.span.events';
-
-const SENSITIVE_ATTRIBUTE_KEYS = [
-  'authorization',
-  'cookie',
-  'set-cookie',
-  'token',
-  'api_key',
-  'apikey',
-  'secret',
-  'password',
-  'passphrase',
-];
-
-const NORMALIZED_SENSITIVE_ATTRIBUTE_KEYS = SENSITIVE_ATTRIBUTE_KEYS.map((key) =>
-  key.replace(/[^a-z0-9]/g, ''),
-);
-
-const SAFE_TOKEN_ATTRIBUTE_KEYS = new Set([
-  'gen_ai.request.max_tokens',
-  'gen_ai.usage.input_tokens',
-  'gen_ai.usage.output_tokens',
-  'gen_ai.usage.total_tokens',
-  'gen_ai.usage.cached_tokens',
-  'gen_ai.usage.reasoning_tokens',
-  'gen_ai.usage.accepted_prediction_tokens',
-  'gen_ai.usage.rejected_prediction_tokens',
-  'gen_ai.usage.cache_read_input_tokens',
-  'gen_ai.usage.cache_creation_input_tokens',
-]);
-
-function isSensitiveAttributeKey(key: string): boolean {
-  const lowerKey = key.toLowerCase();
-  if (SAFE_TOKEN_ATTRIBUTE_KEYS.has(lowerKey)) {
-    return false;
-  }
-
-  const normalizedKey = lowerKey.replace(/[^a-z0-9]/g, '');
-
-  return SENSITIVE_ATTRIBUTE_KEYS.some((sensitiveKey, index) => {
-    return (
-      lowerKey.includes(sensitiveKey) ||
-      normalizedKey.includes(NORMALIZED_SENSITIVE_ATTRIBUTE_KEYS[index])
-    );
-  });
-}
-
-export function sanitizeTraceAttributes(
-  attributes: Record<string, any> | null | undefined,
-  options: AttributeSanitizationOptions = {},
-): Record<string, any> {
-  if (!attributes) {
-    return {};
-  }
-
-  const { redactAttributes = [], sanitizeSensitiveAttributes = true } = options;
-  const customPatterns = redactAttributes.map((pattern) => pattern.toLowerCase());
-
-  const sanitizeValue = (value: any): any => {
-    if (typeof value === 'string') {
-      return value.length > 400 ? `${value.slice(0, 400)}…` : value;
-    }
-    if (Array.isArray(value)) {
-      return value.map(sanitizeValue);
-    }
-    if (value && typeof value === 'object') {
-      return sanitizeTraceAttributes(value as Record<string, any>, options);
-    }
-    return value;
-  };
-
-  const sanitized: Record<string, any> = {};
-  for (const [key, value] of Object.entries(attributes)) {
-    if (customPatterns.some((pattern) => key.toLowerCase().includes(pattern))) {
-      sanitized[key] = '[REDACTED]';
-      continue;
-    }
-    if (sanitizeSensitiveAttributes && isSensitiveAttributeKey(key)) {
-      sanitized[key] = '<redacted>';
-      continue;
-    }
-    sanitized[key] = sanitizeValue(value);
-  }
-
-  return sanitized;
-}
 
 function serializeSpan(
   span: typeof spansTable.$inferSelect,
   shouldSanitizeAttributes = true,
 ): SpanData {
   const rawAttributes = span.attributes ?? undefined;
-  const events = rawAttributes?.[SPAN_EVENTS_ATTRIBUTE] as SpanData['events'] | undefined;
+  const attributes = rawAttributes
+    ? shouldSanitizeAttributes
+      ? sanitizeTraceAttributes(rawAttributes)
+      : rawAttributes
+    : undefined;
+  // Read events back from the sanitized attributes so event payloads inherit the same
+  // credential masking as the rest of the span.
+  const events = attributes?.[SPAN_EVENTS_ATTRIBUTE] as SpanData['events'] | undefined;
 
   return {
     spanId: span.spanId,
@@ -155,15 +78,43 @@ function serializeSpan(
     name: span.name,
     startTime: span.startTime,
     endTime: span.endTime ?? undefined,
-    attributes: rawAttributes
-      ? shouldSanitizeAttributes
-        ? sanitizeTraceAttributes(rawAttributes)
-        : rawAttributes
-      : undefined,
+    attributes,
     statusCode: span.statusCode ?? undefined,
     statusMessage: span.statusMessage ?? undefined,
-    ...(events && { events }),
+    ...(Array.isArray(events) && events.length > 0 && { events }),
   };
+}
+
+function isGraderOwnedSpan(
+  span: typeof spansTable.$inferSelect,
+  spansById: ReadonlyMap<string, typeof spansTable.$inferSelect>,
+  ownershipCache: Map<string, boolean>,
+): boolean {
+  let ancestor: typeof spansTable.$inferSelect | undefined = span;
+  const visitedSpanIds = new Set<string>();
+  let belongsToGrader = false;
+
+  while (ancestor && !visitedSpanIds.has(ancestor.spanId)) {
+    const cached = ownershipCache.get(ancestor.spanId);
+    if (cached !== undefined) {
+      belongsToGrader = cached;
+      break;
+    }
+
+    visitedSpanIds.add(ancestor.spanId);
+    if (ancestor.attributes?.[SPAN_ROLE_ATTRIBUTE] === 'grader') {
+      belongsToGrader = true;
+      break;
+    }
+
+    ancestor = ancestor.parentSpanId ? spansById.get(ancestor.parentSpanId) : undefined;
+  }
+
+  for (const spanId of visitedSpanIds) {
+    ownershipCache.set(spanId, belongsToGrader);
+  }
+
+  return belongsToGrader;
 }
 
 function sqliteTimestampFromMs(timestampMs: number): string {
@@ -208,19 +159,6 @@ function computeDepth(
   const currentDepth = parentDepth + 1;
   depthCache.set(span.spanId, currentDepth);
   return currentDepth;
-}
-
-function deriveSpanKind(span: SpanData): string {
-  const attributes = span.attributes || {};
-  const attributeKind = (attributes['span.kind'] ||
-    attributes['otel.span.kind'] ||
-    attributes['spanKind']) as string | undefined;
-
-  if (typeof attributeKind === 'string') {
-    return attributeKind.toLowerCase();
-  }
-
-  return 'internal';
 }
 
 export class TraceStore {
@@ -293,24 +231,7 @@ export class TraceStore {
         logger.debug(`[TraceStore] Trace ${traceId} found, proceeding with span insertion`);
       }
 
-      let spansToInsert = spans;
-      if (options?.deduplicate && spans.length > 0) {
-        const spanIds = [...new Set(spans.map((span) => span.spanId))];
-        const existingSpans = await db
-          .select({ spanId: spansTable.spanId })
-          .from(spansTable)
-          .where(and(eq(spansTable.traceId, traceId), inArray(spansTable.spanId, spanIds)));
-        const seenSpanIds = new Set(existingSpans.map((span) => span.spanId));
-        spansToInsert = spans.filter((span) => {
-          if (seenSpanIds.has(span.spanId)) {
-            return false;
-          }
-          seenSpanIds.add(span.spanId);
-          return true;
-        });
-      }
-
-      const spanRecords = spansToInsert.map((span) => {
+      const spanRecords = spans.map((span) => {
         logger.debug(`[TraceStore] Preparing span ${span.spanId} (${span.name}) for insertion`);
         return {
           id: crypto.randomUUID(),
@@ -332,7 +253,11 @@ export class TraceStore {
         return { stored: true };
       }
 
-      await db.insert(spansTable).values(spanRecords).run();
+      await db
+        .insert(spansTable)
+        .values(spanRecords)
+        .onConflictDoNothing({ target: [spansTable.traceId, spansTable.spanId] })
+        .run();
       logger.debug(
         `[TraceStore] Successfully added ${spanRecords.length} spans to trace ${traceId}`,
       );
@@ -492,8 +417,10 @@ export class TraceStore {
         .select()
         .from(spansTable)
         .where(eq(spansTable.traceId, traceId))
-        .orderBy(asc(spansTable.startTime));
+        .orderBy(asc(spansTable.startTime), asc(spansTable.spanId));
 
+      const rowsBySpanId = new Map(rows.map((row) => [row.spanId, row]));
+      const graderOwnedSpanIds = new Map<string, boolean>();
       const spanMap = new Map<string, SpanData>();
       const depthCache = new Map<string, number>();
 
@@ -504,36 +431,40 @@ export class TraceStore {
 
         const rawAttributes = row.attributes ?? {};
 
+        if (!includeInternalSpans && isGraderOwnedSpan(row, rowsBySpanId, graderOwnedSpanIds)) {
+          continue;
+        }
+
+        // Sanitize once so span events, which are stored inside the attributes blob,
+        // inherit the same redaction as every other attribute value.
+        const attributes = shouldSanitize ? sanitizeTraceAttributes(rawAttributes) : rawAttributes;
+
         const spanData: SpanData = {
           spanId: row.spanId,
           parentSpanId: row.parentSpanId ?? undefined,
           name: row.name,
           startTime: row.startTime,
           endTime: row.endTime ?? undefined,
-          attributes: shouldSanitize ? sanitizeTraceAttributes(rawAttributes) : rawAttributes,
+          attributes,
           statusCode: row.statusCode ?? undefined,
           statusMessage: row.statusMessage ?? undefined,
-          ...(Array.isArray(rawAttributes[SPAN_EVENTS_ATTRIBUTE]) && {
-            events: rawAttributes[SPAN_EVENTS_ATTRIBUTE] as unknown as SpanData['events'],
+          ...(Array.isArray(attributes[SPAN_EVENTS_ATTRIBUTE]) && {
+            events: attributes[SPAN_EVENTS_ATTRIBUTE] as unknown as SpanData['events'],
           }),
         };
 
-        const spanKind = deriveSpanKind({
-          ...spanData,
-          attributes: rawAttributes,
-        });
+        const hasExplicitFilter = Boolean(spanFilter?.length);
 
-        if (!includeInternalSpans && spanKind === 'internal') {
+        if (hasExplicitFilter && !matchesSpanFilter(spanData.name, spanFilter!)) {
           continue;
         }
 
-        if (spanFilter && spanFilter.length > 0) {
-          const matchesFilter = spanFilter.some((filterName) =>
-            spanData.name.toLowerCase().includes(filterName.toLowerCase()),
-          );
-          if (!matchesFilter) {
-            continue;
-          }
+        if (
+          !includeInternalSpans &&
+          !hasExplicitFilter &&
+          !isRelevantSpan({ attributes: rawAttributes, statusCode: spanData.statusCode })
+        ) {
+          continue;
         }
 
         spanMap.set(spanData.spanId, spanData);

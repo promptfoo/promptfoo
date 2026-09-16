@@ -5,7 +5,7 @@ import { getEnvBool, getEnvInt } from '../../envars';
 import logger from '../../logger';
 import { TOKEN_REFRESH_BUFFER_MS, type TokenRefreshLock } from '../../util/oauth';
 import { isMissingPackageImportError } from '../../util/packageImportErrors';
-import { withMCPToolCallSpan } from '../tracing';
+import { withGenAIToolSpan } from '../tracing';
 import {
   applyQueryParams,
   getAuthHeaders,
@@ -34,6 +34,16 @@ interface OAuthServerConfig {
   serverKey: string;
   serverConfig: MCPServerConfig;
   auth: MCPOAuthClientCredentialsAuth | MCPOAuthPasswordAuth;
+}
+
+/**
+ * Environment for a spawned stdio MCP server: the promptfoo process environment with
+ * the server's own `env` map layered on top. Per-server values win so a config can
+ * override an inherited variable (e.g. a scoped token) without unsetting the rest.
+ */
+function getStdioEnv(server: MCPServerConfig): Record<string, string> {
+  const parentEnv = process.env as Record<string, string>;
+  return server.env ? { ...parentEnv, ...server.env } : parentEnv;
 }
 
 /**
@@ -137,14 +147,23 @@ export class MCPClient {
 
     // Initialize servers
     const servers = this.config.servers || (this.config.server ? [this.config.server] : []);
+    const usedKeys = new Set(this.clients.keys());
     for (const server of servers) {
-      logger.info(`connecting to server ${server.name || server.url || server.path || 'default'}`);
-      await this.connectToServer(server);
+      const baseKey = server.name || server.url || server.path || server.command || 'default';
+      let serverKey = baseKey;
+      for (let suffix = 1; usedKeys.has(serverKey); suffix++) {
+        serverKey = `${baseKey}:${suffix}`;
+      }
+      usedKeys.add(serverKey);
+      logger.info(`connecting to server ${serverKey}`);
+      await this.connectToServer(server, serverKey);
     }
   }
 
-  private async connectToServer(server: MCPServerConfig): Promise<void> {
-    const serverKey = server.name || server.url || server.path || 'default';
+  private async connectToServer(
+    server: MCPServerConfig,
+    serverKey = server.name || server.url || server.path || 'default',
+  ): Promise<void> {
     const { Client } = await loadMcpClientSdk();
     const client = new Client({
       name: 'promptfoo-MCP',
@@ -156,13 +175,13 @@ export class MCPClient {
     try {
       const requestOptions = getEffectiveRequestOptions(this.config);
 
-      if (server.command && server.args) {
+      if (server.command) {
         const { StdioClientTransport } = await import('@modelcontextprotocol/sdk/client/stdio.js');
         // NPM package or other command execution
         transport = new StdioClientTransport({
           command: server.command,
-          args: server.args,
-          env: process.env as Record<string, string>,
+          args: server.args ?? [],
+          env: getStdioEnv(server),
         });
         await client.connect(transport, requestOptions);
       } else if (server.path) {
@@ -186,7 +205,7 @@ export class MCPClient {
         transport = new StdioClientTransport({
           command,
           args: [serverPath],
-          env: process.env as Record<string, string>,
+          env: getStdioEnv(server),
         });
         await client.connect(transport, requestOptions);
       } else if (server.url) {
@@ -263,7 +282,7 @@ export class MCPClient {
           logger.debug('Connected using SSE transport');
         }
       } else {
-        throw new Error('Either command+args or path or url must be specified for MCP server');
+        throw new Error('Either command or path or url must be specified for MCP server');
       }
 
       // Ping server to verify connection if configured
@@ -351,7 +370,9 @@ export class MCPClient {
     oauthConfig: OAuthServerConfig,
     forceRefresh: boolean,
   ): Promise<void> {
-    // If a refresh is already in progress, wait for it instead of starting a new one.
+    // Wait for each active refresh lock. Its owner clears it in finally; once no lock
+    // remains, this caller either uses the refreshed token or starts its own refresh.
+    // Another caller may install a new lock while we wait, so check again each time.
     while (true) {
       const existingRefreshPromise = this.tokenRefreshLocks.get(serverKey)?.promise;
       if (!existingRefreshPromise) {
@@ -365,10 +386,10 @@ export class MCPClient {
         if (this.hasValidToken(serverKey)) {
           return;
         }
-        // Token still needs refresh after waiting, so fall through and try again.
+        // The token is still stale; check for a replacement lock before refreshing.
         logger.debug(`[MCP] Token still needs refresh for ${serverKey}, refreshing again...`);
       } catch {
-        // If the in-progress refresh failed, we'll try again below
+        // The lock owner cleans up even on failure; check for a replacement lock.
         logger.debug(`[MCP] Previous token refresh failed for ${serverKey}, retrying...`);
       }
     }
@@ -415,11 +436,20 @@ export class MCPClient {
     this.transports.delete(serverKey);
 
     // Reconnect with fresh token
-    await this.connectToServer(oauthConfig.serverConfig);
+    await this.connectToServer(oauthConfig.serverConfig, serverKey);
     logger.debug(`[MCP] Successfully refreshed OAuth token for server ${serverKey}`);
   }
 
   async callTool(name: string, args: Record<string, unknown>): Promise<MCPToolResult> {
+    return await withGenAIToolSpan({ name, arguments: args, resultFormat: 'mcp' }, () =>
+      this.callToolInternal(name, args),
+    );
+  }
+
+  private async callToolInternal(
+    name: string,
+    args: Record<string, unknown>,
+  ): Promise<MCPToolResult> {
     const requestOptions = getEffectiveRequestOptions(this.config);
     const disconnectedServers: string[] = [];
 
@@ -445,87 +475,81 @@ export class MCPClient {
           disconnectedServers.push(serverKey);
           continue;
         }
-        return withMCPToolCallSpan(
-          { toolName: name, serverKey },
-          async () => {
-            let currentClient = client;
-            let retried = false;
+        let currentClient = client;
+        let retried = false;
 
-            while (true) {
-              try {
-                const result = await currentClient.callTool(
-                  { name, arguments: args },
-                  undefined, // use default result schema
-                  requestOptions,
-                );
+        // A successful call returns. Authentication failure allows one refresh and
+        // one retry; all other failures return an error after the catch block.
+        while (true) {
+          try {
+            const result = await currentClient.callTool(
+              { name, arguments: args },
+              undefined, // use default result schema
+              requestOptions,
+            );
 
-                // Handle different content types appropriately
-                let content = '';
-                if (result?.content) {
-                  if (typeof result.content === 'string') {
-                    // Try to parse JSON first, fall back to raw string
-                    try {
-                      const parsed = JSON.parse(result.content);
-                      content = typeof parsed === 'string' ? parsed : JSON.stringify(parsed);
-                    } catch {
-                      content = result.content;
-                    }
-                  } else if (Buffer.isBuffer(result.content)) {
-                    content = result.content.toString();
-                  } else {
-                    content = JSON.stringify(result.content);
-                  }
+            // Handle different content types appropriately
+            let content = '';
+            if (result?.content) {
+              if (typeof result.content === 'string') {
+                // Try to parse JSON first, fall back to raw string
+                try {
+                  const parsed = JSON.parse(result.content);
+                  content = typeof parsed === 'string' ? parsed : JSON.stringify(parsed);
+                } catch {
+                  content = result.content;
                 }
-
-                return {
-                  content,
-                  ...(result.isError ? { isError: true } : {}),
-                  raw: result,
-                };
-              } catch (error) {
-                const errorMessage = error instanceof Error ? error.message : String(error);
-
-                // Check if this is an auth error and we have OAuth config for this server
-                // This is a fallback in case the proactive refresh didn't catch an expired token
-                const isAuthError =
-                  errorMessage.includes('401') ||
-                  errorMessage.includes('Unauthorized') ||
-                  errorMessage.includes('authorization_endpoint') ||
-                  errorMessage.includes('token');
-
-                const oauthConfig = this.oauthConfigs.get(serverKey);
-                if (!retried && isAuthError && oauthConfig) {
-                  logger.debug(
-                    `[MCP] Auth error for ${serverKey}, attempting reactive token refresh`,
-                  );
-                  retried = true;
-                  try {
-                    await this.refreshOAuthToken(serverKey, oauthConfig, true);
-                    // Get the new client after reconnection
-                    const newClient = this.clients.get(serverKey);
-                    if (newClient) {
-                      currentClient = newClient;
-                      continue; // Retry with new token
-                    }
-                  } catch (refreshError) {
-                    const refreshErrorMsg =
-                      refreshError instanceof Error ? refreshError.message : String(refreshError);
-                    logger.error(`[MCP] Token refresh failed for ${serverKey}: ${refreshErrorMsg}`);
-                  }
-                }
-
-                if (this.isDebugEnabled) {
-                  logger.error(`Error calling tool ${name}: ${errorMessage}`);
-                }
-                return {
-                  content: '',
-                  error: errorMessage,
-                };
+              } else if (Buffer.isBuffer(result.content)) {
+                content = result.content.toString();
+              } else {
+                content = JSON.stringify(result.content);
               }
             }
-          },
-          (result) => ({ error: !!result.error }),
-        );
+
+            return {
+              content,
+              ...(result.isError ? { isError: true } : {}),
+              raw: result,
+            };
+          } catch (error) {
+            const errorMessage = error instanceof Error ? error.message : String(error);
+
+            // Check if this is an auth error and we have OAuth config for this server
+            // This is a fallback in case the proactive refresh didn't catch an expired token
+            const isAuthError =
+              errorMessage.includes('401') ||
+              errorMessage.includes('Unauthorized') ||
+              errorMessage.includes('authorization_endpoint') ||
+              errorMessage.includes('token');
+
+            const oauthConfig = this.oauthConfigs.get(serverKey);
+            if (!retried && isAuthError && oauthConfig) {
+              logger.debug(`[MCP] Auth error for ${serverKey}, attempting reactive token refresh`);
+              retried = true;
+              try {
+                await this.refreshOAuthToken(serverKey, oauthConfig, true);
+                // Get the new client after reconnection
+                const newClient = this.clients.get(serverKey);
+                if (newClient) {
+                  currentClient = newClient;
+                  continue; // Retry with new token
+                }
+              } catch (refreshError) {
+                const refreshErrorMsg =
+                  refreshError instanceof Error ? refreshError.message : String(refreshError);
+                logger.error(`[MCP] Token refresh failed for ${serverKey}: ${refreshErrorMsg}`);
+              }
+            }
+
+            if (this.isDebugEnabled) {
+              logger.error(`Error calling tool ${name}: ${errorMessage}`);
+            }
+            return {
+              content: '',
+              error: errorMessage,
+            };
+          }
+        }
       }
     }
 

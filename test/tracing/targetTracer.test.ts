@@ -1,14 +1,7 @@
 import { SpanKind, SpanStatusCode } from '@opentelemetry/api';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { PromptfooAttributes } from '../../src/tracing/genaiTracer';
-import { HttpAttributes } from '../../src/tracing/oauthTracer';
-import {
-  MCPAttributes,
-  TargetAttributes,
-  withHttpRequestSpan,
-  withMCPToolCallSpan,
-  withTargetSpan,
-} from '../../src/tracing/targetTracer';
+import { TargetAttributes, withTargetSpan } from '../../src/tracing/targetTracer';
 
 const mocks = vi.hoisted(() => {
   const span = {
@@ -19,14 +12,10 @@ const mocks = vi.hoisted(() => {
   };
 
   return {
-    contextActive: vi.fn(() => ({ traceId: 'active' })),
     propagationExtract: vi.fn(() => ({ traceId: 'parent' })),
     span,
     tracer: {
-      startActiveSpan: vi.fn((_name, _options, arg3, arg4) => {
-        const fn = typeof arg4 === 'function' ? arg4 : arg3;
-        return fn(span);
-      }),
+      startActiveSpan: vi.fn((_name, _options, _context, fn) => fn(span)),
     },
   };
 });
@@ -36,22 +25,11 @@ vi.mock('@opentelemetry/api', async () => {
 
   return {
     ...actual,
-    context: {
-      ...actual.context,
-      active: mocks.contextActive,
-    },
     propagation: {
       ...actual.propagation,
       extract: mocks.propagationExtract,
     },
     ROOT_CONTEXT: { traceId: 'root' },
-    SpanKind: {
-      CLIENT: 2,
-    },
-    SpanStatusCode: {
-      OK: 1,
-      ERROR: 2,
-    },
     trace: {
       ...actual.trace,
       getTracer: vi.fn(() => mocks.tracer),
@@ -59,46 +37,39 @@ vi.mock('@opentelemetry/api', async () => {
   };
 });
 
-describe('targetTracer', () => {
+describe('universal target tracing', () => {
   beforeEach(() => {
     vi.clearAllMocks();
   });
 
-  it('creates target spans with trace linkage, context attributes, and cache state', async () => {
+  it('records target context and cached responses for custom providers', async () => {
+    const traceparent = '00-0123456789abcdef0123456789abcdef-0123456789abcdef-01';
     const result = await withTargetSpan(
       {
-        targetType: 'http',
-        url: 'https://api.example.com/chat',
-        providerId: 'http:chat',
-        label: 'Chat API',
-        traceparent: '00-trace-id-span-id-01',
-        promptLabel: 'llm-rubric',
+        targetType: 'provider',
+        providerId: 'python:customer_provider.py',
+        label: 'Customer provider',
+        traceparent,
+        promptLabel: 'test prompt',
         evalId: 'eval-1',
-        testIndex: 4,
-        iteration: 2,
+        testIndex: 3,
       },
       async () => ({ cached: true, output: 'ok' }),
     );
 
     expect(result).toEqual({ cached: true, output: 'ok' });
-    expect(mocks.propagationExtract).toHaveBeenCalledWith(
-      { traceId: 'root' },
-      { traceparent: '00-trace-id-span-id-01' },
-    );
+    expect(mocks.propagationExtract).toHaveBeenCalledWith({ traceId: 'root' }, { traceparent });
     expect(mocks.tracer.startActiveSpan).toHaveBeenCalledWith(
-      'Chat API',
+      'Customer provider',
       {
         kind: SpanKind.CLIENT,
         attributes: expect.objectContaining({
-          [TargetAttributes.SERVICE_NAME]: 'llm-rubric',
-          [TargetAttributes.TARGET_TYPE]: 'http',
-          [TargetAttributes.TARGET_URL]: 'https://api.example.com/chat',
-          [TargetAttributes.TARGET_LABEL]: 'Chat API',
-          [PromptfooAttributes.PROVIDER_ID]: 'http:chat',
-          [PromptfooAttributes.PROMPT_LABEL]: 'llm-rubric',
+          [TargetAttributes.TARGET_TYPE]: 'provider',
+          [TargetAttributes.TARGET_LABEL]: 'Customer provider',
+          [PromptfooAttributes.PROVIDER_ID]: 'python:customer_provider.py',
+          [PromptfooAttributes.PROMPT_LABEL]: 'test prompt',
           [PromptfooAttributes.EVAL_ID]: 'eval-1',
-          [PromptfooAttributes.TEST_INDEX]: 4,
-          [PromptfooAttributes.ITERATION]: 2,
+          [PromptfooAttributes.TEST_INDEX]: 3,
         }),
       },
       { traceId: 'parent' },
@@ -106,82 +77,67 @@ describe('targetTracer', () => {
     );
     expect(mocks.span.setAttribute).toHaveBeenCalledWith(PromptfooAttributes.CACHE_HIT, true);
     expect(mocks.span.setStatus).toHaveBeenCalledWith({ code: SpanStatusCode.OK });
-    expect(mocks.span.end).toHaveBeenCalled();
+    expect(mocks.span.end).toHaveBeenCalledOnce();
   });
 
-  it('marks target responses with provider errors as span failures', async () => {
-    await withTargetSpan({ targetType: 'mcp', providerId: 'mcp' }, async () => ({
-      error: 'tool failed',
-    }));
+  it('records provider error responses without swallowing the result', async () => {
+    const result = await withTargetSpan(
+      {
+        targetType: 'provider',
+        providerId: 'a2a:customer-agent',
+        traceparent: '00-0123456789abcdef0123456789abcdef-0123456789abcdef-01',
+      },
+      async () => ({ error: 'agent unavailable' }),
+    );
 
+    expect(result).toEqual({ error: 'agent unavailable' });
     expect(mocks.span.setStatus).toHaveBeenCalledWith({
       code: SpanStatusCode.ERROR,
-      message: 'tool failed',
+      message: 'agent unavailable',
     });
     expect(mocks.span.recordException).toHaveBeenCalledWith(expect.any(Error));
   });
 
-  it('records thrown target span exceptions', async () => {
-    const error = new Error('target failed');
+  it('keeps grader-provider spans free of target-only metadata', async () => {
+    await withTargetSpan(
+      {
+        targetType: 'provider',
+        providerId: 'openai:judge',
+        label: 'Judge provider',
+        role: 'grader',
+        traceparent: '00-0123456789abcdef0123456789abcdef-0123456789abcdef-01',
+      },
+      async () => ({ output: 'pass' }),
+    );
+
+    const [name, options] = mocks.tracer.startActiveSpan.mock.calls[0];
+    expect(name).toBe('grader provider Judge provider');
+    expect(options.attributes).toMatchObject({
+      [PromptfooAttributes.PROVIDER_ID]: 'openai:judge',
+      'promptfoo.span.role': 'grader',
+    });
+    expect(options.attributes).not.toHaveProperty(TargetAttributes.TARGET_TYPE);
+    expect(options.attributes).not.toHaveProperty(TargetAttributes.TARGET_LABEL);
+    expect(options.attributes).not.toHaveProperty('service.name');
+  });
+
+  it('records and rethrows provider exceptions', async () => {
+    const error = new Error('target unavailable');
 
     await expect(
-      withTargetSpan({ targetType: 'http', providerId: 'http:test' }, async () => {
-        throw error;
-      }),
-    ).rejects.toThrow('target failed');
+      withTargetSpan(
+        {
+          targetType: 'http',
+          providerId: 'http:customer-api',
+          traceparent: '00-0123456789abcdef0123456789abcdef-0123456789abcdef-01',
+        },
+        async () => {
+          throw error;
+        },
+      ),
+    ).rejects.toThrow('target unavailable');
 
-    expect(mocks.span.setStatus).toHaveBeenCalledWith({
-      code: SpanStatusCode.ERROR,
-      message: 'target failed',
-    });
     expect(mocks.span.recordException).toHaveBeenCalledWith(error);
-  });
-
-  it('marks MCP tool call spans from result extractors', async () => {
-    await withMCPToolCallSpan(
-      { toolName: 'lookup', serverKey: 'server-1' },
-      async () => ({ error: true }),
-      (value) => value,
-    );
-
-    expect(mocks.tracer.startActiveSpan).toHaveBeenCalledWith(
-      'mcp tool_call lookup',
-      {
-        kind: SpanKind.CLIENT,
-        attributes: expect.objectContaining({
-          [TargetAttributes.SERVICE_NAME]: 'promptfoo-cli',
-          [MCPAttributes.TOOL_NAME]: 'lookup',
-          [MCPAttributes.SERVER_KEY]: 'server-1',
-        }),
-      },
-      expect.any(Function),
-    );
-    expect(mocks.span.setStatus).toHaveBeenCalledWith({
-      code: SpanStatusCode.ERROR,
-      message: 'Tool call returned an error',
-    });
-  });
-
-  it('captures HTTP request metadata when URL parsing fails', async () => {
-    await withHttpRequestSpan(
-      { method: 'POST', url: 'not a valid URL' },
-      async () => ({ status: 201 }),
-      () => ({ httpStatusCode: 201 }),
-    );
-
-    expect(mocks.tracer.startActiveSpan).toHaveBeenCalledWith(
-      'POST',
-      {
-        kind: SpanKind.CLIENT,
-        attributes: expect.objectContaining({
-          [TargetAttributes.SERVICE_NAME]: 'promptfoo-cli',
-          [HttpAttributes.REQUEST_METHOD]: 'POST',
-          [HttpAttributes.URL_FULL]: 'not a valid URL',
-        }),
-      },
-      expect.any(Function),
-    );
-    expect(mocks.span.setAttribute).toHaveBeenCalledWith(HttpAttributes.RESPONSE_STATUS_CODE, 201);
-    expect(mocks.span.setStatus).toHaveBeenCalledWith({ code: SpanStatusCode.OK });
+    expect(mocks.span.end).toHaveBeenCalledOnce();
   });
 });

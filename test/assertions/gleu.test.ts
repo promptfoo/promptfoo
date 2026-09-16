@@ -20,6 +20,20 @@ describe('GLEU score calculation', () => {
     expect(score).toBeGreaterThan(0.95);
   });
 
+  it('removes long trailing period runs without changing the score', () => {
+    const trailingPeriods = '.'.repeat(50_000);
+
+    expect(calculateGleuScore(`The cat${trailingPeriods}`, ['The cat'])).toBe(1);
+    expect(calculateGleuScore('The cat', [`The cat${trailingPeriods}`])).toBe(1);
+  });
+
+  it('preserves long period runs that are followed by other punctuation', () => {
+    const punctuation = `${'.'.repeat(50_000)}!`;
+
+    expect(calculateGleuScore(`The cat${punctuation}`, [`The cat${punctuation}`])).toBe(1);
+    expect(calculateGleuScore(`The cat${punctuation}`, ['The cat!'])).toBeLessThan(1);
+  });
+
   it('should handle the infamous "the the the … " example', () => {
     const references = ['The cat sat on the mat'];
     const candidate = 'the the the the the the the';

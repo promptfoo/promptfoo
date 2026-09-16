@@ -5,381 +5,340 @@ import {
   type Span,
   SpanKind,
   SpanStatusCode,
+  trace,
 } from '@opentelemetry/api';
-import { getGenAITracer, PromptfooAttributes } from './genaiTracer';
-import { getServiceName } from './graderTracer';
-import { HttpAttributes } from './oauthTracer';
+import {
+  GenAIAttributes,
+  getGenAITracer,
+  PromptfooAttributes,
+  sanitizeBody,
+  withGenAISpan,
+} from './genaiTracer';
+import {
+  getActiveTraceparent,
+  type PromptfooSpanRole,
+  SPAN_ROLE_ATTRIBUTE,
+  withSpanRole,
+} from './spanRoles';
 
-/**
- * Target-specific attribute names for tracing.
- * Uses the promptfoo namespace for custom attributes.
- */
+import type { ApiProvider, CallApiContextParams, ProviderResponse } from '../types/index';
+
 export const TargetAttributes = {
-  // Service identification
-  SERVICE_NAME: 'service.name',
-
-  // Target type (http, mcp, websocket)
   TARGET_TYPE: 'promptfoo.target.type',
-
-  // Target endpoint URL
-  TARGET_URL: 'promptfoo.target.url',
-
-  // Target label (human-readable name for the target)
   TARGET_LABEL: 'promptfoo.target.label',
 } as const;
 
-/**
- * Target types for span categorization.
- */
-export type TargetType = 'http' | 'mcp' | 'websocket' | 'llm';
+export const GraderAttributes = {
+  GRADER_ID: 'promptfoo.grader.id',
+} as const;
 
-/**
- * Context for creating a target span.
- */
+const MAX_GRADING_EXPLANATION_LENGTH = 1024;
+
+export type TargetType = 'http' | 'mcp' | 'websocket' | 'provider';
+
 export interface TargetSpanContext {
-  /** The type of target (http, mcp, websocket) */
   targetType: TargetType;
-  /** The target endpoint URL */
-  url?: string;
-  /** The provider ID (used for span name if label not provided) */
   providerId: string;
-  /** Optional provider label (preferred for span name) */
   label?: string;
-  /** W3C Trace Context - for propagating trace context from parent */
-  traceparent?: string;
-  /** Optional prompt label for identifying which prompt was used */
+  traceparent: string;
   promptLabel?: string;
-  /** Optional evaluation ID */
   evalId?: string;
-  /** Optional test case index */
   testIndex?: number;
-  /** Optional iteration/turn number (1-indexed) */
+  /** Iteration/turn number (1-indexed) for multi-turn red-team strategies. */
   iteration?: number;
+  role?: Extract<PromptfooSpanRole, 'target' | 'grader'>;
 }
 
-/**
- * Execute a function within a target span.
- *
- * This wrapper creates a root span for HTTP, MCP, or WebSocket target execution.
- * The span:
- * - Sets service.name = 'promptfoo-cli'
- * - Uses provider label or ID as the span name
- * - Sets promptfoo.target.* attributes
- * - Provides context for child spans (OAuth, HTTP requests, etc.)
- * - Sets span status to OK if no error, or ERROR if exception thrown
- *
- * @param ctx - Target span context with provider information
- * @param fn - The async function to execute
- * @returns The return value from fn
- *
- * @example
- * ```typescript
- * const response = await withTargetSpan(
- *   {
- *     targetType: 'http',
- *     url: 'https://api.example.com/chat',
- *     providerId: 'http:chat',
- *     label: 'Chat API',
- *   },
- *   async (span) => {
- *     // OAuth and HTTP request spans will be children of this span
- *     // Span status will be set to OK if no error, or ERROR if exception thrown
- *     return await makeRequest();
- *   }
- * );
- * ```
- */
+/** Keep one recorded test-case root active until immediate or deferred grading has finished. */
+export async function withTestCaseSpan<T>(
+  rootSpan: Span | undefined,
+  fn: () => Promise<T>,
+  getDeferredCompletion?: (result: T) => Promise<unknown> | undefined,
+): Promise<T> {
+  if (!rootSpan) {
+    return fn();
+  }
+
+  let result: T;
+  try {
+    const rootContext = trace.setSpan(ROOT_CONTEXT, rootSpan);
+    result = await context.with(rootContext, () => withSpanRole('test_case', fn));
+  } catch (error) {
+    rootSpan.setStatus({
+      code: SpanStatusCode.ERROR,
+      message: error instanceof Error ? error.message : String(error),
+    });
+    if (error instanceof Error) {
+      rootSpan.recordException(error);
+    }
+    rootSpan.end();
+    throw error;
+  }
+
+  const finish = () => {
+    const row = Array.isArray(result) ? result[0] : undefined;
+    if (row && typeof row === 'object') {
+      if ('success' in row && typeof row.success === 'boolean') {
+        rootSpan.setAttribute('promptfoo.test.success', row.success);
+      }
+      if ('score' in row && typeof row.score === 'number') {
+        rootSpan.setAttribute('promptfoo.test.score', row.score);
+      }
+      if ('error' in row && row.error) {
+        rootSpan.setStatus({ code: SpanStatusCode.ERROR, message: String(row.error) });
+      } else {
+        rootSpan.setStatus({ code: SpanStatusCode.OK });
+      }
+    } else {
+      rootSpan.setStatus({ code: SpanStatusCode.OK });
+    }
+    rootSpan.end();
+  };
+
+  const completion = getDeferredCompletion?.(result);
+  if (completion) {
+    void completion.then(finish, finish);
+  } else {
+    finish();
+  }
+
+  return result;
+}
+
+/** Record one target span for every evaluated provider, including custom providers. */
 export async function withTargetSpan<T>(
   ctx: TargetSpanContext,
   fn: (span: Span) => Promise<T>,
 ): Promise<T> {
-  const tracer = getGenAITracer();
-
-  // Span name: use label if provided, otherwise provider ID
-  const spanName = ctx.label || ctx.providerId;
-
-  // Extract parent context from traceparent if provided
-  let parentContext = context.active();
-  if (ctx.traceparent) {
-    const carrier = { traceparent: ctx.traceparent };
-    parentContext = propagation.extract(ROOT_CONTEXT, carrier);
-  }
-
-  // Build attributes - use dynamic service name based on prompt label
-  const attributes: Record<string, string | number | boolean> = {
-    [TargetAttributes.SERVICE_NAME]: getServiceName(ctx.promptLabel),
-    [TargetAttributes.TARGET_TYPE]: ctx.targetType,
+  const activeTraceparent = getActiveTraceparent();
+  const parentContext =
+    activeTraceparent?.split('-')[1] === ctx.traceparent.split('-')[1]
+      ? context.active()
+      : propagation.extract(ROOT_CONTEXT, { traceparent: ctx.traceparent });
+  const role = ctx.role ?? 'target';
+  const attributes: Record<string, string | number> = {
     [PromptfooAttributes.PROVIDER_ID]: ctx.providerId,
+    [SPAN_ROLE_ATTRIBUTE]: role,
   };
 
-  if (ctx.url) {
-    attributes[TargetAttributes.TARGET_URL] = ctx.url;
+  if (role === 'target') {
+    attributes[TargetAttributes.TARGET_TYPE] = ctx.targetType;
+    if (ctx.label) {
+      attributes[TargetAttributes.TARGET_LABEL] = ctx.label;
+    }
   }
-
-  if (ctx.label) {
-    attributes[TargetAttributes.TARGET_LABEL] = ctx.label;
-  }
-
   if (ctx.promptLabel) {
     attributes[PromptfooAttributes.PROMPT_LABEL] = ctx.promptLabel;
   }
-
   if (ctx.evalId) {
     attributes[PromptfooAttributes.EVAL_ID] = ctx.evalId;
   }
-
   if (ctx.testIndex !== undefined) {
     attributes[PromptfooAttributes.TEST_INDEX] = ctx.testIndex;
   }
-
   if (ctx.iteration !== undefined) {
     attributes[PromptfooAttributes.ITERATION] = ctx.iteration;
   }
 
-  const spanCallback = async (span: Span): Promise<T> => {
-    try {
-      const value = await fn(span);
-
-      // Set cache hit attribute if present in response
-      if (value && typeof value === 'object' && 'cached' in value) {
-        span.setAttribute(PromptfooAttributes.CACHE_HIT, Boolean(value.cached));
-      }
-
-      // Check if the response contains an error field (e.g., ProviderResponse.error)
-      if (value && typeof value === 'object' && 'error' in value && value.error) {
-        const errorMessage = typeof value.error === 'string' ? value.error : String(value.error);
-        span.setStatus({
-          code: SpanStatusCode.ERROR,
-          message: errorMessage,
-        });
-        // Record the error as an exception for better visibility in tracing backends
-        span.recordException(new Error(errorMessage));
-      } else {
-        span.setStatus({ code: SpanStatusCode.OK });
-      }
-
-      return value;
-    } catch (error) {
-      span.setStatus({
-        code: SpanStatusCode.ERROR,
-        message: error instanceof Error ? error.message : String(error),
-      });
-
-      if (error instanceof Error) {
-        span.recordException(error);
-      }
-
-      throw error;
-    } finally {
-      span.end();
-    }
-  };
-
-  return tracer.startActiveSpan(
-    spanName,
-    {
-      kind: SpanKind.CLIENT,
-      attributes,
-    },
+  return getGenAITracer().startActiveSpan(
+    role === 'grader'
+      ? `grader provider ${ctx.label || ctx.providerId}`
+      : ctx.label || ctx.providerId,
+    { kind: SpanKind.CLIENT, attributes },
     parentContext,
-    spanCallback,
-  );
-}
-
-/**
- * Context for creating an HTTP request span.
- */
-export interface HttpRequestSpanContext {
-  /** HTTP method */
-  method: string;
-  /** Request URL */
-  url: string;
-}
-
-/**
- * Result data to attach to an HTTP request span after completion.
- */
-export interface HttpRequestSpanResult {
-  /** HTTP status code */
-  httpStatusCode?: number;
-}
-
-/**
- * Execute a function within an HTTP request span.
- *
- * This creates a child span for the actual HTTP request, separate from
- * the parent target span. This allows proper distributed tracing where
- * the external service can link its spans to this HTTP request span.
- *
- * @param ctx - HTTP request span context
- * @param fn - The async function to execute (typically the fetch call)
- * @param resultExtractor - Optional function to extract result data from the return value
- * @returns The return value from fn
- */
-/**
- * MCP-specific attribute names for tracing.
- */
-export const MCPAttributes = {
-  TOOL_NAME: 'mcp.tool.name',
-  SERVER_KEY: 'mcp.server.key',
-} as const;
-
-/**
- * Context for creating an MCP tool call span.
- */
-export interface MCPToolCallSpanContext {
-  /** Tool name being called */
-  toolName: string;
-  /** Server key (identifier for the MCP server) */
-  serverKey?: string;
-}
-
-/**
- * Result data to attach to an MCP tool call span after completion.
- */
-export interface MCPToolCallSpanResult {
-  /** Whether the tool call resulted in an error */
-  error?: boolean;
-}
-
-/**
- * Execute a function within an MCP tool call span.
- *
- * @param ctx - MCP tool call span context
- * @param fn - The async function to execute (typically the tool call)
- * @param resultExtractor - Optional function to extract result data from the return value
- * @returns The return value from fn
- */
-export async function withMCPToolCallSpan<T>(
-  ctx: MCPToolCallSpanContext,
-  fn: (span: Span) => Promise<T>,
-  resultExtractor?: (value: T) => MCPToolCallSpanResult,
-): Promise<T> {
-  const tracer = getGenAITracer();
-
-  const spanName = `mcp tool_call ${ctx.toolName}`;
-  const attributes: Record<string, string> = {
-    [TargetAttributes.SERVICE_NAME]: 'promptfoo-cli',
-    [MCPAttributes.TOOL_NAME]: ctx.toolName,
-  };
-
-  if (ctx.serverKey) {
-    attributes[MCPAttributes.SERVER_KEY] = ctx.serverKey;
-  }
-
-  const spanCallback = async (span: Span): Promise<T> => {
-    try {
-      const value = await fn(span);
-
-      // Set response attributes if extractor provided
-      if (resultExtractor) {
-        const result = resultExtractor(value);
-        if (result.error) {
-          span.setStatus({
-            code: SpanStatusCode.ERROR,
-            message: 'Tool call returned an error',
-          });
+    async (span) => {
+      try {
+        const result = await withSpanRole(role, () => fn(span));
+        if (result && typeof result === 'object' && 'cached' in result) {
+          span.setAttribute(PromptfooAttributes.CACHE_HIT, Boolean(result.cached));
+        }
+        if (result && typeof result === 'object' && 'error' in result && result.error) {
+          const message = String(result.error);
+          span.setStatus({ code: SpanStatusCode.ERROR, message });
+          span.recordException(new Error(message));
         } else {
           span.setStatus({ code: SpanStatusCode.OK });
         }
-      } else {
-        span.setStatus({ code: SpanStatusCode.OK });
+        return result;
+      } catch (error) {
+        span.setStatus({
+          code: SpanStatusCode.ERROR,
+          message: error instanceof Error ? error.message : String(error),
+        });
+        if (error instanceof Error) {
+          span.recordException(error);
+        }
+        throw error;
+      } finally {
+        span.end();
       }
-
-      return value;
-    } catch (error) {
-      span.setStatus({
-        code: SpanStatusCode.ERROR,
-        message: error instanceof Error ? error.message : String(error),
-      });
-
-      if (error instanceof Error) {
-        span.recordException(error);
-      }
-
-      throw error;
-    } finally {
-      span.end();
-    }
-  };
-
-  return tracer.startActiveSpan(
-    spanName,
-    {
-      kind: SpanKind.CLIENT,
-      attributes,
     },
-    spanCallback,
   );
 }
 
-export async function withHttpRequestSpan<T>(
-  ctx: HttpRequestSpanContext,
-  fn: (span: Span) => Promise<T>,
-  resultExtractor?: (value: T) => HttpRequestSpanResult,
+interface TracedProviderCallOptions {
+  provider: ApiProvider;
+  callContext?: CallApiContextParams;
+  operationName?: 'embeddings';
+  role?: Extract<PromptfooSpanRole, 'target' | 'grader'>;
+  promptLabel?: string;
+  evalId?: string;
+  testIndex?: number;
+}
+
+function getTargetType(providerId: string): TargetType {
+  if (providerId.startsWith('mcp')) {
+    return 'mcp';
+  }
+  if (providerId.startsWith('ws')) {
+    return 'websocket';
+  }
+  return providerId.startsWith('http') ? 'http' : 'provider';
+}
+
+/** Apply consistent provider spans and propagation without modifying provider implementations. */
+export async function withTracedProviderCall<T extends ProviderResponse>(
+  {
+    provider,
+    callContext,
+    operationName,
+    role = 'target',
+    promptLabel,
+    evalId,
+    testIndex,
+  }: TracedProviderCallOptions,
+  invoke: (callContext: CallApiContextParams | undefined) => Promise<T>,
 ): Promise<T> {
-  const tracer = getGenAITracer();
-
-  // Parse URL for span name and attributes
-  let spanName = `${ctx.method}`;
-  const attributes: Record<string, string | number> = {
-    [TargetAttributes.SERVICE_NAME]: 'promptfoo-cli',
-    [HttpAttributes.REQUEST_METHOD]: ctx.method,
-  };
-
-  try {
-    const url = new URL(ctx.url);
-    spanName = `${ctx.method} ${url.pathname}`;
-    attributes[HttpAttributes.URL_FULL] = `${url.protocol}//${url.host}${url.pathname}`;
-    attributes[HttpAttributes.URL_SCHEME] = url.protocol.replace(':', '');
-    attributes[HttpAttributes.URL_PATH] = url.pathname;
-    attributes[HttpAttributes.SERVER_ADDRESS] = url.hostname;
-    attributes[HttpAttributes.SERVER_PORT] = url.port
-      ? parseInt(url.port, 10)
-      : url.protocol === 'https:'
-        ? 443
-        : 80;
-  } catch {
-    // If URL parsing fails, use the raw URL
-    attributes[HttpAttributes.URL_FULL] = ctx.url.slice(0, 256);
+  const traceparent = getActiveTraceparent() ?? callContext?.traceparent;
+  if (!traceparent) {
+    return invoke(callContext);
   }
 
-  const spanCallback = async (span: Span): Promise<T> => {
-    try {
-      const value = await fn(span);
-
-      // Set response attributes if extractor provided
-      if (resultExtractor) {
-        const result = resultExtractor(value);
-        if (result.httpStatusCode !== undefined) {
-          span.setAttribute(HttpAttributes.RESPONSE_STATUS_CODE, result.httpStatusCode);
-        }
-      }
-
-      span.setStatus({ code: SpanStatusCode.OK });
-      return value;
-    } catch (error) {
-      span.setStatus({
-        code: SpanStatusCode.ERROR,
-        message: error instanceof Error ? error.message : String(error),
-      });
-
-      if (error instanceof Error) {
-        span.recordException(error);
-      }
-
-      throw error;
-    } finally {
-      span.end();
-    }
-  };
-
-  return tracer.startActiveSpan(
-    spanName,
+  const providerId = provider.id();
+  return withTargetSpan(
     {
-      kind: SpanKind.CLIENT,
-      attributes,
+      targetType: getTargetType(providerId),
+      providerId,
+      label: provider.label,
+      traceparent,
+      promptLabel: promptLabel ?? callContext?.prompt?.label,
+      evalId: evalId ?? callContext?.evaluationId,
+      testIndex,
+      iteration: callContext?.iteration,
+      role,
     },
-    spanCallback,
+    async () => {
+      const childTraceparent = getActiveTraceparent() ?? traceparent;
+      const invokeProvider = () =>
+        callContext ? invoke({ ...callContext, traceparent: childTraceparent }) : invoke(undefined);
+
+      if (operationName === 'embeddings') {
+        const providerWithModel = provider as ApiProvider & {
+          deploymentName?: unknown;
+          modelName?: unknown;
+        };
+        const providerModel =
+          typeof providerWithModel.modelName === 'string'
+            ? providerWithModel.modelName
+            : typeof providerWithModel.deploymentName === 'string'
+              ? providerWithModel.deploymentName
+              : providerId.split(':').slice(1).join(':') || providerId;
+
+        return withGenAISpan(
+          {
+            system: providerId.split(':', 1)[0],
+            operationName,
+            model: providerModel,
+            providerId,
+            promptLabel,
+            traceparent: childTraceparent,
+          },
+          invokeProvider,
+          (response) => ({ tokenUsage: response.tokenUsage, cacheHit: response.cached }),
+        );
+      }
+
+      return invokeProvider();
+    },
+  );
+}
+
+interface GraderSpanContext {
+  graderId: string;
+  traceparent?: string;
+  evalId?: string;
+  testIndex?: number;
+}
+
+function setEvaluationResultAttributes(span: Span, result: unknown): void {
+  const grade = result && typeof result === 'object' && 'grade' in result ? result.grade : result;
+  if (!grade || typeof grade !== 'object') {
+    return;
+  }
+
+  if ('pass' in grade && typeof grade.pass === 'boolean') {
+    span.setAttribute(GenAIAttributes.EVALUATION_SCORE_LABEL, grade.pass ? 'pass' : 'fail');
+  }
+  if ('score' in grade && typeof grade.score === 'number') {
+    span.setAttribute(GenAIAttributes.EVALUATION_SCORE_VALUE, grade.score);
+  }
+  if ('reason' in grade && typeof grade.reason === 'string' && grade.reason) {
+    const explanation = sanitizeBody(grade.reason);
+    span.setAttribute(
+      GenAIAttributes.EVALUATION_EXPLANATION,
+      explanation.length > MAX_GRADING_EXPLANATION_LENGTH
+        ? `${explanation.slice(0, MAX_GRADING_EXPLANATION_LENGTH - 1)}…`
+        : explanation,
+    );
+  }
+}
+
+/** Instrument assertion dispatch and registered graders at their shared invocation boundaries. */
+export async function withGraderSpan<T>(ctx: GraderSpanContext, fn: () => Promise<T>): Promise<T> {
+  const traceparent = getActiveTraceparent() ?? ctx.traceparent;
+  if (!traceparent) {
+    return fn();
+  }
+
+  const activeTraceparent = getActiveTraceparent();
+  const parentContext =
+    activeTraceparent?.split('-')[1] === traceparent.split('-')[1]
+      ? context.active()
+      : propagation.extract(ROOT_CONTEXT, { traceparent });
+  const attributes: Record<string, string | number> = {
+    [GraderAttributes.GRADER_ID]: ctx.graderId,
+    [GenAIAttributes.EVALUATION_NAME]: ctx.graderId,
+    [SPAN_ROLE_ATTRIBUTE]: 'grader',
+  };
+  if (ctx.evalId) {
+    attributes[PromptfooAttributes.EVAL_ID] = ctx.evalId;
+  }
+  if (ctx.testIndex !== undefined) {
+    attributes[PromptfooAttributes.TEST_INDEX] = ctx.testIndex;
+  }
+
+  return getGenAITracer().startActiveSpan(
+    `grader ${ctx.graderId}`,
+    { kind: SpanKind.INTERNAL, attributes },
+    parentContext,
+    async (span) => {
+      try {
+        const result = await withSpanRole('grader', fn);
+        setEvaluationResultAttributes(span, result);
+        span.setStatus({ code: SpanStatusCode.OK });
+        return result;
+      } catch (error) {
+        span.setStatus({
+          code: SpanStatusCode.ERROR,
+          message: error instanceof Error ? error.message : String(error),
+        });
+        if (error instanceof Error) {
+          span.recordException(error);
+        }
+        throw error;
+      } finally {
+        span.end();
+      }
+    },
   );
 }
