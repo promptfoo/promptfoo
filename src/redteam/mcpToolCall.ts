@@ -11,8 +11,10 @@ export type McpToolCall = {
   args: Record<string, unknown>;
 };
 
-const TOOL_NAME_FIELDS = ['tool', 'toolName', 'function', 'functionName', 'name'] as const;
-const TOOL_ARGS_FIELDS = ['args', 'arguments', 'params', 'parameters'] as const;
+/** Field names under which providers and models put a tool call's name. */
+export const TOOL_NAME_FIELDS = ['tool', 'toolName', 'function', 'functionName', 'name'] as const;
+/** Field names under which providers and models put a tool call's arguments. */
+export const TOOL_ARGS_FIELDS = ['args', 'arguments', 'params', 'parameters'] as const;
 
 const ajv = new Ajv({ allErrors: true, strictSchema: false });
 addFormats(ajv);
