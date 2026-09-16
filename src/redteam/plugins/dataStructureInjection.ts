@@ -483,13 +483,6 @@ function parseSpan(span: string): unknown {
 
 type JsonRecord = Record<string, unknown>;
 
-/**
- * Tree walks stop below this depth. `JSON.parse` handles arbitrarily deep
- * input iteratively, but the walkers are recursive; real tool calls sit a
- * handful of levels down, so this only bounds adversarial output.
- */
-const MAX_WALK_DEPTH = 64;
-
 function asRecord(value: unknown): JsonRecord | undefined {
   return value !== null && typeof value === 'object' && !Array.isArray(value)
     ? (value as JsonRecord)
@@ -612,33 +605,43 @@ function collectToolCalls(
   bareArgumentFields: Set<string>,
   atRoot: boolean,
   out: RecognizedCall[],
-  depth = 0,
 ): void {
-  if (depth > MAX_WALK_DEPTH) {
-    return;
-  }
-  if (Array.isArray(node)) {
-    for (const item of node) {
-      collectToolCalls(item, bareArgumentFields, atRoot, out, depth + 1);
+  const pending: Array<{ node: unknown; bareAllowed: boolean }> = [{ node, bareAllowed: atRoot }];
+
+  while (pending.length > 0) {
+    const current = pending.pop();
+    if (!current) {
+      continue;
     }
-    return;
-  }
-  const record = asRecord(node);
-  if (!record) {
-    return;
-  }
-  const call = recognizeToolCall(record);
-  if (call !== undefined) {
-    out.push(call);
-    return;
-  }
-  const bare = atRoot ? bareArguments(record, bareArgumentFields) : undefined;
-  if (bare !== undefined) {
-    out.push({ args: bare });
-    return;
-  }
-  for (const child of Object.values(record)) {
-    collectToolCalls(child, bareArgumentFields, false, out, depth + 1);
+
+    if (Array.isArray(current.node)) {
+      for (let i = current.node.length - 1; i >= 0; i--) {
+        pending.push({ node: current.node[i], bareAllowed: current.bareAllowed });
+      }
+      continue;
+    }
+
+    const record = asRecord(current.node);
+    if (!record) {
+      continue;
+    }
+
+    const call = recognizeToolCall(record);
+    if (call !== undefined) {
+      out.push(call);
+      continue;
+    }
+
+    const bare = current.bareAllowed ? bareArguments(record, bareArgumentFields) : undefined;
+    if (bare !== undefined) {
+      out.push({ args: bare });
+      continue;
+    }
+
+    const children = Object.values(record);
+    for (let i = children.length - 1; i >= 0; i--) {
+      pending.push({ node: children[i], bareAllowed: false });
+    }
   }
 }
 
@@ -648,21 +651,23 @@ interface ArgumentScope {
 }
 
 /** Collect every object key and string value beneath an arguments node. */
-function collectArgumentScope(node: unknown, into: ArgumentScope, depth = 0): void {
-  if (depth > MAX_WALK_DEPTH) {
-    return;
-  }
-  if (Array.isArray(node)) {
-    for (const item of node) {
-      collectArgumentScope(item, into, depth + 1);
+function collectArgumentScope(node: unknown, into: ArgumentScope): void {
+  const pending: unknown[] = [node];
+
+  while (pending.length > 0) {
+    const current = pending.pop();
+    if (Array.isArray(current)) {
+      for (const item of current) {
+        pending.push(item);
+      }
+    } else if (current !== null && typeof current === 'object') {
+      for (const [key, child] of Object.entries(current as JsonRecord)) {
+        into.keys.push(key);
+        pending.push(child);
+      }
+    } else if (typeof current === 'string') {
+      into.strings.push(current);
     }
-  } else if (node !== null && typeof node === 'object') {
-    for (const [key, child] of Object.entries(node as JsonRecord)) {
-      into.keys.push(key);
-      collectArgumentScope(child, into, depth + 1);
-    }
-  } else if (typeof node === 'string') {
-    into.strings.push(node);
   }
 }
 

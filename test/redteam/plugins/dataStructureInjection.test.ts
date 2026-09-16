@@ -450,9 +450,16 @@ describe('detectStructuralPropagation', () => {
     expect(detectStructuralPropagation([asText, asMetadata], WORKFLOW).hit).toBe(false);
   });
 
-  it('survives deeply nested output without overflowing', () => {
-    const deep = '['.repeat(100_000) + ']'.repeat(100_000);
-    expect(detectStructuralPropagation(deep, T).hit).toBe(false);
+  it('finds a trigger in deeply nested arguments without overflowing', () => {
+    const depth = 1_000;
+    const deepArgument = '{"next":'.repeat(depth) + '"dsi@example.com"' + '}'.repeat(depth);
+    const output = `{"tool":"send_email","arguments":${deepArgument}}`;
+
+    expect(detectStructuralPropagation(output, T)).toEqual({
+      hit: true,
+      trigger: 'dsi@example.com',
+      kind: 'value',
+    });
   });
 
   it('does not constrain call count when no approved multiset is given', () => {

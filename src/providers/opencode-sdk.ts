@@ -25,6 +25,7 @@ import type {
   ProviderResponse,
   SkillCallEntry,
 } from '../types/index';
+import type { McpToolCallEntry } from './mcp/types';
 
 /**
  * OpenCode SDK Provider
@@ -493,12 +494,14 @@ interface OpenCodeAssistantMessage {
 }
 
 interface OpenCodePromptPart {
+  id?: string;
   type: string;
   text?: string;
   tool?: string;
   state?: {
     status?: string;
     input?: Record<string, unknown>;
+    output?: unknown;
     metadata?: Record<string, unknown>;
   };
 }
@@ -1652,6 +1655,7 @@ export class OpenCodeSDKProvider implements ApiProvider {
 
     const tokens = assistantMessage?.tokens;
     const skillCalls = this.deriveSkillCalls(parts);
+    const toolCalls = this.deriveToolCalls(parts);
 
     return {
       output,
@@ -1659,8 +1663,38 @@ export class OpenCodeSDKProvider implements ApiProvider {
       ...(assistantMessage?.cost === undefined ? {} : { cost: assistantMessage.cost }),
       raw: JSON.stringify(response),
       sessionId,
-      ...(skillCalls.length === 0 ? {} : { metadata: { skillCalls } }),
+      ...(skillCalls.length === 0 && toolCalls.length === 0
+        ? {}
+        : {
+            metadata: {
+              ...(skillCalls.length > 0 && { skillCalls }),
+              ...(toolCalls.length > 0 && { toolCalls }),
+            },
+          }),
     };
+  }
+
+  /** Publish all executed OpenCode tools through the cross-provider tool-call contract. */
+  private deriveToolCalls(parts: OpenCodePromptPart[]): McpToolCallEntry[] {
+    return parts.flatMap((part) => {
+      if (
+        part.type !== 'tool' ||
+        typeof part.tool !== 'string' ||
+        part.state?.input === undefined
+      ) {
+        return [];
+      }
+
+      return [
+        {
+          ...(part.id && { id: part.id }),
+          name: part.tool,
+          input: part.state.input,
+          output: part.state.output ?? null,
+          is_error: part.state.status === 'error',
+        },
+      ];
+    });
   }
 
   private deriveSkillCalls(parts: OpenCodePromptPart[]): SkillCallEntry[] {

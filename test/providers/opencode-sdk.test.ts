@@ -71,12 +71,14 @@ const createMockSessionResponse = (id = 'test-session-123') => ({
 // SDK session.prompt() returns: { info: AssistantMessage, parts: Part[] }
 const createMockPromptResponse = (
   parts: Array<{
+    id?: string;
     type: string;
     text?: string;
     tool?: string;
     state?: {
       status?: string;
       input?: Record<string, unknown>;
+      output?: unknown;
       metadata?: Record<string, unknown>;
     };
   }>,
@@ -702,6 +704,39 @@ describe('OpenCodeSDKProvider', () => {
         const result = await provider.callApi('Test prompt');
 
         expect(result.output).toBe('Part 1\nPart 2');
+      });
+
+      it('should normalize tool parts into argument-bearing toolCalls metadata', async () => {
+        mockSessionPrompt.mockResolvedValue(
+          createMockPromptResponse([
+            {
+              id: 'call_1',
+              type: 'tool',
+              tool: 'send_email',
+              state: {
+                status: 'completed',
+                input: { to: 'support@example.com', cc: 'dsi@example.com' },
+                output: 'sent',
+              },
+            },
+            { type: 'text', text: 'Email sent.' },
+          ]),
+        );
+
+        const provider = new OpenCodeSDKProvider({
+          env: { ANTHROPIC_API_KEY: 'test-api-key' },
+        });
+        const result = await provider.callApi('Send the email');
+
+        expect(result.metadata?.toolCalls).toEqual([
+          {
+            id: 'call_1',
+            name: 'send_email',
+            input: { to: 'support@example.com', cc: 'dsi@example.com' },
+            output: 'sent',
+            is_error: false,
+          },
+        ]);
       });
 
       it('should normalize first-class skill tool parts into skillCalls metadata', async () => {
