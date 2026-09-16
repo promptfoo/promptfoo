@@ -5,10 +5,12 @@ import { FalImageGenerationProvider } from '../../src/providers/fal';
 
 const mockSubscribe = vi.hoisted(() => vi.fn());
 const mockConfig = vi.hoisted(() => vi.fn());
+const mockCreateClient = vi.hoisted(() => vi.fn());
 
 vi.mock('@fal-ai/client', async (importOriginal) => {
   return {
     ...(await importOriginal()),
+    createFalClient: mockCreateClient,
 
     fal: {
       subscribe: mockSubscribe,
@@ -39,6 +41,7 @@ vi.mock('../../src/envars', async (importOriginal) => {
 describe('Fal Provider', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mockCreateClient.mockImplementation(() => ({ subscribe: mockSubscribe }));
     vi.mocked(isCacheEnabled).mockReturnValue(false);
     vi.mocked(getCache).mockReturnValue({
       get: vi.fn().mockResolvedValue(null),
@@ -64,6 +67,7 @@ describe('Fal Provider', () => {
 
   afterEach(() => {
     vi.resetAllMocks();
+    vi.unstubAllGlobals();
   });
 
   describe('FalImageGenerationProvider', () => {
@@ -174,7 +178,7 @@ describe('Fal Provider', () => {
 
         const result = await provider.callApi('a cute cat');
 
-        expect(mockConfig).toHaveBeenCalledWith({
+        expect(mockCreateClient).toHaveBeenCalledWith({
           credentials: 'test-api-key',
         });
         expect(mockSubscribe).toHaveBeenCalledWith('fal-ai/flux/schnell', {
@@ -261,7 +265,7 @@ describe('Fal Provider', () => {
           vars: {},
         });
 
-        expect(mockConfig).toHaveBeenCalledWith({
+        expect(mockCreateClient).toHaveBeenCalledWith({
           credentials: 'test-api-key',
           proxyUrl: {
             url: 'http://fal-proxy.test/api/fal',
@@ -388,6 +392,7 @@ describe('Fal Provider', () => {
           output: '![cached prompt](https://cached.example.com/image.png)',
         });
         expect(mockSubscribe).not.toHaveBeenCalled();
+        expect(mockCreateClient).not.toHaveBeenCalled();
         expect(mockCache.get).toHaveBeenCalledWith(
           expect.stringContaining('fal:fal-ai/flux/schnell:'),
         );
@@ -652,6 +657,13 @@ describe('Fal Provider', () => {
         await expect(provider.callApi('test prompt')).rejects.toThrow('API Error');
       });
 
+      it('preserves SDK abort errors', async () => {
+        const error = new DOMException('Subscription aborted', 'AbortError');
+        mockSubscribe.mockRejectedValueOnce(error);
+
+        await expect(provider.callApi('test prompt')).rejects.toBe(error);
+      });
+
       it('should throw error when image URL cannot be resolved', async () => {
         const mockResponse = {
           data: {
@@ -670,6 +682,118 @@ describe('Fal Provider', () => {
     });
 
     describe('client initialization', () => {
+      it('refreshes the owned client from the current provider configuration', async () => {
+        mockSubscribe.mockResolvedValue({
+          data: { images: [{ url: 'https://example.com/image.png' }] },
+          requestId: 'test-request-id',
+        });
+
+        await provider.callApi('first');
+        provider.apiKey = 'rotated-key';
+        provider.clientConfig = { proxyUrl: 'https://proxy.example/fal' };
+        await provider.callApi('second');
+
+        expect(mockCreateClient).toHaveBeenNthCalledWith(1, { credentials: 'test-api-key' });
+        expect(mockCreateClient).toHaveBeenNthCalledWith(2, {
+          credentials: 'rotated-key',
+          proxyUrl: 'https://proxy.example/fal',
+        });
+        expect(mockConfig).not.toHaveBeenCalled();
+      });
+
+      it('isolates concurrent subscriptions and cache hits from another SDK singleton consumer', async () => {
+        const sdk = await vi.importActual<typeof import('@fal-ai/client')>('@fal-ai/client');
+        const requests: { url: string; target: string; authorization: string | null }[] = [];
+        let releaseSubmissions!: () => void;
+        let submissions = 0;
+        const bothSubmitted = new Promise<void>((resolve) => {
+          releaseSubmissions = resolve;
+        });
+        const mockFetch = vi.fn<typeof fetch>(async (url, options) => {
+          const headers = new Headers(options?.headers);
+          const target = headers.get('x-fal-target-url') || String(url);
+          const authorization = headers.get('authorization');
+          requests.push({ url: String(url), target, authorization });
+          let body: unknown;
+          if (options?.method === 'POST') {
+            const input = JSON.parse(String(options.body));
+            if (input.prompt === 'A' || input.prompt === 'B') {
+              if (++submissions === 2) {
+                releaseSubmissions();
+              }
+              await bothSubmitted;
+            }
+            body = { request_id: authorization?.slice(4) };
+          } else if (target.includes('/status')) {
+            body = { status: 'COMPLETED' };
+          } else {
+            body = { images: [{ url: 'https://example.com/image.png' }] };
+          }
+          return new Response(JSON.stringify(body), {
+            status: 200,
+            headers: { 'content-type': 'application/json' },
+          });
+        });
+        vi.stubGlobal('fetch', mockFetch);
+        mockCreateClient.mockImplementation(sdk.createFalClient);
+        mockConfig.mockImplementation(sdk.fal.config);
+        mockSubscribe.mockImplementation(sdk.fal.subscribe);
+        sdk.fal.config({
+          credentials: 'fixture-external',
+          proxyUrl: { url: 'https://external.example/proxy', when: 'always' },
+          fetch: mockFetch,
+        });
+        const providerA = new FalImageGenerationProvider('fal-ai/fixture', {
+          config: {
+            apiKey: 'fixture-a',
+            client: { proxyUrl: { url: 'https://a.example/proxy', when: 'always' } },
+          },
+        });
+        const providerB = new FalImageGenerationProvider('fal-ai/fixture', {
+          config: {
+            apiKey: 'fixture-b',
+            client: { proxyUrl: { url: 'https://b.example/proxy', when: 'always' } },
+          },
+        });
+
+        const results = await Promise.all([providerA.callApi('A'), providerB.callApi('B')]);
+
+        expect(results).toEqual([
+          { cached: false, output: '![A](https://example.com/image.png)' },
+          { cached: false, output: '![B](https://example.com/image.png)' },
+        ]);
+        expect(requests).toHaveLength(6);
+        for (const name of ['a', 'b']) {
+          const ownRequests = requests.filter((r) => r.authorization === `Key fixture-${name}`);
+          expect(ownRequests).toHaveLength(3);
+          expect(ownRequests.every((r) => r.url === `https://${name}.example/proxy`)).toBe(true);
+          expect(
+            ownRequests
+              .filter((r) => r.target.includes('/requests/'))
+              .every((r) => r.target.includes(`fixture-${name}`)),
+          ).toBe(true);
+        }
+        await sdk.fal.run('fal-ai/fixture', { input: { prompt: 'external after subscriptions' } });
+        expect(requests.at(-1)).toMatchObject({
+          authorization: 'Key fixture-external',
+          url: 'https://external.example/proxy',
+        });
+
+        vi.mocked(isCacheEnabled).mockReturnValue(true);
+        vi.mocked(getCache().get).mockResolvedValue(JSON.stringify('cached image'));
+        mockFetch.mockClear();
+        expect(await providerA.callApi('cached')).toEqual({ cached: true, output: 'cached image' });
+        expect(mockFetch).not.toHaveBeenCalled();
+
+        await sdk.fal.run('fal-ai/fixture', { input: { prompt: 'external after cache hit' } });
+        expect(requests.at(-1)).toMatchObject({
+          authorization: 'Key fixture-external',
+          url: 'https://external.example/proxy',
+        });
+        expect(mockConfig).not.toHaveBeenCalled();
+        expect(mockSubscribe).not.toHaveBeenCalled();
+      });
+
       it('should lazy load the fal client', async () => {
         vi.clearAllMocks();
 
@@ -692,9 +816,50 @@ describe('Fal Provider', () => {
             prompt: 'test prompt',
           },
         });
-        expect(mockConfig).toHaveBeenCalledWith({
+        expect(mockCreateClient).toHaveBeenCalledWith({
           credentials: 'test-api-key',
         });
+      });
+
+      it.each([true, false])('handles a missing SDK with a cache hit: %s', async (cached) => {
+        // Exercise the dependency swap even when the SDK was already loaded.
+        await import('@fal-ai/client');
+        const importSdk = vi.fn(() => {
+          throw new Error('Fixture missing SDK');
+        });
+        vi.doMock('@fal-ai/client', importSdk);
+        vi.resetModules();
+        try {
+          const freshCache = await import('../../src/cache');
+          vi.mocked(freshCache.isCacheEnabled).mockReturnValue(cached);
+          vi.mocked(freshCache.getCache).mockReturnValue({
+            get: vi.fn().mockResolvedValue(JSON.stringify('cached image')),
+          } as any);
+          const { FalImageGenerationProvider: FreshFalImageGenerationProvider } = await import(
+            '../../src/providers/fal'
+          );
+          const freshProvider = new FreshFalImageGenerationProvider('fal-ai/flux/schnell', {
+            config: { apiKey: 'test-api-key' },
+          });
+          if (cached) {
+            await expect(freshProvider.callApi('test prompt')).resolves.toEqual({
+              cached: true,
+              output: 'cached image',
+            });
+          } else {
+            await expect(freshProvider.callApi('test prompt')).rejects.toThrow(
+              'The @fal-ai/client package is required. Please install it with: npm install @fal-ai/client',
+            );
+          }
+          expect(importSdk).toHaveBeenCalledTimes(cached ? 0 : 1);
+        } finally {
+          vi.doMock('@fal-ai/client', async (importOriginal) => ({
+            ...(await importOriginal()),
+            createFalClient: mockCreateClient,
+            fal: { config: mockConfig, subscribe: mockSubscribe },
+          }));
+          vi.resetModules();
+        }
       });
     });
   });

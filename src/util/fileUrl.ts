@@ -1,5 +1,7 @@
 import { isJavascriptFile } from './fileExtensions';
 
+// Re-exported so callers in other architecture layers can pull both helpers from one
+// module; adding a second cross-layer import would widen the architecture baseline.
 export { isJavascriptFile } from './fileExtensions';
 
 // Matches the leading slash + Windows drive prefix from canonical `file:///C:/...`
@@ -15,7 +17,26 @@ function normalizeFilePath(filePath: string): string {
 }
 
 /**
- * Extracts a filesystem path and optional named function from a file:// URL.
+ * Extracts the file path and optional function name from a `file://` URL.
+ *
+ * Splits at the **last** `:` rather than the first so Windows drive-letter
+ * prefixes (`C:`, `D:`, ...) are preserved in `filePath`. The `lastColonIndex
+ * > 1` guard prevents splitting at a leading drive-letter colon (`file://C:`
+ * with no function name) or at the empty-path edge case (`file://:fn`). Only
+ * JavaScript and Python callback files support the named-export suffix, and a
+ * candidate suffix containing a path separator is part of the path, so colons
+ * in other valid POSIX paths remain part of the path.
+ *
+ * Examples:
+ *   `file://callbacks.js`             → `{ filePath: 'callbacks.js' }`
+ *   `file://callbacks.js:fn`          → `{ filePath: 'callbacks.js', functionName: 'fn' }`
+ *   `file://C:/cb.js:fn`              → `{ filePath: 'C:/cb.js', functionName: 'fn' }`
+ *   `file://C:`                       → `{ filePath: 'C:' }` (drive-letter colon preserved)
+ *   `file://2026-05-27T12:00:00.js`   → `{ filePath: '2026-05-27T12:00:00.js' }` (colon is part of path)
+ *
+ * @param fileUrl The `file://` URL.
+ * @returns The file path and optional function name.
+ * @throws If `fileUrl` does not start with `file://`.
  */
 export function parseFileUrl(fileUrl: string): { filePath: string; functionName?: string } {
   if (!fileUrl.startsWith('file://')) {

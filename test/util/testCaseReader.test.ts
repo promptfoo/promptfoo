@@ -4,7 +4,7 @@ import * as path from 'path';
 import { parse as parseCsv } from 'csv-parse/sync';
 import dedent from 'dedent';
 import { globSync, hasMagic } from 'glob';
-import yaml from 'js-yaml';
+import * as yaml from 'js-yaml';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { testCaseFromCsvRow } from '../../src/csv';
 import { getEnvBool, getEnvString } from '../../src/envars';
@@ -263,6 +263,18 @@ describe('readStandaloneTestsFile', () => {
     ]);
   });
 
+  it.each([
+    ['a parent directory contains #', 'test.csv', 'fixtures#1'],
+    ['the filename contains #', 'test#1.csv', ''],
+  ])('should read CSV when %s', async (_scenario, filePath, basePath) => {
+    vi.mocked(fs.readFileSync).mockReturnValue('var1,__expected\nvalue1,expected1');
+
+    const result = await readStandaloneTestsFile(filePath, basePath);
+
+    expect(result).toHaveLength(1);
+    expect(result[0].vars).toEqual({ var1: 'value1' });
+  });
+
   it('should read CSV file with BOM (Byte Order Mark) and return test cases', async () => {
     vi.mocked(fs.readFileSync).mockReturnValue(
       '\uFEFFvar1,var2,__expected\nvalue1,value2,expected1\nvalue3,value4,expected2',
@@ -409,6 +421,55 @@ describe('readStandaloneTestsFile', () => {
     expect(result[2].description).toBe('Row #3');
   });
 
+  it('should throw a descriptive error for malformed JSONL pointing at the real file line', async () => {
+    vi.mocked(fs.readFileSync).mockReturnValue(
+      `{"vars":{"x":"a"}}
+{"vars":{"x":"b"} BROKEN}
+{"vars":{"x":"c"}}`,
+    );
+
+    // The raw JSON.parse SyntaxError says "line 1" (its view of the single line);
+    // the wrapper must report the offending file and its real line number (2).
+    await expect(readStandaloneTestsFile('bad.jsonl')).rejects.toThrow(
+      /Failed to parse JSONL test file .*bad\.jsonl on line 2:/,
+    );
+  });
+
+  it('should count blank lines when reporting the malformed JSONL line number', async () => {
+    vi.mocked(fs.readFileSync).mockReturnValue(
+      `{"vars":{"x":"a"}}
+
+{"vars":{"x":"b"} BROKEN}`,
+    );
+
+    // Line 2 is blank, so the broken row is file line 3 — must not be reported
+    // as 2 (its index among non-blank rows).
+    await expect(readStandaloneTestsFile('bad.jsonl')).rejects.toThrow(
+      /Failed to parse JSONL test file .*bad\.jsonl on line 3:/,
+    );
+  });
+
+  it('should throw a descriptive error for malformed JSONL loaded via glob', async () => {
+    vi.mocked(fs.readFileSync).mockReturnValue(
+      `{"vars":{"x":"a"}}
+not valid json`,
+    );
+    vi.mocked(globSync).mockImplementation((pathOrGlob) => [pathOrGlob].flat() as string[]);
+
+    await expect(readTests(['bad.jsonl'])).rejects.toThrow(
+      /Failed to parse JSONL test file .*bad\.jsonl on line 2:/,
+    );
+  });
+
+  it('should throw a descriptive error for a malformed JSON test file loaded via glob', async () => {
+    vi.mocked(fs.readFileSync).mockReturnValue('{ "not": valid json }');
+    vi.mocked(globSync).mockImplementation((pathOrGlob) => [pathOrGlob].flat() as string[]);
+
+    await expect(readTests(['bad.json'])).rejects.toThrow(
+      /Failed to parse JSON test file .*bad\.json:/,
+    );
+  });
+
   it('should read YAML file and return test cases', async () => {
     vi.mocked(fs.readFileSync).mockReturnValue(dedent`
       - var1: value1
@@ -485,6 +546,30 @@ describe('readStandaloneTestsFile', () => {
         vars: { review_id: 'review-002' },
       },
     ]);
+  });
+
+  it('should redact SAS tokens in malformed Azure Blob JSONL parse errors', async () => {
+    const blobUri = 'az://account/container/tests.jsonl?sp=r&sig=SECRETSIG';
+    vi.mocked(readAzureBlobText).mockResolvedValue('{"vars":{"x":"a"}}\n{"vars": BROKEN}');
+
+    const error = await readStandaloneTestsFile(blobUri).then(
+      () => {
+        throw new Error('expected readStandaloneTestsFile to reject');
+      },
+      (err) => err as Error,
+    );
+    expect(error.message).toContain(
+      'Failed to parse JSONL test file az://account/container/tests.jsonl?<redacted> on line 2:',
+    );
+    expect(error.message).not.toContain('SECRETSIG');
+  });
+
+  it('should throw a descriptive error for a malformed standalone JSON test file', async () => {
+    vi.mocked(fs.readFileSync).mockReturnValue('{"vars": {');
+
+    await expect(readStandaloneTestsFile('bad.json')).rejects.toThrow(
+      /Failed to parse JSON test file .*bad\.json:/,
+    );
   });
 
   it('should read CSV test sets from Azure Blob Storage URIs', async () => {
@@ -2179,6 +2264,18 @@ describe('readTests', () => {
     expect(result[0].vars).toEqual({ name: 'test1', value: 'result1' });
   });
 
+  it('should handle xlsx sheet names containing dots in array format', async () => {
+    const mockData = [{ name: 'decimal-sheet', value: 'result' }];
+    const parseXlsxFileMock = vi.fn().mockResolvedValue(mockData);
+    mockParseXlsxFileState.implementation = parseXlsxFileMock;
+
+    const result = await readTests(['file://test.xlsx#2.9']);
+
+    expect(parseXlsxFileMock).toHaveBeenCalledWith(expect.stringContaining('test.xlsx#2.9'));
+    expect(result).toHaveLength(1);
+    expect(result[0].vars).toEqual({ name: 'decimal-sheet', value: 'result' });
+  });
+
   it('should handle xls files in array format', async () => {
     // Mock parseXlsxFile to return processed CsvRow[] data
     const mockData = [{ col1: 'data1', col2: 'data2' }];
@@ -2550,61 +2647,60 @@ describe('readVarsFiles', () => {
     });
   });
 
-  it.each([
-    'set[ab]',
-    'set{a,b}',
-    'set@(x)',
-  ])('should keep declaring-directory metacharacters literal: %s', async (directory) => {
-    const basePath = path.resolve('/suite');
-    const declaringBasePath = path.resolve(basePath, directory, 'fixtures');
-    const varsPath = path.resolve(declaringBasePath, 'vars.yaml');
-    const dataPath = path.resolve(declaringBasePath, 'data.json');
-    const matchedPath = path.resolve(declaringBasePath, 'data/item.json');
-    const decoyPath = path.resolve(basePath, 'decoy/data/item.json');
-    const outerGlob = path.resolve(basePath, '*/fixtures/vars.yaml');
-    vi.mocked(globSync).mockImplementation((input, options) => {
-      const value = String(input);
-      if (value === outerGlob) {
-        return [varsPath];
-      }
-      if (value === 'data/*.json' && options?.cwd === declaringBasePath) {
-        return [matchedPath];
-      }
-      if (path.isAbsolute(value) && value.endsWith('data/*.json')) {
-        return [decoyPath];
-      }
-      return [];
-    });
-    vi.mocked(fs.readFileSync).mockReturnValue(dedent`
+  it.each(['set[ab]', 'set{a,b}', 'set@(x)'])(
+    'should keep declaring-directory metacharacters literal: %s',
+    async (directory) => {
+      const basePath = path.resolve('/suite');
+      const declaringBasePath = path.resolve(basePath, directory, 'fixtures');
+      const varsPath = path.resolve(declaringBasePath, 'vars.yaml');
+      const dataPath = path.resolve(declaringBasePath, 'data.json');
+      const matchedPath = path.resolve(declaringBasePath, 'data/item.json');
+      const decoyPath = path.resolve(basePath, 'decoy/data/item.json');
+      const outerGlob = path.resolve(basePath, '*/fixtures/vars.yaml');
+      vi.mocked(globSync).mockImplementation((input, options) => {
+        const value = String(input);
+        if (value === outerGlob) {
+          return [varsPath];
+        }
+        if (value === 'data/*.json' && options?.cwd === declaringBasePath) {
+          return [matchedPath];
+        }
+        if (path.isAbsolute(value) && value.endsWith('data/*.json')) {
+          return [decoyPath];
+        }
+        return [];
+      });
+      vi.mocked(fs.readFileSync).mockReturnValue(dedent`
         direct: file://data.json
         bundle: file://data/*.json
       `);
-    vi.mocked(loadConfigFromFilePath).mockImplementation((filePath) => {
-      if (filePath === dataPath) {
-        return { marker: 'direct' };
-      }
-      if (filePath === matchedPath) {
-        return { marker: 'matched', report: 'file://report.txt' };
-      }
-      if (filePath === decoyPath) {
-        return { marker: 'decoy' };
-      }
-      return undefined;
-    });
+      vi.mocked(loadConfigFromFilePath).mockImplementation((filePath) => {
+        if (filePath === dataPath) {
+          return { marker: 'direct' };
+        }
+        if (filePath === matchedPath) {
+          return { marker: 'matched', report: 'file://report.txt' };
+        }
+        if (filePath === decoyPath) {
+          return { marker: 'decoy' };
+        }
+        return undefined;
+      });
 
-    const result = await readTestFiles('*/fixtures/vars.yaml', basePath);
+      const result = await readTestFiles('*/fixtures/vars.yaml', basePath);
 
-    expect(result).toEqual({
-      direct: { marker: 'direct' },
-      bundle: [
-        {
-          marker: 'matched',
-          report: `file://${path.posix.join(directory, 'fixtures/data/report.txt')}`,
-        },
-      ],
-    });
-    expect(loadConfigFromFilePath).not.toHaveBeenCalledWith(decoyPath);
-  });
+      expect(result).toEqual({
+        direct: { marker: 'direct' },
+        bundle: [
+          {
+            marker: 'matched',
+            report: `file://${path.posix.join(directory, 'fixtures/data/report.txt')}`,
+          },
+        ],
+      });
+      expect(loadConfigFromFilePath).not.toHaveBeenCalledWith(decoyPath);
+    },
+  );
 
   it('should skip a structured glob match that disappears before loading', async () => {
     const varsPath = path.resolve('/suite/fixtures/vars.yaml');
@@ -2637,44 +2733,44 @@ describe('readVarsFiles', () => {
     expect(result).toEqual({ bundle: [{ marker: 'present' }] });
   });
 
-  it.each([
-    'vars.yaml',
-    'vars.json',
-  ])('should parse CSV references from an external vars file: %s', async (varsFile) => {
-    const varsPath = path.resolve('/suite/fixtures', varsFile);
-    const csvPath = path.resolve('/suite/fixtures/data/rows.csv');
-    const canonicalCsvPath = csvPath.replace(/\\/g, '/');
-    const csvReference = `file://${canonicalCsvPath}`;
-    vi.mocked(globSync).mockImplementation((input) =>
-      String(input) === varsPath ? [varsPath] : [],
-    );
-    vi.mocked(fs.readFileSync).mockReturnValue(
-      varsFile.endsWith('.json')
-        ? JSON.stringify({ context: csvReference, nested: { rows: csvReference } })
-        : `context: ${csvReference}\nnested:\n  rows: ${csvReference}`,
-    );
-    vi.mocked(loadConfigFromFilePath).mockImplementation((filePath) => {
-      if (filePath === canonicalCsvPath) {
-        return [
-          { marker: 'alpha', report: 'file://alpha.txt' },
-          { marker: 'beta', report: 'file://beta.txt' },
-        ];
-      }
-      return undefined;
-    });
+  it.each(['vars.yaml', 'vars.json'])(
+    'should parse CSV references from an external vars file: %s',
+    async (varsFile) => {
+      const varsPath = path.resolve('/suite/fixtures', varsFile);
+      const csvPath = path.resolve('/suite/fixtures/data/rows.csv');
+      const canonicalCsvPath = csvPath.replace(/\\/g, '/');
+      const csvReference = `file://${canonicalCsvPath}`;
+      vi.mocked(globSync).mockImplementation((input) =>
+        String(input) === varsPath ? [varsPath] : [],
+      );
+      vi.mocked(fs.readFileSync).mockReturnValue(
+        varsFile.endsWith('.json')
+          ? JSON.stringify({ context: csvReference, nested: { rows: csvReference } })
+          : `context: ${csvReference}\nnested:\n  rows: ${csvReference}`,
+      );
+      vi.mocked(loadConfigFromFilePath).mockImplementation((filePath) => {
+        if (filePath === canonicalCsvPath) {
+          return [
+            { marker: 'alpha', report: 'file://alpha.txt' },
+            { marker: 'beta', report: 'file://beta.txt' },
+          ];
+        }
+        return undefined;
+      });
 
-    const result = await readTestFiles(
-      path.posix.join('fixtures', varsFile),
-      path.resolve('/suite'),
-    );
+      const result = await readTestFiles(
+        path.posix.join('fixtures', varsFile),
+        path.resolve('/suite'),
+      );
 
-    const expectedRows = [
-      { marker: 'alpha', report: 'file://fixtures/data/alpha.txt' },
-      { marker: 'beta', report: 'file://fixtures/data/beta.txt' },
-    ];
-    expect(result).toEqual({ context: expectedRows, nested: { rows: expectedRows } });
-    expect(loadConfigFromFilePath).toHaveBeenCalledWith(canonicalCsvPath);
-  });
+      const expectedRows = [
+        { marker: 'alpha', report: 'file://fixtures/data/alpha.txt' },
+        { marker: 'beta', report: 'file://fixtures/data/beta.txt' },
+      ];
+      expect(result).toEqual({ context: expectedRows, nested: { rows: expectedRows } });
+      expect(loadConfigFromFilePath).toHaveBeenCalledWith(canonicalCsvPath);
+    },
+  );
 
   it('should rebase file references returned as structured scalar values', async () => {
     vi.mocked(maybeLoadConfigFromExternalFile).mockImplementation((config: any, context) => {
@@ -2738,29 +2834,29 @@ describe('readVarsFiles', () => {
     expect(maybeLoadConfigFromExternalFile).toHaveBeenCalledWith(reference, 'vars');
   });
 
-  it.each([
-    'file://{{ env.CONTEXT_FILE }}.json',
-    'file://{{ env["CONTEXT_FILE"] }}.json',
-  ])('should render a top-level vars-file path before resolving it: %s', async (reference) => {
-    const renderedReference = `file://${path.resolve('/external/context.json').replace(/\\/g, '/')}`;
-    vi.mocked(maybeLoadConfigFromExternalFile).mockImplementation((config: any, context) => {
-      if (config === reference && context === 'vars') {
-        return renderedReference;
-      }
-      return config;
-    });
-    vi.mocked(loadConfigFromFilePath).mockReturnValue({ marker: 'rendered-before-resolution' });
-    vi.mocked(globSync).mockReturnValue([path.resolve('/suite/fixtures/vars.yaml')]);
-    vi.mocked(fs.readFileSync).mockReturnValue(`context: '${reference}'`);
+  it.each(['file://{{ env.CONTEXT_FILE }}.json', 'file://{{ env["CONTEXT_FILE"] }}.json'])(
+    'should render a top-level vars-file path before resolving it: %s',
+    async (reference) => {
+      const renderedReference = `file://${path.resolve('/external/context.json').replace(/\\/g, '/')}`;
+      vi.mocked(maybeLoadConfigFromExternalFile).mockImplementation((config: any, context) => {
+        if (config === reference && context === 'vars') {
+          return renderedReference;
+        }
+        return config;
+      });
+      vi.mocked(loadConfigFromFilePath).mockReturnValue({ marker: 'rendered-before-resolution' });
+      vi.mocked(globSync).mockReturnValue([path.resolve('/suite/fixtures/vars.yaml')]);
+      vi.mocked(fs.readFileSync).mockReturnValue(`context: '${reference}'`);
 
-    const result = await readTestFiles('fixtures/vars.yaml', path.resolve('/suite'));
+      const result = await readTestFiles('fixtures/vars.yaml', path.resolve('/suite'));
 
-    expect(result).toEqual({ context: { marker: 'rendered-before-resolution' } });
-    expect(maybeLoadConfigFromExternalFile).toHaveBeenCalledWith(reference, 'vars');
-    expect(loadConfigFromFilePath).toHaveBeenCalledWith(
-      path.resolve('/external/context.json').replace(/\\/g, '/'),
-    );
-  });
+      expect(result).toEqual({ context: { marker: 'rendered-before-resolution' } });
+      expect(maybeLoadConfigFromExternalFile).toHaveBeenCalledWith(reference, 'vars');
+      expect(loadConfigFromFilePath).toHaveBeenCalledWith(
+        path.resolve('/external/context.json').replace(/\\/g, '/'),
+      );
+    },
+  );
 });
 
 describe('loadTestsFromGlob', () => {

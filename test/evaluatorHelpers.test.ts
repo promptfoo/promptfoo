@@ -12,6 +12,8 @@ import {
   runExtensionHook,
 } from '../src/evaluatorHelpers';
 import logger from '../src/logger';
+import { AIStudioChatProvider } from '../src/providers/google/ai.studio';
+import { VertexChatProvider } from '../src/providers/google/vertex';
 import { transform } from '../src/util/transform';
 import { createMockProvider } from './factories/provider';
 import { mockProcessEnv } from './util/utils';
@@ -783,18 +785,21 @@ describe('evaluatorHelpers', () => {
     it.each([
       ['loop-local', '{% for context in items %}{{ context.message }}{% endfor %}', 'hi'],
       ['raw', '{% raw %}{{ context.message }}{% endraw %}', '{{ context.message }}'],
-    ])('should not render a nested target referenced only in %s syntax', async (_kind, promptText, expected) => {
-      const vars: Record<string, any> = {
-        context: { message: 'file:///path/to/malformed.txt' },
-        items: [{ message: 'hi' }],
-      };
-      vi.spyOn(fsPromises, 'readFile').mockResolvedValueOnce('{% if %}broken{% endif %}');
+    ])(
+      'should not render a nested target referenced only in %s syntax',
+      async (_kind, promptText, expected) => {
+        const vars: Record<string, any> = {
+          context: { message: 'file:///path/to/malformed.txt' },
+          items: [{ message: 'hi' }],
+        };
+        vi.spyOn(fsPromises, 'readFile').mockResolvedValueOnce('{% if %}broken{% endif %}');
 
-      const renderedPrompt = await renderPrompt(toPrompt(promptText), vars, {});
+        const renderedPrompt = await renderPrompt(toPrompt(promptText), vars, {});
 
-      expect(renderedPrompt).toBe(expected);
-      expect(vars.context.message).toBe('{% if %}broken{% endif %}');
-    });
+        expect(renderedPrompt).toBe(expected);
+        expect(vars.context.message).toBe('{% if %}broken{% endif %}');
+      },
+    );
 
     it('should discover nested targets after JSON escape decoding', async () => {
       const vars: Record<string, any> = {
@@ -903,35 +908,41 @@ describe('evaluatorHelpers', () => {
         '{"report":"{{ context.report }}"}',
         JSON.stringify({ report: 'Hello ALICE' }, null, 2),
       ],
-    ])('should settle filtered top-level file content before a nested mapping in %s prompts', async (_kind, promptText, expected) => {
-      const vars: Record<string, any> = {
-        name: 'Alice',
-        file_content: 'file:///path/to/report.txt',
-        context: { report: '{{ file_content }}' },
-      };
-      vi.spyOn(fsPromises, 'readFile').mockResolvedValueOnce('Hello {{ name | upper }}');
+    ])(
+      'should settle filtered top-level file content before a nested mapping in %s prompts',
+      async (_kind, promptText, expected) => {
+        const vars: Record<string, any> = {
+          name: 'Alice',
+          file_content: 'file:///path/to/report.txt',
+          context: { report: '{{ file_content }}' },
+        };
+        vi.spyOn(fsPromises, 'readFile').mockResolvedValueOnce('Hello {{ name | upper }}');
 
-      const renderedPrompt = await renderPrompt(toPrompt(promptText), vars, {});
+        const renderedPrompt = await renderPrompt(toPrompt(promptText), vars, {});
 
-      expect(vars.context.report).toBe('Hello ALICE');
-      expect(renderedPrompt).toBe(expected);
-    });
+        expect(vars.context.report).toBe('Hello ALICE');
+        expect(renderedPrompt).toBe(expected);
+      },
+    );
 
     it.each([
       ['plain', '{{ context.report }}', ''],
       ['JSON', '{"report":"{{ context.report }}"}', JSON.stringify({ report: '' }, null, 2)],
-    ])('should preserve empty YAML parity through a nested mapping in %s prompts', async (_kind, promptText, expected) => {
-      const vars: Record<string, any> = {
-        file_content: 'file:///path/to/empty.yaml',
-        context: { report: '{{ file_content }}' },
-      };
-      vi.spyOn(fsPromises, 'readFile').mockResolvedValueOnce('');
+    ])(
+      'should preserve empty YAML parity through a nested mapping in %s prompts',
+      async (_kind, promptText, expected) => {
+        const vars: Record<string, any> = {
+          file_content: 'file:///path/to/empty.yaml',
+          context: { report: '{{ file_content }}' },
+        };
+        vi.spyOn(fsPromises, 'readFile').mockResolvedValueOnce('');
 
-      const renderedPrompt = await renderPrompt(toPrompt(promptText), vars, {});
+        const renderedPrompt = await renderPrompt(toPrompt(promptText), vars, {});
 
-      expect(vars.context.report).toBeUndefined();
-      expect(renderedPrompt).toBe(expected);
-    });
+        expect(vars.context.report).toBeUndefined();
+        expect(renderedPrompt).toBe(expected);
+      },
+    );
 
     it('should preserve malformed top-level file template errors through a nested mapping', async () => {
       const vars: Record<string, any> = {
@@ -946,23 +957,26 @@ describe('evaluatorHelpers', () => {
     it.each([
       ['empty YAML', 'source.yaml', '', ''],
       ['malformed template', 'source.txt', '{% if %}broken{% endif %}', undefined],
-    ])('should preserve top-level %s parity when the mapping is loaded from a nested file', async (_kind, sourceFile, fileContent, expected) => {
-      const vars: Record<string, any> = {
-        file_content: `file:///path/to/${sourceFile}`,
-        context: { report: 'file:///path/to/mapping.txt' },
-      };
-      vi.spyOn(fsPromises, 'readFile').mockImplementation(async (filePath) =>
-        String(filePath).endsWith(sourceFile) ? fileContent : '{{ file_content }}',
-      );
+    ])(
+      'should preserve top-level %s parity when the mapping is loaded from a nested file',
+      async (_kind, sourceFile, fileContent, expected) => {
+        const vars: Record<string, any> = {
+          file_content: `file:///path/to/${sourceFile}`,
+          context: { report: 'file:///path/to/mapping.txt' },
+        };
+        vi.spyOn(fsPromises, 'readFile').mockImplementation(async (filePath) =>
+          String(filePath).endsWith(sourceFile) ? fileContent : '{{ file_content }}',
+        );
 
-      const rendered = renderPrompt(toPrompt('{{ context.report }}'), vars, {});
-      if (expected === undefined) {
-        await expect(rendered).rejects.toThrow();
-      } else {
-        await expect(rendered).resolves.toBe(expected);
-        expect(vars.context.report).toBeUndefined();
-      }
-    });
+        const rendered = renderPrompt(toPrompt('{{ context.report }}'), vars, {});
+        if (expected === undefined) {
+          await expect(rendered).rejects.toThrow();
+        } else {
+          await expect(rendered).resolves.toBe(expected);
+          expect(vars.context.report).toBeUndefined();
+        }
+      },
+    );
 
     it('should preserve a prompt-function override of a collected nested target', async () => {
       const vars: Record<string, any> = {
@@ -1077,16 +1091,19 @@ describe('evaluatorHelpers', () => {
     it.each([
       ['plain', '{{ context.message }}'],
       ['JSON', '{"message":"{{ context.message }}"}'],
-    ])('should surface render errors from nested-file helper dependencies in %s prompts', async (_kind, promptText) => {
-      const vars: Record<string, any> = {
-        name: 'Alice',
-        helper: '{{ name | uppper }}',
-        context: { message: 'file:///path/to/message.txt' },
-      };
-      vi.spyOn(fsPromises, 'readFile').mockResolvedValueOnce('{{ helper }}');
+    ])(
+      'should surface render errors from nested-file helper dependencies in %s prompts',
+      async (_kind, promptText) => {
+        const vars: Record<string, any> = {
+          name: 'Alice',
+          helper: '{{ name | uppper }}',
+          context: { message: 'file:///path/to/message.txt' },
+        };
+        vi.spyOn(fsPromises, 'readFile').mockResolvedValueOnce('{{ helper }}');
 
-      await expect(renderPrompt(toPrompt(promptText), vars, {})).rejects.toThrow(/uppper/);
-    });
+        await expect(renderPrompt(toPrompt(promptText), vars, {})).rejects.toThrow(/uppper/);
+      },
+    );
 
     it('should not retry a filter that intentionally returns template syntax', async () => {
       const tick = vi.fn((value: string) => `{{ ${value} }}-${tick.mock.calls.length}`);
@@ -1696,24 +1713,24 @@ describe('evaluatorHelpers', () => {
       expect(renderedPrompt).toBe('Hello ALICE');
     });
 
-    it.each([
-      '{{ context.name | default(context.attack.evil) }}',
-      '{{ context[key] }}',
-    ])('should preserve protected or dynamic same-root paths: %s', async (template) => {
-      const shared = { evil: 'secret' };
-      const vars: Record<string, any> = {
-        payload: shared,
-        context: { attack: shared, name: 'Alice' },
-        key: 'name',
-        message: template,
-      };
+    it.each(['{{ context.name | default(context.attack.evil) }}', '{{ context[key] }}'])(
+      'should preserve protected or dynamic same-root paths: %s',
+      async (template) => {
+        const shared = { evil: 'secret' };
+        const vars: Record<string, any> = {
+          payload: shared,
+          context: { attack: shared, name: 'Alice' },
+          key: 'name',
+          message: template,
+        };
 
-      const renderedPrompt = await renderPrompt(toPrompt('{{ message }}'), vars, {}, undefined, [
-        'payload',
-      ]);
+        const renderedPrompt = await renderPrompt(toPrompt('{{ message }}'), vars, {}, undefined, [
+          'payload',
+        ]);
 
-      expect(renderedPrompt).toBe(template);
-    });
+        expect(renderedPrompt).toBe(template);
+      },
+    );
 
     it('should preserve protected aliases reached through escaped bracket keys', async () => {
       const shared = { evil: 'secret' };
@@ -1867,57 +1884,65 @@ describe('evaluatorHelpers', () => {
       }
     });
 
-    it.each([
-      'values',
-      'entries',
-    ])('should preserve aliases reached through callable iterator prototypes: %s', async (method) => {
-      const shared = { evil: 'secret' };
-      const iteratorPrototype = Object.getPrototypeOf([][Symbol.iterator]());
-      Object.defineProperty(iteratorPrototype, '__promptfooAttack9419', {
-        configurable: true,
-        value: shared,
-      });
-      const template = `{{ context.${method}().__promptfooAttack9419.evil | upper }}`;
-      const vars: Record<string, any> = {
-        payload: shared,
-        context: [1],
-        message: template,
-      };
+    it.each(['values', 'entries'])(
+      'should preserve aliases reached through callable iterator prototypes: %s',
+      async (method) => {
+        const shared = { evil: 'secret' };
+        const iteratorPrototype = Object.getPrototypeOf([][Symbol.iterator]());
+        Object.defineProperty(iteratorPrototype, '__promptfooAttack9419', {
+          configurable: true,
+          value: shared,
+        });
+        const template = `{{ context.${method}().__promptfooAttack9419.evil | upper }}`;
+        const vars: Record<string, any> = {
+          payload: shared,
+          context: [1],
+          message: template,
+        };
 
-      try {
-        const renderedPrompt = await renderPrompt(toPrompt('{{ message }}'), vars, {}, undefined, [
-          'payload',
-        ]);
+        try {
+          const renderedPrompt = await renderPrompt(
+            toPrompt('{{ message }}'),
+            vars,
+            {},
+            undefined,
+            ['payload'],
+          );
 
-        expect(renderedPrompt).toBe(template);
-      } finally {
-        delete (iteratorPrototype as Record<string, unknown>).__promptfooAttack9419;
-      }
-    });
+          expect(renderedPrompt).toBe(template);
+        } finally {
+          delete (iteratorPrototype as Record<string, unknown>).__promptfooAttack9419;
+        }
+      },
+    );
 
-    it.each([
-      'values',
-      'entries',
-    ])('should preserve callable iterator aliases rooted in Nunjucks globals: %s', async (method) => {
-      const shared = { evil: 'secret' };
-      const iteratorPrototype = Object.getPrototypeOf([][Symbol.iterator]());
-      Object.defineProperty(iteratorPrototype, '__promptfooAttack9419', {
-        configurable: true,
-        value: shared,
-      });
-      const template = `{{ range(0, 1).${method}().__promptfooAttack9419.evil | upper }}`;
-      const vars: Record<string, any> = { payload: shared, message: template };
+    it.each(['values', 'entries'])(
+      'should preserve callable iterator aliases rooted in Nunjucks globals: %s',
+      async (method) => {
+        const shared = { evil: 'secret' };
+        const iteratorPrototype = Object.getPrototypeOf([][Symbol.iterator]());
+        Object.defineProperty(iteratorPrototype, '__promptfooAttack9419', {
+          configurable: true,
+          value: shared,
+        });
+        const template = `{{ range(0, 1).${method}().__promptfooAttack9419.evil | upper }}`;
+        const vars: Record<string, any> = { payload: shared, message: template };
 
-      try {
-        const renderedPrompt = await renderPrompt(toPrompt('{{ message }}'), vars, {}, undefined, [
-          'payload',
-        ]);
+        try {
+          const renderedPrompt = await renderPrompt(
+            toPrompt('{{ message }}'),
+            vars,
+            {},
+            undefined,
+            ['payload'],
+          );
 
-        expect(renderedPrompt).toBe(template);
-      } finally {
-        delete (iteratorPrototype as Record<string, unknown>).__promptfooAttack9419;
-      }
-    });
+          expect(renderedPrompt).toBe(template);
+        } finally {
+          delete (iteratorPrototype as Record<string, unknown>).__promptfooAttack9419;
+        }
+      },
+    );
 
     it('should preserve member calls separated from roots by whitespace', async () => {
       const shared = { evil: 'secret' };
@@ -1974,19 +1999,22 @@ describe('evaluatorHelpers', () => {
     it.each([
       ['Map', (shared: { report: string }) => new Map([['child', shared]])],
       ['Set', (shared: { report: string }) => new Set([shared])],
-    ])('should not dereference skipped refs reached through %s entries (issue #1613)', async (_kind, createPayload) => {
-      const shared = { report: 'file:///path/to/skipped.txt' };
-      const vars: Record<string, any> = {
-        payload: createPayload(shared),
-        context: shared,
-      };
-      const readFile = vi.spyOn(fsPromises, 'readFile');
+    ])(
+      'should not dereference skipped refs reached through %s entries (issue #1613)',
+      async (_kind, createPayload) => {
+        const shared = { report: 'file:///path/to/skipped.txt' };
+        const vars: Record<string, any> = {
+          payload: createPayload(shared),
+          context: shared,
+        };
+        const readFile = vi.spyOn(fsPromises, 'readFile');
 
-      await renderPrompt(toPrompt('{{ context.report }}'), vars, {}, undefined, ['payload']);
+        await renderPrompt(toPrompt('{{ context.report }}'), vars, {}, undefined, ['payload']);
 
-      expect(vars.context.report).toBe('file:///path/to/skipped.txt');
-      expect(readFile).not.toHaveBeenCalled();
-    });
+        expect(vars.context.report).toBe('file:///path/to/skipped.txt');
+        expect(readFile).not.toHaveBeenCalled();
+      },
+    );
 
     it('should keep aliases opaque when a runtime register proxy hides Map entries', async () => {
       const shared = { report: 'file:///path/to/skipped.txt' };
@@ -2079,20 +2107,23 @@ describe('evaluatorHelpers', () => {
             }
           })(),
       ],
-    ])('should disable all preprocessing when a skipped %s graph is incomplete', async (_kind, createPayload) => {
-      const shared = { evil: 'secret' };
-      const vars: Record<string, any> = {
-        payload: createPayload(shared),
-        context: shared,
-        message: '{{ context.evil | upper }}',
-      };
+    ])(
+      'should disable all preprocessing when a skipped %s graph is incomplete',
+      async (_kind, createPayload) => {
+        const shared = { evil: 'secret' };
+        const vars: Record<string, any> = {
+          payload: createPayload(shared),
+          context: shared,
+          message: '{{ context.evil | upper }}',
+        };
 
-      const renderedPrompt = await renderPrompt(toPrompt('{{ message }}'), vars, {}, undefined, [
-        'payload',
-      ]);
+        const renderedPrompt = await renderPrompt(toPrompt('{{ message }}'), vars, {}, undefined, [
+          'payload',
+        ]);
 
-      expect(renderedPrompt).toBe('{{ context.evil | upper }}');
-    });
+        expect(renderedPrompt).toBe('{{ context.evil | upper }}');
+      },
+    );
 
     it('should not load hidden scalar aliases when skipped graph inspection is incomplete', async () => {
       const hiddenReference = 'file:///path/to/skipped.txt';
@@ -3701,6 +3732,12 @@ describe('evaluatorHelpers', () => {
       });
     });
 
+    it('preserves Ogg video metadata for existing evaluations', () => {
+      expect(collectFileMetadata({ clip: 'file://clip.ogg' })).toEqual({
+        clip: { path: 'file://clip.ogg', type: 'video', format: 'ogg' },
+      });
+    });
+
     it('should identify video files correctly', () => {
       const vars = {
         video1: 'file://path/to/video.mp4',
@@ -3734,6 +3771,7 @@ describe('evaluatorHelpers', () => {
       const vars = {
         audio1: 'file://path/to/audio.mp3',
         audio2: 'file://path/to/audio.wav',
+        audio3: 'file://path/to/audio.flac',
         text: 'This is not a file',
       };
 
@@ -3749,6 +3787,11 @@ describe('evaluatorHelpers', () => {
           path: 'file://path/to/audio.wav',
           type: 'audio',
           format: 'wav',
+        },
+        audio3: {
+          path: 'file://path/to/audio.flac',
+          type: 'audio',
+          format: 'flac',
         },
       });
     });
@@ -3878,6 +3921,21 @@ describe('evaluatorHelpers', () => {
       ); // base64 of SVG content
     });
 
+    it.each([
+      ['heic', 'image/heic'],
+      ['heif', 'image/heif'],
+      ['avif', 'image/avif'],
+      ['tif', 'image/tiff'],
+      ['tiff', 'image/tiff'],
+    ])('should generate a data URL for %s images', async (extension, mimeType) => {
+      const prompt = toPrompt('Test prompt with image: {{image}}');
+      const renderedPrompt = await renderPrompt(prompt, {
+        image: `file://test-image.${extension}`,
+      });
+
+      expect(renderedPrompt).toContain(`data:${mimeType};base64,`);
+    });
+
     it('should handle case-insensitive file extensions', async () => {
       const prompt = toPrompt('Test prompt with image: {{image}}');
       const renderedPrompt = await renderPrompt(prompt, {
@@ -3904,30 +3962,83 @@ describe('evaluatorHelpers', () => {
       expect(renderedPrompt).toContain('data:image/png;base64,');
     });
 
-    it('should maintain existing behavior for video files (raw base64)', async () => {
-      vi.spyOn(fsPromises, 'readFile').mockResolvedValue(Buffer.from('test-video-content'));
+    it.each(['mp4', 'mpeg', 'mpg', 'mov', 'avi', 'flv', 'webm', 'wmv', '3gp', '3gpp'])(
+      'should load %s video files as raw base64',
+      async (extension) => {
+        vi.spyOn(fsPromises, 'readFile').mockResolvedValue(Buffer.from('test-video-content'));
 
-      const prompt = toPrompt('Test prompt with video: {{video}}');
-      const renderedPrompt = await renderPrompt(prompt, {
-        video: 'file://test-video.mp4',
-      });
+        const prompt = toPrompt('Test prompt with video: {{video}}');
+        const renderedPrompt = await renderPrompt(prompt, {
+          video: `file://test-video.${extension}`,
+        });
 
-      // Should NOT have data: prefix for videos
-      expect(renderedPrompt).not.toContain('data:video');
-      expect(renderedPrompt).toContain('dGVzdC12aWRlby1jb250ZW50'); // base64 of 'test-video-content'
-    });
+        // Should NOT have data: prefix for videos
+        expect(renderedPrompt).not.toContain('data:video');
+        expect(renderedPrompt).toContain('dGVzdC12aWRlby1jb250ZW50'); // base64 of 'test-video-content'
+      },
+    );
 
-    it('should maintain existing behavior for audio files (raw base64)', async () => {
+    it.each(['mp3', 'wav', 'm4a', 'aif', 'aiff', 'aifc', 'aac', 'ogg', 'flac'])(
+      'should load %s audio files as raw base64',
+      async (extension) => {
+        vi.spyOn(fsPromises, 'readFile').mockResolvedValue(Buffer.from('test-audio-content'));
+
+        const prompt = toPrompt('Test prompt with audio: {{audio}}');
+        const renderedPrompt = await renderPrompt(prompt, {
+          audio: `file://test-audio.${extension}`,
+        });
+
+        // Should NOT have data: prefix for audio
+        expect(renderedPrompt).not.toContain('data:audio');
+        expect(renderedPrompt).toContain('dGVzdC1hdWRpby1jb250ZW50'); // base64 of 'test-audio-content'
+      },
+    );
+
+    it.each(['m4a', 'M4A', 'M4a'])(
+      'preserves M4A MIME type for Google providers with .%s inputs',
+      async (extension) => {
+        vi.spyOn(fsPromises, 'readFile').mockResolvedValue(Buffer.from('test-audio-content'));
+        for (const provider of [
+          new AIStudioChatProvider('gemini-3.8-flash'),
+          new VertexChatProvider('gemini-3.8-flash'),
+          new AIStudioChatProvider('gemini-3.8-flash', { id: 'custom-google-id' }),
+          new VertexChatProvider('gemini-3.8-flash', { id: 'custom-vertex-id' }),
+          new AIStudioChatProvider('gemini-3.8-flash', { id: 'palm:gemini-3.8-flash' }),
+        ]) {
+          const rendered = await renderPrompt(
+            toPrompt('{{audio}}'),
+            { audio: `file://test-audio.${extension}` },
+            undefined,
+            provider,
+          );
+          expect(rendered).toBe('data:audio/mp4;base64,dGVzdC1hdWRpby1jb250ZW50');
+        }
+      },
+    );
+
+    it.each(['https://example.com/api', 'file://custom-provider.js', 'openai:gpt-5.6'])(
+      'keeps M4A variables as raw base64 for %s',
+      async (id) => {
+        vi.spyOn(fsPromises, 'readFile').mockResolvedValue(Buffer.from('test-audio-content'));
+        const rendered = await renderPrompt(
+          toPrompt('{{audio}}'),
+          { audio: 'file://test-audio.m4a' },
+          undefined,
+          createMockProvider({ id }),
+        );
+        expect(rendered).toBe('dGVzdC1hdWRpby1jb250ZW50');
+      },
+    );
+
+    it('keeps M4A variables as raw base64 for non-Gemini Google models', async () => {
       vi.spyOn(fsPromises, 'readFile').mockResolvedValue(Buffer.from('test-audio-content'));
-
-      const prompt = toPrompt('Test prompt with audio: {{audio}}');
-      const renderedPrompt = await renderPrompt(prompt, {
-        audio: 'file://test-audio.mp3',
-      });
-
-      // Should NOT have data: prefix for audio
-      expect(renderedPrompt).not.toContain('data:audio');
-      expect(renderedPrompt).toContain('dGVzdC1hdWRpby1jb250ZW50'); // base64 of 'test-audio-content'
+      const rendered = await renderPrompt(
+        toPrompt('{{audio}}'),
+        { audio: 'file://test-audio.m4a' },
+        undefined,
+        new AIStudioChatProvider('chat-bison'),
+      );
+      expect(rendered).toBe('dGVzdC1hdWRpby1jb250ZW50');
     });
 
     it('should handle Azure Vision prompt structure correctly', async () => {

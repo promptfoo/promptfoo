@@ -4,7 +4,6 @@ import * as path from 'path';
 
 import { type Options as CsvOptions, parse as csvParse } from 'csv-parse/sync';
 import { globSync, hasMagic } from 'glob';
-import yaml from 'js-yaml';
 import nunjucks from 'nunjucks';
 import cliState from '../cliState';
 import { getEnvBool } from '../envars';
@@ -16,6 +15,7 @@ import { parseRubyFileReference } from './fileUrl';
 import { parseFileUrl } from './functions/loadFunction';
 import { safeResolve, toPosixPath } from './pathUtils';
 import { renderVarsInObject } from './render';
+import { loadYaml } from './yamlLoad';
 
 import type { NunjucksFilterMap, OutputFile, VarValue } from '../types';
 
@@ -81,7 +81,7 @@ export function loadConfigFromFilePath(filePath: string): any {
   }
   if (filePath.endsWith('.yaml') || filePath.endsWith('.yml')) {
     try {
-      return yaml.load(contents);
+      return loadYaml(contents);
     } catch (error) {
       throw new Error(`Failed to parse YAML file ${filePath}: ${error}`);
     }
@@ -237,7 +237,7 @@ export function maybeLoadFromExternalFile(
           allContents.push(parsed);
         }
       } else if (matchedFile.endsWith('.yaml') || matchedFile.endsWith('.yml')) {
-        const parsed = yaml.load(contents);
+        const parsed = loadYaml(contents);
         if (parsed === null || parsed === undefined) {
           continue; // Skip empty files
         }

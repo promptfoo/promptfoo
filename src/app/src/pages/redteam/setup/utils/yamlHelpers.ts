@@ -1,6 +1,6 @@
 import { subCategoryDescriptions } from '@promptfoo/redteam/constants';
 import { getUnifiedConfig } from '@promptfoo/redteam/sharedFrontend';
-import yaml from 'js-yaml';
+import * as yaml from 'js-yaml';
 import type { RedteamFileConfig } from '@promptfoo/types';
 
 import type { Config } from '../types';
