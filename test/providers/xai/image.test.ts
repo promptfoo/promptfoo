@@ -248,6 +248,22 @@ describe('XAI Image Provider', () => {
       expect(result.cost).toBeCloseTo(0.04, 10);
     });
 
+    it('prices auto-quality grok-imagine-image-2.0 edits at the medium output tier', async () => {
+      const provider = new XAIImageProvider('grok-imagine-image-2.0', {
+        config: {
+          apiKey: mockApiKey,
+          quality: 'auto',
+          resolution: '1k',
+          image: { url: 'https://example.com/source.png' },
+        },
+      });
+
+      const result = await provider.callApi('Edit the cat');
+
+      // Auto currently serves medium for edits: $0.06 output + $0.01 input image.
+      expect(result.cost).toBeCloseTo(0.07, 10);
+    });
+
     it('routes Grok Imagine quality aliases to the canonical model slug', async () => {
       const provider = new XAIImageProvider('grok-imagine-image-quality-latest', {
         config: { apiKey: mockApiKey },
