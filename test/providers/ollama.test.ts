@@ -1,6 +1,7 @@
 import { trace } from '@opentelemetry/api';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { fetchWithCache } from '../../src/cache';
+import logger from '../../src/logger';
 import {
   OllamaChatProvider,
   OllamaCompletionProvider,
@@ -256,6 +257,24 @@ describe('OllamaCompletionProvider', () => {
     const body = JSON.parse(vi.mocked(fetchWithCache).mock.calls[0][1]?.body as string);
     expect(body.showThinking).toBeUndefined();
     expect(body.options.showThinking).toBeUndefined();
+  });
+
+  it('should set the cached flag and report cached token usage on a completion cache hit', async () => {
+    vi.mocked(fetchWithCache).mockResolvedValue({
+      data: '{"response":"hi","done":true,"prompt_eval_count":10,"eval_count":20}\n',
+      cached: true,
+      status: 200,
+      statusText: 'OK',
+      headers: {},
+    });
+
+    const provider = new OllamaCompletionProvider('llama3.3');
+    const result = await provider.callApi('test prompt');
+
+    // The completion path builds its response separately from the chat path, so it
+    // needs its own cache-hit coverage.
+    expect(result.cached).toBe(true);
+    expect(result.tokenUsage).toEqual({ cached: 30, total: 30 });
   });
 
   it('should omit finishReason when done_reason is absent', async () => {
@@ -609,6 +628,107 @@ describe('OllamaChatProvider', () => {
     expect(vi.mocked(fetchWithCache).mock.calls[0]).toBeDefined();
     const call = vi.mocked(fetchWithCache).mock.calls[0] as any;
     expect(JSON.parse(call[1].body).think).toBeTruthy();
+  });
+
+  it('should set the cached flag and report cached token usage on a cache hit', async () => {
+    vi.mocked(fetchWithCache).mockResolvedValue({
+      data: '{"message":{"role":"assistant","content":"hi"},"done":true,"prompt_eval_count":10,"eval_count":20}\n',
+      cached: true,
+      status: 200,
+      statusText: 'OK',
+      headers: {},
+    });
+
+    const provider = new OllamaChatProvider('llama3.3');
+    const result = await provider.callApi('test prompt');
+
+    // src/providers/AGENTS.md requires the cached flag; without it the evaluator never
+    // takes its "Skipping delay because response is cached" branch.
+    expect(result.cached).toBe(true);
+    expect(result.tokenUsage).toEqual({ cached: 30, total: 30 });
+  });
+
+  it('should merge passthrough.options instead of clobbering computed options', async () => {
+    vi.mocked(fetchWithCache).mockResolvedValue({
+      data: '{"message":{"role":"assistant","content":"hi"},"done":true}\n',
+      cached: false,
+      status: 200,
+      statusText: 'OK',
+      headers: {},
+    });
+
+    const provider = new OllamaChatProvider('llama3.3', {
+      config: { temperature: 0.5, num_predict: 64, passthrough: { options: { min_p: 0.1 } } },
+    });
+    await provider.callApi('test prompt');
+
+    const body = JSON.parse(vi.mocked(fetchWithCache).mock.calls[0][1]?.body as string);
+    // Spreading passthrough wholesale used to replace the computed options object,
+    // silently discarding temperature and num_predict.
+    expect(body.options).toEqual({ temperature: 0.5, num_predict: 64, min_p: 0.1 });
+  });
+
+  it('should forward min_p, keep_alive, and legacy options, but drop invalid keys', async () => {
+    vi.mocked(fetchWithCache).mockResolvedValue({
+      data: '{"message":{"role":"assistant","content":"hi"},"done":true}\n',
+      cached: false,
+      status: 200,
+      statusText: 'OK',
+      headers: {},
+    });
+
+    const provider = new OllamaChatProvider('llama3.3', {
+      config: {
+        min_p: 0.05,
+        draft_num_predict: 4,
+        keep_alive: '5m',
+        // Removed from current Ollama releases but still forwarded, so a config
+        // pointed at an older OLLAMA_BASE_URL keeps working.
+        mirostat: 2,
+        tfs_z: 1,
+        // Never a valid wire name: the Go field was UseNUMA with json tag "numa",
+        // and "numa" itself is gone upstream.
+        useNUMA: true,
+        // An OpenAI key Ollama ignores.
+        max_tokens: 99,
+      } as any,
+    });
+    await provider.callApi('test prompt');
+
+    const body = JSON.parse(vi.mocked(fetchWithCache).mock.calls[0][1]?.body as string);
+    expect(body.options.min_p).toBe(0.05);
+    expect(body.options.draft_num_predict).toBe(4);
+    expect(body.keep_alive).toBe('5m');
+    expect(body.options.keep_alive).toBeUndefined();
+    expect(body.options.mirostat).toBe(2);
+    expect(body.options.tfs_z).toBe(1);
+    expect(body.options.useNUMA).toBeUndefined();
+    expect(body.options.max_tokens).toBeUndefined();
+    expect(body.max_tokens).toBeUndefined();
+  });
+
+  it('should not report promptfoo-internal keys as dropped config', async () => {
+    const debugSpy = vi.spyOn(logger, 'debug').mockImplementation(() => logger);
+    vi.mocked(fetchWithCache).mockResolvedValue({
+      data: '{"message":{"role":"assistant","content":"hi"},"done":true}\n',
+      cached: false,
+      status: 200,
+      statusText: 'OK',
+      headers: {},
+    });
+
+    // loadApiProvider injects basePath into every provider config, so without an
+    // exclusion the diagnostic fires on every request with a key the user never set.
+    const provider = new OllamaChatProvider('llama3.3', {
+      config: { temperature: 0, basePath: '/x', showThinking: false } as any,
+    });
+    await provider.callApi('test prompt');
+
+    const droppedCalls = debugSpy.mock.calls.filter((c) =>
+      String(c[0]).includes('Ignoring unsupported config keys'),
+    );
+    debugSpy.mockRestore();
+    expect(droppedCalls).toHaveLength(0);
   });
 
   it('should not leak think or passthrough into the nested options object', async () => {
