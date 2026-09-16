@@ -144,6 +144,99 @@ describe('Provider Registry', () => {
   });
 
   it.each([
+    ['openai:live:gpt-live-1', 'gpt-live-1'],
+    ['openai:live', 'gpt-live-1'],
+    ['openai:gpt-live-1', 'gpt-live-1'],
+    ['openai:gpt-live-1-2026-09-01', 'gpt-live-1-2026-09-01'],
+  ])(
+    'routes %s to the Live endpoint with scoped configuration',
+    async (providerPath, modelName) => {
+      const factories = await getProviderFactories(providerPath);
+      const factory = factories.find((entry) => entry.test(providerPath));
+      const provider = await factory!.create(
+        providerPath,
+        {
+          id: 'live-fixture',
+          config: { audio: { output: { voice: 'quartz' } } },
+          env: { OPENAI_API_KEY: 'provider-key' },
+        },
+        { basePath: '.', options: {}, env: { OPENAI_API_KEY: 'suite-key' } },
+      );
+      expect(provider.constructor.name).toBe('OpenAiLiveProvider');
+      expect(provider.id()).toBe('live-fixture');
+      expect(provider).toHaveProperty('modelName', modelName);
+      expect(provider).toHaveProperty('config.audio.output.voice', 'quartz');
+      expect(provider).toHaveProperty('env.OPENAI_API_KEY', 'provider-key');
+    },
+  );
+
+  it.each([
+    'openai:gpt-live-transcribe',
+    'openai:gpt-live-transcribe-2026-09-01',
+    'openai:live:gpt-live-transcribe',
+    'openai:live:gpt-live-transcribe-2026-09-01',
+    'openai:transcription:gpt-live-transcribe',
+    'openai:transcription:gpt-live-transcribe-2026-09-01',
+    'openai:realtime:gpt-live-transcribe',
+    'openai:chat:gpt-live-transcribe',
+    'openai:responses:gpt-live-transcribe',
+  ])('rejects unsupported Live transcription on route %s', async (providerPath) => {
+    const factories = await getProviderFactories(providerPath);
+    const factory = factories.find((entry) => entry.test(providerPath));
+    await expect(factory!.create(providerPath, {}, { basePath: '.', options: {} })).rejects.toThrow(
+      'transcription session',
+    );
+  });
+
+  it.each(['openai:gpt-live-transcribe', 'openai:gpt-live-transcribe-2026-09-01'])(
+    'rejects transcription shorthand despite a model override for %s',
+    async (providerPath) => {
+      const factories = await getProviderFactories(providerPath);
+      const factory = factories.find((entry) => entry.test(providerPath));
+      await expect(
+        factory!.create(
+          providerPath,
+          { config: { model: 'gpt-live-1' } },
+          { basePath: '.', options: {} },
+        ),
+      ).rejects.toThrow('transcription session');
+    },
+  );
+
+  it('rejects transcription in a passthrough model override', async () => {
+    const factories = await getProviderFactories('openai:chat:gpt-4o');
+    const factory = factories.find((entry) => entry.test('openai:chat:gpt-4o'));
+    await expect(
+      factory!.create(
+        'openai:chat:gpt-4o',
+        { config: { passthrough: { model: 'gpt-live-transcribe' } } },
+        { basePath: '.', options: {} },
+      ),
+    ).rejects.toThrow('transcription session');
+  });
+
+  it.each([
+    'azure:live:gpt-live-1',
+    'azureopenai:live:gpt-live-1',
+    'openai:realtime:gpt-live-1',
+    'openai:realtime:gpt-live-1-2026-09-01',
+    'openai:chat:gpt-live-1',
+    'openai:chat:gpt-live-1-2026-09-01',
+    'openai:responses:gpt-live-1',
+    'openai:responses:gpt-live-1-2026-09-01',
+    'openai:completion:gpt-live-1',
+    'openai:embedding:gpt-live-1',
+    'openai:tts:gpt-live-1',
+    'openai:image:gpt-live-1',
+  ])('rejects the incompatible Live route %s', async (providerPath) => {
+    const factories = await getProviderFactories(providerPath);
+    const factory = factories.find((entry) => entry.test(providerPath));
+    await expect(factory!.create(providerPath, {}, { basePath: '.', options: {} })).rejects.toThrow(
+      'openai:live:',
+    );
+  });
+
+  it.each([
     ['cohere-main/embed-english-v3.0', 'embedding', 'TrueFoundryEmbeddingProvider'],
     ['tenant/vector-index:stable', 'embedding', 'TrueFoundryEmbeddingProvider'],
     ['embedding-team/chat-alias:stable', 'chat', 'TrueFoundryProvider'],
