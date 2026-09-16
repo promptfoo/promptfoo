@@ -16,6 +16,7 @@ import {
 import { isHttpProvider, patchHttpConfigForValidation } from '../util/httpProvider';
 import { setupEnv } from '../util/index';
 import { safeJsonStringify } from '../util/json';
+import { resolveProviderFileProviderId } from '../util/providerFileCache';
 import { isUuid } from '../util/uuid';
 import type { Command } from 'commander';
 
@@ -281,11 +282,16 @@ async function loadProvidersForTesting(
 
     // Cloud target
     if (isUuid(target)) {
-      const providerOptions = await getProviderFromCloud(target);
+      const { provider: providerOptions, providerFile } = await getProviderFromCloud(target);
       const patchedOptions = isHttpProvider(providerOptions)
         ? patchHttpConfigForValidation(providerOptions)
         : providerOptions;
-      provider = await loadApiProvider(patchedOptions.id, {
+      const resolvedId = await resolveProviderFileProviderId(
+        target,
+        patchedOptions.id,
+        providerFile,
+      );
+      provider = await loadApiProvider(resolvedId, {
         options: patchedOptions,
         basePath: cliState.basePath,
       });
