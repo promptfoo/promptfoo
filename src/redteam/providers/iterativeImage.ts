@@ -7,7 +7,12 @@ import { extractFirstJsonObject } from '../../util/json';
 import { extractVariablesFromTemplates, getNunjucksEngine } from '../../util/templates';
 import { sleep } from '../../util/time';
 import { TokenUsageTracker } from '../../util/tokenUsage';
-import { accumulateResponseTokenUsage, createEmptyTokenUsage } from '../../util/tokenUsageUtils';
+import {
+  accumulateAttackerTokenUsage,
+  accumulateGradingResponseTokenUsage,
+  accumulateResponseTokenUsage,
+  createEmptyTokenUsage,
+} from '../../util/tokenUsageUtils';
 import {
   buildPromptInputDescriptions,
   materializeInputVariablesWithMetadata,
@@ -309,7 +314,8 @@ async function runRedteamConversation({
         await sleep(redteamProvider.delay);
       }
 
-      TokenUsageTracker.getInstance().trackUsage(redteamProvider.id(), redteamResp.tokenUsage);
+      TokenUsageTracker.getInstance().trackResponseUsage(redteamProvider.id(), redteamResp);
+      accumulateAttackerTokenUsage(totalTokenUsage, redteamResp);
 
       if (redteamResp.error) {
         logger.warn(`Iteration ${i + 1}: Redteam provider error: ${redteamResp.error}`);
@@ -428,10 +434,7 @@ async function runRedteamConversation({
             undefined,
             options,
           );
-          // Vision analysis calls are internal and should not count as target probes.
-          accumulateResponseTokenUsage(totalTokenUsage, visionResponse, {
-            countAsRequest: false,
-          });
+          accumulateGradingResponseTokenUsage(totalTokenUsage, visionResponse);
 
           if (visionProvider.delay) {
             await sleep(visionProvider.delay);
@@ -499,11 +502,12 @@ async function runRedteamConversation({
         undefined,
         options,
       );
+      accumulateGradingResponseTokenUsage(totalTokenUsage, judgeResp);
       if (redteamProvider.delay) {
         await sleep(redteamProvider.delay);
       }
 
-      TokenUsageTracker.getInstance().trackUsage(redteamProvider.id(), judgeResp.tokenUsage);
+      TokenUsageTracker.getInstance().trackResponseUsage(redteamProvider.id(), judgeResp);
 
       let score: number;
       let scoreComponents: JudgeResponse['currentResponse']['components'];

@@ -280,7 +280,7 @@ export default class EvalFactory {
   }
 
   static async createOldResult() {
-    const db = getDb();
+    const db = await getDb();
     return (await db.insert(evalsTable).values(oldStyleEval()).returning())[0];
   }
 }

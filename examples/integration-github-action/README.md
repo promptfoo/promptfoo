@@ -12,6 +12,7 @@ This folder contains a standalone GitHub Action that runs **promptfoo** when a p
 ## Prerequisites
 
 - GitHub repository with Actions enabled
+- Node.js >=22.22.0 configured for the GitHub runner (Node.js 24 LTS recommended)
 - API keys for LLM providers set as repository secrets:
   - `OPENAI_API_KEY` - Get from [OpenAI API keys page](https://platform.openai.com/api-keys)
   - `ANTHROPIC_API_KEY` - Get from [Anthropic Console](https://console.anthropic.com/) (optional)

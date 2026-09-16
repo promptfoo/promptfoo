@@ -15,7 +15,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@app/components/ui/select';
-import { type Inputs, normalizeInputDefinition } from '@promptfoo/types';
+import { type Inputs, normalizeInputDefinition } from '@promptfoo/contracts';
 
 interface VariableSelectionDialogProps {
   open: boolean;

@@ -1,6 +1,6 @@
 import { and, asc, desc, eq, like, sql } from 'drizzle-orm';
 import express from 'express';
-import { getBlobByHash, getBlobUrl } from '../../blobs';
+import { getBlobStorageProvider, isSafeInlineBlobMimeType, type StoredBlob } from '../../blobs';
 import { isBlobStorageEnabled } from '../../blobs/extractor';
 import { getDb } from '../../database';
 import {
@@ -117,7 +117,7 @@ blobsRouter.get('/library', async (req: Request, res: Response): Promise<void> =
   const orderByFn = sortOrder === 'asc' ? asc : desc;
 
   try {
-    const db = getDb();
+    const db = await getDb();
 
     // Build WHERE conditions for filtering
     const filterConditions = [];
@@ -152,7 +152,7 @@ blobsRouter.get('/library', async (req: Request, res: Response): Promise<void> =
     const whereClause = filterConditions.length > 0 ? and(...filterConditions) : undefined;
 
     // Get total count of unique blobs matching filters
-    const countResult = db
+    const countResult = await db
       .select({ count: sql<number>`COUNT(DISTINCT ${blobAssetsTable.hash})` })
       .from(blobAssetsTable)
       .innerJoin(blobReferencesTable, eq(blobAssetsTable.hash, blobReferencesTable.blobHash))
@@ -162,7 +162,7 @@ blobsRouter.get('/library', async (req: Request, res: Response): Promise<void> =
     const total = countResult?.count ?? 0;
 
     // Get unique blob hashes for the current page using Drizzle query builder
-    const uniqueHashes = db
+    const uniqueHashes = await db
       .selectDistinct({ hash: blobAssetsTable.hash })
       .from(blobAssetsTable)
       .innerJoin(blobReferencesTable, eq(blobAssetsTable.hash, blobReferencesTable.blobHash))
@@ -216,7 +216,7 @@ blobsRouter.get('/library', async (req: Request, res: Response): Promise<void> =
       }),
     };
 
-    const items = db
+    const items = await db
       .select(selectColumns)
       .from(blobAssetsTable)
       .innerJoin(
@@ -376,7 +376,7 @@ blobsRouter.get('/library/evals', async (req: Request, res: Response): Promise<v
   const { limit, search } = parseResult.data;
 
   try {
-    const db = getDb();
+    const db = await getDb();
 
     const conditions = [];
     if (search) {
@@ -389,7 +389,7 @@ blobsRouter.get('/library/evals', async (req: Request, res: Response): Promise<v
       );
     }
 
-    const evals = db
+    const evals = await db
       .selectDistinct({
         evalId: blobReferencesTable.evalId,
         description: evalsTable.description,
@@ -430,8 +430,8 @@ blobsRouter.get('/:hash', async (req: Request, res: Response): Promise<void> => 
   }
   const { hash } = paramsResult.data;
 
-  const db = getDb();
-  const asset = db
+  const db = await getDb();
+  const asset = await db
     .select({
       hash: blobAssetsTable.hash,
       mimeType: blobAssetsTable.mimeType,
@@ -453,7 +453,7 @@ blobsRouter.get('/:hash', async (req: Request, res: Response): Promise<void> => 
   // - Verify the requesting user has access to the evaluation (reference.evalId)
   // - Check user/team ownership before serving the blob
   // - Implement proper session/token-based authentication
-  const reference = db
+  const reference = await db
     .select({ evalId: blobReferencesTable.evalId })
     .from(blobReferencesTable)
     .where(eq(blobReferencesTable.blobHash, hash))
@@ -465,14 +465,21 @@ blobsRouter.get('/:hash', async (req: Request, res: Response): Promise<void> => 
     return;
   }
 
-  let blob: Awaited<ReturnType<typeof getBlobByHash>>;
+  let blob: StoredBlob;
   try {
-    const presigned = await getBlobUrl(hash);
+    const provider = getBlobStorageProvider();
+    blob = await provider.getByHash(hash);
+    // Retained objects can have a different MIME from their later import registration.
+    // Only redirect when the stored MIME agrees with the registered passive type.
+    const presigned =
+      isSafeInlineBlobMimeType(asset.mimeType) &&
+      blob.metadata.mimeType.toLowerCase() === asset.mimeType.toLowerCase()
+        ? await provider.getUrl(hash)
+        : null;
     if (presigned) {
       res.redirect(302, presigned);
       return;
     }
-    blob = await getBlobByHash(hash);
   } catch (error) {
     logger.error('[BlobRoute] Failed to load blob', { error, hash });
     res.status(404).json({ error: 'Blob not found' });
@@ -486,13 +493,20 @@ blobsRouter.get('/:hash', async (req: Request, res: Response): Promise<void> => 
   }
 
   // Validate MIME type before setting header to prevent injection attacks
-  const mimeType = blob.metadata.mimeType || asset.mimeType;
+  // Match the registered-MIME getter while reusing the bytes already read above.
+  const mimeType = asset.mimeType;
   if (SAFE_MIME_TYPE_REGEX.test(mimeType)) {
     res.setHeader('Content-Type', mimeType);
   } else {
     logger.warn('[BlobRoute] Invalid MIME type, using fallback', { mimeType, hash });
     res.setHeader('Content-Type', 'application/octet-stream');
   }
+  // Deduplicated bytes can retain MIME metadata from before a failed import/store.
+  // Keep opaque storage metadata intact, but never render active content inline here.
+  if (!isSafeInlineBlobMimeType(mimeType)) {
+    res.setHeader('Content-Disposition', 'attachment');
+  }
+  res.setHeader('X-Content-Type-Options', 'nosniff');
   res.setHeader('Content-Length', (blob.metadata.sizeBytes ?? asset.sizeBytes).toString());
   res.setHeader('Cache-Control', 'public, max-age=31536000, immutable');
   res.setHeader('Accept-Ranges', 'none');
