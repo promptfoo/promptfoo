@@ -1545,10 +1545,6 @@ function processImagesInContents(
   contents: GeminiFormat,
   contextVars?: Record<string, VarValue>,
 ): GeminiFormat {
-  if (!contextVars) {
-    return contents;
-  }
-
   // Guard: ensure contents is an array
   if (!Array.isArray(contents)) {
     logger.warn('[Google] contents is not an array in processImagesInContents', {
@@ -1561,7 +1557,7 @@ function processImagesInContents(
 
   const base64ToMimeType = new Map<string, string>();
 
-  for (const value of Object.values(contextVars)) {
+  for (const value of Object.values(contextVars ?? {})) {
     if (typeof value === 'string') {
       const mimeType = getMimeTypeFromBase64(value);
       if (mimeType) {
@@ -1629,8 +1625,15 @@ function processImagesInContents(
           } else {
             newParts.push(part);
           }
+        } else if (typeof part.inlineData?.data === 'string') {
+          newParts.push({
+            ...part,
+            inlineData: {
+              ...part.inlineData,
+              data: extractBase64FromDataUrl(part.inlineData.data),
+            },
+          });
         } else {
-          // Keep non-text parts as is
           newParts.push(part);
         }
       }

@@ -1782,6 +1782,38 @@ describe('util', () => {
       });
 
       describe('data URL support', () => {
+        it.each([undefined, {}])(
+          'normalizes native inline data without changing its declared MIME type with vars %j',
+          (contextVars) => {
+            const base64Data = Buffer.from('ordinary offline audio').toString('base64');
+            const prompt = JSON.stringify([
+              {
+                role: 'user',
+                parts: [
+                  {
+                    inlineData: {
+                      mimeType: 'audio/mp4',
+                      data: `data:audio/x-m4a;base64,${base64Data}`,
+                    },
+                  },
+                  { inlineData: { mimeType: 'audio/mp4', data: base64Data } },
+                  { inlineData: { mimeType: 'audio/mp4', data: 'data:audio/mp4,invalid' } },
+                  { text: 'Keep ordinary text unchanged.' },
+                ],
+              },
+            ]);
+
+            const { contents } = geminiFormatAndSystemInstructions(prompt, contextVars);
+
+            expect(contents[0].parts).toEqual([
+              { inlineData: { mimeType: 'audio/mp4', data: base64Data } },
+              { inlineData: { mimeType: 'audio/mp4', data: base64Data } },
+              { inlineData: { mimeType: 'audio/mp4', data: 'data:audio/mp4,invalid' } },
+              { text: 'Keep ordinary text unchanged.' },
+            ]);
+          },
+        );
+
         const asfHeader = Buffer.from('3026b2758e66cf11a6d900aa0062ce6c', 'hex');
         const asfStreamProperties = Buffer.from('9107dcb7b7a9cf118ee600c00c205365', 'hex');
         const asfVideoStream = Buffer.from('c0ef19bc4d5bcf11a8fd00805f5c442b', 'hex');

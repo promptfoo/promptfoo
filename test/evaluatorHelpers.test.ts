@@ -13,6 +13,7 @@ import {
 } from '../src/evaluatorHelpers';
 import logger from '../src/logger';
 import { AIStudioChatProvider } from '../src/providers/google/ai.studio';
+import { geminiFormatAndSystemInstructions } from '../src/providers/google/util';
 import { VertexChatProvider } from '../src/providers/google/vertex';
 import { transform } from '../src/util/transform';
 import { createMockProvider } from './factories/provider';
@@ -1880,6 +1881,38 @@ describe('evaluatorHelpers', () => {
         }
       },
     );
+
+    describe.each([AIStudioChatProvider, VertexChatProvider])('%s audio formatting', (Provider) => {
+      it.each(['m4a', 'M4A', 'wav'])(
+        'sends raw base64 for native and text-part .%s variables',
+        async (extension) => {
+          const audio =
+            extension === 'wav'
+              ? Buffer.from('RIFF0000WAVEfmt ordinary offline audio')
+              : Buffer.from('000000186674797069736f6d0000000069736f6d6d703432', 'hex');
+          vi.spyOn(fs, 'readFileSync').mockReturnValue(audio);
+          const mimeType = extension === 'wav' ? 'audio/wav' : 'audio/mp4';
+          const vars = { audio: `file://test-audio.${extension}` };
+          const rendered = await renderPrompt(
+            toPrompt(
+              JSON.stringify([
+                {
+                  role: 'user',
+                  parts: [{ inlineData: { mimeType, data: '{{audio}}' } }, { text: '{{audio}}' }],
+                },
+              ]),
+            ),
+            vars,
+            undefined,
+            new Provider('gemini-3.8-flash'),
+          );
+          const { contents } = geminiFormatAndSystemInstructions(rendered, vars);
+          const expectedPart = { inlineData: { mimeType, data: audio.toString('base64') } };
+
+          expect(contents).toEqual([{ role: 'user', parts: [expectedPart, expectedPart] }]);
+        },
+      );
+    });
 
     it.each(['https://example.com/api', 'file://custom-provider.js', 'openai:gpt-5.6'])(
       'keeps M4A variables as raw base64 for %s',
