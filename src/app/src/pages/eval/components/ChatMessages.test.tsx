@@ -98,7 +98,7 @@ describe('ChatMessages', () => {
       {
         role: 'user',
         content: 'Multi-modal message',
-        audio: { data: 'audiodata', format: 'wav' },
+        audio: { data: 'base64audiodata', format: 'wav' },
         image: { data: FAKE_IMAGE_DATA_URL, format: 'jpeg' },
       },
     ];

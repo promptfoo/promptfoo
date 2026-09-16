@@ -22,6 +22,7 @@ vi.stubGlobal('crypto', {
 
 vi.mock('@app/utils/api', () => ({
   callApi: vi.fn(),
+  clearEvalApiResponseCache: vi.fn(),
   fetchUserEmail: vi.fn(() => Promise.resolve('test@example.com')),
   fetchUserId: vi.fn(() => Promise.resolve('test-user-id')),
   updateEvalAuthor: vi.fn(() => Promise.resolve({})),
@@ -1162,6 +1163,7 @@ describe('useTableStore', () => {
       expect(mockCallApi).toHaveBeenCalledTimes(1); // table endpoint only (metadata-keys fetched lazily)
       const url = mockCallApi.mock.calls[0][0];
       const urlParams = new URL(url, 'http://example.com').searchParams;
+      expect(urlParams.get('lean')).toBe('true');
       const rawFilterParam = urlParams.get('filter');
       const actualFilterParam = JSON.parse(rawFilterParam || '{}');
       const expectedFilterParam = JSON.parse(expectedEncodedFilterValue);
