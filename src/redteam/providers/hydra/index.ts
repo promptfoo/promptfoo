@@ -731,8 +731,16 @@ export class HydraProvider implements ApiProvider {
       }
 
       if (targetResponse.error) {
-        logger.info(`${this.logPrefix} Target error`, { turn, error: targetResponse.error });
-        continue;
+        logger.info(`${this.logPrefix} Target error, stopping attack`, {
+          turn,
+          error: targetResponse.error,
+        });
+        // Remove the unanswered user message we added before calling the target,
+        // mirroring the transform-failure cleanup above, so conversation state
+        // (and roundsCompleted below) stays consistent when we stop here.
+        this.conversationHistory.pop();
+        stopReason = 'Target error';
+        break;
       }
 
       if (!Object.prototype.hasOwnProperty.call(targetResponse, 'output')) {

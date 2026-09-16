@@ -894,7 +894,10 @@ type SharedBacktrackingStopReason =
   | 'Target ended conversation';
 
 export type RoundBacktrackingStopReason = SharedBacktrackingStopReason | 'Max rounds reached';
-export type TurnBacktrackingStopReason = SharedBacktrackingStopReason | 'Max turns reached';
+export type TurnBacktrackingStopReason =
+  | SharedBacktrackingStopReason
+  | 'Max turns reached'
+  | 'Target error';
 
 /**
  * Externalize large blob payloads in provider responses before they are copied into
