@@ -71,9 +71,12 @@ function HeroStrategyCard({
   isRemoteGenerationDisabled,
   isConfigured,
 }: HeroStrategyCardProps) {
-  const { handleTestCaseGeneration, isGenerating, isCurrentStrategy } = useStrategyTestGeneration({
-    strategyId: strategy.id,
-  });
+  const {
+    handleTestCaseGeneration,
+    isGenerating,
+    isCurrentStrategy,
+    isTestCaseGenerationAvailable,
+  } = useStrategyTestGeneration({ strategyId: strategy.id });
 
   const requiresConfig = isSelected && !isConfigured;
 
@@ -82,7 +85,9 @@ function HeroStrategyCard({
 
   const tooltipTitle = requiresConfig
     ? 'Configuration required. Click the settings icon to configure.'
-    : `Generate an example test case using the ${strategy.name} Strategy.`;
+    : isTestCaseGenerationAvailable
+      ? `Generate an example test case using the ${strategy.name} Strategy.`
+      : 'No configured plugins are compatible with this strategy.';
 
   const settingsTooltipTitle = requiresConfig
     ? 'Configuration required. Click the settings icon to configure.'
@@ -159,7 +164,7 @@ function HeroStrategyCard({
       <div className="relative z-10 mt-auto flex items-center gap-2">
         <TestCaseGenerateButton
           onClick={handleTestCaseGeneration}
-          disabled={isDisabled || isGenerating || requiresConfig}
+          disabled={isDisabled || isGenerating || requiresConfig || !isTestCaseGenerationAvailable}
           isGenerating={isGenerating && isCurrentStrategy}
           size="small"
           tooltipTitle={tooltipTitle}

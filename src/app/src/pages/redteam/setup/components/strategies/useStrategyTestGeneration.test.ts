@@ -1,5 +1,5 @@
 import { act, renderHook } from '@testing-library/react';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { useRedTeamConfig } from '../../hooks/useRedTeamConfig';
 import { useTestCaseGeneration } from '../TestCaseGenerationProvider';
 import { useStrategyTestGeneration } from './useStrategyTestGeneration';
@@ -25,6 +25,10 @@ describe('useStrategyTestGeneration', () => {
       continueGeneration: vi.fn(),
       plugin: null,
     });
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
   });
 
   it('passes through configured plugin payloads when generating a strategy preview', async () => {
@@ -141,6 +145,97 @@ describe('useStrategyTestGeneration', () => {
         config: {},
         isStatic: false,
       },
+    );
+  });
+
+  it('selects a plugin compatible with strategy targeting', async () => {
+    vi.spyOn(Math, 'random').mockReturnValue(0);
+    vi.mocked(useRedTeamConfig).mockReturnValue({
+      config: {
+        plugins: [
+          'pii:direct',
+          {
+            id: 'harmful:hate',
+            config: { language: 'es' },
+          },
+        ],
+        strategies: [
+          {
+            id: 'layer',
+            config: { plugins: ['harmful'], steps: ['base64'] },
+          },
+        ],
+      },
+    } as ReturnType<typeof useRedTeamConfig>);
+
+    const { result } = renderHook(() =>
+      useStrategyTestGeneration({
+        strategyId: 'layer',
+      }),
+    );
+
+    await act(async () => {
+      await result.current.handleTestCaseGeneration();
+    });
+
+    expect(result.current.testGenerationPlugin).toBe('harmful:hate');
+    expect(generateTestCase).toHaveBeenCalledWith(
+      {
+        id: 'harmful:hate',
+        config: { language: 'es' },
+        isStatic: true,
+      },
+      {
+        id: 'layer',
+        config: { plugins: ['harmful'], steps: ['base64'] },
+        isStatic: false,
+      },
+    );
+  });
+
+  it('disables preview when no configured plugin is compatible', async () => {
+    vi.mocked(useRedTeamConfig).mockReturnValue({
+      config: {
+        plugins: ['pii:direct'],
+        strategies: [
+          {
+            id: 'layer',
+            config: { plugins: ['harmful'], steps: ['base64'] },
+          },
+        ],
+      },
+    } as ReturnType<typeof useRedTeamConfig>);
+
+    const { result } = renderHook(() => useStrategyTestGeneration({ strategyId: 'layer' }));
+
+    await act(async () => {
+      await result.current.handleTestCaseGeneration();
+    });
+
+    expect(result.current.testGenerationPlugin).toBeNull();
+    expect(result.current.isTestCaseGenerationAvailable).toBe(false);
+    expect(generateTestCase).not.toHaveBeenCalled();
+  });
+
+  it('keeps Basic previews available for strategy-exempt plugins', async () => {
+    vi.mocked(useRedTeamConfig).mockReturnValue({
+      config: {
+        plugins: ['aegis'],
+        strategies: ['basic'],
+      },
+    } as ReturnType<typeof useRedTeamConfig>);
+
+    const { result } = renderHook(() => useStrategyTestGeneration({ strategyId: 'basic' }));
+
+    await act(async () => {
+      await result.current.handleTestCaseGeneration();
+    });
+
+    expect(result.current.testGenerationPlugin).toBe('aegis');
+    expect(result.current.isTestCaseGenerationAvailable).toBe(true);
+    expect(generateTestCase).toHaveBeenCalledWith(
+      { id: 'aegis', config: {}, isStatic: true },
+      { id: 'basic', config: {}, isStatic: false },
     );
   });
 });

@@ -70,8 +70,13 @@ interface PolicyPlugin {
 
 interface JobStatusResponse {
   hasRunningJob: boolean;
+  hasPendingRun?: boolean;
   jobId?: string;
+  latestRunId?: string;
+  statusUnavailable?: boolean;
 }
+
+type JobRecoveryResult = 'running' | 'finished' | 'missing' | 'unavailable' | 'stale';
 
 const getRunTargetValidationError = (
   targetConfigError: string | null,
@@ -173,6 +178,9 @@ export default function Review({
   const { jobId: savedJobId, setJob, clearJob, _hasHydrated } = useRedteamJobStore();
   const { signalEvalCompleted } = useEvalHistoryRefresh();
   const pollIntervalRef = useRef<number | null>(null);
+  const pollGenerationRef = useRef(0);
+  const runRequestRef = useRef(0);
+  const pendingEmailReplacementRef = useRef(false);
   const [isYamlDialogOpen, setIsYamlDialogOpen] = React.useState(false);
   const yamlContent = useMemo(() => generateOrderedYaml(config), [config]);
 
@@ -281,72 +289,58 @@ export default function Review({
     setMaxConcurrency(String(config.maxConcurrency || REDTEAM_DEFAULTS.MAX_CONCURRENCY));
   }, [config.maxConcurrency]);
 
-  // Track if recovery has been attempted to prevent duplicate runs
-  const hasAttemptedRecovery = useRef(false);
-
   // Recover job state on mount (e.g., after navigation)
   // Wait for Zustand to hydrate from localStorage before checking savedJobId
   // biome-ignore lint/correctness/useExhaustiveDependencies: intentional
   useEffect(() => {
-    if (!_hasHydrated || hasAttemptedRecovery.current) {
+    if (!_hasHydrated) {
       return;
     }
-    hasAttemptedRecovery.current = true;
+    const recoveryRequest = runRequestRef.current;
+    const isCurrentRecovery = () => recoveryRequest === runRequestRef.current;
 
     const recoverJob = async () => {
       // Check what the server thinks is running
-      const { hasRunningJob, jobId: serverJobId } = await checkForRunningJob();
+      const {
+        hasRunningJob,
+        hasPendingRun,
+        jobId: serverJobId,
+        latestRunId,
+        statusUnavailable,
+      } = await checkForRunningJob();
+      if (!isCurrentRecovery()) {
+        return;
+      }
 
-      if (hasRunningJob && serverJobId) {
-        // Server has a running job - reconnect to it
-        try {
-          const jobResponse = await callApi(`/eval/job/${serverJobId}`);
-          if (jobResponse.ok) {
-            const job = (await jobResponse.json()) as Job;
-            setLogs(job.logs || []);
-
-            if (job.status === 'in-progress') {
-              setIsRunning(true);
-              setJob(serverJobId);
-              startPolling(serverJobId);
-            } else if (job.status === 'complete' && job.evalId) {
-              setEvalId(job.evalId);
-              clearJob();
-            } else if (job.status === 'error') {
-              setLogs(job.logs || []);
-              showToast('Previous job failed. Check logs for details.', 'error');
-              clearJob();
-            }
-          } else {
-            // Server reported a running job but we couldn't fetch it
-            showToast('Could not reconnect to running job.', 'error');
-            clearJob();
-          }
-        } catch (error) {
-          console.error('Failed to recover job:', error);
-          showToast('Failed to reconnect to running job.', 'error');
+      if (hasPendingRun) {
+        setIsRunning(true);
+        if (latestRunId) {
+          setJob(latestRunId);
+        }
+        startPendingRunPolling(savedJobId ?? undefined, latestRunId);
+      } else if (hasRunningJob && serverJobId) {
+        const result = await recoverJobById(serverJobId, recoveryRequest);
+        if (!isCurrentRecovery()) {
+          return;
+        }
+        if (result === 'missing' || result === 'unavailable') {
+          showToast('Could not reconnect to running job.', 'error');
           clearJob();
         }
       } else if (savedJobId) {
-        // We have a saved job ID but server says nothing running
-        // Check if it completed while we were away
-        try {
-          const jobResponse = await callApi(`/eval/job/${savedJobId}`);
-          if (jobResponse.ok) {
-            const job = (await jobResponse.json()) as Job;
-            setLogs(job.logs || []);
-
-            if (job.status === 'complete' && job.evalId) {
-              setEvalId(job.evalId);
-              showToast('Your evaluation completed!', 'success');
-            } else if (job.status === 'error') {
-              showToast('Previous job failed. Check logs for details.', 'error');
-            }
-          }
-        } catch {
-          // Job doesn't exist anymore (server restarted or cleaned up)
+        const result = await recoverJobById(savedJobId, recoveryRequest);
+        if (!isCurrentRecovery()) {
+          return;
         }
-        clearJob();
+        if (result === 'unavailable' && statusUnavailable) {
+          setIsRunning(true);
+          startPendingRunPolling(savedJobId);
+        } else if (result === 'missing' || result === 'unavailable') {
+          clearJob();
+        }
+      } else if (statusUnavailable) {
+        setIsRunning(true);
+        startPendingRunPolling();
       }
     };
 
@@ -478,32 +472,48 @@ export default function Review({
     }
   }, [isRunning, apiHealthStatus, targetConfigError]);
 
-  const checkForRunningJob = async (): Promise<JobStatusResponse> => {
+  const checkForRunningJob = useCallback(async (): Promise<JobStatusResponse> => {
     try {
       const response = await callApi('/redteam/status');
+      if (!response.ok) {
+        throw new Error(`Status request failed (${response.status})`);
+      }
       const data = await response.json();
       return data;
     } catch (error) {
       console.error('Error checking job status:', error);
-      return { hasRunningJob: false };
+      return { hasRunningJob: false, statusUnavailable: true };
     }
-  };
+  }, []);
 
   const startPolling = useCallback(
     (jobId: string) => {
+      const pollGeneration = ++pollGenerationRef.current;
+
       // Clear any existing interval
       if (pollIntervalRef.current) {
         window.clearInterval(pollIntervalRef.current);
         pollIntervalRef.current = null;
       }
 
+      let inFlight = false;
       const interval = window.setInterval(async () => {
+        if (inFlight || pollGeneration !== pollGenerationRef.current) {
+          return;
+        }
+        inFlight = true;
         try {
           const statusResponse = await callApi(`/eval/job/${jobId}`);
+          if (pollGeneration !== pollGenerationRef.current) {
+            return;
+          }
           if (!statusResponse.ok) {
             // Job not found - likely server restarted
             window.clearInterval(interval);
-            pollIntervalRef.current = null;
+            if (pollIntervalRef.current === interval) {
+              pollIntervalRef.current = null;
+            }
+            pollGenerationRef.current += 1;
             setIsRunning(false);
             clearJob();
             showToast('Job was interrupted. Please try again.', 'error');
@@ -511,6 +521,9 @@ export default function Review({
           }
 
           const status = (await statusResponse.json()) as Job;
+          if (pollGeneration !== pollGenerationRef.current) {
+            return;
+          }
 
           if (status.logs) {
             setLogs(status.logs);
@@ -518,7 +531,10 @@ export default function Review({
 
           if (status.status === 'complete' || status.status === 'error') {
             window.clearInterval(interval);
-            pollIntervalRef.current = null;
+            if (pollIntervalRef.current === interval) {
+              pollIntervalRef.current = null;
+            }
+            pollGenerationRef.current += 1;
             setIsRunning(false);
             clearJob();
 
@@ -547,6 +563,8 @@ export default function Review({
           }
         } catch (error) {
           console.error('Error polling job status:', error);
+        } finally {
+          inFlight = false;
         }
       }, 1000);
 
@@ -555,7 +573,145 @@ export default function Review({
     [clearJob, recordEvent, showToast, signalEvalCompleted],
   );
 
-  const handleRunWithSettings = async () => {
+  const recoverJobById = useCallback(
+    async (jobId: string, requestGeneration: number): Promise<JobRecoveryResult> => {
+      try {
+        const jobResponse = await callApi(`/eval/job/${jobId}`);
+        if (requestGeneration !== runRequestRef.current) {
+          return 'stale';
+        }
+        if (!jobResponse.ok) {
+          return 'missing';
+        }
+        const job = (await jobResponse.json()) as Job;
+        if (requestGeneration !== runRequestRef.current) {
+          return 'stale';
+        }
+
+        setLogs(job.logs || []);
+        if (job.status === 'in-progress') {
+          setIsRunning(true);
+          setJob(jobId);
+          startPolling(jobId);
+          return 'running';
+        }
+
+        setIsRunning(false);
+        if (job.status === 'complete' && job.evalId) {
+          setEvalId(job.evalId);
+          showToast('Your evaluation completed!', 'success');
+        } else if (job.status === 'error') {
+          showToast('Previous job failed. Check logs for details.', 'error');
+        }
+        clearJob();
+        return 'finished';
+      } catch (error) {
+        console.error('Failed to recover job:', error);
+        return 'unavailable';
+      }
+    },
+    [clearJob, setJob, showToast, startPolling],
+  );
+
+  const startPendingRunPolling = useCallback(
+    (fallbackJobId?: string, initialPendingRunId?: string) => {
+      const pollGeneration = ++pollGenerationRef.current;
+      if (pollIntervalRef.current) {
+        window.clearInterval(pollIntervalRef.current);
+        pollIntervalRef.current = null;
+      }
+
+      let inFlight = false;
+      let pendingRunId = initialPendingRunId;
+      const interval = window.setInterval(async () => {
+        if (inFlight || pollGeneration !== pollGenerationRef.current) {
+          return;
+        }
+        inFlight = true;
+        try {
+          const { hasRunningJob, hasPendingRun, jobId, latestRunId, statusUnavailable } =
+            await checkForRunningJob();
+          if (pollGeneration !== pollGenerationRef.current) {
+            return;
+          }
+          if (statusUnavailable) {
+            return;
+          }
+          if (hasPendingRun) {
+            if (latestRunId && latestRunId !== pendingRunId) {
+              pendingRunId = latestRunId;
+              setJob(latestRunId);
+            }
+            return;
+          }
+          if (hasRunningJob && jobId) {
+            setJob(jobId);
+            startPolling(jobId);
+          } else {
+            const recoveryJobIds = [
+              ...new Set(
+                [pendingRunId, fallbackJobId].filter((candidate): candidate is string =>
+                  Boolean(candidate),
+                ),
+              ),
+            ];
+            for (const recoveryJobId of recoveryJobIds) {
+              const result = await recoverJobById(recoveryJobId, runRequestRef.current);
+              if (pollGeneration !== pollGenerationRef.current || result === 'running') {
+                return;
+              }
+              if (result === 'unavailable' || result === 'stale') {
+                return;
+              }
+              if (result === 'finished') {
+                break;
+              }
+            }
+            window.clearInterval(interval);
+            if (pollIntervalRef.current === interval) {
+              pollIntervalRef.current = null;
+            }
+            pollGenerationRef.current += 1;
+            setIsRunning(false);
+            clearJob();
+          }
+        } finally {
+          inFlight = false;
+        }
+      }, 1000);
+
+      pollIntervalRef.current = interval;
+    },
+    [checkForRunningJob, clearJob, recoverJobById, setJob, startPolling],
+  );
+
+  const reconnectToActiveRun = async (runRequest: number): Promise<boolean> => {
+    const { hasRunningJob, hasPendingRun, jobId, latestRunId, statusUnavailable } =
+      await checkForRunningJob();
+    if (runRequest !== runRequestRef.current) {
+      return false;
+    }
+    if (hasPendingRun || statusUnavailable) {
+      setIsRunning(true);
+      if (hasPendingRun && latestRunId) {
+        setJob(latestRunId);
+      }
+      startPendingRunPolling(undefined, hasPendingRun ? latestRunId : undefined);
+      return true;
+    }
+    if (hasRunningJob && jobId) {
+      setIsRunning(true);
+      setJob(jobId);
+      startPolling(jobId);
+      return true;
+    }
+    return false;
+  };
+
+  const handleRunWithSettings = async (replaceRunningJob = false) => {
+    const runRequest = ++runRequestRef.current;
+    const isCurrentRequest = () => runRequest === runRequestRef.current;
+
     if (targetConfigError) {
       confirmedRunTargetRef.current = null;
       showToast(targetConfigError, 'error');
@@ -567,9 +723,13 @@ export default function Review({
 
     // Check email verification first
     const emailResult = await checkEmailStatus();
+    if (!isCurrentRequest()) {
+      return;
+    }
 
     if (!emailResult.canProceed) {
       if (emailResult.needsEmail) {
+        pendingEmailReplacementRef.current = replaceRunningJob;
         setEmailVerificationMessage(
           emailResult.status?.message ||
             'Redteam evals require email verification. Please enter your work email:',
@@ -588,7 +748,17 @@ export default function Review({
       showToast(emailResult.status.message, 'warning');
     }
 
-    const { hasRunningJob } = await checkForRunningJob();
+    if (!replaceRunningJob) {
+      const { hasRunningJob, hasPendingRun } = await checkForRunningJob();
+      if (!isCurrentRequest()) {
+        return;
+      }
+
+      if (hasRunningJob || hasPendingRun) {
+        setIsJobStatusDialogOpen(true);
+        return;
+      }
+    }
 
     const { config: latestConfig } = useRedTeamConfig.getState();
     const { targetConfigError: latestTargetConfigError } =
@@ -603,14 +773,10 @@ export default function Review({
       showToast(runTargetValidationError, 'error');
       return;
     }
-
-    if (hasRunningJob) {
-      setIsJobStatusDialogOpen(true);
-      return;
-    }
     confirmedRunTargetRef.current = null;
 
     // Clear any existing polling interval before starting a new job
+    pollGenerationRef.current += 1;
     if (pollIntervalRef.current) {
       window.clearInterval(pollIntervalRef.current);
       pollIntervalRef.current = null;
@@ -660,15 +826,48 @@ export default function Review({
           delay: latestConfig.target.config?.delay,
         }),
       });
+      if (!isCurrentRequest()) {
+        return;
+      }
 
-      const { id } = await response.json();
+      const data = await response.json();
+      if (!isCurrentRequest()) {
+        return;
+      }
+      if (response.ok === false) {
+        if (response.status === 409) {
+          const recoveredActiveRun = await reconnectToActiveRun(runRequest);
+          if (!isCurrentRequest()) {
+            return;
+          }
+          if (recoveredActiveRun) {
+            return;
+          }
+        }
+        throw new Error(
+          typeof data?.error === 'string' ? data.error : `Request failed (${response.status})`,
+        );
+      }
+      if (typeof data?.id !== 'string') {
+        throw new Error('Server did not return a job ID');
+      }
 
       // Save job ID to persistent store and start polling
-      setJob(id);
-      startPolling(id);
+      setIsRunning(true);
+      setJob(data.id);
+      startPolling(data.id);
     } catch (error) {
+      if (!isCurrentRequest()) {
+        return;
+      }
       console.error('Error running redteam:', error);
-      setIsRunning(false);
+      const recoveredExistingJob = replaceRunningJob && (await reconnectToActiveRun(runRequest));
+      if (!isCurrentRequest()) {
+        return;
+      }
+      if (!recoveredExistingJob) {
+        setIsRunning(false);
+      }
       const errorMessage = error instanceof Error ? error.message : 'Unknown error';
       showToast(
         `An error occurred while starting the evaluation: ${errorMessage}. Please try again.`,
@@ -679,9 +878,15 @@ export default function Review({
 
   const handleCancel = async () => {
     try {
-      await callApi('/redteam/cancel', {
+      const response = await callApi('/redteam/cancel', {
         method: 'POST',
       });
+      if (!response.ok) {
+        throw new Error(`Cancel request failed (${response.status})`);
+      }
+
+      runRequestRef.current += 1;
+      pollGenerationRef.current += 1;
 
       if (pollIntervalRef.current) {
         window.clearInterval(pollIntervalRef.current);
@@ -698,20 +903,14 @@ export default function Review({
   };
 
   const handleCancelExistingAndRun = async () => {
-    try {
-      await handleCancel();
-      setIsJobStatusDialogOpen(false);
-      setTimeout(() => {
-        handleRunWithSettings();
-      }, 500);
-    } catch (error) {
-      console.error('Error canceling existing job:', error);
-      showToast('Failed to cancel existing job', 'error');
-    }
+    setIsJobStatusDialogOpen(false);
+    await handleRunWithSettings(true);
   };
 
   useEffect(() => {
     return () => {
+      runRequestRef.current += 1;
+      pollGenerationRef.current += 1;
       if (pollIntervalRef.current) {
         window.clearInterval(pollIntervalRef.current);
       }
@@ -1381,12 +1580,15 @@ export default function Review({
         <EmailVerificationDialog
           open={isEmailDialogOpen}
           onClose={() => {
-            setIsEmailDialogOpen(false);
+            pendingEmailReplacementRef.current = false;
             confirmedRunTargetRef.current = null;
+            setIsEmailDialogOpen(false);
           }}
           onSuccess={() => {
+            const replaceRunningJob = pendingEmailReplacementRef.current;
+            pendingEmailReplacementRef.current = false;
             setIsEmailDialogOpen(false);
-            handleRunWithSettings();
+            handleRunWithSettings(replaceRunningJob);
           }}
           message={emailVerificationMessage}
         />
