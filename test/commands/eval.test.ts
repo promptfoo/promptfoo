@@ -1454,6 +1454,23 @@ describe('evalCommand', () => {
     },
   );
 
+  it('rejects --retry-errors with maxErrors before saved ERROR results can be removed', async () => {
+    const latestEval = new Eval(defaultConfig);
+    vi.spyOn(Eval, 'latest').mockResolvedValueOnce(latestEval);
+    vi.mocked(getErrorResultIds).mockResolvedValueOnce(['error-result-id']);
+
+    await expect(
+      doEval({ retryErrors: true, maxErrors: 1 }, defaultConfig, defaultConfigPath, {}),
+    ).rejects.toThrow(
+      'Cannot use --max-errors with --retry-errors because stopping early could discard ERROR results that were not retried.',
+    );
+
+    expect(evaluate).not.toHaveBeenCalled();
+    expect(cliState._retryErrorResultIds).toBeUndefined();
+    expect(cliState.retryMode).toBe(false);
+    expect(cliState.resume).toBe(false);
+  });
+
   it('throws EvalRunError with all missing keys joined for library callers', async () => {
     const previousExitCode = process.exitCode;
     process.exitCode = undefined;

@@ -10,7 +10,7 @@ import { z } from 'zod';
 import { disableCache } from '../cache';
 import cliState from '../cliState';
 import { DEFAULT_MAX_CONCURRENCY } from '../constants';
-import { getEnvBool, getEnvFloat, getEnvInt, isCI } from '../envars';
+import { getEnvBool, getEnvFloat, getEnvInt, getMaxErrors, isCI } from '../envars';
 import { evaluate, PromptSuggestionsRejectedError } from '../evaluator';
 import {
   checkEmailStatusAndMaybeExit,
@@ -762,6 +762,20 @@ export async function doEval(
 
     await checkCloudPermissions(config as UnifiedConfig);
 
+    const maxErrors =
+      cmdObj.maxErrors ?? commandLineOptions?.maxErrors ?? evaluateOptions.maxErrors;
+    const effectiveMaxErrors = maxErrors ?? getMaxErrors();
+
+    if (retryErrors && effectiveMaxErrors > 0) {
+      delete cliState._retryErrorResultIds;
+      cliState.retryMode = false;
+      cliState.resume = false;
+      return failEvalRun(
+        'Cannot use --max-errors with --retry-errors because stopping early could discard ERROR results that were not retried. Set --max-errors 0 to retry every ERROR result.',
+        isCliInvocation,
+      );
+    }
+
     const providerFilter = resumeEval ? persistedProviderFilter : cliProviderFilter;
 
     // Strip any providerFilter a config file injected via evaluateOptions — only the
@@ -782,6 +796,7 @@ export async function doEval(
       delay: !Number.isNaN(delay) && delay > 0 ? delay : undefined,
       filterRange,
       maxConcurrency,
+      maxErrors,
       cache,
     };
 
