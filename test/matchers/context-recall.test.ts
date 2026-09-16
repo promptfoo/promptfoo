@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { DEFAULT_RAG_ASSERTION_THRESHOLD } from '../../src/assertions/ragDefaults';
 import { matchesContextRecall } from '../../src/matchers/rag';
 import { DefaultGradingProvider } from '../../src/providers/openai/defaults';
 
@@ -23,7 +24,11 @@ describe('matchesContextRecall', () => {
       error: 'grading provider unavailable',
     } as any);
 
-    const result = await matchesContextRecall('Context text', 'Ground truth text', 0.7);
+    const result = await matchesContextRecall(
+      'Context text',
+      'Ground truth text',
+      DEFAULT_RAG_ASSERTION_THRESHOLD,
+    );
 
     expect(result.pass).toBe(false);
     expect(result.score).toBe(0);

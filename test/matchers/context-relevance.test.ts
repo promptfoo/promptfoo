@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { DEFAULT_RAG_ASSERTION_THRESHOLD } from '../../src/assertions/ragDefaults';
 import { matchesContextRelevance } from '../../src/matchers/rag';
 import { DefaultGradingProvider } from '../../src/providers/openai/defaults';
 
@@ -18,7 +19,11 @@ describe('matchesContextRelevance (RAGAS Context Relevance)', () => {
       error: 'grading provider unavailable',
     } as any);
 
-    const result = await matchesContextRelevance('What is X?', 'Some context', 0.7);
+    const result = await matchesContextRelevance(
+      'What is X?',
+      'Some context',
+      DEFAULT_RAG_ASSERTION_THRESHOLD,
+    );
 
     expect(result.pass).toBe(false);
     expect(result.score).toBe(0);
@@ -464,7 +469,7 @@ This policy excludes all staff going on any outgoing structured programs, short 
       });
       vi.spyOn(DefaultGradingProvider, 'callApi').mockImplementation(mockCallApi);
 
-      const result = await matchesContextRelevance(query, context, 0.5);
+      const result = await matchesContextRelevance(query, context, DEFAULT_RAG_ASSERTION_THRESHOLD);
 
       expect(result.pass).toBe(false);
       expect(result.score).toBe(0);

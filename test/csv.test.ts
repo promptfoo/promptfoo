@@ -873,6 +873,8 @@ describe('assertionFromString', () => {
       'answer-relevance',
       'classifier',
       'context-faithfulness',
+      'context-recall',
+      'context-relevance',
       'cost',
       'latency',
       'levenshtein',
@@ -889,21 +891,6 @@ describe('assertionFromString', () => {
       expect(result.value).toBe('Expected output');
       expect(result.threshold).toBe(0.75);
     }
-  });
-
-  it('should use the YAML default threshold for context-recall', () => {
-    expect(assertionFromString('context-recall:Expected output')).toEqual({
-      type: 'context-recall',
-      value: 'Expected output',
-      threshold: 0.7,
-    });
-  });
-
-  it('should use the YAML default threshold for context-relevance', () => {
-    expect(assertionFromString('context-relevance')).toEqual({
-      type: 'context-relevance',
-      threshold: 0.7,
-    });
   });
 
   it('should return complete assertion object structure for representative threshold-based assertion types', () => {
