@@ -81,8 +81,8 @@ describeIfBuildExists('Library Exports', () => {
       // chunk), not just the shim, so a regression that inlines a heavy dep into a chunk is caught.
       for (const entry of ['contracts.js', 'contracts.cjs']) {
         const { totalBytes, bareSpecifiers } = readModuleClosure(path.join(distDir, entry));
-        // ~14KB (ESM) / ~19KB (CJS) today; a heavy dep or inlined zod would blow well past this.
-        expect(totalBytes).toBeLessThan(50000);
+        // MCP and HTTP contracts are ~48KB (ESM) / ~55KB (CJS), without bundling Zod.
+        expect(totalBytes).toBeLessThan(65000);
         // Leaf-safe contract: zod is the ONLY external the subpath may pull. This catches both a
         // newly-leaked dependency (extra entry) AND zod accidentally being inlined (zod disappears).
         expect([...bareSpecifiers].sort()).toEqual(['zod']);
@@ -91,7 +91,7 @@ describeIfBuildExists('Library Exports', () => {
       for (const declaration of ['contracts.d.ts', 'contracts.d.cts']) {
         const declarationPath = path.join(distDir, declaration);
         expect(fs.existsSync(declarationPath)).toBe(true);
-        expect(fs.statSync(declarationPath).size).toBeLessThan(100000);
+        expect(fs.statSync(declarationPath).size).toBeLessThan(225000);
       }
     });
 
@@ -154,6 +154,15 @@ describeIfBuildExists('Library Exports', () => {
       expect(contractsModule.McpAuthSchema.parse({ type: 'none' })).toBeUndefined();
       expect(contractsModule.McpConfigInputSchema.safeParse({ server: {} }).success).toBe(false);
       expect(contractsModule.McpConfigSchema.parse({}).enabled).toBe(true);
+      expect(
+        contractsModule.HttpProviderConfigInputSchema.safeParse({ method: 'GET' }).success,
+      ).toBe(true);
+      expect(
+        contractsModule.HttpProviderConfigInputSchema.safeParse({ method: 'POST' }).success,
+      ).toBe(false);
+      expect(
+        contractsModule.HttpAuthInputSchema.safeParse({ type: 'api_key', value: 'key' }).success,
+      ).toBe(false);
       expect(contractsModule.McpAuthInputJsonSchema.$schema).toBe(
         'http://json-schema.org/draft-07/schema#',
       );
@@ -207,6 +216,15 @@ describeIfBuildExists('Library Exports', () => {
       expect(contractsModule.McpAuthSchema.parse({ type: 'none' })).toBeUndefined();
       expect(contractsModule.McpConfigInputSchema.safeParse({ server: {} }).success).toBe(false);
       expect(contractsModule.McpConfigSchema.parse({}).enabled).toBe(true);
+      expect(
+        contractsModule.HttpProviderConfigInputSchema.safeParse({ method: 'GET' }).success,
+      ).toBe(true);
+      expect(
+        contractsModule.HttpProviderConfigInputSchema.safeParse({ method: 'POST' }).success,
+      ).toBe(false);
+      expect(
+        contractsModule.HttpAuthInputSchema.safeParse({ type: 'api_key', value: 'key' }).success,
+      ).toBe(false);
       expect(contractsModule.McpAuthInputJsonSchema.$schema).toBe(
         'http://json-schema.org/draft-07/schema#',
       );
