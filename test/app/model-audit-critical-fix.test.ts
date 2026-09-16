@@ -56,7 +56,7 @@ describe('Model Audit Critical Findings Fix', () => {
 
     const selectedSeverity = 'error';
 
-    // Test the filtering logic from SecurityFindings.tsx
+    // Test the filtering logic from ResultsTab.tsx
     const filteredIssues = mockScanResults.issues.filter((issue) => {
       if (!selectedSeverity && issue.severity === 'debug') {
         return false;

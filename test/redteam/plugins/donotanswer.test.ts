@@ -4,7 +4,7 @@ import { DoNotAnswerPlugin, fetchDataset } from '../../../src/redteam/plugins/do
 import { fetchWithTimeout } from '../../../src/util/fetch/index';
 
 vi.mock('fs');
-vi.mock('../../../src/util/fetch');
+vi.mock('../../../src/util/fetch/index');
 vi.mock('../../../src/logger');
 
 describe('DoNotAnswerPlugin', () => {
