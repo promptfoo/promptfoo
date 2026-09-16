@@ -36,6 +36,7 @@ interface OllamaCompletionOptions {
   main_gpu?: number;
   use_mmap?: boolean;
   num_thread?: number;
+  draft_num_predict?: number;
 
   // Removed from Ollama's Options struct in newer releases, but still forwarded so
   // configs pointed at an older OLLAMA_BASE_URL keep working. Modern servers ignore
@@ -88,6 +89,7 @@ const OllamaCompletionOptionKeys = new Set<keyof OllamaCompletionOptions>([
   'main_gpu',
   'use_mmap',
   'num_thread',
+  'draft_num_predict',
   'tfs_z',
   'num_gqa',
   'f16_kv',
@@ -796,7 +798,11 @@ export class OllamaEmbeddingProvider extends OllamaCompletionProvider {
           ? undefined
           : response.cached
             ? { cached: promptTokens, total: promptTokens }
-            : { prompt: promptTokens, total: promptTokens };
+            : // accumulateTokenUsage defaults incrementRequests to false, and the
+              // similarity matcher calls it with two args, so an omitted numRequests
+              // reports zero. Other embedding providers set it explicitly too
+              // (src/providers/voyage.ts:119, src/providers/cohere.ts:211).
+              { prompt: promptTokens, total: promptTokens, numRequests: 1 };
       return {
         embedding,
         ...(tokenUsage && { tokenUsage }),

@@ -37,7 +37,7 @@ Small models are useful for smoke-testing a config without a long download —
 `qwen3:0.6b` (~500MB) supports both tools and reasoning, and `all-minilm` (~45MB)
 covers embeddings.
 
-We also support the `/api/embed` endpoint via `ollama:embeddings:<model name>` (or the singular `ollama:embedding:`) for model-graded assertions such as [similarity](/docs/configuration/expected-outputs/similar/).
+We also support the `/api/embed` endpoint via `ollama:embeddings:<model name>` (or the singular `ollama:embedding:<model name>`) for model-graded assertions such as [similarity](/docs/configuration/expected-outputs/similar/).
 
 Supported environment variables:
 
@@ -46,7 +46,7 @@ Supported environment variables:
 - `REQUEST_TIMEOUT_MS` - request timeout in milliseconds
 
 To pass configuration options to Ollama, use the `config` key. See Ollama's
-[parameter reference](https://github.com/ollama/ollama/blob/main/docs/modelfile.md#parameter)
+[parameter reference](https://github.com/ollama/ollama/blob/main/docs/modelfile.mdx#parameter)
 for what each one does:
 
 ```yaml title="promptfooconfig.yaml"
@@ -103,7 +103,7 @@ Ollama's current [Options struct](https://github.com/ollama/ollama/blob/main/api
 `num_predict`, `num_keep`, `seed`, `top_k`, `top_p`, `min_p`, `typical_p`,
 `repeat_last_n`, `temperature`, `repeat_penalty`, `presence_penalty`,
 `frequency_penalty`, `stop`, `num_ctx`, `num_batch`, `num_gpu`, `main_gpu`,
-`use_mmap`, and `num_thread`.
+`use_mmap`, `num_thread`, and `draft_num_predict`.
 
 Note that `max_tokens` is an OpenAI key — Ollama ignores it, so use `num_predict`.
 
@@ -344,8 +344,11 @@ By default, promptfoo evaluates all providers concurrently for each prompt. Howe
 promptfoo eval -j 1
 ```
 
-This serializes the eval's **target** calls: one provider and prompt at a time, in
-test-case order.
+This serializes the eval's **target** calls: one provider and prompt at a time.
+
+Ordering caveat: the evaluator runs test cases marked `options.runSerially` as a separate
+partition ahead of the rest, so a config using that option does not execute in strict
+test-case order even at `-j 1`.
 
 Model-graded assertions run on a separate path. When grading grouping is active they are
 serialized too, but if it is disabled — by a per-eval timeout or a `{{_conversation}}`

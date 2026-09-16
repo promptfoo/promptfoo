@@ -679,6 +679,7 @@ describe('OllamaChatProvider', () => {
     const provider = new OllamaChatProvider('llama3.3', {
       config: {
         min_p: 0.05,
+        draft_num_predict: 4,
         keep_alive: '5m',
         // Removed from current Ollama releases but still forwarded, so a config
         // pointed at an older OLLAMA_BASE_URL keeps working.
@@ -695,6 +696,7 @@ describe('OllamaChatProvider', () => {
 
     const body = JSON.parse(vi.mocked(fetchWithCache).mock.calls[0][1]?.body as string);
     expect(body.options.min_p).toBe(0.05);
+    expect(body.options.draft_num_predict).toBe(4);
     expect(body.keep_alive).toBe('5m');
     expect(body.options.keep_alive).toBeUndefined();
     expect(body.options.mirostat).toBe(2);
@@ -1243,7 +1245,9 @@ describe('OllamaEmbeddingProvider', () => {
 
     expect(result).toEqual({
       embedding: [0.1, 0.2, 0.3],
-      tokenUsage: { prompt: 4, total: 4 },
+      // numRequests must be explicit: the similarity matcher accumulates usage without
+      // inferring a request count, so omitting it reports zero embedding requests.
+      tokenUsage: { prompt: 4, total: 4, numRequests: 1 },
     });
 
     // /api/embeddings is superseded upstream; it also hard-errors on long inputs.
