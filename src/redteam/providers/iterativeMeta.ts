@@ -328,6 +328,9 @@ export async function runMetaAgentRedteam({
         Strategies,
         transformContext,
       );
+      if (lastTransformResult.tokenUsage) {
+        accumulateAttackerTokenUsage(totalTokenUsage, lastTransformResult);
+      }
 
       if (lastTransformResult.error) {
         logger.warn('[IterativeMeta] Transform failed, skipping iteration', {

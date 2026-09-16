@@ -6,10 +6,27 @@ providers:
   - echo
 
 prompts:
-  - 'Test DynamicValue here'
+  - '{{expected}}'
 
 tests:
-  - assert:
+  - description: uses JavaScript output as the assertion value
+    vars:
+      expected: DynamicValue
+    assert:
       # The file:// reference should execute the script and use its return value
       - type: contains
         value: file://../assertions/dynamic-value.js
+
+  - description: uses Python output as the assertion value
+    vars:
+      expected: PythonScriptValue
+    assert:
+      - type: contains
+        value: file://../assertions/dynamic-value.py
+
+  - description: uses Ruby output as the assertion value
+    vars:
+      expected: RubyScriptValue
+    assert:
+      - type: contains
+        value: file://../assertions/dynamic-value.rb
