@@ -1305,6 +1305,8 @@ For complete working examples of the search grounding, code execution, and url c
 
 Promptfoo now supports Google's WebSocket-based Live API, which enables low-latency bidirectional voice and video interactions with Gemini models. This API provides real-time interactive capabilities beyond what's available in the standard REST API.
 
+`google:live:` connects to the Gemini API, even when authenticating with OAuth. For Google Cloud project/location routing, use the separate [`vertex:live:` provider](/docs/providers/vertex#live-api).
+
 Use `google:live:gemini-3.8-live` for low-latency dialogue or `google:live:gemini-3.8-live-extended-thinking` for background reasoning. Both default to the `v1alpha` endpoint, audio output, and output transcription (`output.text`), and accept `GOOGLE_API_KEY` or `GEMINI_API_KEY`. Text response modality requests are converted to audio with transcription and billed at audio rates.
 
 Extended Thinking accepts `generationConfig.thinkingConfig.thinkingLevel: LOW` (default), `MEDIUM`, or `HIGH`. Promptfoo sets function declarations to `behavior: NON_BLOCKING` and waits for `interactionStatus: IDLE` before advancing the conversation or returning a result; intermediate spoken updates are included in the transcript. Blocking tools are rejected. The standard 3.8 Live model does not accept `thinkingConfig`; neither model accepts `enableAffectiveDialog` or disabled proactive audio. Finite PCM audio inputs use explicit activity boundaries instead of automatic voice activity detection. See [Google's migration guide](https://ai.google.dev/gemini-api/docs/live-api/thinking) and the [Gemini 3.8 example](https://github.com/promptfoo/promptfoo/blob/main/examples/google-live/promptfooconfig.yaml).
@@ -1426,15 +1428,12 @@ Other configuration options are available, such as setting proactive audio, sett
 Try the examples:
 
 ```sh
-# Initialize the basic text-only and function calling/tools examples
+# Initialize the Gemini 3.8 Live comparison
 promptfoo init --example google-live
 cd google-live
 
-# Basic text-only example
-promptfoo eval -c promptfooconfig.yaml -j 3
-
-# Function calling and tools example
-promptfoo eval -c promptfooconfig.tools.yaml -j 3
+# Grade both models' spoken-response transcripts
+promptfoo eval -c promptfooconfig.yaml --no-cache -j 1
 
 # Audio generation example
 cd ..
