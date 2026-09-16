@@ -9,14 +9,26 @@ sidebar_position: 20
 
 Promptfoo supports the Model Context Protocol (MCP) for advanced tool use, and agentic workflows. MCP allows you to connect your Promptfoo providers to an external MCP server, such as the [modelcontextprotocol/server-memory](https://github.com/modelcontextprotocol/server-memory), to enable tool orchestration, and more.
 
+:::note MCP SDK dependency
+
+Promptfoo's general MCP integration uses the optional `@modelcontextprotocol/sdk` runtime package. Standard npm installs include optional dependencies, but installs that omit them need:
+
+```bash
+npm install @modelcontextprotocol/sdk
+```
+
+:::
+
 ## Basic Configuration
+
+For OpenAI, use an explicit `openai:chat:<model>` provider with `config.mcp`. Responses providers use OpenAI's [hosted MCP tools](#openai-responses-api-mcp-integration) instead.
 
 To enable MCP for a provider, add the `mcp` block to your provider's `config` in your `promptfooconfig.yaml`:
 
 ```yaml title="promptfooconfig.yaml"
 description: Testing MCP memory server integration with Google AI Studio
 providers:
-  - id: google:gemini-2.0-flash
+  - id: google:gemini-2.5-flash
     config:
       mcp:
         enabled: true
@@ -51,7 +63,7 @@ MCP servers can be run locally or accessed remotely. For development and testing
 
 ```yaml
 providers:
-  - id: openai:responses:gpt-5.1
+  - id: openai:chat:gpt-5.6-luna
     config:
       apiKey: <your-api-key>
       mcp:
@@ -64,7 +76,7 @@ providers:
 
 ```yaml
 providers:
-  - id: openai:responses:gpt-5.1
+  - id: openai:chat:gpt-5.6-luna
     config:
       apiKey: <your-api-key>
       mcp:
@@ -91,7 +103,7 @@ Promptfoo allows a single provider to connect to multiple MCP servers by using t
 
 ```yaml title="promptfooconfig.yaml"
 providers:
-  - id: openai:responses:gpt-5.1
+  - id: openai:chat:gpt-5.6-luna
     config:
       mcp:
         enabled: true
@@ -138,7 +150,7 @@ You can configure multiple MCP servers by assigning different MCP server configu
 ```yaml title="promptfooconfig.yaml"
 description: Using multiple MCP servers
 providers:
-  - id: google:gemini-2.0-flash
+  - id: google:gemini-2.5-flash
     config:
       mcp:
         enabled: true
@@ -147,7 +159,7 @@ providers:
           args: ['-y', '@modelcontextprotocol/server-memory']
           name: gemini-memory
 
-  - id: openai:responses:gpt-5.1
+  - id: openai:chat:gpt-5.6-luna
     config:
       apiKey: <your-api-key>
       mcp:
@@ -183,7 +195,7 @@ This setup is useful for testing, benchmarking, or running isolated agentic work
 MCP is supported by most major providers in Promptfoo, including:
 
 - Google Gemini (AI Studio, Vertex)
-- OpenAI (and compatible providers like Groq, Together, etc.)
+- OpenAI Chat Completions (and compatible providers like Groq, Together, etc.)
 - Anthropic
 
 ## OpenAI Responses API MCP Integration
@@ -207,7 +219,7 @@ MCP tool calls have a default timeout of 60 seconds. For long-running tools, inc
 
 ```yaml
 providers:
-  - id: openai:responses:gpt-5.1
+  - id: openai:chat:gpt-5.6-luna
     config:
       mcp:
         enabled: true

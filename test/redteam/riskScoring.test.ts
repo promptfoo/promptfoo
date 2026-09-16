@@ -29,6 +29,14 @@ describe('Risk Scoring', () => {
       expect(unknownMeta.humanExploitable).toBe(true);
       expect(unknownMeta.humanComplexity).toBe('medium');
     });
+
+    it('should score jailbreak-templates identically to its deprecated prompt-injection alias', () => {
+      const canonicalMeta = getStrategyMetadata('jailbreak-templates');
+      expect(canonicalMeta.humanExploitable).toBe(true);
+      expect(canonicalMeta.humanComplexity).toBe('low');
+
+      expect(getStrategyMetadata('prompt-injection')).toEqual(canonicalMeta);
+    });
   });
 
   describe('calculatePluginRiskScore', () => {
