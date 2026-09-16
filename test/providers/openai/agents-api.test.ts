@@ -786,6 +786,99 @@ describe('OpenAiAgentsApiProvider', () => {
           'User-Agent': 'promptfoo-test',
         };
 
+        describe.each([undefined, { Authorization: 'Bearer offline-replacement-key' }])(
+          'discarded templates with replacement headers %j',
+          (headers) => {
+            it.each([
+              'Bearer {{ auth.token.trim() }}',
+              'Bearer {{ auth.token | trim }}',
+              'Bearer {{ (auth.token | load).access_token }}',
+            ])('does not require discarded credential inputs: %s', async (authorization) => {
+              const result = await provider({
+                apiBaseUrl: 'https://gateway.example/v1',
+                apiKey: 'offline-replacement-key',
+                headers: { Authorization: authorization },
+              }).callApi('hi', {
+                ...promptContext({ ...endpointConfig, headers }),
+                vars: { auth: {} },
+              });
+
+              expect(result.output).toBe('42');
+              expect(result.metadata?.sessionDeleted).toBe(true);
+              expect(requestAuthorizations()).toEqual(new Set(['Bearer offline-replacement-key']));
+            });
+          },
+        );
+
+        describe.each([undefined, {}])('blank inherited headers replaced by %j', (headers) => {
+          it.each(['', '   ', '{{ optional }}'])(
+            'retains ambient authentication when the old header is absent: %j',
+            async (value) => {
+              mockProcessEnv({ OPENAI_API_KEY: 'offline-ambient-key' });
+              const result = await new OpenAiAgentsApiProvider('', {
+                config: {
+                  apiBaseUrl: 'https://gateway.example/v1',
+                  headers: { 'X-Gateway-Auth': value },
+                },
+              }).callApi('hi', {
+                ...promptContext({ ...endpointConfig, headers }),
+                vars: { optional: '' },
+              });
+
+              expect(result.output).toBe('42');
+              expect(result.metadata?.sessionDeleted).toBe(true);
+              expect(requestAuthorizations()).toEqual(new Set(['Bearer offline-ambient-key']));
+            },
+          );
+        });
+
+        it('redacts filtered rendered credentials echoed in a validation error', async () => {
+          const credential = 'offline-opaque-gateway-credential';
+          vi.mocked(fetchWithRetries).mockResolvedValueOnce(
+            apiError(400, `Invalid instructions: ${credential}`),
+          );
+          const result = await provider({
+            apiBaseUrl: 'https://gateway.example/v1',
+            headers: { 'X-Custom-Gateway': '{{ credential }}' },
+            agent: { model: 'gpt-6-astra', instructions: '{{ credential }}' },
+          }).callApi('hi', {
+            ...promptContext(endpointConfig),
+            vars: { credential },
+          });
+
+          expect(result.error).toContain('HTTP 400');
+          expect(result.error).toContain('Invalid instructions: [REDACTED]');
+          expect(result.error).not.toContain(credential);
+          const request = vi.mocked(fetchWithRetries).mock.calls[0][1]!;
+          expect(new Headers(request.headers).get('X-Custom-Gateway')).toBeNull();
+          expect(JSON.parse(request.body as string).agent.instructions).toBe(credential);
+        });
+
+        it('still validates templates in retained non-credential headers', async () => {
+          const result = await provider({
+            apiBaseUrl: 'https://gateway.example/v1',
+            headers: { 'Content-Type': '{{ auth.token | trim }}' },
+          }).callApi('hi', { ...promptContext(endpointConfig), vars: { auth: {} } });
+
+          expect(result.error).toContain('TypeError');
+          expect(fetchWithRetries).not.toHaveBeenCalled();
+        });
+
+        it('does not replace an unrenderable discarded credential with the ambient key', async () => {
+          mockProcessEnv({ OPENAI_API_KEY: 'offline-ambient-key' });
+          const result = await new OpenAiAgentsApiProvider('', {
+            config: {
+              apiBaseUrl: 'https://gateway.example/v1',
+              apiKeyRequired: false,
+              headers: { Authorization: 'Bearer {{ auth.token | trim }}' },
+            },
+          }).callApi('hi', { ...promptContext(endpointConfig), vars: { auth: {} } });
+
+          expect(result.output).toBe('42');
+          expect(result.metadata?.sessionDeleted).toBe(true);
+          expect(requestAuthorizations()).toEqual(new Set([null]));
+        });
+
         it.each([false, true])(
           'filters credential values after rendering: %s',
           async (templated) => {

@@ -129,6 +129,14 @@ function isCredentialName(name: string): boolean {
   return isSecretField(name) || CREDENTIAL_NAME.test(name);
 }
 
+function isCredentialHeader(name: string, value: string): boolean {
+  return (
+    isCredentialName(name) ||
+    /(?:^|[-_])auth(?:$|[-_])/i.test(name) ||
+    sanitizeObject({ headers: { [name]: value } }).headers[name] === REDACTED
+  );
+}
+
 function addCredential(credentials: Set<string>, value: unknown): void {
   if (typeof value !== 'string') {
     return;
@@ -730,6 +738,7 @@ export class OpenAiAgentsApiProvider extends OpenAiGenericProvider {
       promptConfig?.apiBaseUrl !== undefined || promptConfig?.apiHost !== undefined;
     const mergedConfig = {
       ...this.config,
+      ...(endpointOverride && { headers: undefined }),
       ...(promptConfig?.apiBaseUrl !== undefined && { apiHost: undefined }),
       ...(promptConfig?.apiHost !== undefined && { apiBaseUrl: undefined }),
       ...(promptConfig?.apiKeyEnvar !== undefined && { apiKey: undefined }),
@@ -739,6 +748,7 @@ export class OpenAiAgentsApiProvider extends OpenAiGenericProvider {
     // Promptfoo can attach a live provider here; do not render its methods or state.
     delete mergedConfig.provider;
     let config = mergedConfig;
+    const removedHeaderCredentials = new Set<string>();
     try {
       let removedInheritedHeaders = false;
       const vars = context?.vars;
@@ -746,24 +756,37 @@ export class OpenAiAgentsApiProvider extends OpenAiGenericProvider {
         config = renderConfigTemplates(mergedConfig, vars, Object.keys(vars)) as AgentsApiOptions;
       }
       if (endpointOverride && this.config.headers) {
-        const inheritedHeaders = renderConfigTemplates(
-          this.config.headers,
-          vars ?? {},
-          Object.keys(vars ?? {}),
-        ) as NonNullable<AgentsApiOptions['headers']>;
-        const sanitizedHeaders = sanitizeObject({ headers: inheritedHeaders }).headers;
-        const safeHeaders = Object.fromEntries(
-          Object.entries(inheritedHeaders).filter(
-            ([name]) =>
-              !isCredentialName(name) &&
-              !/(?:^|[-_])auth(?:$|[-_])/i.test(name) &&
-              sanitizedHeaders[name] !== REDACTED,
-          ),
+        const replacesHeaders = promptConfig?.headers !== undefined;
+        const { hasHeaderCredential, hasCustomHeader } = scanRequestHeaders(
+          new Headers(config.headers),
+          new Set<string>(),
         );
-        removedInheritedHeaders =
-          Object.keys(safeHeaders).length < Object.keys(inheritedHeaders).length;
-        if (promptConfig?.headers === undefined) {
-          config.headers = safeHeaders;
+        const hasReplacementCredential =
+          replacesHeaders &&
+          (config.apiKey || config.apiKeyEnvar || hasHeaderCredential || hasCustomHeader);
+        if (!hasReplacementCredential) {
+          const safeHeaders: Record<string, string> = {};
+          for (const [name, originalValue] of Object.entries(this.config.headers)) {
+            let value = originalValue;
+            try {
+              if (vars) {
+                value = renderConfigTemplates(originalValue, vars, Object.keys(vars)) as string;
+              }
+            } catch (error) {
+              if (!replacesHeaders && !isCredentialHeader(name, originalValue)) {
+                throw error;
+              }
+            }
+            if (isCredentialHeader(name, value)) {
+              removedInheritedHeaders ||= value.trim().length > 0;
+              addCredential(removedHeaderCredentials, value);
+            } else {
+              safeHeaders[name] = value;
+            }
+          }
+          if (!replacesHeaders) {
+            config.headers = safeHeaders;
+          }
         }
       }
       // Keep request credentials and lifecycle settings isolated across concurrent calls.
@@ -781,6 +804,9 @@ export class OpenAiAgentsApiProvider extends OpenAiGenericProvider {
         }
       }
       collectCallCredentials(this, callProvider.inheritedCredentials);
+      for (const credential of removedHeaderCredentials) {
+        callProvider.inheritedCredentials.add(credential);
+      }
       const spanContext = buildChatSpanContext({
         system: 'openai',
         model: callProvider.modelName,
@@ -800,7 +826,7 @@ export class OpenAiAgentsApiProvider extends OpenAiGenericProvider {
     } catch (error) {
       options?.abortSignal?.throwIfAborted();
       // Redact this call's own key, key variable, and base URL, including prompt-level overrides.
-      const credentials = new Set<string>();
+      const credentials = new Set<string>(removedHeaderCredentials);
       collectCallCredentials(this, credentials);
       for (const callConfig of new Set([mergedConfig, config])) {
         collectCallCredentials(
