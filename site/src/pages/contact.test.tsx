@@ -1,8 +1,32 @@
 import React from 'react';
 
-import { fireEvent, render, screen } from '@testing-library/react';
-import { describe, expect, it } from 'vitest';
+import { act, fireEvent, render, screen } from '@testing-library/react';
+import { describe, expect, it, vi } from 'vitest';
 import ContactPage from './contact';
+
+interface TurnstileOptions {
+  callback: (token: string) => void;
+  'expired-callback': () => void;
+  'timeout-callback': () => void;
+  'error-callback': () => void;
+  'unsupported-callback': () => void;
+}
+
+// Keep the real React wrapper; replace only Cloudflare's remote browser API.
+const turnstile = vi.hoisted(() => {
+  const api = {
+    render: vi.fn<(_container: HTMLElement, _options: TurnstileOptions) => string>(
+      () => 'contact-widget',
+    ),
+    remove: vi.fn(),
+  };
+  vi.stubGlobal('turnstile', api);
+  return api;
+});
+
+function verify(token = 'test-turnstile-token') {
+  act(() => turnstile.render.mock.lastCall![1].callback(token));
+}
 
 describe('contact form', () => {
   it('submits contact details to Formspark in the POST body', () => {
@@ -19,6 +43,7 @@ describe('contact form', () => {
     fireEvent.change(screen.getByLabelText(/How can we help/), {
       target: { value: 'Please share a demo.' },
     });
+    verify();
 
     expect(form.method).toBe('post');
     expect(form.action).toBe('https://submit-form.com/ghriv7voL');
@@ -29,7 +54,66 @@ describe('contact form', () => {
       company: 'Example',
       'interested-in': 'Model Evaluation',
       message: 'Please share a demo.',
+      'cf-turnstile-response': 'test-turnstile-token',
     });
+    expect(screen.getByRole('button', { name: 'Contact sales' })).toBeEnabled();
+    expect(fireEvent.submit(form)).toBe(true);
+  });
+
+  it('blocks submission until the existing Turnstile widget verifies the visitor', () => {
+    render(<ContactPage />);
+
+    const button = screen.getByRole('button', { name: 'Contact sales' });
+    const form = button.closest('form')!;
+    expect(turnstile.render).toHaveBeenCalledWith(
+      expect.any(HTMLElement),
+      expect.objectContaining({
+        sitekey: '0x4AAAAAAExEs4irtoVm_IKg',
+        action: 'contact',
+        'response-field': false,
+        'refresh-expired': 'auto',
+      }),
+    );
+    expect(button).toBeDisabled();
+    expect(fireEvent.submit(form)).toBe(false);
+    expect(new FormData(form).get('cf-turnstile-response')).toBe('');
+  });
+
+  it.each([
+    'expired-callback',
+    'timeout-callback',
+    'error-callback',
+    'unsupported-callback',
+  ] as const)('clears the token and blocks submission after %s', (callback) => {
+    render(<ContactPage />);
+    verify();
+
+    act(() => turnstile.render.mock.lastCall![1][callback]());
+
+    const button = screen.getByRole('button', { name: 'Contact sales' });
+    const form = button.closest('form')!;
+    expect(button).toBeDisabled();
+    expect(new FormData(form).get('cf-turnstile-response')).toBe('');
+    expect(fireEvent.submit(form)).toBe(false);
+    expect(screen.getByRole('status')).toBeVisible();
+
+    verify('fresh-token');
+    expect(button).toBeEnabled();
+    expect(new FormData(form).getAll('cf-turnstile-response')).toEqual(['fresh-token']);
+    expect(screen.queryByRole('status')).not.toBeInTheDocument();
+  });
+
+  it('removes the widget on navigation and requires a fresh token on return', () => {
+    const { unmount } = render(<ContactPage />);
+    verify();
+    unmount();
+
+    expect(turnstile.remove).toHaveBeenCalledWith('contact-widget');
+    render(<ContactPage />);
+    expect(turnstile.render).toHaveBeenCalledTimes(2);
+    expect(screen.getByRole('button', { name: 'Contact sales' })).toBeDisabled();
+    verify();
+    expect(screen.getByRole('button', { name: 'Contact sales' })).toBeEnabled();
   });
 
   it('keeps the honeypot hidden and out of normal submissions', () => {
