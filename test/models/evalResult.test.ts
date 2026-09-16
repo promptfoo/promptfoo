@@ -36,12 +36,18 @@ describe('EvalResult', () => {
     (label) => {
       const row = createEvaluateResult({
         ...mockEvaluateResult,
-        prompt: { raw: 'Private prompt', label: label as unknown as string },
+        prompt: {
+          raw: 'Private prompt',
+          label: label as unknown as string,
+          template: 'PRIVATE_TEMPLATE_LITERAL',
+        },
         testCase: { assert: [{ type: 'promptfoo:redteam:harness:artifact-redaction' }] },
       });
       const projected = sanitizeResultForJsonlArtifact(row);
       expect(projected.prompt.label).toContain('Prompt omitted');
       expect(JSON.stringify(projected.prompt)).not.toContain('PRIVATE_MALFORMED_LABEL');
+      expect(JSON.stringify(projected.prompt)).not.toContain('PRIVATE_TEMPLATE_LITERAL');
+      expect(row.prompt.template).toBe('PRIVATE_TEMPLATE_LITERAL');
       expect(row.prompt.label).toBe(label);
     },
   );
@@ -198,6 +204,7 @@ describe('EvalResult', () => {
           metadata: metadata as AtomicTestCase['metadata'],
         },
         metadata: { ...echoes, unrelated: 'retained' },
+        prompt: { raw: 'Rendered public prompt', label: 'Public fixture', template: secret },
         response: { output: 'Clean report', metadata: echoes },
       });
       const saved = await EvalResult.createFromEvaluateResult('metadata-echo-' + pluginId, row);

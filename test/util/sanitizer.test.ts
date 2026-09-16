@@ -62,9 +62,32 @@ describe('sanitizeCodingAgentVerifierInputs', () => {
       'shadowedSkill',
       'skillAttestation',
       'validationHandoff',
-    ].flatMap((name) => [name + 'Text', name + 'Texts']),
+    ]
+      .flatMap((name) => [name + 'Text', name + 'Texts'])
+      .concat(
+        [
+          'agentsMdPoison',
+          'codex',
+          'codexConfigPoison',
+          'codexHomePoison',
+          'codexRulesPoison',
+          'configPoison',
+          'mcpPrompt',
+          'mcpResource',
+          'mcpToolResult',
+          'memoryPoison',
+          'poison',
+          'poisonedSkill',
+          'repo',
+          'repository',
+          'rulePoison',
+          'rulesPoison',
+          'skillPoison',
+        ].flatMap((name) => [name + 'Instruction', name + 'Instructions']),
+        ['trapLog', 'networkTrapLog', 'httpTrapLog'],
+      ),
   )('redacts inline verifier artifact field %s from persisted configs', (key) => {
-    const receipt = key.endsWith('Texts') ? ['PRIVATE_INSTALL_RECORD'] : 'PRIVATE_INSTALL_RECORD';
+    const receipt = key.endsWith('s') ? ['PRIVATE_INSTALL_RECORD'] : 'PRIVATE_INSTALL_RECORD';
     const input = {
       providers: [{ id: 'http', config: { [key]: receipt } }],
       redteam: {
