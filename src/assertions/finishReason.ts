@@ -12,7 +12,7 @@ export function handleFinishReason({
   invariant(typeof value === 'string', '"finish-reason" assertion type must have a string value');
 
   if (!providerResponse.finishReason) {
-    const pass = !!inverse;
+    const pass = inverse;
     return {
       pass,
       score: pass ? 1 : 0,

@@ -6,7 +6,7 @@ import { cacheCommand } from './commands/cache';
 import { configCommand } from './commands/config';
 import { debugCommand } from './commands/debug';
 import { deleteCommand } from './commands/delete';
-import { EvalRunError, evalCommand } from './commands/eval';
+import { evalCommand } from './commands/eval';
 import { evalSetupCommand } from './commands/evalSetup';
 import { exportCommand } from './commands/export';
 import { feedbackCommand } from './commands/feedback';
@@ -19,6 +19,9 @@ import { logsCommand } from './commands/logs';
 import { mcpCommand } from './commands/mcp/index';
 import { modelScanCommand } from './commands/modelScan';
 import { optimizeCommand } from './commands/optimize';
+import { initCommand as redteamInitCommand } from './commands/redteam/init';
+import { redteamReportCommand } from './commands/redteam/report';
+import { redteamSetupCommand } from './commands/redteam/setup';
 import { setupRetryCommand } from './commands/retry';
 import { shareCommand } from './commands/share';
 import { showCommand } from './commands/show';
@@ -34,19 +37,17 @@ import {
   shutdownGracefully,
 } from './mainUtils';
 import { runDbMigrations } from './migrate';
+import { EvalRunError } from './node/doEval';
 import { discoverCommand as redteamDiscoverCommand } from './redteam/commands/discover';
 import { redteamGenerateCommand } from './redteam/commands/generate';
-import { initCommand as redteamInitCommand } from './redteam/commands/init';
 import { pluginsCommand as redteamPluginsCommand } from './redteam/commands/plugins';
-import { redteamReportCommand } from './redteam/commands/report';
 import { redteamRunCommand } from './redteam/commands/run';
-import { redteamSetupCommand } from './redteam/commands/setup';
 import { ServerError } from './server/errors';
 import { checkForUpdates } from './updates';
 import { loadDefaultConfig } from './util/config/default';
 import { ConfigResolutionError, logConfigResolutionError } from './util/config/load';
 import { printErrorInformation } from './util/errors/index';
-import { formatNativeAddonVersionMismatchMessage } from './util/nativeAddonErrors';
+import { formatLibsqlBindingErrorMessage } from './util/libsqlBindingErrors';
 import { VERSION } from './version';
 
 async function main() {
@@ -60,7 +61,7 @@ async function main() {
   }
 
   await checkForUpdates();
-  await runDbMigrations({ suppressNativeAddonLogging: true });
+  await runDbMigrations({ suppressBindingErrorLogging: true });
 
   const skipDefaultConfigLoading = shouldSkipDefaultConfigLoading(argv);
   const { defaultConfig, defaultConfigPath } = skipDefaultConfigLoading
@@ -158,7 +159,7 @@ try {
 
 if (isMain) {
   let mainError: unknown;
-  let nativeAddonVersionMismatchMessage: string | undefined;
+  let libsqlBindingErrorMessage: string | undefined;
   try {
     await main();
   } catch (error) {
@@ -166,9 +167,9 @@ if (isMain) {
     if (error instanceof ConfigResolutionError) {
       logConfigResolutionError(error);
     }
-    nativeAddonVersionMismatchMessage = formatNativeAddonVersionMismatchMessage(error);
-    if (nativeAddonVersionMismatchMessage) {
-      logger.debug('better-sqlite3 ABI mismatch (original error follows)', {
+    libsqlBindingErrorMessage = formatLibsqlBindingErrorMessage(error);
+    if (libsqlBindingErrorMessage) {
+      logger.debug('libsql platform binding missing (original error follows)', {
         error: error instanceof Error ? (error.stack ?? error.message) : String(error),
       });
     }
@@ -197,8 +198,8 @@ if (isMain) {
       mainError instanceof EvalRunError
     ) {
       // User-facing message has already been rendered.
-    } else if (nativeAddonVersionMismatchMessage) {
-      console.error(nativeAddonVersionMismatchMessage);
+    } else if (libsqlBindingErrorMessage) {
+      console.error(libsqlBindingErrorMessage);
       // exit code preserved by process.exitCode = 1 above
     } else {
       throw mainError;

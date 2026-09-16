@@ -5,6 +5,22 @@ import {
   DEEPSEEK_CHAT_MODELS,
 } from '../../src/providers/deepseek';
 
+describe('DeepSeek usage boundaries', () => {
+  it('bills input-only and output-only responses and preserves valid zero usage', () => {
+    expect(calculateDeepSeekCost('deepseek-chat', { inputCost: 0.01 }, 10, 0)).toBeCloseTo(0.1);
+    expect(calculateDeepSeekCost('deepseek-chat', { outputCost: 0.02 }, 0, 10)).toBeCloseTo(0.2);
+    expect(calculateDeepSeekCost('deepseek-chat', {}, 0, 0)).toBe(0);
+  });
+
+  it.each([undefined, -1, Number.NaN, Number.POSITIVE_INFINITY])(
+    'rejects invalid usage %s',
+    (count) => {
+      expect(calculateDeepSeekCost('deepseek-chat', {}, count, 1)).toBeUndefined();
+      expect(calculateDeepSeekCost('deepseek-chat', {}, 1, count)).toBeUndefined();
+    },
+  );
+});
+
 describe('calculateDeepSeekCost', () => {
   it('should calculate cost without cache', () => {
     const cost = calculateDeepSeekCost('deepseek-chat', {}, 1000000, 1000000);
@@ -68,6 +84,21 @@ describe('calculateDeepSeekCost', () => {
   it('should calculate cost with 100% cache hits', () => {
     const cost = calculateDeepSeekCost('deepseek-chat', {}, 1000000, 1000000, 1000000);
     expect(cost).toBeCloseTo(0.2828); // (0.0028 + 0.28) - all input tokens are cached
+  });
+
+  it('should clamp cached tokens that exceed prompt tokens', () => {
+    const cost = calculateDeepSeekCost('deepseek-chat', {}, 1000000, 1000000, 1500000);
+    expect(cost).toBeCloseTo(0.2828); // capped at all-cached price, never negative
+  });
+
+  it('should clamp negative cached tokens to zero', () => {
+    const cost = calculateDeepSeekCost('deepseek-chat', {}, 1000000, 1000000, -500000);
+    expect(cost).toBeCloseTo(0.42); // (0.14 + 0.28) - treated as no cache hits
+  });
+
+  it('should treat non-finite cached tokens as no cache hits', () => {
+    const cost = calculateDeepSeekCost('deepseek-chat', {}, 1000000, 1000000, Number.NaN);
+    expect(cost).toBeCloseTo(0.42); // (0.14 + 0.28) - same as no cachedTokens
   });
 });
 

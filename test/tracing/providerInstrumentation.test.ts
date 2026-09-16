@@ -22,6 +22,7 @@ import {
   PromptfooAttributes,
   withGenAISpan,
 } from '../../src/tracing/genaiTracer';
+import { withTargetSpan } from '../../src/tracing/targetTracer';
 
 import type { GenAISpanContext, GenAISpanResult } from '../../src/tracing/genaiTracer';
 
@@ -67,6 +68,37 @@ describe('Phase 5: Provider Instrumentation Validation', () => {
   });
 
   describe('GenAI Semantic Conventions Compliance', () => {
+    it('parents existing model spans beneath the evaluator target span', async () => {
+      const traceId = '0123456789abcdef0123456789abcdef';
+
+      await withTargetSpan(
+        {
+          targetType: 'provider',
+          providerId: 'openai:gpt-4',
+          traceparent: `00-${traceId}-0123456789abcdef-01`,
+        },
+        async () =>
+          withGenAISpan(
+            {
+              system: 'openai',
+              operationName: 'chat',
+              model: 'gpt-4',
+              providerId: 'openai:gpt-4',
+              traceparent: getTraceparent(),
+            },
+            async () => ({ output: 'ok' }),
+          ),
+      );
+
+      const spans = memoryExporter.getFinishedSpans();
+      const targetSpan = spans.find((span) => span.name === 'openai:gpt-4');
+      const modelSpan = spans.find((span) => span.name === 'chat gpt-4');
+
+      expect(targetSpan?.spanContext().traceId).toBe(traceId);
+      expect(modelSpan?.spanContext().traceId).toBe(traceId);
+      expect(modelSpan?.parentSpanContext?.spanId).toBe(targetSpan?.spanContext().spanId);
+    });
+
     it('should set all required GenAI attributes on spans', async () => {
       const spanContext: GenAISpanContext = {
         system: 'openai',
@@ -87,7 +119,8 @@ describe('Phase 5: Provider Instrumentation Validation', () => {
       const span = spans[0];
 
       // Required GenAI attributes
-      expect(span.attributes[GenAIAttributes.SYSTEM]).toBe('openai');
+      expect(span.attributes[GenAIAttributes.PROVIDER_NAME]).toBe('openai');
+      expect(span.attributes).not.toHaveProperty(GenAIAttributes.SYSTEM);
       expect(span.attributes[GenAIAttributes.OPERATION_NAME]).toBe('chat');
       expect(span.attributes[GenAIAttributes.REQUEST_MODEL]).toBe('gpt-4');
 
@@ -104,12 +137,12 @@ describe('Phase 5: Provider Instrumentation Validation', () => {
         {
           operationName: 'completion' as const,
           model: 'text-davinci-003',
-          expected: 'completion text-davinci-003',
+          expected: 'text_completion text-davinci-003',
         },
         {
           operationName: 'embedding' as const,
           model: 'text-embedding-ada-002',
-          expected: 'embedding text-embedding-ada-002',
+          expected: 'embeddings text-embedding-ada-002',
         },
       ];
 
@@ -161,11 +194,12 @@ describe('Phase 5: Provider Instrumentation Validation', () => {
       const span = memoryExporter.getFinishedSpans()[0];
       expect(span.attributes[GenAIAttributes.USAGE_INPUT_TOKENS]).toBe(100);
       expect(span.attributes[GenAIAttributes.USAGE_OUTPUT_TOKENS]).toBe(50);
-      expect(span.attributes[GenAIAttributes.USAGE_TOTAL_TOKENS]).toBe(150);
+      expect(span.attributes[PromptfooAttributes.USAGE_TOTAL_TOKENS]).toBe(150);
     });
 
-    it('should capture cached tokens (Anthropic prompt caching)', async () => {
+    it('should capture Promptfoo response-cache tokens separately from provider prompt caching', async () => {
       const resultExtractor = (): GenAISpanResult => ({
+        cacheHit: true,
         tokenUsage: {
           prompt: 200,
           completion: 100,
@@ -186,7 +220,7 @@ describe('Phase 5: Provider Instrumentation Validation', () => {
       );
 
       const span = memoryExporter.getFinishedSpans()[0];
-      expect(span.attributes[GenAIAttributes.USAGE_CACHED_TOKENS]).toBe(150);
+      expect(span.attributes[PromptfooAttributes.USAGE_CACHED_RESPONSE_TOKENS]).toBe(150);
     });
 
     it('should capture reasoning tokens (OpenAI o1 models)', async () => {
@@ -213,7 +247,7 @@ describe('Phase 5: Provider Instrumentation Validation', () => {
       );
 
       const span = memoryExporter.getFinishedSpans()[0];
-      expect(span.attributes[GenAIAttributes.USAGE_REASONING_TOKENS]).toBe(450);
+      expect(span.attributes[GenAIAttributes.USAGE_REASONING_OUTPUT_TOKENS]).toBe(450);
     });
 
     it('should capture speculative decoding tokens', async () => {
@@ -241,8 +275,8 @@ describe('Phase 5: Provider Instrumentation Validation', () => {
       );
 
       const span = memoryExporter.getFinishedSpans()[0];
-      expect(span.attributes[GenAIAttributes.USAGE_ACCEPTED_PREDICTION_TOKENS]).toBe(25);
-      expect(span.attributes[GenAIAttributes.USAGE_REJECTED_PREDICTION_TOKENS]).toBe(5);
+      expect(span.attributes[PromptfooAttributes.USAGE_ACCEPTED_PREDICTION_TOKENS]).toBe(25);
+      expect(span.attributes[PromptfooAttributes.USAGE_REJECTED_PREDICTION_TOKENS]).toBe(5);
     });
   });
 
@@ -411,11 +445,11 @@ describe('Phase 5: Provider Instrumentation Validation', () => {
       expect(spans).toHaveLength(4);
 
       // Verify all systems are represented
-      const systems = spans.map((s) => s.attributes[GenAIAttributes.SYSTEM]);
+      const systems = spans.map((s) => s.attributes[GenAIAttributes.PROVIDER_NAME]);
       expect(systems).toContain('openai');
       expect(systems).toContain('anthropic');
-      expect(systems).toContain('bedrock');
-      expect(systems).toContain('azure');
+      expect(systems).toContain('aws.bedrock');
+      expect(systems).toContain('azure.ai.openai');
 
       // All spans should be successful
       spans.forEach((span) => {
@@ -445,8 +479,12 @@ describe('Phase 5: Provider Instrumentation Validation', () => {
       expect(results).toHaveLength(2);
 
       const spans = memoryExporter.getFinishedSpans();
-      const openaiSpan = spans.find((s) => s.attributes[GenAIAttributes.SYSTEM] === 'openai');
-      const anthropicSpan = spans.find((s) => s.attributes[GenAIAttributes.SYSTEM] === 'anthropic');
+      const openaiSpan = spans.find(
+        (s) => s.attributes[GenAIAttributes.PROVIDER_NAME] === 'openai',
+      );
+      const anthropicSpan = spans.find(
+        (s) => s.attributes[GenAIAttributes.PROVIDER_NAME] === 'anthropic',
+      );
 
       expect(openaiSpan!.attributes[GenAIAttributes.USAGE_INPUT_TOKENS]).toBe(100);
       expect(anthropicSpan!.attributes[GenAIAttributes.USAGE_INPUT_TOKENS]).toBe(200);
@@ -456,42 +494,46 @@ describe('Phase 5: Provider Instrumentation Validation', () => {
   describe('Provider Systems Coverage', () => {
     // Test all Category A providers (directly instrumented)
     const categoryAProviders = [
-      { system: 'openai', model: 'gpt-4' },
-      { system: 'anthropic', model: 'claude-3-opus' },
-      { system: 'azure', model: 'gpt-4-deployment' },
-      { system: 'bedrock', model: 'anthropic.claude-3-sonnet' },
-      { system: 'vertex', model: 'gemini-1.5-pro' },
-      { system: 'vertex:anthropic', model: 'claude-3-sonnet@anthropic' },
-      { system: 'vertex:gemini', model: 'gemini-1.5-flash' },
-      { system: 'ollama', model: 'llama2' },
-      { system: 'mistral', model: 'mistral-large-latest' },
-      { system: 'cohere', model: 'command-r-plus' },
-      { system: 'huggingface', model: 'meta-llama/Llama-2-7b' },
-      { system: 'watsonx', model: 'ibm/granite-13b-chat-v2' },
-      { system: 'http', model: 'custom-endpoint' },
-      { system: 'replicate', model: 'meta/llama-2-70b-chat' },
-      { system: 'openrouter', model: 'openai/gpt-4' },
+      { system: 'alibaba', model: 'qwen-max', providerName: 'alibaba_cloud' },
+      { system: 'openai', model: 'gpt-4', providerName: 'openai' },
+      { system: 'anthropic', model: 'claude-3-opus', providerName: 'anthropic' },
+      { system: 'azure', model: 'gpt-4-deployment', providerName: 'azure.ai.openai' },
+      { system: 'bedrock', model: 'anthropic.claude-3-sonnet', providerName: 'aws.bedrock' },
+      { system: 'vertex', model: 'gemini-1.5-pro', providerName: 'gcp.vertex_ai' },
+      {
+        system: 'vertex:anthropic',
+        model: 'claude-3-sonnet@anthropic',
+        providerName: 'gcp.vertex_ai',
+      },
+      { system: 'vertex:gemini', model: 'gemini-1.5-flash', providerName: 'gcp.vertex_ai' },
+      { system: 'ollama', model: 'llama2', providerName: 'ollama' },
+      { system: 'mistral', model: 'mistral-large-latest', providerName: 'mistral_ai' },
+      { system: 'cohere', model: 'command-r-plus', providerName: 'cohere' },
+      { system: 'huggingface', model: 'meta-llama/Llama-2-7b', providerName: 'huggingface' },
+      { system: 'watsonx', model: 'ibm/granite-13b-chat-v2', providerName: 'ibm.watsonx.ai' },
+      { system: 'replicate', model: 'meta/llama-2-70b-chat', providerName: 'replicate' },
+      { system: 'openrouter', model: 'openai/gpt-4', providerName: 'openrouter' },
     ];
 
-    it.each(categoryAProviders)('should correctly instrument $system provider', async ({
-      system,
-      model,
-    }) => {
-      await withGenAISpan(
-        { system, operationName: 'chat', model, providerId: `${system}:${model}` },
-        async () => ({ output: 'test' }),
-        () => ({ tokenUsage: { prompt: 10, completion: 5, total: 15 } }),
-      );
+    it.each(categoryAProviders)(
+      'should correctly instrument $system provider',
+      async ({ system, model, providerName }) => {
+        await withGenAISpan(
+          { system, operationName: 'chat', model, providerId: `${system}:${model}` },
+          async () => ({ output: 'test' }),
+          () => ({ tokenUsage: { prompt: 10, completion: 5, total: 15 } }),
+        );
 
-      const span = memoryExporter.getFinishedSpans()[0];
+        const span = memoryExporter.getFinishedSpans()[0];
 
-      expect(span.attributes[GenAIAttributes.SYSTEM]).toBe(system);
-      expect(span.attributes[GenAIAttributes.REQUEST_MODEL]).toBe(model);
-      expect(span.attributes[PromptfooAttributes.PROVIDER_ID]).toBe(`${system}:${model}`);
-      expect(span.status.code).toBe(SpanStatusCode.OK);
+        expect(span.attributes[GenAIAttributes.PROVIDER_NAME]).toBe(providerName);
+        expect(span.attributes[GenAIAttributes.REQUEST_MODEL]).toBe(model);
+        expect(span.attributes[PromptfooAttributes.PROVIDER_ID]).toBe(`${system}:${model}`);
+        expect(span.status.code).toBe(SpanStatusCode.OK);
 
-      memoryExporter.reset();
-    });
+        memoryExporter.reset();
+      },
+    );
 
     // Test Category B providers (inherit from OpenAI)
     const categoryBProviders = [
@@ -505,21 +547,29 @@ describe('Phase 5: Provider Instrumentation Validation', () => {
       'perplexity',
     ];
 
-    it.each(
-      categoryBProviders,
-    )('should support inherited instrumentation for %s (via OpenAI base)', async (system) => {
-      // Category B providers inherit from OpenAI and should work with the same pattern
-      await withGenAISpan(
-        { system, operationName: 'chat', model: 'model-name', providerId: `${system}:model-name` },
-        async () => ({ output: 'test' }),
-      );
+    it.each(categoryBProviders)(
+      'should support inherited instrumentation for %s (via OpenAI base)',
+      async (system) => {
+        // Category B providers inherit from OpenAI and should work with the same pattern
+        await withGenAISpan(
+          {
+            system,
+            operationName: 'chat',
+            model: 'model-name',
+            providerId: `${system}:model-name`,
+          },
+          async () => ({ output: 'test' }),
+        );
 
-      const span = memoryExporter.getFinishedSpans()[0];
-      expect(span.attributes[GenAIAttributes.SYSTEM]).toBe(system);
-      expect(span.status.code).toBe(SpanStatusCode.OK);
+        const span = memoryExporter.getFinishedSpans()[0];
+        expect(span.attributes[GenAIAttributes.PROVIDER_NAME]).toBe(
+          system === 'xai' ? 'x_ai' : system,
+        );
+        expect(span.status.code).toBe(SpanStatusCode.OK);
 
-      memoryExporter.reset();
-    });
+        memoryExporter.reset();
+      },
+    );
   });
 
   describe('Promptfoo Context Attributes', () => {

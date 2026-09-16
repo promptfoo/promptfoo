@@ -12,6 +12,7 @@ export const VersionResponseSchema = z.object({
     primary: z.string(),
     alternative: z.string().nullable(),
     commandType: z.enum(['docker', 'npx', 'npm']),
+    isCustomContainer: z.boolean().optional(),
   }),
   commandType: z.enum(['docker', 'npx', 'npm']),
 });

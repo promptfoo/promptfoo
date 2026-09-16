@@ -214,13 +214,12 @@ describe('normalizeLatex', async () => {
       expect(normalizeLatex('(2,3)')).toBe('(2,3)');
     });
 
-    it.each([
-      '(23,53)',
-      '(23,530)',
-      '[23,53]',
-    ])('does not rewrite commas inside grouped coordinate values ("%s")', async (input) => {
-      expect(normalizeLatex(input)).toBe(input);
-    });
+    it.each(['(23,53)', '(23,530)', '[23,53]'])(
+      'does not rewrite commas inside grouped coordinate values ("%s")',
+      async (input) => {
+        expect(normalizeLatex(input)).toBe(input);
+      },
+    );
 
     it.each([
       ['\\boxed{2,00625}', '\\boxed{2.00625}'],
@@ -357,9 +356,12 @@ describe('cleanMathText', async () => {
     ['50sec', '50sec'],
     ['\\sum', '\\sum'],
     ['\\lim', '\\lim'],
-  ])('does not strip an identifier whose suffix happens to contain a unit (%s)', async (input, expected) => {
-    expect(cleanMathText(input)).toBe(expected);
-  });
+  ])(
+    'does not strip an identifier whose suffix happens to contain a unit (%s)',
+    async (input, expected) => {
+      expect(cleanMathText(input)).toBe(expected);
+    },
+  );
 
   it.each([
     ['x + m', 'x + m'],
@@ -367,12 +369,15 @@ describe('cleanMathText', async () => {
     ['a - b - g', 'a - b - g'],
     ['p + q * s', 'p + q * s'],
     ['2*m + 3*s', '2*m + 3*s'],
-  ])('does not strip single-letter unit when used as a variable in an algebraic expression (%s)', async (input, expected) => {
-    // Earlier versions stripped any `\s+m\s*$` (and later, any
-    // digit-or-space lookbehind), which corrupted "x + m" to "x +".
-    // Only strip when a number is the immediate left context of the unit.
-    expect(cleanMathText(input)).toBe(expected);
-  });
+  ])(
+    'does not strip single-letter unit when used as a variable in an algebraic expression (%s)',
+    async (input, expected) => {
+      // Earlier versions stripped any `\s+m\s*$` (and later, any
+      // digit-or-space lookbehind), which corrupted "x + m" to "x +".
+      // Only strip when a number is the immediate left context of the unit.
+      expect(cleanMathText(input)).toBe(expected);
+    },
+  );
 
   it.each([
     ['1/2 m', '1/2'],
@@ -513,12 +518,12 @@ describe('parseMathExpression', async () => {
     expect(await parseMathExpression('1 = 2')).toBeUndefined();
   });
 
-  it.each([
-    'sin(x) = 1',
-    'f(x) = 2',
-  ])('rejects function equations "%s" as scalar values', async (input) => {
-    expect(await parseMathExpression(input)).toBeUndefined();
-  });
+  it.each(['sin(x) = 1', 'f(x) = 2'])(
+    'rejects function equations "%s" as scalar values',
+    async (input) => {
+      expect(await parseMathExpression(input)).toBeUndefined();
+    },
+  );
 
   describe('rejects pure prose to prevent letter-multiplication false positives', async () => {
     it.each([
@@ -554,15 +559,12 @@ describe('tryParseEachSegment', async () => {
     expect(await tryParseEachSegment('')).toBeUndefined();
   });
 
-  it.each([
-    'sin(x) = 1',
-    'f(x) = 2',
-    '\\sin{x} = 1',
-    '\\sin x = 1',
-    'x^2 = 4',
-  ])('does not reduce constraint equation "%s" to its right-hand scalar', async (input) => {
-    expect(await tryParseEachSegment(input)).toBeUndefined();
-  });
+  it.each(['sin(x) = 1', 'f(x) = 2', '\\sin{x} = 1', '\\sin x = 1', 'x^2 = 4'])(
+    'does not reduce constraint equation "%s" to its right-hand scalar',
+    async (input) => {
+      expect(await tryParseEachSegment(input)).toBeUndefined();
+    },
+  );
 });
 
 // =============================================================================
@@ -688,12 +690,12 @@ describe('extractMathAnswer', async () => {
     expect(await extractMathAnswer('\\boxed{\\text{not }42}')).toBe('\\text{not }42');
   });
 
-  it.each([
-    'The answer is not \\boxed{42}',
-    'The answer is \\boxed{\\text{not }42}',
-  ])('does not erase negation around a boxed answer in "%s"', async (input) => {
-    expect(await extractMathAnswer(input)).toContain('not');
-  });
+  it.each(['The answer is not \\boxed{42}', 'The answer is \\boxed{\\text{not }42}'])(
+    'does not erase negation around a boxed answer in "%s"',
+    async (input) => {
+      expect(await extractMathAnswer(input)).toContain('not');
+    },
+  );
 
   it.each([
     'The answer is $\\text{not }42$',
@@ -767,9 +769,12 @@ describe('extractMathAnswer', async () => {
       ['Final answer: 42.', '42'],
       ['Total: 14.', '14'],
       ['Result: 3.14159.', '3.14159'],
-    ])('strips terminal sentence punctuation from labelled (non-prose) answers (%s → %s)', async (input, expected) => {
-      expect(await extractMathAnswer(input)).toBe(expected);
-    });
+    ])(
+      'strips terminal sentence punctuation from labelled (non-prose) answers (%s → %s)',
+      async (input, expected) => {
+        expect(await extractMathAnswer(input)).toBe(expected);
+      },
+    );
 
     it.each([
       ['The answer is 1 / 2', '1 / 2'],
@@ -777,12 +782,15 @@ describe('extractMathAnswer', async () => {
       ['Therefore the result is x + y - 3', 'x + y - 3'],
       ['So the value comes out to 1 + 2 + 3', '1 + 2 + 3'],
       ['And so the answer is -1 / 4', '-1 / 4'],
-    ])('extracts the contiguous trailing math expression from prose (%s → %s)', async (input, expected) => {
-      // Earlier versions returned only the rightmost token (e.g. "2" for
-      // "1 / 2"), turning correct fractional/algebraic answers into
-      // failures and even passing the wrong value.
-      expect(await extractMathAnswer(input)).toBe(expected);
-    });
+    ])(
+      'extracts the contiguous trailing math expression from prose (%s → %s)',
+      async (input, expected) => {
+        // Earlier versions returned only the rightmost token (e.g. "2" for
+        // "1 / 2"), turning correct fractional/algebraic answers into
+        // failures and even passing the wrong value.
+        expect(await extractMathAnswer(input)).toBe(expected);
+      },
+    );
 
     it.each([
       ['Answer 42', '42'],
@@ -790,9 +798,12 @@ describe('extractMathAnswer', async () => {
       ['Total 14', '14'],
       ['Final answer is 42', '42'],
       ['Answer is 0.5', '0.5'],
-    ])('extracts a numeric final after an unpunctuated answer prefix (%s → %s)', async (input, expected) => {
-      expect(await extractMathAnswer(input)).toBe(expected);
-    });
+    ])(
+      'extracts a numeric final after an unpunctuated answer prefix (%s → %s)',
+      async (input, expected) => {
+        expect(await extractMathAnswer(input)).toBe(expected);
+      },
+    );
 
     it.each([
       ['The answer is 10kg', '10'],
@@ -817,24 +828,30 @@ describe('extractMathAnswer', async () => {
       ['The answer is (x + y)', '(x + y)'],
       ['The answer is [x + y]', '[x + y]'],
       ['The answer is cos(x)', 'cos(x)'],
-    ])('extracts compact symbolic prose tokens (no spaces around operators) (%s → %s)', async (input, expected) => {
-      // Pre-fix: isMathShapedToken treated `x+y` (letters mixed with
-      // operators, no digit and not single-letter) as non-math, so the
-      // whole sentence was sent to the parser and rejected as prose.
-      expect(await extractMathAnswer(input)).toBe(expected);
-    });
+    ])(
+      'extracts compact symbolic prose tokens (no spaces around operators) (%s → %s)',
+      async (input, expected) => {
+        // Pre-fix: isMathShapedToken treated `x+y` (letters mixed with
+        // operators, no digit and not single-letter) as non-math, so the
+        // whole sentence was sent to the parser and rejected as prose.
+        expect(await extractMathAnswer(input)).toBe(expected);
+      },
+    );
 
     it.each([
       ['The answer is 2 × 3', '2 × 3'],
       ['Therefore 6 ÷ 2', '6 ÷ 2'],
       ['So the result is 5 − 1', '5 − 1'],
       ['Final answer 2 · 3', '2 · 3'],
-    ])('includes Unicode math operators (×, ÷, −, ·) when extracting prose answers (%s → %s)', async (input, expected) => {
-      // Prior to the fix, isMathShapedToken treated `×` / `÷` / `−` / `·`
-      // as non-math tokens, so prose lines containing them stopped early
-      // and returned only the rightmost numeric token.
-      expect(await extractMathAnswer(input)).toBe(expected);
-    });
+    ])(
+      'includes Unicode math operators (×, ÷, −, ·) when extracting prose answers (%s → %s)',
+      async (input, expected) => {
+        // Prior to the fix, isMathShapedToken treated `×` / `÷` / `−` / `·`
+        // as non-math tokens, so prose lines containing them stopped early
+        // and returned only the rightmost numeric token.
+        expect(await extractMathAnswer(input)).toBe(expected);
+      },
+    );
 
     it('does NOT touch a single-word labelled value (V = 32)', async () => {
       expect(await extractMathAnswer('**V = 32**')).toBe('V = 32');
@@ -882,13 +899,16 @@ describe('extractMathAnswer', async () => {
       ['$$2$$ Answer: 3', '3'],
       ['$$5+5$$ Total: 10', '10'],
       ['work $$2$$, final answer: 3', '3'],
-    ])('prefers a labelled answer after a same-line display fence (%s → %s)', async (input, expected) => {
-      // Pre-fix: fence-on-the-last-line skipped extractFromLastLine and the
-      // display-block scanner returned the intermediate fenced value
-      // ("2", "5+5"), ignoring the labelled final answer that came
-      // after the fence on the same line.
-      expect(await extractMathAnswer(input)).toBe(expected);
-    });
+    ])(
+      'prefers a labelled answer after a same-line display fence (%s → %s)',
+      async (input, expected) => {
+        // Pre-fix: fence-on-the-last-line skipped extractFromLastLine and the
+        // display-block scanner returned the intermediate fenced value
+        // ("2", "5+5"), ignoring the labelled final answer that came
+        // after the fence on the same line.
+        expect(await extractMathAnswer(input)).toBe(expected);
+      },
+    );
 
     it('grades $$2$$ Answer: 3 against 3, not the intermediate 2', async () => {
       expect((await isMathEquivalent('$$2$$ Answer: 3', 3)).pass).toBe(true);
@@ -904,12 +924,15 @@ describe('extractMathAnswer', async () => {
       // Uncolonized prose final after a boxed intermediate.
       ['work \\boxed{2}, final answer is 3', '3'],
       ['intermediate \\boxed{5}, total comes to 10', '10'],
-    ])('prefers a labelled answer after a same-line \\boxed intermediate (%s → %s)', async (input, expected) => {
-      // Pre-fix: \\boxed-on-the-last-line short-circuited extraction to
-      // the boxed value, even when a later labelled answer on the same
-      // line was the actual final.
-      expect(await extractMathAnswer(input)).toBe(expected);
-    });
+    ])(
+      'prefers a labelled answer after a same-line \\boxed intermediate (%s → %s)',
+      async (input, expected) => {
+        // Pre-fix: \\boxed-on-the-last-line short-circuited extraction to
+        // the boxed value, even when a later labelled answer on the same
+        // line was the actual final.
+        expect(await extractMathAnswer(input)).toBe(expected);
+      },
+    );
 
     it('grades work \\boxed{2}, final answer: 3 against 3, not 2', async () => {
       expect((await isMathEquivalent('work \\boxed{2}, final answer: 3', 3)).pass).toBe(true);
@@ -921,13 +944,16 @@ describe('extractMathAnswer', async () => {
       ['work $$2$$ $$3$$', '3'],
       ['\\[2\\] \\[3\\]', '3'],
       ['$$2$$ \\[3\\]', '3'],
-    ])('falls through to the rightmost display block on multi-fence finals (%s → %s)', async (input, expected) => {
-      // Pre-fix: cleanMathText stripped the fences so the last line became
-      // "2 3" / "work 2 3", and extractFromLastLine pulled the rightmost
-      // contiguous math suffix ("2 3") instead of letting the display-block
-      // scanner pick the documented latest block ("3").
-      expect(await extractMathAnswer(input)).toBe(expected);
-    });
+    ])(
+      'falls through to the rightmost display block on multi-fence finals (%s → %s)',
+      async (input, expected) => {
+        // Pre-fix: cleanMathText stripped the fences so the last line became
+        // "2 3" / "work 2 3", and extractFromLastLine pulled the rightmost
+        // contiguous math suffix ("2 3") instead of letting the display-block
+        // scanner pick the documented latest block ("3").
+        expect(await extractMathAnswer(input)).toBe(expected);
+      },
+    );
 
     it('prefers prose after multiple display blocks over the earlier fenced work', async () => {
       expect(await extractMathAnswer('$$2$$ $$3$$ final answer is 4')).toBe('4');
@@ -1006,10 +1032,13 @@ describe('extractMathAnswer', async () => {
     it.each([
       ['42\nDone.', '42'],
       ['The answer is 42\nDone.', '42'],
-    ])('falls back to an earlier plain answer when the last line is prose (%s → %s)', async (actual, expected) => {
-      expect(await extractMathAnswer(actual)).toBe(expected);
-      expect((await isMathEquivalent(actual, expected)).pass).toBe(true);
-    });
+    ])(
+      'falls back to an earlier plain answer when the last line is prose (%s → %s)',
+      async (actual, expected) => {
+        expect(await extractMathAnswer(actual)).toBe(expected);
+        expect((await isMathEquivalent(actual, expected)).pass).toBe(true);
+      },
+    );
   });
 
   describe('hidden-thinking display blocks must not leak through', async () => {
@@ -1371,9 +1400,12 @@ describe('isMathEquivalent', async () => {
     it.each([
       ['\\frac{1}\\pi', '\\frac{1}{\\pi}'],
       ['\\frac{2}\\theta', '\\frac{2}{\\theta}'],
-    ])('grades \\frac with backslash-command denom ("%s" vs %s) as equivalent', async (actual, expected) => {
-      expect((await isMathEquivalent(actual, expected)).pass).toBe(true);
-    });
+    ])(
+      'grades \\frac with backslash-command denom ("%s" vs %s) as equivalent',
+      async (actual, expected) => {
+        expect((await isMathEquivalent(actual, expected)).pass).toBe(true);
+      },
+    );
 
     it.each([
       ['<think>$$2$$</think>\nFinal answer: 3', '3'],
@@ -1394,9 +1426,12 @@ describe('isMathEquivalent', async () => {
     it.each([
       ['Answer: 1,234 kg', '1234'],
       ['Answer: 2,00625 m', '2.00625'],
-    ])('grades comma-formatted values with trailing units "%s" against %s', async (actual, expected) => {
-      expect((await isMathEquivalent(actual, expected)).pass).toBe(true);
-    });
+    ])(
+      'grades comma-formatted values with trailing units "%s" against %s',
+      async (actual, expected) => {
+        expect((await isMathEquivalent(actual, expected)).pass).toBe(true);
+      },
+    );
 
     it('does NOT silently equate 1,000 with 1', async () => {
       // The decimal-comma rewrite previously turned "1,000" into "1.000"=1,
@@ -1454,9 +1489,12 @@ describe('isMathEquivalent', async () => {
       ['3√2 m', '3\\sqrt{2}'],
       ['(1/2) m', '0.5'],
       ['(10) kg', 10],
-    ])('grades fractional / LaTeX answers with trailing units "%s" against %s', async (actual, expected) => {
-      expect((await isMathEquivalent(actual, expected as string | number)).pass).toBe(true);
-    });
+    ])(
+      'grades fractional / LaTeX answers with trailing units "%s" against %s',
+      async (actual, expected) => {
+        expect((await isMathEquivalent(actual, expected as string | number)).pass).toBe(true);
+      },
+    );
 
     it.each([
       ['The answer is 1 / 2', '0.5'],
@@ -1469,9 +1507,12 @@ describe('isMathEquivalent', async () => {
       ['Therefore 45°', '45'],
       ['The answer is (x + 1)', 'x + 1'],
       ['The answer is (x + y)', 'x + y'],
-    ])('grades prose-wrapped contiguous math expression "%s" against %s', async (actual, expected) => {
-      expect((await isMathEquivalent(actual, expected)).pass).toBe(true);
-    });
+    ])(
+      'grades prose-wrapped contiguous math expression "%s" against %s',
+      async (actual, expected) => {
+        expect((await isMathEquivalent(actual, expected)).pass).toBe(true);
+      },
+    );
 
     it.each([
       ['Answer 42', 42],
@@ -1494,22 +1535,28 @@ describe('isMathEquivalent', async () => {
       ['Therefore 6 ÷ 2', 3],
       ['So the result is 5 − 1', 4],
       ['Final answer 2 · 3', 6],
-    ])('grades prose answers with Unicode math operators "%s" against %s', async (actual, expected) => {
-      expect((await isMathEquivalent(actual, expected as string | number)).pass).toBe(true);
-    });
+    ])(
+      'grades prose answers with Unicode math operators "%s" against %s',
+      async (actual, expected) => {
+        expect((await isMathEquivalent(actual, expected as string | number)).pass).toBe(true);
+      },
+    );
 
     it.each([
       ['x + m', 'x + m'],
       ['a - b - g', 'a - b - g'],
       ['p + q * s', 'p*s + q*s'], // mathematically not equal, but parse should NOT corrupt either side
-    ])('does not corrupt algebraic expressions ending in a unit-letter (%s)', async (actual, expected) => {
-      // Confirm the expression parses both ways without unit-stripping
-      // mangling either side. The (%s)/(%s) pair may or may not be
-      // equivalent; we just check we don't get a parseFailed reason
-      // pointing at a corrupted "x +" candidate.
-      const result = await isMathEquivalent(actual, expected);
-      expect(result.parseFailed ?? false).toBe(false);
-    });
+    ])(
+      'does not corrupt algebraic expressions ending in a unit-letter (%s)',
+      async (actual, expected) => {
+        // Confirm the expression parses both ways without unit-stripping
+        // mangling either side. The (%s)/(%s) pair may or may not be
+        // equivalent; we just check we don't get a parseFailed reason
+        // pointing at a corrupted "x +" candidate.
+        const result = await isMathEquivalent(actual, expected);
+        expect(result.parseFailed ?? false).toBe(false);
+      },
+    );
 
     it('grades hidden-think display math against the WRONG value as false', async () => {
       // Inverse of the above: must NOT match the hidden intermediate.
@@ -1551,14 +1598,14 @@ describe('isMathEquivalent', async () => {
       expect(result.reason).toContain('NaN');
     });
 
-    it.each([
-      Number.POSITIVE_INFINITY,
-      Number.NEGATIVE_INFINITY,
-    ])('rejects %s expected value with a clear reason', async (val) => {
-      const result = await isMathEquivalent('0', val);
-      expect(result.pass).toBe(false);
-      expect(result.reason).toContain('finite');
-    });
+    it.each([Number.POSITIVE_INFINITY, Number.NEGATIVE_INFINITY])(
+      'rejects %s expected value with a clear reason',
+      async (val) => {
+        const result = await isMathEquivalent('0', val);
+        expect(result.pass).toBe(false);
+        expect(result.reason).toContain('finite');
+      },
+    );
   });
 
   describe('CortexJS fault tolerance (catch fences)', async () => {

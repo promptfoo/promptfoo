@@ -43,6 +43,28 @@ const TRIG_FNS = [
   'sqrt',
 ];
 
+/**
+ * Rewrites that restore the LaTeX backslash on bare trig/log/sqrt names, and
+ * parenthesize a bare argument, so `cos(x)`, `cos4` and `cos \pi` all reach
+ * the parser as `\cos(...)`. Precomputed once because `normalizeLatex` runs on
+ * every candidate string and would otherwise rebuild ~70 regexes per call.
+ */
+const TRIG_REWRITES: [RegExp, string][] = TRIG_FNS.flatMap((fn) => [
+  // fn( → \fn(
+  [new RegExp(`(?<!\\\\)(?<![a-zA-Z])${fn}\\(`, 'g'), `\\${fn}(`],
+  // fn<digits>(end-of-token) → \fn(<digits>)  e.g. cos4 → \cos(4).
+  // The trailing (?!\w) guard prevents identifiers like `sqrt2var` or
+  // `sqrt2_x` from being silently rewritten to `\sqrt(2)var`.
+  [new RegExp(`(?<!\\\\)(?<![a-zA-Z])${fn}(\\d+)(?!\\w)`, 'g'), `\\${fn}($1)`],
+  // fn<space><digits>(end-of-token) → \fn(<digits>)
+  [new RegExp(`(?<!\\\\)(?<![a-zA-Z])${fn}\\s+(\\d+)(?!\\w)`, 'g'), `\\${fn}($1)`],
+  // fn<space><symbol-or-command>(end-of-token) → \fn(<symbol-or-command>)
+  [
+    new RegExp(`(?<!\\\\)(?<![a-zA-Z])${fn}\\s+([A-Za-z]|\\\\[A-Za-z]+)(?!\\w)`, 'g'),
+    `\\${fn}($1)`,
+  ],
+]);
+
 const ASSIGNMENT_PATTERN = /(?:[A-Za-z_]\w*|P\([^)]*\))\s*(?:=|\u2248|\\approx\b)/gi;
 const DISQUALIFYING_CLAIM_PATTERN =
   /\b(?:is|are)\s+(?:not\b|unequal\s+to\b|less\s+than\b|greater\s+than\b)|\b(?:does\s+not|doesn't)\s+equal(?:s)?(?:\s+to)?\b|\bisn't(?:\s+equal(?:s)?(?:\s+to)?)?\s+(?=[-+\\($\dA-Za-z])|\b(?:cannot|can't)\s+be\b|\b(?:incorrect|wrong)\s+answer\b|\b(?:less|greater)\s+than(?:\s+or\s+equal\s+to)?\b|\bnot\s+(?=[-+\\($\dA-Za-z])|\\text\s*\{\s*(?:not\b|unequal\s+to\b|(?:does\s+not|doesn't|isn't)\s+equal(?:s)?(?:\s+to)?\b)|(?:!=|!==|<=|>=|<|>|\u2260|\u2264|\u2265|\\ne(?:q)?\b|\\le(?:q)?\b|\\ge(?:q)?\b)/i;
@@ -156,20 +178,8 @@ export function normalizeLatex(text: string): string {
   // and "\frac{1}\pi" → "\frac{1}{\}pi").
   s = s.replace(/(\\frac\{[^{}]*\})(\\[A-Za-z]+|[A-Za-z0-9])/g, (_m, p1, p2) => `${p1}{${p2}}`);
 
-  for (const fn of TRIG_FNS) {
-    // fn( → \fn(
-    s = s.replace(new RegExp(`(?<!\\\\)(?<![a-zA-Z])${fn}\\(`, 'g'), `\\${fn}(`);
-    // fn<digits>(end-of-token) → \fn(<digits>)  e.g. cos4 → \cos(4).
-    // The trailing (?!\w) guard prevents identifiers like `sqrt2var` or
-    // `sqrt2_x` from being silently rewritten to `\sqrt(2)var`.
-    s = s.replace(new RegExp(`(?<!\\\\)(?<![a-zA-Z])${fn}(\\d+)(?!\\w)`, 'g'), `\\${fn}($1)`);
-    // fn<space><digits>(end-of-token) → \fn(<digits>)
-    s = s.replace(new RegExp(`(?<!\\\\)(?<![a-zA-Z])${fn}\\s+(\\d+)(?!\\w)`, 'g'), `\\${fn}($1)`);
-    // fn<space><symbol-or-command>(end-of-token) → \fn(<symbol-or-command>)
-    s = s.replace(
-      new RegExp(`(?<!\\\\)(?<![a-zA-Z])${fn}\\s+([A-Za-z]|\\\\[A-Za-z]+)(?!\\w)`, 'g'),
-      `\\${fn}($1)`,
-    );
+  for (const [pattern, replacement] of TRIG_REWRITES) {
+    s = s.replace(pattern, replacement);
   }
 
   return s;
@@ -248,6 +258,20 @@ function isCoefficientedLatexValue(text: string): boolean {
   return coefficient !== undefined && isSelfContainedLatexValue(value.slice(coefficient.length));
 }
 
+/**
+ * A unit suffix is only safe to strip when what precedes it is a
+ * self-contained value rather than an algebraic expression whose last term
+ * happens to look like a unit (`x + m`).
+ */
+function isUnitStrippableValue(value: string): boolean {
+  return (
+    NUMERIC_VALUE_PATTERN.test(value) ||
+    isParenthesizedNumericValue(value) ||
+    isSelfContainedLatexValue(value) ||
+    isCoefficientedLatexValue(value)
+  );
+}
+
 function stripTrailingUnit(text: string): string {
   const trimmed = text.trim();
   const match = trimmed.match(TRAILING_UNIT_PATTERN);
@@ -255,17 +279,9 @@ function stripTrailingUnit(text: string): string {
     return trimmed;
   }
   const value = match[1].trimEnd();
-  const normalizedValue = normalizeLatex(value);
-  if (
-    NUMERIC_VALUE_PATTERN.test(value) ||
-    isParenthesizedNumericValue(value) ||
-    isSelfContainedLatexValue(value) ||
-    isCoefficientedLatexValue(value) ||
-    NUMERIC_VALUE_PATTERN.test(normalizedValue) ||
-    isParenthesizedNumericValue(normalizedValue) ||
-    isSelfContainedLatexValue(normalizedValue) ||
-    isCoefficientedLatexValue(normalizedValue)
-  ) {
+  // Check the raw value and its LaTeX-normalized form, so both `1/2 m` and
+  // `\frac12 m` are recognized as unit-suffixed values.
+  if (isUnitStrippableValue(value) || isUnitStrippableValue(normalizeLatex(value))) {
     return value;
   }
   return trimmed;
@@ -323,14 +339,11 @@ function cleanBoxedAnswer(content: string): string {
 }
 
 function isEqualityExpr(expr: BoxedExpression): boolean {
-  if ((expr as { operator?: string }).operator === 'Equal') {
+  if (expr.operator === 'Equal') {
     return true;
   }
   const json = expr.json as unknown;
-  if (Array.isArray(json) && json[0] === 'Equal') {
-    return true;
-  }
-  return false;
+  return Array.isArray(json) && json[0] === 'Equal';
 }
 
 /**
@@ -496,13 +509,7 @@ function filterNonTrivialLines(s: string): string[] {
  * "V = 32" / "Step 1" stay below the threshold and are left alone.
  */
 function countProseWords(text: string): number {
-  let count = 0;
-  for (const tok of text.split(/\s+/)) {
-    if (tok.length >= 2 && /^[A-Za-z]+$/.test(tok)) {
-      count++;
-    }
-  }
-  return count;
+  return text.split(/\s+/).filter((tok) => tok.length >= 2 && /^[A-Za-z]+$/.test(tok)).length;
 }
 
 /**
@@ -668,10 +675,7 @@ function extractFromLastLine(cleanedLines: string[]): string | undefined {
   if (finalSuffixMatch) {
     candidate = finalSuffixMatch[1].trim();
   }
-  if (hasDisqualifyingClaim(candidate)) {
-    return candidate;
-  }
-  if (hasAdditionalAssignment(candidate)) {
+  if (hasDisqualifyingClaim(candidate) || hasAdditionalAssignment(candidate)) {
     return candidate;
   }
   candidate = stripTopLevelTrailingProse(candidate);
