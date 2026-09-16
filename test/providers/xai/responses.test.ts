@@ -195,26 +195,25 @@ describe('XAIResponsesProvider', () => {
       expectedName: 'no_strict_schema',
       expectedStrict: true,
     },
-  ])('resolves json_schema strict mode: $description', async ({
-    response_format,
-    expectedName,
-    expectedStrict,
-  }) => {
-    const provider = new XAIResponsesProvider('grok-4.3', {
-      config: { apiKey: 'test-key', response_format },
-    });
+  ])(
+    'resolves json_schema strict mode: $description',
+    async ({ response_format, expectedName, expectedStrict }) => {
+      const provider = new XAIResponsesProvider('grok-4.3', {
+        config: { apiKey: 'test-key', response_format },
+      });
 
-    await provider.callApi('hello');
+      await provider.callApi('hello');
 
-    const [, request] = mockFetchWithCache.mock.calls[0];
-    const body = JSON.parse(request.body);
+      const [, request] = mockFetchWithCache.mock.calls[0];
+      const body = JSON.parse(request.body);
 
-    expect(body.text.format).toMatchObject({
-      type: 'json_schema',
-      name: expectedName,
-      strict: expectedStrict,
-    });
-  });
+      expect(body.text.format).toMatchObject({
+        type: 'json_schema',
+        name: expectedName,
+        strict: expectedStrict,
+      });
+    },
+  );
 
   it('uses regional endpoints when configured', () => {
     const provider = new TestableXAIResponsesProvider('grok-4.3', {

@@ -1,3 +1,4 @@
+import { randomUUID } from 'crypto';
 import fs from 'fs/promises';
 import * as os from 'os';
 import * as path from 'path';
@@ -94,6 +95,7 @@ export async function doRedteamRun(options: RedteamRunOptions): Promise<Eval | u
     const { maxConcurrency, tags: _runtimeTags, ...passThroughOptions } = options;
 
     let redteamConfig;
+    const generationRunId = randomUUID();
     const generationStartTime = Date.now();
     try {
       redteamConfig = await doGenerateRedteam({
@@ -106,6 +108,7 @@ export async function doRedteamRun(options: RedteamRunOptions): Promise<Eval | u
         verbose: options.verbose,
         delay: options.delay,
         inRedteamRun: true,
+        generationRunId,
         abortSignal: options.abortSignal,
         progressBar: options.progressBar,
       });
@@ -133,6 +136,8 @@ export async function doRedteamRun(options: RedteamRunOptions): Promise<Eval | u
     const { defaultConfig } = await loadDefaultConfig();
     // Exclude 'description' from options to avoid conflict with Commander's description method
     const { description: _description, ...evalOptions } = options;
+    const generation = redteamConfig.metadata?.generation;
+    const generatedDuringRun = generation?.id === generationRunId;
     const evalResult = await doEval(
       {
         ...evalOptions,
@@ -151,6 +156,9 @@ export async function doRedteamRun(options: RedteamRunOptions): Promise<Eval | u
         abortSignal: options.abortSignal,
         progressCallback: options.progressCallback,
         eventSource: options.eventSource,
+        ...(generatedDuringRun && generation.tokenUsage
+          ? { generationEventId: generation.id, generationTokenUsage: generation.tokenUsage }
+          : {}),
       },
     );
 

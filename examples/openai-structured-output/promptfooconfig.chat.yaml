@@ -4,17 +4,19 @@ prompts:
   - 'Analyze the following customer support query: "{{query}}" and respond with structured JSON data.'
 
 providers:
-  # GPT-5 models with structured output
-  - id: openai:chat:gpt-5.4-nano
-    label: GPT-5.4 Nano External Schema
+  # GPT-5.6 tiers with structured output
+  - id: openai:chat:gpt-5.6-luna
+    label: GPT-5.6 Luna External Schema
     config:
+      reasoning_effort: none
       max_completion_tokens: 800
       seed: 123456
       response_format: file://schema.chat.json # External schema file reference
 
-  - id: openai:chat:gpt-5.4-mini
-    label: GPT-5.4 Mini Inline Schema
+  - id: openai:chat:gpt-5.6-terra
+    label: GPT-5.6 Terra Inline Schema
     config:
+      reasoning_effort: none
       max_completion_tokens: 1000
       response_format:
         type: json_schema
