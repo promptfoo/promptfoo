@@ -84,7 +84,7 @@ const OpenApiEvalTableJsonResponseSchema = z.union([
   EvalSchemas.Table.JsonExportResponse,
 ]);
 
-export const SERVER_OPENAPI_ROUTE_COUNT = 67;
+export const SERVER_OPENAPI_ROUTE_COUNT = 68;
 
 type OpenApiSchema = NonNullable<ZodMediaTypeObject['schema']>;
 type OpenApiResponse = ResponseConfig & { description: string };
@@ -497,6 +497,24 @@ export function createServerOpenApiRegistry() {
     responses: {
       200: jsonResponse('UpdateEvalResponse', EvalSchemas.Update.Response),
       400: validationError(),
+      500: serverError(),
+    },
+  });
+
+  register({
+    method: 'patch',
+    path: '/api/eval/{id}/favorite',
+    operationId: 'updateEvalFavorite',
+    tags: ['Eval'],
+    summary: 'Update evaluation favorite status',
+    request: {
+      params: params('UpdateEvalFavoriteParams', EvalSchemas.UpdateFavorite.Params),
+      body: jsonBody('UpdateEvalFavoriteRequest', EvalSchemas.UpdateFavorite.Request),
+    },
+    responses: {
+      200: jsonResponse('UpdateEvalFavoriteResponse', EvalSchemas.UpdateFavorite.Response),
+      400: validationError(),
+      404: notFound('Evaluation not found'),
       500: serverError(),
     },
   });
