@@ -219,15 +219,14 @@ def _traced_call(method_callable, args, function_name):
         # Extract parent context from W3C traceparent header
         parent_ctx = extract({"traceparent": traceparent})
 
-        # Determine span name following GenAI conventions
+        # A custom Python function may orchestrate work without calling a model.
         span_name = f"python {function_name}"
 
         with _tracer.start_as_current_span(
             span_name, context=parent_ctx, kind=SpanKind.CLIENT
         ) as span:
-            # Set GenAI semantic convention attributes
-            span.set_attribute("gen_ai.system", "python")
-            span.set_attribute("gen_ai.operation.name", function_name)
+            span.set_attribute("promptfoo.provider.type", "python")
+            span.set_attribute("promptfoo.provider.function", function_name)
 
             # Set request attributes from prompt (1st arg)
             if len(args) >= 1:
@@ -241,7 +240,7 @@ def _traced_call(method_callable, args, function_name):
                 if isinstance(options, dict):
                     config = options.get("config", {})
                     if config.get("model"):
-                        span.set_attribute("gen_ai.request.model", config["model"])
+                        span.set_attribute("promptfoo.provider.model", config["model"])
                     # Also check for provider id
                     if options.get("id"):
                         span.set_attribute("promptfoo.provider.id", options["id"])
@@ -279,7 +278,7 @@ def _traced_call(method_callable, args, function_name):
                         usage = result["tokenUsage"]
                         if "total" in usage:
                             span.set_attribute(
-                                "gen_ai.usage.total_tokens", usage["total"]
+                                "promptfoo.usage.total_tokens", usage["total"]
                             )
                         if "prompt" in usage:
                             span.set_attribute(

@@ -19,6 +19,7 @@ import {
   handleRateLimit,
   isRateLimited,
   isTransientError,
+  readBoundedText,
 } from '../src/util/fetch/index';
 import { withFetchRetryContext } from '../src/util/fetch/retryContext';
 import { sleep } from '../src/util/time';
@@ -59,6 +60,7 @@ vi.mock('../src/globalConfig/cloud', () => ({
   cloudConfig: {
     getApiHost: vi.fn().mockReturnValue('https://api.promptfoo.dev'),
     getApiKey: vi.fn(),
+    getAuthHeaderName: vi.fn().mockReturnValue('Authorization'),
     getCurrentOrganizationId: vi.fn(),
     getCurrentTeamId: vi.fn(),
   },
@@ -164,6 +166,7 @@ describe('fetchWithProxy', () => {
     clearAgentCache();
     vi.spyOn(global, 'fetch').mockResolvedValue(new Response());
     vi.mocked(cloudConfig.getApiHost).mockReturnValue('https://api.promptfoo.dev');
+    vi.mocked(cloudConfig.getAuthHeaderName).mockReturnValue('Authorization');
     vi.mocked(ProxyAgent).mockClear();
     cliState.basePath = undefined;
     cliState.maxConcurrency = undefined;
@@ -310,6 +313,46 @@ describe('fetchWithProxy', () => {
     );
   });
 
+  it('should not inject saved cloud auth when skipCloudAuthInjection is set', async () => {
+    vi.mocked(cloudConfig.getApiKey).mockReturnValue('old-saved-key');
+    vi.mocked(cloudConfig.getAuthHeaderName).mockReturnValue('Authorization');
+
+    await fetchWithProxy('https://api.promptfoo.dev/api/v1/users/me', {
+      headers: { 'X-Custom-Auth': 'Bearer new-candidate-key' },
+      skipCloudAuthInjection: true,
+    });
+
+    expect(global.fetch).toHaveBeenCalledWith(
+      'https://api.promptfoo.dev/api/v1/users/me',
+      expect.objectContaining({
+        headers: expect.objectContaining({
+          'X-Custom-Auth': 'Bearer new-candidate-key',
+        }),
+      }),
+    );
+    const [, calledOpts] = vi.mocked(global.fetch).mock.calls.at(-1)!;
+    expect(new Headers(calledOpts?.headers).has('Authorization')).toBe(false);
+  });
+
+  it('should still inject saved cloud auth when skipCloudAuthInjection is not set', async () => {
+    vi.mocked(cloudConfig.getApiKey).mockReturnValue('old-saved-key');
+    vi.mocked(cloudConfig.getAuthHeaderName).mockReturnValue('Authorization');
+
+    await fetchWithProxy('https://api.promptfoo.dev/api/v1/users/me', {
+      headers: { 'X-Custom-Auth': 'Bearer new-candidate-key' },
+    });
+
+    expect(global.fetch).toHaveBeenCalledWith(
+      'https://api.promptfoo.dev/api/v1/users/me',
+      expect.objectContaining({
+        headers: expect.objectContaining({
+          'X-Custom-Auth': 'Bearer new-candidate-key',
+          Authorization: 'Bearer old-saved-key',
+        }),
+      }),
+    );
+  });
+
   it('should not add cloud auth to lookalike Promptfoo cloud hosts', async () => {
     vi.mocked(cloudConfig.getApiKey).mockReturnValue('cloud-token');
 
@@ -400,6 +443,61 @@ describe('fetchWithProxy', () => {
           'x-promptfoo-version': VERSION,
         },
       }),
+    );
+  });
+
+  it('should decode percent-encoded URL credentials before sending Basic auth', async () => {
+    const url = 'https://us%40er:p%40ss%3Aword@example.com/api';
+
+    await fetchWithProxy(url);
+
+    expect(global.fetch).toHaveBeenCalledWith(
+      'https://example.com/api',
+      expect.objectContaining({
+        headers: {
+          Authorization: `Basic ${Buffer.from('us@er:p@ss:word').toString('base64')}`,
+          'x-promptfoo-version': VERSION,
+        },
+      }),
+    );
+  });
+
+  it('should keep malformed percent escapes in URL credentials as written', async () => {
+    const url = 'https://user:bad%zzsecret@example.com/api';
+
+    await fetchWithProxy(url);
+
+    expect(global.fetch).toHaveBeenCalledWith(
+      'https://example.com/api',
+      expect.objectContaining({
+        headers: {
+          Authorization: `Basic ${Buffer.from('user:bad%zzsecret').toString('base64')}`,
+          'x-promptfoo-version': VERSION,
+        },
+      }),
+    );
+  });
+
+  it('should not add Basic auth beside a lowercase authorization header', async () => {
+    const url = 'https://username:password@example.com/api';
+
+    await fetchWithProxy(url, { headers: new Headers({ authorization: 'Bearer token123' }) });
+
+    expect(logger.warn).toHaveBeenCalledWith(
+      expect.stringContaining('Both URL credentials and Authorization header present'),
+    );
+    expect(global.fetch).toHaveBeenCalledWith(
+      'https://example.com/api',
+      expect.objectContaining({
+        headers: {
+          authorization: 'Bearer token123',
+          'x-promptfoo-version': VERSION,
+        },
+      }),
+    );
+    const [, calledOptions] = vi.mocked(global.fetch).mock.calls.at(-1)!;
+    expect(new Headers(calledOptions?.headers as HeadersInit).get('authorization')).toBe(
+      'Bearer token123',
     );
   });
 
@@ -628,6 +726,26 @@ describe('fetchWithProxy', () => {
     await fetchWithProxy('https://example.com');
 
     expect(ProxyAgent).not.toHaveBeenCalled();
+  });
+
+  it.each(['0', '-2', '2foo', '1.5', '', '9007199254740992', 'Infinity'])(
+    'falls back to CLI concurrency for invalid pool size %j',
+    async (value) => {
+      vi.mocked(getEnvString).mockImplementation((key, fallback) =>
+        key === 'PROMPTFOO_FETCH_CONNECTIONS' ? value : fallback,
+      );
+      cliState.maxConcurrency = 3;
+      await fetchWithProxy('https://example.com');
+      expect(Agent).toHaveBeenCalledWith(expect.objectContaining({ connections: 3 }));
+    },
+  );
+
+  it('accepts a positive integer pool size with whitespace', async () => {
+    vi.mocked(getEnvString).mockImplementation((key, fallback) =>
+      key === 'PROMPTFOO_FETCH_CONNECTIONS' ? ' 12 ' : fallback,
+    );
+    await fetchWithProxy('https://example.com');
+    expect(Agent).toHaveBeenCalledWith(expect.objectContaining({ connections: 12 }));
   });
 
   it('should read REQUEST_TIMEOUT_MS when creating the default agent', async () => {
@@ -1239,6 +1357,19 @@ describe('computeRateLimitWaitMs', () => {
     expect(computeRateLimitWaitMs(response)).toBe(7_000);
   });
 
+  it.each([
+    ['25', 25],
+    ['0', 0],
+    ['invalid', 7_000],
+    ['-1', 7_000],
+  ])('reads retry-after-ms=%s with Retry-After as a fallback', (value, expected) => {
+    const response = createMockResponse({
+      headers: new Headers({ 'retry-after-ms': String(value), 'Retry-After': '7' }),
+    });
+
+    expect(computeRateLimitWaitMs(response)).toBe(expected);
+  });
+
   it('prefers OpenAI reset headers when present', () => {
     const response = createMockResponse({
       headers: new Headers({
@@ -1325,19 +1456,21 @@ describe('fetchWithRetries', () => {
   });
 
   it('redacts URL credentials and sensitive query values in retry failure logs', async () => {
-    vi.mocked(global.fetch).mockRejectedValue(new Error('Network error'));
     const url =
       'https://webhook-user:webhook-password@n8n.example.com/webhook/agent?token=webhook-secret';
+    vi.mocked(global.fetch).mockRejectedValue(new Error(`Network error for ${url}`));
 
-    await expect(fetchWithRetries(url, {}, 1000, 0)).rejects.toThrow(
-      'Request failed after 0 retries: Error: Network error',
-    );
+    const failure = await fetchWithRetries(url, {}, 1000, 0).catch((error) => error);
 
-    const debugLogs = JSON.stringify(vi.mocked(logger.debug).mock.calls);
-    expect(debugLogs).toContain('n8n.example.com');
-    expect(debugLogs).not.toContain('webhook-user');
-    expect(debugLogs).not.toContain('webhook-password');
-    expect(debugLogs).not.toContain('webhook-secret');
+    for (const output of [
+      failure.message,
+      JSON.stringify(vi.mocked(logger.debug).mock.calls.at(-1)),
+    ]) {
+      expect(output).toContain('n8n.example.com');
+      expect(output).not.toContain('webhook-user');
+      expect(output).not.toContain('webhook-password');
+      expect(output).not.toContain('webhook-secret');
+    }
   });
 
   it('should not sleep after the final attempt', async () => {
@@ -1715,17 +1848,26 @@ describe('fetchWithRetries', () => {
   });
 
   describe('HttpRateLimitError classification', () => {
+    it('does not inspect a streamless rate-limit body', async () => {
+      const text = vi
+        .fn()
+        .mockResolvedValue(JSON.stringify({ error: { code: 'insufficient_quota' } }));
+      vi.mocked(global.fetch).mockResolvedValue(createMockResponse({ status: 429, text }));
+      const error = await fetchWithRetries('https://example.com', {}, 1000, 0).catch((err) => err);
+      expect(error).toMatchObject({ kind: 'rate_limit' });
+      expect(text).not.toHaveBeenCalled();
+    });
+
     function rateLimitedJsonResponse(opts: {
       headers?: Headers;
       body?: unknown;
       statusText?: string;
     }): Response {
       const text = JSON.stringify(opts.body ?? {});
-      return createMockResponse({
+      return new Response(text, {
         status: 429,
         statusText: opts.statusText ?? 'Too Many Requests',
         headers: opts.headers ?? new Headers(),
-        text: () => Promise.resolve(text),
       });
     }
 
@@ -1776,6 +1918,100 @@ describe('fetchWithRetries', () => {
       expect(sleep).not.toHaveBeenCalled();
     });
 
+    it('fails fast on credit_balance_exhausted (OpenAI prepaid balance at 0)', async () => {
+      const quotaResponse = rateLimitedJsonResponse({
+        body: {
+          error: {
+            code: 'credit_balance_exhausted',
+            message: 'You have no credits remaining',
+            type: 'insufficient_quota',
+          },
+        },
+      });
+      vi.mocked(global.fetch).mockResolvedValue(quotaResponse);
+
+      const err = await fetchWithRetries('https://example.com', {}, 1000, 4).catch((e) => e);
+      expect(err).toBeInstanceOf(HttpRateLimitError);
+      const rl = err as HttpRateLimitError;
+      expect(rl.kind).toBe('quota');
+      expect(rl.code).toBe('credit_balance_exhausted');
+      expect(global.fetch).toHaveBeenCalledTimes(1);
+      expect(sleep).not.toHaveBeenCalled();
+    });
+
+    it('fails fast when only error.type names a hard quota next to an unknown code', async () => {
+      const quotaResponse = rateLimitedJsonResponse({
+        body: { error: { code: 'new_billing_code', type: 'insufficient_quota' } },
+      });
+      vi.mocked(global.fetch).mockResolvedValue(quotaResponse);
+
+      const err = await fetchWithRetries('https://example.com', {}, 1000, 4).catch((e) => e);
+      expect(err).toBeInstanceOf(HttpRateLimitError);
+      const rl = err as HttpRateLimitError;
+      expect(rl.kind).toBe('quota');
+      expect(rl.code).toBe('new_billing_code');
+      expect(rl.type).toBe('insufficient_quota');
+      expect(global.fetch).toHaveBeenCalledTimes(1);
+    });
+
+    it('retries a transient code paired with a hard-quota type when Retry-After is short', async () => {
+      const throttled = rateLimitedJsonResponse({
+        headers: new Headers({ 'Retry-After': '1' }),
+        body: { error: { code: 'rate_limit_exceeded', type: 'quota_exceeded' } },
+      });
+      vi.mocked(global.fetch).mockResolvedValue(throttled);
+
+      const err = await fetchWithRetries('https://example.com', {}, 1000, 1).catch((e) => e);
+      expect(err).toBeInstanceOf(HttpRateLimitError);
+      const rl = err as HttpRateLimitError;
+      expect(rl.kind).toBe('rate_limit');
+      expect(rl.code).toBe('rate_limit_exceeded');
+      // Retry-After downgraded the quota classification, so the retry budget is used.
+      expect(global.fetch).toHaveBeenCalledTimes(2);
+      expect(sleep).toHaveBeenCalledTimes(1);
+    });
+
+    it('retries insufficient_quota with a short Retry-After (Azure per-minute saturation)', async () => {
+      const throttled = rateLimitedJsonResponse({
+        headers: new Headers({ 'Retry-After': '1' }),
+        body: { error: { code: 'insufficient_quota', message: 'deployment saturated' } },
+      });
+      vi.mocked(global.fetch).mockResolvedValue(throttled);
+
+      const err = await fetchWithRetries('https://example.com', {}, 1000, 1).catch((e) => e);
+      expect(err).toBeInstanceOf(HttpRateLimitError);
+      expect((err as HttpRateLimitError).kind).toBe('rate_limit');
+      expect(global.fetch).toHaveBeenCalledTimes(2);
+    });
+
+    describe('retry-after-ms backoff', () => {
+      beforeEach(() => {
+        vi.spyOn(Math, 'random').mockReturnValue(0);
+      });
+
+      afterEach(() => {
+        vi.restoreAllMocks();
+      });
+
+      it.each([0, 25])(
+        'waits %i ms before retrying an ambiguous quota response',
+        async (waitMs) => {
+          const throttled = rateLimitedJsonResponse({
+            headers: new Headers({ 'retry-after-ms': String(waitMs) }),
+            body: { error: { code: 'insufficient_quota', message: 'deployment saturated' } },
+          });
+          const success = createMockResponse();
+          vi.mocked(global.fetch).mockResolvedValueOnce(throttled).mockResolvedValueOnce(success);
+
+          const response = await fetchWithRetries('https://example.com', {}, 1000, 1);
+
+          expect(response).toBe(success);
+          expect(global.fetch).toHaveBeenCalledTimes(2);
+          expect(sleep).toHaveBeenCalledExactlyOnceWith(waitMs);
+        },
+      );
+    });
+
     it('fails fast on billing_hard_limit_reached', async () => {
       const quotaResponse = rateLimitedJsonResponse({
         body: { error: { code: 'billing_hard_limit_reached', message: 'billing limit hit' } },
@@ -1805,11 +2041,9 @@ describe('fetchWithRetries', () => {
     });
 
     it('falls back to status-only when body has no JSON code', async () => {
-      const response = createMockResponse({
+      const response = new Response('plain text rate limit notice', {
         status: 429,
         statusText: 'Too Many Requests',
-        headers: new Headers(),
-        text: () => Promise.resolve('plain text rate limit notice'),
       });
       vi.mocked(global.fetch).mockResolvedValue(response);
 
@@ -2450,6 +2684,15 @@ describe('fetchWithRetries with disableTransientRetries', () => {
     });
   });
 
+  it('redacts opaque path credentials in retry diagnostics', async () => {
+    const credential = '123e4567-e89b-12d3-a456-426614174000';
+    vi.spyOn(global, 'fetch').mockRejectedValueOnce(new Error('offline'));
+    await expect(
+      fetchWithRetries(`https://gateway.example/v1/${credential}/responses`, {}, 1000, 0),
+    ).rejects.toThrow('Request failed');
+    expect(logger.debug).toHaveBeenCalledWith(expect.not.stringContaining(credential));
+  });
+
   it('should disable transient retries in fetchWithProxy to avoid double-retrying', async () => {
     // This test verifies that fetchWithRetries passes disableTransientRetries: true
     // to prevent fetchWithProxy from also retrying transient errors
@@ -2469,5 +2712,42 @@ describe('fetchWithRetries with disableTransientRetries', () => {
     // So we should see exactly 1 fetch call
     expect(mockFetch).toHaveBeenCalledTimes(1);
     expect(result).toBe(transientResponse);
+  });
+});
+
+describe('readBoundedText', () => {
+  it.each([undefined, '1', '1000000'])(
+    'does not buffer a streamless body with length %s',
+    async (length) => {
+      const text = vi.fn().mockResolvedValue('oversized body');
+      const response = {
+        body: null,
+        headers: new Headers(length ? { 'content-length': length } : {}),
+        text,
+      } as unknown as Response;
+      expect(await readBoundedText(response, 4, { requireStream: true })).toBe('');
+      expect(text).not.toHaveBeenCalled();
+    },
+  );
+
+  it('preserves the legacy streamless fallback for ordinary response consumers', async () => {
+    const response = {
+      body: null,
+      headers: new Headers(),
+      text: vi.fn().mockResolvedValue('hello'),
+    } as unknown as Response;
+    expect(await readBoundedText(response, 4)).toBe('hell');
+  });
+
+  it('bounds streamed bytes and cancels the reader', async () => {
+    const cancel = vi.fn();
+    const body = new ReadableStream({
+      start(controller) {
+        controller.enqueue(new TextEncoder().encode('abcdefgh'));
+      },
+      cancel,
+    });
+    expect(await readBoundedText(new Response(body), 4)).toBe('abcd');
+    expect(cancel).toHaveBeenCalledOnce();
   });
 });
