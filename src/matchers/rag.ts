@@ -16,7 +16,6 @@ import { callGradingProvider, callProviderWithContext, getAndCheckProvider } fro
 import { loadRubricPrompt, renderLlmRubricPrompt } from './rubric';
 import {
   cosineSimilarity,
-  fail,
   graderFail,
   normalizeMatcherTokenUsage,
   splitIntoSentences,
