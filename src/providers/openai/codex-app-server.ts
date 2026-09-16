@@ -3437,6 +3437,7 @@ export class OpenAICodexAppServerProvider implements ApiProvider {
         input: number;
         output: number;
         cached: number;
+        cacheWrite?: number;
         reasoning: number;
       }
     | undefined {
@@ -3453,6 +3454,7 @@ export class OpenAICodexAppServerProvider implements ApiProvider {
       input,
       output,
       cached: usage.cachedInputTokens ?? usage.cached_input_tokens ?? 0,
+      cacheWrite: usage.cacheWriteInputTokens ?? usage.cache_write_input_tokens,
       reasoning: usage.reasoningOutputTokens ?? usage.reasoning_output_tokens ?? 0,
     };
   }
@@ -3465,6 +3467,7 @@ export class OpenAICodexAppServerProvider implements ApiProvider {
     return {
       input_tokens: usage.input,
       cached_input_tokens: usage.cached,
+      cache_write_input_tokens: usage.cacheWrite ?? 0,
       output_tokens: usage.output,
       reasoning_output_tokens: usage.reasoning,
     };
@@ -3480,6 +3483,9 @@ export class OpenAICodexAppServerProvider implements ApiProvider {
       completion: usage.output,
       total: usage.input + usage.output,
       cached: usage.cached,
+      ...(typeof usage.cacheWrite === 'number'
+        ? { completionDetails: { cacheCreationInputTokens: usage.cacheWrite } }
+        : {}),
     };
   }
 
@@ -3618,6 +3624,9 @@ export class OpenAICodexAppServerProvider implements ApiProvider {
       attributes['gen_ai.usage.output_tokens'] = usage.output;
       if (usage.cached) {
         attributes[GenAIAttributes.USAGE_CACHE_READ_INPUT_TOKENS] = usage.cached;
+      }
+      if (usage.cacheWrite) {
+        attributes[GenAIAttributes.USAGE_CACHE_CREATION_INPUT_TOKENS] = usage.cacheWrite;
       }
       if (usage.reasoning) {
         attributes[GenAIAttributes.USAGE_REASONING_OUTPUT_TOKENS] = usage.reasoning;

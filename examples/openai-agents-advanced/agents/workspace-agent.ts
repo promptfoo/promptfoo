@@ -6,7 +6,7 @@ const taskFilePath = fileURLToPath(new URL('../workspace/task.md', import.meta.u
 
 export default new SandboxAgent({
   name: 'Workspace Reviewer',
-  model: 'gpt-5-mini',
+  model: 'gpt-5.6-luna',
   modelSettings: {
     toolChoice: 'required',
   },
