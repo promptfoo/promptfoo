@@ -165,49 +165,49 @@ describe('EvalResult', () => {
       expect(retrieved).toBeNull();
     });
 
-    it.each([
-      true,
-      false,
-    ])('persists a private nonstandard baseline when persist starts as %s', async (persistInitially) => {
-      const gradingResult = {
-        pass: false,
-        score: 0.25,
-        reason: 'Custom aggregate failed',
-      };
-      setNonstandardScoringBaseline(gradingResult, { pass: false, score: 0.25 });
-      const result = await EvalResult.createFromEvaluateResult(
-        `test-eval-custom-baseline-${persistInitially}`,
-        {
-          ...mockEvaluateResult,
-          success: false,
+    it.each([true, false])(
+      'persists a private nonstandard baseline when persist starts as %s',
+      async (persistInitially) => {
+        const gradingResult = {
+          pass: false,
           score: 0.25,
-          failureReason: ResultFailureReason.ASSERT,
-          gradingResult,
-        },
-        { persist: persistInitially },
-      );
-      if (!persistInitially) {
-        await result.save();
-      }
+          reason: 'Custom aggregate failed',
+        };
+        setNonstandardScoringBaseline(gradingResult, { pass: false, score: 0.25 });
+        const result = await EvalResult.createFromEvaluateResult(
+          `test-eval-custom-baseline-${persistInitially}`,
+          {
+            ...mockEvaluateResult,
+            success: false,
+            score: 0.25,
+            failureReason: ResultFailureReason.ASSERT,
+            gradingResult,
+          },
+          { persist: persistInitially },
+        );
+        if (!persistInitially) {
+          await result.save();
+        }
 
-      const stored = await (await getDb())
-        .select({ manualRatingState: evalResultsTable.manualRatingState })
-        .from(evalResultsTable)
-        .where(eq(evalResultsTable.id, result.id))
-        .get();
-      expect(stored?.manualRatingState).toMatchObject({
-        version: 1,
-        status: 'baseline',
-        original: {
-          success: false,
-          score: 0.25,
-          failureReason: ResultFailureReason.ASSERT,
-        },
-      });
-      expect(JSON.stringify(result.gradingResult)).not.toContain(
-        '__promptfooNonstandardScoringBaseline',
-      );
-    });
+        const stored = await (await getDb())
+          .select({ manualRatingState: evalResultsTable.manualRatingState })
+          .from(evalResultsTable)
+          .where(eq(evalResultsTable.id, result.id))
+          .get();
+        expect(stored?.manualRatingState).toMatchObject({
+          version: 1,
+          status: 'baseline',
+          original: {
+            success: false,
+            score: 0.25,
+            failureReason: ResultFailureReason.ASSERT,
+          },
+        });
+        expect(JSON.stringify(result.gradingResult)).not.toContain(
+          '__promptfooNonstandardScoringBaseline',
+        );
+      },
+    );
 
     it('should preserve response headers when persist option is false', async () => {
       const result = await EvalResult.createFromEvaluateResult(

@@ -561,7 +561,7 @@ function isHumanAssertion(assertion: unknown): boolean {
 }
 
 function isHumanGradingResult(value: unknown): value is GradingResult {
-  return Boolean(asRecord(value) && isHumanAssertion(asRecord(value)?.assertion));
+  return isHumanAssertion(asRecord(value)?.assertion);
 }
 
 function hasOwn(value: object, key: PropertyKey): boolean {
