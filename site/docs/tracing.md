@@ -483,6 +483,8 @@ Here's how it works:
 
 To pull traces from your tracing service, add it under `tracing.provider` in your configuration. The provider ID identifies the service, and its settings tell Promptfoo how to connect.
 
+Braintrust and Langfuse use the timestamps parsed from their backend records. Metadata fields named `otel.span.start_time_unix_nano` or `otel.span.end_time_unix_nano` are ignored so they cannot supply conflicting span times.
+
 #### Grafana Tempo
 
 Use the `tempo` trace provider to pull traces from Grafana Tempo:
