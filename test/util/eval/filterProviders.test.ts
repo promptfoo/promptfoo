@@ -1,8 +1,41 @@
 import { describe, expect, it } from 'vitest';
-import { filterProviderConfigs, filterProviders } from '../../../src/util/eval/filterProviders';
+import {
+  filterProviderConfigs,
+  filterProviders,
+  getPersistedProviderFilterOptions,
+  getProviderFilterRegexError,
+} from '../../../src/util/eval/filterProviders';
 
 import type { ApiProvider, TestSuiteConfig } from '../../../src/types/index';
 import type { ProviderOptions, ProviderOptionsMap } from '../../../src/types/providers';
+
+describe('getPersistedProviderFilterOptions', () => {
+  it('converts a persisted filter into config resolution options', () => {
+    expect(getPersistedProviderFilterOptions('selected-target')).toEqual({
+      filterProviders: 'selected-target',
+    });
+  });
+
+  it.each([undefined, null])('treats a missing persisted filter as no filter: %j', (value) => {
+    expect(getPersistedProviderFilterOptions(value)).toEqual({});
+  });
+
+  it.each(['', 42, {}, ['echo']])('fails closed on a tampered persisted filter: %j', (value) => {
+    expect(() => getPersistedProviderFilterOptions(value)).toThrow(
+      'Stored provider filter is invalid',
+    );
+  });
+});
+
+describe('getProviderFilterRegexError', () => {
+  it('returns undefined for a valid pattern', () => {
+    expect(getProviderFilterRegexError('selected-.*')).toBeUndefined();
+  });
+
+  it('returns the reason for an invalid pattern', () => {
+    expect(getProviderFilterRegexError('[')).toContain('Invalid regular expression');
+  });
+});
 
 describe('filterProviders', () => {
   const mockProviders: ApiProvider[] = [

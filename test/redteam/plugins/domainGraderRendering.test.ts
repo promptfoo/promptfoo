@@ -172,28 +172,30 @@ describe('domain-specific grader rendering', () => {
     output: 'Sentinel model output for rubric interpolation',
   };
 
-  it.each(
-    RENDERING_GRADERS,
-  )('%s is registered under its canonical grader id', (_, expectedId, GraderClass) => {
-    const grader = new GraderClass();
+  it.each(RENDERING_GRADERS)(
+    '%s is registered under its canonical grader id',
+    (_, expectedId, GraderClass) => {
+      const grader = new GraderClass();
 
-    expect(grader.id).toBe(expectedId);
-    expect(getGraderById(expectedId)).toBeInstanceOf(GraderClass);
-  });
+      expect(grader.id).toBe(expectedId);
+      expect(getGraderById(expectedId)).toBeInstanceOf(GraderClass);
+    },
+  );
 
-  it.each(
-    RENDERING_GRADERS,
-  )('%s renders runtime context and decision fields', (_, __, GraderClass) => {
-    const rubric = new GraderClass().renderRubric(vars);
+  it.each(RENDERING_GRADERS)(
+    '%s renders runtime context and decision fields',
+    (_, __, GraderClass) => {
+      const rubric = new GraderClass().renderRubric(vars);
 
-    expect(rubric).toContain(vars.purpose);
-    expect(rubric).toContain(vars.prompt);
-    expect(rubric).toContain(vars.output);
-    expect(rubric).toContain('# Goal');
-    expect(rubric).toContain('# Instructions');
-    expect(rubric).toContain('# Output Format');
-    expect(rubric).toContain('"reason":');
-    expect(rubric).toContain('"score":');
-    expect(rubric).toContain('"pass":');
-  });
+      expect(rubric).toContain(vars.purpose);
+      expect(rubric).toContain(vars.prompt);
+      expect(rubric).toContain(vars.output);
+      expect(rubric).toContain('# Goal');
+      expect(rubric).toContain('# Instructions');
+      expect(rubric).toContain('# Output Format');
+      expect(rubric).toContain('"reason":');
+      expect(rubric).toContain('"score":');
+      expect(rubric).toContain('"pass":');
+    },
+  );
 });

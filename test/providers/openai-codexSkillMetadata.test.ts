@@ -2,8 +2,8 @@ import path from 'path';
 
 import { describe, expect, it } from 'vitest';
 import {
-  type CodexCommandSkillItemAdapter,
   buildCodexSkillMetadata,
+  type CodexCommandSkillItemAdapter,
   extractCodexSkillPathCandidates,
   getCodexSkillMetadataFields,
   getCodexSkillRootPrefixes,
@@ -33,9 +33,7 @@ describe('codexSkillMetadata', () => {
       });
       // The working dir is resolved to an absolute path, so derive the expected
       // prefix the same way rather than hard-coding a POSIX-only string.
-      expect(withWorkingDir).toContain(
-        path.posix.join(workingDir.replace(/\\/g, '/'), '.agents'),
-      );
+      expect(withWorkingDir).toContain(path.posix.join(workingDir.replace(/\\/g, '/'), '.agents'));
       expect(withWorkingDir).toContain('/repo/.agents');
 
       const orphanGitRoot = getCodexSkillRootPrefixes({ gitRepositoryRoot: '/repo' });
@@ -55,12 +53,12 @@ describe('codexSkillMetadata', () => {
     });
 
     it('strips wrapping punctuation from tokens', () => {
-      expect(
-        extractCodexSkillPathCandidates('`.agents/skills/repo-skill/SKILL.md`'),
-      ).toEqual([{ name: 'repo-skill', path: '.agents/skills/repo-skill/SKILL.md' }]);
-      expect(
-        extractCodexSkillPathCandidates('(.agents/skills/repo-skill/SKILL.md),'),
-      ).toEqual([{ name: 'repo-skill', path: '.agents/skills/repo-skill/SKILL.md' }]);
+      expect(extractCodexSkillPathCandidates('`.agents/skills/repo-skill/SKILL.md`')).toEqual([
+        { name: 'repo-skill', path: '.agents/skills/repo-skill/SKILL.md' },
+      ]);
+      expect(extractCodexSkillPathCandidates('(.agents/skills/repo-skill/SKILL.md),')).toEqual([
+        { name: 'repo-skill', path: '.agents/skills/repo-skill/SKILL.md' },
+      ]);
     });
 
     it('rejects wildcard skill segments as invalid names', () => {
@@ -69,7 +67,9 @@ describe('codexSkillMetadata', () => {
 
     it('rejects paths outside any known skill root', () => {
       expect(
-        extractCodexSkillPathCandidates('/tmp/unrelated/skills/external/SKILL.md', ['/repo/.agents']),
+        extractCodexSkillPathCandidates('/tmp/unrelated/skills/external/SKILL.md', [
+          '/repo/.agents',
+        ]),
       ).toEqual([]);
     });
 
@@ -146,9 +146,9 @@ describe('codexSkillMetadata', () => {
     });
 
     it('emits attemptedSkillCalls only when it exceeds confirmed calls', () => {
-      expect(
-        getCodexSkillMetadataFields({ attemptedSkillCalls: [skill], skillCalls: [] }),
-      ).toEqual({ attemptedSkillCalls: [skill] });
+      expect(getCodexSkillMetadataFields({ attemptedSkillCalls: [skill], skillCalls: [] })).toEqual(
+        { attemptedSkillCalls: [skill] },
+      );
     });
 
     it('omits empty skillCalls', () => {

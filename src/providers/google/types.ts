@@ -1,5 +1,6 @@
 import type { GoogleAuthOptions } from 'google-auth-library';
 
+import type { ClaudeEffort } from '../anthropic/types';
 import type { MCPConfig } from '../mcp/types';
 
 /**
@@ -26,28 +27,57 @@ export interface ModelArmorConfig {
 interface Blob {
   mimeType: string;
   data: string; // base64-encoded string
+  displayName?: string;
+}
+
+export interface StreamedPartialArg {
+  jsonPath?: string;
+  stringValue?: string;
+  numberValue?: number;
+  boolValue?: boolean;
+  nullValue?: unknown;
+  willContinue?: boolean;
 }
 
 export interface FunctionCall {
+  id?: string;
   name: string;
-  args?: { [key: string]: any };
+  args?: { [key: string]: any } | string;
+  partialArgs?: StreamedPartialArg[];
+  willContinue?: boolean;
+}
+
+export interface StreamedFunctionCall {
+  id?: string;
+  name?: string;
+  args?: { [key: string]: any } | string;
+  partialArgs?: StreamedPartialArg[];
+  willContinue?: boolean;
 }
 
 interface FunctionResponse {
+  id?: string;
   name: string;
   response: { [key: string]: any };
+  parts?: { inlineData?: Blob; fileData?: FileData }[];
 }
 
 interface FileData {
   mimeType?: string;
   fileUri: string;
+  displayName?: string;
 }
 
 export interface Part {
   text?: string;
+  // True for interim thinking output (text or images) when thoughts are
+  // requested; thought parts are not final content and are billed as
+  // thinking tokens rather than per-image output.
+  thought?: boolean;
   inlineData?: Blob;
-  functionCall?: FunctionCall;
+  functionCall?: FunctionCall | StreamedFunctionCall;
   functionResponse?: FunctionResponse;
+  thoughtSignature?: string;
   fileData?: FileData;
 }
 
@@ -101,6 +131,18 @@ export interface Tool {
   googleSearchRetrieval?: GoogleSearchRetrieval;
   codeExecution?: object;
   googleSearch?: object;
+  googleMaps?: { enableWidget?: boolean };
+  urlContext?: object;
+  fileSearch?: {
+    fileSearchStoreNames: string[];
+    metadataFilter?: string;
+  };
+  computerUse?: {
+    environment: 'ENVIRONMENT_BROWSER' | 'ENVIRONMENT_MOBILE' | 'ENVIRONMENT_DESKTOP';
+    enablePromptInjectionDetection?: boolean;
+    excludedPredefinedFunctions?: string[];
+    disabledSafetyPolicies?: string[];
+  };
 
   // Note: These snake_case properties are supported but should be accessed with type assertions
   // Type definitions included for documentation purposes only
@@ -110,9 +152,18 @@ export interface Tool {
 }
 
 export type ClaudeThinkingConfig =
-  | { type: 'enabled'; budget_tokens?: number }
-  | { type: 'adaptive' }
+  | { type: 'enabled'; budget_tokens?: number; display?: 'summarized' | 'omitted' }
+  | { type: 'adaptive'; display?: 'summarized' | 'omitted' }
   | { type: 'disabled' };
+
+export interface GoogleSpeechConfig {
+  voiceConfig?: {
+    prebuiltVoiceConfig?: {
+      voiceName?: string;
+    };
+  };
+  languageCode?: string;
+}
 
 export interface CompletionOptions {
   apiKey?: string;
@@ -124,11 +175,29 @@ export interface CompletionOptions {
   inputCost?: number;
   /** Custom per-token output cost override. Takes precedence over cost. */
   outputCost?: number;
+  /** Custom per-token audio input/output cost override. */
+  audioCost?: number;
+  /** Custom per-token audio input cost override. */
+  audioInputCost?: number;
+  /** Custom per-token audio output cost override. */
+  audioOutputCost?: number;
+  /** Custom per-token video output cost override. */
+  videoOutputCost?: number;
+  /** Custom per-token image input cost override. */
+  imageInputCost?: number;
   headers?: { [key: string]: string }; // Custom headers for the request
+  /** Gemini inference service tier. */
+  service_tier?: 'standard' | 'priority' | 'flex';
+  /** Additional top-level Gemini request fields. */
+  passthrough?: Record<string, unknown>;
   projectId?: string;
   region?: string;
   publisher?: string;
-  apiVersion?: string; // For Live API: 'v1alpha' or 'v1' (default: v1alpha)
+  apiVersion?: string; // For Live API: 'v1alpha' or 'v1beta'
+  /** Previous Gemini Interactions API ID for conversational video editing. */
+  previousInteractionId?: string;
+  /** Keep a Gemini interaction available for subsequent editing turns. */
+  store?: boolean;
   anthropicVersion?: string;
   anthropic_version?: string; // Alternative format
   /**
@@ -154,6 +223,7 @@ export interface CompletionOptions {
   top_k?: number; // Alternative format for Claude models
   thinking?: ClaudeThinkingConfig; // Extended thinking for Claude models
   showThinking?: boolean; // Whether to include thinking output for Claude models
+  effort?: ClaudeEffort; // Reasoning depth for Claude models
 
   // Imagen image generation options
   n?: number; // Number of images to generate
@@ -189,6 +259,9 @@ export interface CompletionOptions {
   // Live API websocket timeout
   timeoutMs?: number;
 
+  // Live API top-level speech configuration
+  speechConfig?: GoogleSpeechConfig;
+
   generationConfig?: {
     context?: string;
     examples?: { input: string; output: string }[];
@@ -205,15 +278,11 @@ export interface CompletionOptions {
     // Live API
     response_modalities?: string[];
 
+    // GenerateContent API
+    responseModalities?: string[];
+
     // Speech configuration
-    speechConfig?: {
-      voiceConfig?: {
-        prebuiltVoiceConfig?: {
-          voiceName?: string;
-        };
-      };
-      languageCode?: string;
-    };
+    speechConfig?: GoogleSpeechConfig;
 
     // Transcription configuration
     outputAudioTranscription?: Record<string, any>;
@@ -234,6 +303,13 @@ export interface CompletionOptions {
       thinkingBudget?: number;
       thinkingLevel?: 'MINIMAL' | 'LOW' | 'MEDIUM' | 'HIGH';
     };
+
+    // Image configuration for Gemini image models; the top-level
+    // imageAspectRatio/imageSize options override matching fields here.
+    imageConfig?: {
+      aspectRatio?: string;
+      imageSize?: string;
+    };
   };
 
   responseSchema?: string;
@@ -253,6 +329,11 @@ export interface CompletionOptions {
       allowedFunctionNames?: string[];
       streamFunctionCallArguments?: boolean;
     };
+    retrievalConfig?: {
+      latLng?: { latitude: number; longitude: number };
+      languageCode?: string;
+    };
+    includeServerSideToolInvocations?: boolean;
   };
 
   tool_config?: {
@@ -270,6 +351,11 @@ export interface CompletionOptions {
       allowed_function_names?: string[];
       stream_function_call_arguments?: boolean;
     };
+    retrieval_config?: {
+      lat_lng?: { latitude: number; longitude: number };
+      language_code?: string;
+    };
+    include_server_side_tool_invocations?: boolean;
   };
 
   tool_choice?: 'auto' | 'none' | 'required' | { type: 'function'; function: { name: string } };
@@ -453,6 +539,7 @@ export interface ClaudeRequest {
   top_k?: number;
   system?: Array<{ type: string; text: string }>;
   thinking?: ClaudeThinkingConfig;
+  output_config?: { effort?: ClaudeEffort };
   messages: ClaudeMessage[];
 }
 
@@ -482,6 +569,11 @@ export interface ClaudeResponse {
 export type GoogleVideoModel =
   | 'veo-3.1-generate-preview'
   | 'veo-3.1-fast-preview'
+  | 'veo-3.1-fast-generate-preview'
+  | 'veo-3.1-lite-generate-preview'
+  | 'veo-3.1-generate-001'
+  | 'veo-3.1-fast-generate-001'
+  | 'veo-3.1-lite-generate-001'
   | 'veo-3-generate'
   | 'veo-3-fast'
   | 'veo-2-generate';
@@ -550,8 +642,9 @@ export interface GoogleVideoOptions {
   referenceImages?: (string | GoogleVideoReferenceImage)[];
 
   // Video extension (Veo 3.1 only)
-  extendVideoId?: string; // Operation ID from previous Veo generation
-  sourceVideo?: string; // Base64/file:// video for AI Studio, or Veo operation ID in Vertex flows
+  /** @deprecated Vertex operation IDs are unsupported. Use sourceVideo with a gs:// URI, base64 data, or file:// path. */
+  extendVideoId?: string;
+  sourceVideo?: string; // AI Studio generated video URI; Vertex: base64/file:// or gs://
 
   // Person generation control
   personGeneration?: GoogleVideoPersonGeneration;
