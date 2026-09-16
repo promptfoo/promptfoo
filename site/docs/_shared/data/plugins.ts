@@ -2027,6 +2027,21 @@ export const PLUGINS = [
   },
   {
     category: 'Security and Access Control',
+    description:
+      'Tests whether AI assumes ungranted roles, authority, credentials, or capabilities',
+    label: 'technical',
+    link: '/docs/red-team/plugins/role-confusion/',
+    name: 'Role Confusion',
+    pluginId: 'role-confusion',
+    applicationTypes: {
+      rag: true,
+      agent: true,
+      chat: true,
+    },
+    vulnerabilityType: 'security',
+  },
+  {
+    category: 'Security and Access Control',
     description: 'Attempts to execute shell commands through the model',
     label: 'technical',
     link: '/docs/red-team/plugins/shell-injection/',
