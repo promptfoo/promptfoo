@@ -767,30 +767,28 @@ export class OpenAiAgentsApiProvider extends OpenAiGenericProvider {
         const hasReplacementCredential =
           replacesHeaders &&
           (config.apiKey || config.apiKeyEnvar || hasHeaderCredential || hasCustomHeader);
-        if (!hasReplacementCredential) {
-          const safeHeaders: Record<string, string> = {};
-          for (const [name, originalValue] of Object.entries(this.config.headers)) {
-            let value = String(originalValue);
-            try {
-              if (vars) {
-                value = String(renderConfigTemplates(originalValue, vars, Object.keys(vars)));
-              }
-            } catch (error) {
-              if (!replacesHeaders && !isCredentialHeader(name, value)) {
-                throw error;
-              }
+        const safeHeaders: Record<string, string> = {};
+        for (const [name, originalValue] of Object.entries(this.config.headers)) {
+          let value = String(originalValue);
+          try {
+            if (vars) {
+              value = String(renderConfigTemplates(originalValue, vars, Object.keys(vars)));
             }
-            if (isCredentialHeader(name, value)) {
-              removedInheritedHeaders ||= value.trim().length > 0;
-              addCredential(removedHeaderCredentials, value);
-              collectConfigCredentials(value, removedHeaderCredentials);
-            } else {
-              safeHeaders[name] = value;
+          } catch (error) {
+            if (!replacesHeaders && !isCredentialHeader(name, value)) {
+              throw error;
             }
           }
-          if (!replacesHeaders) {
-            config.headers = safeHeaders;
+          if (isCredentialHeader(name, value)) {
+            removedInheritedHeaders ||= !hasReplacementCredential && value.trim().length > 0;
+            addCredential(removedHeaderCredentials, value);
+            collectConfigCredentials(value, removedHeaderCredentials);
+          } else {
+            safeHeaders[name] = value;
           }
+        }
+        if (!replacesHeaders) {
+          config.headers = safeHeaders;
         }
       }
       // Keep request credentials and lifecycle settings isolated across concurrent calls.

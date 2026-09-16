@@ -896,6 +896,77 @@ describe('OpenAiAgentsApiProvider', () => {
         });
 
         describe.each([
+          { name: 'retained key', apiKey: 'test-key', headers: {} },
+          {
+            name: 'replacement Authorization',
+            apiKey: undefined,
+            headers: { Authorization: 'Bearer offline-replacement-key' },
+          },
+          {
+            name: 'replacement gateway header',
+            apiKey: undefined,
+            headers: { 'X-Goog-Iap-Jwt-Assertion': 'offline-replacement-key' },
+          },
+          {
+            name: 'replacement key variable',
+            apiKey: undefined,
+            apiKeyEnvar: 'REPLACEMENT_KEY',
+            headers: {},
+          },
+        ])('discarded credential redaction with $name', ({ apiKey, apiKeyEnvar, headers }) => {
+          it.each(['creation', 'turn'])('redacts %s and cleanup errors', async (phase) => {
+            const credential = 'offline-discarded-opaque-credential';
+            mockProcessEnv({ REPLACEMENT_KEY: 'offline-replacement-key' });
+            mockApi((pathname, method) => {
+              if (method === 'DELETE') {
+                return apiError(400, `Cleanup failed: ${credential}`);
+              }
+              if (phase === 'creation' && method === 'POST') {
+                return apiError(400, `Invalid instructions: ${credential}`);
+              }
+              if (pathname.endsWith('/turns')) {
+                return json(
+                  page([
+                    {
+                      ...turn,
+                      status: 'failed',
+                      error: { message: `Invalid instructions: ${credential}` },
+                    },
+                  ]),
+                );
+              }
+              return undefined;
+            });
+            const result = await provider({
+              apiBaseUrl: 'https://gateway.example/v1',
+              apiKey,
+              headers: { Authorization: 'Bearer {{ credential }}' },
+              agent: { model: 'gpt-6-astra', instructions: '{{ credential }}' },
+            }).callApi('hi', {
+              ...promptContext({ ...endpointConfig, apiKeyEnvar, headers, apiKeyRequired: false }),
+              vars: { credential },
+            });
+
+            expect(result.error).toContain('Invalid instructions: [REDACTED]');
+            expect(result.error).not.toContain(credential);
+            if (phase === 'turn') {
+              expect(result.metadata?.cleanupError).toContain('Cleanup failed: [REDACTED]');
+              expect(result.metadata?.cleanupError).not.toContain(credential);
+            }
+            for (const [url, request] of vi.mocked(fetchWithRetries).mock.calls) {
+              expect(new URL(String(url)).hostname).toBe('prompt.example');
+              const requestHeaders = new Headers(request!.headers);
+              expect(requestHeaders.get('Authorization') ?? '').not.toContain(credential);
+              expect(requestHeaders.get('Authorization')).toBe(
+                'X-Goog-Iap-Jwt-Assertion' in headers
+                  ? null
+                  : `Bearer ${apiKey ?? 'offline-replacement-key'}`,
+              );
+            }
+          });
+        });
+
+        describe.each([
           'https://gateway.example/v1?api-key=offline-url-credential',
           'https://offline-user:offline-url-credential@gateway.example/v1',
           'https://gateway.example/v1?api-key=offline%2Durl%2Dcredential',
