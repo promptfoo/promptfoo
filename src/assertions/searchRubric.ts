@@ -14,12 +14,12 @@ export async function handleSearchRubric({
   test,
   providerResponse,
 }: AssertionParams): Promise<GradingResult> {
-  if (renderedValue == null) {
+  if (typeof renderedValue !== 'string') {
     throw new Error('search-rubric assertion type must have a string value');
   }
 
   const result = await matchesSearchRubric(
-    String(renderedValue),
+    renderedValue,
     providerResponse.output,
     test.options,
     test.vars,
@@ -29,6 +29,8 @@ export async function handleSearchRubric({
   );
 
   if (isGraderFailure(result)) {
+    // A broken grader is not evidence about the criterion; propagate verbatim
+    // instead of flipping a transport failure into a pass.
     return result;
   }
 

@@ -188,4 +188,25 @@ describe('OpenAiResponsesProvider HTTP metadata', () => {
       restoreEnv();
     }
   });
+
+  it('should stop a streaming response when the eval is cancelled', async () => {
+    const controller = new AbortController();
+    vi.mocked(cache.fetchWithCache).mockImplementation(async (_url, options) => {
+      const signal = options?.signal;
+      return new Promise((_resolve, reject) => {
+        signal?.addEventListener('abort', () => {
+          reject(new DOMException('The operation was aborted.', 'AbortError'));
+        });
+        queueMicrotask(() => controller.abort());
+      });
+    });
+
+    const provider = new OpenAiResponsesProvider('gpt-4o', {
+      config: { apiKey: 'test-key', stream: true },
+    });
+
+    await expect(
+      provider.callApi('Cancellable stream', undefined, { abortSignal: controller.signal }),
+    ).rejects.toMatchObject({ name: 'AbortError' });
+  });
 });

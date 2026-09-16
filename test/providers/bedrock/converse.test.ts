@@ -1269,22 +1269,22 @@ describe('AwsBedrockConverseProvider', () => {
       expect(result.cost).toBeCloseTo(0.0035, 6);
     });
 
-    it.each([
-      'us.anthropic.claude-fable-5',
-      'eu.anthropic.claude-fable-5',
-    ])('should apply the regional premium for %s', async (modelId) => {
-      const provider = new AwsBedrockConverseProvider(modelId, {
-        config: { region: 'us-east-1' },
-      });
+    it.each(['us.anthropic.claude-fable-5', 'eu.anthropic.claude-fable-5'])(
+      'should apply the regional premium for %s',
+      async (modelId) => {
+        const provider = new AwsBedrockConverseProvider(modelId, {
+          config: { region: 'us-east-1' },
+        });
 
-      mockSend.mockResolvedValueOnce(createMockConverseResponse('Response'));
+        mockSend.mockResolvedValueOnce(createMockConverseResponse('Response'));
 
-      const result = await provider.callApi('Test');
+        const result = await provider.callApi('Test');
 
-      // Geo-prefixed inference profiles bill at the 10% premium over the
-      // $10/$50 base rates: (100/1M * 11) + (50/1M * 55) = 0.00385
-      expect(result.cost).toBeCloseTo(0.00385, 6);
-    });
+        // Geo-prefixed inference profiles bill at the 10% premium over the
+        // $10/$50 base rates: (100/1M * 11) + (50/1M * 55) = 0.00385
+        expect(result.cost).toBeCloseTo(0.00385, 6);
+      },
+    );
 
     it('should apply cache pricing at base rate on the global endpoint for Claude Opus 4.8', async () => {
       // The global endpoint bills at base rate (no regional premium); regional/geo profiles
@@ -1894,36 +1894,36 @@ Third line`;
       expect(call?.inferenceConfig?.maxTokens).toBe(1024);
     });
 
-    it.each([
-      'any',
-      { tool: { name: 'test_tool' } },
-    ])('omits forced tool choice for Claude Fable 5 while preserving tools: %j', async (toolChoice) => {
-      const provider = new AwsBedrockConverseProvider('global.anthropic.claude-fable-5', {
-        config: {
-          region: 'us-east-1',
-          tools: [{ name: 'test_tool', description: 'Test' }],
-          toolChoice: toolChoice as any,
-        },
-      });
-      mockSend.mockResolvedValueOnce(createMockConverseResponse('Test'));
+    it.each(['any', { tool: { name: 'test_tool' } }])(
+      'omits forced tool choice for Claude Fable 5 while preserving tools: %j',
+      async (toolChoice) => {
+        const provider = new AwsBedrockConverseProvider('global.anthropic.claude-fable-5', {
+          config: {
+            region: 'us-east-1',
+            tools: [{ name: 'test_tool', description: 'Test' }],
+            toolChoice: toolChoice as any,
+          },
+        });
+        mockSend.mockResolvedValueOnce(createMockConverseResponse('Test'));
 
-      await provider.callApi('Test');
+        await provider.callApi('Test');
 
-      const { ConverseCommand } = (await import(
-        '@aws-sdk/client-bedrock-runtime'
-      )) as unknown as MockBedrockModule;
-      expect(ConverseCommand).toHaveBeenLastCalledWith(
-        expect.objectContaining({
-          toolConfig: expect.objectContaining({
-            tools: expect.any(Array),
+        const { ConverseCommand } = (await import(
+          '@aws-sdk/client-bedrock-runtime'
+        )) as unknown as MockBedrockModule;
+        expect(ConverseCommand).toHaveBeenLastCalledWith(
+          expect.objectContaining({
+            toolConfig: expect.objectContaining({
+              tools: expect.any(Array),
+            }),
           }),
-        }),
-      );
-      const request = (
-        ConverseCommand as unknown as { mock: { calls: unknown[][] } }
-      ).mock.calls.at(-1)?.[0] as { toolConfig?: Record<string, unknown> };
-      expect(request.toolConfig).not.toHaveProperty('toolChoice');
-    });
+        );
+        const request = (
+          ConverseCommand as unknown as { mock: { calls: unknown[][] } }
+        ).mock.calls.at(-1)?.[0] as { toolConfig?: Record<string, unknown> };
+        expect(request.toolConfig).not.toHaveProperty('toolChoice');
+      },
+    );
 
     it('warns only once per provider instance when forced tool choice is dropped for Claude Fable 5', async () => {
       const warnSpy = vi.spyOn(logger, 'warn');
@@ -1987,6 +1987,37 @@ Third line`;
         -1,
       )?.[0] as { inferenceConfig?: Record<string, unknown> };
       expect(call?.inferenceConfig?.temperature).toBe(0);
+    });
+
+    it('preserves sampling and thinking for numbered Claude inference-profile aliases', async () => {
+      const provider = new AwsBedrockConverseProvider(
+        'arn:aws:bedrock:us-east-1:123456789012:application-inference-profile/claude-prod-5',
+        {
+          config: {
+            region: 'us-east-1',
+            max_tokens: 10000,
+            temperature: 0.5,
+            topP: 0.9,
+            thinking: { type: 'enabled', budget_tokens: 8192 },
+          },
+        },
+      );
+
+      mockSend.mockResolvedValueOnce(createMockConverseResponse('Test'));
+
+      await provider.callApi('Test');
+
+      const { ConverseCommand } = (await import(
+        '@aws-sdk/client-bedrock-runtime'
+      )) as unknown as MockBedrockModule;
+      expect(ConverseCommand).toHaveBeenLastCalledWith(
+        expect.objectContaining({
+          inferenceConfig: expect.objectContaining({ temperature: 0.5, topP: 0.9 }),
+          additionalModelRequestFields: {
+            thinking: { type: 'enabled', budget_tokens: 8192 },
+          },
+        }),
+      );
     });
   });
 
@@ -2057,6 +2088,32 @@ Third line`;
         expect.objectContaining({
           guardrailConfig: {
             guardrailIdentifier: 'my-guardrail',
+            guardrailVersion: '2',
+          },
+        }),
+      );
+    });
+
+    it('should coerce numeric YAML guardrail identifiers and versions to strings', async () => {
+      const provider = new AwsBedrockConverseProvider('anthropic.claude-3-5-sonnet-20241022-v2:0', {
+        config: {
+          region: 'us-east-1',
+          guardrailIdentifier: 12345 as unknown as string,
+          guardrailVersion: 2 as unknown as string,
+        },
+      });
+
+      mockSend.mockResolvedValueOnce(createMockConverseResponse('Test'));
+
+      await provider.callApi('Test');
+
+      const { ConverseCommand } = (await import(
+        '@aws-sdk/client-bedrock-runtime'
+      )) as unknown as MockBedrockModule;
+      expect(ConverseCommand).toHaveBeenCalledWith(
+        expect.objectContaining({
+          guardrailConfig: {
+            guardrailIdentifier: '12345',
             guardrailVersion: '2',
           },
         }),
@@ -2145,6 +2202,107 @@ Third line`;
               type: 'adaptive',
             },
           },
+        }),
+      );
+    });
+
+    it('should convert manual thinking to adaptive for Claude Opus 5', async () => {
+      const provider = new AwsBedrockConverseProvider('anthropic.claude-opus-5', {
+        config: {
+          region: 'us-east-1',
+          thinking: { type: 'enabled', budget_tokens: 16000 },
+        },
+      });
+
+      mockSend.mockResolvedValueOnce(createMockConverseResponse('Test'));
+
+      await provider.callApi('Test');
+
+      const { ConverseCommand } = (await import(
+        '@aws-sdk/client-bedrock-runtime'
+      )) as unknown as MockBedrockModule;
+      expect(ConverseCommand).toHaveBeenLastCalledWith(
+        expect.objectContaining({
+          additionalModelRequestFields: { thinking: { type: 'adaptive' } },
+        }),
+      );
+    });
+
+    it('drops disabled thinking for Opus 5 when raw fields carry a capped effort', async () => {
+      // Converse has no typed effort option, but output_config.effort rides through
+      // additionalModelRequestFields — so the disabled+xhigh 400 is reachable here and the
+      // rejected `disabled` must be dropped, exactly as on the Anthropic path.
+      const provider = new AwsBedrockConverseProvider('anthropic.claude-opus-5', {
+        config: {
+          region: 'us-east-1',
+          additionalModelRequestFields: {
+            output_config: { effort: 'xhigh' },
+            thinking: { type: 'disabled' },
+          },
+        },
+      });
+      mockSend.mockResolvedValueOnce(createMockConverseResponse('Test'));
+
+      await provider.callApi('Test');
+
+      const { ConverseCommand } = (await import(
+        '@aws-sdk/client-bedrock-runtime'
+      )) as unknown as MockBedrockModule;
+      expect(ConverseCommand).toHaveBeenLastCalledWith(
+        expect.objectContaining({
+          // effort survives; only the rejected `disabled` is removed.
+          additionalModelRequestFields: { output_config: { effort: 'xhigh' } },
+        }),
+      );
+    });
+
+    it('keeps disabled thinking for Opus 5 when raw effort is within the cap', async () => {
+      const provider = new AwsBedrockConverseProvider('anthropic.claude-opus-5', {
+        config: {
+          region: 'us-east-1',
+          additionalModelRequestFields: {
+            output_config: { effort: 'high' },
+            thinking: { type: 'disabled' },
+          },
+        },
+      });
+      mockSend.mockResolvedValueOnce(createMockConverseResponse('Test'));
+
+      await provider.callApi('Test');
+
+      const { ConverseCommand } = (await import(
+        '@aws-sdk/client-bedrock-runtime'
+      )) as unknown as MockBedrockModule;
+      expect(ConverseCommand).toHaveBeenLastCalledWith(
+        expect.objectContaining({
+          additionalModelRequestFields: {
+            output_config: { effort: 'high' },
+            thinking: { type: 'disabled' },
+          },
+        }),
+      );
+    });
+
+    it('preserves disabled thinking for Claude Opus 5 (Bedrock does not send effort)', async () => {
+      // Opus 5 rejects `thinking: disabled` only at effort xhigh/max, and the Bedrock path
+      // never forwards `output_config.effort` — so the API sees the default effort (`high`)
+      // and `disabled` is valid. Dropping it here would needlessly re-enable thinking.
+      const provider = new AwsBedrockConverseProvider('anthropic.claude-opus-5', {
+        config: {
+          region: 'us-east-1',
+          additionalModelRequestFields: { top_k: 40, thinking: { type: 'disabled' } },
+        },
+      });
+      mockSend.mockResolvedValueOnce(createMockConverseResponse('Test'));
+
+      await provider.callApi('Test');
+
+      const { ConverseCommand } = (await import(
+        '@aws-sdk/client-bedrock-runtime'
+      )) as unknown as MockBedrockModule;
+      expect(ConverseCommand).toHaveBeenLastCalledWith(
+        expect.objectContaining({
+          additionalModelRequestFields: { thinking: { type: 'disabled' } },
         }),
       );
     });
@@ -2432,9 +2590,9 @@ Third line`;
 
       const result = await provider.callApi('Test');
 
-      // Llama 3.3 70B: $0.99/MTok both
-      // (10000/1M * 0.99) + (5000/1M * 0.99) = 0.0099 + 0.00495 = 0.01485
-      expect(result.cost).toBeCloseTo(0.01485, 4);
+      // Llama 3.3 70B: $0.72/MTok both (AWS Price List, us-east-1 on-demand)
+      // (10000/1M * 0.72) + (5000/1M * 0.72) = 0.0072 + 0.0036 = 0.0108
+      expect(result.cost).toBeCloseTo(0.0108, 4);
     });
 
     it('should return undefined cost for unknown models', async () => {
@@ -2913,34 +3071,37 @@ Third line`;
       );
     });
 
-    it.each([
-      { tool: null },
-      { tool: {} },
-    ])('should fall back to auto for malformed native toolChoice objects: %j', async (toolChoice) => {
-      mockSend.mockReset();
-      const provider = new AwsBedrockConverseProvider('anthropic.claude-3-5-sonnet-20241022-v2:0', {
-        config: {
-          region: 'us-east-1',
-          tools: [{ name: 'test_tool', description: 'Test' }],
-          toolChoice: toolChoice as any,
-        },
-      });
+    it.each([{ tool: null }, { tool: {} }])(
+      'should fall back to auto for malformed native toolChoice objects: %j',
+      async (toolChoice) => {
+        mockSend.mockReset();
+        const provider = new AwsBedrockConverseProvider(
+          'anthropic.claude-3-5-sonnet-20241022-v2:0',
+          {
+            config: {
+              region: 'us-east-1',
+              tools: [{ name: 'test_tool', description: 'Test' }],
+              toolChoice: toolChoice as any,
+            },
+          },
+        );
 
-      mockSend.mockResolvedValueOnce(createMockConverseResponse('Test'));
+        mockSend.mockResolvedValueOnce(createMockConverseResponse('Test'));
 
-      await provider.callApi('Test');
+        await provider.callApi('Test');
 
-      const { ConverseCommand } = (await import(
-        '@aws-sdk/client-bedrock-runtime'
-      )) as unknown as MockBedrockModule;
-      expect(ConverseCommand).toHaveBeenCalledWith(
-        expect.objectContaining({
-          toolConfig: expect.objectContaining({
-            toolChoice: { auto: {} },
+        const { ConverseCommand } = (await import(
+          '@aws-sdk/client-bedrock-runtime'
+        )) as unknown as MockBedrockModule;
+        expect(ConverseCommand).toHaveBeenCalledWith(
+          expect.objectContaining({
+            toolConfig: expect.objectContaining({
+              toolChoice: { auto: {} },
+            }),
           }),
-        }),
-      );
-    });
+        );
+      },
+    );
 
     it('should handle toolSpec format directly', async () => {
       mockSend.mockReset();

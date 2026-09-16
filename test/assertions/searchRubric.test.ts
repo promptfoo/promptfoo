@@ -49,15 +49,20 @@ describe('handleSearchRubric', () => {
     renderedValue: 'Contains outdated information',
   };
 
-  it('should throw error when renderedValue is undefined', async () => {
-    const params: AssertionParams = {
-      ...defaultParams,
-      renderedValue: undefined,
-    };
+  it.each([
+    { renderedValue: undefined },
+    { renderedValue: null },
+    { renderedValue: 123 },
+    { renderedValue: false },
+    { renderedValue: { rubric: 'test' } },
+    { renderedValue: ['test'] },
+  ])('rejects non-string rubric %j before calling the grader', async ({ renderedValue }) => {
+    const params = { ...defaultParams, renderedValue } as AssertionParams;
 
     await expect(handleSearchRubric(params)).rejects.toThrow(
       'search-rubric assertion type must have a string value',
     );
+    expect(mockMatchesSearchRubric).not.toHaveBeenCalled();
   });
 
   it('should call matchesSearchRubric with correct parameters', async () => {
@@ -220,6 +225,37 @@ describe('handleSearchRubric', () => {
     expect(result.pass).toBe(true);
     expect(result.reason).toContain('does not require web search verification');
   });
+
+  it.each([false, true])(
+    'preserves the full grader failure result (inverse=%s)',
+    async (inverse) => {
+      const params: AssertionParams = {
+        ...defaultParams,
+        assertion: {
+          ...defaultParams.assertion,
+          type: inverse ? 'not-search-rubric' : 'search-rubric',
+        },
+        inverse,
+        renderedValue: 'Contains outdated information',
+      };
+
+      const errorResult: GradingResult = {
+        assertion: params.assertion,
+        pass: false,
+        score: 0,
+        reason: 'Search rubric evaluation failed: Request timed out',
+        tokensUsed: { total: 5, prompt: 3, completion: 2 },
+        metadata: { graderError: true },
+      };
+
+      // Keep the expected result independent so an in-place mutation cannot hide a regression.
+      mockMatchesSearchRubric.mockResolvedValue(structuredClone(errorResult));
+
+      const result = await handleSearchRubric(params);
+
+      expect(result).toEqual(errorResult);
+    },
+  );
 
   it('should pass provider to matchesSearchRubric', async () => {
     const mockProvider = createMockProvider();
