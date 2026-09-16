@@ -75,7 +75,7 @@ class PromptTemplate:
     );
     fs.writeFileSync(
       path.join(stubRoot, 'langchain_openai.py'),
-      'class OpenAI:\n    def __init__(self, **_kwargs):\n        pass\n',
+      'class ChatOpenAI:\n    def __init__(self, *, model, temperature, api_key):\n        pass\n',
     );
   });
 

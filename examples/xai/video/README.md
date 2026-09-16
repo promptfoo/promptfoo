@@ -9,6 +9,15 @@ cd xai/video
 
 This example demonstrates video generation using xAI's Grok Imagine API.
 
+## Models
+
+| Provider ID                        | Price per second |
+| ---------------------------------- | ---------------- |
+| `xai:video:grok-imagine-video`     | $0.050           |
+| `xai:video:grok-imagine-video-1.5` | $0.080           |
+
+`grok-imagine-video-1.5` is the latest video model. Its `grok-imagine-video-1.5-preview` and `grok-imagine-video-1.5-2026-05-30` aliases resolve to the same model and are billed at the same rate.
+
 ## Setup
 
 1. Set your xAI API key:
