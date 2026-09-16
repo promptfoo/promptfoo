@@ -774,6 +774,118 @@ describe('OpenAiAgentsApiProvider', () => {
       },
     );
 
+    describe.each([{ apiBaseUrl: 'https://prompt.example/v1' }, { apiHost: 'prompt.example' }])(
+      'endpoint header isolation with %j',
+      (endpointConfig) => {
+        const fakeJwt = 'eyJhbGciOiJub25lIn0.eyJzdWIiOiJvZmZsaW5lIn0.offline';
+        const inheritedHeaders = {
+          'X-Goog-Iap-Jwt-Assertion': fakeJwt,
+          'X-Custom-Gateway': 'opaque-offline-credential',
+          'X-Tenant-Id': 'tenant-a',
+          'Content-Type': 'application/json',
+          'User-Agent': 'promptfoo-test',
+        };
+
+        it.each([false, true])(
+          'filters credential values after rendering: %s',
+          async (templated) => {
+            const agentProvider = provider({
+              apiBaseUrl: 'https://gateway.example/v1',
+              headers: {
+                ...inheritedHeaders,
+                'X-Organization-Id': templated ? '{{credential}}' : 'Bearer offline-gateway-key',
+              },
+            });
+            const result = await agentProvider.callApi('hi', {
+              ...promptContext(endpointConfig),
+              vars: { credential: 'Bearer offline-gateway-key' },
+            });
+
+            expect(result.output).toBe('42');
+            expect(result.metadata?.sessionDeleted).toBe(true);
+            expect(calls().length).toBeGreaterThan(1);
+            for (const [url, request] of vi.mocked(fetchWithRetries).mock.calls) {
+              expect(new URL(String(url)).hostname).toBe('prompt.example');
+              const headers = new Headers(request!.headers);
+              expect(headers.get('X-Goog-Iap-Jwt-Assertion')).toBeNull();
+              expect(headers.get('X-Custom-Gateway')).toBeNull();
+              expect(headers.get('X-Organization-Id')).toBeNull();
+              expect(headers.get('X-Tenant-Id')).toBe('tenant-a');
+              expect(headers.get('Content-Type')).toBe('application/json');
+              expect(headers.get('User-Agent')).toBe('promptfoo-test');
+            }
+
+            vi.mocked(fetchWithRetries).mockClear();
+            expect((await agentProvider.callApi('hi')).output).toBe('42');
+            for (const [url, request] of vi.mocked(fetchWithRetries).mock.calls) {
+              expect(new URL(String(url)).hostname).toBe('gateway.example');
+              expect(new Headers(request!.headers).get('X-Goog-Iap-Jwt-Assertion')).toBe(fakeJwt);
+            }
+          },
+        );
+
+        it.each([{}, { 'X-Goog-Iap-Jwt-Assertion': 'explicit-replacement-credential' }])(
+          'respects explicitly supplied replacement headers %j',
+          async (headers) => {
+            const result = await provider({
+              apiBaseUrl: 'https://gateway.example/v1',
+              headers: inheritedHeaders,
+            }).callApi('hi', promptContext({ ...endpointConfig, headers }));
+
+            expect(result.output).toBe('42');
+            for (const [, request] of vi.mocked(fetchWithRetries).mock.calls) {
+              const requestHeaders = new Headers(request!.headers);
+              expect(requestHeaders.get('X-Goog-Iap-Jwt-Assertion')).toBe(
+                headers['X-Goog-Iap-Jwt-Assertion'] ?? null,
+              );
+              expect(requestHeaders.get('X-Custom-Gateway')).toBeNull();
+              expect(requestHeaders.get('X-Tenant-Id')).toBeNull();
+            }
+          },
+        );
+
+        it.each([false, true])(
+          'isolates headers without an explicit API key: %s',
+          async (ambient) => {
+            if (ambient) {
+              mockProcessEnv({ OPENAI_API_KEY: 'offline-ambient-key' });
+            }
+            const result = await new OpenAiAgentsApiProvider('', {
+              config: {
+                apiBaseUrl: 'https://gateway.example/v1',
+                apiKeyRequired: ambient,
+                headers: inheritedHeaders,
+              },
+            }).callApi('hi', promptContext(endpointConfig));
+
+            expect(result.output).toBe('42');
+            for (const [, request] of vi.mocked(fetchWithRetries).mock.calls) {
+              expect(new Headers(request!.headers).get('X-Goog-Iap-Jwt-Assertion')).toBeNull();
+            }
+          },
+        );
+
+        it('keeps inherited credentials out of failure and cleanup requests', async () => {
+          mockApi((pathname) =>
+            pathname.endsWith('/turns')
+              ? json(page([{ ...turn, status: 'failed', error: { message: 'stopped' } }]))
+              : undefined,
+          );
+          const result = await provider({
+            apiBaseUrl: 'https://gateway.example/v1',
+            headers: inheritedHeaders,
+          }).callApi('hi', promptContext(endpointConfig));
+
+          expect(result.error).toContain('turn failed: stopped');
+          expect(result.metadata?.sessionDeleted).toBe(true);
+          expect(calls().at(-1)?.method).toBe('DELETE');
+          for (const [, request] of vi.mocked(fetchWithRetries).mock.calls) {
+            expect(new Headers(request!.headers).get('X-Goog-Iap-Jwt-Assertion')).toBeNull();
+          }
+        });
+      },
+    );
+
     it('redacts both provider and prompt credentials after group overrides', async () => {
       mockProcessEnv({ PROMPT_OPENAI_KEY: 'prompt-envar-key' });
       vi.mocked(fetchWithRetries).mockResolvedValueOnce(
@@ -1917,7 +2029,7 @@ describe('OpenAiAgentsApiProvider', () => {
     it('drops inherited credential headers when a prompt changes endpoints', async () => {
       await provider({
         apiBaseUrl: 'https://gateway.example/v1',
-        headers: { 'X-Gateway-Auth': 'gateway-secret', 'X-Tenant': 'tenant-a' },
+        headers: { 'X-Gateway-Auth': 'gateway-secret', 'X-Tenant-Id': 'tenant-a' },
       }).callApi('hi', {
         vars: {},
         prompt: {
@@ -1928,7 +2040,7 @@ describe('OpenAiAgentsApiProvider', () => {
       });
       const headers = new Headers(vi.mocked(fetchWithRetries).mock.calls[0][1]?.headers);
       expect(headers.get('X-Gateway-Auth')).toBeNull();
-      expect(headers.get('X-Tenant')).toBe('tenant-a');
+      expect(headers.get('X-Tenant-Id')).toBe('tenant-a');
     });
 
     it('propagates eval cancellation while reading subagent turns', async () => {

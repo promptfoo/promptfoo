@@ -6,6 +6,7 @@ import {
   isSecretField,
   looksLikeSecret,
   REDACTED,
+  sanitizeObject,
   sanitizeUrlForLogging,
 } from '../../util/sanitizer';
 import { analyzeTemplateReference } from '../../util/templates';
@@ -727,17 +728,8 @@ export class OpenAiAgentsApiProvider extends OpenAiGenericProvider {
     const promptConfig = context?.prompt?.config;
     const endpointOverride =
       promptConfig?.apiBaseUrl !== undefined || promptConfig?.apiHost !== undefined;
-    const inheritedHeaders =
-      endpointOverride && promptConfig?.headers === undefined
-        ? Object.fromEntries(
-            Object.entries(this.config.headers ?? {}).filter(
-              ([name]) => !isCredentialName(name) && !/(?:^|[-_])auth(?:$|[-_])/i.test(name),
-            ),
-          )
-        : this.config.headers;
     const mergedConfig = {
       ...this.config,
-      ...(endpointOverride && { headers: inheritedHeaders }),
       ...(promptConfig?.apiBaseUrl !== undefined && { apiHost: undefined }),
       ...(promptConfig?.apiHost !== undefined && { apiBaseUrl: undefined }),
       ...(promptConfig?.apiKeyEnvar !== undefined && { apiKey: undefined }),
@@ -751,6 +743,17 @@ export class OpenAiAgentsApiProvider extends OpenAiGenericProvider {
       const vars = context?.vars;
       if (vars) {
         config = renderConfigTemplates(mergedConfig, vars, Object.keys(vars)) as AgentsApiOptions;
+      }
+      if (endpointOverride && promptConfig?.headers === undefined && config.headers) {
+        const sanitizedHeaders = sanitizeObject({ headers: config.headers }).headers;
+        config.headers = Object.fromEntries(
+          Object.entries(config.headers).filter(
+            ([name]) =>
+              !isCredentialName(name) &&
+              !/(?:^|[-_])auth(?:$|[-_])/i.test(name) &&
+              sanitizedHeaders[name] !== REDACTED,
+          ),
+        );
       }
       // Keep request credentials and lifecycle settings isolated across concurrent calls.
       const callProvider = new OpenAiAgentsApiProvider(this.modelOverride, {
