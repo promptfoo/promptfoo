@@ -5,6 +5,7 @@ import {
 } from '@asteasolutions/zod-to-openapi';
 import { describe, expect, it } from 'vitest';
 import { z } from 'zod';
+import { HttpProviderConfigFieldsSchema } from '../../src/contracts/providerConfig/http';
 import { McpConfigInputSchema } from '../../src/contracts/providerConfig/mcp';
 
 extendZodWithOpenApi(z);
@@ -17,6 +18,29 @@ function generateSchemas(registry: OpenAPIRegistry) {
 }
 
 describe('zod-to-openapi compatibility', () => {
+  it('preserves HTTP field descriptions and parser deprecation metadata', () => {
+    const registry = new OpenAPIRegistry();
+    registry.register(
+      'HttpConfigMetadata',
+      HttpProviderConfigFieldsSchema.pick({
+        auth: true,
+        headers: true,
+        responseParser: true,
+      }),
+    );
+    expect(generateSchemas(registry)?.HttpConfigMetadata).toMatchObject({
+      properties: {
+        auth: { anyOf: expect.any(Array) },
+        headers: { description: expect.stringContaining('support templates') },
+        responseParser: {
+          type: 'string',
+          deprecated: true,
+          description: 'Deprecated alias for transformResponse',
+        },
+      },
+    });
+  });
+
   it('preserves MCP descriptions and deprecation without inventing timeout defaults', () => {
     const registry = new OpenAPIRegistry();
     registry.registerPath({

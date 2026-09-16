@@ -12,6 +12,16 @@ export {
   McpAuthSchema,
 } from './providerConfig/auth.js';
 export {
+  type HttpProviderConfigInput,
+  HttpProviderConfigInputJsonSchema,
+  HttpProviderConfigInputSchema,
+} from './providerConfig/http.js';
+export {
+  type HttpAuthInput,
+  HttpAuthInputJsonSchema,
+  HttpAuthInputSchema,
+} from './providerConfig/httpAuth.js';
+export {
   type McpConfig,
   type McpConfigInput,
   McpConfigInputJsonSchema,
