@@ -109,6 +109,8 @@ interface FilteredBasicMetricsRow {
   total_score: number;
   total_latency: number;
   total_cost: number;
+  has_incurred_cost: number;
+  total_incurred_cost: number | null;
   total_tokens: number | null;
   prompt_tokens: number | null;
   completion_tokens: number | null;
@@ -320,6 +322,7 @@ async function calculateWithOptimizedQuery(opts: FilteredMetricsOptions): Promis
   const incurredGradingPath = '$.tokensUsed.incurredTokenUsage';
   const gradingCachePath = '$.metadata.cachedResponse';
   const responseCachePath = '$.cached';
+  const incurredCostPath = '$.incurredCost';
   const incurredTargetUsage = (field: TokenUsageField) =>
     jsonIncurredUsageField(response, targetPath, incurredTargetPath, field, {
       cachedResponsePath: responseCachePath,
@@ -350,6 +353,22 @@ async function calculateWithOptimizedQuery(opts: FilteredMetricsOptions): Promis
       SUM(score) as total_score,
       SUM(latency_ms) as total_latency,
       SUM(cost) as total_cost,
+      SUM(
+        CASE
+          WHEN json_extract(response, ${incurredCostPath}) IS NOT NULL
+            OR COALESCE(json_extract(response, ${responseCachePath}), 0) = 1
+          THEN 1
+          ELSE 0
+        END
+      ) as has_incurred_cost,
+      SUM(
+        CASE
+          WHEN json_extract(response, ${incurredCostPath}) IS NOT NULL
+          THEN CAST(json_extract(response, ${incurredCostPath}) AS REAL)
+          WHEN COALESCE(json_extract(response, ${responseCachePath}), 0) = 1 THEN 0
+          ELSE COALESCE(cost, 0)
+        END
+      ) as total_incurred_cost,
       -- Token usage aggregation (token usage is inside response JSON)
       SUM(${jsonUsageTotal(response, targetPath)}) as total_tokens,
       SUM(${jsonUsageNumber(response, targetPath, 'prompt')}) as prompt_tokens,
@@ -439,6 +458,7 @@ async function calculateWithOptimizedQuery(opts: FilteredMetricsOptions): Promis
       testErrorCount: row.error_count || 0,
       totalLatencyMs: row.total_latency || 0,
       cost: row.total_cost || 0,
+      ...(row.has_incurred_cost > 0 && { incurredCost: row.total_incurred_cost || 0 }),
       tokenUsage: getFilteredTokenUsage(row),
       namedScores: {},
       namedScoresCount: {},
