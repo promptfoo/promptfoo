@@ -75,9 +75,10 @@ the same `not_found_error` a retired model returns.
 ### Retired on the Anthropic API
 
 These IDs return `404 not_found_error` from Anthropic. Promptfoo still accepts them — they
-remain valid on AWS Bedrock, GCP Vertex, and OpenAI-compatible gateways, which set their own
-lifecycle dates, and cost attribution for historical evals needs the rates — but a direct
-`anthropic:messages:` call will fail.
+remain valid on GCP Vertex and OpenAI-compatible gateways, which set their own lifecycle
+dates, and cost attribution for historical evals needs the rates — but a direct
+`anthropic:messages:` call will fail. AWS Bedrock has since withdrawn some of them; see
+[Cross-Platform Model Availability](#cross-platform-model-availability).
 
 | Model ID                     | Description            | Suggested replacement |
 | ---------------------------- | ---------------------- | --------------------- |
@@ -124,12 +125,12 @@ Claude models are available across multiple platforms. Here's how the model name
 | Claude 4.5 Sonnet | claude-sonnet-4-5-20250929 (claude-sonnet-4-5) | claude-sonnet-4-5-20250929                                            | anthropic.claude-sonnet-4-5-20250929-v1:0         | claude-sonnet-4-5@20250929                     |
 | Claude 4.5 Haiku  | claude-haiku-4-5-20251001 (claude-haiku-4-5)   | claude-haiku-4-5-20251001                                             | anthropic.claude-haiku-4-5-20251001-v1:0          | claude-haiku-4-5@20251001                      |
 | Claude 4.1 Opus   | Retired on the direct API                      | claude-opus-4-1-20250805                                              | anthropic.claude-opus-4-1-20250805-v1:0           | claude-opus-4-1@20250805                       |
-| Claude 4 Opus     | Retired on the direct API                      | claude-opus-4-20250514                                                | anthropic.claude-opus-4-20250514-v1:0             | claude-opus-4@20250514                         |
+| Claude 4 Opus     | Retired on the direct API                      | claude-opus-4-20250514                                                | Withdrawn from Bedrock                            | claude-opus-4@20250514                         |
 | Claude 4 Sonnet   | Retired on the direct API                      | claude-sonnet-4-20250514                                              | anthropic.claude-sonnet-4-20250514-v1:0           | claude-sonnet-4@20250514                       |
 | Claude 3.7 Sonnet | Retired on the direct API                      | claude-3-7-sonnet-20250219                                            | anthropic.claude-3-7-sonnet-20250219-v1:0         | claude-3-7-sonnet@20250219                     |
 | Claude 3.5 Sonnet | Retired on the direct API                      | claude-3-5-sonnet-20241022                                            | anthropic.claude-3-5-sonnet-20241022-v2:0         | claude-3-5-sonnet-v2@20241022                  |
-| Claude 3.5 Haiku  | Retired on the direct API                      | claude-3-5-haiku-20241022                                             | anthropic.claude-3-5-haiku-20241022-v1:0          | claude-3-5-haiku@20241022                      |
-| Claude 3 Opus     | Retired on the direct API                      | claude-3-opus-20240229                                                | anthropic.claude-3-opus-20240229-v1:0             | claude-3-opus@20240229                         |
+| Claude 3.5 Haiku  | Retired on the direct API                      | claude-3-5-haiku-20241022                                             | Withdrawn from Bedrock                            | claude-3-5-haiku@20241022                      |
+| Claude 3 Opus     | Retired on the direct API                      | claude-3-opus-20240229                                                | Withdrawn from Bedrock                            | claude-3-opus@20240229                         |
 | Claude 3 Haiku    | Retired on the direct API                      | claude-3-haiku-20240307                                               | anthropic.claude-3-haiku-20240307-v1:0            | claude-3-haiku@20240307                        |
 
 ### Supported Parameters

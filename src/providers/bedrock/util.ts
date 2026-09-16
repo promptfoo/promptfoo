@@ -4,6 +4,14 @@ import { getEnvString } from '../../envars';
 
 const REQUEST_TIMEOUT_MS = 300_000; // 5 minutes
 
+/**
+ * Matches the geo/global prefix of a system-defined inference profile ID, e.g. the
+ * `us.` in `us.anthropic.claude-sonnet-4-6`.
+ *
+ * See https://docs.aws.amazon.com/bedrock/latest/userguide/inference-profiles-support.html
+ */
+export const INFERENCE_PROFILE_PREFIX = /^(?:us|eu|apac|global|jp|au)\./;
+
 export function hasProxyEnv(): boolean {
   return Boolean(getEnvString('HTTP_PROXY') || getEnvString('HTTPS_PROXY'));
 }
