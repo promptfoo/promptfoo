@@ -612,6 +612,11 @@ async function runRedteamConversation({
   let bestScore = 0;
   let noImprovementCount = 0;
   let storedGraderResult: GradingResult | undefined = undefined;
+  let bestGraderResult: GradingResult | undefined;
+  const getBestGraderResult = () =>
+    bestGraderResult
+      ? { ...bestGraderResult, tokensUsed: storedGraderResult?.tokensUsed }
+      : storedGraderResult;
 
   const totalTokenUsage: TokenUsage = createEmptyTokenUsage();
 
@@ -690,7 +695,7 @@ async function runRedteamConversation({
               attempts,
               redteamTreeHistory: treeOutputs,
               stopReason: 'ATTACKER_ERROR',
-              storedGraderResult,
+              storedGraderResult: getBestGraderResult(),
               sessionIds: extractSessionIds(treeOutputs),
             },
             tokenUsage: totalTokenUsage,
@@ -1013,10 +1018,24 @@ async function runRedteamConversation({
               undefined, // skipRefusalCheck
               gradingContext,
             );
-            storedGraderResult = accumulateGraderResult(storedGraderResult, {
-              ...grade,
-              assertion: buildGraderResultAssertion(grade.assertion, assertToUse, rubric),
-            });
+            storedGraderResult = accumulateGraderResult(
+              storedGraderResult,
+              {
+                ...grade,
+                assertion: buildGraderResultAssertion(grade.assertion, assertToUse, rubric),
+              },
+              {
+                prompt: finalInjectVar,
+                output: targetResponse.output,
+                pluginId: test.metadata?.pluginId,
+              },
+            );
+            if (
+              targetResponse.output === bestResponse &&
+              finalInjectVar === bestFinalAttackPrompt
+            ) {
+              bestGraderResult = storedGraderResult;
+            }
             graderPassed = grade.pass;
           }
         }
@@ -1044,10 +1063,10 @@ async function runRedteamConversation({
           });
           return {
             output: targetResponse.output,
-            prompt: bestNode.prompt,
+            prompt: newInjectVar,
             metadata: {
               highestScore: maxScore,
-              redteamFinalPrompt: bestFinalAttackPrompt || lastFinalAttackPrompt || bestNode.prompt,
+              redteamFinalPrompt: finalInjectVar,
               messages: treeOutputs as Record<string, any>[],
               attempts,
               redteamTreeHistory: treeOutputs,
@@ -1095,7 +1114,7 @@ async function runRedteamConversation({
               attempts,
               redteamTreeHistory: treeOutputs,
               stopReason: stoppingReason,
-              storedGraderResult,
+              storedGraderResult: getBestGraderResult(),
               sessionIds: extractSessionIds(treeOutputs),
               ...((bestTransformDisplayVars || lastTransformDisplayVars) && {
                 transformDisplayVars: bestTransformDisplayVars || lastTransformDisplayVars,
@@ -1139,7 +1158,7 @@ async function runRedteamConversation({
               attempts,
               redteamTreeHistory: treeOutputs,
               stopReason: stoppingReason,
-              storedGraderResult,
+              storedGraderResult: getBestGraderResult(),
               sessionIds: extractSessionIds(treeOutputs),
               ...((bestTransformDisplayVars || lastTransformDisplayVars) && {
                 transformDisplayVars: bestTransformDisplayVars || lastTransformDisplayVars,
@@ -1286,7 +1305,7 @@ async function runRedteamConversation({
       attempts,
       redteamTreeHistory: treeOutputs,
       stopReason: stoppingReason,
-      storedGraderResult,
+      storedGraderResult: getBestGraderResult(),
       sessionIds: extractSessionIds(treeOutputs),
       ...((bestTransformDisplayVars || lastTransformDisplayVars) && {
         transformDisplayVars: bestTransformDisplayVars || lastTransformDisplayVars,

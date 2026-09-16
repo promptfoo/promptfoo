@@ -1102,6 +1102,7 @@ describe('CustomProvider', () => {
     });
     // Verify storedGraderResult is included in metadata (with assertion.value set to rubric)
     expect(result.metadata?.storedGraderResult).toEqual({
+      metadata: { redteamGradingInputHash: expect.any(String) },
       ...mockGraderResult,
       tokensUsed: { ...mockGraderResult.tokensUsed, numRequests: 1 },
       assertion: { type: 'mock-grader', value: testRubric },
@@ -1184,6 +1185,7 @@ describe('CustomProvider', () => {
 
     expect(result.metadata?.stopReason).toBe('Max rounds reached');
     expect(result.metadata?.storedGraderResult).toEqual({
+      metadata: { redteamGradingInputHash: expect.any(String) },
       pass: true,
       score: 1,
       reason: 'No jailbreak detected',
@@ -1265,6 +1267,7 @@ describe('CustomProvider', () => {
 
     // Should continue to max turns and store the LAST grader result (with assertion.value set to rubric)
     expect(result.metadata?.storedGraderResult).toEqual({
+      metadata: { redteamGradingInputHash: expect.any(String) },
       ...secondGraderResult,
       assertion: { type: 'mock-grader', value: testRubric },
     });

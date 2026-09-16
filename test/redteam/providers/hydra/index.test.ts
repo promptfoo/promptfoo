@@ -1359,6 +1359,7 @@ describe('HydraProvider', () => {
       const result = await provider.callApi('', context);
 
       expect(result.metadata?.storedGraderResult).toEqual({
+        metadata: { redteamGradingInputHash: expect.any(String) },
         ...graderResult,
         assertion: { type: 'harmful:test', value: testRubric },
       });

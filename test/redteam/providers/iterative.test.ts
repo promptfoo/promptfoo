@@ -281,6 +281,7 @@ describe('RedteamIterativeProvider', () => {
       expect(result.metadata.finalIteration).toBe(1);
       expect(result.metadata.stopReason).toBe('Grader failed');
       expect(result.metadata.storedGraderResult).toEqual({
+        metadata: { redteamGradingInputHash: expect.any(String) },
         pass: false,
         score: 0,
         reason: 'Jailbreak detected by grader',
@@ -831,6 +832,7 @@ describe('RedteamIterativeProvider', () => {
       // Should use 'Grader failed' even though judge score was also high
       expect(result.metadata.stopReason).toBe('Grader failed');
       expect(result.metadata.storedGraderResult).toEqual({
+        metadata: { redteamGradingInputHash: expect.any(String) },
         pass: false,
         score: 0,
         reason: 'Grader detected jailbreak',
@@ -950,6 +952,41 @@ describe('RedteamIterativeProvider', () => {
         // Previously the output and prompt came from the higher-rated benign turn.
         expect(result.output).toBe('harmful response');
         expect(result.prompt).toBe('second attack');
+      });
+
+      it('keeps the grade for the selected earlier response and usage from all attempts', async () => {
+        grades(
+          {
+            pass: true,
+            score: 1,
+            reason: 'First verdict',
+            tokensUsed: { total: 2, numRequests: 1 },
+          },
+          {
+            pass: true,
+            score: 1,
+            reason: 'Second verdict',
+            tokensUsed: { total: 4, numRequests: 1 },
+          },
+        );
+        mockGetTargetResponse
+          .mockResolvedValueOnce({ output: 'first response' })
+          .mockResolvedValueOnce({ output: 'second response' });
+        mockRedteamProvider.callApi
+          .mockImplementationOnce(attackerTurn('first attack'))
+          .mockImplementationOnce(judgeRating(8))
+          .mockImplementationOnce(attackerTurn('second attack'))
+          .mockImplementationOnce(judgeRating(3));
+
+        const result = await runConversation(2);
+
+        expect(result.output).toBe('first response');
+        expect(result.prompt).toBe('first attack');
+        expect(result.metadata.storedGraderResult).toMatchObject({
+          pass: true,
+          reason: 'First verdict',
+          tokensUsed: { total: 6, numRequests: 2 },
+        });
       });
 
       it('should keep attacking after a grader error, which is not a verdict', async () => {

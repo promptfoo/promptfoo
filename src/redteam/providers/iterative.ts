@@ -213,6 +213,7 @@ export async function runRedteamConversation({
   let bestInjectVar: string | undefined = undefined;
   let targetPrompt: string | null = null;
   let storedGraderResult: GradingResult | undefined = undefined;
+  let bestGraderResult: GradingResult | undefined;
   let stopReason: StopReason = 'Max iterations reached';
 
   const sessionIds: string[] = [];
@@ -634,10 +635,18 @@ export async function runRedteamConversation({
           undefined,
           gradingContext,
         );
-        storedGraderResult = accumulateGraderResult(storedGraderResult, {
-          ...grade,
-          assertion: buildGraderResultAssertion(grade.assertion, assertToUse, rubric),
-        });
+        storedGraderResult = accumulateGraderResult(
+          storedGraderResult,
+          {
+            ...grade,
+            assertion: buildGraderResultAssertion(grade.assertion, assertToUse, rubric),
+          },
+          {
+            prompt: finalInjectVar,
+            output: targetResponse.output,
+            pluginId: test.metadata?.pluginId,
+          },
+        );
       }
     }
 
@@ -680,7 +689,8 @@ export async function runRedteamConversation({
       stopReason = 'Grader failed';
       finalIteration = i + 1;
       bestResponse = targetResponse.output;
-      bestInjectVar = newInjectVar;
+      bestInjectVar = finalInjectVar;
+      bestGraderResult = storedGraderResult;
       recordTurn(undefined, tracingOptions.includeInAttack ? computedTraceSummary : undefined);
       break;
     }
@@ -776,7 +786,8 @@ export async function runRedteamConversation({
       if (currentScore > highestScore) {
         highestScore = currentScore;
         bestResponse = targetResponse.output;
-        bestInjectVar = newInjectVar;
+        bestInjectVar = finalInjectVar;
+        bestGraderResult = storedGraderResult;
       }
 
       // Check if we should exit early (but don't break yet). A real failing grade already
@@ -854,7 +865,9 @@ export async function runRedteamConversation({
       highestScore,
       redteamHistory: previousOutputs,
       redteamFinalPrompt: bestInjectVar,
-      storedGraderResult,
+      storedGraderResult: bestGraderResult
+        ? { ...bestGraderResult, tokensUsed: storedGraderResult?.tokensUsed }
+        : storedGraderResult,
       stopReason: stopReason,
       sessionIds,
       traceSnapshots:

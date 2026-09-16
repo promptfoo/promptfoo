@@ -1,12 +1,17 @@
 import logger from '../logger';
 import { MULTI_INPUT_VAR } from '../redteam/constants';
 import { getGraderById } from '../redteam/graders';
+import { getGradingInputHash } from '../redteam/grading/storedResult';
+import { isAttackProvider } from '../redteam/shared/attackProviders';
 import { checkExfilTracking } from '../redteam/strategies/indirectWebPwn';
+import { isApiProvider, isProviderOptions } from '../types/providers';
 import invariant from '../util/invariant';
+import { accumulateTokenUsage, cloneTokenUsageBreakdown } from '../util/tokenUsageUtils';
 import { summarizeTrajectoryForJudge } from './trajectoryUtils';
 
 import type { RedteamGradingContext } from '../redteam/grading/types';
 import type {
+  ApiProvider,
   Assertion,
   AssertionParams,
   AtomicTestCase,
@@ -39,8 +44,39 @@ function analyzeGraderErrors(redteamHistory: Array<{ graderError?: string }> | u
 function matchesStoredGraderResult(
   assertion: Assertion,
   storedResult: GradingResult,
-  pluginId: string | undefined,
+  test: AtomicTestCase,
+  provider: ApiProvider | undefined,
 ): boolean {
+  const pluginId = test.metadata?.pluginId;
+  const configuredProvider = test.provider ?? provider;
+  const providerId =
+    typeof configuredProvider === 'string'
+      ? configuredProvider
+      : isApiProvider(configuredProvider)
+        ? configuredProvider.id()
+        : isProviderOptions(configuredProvider)
+          ? configuredProvider.id
+          : undefined;
+
+  // A target can return arbitrary metadata. Only the configured attack executor
+  // may supply a reusable grade; a marker in the response is not provenance.
+  if (
+    !pluginId ||
+    !test.metadata?.strategyId ||
+    !providerId?.startsWith('promptfoo:redteam:') ||
+    !isAttackProvider(providerId) ||
+    typeof storedResult.metadata?.redteamGradingInputHash !== 'string'
+  ) {
+    return false;
+  }
+  const pluginAssertionType = `promptfoo:redteam:${pluginId}`;
+  if (
+    assertion.type !== pluginAssertionType &&
+    assertion.type !== getGraderById(pluginAssertionType)?.id
+  ) {
+    return false;
+  }
+
   // Strategies preserve the assertion they actually graded. Plugin IDs can name a
   // subcategory (pii:social) while its assertion names a shared grader (pii).
   if (storedResult.assertion?.type) {
@@ -51,23 +87,14 @@ function matchesStoredGraderResult(
     );
   }
 
-  // Older results did not record the assertion. Accept the plugin's exact type or
-  // its canonical grader, but never a sibling category that shares that grader.
-  if (!pluginId) {
-    return false;
-  }
-  const pluginAssertionType = `promptfoo:redteam:${pluginId}`;
-  return (
-    assertion.type === pluginAssertionType ||
-    assertion.type === getGraderById(pluginAssertionType)?.id
-  );
+  // Without a recorded assertion, the grade cannot be associated with this check.
+  return false;
 }
 
-function getTargetConversation(providerResponse: ProviderResponse): {
+function getTargetConversation(messages: unknown): {
   lastUserPrompt?: string;
   conversationTranscript?: string;
 } {
-  const messages = providerResponse.metadata?.messages;
   if (!Array.isArray(messages)) {
     return {};
   }
@@ -78,7 +105,7 @@ function getTargetConversation(providerResponse: ProviderResponse): {
       break;
     }
   }
-  if (lastUserIndex < 0) {
+  if (lastUserIndex < 0 || !messages[lastUserIndex].content.trim()) {
     return {};
   }
 
@@ -170,8 +197,31 @@ export const handleRedteam = async ({
   assertionValueContext,
 }: AssertionParams): Promise<GradingResult> => {
   // Skip grading if stored result exists from strategy execution for this specific assertion
+  const savedConversation = getTargetConversation(providerResponse.metadata?.messages);
+  const reportedConversation = getTargetConversation(providerResponse.prompt);
+  const hasFinalPrompt =
+    typeof providerResponse.metadata?.redteamFinalPrompt === 'string' &&
+    providerResponse.metadata.redteamFinalPrompt.trim();
+  const { lastUserPrompt, conversationTranscript } =
+    (hasFinalPrompt && savedConversation.lastUserPrompt) || !reportedConversation.lastUserPrompt
+      ? savedConversation
+      : reportedConversation;
+  const effectivePrompt = getRedteamPrompt(prompt, test, providerResponse, lastUserPrompt);
+  invariant(effectivePrompt, `Grader ${baseType} must have a prompt`);
+
   const storedResult = providerResponse.metadata?.storedGraderResult as GradingResult | undefined;
-  if (storedResult && matchesStoredGraderResult(assertion, storedResult, test.metadata?.pluginId)) {
+  const hasStrategyGrade =
+    storedResult && matchesStoredGraderResult(assertion, storedResult, test, provider);
+  if (
+    hasStrategyGrade &&
+    storedResult.metadata?.redteamGradingInputHash ===
+      getGradingInputHash(
+        effectivePrompt,
+        outputString,
+        providerResponse.metadata?.messages,
+        test.metadata?.pluginId,
+      )
+  ) {
     // Check if any turns had grader errors (even though we have a stored result)
     const redteamHistory = providerResponse.metadata?.redteamHistory as
       | Array<{ graderError?: string }>
@@ -195,9 +245,6 @@ export const handleRedteam = async ({
 
   const grader = getGraderById(assertion.type);
   invariant(grader, `Unknown grader: ${baseType}`);
-  const { lastUserPrompt, conversationTranscript } = getTargetConversation(providerResponse);
-  const effectivePrompt = getRedteamPrompt(prompt, test, providerResponse, lastUserPrompt);
-  invariant(effectivePrompt, `Grader ${baseType} must have a prompt`);
 
   // Build grading context from provider response metadata, test metadata, and locally
   // captured assertion trace data. Keep raw trace data in-process for deterministic
@@ -250,8 +297,18 @@ export const handleRedteam = async ({
       gradingContext,
     );
 
+    // A stale verdict is unusable, but its strategy grading calls still incurred usage.
+    const tokensUsed =
+      hasStrategyGrade && storedResult.tokensUsed
+        ? cloneTokenUsageBreakdown(storedResult.tokensUsed)
+        : undefined;
+    if (tokensUsed && grade.tokensUsed) {
+      accumulateTokenUsage(tokensUsed, grade.tokensUsed);
+    }
+
     return {
       ...grade,
+      ...(tokensUsed ? { tokensUsed } : {}),
       ...(grade.assertion || assertion
         ? {
             assertion: {

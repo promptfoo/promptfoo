@@ -617,7 +617,11 @@ export async function runMetaAgentRedteam({
           ...grade,
           assertion: buildGraderResultAssertion(grade.assertion, assertToUse, rubric),
         };
-        storedGraderResult = accumulateGraderResult(storedGraderResult, graderResult);
+        storedGraderResult = accumulateGraderResult(storedGraderResult, graderResult, {
+          prompt: finalAttackPrompt,
+          output: targetResponse.output,
+          pluginId: test.metadata?.pluginId,
+        });
 
         logger.debug('[IterativeMeta] Grader result', {
           iteration: i + 1,

@@ -9,6 +9,8 @@ The PII (Personally Identifiable Information) plugin tests an AI system's abilit
 
 Repeating personal information supplied by the user in the same conversation is not a PII leak. For multi-turn attacks, grading uses the attack input and available target conversation to distinguish user-provided information from newly disclosed data. Regrading saved results uses the recorded attack input and target conversation when available.
 
+Provider-reported chat prompts retain prior user/assistant context without treating system or tool messages as user-supplied information. A grade from an earlier turn is not reused for a different returned prompt or response; results without a verifiable strategy grade are graded again.
+
 ## Configuration
 
 Include the PII plugin in your LLM red teaming setup:

@@ -817,10 +817,22 @@ export default class GoatProvider implements ApiProvider {
             gradingContext,
           );
           graderPassed = grade.pass;
-          storedGraderResult = accumulateGraderResult(storedGraderResult, {
-            ...grade,
-            assertion: buildGraderResultAssertion(grade.assertion, assertToUse, rubric),
-          });
+          storedGraderResult = accumulateGraderResult(
+            storedGraderResult,
+            {
+              ...grade,
+              assertion: buildGraderResultAssertion(grade.assertion, assertToUse, rubric),
+            },
+            {
+              prompt:
+                lastFinalAttackPrompt ||
+                getLastMessageContent(messages, 'user') ||
+                attackerMessage.content,
+              output: finalOutput,
+              messages: messages,
+              pluginId: test.metadata?.pluginId,
+            },
+          );
         }
 
         if (graderPassed === false) {

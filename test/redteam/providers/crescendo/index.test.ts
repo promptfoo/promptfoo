@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { runAssertions } from '../../../../src/assertions/index';
 import * as evaluatorHelpers from '../../../../src/evaluatorHelpers';
 import { CrescendoProvider, MemorySystem } from '../../../../src/redteam/providers/crescendo/index';
 import { redteamProviderManager, tryUnblocking } from '../../../../src/redteam/providers/shared';
@@ -8,6 +9,7 @@ import { checkServerFeatureSupport } from '../../../../src/util/server';
 import { createMockProvider, type MockApiProvider } from '../../../factories/provider';
 
 import type { Message } from '../../../../src/redteam/providers/shared';
+import type { AtomicTestCase } from '../../../../src/types/index';
 
 // Hoisted mock for getGraderById
 const mockGetGraderById = vi.hoisted(() => vi.fn());
@@ -829,6 +831,106 @@ describe('CrescendoProvider', () => {
     expect(result.metadata?.storedGraderResult).toMatchObject({ pass: true });
     expect(result.metadata?.storedGraderResult?.assertion).toBeDefined();
   });
+
+  it.each(['grader error', 'conversation ended', 'backtracking'])(
+    'regrades the returned turn after %s instead of reusing an earlier pass',
+    async (stop) => {
+      const getResult = vi
+        .fn()
+        .mockResolvedValue({
+          grade: {
+            pass: false,
+            score: 0,
+            reason: 'Latest response verdict',
+            tokensUsed: { total: 3, numRequests: 1 },
+          },
+          rubric: 'rubric',
+        })
+        .mockResolvedValueOnce({
+          grade: {
+            pass: true,
+            score: 1,
+            reason: 'Earlier response verdict',
+            tokensUsed: { total: 5, numRequests: 1 },
+          },
+          rubric: 'rubric',
+        });
+      if (stop === 'grader error') {
+        getResult.mockRejectedValueOnce(new Error('Temporary grader failure'));
+      }
+      mockGetGraderById.mockReturnValue({ id: 'promptfoo:redteam:pii', getResult });
+      const provider = new CrescendoProvider({
+        injectVar: 'objective',
+        maxTurns: 2,
+        maxBacktracks: 1,
+        redteamProvider: mockRedTeamProvider,
+        stateful: false,
+      });
+      if (stop === 'backtracking') {
+        vi.spyOn(provider as any, 'getRefusalScore')
+          .mockResolvedValueOnce([false, ''])
+          .mockResolvedValueOnce([true, 'Refused']);
+      }
+      const test: AtomicTestCase = {
+        provider: 'promptfoo:redteam:crescendo',
+        assert: [{ type: 'promptfoo:redteam:pii' }],
+        metadata: { pluginId: 'pii:social', strategyId: 'crescendo', purpose: 'An assistant' },
+      };
+      mockRedTeamProvider.callApi
+        .mockResolvedValueOnce({
+          output: JSON.stringify({
+            generatedQuestion: 'first question',
+            rationaleBehindJailbreak: '',
+            lastResponseSummary: '',
+          }),
+        })
+        .mockResolvedValueOnce({
+          output: JSON.stringify({
+            generatedQuestion: 'second question',
+            rationaleBehindJailbreak: '',
+            lastResponseSummary: '',
+          }),
+        });
+      mockTargetProvider.callApi
+        .mockResolvedValueOnce({ output: 'first response' })
+        .mockResolvedValueOnce({
+          output: 'second response',
+          ...(stop === 'conversation ended' ? { conversationEnded: true } : {}),
+        });
+      mockScoringProvider.callApi.mockResolvedValue({
+        output: JSON.stringify({ value: false, metadata: 0, rationale: 'Continue' }),
+      });
+      vi.mocked(evaluatorHelpers.renderPrompt).mockImplementation(async (_prompt, vars) =>
+        String(vars.objective),
+      );
+      const response = await provider.callApi('ignored', {
+        originalProvider: mockTargetProvider,
+        vars: { objective: 'original question' },
+        prompt: { raw: '{{objective}}', label: 'test' },
+        test,
+      });
+
+      expect(response.output).toBe('second response');
+      expect(response.metadata?.redteamFinalPrompt).toBe('second question');
+      const result = await runAssertions({
+        prompt: 'original question',
+        test,
+        providerResponse: response,
+      });
+      expect(result.pass).toBe(false);
+      expect(getResult).toHaveBeenLastCalledWith(
+        'second question',
+        'second response',
+        expect.anything(),
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        expect.anything(),
+      );
+      expect(result.componentResults?.[0].tokensUsed).toMatchObject({ total: 8, numRequests: 2 });
+    },
+  );
 
   it('should grade the latest assistant output while passing prior turns in grading context', async () => {
     const getResult = vi.fn(async () => ({

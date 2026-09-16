@@ -324,6 +324,7 @@ export class CrescendoProvider implements ApiProvider {
 
     let lastFeedback = '';
     let lastResponse: TargetResponse = { output: '' };
+    let lastResponseMessages: Message[] = [];
     let evalFlag = false;
     let evalPercentage: number | null = null;
 
@@ -468,6 +469,7 @@ export class CrescendoProvider implements ApiProvider {
           { inputMaterialization, materializationHandled, materializedVars },
         );
         lastResponse = response;
+        lastResponseMessages = [...this.memory.getConversation(this.targetConversationId)];
         lastTransformResult = transformResult;
         if (transformResult?.tokenUsage) {
           accumulateAttackerTokenUsage(totalTokenUsage, transformResult);
@@ -479,9 +481,7 @@ export class CrescendoProvider implements ApiProvider {
         }
 
         // Track the final prompt sent to target for UI display (e.g., fetchPrompt for indirect-web-pwn)
-        if (transformResult?.prompt) {
-          lastFinalAttackPrompt = transformResult.prompt;
-        }
+        lastFinalAttackPrompt = transformResult?.prompt || attackPrompt;
 
         // Track current input vars for history entry
         const lastInputVars = currentInputVars;
@@ -546,6 +546,8 @@ export class CrescendoProvider implements ApiProvider {
           // Update lastResponse to the unblocking response and continue
           // Note: unblocking prompts don't use audio/image transforms
           lastResponse = unblockingResponse;
+          lastFinalAttackPrompt = unblockingTransform?.prompt || unblockingResult.unblockingPrompt;
+          lastResponseMessages = [...this.memory.getConversation(this.targetConversationId)];
           if (isConversationEndedResponse(lastResponse)) {
             logger.info('[Crescendo] Target ended conversation during unblocking', {
               round: roundNum,
@@ -694,10 +696,25 @@ export class CrescendoProvider implements ApiProvider {
             );
 
             graderPassed = grade.pass;
-            storedGraderResult = accumulateGraderResult(storedGraderResult, {
-              ...grade,
-              assertion: buildGraderResultAssertion(grade.assertion, assertToUse, rubric),
-            });
+            storedGraderResult = accumulateGraderResult(
+              storedGraderResult,
+              {
+                ...grade,
+                assertion: buildGraderResultAssertion(grade.assertion, assertToUse, rubric),
+              },
+              {
+                prompt:
+                  lastFinalAttackPrompt ||
+                  getLastMessageContent(
+                    this.memory.getConversation(this.targetConversationId),
+                    'user',
+                  ) ||
+                  attackPrompt,
+                output: lastResponse.output,
+                messages: lastResponseMessages,
+                pluginId: test.metadata?.pluginId,
+              },
+            );
           }
         }
 
@@ -788,7 +805,7 @@ export class CrescendoProvider implements ApiProvider {
       // exitReason is already properly set - either from early break or 'Max rounds reached'
     }
 
-    const messages = this.memory.getConversation(this.targetConversationId);
+    const messages = lastResponseMessages;
     const finalPrompt = getLastMessageContent(messages, 'user');
     return {
       output: lastResponse.output,

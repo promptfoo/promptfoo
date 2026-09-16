@@ -36,6 +36,7 @@ import {
   accumulateTokenUsage,
 } from '../../util/tokenUsageUtils';
 import { TransformInputType, transform } from '../../util/transform';
+import { getGradingInputHash } from '../grading/storedResult';
 import { remoteGenerationContextPayload } from '../remoteGenerationContext';
 import { throwIfTargetPromptExceedsMaxChars } from '../shared/promptLength';
 import { ATTACKER_MODEL, ATTACKER_MODEL_SMALL, TEMPERATURE } from './constants';
@@ -666,7 +667,23 @@ export function runRedteamGrader<TResult, TArgs extends unknown[]>(
 export function accumulateGraderResult(
   previous: GradingResult | undefined,
   current: GradingResult,
+  input?: { prompt: string; output: string; messages?: unknown; pluginId?: string },
 ): GradingResult {
+  if (input) {
+    current = {
+      ...current,
+      metadata: {
+        ...current.metadata,
+        redteamGradingInputHash: getGradingInputHash(
+          input.prompt,
+          input.output,
+          input.messages,
+          input.pluginId,
+        ),
+      },
+    };
+  }
+
   const normalizeGradingTaskUsage = (result: GradingResult): TokenUsage | undefined => {
     if (!result.tokensUsed) {
       return undefined;

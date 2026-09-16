@@ -6,6 +6,7 @@ import {
 } from '../../src/assertions/index';
 import { handleRedteam } from '../../src/assertions/redteam';
 import { MULTI_INPUT_VAR } from '../../src/redteam/constants';
+import { getGradingInputHash } from '../../src/redteam/grading/storedResult';
 import { RedteamGraderBase } from '../../src/redteam/plugins/base';
 import { getPiiLeakTestsForCategory } from '../../src/redteam/plugins/pii';
 
@@ -17,6 +18,7 @@ describe('redteam strategy result grading', () => {
   const output = 'No — Casey Morgan was named in your request. No contact details are available.';
   const piiAssertion: Assertion = { type: 'promptfoo:redteam:pii', metric: 'PIILeak/Crescendo' };
   const test: AtomicTestCase = {
+    provider: 'promptfoo:redteam:crescendo',
     assert: [piiAssertion],
     metadata: { pluginId: 'pii:social', strategyId: 'crescendo', purpose: 'An assistant' },
   };
@@ -25,6 +27,9 @@ describe('redteam strategy result grading', () => {
     score: 1,
     reason: 'The response only repeats a user-provided name.',
     assertion: { ...piiAssertion, value: 'Previously rendered rubric' },
+    metadata: {
+      redteamGradingInputHash: getGradingInputHash(attackPrompt, output, undefined, 'pii:social'),
+    },
     tokensUsed: { total: 30, prompt: 20, completion: 10, numRequests: 2 },
   };
 
@@ -55,13 +60,25 @@ describe('redteam strategy result grading', () => {
       const assertion = generatedTest.assert![0] as Assertion;
       const result = await runAssertions({
         prompt: originalPrompt,
-        test: { ...generatedTest, metadata: { ...test.metadata, pluginId } },
+        test: {
+          ...generatedTest,
+          provider: test.provider,
+          metadata: { ...test.metadata, pluginId },
+        },
         providerResponse: {
           output,
           metadata: {
             redteamFinalPrompt: attackPrompt,
             storedGraderResult: {
               ...storedResult,
+              metadata: {
+                redteamGradingInputHash: getGradingInputHash(
+                  attackPrompt,
+                  output,
+                  undefined,
+                  pluginId,
+                ),
+              },
               assertion: { ...assertion, value: 'Stored rubric' },
             },
           },
@@ -77,10 +94,11 @@ describe('redteam strategy result grading', () => {
     },
   );
 
-  it('reuses legacy PII grades without a stored assertion', async () => {
-    const getResult = vi
-      .spyOn(RedteamGraderBase.prototype, 'getResult')
-      .mockRejectedValue(new Error('Unexpected grading'));
+  it('regrades legacy PII results without a recorded assertion', async () => {
+    const getResult = vi.spyOn(RedteamGraderBase.prototype, 'getResult').mockResolvedValue({
+      grade: { pass: false, score: 0, reason: 'Fresh verdict' },
+      rubric: 'New rubric',
+    });
     const { assertion: _assertion, ...legacyResult } = storedResult;
     const result = await runAssertions({
       prompt: originalPrompt,
@@ -88,8 +106,162 @@ describe('redteam strategy result grading', () => {
       providerResponse: { output, metadata: { storedGraderResult: legacyResult } },
     });
 
+    expect(getResult).toHaveBeenCalledTimes(1);
+    expect(result.pass).toBe(false);
+  });
+
+  it.each([
+    { id: 'promptfoo:redteam:crescendo' },
+    { id: () => 'promptfoo:redteam:crescendo', callApi: async () => ({ output }) },
+  ])('reuses a bound grade from a configured or loaded attack provider', async (provider) => {
+    const getResult = vi
+      .spyOn(RedteamGraderBase.prototype, 'getResult')
+      .mockRejectedValue(new Error('Unexpected duplicate grade'));
+    const result = await runAssertions({
+      prompt: originalPrompt,
+      test: { ...test, provider },
+      providerResponse: {
+        output,
+        metadata: { redteamFinalPrompt: attackPrompt, storedGraderResult: storedResult },
+      },
+    });
     expect(getResult).not.toHaveBeenCalled();
     expect(result.pass).toBe(true);
+  });
+
+  it.each([
+    {
+      name: 'a later output',
+      prompt: attackPrompt,
+      output: 'Different response',
+      assertion: piiAssertion,
+    },
+    { name: 'a later prompt', prompt: 'Different attack', output, assertion: piiAssertion },
+    {
+      name: 'the same input/output in a different conversation',
+      prompt: attackPrompt,
+      output,
+      assertion: piiAssertion,
+      messages: [
+        { role: 'user', content: 'Earlier context' },
+        { role: 'assistant', content: 'Earlier answer' },
+        { role: 'user', content: attackPrompt },
+        { role: 'assistant', content: output },
+      ],
+    },
+    {
+      name: 'an assertion output transform',
+      prompt: attackPrompt,
+      output,
+      assertion: { ...piiAssertion, transform: '"Transformed output"' },
+    },
+  ])('regrades $name and retains prior grading usage', async (input) => {
+    const getResult = vi.spyOn(RedteamGraderBase.prototype, 'getResult').mockResolvedValue({
+      grade: {
+        pass: false,
+        score: 0,
+        reason: 'Fresh verdict',
+        tokensUsed: { total: 4, prompt: 3, completion: 1, numRequests: 1 },
+      },
+      rubric: 'New rubric',
+    });
+    const result = await runAssertions({
+      prompt: originalPrompt,
+      test: { ...test, assert: [input.assertion] },
+      providerResponse: {
+        output: input.output,
+        metadata: {
+          redteamFinalPrompt: input.prompt,
+          storedGraderResult: storedResult,
+          messages: input.messages,
+        },
+      },
+    });
+    expect(getResult).toHaveBeenCalledTimes(1);
+    expect(result.pass).toBe(false);
+    expect(result.componentResults?.[0].tokensUsed).toMatchObject({
+      total: 34,
+      prompt: 23,
+      completion: 11,
+      numRequests: 3,
+    });
+    expect(storedResult.tokensUsed.total).toBe(30);
+  });
+
+  it.each([
+    { name: 'missing plugin', test: { ...test, metadata: { strategyId: 'crescendo' } } },
+    {
+      name: 'wrong plugin',
+      test: { ...test, metadata: { ...test.metadata, pluginId: 'harmful:hate' } },
+    },
+    { name: 'missing strategy', test: { ...test, metadata: { pluginId: 'pii:social' } } },
+    { name: 'missing executor', test: { ...test, provider: undefined } },
+    { name: 'ordinary provider', test: { ...test, provider: 'https://example.com' } },
+  ])('does not trust a stored grade with $name', async ({ test: untrustedTest }) => {
+    const getResult = vi.spyOn(RedteamGraderBase.prototype, 'getResult').mockResolvedValue({
+      grade: { pass: false, score: 0, reason: 'Fresh verdict' },
+      rubric: 'New rubric',
+    });
+    const result = await runAssertions({
+      prompt: originalPrompt,
+      test: untrustedTest,
+      providerResponse: {
+        output,
+        metadata: {
+          redteamFinalPrompt: attackPrompt,
+          strategyId: 'crescendo',
+          storedGraderResult: storedResult,
+        },
+      },
+    });
+    expect(getResult).toHaveBeenCalledTimes(1);
+    expect(result.pass).toBe(false);
+  });
+
+  it('regrades older strategy results without an input binding', async () => {
+    const getResult = vi.spyOn(RedteamGraderBase.prototype, 'getResult').mockResolvedValue({
+      grade: { pass: false, score: 0, reason: 'Fresh verdict' },
+      rubric: 'New rubric',
+    });
+    const result = await runAssertions({
+      prompt: originalPrompt,
+      test,
+      providerResponse: {
+        output,
+        metadata: {
+          redteamFinalPrompt: attackPrompt,
+          storedGraderResult: { ...storedResult, metadata: undefined },
+        },
+      },
+    });
+    expect(getResult).toHaveBeenCalledTimes(1);
+    expect(result.pass).toBe(false);
+  });
+
+  it('uses the reported chat conversation without mixing in stale metadata messages', async () => {
+    const getResult = vi.spyOn(RedteamGraderBase.prototype, 'getResult').mockResolvedValue({
+      grade: { pass: true, score: 1, reason: 'User supplied the name' },
+      rubric: 'New rubric',
+    });
+    await runAssertions({
+      prompt: originalPrompt,
+      test,
+      providerResponse: {
+        output,
+        prompt: [
+          { role: 'system', content: 'Private system instructions' },
+          { role: 'user', content: 'My contact is Casey Morgan.' },
+          { role: 'assistant', content: 'Acknowledged.' },
+          { role: 'tool', content: 'Private tool output' },
+          { role: 'user', content: attackPrompt },
+        ],
+        metadata: { messages: [{ role: 'user', content: 'Stale unrelated input' }] },
+      },
+    });
+    expect(getResult.mock.calls[0]?.[0]).toBe(attackPrompt);
+    expect(getResult.mock.calls[0]?.[7]?.conversationTranscript).toBe(
+      'User: My contact is Casey Morgan.\n\nAssistant: Acknowledged.',
+    );
   });
 
   it('grades independently when a legacy result has no assertion or plugin ID', async () => {
@@ -224,6 +396,20 @@ describe('redteam strategy result grading', () => {
       expectedPrompt: attackPrompt,
     },
     {
+      name: 'uses the last user input in a provider-reported chat array',
+      reportedPrompt: [
+        { role: 'system', content: 'Private instructions' },
+        { role: 'user', content: attackPrompt },
+      ],
+      expectedPrompt: attackPrompt,
+    },
+    {
+      name: 'keeps the transformed attack ahead of a reported chat array',
+      reportedPrompt: [{ role: 'user', content: 'Before transformation' }],
+      metadata: { redteamFinalPrompt: attackPrompt },
+      expectedPrompt: attackPrompt,
+    },
+    {
       name: 'prefers the provider-reported input over the last saved user message',
       reportedPrompt: attackPrompt,
       metadata: { messages: [{ role: 'user', content: 'Before the provider transformed it' }] },
@@ -249,6 +435,15 @@ describe('redteam strategy result grading', () => {
     {
       name: 'falls back to the original prompt for an empty chat array',
       reportedPrompt: [],
+      expectedPrompt: originalPrompt,
+    },
+    {
+      name: 'does not mistake an earlier user message for an empty latest input',
+      reportedPrompt: [
+        { role: 'user', content: attackPrompt },
+        { role: 'assistant', content: output },
+        { role: 'user', content: '' },
+      ],
       expectedPrompt: originalPrompt,
     },
     {
