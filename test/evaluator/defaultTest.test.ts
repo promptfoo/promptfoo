@@ -184,6 +184,7 @@ describe('Evaluator with external defaultTest', () => {
       options: { provider: 'test-provider' },
       metadata: { suite: 'test-suite' },
       threshold: 0.8,
+      feedback: { pass: 'https://reviews.example.com/results/{{resultId}}' },
     };
 
     const testSuite: TestSuite = {
@@ -195,6 +196,7 @@ describe('Evaluator with external defaultTest', () => {
           vars: { testVar: 'override' },
           assert: [{ type: 'contains' as const, value: 'exp' }],
           threshold: 0.9,
+          feedback: { fail: 'https://reviews.example.com/results/{{resultId}}' },
         },
       ],
       defaultTest,
@@ -213,6 +215,7 @@ describe('Evaluator with external defaultTest', () => {
     });
     expect(firstResult.testCase.threshold).toBe(0.8);
     expect(firstResult.testCase.metadata).toEqual({ suite: 'test-suite' });
+    expect(firstResult.testCase.feedback).toEqual(defaultTest.feedback);
 
     // Second test should merge/override appropriately
     const secondResult = summary.results[1] as any;
@@ -221,6 +224,9 @@ describe('Evaluator with external defaultTest', () => {
       { type: 'contains' as const, value: 'exp' },
     ]);
     expect(secondResult.testCase.threshold).toBe(0.9); // Override
+    expect(secondResult.testCase.feedback).toEqual({
+      fail: 'https://reviews.example.com/results/{{resultId}}',
+    });
   });
 
   it('should allow a test case to opt out of defaultTest assertions', async () => {
