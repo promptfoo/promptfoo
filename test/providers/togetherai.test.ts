@@ -168,9 +168,7 @@ describe('createTogetherAiProvider', () => {
           config: expect.objectContaining({
             passthrough: expect.objectContaining({
               temperature: 0.7,
-              passthrough: {
-                custom_param: 'value',
-              },
+              custom_param: 'value',
             }),
           }),
         }),
