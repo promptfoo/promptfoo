@@ -611,6 +611,74 @@ describe('OllamaChatProvider', () => {
     expect(JSON.parse(call[1].body).think).toBeTruthy();
   });
 
+  it('should set the cached flag and report cached token usage on a cache hit', async () => {
+    vi.mocked(fetchWithCache).mockResolvedValue({
+      data: '{"message":{"role":"assistant","content":"hi"},"done":true,"prompt_eval_count":10,"eval_count":20}\n',
+      cached: true,
+      status: 200,
+      statusText: 'OK',
+      headers: {},
+    });
+
+    const provider = new OllamaChatProvider('llama3.3');
+    const result = await provider.callApi('test prompt');
+
+    // src/providers/AGENTS.md requires the cached flag; without it the evaluator never
+    // takes its "Skipping delay because response is cached" branch.
+    expect(result.cached).toBe(true);
+    expect(result.tokenUsage).toEqual({ cached: 30, total: 30 });
+  });
+
+  it('should merge passthrough.options instead of clobbering computed options', async () => {
+    vi.mocked(fetchWithCache).mockResolvedValue({
+      data: '{"message":{"role":"assistant","content":"hi"},"done":true}\n',
+      cached: false,
+      status: 200,
+      statusText: 'OK',
+      headers: {},
+    });
+
+    const provider = new OllamaChatProvider('llama3.3', {
+      config: { temperature: 0.5, num_predict: 64, passthrough: { options: { min_p: 0.1 } } },
+    });
+    await provider.callApi('test prompt');
+
+    const body = JSON.parse(vi.mocked(fetchWithCache).mock.calls[0][1]?.body as string);
+    // Spreading passthrough wholesale used to replace the computed options object,
+    // silently discarding temperature and num_predict.
+    expect(body.options).toEqual({ temperature: 0.5, num_predict: 64, min_p: 0.1 });
+  });
+
+  it('should forward min_p and keep_alive, and drop keys Ollama removed', async () => {
+    vi.mocked(fetchWithCache).mockResolvedValue({
+      data: '{"message":{"role":"assistant","content":"hi"},"done":true}\n',
+      cached: false,
+      status: 200,
+      statusText: 'OK',
+      headers: {},
+    });
+
+    const provider = new OllamaChatProvider('llama3.3', {
+      config: {
+        min_p: 0.05,
+        keep_alive: '5m',
+        // Removed from Ollama's Options struct; must not be forwarded.
+        tfs_z: 1,
+        mirostat: 2,
+        useNUMA: true,
+      } as any,
+    });
+    await provider.callApi('test prompt');
+
+    const body = JSON.parse(vi.mocked(fetchWithCache).mock.calls[0][1]?.body as string);
+    expect(body.options.min_p).toBe(0.05);
+    expect(body.keep_alive).toBe('5m');
+    expect(body.options.keep_alive).toBeUndefined();
+    expect(body.options.tfs_z).toBeUndefined();
+    expect(body.options.mirostat).toBeUndefined();
+    expect(body.options.useNUMA).toBeUndefined();
+  });
+
   it('should not leak think or passthrough into the nested options object', async () => {
     vi.mocked(fetchWithCache).mockResolvedValue({
       data: '{"message":{"role":"assistant","content":"hi"},"done":true}\n',

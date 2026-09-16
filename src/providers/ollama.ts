@@ -15,88 +15,66 @@ import type {
 } from '../types/index';
 
 interface OllamaCompletionOptions {
-  // From https://github.com/jmorganca/ollama/blob/v0.1.0/api/types.go#L161
+  // Nested `options` members, per Ollama's current Options/Runner structs:
+  // https://github.com/ollama/ollama/blob/main/api/types.go
   num_predict?: number;
+  num_keep?: number;
+  seed?: number;
   top_k?: number;
   top_p?: number;
-  tfs_z?: number;
-  seed?: number;
-  useNUMA?: boolean;
-  num_ctx?: number;
-  num_keep?: number;
-  num_batch?: number;
-  num_gqa?: number;
-  num_gpu?: number;
-  main_gpu?: number;
-  low_vram?: boolean;
-  f16_kv?: boolean;
-  logits_all?: boolean;
-  vocab_only?: boolean;
-  use_mmap?: boolean;
-  use_mlock?: boolean;
-  embedding_only?: boolean;
-  rope_frequency_base?: number;
-  rope_frequency_scale?: number;
+  min_p?: number;
   typical_p?: number;
   repeat_last_n?: number;
   temperature?: number;
   repeat_penalty?: number;
   presence_penalty?: number;
   frequency_penalty?: number;
-  mirostat?: number;
-  mirostat_tau?: number;
-  mirostat_eta?: number;
-  penalize_newline?: boolean;
   stop?: string[];
+  num_ctx?: number;
+  num_batch?: number;
+  num_gpu?: number;
+  main_gpu?: number;
+  use_mmap?: boolean;
   num_thread?: number;
+
+  // Top-level API parameters (siblings of `options`, not members of it).
   tools?: any[]; // Support for function calling/tools
   think?: boolean; // Top-level parameter for thinking/reasoning
+  keep_alive?: string | number;
+  truncate?: boolean; // /api/embed only
+  dimensions?: number; // /api/embed only
+  passthrough?: Record<string, any>; // Pass arbitrary fields to the API
+
   // Promptfoo-side rendering option: prepend the model's reasoning to the output.
   // Deliberately absent from OllamaCompletionOptionKeys so it is never sent to Ollama.
   showThinking?: boolean;
-  // Top-level /api/embed parameters (not members of the nested `options` object).
-  truncate?: boolean;
-  dimensions?: number;
-  keep_alive?: string | number;
-  passthrough?: Record<string, any>; // Pass arbitrary fields to the API
 }
 
 const OllamaCompletionOptionKeys = new Set<keyof OllamaCompletionOptions>([
   'num_predict',
+  'num_keep',
+  'seed',
   'top_k',
   'top_p',
-  'tfs_z',
-  'seed',
-  'useNUMA',
-  'num_ctx',
-  'num_keep',
-  'num_batch',
-  'num_gqa',
-  'num_gpu',
-  'main_gpu',
-  'low_vram',
-  'f16_kv',
-  'logits_all',
-  'vocab_only',
-  'use_mmap',
-  'use_mlock',
-  'embedding_only',
-  'rope_frequency_base',
-  'rope_frequency_scale',
+  'min_p',
   'typical_p',
   'repeat_last_n',
   'temperature',
   'repeat_penalty',
   'presence_penalty',
   'frequency_penalty',
-  'mirostat',
-  'mirostat_tau',
-  'mirostat_eta',
-  'penalize_newline',
   'stop',
+  'num_ctx',
+  'num_batch',
+  'num_gpu',
+  'main_gpu',
+  'use_mmap',
   'num_thread',
   'tools',
   'think',
+  'keep_alive',
+  'truncate',
+  'dimensions',
   'passthrough',
 ]);
 
@@ -104,7 +82,14 @@ const OllamaCompletionOptionKeys = new Set<keyof OllamaCompletionOptions>([
  * Keys that live in the config block but are NOT members of Ollama's nested `options`
  * object: they are either top-level API parameters or promptfoo-side settings.
  */
-const OllamaNonNestedOptionKeys = new Set<string>(['tools', 'think', 'passthrough']);
+const OllamaNonNestedOptionKeys = new Set<string>([
+  'tools',
+  'think',
+  'passthrough',
+  'keep_alive',
+  'truncate',
+  'dimensions',
+]);
 
 /**
  * Builds the nested `options` object Ollama expects, dropping anything that belongs at
@@ -113,13 +98,41 @@ const OllamaNonNestedOptionKeys = new Set<string>(['tools', 'think', 'passthroug
  * also sent as junk `options` members.
  */
 function buildOllamaOptions(config: OllamaCompletionOptions): Record<string, any> {
-  return Object.keys(config).reduce<Record<string, any>>((options, key) => {
+  const dropped: string[] = [];
+  const options = Object.keys(config).reduce<Record<string, any>>((acc, key) => {
     const optionName = key as keyof OllamaCompletionOptions;
-    if (OllamaCompletionOptionKeys.has(optionName) && !OllamaNonNestedOptionKeys.has(key)) {
-      options[optionName] = config[optionName];
+    if (OllamaCompletionOptionKeys.has(optionName)) {
+      if (!OllamaNonNestedOptionKeys.has(key)) {
+        acc[optionName] = config[optionName];
+      }
+    } else if (key !== 'showThinking') {
+      dropped.push(key);
     }
-    return options;
+    return acc;
   }, {});
+
+  if (dropped.length > 0) {
+    // Unrecognized keys are silently discarded, which is how `max_tokens` (an OpenAI
+    // key Ollama ignores) sat unnoticed in this repo's own redteam example.
+    logger.debug('[Ollama] Ignoring unsupported config keys', {
+      dropped,
+      hint: 'Use `passthrough` to send arbitrary top-level fields to the Ollama API.',
+    });
+  }
+  return options;
+}
+
+/**
+ * Splits `passthrough` so a user-provided `options` object MERGES with the computed
+ * one instead of replacing it. Spreading passthrough wholesale used to silently discard
+ * temperature/num_predict whenever someone reached for `passthrough.options`.
+ */
+function splitOllamaPassthrough(config: OllamaCompletionOptions): {
+  passthroughOptions: Record<string, any>;
+  passthroughRest: Record<string, any>;
+} {
+  const { options: passthroughOptions, ...passthroughRest } = config.passthrough ?? {};
+  return { passthroughOptions: passthroughOptions ?? {}, passthroughRest };
 }
 
 /**
@@ -270,17 +283,27 @@ function collectOllamaToolCalls(lines: OllamaChatJsonL[]) {
     }));
 }
 
-/** Extracts token usage from the chunk carrying `done: true`. */
-function extractOllamaTokenUsage(finalChunk: {
-  prompt_eval_count?: number;
-  eval_count?: number;
-}): Partial<TokenUsage> | undefined {
+/**
+ * Extracts token usage from the chunk carrying `done: true`, following the repo-wide
+ * convention that a cache hit reports only `cached`/`total` and no new request
+ * (see getTokenUsage in src/providers/openai/util.ts).
+ */
+function extractOllamaTokenUsage(
+  finalChunk: { prompt_eval_count?: number; eval_count?: number },
+  cached: boolean,
+): Partial<TokenUsage> | undefined {
   if (finalChunk.prompt_eval_count === undefined && finalChunk.eval_count === undefined) {
     return undefined;
   }
   const prompt = finalChunk.prompt_eval_count || 0;
   const completion = finalChunk.eval_count || 0;
-  return { prompt, completion, total: prompt + completion };
+  const total = prompt + completion;
+  if (cached) {
+    return { cached: total, total };
+  }
+  // numRequests is intentionally omitted: tokenUsageUtils increments it by 1 when an
+  // update does not specify it, so setting it here would be a no-op.
+  return { prompt, completion, total };
 }
 
 /**
@@ -351,13 +374,15 @@ export class OllamaCompletionProvider implements ApiProvider {
   }
 
   private async callApiInternal(prompt: string): Promise<ProviderResponse> {
+    const { passthroughOptions, passthroughRest } = splitOllamaPassthrough(this.config);
     const params = {
       model: this.modelName,
       prompt,
       stream: false,
-      options: buildOllamaOptions(this.config),
+      options: { ...buildOllamaOptions(this.config), ...passthroughOptions },
       ...(this.config.think === undefined ? {} : { think: this.config.think }),
-      ...(this.config.passthrough || {}),
+      ...(this.config.keep_alive === undefined ? {} : { keep_alive: this.config.keep_alive }),
+      ...passthroughRest,
     };
 
     logger.debug('Calling Ollama API', { params });
@@ -422,12 +447,15 @@ export class OllamaCompletionProvider implements ApiProvider {
       // Extract token usage from the final chunk (where done: true)
       const finalChunk = lines.find((chunk: OllamaCompletionJsonL) => chunk.done);
       const finishReason = normalizeFinishReason(finalChunk?.done_reason);
-      const tokenUsage = finalChunk ? extractOllamaTokenUsage(finalChunk) : undefined;
+      const tokenUsage = finalChunk
+        ? extractOllamaTokenUsage(finalChunk, response.cached)
+        : undefined;
 
       return {
         output,
         ...(finishReason && { finishReason }),
         ...(tokenUsage && { tokenUsage }),
+        ...(response.cached && { cached: true }),
       };
     } catch (err) {
       return {
@@ -498,12 +526,14 @@ export class OllamaChatProvider implements ApiProvider {
   ): Promise<ProviderResponse> {
     const messages = parseChatPrompt(prompt, [{ role: 'user', content: prompt }]);
 
+    const { passthroughOptions, passthroughRest } = splitOllamaPassthrough(this.config);
     const params: any = {
       model: this.modelName,
       messages,
-      options: buildOllamaOptions(this.config),
+      options: { ...buildOllamaOptions(this.config), ...passthroughOptions },
       ...(this.config.think === undefined ? {} : { think: this.config.think }),
-      ...(this.config.passthrough || {}),
+      ...(this.config.keep_alive === undefined ? {} : { keep_alive: this.config.keep_alive }),
+      ...passthroughRest,
     };
 
     // Handle tools if configured
@@ -605,12 +635,15 @@ export class OllamaChatProvider implements ApiProvider {
       output = applyOllamaThinking(output, thinking, this.config.showThinking);
 
       // Extract token usage from the final chunk (where done: true)
-      const tokenUsage = finalChunk ? extractOllamaTokenUsage(finalChunk) : undefined;
+      const tokenUsage = finalChunk
+        ? extractOllamaTokenUsage(finalChunk, response.cached)
+        : undefined;
 
       return {
         output,
         ...(finishReason && { finishReason }),
         ...(tokenUsage && { tokenUsage }),
+        ...(response.cached && { cached: true }),
       };
     } catch (err) {
       return {
@@ -622,6 +655,7 @@ export class OllamaChatProvider implements ApiProvider {
 
 export class OllamaEmbeddingProvider extends OllamaCompletionProvider {
   async callEmbeddingApi(text: string): Promise<ProviderEmbeddingResponse> {
+    const { passthroughOptions, passthroughRest } = splitOllamaPassthrough(this.config);
     const params = {
       model: this.modelName,
       input: text,
@@ -633,8 +667,8 @@ export class OllamaEmbeddingProvider extends OllamaCompletionProvider {
       truncate: this.config.truncate ?? false,
       ...(this.config.dimensions === undefined ? {} : { dimensions: this.config.dimensions }),
       ...(this.config.keep_alive === undefined ? {} : { keep_alive: this.config.keep_alive }),
-      options: buildOllamaOptions(this.config),
-      ...(this.config.passthrough || {}),
+      options: { ...buildOllamaOptions(this.config), ...passthroughOptions },
+      ...passthroughRest,
     };
 
     logger.debug('Calling Ollama embeddings API', { params });
@@ -689,11 +723,16 @@ export class OllamaEmbeddingProvider extends OllamaCompletionProvider {
         throw new Error('No embedding found in Ollama embeddings API response');
       }
       const promptTokens = response.data.prompt_eval_count;
+      const tokenUsage =
+        promptTokens === undefined
+          ? undefined
+          : response.cached
+            ? { cached: promptTokens, total: promptTokens }
+            : { prompt: promptTokens, total: promptTokens };
       return {
         embedding,
-        ...(promptTokens === undefined
-          ? {}
-          : { tokenUsage: { prompt: promptTokens, total: promptTokens } }),
+        ...(tokenUsage && { tokenUsage }),
+        ...(response.cached && { cached: true }),
       };
     } catch (err) {
       return {

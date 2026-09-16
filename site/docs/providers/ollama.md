@@ -61,6 +61,7 @@ providers:
       top_p: 0.9
       think: true # Enable thinking/reasoning mode (top-level API parameter)
       showThinking: true # Include the reasoning trace in the output (default: true)
+      keep_alive: '5m' # How long Ollama keeps the model loaded after the request
 ```
 
 ## Reasoning models
@@ -99,14 +100,24 @@ Responses also carry a normalized `finishReason` (`stop`, `length`, …) derived
 Ollama's `done_reason`, which you can assert on with
 [`finish-reason`](/docs/configuration/expected-outputs/deterministic/#finish-reason).
 
-You can also pass arbitrary fields directly to the Ollama API using the `passthrough` option:
+Config keys promptfoo does not recognize are **silently dropped** before the request is
+sent (run with `LOG_LEVEL=debug` to see which). The supported `options` keys track
+Ollama's current [Options struct](https://github.com/ollama/ollama/blob/main/api/types.go):
+`num_predict`, `num_keep`, `seed`, `top_k`, `top_p`, `min_p`, `typical_p`,
+`repeat_last_n`, `temperature`, `repeat_penalty`, `presence_penalty`,
+`frequency_penalty`, `stop`, `num_ctx`, `num_batch`, `num_gpu`, `main_gpu`,
+`use_mmap`, and `num_thread`. Note that `max_tokens` is an OpenAI key — Ollama ignores
+it, so use `num_predict`.
+
+You can also pass arbitrary fields directly to the Ollama API using the `passthrough`
+option. A `passthrough.options` object is merged into the computed options rather than
+replacing them:
 
 ```yaml title="promptfooconfig.yaml"
 providers:
   - id: ollama:chat:llama3.3
     config:
       passthrough:
-        keep_alive: '5m'
         format: 'json'
         # Any other Ollama API fields
 ```
