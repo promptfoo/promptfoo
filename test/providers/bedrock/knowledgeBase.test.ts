@@ -439,6 +439,9 @@ describe('AwsBedrockKnowledgeBaseProvider', () => {
     };
 
     expect(RetrieveAndGenerateCommand).toHaveBeenCalledWith(expectedCommand);
+    expect(vi.mocked(RetrieveAndGenerateCommand).mock.calls[0][0]).not.toHaveProperty(
+      'retrieveAndGenerateConfiguration.knowledgeBaseConfiguration.generationConfiguration',
+    );
   });
 
   it('serializes configured generation settings, including zero values', async () => {
