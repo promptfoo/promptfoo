@@ -67,6 +67,7 @@ export function getUnifiedConfig(
       ...(config.provider && { provider: config.provider }),
       ...(config.maxConcurrency && { maxConcurrency: config.maxConcurrency }),
       ...(config.language && { language: config.language }),
+      ...(config.graderLanguage && { graderLanguage: config.graderLanguage }),
       ...(config.frameworks &&
         config.frameworks.length > 0 && {
           frameworks: Array.from(new Set(config.frameworks)),
