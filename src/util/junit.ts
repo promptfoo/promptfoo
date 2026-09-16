@@ -1,7 +1,7 @@
 import * as fsPromises from 'fs/promises';
 
 import { XMLBuilder } from 'fast-xml-parser';
-import { ResultFailureReason } from '../types';
+import { countedComponentResults, ResultFailureReason } from '../types';
 
 import type Eval from '../models/eval';
 import type EvalResult from '../models/evalResult';
@@ -94,7 +94,9 @@ function getTestCaseName(result: JunitProjectedResult): string {
 function getFailedComponentResults(
   gradingResult: GradingResult | null | undefined,
 ): GradingResult[] {
-  return gradingResult?.componentResults?.filter((component) => !component.pass) ?? [];
+  return countedComponentResults(gradingResult?.componentResults).filter(
+    (component) => !component.pass,
+  );
 }
 
 function getAssertionLabel(gradingResult: GradingResult): string {

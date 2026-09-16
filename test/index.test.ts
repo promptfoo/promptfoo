@@ -104,6 +104,7 @@ describe('index.ts exports', () => {
     'assertions',
     'buildInputPromptDescription',
     'cache',
+    'countedComponentResults',
     'evaluate',
     'generateTable',
     'getInputDescription',
@@ -288,6 +289,18 @@ describe('evaluate function', () => {
         eventSource: 'library',
       }),
     );
+  });
+
+  it('rejects metricOnly on comparison assertions for library callers', async () => {
+    // The library path bypasses config-file loading, so createRuntimeTestSuite
+    // must enforce the same assertion contract as resolveConfigs.
+    await expect(
+      index.evaluate({
+        prompts: ['test prompt'],
+        providers: [],
+        tests: [{ assert: [{ type: 'max-score', metricOnly: true }] }],
+      }),
+    ).rejects.toThrow(/'metricOnly' is not supported on max-score/);
   });
 
   it('should pin package callers to library semantics', async () => {
