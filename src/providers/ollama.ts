@@ -426,12 +426,8 @@ export class OllamaChatProvider implements ApiProvider {
 
       const content = contentParts.join('');
 
-      // Find tool_calls from any chunk (they may appear before done: true)
-      const chunkWithToolCalls = lines.find(
-        (chunk: OllamaChatJsonL) =>
-          chunk.message?.tool_calls && chunk.message.tool_calls.length > 0,
-      );
-      let tool_calls = chunkWithToolCalls?.message?.tool_calls;
+      // Tool calls can arrive in multiple chunks before done: true.
+      let tool_calls = lines.flatMap((chunk: OllamaChatJsonL) => chunk.message?.tool_calls ?? []);
 
       // Normalize tool_calls to match OpenAI format (arguments as JSON string, not object)
       if (tool_calls && tool_calls.length > 0) {

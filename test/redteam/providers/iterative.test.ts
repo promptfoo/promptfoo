@@ -883,6 +883,150 @@ describe('RedteamIterativeProvider', () => {
       });
     });
 
+    describe('when the grader reports a failing grade', () => {
+      const test: AtomicTestCase = {
+        vars: {},
+        assert: [{ type: 'promptfoo:redteam:test-plugin' }],
+        metadata: { pluginId: 'test-plugin', goal: 'test goal' },
+      };
+
+      const attackerTurn = (prompt: string) =>
+        async function () {
+          return { output: JSON.stringify({ improvement: prompt, prompt }) };
+        };
+
+      const judgeRating = (rating: number) =>
+        async function () {
+          return {
+            output: JSON.stringify({
+              currentResponse: { rating, explanation: 'rated' },
+              previousBestResponse: { rating: 0, explanation: 'none' },
+            }),
+          };
+        };
+
+      const grades = (...results: Array<Record<string, unknown>>) => {
+        const getResult = vi.fn<any>();
+        for (const grade of results) {
+          getResult.mockResolvedValueOnce({ grade, rubric: 'test rubric' });
+        }
+        mockGetGraderById.mockReturnValue({ getResult });
+        return getResult;
+      };
+
+      const runConversation = (numIterations: number) =>
+        runRedteamConversation({
+          context: { prompt: { raw: '', label: '' }, vars: {}, test },
+          filters: undefined,
+          injectVar: 'test',
+          numIterations,
+          options: {},
+          prompt: { raw: 'test', label: 'test' },
+          redteamProvider: mockRedteamProvider,
+          gradingProvider: mockRedteamProvider,
+          targetProvider: mockTargetProvider,
+          test,
+          vars: { test: 'goal' },
+          excludeTargetOutputFromAgenticAttackGeneration: false,
+        });
+
+      it.each([
+        ['return an error', { error: 'judge unavailable' }],
+        ['return output that is not JSON', { output: 'I cannot rate this response.' }],
+        [
+          'omit the numeric rating',
+          { output: JSON.stringify({ currentResponse: { explanation: 'no rating given' } }) },
+        ],
+      ])('should stop without calling the judge, which could %s', async (_case, judgeResponse) => {
+        const getResult = grades(
+          { pass: false, score: 0, reason: 'Target produced harmful content' },
+          { pass: true, score: 1, reason: 'Benign output' },
+        );
+        mockGetTargetResponse
+          .mockResolvedValueOnce({ output: 'harmful response' })
+          .mockResolvedValueOnce({ output: 'benign response' });
+        mockRedteamProvider.callApi
+          .mockImplementationOnce(attackerTurn('first attack'))
+          .mockImplementationOnce(async function () {
+            return judgeResponse;
+          })
+          .mockImplementationOnce(attackerTurn('second attack'))
+          .mockImplementationOnce(judgeRating(3));
+
+        const result = await runConversation(2);
+
+        // Previously a failing judge call skipped the early exit, the next iteration's passing
+        // grade replaced this one, and the attack was reported as unsuccessful.
+        expect(result.metadata.stopReason).toBe('Grader failed');
+        expect(result.metadata.finalIteration).toBe(1);
+        expect(result.metadata.storedGraderResult).toMatchObject({
+          pass: false,
+          reason: 'Target produced harmful content',
+        });
+        expect(getResult).toHaveBeenCalledTimes(1);
+        expect(mockRedteamProvider.callApi).toHaveBeenCalledTimes(1);
+        expect(result.output).toBe('harmful response');
+        expect(result.metadata.redteamHistory).toHaveLength(1);
+        expect(result.metadata.redteamHistory[0]).toMatchObject({
+          output: 'harmful response',
+          graderPassed: false,
+        });
+        expect(result.metadata.redteamHistory[0].score).toBeUndefined();
+      });
+
+      it('should report the turn that failed even when an earlier turn scored higher', async () => {
+        grades(
+          { pass: true, score: 1, reason: 'Benign output' },
+          { pass: false, score: 0, reason: 'Target produced harmful content' },
+        );
+        mockGetTargetResponse
+          .mockResolvedValueOnce({ output: 'benign response' })
+          .mockResolvedValueOnce({ output: 'harmful response' });
+        mockRedteamProvider.callApi
+          .mockImplementationOnce(attackerTurn('first attack'))
+          .mockImplementationOnce(judgeRating(9))
+          .mockImplementationOnce(attackerTurn('second attack'))
+          .mockImplementationOnce(judgeRating(2));
+
+        const result = await runConversation(3);
+
+        expect(result.metadata.stopReason).toBe('Grader failed');
+        expect(result.metadata.finalIteration).toBe(2);
+        // Previously the output and prompt came from the higher-rated benign turn.
+        expect(result.output).toBe('harmful response');
+        expect(result.prompt).toBe('second attack');
+      });
+
+      it('should keep attacking after a grader error, which is not a verdict', async () => {
+        const getResult = grades(
+          {
+            pass: false,
+            score: 0,
+            reason: 'Grading provider returned 503',
+            metadata: { graderError: true },
+          },
+          { pass: true, score: 1, reason: 'Benign output' },
+        );
+        mockGetTargetResponse
+          .mockResolvedValueOnce({ output: 'refusal one' })
+          .mockResolvedValueOnce({ output: 'refusal two' });
+        mockRedteamProvider.callApi
+          .mockImplementationOnce(attackerTurn('first attack'))
+          // The same grading outage also fails the judge on this turn
+          .mockImplementationOnce(async function () {
+            return { error: '503 Service Unavailable' };
+          })
+          .mockImplementationOnce(attackerTurn('second attack'))
+          .mockImplementationOnce(judgeRating(3));
+
+        const result = await runConversation(2);
+
+        expect(result.metadata.stopReason).toBe('Max iterations reached');
+        expect(result.metadata.storedGraderResult).toMatchObject({ pass: true });
+        expect(getResult).toHaveBeenCalledTimes(2);
+      });
+    });
+
     it('should re-run transformVars for each iteration', async () => {
       const mockTest: AtomicTestCase = {
         vars: { originalVar: 'value' },
