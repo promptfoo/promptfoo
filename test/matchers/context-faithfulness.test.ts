@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { DEFAULT_RAG_ASSERTION_THRESHOLD } from '../../src/assertions/ragDefaults';
 import { matchesContextFaithfulness } from '../../src/matchers/rag';
 import { DefaultGradingProvider } from '../../src/providers/openai/defaults';
 
@@ -113,7 +114,12 @@ describe('matchesContextFaithfulness', () => {
     callApiSpy.mockResolvedValue({ error: 'grading provider failed' });
 
     await expect(
-      matchesContextFaithfulness('Query text', 'Output text', 'Context text', 0.7),
+      matchesContextFaithfulness(
+        'Query text',
+        'Output text',
+        'Context text',
+        DEFAULT_RAG_ASSERTION_THRESHOLD,
+      ),
     ).resolves.toMatchObject({
       pass: false,
       score: 0,
@@ -128,7 +134,12 @@ describe('matchesContextFaithfulness', () => {
     callApiSpy.mockResolvedValue({ output: '   ' });
 
     await expect(
-      matchesContextFaithfulness('Query text', 'Output text', 'Context text', 0.7),
+      matchesContextFaithfulness(
+        'Query text',
+        'Output text',
+        'Context text',
+        DEFAULT_RAG_ASSERTION_THRESHOLD,
+      ),
     ).resolves.toMatchObject({
       pass: false,
       score: 0,
@@ -268,7 +279,12 @@ describe('matchesContextFaithfulness', () => {
     });
 
     await expect(
-      matchesContextFaithfulness('Query text', 'Output text', 'Context text', 0.7),
+      matchesContextFaithfulness(
+        'Query text',
+        'Output text',
+        'Context text',
+        DEFAULT_RAG_ASSERTION_THRESHOLD,
+      ),
     ).resolves.toMatchObject({
       pass: false,
       score: 0,
