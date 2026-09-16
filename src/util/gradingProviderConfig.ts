@@ -6,6 +6,9 @@ import type { EnvOverrides } from '../types/env';
 import type { NunjucksFilterMap, VarValue } from '../types/index';
 import type { ProviderOptions } from '../types/providers';
 
+/** Opening delimiters for Nunjucks output, tag, and comment blocks. */
+const TEMPLATE_SYNTAX_RE = /\{[{%#]/;
+
 /** Raw grader configs must survive provider resolution until per-case vars are available. */
 export function hasProviderConfigTemplates(provider: unknown): provider is ProviderOptions {
   if (!provider || typeof provider !== 'object' || isApiProvider(provider)) {
@@ -15,7 +18,9 @@ export function hasProviderConfigTemplates(provider: unknown): provider is Provi
   return (
     typeof id === 'string' &&
     !!config &&
-    Object.values(config).some((value) => typeof value === 'string' && /\{[{%#]/.test(value))
+    Object.values(config).some(
+      (value) => typeof value === 'string' && TEMPLATE_SYNTAX_RE.test(value),
+    )
   );
 }
 
@@ -47,7 +52,7 @@ export function renderGradingProviderConfig(
       }
       // Some agent SDK providers render config again at call time. Reject
       // residual syntax so case data cannot become a template on that pass.
-      if (/\{[{%#]/.test(rendered)) {
+      if (TEMPLATE_SYNTAX_RE.test(rendered)) {
         throw new Error(
           `Invalid agent-rubric provider config in "${key}": the rendered value contains template syntax that a provider could interpret again.`,
         );
