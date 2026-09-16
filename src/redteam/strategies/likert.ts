@@ -1,24 +1,23 @@
 import async from 'async';
 import { Presets, SingleBar } from 'cli-progress';
-import { fetchWithCache } from '../../cache';
-import { getUserEmail } from '../../globalConfig/accounts';
 import logger from '../../logger';
-import { getRequestTimeoutMs } from '../../providers/shared';
 import { describeFetchError } from '../../util/fetch/errors';
 import invariant from '../../util/invariant';
 import {
   getRemoteGenerationExplicitlyDisabledError,
-  getRemoteGenerationHeaders,
-  getRemoteGenerationUrl,
   neverGenerateRemote,
 } from '../remoteGeneration';
+import { remoteGenerationContextPayload } from '../remoteGenerationContext';
+import { postRemoteGenerationTask } from '../remoteGenerationTask';
 
 import type { TestCase } from '../../types/index';
+import type { StrategyRuntimeContext } from './types';
 
 async function generateLikertPrompts(
   testCases: TestCase[],
   injectVar: string,
   config: Record<string, any>,
+  runtimeContext?: StrategyRuntimeContext,
 ): Promise<TestCase[]> {
   let progressBar: SingleBar | undefined;
   try {
@@ -50,8 +49,7 @@ async function generateLikertPrompts(
         prompt: testCase.vars[injectVar],
         index,
         plugin: testCase.metadata?.plugins?.join(',') ?? testCase.metadata?.pluginId,
-        ...config,
-        email: getUserEmail(),
+        ...remoteGenerationContextPayload(config.targetId),
       };
 
       interface LikertGenerationResponse {
@@ -59,14 +57,9 @@ async function generateLikertPrompts(
         modifiedPrompts?: string[];
       }
 
-      const { data } = await fetchWithCache<LikertGenerationResponse>(
-        getRemoteGenerationUrl(),
-        {
-          method: 'POST',
-          headers: getRemoteGenerationHeaders(),
-          body: JSON.stringify(payload),
-        },
-        getRequestTimeoutMs(),
+      const { data } = await postRemoteGenerationTask<LikertGenerationResponse>(
+        payload,
+        runtimeContext,
       );
 
       logger.debug(
@@ -93,7 +86,7 @@ async function generateLikertPrompts(
           },
           assert: testCase.assert?.map((assertion) => ({
             ...assertion,
-            metric: `${assertion.metric}/Likert`,
+            metric: assertion.metric ? `${assertion.metric}/Likert` : assertion.metric,
           })),
           metadata: {
             ...testCase.metadata,
@@ -130,12 +123,13 @@ export async function addLikertTestCases(
   testCases: TestCase[],
   injectVar: string,
   config: Record<string, unknown>,
+  runtimeContext?: StrategyRuntimeContext,
 ): Promise<TestCase[]> {
   if (neverGenerateRemote()) {
     throw new Error(getRemoteGenerationExplicitlyDisabledError('Likert jailbreak strategy'));
   }
 
-  const likertTestCases = await generateLikertPrompts(testCases, injectVar, config);
+  const likertTestCases = await generateLikertPrompts(testCases, injectVar, config, runtimeContext);
   if (likertTestCases.length === 0) {
     logger.warn('No Likert jailbreak test cases were generated');
   }

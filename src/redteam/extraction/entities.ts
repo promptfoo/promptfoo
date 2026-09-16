@@ -18,6 +18,7 @@ export async function extractEntities(
         'entities' as RedTeamTask,
         prompts,
         generationContext,
+        provider,
       );
       return result as string[];
     } catch (error) {

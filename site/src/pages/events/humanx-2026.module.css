@@ -501,3 +501,16 @@
     align-items: center;
   }
 }
+
+/* Respect reduced-motion: this page runs several continuous background
+   animations that are decorative only. */
+@media (prefers-reduced-motion: reduce) {
+  .humanxPage,
+  .humanxPage *,
+  .humanxPage *::before,
+  .humanxPage *::after {
+    animation: none !important;
+    transition: none !important;
+    scroll-behavior: auto !important;
+  }
+}
