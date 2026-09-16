@@ -435,67 +435,66 @@ describe('WebSocketProvider', () => {
       expectedMessage: 'WebSocket connection failed (EPROTO)',
       expectedRateLimitHits: 0,
     },
-  ])('should retry $description without exposing rendered WebSocket URL values', async ({
-    createError,
-    expectedMessage,
-    expectedRateLimitHits,
-  }) => {
-    const errorSpy = vi.spyOn(logger, 'error').mockImplementation(() => {});
-    const renderedUrl =
-      'ws://runtime-secret-tenant.invalid/sessions/private-session-123?token=runtime-query-secret';
-    provider = new WebSocketProvider('ws://test.com', {
-      config: {
-        url: 'ws://{{ tenant }}.invalid/sessions/{{ sessionId }}?token={{ token }}',
-        messageTemplate: '{{ prompt }}',
-        timeoutMs: 1000,
-        maxRetries: 2,
-      },
-    });
-    emitWebSocketEvents({ type: 'error', error: createError(renderedUrl) });
-
-    const registry = new RateLimitRegistry({ maxConcurrency: 1, queueTimeoutMs: 100 });
-    const callApi = vi.fn(() =>
-      provider.callApi('test prompt', {
-        prompt: { raw: 'test prompt', label: 'test prompt' },
-        vars: {
-          tenant: 'runtime-secret-tenant',
-          sessionId: 'private-session-123',
-          token: 'runtime-query-secret',
+  ])(
+    'should retry $description without exposing rendered WebSocket URL values',
+    async ({ createError, expectedMessage, expectedRateLimitHits }) => {
+      const errorSpy = vi.spyOn(logger, 'error').mockImplementation(() => {});
+      const renderedUrl =
+        'ws://runtime-secret-tenant.invalid/sessions/private-session-123?token=runtime-query-secret';
+      provider = new WebSocketProvider('ws://test.com', {
+        config: {
+          url: 'ws://{{ tenant }}.invalid/sessions/{{ sessionId }}?token={{ token }}',
+          messageTemplate: '{{ prompt }}',
+          timeoutMs: 1000,
+          maxRetries: 2,
         },
-      }),
-    );
+      });
+      emitWebSocketEvents({ type: 'error', error: createError(renderedUrl) });
 
-    try {
-      const error = await registry
-        .execute(provider, callApi, {
-          isRateLimited: isProviderResponseRateLimited,
-          getRetryAfter: () => 0,
-        })
-        .catch((caughtError: Error) => caughtError);
+      const registry = new RateLimitRegistry({ maxConcurrency: 1, queueTimeoutMs: 100 });
+      const callApi = vi.fn(() =>
+        provider.callApi('test prompt', {
+          prompt: { raw: 'test prompt', label: 'test prompt' },
+          vars: {
+            tenant: 'runtime-secret-tenant',
+            sessionId: 'private-session-123',
+            token: 'runtime-query-secret',
+          },
+        }),
+      );
 
-      if (!(error instanceof Error)) {
-        throw new Error('Expected the WebSocket provider call to fail');
+      try {
+        const error = await registry
+          .execute(provider, callApi, {
+            isRateLimited: isProviderResponseRateLimited,
+            getRetryAfter: () => 0,
+          })
+          .catch((caughtError: Error) => caughtError);
+
+        if (!(error instanceof Error)) {
+          throw new Error('Expected the WebSocket provider call to fail');
+        }
+        expect(callApi).toHaveBeenCalledTimes(3);
+        expect(error.message).toBe(expectedMessage);
+        expect(Object.values(registry.getMetrics())[0]).toMatchObject({
+          retriedRequests: 2,
+          rateLimitHits: expectedRateLimitHits,
+          failedRequests: 1,
+        });
+
+        const observableError = JSON.stringify({
+          message: error.message,
+          logs: errorSpy.mock.calls,
+          metrics: registry.getMetrics(),
+        });
+        expect(observableError).not.toContain('runtime-secret-tenant');
+        expect(observableError).not.toContain('private-session-123');
+        expect(observableError).not.toContain('runtime-query-secret');
+      } finally {
+        registry.dispose();
       }
-      expect(callApi).toHaveBeenCalledTimes(3);
-      expect(error.message).toBe(expectedMessage);
-      expect(Object.values(registry.getMetrics())[0]).toMatchObject({
-        retriedRequests: 2,
-        rateLimitHits: expectedRateLimitHits,
-        failedRequests: 1,
-      });
-
-      const observableError = JSON.stringify({
-        message: error.message,
-        logs: errorSpy.mock.calls,
-        metrics: registry.getMetrics(),
-      });
-      expect(observableError).not.toContain('runtime-secret-tenant');
-      expect(observableError).not.toContain('private-session-123');
-      expect(observableError).not.toContain('runtime-query-secret');
-    } finally {
-      registry.dispose();
-    }
-  });
+    },
+  );
 
   it('should retry transient TLS failures when the rendered URL contains certificate text', async () => {
     const errorSpy = vi.spyOn(logger, 'error').mockImplementation(() => {});
@@ -888,6 +887,52 @@ describe('WebSocketProvider', () => {
         await timeoutPromise;
 
         expect(mockWs.close).toHaveBeenCalled();
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
+    it('should time out when the stream delivers a partial chunk and then stalls', async () => {
+      vi.useFakeTimers();
+      try {
+        // Accumulates every chunk but never signals completion, which is what a server
+        // that streams a partial answer and then stops sending looks like.
+        const streamResponse = vi.fn((accumulator: any, event: any) => [
+          { output: `${accumulator.output ?? ''}${event?.data ?? ''}` },
+          '',
+        ]);
+
+        provider = new WebSocketProvider('ws://test.com', {
+          config: {
+            messageTemplate: '{{ prompt }}',
+            timeoutMs: 100,
+            streamResponse,
+          },
+        });
+
+        emitWebSocketEvents({ type: 'open' }, { type: 'message', data: 'partial chunk' });
+
+        const onResolved = vi.fn();
+        const onRejected = vi.fn();
+        const responsePromise = provider.callApi('timeout test').then(onResolved, onRejected);
+
+        // Deliver the partial chunk while the clock is still short of the timeout.
+        await vi.advanceTimersByTimeAsync(0);
+        expect(streamResponse).toHaveBeenCalledTimes(1);
+        expect(onResolved).not.toHaveBeenCalled();
+        expect(onRejected).not.toHaveBeenCalled();
+
+        // Nothing else ever arrives, so the request deadline still has to fire.
+        await vi.advanceTimersByTimeAsync(200);
+
+        expect(onResolved).not.toHaveBeenCalled();
+        expect(onRejected).toHaveBeenCalledTimes(1);
+        const [error] = onRejected.mock.calls[0];
+        expect(error).toBeInstanceOf(Error);
+        expect(error.message).toContain('WebSocket request timed out after 100ms');
+        expect(mockWs.close).toHaveBeenCalled();
+
+        await responsePromise;
       } finally {
         vi.useRealTimers();
       }

@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 
 import Head from '@docusaurus/Head';
 import Link from '@docusaurus/Link';
@@ -7,8 +7,8 @@ import { EventCard, EventFilters, FeaturedEvent } from '../../components/Events'
 import {
   type Event,
   events,
+  getEventsAt,
   getEventYear,
-  getFeaturedEvent,
   getPastEvents,
   getUpcomingEvents,
 } from '../../data/events';
@@ -16,11 +16,52 @@ import styles from './index.module.css';
 
 import type { FilterStatus, FilterYear } from '../../components/Events';
 
+const MAX_ROLLOVER_TIMEOUT_MS = 2 ** 31 - 1;
+
 export default function EventsPage(): React.ReactElement {
   const [statusFilter, setStatusFilter] = useState<FilterStatus>('all');
   const [yearFilter, setYearFilter] = useState<FilterYear>('all');
+  const [liveEvents, setLiveEvents] = useState<Event[]>(events);
 
-  const featuredEvent = getFeaturedEvent();
+  useEffect(() => {
+    let rolloverTimer: number | undefined;
+
+    const refreshEvents = () => {
+      const now = Date.now();
+
+      setLiveEvents((current) => {
+        const refreshed = getEventsAt(now);
+        return current.every((event, index) => event.status === refreshed[index]?.status)
+          ? current
+          : refreshed;
+      });
+
+      const nextClosingTime = events.reduce((next, event) => {
+        const closesAt = Date.parse(event.endDate);
+        return closesAt >= now ? Math.min(next, closesAt) : next;
+      }, Number.POSITIVE_INFINITY);
+
+      if (Number.isFinite(nextClosingTime)) {
+        rolloverTimer = window.setTimeout(
+          refreshEvents,
+          Math.min(nextClosingTime - now + 1, MAX_ROLLOVER_TIMEOUT_MS),
+        );
+      }
+    };
+
+    refreshEvents();
+
+    return () => {
+      if (rolloverTimer !== undefined) {
+        window.clearTimeout(rolloverTimer);
+      }
+    };
+  }, []);
+
+  const upcomingEvents = useMemo(() => getUpcomingEvents(liveEvents), [liveEvents]);
+  const pastEvents = useMemo(() => getPastEvents(liveEvents), [liveEvents]);
+
+  const featuredEvent = upcomingEvents[0];
 
   // Get available years from events
   const availableYears = useMemo(() => {
@@ -34,14 +75,12 @@ export default function EventsPage(): React.ReactElement {
 
     // Apply status filter
     if (statusFilter === 'upcoming') {
-      result = getUpcomingEvents();
+      result = upcomingEvents;
     } else if (statusFilter === 'past') {
-      result = getPastEvents();
+      result = pastEvents;
     } else {
       // Sort all events: upcoming first (by date asc), then past (by date desc)
-      const upcoming = getUpcomingEvents();
-      const past = getPastEvents();
-      result = [...upcoming, ...past];
+      result = [...upcomingEvents, ...pastEvents];
     }
 
     // Apply year filter
@@ -50,29 +89,29 @@ export default function EventsPage(): React.ReactElement {
     }
 
     return result;
-  }, [statusFilter, yearFilter]);
+  }, [pastEvents, statusFilter, upcomingEvents, yearFilter]);
 
   // Calculate event counts for filters
   const eventCounts = useMemo(() => {
-    let allEvents = events;
-    let upcomingEvents = getUpcomingEvents();
-    let pastEvents = getPastEvents();
+    let allEvents = liveEvents;
+    let upcomingForYear = upcomingEvents;
+    let pastForYear = pastEvents;
 
     // If year filter is applied, filter counts
     if (yearFilter !== 'all') {
-      allEvents = events.filter((event) => getEventYear(event.startDate) === yearFilter);
-      upcomingEvents = upcomingEvents.filter(
+      allEvents = liveEvents.filter((event) => getEventYear(event.startDate) === yearFilter);
+      upcomingForYear = upcomingEvents.filter(
         (event) => getEventYear(event.startDate) === yearFilter,
       );
-      pastEvents = pastEvents.filter((event) => getEventYear(event.startDate) === yearFilter);
+      pastForYear = pastEvents.filter((event) => getEventYear(event.startDate) === yearFilter);
     }
 
     return {
       all: allEvents.length,
-      upcoming: upcomingEvents.length,
-      past: pastEvents.length,
+      upcoming: upcomingForYear.length,
+      past: pastForYear.length,
     };
-  }, [yearFilter]);
+  }, [liveEvents, pastEvents, upcomingEvents, yearFilter]);
 
   return (
     <Layout

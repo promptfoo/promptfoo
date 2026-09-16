@@ -24,8 +24,8 @@
 
 ## Quick Start
 
-Requires [Node.js](https://nodejs.org/en/download) `^20.20.0` or `>=22.22.0` for npm and npx usage.
-[Node.js 20 support ends July 30, 2026 at 00:00 UTC](https://www.promptfoo.dev/docs/installation/#nodejs-runtime-support); upgrade to Node.js 24 LTS before updating promptfoo at or after the cutoff.
+Requires [Node.js](https://nodejs.org/en/download) `>=22.22.0` for npm and npx usage. Node.js 24 LTS
+is recommended; see the [runtime support guide](https://www.promptfoo.dev/docs/installation/#nodejs-runtime-support).
 
 ```sh
 npm install -g promptfoo
