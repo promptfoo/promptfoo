@@ -1,4 +1,5 @@
 import { ResultFailureReason as ResultFailureReasonEnum } from '../../../types/index';
+import { redactSecretLeaves, sanitizeErrorMessage } from '../../../util/sanitizer';
 import { truncateText } from './utils';
 
 import type {
@@ -151,10 +152,10 @@ function formatSingleResult(
       label: result.prompt?.label,
       raw: promptRaw,
     },
-    provider: {
-      id: result.provider?.id ?? 'unknown',
-      label: result.provider?.label,
-    },
+    provider: redactSecretLeaves(
+      { id: result.provider?.id ?? 'unknown', label: result.provider?.label },
+      { redactOpaqueValues: false },
+    ),
     response: {
       output: outputText,
       tokenUsage: result.tokenUsage,
@@ -165,7 +166,10 @@ function formatSingleResult(
       success: result.success,
       score: result.score,
       namedScores: result.namedScores,
-      error: result.error ?? undefined,
+      error:
+        result.error == null
+          ? undefined
+          : truncateText(sanitizeErrorMessage(result.error), maxTextLength),
       failureReason: formatFailureReason(result.failureReason),
     },
     assertions,
@@ -216,7 +220,8 @@ export function formatPromptsSummary(summary: EvaluateSummary): Array<{
   if (summary.version === 3 && 'prompts' in summary) {
     return summary.prompts.map((prompt) => ({
       label: prompt.label,
-      provider: prompt.provider,
+      provider: redactSecretLeaves({ provider: prompt.provider }, { redactOpaqueValues: false })
+        .provider,
       metrics: prompt.metrics,
     }));
   }

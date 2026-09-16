@@ -832,7 +832,7 @@ export default class Eval {
    * This may be higher than getResultsCount() when there are multiple prompts/providers.
    */
   async getTotalResultRowCount(): Promise<number> {
-    return getTotalResultRowCount(this.id);
+    return this.persisted ? getTotalResultRowCount(this.id) : this.results.length;
   }
 
   /**

@@ -23,6 +23,29 @@ describe('provider credential policy', () => {
     ).toBe('configured-key');
   });
 
+  it.each(['configured', 'provider-env', 'process-env'] as const)(
+    'does not use a redaction marker as a %s credential',
+    (source) => {
+      mockProcessEnv({
+        AZURE_API_KEY: source === 'process-env' ? '[REDACTED]' : 'fallback-key',
+        AZURE_OPENAI_API_KEY: 'legacy-key',
+      });
+      const config = source === 'configured' ? { apiKey: '[REDACTED]' } : {};
+      const env = source === 'provider-env' ? { AZURE_API_KEY: '[REDACTED]' } : undefined;
+      expect(resolveProviderApiKey(config, env, defaults)).toBe(
+        source === 'process-env' ? 'legacy-key' : 'fallback-key',
+      );
+      expect(config).toEqual(source === 'configured' ? { apiKey: '[REDACTED]' } : {});
+    },
+  );
+
+  it('returns no credential when every available value is redacted', () => {
+    mockProcessEnv({ AZURE_API_KEY: '[REDACTED]', AZURE_OPENAI_API_KEY: '[REDACTED]' });
+    expect(
+      resolveProviderApiKey({ apiKey: '[REDACTED]' }, { AZURE_API_KEY: '[REDACTED]' }, defaults),
+    ).toBeUndefined();
+  });
+
   it('prefers provider environment for a named credential', () => {
     mockProcessEnv({ TOGETHER_API_KEY: 'process-key' });
     expect(

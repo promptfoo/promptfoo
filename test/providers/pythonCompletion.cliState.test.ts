@@ -2,7 +2,7 @@
  * Tests for cliState.maxConcurrency propagation to Python worker pool.
  * This is a focused test file to avoid the complex mocking issues in pythonCompletion.test.ts.
  */
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import cliState from '../../src/cliState';
 
 // Mock all dependencies to avoid import chain issues
@@ -113,6 +113,36 @@ describe('PythonProvider cliState.maxConcurrency', () => {
     // Reset getEnvInt
     mockGetEnvInt.mockReset();
     mockGetEnvInt.mockReturnValue(undefined);
+  });
+
+  afterEach(() => {
+    cliState.maxConcurrency = undefined;
+    vi.resetModules();
+  });
+
+  it('shares scoped worker limits with a separately loaded SDK copy', async () => {
+    vi.resetModules();
+    const otherState = (await import('../../src/cliState')).default;
+    const { PythonProvider: OtherPythonProvider } = await import(
+      '../../src/providers/pythonCompletion'
+    );
+    expect(otherState).not.toBe(cliState);
+    await Promise.all(
+      [4, 7].map((limit) =>
+        cliState.withMaxConcurrency(limit, async () => {
+          await Promise.resolve();
+          expect(otherState.maxConcurrency).toBe(limit);
+          await new OtherPythonProvider('script.py').initialize();
+          await otherState.withMaxConcurrency(limit + 1, async () => {
+            expect(cliState.maxConcurrency).toBe(limit + 1);
+          });
+          expect(otherState.maxConcurrency).toBe(limit);
+        }),
+      ),
+    );
+    expect(mockPythonWorkerPool.mock.calls.map((call) => call[2]).sort()).toEqual([4, 7]);
+    expect(otherState.maxConcurrency).toBeUndefined();
+    expect(cliState.maxConcurrency).toBeUndefined();
   });
 
   it('should use cliState.maxConcurrency when config.workers is not set', async () => {

@@ -7,6 +7,7 @@ import { trace as otelTrace, SpanStatusCode } from '@opentelemetry/api';
 import dedent from 'dedent';
 import cliState from '../cliState';
 import { getEnvString } from '../envars';
+import { getRuntimeEnv } from '../envOverrides';
 import { importModule, resolvePackageEntryPoint } from '../esm';
 import logger from '../logger';
 import {
@@ -1417,9 +1418,10 @@ export class ClaudeCodeSDKProvider implements ApiProvider {
     // Sort keys for stable cache-key hashing. Precedence is documented on the
     // `env` field of ClaudeCodeOptions: process.env < config.env < EnvOverrides.
     const env: Record<string, string> = {};
-    for (const key of Object.keys(process.env).sort()) {
-      if (process.env[key] !== undefined) {
-        env[key] = process.env[key];
+    const processEnv = getRuntimeEnv();
+    for (const key of Object.keys(processEnv).sort()) {
+      if (processEnv[key] !== undefined) {
+        env[key] = processEnv[key];
       }
     }
 

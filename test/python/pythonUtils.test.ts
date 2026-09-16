@@ -19,6 +19,7 @@ vi.mock('child_process', () => ({
 }));
 
 import { PythonShell } from 'python-shell';
+import cliState from '../../src/cliState';
 import { getEnvBool, getEnvString } from '../../src/envars';
 import logger from '../../src/logger';
 import * as pythonUtils from '../../src/python/pythonUtils';
@@ -27,6 +28,7 @@ import {
   removeSecureTempDirectory,
   writeSecureTempFile,
 } from '../../src/util/secureTempFiles';
+import { mockProcessEnv } from '../util/utils';
 
 const fsMock = vi.hoisted(() => ({
   writeFileSync: vi.fn(),
@@ -515,6 +517,30 @@ describe('Python Utils', () => {
   });
 
   describe('runPython', () => {
+    it('passes file defaults to one-shot Python calls without changing process.env', async () => {
+      const restore = mockProcessEnv({ PROMPTFOO_REVIEW_ENV_PROBE: 'host' });
+      vi.mocked(fs.readFileSync).mockReturnValue(
+        JSON.stringify({ type: 'final_result', data: 42 }),
+      );
+      mockExecFileAsync.mockResolvedValue({ stdout: 'Python 3.8.10\n', stderr: '' });
+      mockPythonShellInstance.end.mockImplementation((callback: (error: Error | null) => void) =>
+        callback(null),
+      );
+      try {
+        await cliState.withEnvFileOverrides({ PROMPTFOO_REVIEW_ENV_PROBE: 'file' }, () =>
+          pythonUtils.runPython('/path/to/script.py', 'call_api', []),
+        );
+        expect(PythonShell).toHaveBeenCalledWith(
+          'wrapper.py',
+          expect.objectContaining({
+            env: expect.objectContaining({ PROMPTFOO_REVIEW_ENV_PROBE: 'file' }),
+          }),
+        );
+        expect(process.env.PROMPTFOO_REVIEW_ENV_PROBE).toBe('host');
+      } finally {
+        restore();
+      }
+    });
     beforeEach(() => {
       vi.clearAllMocks();
     });

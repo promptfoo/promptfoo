@@ -2131,6 +2131,27 @@ describe('ConfigResolutionError', () => {
     vi.clearAllMocks();
   });
 
+  it.each([
+    undefined,
+    '',
+    'Use another config',
+    'Fetch https://user:PRIVATE_OVERRIDE@example.com failed',
+  ])('sanitizes credentials while preserving the CLI message override: %s', (cliMessage) => {
+    const error = new ConfigResolutionError('Fetch https://user:PRIVATE_ERROR@example.com failed', {
+      cliMessage,
+    });
+    expect(error.message).not.toContain('PRIVATE_ERROR');
+    expect(error.message).toContain('example.com');
+    expect(error.cliMessage).not.toContain('PRIVATE_OVERRIDE');
+    if (cliMessage === undefined) {
+      expect(error.cliMessage).toBe(error.message);
+    } else if (!cliMessage.includes('PRIVATE_OVERRIDE')) {
+      expect(error.cliMessage).toBe(cliMessage);
+    }
+    logConfigResolutionError(error);
+    expect(logger.error).toHaveBeenCalledWith(error.cliMessage);
+  });
+
   it('should fall back to error logging for invalid runtime log levels', () => {
     const error = new ConfigResolutionError('invalid log level', {
       logLevel: 'debug' as any,
@@ -2242,6 +2263,65 @@ describe('readConfig', () => {
 
     expect(result).toEqual(mockConfig);
     expect(importModule).toHaveBeenCalledWith('config.js');
+  });
+
+  it('binds preconstructed providers to their containing JavaScript config', async () => {
+    const providers = new Map<string, ReturnType<typeof createMockProvider>>();
+    vi.mocked(importModule).mockImplementation(async (configPath) => {
+      const provider = createMockProvider();
+      provider.setConfigBasePath = vi.fn();
+      providers.set(String(configPath), provider);
+      await Promise.resolve();
+      return { providers: [provider], prompts: ['hello'] };
+    });
+    const configs = ['/first/config.mjs', '/second/config.mjs'];
+    const loaded = await Promise.all(configs.map((configPath) => readConfig(configPath)));
+    for (const [index, configPath] of configs.entries()) {
+      const provider = providers.get(configPath)!;
+      expect(provider.setConfigBasePath).toHaveBeenCalledWith(
+        path.resolve(path.dirname(configPath)),
+      );
+      expect((loaded[index].providers as unknown[])[0]).toBe(provider);
+    }
+  });
+
+  it('binds nested preconstructed providers once without walking their internal state', async () => {
+    const nested = createMockProvider();
+    nested.setConfigBasePath = vi.fn();
+    const internal = createMockProvider();
+    internal.setConfigBasePath = vi.fn();
+    nested.config = { internal };
+    vi.mocked(importModule).mockResolvedValue({
+      providers: ['echo'],
+      prompts: ['hello'],
+      defaultTest: { provider: nested, options: { provider: { text: nested } } },
+      tests: [{ assert: [{ type: 'llm-rubric', provider: nested, value: 'Pass' }] }],
+      scenarios: [{ config: [{ provider: nested }], tests: [{ provider: nested }] }],
+    });
+    await readConfig('/nested/config.mjs');
+    expect(nested.setConfigBasePath).toHaveBeenCalledExactlyOnceWith(path.resolve('/nested'));
+    expect(internal.setConfigBasePath).not.toHaveBeenCalled();
+    expect(nested.config.internal).toBe(internal);
+  });
+
+  it('cleans up nested preconstructed providers with the evaluation scope', async () => {
+    const { providerRegistry } = await import('../../../src/providers/providerRegistry');
+    const actual = await vi.importActual<typeof import('../../../src/providers/index')>(
+      '../../../src/providers/index',
+    );
+    const provider = createMockProvider();
+    provider.cleanup = vi.fn().mockResolvedValue(undefined);
+    vi.mocked(importModule).mockResolvedValue({
+      providers: ['echo'],
+      prompts: ['hello'],
+      defaultTest: { provider },
+    });
+    await vi
+      .mocked(loadApiProviders)
+      .withImplementation(actual.loadApiProviders, () =>
+        providerRegistry.withScope(() => readConfig('/nested/config.mjs')),
+      );
+    expect(provider.cleanup).toHaveBeenCalledOnce();
   });
 
   it('should throw error for unsupported file format', async () => {

@@ -22,6 +22,19 @@ function createEvaluation(overrides: Partial<InMemoryEvaluation> = {}): InMemory
 }
 
 describe('InMemoryEvaluationStore', () => {
+  it('retries a pair with an error even when it also has an older success', async () => {
+    const store = new InMemoryEvaluationStore(
+      createEvaluation({
+        results: [
+          createEvaluateResult({ testIdx: 0, promptIdx: 0, failureReason: 2 }),
+          createEvaluateResult({ testIdx: 0, promptIdx: 0, failureReason: 0 }),
+        ],
+      }),
+    );
+    expect(await store.readCompletedIndexPairs()).toContain('0:0');
+    expect(await store.readCompletedIndexPairs({ excludeErrors: true })).not.toContain('0:0');
+  });
+
   it('exposes the evaluation record and its core properties', () => {
     const evaluation = createEvaluation({
       persisted: true,

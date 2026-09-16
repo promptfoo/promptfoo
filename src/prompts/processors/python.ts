@@ -2,6 +2,7 @@ import * as fs from 'fs';
 
 import { PythonShell } from 'python-shell';
 import { getEnvString } from '../../envars';
+import { getRuntimeEnv } from '../../envOverrides';
 import logger from '../../logger';
 import { runPython } from '../../python/pythonUtils';
 import invariant from '../../util/invariant';
@@ -66,6 +67,7 @@ export const pythonPromptFunctionLegacy = async (
   };
   const options: PythonShellOptions = {
     mode: 'text',
+    env: getRuntimeEnv(),
     pythonPath: getEnvString('PROMPTFOO_PYTHON', 'python'),
     args: [safeJsonStringify(transformedContext) as string],
   };

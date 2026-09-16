@@ -99,7 +99,10 @@ After restarting your AI tool, you should see promptfoo tools available. Try ask
 - **`list_evaluations`** - Browse your evaluation runs with optional dataset filtering
 - **`get_evaluation_details`** - Get comprehensive results, metrics, and test cases for a specific evaluation
 - **`run_evaluation`** - Execute evaluations with custom parameters, test case filtering, and concurrency control
+  Filtered runs check access to the selected targets and active graders, including graders loaded from provider files or added by extension hooks. Default assertions disabled by a selected test do not require access to their graders.
+  Without `configPath`, it uses the discovered `promptfooconfig.yaml`, `.yml`, or `.json` file.
 - **`share_evaluation`** - Generate publicly shareable URLs for evaluation results
+  Shared results redact credentials in configuration, provider IDs, and trace metadata, and omit executable function bodies. Runtime callbacks and credentials remain available locally.
 
 ### Generation Tools
 
@@ -131,6 +134,16 @@ The AI will use these tools in sequence:
 1. `validate_promptfoo_config` - Check your configuration
 2. `list_evaluations` - Show recent runs
 3. `run_evaluation` - Execute with test case filtering, such as `{"start": 0, "end": 5}` for the first five zero-based test indices
+
+Test case indices address logical tests after scenario expansion: explicit tests first; then, for each scenario, config rows in declaration order with test templates iterated within each row. Variable combinations, prompts, providers, and repeats do not add indices. Reusing a suite does not append duplicate scenario rows. Selected scenario rows retain their conversation grouping when extension hooks serialize, edit, reorder, add, or remove tests. Each `run_evaluation` call keeps its concurrency setting isolated from overlapping calls.
+
+Environment files configured through `commandLineOptions.envPath` are also isolated per call, including built-in providers, subprocess providers, executable prompts, and callbacks. Suite environment settings override file defaults. JavaScript target and grading callbacks receive these values through `context.env`; that property is omitted from context serialization. SDK `evaluate()` calls retain their suite environment through execution and output writing. Loading a file does not change the server process environment or copy its values into the saved configuration’s `env` settings.
+
+Providers shared by overlapping MCP or SDK calls remain open until both calls finish. Relative assertion files resolve against each call's configuration directory. MCP connections use the calling evaluation's environment even if another evaluation has already rendered the shared provider's configuration. MCP and Python provider instances keep one execution environment while active; use separate instances for different environments. Reusing an instance after cleanup starts a fresh connection or worker pool. Shared eval records redact provider credentials and TLS private keys while preserving public certificates.
+
+Provider permission checks include nested graders, including those supplied by extension hooks, whether or not `providerFilter` is set. Replay fingerprints distinguish provider implementation paths from literal labels and configuration values, including `file://` strings. File-backed HTTP transforms, parsers, and authentication callbacks are included. Selected test replay also checks extension hook sources before running them. Long model revisions, prompt settings, request-body identifiers, and URL query values affect replay identity; credential values are redacted before fingerprinting. Preconstructed grading providers retain their implementation and public settings in replay identity. Resume and retry restore saved provider selections before applying runtime filters. When a configuration file is discovered automatically, the MCP response reports that file’s path.
+
+Use environment references for credentials. With `write: true`, local evaluation storage retains inline configuration values; credential redaction for shared results does not remove those local values.
 
 ### 2. Provider Comparison
 

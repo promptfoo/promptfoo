@@ -121,6 +121,9 @@ interface TraceData {
 }
 
 interface AssertionValueFunctionContext {
+  // Invocation-local environment, omitted from serialized context
+  env?: Record<string, string | undefined>;
+
   // Raw prompt sent to LLM
   prompt: string | undefined;
 
@@ -202,7 +205,7 @@ module.exports = (output, context) => {
 
 ## External script
 
-To reference an external file, use the `file://` prefix:
+To reference an external file, use the `file://` prefix: Windows drive paths are supported, for example `file://C:/checks/assert.cjs:check`; the final suffix selects the exported function.
 
 ```yaml
 assert:

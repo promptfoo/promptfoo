@@ -15,16 +15,20 @@ import { fetchHuggingFaceDataset } from '../integrations/huggingfaceDatasets';
 import logger from '../logger';
 import { fetchCsvFromSharepoint } from '../microsoftSharepoint';
 import { loadApiProvider } from '../providers/index';
+import { providerRegistry } from '../providers/providerRegistry';
 import { runPython } from '../python/pythonUtils';
 import telemetry from '../telemetry';
+import { isApiProvider } from '../types/providers';
 import { parseAzureBlobUri, readAzureBlobText, sanitizeAzureBlobUriForError } from './azureBlob';
 import { maybeLoadConfigFromExternalFile } from './file';
 import { isJavascriptFile } from './fileExtensions';
+import { isProviderTypeMap } from './gradingProvider';
 import { parseXlsxFile } from './xlsx';
 import { loadYaml } from './yamlLoad';
 
 import type {
   CsvRow,
+  EvaluateTestSuite,
   ProviderOptions,
   TestCase,
   TestCaseWithVarsFile,
@@ -279,13 +283,52 @@ function getStandaloneTestsFileMetadata(
   };
 }
 
+export async function adoptExistingTestProviders(
+  testSuite: Partial<Pick<EvaluateTestSuite, 'providers' | 'defaultTest' | 'tests' | 'scenarios'>>,
+): Promise<void> {
+  const existingProviders: unknown[] = Array.isArray(testSuite.providers)
+    ? [...testSuite.providers]
+    : [testSuite.providers];
+  for (const test of [
+    testSuite.defaultTest,
+    ...(Array.isArray(testSuite.tests) ? testSuite.tests : []),
+    ...(testSuite.scenarios ?? []).flatMap((scenario) =>
+      typeof scenario === 'string' ? [] : [...scenario.config, ...(scenario.tests ?? [])],
+    ),
+  ]) {
+    if (!test || typeof test !== 'object' || 'path' in test) {
+      continue;
+    }
+    existingProviders.push(test.provider, test.options?.provider);
+    const assertions = [...(test.assert ?? [])];
+    while (assertions.length) {
+      const assertion = assertions.pop()!;
+      if (assertion.type === 'assert-set') {
+        assertions.push(...assertion.assert);
+      } else {
+        existingProviders.push(assertion.provider);
+      }
+    }
+  }
+  for (const provider of existingProviders) {
+    const instances = isProviderTypeMap(provider) ? Object.values(provider) : [provider];
+    for (const instance of instances) {
+      if (isApiProvider(instance)) {
+        await providerRegistry.adopt(instance);
+      }
+    }
+  }
+}
+
 async function readJavascriptTestCases(
   pathWithoutFunction: string,
   maybeFunctionName: string | undefined,
   finalConfig: Record<string, any> | undefined,
 ): Promise<TestCase[]> {
   const mod = await importModule(pathWithoutFunction, maybeFunctionName);
-  return typeof mod === 'function' ? await mod(finalConfig) : mod;
+  const tests = typeof mod === 'function' ? await mod(finalConfig) : mod;
+  await adoptExistingTestProviders({ tests });
+  return tests;
 }
 
 async function readPythonTestCases(

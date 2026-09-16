@@ -1,3 +1,7 @@
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
+
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 vi.mock('../../../src/util/fetch/index', async () => {
@@ -11,6 +15,11 @@ vi.mock('../../../src/util/fetch/index', async () => {
   };
 });
 
+vi.mock('../../../src/esm', async (importOriginal) => ({
+  ...(await importOriginal()),
+  importModule: vi.fn(),
+}));
+
 vi.mock('../../../src/util/time', async () => {
   const actual =
     await vi.importActual<typeof import('../../../src/util/time')>('../../../src/util/time');
@@ -20,6 +29,7 @@ vi.mock('../../../src/util/time', async () => {
   };
 });
 
+import { importModule } from '../../../src/esm';
 import { loadApiProvider } from '../../../src/providers';
 import { A2AProvider } from '../../../src/providers/a2a';
 import { fetchWithProxy, fetchWithTimeout } from '../../../src/util/fetch/index';
@@ -61,6 +71,62 @@ describe('A2AProvider', () => {
   beforeEach(() => {
     vi.resetAllMocks();
     vi.mocked(sleep).mockResolvedValue(undefined);
+  });
+
+  it('does not import a response transform during provider construction', async () => {
+    vi.mocked(importModule).mockResolvedValue(() => ({ output: 'fixture' }));
+    const instance = new A2AProvider('a2a:https://agent.example.com/a2a/v1', {
+      config: { transformResponse: 'file://response.js' },
+    });
+    instance.getSourceHash();
+    expect(importModule).not.toHaveBeenCalled();
+  });
+
+  it('hashes current transform bytes without importing the module', () => {
+    const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'a2a-source-'));
+    try {
+      const file = path.join(directory, 'transform.mjs');
+      fs.writeFileSync(file, "export default () => 'first';");
+      const instance = provider({ transformResponse: `file://${file}` });
+      const original = instance.getSourceHash();
+      expect(instance.getSourceHash()).toBe(original);
+      fs.writeFileSync(file, "export default () => 'changed';");
+      expect(instance.getSourceHash()).not.toBe(original);
+      expect(importModule).not.toHaveBeenCalled();
+    } finally {
+      fs.rmSync(directory, { recursive: true, force: true });
+    }
+  });
+
+  it('imports and reuses the response transform when calls execute', async () => {
+    vi.mocked(importModule).mockResolvedValue(() => ({ output: 'transformed' }));
+    vi.mocked(fetchWithTimeout).mockImplementation(async () =>
+      jsonResponse({
+        message: { role: 'ROLE_AGENT', parts: [{ text: 'original' }] },
+      }),
+    );
+    const instance = provider({ transformResponse: 'file://response.js' });
+    await expect(instance.callApi('one')).resolves.toMatchObject({ output: 'transformed' });
+    await expect(instance.callApi('two')).resolves.toMatchObject({ output: 'transformed' });
+    expect(importModule).toHaveBeenCalledTimes(1);
+  });
+
+  it('binds a preconstructed transform to its configuration directory', async () => {
+    vi.mocked(importModule).mockResolvedValue(() => ({ output: 'transformed' }));
+    vi.mocked(fetchWithTimeout).mockResolvedValue(
+      jsonResponse({ message: { role: 'ROLE_AGENT', parts: [{ text: 'original' }] } }),
+    );
+    const instance = provider({ transformResponse: 'file://response.js' });
+    instance.setConfigBasePath('/declaring/config');
+    await expect(instance.callApi('hello')).resolves.toMatchObject({ output: 'transformed' });
+    expect(importModule).toHaveBeenCalledWith(
+      path.resolve('/declaring/config/response.js'),
+      undefined,
+    );
+    expect(() => instance.setConfigBasePath('/different/config')).toThrow(
+      'initialized A2A provider',
+    );
+    expect(() => instance.setConfigBasePath('/declaring/config')).not.toThrow();
   });
 
   it('loads from the provider registry with a bare id and shorthand url', async () => {

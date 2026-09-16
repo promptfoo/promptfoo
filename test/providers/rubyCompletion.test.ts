@@ -7,6 +7,7 @@ import { RubyProvider } from '../../src/providers/rubyCompletion';
 import * as rubyUtils from '../../src/ruby/rubyUtils';
 import { runRuby } from '../../src/ruby/rubyUtils';
 import * as fileReference from '../../src/util/fileReference';
+import { mockProcessEnv } from '../util/utils';
 
 const fsMocks = vi.hoisted(() => ({
   readFileSync: vi.fn(),
@@ -91,6 +92,8 @@ vi.mock('../../src/util', async () => {
 });
 
 describe('RubyProvider', () => {
+  let restoreHostEnv: () => void;
+
   const mockRunRuby = vi.mocked(runRuby);
   const mockGetCache = vi.mocked(vi.mocked(getCache));
   const mockIsCacheEnabled = vi.mocked(isCacheEnabled);
@@ -98,6 +101,7 @@ describe('RubyProvider', () => {
   const mockResolve = vi.mocked(path.resolve);
 
   beforeEach(() => {
+    restoreHostEnv = mockProcessEnv({}, { clear: true });
     vi.clearAllMocks();
     // Reset mocked implementations to avoid test interference
     mockRunRuby.mockReset();
@@ -115,6 +119,7 @@ describe('RubyProvider', () => {
   });
 
   afterEach(() => {
+    restoreHostEnv();
     vi.clearAllMocks();
   });
 
@@ -326,6 +331,25 @@ describe('RubyProvider', () => {
   });
 
   describe('caching', () => {
+    it('bypasses cache reads and writes when provider environment is configured', async () => {
+      mockIsCacheEnabled.mockReturnValue(true);
+      const cache = {
+        get: vi.fn().mockResolvedValue(JSON.stringify({ output: 'cached' })),
+        set: vi.fn(),
+      };
+      mockGetCache.mockResolvedValue(cache as never);
+      mockRunRuby.mockResolvedValue({ output: 'fresh' });
+      for (const value of ['cache-private-first', 'cache-private-second', 'cache-private-first']) {
+        const provider = new RubyProvider('script.rb', {
+          config: { basePath: '/absolute/path/to' },
+          env: { OPENAI_API_KEY: value },
+        });
+        await provider.callApi('unchanged prompt');
+      }
+      expect(cache.get).not.toHaveBeenCalled();
+      expect(cache.set).not.toHaveBeenCalled();
+    });
+
     it('should use cached result when available', async () => {
       const provider = new RubyProvider('script.rb');
       mockIsCacheEnabled.mockReturnValue(true);
@@ -337,9 +361,7 @@ describe('RubyProvider', () => {
 
       const result = await provider.callApi('test prompt');
 
-      expect(mockCache.get).toHaveBeenCalledWith(
-        expect.stringContaining('ruby:script.rb:default:call_api:'),
-      );
+      expect(mockCache.get).toHaveBeenCalledWith(expect.stringContaining('ruby:default:call_api:'));
       expect(mockRunRuby).not.toHaveBeenCalled();
       expect(result).toEqual({ output: 'cached result', cached: true });
     });
@@ -357,7 +379,7 @@ describe('RubyProvider', () => {
       await provider.callApi('test prompt');
 
       expect(mockCache.set).toHaveBeenCalledWith(
-        expect.stringContaining('ruby:script.rb:default:call_api:'),
+        expect.stringContaining('ruby:default:call_api:'),
         '{"output":"new result"}',
       );
     });
@@ -510,9 +532,7 @@ describe('RubyProvider', () => {
         cached: false,
       });
       expect(mockCache.set).toHaveBeenCalledWith(
-        expect.stringMatching(
-          /^ruby:script\.rb:default:call_api:[a-f0-9]{64}:test prompt:undefined:undefined$/,
-        ),
+        expect.stringMatching(/^ruby:default:call_api:[a-f0-9]{64}$/),
         '{"output":"fresh result"}',
       );
     });

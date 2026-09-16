@@ -712,6 +712,9 @@
                     "type": "string"
                   },
                   "function": {},
+                  "sourceHash": {
+                    "type": "string"
+                  },
                   "config": {}
                 },
                 "required": ["raw", "label"],

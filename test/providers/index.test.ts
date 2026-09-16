@@ -1409,6 +1409,54 @@ describe('loadApiProvider', () => {
     });
   });
 
+  it.each([
+    { env: undefined, options: {}, expected: 'file-key' },
+    { env: { OPENAI_API_KEY: 'suite-key' }, options: {}, expected: 'suite-key' },
+    {
+      env: { OPENAI_API_KEY: 'suite-key' },
+      options: { env: { OPENAI_API_KEY: 'provider-key' } },
+      expected: 'provider-key',
+    },
+    { env: { OPENAI_API_KEY: undefined }, options: {}, expected: 'file-key' },
+  ])(
+    'uses env-file values beneath defined suite and provider overrides: $expected',
+    async ({ env, options, expected }) => {
+      mockProcessEnv({ OPENAI_API_KEY: 'host-key' });
+      const provider = (await cliState.withEnvFileOverrides({ OPENAI_API_KEY: 'file-key' }, () =>
+        loadApiProvider('openai:chat', { env, options }),
+      )) as OpenAiChatCompletionProvider;
+      expect(provider.getApiKey()).toBe(expected);
+      expect(process.env.OPENAI_API_KEY).toBe('host-key');
+    },
+  );
+
+  it('constructs Slack providers with an isolated env-file token', async () => {
+    mockProcessEnv({ SLACK_BOT_TOKEN: undefined });
+    await expect(
+      cliState.withEnvFileOverrides({ SLACK_BOT_TOKEN: 'fixture-slack-token' }, () =>
+        loadApiProvider('slack', { options: { config: { channel: 'fixture-channel' } } }),
+      ),
+    ).resolves.toMatchObject({ client: { token: 'fixture-slack-token' } });
+    expect(process.env.SLACK_BOT_TOKEN).toBeUndefined();
+  });
+
+  it.each([
+    {
+      id: 'envoy:fixture',
+      env: { ENVOY_API_BASE_URL: 'https://gateway.example.com' },
+      expected: 'https://gateway.example.com/v1',
+    },
+    {
+      id: 'snowflake:fixture',
+      env: { SNOWFLAKE_ACCOUNT_IDENTIFIER: 'org-account' },
+      expected: 'https://org-account.snowflakecomputing.com',
+    },
+  ])('constructs $id from isolated file defaults', async ({ id, env, expected }) => {
+    mockProcessEnv({ ENVOY_API_BASE_URL: undefined, SNOWFLAKE_ACCOUNT_IDENTIFIER: undefined });
+    const provider = await cliState.withEnvFileOverrides(env, () => loadApiProvider(id));
+    expect(provider.config.apiBaseUrl).toBe(expected);
+  });
+
   it('passes provider env overrides to provider instances', async () => {
     const provider = (await loadApiProvider('openai:chat', {
       options: {
@@ -1478,7 +1526,7 @@ describe('loadApiProvider', () => {
         },
       })) as AbliterationProvider;
 
-      expect(provider.env?.ABLIT_API_BASE_URL).toBeUndefined();
+      expect(provider.env?.ABLIT_API_BASE_URL).toBe('https://cli-state.example.com/v1');
       expect(provider.config.apiBaseUrl).toBe('https://cli-state.example.com/v1');
       expect(provider.getApiKey()).toBe('provider-key');
     } finally {

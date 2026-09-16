@@ -4,7 +4,7 @@
  */
 import safeStringify from 'fast-safe-stringify';
 
-import type { EvalRuntimeOptions, UnifiedConfig } from '../types';
+import type { EvalRuntimeOptions, OutputFile, UnifiedConfig } from '../types';
 
 const MAX_DEPTH = 4;
 const DUMMY_BASE = 'http://placeholder';
@@ -49,7 +49,7 @@ function hasUrlUserinfoPassword(url: string): boolean {
  * a benign name in a malformed URL, and `;`-separated query pairs (URLSearchParams
  * only splits on `&`). Linear: a single split plus per-segment checks.
  */
-function hasSecretFormSegment(text: string): boolean {
+function hasSecretFormSegment(text: string, redactOpaqueValues = true): boolean {
   for (const segment of text.split(/[?&;#]/)) {
     const equalsIndex = segment.indexOf('=');
     if (equalsIndex <= 0) {
@@ -61,8 +61,8 @@ function hasSecretFormSegment(text: string): boolean {
     }
     const decodedValue = decodeFormComponent(rawValue);
     if (
-      looksLikeSecret(rawValue) ||
-      (decodedValue !== undefined && looksLikeSecret(decodedValue))
+      looksLikeSecret(rawValue, redactOpaqueValues) ||
+      (decodedValue !== undefined && looksLikeSecret(decodedValue, redactOpaqueValues))
     ) {
       return true;
     }
@@ -92,8 +92,12 @@ function hasSecretFormSegment(text: string): boolean {
  * carry one of the structural markers above (the secret-named-key case is covered
  * by `hasSecretFormSegment`, which normalizes keys like `api_key` before matching).
  */
-function unparseableUrlMightLeakSecret(url: string): boolean {
-  return hasUrlUserinfoPassword(url) || looksLikeSecret(url.trim()) || hasSecretFormSegment(url);
+function unparseableUrlMightLeakSecret(url: string, redactOpaqueValues = true): boolean {
+  return (
+    hasUrlUserinfoPassword(url) ||
+    looksLikeSecret(url.trim(), redactOpaqueValues) ||
+    hasSecretFormSegment(url, redactOpaqueValues)
+  );
 }
 
 /**
@@ -311,7 +315,7 @@ export function sanitizeRuntimeOptions(
  * Check if a value looks like a secret based on common patterns.
  * Detects API keys, tokens, and other credential patterns.
  */
-export function looksLikeSecret(value: string): boolean {
+export function looksLikeSecret(value: string, detectOpaqueValues = true): boolean {
   if (typeof value !== 'string') {
     return false;
   }
@@ -359,7 +363,7 @@ export function looksLikeSecret(value: string): boolean {
   // Long base64-like strings (likely tokens/keys) - 64+ chars of alphanumeric
   // Using 64 chars to reduce false positives on concatenated IDs, base64 content, or long model names
   // Scan for disallowed characters without growing the regex stack for large values.
-  if (value.length >= 64 && !/[^a-zA-Z0-9+/=_-]/.test(value)) {
+  if (detectOpaqueValues && value.length >= 64 && !/[^a-zA-Z0-9+/=_-]/.test(value)) {
     return true;
   }
 
@@ -409,7 +413,7 @@ function isSafeTracingCredentialTemplate(value: unknown): value is string {
   return typeof value === 'string' && SAFE_TRACING_CREDENTIAL_TEMPLATE.test(value.trim());
 }
 
-function isTracingCredentialHeader(name: string, value: string): boolean {
+function isCredentialHeader(name: string, value: string, detectOpaqueValues = true): boolean {
   const normalizedName = name.replace(/([a-z0-9])([A-Z])/g, '$1_$2').toLowerCase();
   return (
     isSecretField(name) ||
@@ -418,14 +422,12 @@ function isTracingCredentialHeader(name: string, value: string): boolean {
     ) ||
     normalizedName.replace(/[-_]/g, '') === 'xhoneycombteam' ||
     /^(?:bearer|basic|token|api[-_]?key)\s+\S+/i.test(value.trim()) ||
-    looksLikeSecret(value.trim())
+    looksLikeSecret(value.trim(), detectOpaqueValues)
   );
 }
 
 function isNonSensitiveTracingHeader(name: string, value: string): boolean {
-  return (
-    SAFE_TRACING_PROVIDER_HEADERS.has(name.toLowerCase()) && !isTracingCredentialHeader(name, value)
-  );
+  return SAFE_TRACING_PROVIDER_HEADERS.has(name.toLowerCase()) && !isCredentialHeader(name, value);
 }
 
 function getTracingTemplateEnvironmentVariable(template: string): string | undefined {
@@ -851,7 +853,12 @@ export function restoreAzureBlobSasTokens<T>(value: T, storedValue: unknown): T 
 /**
  * Parse and sanitize JSON strings, also check if the string looks like a secret
  */
-function sanitizeJsonString(str: string, depth: number, maxDepth: number): string {
+function sanitizeJsonString(
+  str: string,
+  depth: number,
+  maxDepth: number,
+  redactOpaqueValues = true,
+): string {
   const redactedAzureBlobUri = redactAzureBlobSasToken(str);
   if (redactedAzureBlobUri !== str) {
     return redactedAzureBlobUri;
@@ -860,19 +867,19 @@ function sanitizeJsonString(str: string, depth: number, maxDepth: number): strin
   try {
     const parsed = JSON.parse(str);
     if (parsed && typeof parsed === 'object') {
-      const sanitized = recursiveSanitize(parsed, depth, maxDepth);
+      const sanitized = recursiveSanitize(parsed, depth, maxDepth, false, redactOpaqueValues);
       return JSON.stringify(sanitized);
     }
   } catch {
     if (looksLikeUrlEncodedFormData(str)) {
-      const sanitizedUrlEncoded = sanitizeUrlEncodedString(str);
+      const sanitizedUrlEncoded = sanitizeUrlEncodedString(str, redactOpaqueValues);
       if (sanitizedUrlEncoded !== str) {
         return sanitizedUrlEncoded;
       }
     }
 
     // Not JSON - check if it looks like a secret
-    if (looksLikeSecret(str)) {
+    if (looksLikeSecret(str, redactOpaqueValues)) {
       return REDACTED;
     }
   }
@@ -924,7 +931,10 @@ function decodeFormComponent(component: string): string | undefined {
  * the value is JSON but contains no secrets (so callers can preserve the
  * original byte-for-byte).
  */
-function redactNestedJsonValue(decoded: string | undefined): string | null {
+function redactNestedJsonValue(
+  decoded: string | undefined,
+  redactOpaqueValues = true,
+): string | null {
   if (decoded === undefined) {
     return null;
   }
@@ -941,7 +951,9 @@ function redactNestedJsonValue(decoded: string | undefined): string | null {
   if (!parsed || typeof parsed !== 'object') {
     return null;
   }
-  const sanitized = sanitizeObject(parsed);
+  const sanitized = redactOpaqueValues
+    ? sanitizeObject(parsed)
+    : redactSecretLeaves(parsed, { redactOpaqueValues: false });
   const originalSerialized = JSON.stringify(parsed);
   const sanitizedSerialized = JSON.stringify(sanitized);
   return sanitizedSerialized === originalSerialized ? null : sanitizedSerialized;
@@ -959,7 +971,7 @@ function isPureTemplateValue(value: string): boolean {
   return value.includes('{{') && value.replace(NUNJUCKS_PLACEHOLDER, '').trim() === '';
 }
 
-export function sanitizeUrlEncodedString(value: string): string {
+export function sanitizeUrlEncodedString(value: string, redactOpaqueValues = true): string {
   if (!value.includes('=')) {
     return value;
   }
@@ -1006,7 +1018,7 @@ export function sanitizeUrlEncodedString(value: string): string {
     // Recurse into JSON-shaped values so credentials buried in a
     // form-encoded JSON payload (e.g. `data=%7B%22password%22%3A...%7D`) get
     // redacted at the leaf rather than leaked as opaque bytes.
-    const nestedJson = redactNestedJsonValue(decodedValue);
+    const nestedJson = redactNestedJsonValue(decodedValue, redactOpaqueValues);
     if (nestedJson !== null) {
       changed = true;
       return `${separator}${rawKey}=${encodeURIComponent(nestedJson)}`;
@@ -1017,7 +1029,8 @@ export function sanitizeUrlEncodedString(value: string): string {
     // `key=AAAA+BBBB...` where the raw 64-char chunk matches but the
     // space-bearing decoded form doesn't).
     const valueLooksSecret =
-      looksLikeSecret(rawValue) || (decodedValue !== undefined && looksLikeSecret(decodedValue));
+      looksLikeSecret(rawValue, redactOpaqueValues) ||
+      (decodedValue !== undefined && looksLikeSecret(decodedValue, redactOpaqueValues));
 
     if (valueLooksSecret) {
       changed = true;
@@ -1032,7 +1045,13 @@ export function sanitizeUrlEncodedString(value: string): string {
 /**
  * Sanitize plain object fields
  */
-function sanitizePlainObject(obj: any, depth: number, maxDepth: number, isEnvMap = false): any {
+function sanitizePlainObject(
+  obj: any,
+  depth: number,
+  maxDepth: number,
+  isEnvMap = false,
+  redactOpaqueValues = true,
+): any {
   const sanitized: any = {};
   const isSecretKey = isEnvMap ? isSecretEnvVarName : isSecretField;
   for (const [key, value] of Object.entries(obj)) {
@@ -1044,7 +1063,7 @@ function sanitizePlainObject(obj: any, depth: number, maxDepth: number, isEnvMap
           name,
           isSafeTracingCredentialTemplate(item) ||
           (typeof item === 'string' &&
-            !isTracingCredentialHeader(name, item) &&
+            !isCredentialHeader(name, item, redactOpaqueValues) &&
             (isNonCredentialHeader(name) || SAFE_TRACING_PROVIDER_HEADERS.has(name.toLowerCase())))
             ? item
             : REDACTED,
@@ -1056,7 +1075,10 @@ function sanitizePlainObject(obj: any, depth: number, maxDepth: number, isEnvMap
     ) {
       const scheme = /^[a-z][a-z\d+.-]*:\/\//i;
       const hasScheme = scheme.test(value);
-      const endpoint = sanitizeUrlForLogging(hasScheme ? value : `https://${value}`);
+      const endpoint = sanitizeUrlForLogging(
+        hasScheme ? value : `https://${value}`,
+        redactOpaqueValues,
+      );
       const host = hasScheme ? endpoint : endpoint.replace(/^https:\/\//, '');
       const hasPath = value.replace(scheme, '').split(/[?#]/, 1)[0].includes('/');
       sanitized[key] = hasPath ? host : host.replace(/\/(?=[?#]|$)/, '');
@@ -1070,15 +1092,21 @@ function sanitizePlainObject(obj: any, depth: number, maxDepth: number, isEnvMap
       sanitized[key] =
         key === 'url' ||
         (isEnvMap && key.toUpperCase().endsWith('_URL') && !/^OPENAI_(?:API_)?BASE_URL$/i.test(key))
-          ? sanitizeUrl(value)
-          : sanitizeUrlForLogging(value);
-    } else if (typeof value === 'string' && looksLikeSecret(value)) {
+          ? sanitizeUrl(value, redactOpaqueValues)
+          : sanitizeUrlForLogging(value, redactOpaqueValues);
+    } else if (typeof value === 'string' && looksLikeSecret(value, redactOpaqueValues)) {
       // Redact values that look like secrets (API keys, tokens, etc.)
       sanitized[key] = REDACTED;
     } else {
       // An `env` map is handed verbatim to a subprocess, so its keys are environment
       // variable names and get the broader credential-word match one level down.
-      sanitized[key] = recursiveSanitize(value, depth + 1, maxDepth, key === 'env');
+      sanitized[key] = recursiveSanitize(
+        value,
+        depth + 1,
+        maxDepth,
+        key === 'env',
+        redactOpaqueValues,
+      );
     }
   }
   return sanitized;
@@ -1087,14 +1115,20 @@ function sanitizePlainObject(obj: any, depth: number, maxDepth: number, isEnvMap
 /**
  * Recursively sanitize an object, redacting secret fields at any depth
  */
-function recursiveSanitize(obj: any, depth = 0, maxDepth = MAX_DEPTH, isEnvMap = false): any {
+function recursiveSanitize(
+  obj: any,
+  depth = 0,
+  maxDepth = MAX_DEPTH,
+  isEnvMap = false,
+  redactOpaqueValues = true,
+): any {
   if (typeof obj === 'function') {
     return `[Function] ${obj.name}`;
   }
 
   // Handle strings - check if they're JSON and sanitize if so
   if (typeof obj === 'string') {
-    return sanitizeJsonString(obj, depth, maxDepth);
+    return sanitizeJsonString(obj, depth, maxDepth, redactOpaqueValues);
   }
 
   // Handle primitives and null/undefined
@@ -1109,7 +1143,9 @@ function recursiveSanitize(obj: any, depth = 0, maxDepth = MAX_DEPTH, isEnvMap =
 
   // Handle arrays
   if (Array.isArray(obj)) {
-    return obj.map((item) => recursiveSanitize(item, depth + 1, maxDepth));
+    return obj.map((item) =>
+      recursiveSanitize(item, depth + 1, maxDepth, false, redactOpaqueValues),
+    );
   }
 
   // Handle class instances
@@ -1119,7 +1155,7 @@ function recursiveSanitize(obj: any, depth = 0, maxDepth = MAX_DEPTH, isEnvMap =
   }
 
   // Handle plain objects
-  return sanitizePlainObject(obj, depth, maxDepth, isEnvMap);
+  return sanitizePlainObject(obj, depth, maxDepth, isEnvMap, redactOpaqueValues);
 }
 
 /**
@@ -1134,9 +1170,15 @@ export function sanitizeObject(
     context?: string;
     throwOnError?: boolean;
     maxDepth?: number;
+    redactOpaqueValues?: boolean;
   } = {},
 ): any {
-  const { context = 'object', throwOnError = false, maxDepth = MAX_DEPTH } = options;
+  const {
+    context = 'object',
+    throwOnError = false,
+    maxDepth = MAX_DEPTH,
+    redactOpaqueValues = true,
+  } = options;
 
   try {
     // Handle null/undefined
@@ -1146,7 +1188,7 @@ export function sanitizeObject(
 
     // Handle strings - check if they're JSON and sanitize if so
     if (typeof obj === 'string') {
-      return sanitizeJsonString(obj, 0, maxDepth);
+      return sanitizeJsonString(obj, 0, maxDepth, redactOpaqueValues);
     }
 
     // Handle other primitives
@@ -1178,7 +1220,7 @@ export function sanitizeObject(
     );
 
     // Apply recursive sanitization with depth limiting
-    return recursiveSanitize(safeObj, 0, maxDepth);
+    return recursiveSanitize(safeObj, 0, maxDepth, false, redactOpaqueValues);
   } catch (error) {
     if (throwOnError) {
       throw error;
@@ -1196,7 +1238,272 @@ export const sanitizeBody = sanitizeObject;
 export const sanitizeHeaders = sanitizeObject;
 export const sanitizeQueryParams = sanitizeObject;
 
-function getSecretLookingRawQueryKeys(search: string): Set<string> {
+/**
+ * Container keys whose SHAPE is not a secret and must survive redaction. Their
+ * secret leaves (token, clientSecret, password, …) are still redacted, but the
+ * structural fields around them (auth type, grant type, token URL, header
+ * placement, key name, scopes, session URL/method/parser) are preserved. This is
+ * what lets replay fingerprints notice a bearer→api-key or endpoint change and
+ * lets shared configs keep their authentication shape without leaking credentials.
+ */
+const STRUCTURE_PRESERVING_SECRET_KEYS = new Set(['auth', 'session']);
+
+// Secret field names recognized by the replay/share canonicalizer beyond
+// SECRET_FIELD_NAMES, kept as a superset of the historical per-fingerprint sets so
+// switching to the shared canonicalizer never weakens redaction.
+const REPLAY_EXTRA_SECRET_FIELDS = new Set(['accesskeyid', 'secretaccesskey', 'cookies']);
+
+function normalizeReplayFieldName(fieldName: string): string {
+  // Strip separators AND dots so nested keys (`a.b.token`) normalize like the
+  // historical selection sanitizer did.
+  return fieldName.toLowerCase().replace(/[-_.\s=]/g, '');
+}
+
+/**
+ * Whether a field name denotes a credential leaf for replay/share redaction. A
+ * superset of {@link isSecretField} so the shared canonicalizer never redacts less
+ * than the previous provider/test fingerprint sanitizers.
+ */
+export function isReplaySecretField(fieldName: string): boolean {
+  const normalized = normalizeReplayFieldName(fieldName);
+  // This names the credential source; its resolved value is redacted separately.
+  if (normalized === 'apikeyenvar') {
+    return false;
+  }
+  return (
+    isSecretField(fieldName) ||
+    normalized.endsWith('apikey') ||
+    normalized.endsWith('accesstoken') ||
+    REPLAY_EXTRA_SECRET_FIELDS.has(normalized)
+  );
+}
+
+function isStructurePreservingSecretKey(fieldName: string): boolean {
+  return STRUCTURE_PRESERVING_SECRET_KEYS.has(normalizeReplayFieldName(fieldName));
+}
+
+const URL_KEY_RE = /(?:url|uri|endpoint)$/i;
+
+/** Redact a primitive (non-object) leaf value based on its key and content. */
+function redactPrimitiveLeaf(
+  value: unknown,
+  key: string | undefined,
+  redactOpaqueValues: boolean,
+): unknown {
+  if (typeof value === 'string' && key && /^(?:id|provider(?:id|s)?)$/i.test(key)) {
+    const url = value.match(/^([a-z][\w-]*:)?(https?:\/\/.+)$/i);
+    if (url) {
+      const sanitized = sanitizeUrlForLogging(url[2], redactOpaqueValues);
+      if (url[1]?.toLowerCase() === 'webhook:') {
+        try {
+          const parsed = new URL(sanitized);
+          parsed.pathname = parsed.pathname.replace(
+            /^\/(?:(hooks|webhooks|services)\/)?[\s\S]*$/i,
+            (_path, route) => `/${route ? `${route}/` : ''}%5BREDACTED%5D`,
+          );
+          return url[1] + parsed.toString();
+        } catch {
+          return url[1] + REDACTED;
+        }
+      }
+      return (url[1] ?? '') + sanitized;
+    }
+  }
+  if (typeof key === 'string') {
+    if (typeof value === 'string' && URL_KEY_RE.test(key)) {
+      return sanitizeUrlForLogging(value, redactOpaqueValues);
+    }
+    if (isStructurePreservingSecretKey(key)) {
+      // An `auth`/`session` value that is itself a bare credential string is
+      // redacted; a structural expression (source path, method) is kept.
+      return typeof value === 'string' && looksLikeSecret(value) ? REDACTED : value;
+    }
+    if (isReplaySecretField(key)) {
+      return REDACTED;
+    }
+  }
+  if (typeof value === 'string' && looksLikeSecret(value, redactOpaqueValues)) {
+    return REDACTED;
+  }
+  return value;
+}
+
+function redactSecretLeavesInner(
+  value: unknown,
+  key: string | undefined,
+  seen: WeakSet<object>,
+  redactOpaqueValues: boolean,
+): unknown {
+  if (typeof value === 'bigint') {
+    return { __promptfooBigInt: value.toString() };
+  }
+  if (typeof value === 'function') {
+    return { __promptfooFunction: Function.prototype.toString.call(value) };
+  }
+  if (typeof value === 'symbol') {
+    return { __promptfooSymbol: String(value) };
+  }
+  if (value === null || value === undefined) {
+    return value;
+  }
+
+  if (typeof value !== 'object') {
+    return redactPrimitiveLeaf(value, key, redactOpaqueValues);
+  }
+
+  if (seen.has(value)) {
+    return '[Circular]';
+  }
+  seen.add(value);
+  try {
+    if (Array.isArray(value)) {
+      return value.map((item) => redactSecretLeavesInner(item, key, seen, redactOpaqueValues));
+    }
+    if (value instanceof Date) {
+      return value.toISOString();
+    }
+    // A non-structural secret CONTAINER (e.g. `credentials: {...}`) is redacted
+    // whole, matching the previous behavior. `auth`/`session` fall through and
+    // recurse so their non-secret structure survives.
+    if (
+      typeof key === 'string' &&
+      isReplaySecretField(key) &&
+      !isStructurePreservingSecretKey(key)
+    ) {
+      return REDACTED;
+    }
+    const apiKeyAuth = key === 'auth' && (value as Record<string, unknown>).type === 'api_key';
+    return Object.fromEntries(
+      Object.entries(value).map(([childKey, childValue]) => [
+        childKey,
+        (apiKeyAuth && childKey === 'value') ||
+        (key?.toLowerCase() === 'tls' && childKey.toLowerCase() === 'key') ||
+        (key?.toLowerCase() === 'env' && isSecretEnvVarName(childKey)) ||
+        (key?.toLowerCase() === 'headers' &&
+          isCredentialHeader(
+            childKey,
+            typeof childValue === 'string' ? childValue : '',
+            redactOpaqueValues,
+          ))
+          ? REDACTED
+          : redactSecretLeavesInner(childValue, childKey, seen, redactOpaqueValues),
+      ]),
+    );
+  } finally {
+    seen.delete(value);
+  }
+}
+
+/**
+ * Canonical, credential-aware, cycle/BigInt-safe redactor shared by replay
+ * fingerprints (provider + test) and the remote share projection. Unlike
+ * {@link sanitizeObject}, it redacts only credential LEAVES and preserves the
+ * surrounding structure, including the non-secret shape of `auth`/`session`
+ * containers. Functions, symbols, BigInts, and circular references are replaced
+ * with stable structural markers so the result is always JSON-serializable.
+ * Fingerprints disable opaque-value guessing to retain model revisions and body
+ * identifiers. Named credentials and recognizable credential formats stay redacted.
+ */
+export function redactSecretLeaves<T>(
+  value: T,
+  { redactOpaqueValues = true }: { redactOpaqueValues?: boolean } = {},
+): T {
+  return redactSecretLeavesInner(value, undefined, new WeakSet<object>(), redactOpaqueValues) as T;
+}
+
+/** Redact trace credentials, including provider IDs repeated in span text. */
+export function sanitizeTracesForArtifact(
+  traces: NonNullable<OutputFile['traces']>,
+): NonNullable<OutputFile['traces']> {
+  return traces.map((trace) => {
+    const redacted = redactSecretLeaves(trace, { redactOpaqueValues: false });
+    const replacements = new Map<string, string>();
+    for (const providerId of [
+      trace.metadata?.providerId,
+      ...trace.spans.map((span) => span.attributes?.['promptfoo.provider.id']),
+    ]) {
+      if (typeof providerId === 'string' && providerId) {
+        const id = redactSecretLeaves({ id: providerId }, { redactOpaqueValues: false }).id;
+        if (id !== providerId) {
+          replacements.set(providerId, id);
+        }
+      }
+    }
+    if (replacements.size === 0) {
+      return redacted;
+    }
+    return JSON.parse(
+      JSON.stringify(redacted, (_key, value) => {
+        if (typeof value !== 'string') {
+          return value;
+        }
+        for (const [providerId, id] of replacements) {
+          value = value.split(providerId).join(id);
+        }
+        return value;
+      }),
+    );
+  });
+}
+
+function stableStringifyInner(value: unknown, seen: WeakSet<object>): string {
+  if (value === undefined) {
+    return 'undefined';
+  }
+  if (value === null) {
+    return 'null';
+  }
+  if (typeof value === 'bigint') {
+    return JSON.stringify({ __promptfooBigInt: value.toString() });
+  }
+  if (typeof value === 'function') {
+    return JSON.stringify({ __promptfooFunction: Function.prototype.toString.call(value) });
+  }
+  if (typeof value === 'symbol') {
+    return JSON.stringify({ __promptfooSymbol: String(value) });
+  }
+  if (typeof value !== 'object') {
+    return JSON.stringify(value) ?? String(value);
+  }
+  if (seen.has(value)) {
+    return '"[Circular]"';
+  }
+  seen.add(value);
+  try {
+    if (Array.isArray(value)) {
+      // Match JSON.stringify: an `undefined` array hole serializes as `null`.
+      return `[${value
+        .map((item) => (item === undefined ? 'null' : stableStringifyInner(item, seen)))
+        .join(',')}]`;
+    }
+    if (value instanceof Date) {
+      return JSON.stringify(value.toISOString());
+    }
+    const record = value as Record<string, unknown>;
+    return `{${Object.keys(record)
+      .sort()
+      // Match JSON.stringify: properties whose value is `undefined` are omitted, so
+      // `{ a, config: undefined }` and `{ a }` share a fingerprint.
+      .filter((childKey) => record[childKey] !== undefined)
+      .map(
+        (childKey) => `${JSON.stringify(childKey)}:${stableStringifyInner(record[childKey], seen)}`,
+      )
+      .join(',')}}`;
+  } finally {
+    seen.delete(value);
+  }
+}
+
+/**
+ * Deterministic, cycle/BigInt-safe serialization with sorted keys. Suitable for
+ * hashing config fingerprints without throwing on `bigint`, circular references,
+ * functions, or symbols.
+ */
+export function stableStringify(value: unknown): string {
+  return stableStringifyInner(value, new WeakSet<object>());
+}
+
+function getSecretLookingRawQueryKeys(search: string, redactOpaqueValues: boolean): Set<string> {
   const secretKeys = new Set<string>();
 
   for (const segment of search.slice(1).split('&')) {
@@ -1206,7 +1513,7 @@ function getSecretLookingRawQueryKeys(search: string): Set<string> {
     }
 
     const rawValue = segment.slice(separatorIndex + 1);
-    if (!looksLikeSecret(rawValue)) {
+    if (!looksLikeSecret(rawValue, redactOpaqueValues)) {
       continue;
     }
 
@@ -1220,7 +1527,7 @@ function getSecretLookingRawQueryKeys(search: string): Set<string> {
   return secretKeys;
 }
 
-function sanitizeTemplatedUrl(url: string): string {
+function sanitizeTemplatedUrl(url: string, redactOpaqueValues: boolean): string {
   // A template may coexist with an already-rendered env credential. Avoid URL
   // parsing here because it encodes the remaining Nunjucks syntax, but still
   // scrub literal query and fragment credentials before the value is logged or
@@ -1235,13 +1542,13 @@ function sanitizeTemplatedUrl(url: string): string {
   const queryIndex = beforeHash.indexOf('?');
   const beforeQuery = queryIndex === -1 ? beforeHash : beforeHash.slice(0, queryIndex);
   const query = queryIndex === -1 ? '' : beforeHash.slice(queryIndex + 1);
-  const sanitizedQuery = query ? sanitizeUrlEncodedString(query) : query;
-  const sanitizedHash = hash ? sanitizeUrlEncodedString(hash) : hash;
+  const sanitizedQuery = query ? sanitizeUrlEncodedString(query, redactOpaqueValues) : query;
+  const sanitizedHash = hash ? sanitizeUrlEncodedString(hash, redactOpaqueValues) : hash;
 
   return `${beforeQuery}${queryIndex === -1 ? '' : `?${sanitizedQuery}`}${hashIndex === -1 ? '' : `#${sanitizedHash}`}`;
 }
 
-export function sanitizeUrl(url: string): string {
+export function sanitizeUrl(url: string, redactOpaqueValues = true): string {
   try {
     // Ensure url is a string and handle edge cases
     if (typeof url !== 'string' || !url.trim()) {
@@ -1251,7 +1558,7 @@ export function sanitizeUrl(url: string): string {
     // Preserve unresolved template syntax while redacting any literal credentials
     // that were already rendered into another part of the same URL.
     if (url.includes('{{') && url.includes('}}')) {
-      return sanitizeTemplatedUrl(url);
+      return sanitizeTemplatedUrl(url, redactOpaqueValues);
     }
 
     // Handle path-only URLs (e.g., /api/openai/completion from raw HTTP request mode).
@@ -1269,20 +1576,25 @@ export function sanitizeUrl(url: string): string {
     }
 
     // Sanitize query parameters that might contain sensitive data
-    const rawSecretParamKeys = getSecretLookingRawQueryKeys(parsedUrl.search);
+    const rawSecretParamKeys = getSecretLookingRawQueryKeys(parsedUrl.search, redactOpaqueValues);
 
     try {
       for (const [key, value] of Array.from(sanitizedUrl.searchParams.entries())) {
         if (
           SENSITIVE_URL_PARAM_NAMES.test(key) ||
           rawSecretParamKeys.has(key) ||
-          looksLikeSecret(value) ||
+          looksLikeSecret(value, redactOpaqueValues) ||
           // URLSearchParams only splits on `&`, so a `;`-delimited credential
           // (`data=ok;api_key=sk-...`, legacy but still accepted by some stacks)
           // hides inside one value. Redact the whole value when it conceals one.
-          (value.includes(';') && hasSecretFormSegment(value))
+          (value.includes(';') && hasSecretFormSegment(value, redactOpaqueValues))
         ) {
           sanitizedUrl.searchParams.set(key, '[REDACTED]');
+        } else {
+          const nestedJson = redactNestedJsonValue(value, redactOpaqueValues);
+          if (nestedJson !== null) {
+            sanitizedUrl.searchParams.set(key, nestedJson);
+          }
         }
       }
     } catch (paramError) {
@@ -1295,7 +1607,10 @@ export function sanitizeUrl(url: string): string {
     // shape `#access_token=...`). The hash is a `key=value(&...)` string after the
     // leading `#`, so reuse the same form-pair scrubbing as the query.
     if (sanitizedUrl.hash.length > 1) {
-      const sanitizedHash = sanitizeUrlEncodedString(sanitizedUrl.hash.slice(1));
+      const sanitizedHash = sanitizeUrlEncodedString(
+        sanitizedUrl.hash.slice(1),
+        redactOpaqueValues,
+      );
       sanitizedUrl.hash = sanitizedHash ? `#${sanitizedHash}` : '';
     }
 
@@ -1312,8 +1627,25 @@ export function sanitizeUrl(url: string): string {
     // sanitizeObject runs this on any field literally named `url`, so blanket
     // redaction would destroy non-secret bare domains, relative paths, and prose
     // in persisted eval results and user-facing config error messages.
-    return unparseableUrlMightLeakSecret(url) ? REDACTED : url;
+    return unparseableUrlMightLeakSecret(url, redactOpaqueValues) ? REDACTED : url;
   }
+}
+
+/** Keep useful error text while removing transport URLs and credential-bearing details. */
+export function sanitizeErrorMessage(message: string): string {
+  const sanitized = message.replace(/\bhttps?:\/\/[^\s<>"'`]+/gi, (url) =>
+    sanitizeUrlForLogging(url),
+  );
+  // Free-form header/config dumps need not be valid JSON. Avoid guessing where
+  // an unquoted credential ends; keep those details out of public errors.
+  for (const match of sanitized.matchAll(/(?:^|[\s{[,])["']?([a-z_][\w.-]*)["']?\s*[:=]/gi)) {
+    if (isReplaySecretField(match[1])) {
+      return 'Evaluation error details were redacted because they contain credentials.';
+    }
+  }
+  return sanitizeObject(sanitized.replace(/\b(?:Bearer|Basic)\s+[a-z0-9._~+/-]+=*/gi, REDACTED), {
+    redactOpaqueValues: false,
+  });
 }
 
 /**
@@ -1321,14 +1653,19 @@ export function sanitizeUrl(url: string): string {
  * legitimate resource IDs in persisted provider results, so only logging paths
  * use this stricter redaction.
  */
-export function sanitizeUrlForLogging(url: string): string {
-  const sanitized = sanitizeUrl(url);
+export function sanitizeUrlForLogging(url: string, redactOpaqueValues = true): string {
+  const sanitized = sanitizeUrl(url, redactOpaqueValues);
   try {
     const isPathOnly = sanitized.startsWith('/') && !sanitized.startsWith('//');
     const parsed = isPathOnly ? new URL(sanitized, DUMMY_BASE) : new URL(sanitized);
-    parsed.pathname = parsed.pathname
-      .split('/')
-      .map((segment, index, segments) => {
+    const segments = parsed.pathname.split('/');
+    const webhookRoot = segments.findIndex(
+      (segment) =>
+        /^(?:hooks|webhooks)$/i.test(segment) ||
+        (parsed.hostname === 'hooks.slack.com' && segment === 'services'),
+    );
+    parsed.pathname = segments
+      .map((segment, index) => {
         const previous = decodeFormComponent(segments[index - 1] ?? '') ?? '';
         try {
           const decoded = decodeURIComponent(segment);
@@ -1339,8 +1676,9 @@ export function sanitizeUrlForLogging(url: string): string {
             /[a-z]/i.test(decoded) &&
             /[0-9]/.test(decoded);
           return opaqueValue ||
+            (webhookRoot > 0 && index > webhookRoot && segment !== '') ||
             OPAQUE_CREDENTIAL_PATH_SEGMENT.test(decoded) ||
-            looksLikeSecret(decoded)
+            looksLikeSecret(decoded, redactOpaqueValues)
             ? '%5BREDACTED%5D'
             : segment;
         } catch {
@@ -1355,6 +1693,8 @@ export function sanitizeUrlForLogging(url: string): string {
       .some((segment) =>
         OPAQUE_CREDENTIAL_PATH_SEGMENT.test(decodeFormComponent(segment) ?? segment),
       );
-    return unparseableUrlMightLeakSecret(url) || hasOpaquePath ? REDACTED : sanitized;
+    return unparseableUrlMightLeakSecret(url, redactOpaqueValues) || hasOpaquePath
+      ? REDACTED
+      : sanitized;
   }
 }

@@ -75,12 +75,11 @@ vi.mock('path', async () => {
   };
 });
 
-vi.mock('../../src/cliState', () => ({
-  default: {
-    basePath: '/base/path',
-  },
-  basePath: '/base/path',
-}));
+vi.mock('../../src/cliState', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../../src/cliState')>();
+  actual.default.basePath = '/base/path';
+  return actual;
+});
 vi.mock('../../src/matchers/rag', async () => {
   const actual =
     await vi.importActual<typeof import('../../src/matchers/rag')>('../../src/matchers/rag');

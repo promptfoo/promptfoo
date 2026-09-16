@@ -13,19 +13,19 @@ export function resolveProviderApiKey(
   env: Readonly<Record<string, string | undefined>> | undefined,
   defaultEnvars: readonly string[],
 ): string | undefined {
-  if (config?.apiKey) {
+  if (config?.apiKey && config.apiKey !== '[REDACTED]') {
     return config.apiKey;
   }
   const envars = config?.apiKeyEnvar ? [config.apiKeyEnvar] : defaultEnvars;
   for (const envar of envars) {
     const value = env?.[envar];
-    if (value) {
+    if (value && value !== '[REDACTED]') {
       return value;
     }
   }
   for (const envar of envars) {
     const value = getEnvString(envar as EnvVarKey);
-    if (value) {
+    if (value && value !== '[REDACTED]') {
       return value;
     }
   }

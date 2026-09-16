@@ -2591,9 +2591,11 @@ describe('GoogleLiveProvider', () => {
 
       expect(validatePythonPathMock).toHaveBeenCalledWith('/custom/python/path', true);
 
-      expect(mockSpawn).toHaveBeenCalledWith('/custom/python/bin', [
-        'examples/google-live/counter_api.py',
-      ]);
+      expect(mockSpawn).toHaveBeenCalledWith(
+        '/custom/python/bin',
+        ['examples/google-live/counter_api.py'],
+        { env: process.env },
+      );
     });
 
     it('should handle errors when spawning Python process', async () => {
@@ -2685,7 +2687,12 @@ describe('GoogleLiveProvider', () => {
         return mockWs;
       });
 
-      await providerWithStatefulApi.callApi('Test prompt');
+      await cliState.withEnvFileOverrides({ PROMPTFOO_REVIEW_ENV_PROBE: 'file' }, () =>
+        providerWithStatefulApi.callApi('Test prompt'),
+      );
+      expect(mockSpawn).toHaveBeenCalledWith(expect.any(String), expect.any(Array), {
+        env: expect.objectContaining({ PROMPTFOO_REVIEW_ENV_PROBE: 'file' }),
+      });
 
       expect(mockStdout.on).toHaveBeenCalledWith('data', expect.any(Function));
       expect(mockStderr.on).toHaveBeenCalledWith('data', expect.any(Function));
@@ -2730,9 +2737,11 @@ describe('GoogleLiveProvider', () => {
 
         expect(validatePythonPathMock).toHaveBeenCalledWith('/env/python3', true);
 
-        expect(mockSpawn).toHaveBeenCalledWith('/env/python3', [
-          'examples/google-live/counter_api.py',
-        ]);
+        expect(mockSpawn).toHaveBeenCalledWith(
+          '/env/python3',
+          ['examples/google-live/counter_api.py'],
+          { env: process.env },
+        );
       } finally {
         if (originalEnv) {
           mockProcessEnv({ PROMPTFOO_PYTHON: originalEnv });

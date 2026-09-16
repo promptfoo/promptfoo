@@ -32,10 +32,10 @@ export function isProviderTypeMap(provider: unknown): provider is ProviderTypeMa
       typeof provider === 'object' &&
       !Array.isArray(provider) &&
       !isApiProvider(provider) &&
-      !Object.hasOwn(provider, 'id') &&
+      !Object.prototype.hasOwnProperty.call(provider, 'id') &&
       GRADING_PROVIDER_TYPE_KEYS.some(
         (providerType) =>
-          Object.hasOwn(provider, providerType) &&
+          Object.prototype.hasOwnProperty.call(provider, providerType) &&
           isTypedProviderValue((provider as Record<string, unknown>)[providerType]),
       ),
   );
@@ -51,7 +51,7 @@ export function buildConfiguredProviderMap(providers: ApiProvider[]): Record<str
     providerMap[provider.id()] = provider;
   }
   for (const provider of providers) {
-    if (provider.label && !Object.hasOwn(providerMap, provider.label)) {
+    if (provider.label && !Object.prototype.hasOwnProperty.call(providerMap, provider.label)) {
       providerMap[provider.label] = provider;
     }
   }
@@ -62,7 +62,7 @@ function getConfiguredProvider(
   id: string,
   providerMap: Record<string, ApiProvider>,
 ): ApiProvider | undefined {
-  return Object.hasOwn(providerMap, id) ? providerMap[id] : undefined;
+  return Object.prototype.hasOwnProperty.call(providerMap, id) ? providerMap[id] : undefined;
 }
 
 function resolveTypedProviderValue(

@@ -4,16 +4,19 @@ import {
   looksLikeSecret,
   preserveTracingCredentialReferences,
   redactAzureBlobSasTokens,
+  redactSecretLeaves,
   restoreAzureBlobSasTokens,
   sanitizeBody,
   sanitizeHeaders,
   sanitizeObject,
   sanitizeQueryParams,
   sanitizeRuntimeOptions,
+  sanitizeTracesForArtifact,
   sanitizeTracingConfigForPersistence,
   sanitizeUrl,
   sanitizeUrlEncodedString,
   sanitizeUrlForLogging,
+  stableStringify,
 } from '../../src/util/sanitizer';
 
 let consoleErrorSpy: ReturnType<typeof vi.spyOn>;
@@ -27,6 +30,288 @@ beforeEach(() => {
 afterEach(() => {
   consoleErrorSpy.mockRestore();
   consoleWarnSpy.mockRestore();
+});
+
+describe('sanitizeTracesForArtifact', () => {
+  it('redacts trace headers and provider ID echoes while preserving opaque evidence and live data', () => {
+    const providerId = 'webhook:https://hooks.slack.com/services/T123/B123/PRIVATE_TRACE_PROVIDER';
+    const encoded = Buffer.from('ordinary encoded evidence '.repeat(8)).toString('base64');
+    const traces = [
+      {
+        traceId: 'a'.repeat(32),
+        evaluationId: 'eval-1',
+        testCaseId: 'test-1',
+        metadata: {
+          providerId,
+          headers: { Authorization: 'PRIVATE_TRACE_HEADER' },
+          label: 'public trace',
+        },
+        spans: [
+          { spanId: 'parent', name: providerId, startTime: 1 },
+          {
+            spanId: 'child',
+            name: `call ${providerId}`,
+            startTime: 2,
+            statusMessage: `failed ${providerId}`,
+            status: { code: 'error', message: `failed ${providerId}` },
+            attributes: {
+              'promptfoo.provider.id': providerId,
+              encoded,
+              headers: { 'x-api-key': 'PRIVATE_TRACE_HEADER' },
+            },
+            events: [
+              {
+                name: 'request',
+                attributes: { headers: { Authorization: 'PRIVATE_TRACE_HEADER' } },
+              },
+            ],
+          },
+        ],
+      },
+    ];
+    const original = JSON.stringify(traces);
+    const projected = sanitizeTracesForArtifact(traces);
+    expect(JSON.stringify(projected)).not.toMatch(/PRIVATE_TRACE_(?:PROVIDER|HEADER)/);
+    expect(projected[0].spans[1].attributes?.encoded).toBe(encoded);
+    expect(projected[0].traceId).toBe(traces[0].traceId);
+    expect(projected[0].metadata?.label).toBe('public trace');
+    expect(JSON.stringify(traces)).toBe(original);
+  });
+});
+
+describe('redactSecretLeaves', () => {
+  it.each([
+    ['url', 'https://example.test/api?revision=REVISION&api_key=credential-value'],
+    ['id', 'http:https://example.test/api?revision=REVISION&api_key=credential-value'],
+    ['endpoint', 'https://example.test/api#revision=REVISION&token=credential-value'],
+    ['url', 'https://example.test/{{route}}?revision=REVISION&token=credential-value'],
+    ['url', '/api?revision=REVISION&token=credential-value'],
+    [
+      'url',
+      'https://example.test/api?data=%7B%22revision%22%3A%22REVISION%22%2C%22token%22%3A%22credential-value%22%7D',
+    ],
+  ])('retains semantic URL values in %s fingerprints: %s', (key, url) => {
+    const revision = 'a'.repeat(64);
+    const config = { [key]: url.replace('REVISION', revision) };
+    const fingerprint = JSON.stringify(redactSecretLeaves(config, { redactOpaqueValues: false }));
+    expect(fingerprint).toContain(revision);
+    expect(fingerprint).not.toContain('credential-value');
+    expect(JSON.stringify(redactSecretLeaves(config))).not.toContain(revision);
+  });
+
+  it('preserves opaque semantic values for fingerprints without weakening share redaction', () => {
+    const opaque = 'a'.repeat(64);
+    const config = {
+      revision: opaque,
+      body: { identifier: opaque },
+      headers: { 'X-Model-Revision': opaque, Authorization: opaque },
+      apiKey: opaque,
+      auth: opaque,
+      session: opaque,
+      unknown: 'sk-' + 'b'.repeat(64),
+    };
+    const fingerprint = redactSecretLeaves(config, { redactOpaqueValues: false });
+    expect(fingerprint).toEqual({
+      revision: opaque,
+      body: { identifier: opaque },
+      headers: { 'X-Model-Revision': opaque, Authorization: '[REDACTED]' },
+      apiKey: '[REDACTED]',
+      auth: '[REDACTED]',
+      session: '[REDACTED]',
+      unknown: '[REDACTED]',
+    });
+    expect(JSON.stringify(redactSecretLeaves(config))).not.toContain(opaque);
+    expect(config.apiKey).toBe(opaque);
+  });
+
+  it.each(['session=short', [{ name: 'session', value: 'short', domain: 'example.test' }]])(
+    'redacts nested browser cookies without changing the local config',
+    (cookies) => {
+      const config = {
+        defaultTest: { options: { provider: { id: 'browser', config: { cookies } } } },
+      };
+      const result = redactSecretLeaves(config);
+      expect(JSON.stringify(result)).not.toContain('short');
+      expect(config.defaultTest.options.provider.config.cookies).toEqual(cookies);
+      expect(result.defaultTest.options.provider.id).toBe('browser');
+    },
+  );
+  it('preserves ordinary HTTP service identities', () => {
+    const id = 'https://api.example.test/services/public';
+    expect(redactSecretLeaves({ id })).toEqual({ id });
+  });
+
+  it.each([
+    'webhook:https://example.test/services/T123/B456/AbCdEfGhIjKlMnOpQrStUvWx',
+    'webhook:https://example.test/AbCdEfGhIjKlMnOpQrStUvWx',
+    'webhook:https://bad host/AbCdEfGhIjKlMnOpQrStUvWx',
+    'https://hooks.slack.com/services/T123/B456/AbCdEfGhIjKlMnOpQrStUvWx',
+  ])('redacts arbitrary webhook credentials from identity %s', (id) => {
+    for (const key of ['id', 'providerId', 'provider', 'providers']) {
+      expect(JSON.stringify(redactSecretLeaves({ [key]: id }))).not.toContain(
+        'AbCdEfGhIjKlMnOpQrStUvWx',
+      );
+    }
+  });
+
+  it.each(['id', 'providerId', 'provider', 'providers'])(
+    'redacts credentials inside URL-bearing %s values',
+    (key) => {
+      const secret = 'sk-live-abcdefghijklmnopqrstuvwxyz1234567890';
+      const value = `webhook:https://example.test/hooks/${secret}?token=${secret}`;
+      const result = redactSecretLeaves({ [key]: key === 'providers' ? [value] : value });
+      expect(JSON.stringify(result)).not.toContain(secret);
+      expect(JSON.stringify(result)).toContain('webhook:https://example.test/hooks/');
+    },
+  );
+
+  it.each([
+    '-----BEGIN PRIVATE KEY-----\nfixture-secret\n-----END PRIVATE KEY-----',
+    ['fixture-key-one', 'fixture-key-two'],
+  ])('redacts nested TLS keys while preserving public certificates', (key) => {
+    const config = {
+      defaultTest: {
+        options: {
+          provider: {
+            config: { tls: { key, cert: 'public-cert', ca: ['public-ca'] }, key: 'ordinary-key' },
+          },
+        },
+      },
+    };
+    const result = redactSecretLeaves(config);
+    expect(result.defaultTest.options.provider.config).toEqual({
+      tls: { key: '[REDACTED]', cert: 'public-cert', ca: ['public-ca'] },
+      key: 'ordinary-key',
+    });
+    expect(config.defaultTest.options.provider.config.tls.key).toEqual(key);
+  });
+
+  it.each(['X-Client-Token', 'X-Client-Secret', 'X-Client-Auth', 'XClientToken', 'Cookie'])(
+    'redacts short credentials in custom header %s',
+    (name) => {
+      const headers = {
+        [name]: 'abc123',
+        'Content-Type': 'application/json',
+        'X-Tenant-Id': 'team',
+      };
+      expect(
+        redactSecretLeaves({ provider: { config: { headers } } }).provider.config.headers,
+      ).toEqual({
+        [name]: '[REDACTED]',
+        'Content-Type': 'application/json',
+        'X-Tenant-Id': 'team',
+      });
+      expect(headers[name]).toBe('abc123');
+    },
+  );
+
+  it.each(['apiBaseUrl', 'tokenUrl', 'API_BASE_URL', 'endpoint', 'uri', 'MONGODB_URI'])(
+    'redacts credentials in %s without dropping endpoint semantics',
+    (key) => {
+      const result = redactSecretLeaves({
+        provider: {
+          config: {
+            [key]: 'https://gateway.test/v1?api_key=short-secret&tenant=alpha',
+          },
+        },
+      });
+      const url = new URL(result.provider.config[key]);
+      expect(url.searchParams.get('api_key')).toBe('[REDACTED]');
+      expect(url.searchParams.get('tenant')).toBe('alpha');
+      expect(url.pathname).toBe('/v1');
+    },
+  );
+
+  it('redacts short secrets in nested provider environment maps', () => {
+    const result = redactSecretLeaves({
+      defaultTest: {
+        options: {
+          provider: {
+            config: {
+              env: {
+                CUSTOM_TOKEN: 'short-secret',
+                SERVICE_PASSWORD: 'short-password',
+                PORT: '3000',
+              },
+            },
+          },
+        },
+      },
+    });
+    expect(result.defaultTest.options.provider.config.env).toEqual({
+      CUSTOM_TOKEN: '[REDACTED]',
+      SERVICE_PASSWORD: '[REDACTED]',
+      PORT: '3000',
+    });
+  });
+
+  it('preserves non-secret auth/session structure while redacting secret leaves', () => {
+    const result = redactSecretLeaves({
+      url: 'https://api.test/chat',
+      auth: {
+        type: 'oauth2',
+        grantType: 'client_credentials',
+        tokenUrl: 'https://auth.test/token',
+        scopes: ['read', 'write'],
+        clientSecret: 'sentinel-secret',
+        token: 'sentinel-token',
+      },
+      session: { source: 'response', header: 'x-session-id', parser: 'json' },
+    }) as any;
+
+    expect(result.auth).toEqual({
+      type: 'oauth2',
+      grantType: 'client_credentials',
+      tokenUrl: 'https://auth.test/token',
+      scopes: ['read', 'write'],
+      clientSecret: '[REDACTED]',
+      token: '[REDACTED]',
+    });
+    expect(result.session).toEqual({ source: 'response', header: 'x-session-id', parser: 'json' });
+    expect(JSON.stringify(result)).not.toContain('sentinel');
+  });
+
+  it('redacts a non-structural secret container whole', () => {
+    const result = redactSecretLeaves({
+      credentials: { username: 'user', password: 'sentinel-pw' },
+    }) as any;
+    expect(result.credentials).toBe('[REDACTED]');
+    expect(JSON.stringify(result)).not.toContain('user');
+  });
+
+  it('redacts short api-key auth values', () => {
+    expect(
+      redactSecretLeaves({ auth: { type: 'api_key', in: 'query', name: 'key', value: 'abc123' } }),
+    ).toEqual({
+      auth: { type: 'api_key', in: 'query', name: 'key', value: '[REDACTED]' },
+    });
+  });
+
+  it('is cycle- and BigInt-safe', () => {
+    const circular: Record<string, unknown> = { limit: 1n, name: 'x' };
+    circular.self = circular;
+    const result = redactSecretLeaves(circular) as any;
+    expect(result.limit).toEqual({ __promptfooBigInt: '1' });
+    expect(result.self).toBe('[Circular]');
+    expect(result.name).toBe('x');
+  });
+});
+
+describe('stableStringify', () => {
+  it('is deterministic regardless of key order', () => {
+    expect(stableStringify({ b: 1, a: 2 })).toBe(stableStringify({ a: 2, b: 1 }));
+  });
+
+  it('omits undefined properties like JSON.stringify', () => {
+    expect(stableStringify({ a: 1, b: undefined })).toBe(stableStringify({ a: 1 }));
+  });
+
+  it('serializes bigint and circular references without throwing', () => {
+    const circular: Record<string, unknown> = { n: 5n };
+    circular.self = circular;
+    expect(() => stableStringify(circular)).not.toThrow();
+    expect(stableStringify(circular)).toContain('__promptfooBigInt');
+  });
 });
 
 describe('sanitizeRuntimeOptions', () => {
@@ -261,6 +546,29 @@ describe('isSecretEnvVarName', () => {
 });
 
 describe('sanitizeObject', () => {
+  it('can preserve opaque payloads without retaining named or recognizable credentials', () => {
+    const opaque = 'Q'.repeat(80);
+    const input = {
+      payload: opaque,
+      nested: [{ payload: opaque }],
+      json: JSON.stringify({ payload: opaque, apiKey: 'private-json-key' }),
+      form: `payload=${opaque}&api_key=private-form-key`,
+      url: `https://example.com/?payload=${opaque}&api_key=private-url-key`,
+      apiKey: 'private-key',
+      tokenShape: 'sk-' + 'x'.repeat(24),
+    };
+    const result = sanitizeObject(input, { redactOpaqueValues: false });
+    expect(result.payload).toBe(opaque);
+    expect(result.nested[0].payload).toBe(opaque);
+    expect(JSON.parse(result.json)).toEqual({ payload: opaque, apiKey: '[REDACTED]' });
+    expect(result.form).toContain(`payload=${opaque}`);
+    expect(result.url).toContain(`payload=${opaque}`);
+    expect(result.apiKey).toBe('[REDACTED]');
+    expect(result.tokenShape).toBe('[REDACTED]');
+    expect(JSON.stringify(result)).not.toContain('private-');
+    expect(sanitizeObject(input).payload).toBe('[REDACTED]');
+  });
+
   describe('environment variable maps', () => {
     it('redacts credential-named variables inside an env map', () => {
       // Regression: `env` is handed verbatim to a subprocess, so it is where a config

@@ -60,6 +60,10 @@ providers:
 Promptfoo's own environment, so the server process inherits everything Promptfoo was started
 with and a per-server entry wins on conflict.
 
+Relative `server.path` values resolve from the configuration directory, including preconstructed providers nested in JavaScript test, assertion, and scenario configuration. An explicit provider `basePath` takes precedence.
+
+Reused provider instances retain their environment templates for later evaluations, including when a provider updates unrelated runtime configuration. Rendering preserves JavaScript SDK objects and cycles in the configuration. The first call initializes the connection and response transform from that evaluation's environment. Nested instances join the evaluation's cleanup scope, so their connections close before the next run. An active instance rejects calls with a different execution environment. Use separate instances for those evaluations; an instance can use a new environment after cleanup.
+
 Keep secrets out of the config file. `{{ env.VAR }}` placeholders are resolved from the
 environment when the provider loads, so the config stays committable while the credential comes
 from your shell or `--env-file`. A placeholder for an unset variable is preserved verbatim

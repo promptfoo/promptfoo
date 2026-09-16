@@ -8,6 +8,7 @@ import Eval from './models/eval';
 import { sanitizeProvider } from './models/evalResult';
 import { processPrompts, readProviderPromptMap } from './prompts/index';
 import { loadApiProviders, resolveProvider } from './providers/index';
+import { providerRegistry } from './providers/providerRegistry';
 import { createShareableUrl, isSharingEnabled } from './share';
 import { isApiProvider } from './types/providers';
 import { isTransformFunction } from './types/transform';
@@ -18,7 +19,8 @@ import {
   resolveConfiguredProviderReference,
 } from './util/gradingProvider';
 import { readFilters, warnOnDegradedJsonlRecovery, writeMultipleOutputs } from './util/index';
-import { readTests } from './util/testCaseReader';
+import { redactSecretLeaves } from './util/sanitizer';
+import { adoptExistingTestProviders, readTests } from './util/testCaseReader';
 import { INLINE_FUNCTION_LABEL, TRANSFORM_KEYS } from './util/transform';
 
 import type {
@@ -65,7 +67,12 @@ function toSerializableProviderRef(provider: unknown): unknown {
   if (Array.isArray(provider)) {
     return provider.map(toSerializableProviderRef);
   }
-  return provider;
+  if (isProviderTypeMap(provider)) {
+    return Object.fromEntries(
+      Object.entries(provider).map(([type, value]) => [type, toSerializableProviderRef(value)]),
+    );
+  }
+  return provider && typeof provider === 'object' ? redactSecretLeaves(provider) : provider;
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -73,12 +80,12 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 }
 
 function withSerializableProvider<T extends Record<string, unknown>>(record: T): T {
-  if (!isApiProvider(record.provider)) {
+  if (record.provider === undefined) {
     return record;
   }
   return {
     ...record,
-    provider: sanitizeProvider(record.provider),
+    provider: toSerializableProviderRef(record.provider),
   };
 }
 
@@ -163,13 +170,14 @@ function toSerializableScenario(scenario: unknown, droppedRef: { value: boolean 
     return scenario;
   }
 
-  if (!Array.isArray(scenario.tests)) {
-    return scenario;
-  }
-
   return {
     ...scenario,
-    tests: scenario.tests.map((t) => toSerializableTestCase(t, droppedRef)),
+    ...(Array.isArray(scenario.config) && {
+      config: scenario.config.map((t) => toSerializableTestCase(t, droppedRef)),
+    }),
+    ...(Array.isArray(scenario.tests) && {
+      tests: scenario.tests.map((t) => toSerializableTestCase(t, droppedRef)),
+    }),
   };
 }
 
@@ -224,13 +232,16 @@ async function createRuntimeTestSuite(
     testSuiteConfig.defaultTest.startsWith('file://')
       ? await maybeLoadFromExternalFile(testSuiteConfig.defaultTest)
       : testSuiteConfig.defaultTest;
+  await adoptExistingTestProviders({ defaultTest });
+  const tests = await readTests(testSuiteConfig.tests);
+  await adoptExistingTestProviders({ tests });
 
   return {
     ...testSuiteConfig,
     defaultTest: defaultTest as TestSuite['defaultTest'],
     scenarios: testSuiteConfig.scenarios as Scenario[],
     providers: loadedProviders,
-    tests: await readTests(testSuiteConfig.tests),
+    tests,
     nunjucksFilters: await readFilters(testSuiteConfig.nunjucksFilters || {}),
     prompts: await processPrompts(testSuiteConfig.prompts),
   };
@@ -318,59 +329,64 @@ export async function evaluateWithSource(
   testSuite: EvaluateTestSuite,
   options: InternalEvaluateOptions = {},
 ) {
-  const { author: suiteAuthor, ...testSuiteConfig } = testSuite;
+  return providerRegistry.withScope(() =>
+    cliState.withEnv(testSuite.env, async () => {
+      await adoptExistingTestProviders(testSuite);
+      const { author: suiteAuthor, ...testSuiteConfig } = testSuite;
 
-  if (testSuiteConfig.writeLatestResults) {
-    await runDbMigrations();
-  }
+      if (testSuiteConfig.writeLatestResults) {
+        await runDbMigrations();
+      }
 
-  const loadedProviders = await loadApiProviders(testSuiteConfig.providers, {
-    env: testSuiteConfig.env,
-  });
-  const providerMap = buildConfiguredProviderMap(loadedProviders);
-  const constructedTestSuite = await createRuntimeTestSuite(testSuiteConfig, loadedProviders);
-  await resolveNestedProviders(testSuiteConfig, constructedTestSuite, providerMap);
+      const loadedProviders = await loadApiProviders(testSuiteConfig.providers, {
+        env: testSuiteConfig.env,
+      });
+      const providerMap = buildConfiguredProviderMap(loadedProviders);
+      const constructedTestSuite = await createRuntimeTestSuite(testSuiteConfig, loadedProviders);
+      await resolveNestedProviders(testSuiteConfig, constructedTestSuite, providerMap);
 
-  const parsedProviderPromptMap = readProviderPromptMap(
-    testSuiteConfig,
-    constructedTestSuite.prompts,
+      const parsedProviderPromptMap = readProviderPromptMap(
+        testSuiteConfig,
+        constructedTestSuite.prompts,
+      );
+      const unifiedConfig = createSerializableUnifiedConfig(
+        testSuiteConfig,
+        constructedTestSuite.prompts,
+      );
+      const author = getAuthor(suiteAuthor);
+      const evalRecord = testSuiteConfig.writeLatestResults
+        ? await Eval.create(unifiedConfig, constructedTestSuite.prompts, { author })
+        : new Eval(unifiedConfig, { author });
+
+      const ret = await cache.withCacheEnabled(options.cache === false ? false : undefined, () =>
+        doEvaluate(
+          {
+            ...constructedTestSuite,
+            providerPromptMap: parsedProviderPromptMap,
+          },
+          evalRecord,
+          {
+            isRedteam: Boolean(testSuiteConfig.redteam),
+            ...options,
+          },
+        ),
+      );
+
+      await maybeShareEval(testSuiteConfig, ret);
+      if (testSuiteConfig.outputPath) {
+        const outputPaths =
+          typeof testSuiteConfig.outputPath === 'string'
+            ? [testSuiteConfig.outputPath]
+            : testSuiteConfig.outputPath;
+        warnOnDegradedJsonlRecovery(evalRecord, outputPaths);
+        // writeMultipleOutputs maps each path through writeOutput, so it covers the single-path
+        // case too — matching the doEval call site in src/node/doEval.ts.
+        if (outputPaths.length) {
+          await writeMultipleOutputs(outputPaths, evalRecord, null);
+        }
+      }
+
+      return ret;
+    }),
   );
-  const unifiedConfig = createSerializableUnifiedConfig(
-    testSuiteConfig,
-    constructedTestSuite.prompts,
-  );
-  const author = getAuthor(suiteAuthor);
-  const evalRecord = testSuiteConfig.writeLatestResults
-    ? await Eval.create(unifiedConfig, constructedTestSuite.prompts, { author })
-    : new Eval(unifiedConfig, { author });
-
-  const ret = await cache.withCacheEnabled(options.cache === false ? false : undefined, () =>
-    doEvaluate(
-      {
-        ...constructedTestSuite,
-        providerPromptMap: parsedProviderPromptMap,
-      },
-      evalRecord,
-      {
-        isRedteam: Boolean(testSuiteConfig.redteam),
-        ...options,
-      },
-    ),
-  );
-
-  await maybeShareEval(testSuiteConfig, ret);
-  if (testSuiteConfig.outputPath) {
-    const outputPaths =
-      typeof testSuiteConfig.outputPath === 'string'
-        ? [testSuiteConfig.outputPath]
-        : testSuiteConfig.outputPath;
-    warnOnDegradedJsonlRecovery(evalRecord, outputPaths);
-    // writeMultipleOutputs maps each path through writeOutput, so it covers the single-path
-    // case too — matching the doEval call site in src/node/doEval.ts.
-    if (outputPaths.length) {
-      await writeMultipleOutputs(outputPaths, evalRecord, null);
-    }
-  }
-
-  return ret;
 }
