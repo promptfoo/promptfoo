@@ -721,6 +721,19 @@ describe('resolveImageSource security', () => {
     expect(resolveImageSource('short-string')).toBeUndefined();
   });
 
+  it('should not misidentify slug text with hyphens or underscores as base64 image data URI', () => {
+    const slugWithHyphens =
+      'test-case-description-with-many-words-and-hyphens-long-slug-identifier';
+    expect(resolveImageSource(slugWithHyphens)).toBeUndefined();
+
+    const slugWithUnderscores =
+      'test_case_description_with_many_words_and_underscores_long_slug_identifier';
+    expect(resolveImageSource(slugWithUnderscores)).toBeUndefined();
+
+    const mixedSlug = 'test-slug_with-both_hyphens-and_underscores_test_case_identifier_123456';
+    expect(resolveImageSource(mixedSlug)).toBeUndefined();
+  });
+
   it('should resolve blobRef from image object', () => {
     const result = resolveImageSource({
       blobRef: 'promptfoo://blob/abc123def456789012345678901234567890',
