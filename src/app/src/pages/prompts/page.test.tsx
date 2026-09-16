@@ -1,4 +1,3 @@
-import { createTheme, ThemeProvider } from '@mui/material/styles';
 import { render, screen, waitFor } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -58,14 +57,10 @@ vi.mock('./Prompts', () => ({
 // Import after mocks
 import PromptsPage from './page';
 
-const theme = createTheme();
-
 function renderWithProviders() {
   return render(
     <MemoryRouter>
-      <ThemeProvider theme={theme}>
-        <PromptsPage />
-      </ThemeProvider>
+      <PromptsPage />
     </MemoryRouter>,
   );
 }
