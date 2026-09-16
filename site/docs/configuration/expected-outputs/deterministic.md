@@ -65,7 +65,9 @@ These assertions can check LLM output or provider metadata directly. Configured 
 | [perplexity](#perplexity)                                       | Perplexity is below a threshold                                    |
 | [python](/docs/configuration/expected-outputs/python)           | provided Python function validates the output                      |
 | [regex](#regex)                                                 | output matches regex                                               |
+| [rouge-l](#rouge-l)                                             | Rouge-L (longest common subsequence) score is above a threshold    |
 | [rouge-n](#rouge-n)                                             | Rouge-N score is above a given threshold                           |
+| [rouge-s](#rouge-s)                                             | Rouge-S (skip-bigram) score is above a threshold                   |
 | [starts-with](#starts-with)                                     | output starts with string                                          |
 | [trace-span-count](#trace-span-count)                           | Count spans matching patterns with min/max thresholds              |
 | [trace-span-duration](#trace-span-duration)                     | Check span durations with percentile support                       |
@@ -1315,6 +1317,76 @@ tests:
       - type: rouge-n
         value: '{{expected}}'
 ```
+
+### Rouge-L
+
+The `rouge-l` assertion scores the **longest common subsequence** (LCS) between the output and the expected value, rather than fixed-length n-grams.
+
+Because an LCS does not have to be contiguous, ROUGE-L rewards output that preserves the reference's word _order_ while tolerating extra words between the matched ones. That makes it stricter than `rouge-n`, which promptfoo scores on unigrams and which therefore ignores word order entirely:
+
+| Output vs `the quick brown fox` | rouge-n | rouge-l | rouge-s |
+| ------------------------------- | ------- | ------- | ------- |
+| `the quick brown fox`           | 1.00    | 1.00    | 1.00    |
+| `the very quick brown fox`      | 0.89    | 0.89    | 0.75    |
+| `brown fox quick the`           | 1.00    | 0.50    | 0.17    |
+
+Use `rouge-l` when the order of the output matters and `rouge-n` when only the presence of the right words does.
+
+Scored at the sentence level: the output and the expected value are each treated as a single token sequence, so reordering whole sentences lowers the score.
+
+```yaml
+assert:
+  # Ensure Rouge-L score compared to "hello world" is >= 0.75 (default threshold)
+  - type: rouge-l
+    value: hello world
+
+  # With custom threshold
+  - type: rouge-l
+    threshold: 0.6
+    value: hello world
+
+  # Ensure Rouge-L score is below a threshold
+  - type: not-rouge-l
+    threshold: 0.75
+    value: hello world
+```
+
+### Rouge-S
+
+The `rouge-s` assertion scores **skip-bigram** overlap: every ordered pair of words, however many words separate them.
+
+Every pair carries order information, so `rouge-s` is the **strictest of the three about word order** — see the table above, where reordered text scores 1.00 on `rouge-n`, 0.50 on `rouge-l` and 0.17 on `rouge-s`. Reach for it when the relationships between terms must hold, not just the words themselves.
+
+A skip-bigram needs two tokens, so an output of fewer than two words scores 0 — including a single word compared against itself.
+
+```yaml
+assert:
+  - type: rouge-s
+    value: hello world
+
+  - type: rouge-s
+    threshold: 0.6
+    value: hello world
+
+  - type: not-rouge-s
+    threshold: 0.75
+    value: hello world
+```
+
+`value` can reference other variables using template syntax, the same as `rouge-n`:
+
+```yaml
+tests:
+  - vars:
+      expected: hello world
+    assert:
+      - type: rouge-l
+        value: '{{expected}}'
+```
+
+:::note
+All three ROUGE variants share the same 0.75 default threshold, are scored case-insensitively, and count repeated matches — a word appearing twice in both texts contributes twice. Identical text scores 1.0 on all three, with the single exception noted above: `rouge-s` needs at least two tokens. An empty output scores 0 rather than raising an error.
+:::
 
 ### BLEU
 
