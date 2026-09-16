@@ -1,6 +1,7 @@
 import { matchesContextRelevance } from '../matchers/rag';
 import invariant from '../util/invariant';
 import { resolveContext } from './contextUtils';
+import { applyRagInverse, DEFAULT_RAG_ASSERTION_THRESHOLD } from './ragDefaults';
 
 import type { AssertionParams, GradingResult } from '../types/index';
 
@@ -18,10 +19,10 @@ export const handleContextRelevance = async ({
   assertion,
   test,
   output,
-  inverse,
   prompt,
   providerResponse,
   providerCallContext,
+  inverse,
 }: AssertionParams): Promise<GradingResult> => {
   invariant(test.vars, 'context-relevance assertion requires a test with variables');
   invariant(
@@ -38,35 +39,20 @@ export const handleContextRelevance = async ({
     providerResponse,
   );
 
-  const threshold = (assertion.threshold as number) ?? 0.7;
-
   const result = await matchesContextRelevance(
     test.vars.query,
     context,
-    threshold,
+    (assertion.threshold as number) ?? DEFAULT_RAG_ASSERTION_THRESHOLD,
     test.options,
     providerCallContext,
   );
 
-  if (result.metadata?.graderError === true) {
-    return { assertion, ...result, metadata: { ...result.metadata, context } };
-  }
-
-  const pass = inverse ? !result.pass : result.pass;
-
   return {
     assertion,
-    ...result,
-    pass,
-    score: inverse ? 1 - result.score : result.score,
-    reason: inverse
-      ? pass
-        ? 'Assertion passed'
-        : `Relevance ${result.score.toFixed(2)} is >= ${threshold}`
-      : result.reason,
+    ...applyRagInverse(result, inverse),
     metadata: {
-      ...(typeof result.metadata === 'object' ? result.metadata : {}),
       context,
+      ...(result.metadata || {}),
     },
   };
 };

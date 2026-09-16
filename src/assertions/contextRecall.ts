@@ -1,6 +1,7 @@
 import { matchesContextRecall } from '../matchers/rag';
 import invariant from '../util/invariant';
 import { resolveContext } from './contextUtils';
+import { applyRagInverse, DEFAULT_RAG_ASSERTION_THRESHOLD } from './ragDefaults';
 
 import type { AssertionParams, GradingResult } from '../types/index';
 
@@ -20,9 +21,9 @@ export const handleContextRecall = async ({
   prompt,
   test,
   output,
-  inverse,
   providerResponse,
   providerCallContext,
+  inverse,
 }: AssertionParams): Promise<GradingResult> => {
   invariant(
     typeof renderedValue === 'string',
@@ -32,37 +33,22 @@ export const handleContextRecall = async ({
 
   const context = await resolveContext(assertion, test, output, prompt, prompt, providerResponse);
 
-  const threshold = (assertion.threshold as number) ?? 0.7;
-
   // RAGAS context-recall checks if ground truth (renderedValue) can be attributed to context
   const result = await matchesContextRecall(
     context, // context parameter (used as {{context}} in prompt)
     renderedValue, // ground truth parameter (used as {{groundTruth}} in prompt)
-    threshold,
+    (assertion.threshold as number) ?? DEFAULT_RAG_ASSERTION_THRESHOLD,
     test.options,
     test.vars,
     providerCallContext,
   );
 
-  if (result.metadata?.graderError === true) {
-    return { assertion, ...result, metadata: { ...result.metadata, context } };
-  }
-
-  const pass = inverse ? !result.pass : result.pass;
-
   return {
     assertion,
-    ...result,
-    pass,
-    score: inverse ? 1 - result.score : result.score,
-    reason: inverse
-      ? pass
-        ? 'Assertion passed'
-        : `Recall ${result.score.toFixed(2)} is >= ${threshold}`
-      : result.reason,
+    ...applyRagInverse(result, inverse),
     metadata: {
-      ...(typeof result.metadata === 'object' ? result.metadata : {}),
       context,
+      ...(result.metadata || {}),
     },
   };
 };

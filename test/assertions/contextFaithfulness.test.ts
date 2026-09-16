@@ -269,12 +269,70 @@ describe('handleContextFaithfulness', () => {
       'test query',
       'raw',
       'from-transform',
-      0,
+      0.5,
       {},
       expect.any(Object),
       undefined,
     );
     expect(result.metadata).toBeDefined();
     expect(result.metadata!.context).toBe('from-transform');
+  });
+
+  it('should invert omitted-threshold not-context-faithfulness results', async () => {
+    const mockResult = { pass: false, score: 0.4, reason: 'Faithfulness 0.40 is < 0.5' };
+    vi.mocked(matchers.matchesContextFaithfulness).mockResolvedValue(mockResult);
+    vi.mocked(contextUtils.resolveContext).mockResolvedValue('test context');
+
+    const result = await handleContextFaithfulness({
+      assertion: {
+        type: 'not-context-faithfulness',
+      },
+      test: {
+        vars: {
+          query: 'What is the capital of France?',
+          context: 'Paris is the capital of France.',
+        },
+        options: {},
+      },
+      output: 'The capital of France is Paris.',
+      prompt: 'test prompt',
+      baseType: 'context-faithfulness',
+      assertionValueContext: {
+        prompt: 'test prompt',
+        vars: {
+          query: 'What is the capital of France?',
+          context: 'Paris is the capital of France.',
+        },
+        test: {
+          vars: {
+            query: 'What is the capital of France?',
+            context: 'Paris is the capital of France.',
+          },
+          options: {},
+        },
+        logProbs: null,
+        tokenUsage: null,
+        cached: false,
+        provider: null,
+        providerResponse: null,
+      },
+      inverse: true,
+      outputString: 'The capital of France is Paris.',
+      providerResponse: null,
+    } as any);
+
+    expect(matchers.matchesContextFaithfulness).toHaveBeenCalledWith(
+      'What is the capital of France?',
+      'The capital of France is Paris.',
+      'test context',
+      0.5,
+      {},
+      expect.any(Object),
+      undefined,
+    );
+    expect(result.pass).toBe(true);
+    expect(result.score).toBe(0.6);
+    expect(result.reason).toBe('Faithfulness 0.40 is < 0.5');
+    expect(result.metadata).toEqual({ context: 'test context' });
   });
 });
