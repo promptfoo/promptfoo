@@ -688,7 +688,9 @@ export async function doEval(
     const shouldApplyFiltersToImplicitDefaultTest =
       hasActiveTestFilter && canSynthesizeImplicitDefaultTest && !testSuite.tests?.length;
 
-    // Apply filtering only when not resuming, to preserve test indices
+    // Apply filtering only when not resuming, to preserve test indices.
+    // When the suite has scenarios, pattern filtering is deferred to the evaluator so it runs
+    // after scenario expansion and can match templated descriptions (same as range filtering).
     if (!resumeEval) {
       if (shouldApplyFiltersToImplicitDefaultTest) {
         const defaultMetadata =
@@ -701,7 +703,7 @@ export async function doEval(
         errorsOnly: cmdObj.filterErrorsOnly,
         firstN: cmdObj.filterFirstN,
         metadata: cmdObj.filterMetadata,
-        pattern: cmdObj.filterPattern,
+        pattern: hasScenarios ? undefined : cmdObj.filterPattern,
         range: hasScenarios ? undefined : filterRange,
         sample: filterSample,
         sampleSeed: filterSampleSeed,
@@ -945,6 +947,7 @@ export async function doEval(
         filterRange: hasScenarios || resumeEval ? filterRange : undefined,
         abortSignal: evaluateOptions.abortSignal,
         isRedteam: Boolean(config.redteam),
+        filterPattern: hasScenarios && !resumeEval ? cmdObj.filterPattern : undefined,
       });
 
       // Post-evaluation cleanup for retry-errors mode
