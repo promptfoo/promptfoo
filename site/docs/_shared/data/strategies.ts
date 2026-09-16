@@ -192,6 +192,18 @@ export const strategies: Strategy[] = [
   },
   {
     category: 'Multi-turn',
+    strategy: 'jailbreak:goblin',
+    displayName: 'Goblin Multi-turn',
+    description: 'Encoding, math, and logic attacks',
+    longDescription:
+      'Multi-turn jailbreak strategy focused on encoding techniques, math, and logic problems',
+    cost: 'High',
+    asrIncrease: '70-90%',
+    link: '/docs/red-team/strategies/goblin/',
+    isRemote: true,
+  },
+  {
+    category: 'Multi-turn',
     strategy: 'mischievous-user',
     displayName: 'Mischievous User',
     description: 'Mischievous user conversations',

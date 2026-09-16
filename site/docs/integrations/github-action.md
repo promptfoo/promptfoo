@@ -17,7 +17,7 @@ The provided link opens the [web viewer](/docs/usage/web-ui) interface, which al
 
 ## Using the GitHub Action
 
-Here's an example action that watches a PR for modifications. If any file in the `prompts/` directory is modified, we automatically run the eval and post a link to the results using the `promptfoo/promptfoo-action@v1`:
+Here's an example action that watches a PR for modifications. If any file in the `prompts/` directory is modified, we automatically run the eval and post a link to the results using the `promptfoo/promptfoo-action@v1`. The action requires Node.js `>=22.22.0` on the runner; Node.js 24 LTS is recommended:
 
 ```yml
 name: 'Prompt Evaluation'
@@ -34,6 +34,11 @@ jobs:
       # This permission is used to post comments on Pull Requests
       pull-requests: write
     steps:
+      - name: Set up Node.js
+        uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6
+        with:
+          node-version: '24'
+
       # This cache is optional, but you'll save money and time by setting it up!
       - name: Set up promptfoo cache
         uses: actions/cache@v4
@@ -131,7 +136,7 @@ Here's an example:
 >   - uses: actions/checkout@v5
 >   - uses: actions/setup-node@v4
 >     with:
->       node-version: '22'
+>       node-version: '24'
 >       cache: 'npm'
 >   - run: npm ci
 >   - name: Run Promptfoo redteam
@@ -145,7 +150,7 @@ Here's an example:
 >   - uses: actions/checkout@v5
 >   - uses: actions/setup-node@v4
 >     with:
->       node-version: '22'
+>       node-version: '24'
 >       cache: 'npm'
 >       cache-dependency-path: '**/.github/workflows/*.yml'
 >   - name: Run Promptfoo redteam

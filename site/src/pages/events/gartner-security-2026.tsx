@@ -17,14 +17,16 @@ export default function GartnerSecurity2026(): React.ReactElement {
       const offset = 80;
       const elementPosition = element.getBoundingClientRect().top;
       const offsetPosition = elementPosition + window.scrollY - offset;
-      window.scrollTo({ top: offsetPosition, behavior: 'smooth' });
+      // CSS scroll-behavior does not govern an explicit JS behavior, so choose it here.
+      const prefersReducedMotion = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
+      window.scrollTo({ top: offsetPosition, behavior: prefersReducedMotion ? 'auto' : 'smooth' });
     }
   };
 
   return (
     <Layout
       title="Promptfoo at Gartner Security & Risk Management Summit 2026"
-      description="Turn AI risk into a measurable program. Meet Promptfoo for briefings on continuous red teaming, guardrails, and executive reporting."
+      description="Recap of Promptfoo at Gartner Security & Risk Management Summit 2026: briefings on continuous red teaming, guardrails, and executive reporting."
     >
       <Head>
         <meta
@@ -33,7 +35,7 @@ export default function GartnerSecurity2026(): React.ReactElement {
         />
         <meta
           property="og:description"
-          content="Turn AI risk into a measurable program. Meet Promptfoo for briefings on continuous red teaming, guardrails, and executive reporting. Jun 1-3, National Harbor MD."
+          content="Recap of Promptfoo at Gartner Security 2026: briefings on continuous red teaming, guardrails, and executive reporting. Jun 1-3, National Harbor MD."
         />
         <meta
           property="og:image"
@@ -48,7 +50,7 @@ export default function GartnerSecurity2026(): React.ReactElement {
         />
         <meta
           name="twitter:description"
-          content="Meet Promptfoo at Gartner Security 2026. Enterprise AI security, analyst briefings, and CISO discussions."
+          content="Recap of Promptfoo at Gartner Security 2026. Enterprise AI security, analyst briefings, and CISO discussions."
         />
         <meta
           name="twitter:image"
@@ -73,9 +75,9 @@ export default function GartnerSecurity2026(): React.ReactElement {
                 <span className={styles.highlight}>Measurable</span>
               </h1>
               <p className={styles.heroSubtitle}>
-                If you're building an AI security program, we can help you move from ad hoc testing
-                to continuous coverage. Meet Promptfoo for demos of automated red teaming, runtime
-                guardrails, and reporting security leadership can track.
+                We met with teams building AI security programs and mapped the move from ad hoc
+                testing to continuous coverage: demos of automated red teaming, runtime guardrails,
+                and reporting security leadership can track.
               </p>
               {/* Risk Meter Animation */}
               <div className={styles.riskMeterContainer}>
@@ -100,7 +102,7 @@ export default function GartnerSecurity2026(): React.ReactElement {
                   Learn More
                 </a>
                 <Link to="/contact" className={styles.secondaryButton}>
-                  Schedule a Briefing
+                  Book a Briefing
                 </Link>
               </div>
               <div className={styles.eventDetails}>
@@ -161,15 +163,15 @@ export default function GartnerSecurity2026(): React.ReactElement {
                 <div className={styles.cardIcon}>📊</div>
                 <h3>Operationalize AI Security</h3>
                 <p>
-                  Learn how to move from ad hoc testing to structured coverage that tracks risk
-                  reduction over time.
+                  How to move from ad hoc testing to structured coverage that tracks risk reduction
+                  over time.
                 </p>
               </div>
               <div className={styles.offerCard}>
                 <div className={styles.cardIcon}>📋</div>
                 <h3>Executive-ready Reporting</h3>
                 <p>
-                  See dashboards and artifacts that translate technical findings into board-level
+                  Dashboards and artifacts that translate technical findings into board-level
                   summaries.
                 </p>
               </div>
@@ -177,8 +179,8 @@ export default function GartnerSecurity2026(): React.ReactElement {
                 <div className={styles.cardIcon}>🎯</div>
                 <h3>Briefings and Architecture Reviews</h3>
                 <p>
-                  Book dedicated time with our team to walk through your program design and get
-                  personalized recommendations.
+                  Teams walked through their program design with us and left with specific
+                  recommendations.
                 </p>
               </div>
             </div>
@@ -194,7 +196,7 @@ export default function GartnerSecurity2026(): React.ReactElement {
                 <div className={styles.statLabel}>Developers</div>
               </div>
               <div className={styles.stat}>
-                <div className={styles.statNumber}>80+</div>
+                <div className={styles.statNumber}>{SITE_CONSTANTS.FORTUNE_500_COUNT}</div>
                 <div className={styles.statLabel}>Fortune 500 Companies</div>
               </div>
               <div className={styles.stat}>
@@ -209,9 +211,9 @@ export default function GartnerSecurity2026(): React.ReactElement {
         <section className={styles.ctaSection}>
           <div className={styles.container}>
             <div className={styles.ctaContent}>
-              <h2 className={styles.ctaTitle}>Attending Gartner Security?</h2>
+              <h2 className={styles.ctaTitle}>Missed us at the summit?</h2>
               <p className={styles.ctaText}>
-                Reach out to book a demo or architecture review during the summit.
+                Reach out to book a demo or an architecture review with our team.
               </p>
               <div className={styles.ctaButtons}>
                 <Link to="/contact" className={styles.primaryButton}>

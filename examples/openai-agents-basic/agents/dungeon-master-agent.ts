@@ -32,6 +32,6 @@ When combat occurs:
 
 Keep responses punchy but atmospheric. Always roll dice for uncertain outcomes.
 Reference character abilities and inventory items when relevant. Make every moment memorable!`,
-  model: 'gpt-5-mini',
+  model: 'gpt-5.6-luna',
   tools: gameTools,
 });

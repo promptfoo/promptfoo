@@ -10,6 +10,7 @@ export interface GlobalConfig {
     appUrl?: string;
     apiHost?: string;
     apiKey?: string;
+    authHeaderName?: string;
     currentOrganizationId?: string;
     sharing?: boolean;
     currentTeamId?: string;
