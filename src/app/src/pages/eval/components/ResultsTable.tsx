@@ -47,6 +47,7 @@ import { Link, useNavigate } from 'react-router-dom';
 import CustomMetrics from './CustomMetrics';
 import CustomMetricsDialog from './CustomMetricsDialog';
 import EvalOutputCell from './EvalOutputCell';
+import { extractMarkdownImageSources } from './EvalOutputCell.utils';
 import EvalOutputPromptDialog from './EvalOutputPromptDialog';
 import { useFilterMode } from './FilterModeProvider';
 import { ProviderDisplay } from './ProviderDisplay';
@@ -333,16 +334,12 @@ function renderMediaVariableCell({
   output,
   mediaMetadata,
   value,
-  lightboxOpen,
-  lightboxImage,
   maxTextLength,
   toggleLightbox,
 }: {
   output: EvaluateTableOutput | null;
   mediaMetadata?: { path: string; type: string; format?: string };
   value: string | object;
-  lightboxOpen: boolean;
-  lightboxImage: string | null;
   maxTextLength: number;
   toggleLightbox?: (url?: string) => void;
 }): React.ReactNode | null {
@@ -383,8 +380,6 @@ function renderMediaVariableCell({
     ) : mediaType === 'image' && imageSrc && toggleLightbox ? (
       renderImageCellContent({
         imgSrc: imageSrc,
-        lightboxOpen,
-        lightboxImage,
         maxTextLength,
         toggleLightbox,
         alt: 'Input image',
@@ -490,8 +485,6 @@ function renderVariableCell({
   injectVarName,
   maxTextLength,
   renderMarkdown,
-  lightboxOpen,
-  lightboxImage,
   toggleLightbox,
 }: {
   info: CellContext<EvaluateTableRow, string>;
@@ -499,8 +492,6 @@ function renderVariableCell({
   injectVarName: string;
   maxTextLength: number;
   renderMarkdown: boolean;
-  lightboxOpen: boolean;
-  lightboxImage: string | null;
   toggleLightbox: (url?: string) => void;
 }): React.ReactNode {
   const row = info.row.original;
@@ -519,8 +510,6 @@ function renderVariableCell({
     output,
     mediaMetadata: fileMetadata?.[varName],
     value,
-    lightboxOpen,
-    lightboxImage,
     maxTextLength,
     toggleLightbox,
   });
@@ -536,8 +525,13 @@ function renderVariableCell({
     }
   }
 
-  const cellContent = renderMarkdown ? (
-    <VariableMarkdownCell value={value} maxTextLength={maxTextLength} />
+  const shouldRenderMarkdown = renderMarkdown || extractMarkdownImageSources(value).length > 0;
+  const cellContent = shouldRenderMarkdown ? (
+    <VariableMarkdownCell
+      value={value}
+      maxTextLength={maxTextLength}
+      onImageClick={toggleLightbox}
+    />
   ) : (
     <TruncatedText text={value} maxLength={maxTextLength} />
   );
@@ -1360,16 +1354,12 @@ function renderImageCellContent({
   imgSrc,
   originalImageText,
   alt = 'Base64 encoded image',
-  lightboxOpen,
-  lightboxImage,
   maxTextLength,
   toggleLightbox,
 }: {
   imgSrc: string;
   originalImageText?: string;
   alt?: string;
-  lightboxOpen: boolean;
-  lightboxImage: string | null;
   maxTextLength: number;
   toggleLightbox: (url?: string) => void;
 }): React.ReactNode {
@@ -1387,19 +1377,6 @@ function renderImageCellContent({
         }}
         onClick={() => toggleLightbox(imgSrc)}
       />
-      {lightboxOpen && lightboxImage === imgSrc && (
-        <div className="lightbox" onClick={() => toggleLightbox()}>
-          <img
-            src={lightboxImage}
-            alt="Lightbox"
-            style={{
-              maxWidth: '90%',
-              maxHeight: '90vh',
-              objectFit: 'contain',
-            }}
-          />
-        </div>
-      )}
       {originalImageText ? (
         <div className="mt-1.5 text-muted-foreground text-[0.8em]">
           <strong>Original (image text):</strong>{' '}
@@ -1417,8 +1394,6 @@ function renderResultsTableCell({
   injectVarName,
   shouldDrawColBorder,
   maxTextLength,
-  lightboxOpen,
-  lightboxImage,
   toggleLightbox,
 }: {
   cell: Cell<EvaluateTableRow, unknown>;
@@ -1427,8 +1402,6 @@ function renderResultsTableCell({
   injectVarName: string;
   shouldDrawColBorder: boolean;
   maxTextLength: number;
-  lightboxOpen: boolean;
-  lightboxImage: string | null;
   toggleLightbox: (url?: string) => void;
 }): React.ReactNode {
   const columnId = String(cell.column.id);
@@ -1454,8 +1427,6 @@ function renderResultsTableCell({
           headVars,
           injectVarName,
         }),
-        lightboxOpen,
-        lightboxImage,
         maxTextLength,
         toggleLightbox,
       })
@@ -1484,8 +1455,6 @@ function ResultsTableBodyRow({
   headVars,
   injectVarName,
   maxTextLength,
-  lightboxOpen,
-  lightboxImage,
   toggleLightbox,
 }: {
   row: Row<EvaluateTableRow>;
@@ -1493,8 +1462,6 @@ function ResultsTableBodyRow({
   headVars: string[];
   injectVarName: string;
   maxTextLength: number;
-  lightboxOpen: boolean;
-  lightboxImage: string | null;
   toggleLightbox: (url?: string) => void;
 }) {
   let colBorderDrawn = false;
@@ -1514,8 +1481,6 @@ function ResultsTableBodyRow({
           injectVarName,
           shouldDrawColBorder,
           maxTextLength,
-          lightboxOpen,
-          lightboxImage,
           toggleLightbox,
         });
       })}
@@ -1718,10 +1683,10 @@ function ResultsTable({
     });
   }, [filteredResultsCount]);
 
-  const toggleLightbox = (url?: string) => {
+  const toggleLightbox = React.useCallback((url?: string) => {
     setLightboxImage(url || null);
-    setLightboxOpen(!lightboxOpen);
-  };
+    setLightboxOpen(Boolean(url));
+  }, []);
 
   // biome-ignore lint/correctness/useExhaustiveDependencies: intentional
   const handleRating = React.useCallback(
@@ -2057,7 +2022,6 @@ function ResultsTable({
   const columnHelper = React.useMemo(() => createColumnHelper<EvaluateTableRow>(), []);
 
   const { renderMarkdown } = useResultsViewSettingsStore();
-  // biome-ignore lint/correctness/useExhaustiveDependencies: intentional
   const variableColumns = React.useMemo(() => {
     if (head.vars.length > 0) {
       return [
@@ -2077,8 +2041,6 @@ function ResultsTable({
                   injectVarName,
                   maxTextLength,
                   renderMarkdown,
-                  lightboxOpen,
-                  lightboxImage,
                   toggleLightbox,
                 }),
               size: variableColumnSizes[idx],
@@ -2090,12 +2052,10 @@ function ResultsTable({
     return [];
   }, [
     columnHelper,
-    head,
     head.vars,
     maxTextLength,
     renderMarkdown,
-    lightboxOpen,
-    lightboxImage,
+    toggleLightbox,
     injectVarName,
     variableColumnSizes,
   ]);
@@ -2574,14 +2534,25 @@ function ResultsTable({
                 headVars={head.vars}
                 injectVarName={injectVarName}
                 maxTextLength={maxTextLength}
-                lightboxOpen={lightboxOpen}
-                lightboxImage={lightboxImage}
                 toggleLightbox={toggleLightbox}
               />
             ))}
           </tbody>
         </table>
       </div>
+      {lightboxOpen && lightboxImage && (
+        <div className="lightbox" onClick={() => toggleLightbox()}>
+          <img
+            src={lightboxImage}
+            alt="Lightbox"
+            style={{
+              maxWidth: '90%',
+              maxHeight: '90vh',
+              objectFit: 'contain',
+            }}
+          />
+        </div>
+      )}
       <div className="pagination sticky bottom-0 z-10 flex w-screen shrink-0 flex-col items-stretch gap-3 border-t border-border bg-background px-4 py-2 shadow-lg -mx-4 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between sm:gap-4">
         <div>
           Showing{' '}
