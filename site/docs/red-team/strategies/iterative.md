@@ -20,7 +20,7 @@ strategies:
   # With configuration
   - id: jailbreak
     config:
-      # Optional: Number of iterations to attempt (default: 10)
+      # Optional: Number of iterations to attempt (default: 4)
       numIterations: 50
 ```
 

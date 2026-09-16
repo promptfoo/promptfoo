@@ -7,6 +7,7 @@ export const homoglyphMap: { [key: string]: string } = {
   c: 'с', // Cyrillic с (U+0441)
   d: 'ԁ', // Cyrillic д (U+0501)
   e: 'е', // Cyrillic е (U+0435)
+  f: 'ƒ', // Latin small letter f with hook (U+0192)
   g: 'ɡ', // Latin small letter script g
   h: 'һ', // Cyrillic һ (U+04BB)
   i: 'і', // Cyrillic і (U+0456)
@@ -85,7 +86,7 @@ export function addHomoglyphs(testCases: TestCase[], injectVar: string): TestCas
       ...testCase,
       assert: testCase.assert?.map((assertion) => ({
         ...assertion,
-        metric: `${assertion.metric}/Homoglyph`,
+        metric: assertion.metric ? `${assertion.metric}/Homoglyph` : assertion.metric,
       })),
       vars: {
         ...testCase.vars,

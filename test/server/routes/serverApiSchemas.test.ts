@@ -404,29 +404,32 @@ describe('inline server API DTO validation', () => {
     [403, false, 'cannot share evaluations (HTTP 403)'],
     [429, true, 'temporarily unavailable (HTTP 429)'],
     [503, true, 'temporarily unavailable (HTTP 503)'],
-  ])('classifies Cloud auth status %i without exposing response details', async (status, isRetryable, expectedReason) => {
-    mockedEval.findById.mockResolvedValue({ id: 'eval-1' } as never);
-    mockedDetermineShareDomain.mockReturnValue({ domain: 'https://promptfoo.app' } as never);
-    mockedCloudConfig.isEnabled.mockReturnValue(true);
-    mockedIsSharingEnabled.mockReturnValue(true);
-    mockedCheckCloudShareAuthentication.mockResolvedValue(
-      new Response('sensitive upstream response', {
-        status,
-        statusText: 'INTERNAL SECRET STATUS',
-      }),
-    );
+  ])(
+    'classifies Cloud auth status %i without exposing response details',
+    async (status, isRetryable, expectedReason) => {
+      mockedEval.findById.mockResolvedValue({ id: 'eval-1' } as never);
+      mockedDetermineShareDomain.mockReturnValue({ domain: 'https://promptfoo.app' } as never);
+      mockedCloudConfig.isEnabled.mockReturnValue(true);
+      mockedIsSharingEnabled.mockReturnValue(true);
+      mockedCheckCloudShareAuthentication.mockResolvedValue(
+        new Response('sensitive upstream response', {
+          status,
+          statusText: 'INTERNAL SECRET STATUS',
+        }),
+      );
 
-    const response = await api.get('/api/results/share/check-domain?id=eval-1');
+      const response = await api.get('/api/results/share/check-domain?id=eval-1');
 
-    expect(response.status).toBe(200);
-    expect(response.body).toMatchObject({
-      sharingEnabled: false,
-      isRetryable,
-    });
-    expect(response.body.sharingDisabledReason).toContain(expectedReason);
-    expect(response.body.sharingDisabledReason).not.toContain('INTERNAL');
-    expect(response.body.sharingDisabledReason).not.toContain('sensitive');
-  });
+      expect(response.status).toBe(200);
+      expect(response.body).toMatchObject({
+        sharingEnabled: false,
+        isRetryable,
+      });
+      expect(response.body.sharingDisabledReason).toContain(expectedReason);
+      expect(response.body.sharingDisabledReason).not.toContain('INTERNAL');
+      expect(response.body.sharingDisabledReason).not.toContain('sensitive');
+    },
+  );
 
   it('marks Cloud network failures as retryable', async () => {
     mockedEval.findById.mockResolvedValue({ id: 'eval-1' } as never);

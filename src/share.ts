@@ -19,7 +19,7 @@ import {
 import { isAbortError } from './util/fetch/errors';
 import { fetchWithProxy } from './util/fetch/index';
 import { createBlobInlineCache, inlineBlobRefsForShare } from './util/inlineBlobsForShare';
-import { redactAzureBlobSasTokens } from './util/sanitizer';
+import { redactAzureBlobSasTokens, sanitizeTracingConfigForPersistence } from './util/sanitizer';
 
 import type Eval from './models/eval';
 import type EvalResult from './models/evalResult';
@@ -188,7 +188,9 @@ async function sendEvalRecord(
   // Fetch traces for the eval
   const traces = await evalRecord.getTraces();
   signal?.throwIfAborted();
-  const redactedConfig = redactAzureBlobSasTokens(evalRecord.config);
+  const redactedConfig = redactAzureBlobSasTokens(
+    sanitizeTracingConfigForPersistence(evalRecord.config),
+  );
 
   // Preserve the verified runtime team on server-issued unified configs. For
   // other configs, use the current CLI team to avoid falling back to default.
@@ -544,10 +546,8 @@ async function sendChunkedResults(
   // Prepare headers
   const headers: Record<string, string> = {
     'Content-Type': 'application/json',
+    ...(cloudConfig.isEnabled() ? (cloudConfig.getAuthHeaders() ?? {}) : {}),
   };
-  if (cloudConfig.isEnabled()) {
-    headers['Authorization'] = `Bearer ${cloudConfig.getApiKey()}`;
-  }
 
   // Use total row count (not distinct test count) since we iterate over all result rows
   const totalResults = await evalRecord.getTotalResultRowCount();
@@ -909,7 +909,7 @@ export async function createShareableModelAuditUrl(
 
   const headers = {
     'Content-Type': 'application/json',
-    ...(cloudConfig.isEnabled() && { Authorization: `Bearer ${cloudConfig.getApiKey()}` }),
+    ...(cloudConfig.isEnabled() ? (cloudConfig.getAuthHeaders() ?? {}) : {}),
   };
 
   const url = `${apiBaseUrl}/api/v1/model-audits/share`;

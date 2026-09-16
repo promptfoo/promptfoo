@@ -235,41 +235,41 @@ describe('share-time blob upload', () => {
     );
   });
 
-  it.each([
-    'AbortError',
-    'AbortException',
-  ])('propagates %s cancellation from an in-flight remote blob upload', async (errorName) => {
-    const hash = '8'.repeat(64);
-    const controller = new AbortController();
-    const cancellation = new Error('cancelled');
-    cancellation.name = errorName;
-    vi.mocked(uploadBlobRemote).mockImplementation(
-      (_buffer, _mimeType, _context, signal) =>
-        new Promise((_resolve, reject) => {
-          signal?.addEventListener('abort', () => reject(signal.reason), { once: true });
-        }),
-    );
+  it.each(['AbortError', 'AbortException'])(
+    'propagates %s cancellation from an in-flight remote blob upload',
+    async (errorName) => {
+      const hash = '8'.repeat(64);
+      const controller = new AbortController();
+      const cancellation = new Error('cancelled');
+      cancellation.name = errorName;
+      vi.mocked(uploadBlobRemote).mockImplementation(
+        (_buffer, _mimeType, _context, signal) =>
+          new Promise((_resolve, reject) => {
+            signal?.addEventListener('abort', () => reject(signal.reason), { once: true });
+          }),
+      );
 
-    const upload = uploadBlobRefsForShare(
-      `promptfoo://blob/${hash}`,
-      createRemoteBlobUploadCache(),
-      { localEvalId: 'local-eval-abort', remoteEvalId: 'remote-eval-abort' },
-      controller.signal,
-    );
-    const rejection = expect(upload).rejects.toBe(cancellation);
-    await vi.waitFor(() => expect(uploadBlobRemote).toHaveBeenCalledOnce());
+      const upload = uploadBlobRefsForShare(
+        `promptfoo://blob/${hash}`,
+        createRemoteBlobUploadCache(),
+        { localEvalId: 'local-eval-abort', remoteEvalId: 'remote-eval-abort' },
+        controller.signal,
+      );
+      const rejection = expect(upload).rejects.toBe(cancellation);
+      await vi.waitFor(() => expect(uploadBlobRemote).toHaveBeenCalledOnce());
 
-    controller.abort(cancellation);
+      controller.abort(cancellation);
 
-    await rejection;
-    expect(uploadBlobRemote).toHaveBeenCalledWith(
-      Buffer.from('image-bytes'),
-      'image/png',
-      expect.objectContaining({ evalId: 'remote-eval-abort' }),
-      controller.signal,
-    );
-    expect(logger.warn).not.toHaveBeenCalled();
-  });
+      await rejection;
+      expect(uploadBlobRemote).toHaveBeenCalledWith(
+        Buffer.from('image-bytes'),
+        'image/png',
+        expect.objectContaining({ evalId: 'remote-eval-abort' }),
+        controller.signal,
+      );
+      expect(logger.warn).not.toHaveBeenCalled();
+    },
+  );
 
   it('checks authorization only once for repeated unauthorized references', async () => {
     const hash = 'e'.repeat(64);

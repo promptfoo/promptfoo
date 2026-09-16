@@ -32,10 +32,9 @@ export function makeRequest(
   options: { signal?: AbortSignal; silent?: boolean } = {},
 ): Promise<Response> {
   const apiHost = cloudConfig.getApiHost();
-  const apiKey = cloudConfig.getApiKey();
   const url = `${apiHost}/api/v1/${path.startsWith('/') ? path.slice(1) : path}`;
   const headers: Record<string, string> = {
-    Authorization: `Bearer ${apiKey}`,
+    ...(cloudConfig.getAuthHeaders() ?? {}),
     'Content-Type': 'application/json',
   };
   if (options.silent) {
@@ -373,6 +372,7 @@ export async function getPluginSeverityOverridesFromCloud(cloudProviderId: strin
 export async function getUserTeams(
   apiHost?: string,
   apiKey?: string,
+  authHeaderName?: string,
 ): Promise<
   Array<{
     id: string;
@@ -387,8 +387,9 @@ export async function getUserTeams(
     apiHost && apiKey
       ? await fetchWithProxy(`${apiHost}/api/v1/users/me/teams`, {
           headers: {
-            Authorization: `Bearer ${apiKey}`,
+            [authHeaderName || cloudConfig.getAuthHeaderName()]: `Bearer ${apiKey}`,
           },
+          skipCloudAuthInjection: true,
         })
       : await makeRequest(`/users/me/teams`, 'GET');
   if (!response.ok) {
@@ -869,9 +870,8 @@ export async function getOrgContext(): Promise<{
 
   try {
     const apiHost = cloudConfig.getApiHost();
-    const apiKey = cloudConfig.getApiKey();
     const response = await fetchWithProxy(`${apiHost}/api/v1/users/me`, {
-      headers: { Authorization: `Bearer ${apiKey}` },
+      headers: { ...(cloudConfig.getAuthHeaders() ?? {}) },
     });
 
     if (!response.ok) {
