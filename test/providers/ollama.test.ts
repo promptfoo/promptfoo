@@ -611,6 +611,28 @@ describe('OllamaChatProvider', () => {
     expect(JSON.parse(call[1].body).think).toBeTruthy();
   });
 
+  it('should not leak think or passthrough into the nested options object', async () => {
+    vi.mocked(fetchWithCache).mockResolvedValue({
+      data: '{"message":{"role":"assistant","content":"hi"},"done":true}\n',
+      cached: false,
+      status: 200,
+      statusText: 'OK',
+      headers: {},
+    });
+
+    const provider = new OllamaChatProvider('llama3.3', {
+      config: { temperature: 0.5, think: true, passthrough: { format: 'json' } },
+    });
+    await provider.callApi('test prompt');
+
+    const body = JSON.parse(vi.mocked(fetchWithCache).mock.calls[0][1]?.body as string);
+    // think and format belong at the top level; the chat reducer used to copy them
+    // into options as junk members too.
+    expect(body.options).toEqual({ temperature: 0.5 });
+    expect(body.think).toBe(true);
+    expect(body.format).toBe('json');
+  });
+
   it('should handle tools configuration', async () => {
     const provider = new OllamaChatProvider('llama3.3', {
       config: {
@@ -1114,25 +1136,89 @@ describe('OllamaEmbeddingProvider', () => {
     vi.resetAllMocks();
   });
 
-  it('should call embeddings API and return response', async () => {
-    const mockResponse = {
-      data: {
-        embedding: [0.1, 0.2, 0.3],
-      },
+  it('should call the /api/embed endpoint and return the embedding with token usage', async () => {
+    vi.mocked(fetchWithCache).mockResolvedValue({
+      data: { embeddings: [[0.1, 0.2, 0.3]], prompt_eval_count: 4 },
       cached: false,
       status: 200,
       statusText: 'OK',
       headers: {},
-    };
+    });
 
-    vi.mocked(fetchWithCache).mockResolvedValue(mockResponse);
-
-    const provider = new OllamaEmbeddingProvider('llama3.3');
+    const provider = new OllamaEmbeddingProvider('all-minilm');
     const result = await provider.callEmbeddingApi('test text');
 
     expect(result).toEqual({
       embedding: [0.1, 0.2, 0.3],
+      tokenUsage: { prompt: 4, total: 4 },
     });
+
+    // /api/embeddings is superseded upstream; it also hard-errors on long inputs.
+    const [url] = vi.mocked(fetchWithCache).mock.calls[0];
+    expect(url).toBe('http://localhost:11434/api/embed');
+  });
+
+  it('should default truncate to false so over-long input fails loudly', async () => {
+    vi.mocked(fetchWithCache).mockResolvedValue({
+      data: { embeddings: [[0.1]] },
+      cached: false,
+      status: 200,
+      statusText: 'OK',
+      headers: {},
+    });
+
+    const provider = new OllamaEmbeddingProvider('all-minilm');
+    await provider.callEmbeddingApi('test text');
+
+    const body = JSON.parse(vi.mocked(fetchWithCache).mock.calls[0][1]?.body as string);
+    expect(body.input).toBe('test text');
+    expect(body.truncate).toBe(false);
+  });
+
+  it('should thread config through to the embeddings request', async () => {
+    vi.mocked(fetchWithCache).mockResolvedValue({
+      data: { embeddings: [[0.1]] },
+      cached: false,
+      status: 200,
+      statusText: 'OK',
+      headers: {},
+    });
+
+    const provider = new OllamaEmbeddingProvider('all-minilm', {
+      config: {
+        num_ctx: 2048,
+        truncate: true,
+        dimensions: 128,
+        keep_alive: '5m',
+      },
+    });
+    await provider.callEmbeddingApi('test text');
+
+    // Previously callEmbeddingApi built {model, prompt} and ignored config entirely,
+    // so num_ctx (the actual fix for a context-length error) was unreachable.
+    const body = JSON.parse(vi.mocked(fetchWithCache).mock.calls[0][1]?.body as string);
+    expect(body.options.num_ctx).toBe(2048);
+    expect(body.truncate).toBe(true);
+    expect(body.dimensions).toBe(128);
+    expect(body.keep_alive).toBe('5m');
+  });
+
+  it('should explain how to fix a context-length error', async () => {
+    vi.mocked(fetchWithCache).mockResolvedValue({
+      data: { error: 'the input length exceeds the context length' },
+      cached: false,
+      status: 400,
+      statusText: 'Bad Request',
+      headers: {},
+    });
+
+    const provider = new OllamaEmbeddingProvider('all-minilm');
+    const result = await provider.callEmbeddingApi('a'.repeat(5000));
+
+    expect(result.error).toContain('the input length exceeds the context length');
+    expect(result.error).toContain('num_ctx');
+    expect(result.error).toContain('truncate');
+    expect(result.embedding).toBeUndefined();
   });
 
   it.each([

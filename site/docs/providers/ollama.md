@@ -42,7 +42,7 @@ Or, use the `/api/chat` endpoint for chat-formatted prompts:
 - `ollama:chat:mixtral:8x22b`
 - ...
 
-We also support the `/api/embeddings` endpoint via `ollama:embeddings:<model name>` for model-graded assertions such as [similarity](/docs/configuration/expected-outputs/similar/).
+We also support the `/api/embed` endpoint via `ollama:embeddings:<model name>` (or the singular `ollama:embedding:`) for model-graded assertions such as [similarity](/docs/configuration/expected-outputs/similar/).
 
 Supported environment variables:
 
@@ -230,6 +230,35 @@ providers:
 
 tests:
   # Your test cases here
+```
+
+### Embedding input length
+
+Embedding models have small context windows — `all-minilm` defaults to 256 tokens and
+tops out at 512. Promptfoo sends `truncate: false`, so input that exceeds the window
+fails with an explicit error rather than silently embedding only the first N tokens and
+producing a plausible-but-wrong similarity score:
+
+```
+Ollama API error: 400 Bad Request: the input length exceeds the context length.
+Raise `config.num_ctx` (up to the model's own maximum, shown by `ollama show all-minilm`),
+or set `config.truncate: true` to embed only the first num_ctx tokens -- note that
+truncating silently changes similarity scores.
+```
+
+Both remedies are configurable:
+
+```yaml title="promptfooconfig.yaml"
+defaultTest:
+  options:
+    provider:
+      embedding:
+        id: ollama:embeddings:all-minilm
+        config:
+          num_ctx: 512 # raise the window (bounded by the model's maximum)
+          # truncate: true  # or accept truncation
+          # dimensions: 128 # Matryoshka models only
+          # keep_alive: 5m
 ```
 
 Popular Ollama embedding models include:
