@@ -4,7 +4,7 @@ import { gzip } from 'zlib';
 import { CONSENT_ENDPOINT, EVENTS_ENDPOINT, R_ENDPOINT } from '../../constants';
 import { cloudConfig } from '../../globalConfig/cloud';
 import logger, { logRequestResponse } from '../../logger';
-import { sanitizeUrl } from '../sanitizer';
+import { sanitizeUrl, sanitizeUrlForLogging } from '../sanitizer';
 
 import type { FetchOptions } from './types';
 
@@ -238,9 +238,12 @@ export async function monkeyPatchFetch(
         );
         throw e;
       }
-      logger.debug(
-        `Error in fetch: ${JSON.stringify(e, Object.getOwnPropertyNames(e), 2)} ${e instanceof Error ? e.stack : ''}`,
-      );
+      const safeUrl = sanitizeUrlForLogging(urlString);
+      const safeError =
+        `${JSON.stringify(e, Object.getOwnPropertyNames(e), 2)} ${e instanceof Error ? e.stack : ''}`
+          .split(urlString)
+          .join(safeUrl);
+      logger.debug(`Error in fetch: ${safeError}`);
     }
     throw e;
   }
