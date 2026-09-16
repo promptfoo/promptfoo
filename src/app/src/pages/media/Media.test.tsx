@@ -18,11 +18,16 @@ vi.mock('@app/hooks/useTelemetry', () => ({
 }));
 
 // Mock thumbnail cache cleanup
+vi.mock('@app/utils/media', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@app/utils/media')>()),
+  downloadFile: vi.fn(),
+}));
 vi.mock('./hooks/useThumbnailCache', () => ({
   clearExpiredThumbnails: () => Promise.resolve(),
 }));
 
 import { callApi } from '@app/utils/api';
+import { downloadFile } from '@app/utils/media';
 import Media from './Media';
 
 // Helper to capture current location for assertions
@@ -174,6 +179,34 @@ describe('Media page URL state machine', () => {
 
     const cancelDownloadButton = await screen.findByRole('button', { name: 'Cancel download' });
     expect(cancelDownloadButton.parentElement?.parentElement).toHaveClass('flex-wrap');
+  });
+
+  it('stops the bulk download loop when the page unmounts mid-download', async () => {
+    // The loop awaits a timer between files, so before the unmount abort it kept
+    // running after teardown and called setState on an unmounted component —
+    // surfacing in CI as "ReferenceError: window is not defined".
+    const user = userEvent.setup();
+    mockApiResponses();
+    const { unmount } = renderMedia();
+
+    await waitFor(() => {
+      expect(screen.getByText('First item')).toBeInTheDocument();
+    });
+
+    await user.click(screen.getAllByRole('button', { name: /^Download$/ })[0]);
+    await user.click(screen.getByRole('menuitem', { name: /Select Items/i }));
+    await user.click(screen.getByRole('button', { name: 'Select All' }));
+    await user.click(screen.getByRole('button', { name: 'Download (2)' }));
+
+    await screen.findByRole('button', { name: 'Cancel download' });
+    const callsBeforeUnmount = vi.mocked(downloadFile).mock.calls.length;
+
+    expect(() => unmount()).not.toThrow();
+
+    // Well past the 200ms inter-file delay: an un-aborted loop would have started
+    // the next download by now.
+    await new Promise((resolve) => setTimeout(resolve, 400));
+    expect(vi.mocked(downloadFile).mock.calls.length).toBe(callsBeforeUnmount);
   });
 
   it('clicking a card adds hash to URL', async () => {

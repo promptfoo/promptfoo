@@ -6,6 +6,7 @@
     "target": "ES2022",
     "module": "ESNext",
     "moduleResolution": "bundler",
+    "noEmit": true,
     "outDir": "dist",
     "skipLibCheck": true,
     "sourceMap": true,
@@ -13,8 +14,7 @@
     "resolveJsonModule": true,
     "composite": true,
     "rootDir": ".",
-    "ignoreDeprecations": "6.0",
-    "baseUrl": "./"
+    "types": ["node"]
   },
   "include": [
     "*.ts",
