@@ -10,7 +10,7 @@ import { ConversationRelevancyTemplate } from '../matchers/conversationRelevancy
 import { matchesConversationRelevance } from '../matchers/deepeval';
 
 import type { AssertionParams, GradingResult } from '../../types/index';
-import type { Message } from '../matchers/deepeval';
+import type { ConversationRelevanceMessage } from '../matchers/deepeval';
 
 const DEFAULT_WINDOW_SIZE = 5;
 // DeepEval's default pass threshold for the conversation relevancy metric.
@@ -24,9 +24,12 @@ export const handleConversationRelevance = async ({
   providerCallContext,
   test,
 }: AssertionParams): Promise<GradingResult> => {
-  let messages: Message[] = [];
-  if (test.vars?._conversation && (test.vars._conversation as Message[]).length > 0) {
-    messages = test.vars?._conversation as Message[];
+  let messages: ConversationRelevanceMessage[] = [];
+  if (
+    test.vars?._conversation &&
+    (test.vars._conversation as ConversationRelevanceMessage[]).length > 0
+  ) {
+    messages = test.vars?._conversation as ConversationRelevanceMessage[];
   } else {
     invariant(
       typeof outputString === 'string',

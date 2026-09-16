@@ -5,7 +5,7 @@ import * as path from 'path';
 import { Command } from 'commander';
 import { globSync } from 'glob';
 import { afterEach, beforeEach, describe, expect, it, Mocked, vi } from 'vitest';
-import { disableCache } from '../../src/cache';
+import { disableCache, enableCache, isCacheEnabled } from '../../src/cache';
 import cliState from '../../src/cliState';
 import {
   doEval as commandDoEval,
@@ -54,7 +54,6 @@ import { mockProcessEnv } from '../util/utils';
 
 import type { ApiProvider, TestSuite, UnifiedConfig } from '../../src/types/index';
 
-vi.mock('../../src/cache');
 vi.mock('../../src/evaluator');
 vi.mock('../../src/globalConfig/accounts');
 vi.mock('../../src/globalConfig/cloud', async (importOriginal) => {
@@ -245,8 +244,13 @@ describe('evalCommand', () => {
     );
   });
 
-  it('should apply resolved author when --no-write is used', async () => {
-    const cmdObj = { table: false, write: false };
+  it('should apply resolved author and explicit record metadata when --no-write is used', async () => {
+    const cmdObj = {
+      table: false,
+      write: false,
+      id: 'stable-id',
+      description: 'nightly scan',
+    };
     const config = {} as UnifiedConfig;
     let capturedEvalRecord: Eval | undefined;
 
@@ -267,6 +271,8 @@ describe('evalCommand', () => {
     await doEval(cmdObj, config, defaultConfigPath, {});
 
     expect(capturedEvalRecord?.author).toBe('ci-author@example.com');
+    expect(capturedEvalRecord?.id).toBe('stable-id');
+    expect(capturedEvalRecord?.config.description).toBe('nightly scan');
   });
 
   it('should finalize streamed JSONL output after a successful CLI evaluation', async () => {
@@ -1104,10 +1110,36 @@ describe('evalCommand', () => {
     );
   });
 
-  it('should handle --no-cache option', async () => {
-    const cmdObj = { cache: false };
-    await doEval(cmdObj, defaultConfig, defaultConfigPath, {});
-    expect(disableCache).toHaveBeenCalledTimes(1);
+  it.each([false, true])('isolates --no-cache when evaluation throws=%s', async (throws) => {
+    const previouslyEnabled = isCacheEnabled();
+    enableCache();
+    try {
+      vi.mocked(evaluate).mockImplementationOnce(async (_testSuite, evalRecord) => {
+        expect(isCacheEnabled()).toBe(false);
+        if (throws) {
+          throw new Error('fixture evaluation failed');
+        }
+        return evalRecord as Eval;
+      });
+      const run = doEval({ cache: false }, defaultConfig, defaultConfigPath, {});
+      if (throws) {
+        await expect(run).rejects.toThrow('fixture evaluation failed');
+      } else {
+        await run;
+      }
+      expect(isCacheEnabled()).toBe(true);
+      vi.mocked(evaluate).mockImplementationOnce(async (_testSuite, evalRecord) => {
+        expect(isCacheEnabled()).toBe(true);
+        return evalRecord as Eval;
+      });
+      await doEval({ cache: true }, defaultConfig, defaultConfigPath, {});
+    } finally {
+      if (previouslyEnabled) {
+        enableCache();
+      } else {
+        disableCache();
+      }
+    }
   });
 
   it('should handle --write option', async () => {

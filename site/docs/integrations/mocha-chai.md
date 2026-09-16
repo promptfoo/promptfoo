@@ -13,6 +13,9 @@ import TabItem from '@theme/TabItem';
 This guide includes examples that show how to create Mocha test cases for desired prompt quality using semantic similarity and LLM grading.
 
 For more information on supported checks, see [Assertions & Metrics documentation](/docs/configuration/expected-outputs/).
+For the supported programmatic surface behind these helpers, see the
+[Node.js API guide](/docs/usage/node-package) and generated
+[assertions reference](/docs/api/node/reference/variables/assertions).
 
 ## Prerequisites
 

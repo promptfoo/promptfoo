@@ -13,6 +13,18 @@ import type {
   VarValue,
 } from '../types/index';
 
+/**
+ * Compare candidate outputs and mark the grader-selected best response.
+ *
+ * Exposed as `assertions.matchesComparisonBoolean()` on the public helper object.
+ *
+ * @param criteria - Rubric describing how to choose the best output.
+ * @param outputs - Candidate outputs to compare.
+ * @param grading - Optional provider and rubric overrides.
+ * @param vars - Template variables available while rendering custom rubrics.
+ * @param providerCallContext - Provider context forwarded to grader calls.
+ * @returns One grading result per candidate output, in the original order.
+ */
 export async function matchesSelectBest(
   criteria: string,
   outputs: string[],

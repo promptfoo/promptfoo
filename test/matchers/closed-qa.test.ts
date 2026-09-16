@@ -22,18 +22,17 @@ describe('matchesClosedQa', () => {
     vi.restoreAllMocks();
   });
 
-  it('should pass when the closed QA check passes', async () => {
+  it('should use default grading when the closed QA check passes', async () => {
     const input = 'Input text';
     const expected = 'Expected output';
     const output = 'Sample output';
-    const grading = {};
 
     vi.spyOn(DefaultGradingProvider, 'callApi').mockResolvedValueOnce({
       output: 'foo \n \n bar\n Y Y \n',
       tokenUsage: { total: 10, prompt: 5, completion: 5 },
     });
 
-    await expect(matchesClosedQa(input, expected, output, grading)).resolves.toEqual({
+    await expect(matchesClosedQa(input, expected, output)).resolves.toEqual({
       pass: true,
       reason: 'The submission meets the criterion:\nfoo \n \n bar\n Y Y \n',
       score: 1,
