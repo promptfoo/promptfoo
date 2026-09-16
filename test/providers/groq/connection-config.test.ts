@@ -103,13 +103,21 @@ describe.each([
     expect(request().headers).toHaveProperty('Authorization', 'Bearer scoped-key');
   });
 
-  it('preserves process precedence for the selected key variable', async () => {
+  it('prefers the provider-scoped key over the ambient process environment', async () => {
     reply(responses);
     await new Provider('private/model', {
       config: { apiKeyEnvar: 'GROQ_PROXY_KEY' },
       env: { GROQ_PROXY_KEY: 'scoped-key', OPENAI_API_KEY: 'unrelated-scoped-openai-key' },
     }).callApi('Hello');
-    expect(request().headers).toHaveProperty('Authorization', 'Bearer proxy-process-key');
+    expect(request().headers).toHaveProperty('Authorization', 'Bearer scoped-key');
+  });
+
+  it('prefers the default provider-scoped key over the ambient process environment', async () => {
+    reply(responses);
+    await new Provider('private/model', {
+      env: { GROQ_API_KEY: 'scoped-default-key' },
+    }).callApi('Hello');
+    expect(request().headers).toHaveProperty('Authorization', 'Bearer scoped-default-key');
   });
 
   it('uses an explicit key when the selected environment variable is absent', async () => {
