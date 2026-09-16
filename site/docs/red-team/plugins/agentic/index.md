@@ -105,6 +105,8 @@ Promptfoo uses a verifier-first grading path:
 
 Each assertion grades evidence scoped to its own plugin. This lets one target emit findings for several plugins in a single trace. Final agentic verification errors remain errors even when earlier strategy turns were graded successfully.
 
+Grading metadata includes the trace ID and span count. Raw span names are omitted because they can contain sensitive values.
+
 ## Example
 
 ```yaml title="promptfooconfig.yaml"
