@@ -1,4 +1,8 @@
-import { isHttpRateLimitError, isTransientConnectionError } from '../util/fetch/errors';
+import {
+  isHttpRateLimitError,
+  isTransientConnectionError,
+  type SystemError,
+} from '../util/fetch/errors';
 
 export interface RetryPolicy {
   maxRetries: number;
@@ -68,19 +72,35 @@ export function shouldRetry(
 
   // Retry transient errors.
   // isTransientConnectionError covers TLS/socket-level failures (bad record
-  // mac, EPROTO, ECONNRESET, socket hang up).  The inline patterns below
+  // mac, EPROTO, ECONNRESET, socket hang up). The inline patterns below
   // cover higher-level transient failures (DNS, HTTP status codes, timeouts)
-  // that are distinct from those low-level connection errors.
+  // across the error and nested cause.
   if (error) {
-    const message = (error.message ?? '').toLowerCase();
+    const cause = (error as SystemError).cause as SystemError | undefined;
+    const causeCode = cause?.code ?? '';
+    const causeMessage = (cause as Error | undefined)?.message ?? '';
+    const message = `${error.message ?? ''} ${causeMessage}`.toLowerCase();
+    const code = (error as SystemError).code ?? '';
+
     return (
       isTransientConnectionError(error) ||
+      code === 'ETIMEDOUT' ||
+      code === 'ECONNREFUSED' ||
+      code === 'EAI_AGAIN' ||
+      code === 'UND_ERR_CONNECT_TIMEOUT' ||
+      code === 'UND_ERR_SOCKET' ||
+      causeCode === 'ETIMEDOUT' ||
+      causeCode === 'ECONNREFUSED' ||
+      causeCode === 'EAI_AGAIN' ||
+      causeCode === 'UND_ERR_CONNECT_TIMEOUT' ||
+      causeCode === 'UND_ERR_SOCKET' ||
       message.includes('timeout') ||
       message.includes('econnrefused') ||
       message.includes('network') ||
       message.includes('503') ||
       message.includes('502') ||
-      message.includes('504')
+      message.includes('504') ||
+      message.includes('fetch failed')
     );
   }
 
