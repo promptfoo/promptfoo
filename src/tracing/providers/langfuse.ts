@@ -1,4 +1,5 @@
-import logger from '../../logger';
+import { isDeepStrictEqual } from 'node:util';
+
 import { getNormalizedToolAttributes } from '../toolAttributes';
 import {
   fetchWithProxy,
@@ -260,11 +261,7 @@ function observationAttributes(observation: LangfuseObservation): Record<string,
   };
 }
 
-function transformObservation(
-  observation: LangfuseObservation,
-  traceId: string,
-  options?: FetchTraceOptions,
-): SpanData | null {
+function transformObservation(observation: LangfuseObservation, traceId: string): SpanData | null {
   if (
     typeof observation.id !== 'string' ||
     !observation.id ||
@@ -276,10 +273,7 @@ function transformObservation(
   }
 
   const startTime = Date.parse(observation.startTime);
-  if (
-    Number.isNaN(startTime) ||
-    (options?.earliestStartTime !== undefined && startTime < options.earliestStartTime)
-  ) {
+  if (Number.isNaN(startTime)) {
     return null;
   }
 
@@ -318,28 +312,37 @@ function transformObservation(
 
 function addObservations(
   observations: unknown[],
-  spans: SpanData[],
-  seenSpanIds: Set<string>,
+  spans: Map<string, SpanData>,
   traceId: string,
   maxSpans: number,
   options?: FetchTraceOptions,
 ): void {
   for (const observation of observations) {
     if (!observation || typeof observation !== 'object' || Array.isArray(observation)) {
-      logger.warn('[LangfuseProvider] Skipping malformed observation');
-      continue;
+      throw new TraceProviderError('Invalid Langfuse observation', { invalidEvidence: true });
     }
 
-    const span = transformObservation(observation as LangfuseObservation, traceId, options);
-    if (!span) {
-      logger.warn('[LangfuseProvider] Skipping malformed or unrelated observation');
+    const row = observation as LangfuseObservation;
+    if (typeof row.traceId === 'string' && row.traceId.toLowerCase() !== traceId) {
       continue;
     }
-    if (!seenSpanIds.has(span.spanId)) {
-      seenSpanIds.add(span.spanId);
-      spans.push(span);
+    const span = transformObservation(row, traceId);
+    if (!span) {
+      throw new TraceProviderError('Invalid Langfuse observation', { invalidEvidence: true });
     }
-    if (spans.length >= maxSpans) {
+    if (options?.earliestStartTime !== undefined && span.startTime < options.earliestStartTime) {
+      continue;
+    }
+    const previous = spans.get(span.spanId);
+    if (previous && !isDeepStrictEqual(previous, span)) {
+      throw new TraceProviderError('Conflicting duplicate Langfuse observation IDs', {
+        invalidEvidence: true,
+      });
+    }
+    if (!previous) {
+      spans.set(span.spanId, span);
+    }
+    if (spans.size >= maxSpans) {
       return;
     }
   }
@@ -354,10 +357,14 @@ function getNextCursor(
     return undefined;
   }
   if (typeof cursor !== 'string' || !cursor) {
-    throw new TraceProviderError('Langfuse returned an invalid pagination cursor');
+    throw new TraceProviderError('Langfuse returned an invalid pagination cursor', {
+      invalidEvidence: true,
+    });
   }
   if (seenCursors.has(cursor)) {
-    throw new TraceProviderError('Langfuse returned a repeated pagination cursor');
+    throw new TraceProviderError('Langfuse returned a repeated pagination cursor', {
+      invalidEvidence: true,
+    });
   }
   seenCursors.add(cursor);
   return cursor;
@@ -384,7 +391,9 @@ function getNextPage(response: LangfuseObservationsResponse): number | undefined
     !Number.isSafeInteger(totalPages) ||
     totalPages < page
   ) {
-    throw new TraceProviderError('Langfuse returned invalid pagination metadata');
+    throw new TraceProviderError('Langfuse returned invalid pagination metadata', {
+      invalidEvidence: true,
+    });
   }
 
   return page < totalPages ? page + 1 : undefined;
@@ -434,13 +443,11 @@ export class LangfuseProvider implements TraceProvider {
 
     const normalizedTraceId = traceId.toLowerCase();
     const maxSpans = Math.min(Math.max(options?.maxSpans ?? MAX_SPANS, 1), MAX_SPANS);
-    const pageSize = Math.min(maxSpans, MAX_PAGE_SIZE);
     const timeoutSignal = AbortSignal.timeout(this.config.timeout ?? 10_000);
     const signal = options?.abortSignal
       ? AbortSignal.any([timeoutSignal, options.abortSignal])
       : timeoutSignal;
-    const spans: SpanData[] = [];
-    const seenSpanIds = new Set<string>();
+    const spans = new Map<string, SpanData>();
     const seenCursors = new Set<string>();
     let page: number | undefined;
     let cursor: string | undefined;
@@ -450,7 +457,7 @@ export class LangfuseProvider implements TraceProvider {
       const url = new URL(`${this.baseUrl}/api/public/v2/observations`);
       url.searchParams.set('traceId', normalizedTraceId);
       url.searchParams.set('fields', 'core,basic,io,metadata,model,usage');
-      url.searchParams.set('limit', String(pageSize));
+      url.searchParams.set('limit', String(MAX_PAGE_SIZE));
       if (options?.earliestStartTime !== undefined) {
         url.searchParams.set('fromStartTime', new Date(options.earliestStartTime).toISOString());
       }
@@ -484,32 +491,46 @@ export class LangfuseProvider implements TraceProvider {
       const contentLength = Number(response.headers.get('content-length'));
       if (contentLength > remainingBytes) {
         await releaseResponse(response, 'Langfuse');
-        throw new TraceProviderError('Langfuse trace exceeds the maximum response size');
+        throw new TraceProviderError('Langfuse trace exceeds the maximum response size', {
+          limitExceeded: true,
+        });
       }
       const body = await readLimitedResponse(response, 'Langfuse', remainingBytes);
       remainingBytes -= new TextEncoder().encode(body).byteLength;
-      const result = JSON.parse(body) as LangfuseObservationsResponse;
-      if (!Array.isArray(result.data)) {
-        throw new TraceProviderError('Langfuse returned an invalid observations response');
+      const result = parseJsonValue(body) as LangfuseObservationsResponse;
+      if (!Array.isArray(result?.data)) {
+        throw new TraceProviderError('Langfuse returned an invalid observations response', {
+          invalidEvidence: true,
+        });
       }
 
-      addObservations(result.data, spans, seenSpanIds, normalizedTraceId, maxSpans, options);
+      addObservations(result.data, spans, normalizedTraceId, MAX_SPANS + 1, options);
+      if (spans.size > MAX_SPANS) {
+        throw new TraceProviderError('Langfuse trace exceeds the maximum span count', {
+          limitExceeded: true,
+        });
+      }
       page = getNextPage(result);
       cursor = page ? undefined : getNextCursor(result, seenCursors);
-    } while ((page || cursor) && spans.length < maxSpans);
+    } while (page || cursor);
 
-    if (spans.length === 0) {
+    if (spans.size === 0) {
       return null;
     }
 
     const services = new Set<string>();
-    for (const span of spans) {
+    for (const span of spans.values()) {
       const service = span.attributes?.['service.name'];
       if (typeof service === 'string') {
         services.add(service);
       }
     }
 
-    return { traceId: normalizedTraceId, spans, services: [...services], fetchedAt: Date.now() };
+    return {
+      traceId: normalizedTraceId,
+      spans: [...spans.values()].slice(0, maxSpans),
+      services: [...services],
+      fetchedAt: Date.now(),
+    };
   }
 }

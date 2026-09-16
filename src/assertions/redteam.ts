@@ -76,9 +76,12 @@ export const handleRedteam = async ({
   renderedValue,
   providerResponse,
   assertionValueContext,
+  providerCallContext,
 }: AssertionParams): Promise<GradingResult> => {
-  // Skip grading if stored result exists from strategy execution for this specific assertion
+  const isAgentic = baseType.startsWith('promptfoo:redteam:agentic:');
+  // Inspect the final agentic trace, including when a linked trace is not available yet.
   if (
+    (!isAgentic || (!assertionValueContext.trace && !providerCallContext?.traceparent)) &&
     providerResponse.metadata?.storedGraderResult &&
     test.metadata?.pluginId &&
     assertion.type.includes(test.metadata.pluginId)
@@ -184,7 +187,7 @@ export const handleRedteam = async ({
     const { hasAnyErrors, allTurnsHaveErrors } = analyzeGraderErrors(redteamHistory);
 
     // Only handle gracefully if this is an iterative test with SOME (not all) grader errors
-    if (test.metadata?.strategyId && hasAnyErrors && !allTurnsHaveErrors) {
+    if (!isAgentic && test.metadata?.strategyId && hasAnyErrors && !allTurnsHaveErrors) {
       const errorMessage = error instanceof Error ? error.message : String(error);
       logger.warn('[Redteam] Grading failed for iterative test with some prior grader errors', {
         error: errorMessage,

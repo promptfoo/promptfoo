@@ -1,5 +1,6 @@
 import { ExportResultCode } from '@opentelemetry/core';
 import logger from '../logger';
+import { mergeResourceAttributes } from './resourceAttributes';
 import { getTraceStore, type SpanData, type TraceStore } from './store';
 import type { ExportResult } from '@opentelemetry/core';
 import type { ReadableSpan, SpanExporter } from '@opentelemetry/sdk-trace-base';
@@ -133,11 +134,32 @@ export class LocalSpanExporter implements SpanExporter {
 
     return {
       spanId: spanContext.spanId,
+      ...((span.droppedAttributesCount > 0 ||
+        span.droppedEventsCount > 0 ||
+        span.events.some((event) => (event.droppedAttributesCount ?? 0) > 0)) && {
+        incomplete: true,
+      }),
       parentSpanId: span.parentSpanContext?.spanId || undefined,
       name: span.name,
       startTime: startTimeMs,
       endTime: endTimeMs,
-      attributes: this.convertAttributes({ ...span.resource.attributes, ...span.attributes }),
+      attributes: mergeResourceAttributes(this.convertAttributes(span.resource.attributes), {
+        ...this.convertAttributes(span.attributes),
+        'otel.span.start_time_unix_nano': (
+          BigInt(span.startTime[0]) * 1_000_000_000n +
+          BigInt(span.startTime[1])
+        ).toString(),
+        'otel.span.end_time_unix_nano': (
+          BigInt(span.endTime[0]) * 1_000_000_000n +
+          BigInt(span.endTime[1])
+        ).toString(),
+      }),
+      events: span.events.map((event) => ({
+        name: event.name,
+        timestamp: event.time[0] * 1e3 + event.time[1] / 1e6,
+        timestampNanos: (BigInt(event.time[0]) * 1_000_000_000n + BigInt(event.time[1])).toString(),
+        attributes: this.convertAttributes(event.attributes ?? {}),
+      })),
       statusCode: span.status.code,
       statusMessage: span.status.message,
     };
