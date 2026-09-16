@@ -305,8 +305,8 @@ export class GoogleLiveProvider implements ApiProvider {
    * - Service account JSON (via config.credentials or GOOGLE_APPLICATION_CREDENTIALS)
    * - Application Default Credentials (via `gcloud auth application-default login`)
    */
-  private async getAccessToken(): Promise<string | undefined> {
-    const credentials = loadCredentials(this.config.credentials);
+  private async getAccessToken(config: CompletionOptions): Promise<string | undefined> {
+    const credentials = loadCredentials(config.credentials);
     return getGoogleAccessToken(credentials);
   }
 
@@ -316,8 +316,11 @@ export class GoogleLiveProvider implements ApiProvider {
     apiVersion: string;
     headers?: Record<string, string>;
   }> {
-    const accessToken = await this.getAccessToken();
-    const apiKey = this.getApiKey();
+    // Cloud ADC often lacks Gemini API scopes. Do not let an incidental gcloud
+    // login override an API key; explicit OAuth credentials still take priority
+    // over environment API keys. Vertex overrides this method and uses only OAuth.
+    const apiKey = config.apiKey || (config.credentials ? undefined : this.getApiKey());
+    const accessToken = apiKey ? undefined : await this.getAccessToken(config);
     if (!accessToken && !apiKey) {
       throw new Error(
         'Google authentication is not configured. Set GOOGLE_API_KEY or GEMINI_API_KEY, or configure OAuth2 credentials.\n\n' +

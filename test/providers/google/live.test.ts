@@ -7,6 +7,7 @@ import cliState from '../../../src/cliState';
 import { importModule } from '../../../src/esm';
 import logger from '../../../src/logger';
 import { fetchJson, GoogleLiveProvider, tryGetThenPost } from '../../../src/providers/google/live';
+import { getGoogleAccessToken } from '../../../src/providers/google/util';
 import * as fetchModule from '../../../src/util/fetch/index';
 import { mockProcessEnv } from '../../util/utils';
 
@@ -121,6 +122,7 @@ describe('GoogleLiveProvider', () => {
     // call history but preserves implementations, and async work scheduled by
     // a prior test can still record calls before the next test runs.
     mockFetchWithProxy.mockReset();
+    vi.mocked(getGoogleAccessToken).mockReset().mockResolvedValue(undefined);
 
     const spawnMock = vi.mocked((await import('child_process')).spawn);
     spawnMock.mockReset();
@@ -199,6 +201,93 @@ describe('GoogleLiveProvider', () => {
         return mockWs;
       });
     };
+
+    it.each([true, false])(
+      'prefers a Gemini API key over incidental Cloud ADC (explicit=%s)',
+      async (explicit) => {
+        const restoreEnv = mockProcessEnv({ GOOGLE_API_KEY: 'env-gemini-key' });
+        try {
+          vi.mocked(getGoogleAccessToken).mockResolvedValue('cloud-only-token');
+          provider = new GoogleLiveProvider('gemini-3.8-live', {
+            config: explicit ? { apiKey: 'explicit-gemini-key' } : {},
+          });
+          connect(() =>
+            emit({ serverContent: { outputTranscription: { text: 'Hello' }, turnComplete: true } }),
+          );
+          expect((await provider.callApi('Hello')).error).toBeUndefined();
+          expect(getGoogleAccessToken).not.toHaveBeenCalled();
+          expect(WebSocket).toHaveBeenCalledWith(
+            expect.stringContaining(`?key=${explicit ? 'explicit-gemini-key' : 'env-gemini-key'}`),
+          );
+        } finally {
+          restoreEnv();
+        }
+      },
+    );
+
+    it('uses explicit OAuth credentials instead of an environment API key', async () => {
+      const restoreEnv = mockProcessEnv({ GOOGLE_API_KEY: 'env-gemini-key' });
+      const credentials = '{"type":"service_account"}';
+      try {
+        vi.mocked(getGoogleAccessToken).mockResolvedValue('gemini-oauth-token');
+        provider = new GoogleLiveProvider('gemini-3.8-live', { config: { credentials } });
+        connect(() =>
+          emit({ serverContent: { outputTranscription: { text: 'Hello' }, turnComplete: true } }),
+        );
+        expect((await provider.callApi('Hello')).error).toBeUndefined();
+        expect(getGoogleAccessToken).toHaveBeenCalledWith(credentials);
+        expect(WebSocket).toHaveBeenCalledWith(
+          expect.stringContaining('?access_token=gemini-oauth-token'),
+        );
+      } finally {
+        restoreEnv();
+      }
+    });
+
+    it('does not fall back to another identity when explicit OAuth credentials fail', async () => {
+      const restoreEnv = mockProcessEnv({ GOOGLE_API_KEY: 'env-gemini-key' });
+      try {
+        provider = new GoogleLiveProvider('gemini-3.8-live', {
+          config: { credentials: '{"type":"service_account"}' },
+        });
+        await expect(provider.callApi('Hello')).rejects.toThrow(
+          'Google authentication is not configured',
+        );
+        expect(WebSocket).not.toHaveBeenCalled();
+      } finally {
+        restoreEnv();
+      }
+    });
+
+    it('uses ADC when no API key or explicit credentials are configured', async () => {
+      const restoreEnv = mockProcessEnv({ GOOGLE_API_KEY: undefined, GEMINI_API_KEY: undefined });
+      try {
+        vi.mocked(getGoogleAccessToken).mockResolvedValue('gemini-oauth-token');
+        provider = new GoogleLiveProvider('gemini-3.8-live', {});
+        connect(() =>
+          emit({ serverContent: { outputTranscription: { text: 'Hello' }, turnComplete: true } }),
+        );
+        expect((await provider.callApi('Hello')).error).toBeUndefined();
+        expect(getGoogleAccessToken).toHaveBeenCalledWith(undefined);
+        expect(WebSocket).toHaveBeenCalledWith(
+          expect.stringContaining('?access_token=gemini-oauth-token'),
+        );
+      } finally {
+        restoreEnv();
+      }
+    });
+
+    it('honors an effective prompt API-key override', async () => {
+      provider = new GoogleLiveProvider('gemini-3.8-live', { config: { apiKey: 'base-key' } });
+      connect(() =>
+        emit({ serverContent: { outputTranscription: { text: 'Hello' }, turnComplete: true } }),
+      );
+      await provider.callApi('Hello', {
+        prompt: { raw: 'Hello', label: 'Hello', config: { apiKey: 'prompt-key' } },
+        vars: {},
+      });
+      expect(WebSocket).toHaveBeenCalledWith(expect.stringContaining('?key=prompt-key'));
+    });
 
     it.each(['gemini-3.8-live', extendedModel])(
       'defaults %s to audio with transcription',
