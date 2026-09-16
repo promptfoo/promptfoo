@@ -1,6 +1,12 @@
 import { createHmac } from 'crypto';
 
-import { fetchWithCache, getCache, isCacheEnabled } from '../cache';
+import {
+  fetchWithCache,
+  getCache,
+  getCacheClearGeneration,
+  getScopedCacheKey,
+  isCacheEnabled,
+} from '../cache';
 import { getEnvFloat, getEnvInt, getEnvString } from '../envars';
 import logger from '../logger';
 import { getRequestTimeoutMs } from '../providers/shared';
@@ -63,6 +69,15 @@ interface ReplicatePrediction {
 }
 
 const REPLICATE_CACHE_KEY_HMAC_KEY = 'promptfoo:replicate:cache-key:v1';
+const pendingPredictions = new Map<
+  string,
+  {
+    promise: ReturnType<typeof fetchWithCache>;
+    controller: AbortController;
+    subscribers: number;
+    claimed: boolean;
+  }
+>();
 
 function isAbortError(error: unknown): boolean {
   return error instanceof Error && (error.name === 'AbortError' || error.name === 'AbortException');
@@ -79,6 +94,23 @@ function throwIfAborted(signal?: AbortSignal) {
   const error = new Error(reason instanceof Error ? reason.message : 'Request was aborted');
   error.name = 'AbortError';
   throw error;
+}
+
+function awaitPrediction<T>(promise: Promise<T>, signal?: AbortSignal): Promise<T> {
+  if (!signal) {
+    return promise;
+  }
+  return new Promise((resolve, reject) => {
+    const onAbort = () => {
+      signal.removeEventListener('abort', onAbort);
+      reject(signal.reason);
+    };
+    signal.addEventListener('abort', onAbort, { once: true });
+    promise.then(resolve, reject).finally(() => signal.removeEventListener('abort', onAbort));
+    if (signal.aborted) {
+      onAbort();
+    }
+  });
 }
 
 function normalizeReplicateCacheValue(value: unknown): unknown {
@@ -115,6 +147,86 @@ function getReplicateAuthCacheNamespace(apiKey: string | undefined) {
   }
 
   return createHmac('sha256', apiKey).update(REPLICATE_CACHE_KEY_HMAC_KEY).digest('hex');
+}
+
+async function createPrediction(
+  modelName: string,
+  apiKey: string,
+  data: unknown,
+  cacheKey: string | undefined,
+  signal?: AbortSignal,
+) {
+  const url = modelName.includes(':')
+    ? 'https://api.replicate.com/v1/predictions'
+    : `https://api.replicate.com/v1/models/${modelName}/predictions`;
+  const request = {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${apiKey}`,
+      'Content-Type': 'application/json',
+      Prefer: 'wait=60',
+    },
+    body: JSON.stringify(data),
+  };
+  const key = cacheKey && `${getCacheClearGeneration()}:${getScopedCacheKey(cacheKey)}`;
+  throwIfAborted(signal);
+  let pending = key ? pendingPredictions.get(key) : undefined;
+  const shared = pending !== undefined;
+  if (!pending) {
+    const controller = new AbortController();
+    const promise = fetchWithCache(
+      url,
+      { ...request, signal: key ? controller.signal : signal },
+      getRequestTimeoutMs(),
+      'json',
+    );
+    pending = { promise, controller, subscribers: 0, claimed: false };
+    if (key) {
+      pendingPredictions.set(key, pending);
+    }
+  }
+  const pendingRequest = pending;
+  pendingRequest.subscribers++;
+  const release = () => {
+    if (
+      --pendingRequest.subscribers === 0 &&
+      key &&
+      pendingPredictions.get(key) === pendingRequest
+    ) {
+      pendingPredictions.delete(key);
+      pendingRequest.controller.abort();
+    }
+  };
+  try {
+    return {
+      creation: await awaitPrediction(pendingRequest.promise, signal),
+      shared,
+      release,
+      claim: () => {
+        if (pendingRequest.claimed) {
+          return false;
+        }
+        pendingRequest.claimed = true;
+        return true;
+      },
+    };
+  } catch (error) {
+    release();
+    throw error;
+  }
+}
+
+async function withPredictionLease<T>(
+  run: (retain: (release: () => void) => void) => Promise<T>,
+): Promise<T> {
+  let release: (() => void) | undefined;
+  try {
+    return await run((value) => {
+      release = value;
+    });
+  } finally {
+    release?.();
+  }
 }
 
 function getReplicateValueSummary(prefix: string, value: unknown): Record<string, unknown> {
@@ -198,12 +310,19 @@ export class ReplicateProvider implements ApiProvider {
       return result;
     };
 
-    return withGenAISpan(spanContext, () => this.callApiInternal(prompt, options), resultExtractor);
+    return withPredictionLease((retain) =>
+      withGenAISpan(
+        spanContext,
+        () => this.callApiInternal(prompt, options, retain),
+        resultExtractor,
+      ),
+    );
   }
 
   protected async callApiInternal(
     prompt: string,
     options?: CallApiOptionsParams,
+    retainPrediction?: (release: () => void) => void,
   ): Promise<ProviderResponse> {
     if (!this.apiKey) {
       throw new Error(
@@ -278,30 +397,21 @@ export class ReplicateProvider implements ApiProvider {
     let cached = false;
     try {
       // Create prediction with sync mode (wait up to 60 seconds)
-      const createResponse = await fetchWithCache(
-        this.modelName.includes(':')
-          ? 'https://api.replicate.com/v1/predictions'
-          : `https://api.replicate.com/v1/models/${this.modelName}/predictions`,
-        {
-          method: 'POST',
-          signal: options?.abortSignal,
-          headers: {
-            Authorization: `Bearer ${this.apiKey}`,
-            'Content-Type': 'application/json',
-            Prefer: 'wait=60',
-          },
-          body: JSON.stringify(data),
-        },
-        getRequestTimeoutMs(),
-        'json',
+      const { creation, shared, claim, release } = await createPrediction(
+        this.modelName,
+        this.apiKey,
+        data,
+        cacheKey,
+        options?.abortSignal,
       );
-
-      cached = createResponse.cached;
-      response = createResponse.data as ReplicatePrediction;
+      retainPrediction?.(release);
+      cached = creation.cached || shared;
+      response = creation.data as ReplicatePrediction;
 
       // If still processing, poll for completion
-      if (response.status === 'starting' || response.status === 'processing') {
-        cached = false;
+      const polled = response.status === 'starting' || response.status === 'processing';
+      if (polled) {
+        cached = shared;
         response = await this.pollForCompletion(response.id, options?.abortSignal);
       }
 
@@ -310,6 +420,12 @@ export class ReplicateProvider implements ApiProvider {
       }
 
       response = response.output;
+      if (
+        typeof response === 'string' ||
+        (Array.isArray(response) && response.every((item) => typeof item === 'string'))
+      ) {
+        cached = (!polled && creation.cached) || !claim();
+      }
     } catch (err) {
       throwIfAborted(options?.abortSignal);
       if (isAbortError(err)) {
@@ -330,8 +446,10 @@ export class ReplicateProvider implements ApiProvider {
       tokenUsage: { ...createEmptyTokenUsage(), numRequests: Number(!cached) },
     };
 
+    if (Array.isArray(response) && response.every((item) => typeof item === 'string')) {
+      response = response.join('');
+    }
     if (typeof response === 'string') {
-      // It's text
       const ret = {
         output: response,
         ...responseMetadata,
@@ -344,23 +462,6 @@ export class ReplicateProvider implements ApiProvider {
         }
       }
       return ret;
-    } else if (Array.isArray(response)) {
-      // It's a list of generative outputs
-      if (response.every((item) => typeof item === 'string')) {
-        const output = response.join('');
-        const ret = {
-          output,
-          ...responseMetadata,
-        };
-        if (cache && cacheKey) {
-          try {
-            await cache.set(cacheKey, JSON.stringify(ret));
-          } catch (err) {
-            logger.error(`Failed to cache response: ${String(err)}`);
-          }
-        }
-        return ret;
-      }
     }
 
     logger.error('Unsupported response from Replicate: ' + JSON.stringify(response));
@@ -533,18 +634,21 @@ export class ReplicateImageProvider extends ReplicateProvider {
     options?: CallApiOptionsParams,
   ): Promise<ProviderResponse> {
     throwIfAborted(options?.abortSignal);
-    try {
-      return await this.callImageApiInternal(prompt, options);
-    } catch (err) {
-      // Body reads can wrap a custom abort reason in a plain Error after headers arrive.
-      throwIfAborted(options?.abortSignal);
-      throw err;
-    }
+    return withPredictionLease(async (retain) => {
+      try {
+        return await this.callImageApiInternal(prompt, options, retain);
+      } catch (err) {
+        // Body reads can wrap a custom abort reason in a plain Error after headers arrive.
+        throwIfAborted(options?.abortSignal);
+        throw err;
+      }
+    });
   }
 
   private async callImageApiInternal(
     prompt: string,
     options?: CallApiOptionsParams,
+    retainPrediction?: (release: () => void) => void,
   ): Promise<ProviderResponse> {
     if (!this.apiKey) {
       throw new Error(
@@ -593,30 +697,22 @@ export class ReplicateImageProvider extends ReplicateProvider {
       }
 
       // Create prediction with sync mode
-      const createResponse = await fetchWithCache(
-        this.modelName.includes(':')
-          ? 'https://api.replicate.com/v1/predictions'
-          : `https://api.replicate.com/v1/models/${this.modelName}/predictions`,
-        {
-          method: 'POST',
-          signal: options?.abortSignal,
-          headers: {
-            Authorization: `Bearer ${this.apiKey}`,
-            'Content-Type': 'application/json',
-            Prefer: 'wait=60',
-          },
-          body: JSON.stringify(data),
-        },
-        getRequestTimeoutMs(),
-        'json',
+      const { creation, shared, claim, release } = await createPrediction(
+        this.modelName,
+        this.apiKey,
+        data,
+        isCacheEnabled() ? cacheKey : undefined,
+        options?.abortSignal,
       );
-
-      let prediction = createResponse.data as ReplicatePrediction;
+      retainPrediction?.(release);
+      cached = creation.cached || shared;
+      let prediction = creation.data as ReplicatePrediction;
 
       logger.debug(`Initial prediction status: ${prediction.status}, ID: ${prediction.id}`);
 
       // If still processing, poll for completion
-      if (prediction.status === 'starting' || prediction.status === 'processing') {
+      const polled = prediction.status === 'starting' || prediction.status === 'processing';
+      if (polled) {
         prediction = await this.pollForCompletion(prediction.id, options?.abortSignal);
       }
 
@@ -633,6 +729,12 @@ export class ReplicateImageProvider extends ReplicateProvider {
       }
 
       response = prediction.output;
+      if (
+        typeof response === 'string' ||
+        (Array.isArray(response) && typeof response[0] === 'string')
+      ) {
+        cached = (!polled && creation.cached) || !claim();
+      }
     }
 
     // Handle various response formats
