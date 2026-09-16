@@ -40,11 +40,19 @@ const formatContentMessages = (
   contentIndex: number,
   useRealtimeTextInput = false,
   useManualAudioActivity = false,
+  useClientContentText = false,
 ) => {
   if (contents[contentIndex].role !== 'user') {
     throw new Error('Can only take user role inputs.');
   }
   const parts = contents[contentIndex].parts;
+
+  // Vertex 2.5 accepts clientContent text turns. Realtime text is a contextual
+  // hint there and can produce an empty turn instead of an answer; 3.8 requires
+  // realtimeInput.text, so keep its protocol separate.
+  if (useClientContentText && parts.every((part) => typeof part.text === 'string')) {
+    return [{ clientContent: { turns: [{ role: 'user', parts }], turnComplete: true } }];
+  }
 
   if (useRealtimeTextInput) {
     const mappedMessages = parts.map((part) => {
@@ -87,6 +95,24 @@ const formatContentMessages = (
     });
     const textMessages = mappedMessages.filter((message) => 'text' in message.realtimeInput);
     const contentMessages = mappedMessages.filter((message) => !('text' in message.realtimeInput));
+    if (useClientContentText && textMessages.length > 0) {
+      const text = textMessages.map((message) => message.realtimeInput.text).join('\n');
+      const hasAudio = contentMessages.some((message) => 'audio' in message.realtimeInput);
+      const clientContent = {
+        clientContent: { turns: [{ role: 'user', parts: [{ text }] }], turnComplete: !hasAudio },
+      };
+      if (hasAudio) {
+        // Supply text as context before the recording. Sending realtimeInput.text
+        // during an audio activity can interrupt it on Vertex 2.5.
+        return [
+          clientContent,
+          { realtimeInput: { activityStart: {} } },
+          ...contentMessages,
+          { realtimeInput: { activityEnd: {} } },
+        ];
+      }
+      return [...contentMessages, clientContent];
+    }
     if (textMessages.length > 0) {
       contentMessages.push({
         realtimeInput: {
@@ -217,6 +243,7 @@ export const tryGetThenPost = async <T = unknown>(url: string, data?: unknown): 
 export class GoogleLiveProvider implements ApiProvider {
   config: CompletionOptions;
   modelName: string;
+  protected readonly isVertex: boolean = false;
   private loadedFunctionCallbacks: Record<string, Function> = {};
 
   constructor(modelName: string, options: ProviderOptions) {
@@ -283,6 +310,40 @@ export class GoogleLiveProvider implements ApiProvider {
     return getGoogleAccessToken(credentials);
   }
 
+  protected async getConnection(config: CompletionOptions): Promise<{
+    url: string;
+    model: string;
+    apiVersion: string;
+    headers?: Record<string, string>;
+  }> {
+    const accessToken = await this.getAccessToken();
+    const apiKey = this.getApiKey();
+    if (!accessToken && !apiKey) {
+      throw new Error(
+        'Google authentication is not configured. Set GOOGLE_API_KEY or GEMINI_API_KEY, or configure OAuth2 credentials.\n\n' +
+          'Either:\n' +
+          '1. Set up Application Default Credentials:\n' +
+          '   gcloud auth application-default login --client-id-file=client_secret.json ' +
+          '--scopes="https://www.googleapis.com/auth/cloud-platform,https://www.googleapis.com/auth/generative-language.retriever"\n' +
+          '2. Set GOOGLE_APPLICATION_CREDENTIALS to a service account key file, or\n' +
+          '3. Add `credentials` to the provider config with service account JSON\n\n' +
+          'For OAuth2 setup instructions, see: https://ai.google.dev/gemini-api/docs/oauth\n' +
+          'These options require the google-auth-library package to be installed.',
+      );
+    }
+    const prefersV1beta =
+      this.modelName.startsWith('gemini-3.1-flash-live') ||
+      this.modelName.startsWith('gemini-2.5-flash-native-audio-') ||
+      this.modelName.startsWith('gemini-live-2.5-flash-preview-native-audio-');
+    const apiVersion = config.apiVersion || (prefersV1beta ? 'v1beta' : 'v1alpha');
+    const auth = accessToken ? `access_token=${accessToken}` : `key=${apiKey}`;
+    return {
+      url: `wss://generativelanguage.googleapis.com/ws/google.ai.generativelanguage.${apiVersion}.GenerativeService.BidiGenerateContent?${auth}`,
+      model: `models/${this.modelName}`,
+      apiVersion,
+    };
+  }
+
   async callApi(prompt: string, context?: CallApiContextParams): Promise<ProviderResponse> {
     const isGemini38Live =
       this.modelName === 'gemini-3.8-live' ||
@@ -299,23 +360,10 @@ export class GoogleLiveProvider implements ApiProvider {
       }
     }
 
-    // Both OAuth2 credentials and Gemini API keys are supported.
-    const accessToken = await this.getAccessToken();
-    const apiKey = this.getApiKey();
-
-    if (!accessToken && !apiKey) {
-      throw new Error(
-        'Google authentication is not configured. Set GOOGLE_API_KEY or GEMINI_API_KEY, or configure OAuth2 credentials.\n\n' +
-          'Either:\n' +
-          '1. Set up Application Default Credentials:\n' +
-          '   gcloud auth application-default login --client-id-file=client_secret.json ' +
-          '--scopes="https://www.googleapis.com/auth/cloud-platform,https://www.googleapis.com/auth/generative-language.retriever"\n' +
-          '2. Set GOOGLE_APPLICATION_CREDENTIALS to a service account key file, or\n' +
-          '3. Add `credentials` to the provider config with service account JSON\n\n' +
-          'For OAuth2 setup instructions, see: https://ai.google.dev/gemini-api/docs/oauth\n' +
-          'These options require the google-auth-library package to be installed.',
-      );
-    }
+    // Resolve authentication before starting tool processes or opening a socket.
+    const connection = await this.getConnection(config);
+    const usesRealtimeTextInput =
+      isGemini38Live || connection.apiVersion === 'v1beta' || this.isVertex;
 
     const { toolConfig, toolsDisabled } = resolveGoogleToolConfig(config);
 
@@ -328,7 +376,7 @@ export class GoogleLiveProvider implements ApiProvider {
     // Eval audio inputs are finite recordings, so mark their boundaries explicitly
     // instead of relying on voice activity detection to find trailing silence.
     const useManualAudioActivity =
-      isGemini38Live &&
+      (isGemini38Live || this.isVertex) &&
       contents.some((content) =>
         content.parts.some((part) => {
           const audioPart = part as {
@@ -395,6 +443,15 @@ export class GoogleLiveProvider implements ApiProvider {
       : normalizedTools;
     if (usesInteractionStatus) {
       for (const tool of requestTools) {
+        // Both spellings are accepted in provider configs. Enforce asynchronous
+        // behavior after normalizing so snake-case tools cannot bypass the check.
+        if (tool.function_declarations) {
+          tool.functionDeclarations = [
+            ...(tool.functionDeclarations ?? []),
+            ...tool.function_declarations,
+          ];
+          delete tool.function_declarations;
+        }
         if (
           tool.functionDeclarations?.some(
             (declaration: FunctionDeclaration) => declaration.behavior === 'BLOCKING',
@@ -422,10 +479,6 @@ export class GoogleLiveProvider implements ApiProvider {
 
     return new Promise<ProviderResponse>((resolve) => {
       const isNativeAudioModel = this.modelName.includes('native-audio');
-      const prefersV1beta =
-        this.modelName.startsWith('gemini-3.1-flash-live') ||
-        this.modelName.startsWith('gemini-2.5-flash-native-audio-') ||
-        this.modelName.startsWith('gemini-live-2.5-flash-preview-native-audio-');
       let isResolved = false;
 
       const safeResolve = (response: ProviderResponse) => {
@@ -435,23 +488,9 @@ export class GoogleLiveProvider implements ApiProvider {
         }
       };
 
-      let { apiVersion } = config;
-      if (!apiVersion) {
-        apiVersion = prefersV1beta ? 'v1beta' : 'v1alpha';
-      }
-      const usesRealtimeTextInput = isGemini38Live || apiVersion === 'v1beta';
-
-      // Construct the WebSocket URL with OAuth2 credentials or an API key.
-      let url: string;
-      if (accessToken) {
-        url = `wss://generativelanguage.googleapis.com/ws/google.ai.generativelanguage.${apiVersion}.GenerativeService.BidiGenerateContent?access_token=${accessToken}`;
-        logger.debug('Using OAuth2 access token for Google Live API authentication');
-      } else {
-        url = `wss://generativelanguage.googleapis.com/ws/google.ai.generativelanguage.${apiVersion}.GenerativeService.BidiGenerateContent?key=${apiKey}`;
-        logger.debug('Using API key for Google Live API authentication');
-      }
-
-      const ws = new WebSocketCtor(url);
+      const ws = connection.headers
+        ? new WebSocketCtor(connection.url, { headers: connection.headers })
+        : new WebSocketCtor(connection.url);
 
       let response_text_total = '';
       const responseAudioChunks: Buffer[] = [];
@@ -507,6 +546,7 @@ export class GoogleLiveProvider implements ApiProvider {
       const hasOutputTranscription =
         !!config.generationConfig?.outputAudioTranscription ||
         isGemini38Live ||
+        this.isVertex ||
         (usesRealtimeTextInput && requestedText);
 
       const videoFrameCount = contents.reduce(
@@ -776,7 +816,7 @@ export class GoogleLiveProvider implements ApiProvider {
             config,
             Math.max(promptTokens - (billVideoPerSecond ? videoPromptTokens : 0), 0),
             billableCompletionTokens,
-            false,
+            this.isVertex,
             audioPromptTokens,
             audioCompletionTokens,
             undefined,
@@ -821,7 +861,9 @@ export class GoogleLiveProvider implements ApiProvider {
         const speechConfig = generationSpeechConfig ?? config.speechConfig;
         const outputAudioTranscription =
           configuredOutputAudioTranscription ??
-          (isGemini38Live || (usesRealtimeTextInput && requestedText) ? {} : undefined);
+          (isGemini38Live || this.isVertex || (usesRealtimeTextInput && requestedText)
+            ? {}
+            : undefined);
 
         let formattedSpeechConfig;
         if (speechConfig) {
@@ -847,7 +889,7 @@ export class GoogleLiveProvider implements ApiProvider {
 
         const setupMessage = {
           setup: {
-            model: `models/${this.modelName}`,
+            model: connection.model,
             ...(useManualAudioActivity
               ? { realtimeInputConfig: { automaticActivityDetection: { disabled: true } } }
               : {}),
@@ -958,7 +1000,7 @@ export class GoogleLiveProvider implements ApiProvider {
           const response = JSON.parse(responseText);
           // Gemini 3.8 may interleave empty frames with streamed audio. They do
           // not signal completion and must not trigger the legacy fallback.
-          if (isGemini38Live && Object.keys(response).length === 0) {
+          if ((isGemini38Live || this.isVertex) && Object.keys(response).length === 0) {
             return;
           }
           const interactionStatus =
@@ -1010,6 +1052,7 @@ export class GoogleLiveProvider implements ApiProvider {
               contentIndex,
               usesRealtimeTextInput,
               useManualAudioActivity,
+              this.isVertex && !isGemini38Live,
             );
             contentIndex += 1;
             logger.debug('WebSocket sent', { messageCount: contentMessages.length });
@@ -1024,7 +1067,7 @@ export class GoogleLiveProvider implements ApiProvider {
             const hasModelOutput =
               Boolean(serverContent.modelTurn?.parts?.length) ||
               Boolean(serverContent.outputTranscription?.text) ||
-              (!isGemini38Live && Boolean(serverContent.generationComplete));
+              (!isGemini38Live && !this.isVertex && Boolean(serverContent.generationComplete));
             if (hasModelOutput) {
               hasPendingToolFollowup = false;
             } else if (
@@ -1084,6 +1127,7 @@ export class GoogleLiveProvider implements ApiProvider {
                 contentIndex,
                 usesRealtimeTextInput,
                 useManualAudioActivity,
+                this.isVertex && !isGemini38Live,
               );
               contentIndex += 1;
               logger.debug('WebSocket sent (multi-turn)', { messageCount: contentMessages.length });
@@ -1257,6 +1301,7 @@ export class GoogleLiveProvider implements ApiProvider {
             if (
               hasOutputTranscription &&
               !isGemini38Live &&
+              !this.isVertex &&
               hasAudioContent &&
               isAudioExpected &&
               !hasAudioStreamEnded
@@ -1290,7 +1335,7 @@ export class GoogleLiveProvider implements ApiProvider {
         if (isResolved) {
           return;
         }
-        if (!isGemini38Live) {
+        if (!isGemini38Live && !this.isVertex) {
           return processMessage(event);
         }
         armIdleTimeout();
@@ -1299,7 +1344,10 @@ export class GoogleLiveProvider implements ApiProvider {
       };
 
       ws.onerror = (err) => {
-        logger.error(`WebSocket error for model ${this.modelName}: ${JSON.stringify(err)}`);
+        // ws error events can retain the socket and its authentication headers.
+        // Never serialize the event object into logs or exported eval errors.
+        const message = err.message || 'Connection failed';
+        logger.error('Google Live WebSocket error', { model: this.modelName, message });
         if (isNativeAudioModel) {
           logger.error(
             `Native audio model ${this.modelName} may not be available or may require different configuration`,
@@ -1308,7 +1356,7 @@ export class GoogleLiveProvider implements ApiProvider {
         clearTimeout(timeout);
         ws.close();
         safeResolve({
-          error: `WebSocket error for model ${this.modelName}: ${JSON.stringify(err)}`,
+          error: `WebSocket error for model ${this.modelName}: ${message}`,
         });
       };
 

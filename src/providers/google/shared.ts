@@ -185,6 +185,16 @@ export const GOOGLE_MODELS: GoogleModel[] = [
     }),
   ),
   {
+    id: 'gemini-live-2.5-flash-native-audio',
+    cost: {
+      input: 0.5 / 1e6,
+      output: 2.0 / 1e6,
+      audioInput: 3.0 / 1e6,
+      audioOutput: 12.0 / 1e6,
+      imageInput: 3.0 / 1e6,
+    },
+  },
+  {
     id: 'gemini-live-2.5-flash-preview-native-audio-09-2025',
     cost: {
       input: 0.3 / 1e6,
