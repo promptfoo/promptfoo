@@ -8,8 +8,10 @@ prompts:
   - 'What are the main features of {{repo}}? Please provide a detailed overview.'
 
 providers:
-  - id: openai:responses:gpt-4.1-2025-04-14
+  - id: openai:responses:gpt-5.6-terra
     config:
+      reasoning:
+        effort: none
       tools:
         - type: mcp
           server_label: deepwiki
@@ -17,7 +19,6 @@ providers:
           require_approval: never
           allowed_tools: ['ask_question', 'read_wiki_structure']
       max_output_tokens: 1500
-      temperature: 0.3
       instructions: 'You are a helpful research assistant. Use the available MCP tools to search for accurate information about repositories and provide comprehensive answers.'
 
 tests:

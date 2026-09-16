@@ -2,13 +2,13 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { fetchWithCache } from '../../src/cache';
 import { getEnvInt, getEnvString } from '../../src/envars';
 import { createQuiverAiProvider, QuiverAiProvider } from '../../src/providers/quiverai';
-import { fetchWithProxy } from '../../src/util/fetch';
+import { fetchWithProxy } from '../../src/util/fetch/index';
 
 vi.mock('../../src/cache', () => ({
   fetchWithCache: vi.fn(),
 }));
 
-vi.mock('../../src/util/fetch', () => ({
+vi.mock('../../src/util/fetch/index', () => ({
   fetchWithProxy: vi.fn(),
 }));
 
@@ -334,7 +334,7 @@ describe('QuiverAI Provider', () => {
       expect(result.metadata).toEqual({ responseId: 'resp_abc', credits: 20 });
     });
 
-    it('should handle cached responses', async () => {
+    it('should handle cached responses as one logical request', async () => {
       vi.mocked(fetchWithCache).mockResolvedValue({
         data: makeSvgResponse(['<svg></svg>']),
         cached: true,
@@ -345,7 +345,7 @@ describe('QuiverAI Provider', () => {
       const provider = createProvider({ stream: false });
       const result = await provider.callApi('test');
       expect(result.cached).toBe(true);
-      expect(result.tokenUsage?.numRequests).toBe(0);
+      expect(result.tokenUsage?.numRequests).toBe(1);
     });
 
     it('should handle API error responses with request_id', async () => {

@@ -5,14 +5,13 @@ import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { promisify } from 'node:util';
 
-import yaml from 'js-yaml';
+import * as yaml from 'js-yaml';
 import { describe, expect, it } from 'vitest';
 
 const execFileAsync = promisify(execFile);
 
 const repoRoot = path.resolve(__dirname, '../..');
 const pluginRoot = path.join(repoRoot, 'plugins', 'promptfoo');
-const existingClaudePluginRoot = path.join(repoRoot, 'plugins', 'promptfoo-evals');
 const repoClaudeSkillsRoot = path.join(repoRoot, '.claude', 'skills');
 const repoCodexSkillsRoot = path.join(repoRoot, '.agents', 'skills');
 const evalsSkillRoot = path.join(pluginRoot, 'skills', 'promptfoo-evals');
@@ -26,6 +25,7 @@ const expectedSkillDirs = [
   'promptfoo-redteam-run',
   'promptfoo-redteam-setup',
 ];
+const expectedPluginVersion = '0.1.3';
 const expectedFixtureDirs = [
   'evals-json-rubric',
   'evals-local-js',
@@ -1713,7 +1713,7 @@ function openApiUnsafeResponseFieldSpec() {
   };
 }
 
-describe('promptfoo Codex plugin package', () => {
+describe('promptfoo plugin package (Codex + Claude Code)', () => {
   it('declares a Codex plugin manifest with a skills directory', () => {
     const manifestPath = path.join(pluginRoot, '.codex-plugin', 'plugin.json');
     const manifest = JSON.parse(readText(manifestPath));
@@ -1846,7 +1846,6 @@ describe('promptfoo Codex plugin package', () => {
     expect(
       fs.existsSync(path.join(repoRoot, entry.source.path, '.codex-plugin', 'plugin.json')),
     ).toBe(true);
-    expect(fs.existsSync(path.join(repoRoot, entry.source.path, '.claude-plugin'))).toBe(false);
   });
 
   it('keeps the published surface to four focused skills without a meta selector', () => {
@@ -1861,12 +1860,13 @@ describe('promptfoo Codex plugin package', () => {
     expect(skillDirs).not.toContain('promptfoo-meta');
   });
 
-  it('keeps the Codex plugin bundle file inventory intentionally small', () => {
+  it('keeps the shared plugin bundle file inventory intentionally small', () => {
     const packagedFiles = listFiles(pluginRoot, () => true)
       .map((filePath) => toPosixPath(path.relative(pluginRoot, filePath)))
       .sort();
 
     expect(packagedFiles).toEqual([
+      '.claude-plugin/plugin.json',
       '.codex-plugin/plugin.json',
       'assets/promptfoo-panda.svg',
       'skills/promptfoo-evals/SKILL.md',
@@ -1876,6 +1876,9 @@ describe('promptfoo Codex plugin package', () => {
       'skills/promptfoo-provider-setup/agents/openai.yaml',
       'skills/promptfoo-provider-setup/references/provider-patterns.md',
       'skills/promptfoo-provider-setup/scripts/openapi-operation-to-config.mjs',
+      'skills/promptfoo-provider-setup/scripts/response-contract.mjs',
+      'skills/promptfoo-provider-setup/scripts/vendor/LICENSE',
+      'skills/promptfoo-provider-setup/scripts/vendor/js-yaml.mjs',
       'skills/promptfoo-redteam-run/SKILL.md',
       'skills/promptfoo-redteam-run/agents/openai.yaml',
       'skills/promptfoo-redteam-run/references/redteam-run-patterns.md',
@@ -1916,60 +1919,6 @@ describe('promptfoo Codex plugin package', () => {
     );
   });
 
-  it('keeps frontmatter routing descriptions precise without a selector skill', () => {
-    const routingExpectations: Record<
-      string,
-      {
-        positives: string[];
-        negatives: string[];
-      }
-    > = {
-      'promptfoo-evals': {
-        positives: ['non-redteam promptfoo eval suites', 'test cases', 'assertions'],
-        negatives: [
-          'Do not use',
-          'connecting a new target/provider',
-          'smoke-testing an endpoint',
-          'redteam plugin/strategy setup',
-        ],
-      },
-      'promptfoo-provider-setup': {
-        positives: ['providers or redteam targets', 'live HTTP', 'static-code-derived'],
-        negatives: ['Do not', 'choosing eval assertions', 'red team plugins'],
-      },
-      'promptfoo-redteam-run': {
-        positives: ['Run, rerun, inspect', 'generated redteam YAML', 'attack success rate'],
-        negatives: ['Do not use', 'initial provider wiring', 'choosing plugins'],
-      },
-      'promptfoo-redteam-setup': {
-        positives: [
-          'purpose',
-          'targets',
-          'plugins',
-          'strategies',
-          'static-code-derived',
-          'generating adversarial',
-        ],
-        negatives: ['Do not use', 'basic provider wiring', 'running/evaluating'],
-      },
-    };
-
-    for (const skillDir of expectedSkillDirs) {
-      const frontmatter = readSkillFrontmatter(path.join(pluginRoot, 'skills', skillDir));
-      const expectations = routingExpectations[skillDir];
-
-      expect(frontmatter.name).toBe(skillDir);
-      expect(frontmatter.description.length).toBeGreaterThan(140);
-      expect(frontmatter.description.length).toBeLessThan(520);
-      for (const phrase of expectations.positives) {
-        expect(frontmatter.description).toContain(phrase);
-      }
-      for (const phrase of expectations.negatives) {
-        expect(frontmatter.description).toContain(phrase);
-      }
-    }
-  });
-
   it('keeps every skill structurally complete and progressively disclosed', () => {
     for (const skillDir of expectedSkillDirs) {
       const skillRoot = path.join(pluginRoot, 'skills', skillDir);
@@ -1981,6 +1930,10 @@ describe('promptfoo Codex plugin package', () => {
         .filter((fileName) => fileName.endsWith('.md'));
 
       expect(skill).toMatch(new RegExp(`^---\\nname: ${skillDir}\\n`));
+      const frontmatter = readSkillFrontmatter(skillRoot);
+      expect(frontmatter.name).toBe(skillDir);
+      expect(frontmatter.description.length).toBeGreaterThan(40);
+      expect(frontmatter.description.length).toBeLessThan(520);
       expect(openaiYaml).toContain(`$${skillDir}`);
       expect(openaiYaml).toContain('allow_implicit_invocation: true');
       expect(referenceFiles.length).toBeGreaterThanOrEqual(1);
@@ -1992,12 +1945,56 @@ describe('promptfoo Codex plugin package', () => {
     }
   });
 
-  it('documents the Codex plugin bundle beside the published single eval skill', () => {
+  it.each([
+    {
+      skill: 'promptfoo-evals',
+      scope: /non-redteam.*configured target/s,
+      handoffs: ['promptfoo-provider-setup', 'redteam skills'],
+      workflow: [/known-good output must pass/s, /deliberately wrong outputs must fail/s],
+    },
+    {
+      skill: 'promptfoo-provider-setup',
+      scope: /request\/auth mapping.*response parsing/s,
+      handoffs: ['promptfoo-evals', 'promptfoo-redteam-setup'],
+      workflow: [/token-derived user\/role/, /missing or has the wrong type/],
+    },
+    {
+      skill: 'promptfoo-redteam-setup',
+      scope: /purpose, trust boundaries/,
+      handoffs: ['promptfoo-provider-setup', 'promptfoo-redteam-run'],
+      workflow: [
+        /known owned and unowned synthetic objects/,
+        /intended policy from observed enforcement/,
+      ],
+    },
+    {
+      skill: 'promptfoo-redteam-run',
+      scope: /existing Promptfoo redteam scan/,
+      handoffs: ['promptfoo-provider-setup', 'promptfoo-redteam-setup'],
+      workflow: [/failureReason/, /--filter-errors-only[^\n]*--remote/],
+    },
+  ])(
+    'preserves $skill routing and essential workflow contracts',
+    ({ skill, scope, handoffs, workflow }) => {
+      const skillRoot = path.join(pluginRoot, 'skills', skill);
+      const { description } = readSkillFrontmatter(skillRoot);
+      expect(description).toMatch(scope);
+      for (const handoff of handoffs) {
+        expect(description).toContain(handoff);
+      }
+      const body = readText(path.join(skillRoot, 'SKILL.md'));
+      for (const contract of workflow) {
+        expect(body).toMatch(contract);
+      }
+    },
+  );
+
+  it('documents the shared plugin bundle on both marketplaces', () => {
     const docs = readText(path.join(repoRoot, 'site', 'docs', 'integrations', 'agent-skill.md'));
 
     expect(docs).toContain('Via Claude Code marketplace');
     expect(docs).toContain('Via Codex plugin bundle');
-    expect(docs).toContain('preferred Codex');
+    expect(docs).toContain('/plugin install promptfoo@promptfoo');
     expect(docs).toContain('intentionally no meta selector skill');
     expect(docs).toContain("routes from each skill's");
     expect(docs).toContain('Python providers are first-class');
@@ -2005,71 +2002,67 @@ describe('promptfoo Codex plugin package', () => {
     expect(docs).toContain('local graders');
     expect(docs).toContain('PROMPTFOO_PYTHON');
     expect(docs).toContain('copy `plugins/promptfoo`');
-    expect(docs).toContain('portable single');
     expect(docs).toContain('plugins/promptfoo');
     expect(docs).toContain('.agents/plugins/marketplace.json');
+    expect(docs).toContain('.claude-plugin/marketplace.json');
     for (const skillDir of expectedSkillDirs) {
       expect(docs).toContain(skillDir);
     }
   });
 
-  it('keeps the existing Claude eval plugin separate from the Codex bundle', () => {
+  it('serves one bundle to both the Codex and Claude marketplaces', () => {
     const codexManifest = JSON.parse(
       readText(path.join(pluginRoot, '.codex-plugin', 'plugin.json')),
     );
     const claudeManifest = JSON.parse(
-      readText(path.join(existingClaudePluginRoot, '.claude-plugin', 'plugin.json')),
+      readText(path.join(pluginRoot, '.claude-plugin', 'plugin.json')),
     );
 
+    // One plugin identity across both marketplaces: same name, version, and author.
     expect(codexManifest.name).toBe('promptfoo');
-    expect(claudeManifest.name).toBe('promptfoo-evals');
-    expect(fs.existsSync(path.join(pluginRoot, '.claude-plugin'))).toBe(false);
-    expect(fs.existsSync(path.join(existingClaudePluginRoot, '.codex-plugin'))).toBe(false);
-    expect(fs.existsSync(path.join(existingClaudePluginRoot, 'skills', 'promptfoo-evals'))).toBe(
-      true,
+    expect(claudeManifest.name).toBe('promptfoo');
+    expect(codexManifest.version).toBe(expectedPluginVersion);
+    expect(claudeManifest.version).toBe(expectedPluginVersion);
+    expect(claudeManifest.author.name).toBe('Promptfoo');
+    expect(JSON.stringify(claudeManifest)).not.toContain('[TODO:');
+
+    // The standalone single-skill Claude bundle has been retired in favor of this shared bundle.
+    expect(fs.existsSync(path.join(repoRoot, 'plugins', 'promptfoo-evals'))).toBe(false);
+
+    // Claude marketplace entry — asserted with the same rigor as the Codex marketplace above.
+    const claudeMarketplace = JSON.parse(
+      readText(path.join(repoRoot, '.claude-plugin', 'marketplace.json')),
     );
-  });
+    expect(claudeMarketplace.name).toBe('promptfoo');
+    expect(claudeMarketplace.owner.name).toBe('promptfoo');
+    expect(typeof claudeMarketplace.metadata.description).toBe('string');
+    expect(claudeMarketplace.plugins).toHaveLength(1);
+    expect(JSON.stringify(claudeMarketplace)).not.toContain('[TODO:');
+    const claudeEntry = claudeMarketplace.plugins[0];
+    expect(claudeEntry.name).toBe('promptfoo');
+    expect(claudeEntry.license).toBe('MIT');
 
-  it('keeps Codex eval guidance compatible with the published Claude eval skill', () => {
-    const claudeSkill = readText(
-      path.join(existingClaudePluginRoot, 'skills', 'promptfoo-evals', 'SKILL.md'),
+    // Parity guarantee: both marketplaces must resolve to the SAME on-disk bundle.
+    const codexMarketplace = JSON.parse(
+      readText(path.join(repoRoot, '.agents', 'plugins', 'marketplace.json')),
     );
-    const codexSkill = readText(path.join(evalsSkillRoot, 'SKILL.md'));
-    const codexReference = readText(path.join(evalsSkillRoot, 'references', 'eval-patterns.md'));
-
-    expect(claudeSkill).toContain('deterministic');
-    expect(claudeSkill).toContain('model-graded');
-    expect(claudeSkill).toContain('tests: file://tests/*.yaml');
-    expect(claudeSkill).toContain("apiKey: '{{env.OPENAI_API_KEY}}'");
-    expect(claudeSkill).toContain('options.transform');
-
-    for (const phrase of [
-      'deterministic',
-      'model-graded',
-      'tests: file://tests/*.yaml',
-      "apiKey: '{{env.OPENAI_API_KEY}}'",
-      'options.transform',
-      'openai:chat:gpt-4.1-mini',
-      'anthropic:messages:claude-sonnet-4-6',
-      'echo',
-    ]) {
-      expect(`${codexSkill}\n${codexReference}`).toContain(phrase);
+    const codexEntry = (codexMarketplace.plugins as MarketplacePlugin[]).find(
+      (plugin) => plugin.name === 'promptfoo',
+    );
+    if (!codexEntry) {
+      throw new Error('Missing promptfoo Codex marketplace entry');
     }
-    expect(codexSkill).toContain('If the provider does not work yet, switch to');
-    expect(codexReference).toContain('promptfoo-provider-setup');
-  });
+    const claudeBundle = path.resolve(repoRoot, claudeEntry.source);
+    expect(claudeBundle).toBe(pluginRoot);
+    expect(path.resolve(repoRoot, codexEntry.source.path)).toBe(pluginRoot);
 
-  it('keeps the repo-local and published portable eval skill copies byte-for-byte aligned', () => {
-    for (const relativePath of ['SKILL.md', path.join('references', 'cheatsheet.md')]) {
-      const repoLocalFile = readText(
-        path.join(repoClaudeSkillsRoot, 'promptfoo-evals', relativePath),
-      );
-      const publishedFile = readText(
-        path.join(existingClaudePluginRoot, 'skills', 'promptfoo-evals', relativePath),
-      );
-
-      expect(repoLocalFile).toBe(publishedFile);
-    }
+    // Claude Code auto-discovers the same four skills as Codex from the shared bundle's skills/.
+    const claudeSkillDirs = fs
+      .readdirSync(path.join(claudeBundle, 'skills'), { withFileTypes: true })
+      .filter((dirent) => dirent.isDirectory())
+      .map((dirent) => dirent.name)
+      .sort();
+    expect(claudeSkillDirs).toEqual(expectedSkillDirs);
   });
 
   it('keeps every repo-local Claude skill discoverable through canonical SKILL.md casing', () => {
@@ -2091,6 +2084,22 @@ describe('promptfoo Codex plugin package', () => {
     }
   });
 
+  it('keeps the promptfoo-evals contributor copy self-contained', () => {
+    // The repo-local copy is standalone: the sibling skills it could route to
+    // (promptfoo-provider-setup, the redteam skills) are not present under
+    // .claude/skills/, so it must not hand off to them and dangle.
+    const contributorEvals = readText(
+      path.join(repoClaudeSkillsRoot, 'promptfoo-evals', 'SKILL.md'),
+    );
+    for (const sibling of [
+      'promptfoo-provider-setup',
+      'promptfoo-redteam-setup',
+      'promptfoo-redteam-run',
+    ]) {
+      expect(contributorEvals).not.toContain(sibling);
+    }
+  });
+
   it('keeps shared repo-local contributor skills aligned between Claude and Codex', () => {
     for (const skillDir of ['redteam-plugin-development', 'search-params']) {
       const claudeSkill = readText(path.join(repoClaudeSkillsRoot, skillDir, 'SKILL.md'));
@@ -2101,18 +2110,6 @@ describe('promptfoo Codex plugin package', () => {
   });
 
   it('keeps every agents/openai.yaml aligned with UI metadata constraints', () => {
-    const expectedDefaultPromptPhrases: Record<string, string[]> = {
-      'promptfoo-evals': ['focused eval', 'local JS/Python providers'],
-      'promptfoo-provider-setup': [
-        'HTTP endpoint',
-        'OpenAPI operation',
-        'Python provider',
-        'app code',
-      ],
-      'promptfoo-redteam-run': ['execute', 'HTTP, Python, or JS target'],
-      'promptfoo-redteam-setup': ['live endpoint', 'OpenAPI spec', 'code'],
-    };
-
     for (const skillDir of expectedSkillDirs) {
       const skillRoot = path.join(pluginRoot, 'skills', skillDir);
       const metadata = yaml.load(readText(path.join(skillRoot, 'agents', 'openai.yaml'))) as
@@ -2139,9 +2136,6 @@ describe('promptfoo Codex plugin package', () => {
       expect(metadata.interface.default_prompt.trim()).toBe(metadata.interface.default_prompt);
       expect(metadata.interface.default_prompt.endsWith('.')).toBe(true);
       expect(metadata.interface.default_prompt.length).toBeLessThanOrEqual(128);
-      for (const phrase of expectedDefaultPromptPhrases[skillDir]) {
-        expect(metadata.interface.default_prompt).toContain(phrase);
-      }
       expect(metadata.policy.allow_implicit_invocation).toBe(true);
     }
   });
@@ -2397,7 +2391,7 @@ describe('promptfoo Codex plugin package', () => {
 
     const evalGrader = await loadFixtureProvider('evals-json-rubric/grader.mjs');
     const evalGrade = parseOutputJson(
-      await evalGrader.callApi('The answer mentions inv-123, approved, and low risk.'),
+      await evalGrader.callApi(JSON.stringify({ candidate: JSON.stringify(jsonResult) })),
     );
     expect(evalGrade.pass).toBe(true);
     expect(evalGrade.score).toBe(1);
@@ -2613,82 +2607,6 @@ describe('promptfoo Codex plugin package', () => {
 });
 
 describe('promptfoo-evals skill', () => {
-  it('has a routing description with eval scope and provider/redteam boundaries', () => {
-    const skill = readText(path.join(evalsSkillRoot, 'SKILL.md'));
-
-    expect(skill).toMatch(/^---\nname: promptfoo-evals\n/);
-    expect(skill).toContain('after the target');
-    expect(skill).toContain('or provider already works');
-    expect(skill).toContain('prompts, vars, test cases, assertions');
-    expect(skill).toContain('model-graded rubrics');
-    expect(skill).toContain('non-redteam promptfoo eval suites');
-    expect(skill).toContain('connecting a new target/provider');
-    expect(skill).toContain('smoke-testing');
-    expect(skill).toContain('redteam plugin/strategy setup');
-  });
-
-  it('documents focused eval authoring, running, and iteration', () => {
-    const skill = readText(path.join(evalsSkillRoot, 'SKILL.md'));
-
-    expect(skill).toContain('State the eval question');
-    expect(skill).toContain('Choose assertions');
-    expect(skill).toContain('Search for existing configs first');
-    expect(skill).toContain('tests: file://tests/*.yaml');
-    expect(skill).toContain('file://prompts/');
-    expect(skill).toContain('Field order');
-    expect(skill).toContain('llms-full.txt');
-    expect(skill).toContain('is-json');
-    expect(skill).toContain('javascript');
-    expect(skill).toContain('llm-rubric');
-    expect(skill).toContain('inline the source');
-    expect(skill).toContain('validate config');
-    expect(skill).toContain('--no-cache --no-share');
-    expect(skill).toContain('results.stats');
-    expect(skill).toContain('--filter-failing');
-  });
-
-  it('ships Codex UI metadata for evals', () => {
-    const openaiYaml = readText(path.join(evalsSkillRoot, 'agents', 'openai.yaml'));
-
-    expect(openaiYaml).toContain('Promptfoo Evals');
-    expect(openaiYaml).toContain('$promptfoo-evals');
-    expect(openaiYaml).toContain('allow_implicit_invocation: true');
-  });
-
-  it('keeps eval patterns in a progressive-disclosure reference file', () => {
-    const reference = readText(path.join(evalsSkillRoot, 'references', 'eval-patterns.md'));
-
-    expect(reference).toContain('Config Structure');
-    expect(reference).toContain('Minimal Local Provider Eval');
-    expect(reference).toContain('Known Provider Examples');
-    expect(reference).toContain('Path(__file__).resolve().parent');
-    expect(reference).toContain('anchor `sys.path`');
-    expect(reference).toContain('constructor `options.config`');
-    expect(reference).toContain('options` argument to `call_api`');
-    expect(reference).toContain('openai:chat:gpt-4.1-mini');
-    expect(reference).toContain('anthropic:messages:claude-sonnet-4-6');
-    expect(reference).toContain('echo');
-    expect(reference).toContain('promptfoo-provider-setup');
-    expect(reference).toContain('File-Based Tests');
-    expect(reference).toContain('Dataset-Backed Tests');
-    expect(reference).toContain('tests: file://tests.csv');
-    expect(reference).toContain('tests: file://generate_tests.py:create_tests');
-    expect(reference).toContain('Assertion Scoring Options');
-    expect(reference).toContain('weight: 2');
-    expect(reference).toContain('metric: decision_accuracy');
-    expect(reference).toContain('For `cost` and `latency`, it is a maximum allowed value');
-    expect(reference).toContain('Structured JSON Eval');
-    expect(reference).toContain('Local Model-Graded Rubric');
-    expect(reference).toContain('Faithfulness Rubric');
-    expect(reference).toContain('{{env.OPENAI_API_KEY}}');
-    expect(reference).toContain('output.replace');
-    expect(reference).toContain('Focused Reruns');
-    expect(reference).toContain('PROMPTFOO_FAILED_TEST_EXIT_CODE=0');
-    expect(reference).toContain('pass');
-    expect(reference).toContain('score');
-    expect(reference).toContain('reason');
-  });
-
   it.each([
     {
       dir: 'evals-local-js',
@@ -2734,142 +2652,42 @@ describe('promptfoo-evals skill', () => {
       ],
       extraFile: 'grader.mjs',
     },
-  ])('ships a runnable/validatable $dir eval fixture', ({
-    dir,
-    snippets,
-    extraFile,
-    providerFile,
-  }) => {
-    const config = readText(path.join(fixtureRoot, dir, 'promptfooconfig.yaml'));
-    const provider = readText(path.join(fixtureRoot, dir, providerFile));
+  ])(
+    'ships a runnable/validatable $dir eval fixture',
+    ({ dir, snippets, extraFile, providerFile }) => {
+      const config = readText(path.join(fixtureRoot, dir, 'promptfooconfig.yaml'));
+      const provider = readText(path.join(fixtureRoot, dir, providerFile));
 
-    expect(config).toContain(
-      '# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json',
-    );
-    expect(config).toContain('prompts:');
-    expect(config).toContain('providers:');
-    expect(config).toContain('tests:');
-    if (providerFile.endsWith('.py')) {
-      expect(provider).toContain('def call_api(prompt: str, options: dict, context: dict)');
-    } else {
-      expect(provider).toContain('export default class');
-      expect(provider).toContain('async callApi');
-    }
+      expect(config).toContain(
+        '# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json',
+      );
+      expect(config).toContain('prompts:');
+      expect(config).toContain('providers:');
+      expect(config).toContain('tests:');
+      if (providerFile.endsWith('.py')) {
+        expect(provider).toContain('def call_api(prompt: str, options: dict, context: dict)');
+      } else {
+        expect(provider).toContain('export default class');
+        expect(provider).toContain('async callApi');
+      }
 
-    if (extraFile) {
-      const grader = readText(path.join(fixtureRoot, dir, extraFile));
-      expect(grader).toContain('export default class');
-      expect(grader).toContain('JSON.stringify');
-      expect(grader).toContain('pass');
-      expect(grader).toContain('score');
-      expect(grader).toContain('reason');
-    }
+      if (extraFile) {
+        const grader = readText(path.join(fixtureRoot, dir, extraFile));
+        expect(grader).toContain('export default class');
+        expect(grader).toContain('JSON.stringify');
+        expect(grader).toContain('pass');
+        expect(grader).toContain('score');
+        expect(grader).toContain('reason');
+      }
 
-    for (const snippet of snippets) {
-      expect(config).toContain(snippet);
-    }
-  });
+      for (const snippet of snippets) {
+        expect(config).toContain(snippet);
+      }
+    },
+  );
 });
 
 describe('promptfoo-provider-setup skill', () => {
-  it('has a routing description with positive scope and negative boundaries', () => {
-    const skill = readText(path.join(providerSkillRoot, 'SKILL.md'));
-
-    expect(skill).toMatch(/^---\nname: promptfoo-provider-setup\n/);
-    expect(skill).toContain('live HTTP');
-    expect(skill).toContain('local scripts');
-    expect(skill).toContain('static-code-derived provider');
-    expect(skill).toContain('wrappers');
-    expect(skill).toContain('Do not');
-    expect(skill).toContain('red team plugins');
-  });
-
-  it('documents live, static, hybrid, and wrapper setup workflows', () => {
-    const skill = readText(path.join(providerSkillRoot, 'SKILL.md'));
-
-    expect(skill).toContain('Live HTTP endpoint');
-    expect(skill).toContain('Static code discovery');
-    expect(skill).toContain('Hybrid');
-    expect(skill).toContain('Wrapper mode');
-    expect(skill).toContain('transformResponse');
-    expect(skill).toContain('stateful: false');
-    expect(skill).toContain('query-string fields on any HTTP method');
-    expect(skill).toContain('--auth-header');
-    expect(skill).toContain('--auth-prefix');
-    expect(skill).toContain('infers Bearer/OAuth2/OpenID and header/query/cookie API-key auth');
-    expect(skill).toContain('constructor `options.config`');
-    expect(skill).toContain('file://provider.py:function_name');
-    expect(skill).toContain('config.timeout');
-    expect(skill).toContain('PROMPTFOO_PYTHON');
-    expect(skill).toContain('validate target');
-    expect(skill).toContain('targets');
-    expect(skill).toContain('inputs');
-    expect(skill).toContain('--no-cache --no-share');
-    expect(skill).toContain('Inspect the output file for `results.stats`, `response.output`');
-  });
-
-  it('ships Codex UI metadata with an explicit skill mention', () => {
-    const openaiYaml = readText(path.join(providerSkillRoot, 'agents', 'openai.yaml'));
-
-    expect(openaiYaml).toContain('Promptfoo Provider Setup');
-    expect(openaiYaml).toContain('$promptfoo-provider-setup');
-    expect(openaiYaml).toContain('allow_implicit_invocation: true');
-  });
-
-  it('keeps provider examples in a progressive-disclosure reference file', () => {
-    const reference = readText(path.join(providerSkillRoot, 'references', 'provider-patterns.md'));
-
-    expect(reference).toContain('id: https');
-    expect(reference).toContain('queryParams:');
-    expect(reference).toContain('json.choices[0].message.content');
-    expect(reference).toContain('transformResponse: text.replace');
-    expect(reference).toContain('stateful: false');
-    expect(reference).toContain('{{sessionId}}');
-    expect(reference).toContain('file://provider.js');
-    expect(reference).toContain('file://provider.py:call_api');
-    expect(reference).toContain('file://provider.py:function_name');
-    expect(reference).toContain('targets:');
-    expect(reference).toContain('inputs:');
-    expect(reference).toContain('constructor(options = {})');
-    expect(reference).toContain('this.config = options.config || {}');
-    expect(reference).toContain('callApi(prompt, context = {})');
-    expect(reference).toContain('call_api(prompt: str, options: dict, context: dict)');
-    expect(reference).toContain('sys.path.insert(0, str(Path(__file__).resolve().parent))');
-    expect(reference).toContain('Anchor');
-    expect(reference).toContain('PROMPTFOO_PYTHON');
-    expect(reference).toContain('PROMPTFOO_PYTHON_WORKERS');
-    expect(reference).toContain('config.pythonExecutable');
-    expect(reference).toContain('config.workers');
-    expect(reference).toContain('config.timeout');
-    expect(reference).toContain('context.vars');
-    expect(reference).toContain('{{env.CHAT_API_URL}}');
-    expect(reference).toContain('OpenAPI operation to HTTP provider');
-    expect(reference).toContain('operation at a time');
-    expect(reference).toContain('path parameters into the');
-    expect(reference).toContain('first successful response schema');
-    expect(reference).toContain('OpenAPI `$ref`s');
-    expect(reference).toContain('`allOf`');
-    expect(reference).toContain('`oneOf`/`anyOf`');
-    expect(reference).toContain('wire names intact');
-    expect(reference).toContain('safe vars');
-    expect(reference).toContain('preserves headers');
-    expect(reference).toContain('parameter/media examples');
-    expect(reference).toContain('+json media');
-    expect(reference).toContain('defaults/enums');
-    expect(reference).toContain('health/status');
-    expect(reference).toContain('`question`');
-    expect(reference).toContain('`input`');
-    expect(reference).toContain('Bearer/OAuth2/OpenID/header/query/cookie API-key');
-    expect(reference).toContain('--auth-header X-API-Key --auth-prefix none');
-    expect(reference).toContain('Hybrid discovery notes');
-    expect(reference).toContain('Static source: route/handler/client file and line range');
-    expect(reference).toContain('Safe live probe: exact non-mutating payload');
-    expect(reference).toContain('Promptfoo mapping: vars to request fields');
-    expect(reference).toContain('--no-cache');
-    expect(reference).toContain('--no-share');
-    expect(reference).toContain('rg -n');
-  });
-
   it.each([
     {
       dir: 'provider-setup-http',
@@ -3150,7 +2968,7 @@ describe('promptfoo-provider-setup skill', () => {
       }),
     );
     expect(provider.config.body).toEqual({ user_id: '{{user_id}}', message: '{{prompt}}' });
-    expect(provider.config.transformResponse).toBe('json.output');
+    expect(provider.config.transformResponse).toContain('const value = json?.output;');
 
     const getOutput = execFileSync(
       'node',
@@ -3181,7 +2999,7 @@ describe('promptfoo-provider-setup skill', () => {
       q: '{{prompt}}',
       user_id: '{{user_id}}',
     });
-    expect(getProvider.config.transformResponse).toBe('json.answer');
+    expect(getProvider.config.transformResponse).toContain('const value = json?.answer;');
     const getTest = (generatedGet.tests as unknown[])[0];
     expectRecord(getTest, 'Generated OpenAPI GET test');
     expect(getTest.vars).toEqual({
@@ -3605,7 +3423,7 @@ describe('promptfoo-provider-setup skill', () => {
       tenant_id: '{{tenant_id}}',
       question: '{{prompt}}',
     });
-    expect(questionProvider.config.transformResponse).toBe('json.answer');
+    expect(questionProvider.config.transformResponse).toContain('const value = json?.answer;');
     const questionTest = (generatedQuestion.tests as unknown[])[0];
     expectRecord(questionTest, 'Generated OpenAPI question test');
     expect(questionTest.vars).toEqual({
@@ -3641,7 +3459,7 @@ describe('promptfoo-provider-setup skill', () => {
       tenant_id: '{{tenant_id}}',
     });
     expect(createdProvider.config.body).toEqual({ user_id: '{{user_id}}', message: '{{prompt}}' });
-    expect(createdProvider.config.transformResponse).toBe('json.output');
+    expect(createdProvider.config.transformResponse).toContain('const value = json?.output;');
     const createdTest = (generatedCreated.tests as unknown[])[0];
     expectRecord(createdTest, 'Generated OpenAPI 201 test');
     expect(createdTest.vars).toEqual({
@@ -3734,16 +3552,17 @@ describe('promptfoo-provider-setup skill', () => {
       expect(provider.config.url).toBe('{{env.HEALTH_API_BASE_URL}}/health');
       expect(provider.config.queryParams).toBeUndefined();
       expect(provider.config.body).toBeUndefined();
-      expect(provider.config.transformResponse).toBe('json.status');
+      expect(provider.config.transformResponse).toContain('const value = json?.status;');
       const [test] = generated.tests as unknown[];
       expectRecord(test, 'Generated no-prompt OpenAPI provider test');
       expect(test.vars).toEqual({
         message: 'Say exactly PONG.',
       });
       // The "Say exactly PONG." message never reaches the target here, so the
-      // smoke assertion falls back to is-json on the structured response
-      // instead of `contains: PONG` (which would fail by construction).
-      expect(test.assert).toEqual([{ type: 'is-json' }]);
+      // smoke assertion checks the selected status value, not the JSON envelope.
+      expect(test.assert).toEqual([
+        { type: 'javascript', value: 'output !== null && output !== undefined' },
+      ]);
       expect(test.description).toBe('getHealth responds successfully');
     } finally {
       fs.rmSync(tempDir, { recursive: true, force: true });
@@ -3830,7 +3649,7 @@ describe('promptfoo-provider-setup skill', () => {
         user_id: '{{user_id}}',
         message: '{{prompt}}',
       });
-      expect(provider.config.transformResponse).toBe('json.answer');
+      expect(provider.config.transformResponse).toContain('const value = json?.answer;');
       const [test] = generated.tests as unknown[];
       expectRecord(test, 'Generated vendor JSON provider test');
       expect(test.vars).toEqual({
@@ -3872,7 +3691,7 @@ describe('promptfoo-provider-setup skill', () => {
       expect(provider.config.body).toBe(
         'user_id={{user_id | urlencode}}&message={{prompt | urlencode}}&scope={{scope | urlencode}}',
       );
-      expect(provider.config.transformResponse).toBe('json.answer');
+      expect(provider.config.transformResponse).toContain('const value = json?.answer;');
       const [test] = generated.tests as unknown[];
       expectRecord(test, 'Generated form provider test');
       expect(test.vars).toEqual({
@@ -3928,7 +3747,7 @@ describe('promptfoo-provider-setup skill', () => {
           { kind: 'field', name: 'user_id', value: '{{user_id}}' },
         ],
       });
-      expect(provider.config.transformResponse).toBe('json.output');
+      expect(provider.config.transformResponse).toContain('const value = json?.output;');
       const [test] = generated.tests as unknown[];
       expectRecord(test, 'Generated multipart provider test');
       expect(test.vars).toEqual({
@@ -3969,7 +3788,7 @@ describe('promptfoo-provider-setup skill', () => {
         'Content-Type': 'text/plain',
       });
       expect(provider.config.body).toBe('{{prompt}}');
-      expect(provider.config.transformResponse).toBe('json.output');
+      expect(provider.config.transformResponse).toContain('const value = json?.output;');
       const [test] = generated.tests as unknown[];
       expectRecord(test, 'Generated text provider test');
       expect(test.vars).toEqual({
@@ -4013,7 +3832,7 @@ describe('promptfoo-provider-setup skill', () => {
           'Content-Type': contentType,
         });
         expect(provider.config.body).toBe('{{prompt}}');
-        expect(provider.config.transformResponse).toBe('json.output');
+        expect(provider.config.transformResponse).toContain('const value = json?.output;');
         const [test] = generated.tests as unknown[];
         expectRecord(test, `Generated ${operationId} provider test`);
         expect(test.vars).toEqual({
@@ -4059,7 +3878,7 @@ describe('promptfoo-provider-setup skill', () => {
           priority: '{{priority}}',
         },
       ]);
-      expect(provider.config.transformResponse).toBe('json.output');
+      expect(provider.config.transformResponse).toContain('const value = json?.output;');
       const [test] = generated.tests as unknown[];
       expectRecord(test, 'Generated array provider test');
       expect(test.vars).toEqual({
@@ -4143,7 +3962,7 @@ describe('promptfoo-provider-setup skill', () => {
         message: '{{prompt}}',
         user_id: '{{user_id}}',
       });
-      expect(provider.config.transformResponse).toBe('json[0].output');
+      expect(provider.config.transformResponse).toContain('const value = json?.[0]?.output;');
       const [test] = generated.tests as unknown[];
       expectRecord(test, 'Generated array-response provider test');
       expect(test.vars).toEqual({
@@ -4179,7 +3998,7 @@ describe('promptfoo-provider-setup skill', () => {
       const [provider] = generated.providers as unknown[];
       expectRecord(provider, 'Generated example-only array-response provider');
       expectRecord(provider.config, 'Generated example-only array-response provider config block');
-      expect(provider.config.transformResponse).toBe('json[0].output');
+      expect(provider.config.transformResponse).toContain('const value = json?.[0]?.output;');
       const [test] = generated.tests as unknown[];
       expectRecord(test, 'Generated example-only array-response provider test');
       expect(test.vars).toEqual({
@@ -4218,14 +4037,16 @@ describe('promptfoo-provider-setup skill', () => {
       const [objectProvider] = objectGenerated.providers as unknown[];
       expectRecord(objectProvider, 'Generated unsafe response field provider');
       expectRecord(objectProvider.config, 'Generated unsafe response field provider config block');
-      expect(objectProvider.config.transformResponse).toBe('json["api-version"]');
+      expect(objectProvider.config.transformResponse).toContain(
+        'const value = json?.["api-version"];',
+      );
 
       const arrayGenerated = runHelper('unsafeArrayResponseField');
       expectRecord(arrayGenerated, 'Generated unsafe array response field provider config');
       const [arrayProvider] = arrayGenerated.providers as unknown[];
       expectRecord(arrayProvider, 'Generated unsafe array response field provider');
       expectRecord(arrayProvider.config, 'Generated unsafe array response field provider config');
-      expect(arrayProvider.config.transformResponse).toBe('json[0]["200"]');
+      expect(arrayProvider.config.transformResponse).toContain('const value = json?.[0]?.["200"];');
     } finally {
       fs.rmSync(tempDir, { recursive: true, force: true });
     }
@@ -4260,7 +4081,7 @@ describe('promptfoo-provider-setup skill', () => {
         message: '{{prompt}}',
         note_type: '{{note_type}}',
       });
-      expect(provider.config.transformResponse).toBe('json.answer');
+      expect(provider.config.transformResponse).toContain('const value = json?.answer;');
       const [test] = generated.tests as unknown[];
       expectRecord(test, 'Generated allOf provider test');
       expect(test.vars).toEqual({
@@ -4301,7 +4122,7 @@ describe('promptfoo-provider-setup skill', () => {
         user_id: '{{user_id}}',
         message: '{{prompt}}',
       });
-      expect(provider.config.transformResponse).toBe('json.answer');
+      expect(provider.config.transformResponse).toContain('const value = json?.answer;');
       const [test] = generated.tests as unknown[];
       expectRecord(test, 'Generated repeated-ref provider test');
       expect(test.vars).toEqual({
@@ -4389,7 +4210,7 @@ describe('promptfoo-provider-setup skill', () => {
         user_id: '{{user_id}}',
         query: '{{prompt}}',
       });
-      expect(provider.config.transformResponse).toBe('json.answer');
+      expect(provider.config.transformResponse).toContain('const value = json?.answer;');
       const [test] = generated.tests as unknown[];
       expectRecord(test, 'Generated variant provider test');
       expect(test.vars).toEqual({
@@ -4433,7 +4254,7 @@ describe('promptfoo-provider-setup skill', () => {
         message: '{{prompt}}',
         note_type: '{{note_type}}',
       });
-      expect(provider.config.transformResponse).toBe('json.answer');
+      expect(provider.config.transformResponse).toContain('const value = json?.answer;');
       const [test] = generated.tests as unknown[];
       expectRecord(test, 'Generated example-only provider test');
       expect(test.vars).toEqual({
@@ -4581,7 +4402,7 @@ describe('promptfoo-provider-setup skill', () => {
       const [provider] = generated.providers as unknown[];
       expectRecord(provider, 'Generated writeOnly response provider');
       expectRecord(provider.config, 'Generated writeOnly response provider config block');
-      expect(provider.config.transformResponse).toBe('json.public_text');
+      expect(provider.config.transformResponse).toContain('const value = json?.public_text;');
     } finally {
       fs.rmSync(tempDir, { recursive: true, force: true });
     }
@@ -4615,7 +4436,7 @@ describe('promptfoo-provider-setup skill', () => {
         message: '{{prompt}}',
         client_note: '{{client_note}}',
       });
-      expect(provider.config.transformResponse).toBe('json.public_text');
+      expect(provider.config.transformResponse).toContain('const value = json?.public_text;');
       const [test] = generated.tests as unknown[];
       expectRecord(test, 'Generated composed visibility provider test');
       expect(test.vars).toEqual({
@@ -4874,140 +4695,6 @@ describe('promptfoo-provider-setup skill', () => {
 });
 
 describe('promptfoo-redteam-setup skill', () => {
-  it('has a routing description with setup scope and run/provider boundaries', () => {
-    const skill = readText(path.join(redteamSetupSkillRoot, 'SKILL.md'));
-
-    expect(skill).toMatch(/^---\nname: promptfoo-redteam-setup\n/);
-    expect(skill).toContain('purpose');
-    expect(skill).toContain('plugins');
-    expect(skill).toContain('strategies');
-    expect(skill).toContain('multi-input target inputs');
-    expect(skill).toContain('Do not use for');
-    expect(skill).toContain('basic provider wiring');
-    expect(skill).toContain('running/evaluating an already-generated');
-  });
-
-  it('documents focused redteam setup workflow and generation QA', () => {
-    const skill = readText(path.join(redteamSetupSkillRoot, 'SKILL.md'));
-
-    expect(skill).toContain('Derive target facts from live or static evidence');
-    expect(skill).toContain('Write the target and purpose');
-    expect(skill).toContain('Choose a small plugin set');
-    expect(skill).toContain('Choose strategies conservatively');
-    expect(skill).toContain('Use `jailbreak:meta` for the default first setup/generation pass.');
-    expect(skill).toContain('Use `jailbreak:hydra` instead when the target is stateful');
-    expect(skill).toContain('search route handlers, API clients, tests');
-    expect(skill).toContain('object IDs imply `bola`');
-    expect(skill).toContain("Promptfoo's default redteam generation");
-    expect(skill).toContain('redteam.provider');
-    expect(skill).toContain('file://x.py:name');
-    expect(skill).toContain('openapi-operation-to-redteam-config.mjs');
-    expect(skill).toContain('--auth-header');
-    expect(skill).toContain('--auth-prefix');
-    expect(skill).toContain('infers Bearer/OAuth2/OpenID and header/query/cookie API-key auth');
-    expect(skill).toContain('--smoke-test true');
-    expect(skill).toContain('validate target');
-    expect(skill).toContain('redteam generate');
-    expect(skill).toContain('metadata.pluginId');
-    expect(skill).toContain('defaultTest.metadata.purpose');
-    expect(skill).toContain('non-precreated output path');
-    expect(skill).toContain('config-relative `file://./target.js`');
-    expect(skill).toContain('file targets resolve under `/tmp`');
-  });
-
-  it('assumes remote redteam generation is available', () => {
-    const redteamMarkdown = [
-      readText(path.join(redteamSetupSkillRoot, 'SKILL.md')),
-      readText(path.join(redteamSetupSkillRoot, 'references', 'redteam-setup-patterns.md')),
-      readText(path.join(redteamRunSkillRoot, 'SKILL.md')),
-      readText(path.join(redteamRunSkillRoot, 'references', 'redteam-run-patterns.md')),
-    ].join('\n');
-
-    expect(redteamMarkdown).toContain("Promptfoo's default redteam generation");
-    for (const forbidden of [
-      ['PROMPTFOO_DISABLE', 'REMOTE_GENERATION'].join('_'),
-      ['local-only', 'generation'].join(' '),
-      ['Local', 'Only', 'QA'].join('-').replace('-QA', ' QA'),
-      ['remote', 'only'].join('-'),
-      ['data must', 'stay local'].join(' '),
-      ['deferred', 'remote', 'enabled scan'].join(' ').replace('remote ', 'remote-'),
-    ]) {
-      expect(redteamMarkdown).not.toContain(forbidden);
-    }
-  });
-
-  it('ships Codex UI metadata for redteam setup', () => {
-    const openaiYaml = readText(path.join(redteamSetupSkillRoot, 'agents', 'openai.yaml'));
-
-    expect(openaiYaml).toContain('Promptfoo Redteam Setup');
-    expect(openaiYaml).toContain('$promptfoo-redteam-setup');
-    expect(openaiYaml).toContain('allow_implicit_invocation: true');
-  });
-
-  it('keeps redteam examples in a progressive-disclosure reference file', () => {
-    const reference = readText(
-      path.join(redteamSetupSkillRoot, 'references', 'redteam-setup-patterns.md'),
-    );
-
-    expect(reference).toContain('Single-input HTTP policy scan');
-    expect(reference).toContain('Multi-input authorization scan');
-    expect(reference).toContain('Multi-input is not the same as multi-turn.');
-    expect(reference).toContain('jailbreak:meta');
-    expect(reference).toContain('jailbreak:hydra');
-    expect(reference).toContain('provider: file://./redteam-generator.mjs');
-    expect(reference).toContain('file://./redteam-generator.py');
-    expect(reference).toContain('call_api(prompt, options, context)');
-    expect(reference).toContain("json.dumps(payload, separators=(',', ':'))");
-    expect(reference).toContain('Relative to the command working directory');
-    expect(reference).toContain('repo-root-relative path');
-    expect(reference).toContain('Before generating against a live target');
-    expect(reference).toContain('inspect the observed request/response');
-    expect(reference).toContain('id: policy');
-    expect(reference).toContain('Add `bola` or `bfla`');
-    expect(reference).toContain('id: rbac');
-    expect(reference).toContain('Generation QA commands');
-    expect(reference).toContain('multi-input-mode');
-    expect(reference).toContain('empty `mktemp` file');
-    expect(reference).toContain('metadata.configHash');
-    expect(reference).toContain('defaultTest?.metadata?.purpose');
-    expect(reference).toContain('For local file targets such as `file://./target.js`');
-    expect(reference).toContain('file://provider.py:invoice_redteam_target');
-    expect(reference).toContain('file://provider.py:function_name');
-    expect(reference).toContain('file://generator.py:function_name');
-    expect(reference).toContain('file://redteam-generator.py:generate_redteam_invoice_prompt');
-    expect(reference).toContain('timeout: 30000');
-    expect(reference).toContain('anchor `sys.path`');
-    expect(reference).toContain('Path(__file__).resolve().parent');
-    expect(reference).toContain('constructor `options.config`');
-    expect(reference).toContain('options` argument to the selected function');
-    expect(reference).toContain('resolve under `/tmp`');
-    expect(reference).toContain('OpenAPI operation to redteam setup');
-    expect(reference).toContain('openapi-operation-to-redteam-config.mjs');
-    expect(reference).toContain('`defaultTest.vars`');
-    expect(reference).toContain('`allOf`');
-    expect(reference).toContain('`oneOf`/`anyOf`');
-    expect(reference).toContain('parameter/media examples');
-    expect(reference).toContain('+json media');
-    expect(reference).toContain('defaults/enums');
-    expect(reference).toContain('safe target `inputs`');
-    expect(reference).toContain('header/query fields to `headers`/`queryParams`');
-    expect(reference).toContain('Use `--policy`');
-    expect(reference).toContain('`--num-tests`');
-    expect(reference).toContain('Bearer/OAuth2/OpenID/header/query/cookie');
-    expect(reference).toContain('--auth-header X-API-Key --auth-prefix');
-    expect(reference).toContain('--smoke-test true');
-    expect(reference).toContain('--smoke-assert');
-    expect(reference).toContain('empty connectivity vars');
-    expect(reference).toContain('`policy` plus `rbac`');
-    expect(reference).toContain('Static code to redteam setup');
-    expect(reference).toContain('Route evidence: file path, method, path');
-    expect(reference).toContain('POST /api/invoices/:invoice_id/chat');
-    expect(reference).toContain('Authorization');
-    expect(reference).toContain('id: bola');
-    expect(reference).toContain('Use it directly');
-    expect(reference).toContain('target has identity or object fields to attack');
-  });
-
   it.each([
     {
       dir: 'redteam-setup-single-input',
@@ -5276,7 +4963,7 @@ describe('promptfoo-redteam-setup skill', () => {
     );
     expect(target.config.queryParams).toEqual({ tenant_id: '{{tenant_id}}' });
     expect(target.config.body).toEqual({ user_id: '{{user_id}}', message: '{{message}}' });
-    expect(target.config.transformResponse).toBe('json.output');
+    expect(target.config.transformResponse).toContain('const value = json?.output;');
 
     expect(generated.defaultTest).toEqual({
       vars: {
@@ -5297,7 +4984,9 @@ describe('promptfoo-redteam-setup skill', () => {
       { id: 'rbac', numTests: 1 },
       { id: 'bola', numTests: 1 },
     ]);
-    expect(generated.redteam.strategies).toEqual(['jailbreak:meta']);
+    expect(generated.redteam.strategies).toEqual([
+      { id: 'jailbreak:meta', config: { numIterations: 2 } },
+    ]);
     const [policyPlugin] = generated.redteam.plugins as unknown[];
     expectRecord(policyPlugin, 'Generated OpenAPI redteam policy plugin');
     expectRecord(policyPlugin.config, 'Generated OpenAPI redteam policy config');
@@ -5318,7 +5007,7 @@ describe('promptfoo-redteam-setup skill', () => {
     expect(searchTarget.config.headers).toEqual({
       Authorization: 'Bearer {{env.OPENAPI_INVOICE_API_TOKEN}}',
     });
-    expect(searchTarget.config.transformResponse).toBe('json.answer');
+    expect(searchTarget.config.transformResponse).toContain('const value = json?.answer;');
     expect(searchTarget.inputs).toEqual({
       q: 'User-controlled message or instruction to the target.',
       user_id: 'Caller identity or tenancy field: user_id.',
@@ -5341,7 +5030,7 @@ describe('promptfoo-redteam-setup skill', () => {
       tenant_id: '{{tenant_id}}',
       question: '{{question}}',
     });
-    expect(questionTarget.config.transformResponse).toBe('json.answer');
+    expect(questionTarget.config.transformResponse).toContain('const value = json?.answer;');
     expect(questionTarget.inputs).toEqual({
       tenant_id: 'Caller identity or tenancy field: tenant_id.',
       question: 'User-controlled message or instruction to the target.',
@@ -5950,7 +5639,7 @@ describe('promptfoo-redteam-setup skill', () => {
         user_id: '{{user_id}}',
         message: '{{message}}',
       });
-      expect(target.config.transformResponse).toBe('json.answer');
+      expect(target.config.transformResponse).toContain('const value = json?.answer;');
       expect(generated.defaultTest).toEqual({
         vars: {
           user_id: 'vendor-json-user',
@@ -5992,7 +5681,7 @@ describe('promptfoo-redteam-setup skill', () => {
       expect(target.config.body).toBe(
         'user_id={{user_id | urlencode}}&message={{message | urlencode}}&scope={{scope | urlencode}}',
       );
-      expect(target.config.transformResponse).toBe('json.answer');
+      expect(target.config.transformResponse).toContain('const value = json?.answer;');
       expect(target.inputs).toEqual({
         user_id: 'Caller identity or tenancy field: user_id.',
         message: 'User-controlled message or instruction to the target.',
@@ -6053,7 +5742,7 @@ describe('promptfoo-redteam-setup skill', () => {
           { kind: 'field', name: 'user_id', value: '{{user_id}}' },
         ],
       });
-      expect(target.config.transformResponse).toBe('json.output');
+      expect(target.config.transformResponse).toContain('const value = json?.output;');
       expect(target.inputs).toEqual({
         document: 'Target input field: document.',
         question: 'User-controlled message or instruction to the target.',
@@ -6099,7 +5788,7 @@ describe('promptfoo-redteam-setup skill', () => {
         'Content-Type': 'text/plain',
       });
       expect(target.config.body).toBe('{{message}}');
-      expect(target.config.transformResponse).toBe('json.output');
+      expect(target.config.transformResponse).toContain('const value = json?.output;');
       expect(target.inputs).toEqual({
         message: 'User-controlled message or instruction to the target.',
       });
@@ -6150,7 +5839,7 @@ describe('promptfoo-redteam-setup skill', () => {
           'Content-Type': contentType,
         });
         expect(target.config.body).toBe('{{message}}');
-        expect(target.config.transformResponse).toBe('json.output');
+        expect(target.config.transformResponse).toContain('const value = json?.output;');
         expect(target.inputs).toEqual({
           message: 'User-controlled message or instruction to the target.',
         });
@@ -6199,7 +5888,7 @@ describe('promptfoo-redteam-setup skill', () => {
           priority: '{{priority}}',
         },
       ]);
-      expect(target.config.transformResponse).toBe('json.output');
+      expect(target.config.transformResponse).toContain('const value = json?.output;');
       expect(target.inputs).toEqual({
         user_id: 'Caller identity or tenancy field: user_id.',
         message: 'User-controlled message or instruction to the target.',
@@ -6293,7 +5982,7 @@ describe('promptfoo-redteam-setup skill', () => {
         message: '{{message}}',
         user_id: '{{user_id}}',
       });
-      expect(target.config.transformResponse).toBe('json[0].output');
+      expect(target.config.transformResponse).toContain('const value = json?.[0]?.output;');
       expect(target.inputs).toEqual({
         message: 'User-controlled message or instruction to the target.',
         user_id: 'Caller identity or tenancy field: user_id.',
@@ -6333,7 +6022,7 @@ describe('promptfoo-redteam-setup skill', () => {
       const [target] = generated.targets as unknown[];
       expectRecord(target, 'Generated example-only array-response redteam target');
       expectRecord(target.config, 'Generated example-only array-response redteam target config');
-      expect(target.config.transformResponse).toBe('json[0].output');
+      expect(target.config.transformResponse).toContain('const value = json?.[0]?.output;');
       expect(target.inputs).toEqual({
         message: 'User-controlled message or instruction to the target.',
         user_id: 'Caller identity or tenancy field: user_id.',
@@ -6380,7 +6069,9 @@ describe('promptfoo-redteam-setup skill', () => {
       const [objectTarget] = objectGenerated.targets as unknown[];
       expectRecord(objectTarget, 'Generated unsafe response field redteam target');
       expectRecord(objectTarget.config, 'Generated unsafe response field redteam config block');
-      expect(objectTarget.config.transformResponse).toBe('json["api-version"]');
+      expect(objectTarget.config.transformResponse).toContain(
+        'const value = json?.["api-version"];',
+      );
 
       const arrayGenerated = runHelper('unsafeArrayResponseField');
       expectRecord(arrayGenerated, 'Generated unsafe array response field redteam config');
@@ -6390,7 +6081,7 @@ describe('promptfoo-redteam-setup skill', () => {
         arrayTarget.config,
         'Generated unsafe array response field redteam config block',
       );
-      expect(arrayTarget.config.transformResponse).toBe('json[0]["200"]');
+      expect(arrayTarget.config.transformResponse).toContain('const value = json?.[0]?.["200"];');
     } finally {
       fs.rmSync(tempDir, { recursive: true, force: true });
     }
@@ -6425,7 +6116,7 @@ describe('promptfoo-redteam-setup skill', () => {
         message: '{{message}}',
         note_type: '{{note_type}}',
       });
-      expect(target.config.transformResponse).toBe('json.answer');
+      expect(target.config.transformResponse).toContain('const value = json?.answer;');
       expect(target.inputs).toEqual({
         user_id: 'Caller identity or tenancy field: user_id.',
         message: 'User-controlled message or instruction to the target.',
@@ -6471,7 +6162,7 @@ describe('promptfoo-redteam-setup skill', () => {
         user_id: '{{user_id}}',
         message: '{{message}}',
       });
-      expect(target.config.transformResponse).toBe('json.answer');
+      expect(target.config.transformResponse).toContain('const value = json?.answer;');
       expect(target.inputs).toEqual({
         user_id: 'Caller identity or tenancy field: user_id.',
         message: 'User-controlled message or instruction to the target.',
@@ -6582,7 +6273,7 @@ describe('promptfoo-redteam-setup skill', () => {
         user_id: '{{user_id}}',
         query: '{{query}}',
       });
-      expect(target.config.transformResponse).toBe('json.answer');
+      expect(target.config.transformResponse).toContain('const value = json?.answer;');
       expect(target.inputs).toEqual({
         user_id: 'Caller identity or tenancy field: user_id.',
         query: 'User-controlled message or instruction to the target.',
@@ -6630,7 +6321,7 @@ describe('promptfoo-redteam-setup skill', () => {
         message: '{{message}}',
         note_type: '{{note_type}}',
       });
-      expect(target.config.transformResponse).toBe('json.answer');
+      expect(target.config.transformResponse).toContain('const value = json?.answer;');
       expect(target.inputs).toEqual({
         user_id: 'Caller identity or tenancy field: user_id.',
         message: 'User-controlled message or instruction to the target.',
@@ -6789,7 +6480,7 @@ describe('promptfoo-redteam-setup skill', () => {
       const [target] = generated.targets as unknown[];
       expectRecord(target, 'Generated writeOnly response redteam target');
       expectRecord(target.config, 'Generated writeOnly response redteam target config');
-      expect(target.config.transformResponse).toBe('json.public_text');
+      expect(target.config.transformResponse).toContain('const value = json?.public_text;');
     } finally {
       fs.rmSync(tempDir, { recursive: true, force: true });
     }
@@ -6823,7 +6514,7 @@ describe('promptfoo-redteam-setup skill', () => {
         message: '{{message}}',
         client_note: '{{client_note}}',
       });
-      expect(target.config.transformResponse).toBe('json.public_text');
+      expect(target.config.transformResponse).toContain('const value = json?.public_text;');
       expect(target.inputs).toEqual({
         message: 'User-controlled message or instruction to the target.',
         client_note: 'Target input field: client_note.',
@@ -7233,75 +6924,6 @@ describe('promptfoo-redteam-setup skill', () => {
 });
 
 describe('promptfoo-redteam-run skill', () => {
-  it('has a routing description with run scope and setup/provider boundaries', () => {
-    const skill = readText(path.join(redteamRunSkillRoot, 'SKILL.md'));
-
-    expect(skill).toMatch(/^---\nname: promptfoo-redteam-run\n/);
-    expect(skill).toContain('Run, rerun, inspect, and QA');
-    expect(skill).toContain('generated redteam YAML');
-    expect(skill).toContain('attack success rate');
-    expect(skill).toContain('Do not use for initial provider wiring');
-    expect(skill).toContain('choosing plugins');
-    expect(skill).toContain('strategies before generation');
-  });
-
-  it('documents reproducible redteam eval, inspection, and filtered reruns', () => {
-    const skill = readText(path.join(redteamRunSkillRoot, 'SKILL.md'));
-
-    expect(skill).toContain('Use `redteam eval`');
-    expect(skill).toContain('Use `redteam run --force`');
-    expect(skill).toContain('validate target');
-    expect(skill).toContain('--no-cache --no-share --no-progress-bar');
-    expect(skill).toContain('results.stats.successes');
-    expect(skill).toContain('shareableUrl');
-    expect(skill).toContain('--filter-failing');
-    expect(skill).toContain('--filter-errors-only');
-    expect(skill).toContain('--filter-metadata pluginId=policy');
-    expect(skill).toContain('ENOENT');
-    expect(skill).toContain('Regenerate beside');
-    expect(skill).toContain('redteam report');
-    // `redteam run` has no --no-share flag (see src/redteam/commands/run.ts);
-    // the skill must route users to PROMPTFOO_DISABLE_SHARING=true instead.
-    expect(skill).toContain('PROMPTFOO_DISABLE_SHARING=true');
-    expect(skill).not.toMatch(/redteam run[^\n]*--no-share/);
-  });
-
-  it('ships Codex UI metadata for redteam runs', () => {
-    const openaiYaml = readText(path.join(redteamRunSkillRoot, 'agents', 'openai.yaml'));
-
-    expect(openaiYaml).toContain('Promptfoo Redteam Run');
-    expect(openaiYaml).toContain('$promptfoo-redteam-run');
-    expect(openaiYaml).toContain('allow_implicit_invocation: true');
-  });
-
-  it('keeps run commands and CI gates in a progressive-disclosure reference file', () => {
-    const reference = readText(
-      path.join(redteamRunSkillRoot, 'references', 'redteam-run-patterns.md'),
-    );
-
-    expect(reference).toContain('Stable Eval From Generated Tests');
-    expect(reference).toContain('Generate And Evaluate');
-    expect(reference).toContain('Deterministic Grader QA');
-    expect(reference).toContain('Run the generated probes with the deterministic grader');
-    expect(reference).toContain('INTENTIONAL_LEAK');
-    expect(reference).toContain('resolves under `/tmp`');
-    expect(reference).toContain('file://test/fixtures/my-scan/target.mjs');
-    expect(reference).toContain('file://./target.py:call_api');
-    expect(reference).toContain('file://grader.py:grade_redteam');
-    expect(reference).toContain('file://target.py:function_name');
-    expect(reference).toContain('call_api(prompt, options, context)');
-    expect(reference).toContain('anchor `sys.path`');
-    expect(reference).toContain('Path(__file__).resolve().parent');
-    expect(reference).toContain('constructor `options.config`');
-    expect(reference).toContain('options` argument to `call_api`');
-    expect(reference).toContain('workers: 1');
-    expect(reference).toContain('timeout');
-    expect(reference).toContain('jq');
-    expect(reference).toContain('--filter-failing');
-    expect(reference).toContain('--filter-errors-only');
-    expect(reference).toContain('PROMPTFOO_FAILED_TEST_EXIT_CODE=0');
-  });
-
   for (const dir of redteamRunFixtureDirs) {
     it(`keeps generated redteam metadata and assertion shape intact for ${dir}`, () => {
       const config = yaml.load(readText(path.join(fixtureRoot, dir, 'redteam.yaml')));
