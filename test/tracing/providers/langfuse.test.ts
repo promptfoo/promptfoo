@@ -637,9 +637,22 @@ describe('LangfuseProvider', () => {
     });
 
     expect(result?.spans.map((span) => span.name)).toEqual(['chat gpt-4o']);
+    expect(result?.incomplete).not.toBe(true);
+    await expect(
+      new LangfuseProvider(config).fetchTrace(TRACE_ID, { earliestStartTime: 1704067201000 }),
+    ).resolves.toBeNull();
     expect(new URL(String(mockedFetch.mock.calls[0][0])).searchParams.get('fromStartTime')).toBe(
       '2024-01-01T00:00:00.050Z',
     );
+  });
+
+  it('retains incompleteness across pages', async () => {
+    mockedFetch
+      .mockResolvedValueOnce(response({ data: [null], meta: { cursor: 'next-page' } }))
+      .mockResolvedValueOnce(response({ data: [observations[0]], meta: {} }));
+    const result = await new LangfuseProvider(config).fetchTrace(TRACE_ID);
+    expect(result).toMatchObject({ incomplete: true });
+    expect(result?.spans.map((span) => span.spanId)).toEqual(['root-span']);
   });
 
   it('stops an explicitly limited read before fetching the next page', async () => {
@@ -697,25 +710,28 @@ describe('LangfuseProvider', () => {
     expect(new URL(String(mockedFetch.mock.calls[0][0])).searchParams.get('limit')).toBe('1');
   });
 
-  it('skips malformed, unrelated, and temporally invalid observations', async () => {
-    mockedFetch.mockResolvedValue(
-      response({
-        data: [
-          null,
-          { ...observations[0], id: '' },
-          { ...observations[0], traceId: 'fedcba9876543210fedcba9876543210' },
-          { ...observations[0], startTime: 'not-a-date' },
-          { ...observations[0], endTime: '2023-12-31T23:59:59.000Z' },
-          { ...observations[0], parentObservationId: observations[0].id },
-          observations[1],
-        ],
-      }),
-    );
+  it.each([false, true])(
+    'marks discarded records incomplete (valid sibling: %s)',
+    async (sibling) => {
+      mockedFetch.mockResolvedValue(
+        response({
+          data: [
+            null,
+            { ...observations[0], id: '' },
+            { ...observations[0], traceId: 'fedcba9876543210fedcba9876543210' },
+            { ...observations[0], startTime: 'not-a-date' },
+            { ...observations[0], endTime: '2023-12-31T23:59:59.000Z' },
+            { ...observations[0], parentObservationId: observations[0].id },
+            ...(sibling ? [observations[1]] : []),
+          ],
+        }),
+      );
 
-    expect((await new LangfuseProvider(config).fetchTrace(TRACE_ID))?.spans).toEqual([
-      expect.objectContaining({ spanId: 'generation-span' }),
-    ]);
-  });
+      const result = await new LangfuseProvider(config).fetchTrace(TRACE_ID);
+      expect(result).toMatchObject({ incomplete: true });
+      expect(result?.spans.map((span) => span.spanId)).toEqual(sibling ? ['generation-span'] : []);
+    },
+  );
 
   it.each([
     { result: 'not observations' },

@@ -51,13 +51,10 @@ function timestampMs(value: unknown): number | undefined {
   return undefined;
 }
 
-function transformSpan(row: BraintrustSpan, options?: FetchTraceOptions): SpanData | null {
+function transformSpan(row: BraintrustSpan): SpanData | null {
   const spanId = row.span_id || row.id;
   const startTime = timestampMs(row.metrics?.start) ?? timestampMs(row.created);
   if (!spanId || startTime === undefined) {
-    return null;
-  }
-  if (options?.earliestStartTime !== undefined && startTime < options.earliestStartTime) {
     return null;
   }
 
@@ -216,13 +213,18 @@ export class BraintrustProvider implements TraceProvider {
 
     const spans: SpanData[] = [];
     const services = new Set<string>();
+    let incomplete = false;
     for (const row of rows) {
-      if (spans.length >= maxSpans) {
-        break;
-      }
-      const span = transformSpan(row, options);
+      const span = transformSpan(row);
       if (!span) {
+        incomplete = true;
         logger.warn('[BraintrustProvider] Skipping malformed span');
+        continue;
+      }
+      if (
+        spans.length >= maxSpans ||
+        (options?.earliestStartTime !== undefined && span.startTime < options.earliestStartTime)
+      ) {
         continue;
       }
       const service = span.attributes?.['service.name'];
@@ -232,8 +234,14 @@ export class BraintrustProvider implements TraceProvider {
       spans.push(span);
     }
 
-    return spans.length > 0
-      ? { traceId: normalizedTraceId, spans, services: [...services], fetchedAt: Date.now() }
+    return spans.length > 0 || incomplete
+      ? {
+          traceId: normalizedTraceId,
+          spans,
+          ...(incomplete && { incomplete }),
+          services: [...services],
+          fetchedAt: Date.now(),
+        }
       : null;
   }
 }

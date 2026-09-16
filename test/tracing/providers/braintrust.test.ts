@@ -321,15 +321,37 @@ describe('BraintrustProvider', () => {
     },
   );
 
+  it.each([false, true])(
+    'marks discarded records incomplete (valid sibling: %s)',
+    async (sibling) => {
+      mockedFetch.mockResolvedValue(
+        response({
+          rows: [
+            ...(sibling ? [rows[0]] : []),
+            { ...rows[0], id: '', span_id: '' },
+            { ...rows[0], metrics: {}, created: 'invalid-date' },
+          ],
+        }),
+      );
+      const result = await new BraintrustProvider(config).fetchTrace(TRACE_ID, { maxSpans: 1 });
+      expect(result).toMatchObject({ incomplete: true });
+      expect(result?.spans.map((span) => span.spanId)).toEqual(sibling ? ['root-span'] : []);
+    },
+  );
+
   it('filters spans by start time and caps the result count', async () => {
     const provider = new BraintrustProvider(config);
 
     expect((await provider.fetchTrace(TRACE_ID, { maxSpans: 1 }))?.spans).toHaveLength(1);
-    expect(
-      (
-        await provider.fetchTrace(TRACE_ID, { earliestStartTime: 1704067200050, maxSpans: 1 })
-      )?.spans.map((span) => span.name),
-    ).toEqual(['tool.search']);
+    const filtered = await provider.fetchTrace(TRACE_ID, {
+      earliestStartTime: 1704067200050,
+      maxSpans: 1,
+    });
+    expect(filtered?.spans.map((span) => span.name)).toEqual(['tool.search']);
+    expect(filtered?.incomplete).not.toBe(true);
+    await expect(
+      provider.fetchTrace(TRACE_ID, { earliestStartTime: 1704067201000 }),
+    ).resolves.toBeNull();
   });
 
   it('rejects malformed BTQL response payloads', async () => {
