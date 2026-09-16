@@ -12,18 +12,15 @@ type BedrockOpenAiResponsesBodyContext = Parameters<OpenAiResponsesProvider['get
 type BedrockOpenAiResponsesCallApiOptions = Parameters<OpenAiResponsesProvider['getOpenAiBody']>[2];
 
 /**
- * OpenAI's frontier models on Amazon Bedrock (GPT-5.6 Sol/Terra/Luna, GPT-5.5, GPT-5.4, ...)
- * are NOT served
- * through the native `InvokeModel` / `Converse` APIs that back the rest of the `bedrock:`
- * provider. They are only available through Bedrock's OpenAI-compatible **Responses API**
- * on the regional "mantle" endpoint:
+ * The bare OpenAI frontier model selectors on Amazon Bedrock use the OpenAI-compatible
+ * Responses API on the regional Mantle endpoint:
  *
  *   https://bedrock-mantle.<region>.api.aws/openai/v1/responses
  *
  * This module routes those model ids to promptfoo's OpenAI Responses provider pointed at
- * that endpoint, so `bedrock:openai.gpt-5.6-sol` produces output identical to the OpenAI
- * Platform `openai:responses:gpt-5.6-sol` provider. The open-weight `gpt-oss` models, by
- * contrast, are served via `InvokeModel` and continue to use the standard Bedrock path.
+ * that endpoint. GPT-5.6 also supports Runtime Converse with inference profile IDs
+ * through the explicit Converse selector.
+ * Open-weight `gpt-oss` models can use the standard InvokeModel path.
  */
 
 /** GA region for the OpenAI frontier models on Bedrock; used when none is configured. */
@@ -70,6 +67,10 @@ export function getBedrockMantleBaseUrl(region: string): string {
  * uses OpenAI regional-processing rates, which are 10% above first-party rates.
  */
 export class BedrockOpenAiResponsesProvider extends OpenAiResponsesProvider {
+  protected override getGenAISystem(): string {
+    return 'bedrock';
+  }
+
   /**
    * Strip the Bedrock `openai.` prefix so the base provider's GPT-5 / o-series capability
    * detection and the OpenAI billing tables match. The request still sends the real
