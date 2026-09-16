@@ -75,6 +75,27 @@ describe('LangfuseProvider', () => {
     vi.resetAllMocks();
   });
 
+  it.each(['metadata', 'attributes', 'resourceAttributes'])(
+    'keeps backend timestamps authoritative over %s timing attributes',
+    async (field) => {
+      const supplied = {
+        'otel.span.start_time_unix_nano': '1',
+        'otel.span.end_time_unix_nano': '2',
+        'fixture.label': 'retained',
+      };
+      const metadata = field === 'metadata' ? supplied : { [field]: supplied };
+      mockedFetch.mockResolvedValueOnce(
+        response({ data: [{ ...observations[0], metadata }], meta: {} }),
+      );
+      const span = (await new LangfuseProvider(config).fetchTrace(TRACE_ID))?.spans[0];
+      expect(span).toMatchObject({ startTime: 1704067200000, endTime: 1704067201000 });
+      expect(span?.attributes).toHaveProperty('fixture.label', 'retained');
+      expect(span?.attributes).not.toHaveProperty('otel.span.start_time_unix_nano');
+      expect(span?.attributes).not.toHaveProperty('otel.span.end_time_unix_nano');
+      expect(supplied['otel.span.start_time_unix_nano']).toBe('1');
+    },
+  );
+
   it.each([false, true])(
     'checks duplicate evidence before deduplication (conflict=%s)',
     async (conflict) => {

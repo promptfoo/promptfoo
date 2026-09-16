@@ -92,6 +92,8 @@ function transformSpan(row: BraintrustSpan): SpanData {
     }),
     ...(isToolSpan && getNormalizedToolAttributes(name, row.input)),
   };
+  delete attributes['otel.span.start_time_unix_nano'];
+  delete attributes['otel.span.end_time_unix_nano'];
 
   return {
     spanId,

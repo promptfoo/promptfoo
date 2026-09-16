@@ -61,6 +61,25 @@ describe('BraintrustProvider', () => {
     mockedFetch.mockImplementation(async () => response({ rows }));
   });
 
+  it.each(['metadata', 'span_attributes'] as const)(
+    'keeps backend timestamps authoritative over %s timing attributes',
+    async (field) => {
+      const supplied = {
+        ...rows[0][field],
+        'otel.span.start_time_unix_nano': '1',
+        'otel.span.end_time_unix_nano': '2',
+        'fixture.label': 'retained',
+      };
+      mockedFetch.mockResolvedValueOnce(response({ rows: [{ ...rows[0], [field]: supplied }] }));
+      const span = (await new BraintrustProvider(config).fetchTrace(TRACE_ID))?.spans[0];
+      expect(span).toMatchObject({ startTime: 1704067200000, endTime: 1704067201000 });
+      expect(span?.attributes).toHaveProperty('fixture.label', 'retained');
+      expect(span?.attributes).not.toHaveProperty('otel.span.start_time_unix_nano');
+      expect(span?.attributes).not.toHaveProperty('otel.span.end_time_unix_nano');
+      expect(supplied['otel.span.start_time_unix_nano']).toBe('1');
+    },
+  );
+
   it.each([-1, 0, 1])('clamps maxSpans=%s to at least one', async (maxSpans) => {
     mockedFetch.mockResolvedValueOnce(
       response({

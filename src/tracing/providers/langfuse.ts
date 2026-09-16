@@ -290,6 +290,10 @@ function transformObservation(observation: LangfuseObservation, traceId: string)
     return null;
   }
 
+  const attributes = observationAttributes(observation);
+  delete attributes['otel.span.start_time_unix_nano'];
+  delete attributes['otel.span.end_time_unix_nano'];
+
   return {
     spanId: observation.id,
     ...(typeof observation.parentObservationId === 'string' && {
@@ -301,7 +305,7 @@ function transformObservation(observation: LangfuseObservation, traceId: string)
         : 'langfuse.observation',
     startTime,
     ...(Number.isFinite(endTime) && { endTime }),
-    attributes: observationAttributes(observation),
+    attributes,
     statusCode: observation.level === 'ERROR' ? 2 : 1,
     ...(typeof observation.statusMessage === 'string' &&
       observation.statusMessage && {
