@@ -1057,7 +1057,7 @@ describe('AnthropicMessagesProvider', () => {
       expect(provider.anthropic.messages.create).toHaveBeenCalledWith(
         {
           model: 'claude-3-7-sonnet-20250219',
-          max_tokens: 2048,
+          max_tokens: 3072,
           messages: [
             {
               role: 'user',
@@ -1610,7 +1610,7 @@ describe('AnthropicMessagesProvider', () => {
     });
 
     it('executes MCP tool_use blocks and continues the Anthropic conversation with tool_result', async () => {
-      provider = createProvider('claude-3-5-sonnet-latest', {
+      provider = createProvider('claude-sonnet-4-6', {
         config: {
           mcp: {
             enabled: true,
@@ -1687,7 +1687,7 @@ describe('AnthropicMessagesProvider', () => {
     });
 
     it('sums thinking tokens across MCP continuation rounds', async () => {
-      provider = createProvider('claude-3-5-sonnet-latest', {
+      provider = createProvider('claude-sonnet-4-6', {
         config: {
           mcp: {
             enabled: true,
@@ -1745,7 +1745,7 @@ describe('AnthropicMessagesProvider', () => {
 
     it('does not cache MCP continuation results by default', async () => {
       enableCache();
-      provider = createProvider('claude-3-5-sonnet-latest', {
+      provider = createProvider('claude-sonnet-4-6', {
         config: {
           mcp: {
             enabled: true,
@@ -1813,7 +1813,7 @@ describe('AnthropicMessagesProvider', () => {
     });
 
     it('leaves mixed MCP and non-MCP tool_use blocks on the existing output path', async () => {
-      provider = createProvider('claude-3-5-sonnet-latest', {
+      provider = createProvider('claude-sonnet-4-6', {
         config: {
           mcp: {
             enabled: true,
@@ -1854,7 +1854,7 @@ describe('AnthropicMessagesProvider', () => {
     });
 
     it('drops forced tool_choice on MCP continuation requests', async () => {
-      provider = createProvider('claude-3-5-sonnet-latest', {
+      provider = createProvider('claude-sonnet-4-6', {
         config: {
           tool_choice: 'required' as any,
           mcp: {
@@ -1920,7 +1920,7 @@ describe('AnthropicMessagesProvider', () => {
     ])(
       'marks MCP tool_result blocks as errors before continuing the Anthropic conversation ($label)',
       async ({ mcpResult, expectedContent }) => {
-        provider = createProvider('claude-3-5-sonnet-latest', {
+        provider = createProvider('claude-sonnet-4-6', {
           config: {
             mcp: {
               enabled: true,
@@ -1975,7 +1975,7 @@ describe('AnthropicMessagesProvider', () => {
     );
 
     it('leaves non-MCP Anthropic tool_use blocks on the existing output path', async () => {
-      provider = createProvider('claude-3-5-sonnet-latest', {
+      provider = createProvider('claude-sonnet-4-6', {
         config: {
           mcp: {
             enabled: true,
@@ -2008,8 +2008,174 @@ describe('AnthropicMessagesProvider', () => {
       expect(result.output).toContain('"name":"get_weather"');
     });
 
+    it('publishes executed MCP tool calls as metadata.toolCalls across rounds', async () => {
+      provider = createProvider('claude-sonnet-4-6', {
+        config: {
+          mcp: { enabled: true, server: { command: 'npm', args: ['start'] } },
+        },
+      });
+
+      mcpMocks.callTool
+        .mockResolvedValueOnce({ content: 'Acme Solar, Helio Grid' })
+        .mockResolvedValueOnce({ content: 'Acme Solar: 412 employees' });
+
+      vi.spyOn(provider.anthropic.messages, 'create')
+        .mockResolvedValueOnce({
+          content: [
+            {
+              type: 'tool_use',
+              id: 'toolu_1',
+              name: 'search_companies',
+              input: { query: 'solar' },
+            },
+          ],
+          stop_reason: 'tool_use',
+          usage: { input_tokens: 10, output_tokens: 5, server_tool_use: null },
+        } as Anthropic.Messages.Message)
+        .mockResolvedValueOnce({
+          content: [
+            {
+              type: 'tool_use',
+              id: 'toolu_2',
+              name: 'search_companies',
+              input: { query: 'Acme Solar headcount' },
+            },
+          ],
+          stop_reason: 'tool_use',
+          usage: { input_tokens: 8, output_tokens: 4, server_tool_use: null },
+        } as Anthropic.Messages.Message)
+        .mockResolvedValueOnce({
+          content: [{ type: 'text', text: 'Acme Solar has 412 employees.' }],
+          stop_reason: 'end_turn',
+          usage: { input_tokens: 6, output_tokens: 3, server_tool_use: null },
+        } as Anthropic.Messages.Message);
+
+      const result = await provider.callApi('How big is Acme Solar?');
+
+      // Both rounds are present, in call order, so a routing assertion can check
+      // which tool ran and with what arguments.
+      expect(result.metadata?.toolCalls).toEqual([
+        {
+          id: 'toolu_1',
+          name: 'search_companies',
+          input: { query: 'solar' },
+          output: 'Acme Solar, Helio Grid',
+          is_error: false,
+        },
+        {
+          id: 'toolu_2',
+          name: 'search_companies',
+          input: { query: 'Acme Solar headcount' },
+          output: 'Acme Solar: 412 employees',
+          is_error: false,
+        },
+      ]);
+    });
+
+    it('marks a failed MCP tool call as is_error in metadata.toolCalls', async () => {
+      provider = createProvider('claude-sonnet-4-6', {
+        config: {
+          mcp: { enabled: true, server: { command: 'npm', args: ['start'] } },
+        },
+      });
+
+      mcpMocks.callTool.mockRejectedValueOnce(new Error('upstream refused'));
+
+      vi.spyOn(provider.anthropic.messages, 'create')
+        .mockResolvedValueOnce({
+          content: [
+            {
+              type: 'tool_use',
+              id: 'toolu_err',
+              name: 'search_companies',
+              input: { query: 'solar' },
+            },
+          ],
+          stop_reason: 'tool_use',
+          usage: { input_tokens: 10, output_tokens: 5, server_tool_use: null },
+        } as Anthropic.Messages.Message)
+        .mockResolvedValueOnce({
+          content: [{ type: 'text', text: 'I could not reach the tool.' }],
+          stop_reason: 'end_turn',
+          usage: { input_tokens: 6, output_tokens: 3, server_tool_use: null },
+        } as Anthropic.Messages.Message);
+
+      const result = await provider.callApi('How big is Acme Solar?');
+
+      expect(result.metadata?.toolCalls).toMatchObject([
+        { id: 'toolu_err', name: 'search_companies', is_error: true },
+      ]);
+      expect((result.metadata?.toolCalls as any[])[0].output).toContain('upstream refused');
+    });
+
+    it('omits metadata.toolCalls entirely when no MCP tool ran', async () => {
+      provider = createProvider('claude-sonnet-4-6', {
+        config: {
+          mcp: { enabled: true, server: { command: 'npm', args: ['start'] } },
+        },
+      });
+
+      vi.spyOn(provider.anthropic.messages, 'create').mockResolvedValue({
+        content: [{ type: 'text', text: 'No tool needed.' }],
+        stop_reason: 'end_turn',
+        usage: { input_tokens: 4, output_tokens: 2, server_tool_use: null },
+      } as Anthropic.Messages.Message);
+
+      const result = await provider.callApi('Say hi');
+
+      // An always-present empty array would break `metadata?.toolCalls?.length > 0`
+      // filters, so the key is absent rather than empty.
+      expect(result.metadata?.toolCalls).toBeUndefined();
+    });
+
+    it('keeps tool calls made before the max_tool_calls bail-out', async () => {
+      provider = createProvider('claude-sonnet-4-6', {
+        config: {
+          max_tool_calls: 1,
+          mcp: { enabled: true, server: { command: 'npm', args: ['start'] } },
+        },
+      });
+
+      mcpMocks.callTool.mockResolvedValue({ content: 'Still needs another lookup.' });
+
+      vi.spyOn(provider.anthropic.messages, 'create')
+        .mockResolvedValueOnce({
+          content: [
+            {
+              type: 'tool_use',
+              id: 'toolu_first',
+              name: 'search_companies',
+              input: { query: 'clean energy' },
+            },
+          ],
+          stop_reason: 'tool_use',
+          usage: { input_tokens: 10, output_tokens: 5, server_tool_use: null },
+        } as Anthropic.Messages.Message)
+        .mockResolvedValueOnce({
+          content: [
+            {
+              type: 'tool_use',
+              id: 'toolu_second',
+              name: 'search_companies',
+              input: { query: 'solar' },
+            },
+          ],
+          stop_reason: 'tool_use',
+          usage: { input_tokens: 8, output_tokens: 4, server_tool_use: null },
+        } as Anthropic.Messages.Message);
+
+      const result = await provider.callApi('Find clean energy companies');
+
+      // The run failed on the cap, but the first round did execute — that is the
+      // evidence you need to debug why the cap was hit.
+      expect(result.error).toContain('exceeded max_tool_calls=1');
+      expect(result.metadata?.toolCalls).toMatchObject([
+        { id: 'toolu_first', name: 'search_companies', is_error: false },
+      ]);
+    });
+
     it('returns an error when MCP tool execution exceeds max_tool_calls', async () => {
-      provider = createProvider('claude-3-5-sonnet-latest', {
+      provider = createProvider('claude-sonnet-4-6', {
         config: {
           max_tool_calls: 1,
           mcp: {
@@ -2069,7 +2235,7 @@ describe('AnthropicMessagesProvider', () => {
       // Regression: max_tool_calls: 0 is an explicit "do not auto-execute MCP
       // tools" guard, but 0 was treated as invalid and silently widened to the
       // default of 8, so tools ran anyway.
-      provider = createProvider('claude-3-5-sonnet-latest', {
+      provider = createProvider('claude-sonnet-4-6', {
         config: {
           max_tool_calls: 0,
           mcp: {
@@ -2106,7 +2272,7 @@ describe('AnthropicMessagesProvider', () => {
     });
 
     it('blocks parallel MCP tool execution when it would exceed max_tool_calls', async () => {
-      provider = createProvider('claude-3-5-sonnet-latest', {
+      provider = createProvider('claude-sonnet-4-6', {
         config: {
           max_tool_calls: 1,
           mcp: {
@@ -2146,7 +2312,7 @@ describe('AnthropicMessagesProvider', () => {
     });
 
     it('continues MCP tool execution through the streaming path', async () => {
-      provider = createProvider('claude-3-5-sonnet-latest', {
+      provider = createProvider('claude-sonnet-4-6', {
         config: {
           stream: true,
           mcp: {
@@ -2207,7 +2373,7 @@ describe('AnthropicMessagesProvider', () => {
     });
 
     it('returns a streaming error once further MCP execution exceeds max_tool_calls', async () => {
-      provider = createProvider('claude-3-5-sonnet-latest', {
+      provider = createProvider('claude-sonnet-4-6', {
         config: {
           max_tool_calls: 1,
           stream: true,
@@ -2270,7 +2436,7 @@ describe('AnthropicMessagesProvider', () => {
 
   describe('cleanup', () => {
     it('should await initialization before cleanup', async () => {
-      provider = createProvider('claude-3-5-sonnet-latest', {
+      provider = createProvider('claude-sonnet-4-6', {
         config: {
           mcp: {
             enabled: true,
@@ -2296,7 +2462,7 @@ describe('AnthropicMessagesProvider', () => {
     });
 
     it('should handle cleanup when MCP is not enabled', async () => {
-      provider = createProvider('claude-3-5-sonnet-latest', {
+      provider = createProvider('claude-sonnet-4-6', {
         config: {
           mcp: {
             enabled: false,
@@ -2310,7 +2476,7 @@ describe('AnthropicMessagesProvider', () => {
     });
 
     it('should handle cleanup errors gracefully', async () => {
-      provider = createProvider('claude-3-5-sonnet-latest', {
+      provider = createProvider('claude-sonnet-4-6', {
         config: {
           mcp: {
             enabled: true,
@@ -3194,6 +3360,17 @@ describe('AnthropicMessagesProvider', () => {
       expect(params.max_tokens).toBeGreaterThan(params.thinking.budget_tokens);
     });
 
+    it('raises max_tokens when it exactly matches the manual thinking budget', async () => {
+      const provider = createProvider('claude-sonnet-4-5', {
+        config: { max_tokens: 8000, thinking: { type: 'enabled', budget_tokens: 8000 } },
+      });
+      const createSpy = vi.spyOn(provider.anthropic.messages, 'create').mockResolvedValue(mockResp);
+
+      await provider.callApi('Hello');
+
+      expect(createSpy.mock.calls[0][0].max_tokens).toBe(9024);
+    });
+
     it('leaves an explicit max_tokens that already clears the budget', async () => {
       const provider = createProvider('claude-sonnet-4-5', {
         config: { max_tokens: 20000, thinking: { type: 'enabled', budget_tokens: 8000 } },
@@ -3527,6 +3704,31 @@ describe('AnthropicMessagesProvider', () => {
       expect(params.thinking?.type).toBe('adaptive');
       expect(params.thinking?.budget_tokens).toBeUndefined();
     });
+
+    it.each([
+      { model: 'claude-sonnet-5', expected: 2048 },
+      { model: 'claude-opus-5', expected: 2048 },
+      { model: 'claude-opus-4-8', expected: 1024 },
+      { model: 'claude-opus-4-7', expected: 1024 },
+    ])(
+      'sizes the default max_tokens for $model by whether it thinks by default',
+      async ({ model, expected }) => {
+        // Sonnet 5 and Opus 5 return thinking blocks for a request that never sets
+        // `thinking`, and those tokens come out of max_tokens — so the default needs
+        // headroom or answers truncate mid-sentence. Opus 4.7/4.8 do not think unless
+        // asked, and keep the smaller default.
+        const provider = createProvider(model, { config: {} });
+        const createSpy = vi
+          .spyOn(provider.anthropic.messages, 'create')
+          .mockResolvedValue({ ...mockResp, model });
+
+        await provider.callApi('Hello');
+
+        expect((createSpy.mock.calls[0][0] as unknown as Record<string, unknown>).max_tokens).toBe(
+          expected,
+        );
+      },
+    );
 
     it('omits the built-in temperature default for Opus 5 (no explicit config)', async () => {
       // Opus 5 inherits the Opus 4.7+ sampling-param deprecation: temperature would 400.

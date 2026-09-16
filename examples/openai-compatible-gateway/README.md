@@ -11,15 +11,13 @@ Point Promptfoo's built-in OpenAI provider at any OpenAI-compatible Chat Complet
    cd openai-compatible-gateway
    ```
 
-2. Create an API key with your gateway or endpoint provider, then export it (prefer a gateway-specific env var so a real `OPENAI_API_KEY` is not sent to the gateway by accident):
+2. Create an API key with your gateway or endpoint provider, then export it under a gateway-specific env var, so a real `OPENAI_API_KEY` is never sent to the gateway:
 
    ```bash
    export GATEWAY_API_KEY=your_gateway_api_key
-   # Recommended: clear ambient OpenAI env vars so they cannot reach the
-   # gateway if GATEWAY_API_KEY is unset or misspelled.
-   unset OPENAI_API_KEY
-   unset OPENAI_API_HOST
    ```
+
+   `apiKeyEnvar` reads only the named variable; it does not fall back to `OPENAI_API_KEY`. For an endpoint that needs no credential, drop `apiKeyEnvar` and set `apiKeyRequired: false` and `useDefaultApiKey: false` instead.
 
 3. In `promptfooconfig.yaml`, set `apiBaseUrl` to your endpoint's base URL, set `apiKeyEnvar: GATEWAY_API_KEY`, and replace `your-model-id` with an exact model ID your endpoint serves (`GET <apiBaseUrl>/models`).
 
@@ -39,4 +37,4 @@ Point Promptfoo's built-in OpenAI provider at any OpenAI-compatible Chat Complet
 
 - Uses the OpenAI Chat Completions API shape only.
 
-See also the [OpenAI provider documentation](https://www.promptfoo.dev/docs/providers/openai/) section on OpenAI-compatible multi-model gateways.
+See the [connection settings](https://www.promptfoo.dev/docs/providers/openai/#connection-settings) section of the OpenAI provider documentation for the full list of base URL and credential options.
