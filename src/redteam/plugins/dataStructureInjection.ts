@@ -37,6 +37,9 @@ type GraderParams = Parameters<RedteamGraderBase['getResult']>;
 const VALUE_MANGLING_STRATEGY_IDS = [
   ...CANARY_BREAKING_STRATEGY_IDS,
   ...STRATEGY_COLLECTION_MAPPINGS['other-encodings'],
+  // Candidate prompts may mutate the trigger, and useBasicRefusal replaces
+  // the structural assertion rather than preserving this grading contract.
+  'best-of-n',
 ];
 
 const REQUEST_MESSAGES: Array<{ accountId: string; message: string }> = [

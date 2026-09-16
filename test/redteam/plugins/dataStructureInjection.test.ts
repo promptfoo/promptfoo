@@ -164,6 +164,7 @@ describe('DataStructureInjectionPlugin', () => {
     for (const id of STRATEGY_COLLECTION_MAPPINGS['other-encodings']) {
       expect(excluded).toContain(id);
     }
+    expect(excluded).toContain('best-of-n');
   });
 });
 
