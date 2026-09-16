@@ -2290,7 +2290,7 @@ describe('GoogleLiveProvider', () => {
           timeoutMs: 500,
           apiKey: 'test-api-key',
           functionToolStatefulApi: {
-            file: 'examples/google-live/counter_api.py',
+            file: 'mock-counter-api.py',
             url: 'http://127.0.0.1:5000',
           },
         },
@@ -2512,7 +2512,7 @@ describe('GoogleLiveProvider', () => {
         tool_choice: 'none',
         tools: 'file://tools.js:getTools',
         functionToolStatefulApi: {
-          file: 'examples/google-live/counter_api.py',
+          file: 'mock-counter-api.py',
           url: 'http://127.0.0.1:8765',
         },
       },
@@ -2821,7 +2821,7 @@ describe('GoogleLiveProvider', () => {
         timeoutMs: 500,
         apiKey: 'test-api-key',
         functionToolStatefulApi: {
-          file: 'examples/google-live/counter_api.py',
+          file: 'mock-counter-api.py',
           url: 'http://127.0.0.1:5000',
         },
         tools: [
@@ -2914,7 +2914,7 @@ describe('GoogleLiveProvider', () => {
           timeoutMs: 500,
           apiKey: 'test-api-key',
           functionToolStatefulApi: {
-            file: 'examples/google-live/counter_api.py',
+            file: 'mock-counter-api.py',
             url: 'http://127.0.0.1:8765',
             pythonExecutable: '/custom/python/path',
           },
@@ -2935,9 +2935,7 @@ describe('GoogleLiveProvider', () => {
 
       expect(validatePythonPathMock).toHaveBeenCalledWith('/custom/python/path', true);
 
-      expect(mockSpawn).toHaveBeenCalledWith('/custom/python/bin', [
-        'examples/google-live/counter_api.py',
-      ]);
+      expect(mockSpawn).toHaveBeenCalledWith('/custom/python/bin', ['mock-counter-api.py']);
     });
 
     it('should handle errors when spawning Python process', async () => {
@@ -2962,7 +2960,7 @@ describe('GoogleLiveProvider', () => {
             timeoutMs: 500,
             apiKey: 'test-api-key',
             functionToolStatefulApi: {
-              file: 'examples/google-live/counter_api.py',
+              file: 'mock-counter-api.py',
               url: 'http://127.0.0.1:8765',
             },
           },
@@ -3013,7 +3011,7 @@ describe('GoogleLiveProvider', () => {
           timeoutMs: 500,
           apiKey: 'test-api-key',
           functionToolStatefulApi: {
-            file: 'examples/google-live/counter_api.py',
+            file: 'mock-counter-api.py',
             url: 'http://127.0.0.1:8765',
           },
         },
@@ -3054,7 +3052,7 @@ describe('GoogleLiveProvider', () => {
             timeoutMs: 500,
             apiKey: 'test-api-key',
             functionToolStatefulApi: {
-              file: 'examples/google-live/counter_api.py',
+              file: 'mock-counter-api.py',
               url: 'http://127.0.0.1:8765',
             },
           },
@@ -3074,9 +3072,7 @@ describe('GoogleLiveProvider', () => {
 
         expect(validatePythonPathMock).toHaveBeenCalledWith('/env/python3', true);
 
-        expect(mockSpawn).toHaveBeenCalledWith('/env/python3', [
-          'examples/google-live/counter_api.py',
-        ]);
+        expect(mockSpawn).toHaveBeenCalledWith('/env/python3', ['mock-counter-api.py']);
       } finally {
         if (originalEnv) {
           mockProcessEnv({ PROMPTFOO_PYTHON: originalEnv });
@@ -3111,7 +3107,7 @@ describe('GoogleLiveProvider', () => {
           timeoutMs: 500,
           apiKey: 'test-api-key',
           functionToolStatefulApi: {
-            file: 'examples/google-live/counter_api.py',
+            file: 'mock-counter-api.py',
             url: 'http://127.0.0.1:8765',
           },
         },

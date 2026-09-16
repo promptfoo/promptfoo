@@ -1,145 +1,16 @@
-# google-live (Google Live API with Gemini)
+# google-live (Gemini 3.8 Live)
 
-You can run this example with:
+Compare Gemini 3.8 Live and Extended Thinking by grading their spoken-response transcripts.
+
+Set `GOOGLE_API_KEY` or `GEMINI_API_KEY` to your [Google AI Studio API key](https://aistudio.google.com/apikey), then run:
 
 ```bash
 npx promptfoo@latest init --example google-live
 cd google-live
+npx promptfoo@latest eval --no-cache -j 1
+npx promptfoo@latest view
 ```
 
-This example demonstrates how to use promptfoo with Google's WebSocket-based Live API, which enables low-latency bidirectional interactions with Gemini models. The example includes four different configurations:
+Both models return audio and a transcript in `output.text`. Extended Thinking defaults to `LOW` and waits for background reasoning to finish before grading.
 
-1. Basic query demonstration
-2. Multiline conversation demonstration
-3. Function calling and Google Search demonstration
-4. Stateful API with Python backend
-
-## Prerequisites
-
-- promptfoo CLI installed (`npm install -g promptfoo` or `brew install promptfoo`)
-- Google AI Studio API key set as `GOOGLE_API_KEY`
-- For the stateful API example: Python 3 with Flask installed (`pip install flask`)
-
-You can obtain a Google AI Studio API key from the [Google AI Studio website](https://ai.google.dev/).
-
-## Running the Examples
-
-You can initialize this example with:
-
-```bash
-npx promptfoo@latest init --example google-live
-```
-
-This will create a directory with all necessary configuration files. After running any evaluation, you can view the results by running:
-
-```bash
-promptfoo view
-```
-
-### Basic Query Example
-
-For Gemini 3.8 Live and Gemini 3.8 Live Extended Thinking, run:
-
-```bash
-promptfoo eval -c promptfooconfig.gemini-3.8.yaml --no-cache -j 1
-```
-
-This compares spoken answers and a deterministic tool lookup on both models. Audio and output transcription are enabled by default. Extended Thinking waits for `interactionStatus: IDLE`, including any background reasoning and tool calls, before grading the complete transcript. It requires non-blocking tools and accepts `thinkingLevel: LOW` (default), `MEDIUM`, or `HIGH`.
-
-The basic configuration in `promptfooconfig.yaml` demonstrates a simple query to the Gemini model:
-
-```bash
-promptfoo eval -c promptfooconfig.yaml -j 3
-```
-
-> Note: Rate limits of 3 concurrent sessions per API key apply, which is why we use `-j 3` to limit concurrency.
-
-### Multiline Conversation Example
-
-The multiline configuration in `promptfooconfig.multiline.yaml` demonstrates a multi-turn conversation:
-
-```bash
-promptfoo eval -c promptfooconfig.multiline.yaml -j 3
-```
-
-### Function Calling and Tools Example
-
-The tools configuration in `promptfooconfig.tools.yaml` demonstrates function calling (where the model can invoke defined functions) and built-in Google Search:
-
-```bash
-promptfoo eval -c promptfooconfig.tools.yaml -j 3
-```
-
-### Stateful API Example
-
-This example runs a local Python API that maintains state between function calls:
-
-```bash
-promptfoo eval -c promptfooconfig.statefulapi.yaml -j 3
-```
-
-**Setup:**
-
-- Requires Python 3 with Flask (`pip install flask`)
-- Uses `python3` command by default
-- Custom Python path: Set `pythonExecutable` in config or use `PROMPTFOO_PYTHON` environment variable
-- Runs on port 8765 (configured in both the Python file and YAML config)
-
-If you encounter errors, check that:
-
-- Flask is properly installed
-- Port 8765 is available (not in use by another application)
-- Python 3 is in your PATH or correctly configured
-
-## What This Example Demonstrates
-
-### 1. Basic Query
-
-- Simple interaction with the Live API
-- Basic assertion testing on model responses
-
-### 2. Multiline Conversation
-
-- Multi-turn conversations with the model
-- Using YAML files to structure conversations
-- Testing how the model maintains context across turns
-
-### 3. Function Calling and Tools
-
-- Custom function declarations (weather and stock price)
-- Built-in Google Search integration
-- Assertions on function calling behavior
-
-### 4. Stateful API Integration
-
-- Promptfoo spawns a local Python API that maintains state between calls
-- Demonstrates how to integrate an external service with LLM function calling
-- Shows how to test stateful interactions with assertions
-
-## Configuration Details
-
-### Provider Configuration
-
-All examples use the `google:live:gemini-3.1-flash-live-preview` model with various configurations:
-
-```yaml
-providers:
-  # Using Gemini 3.1 Flash Live Preview
-  - id: 'google:live:gemini-3.1-flash-live-preview'
-    config:
-      generationConfig:
-        response_modalities: ['audio']
-        outputAudioTranscription: {}
-      timeoutMs: 10000
-```
-
-### Tools Configuration
-
-The function calling examples use JSON configuration files that define:
-
-1. Custom function declarations
-2. The built-in Google Search capability
-
-For the stateful API, `counter_api.py` implements a simple counter service with endpoints for adding to and retrieving a count value.
-
-For more information about the Google Live API and other Google AI models, see the [Google AI documentation](/docs/providers/google).
+See the [Google Live provider docs](https://www.promptfoo.dev/docs/providers/google/#google-live-api) for audio input, multi-turn conversations, and tools.
