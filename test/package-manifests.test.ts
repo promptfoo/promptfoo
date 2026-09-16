@@ -3,7 +3,7 @@ import path from 'node:path';
 
 import { minVersion, satisfies, subset, validRange } from 'semver';
 import { describe, expect, it } from 'vitest';
-import { extractModuleSpecifiers } from '../scripts/architectureUtils';
+import { extractModuleSpecifiers, getPackageName } from '../scripts/architectureUtils';
 
 type PackageManifest = {
   dependencies?: Record<string, string>;
@@ -12,15 +12,49 @@ type PackageManifest = {
   peerDependencies?: Record<string, string>;
 };
 
+type PackageLockManifest<T = PackageManifest & { version?: string; optional?: boolean }> = {
+  packages: Record<string, T>;
+};
+
 function readPackageJson<T>(relativePath: string): T {
   const packageJsonPath = path.join(process.cwd(), relativePath);
   return JSON.parse(fs.readFileSync(packageJsonPath, 'utf8')) as T;
 }
 
+// Match individual shell commands, including continued Docker RUN instructions.
+function validateDockerInstallCommands(dockerfile: string): void {
+  const instructions = dockerfile
+    .split('\n')
+    .filter((line) => !line.trimStart().startsWith('#'))
+    .join('\n')
+    .replace(/\\\r?\n/g, ' ')
+    // Normalize literal shell spelling so n\\pm and n'p'm cannot hide npm.
+    // This intentionally errs toward rejecting quoted command-like text.
+    .replace(/\\(.)/g, '$1')
+    .replace(/["']/g, '');
+  const commands = [...instructions.matchAll(/(?<![\w.-])npm\b([^;&|()\n]*)/g)].map(([, text]) =>
+    text.trim().split(/\s+/),
+  );
+  expect(commands.some(([command]) => command === 'ci')).toBe(true);
+  expect(commands.some(([command]) => command === 'rebuild')).toBe(true);
+  for (const [command, ...args] of commands) {
+    // Keep Docker npm commands auditable: global options must follow the subcommand.
+    // Reject unsupported shapes instead of silently skipping a hidden install.
+    expect(['ci', 'rebuild', 'run']).toContain(command);
+    if (command === 'ci') {
+      expect(args).toContain('--ignore-scripts');
+      expect(args.some((arg) => arg.startsWith('--ignore-scripts='))).toBe(false);
+    } else if (command === 'rebuild') {
+      // Package names and globs can rebuild untrusted nested dependencies.
+      expect(args).toEqual(['./node_modules/esbuild', './node_modules/@swc/core']);
+    }
+  }
+}
+
 const SOURCE_FILE_EXTENSIONS = /\.(ts|tsx|mts|cts|js|mjs|cjs)$/;
-const EXPECTED_SHARP_VERSION = '^0.35.3';
+const EXPECTED_SHARP_VERSION = '^0.35.4';
 const PATCHED_JS_YAML_RANGE = '^3.15.1 || ^4.3.1 || >=5.2.3';
-const PATCHED_UNDICI_RANGE = '^6.28.0 || ^7.29.0 || >=8.9.0';
+const PATCHED_UNDICI_RANGE = '^7.29.1 || >=8.10.2';
 const OPENAI_PACKAGE_NAMES = ['@openai/agents', '@openai/codex-sdk', 'openai'] as const;
 const SWC_PACKAGE_NAMES = [
   '@swc/core',
@@ -96,6 +130,59 @@ function findExtensionUnsafeRelativeSpecifiers(sourceText: string, filePath: str
 }
 
 describe('package manifests', () => {
+  it.each([
+    ['src/app/package.json', ['dedent', 'fast-deep-equal', 'zod']],
+    ['site/package.json', ['ajv']],
+  ] as const)('declares shared imports in their owning workspace: %s', (manifest, dependencies) => {
+    const root = readPackageJson<PackageManifest>('package.json');
+    const workspace = readPackageJson<PackageManifest>(manifest);
+    const lock = readPackageJson<PackageLockManifest>('package-lock.json');
+    const workspacePath = path.posix.dirname(manifest);
+
+    for (const dependency of dependencies) {
+      const range = workspace.devDependencies?.[dependency];
+      expect(range, `${manifest} must declare its direct ${dependency} import`).toBeDefined();
+      expect(range).toBe(root.dependencies?.[dependency]);
+      expect(lock.packages[workspacePath].devDependencies?.[dependency]).toBe(range);
+      expect(satisfies(lock.packages[`node_modules/${dependency}`].version!, range!)).toBe(true);
+    }
+  });
+
+  it('declares browser matcher types alongside the app browser test runner', () => {
+    const app = readPackageJson<PackageManifest>('src/app/package.json');
+    const lock = readPackageJson<PackageLockManifest>('package-lock.json');
+    const range = app.devDependencies?.['@vitest/browser'];
+    const browser = lock.packages['node_modules/@vitest/browser'];
+
+    expect(range, 'browser smoke tests reference @vitest/browser/matchers types').toBeDefined();
+    expect(range).toBe(app.devDependencies?.vitest);
+    expect(range).toBe(app.devDependencies?.['@vitest/browser-playwright']);
+    expect(lock.packages['src/app'].devDependencies?.['@vitest/browser']).toBe(range);
+    expect(browser?.version).toBeDefined();
+    expect(satisfies(browser.version!, range!)).toBe(true);
+    expect(browser.version).toBe(lock.packages['node_modules/vitest'].version);
+  });
+
+  it('declares concrete Docusaurus type and theme imports alongside the docs build', () => {
+    const site = readPackageJson<PackageManifest>('site/package.json');
+    const lock = readPackageJson<PackageLockManifest>('package-lock.json');
+    const coreRange = site.devDependencies?.['@docusaurus/core'];
+    const coreVersion = lock.packages['node_modules/@docusaurus/core'].version;
+
+    for (const dependency of [
+      '@docusaurus/plugin-content-blog',
+      '@docusaurus/theme-common',
+      '@docusaurus/types',
+    ]) {
+      const range = site.devDependencies?.[dependency];
+      expect(range, `${dependency} is a package import, not a virtual alias`).toBeDefined();
+      expect(range).toBe(coreRange);
+      expect(lock.packages.site.devDependencies?.[dependency]).toBe(range);
+      expect(lock.packages[`node_modules/${dependency}`].version).toBe(coreVersion);
+      expect(satisfies(coreVersion!, range!)).toBe(true);
+    }
+  });
+
   it('publishes the lightweight contracts subpath', () => {
     const packageJson = readPackageJson<{
       exports?: Record<string, unknown>;
@@ -188,6 +275,7 @@ describe('package manifests', () => {
           rule.enabled === false &&
           rule.matchManagers?.includes('github-actions') &&
           rule.matchPackageNames?.includes('node') &&
+          rule.matchPackageNames?.includes('actions/node-versions') &&
           rule.matchFileNames?.includes(workflowPath),
       ),
     ).toBe(true);
@@ -240,9 +328,8 @@ describe('package manifests', () => {
   });
 
   it('keeps private npm registry endpoints out of the published lockfile', () => {
-    const packageLock = readPackageJson<{
-      packages: Record<string, { resolved?: string }>;
-    }>('package-lock.json');
+    const packageLock =
+      readPackageJson<PackageLockManifest<{ resolved?: string }>>('package-lock.json');
     const privateRegistryPackages = Object.entries(packageLock.packages)
       .filter(([, packageInfo]) => {
         if (!packageInfo.resolved || !URL.canParse(packageInfo.resolved)) {
@@ -261,9 +348,8 @@ describe('package manifests', () => {
 
   it('holds Knip below the incompatible public re-export audit', () => {
     const packageJson = readPackageJson<PackageManifest>('package.json');
-    const packageLock = readPackageJson<{
-      packages: Record<string, { version?: string }>;
-    }>('package-lock.json');
+    const packageLock =
+      readPackageJson<PackageLockManifest<{ version?: string }>>('package-lock.json');
     const renovateConfig = readPackageJson<{
       packageRules?: Array<{
         allowedVersions?: string;
@@ -286,9 +372,8 @@ describe('package manifests', () => {
 
   it('holds TanStack Table below v9 until the shared table migration is complete', () => {
     const appPackageJson = readPackageJson<PackageManifest>('src/app/package.json');
-    const packageLock = readPackageJson<{
-      packages: Record<string, { version?: string }>;
-    }>('package-lock.json');
+    const packageLock =
+      readPackageJson<PackageLockManifest<{ version?: string }>>('package-lock.json');
     const renovateConfig = readPackageJson<{
       packageRules?: Array<{
         allowedVersions?: string;
@@ -319,9 +404,16 @@ describe('package manifests', () => {
   });
 
   it('keeps jsdom on a release the supported Node floor can install', () => {
-    const rootPackageJson = readPackageJson<PackageManifest & { engines?: Record<string, string> }>(
-      'package.json',
-    );
+    const rootPackageJson = readPackageJson<
+      PackageManifest & {
+        engines?: Record<string, string>;
+        overrides?: Record<string, Record<string, string> | string>;
+      }
+    >('package.json');
+    const packageLock =
+      readPackageJson<PackageLockManifest<{ engines?: Record<string, string>; version?: string }>>(
+        'package-lock.json',
+      );
     const renovateConfig = readPackageJson<{
       packageRules?: Array<{
         allowedVersions?: string;
@@ -336,14 +428,42 @@ describe('package manifests', () => {
     const jsdomCap = renovateConfig.packageRules?.find((rule) =>
       rule.matchPackageNames?.includes('jsdom'),
     )?.allowedVersions;
+    const cssColorCap = renovateConfig.packageRules?.find((rule) =>
+      rule.matchPackageNames?.includes('@asamuzakjp/css-color'),
+    )?.allowedVersions;
+    const jsdomOverrides = rootPackageJson.overrides?.jsdom;
+    const cssColorOverride =
+      typeof jsdomOverrides === 'object' ? jsdomOverrides['@asamuzakjp/css-color'] : undefined;
+    const lockedCssColor = packageLock.packages['node_modules/@asamuzakjp/css-color'];
 
     expect(nodeFloor, 'the root manifest must declare a Node floor').toBeDefined();
+    expect(cssColorOverride, 'jsdom must pin its CSS color parser').toBeDefined();
+    expect(
+      lockedCssColor,
+      'the jsdom CSS color parser must be present in the lockfile',
+    ).toBeDefined();
+    expect(lockedCssColor?.version, 'the parser override and lockfile must agree').toBe(
+      cssColorOverride,
+    );
+    expect(
+      lockedCssColor?.engines?.node,
+      'the parser must declare its supported Node range',
+    ).toBeDefined();
+    expect(
+      satisfies(nodeFloor!.version, lockedCssColor!.engines!.node!),
+      'the jsdom CSS color parser must install on the minimum supported Node version',
+    ).toBe(true);
 
     if (nodeFloor!.compare('22.22.2') < 0) {
       expect(
         jsdomCap,
         'Renovate must hold jsdom below 30 while the Node floor is below 22.22.2',
       ).toBe('<30');
+      expect(
+        cssColorCap,
+        'Renovate must hold the jsdom CSS color parser below 7 while the Node floor is below 22.22.2',
+      ).toBe('<7');
+      expect(satisfies(cssColorOverride!, cssColorCap!)).toBe(true);
 
       for (const manifestPath of ['src/app/package.json', 'site/package.json']) {
         const range = readPackageJson<PackageManifest>(manifestPath).devDependencies?.jsdom;
@@ -358,10 +478,17 @@ describe('package manifests', () => {
   });
 
   it('keeps CLI smoke tests on the real unsupported and minimum-supported Node releases', () => {
-    const workflow = fs.readFileSync(
-      path.join(process.cwd(), '.github/workflows/main.yml'),
-      'utf8',
-    );
+    const workflowPath = '.github/workflows/main.yml';
+    const workflow = fs.readFileSync(path.join(process.cwd(), workflowPath), 'utf8');
+    const renovateConfig = readPackageJson<{
+      packageRules?: Array<{
+        enabled?: boolean;
+        matchCurrentValue?: string;
+        matchFileNames?: string[];
+        matchManagers?: string[];
+        matchPackageNames?: string[];
+      }>;
+    }>('renovate.json');
 
     const unsupportedNodeVersion = workflow.match(
       /name:\s*Set up unsupported Node 20[\s\S]*?node-version:\s*['"]([^'"]+)['"]/,
@@ -372,6 +499,29 @@ describe('package manifests', () => {
 
     expect(unsupportedNodeVersion).toBe('20.20.0');
     expect(minimumSupportedNodeVersion).toBe('22.22.0');
+
+    const protectedRuntimeRule = renovateConfig.packageRules?.find(
+      (rule) =>
+        rule.enabled === false &&
+        rule.matchManagers?.includes('github-actions') &&
+        rule.matchPackageNames?.includes('node') &&
+        rule.matchPackageNames?.includes('actions/node-versions') &&
+        rule.matchFileNames?.includes(workflowPath) &&
+        rule.matchCurrentValue,
+    );
+
+    expect(
+      protectedRuntimeRule,
+      'Renovate must not replace intentionally unsupported or minimum-supported smoke-test runtimes',
+    ).toBeDefined();
+
+    const protectedRuntimePattern = new RegExp(
+      protectedRuntimeRule!.matchCurrentValue!.slice(1, -1),
+    );
+
+    expect(protectedRuntimePattern.test(unsupportedNodeVersion!)).toBe(true);
+    expect(protectedRuntimePattern.test(minimumSupportedNodeVersion!)).toBe(true);
+    expect(protectedRuntimePattern.test(fs.readFileSync('.nvmrc', 'utf8').trim())).toBe(false);
   });
 
   it('keeps the Docker runtime on the patched Node release', () => {
@@ -394,27 +544,32 @@ describe('package manifests', () => {
   it('blocks dependency install scripts in the Docker build', () => {
     const dockerfile = fs.readFileSync(path.join(process.cwd(), 'Dockerfile'), 'utf8');
 
-    expect(dockerfile).toMatch(/npm ci[^\n]*--ignore-scripts/);
+    expect(() => validateDockerInstallCommands(dockerfile)).not.toThrow();
+  });
 
-    // `npm rebuild <name>` matches every folder of that name anywhere in the tree, so a
-    // nested dependency aliased to `esbuild` would run its install script and defeat
-    // --ignore-scripts. Only exact directory specs for the trusted packages are allowed.
-    // Comments are stripped first so the Dockerfile can explain the rule using the very
-    // command shape this asserts against.
-    const instructions = dockerfile
-      .split('\n')
-      .filter((line) => !line.trimStart().startsWith('#'))
-      .join('\n');
-    const rebuildArgs = instructions.match(/npm rebuild ([^\n]*)/)?.[1];
-
-    expect(rebuildArgs, 'the Docker build must rebuild its native packages').toBeDefined();
-    expect(
-      rebuildArgs!
-        .replace(/\\$/, '')
-        .trim()
-        .split(/\s+/)
-        .filter((arg) => arg !== '&&' && !arg.startsWith('-')),
-    ).toEqual(['./node_modules/esbuild', './node_modules/@swc/core']);
+  it.each([
+    'RUN npm ci',
+    String.raw`RUN n\pm ci`,
+    `RUN n'p'm ci`,
+    'RUN n""pm rebuild esbuild',
+    'RUN (npm ci)',
+    'RUN (npm rebuild esbuild)',
+    'RUN /usr/bin/npm ci',
+    'RUN "npm" ci',
+    'RUN npm --silent ci',
+    'RUN npm "ci"',
+    'RUN npm --prefix /app ci',
+    'RUN npm --silent rebuild esbuild',
+    'RUN npm ci --ignore-scripts=false',
+    'RUN npm rebuild esbuild',
+    'RUN npm rebuild ./node_modules/*',
+  ])('rejects an additional unsafe Docker command: %s', (unsafeCommand) => {
+    const safeCommands =
+      'RUN npm ci --ignore-scripts && npm rebuild ./node_modules/esbuild ./node_modules/@swc/core';
+    expect(() => validateDockerInstallCommands(`${safeCommands}\n${unsafeCommand}`)).toThrow();
+    expect(() =>
+      validateDockerInstallCommands(`${safeCommands} && ${unsafeCommand.replace('RUN ', '')}`),
+    ).toThrow();
   });
 
   it('keeps sharp out of the root install path', () => {
@@ -422,54 +577,144 @@ describe('package manifests', () => {
       devDependencies?: Record<string, string>;
       optionalDependencies?: Record<string, string>;
     }>('package.json');
+    const packageLock = readPackageJson<PackageLockManifest>('package-lock.json');
 
     expect(packageJson.devDependencies?.sharp).toBeUndefined();
     expect(packageJson.optionalDependencies?.sharp).toBe(EXPECTED_SHARP_VERSION);
+    expect(packageLock.packages[''].dependencies?.sharp).toBeUndefined();
+    expect(packageLock.packages[''].optionalDependencies?.sharp).toBe(EXPECTED_SHARP_VERSION);
+  });
+
+  it('keeps the Slack SDK optional and aligned with the lockfile', () => {
+    const packageJson = readPackageJson<PackageManifest>('package.json');
+    const packageLock = readPackageJson<PackageLockManifest>('package-lock.json');
+    const sdkName = '@slack/web-api';
+    const sdkRange = packageJson.optionalDependencies?.[sdkName];
+
+    expect(sdkRange).toBe('^8.1.1');
+    expect(packageJson.dependencies?.[sdkName]).toBeUndefined();
+    expect(packageLock.packages[''].dependencies?.[sdkName]).toBeUndefined();
+    expect(packageLock.packages[''].optionalDependencies?.[sdkName]).toBe(sdkRange);
+    expect(packageLock.packages[`node_modules/${sdkName}`].optional).toBe(true);
+    expect(satisfies(packageLock.packages[`node_modules/${sdkName}`].version!, sdkRange!)).toBe(
+      true,
+    );
+  });
+
+  it('includes every browser loader in the optional production profile', () => {
+    const packageJson = readPackageJson<PackageManifest>('package.json');
+    const packageLock =
+      readPackageJson<PackageLockManifest<PackageManifest & { version?: string; dev?: boolean }>>(
+        'package-lock.json',
+      );
+    const browserSource = fs.readFileSync('src/providers/browser.ts', 'utf8');
+    const browserPackages = extractModuleSpecifiers(browserSource, 'src/providers/browser.ts')
+      .map(getPackageName)
+      .filter((name): name is string => name !== undefined);
+
+    expect(browserPackages).toContain('puppeteer-extra-plugin-stealth');
+    for (const dependency of new Set(browserPackages)) {
+      const range = packageJson.optionalDependencies?.[dependency];
+      expect(
+        range,
+        `${dependency} must be available to production browser consumers`,
+      ).toBeDefined();
+      // npm treats a same-root dev + optional declaration as dev-only during
+      // `npm ci --omit=dev`, even though packed consumers resolve it as optional.
+      expect(packageJson.devDependencies?.[dependency]).toBeUndefined();
+      expect(packageLock.packages[''].optionalDependencies?.[dependency]).toBe(range);
+      const installed = packageLock.packages[`node_modules/${dependency}`];
+      expect(installed?.dev, `${dependency} must survive --omit=dev`).not.toBe(true);
+      expect(installed?.version, `${dependency} must have a locked version`).toBeDefined();
+      expect(satisfies(installed.version!, range!)).toBe(true);
+    }
+  });
+
+  it('keeps the Linux Rollup binary optional and aligned with the lockfile', () => {
+    const packageJson = readPackageJson<PackageManifest>('package.json');
+    const packageLock = readPackageJson<PackageLockManifest>('package-lock.json');
+    const binaryName = '@rollup/rollup-linux-x64-gnu';
+    const binaryRange = packageJson.optionalDependencies?.[binaryName];
+    const binaryPackage = packageLock.packages[`node_modules/${binaryName}`];
+
+    expect(binaryRange).toBeDefined();
+    expect(minVersion(binaryRange!)?.compare('4.63.1')).toBeGreaterThanOrEqual(0);
+    expect(packageJson.dependencies?.[binaryName]).toBeUndefined();
+    expect(packageLock.packages[''].dependencies?.[binaryName]).toBeUndefined();
+    expect(packageLock.packages[''].optionalDependencies?.[binaryName]).toBe(binaryRange);
+    expect(binaryPackage.optional).toBe(true);
+    expect(satisfies(binaryPackage.version!, binaryRange!)).toBe(true);
   });
 
   it('keeps Anthropic SDK manifests, lock entries, and optional binaries aligned', () => {
     const packageJson = readPackageJson<PackageManifest>('package.json');
-    const packageLock = readPackageJson<{
-      packages: Record<
-        string,
-        PackageManifest & {
-          version?: string;
-        }
-      >;
-    }>('package-lock.json');
+    const packageLock = readPackageJson<PackageLockManifest>('package-lock.json');
     const sdkName = '@anthropic-ai/sdk';
     const agentName = '@anthropic-ai/claude-agent-sdk';
     const sdkVersion = packageJson.dependencies?.[sdkName];
     const agentVersion = packageJson.devDependencies?.[agentName];
+    const sdkPackage = packageLock.packages[`node_modules/${sdkName}`];
     const agentPackage = packageLock.packages[`node_modules/${agentName}`];
 
     expect(sdkVersion).toBeDefined();
     expect(agentVersion).toBeDefined();
+    expect(sdkPackage, 'the Anthropic SDK must have a lockfile entry').toBeDefined();
+    expect(agentPackage, 'the Anthropic agent SDK must have a lockfile entry').toBeDefined();
+    expect(minVersion(agentVersion!)?.compare('0.3.233')).toBeGreaterThanOrEqual(0);
     expect(packageJson.optionalDependencies?.[agentName]).toBe(agentVersion);
     expect(packageLock.packages[''].dependencies?.[sdkName]).toBe(sdkVersion);
     expect(packageLock.packages[''].devDependencies?.[agentName]).toBe(agentVersion);
     expect(packageLock.packages[''].optionalDependencies?.[agentName]).toBe(agentVersion);
-    expect(packageLock.packages[`node_modules/${sdkName}`].version).toBe(sdkVersion);
-    expect(agentPackage.version).toBe(agentVersion);
+    expect(sdkPackage.version, 'the Anthropic SDK must have a resolved version').toBeDefined();
+    expect(
+      satisfies(sdkPackage.version as string, sdkVersion as string),
+      'the resolved Anthropic SDK must satisfy its declared dependency range',
+    ).toBe(true);
+    expect(
+      agentPackage.version,
+      'the Anthropic agent SDK must have a resolved version',
+    ).toBeDefined();
+    expect(
+      satisfies(agentPackage.version as string, agentVersion as string),
+      'the resolved Anthropic agent SDK must satisfy its declared dependency range',
+    ).toBe(true);
 
     for (const [binaryName, binaryVersion] of Object.entries(
       agentPackage.optionalDependencies ?? {},
     )) {
-      expect(binaryVersion).toBe(agentVersion);
-      expect(packageLock.packages[`node_modules/${binaryName}`].version).toBe(agentVersion);
+      const binaryPackage = packageLock.packages[`node_modules/${binaryName}`];
+
+      expect(binaryVersion).toBe(agentPackage.version);
+      expect(binaryPackage, `${binaryName} must have a lockfile entry`).toBeDefined();
+      expect(binaryPackage.version).toBe(agentPackage.version);
+    }
+  });
+
+  it('keeps the Langfuse client optional and its SDK packages on the supported floor', () => {
+    const packageJson = readPackageJson<PackageManifest>('package.json');
+    const packageLock = readPackageJson<PackageLockManifest>('package-lock.json');
+    const dependencyName = '@langfuse/client';
+    const developmentRange = packageJson.devDependencies?.[dependencyName];
+    const optionalRange = packageJson.optionalDependencies?.[dependencyName];
+    const clientVersion = packageLock.packages[`node_modules/${dependencyName}`].version;
+
+    expect(developmentRange).toBeDefined();
+    expect(optionalRange).toBe(developmentRange);
+    expect(packageJson.dependencies?.[dependencyName]).toBeUndefined();
+    expect(minVersion(developmentRange!)?.compare('5.11.0')).toBeGreaterThanOrEqual(0);
+    expect(packageLock.packages[''].devDependencies?.[dependencyName]).toBe(developmentRange);
+    expect(packageLock.packages[''].optionalDependencies?.[dependencyName]).toBe(optionalRange);
+    expect(clientVersion).toBeDefined();
+    expect(satisfies(clientVersion!, developmentRange!)).toBe(true);
+
+    for (const packageName of ['@langfuse/core', '@langfuse/tracing']) {
+      expect(packageLock.packages[`node_modules/${packageName}`].version).toBe(clientVersion);
     }
   });
 
   it('keeps the WatsonX authentication SDK manifest and lockfile on the supported floor', () => {
     const packageJson = readPackageJson<PackageManifest>('package.json');
-    const packageLock = readPackageJson<{
-      packages: Record<
-        string,
-        PackageManifest & {
-          version?: string;
-        }
-      >;
-    }>('package-lock.json');
+    const packageLock = readPackageJson<PackageLockManifest>('package-lock.json');
     const dependencyName = 'ibm-cloud-sdk-core';
     const developmentRange = packageJson.devDependencies?.[dependencyName];
     const optionalRange = packageJson.optionalDependencies?.[dependencyName];
@@ -487,9 +732,7 @@ describe('package manifests', () => {
 
   it('keeps the protobuf runtime aligned with OTLP numeric and UTF-8 fixes', () => {
     const packageJson = readPackageJson<PackageManifest>('package.json');
-    const packageLock = readPackageJson<{
-      packages: Record<string, PackageManifest & { version?: string }>;
-    }>('package-lock.json');
+    const packageLock = readPackageJson<PackageLockManifest>('package-lock.json');
     const protobufRange = packageJson.dependencies?.protobufjs;
 
     expect(protobufRange).toBeDefined();
@@ -505,9 +748,7 @@ describe('package manifests', () => {
     const packageJson = readPackageJson<
       PackageManifest & { overrides?: { mongoose?: Record<string, string> } }
     >('package.json');
-    const packageLock = readPackageJson<{
-      packages: Record<string, PackageManifest & { version?: string }>;
-    }>('package-lock.json');
+    const packageLock = readPackageJson<PackageLockManifest>('package-lock.json');
     const dependencyName = 'gcp-metadata';
     const dependencyRange = packageJson.dependencies?.[dependencyName];
 
@@ -562,14 +803,14 @@ describe('package manifests', () => {
       const optionalRange = rootPackageJson.optionalDependencies?.[dependencyName];
 
       expect(optionalRange, `${dependencyName} must stay optional`).toBeDefined();
-      expect(minVersion(optionalRange!)?.compare('1.15.46')).toBeGreaterThanOrEqual(0);
+      expect(minVersion(optionalRange!)?.compare('1.16.1')).toBeGreaterThanOrEqual(0);
       expect(rootPackageJson.dependencies?.[dependencyName]).toBeUndefined();
       expect(packageLock.packages[''].dependencies?.[dependencyName]).toBeUndefined();
       expect(packageLock.packages[''].optionalDependencies?.[dependencyName]).toBe(optionalRange);
       expect(packageLock.packages[`node_modules/${dependencyName}`].version).toBeDefined();
       expect(
         minVersion(packageLock.packages[`node_modules/${dependencyName}`].version!)?.compare(
-          '1.15.46',
+          '1.16.1',
         ),
       ).toBeGreaterThanOrEqual(0);
     }
@@ -580,6 +821,17 @@ describe('package manifests', () => {
     expect(packageLock.packages.site.devDependencies?.['@swc/core']).toBe(
       sitePackageJson.devDependencies?.['@swc/core'],
     );
+
+    const swcCore = packageLock.packages['node_modules/@swc/core'];
+    const nativeBindings = Object.entries(swcCore.optionalDependencies ?? {});
+    expect(nativeBindings.length).toBeGreaterThan(0);
+    for (const [dependencyName, version] of nativeBindings) {
+      expect(version, `${dependencyName} must match SWC core`).toBe(swcCore.version);
+      expect(
+        packageLock.packages[`node_modules/${dependencyName}`]?.version,
+        `${dependencyName} must be present at the required version`,
+      ).toBe(version);
+    }
   });
 
   it('keeps the patched Hono request parser optional and aligned across manifests', () => {
@@ -596,14 +848,14 @@ describe('package manifests', () => {
     const optionalRange = packageJson.optionalDependencies?.[dependencyName];
 
     expect(optionalRange).toBeDefined();
-    expect(minVersion(optionalRange!)?.compare('4.13.2')).toBeGreaterThanOrEqual(0);
+    expect(minVersion(optionalRange!)?.compare('4.13.7')).toBeGreaterThanOrEqual(0);
     expect(packageJson.dependencies?.[dependencyName]).toBeUndefined();
     expect(packageLock.packages[''].optionalDependencies?.[dependencyName]).toBe(optionalRange);
     expect(packageLock.packages[''].dependencies?.[dependencyName]).toBeUndefined();
     expect(packageLock.packages[`node_modules/${dependencyName}`].version).toBeDefined();
     expect(
       minVersion(packageLock.packages[`node_modules/${dependencyName}`].version!)?.compare(
-        '4.13.2',
+        '4.13.7',
       ),
     ).toBeGreaterThanOrEqual(0);
   });
@@ -646,12 +898,12 @@ describe('package manifests', () => {
     const installedVersion = packageLock.packages[`node_modules/${dependencyName}`].version;
 
     expect(optionalRange).toBeDefined();
-    expect(minVersion(optionalRange!)?.compare('1.18.15')).toBeGreaterThanOrEqual(0);
+    expect(minVersion(optionalRange!)?.compare('1.18.23')).toBeGreaterThanOrEqual(0);
     expect(packageJson.dependencies?.[dependencyName]).toBeUndefined();
     expect(packageLock.packages[''].dependencies?.[dependencyName]).toBeUndefined();
     expect(packageLock.packages[''].optionalDependencies?.[dependencyName]).toBe(optionalRange);
     expect(installedVersion).toBeDefined();
-    expect(minVersion(installedVersion!)?.compare('1.18.15')).toBeGreaterThanOrEqual(0);
+    expect(minVersion(installedVersion!)?.compare('1.18.23')).toBeGreaterThanOrEqual(0);
     expect(satisfies(installedVersion!, optionalRange!)).toBe(true);
     expect(packageLock.packages[`node_modules/${dependencyName}`].optional).toBe(true);
   });
@@ -841,18 +1093,19 @@ describe('package manifests', () => {
     }
   });
 
-  it('keeps Playwright Chromium optional and its locked browser versions aligned', () => {
+  it('keeps Playwright packages optional and their declared and locked versions aligned', () => {
     const packageJson = readPackageJson<PackageManifest>('package.json');
-    const packageLock = readPackageJson<{
-      packages: Record<string, PackageManifest & { version?: string }>;
-    }>('package-lock.json');
+    const packageLock = readPackageJson<PackageLockManifest>('package-lock.json');
     const browserName = '@playwright/browser-chromium';
     const optionalRange = packageJson.optionalDependencies?.[browserName];
 
     expect(optionalRange).toBeDefined();
-    expect(packageJson.dependencies?.[browserName]).toBeUndefined();
-    expect(packageLock.packages[''].dependencies?.[browserName]).toBeUndefined();
-    expect(packageLock.packages[''].optionalDependencies?.[browserName]).toBe(optionalRange);
+    for (const name of ['playwright', browserName]) {
+      expect(packageJson.optionalDependencies?.[name]).toBe(optionalRange);
+      expect(packageJson.dependencies?.[name]).toBeUndefined();
+      expect(packageLock.packages[''].dependencies?.[name]).toBeUndefined();
+      expect(packageLock.packages[''].optionalDependencies?.[name]).toBe(optionalRange);
+    }
 
     const versions = ['playwright', 'playwright-core', browserName].map((name) => {
       const version = packageLock.packages[`node_modules/${name}`]?.version;
@@ -883,9 +1136,8 @@ describe('package manifests', () => {
     const exampleManifest = readPackageJson<PackageManifest & { engines?: { node?: string } }>(
       'examples/config-websockets/streaming/server/package.json',
     );
-    const lockfile = readPackageJson<{
-      packages: Record<string, { engines?: { node?: string } }>;
-    }>('package-lock.json');
+    const lockfile =
+      readPackageJson<PackageLockManifest<{ engines?: { node?: string } }>>('package-lock.json');
     const readme = fs.readFileSync(
       path.join(process.cwd(), 'examples/config-websockets/streaming/server/README.md'),
       'utf8',
@@ -927,9 +1179,7 @@ describe('package manifests', () => {
   });
 
   it('keeps every direct and transitive js-yaml installation patched', () => {
-    const packageLock = readPackageJson<{
-      packages: Record<string, PackageManifest & { version?: string }>;
-    }>('package-lock.json');
+    const packageLock = readPackageJson<PackageLockManifest>('package-lock.json');
     const workspaceManifests = [
       { path: 'package.json', lockPath: '', field: 'dependencies' },
       { path: 'site/package.json', lockPath: 'site', field: 'dependencies' },
@@ -976,14 +1226,18 @@ describe('package manifests', () => {
   });
 
   it('keeps the JSON Schema ref parser and its HTTP transport on patched versions', () => {
-    const packageJson = readPackageJson<PackageManifest & { engines?: { node?: string } }>(
-      'package.json',
-    );
-    const packageLock = readPackageJson<{
-      packages: Record<string, PackageManifest & { engines?: { node?: string }; version?: string }>;
-    }>('package-lock.json');
+    const packageJson = readPackageJson<
+      PackageManifest & {
+        engines?: { node?: string };
+      }
+    >('package.json');
+    const packageLock =
+      readPackageJson<
+        PackageLockManifest<PackageManifest & { engines?: { node?: string }; version?: string }>
+      >('package-lock.json');
     const parserRange = packageJson.dependencies?.['@apidevtools/json-schema-ref-parser'];
     const parser = packageLock.packages['node_modules/@apidevtools/json-schema-ref-parser'];
+    // Published dependencies do not inherit this repository's npm overrides.
     const parserTransportRange = parser?.dependencies?.undici;
     const parserTransport =
       packageLock.packages['node_modules/@apidevtools/json-schema-ref-parser/node_modules/undici'];
@@ -992,7 +1246,7 @@ describe('package manifests', () => {
       parserRange,
       'the JSON Schema ref parser must remain a runtime dependency',
     ).toBeDefined();
-    expect(minVersion(parserRange as string)?.compare('16.0.0')).toBeGreaterThanOrEqual(0);
+    expect(minVersion(parserRange as string)?.compare('16.0.2')).toBeGreaterThanOrEqual(0);
     expect(packageLock.packages[''].dependencies?.['@apidevtools/json-schema-ref-parser']).toBe(
       parserRange,
     );
@@ -1005,7 +1259,11 @@ describe('package manifests', () => {
     expect(parser.engines?.node, 'the parser must declare its supported Node range').toBeDefined();
     expect(subset(packageJson.engines?.node as string, parser.engines?.node as string)).toBe(true);
     expect(parserTransportRange, 'the parser must pin its HTTP transport').toBeDefined();
-    expect(minVersion(parserTransportRange as string)?.compare('8.10.0')).toBeGreaterThanOrEqual(0);
+    expect(
+      validRange(parserTransportRange as string),
+      'the parser transport dependency must declare a valid semver range',
+    ).not.toBeNull();
+    expect(minVersion(parserTransportRange as string)?.compare('8.10.2')).toBeGreaterThanOrEqual(0);
     expect(
       parserTransport?.version,
       'the parser must resolve its private HTTP transport',
@@ -1018,16 +1276,15 @@ describe('package manifests', () => {
     expect(
       subset(packageJson.engines?.node as string, parserTransport.engines?.node as string),
     ).toBe(true);
-    expect(satisfies(minVersion(parserTransportRange as string)!, PATCHED_UNDICI_RANGE)).toBe(true);
+    expect(
+      subset(parserTransportRange as string, PATCHED_UNDICI_RANGE),
+      `the parser transport dependency must not allow vulnerable undici ${parserTransportRange}`,
+    ).toBe(true);
   });
 
   it('keeps undici patched and aligned across the root and code-scan-action manifests', () => {
-    // The August 2026 undici advisories were fixed in 6.28.0, 7.29.0, and 8.9.0.
-    // GHSA-4cwx-7wf7-3272 affects only 7.x and 8.x, not the patched 6.x line.
-    // The root fix landed in #10269 but code-scan-action/ carries its own lockfile,
-    // so it kept resolving 7.28.0 and stayed on five open Dependabot alerts. Both
-    // projects override undici; assert the floors and the resolved copies together.
-    const PATCHED_UNDICI = '7.29.0';
+    // Keep the September 2026 transport fixes in both independent install graphs.
+    const PATCHED_UNDICI_FLOOR = '7.29.1';
     const rootPackageJson = readPackageJson<{
       overrides?: Record<string, string | Record<string, string>>;
     }>('package.json');
@@ -1059,14 +1316,12 @@ describe('package manifests', () => {
 
       const minimum = minVersion(pinnedRange as string);
       expect(
-        minimum?.compare(PATCHED_UNDICI),
-        `${manifest} must not allow undici below ${PATCHED_UNDICI}`,
+        minimum?.compare(PATCHED_UNDICI_FLOOR),
+        `${manifest} must not allow undici below ${PATCHED_UNDICI_FLOOR}`,
       ).toBeGreaterThanOrEqual(0);
       minimumVersions.push(minimum?.version ?? '');
 
-      const packageLock = readPackageJson<{
-        packages: Record<string, { version?: string }>;
-      }>(lockfile);
+      const packageLock = readPackageJson<PackageLockManifest<{ version?: string }>>(lockfile);
       const installations = Object.entries(packageLock.packages).filter(
         ([packagePath]) =>
           packagePath === 'node_modules/undici' || packagePath.endsWith('/node_modules/undici'),
@@ -1111,14 +1366,13 @@ describe('package manifests', () => {
     const packageJson = readPackageJson<
       PackageManifest & { overrides?: Record<string, string | Record<string, string>> }
     >('package.json');
-    const packageLock = readPackageJson<{
-      packages: Record<string, { version?: string }>;
-    }>('package-lock.json');
+    const packageLock =
+      readPackageJson<PackageLockManifest<{ version?: string }>>('package-lock.json');
 
     // No installation anywhere in the tree — including nested copies — may sit on a
     // compromised version.
     for (const [packagePath, installation] of Object.entries(packageLock.packages)) {
-      const name = packagePath.replace(/^.*node_modules\//, '');
+      const name = packagePath.split(/(?:^|\/)node_modules\//).at(-1) ?? packagePath;
       const bad = COMPROMISED[name as keyof typeof COMPROMISED];
       if (!bad || !installation.version) {
         continue;

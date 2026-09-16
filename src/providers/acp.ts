@@ -23,6 +23,7 @@ import type {
   CallApiOptionsParams,
   ProviderResponse,
 } from '../types/index';
+import type { CacheCheckResult } from './agentic-utils';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -86,7 +87,7 @@ function parseAcpConfig(config: AcpProviderConfig | undefined): AcpProviderConfi
     );
   }
   try {
-    return AcpConfigSchema.parse(config) as AcpProviderConfig;
+    return AcpConfigSchema.parse(config);
   } catch (error) {
     if (error instanceof z.ZodError) {
       const issues = error.issues
@@ -142,9 +143,9 @@ export class AcpProvider implements ApiProvider {
       resolveAgenticWorkingDir(this.config.working_dir, cliState.basePath) || process.cwd();
 
     // Check cache
-    const cacheResult = await this.checkCache(prompt, workingDir);
-    if (cacheResult) {
-      return cacheResult;
+    const { cached, cacheResult } = await this.checkCache(prompt, workingDir);
+    if (cached) {
+      return cached;
     }
 
     // Wrap in GenAI span for tracing
@@ -198,8 +199,8 @@ export class AcpProvider implements ApiProvider {
         });
 
         // Write cache
-        if (!result.error) {
-          await this.writeCache(prompt, workingDir, result);
+        if (!result.error && cacheResult) {
+          await cacheResponse(cacheResult, result);
         }
 
         return result;
@@ -529,7 +530,15 @@ export class AcpProvider implements ApiProvider {
   // Caching
   // ---------------------------------------------------------------------------
 
-  private async checkCache(prompt: string, workingDir: string): Promise<ProviderResponse | null> {
+  /**
+   * Looks up a cached response and, on a miss, returns the cache handle the caller
+   * should use to write the live response back. Returning the handle (rather than
+   * stashing it on the instance) keeps concurrent callApi invocations independent.
+   */
+  private async checkCache(
+    prompt: string,
+    workingDir: string,
+  ): Promise<{ cached?: ProviderResponse; cacheResult?: CacheCheckResult }> {
     try {
       const cacheResult = await initializeAgenticCache(
         { cacheKeyPrefix: 'acp', workingDir },
@@ -537,30 +546,12 @@ export class AcpProvider implements ApiProvider {
       );
       const cached = await getCachedResponse(cacheResult);
       if (cached) {
-        return { ...cached, cached: true };
+        return { cached: { ...cached, cached: true } };
       }
-      // Store cache result for write later
-      this._lastCacheResult = cacheResult;
+      return { cacheResult };
     } catch {
-      // Cache miss or error, continue
-    }
-    return null;
-  }
-
-  private _lastCacheResult: any = null;
-
-  private async writeCache(
-    _prompt: string,
-    _workingDir: string,
-    response: ProviderResponse,
-  ): Promise<void> {
-    try {
-      if (this._lastCacheResult) {
-        await cacheResponse(this._lastCacheResult, response);
-        this._lastCacheResult = null;
-      }
-    } catch {
-      // Cache write failure is non-fatal
+      // Cache miss or error, continue without caching
+      return {};
     }
   }
 }
