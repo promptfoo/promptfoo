@@ -86,10 +86,15 @@ function getOAuthCacheKey(
 // Cache for discovered token endpoints
 const tokenEndpointCache = new Map<string, string>();
 
-function isValidTokenEndpoint(tokenEndpoint: string): boolean {
+function isValidTokenEndpoint(tokenEndpoint: string, serverUrl: URL): boolean {
   try {
     const parsedUrl = new URL(tokenEndpoint);
-    return parsedUrl.protocol === 'http:' || parsedUrl.protocol === 'https:';
+    return (
+      (parsedUrl.protocol === 'http:' || parsedUrl.protocol === 'https:') &&
+      parsedUrl.origin === serverUrl.origin &&
+      !parsedUrl.username &&
+      !parsedUrl.password
+    );
   } catch {
     return false;
   }
@@ -130,7 +135,7 @@ export async function discoverTokenEndpoint(serverUrl: string): Promise<string> 
   for (const discoveryUrl of discoveryUrls) {
     try {
       logger.debug(`[MCP Auth] Trying OAuth discovery at ${discoveryUrl}`);
-      const response = await fetchWithProxy(discoveryUrl);
+      const response = await fetchWithProxy(discoveryUrl, { redirect: 'error' });
 
       if (!response.ok) {
         logger.debug(`[MCP Auth] Discovery failed at ${discoveryUrl}: ${response.status}`);
@@ -138,7 +143,7 @@ export async function discoverTokenEndpoint(serverUrl: string): Promise<string> 
       }
 
       const metadata = (await response.json()) as { token_endpoint?: string };
-      if (metadata.token_endpoint && isValidTokenEndpoint(metadata.token_endpoint)) {
+      if (metadata.token_endpoint && isValidTokenEndpoint(metadata.token_endpoint, url)) {
         logger.debug(`[MCP Auth] Discovered token endpoint: ${metadata.token_endpoint}`);
         tokenEndpointCache.set(serverUrl, metadata.token_endpoint);
         return metadata.token_endpoint;
@@ -186,6 +191,7 @@ export async function getOAuthTokenWithExpiry(
   // Use shared OAuth token fetch logic
   const result = await fetchOAuthToken({
     tokenUrl,
+    ...(auth.tokenUrl ? {} : { redirect: 'error' as const }),
     grantType: auth.grantType,
     clientId: auth.clientId,
     clientSecret: auth.clientSecret,

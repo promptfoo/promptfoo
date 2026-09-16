@@ -251,15 +251,16 @@ describe('discoverTokenEndpoint', () => {
     mockFetch.mockResolvedValueOnce({
       ok: true,
       json: async () => ({
-        token_endpoint: 'https://auth.example.com/oauth/token',
+        token_endpoint: 'https://mcp.example.com/oauth/token',
         authorization_endpoint: 'https://auth.example.com/oauth/authorize',
       }),
     });
 
     const result = await discoverTokenEndpoint('https://mcp.example.com');
-    expect(result).toBe('https://auth.example.com/oauth/token');
+    expect(result).toBe('https://mcp.example.com/oauth/token');
     expect(mockFetch).toHaveBeenCalledWith(
       'https://mcp.example.com/.well-known/oauth-authorization-server',
+      { redirect: 'error' },
     );
   });
 
@@ -271,26 +272,29 @@ describe('discoverTokenEndpoint', () => {
     // Third attempt (root) succeeds
     mockFetch.mockResolvedValueOnce({
       ok: true,
-      json: async () => ({ token_endpoint: 'https://auth.example.com/token' }),
+      json: async () => ({ token_endpoint: 'https://example.com/token' }),
     });
 
     const result = await discoverTokenEndpoint('https://example.com/realms/test');
-    expect(result).toBe('https://auth.example.com/token');
+    expect(result).toBe('https://example.com/token');
 
     // Should have tried path-appended first
     expect(mockFetch).toHaveBeenNthCalledWith(
       1,
       'https://example.com/realms/test/.well-known/oauth-authorization-server',
+      { redirect: 'error' },
     );
     // Then RFC 8414 path-aware
     expect(mockFetch).toHaveBeenNthCalledWith(
       2,
       'https://example.com/.well-known/oauth-authorization-server/realms/test',
+      { redirect: 'error' },
     );
     // Then root
     expect(mockFetch).toHaveBeenNthCalledWith(
       3,
       'https://example.com/.well-known/oauth-authorization-server',
+      { redirect: 'error' },
     );
   });
 
@@ -335,11 +339,11 @@ describe('discoverTokenEndpoint', () => {
     });
     mockFetch.mockResolvedValueOnce({
       ok: true,
-      json: async () => ({ token_endpoint: 'https://auth.example.com/token' }),
+      json: async () => ({ token_endpoint: 'https://example.com/token' }),
     });
 
     await expect(discoverTokenEndpoint('https://example.com/path')).resolves.toBe(
-      'https://auth.example.com/token',
+      'https://example.com/token',
     );
   });
 
@@ -350,11 +354,11 @@ describe('discoverTokenEndpoint', () => {
     });
     mockFetch.mockResolvedValueOnce({
       ok: true,
-      json: async () => ({ token_endpoint: 'https://auth.example.com/token' }),
+      json: async () => ({ token_endpoint: 'https://example.com/token' }),
     });
 
     await expect(discoverTokenEndpoint('https://example.com/path')).resolves.toBe(
-      'https://auth.example.com/token',
+      'https://example.com/token',
     );
   });
 
@@ -365,11 +369,11 @@ describe('discoverTokenEndpoint', () => {
     });
     mockFetch.mockResolvedValueOnce({
       ok: true,
-      json: async () => ({ token_endpoint: 'https://auth.example.com/token' }),
+      json: async () => ({ token_endpoint: 'https://example.com/token' }),
     });
 
     await expect(discoverTokenEndpoint('https://example.com/path')).resolves.toBe(
-      'https://auth.example.com/token',
+      'https://example.com/token',
     );
   });
 
@@ -383,6 +387,60 @@ describe('discoverTokenEndpoint', () => {
 });
 
 describe('getOAuthTokenWithExpiry', () => {
+  it.each([
+    'https://unrelated.example.net/token',
+    'http://credential-origin.example.com/token',
+    'https://credential-origin.example.com:8443/token',
+    'https://user:password@credential-origin.example.com/token',
+  ])('does not send credentials to an unsafe discovered endpoint: %s', async (tokenEndpoint) => {
+    mockFetch.mockResolvedValue({
+      ok: true,
+      json: async () => ({ token_endpoint: tokenEndpoint }),
+    });
+    await expect(
+      getOAuthTokenWithExpiry(
+        {
+          type: 'oauth',
+          grantType: 'client_credentials',
+          clientId: 'fixture',
+          clientSecret: 'fixture-secret',
+        },
+        `https://credential-origin.example.com/mcp?case=${encodeURIComponent(tokenEndpoint)}`,
+      ),
+    ).rejects.toThrow(/configure tokenUrl explicitly/);
+    expect(mockFetch.mock.calls.every(([, options]) => options?.method !== 'POST')).toBe(true);
+  });
+
+  it('rejects redirects while discovering and exchanging credentials', async () => {
+    mockFetch.mockResolvedValueOnce({
+      ok: true,
+      json: async () => ({ token_endpoint: 'https://redirect-policy.example.com/token' }),
+    });
+    mockFetch.mockResolvedValueOnce({
+      ok: true,
+      json: async () => ({ access_token: 'fixture-token', expires_in: 3600 }),
+    });
+    await getOAuthTokenWithExpiry(
+      {
+        type: 'oauth',
+        grantType: 'client_credentials',
+        clientId: 'fixture',
+        clientSecret: 'fixture-secret',
+      },
+      'https://redirect-policy.example.com/mcp',
+    );
+    expect(mockFetch).toHaveBeenNthCalledWith(
+      1,
+      'https://redirect-policy.example.com/mcp/.well-known/oauth-authorization-server',
+      { redirect: 'error' },
+    );
+    expect(mockFetch).toHaveBeenNthCalledWith(
+      2,
+      'https://redirect-policy.example.com/token',
+      expect.objectContaining({ method: 'POST', redirect: 'error' }),
+    );
+  });
+
   it('normalizes string scopes for the request and cache key', async () => {
     mockFetch.mockResolvedValue({
       ok: true,
@@ -424,20 +482,20 @@ describe('getOAuthTokenWithExpiry', () => {
           json: async () => ({
             token_endpoint:
               parsedUrl.hostname === 'agent-a.example.com'
-                ? 'https://auth-a.example.com/oauth/token'
-                : 'https://auth-b.example.com/oauth/token',
+                ? 'https://agent-a.example.com/oauth/token'
+                : 'https://agent-b.example.com/oauth/token',
           }),
         };
       }
 
-      if (url === 'https://auth-a.example.com/oauth/token') {
+      if (url === 'https://agent-a.example.com/oauth/token') {
         return {
           ok: true,
           json: async () => ({ access_token: 'token-a', expires_in: 3600 }),
         };
       }
 
-      if (url === 'https://auth-b.example.com/oauth/token') {
+      if (url === 'https://agent-b.example.com/oauth/token') {
         return {
           ok: true,
           json: async () => ({ access_token: 'token-b', expires_in: 3600 }),
@@ -463,6 +521,9 @@ describe('getOAuthTokenWithExpiry', () => {
       mockFetch.mock.calls
         .map(([url]) => String(url))
         .filter((url) => url.includes('/oauth/token')),
-    ).toEqual(['https://auth-a.example.com/oauth/token', 'https://auth-b.example.com/oauth/token']);
+    ).toEqual([
+      'https://agent-a.example.com/oauth/token',
+      'https://agent-b.example.com/oauth/token',
+    ]);
   });
 });

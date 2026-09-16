@@ -811,6 +811,7 @@ describe('Claude MCP OAuth discovery', () => {
     expect(fetchWithProxy).toHaveBeenNthCalledWith(
       1,
       'https://claude-discovery.example.com/mcp/.well-known/oauth-authorization-server',
+      { redirect: 'error' },
     );
     expect(result.remote).toMatchObject({
       url: 'https://claude-discovery.example.com/mcp/',
