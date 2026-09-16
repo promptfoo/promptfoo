@@ -1886,29 +1886,34 @@ describe('selective schema source isolation', () => {
     }
   }, 10_000);
 
-  it('resolves whitespace-only and query-only refs from the containing directory', async () => {
-    const directory = await mkdtemp(join(tmpdir(), 'promptfoo-relative-ref-root-'));
-    await writeFile(join(directory, ' '), JSON.stringify({ value: 'SPACE' }));
-    await writeFile(join(directory, '?v=1'), JSON.stringify({ value: 'QUERY' }));
+  // Files named ` ` and `?v=1` cannot exist on Windows — `?` is reserved and a
+  // space-only name is invalid — so this scenario is POSIX-only.
+  it.skipIf(process.platform === 'win32')(
+    'resolves whitespace-only and query-only refs from the containing directory',
+    async () => {
+      const directory = await mkdtemp(join(tmpdir(), 'promptfoo-relative-ref-root-'));
+      await writeFile(join(directory, ' '), JSON.stringify({ value: 'SPACE' }));
+      await writeFile(join(directory, '?v=1'), JSON.stringify({ value: 'QUERY' }));
 
-    try {
-      const result = (await dereferenceConfig(
-        {
-          prompts: ['hello'],
-          providers: ['echo'],
-          tests: [{ vars: { query: { $ref: '?v=1' }, space: { $ref: ' ' } } }],
-        } as unknown as UnifiedConfig,
-        directory,
-      )) as any;
+      try {
+        const result = (await dereferenceConfig(
+          {
+            prompts: ['hello'],
+            providers: ['echo'],
+            tests: [{ vars: { query: { $ref: '?v=1' }, space: { $ref: ' ' } } }],
+          } as unknown as UnifiedConfig,
+          directory,
+        )) as any;
 
-      expect(result.tests[0].vars).toEqual({
-        query: { value: 'QUERY' },
-        space: { value: 'SPACE' },
-      });
-    } finally {
-      await rm(directory, { force: true, recursive: true });
-    }
-  });
+        expect(result.tests[0].vars).toEqual({
+          query: { value: 'QUERY' },
+          space: { value: 'SPACE' },
+        });
+      } finally {
+        await rm(directory, { force: true, recursive: true });
+      }
+    },
+  );
 
   it('keeps ordinary external fragment traversal compatible with RefParser', async () => {
     const directory = await mkdtemp(join(tmpdir(), 'promptfoo-external-fragment-sibling-'));
