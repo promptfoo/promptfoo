@@ -7,7 +7,7 @@ export function addHexEncoding(testCases: TestCase[], injectVar: string): TestCa
       ...testCase,
       assert: testCase.assert?.map((assertion) => ({
         ...assertion,
-        metric: `${assertion.metric}/Hex`,
+        metric: assertion.metric ? `${assertion.metric}/Hex` : assertion.metric,
       })),
       vars: {
         ...testCase.vars,

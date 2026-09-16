@@ -59,15 +59,25 @@ promptfoo eval -c promptfooconfig.promptfoo-search.yaml
 
 ## Featured Models
 
+### Grok 4.6
+
+xAI's latest flagship model for coding, agentic tasks, and knowledge work (500K context):
+
+- `xai:grok-4.6` - Latest reasoning model recommended by xAI's catalog
+- `reasoning_effort` - Supports `low`, `medium`, and `high` in chat configs (defaults to `high`; `none` is not accepted)
+- `xai:responses:grok-4.6` - Recommended form for server-side tools
+
+xAI publishes no aliases for this model, so use the exact `grok-4.6` id.
+
 ### Grok 4.5
 
-xAI's flagship model for coding, agentic tasks, and knowledge work (500K context):
+The previous flagship, still available (500K context):
 
-- `xai:grok-4.5` - Flagship reasoning model recommended by xAI's catalog
+- `xai:grok-4.5` - Flagship reasoning model
 - `reasoning_effort` - Supports `low`, `medium`, and `high` in chat configs (defaults to `high`; `none` is not accepted)
 - `xai:responses:grok-4.5` - Recommended form for server-side tools
 
-xAI currently excludes Grok 4.5 from the EU API Console, so its provider block is commented out by default. Non-EU users can opt in by uncommenting that block in `promptfooconfig.yaml`; EU users can run the example unchanged with the included Grok 4.3 and Grok 4.20 providers.
+xAI currently excludes Grok 4.5 from the EU API Console and has not published EU availability for Grok 4.6, so both provider blocks are commented out by default. Non-EU users can opt in by uncommenting them in `promptfooconfig.yaml`; EU users can run the example unchanged with the included Grok 4.3 and Grok 4.20 providers.
 
 ### Grok 4.3
 

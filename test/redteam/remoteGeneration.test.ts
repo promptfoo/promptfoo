@@ -1,3 +1,4 @@
+import { propagation } from '@opentelemetry/api';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import cliState from '../../src/cliState';
 import { getEnvBool, getEnvString } from '../../src/envars';
@@ -509,5 +510,38 @@ describe('getRemoteGenerationHeaders', () => {
       'Content-Type': 'application/json',
       'X-Custom': 'value',
     });
+  });
+
+  it('propagates W3C trace headers without forwarding baggage', () => {
+    const inject = vi.spyOn(propagation, 'inject').mockImplementation((_context, carrier) => {
+      const headers = carrier as Record<string, string>;
+      headers.traceparent = '00-0123456789abcdef0123456789abcdef-0123456789abcdef-01';
+      headers.tracestate = 'vendor=state';
+      headers.baggage = 'customer-secret=do-not-forward';
+    });
+
+    try {
+      expect(getRemoteGenerationHeaders()).toEqual({
+        'Content-Type': 'application/json',
+        traceparent: '00-0123456789abcdef0123456789abcdef-0123456789abcdef-01',
+        tracestate: 'vendor=state',
+      });
+    } finally {
+      inject.mockRestore();
+    }
+  });
+
+  it('preserves an explicitly supplied traceparent', () => {
+    const inject = vi.spyOn(propagation, 'inject').mockImplementation((_context, carrier) => {
+      (carrier as Record<string, string>).traceparent = 'automatically-injected';
+    });
+
+    try {
+      expect(getRemoteGenerationHeaders({ traceparent: 'explicit-parent' })).toMatchObject({
+        traceparent: 'explicit-parent',
+      });
+    } finally {
+      inject.mockRestore();
+    }
   });
 });

@@ -191,7 +191,7 @@ export function convertSlashCommentsToHash(str: string): string {
           case 'singleQuote':
             result += char;
             // Check for string end, but ignore apostrophes in words
-            if (char === "'" && prevChar !== '\\' && !/[a-zA-Z]/.test(nextChar)) {
+            if (char === "'" && !isEscapedQuote(line, i) && !/[a-zA-Z]/.test(nextChar)) {
               state = 'normal';
             }
             break;

@@ -9,6 +9,8 @@ import {
 } from '../../util/index';
 import { FunctionCallbackHandler } from '../functionCallbackUtils';
 import { ResponsesProcessor } from '../responses/index';
+import { normalizeResponsesInput } from '../responses/input';
+import { readResponsesStream } from '../responses/stream';
 import { getRequestTimeoutMs } from '../shared';
 import {
   calculateXAICost,
@@ -102,118 +104,6 @@ export type XAIAgentTool =
   | XAICodeInterpreterTool
   | XAICollectionsSearchTool
   | XAIMCPTool;
-
-type XAIResponsesStreamEvent = {
-  type?: string;
-  response?: any;
-  delta?: string;
-  output_text?: { delta?: string };
-  output?: any[];
-  usage?: any;
-  [key: string]: any;
-};
-
-/**
- * Parses a single Server-Sent Events (SSE) chunk into an xAI Responses stream event.
- *
- * The parser extracts and concatenates `data:` lines, then attempts to parse JSON.
- * It intentionally returns `undefined` for:
- * - empty payloads,
- * - the terminal `[DONE]` marker, and
- * - malformed JSON payloads.
- *
- * Malformed payloads are ignored for stream robustness and logged at debug level
- * to aid troubleshooting of intermittent streaming issues.
- */
-function parseSseEvent(chunk: string): XAIResponsesStreamEvent | undefined {
-  const data = chunk
-    .split(/\r?\n/)
-    .filter((line) => line.startsWith('data:'))
-    .map((line) => line.slice('data:'.length).trimStart())
-    .join('\n')
-    .trim();
-
-  if (!data || data === '[DONE]') {
-    return undefined;
-  }
-
-  try {
-    return JSON.parse(data) as XAIResponsesStreamEvent;
-  } catch {
-    logger.debug('[xAI Responses] Ignoring malformed SSE payload', { data });
-    return undefined;
-  }
-}
-
-async function readStreamingResponse(response: Response): Promise<any> {
-  if (!response.body) {
-    throw new Error('xAI streaming response has no body');
-  }
-
-  const reader = response.body.getReader();
-  const decoder = new TextDecoder();
-  let buffer = '';
-  let latestResponse: any;
-  let outputText = '';
-
-  const processChunk = (chunk: string) => {
-    const event = parseSseEvent(chunk);
-    if (!event) {
-      return;
-    }
-
-    if (event.response && typeof event.response === 'object') {
-      latestResponse = event.response;
-    } else if (Array.isArray(event.output)) {
-      latestResponse = event;
-    }
-
-    if (event.type === 'response.output_text.delta') {
-      if (typeof event.delta === 'string') {
-        outputText += event.delta;
-      } else if (typeof event.output_text?.delta === 'string') {
-        outputText += event.output_text.delta;
-      }
-    }
-  };
-
-  while (true) {
-    const { done, value } = await reader.read();
-    if (done) {
-      break;
-    }
-
-    buffer += decoder.decode(value, { stream: true });
-    const chunks = buffer.split(/\r?\n\r?\n/);
-    buffer = chunks.pop() || '';
-    for (const chunk of chunks) {
-      processChunk(chunk);
-    }
-  }
-
-  buffer += decoder.decode();
-  if (buffer.trim()) {
-    processChunk(buffer);
-  }
-
-  if (latestResponse) {
-    return latestResponse;
-  }
-
-  if (outputText) {
-    return {
-      output: [
-        {
-          type: 'message',
-          role: 'assistant',
-          content: [{ type: 'output_text', text: outputText }],
-        },
-      ],
-    };
-  }
-
-  throw new Error('xAI streaming response did not include output content');
-}
 
 function buildTextFormat(responseFormat: any) {
   if (!responseFormat) {
@@ -390,12 +280,14 @@ export class XAIResponsesProvider implements ApiProvider {
       ...context?.prompt?.config,
     };
 
-    // Parse input - can be string or array of messages
+    // Parse input - can be string or array of messages. Chat-format content parts are
+    // translated to their Responses equivalents so multimodal prompts authored for the chat
+    // API work here too (the Responses API rejects `type: "text"` / `"image_url"` outright).
     let input;
     try {
       const parsedJson = JSON.parse(prompt);
       if (Array.isArray(parsedJson)) {
-        input = parsedJson;
+        input = normalizeResponsesInput(parsedJson);
       } else {
         input = prompt;
       }
@@ -534,7 +426,7 @@ export class XAIResponsesProvider implements ApiProvider {
               data = text;
             }
           } else {
-            data = await readStreamingResponse(response);
+            data = await readResponsesStream(response, 'xAI', logger);
           }
         } catch (err) {
           if (err instanceof Error && err.name === 'AbortError') {

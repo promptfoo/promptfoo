@@ -53,7 +53,7 @@ describe('homoglyph strategy', () => {
         const mapped = homoglyphMap[char];
         expect(mapped, `missing homoglyph for '${char}'`).toBeDefined();
         expect(toHomoglyphs(char), `'${char}' left as ASCII`).not.toBe(char);
-        expect(mapped.charCodeAt(0), `'${char}' maps to ASCII`).toBeGreaterThan(127);
+        expect(mapped.codePointAt(0) ?? 0, `'${char}' maps to ASCII`).toBeGreaterThan(127);
       }
     });
 

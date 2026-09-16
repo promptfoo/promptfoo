@@ -48,6 +48,19 @@ describe('addHexEncoding', () => {
 
     expect(result[0].vars!.input).toBe('');
     expect(result[0].assert![0].metric).toBe('accuracy/Hex');
+    expect(result[0].metadata).toEqual({
+      strategyId: 'hex',
+      originalText: '',
+    });
+  });
+
+  it('should preserve an undefined metric', () => {
+    const result = addHexEncoding(
+      [{ vars: { input: 'hello' }, assert: [{ type: 'contains' }] }],
+      'input',
+    );
+
+    expect(result[0].assert![0].metric).toBeUndefined();
   });
 
   it('should handle special characters', () => {

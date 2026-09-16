@@ -86,7 +86,7 @@ export function addHomoglyphs(testCases: TestCase[], injectVar: string): TestCas
       ...testCase,
       assert: testCase.assert?.map((assertion) => ({
         ...assertion,
-        metric: `${assertion.metric}/Homoglyph`,
+        metric: assertion.metric ? `${assertion.metric}/Homoglyph` : assertion.metric,
       })),
       vars: {
         ...testCase.vars,
