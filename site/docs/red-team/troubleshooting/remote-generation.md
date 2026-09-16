@@ -56,9 +56,21 @@ To diagnose, run with `--verbose` to see detailed logs of any generation failure
 
 ## Is Test Generation Capped?
 
-Promptfoo's red team config does not impose a fixed low cap on `numTests`; it accepts any positive integer. Each test case is a seed that strategies evolve into many attack attempts: `jailbreak:hydra` branches across conversation paths, and `jailbreak:meta` iterates through approaches. As a result, a small number of seeds can still produce broad coverage.
+No. `numTests` accepts any positive integer — there is no fixed upper bound in the config schema.
 
-The default is 5 tests per plugin, and most use cases need fewer than 50. If you're experiencing generation failures, try lowering the count.
+It is worth understanding what the number means before raising it. Each test case is a _seed_, and strategies expand each seed into many attack attempts: `jailbreak:hydra` branches across conversation paths, and `jailbreak:meta` iterates through attack approaches. A small number of seeds therefore still produces broad coverage, and raising `numTests` multiplies generation cost and scan time.
+
+The [default is 5 per plugin](/docs/red-team/configuration/#configuration-fields), and it can be set globally or per plugin:
+
+```yaml
+redteam:
+  numTests: 5 # applies to every plugin
+  plugins:
+    - id: harmful:hate
+      numTests: 10 # override for one plugin
+```
+
+If you are hitting generation failures, lowering the count is a reasonable first step.
 
 ## Alternative Options
 
