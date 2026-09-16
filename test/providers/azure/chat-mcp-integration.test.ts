@@ -116,6 +116,13 @@ describe('AzureChatCompletionProvider MCP Integration', () => {
       output:
         'MCP Tool Result (list_resources): Available resources: [button-tokens.json, color-tokens.json, spacing-tokens.json]',
       isError: false,
+      toolCall: {
+        name: 'list_resources',
+        arguments: {},
+        result: 'Available resources: [button-tokens.json, color-tokens.json, spacing-tokens.json]',
+        isError: false,
+        source: 'mcp',
+      },
     });
 
     // Ensure it's not the problematic [object Object] output
@@ -143,6 +150,13 @@ describe('AzureChatCompletionProvider MCP Integration', () => {
     expect(result).toEqual({
       output: 'MCP Tool Error (list_resources): MCP server connection failed',
       isError: true,
+      toolCall: {
+        name: 'list_resources',
+        arguments: {},
+        result: 'MCP server connection failed',
+        isError: true,
+        source: 'mcp',
+      },
     });
   });
 
