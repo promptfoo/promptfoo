@@ -101,6 +101,8 @@ module.exports = class OpenAIProvider {
 }
 ```
 
+Set `cached: true` when returning a stored response. If a live request is shared between callers and marked `cached` for billing, also set `cacheHit: false` so latency assertions can grade its current elapsed time. Stored replays must set `cacheHit: true` or omit it; latency assertions reject them.
+
 ### Guardrail Responses
 
 To use [`guardrails` or `not-guardrails`](/docs/configuration/expected-outputs/guardrails), return `guardrails` beside `output`, not inside `output` or `metadata`. Set `flagged` explicitly; the directional fields only identify the stage that fired. Keep vendor-specific assessments and scores under `metadata`.
