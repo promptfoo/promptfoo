@@ -50,6 +50,7 @@
         "src/redteam/metrics.ts",
         "src/redteam/plugins/policy/utils.ts",
         "src/redteam/riskScoring.ts",
+        "src/redteam/shared/attackProviders.ts",
         "src/redteam/sharedFrontend.ts",
         "src/redteam/types.ts",
         "src/tracing/store.ts",
