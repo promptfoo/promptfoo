@@ -57,9 +57,24 @@ By default, eval results are stored locally. Inputs and outputs may leave your m
 
 ### Do you collect any PII?
 
-We do not collect PII through product analytics. The email or user identifier associated with your local Promptfoo environment may be sent to the relevant Promptfoo-operated endpoint when you sign in to Promptfoo Cloud, share evals, or invoke a Cloud-backed feature. Setting `PROMPTFOO_DISABLE_TELEMETRY=1` prevents telemetry event requests from the CLI and backend, including the opt-out acknowledgment. See the [security policy](https://github.com/promptfoo/promptfoo/blob/main/SECURITY.md) for the full list of Cloud-backed features and the data each one sends.
+We do not collect PII through product analytics. The email or user identifier associated with your local Promptfoo environment may be sent to the relevant Promptfoo-operated endpoint when you sign in to Promptfoo Cloud, share evals, invoke a Cloud-backed feature, or set `PROMPTFOO_DISABLE_TELEMETRY` (which records a one-time opt-out acknowledgment so opt-out usage can be measured). See the [security policy](https://github.com/promptfoo/promptfoo/blob/main/SECURITY.md) for the full list of Cloud-backed features and the data each one sends.
 
-Browser PostHog telemetry and session replay are configured separately at build time. To opt out, build the Web UI with `PROMPTFOO_DISABLE_TELEMETRY=true`; the browser check does not recognize `1`. Changing the variable at runtime does not alter prebuilt Web UI assets.
+### Why do I still see one request after setting `PROMPTFOO_DISABLE_TELEMETRY`?
+
+Disabling telemetry suppresses every product-analytics event except one: a single opt-out acknowledgment, sent at most once per process, so that opt-out usage can be measured. If you are on a default-deny network you may see one blocked `POST` to `r.promptfoo.app` per run. This is expected; no further telemetry is sent.
+
+### How do I disable telemetry in the Web UI?
+
+Browser telemetry and session replay are a **separate, build-time** control from the CLI variable. The browser reads `VITE_PROMPTFOO_DISABLE_TELEMETRY` and treats only the exact string `true` as opt-out, so:
+
+- `PROMPTFOO_DISABLE_TELEMETRY=1` does **not** disable browser telemetry — use `true`.
+- Setting the variable at runtime does not change an already-built Web UI. It must be set when the Web UI is built:
+
+```sh
+PROMPTFOO_DISABLE_TELEMETRY=true npm run build
+```
+
+If you use the prebuilt `promptfoo` package, the bundled Web UI assets were built without this flag.
 
 ### How do I configure Promptfoo for corporate networks or proxies?
 
