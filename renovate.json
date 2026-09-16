@@ -33,7 +33,7 @@
       "description": "Preserve the intentionally unsupported Node 20.20.0 and minimum-supported Node 22.22.0 binaries used by CLI runtime-boundary smoke tests; update these pins only when the published runtime support contract changes.",
       "matchManagers": ["github-actions"],
       "matchFileNames": [".github/workflows/main.yml"],
-      "matchPackageNames": ["node"],
+      "matchPackageNames": ["node", "actions/node-versions"],
       "matchCurrentValue": "/^(20\\.20\\.0|22\\.22\\.0)$/",
       "enabled": false
     },
@@ -48,7 +48,7 @@
       "description": "Pin the code-scan workflow's Node to 24.15.0: Node >=24.16.0 has a Linux HTTPS slowdown (~10s/request) that drags the scanner's `npm install -g promptfoo` past the job's 15-minute timeout (see the comment in .github/workflows/promptfoo-code-scan.yml; first fixed in PR #9374, regressed by the blanket bump in PR #9859). Renovate must not re-bump this pin. Re-enable when a newer Node resolves the regression.",
       "matchManagers": ["github-actions"],
       "matchFileNames": [".github/workflows/promptfoo-code-scan.yml"],
-      "matchPackageNames": ["node"],
+      "matchPackageNames": ["node", "actions/node-versions"],
       "enabled": false
     },
     {
