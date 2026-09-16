@@ -17,6 +17,19 @@ describe('renderPrompt with skipRenderVars', () => {
     expect(resultWithSkip).toBe('User input: {{7*7}}');
   });
 
+  it('should preserve skipped variable values inside JSON chat prompts', async () => {
+    const prompt = { raw: '[{"role":"user","content":"{{prompt}}"}]', label: 'json-chat' };
+    const vars = {
+      prompt: '{{ secret }}',
+      secret: 'must-not-render',
+    };
+
+    const result = await renderPrompt(prompt, vars, {}, undefined, ['prompt']);
+
+    expect(result).toContain('{{ secret }}');
+    expect(result).not.toContain('must-not-render');
+  });
+
   it('should pass SSTI payloads through without evaluation when skipped', async () => {
     const prompt = { raw: 'Process: {{payload}}', label: 'test' };
     const vars = {
