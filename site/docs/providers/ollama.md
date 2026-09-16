@@ -5,42 +5,37 @@ description: "Run open-source LLMs locally using Ollama's streamlined interface 
 
 # Ollama
 
-The `ollama` provider is compatible with [Ollama](https://github.com/jmorganca/ollama), which enables access to Llama, Mixtral, Mistral, and more.
+The `ollama` provider is compatible with [Ollama](https://github.com/ollama/ollama), which enables access to Llama, Mixtral, Mistral, and more.
 
-You can use its `/api/generate` endpoint by specifying any of the following providers from the [Ollama library](https://ollama.ai/library):
+You can use its `/api/generate` endpoint by specifying any of the following providers from the [Ollama library](https://ollama.com/library):
 
 - `ollama:completion:llama3.2`
 - `ollama:completion:llama3.3`
+- `ollama:completion:qwen3`
+- `ollama:completion:gemma3`
 - `ollama:completion:phi4`
-- `ollama:completion:qwen2.5`
-- `ollama:completion:granite3.2`
-- `ollama:completion:deepcoder`
 - `ollama:completion:codellama`
-- `ollama:completion:llama2-uncensored`
 - ...
+
+A bare `ollama:<model>` (for example `ollama:llama3.2`) also works and routes to the
+completion provider.
 
 Or, use the `/api/chat` endpoint for chat-formatted prompts:
 
 - `ollama:chat:llama3.2`
 - `ollama:chat:llama3.2:1b`
-- `ollama:chat:llama3.2:3b`
 - `ollama:chat:llama3.3`
-- `ollama:chat:llama3.3:70b`
+- `ollama:chat:qwen3`
+- `ollama:chat:qwen3:0.6b`
+- `ollama:chat:gemma3`
 - `ollama:chat:phi4`
-- `ollama:chat:phi4-mini`
-- `ollama:chat:qwen2.5`
-- `ollama:chat:qwen2.5:14b`
-- `ollama:chat:qwen2.5:72b`
-- `ollama:chat:qwq:32b`
-- `ollama:chat:granite3.2`
-- `ollama:chat:granite3.2:2b`
-- `ollama:chat:granite3.2:8b`
-- `ollama:chat:deepcoder`
-- `ollama:chat:deepcoder:1.5b`
-- `ollama:chat:deepcoder:14b`
-- `ollama:chat:mixtral:8x7b`
-- `ollama:chat:mixtral:8x22b`
+- `ollama:chat:deepseek-r1`
+- `ollama:chat:mistral`
 - ...
+
+Small models are useful for smoke-testing a config without a long download —
+`qwen3:0.6b` (~500MB) supports both tools and reasoning, and `all-minilm` (~45MB)
+covers embeddings.
 
 We also support the `/api/embed` endpoint via `ollama:embeddings:<model name>` (or the singular `ollama:embedding:`) for model-graded assertions such as [similarity](/docs/configuration/expected-outputs/similar/).
 
@@ -50,7 +45,9 @@ Supported environment variables:
 - `OLLAMA_API_KEY` - (optional) api key that is passed as the Bearer token in the Authorization Header when calling the API
 - `REQUEST_TIMEOUT_MS` - request timeout in milliseconds
 
-To pass configuration options to Ollama, use the `config` key like so:
+To pass configuration options to Ollama, use the `config` key. See Ollama's
+[parameter reference](https://github.com/ollama/ollama/blob/main/docs/modelfile.md#parameter)
+for what each one does:
 
 ```yaml title="promptfooconfig.yaml"
 providers:
@@ -156,6 +153,21 @@ tests:
       - type: is-valid-openai-tools-call
 ```
 
+Tools can also be loaded from an external file, which keeps large schemas out of the
+config:
+
+```yaml title="promptfooconfig.yaml"
+providers:
+  - id: ollama:chat:llama3.3
+    config:
+      tools: file://tools.json
+```
+
+:::note
+`tools` only applies to `ollama:chat:*`. The `/api/generate` endpoint used by
+`ollama:completion:*` has no tool support, so a `tools` block there has no effect.
+:::
+
 ## Using Ollama as a Local Grading Provider
 
 ### Using Ollama for Model-Graded Assertions
@@ -180,7 +192,7 @@ defaultTest:
 
 providers:
   - ollama:chat:llama3.3
-  - ollama:chat:qwen2.5:14b
+  - ollama:chat:qwen3:8b
 
 tests:
   - vars:
@@ -196,7 +208,7 @@ tests:
         threshold: 0.85
 ```
 
-When running with `--max-concurrency 1` and no per-eval timeout, Promptfoo groups eligible model-graded assertion calls by grading provider ID to reduce local model switching. This is not request batching; each assertion call still runs separately, and report row order is unchanged.
+When running with `--max-concurrency 1`, no per-eval timeout, and no conversation variables (`{{_conversation}}`), Promptfoo groups eligible model-graded assertion calls by grading provider ID to reduce local model switching. This is not request batching; each assertion call still runs separately, and report row order is unchanged.
 
 ### Using Ollama Embedding Models for Similarity Assertions
 
@@ -303,7 +315,7 @@ Make sure the Ollama server is listening on `0.0.0.0` so it accepts remote conne
 If locally developing with `localhost` (promptfoo's default),
 and Ollama API calls are failing with `ECONNREFUSED`,
 then there may be an IPv4 vs IPv6 issue going on with `localhost`.
-Ollama's default host uses [`127.0.0.1`](https://github.com/jmorganca/ollama/blob/main/api/client.go#L19),
+Ollama's default host uses [`127.0.0.1`](https://github.com/ollama/ollama/blob/main/envconfig/config.go),
 which is an IPv4 address.
 The possible issue here arises from `localhost` being bound to an IPv6 address,
 as configured by the operating system's `hosts` file.
@@ -325,11 +337,27 @@ By default, promptfoo evaluates all providers concurrently for each prompt. Howe
 promptfoo eval -j 1
 ```
 
-This sets concurrency to 1, which means:
+This sets concurrency to 1, which means requests are issued one at a time rather than
+in parallel, in test-case order.
 
-1. Evaluations happen one provider at a time, then one prompt at a time.
-2. Only one model is loaded into memory, conserving system resources.
-3. You can easily swap models between evaluations without conflicts.
+:::caution
+Serial execution does **not** by itself keep only one model in memory. Ollama holds each
+model it has loaded for its own `keep_alive` window (5 minutes by default), so evaluating
+two providers serially can still leave both resident — confirm with `ollama ps`.
+
+To actually free a model as soon as its request finishes, set `keep_alive: 0`:
+
+```yaml title="promptfooconfig.yaml"
+providers:
+  - id: ollama:chat:llama3.2
+    config:
+      keep_alive: 0 # unload immediately after each request
+  - id: ollama:chat:qwen3
+    config:
+      keep_alive: 0
+```
+
+:::
 
 This approach is particularly useful for:
 
