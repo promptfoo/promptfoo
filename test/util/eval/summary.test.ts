@@ -851,6 +851,58 @@ describe('generateEvalSummary', () => {
         `  ${chalk.red('✗')} ${chalk.white.bold('1')} ${chalk.white('error')} ${chalk.gray('(10.00%)')}`,
       );
     });
+
+    it('should omit the pass-rate interval when totals pool several columns', () => {
+      const params: EvalSummaryParams = {
+        evalId: 'eval-paired',
+        isRedteam: false,
+        writeToDatabase: false,
+        shareableUrl: null,
+        wantsToShare: false,
+        hasExplicitDisable: false,
+        cloudEnabled: false,
+        tokenUsage: { total: 0 },
+        // 20 test rows evaluated under 3 prompts: 60 pooled results, not 60 independent trials.
+        successes: 48,
+        failures: 12,
+        errors: 0,
+        duration: 5000,
+        maxConcurrency: 4,
+        tracker: mockTracker,
+        columnCount: 3,
+      };
+
+      const lines = generateEvalSummary(params);
+      const plainOutput = stripAnsi(lines.join('\n'));
+
+      expect(plainOutput).toContain('48 passed (80.00%)');
+      expect(plainOutput).not.toContain('95% CI');
+    });
+
+    it('should keep the pass-rate interval for a single column', () => {
+      const params: EvalSummaryParams = {
+        evalId: 'eval-single-column',
+        isRedteam: false,
+        writeToDatabase: false,
+        shareableUrl: null,
+        wantsToShare: false,
+        hasExplicitDisable: false,
+        cloudEnabled: false,
+        tokenUsage: { total: 0 },
+        successes: 17,
+        failures: 3,
+        errors: 0,
+        duration: 5000,
+        maxConcurrency: 4,
+        tracker: mockTracker,
+        columnCount: 1,
+      };
+
+      const lines = generateEvalSummary(params);
+      const plainOutput = stripAnsi(lines.join('\n'));
+
+      expect(plainOutput).toContain('17 passed (85.00%; 95% CI 64.0–94.8%)');
+    });
   });
 
   describe('guidance messages', () => {

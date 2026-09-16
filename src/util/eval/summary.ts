@@ -44,6 +44,14 @@ export interface EvalSummaryParams {
   tracker: TokenUsageTracker;
   /** HTTP status code if the scan was aborted due to a non-transient target error (401, 403, 404, 501) */
   targetErrorStatus?: number;
+  /**
+   * Number of prompt/provider columns the totals were pooled from.
+   *
+   * Columns reuse the same test rows, so pooled counts are not independent trials and a
+   * binomial interval over them would be too narrow. The pass-rate interval is therefore
+   * shown only when there is a single column. Omitted means single-column.
+   */
+  columnCount?: number;
 }
 
 type TokenUsageBreakdown = Pick<
@@ -355,20 +363,31 @@ function getResultsLines({
   errors,
   duration,
   maxConcurrency,
-}: Pick<EvalSummaryParams, 'successes' | 'failures' | 'errors' | 'duration' | 'maxConcurrency'>) {
+  columnCount,
+}: Pick<
+  EvalSummaryParams,
+  'successes' | 'failures' | 'errors' | 'duration' | 'maxConcurrency' | 'columnCount'
+>) {
   const totalTests = successes + failures + errors;
   const errorLabel = errors === 1 ? 'error' : 'errors';
+
+  // With several prompt/provider columns the totals pool the same test rows repeatedly, so the
+  // observations are paired rather than independent and a binomial interval would understate the
+  // uncertainty. Report the interval only when the assumption holds.
+  const intervalApplies = columnCount === undefined || columnCount <= 1;
+  const passRateDetails =
+    totalTests > 0 && intervalApplies
+      ? `${formatResultPercentage(successes, totalTests)}; ${formatPassRateInterval(
+          successes,
+          totalTests,
+        )}`
+      : formatResultPercentage(successes, totalTests);
 
   const passedLine =
     totalTests > 0
       ? `  ${successes > 0 ? `${chalk.green('✓')} ` : ''}${chalk.white.bold(
           successes.toLocaleString(),
-        )} ${chalk.white('passed')} ${chalk.gray(
-          `(${formatResultPercentage(successes, totalTests)}; ${formatPassRateInterval(
-            successes,
-            totalTests,
-          )})`,
-        )}`
+        )} ${chalk.white('passed')} ${chalk.gray(`(${passRateDetails})`)}`
       : formatResultLine(successes, 'passed', undefined, chalk.green, totalTests);
 
   return [
