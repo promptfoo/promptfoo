@@ -136,6 +136,24 @@ describe('YamlEditor', () => {
     expect(screen.getByRole('button', { name: /Save/ })).toBeDisabled();
   });
 
+  it('reports whether its YAML draft has unsaved changes', async () => {
+    const user = userEvent.setup();
+    const onDirtyChange = vi.fn();
+    render(<YamlEditorComponent onDirtyChange={onDirtyChange} />);
+
+    expect(onDirtyChange).toHaveBeenLastCalledWith(false);
+
+    const editor = screen.getByTestId('yaml-editor') as HTMLTextAreaElement;
+    await user.clear(editor);
+    await user.type(editor, 'description: Draft changes');
+
+    expect(onDirtyChange).toHaveBeenLastCalledWith(true);
+
+    await user.click(screen.getByRole('button', { name: /Save/ }));
+
+    expect(onDirtyChange).toHaveBeenLastCalledWith(false);
+  });
+
   it('initializes with initialConfig', () => {
     const initialConfig = {
       description: 'Initial config',

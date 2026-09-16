@@ -18,6 +18,7 @@ interface YamlEditorProps {
   initialConfig?: unknown;
   readOnly?: boolean;
   initialYaml?: string;
+  onDirtyChange?: (isDirty: boolean) => void;
 }
 
 // Schema comment that should always be at the top of the YAML file
@@ -39,7 +40,12 @@ const formatYamlWithSchema = (config: unknown): string => {
   return ensureSchemaComment(yamlContent);
 };
 
-const YamlEditorComponent = ({ initialConfig, readOnly = false, initialYaml }: YamlEditorProps) => {
+const YamlEditorComponent = ({
+  initialConfig,
+  readOnly = false,
+  initialYaml,
+  onDirtyChange,
+}: YamlEditorProps) => {
   const [code, setCode] = React.useState('');
   const [originalCode, setOriginalCode] = React.useState('');
   const [parseError, setParseError] = React.useState<string | null>(null);
@@ -141,8 +147,10 @@ const YamlEditorComponent = ({ initialConfig, readOnly = false, initialYaml }: Y
 
   // Track unsaved changes
   React.useEffect(() => {
-    setHasUnsavedChanges(code !== originalCode);
-  }, [code, originalCode]);
+    const isDirty = code !== originalCode;
+    setHasUnsavedChanges(isDirty);
+    onDirtyChange?.(isDirty);
+  }, [code, onDirtyChange, originalCode]);
 
   React.useEffect(() => {
     // react-simple-code-editor does not expose arbitrary textarea props directly.
