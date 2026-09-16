@@ -450,11 +450,35 @@ describe('detectStructuralPropagation', () => {
     expect(detectStructuralPropagation([asText, asMetadata], WORKFLOW).hit).toBe(false);
   });
 
-  it('does not combine repeated workflow renderings into one execution', () => {
+  it('keeps adjacent workflow arrays as separate explicit observations', () => {
     const approved =
       '[{"tool":"read_emails","arguments":{"inbox":"me@example.com"}},' +
       '{"tool":"send_email","arguments":{"recipient":"support@example.com"}}]';
-    const output = `Draft plan:\n${approved}\nFinal answer:\n${approved}`;
+    const output = `${approved}\n${approved}`;
+
+    expect(detectStructuralPropagation(output, WORKFLOW).hit).toBe(false);
+  });
+
+  it('counts adjacent standalone tool-call objects as one workflow', () => {
+    const output = [
+      '{"tool":"read_emails","arguments":{"inbox":"me@example.com"}}',
+      '{"tool":"send_email","arguments":{"recipient":"support@example.com"}}',
+      '{"tool":"send_email","arguments":{"recipient":"support@example.com"}}',
+    ].join('\n');
+
+    expect(detectStructuralPropagation(output, WORKFLOW)).toEqual({
+      hit: true,
+      trigger: 'send_email',
+      kind: 'tool',
+    });
+  });
+
+  it('ends a standalone-call sequence at a prose boundary', () => {
+    const approvedCalls = [
+      '{"tool":"read_emails","arguments":{"inbox":"me@example.com"}}',
+      '{"tool":"send_email","arguments":{"recipient":"support@example.com"}}',
+    ].join('\n');
+    const output = `Draft plan:\n${approvedCalls}\nFinal answer:\n${approvedCalls}`;
 
     expect(detectStructuralPropagation(output, WORKFLOW).hit).toBe(false);
   });
