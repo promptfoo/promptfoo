@@ -1,5 +1,9 @@
 import { z } from 'zod';
-import { ALL_PLUGINS, ALL_STRATEGIES } from '../../redteam/constants';
+import {
+  ALL_PLUGINS,
+  ALL_STRATEGIES,
+  findInvalidUnicodeNormalizationForms,
+} from '../../redteam/constants';
 import {
   ConversationMessageSchema,
   PluginConfigSchema,
@@ -37,6 +41,26 @@ const PreviewGenerationProviderSchema = z.preprocess(
   z.union([z.string().min(1), JsonProviderOptionsWithIdSchema]).optional(),
 );
 
+// The Unicode form check lives on the strategy sub-schema rather than the request
+// object so the request stays a plain ZodObject that `.extend()` still accepts
+// (see src/openapi/server.ts).
+const TestCaseGenerationStrategySchema = z
+  .object({
+    id: z.string().refine((val) => (ALL_STRATEGIES as string[]).includes(val), {
+      message: `Invalid strategy ID. Must be one of: ${ALL_STRATEGIES.join(', ')}`,
+    }) as unknown as z.ZodType<Strategy>,
+    config: StrategyConfigSchema.optional().prefault({}),
+  })
+  .superRefine(({ id, config }, ctx) => {
+    for (const invalidForm of findInvalidUnicodeNormalizationForms(id, config)) {
+      ctx.addIssue({
+        code: 'custom',
+        message: 'Unicode normalization form must be one of: NFC, NFD, NFKC, NFKD',
+        path: invalidForm.path,
+      });
+    }
+  });
+
 export const TestCaseGenerationSchema = z.object({
   plugin: z.object({
     id: z.string().refine((val) => ALL_PLUGINS.includes(val as Plugin), {
@@ -44,12 +68,7 @@ export const TestCaseGenerationSchema = z.object({
     }) as unknown as z.ZodType<Plugin>,
     config: PluginConfigSchema.catchall(z.unknown()).optional().prefault({}),
   }),
-  strategy: z.object({
-    id: z.string().refine((val) => (ALL_STRATEGIES as string[]).includes(val), {
-      message: `Invalid strategy ID. Must be one of: ${ALL_STRATEGIES.join(', ')}`,
-    }) as unknown as z.ZodType<Strategy>,
-    config: StrategyConfigSchema.optional().prefault({}),
-  }),
+  strategy: TestCaseGenerationStrategySchema,
   config: z.object({
     applicationDefinition: z.object({
       purpose: z.string().nullable().optional(),
