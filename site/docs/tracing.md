@@ -517,6 +517,8 @@ Promptfoo queries Langfuse's v2 Observations API using the OpenTelemetry trace I
 
 If restored tool argument or result attributes would overwrite a different observation input or output, Promptfoo rejects the trace response. Equivalent JSON values remain supported regardless of object key order.
 
+Repeated observation IDs are deduplicated only when their normalized spans agree. Conflicting duplicates within one response or across pagination reject the fetched trace response.
+
 ## Provider Implementation Guide
 
 ### JavaScript/TypeScript
