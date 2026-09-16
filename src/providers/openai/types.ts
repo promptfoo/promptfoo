@@ -30,6 +30,8 @@ export interface OpenAiSharedOptions {
   apiKey?: string;
   apiKeyEnvar?: string;
   apiKeyRequired?: boolean;
+  /** Allow OPENAI_API_KEY when no credential variable is selected. */
+  useDefaultApiKey?: boolean;
   apiHost?: string;
   apiBaseUrl?: string;
   organization?: string;
@@ -112,10 +114,10 @@ export interface OpenAiMCPTool {
 }
 
 // Responses API specific tool types
-export interface OpenAiWebSearchTool {
+export interface OpenAiWebSearchTool extends Omit<OpenAI.Responses.WebSearchTool, 'type'> {
   type: 'web_search' | 'web_search_preview';
-  search_context_size?: 'small' | 'medium' | 'large';
-  user_location?: string;
+  external_web_access?: boolean;
+  return_token_budget?: 'default' | 'unlimited';
 }
 
 export interface OpenAiCodeInterpreterTool {
