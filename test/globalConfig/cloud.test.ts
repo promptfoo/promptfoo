@@ -379,6 +379,37 @@ describe('CloudConfig', () => {
         cloudConfigInstance.validateAndSetApiToken('invalid-token', 'https://test.api'),
       ).rejects.toThrow('Failed to validate API token: Unauthorized');
     });
+
+    it('should persist the auth header name resolved from PROMPTFOO_CLOUD_AUTH_HEADER on Web UI login', async () => {
+      vi.mocked(readGlobalConfig).mockReturnValue({ id: 'test-id' });
+      const restoreEnv = mockProcessEnv({ PROMPTFOO_CLOUD_AUTH_HEADER: 'X-Env-Header' });
+      const cloudConfigInstanceWithEnv = new CloudConfig();
+
+      const mockFetchResponse = {
+        ok: true,
+        json: () => Promise.resolve(mockResponse),
+        text: () => Promise.resolve(JSON.stringify(mockResponse)),
+      } as Response;
+      vi.mocked(fetchWithProxy).mockResolvedValue(mockFetchResponse);
+
+      await cloudConfigInstanceWithEnv.validateAndSetApiToken('test-token', 'https://test.api');
+
+      expect(fetchWithProxy).toHaveBeenCalledWith(
+        'https://test.api/api/v1/users/me',
+        expect.objectContaining({
+          headers: { 'X-Env-Header': 'Bearer test-token' },
+        }),
+      );
+      expect(writeGlobalConfigPartial).toHaveBeenCalledWith(
+        expect.objectContaining({
+          cloud: expect.objectContaining({
+            authHeaderName: 'X-Env-Header',
+          }),
+        }),
+      );
+
+      restoreEnv();
+    });
   });
 
   describe('on-prem sharing behavior', () => {
@@ -757,6 +788,214 @@ describe('CloudConfig', () => {
       mockProcessEnv({ PROMPTFOO_CLOUD_API_URL: undefined });
       const config = new CloudConfig();
       expect(config.getApiHost()).toBe('https://onprem.example.com/prefix');
+    });
+  });
+
+  describe('getAuthHeaderName with environment variable', () => {
+    const originalEnv = process.env.PROMPTFOO_CLOUD_AUTH_HEADER;
+
+    afterEach(() => {
+      if (originalEnv === undefined) {
+        mockProcessEnv({ PROMPTFOO_CLOUD_AUTH_HEADER: undefined });
+      } else {
+        mockProcessEnv({ PROMPTFOO_CLOUD_AUTH_HEADER: originalEnv });
+      }
+    });
+
+    it('should default to Authorization when neither config nor env var is set', () => {
+      vi.mocked(readGlobalConfig).mockReturnValue({ id: 'test-id' });
+      mockProcessEnv({ PROMPTFOO_CLOUD_AUTH_HEADER: undefined });
+      const config = new CloudConfig();
+      expect(config.getAuthHeaderName()).toBe('Authorization');
+    });
+
+    it('should return header name from PROMPTFOO_CLOUD_AUTH_HEADER env var when config is empty', () => {
+      vi.mocked(readGlobalConfig).mockReturnValue({ id: 'test-id' });
+      mockProcessEnv({ PROMPTFOO_CLOUD_AUTH_HEADER: 'X-Env-Header' });
+      const config = new CloudConfig();
+      expect(config.getAuthHeaderName()).toBe('X-Env-Header');
+    });
+
+    it('should return header name from config file when set', () => {
+      vi.mocked(readGlobalConfig).mockReturnValue({
+        id: 'test-id',
+        cloud: { authHeaderName: 'X-Config-Header' },
+      });
+      mockProcessEnv({ PROMPTFOO_CLOUD_AUTH_HEADER: undefined });
+      const config = new CloudConfig();
+      expect(config.getAuthHeaderName()).toBe('X-Config-Header');
+    });
+
+    it('should prefer config file over env var when both are set', () => {
+      vi.mocked(readGlobalConfig).mockReturnValue({
+        id: 'test-id',
+        cloud: { authHeaderName: 'X-Config-Header' },
+      });
+      mockProcessEnv({ PROMPTFOO_CLOUD_AUTH_HEADER: 'X-Env-Header' });
+      const config = new CloudConfig();
+      expect(config.getAuthHeaderName()).toBe('X-Config-Header');
+    });
+  });
+
+  describe('setAuthHeaderName', () => {
+    it('should persist the configured header name', () => {
+      cloudConfigInstance.setAuthHeaderName('X-Promptfoo-Api-Key');
+      expect(writeGlobalConfigPartial).toHaveBeenCalledWith({
+        cloud: expect.objectContaining({
+          authHeaderName: 'X-Promptfoo-Api-Key',
+        }),
+      });
+    });
+  });
+
+  describe('getAuthHeaders', () => {
+    it('should return undefined when no token is resolved', () => {
+      vi.mocked(readGlobalConfig).mockReturnValue({ id: 'test-id' });
+      mockProcessEnv({ PROMPTFOO_API_KEY: undefined });
+      const config = new CloudConfig();
+      expect(config.getAuthHeaders()).toBeUndefined();
+    });
+
+    it('should return an Authorization header with the token by default', () => {
+      expect(cloudConfigInstance.getAuthHeaders()).toEqual({
+        Authorization: 'Bearer test-key',
+      });
+    });
+
+    it('should return the header under the configured custom name', () => {
+      vi.mocked(readGlobalConfig).mockReturnValue({
+        id: 'test-id',
+        cloud: { apiKey: 'test-key', authHeaderName: 'X-Promptfoo-Api-Key' },
+      });
+      const config = new CloudConfig();
+      expect(config.getAuthHeaders()).toEqual({
+        'X-Promptfoo-Api-Key': 'Bearer test-key',
+      });
+    });
+  });
+
+  describe('validateApiToken with a custom auth header name', () => {
+    it('should send the candidate token under the provided header name override', async () => {
+      const mockResponse = {
+        ok: true,
+        json: () =>
+          Promise.resolve({
+            user: { id: '1', email: 'test@example.com' },
+            organization: { id: '1', name: 'Test Org' },
+            app: { url: 'https://test.app' },
+          }),
+        text: () => Promise.resolve('{}'),
+      } as Response;
+      vi.mocked(fetchWithProxy).mockResolvedValue(mockResponse);
+
+      await cloudConfigInstance.validateApiToken(
+        'candidate-token',
+        'https://test.api',
+        'X-Custom-Header',
+      );
+
+      expect(fetchWithProxy).toHaveBeenCalledWith('https://test.api/api/v1/users/me', {
+        headers: { 'X-Custom-Header': 'Bearer candidate-token' },
+        skipCloudAuthInjection: true,
+      });
+    });
+
+    it('should fall back to the configured header name when no override is provided', async () => {
+      vi.mocked(readGlobalConfig).mockReturnValue({
+        id: 'test-id',
+        cloud: { authHeaderName: 'X-Configured-Header' },
+      });
+      cloudConfigInstance = new CloudConfig();
+
+      const mockResponse = {
+        ok: true,
+        json: () =>
+          Promise.resolve({
+            user: { id: '1', email: 'test@example.com' },
+            organization: { id: '1', name: 'Test Org' },
+            app: { url: 'https://test.app' },
+          }),
+        text: () => Promise.resolve('{}'),
+      } as Response;
+      vi.mocked(fetchWithProxy).mockResolvedValue(mockResponse);
+
+      await cloudConfigInstance.validateApiToken('candidate-token', 'https://test.api');
+
+      expect(fetchWithProxy).toHaveBeenCalledWith('https://test.api/api/v1/users/me', {
+        headers: { 'X-Configured-Header': 'Bearer candidate-token' },
+        skipCloudAuthInjection: true,
+      });
+    });
+
+    it('should opt out of saved-cloud-auth injection so a stale saved token cannot leak in alongside the candidate header', async () => {
+      const mockResponse = {
+        ok: true,
+        json: () =>
+          Promise.resolve({
+            user: { id: '1', email: 'test@example.com' },
+            organization: { id: '1', name: 'Test Org' },
+            app: { url: 'https://test.app' },
+          }),
+        text: () => Promise.resolve('{}'),
+      } as Response;
+      vi.mocked(fetchWithProxy).mockResolvedValue(mockResponse);
+
+      await cloudConfigInstance.validateApiToken(
+        'candidate-token',
+        'https://test.api',
+        'X-New-Header',
+      );
+
+      expect(fetchWithProxy).toHaveBeenCalledWith(
+        'https://test.api/api/v1/users/me',
+        expect.objectContaining({ skipCloudAuthInjection: true }),
+      );
+    });
+  });
+
+  describe('saveValidatedApiToken with authHeaderName', () => {
+    it('should persist the authHeaderName when provided', () => {
+      cloudConfigInstance.saveValidatedApiToken(
+        'token',
+        'https://test.api',
+        {
+          id: '1',
+          name: 'Test User',
+          email: 'test@example.com',
+          createdAt: new Date(),
+          updatedAt: new Date(),
+        },
+        { url: 'https://test.app' },
+        true,
+        'X-Promptfoo-Api-Key',
+      );
+
+      expect(writeGlobalConfigPartial).toHaveBeenCalledWith({
+        cloud: expect.objectContaining({
+          authHeaderName: 'X-Promptfoo-Api-Key',
+        }),
+      });
+    });
+
+    it('should not overwrite an existing authHeaderName when none is provided', () => {
+      cloudConfigInstance.saveValidatedApiToken(
+        'token',
+        'https://test.api',
+        {
+          id: '1',
+          name: 'Test User',
+          email: 'test@example.com',
+          createdAt: new Date(),
+          updatedAt: new Date(),
+        },
+        { url: 'https://test.app' },
+        true,
+      );
+
+      const setAuthHeaderNameCalls = vi
+        .mocked(writeGlobalConfigPartial)
+        .mock.calls.filter((call) => call[0].cloud?.authHeaderName !== undefined);
+      expect(setAuthHeaderNameCalls).toHaveLength(0);
     });
   });
 });

@@ -339,6 +339,7 @@ describe('span uniqueness migration', () => {
     const directory = await mkdtemp(join(tmpdir(), 'promptfoo-span-migration-'));
 
     try {
+      // Pin the migration that removes duplicate spans before adding its unique index.
       const migration = await readFile(
         new URL('../../drizzle/0025_broken_emma_frost.sql', import.meta.url),
         'utf8',

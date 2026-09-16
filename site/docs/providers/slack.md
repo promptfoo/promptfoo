@@ -115,6 +115,8 @@ providers:
 
 \*Token is required either in config or as environment variable
 
+Token precedence is `config.token`, provider-scoped `env.SLACK_BOT_TOKEN`, then the process `SLACK_BOT_TOKEN`. Eval-level `env` values are also supported; provider-scoped values take precedence.
+
 ## Response Strategies
 
 ### First Response (Default)
@@ -235,6 +237,8 @@ tests:
 
 ### Thread-based Conversations
 
+`threadTs` controls where the prompt is posted. Response collection currently reads conversation history, so replies that remain only in the thread are not collected.
+
 ```yaml
 description: Continue conversation in thread
 
@@ -292,8 +296,8 @@ module.exports = {
    - Use Slack's markdown for better readability
 
 5. **Rate Limits**: Be aware of Slack's rate limits
-   - Web API: ~1 request per second per method
-   - Consider adding delays for bulk evaluations
+   - Limits vary by method and app distribution; see [Slack conversation history limits](https://docs.slack.dev/reference/methods/conversations.history/).
+   - The provider polls every second and does not expose a polling-interval option.
 
 ## Testing Other Slack Bots
 
@@ -321,13 +325,17 @@ The Slack provider is excellent for testing other Slack bots in their native env
        config:
          channel: C123456789
          timeout: 10000
-         responseStrategy: first
-         # Optional: format messages to mention the bot
-         messageFormatter: |
-           @your-bot-to-test {{prompt}}
+         responseStrategy: user
+         waitForUser: U_YOUR_BOT_ID
+
+   prompts:
+     - '<@U_YOUR_BOT_ID> What can you help me with?'
    ```
 
 3. **Filter responses to only capture the target bot**:
+
+   Set `waitForUser` to the bot's user ID (`U...`), not its app ID or `bot_id`.
+
    ```yaml
    providers:
      - id: slack
@@ -335,7 +343,7 @@ The Slack provider is excellent for testing other Slack bots in their native env
          channel: C123456789
          timeout: 10000
          responseStrategy: user
-         userId: U_YOUR_BOT_ID # The bot's user ID
+         waitForUser: U_YOUR_BOT_ID # The bot's user ID
    ```
 
 ### Example: Testing a Customer Support Bot
@@ -350,15 +358,13 @@ providers:
       channel: C_TEST_CHANNEL
       timeout: 15000
       responseStrategy: user
-      userId: U_SUPPORT_BOT_ID
-      messageFormatter: |
-        <@U_SUPPORT_BOT_ID> {{prompt}}
+      waitForUser: U_SUPPORT_BOT_ID
 
 prompts:
-  - 'How do I reset my password?'
-  - 'What are your business hours?'
-  - 'I need to speak to a human'
-  - "My order hasn't arrived yet, order #12345"
+  - '<@U_SUPPORT_BOT_ID> How do I reset my password?'
+  - '<@U_SUPPORT_BOT_ID> What are your business hours?'
+  - '<@U_SUPPORT_BOT_ID> I need to speak to a human'
+  - "<@U_SUPPORT_BOT_ID> My order hasn't arrived yet, order #12345"
 
 tests:
   - vars:
@@ -419,10 +425,10 @@ prompts:
 
 #### 3. Load Testing
 
-Use multiple parallel evaluations to test bot performance:
+Use a sequential run as a baseline in a shared channel. Concurrent load tests require isolated channels so prompts do not collect the same response:
 
 ```bash
-promptfoo eval -c bot-test-config.yaml -j 10
+promptfoo eval -c bot-test-config.yaml -j 1
 ```
 
 #### 4. A/B Testing Different Bots
@@ -435,13 +441,15 @@ providers:
     label: bot-v1
     config:
       channel: C_CHANNEL_V1
-      userId: U_BOT_V1
+      responseStrategy: user
+      waitForUser: U_BOT_V1
 
   - id: slack
     label: bot-v2
     config:
       channel: C_CHANNEL_V2
-      userId: U_BOT_V2
+      responseStrategy: user
+      waitForUser: U_BOT_V2
 
 prompts:
   - "What's your return policy?"
@@ -528,8 +536,6 @@ providers:
     config:
       responseStrategy: 'first'
       timeout: 180000 # 3 minutes
-      formatMessage: (prompt) =>
-        `📋 *Customer Service Evaluation*\n\n${prompt}\n\n_How would you respond to this customer?_`
 
 prompts:
   - |
@@ -589,7 +595,7 @@ tests:
 
 - **Bot not in channel**: Always invite the bot first with `/invite @YourBotName`
 - **No response captured**: Check the bot has all required scopes
-- **Rate limits**: The provider polls every 1 second. For non-Marketplace apps with strict rate limits, consider increasing timeouts and using longer polling intervals
+- **Rate limits**: The provider polls every second. Increasing the timeout does not reduce the polling rate; check whether your app is subject to stricter conversation history limits.
 
 ## See Also
 

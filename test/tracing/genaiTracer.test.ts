@@ -8,6 +8,7 @@ import {
   getCurrentTraceId,
   getTraceparent,
   PromptfooAttributes,
+  sanitizeBody,
   setGenAIResponseAttributes,
   withGenAISpan,
   withGenAIToolSpan,
@@ -784,6 +785,15 @@ describe('genaiTracer', () => {
       providerId: 'openai:gpt-4',
       sanitizeBodies: true, // Enable sanitization for these tests
     };
+
+    it('supports both capture-group and functional secret replacements', () => {
+      const encodedSecret = `${'a'.repeat(20)}/${'b'.repeat(19)}`;
+      const ordinaryText = 'c'.repeat(40);
+
+      expect(sanitizeBody(`password=hunter2 ${encodedSecret} ${ordinaryText}`)).toBe(
+        `password=<REDACTED> <REDACTED_SECRET> ${ordinaryText}`,
+      );
+    });
 
     it('should redact OpenAI API keys from request body', async () => {
       const contextWithBody = {

@@ -1,6 +1,7 @@
 import { randomBytes } from 'crypto';
 
 import { ROOT_CONTEXT, type Span, SpanKind, TraceFlags, trace } from '@opentelemetry/api';
+import cliState from '../cliState';
 import { getEnvBool } from '../envars';
 import logger from '../logger';
 import telemetry from '../telemetry';
@@ -38,6 +39,7 @@ export function resetTracingState(): void {
   otlpReceiverStartPromise = null;
   otlpReceiverStopPromise = null;
   otlpReceiverUsers = 0;
+  cliState.setActiveOtlpReceiver();
   logger.debug('[EvaluatorTracing] Tracing state reset');
 }
 
@@ -198,6 +200,7 @@ export async function startOtlpReceiverIfNeeded(
         redactAttributes,
         ...(tracePolicy ? { tracePolicy } : {}),
       });
+      cliState.setActiveOtlpReceiver({ host, port, acceptFormats });
       otlpReceiverStarted = true;
       otlpReceiverUsers += 1;
       logger.info(
@@ -296,6 +299,7 @@ export async function stopOtlpReceiverIfNeeded(
         logger.debug('[EvaluatorTracing] Stopping OTLP receiver');
         const { stopOTLPReceiver } = await import('./otlpReceiver');
         await stopOTLPReceiver();
+        cliState.setActiveOtlpReceiver();
         logger.info('[EvaluatorTracing] OTLP receiver stopped successfully');
       } catch (error) {
         otlpReceiverStarted = true;

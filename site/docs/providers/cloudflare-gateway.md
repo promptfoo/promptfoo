@@ -14,7 +14,7 @@ description: Route AI requests through Cloudflare AI Gateway for caching, rate l
 - **Logging** - Monitor requests and responses
 - **Fallback** - Configure fallback providers for reliability
 
-The `cloudflare-gateway` provider lets you route your promptfoo evaluations through Cloudflare AI Gateway to any supported AI provider.
+The `cloudflare-gateway` provider routes promptfoo evals through Cloudflare AI Gateway using the chat protocols listed below. Cloudflare also offers an OpenAI-compatible account API for supported models.
 
 ## Provider Format
 
@@ -26,7 +26,7 @@ cloudflare-gateway:{provider}:{model}
 
 - `cloudflare-gateway:openai:gpt-5.2`
 - `cloudflare-gateway:anthropic:claude-sonnet-4-5-20250929`
-- `cloudflare-gateway:groq:llama-3.3-70b-versatile`
+- `cloudflare-gateway:groq:openai/gpt-oss-120b`
 
 ## Required Configuration
 
@@ -98,25 +98,22 @@ tests:
 
 ## Supported Providers
 
-Cloudflare AI Gateway supports routing to these providers:
+The `cloudflare-gateway` adapter supports these provider-specific chat routes:
 
-| Provider         | Gateway Name       | API Key Environment Variable |
-| ---------------- | ------------------ | ---------------------------- |
-| OpenAI           | `openai`           | `OPENAI_API_KEY`             |
-| Anthropic        | `anthropic`        | `ANTHROPIC_API_KEY`          |
-| Groq             | `groq`             | `GROQ_API_KEY`               |
-| Perplexity       | `perplexity-ai`    | `PERPLEXITY_API_KEY`         |
-| Google AI Studio | `google-ai-studio` | `GOOGLE_API_KEY`             |
-| Mistral          | `mistral`          | `MISTRAL_API_KEY`            |
-| Cohere           | `cohere`           | `COHERE_API_KEY`             |
-| Azure OpenAI     | `azure-openai`     | `AZURE_OPENAI_API_KEY`       |
-| Workers AI       | `workers-ai`       | `CLOUDFLARE_API_KEY`         |
-| Hugging Face     | `huggingface`      | `HUGGINGFACE_API_KEY`        |
-| Replicate        | `replicate`        | `REPLICATE_API_KEY`          |
-| Grok (xAI)       | `grok`             | `XAI_API_KEY`                |
+| Provider     | Gateway Name    | API Key Environment Variable |
+| ------------ | --------------- | ---------------------------- |
+| OpenAI       | `openai`        | `OPENAI_API_KEY`             |
+| Anthropic    | `anthropic`     | `ANTHROPIC_API_KEY`          |
+| Groq         | `groq`          | `GROQ_API_KEY`               |
+| Perplexity   | `perplexity-ai` | `PERPLEXITY_API_KEY`         |
+| Mistral      | `mistral`       | `MISTRAL_API_KEY`            |
+| Azure OpenAI | `azure-openai`  | `AZURE_OPENAI_API_KEY`       |
+| Grok (xAI)   | `grok`          | `XAI_API_KEY`                |
 
 :::note
-AWS Bedrock is not supported through Cloudflare AI Gateway because it requires AWS request signing, which is incompatible with the gateway proxy approach.
+The provider-specific `cloudflare-gateway:` routes for Workers AI, Google AI Studio, Cohere, Hugging Face, and Replicate currently send OpenAI Chat Completions requests to incompatible native endpoints. Use Cloudflare's [OpenAI-compatible REST API](https://developers.cloudflare.com/ai-gateway/usage/rest-api/) for models it supports, as shown below for Workers AI. Other native endpoints require a [custom provider](/docs/providers/custom-api).
+
+AWS Bedrock request signing is not implemented by the `cloudflare-gateway` adapter.
 :::
 
 ## Configuration Options
@@ -155,15 +152,21 @@ providers:
 
 ### Workers AI Configuration
 
-Workers AI routes requests to Cloudflare's edge-deployed models. The model name is included in the URL path:
+Use the generic OpenAI provider with Cloudflare's [OpenAI-compatible Workers AI endpoint](https://developers.cloudflare.com/workers-ai/configuration/open-ai-compatibility/) and a supported chat model such as [Llama 3.3 70B](https://developers.cloudflare.com/workers-ai/models/llama-3.3-70b-instruct-fp8-fast/). Keep the Workers AI model ID in the request body and select the gateway with `cf-aig-gateway-id`:
 
 ```yaml
 providers:
-  - id: cloudflare-gateway:workers-ai:@cf/meta/llama-3.1-8b-instruct
+  - id: openai:chat:@cf/meta/llama-3.3-70b-instruct-fp8-fast
     config:
-      accountId: '{{env.CLOUDFLARE_ACCOUNT_ID}}'
-      gatewayId: '{{env.CLOUDFLARE_GATEWAY_ID}}'
+      apiBaseUrl: https://api.cloudflare.com/client/v4/accounts/{{env.CLOUDFLARE_ACCOUNT_ID}}/ai/v1
+      apiKeyEnvar: CLOUDFLARE_API_TOKEN
+      headers:
+        cf-aig-gateway-id: '{{env.CLOUDFLARE_GATEWAY_ID}}'
 ```
+
+This account API uses a Cloudflare API token with **Account → Workers AI → Read** permission as the bearer credential; a gateway-only token is insufficient. Set `CLOUDFLARE_API_TOKEN` to that token. The `cfAigToken` option above belongs to the provider-specific gateway routes and is not used in this configuration. See [Cloudflare REST authentication](https://developers.cloudflare.com/ai-gateway/usage/rest-api/#authentication).
+
+For third-party models on the same account API, choose a supported model from Cloudflare's provider documentation: [Google AI Studio](https://developers.cloudflare.com/ai-gateway/usage/providers/google-ai-studio/) uses `openai:chat:google-ai-studio/<model>`, and [Cohere](https://developers.cloudflare.com/ai-gateway/usage/providers/cohere/) uses `openai:chat:cohere/<model>`. Cloudflare uses the stored BYOK key under the `default` alias when present and otherwise uses Unified Billing; this route does not send your upstream API key. Review [credential precedence](https://developers.cloudflare.com/ai-gateway/features/unified-billing/#credential-precedence) before switching an existing gateway configuration. The older gateway `/compat` endpoint is [deprecated for single-model calls](https://developers.cloudflare.com/ai-gateway/usage/chat-completion/) and has different authentication options.
 
 ### Provider-Specific Options
 
@@ -201,7 +204,7 @@ providers:
       accountId: '{{env.CLOUDFLARE_ACCOUNT_ID}}'
       gatewayId: '{{env.CLOUDFLARE_GATEWAY_ID}}'
 
-  - id: cloudflare-gateway:groq:llama-3.3-70b-versatile
+  - id: cloudflare-gateway:groq:openai/gpt-oss-120b
     config:
       accountId: '{{env.CLOUDFLARE_ACCOUNT_ID}}'
       gatewayId: '{{env.CLOUDFLARE_GATEWAY_ID}}'

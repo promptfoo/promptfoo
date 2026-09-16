@@ -7,12 +7,16 @@ import {
   getTracingEndpoint,
   getTracingServiceName,
   hasActiveTracingSpan,
+  isActiveTracingExport,
+  waitForNativeTraceExport,
 } from '../../src/providers/tracing';
+import * as traceStore from '../../src/tracing/store';
 
 describe('provider tracing integration', () => {
   afterEach(() => {
     vi.restoreAllMocks();
     vi.unstubAllEnvs();
+    cliState.setActiveOtlpReceiver();
   });
 
   it('does not enable SDK telemetry without an active span', () => {
@@ -60,6 +64,29 @@ describe('provider tracing integration', () => {
     );
 
     expect(getConfiguredTracingEndpoint()).toBeUndefined();
+  });
+
+  it('uses the active shared receiver when another evaluation requests different settings', async () => {
+    cliState.setActiveOtlpReceiver({
+      host: '127.0.0.2',
+      port: 14318,
+      acceptFormats: ['protobuf'],
+    });
+
+    await cliState.withRequestTracingConfig(
+      {
+        enabled: true,
+        otlp: {
+          http: { enabled: true, host: '127.0.0.3', port: 24318, acceptFormats: ['json'] },
+        },
+      },
+      async () => {
+        expect(getConfiguredTracingExport()).toEqual({
+          endpoint: 'http://127.0.0.2:14318',
+          format: 'protobuf',
+        });
+      },
+    );
   });
 
   it('uses the default receiver host when an evaluation omits it', async () => {
@@ -118,6 +145,89 @@ describe('provider tracing integration', () => {
         expect(getConfiguredTracingEndpoint()).toBe('http://[::1]:14318');
       },
     );
+  });
+
+  it('recognizes only supported exports to the current evaluation receiver', async () => {
+    cliState.setActiveOtlpReceiver({
+      host: '::1',
+      port: 14318,
+      acceptFormats: ['protobuf'],
+    });
+
+    await cliState.withRequestTracingConfig(
+      {
+        enabled: true,
+        otlp: { http: { enabled: true, host: '::1', port: 14318 } },
+      },
+      async () => {
+        expect(isActiveTracingExport('http://[::1]:14318', 'http/protobuf')).toBe(true);
+        expect(isActiveTracingExport('http://[::1]:14318/v1/traces', 'http/protobuf')).toBe(true);
+        expect(isActiveTracingExport('http://[::1]:14318', 'http/json')).toBe(false);
+        expect(isActiveTracingExport('https://collector.example.com', 'http/protobuf')).toBe(false);
+        expect(isActiveTracingExport('http://[::1]:14318/custom-traces', 'http/protobuf')).toBe(
+          false,
+        );
+      },
+    );
+  });
+
+  it('does not borrow another evaluation receiver without owning a lease', () => {
+    cliState.setActiveOtlpReceiver({
+      host: '127.0.0.1',
+      port: 4318,
+      acceptFormats: ['json'],
+    });
+
+    expect(isActiveTracingExport('http://127.0.0.1:4318', 'http/json')).toBe(false);
+  });
+
+  it.each(['http://localhost:4318', 'http://127.0.0.1:4318/', 'http://127.0.0.1:4318/v1/traces/'])(
+    'recognizes equivalent local receiver endpoint %s',
+    async (endpoint) => {
+      cliState.setActiveOtlpReceiver({
+        host: '127.0.0.1',
+        port: 4318,
+        acceptFormats: ['json'],
+      });
+
+      await cliState.withRequestTracingConfig(
+        { enabled: true, otlp: { http: { enabled: true, port: 4318 } } },
+        async () => {
+          expect(isActiveTracingExport(endpoint, 'http/json')).toBe(true);
+        },
+      );
+    },
+  );
+
+  it('waits until subprocess spans are stored under the provider span', async () => {
+    const getTrace = vi
+      .fn()
+      .mockResolvedValueOnce({ spans: [{ spanId: 'wrapper', parentSpanId: undefined }] })
+      .mockResolvedValueOnce({ spans: [{ spanId: 'native', parentSpanId: 'provider-span' }] });
+    vi.spyOn(traceStore, 'getTraceStore').mockReturnValue({
+      getTrace,
+    } as unknown as ReturnType<typeof traceStore.getTraceStore>);
+
+    await expect(
+      waitForNativeTraceExport('trace-id', 'provider-span', {
+        OTEL_TRACES_EXPORT_INTERVAL: '10',
+        OTEL_EXPORTER_OTLP_TRACES_TIMEOUT: '100',
+      }),
+    ).resolves.toBe(true);
+    expect(getTrace).toHaveBeenCalledTimes(2);
+  });
+
+  it('times out when no native spans reach the receiver', async () => {
+    vi.spyOn(traceStore, 'getTraceStore').mockReturnValue({
+      getTrace: vi.fn().mockResolvedValue({ spans: [] }),
+    } as unknown as ReturnType<typeof traceStore.getTraceStore>);
+
+    await expect(
+      waitForNativeTraceExport('trace-id', 'provider-span', {
+        OTEL_TRACES_EXPORT_INTERVAL: '1',
+        OTEL_EXPORTER_OTLP_TRACES_TIMEOUT: '1',
+      }),
+    ).resolves.toBe(false);
   });
 
   it('uses the same service name as the Promptfoo OpenTelemetry configuration', () => {

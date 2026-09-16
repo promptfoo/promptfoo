@@ -56,7 +56,7 @@ vi.mock('../../src/evaluator', () => ({
 vi.mock('../../src/globalConfig/cloud', () => ({
   cloudConfig: {
     getApiHost: vi.fn().mockReturnValue('https://api.example.com'),
-    getApiKey: vi.fn().mockReturnValue('test-api-key'),
+    getAuthHeaders: vi.fn().mockReturnValue({ Authorization: 'Bearer test-api-key' }),
   },
 }));
 
