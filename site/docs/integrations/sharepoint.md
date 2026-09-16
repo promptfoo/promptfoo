@@ -59,7 +59,7 @@ prompts:
   - 'Please translate the following text to {{language}}: {{input}}'
 providers:
   - openai:gpt-5
-  - anthropic:claude-sonnet-4-5-20250929
+  - anthropic:claude-sonnet-5
 # highlight-start
 tests: https://yourcompany.sharepoint.com/sites/yoursite/Shared%20Documents/test-cases.csv
 # highlight-end
@@ -95,7 +95,7 @@ prompts:
   - file://prompt2.txt
 providers:
   - openai:gpt-5
-  - anthropic:claude-sonnet-4-5-20250929
+  - anthropic:claude-sonnet-5
 tests: https://yourcompany.sharepoint.com/sites/yoursite/Shared%20Documents/test-cases.csv
 defaultTest:
   options:

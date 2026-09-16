@@ -608,11 +608,11 @@ For example, for Claude:
 
 ```yaml
 providers:
-  - id: anthropic:messages:claude-sonnet-4-5-20250929
+  - id: anthropic:messages:claude-sonnet-5
     config:
       thinking:
-        type: 'enabled'
-        budget_tokens: 16000
+        type: 'adaptive'
+      effort: high # Reasoning depth; replaces budget_tokens on Claude 5 models
       showThinking: false # Exclude thinking content from output
 ```
 

@@ -75,9 +75,11 @@ Anthropic's Claude models are available with the following versions:
 - `vertex:claude-fable-5-1` - Claude Fable 5.1 with always-on adaptive thinking and $0.25/MTok cache reads
 - `vertex:claude-mythos-5-1` - Claude Mythos 5.1 (provider approval required)
 - `vertex:claude-fable-5` - Claude Fable 5 with a 1M-token context window and always-on adaptive thinking
+- `vertex:claude-opus-5` - Claude Opus 5, the Opus-tier Claude 5 model for complex agentic coding and long-horizon work, with a 1M-token context window and the full `low`–`max` effort ladder. Use `config.region: global` for the global endpoint; US and EU multi-region endpoints are also supported where enabled on your project. Thinking is on by default, and `thinking: { type: 'disabled' }` is only accepted at `effort` `high` or below.
+- `vertex:claude-sonnet-5` - Claude Sonnet 5, the most agentic Sonnet, with a 1M-token context window and the full effort ladder. Use `config.region: global` for the global endpoint; US and EU multi-region endpoints are also supported where enabled on your project.
 
 Promptfoo omits unsupported `temperature`, `top_p`, and `top_k` values for the adaptive-only
-Claude models — Fable 5, Mythos 5, Opus 5, Sonnet 5, and Opus 4.7/4.8 (see their entries below).
+Claude models — Fable 5, Mythos 5, Opus 5, Sonnet 5, and Opus 4.7/4.8.
 Regional and multi-region Vertex endpoints carry a
 [10% price premium](https://cloud.google.com/blog/products/ai-machine-learning/global-endpoint-for-claude-models-generally-available-on-vertex-ai)
 over the global endpoint for Claude 4.5 and later models (Sonnet 4.5+, Haiku 4.5,
@@ -102,14 +104,6 @@ and the model ID because Google does not publish one in its public model catalog
 **Claude 4.8:**
 
 - `vertex:claude-opus-4-8` - Claude 4.8 Opus, Anthropic's most capable model for complex reasoning and agentic coding. Use `config.region: global` for the global endpoint; US and EU multi-region endpoints are also supported where enabled on your project. Like Opus 4.7, promptfoo automatically omits `temperature`, `top_p`, and `top_k` (deprecated for this model).
-
-**Claude Opus 5:**
-
-- `vertex:claude-opus-5` - Claude Opus 5, the Opus-tier Claude 5 model for complex agentic coding and long-horizon work, with a 1M-token context window and the full `low`–`max` effort ladder. Use `config.region: global` for the global endpoint; US and EU multi-region endpoints are also supported where enabled on your project. Like Opus 4.7/4.8, promptfoo automatically omits `temperature`, `top_p`, and `top_k` (deprecated for this model). Thinking is on by default, and `thinking: { type: 'disabled' }` is only accepted at `effort` `high` or below.
-
-**Claude Sonnet 5:**
-
-- `vertex:claude-sonnet-5` - Claude Sonnet 5, the most agentic Sonnet, with a 1M-token context window and effort levels. Use `config.region: global` for the global endpoint; US and EU multi-region endpoints are also supported where enabled on your project. Like Opus 4.7/4.8, promptfoo automatically omits `temperature`, `top_p`, and `top_k` (deprecated for this model).
 
 **Claude 4.7:**
 
@@ -142,7 +136,7 @@ and the model ID because Google does not publish one in its public model catalog
 Claude models require explicit access enablement through the [Vertex AI Model Garden](https://console.cloud.google.com/vertex-ai/publishers). Navigate to the Model Garden, search for "Claude", and enable the specific models you need.
 :::
 
-Note: Claude context limits vary by model. Fable 5 and Mythos 5 support up to 1 million input tokens.
+Note: Claude context limits vary by model. Fable 5, Mythos 5, Opus 5, and Sonnet 5 support up to 1 million input tokens.
 
 ### Llama Models
 
@@ -537,9 +531,9 @@ Example configuration with specific region:
 
 ```yaml
 providers:
-  - id: vertex:claude-3-5-sonnet-v2@20241022
+  - id: vertex:claude-sonnet-5
     config:
-      region: us-east5 # Claude models require specific regions
+      region: global # Claude 5 models route through the global endpoint
       projectId: my-project-id
 ```
 
@@ -587,10 +581,10 @@ providers:
     config:
       region: us-central1
 
-  # Claude models (require specific region)
-  - id: vertex:claude-3-5-sonnet-v2@20241022
+  # Claude models (set an enabled region, or `global` for Claude 5)
+  - id: vertex:claude-sonnet-5
     config:
-      region: us-east5
+      region: global
 
   # Llama models
   - id: vertex:llama-3.3-70b-instruct-maas
@@ -686,10 +680,10 @@ providers:
               enabled: true
               llama_guard_settings: {}
 
-  # For Claude models (require specific regions like us-east5)
-  - id: vertex:claude-3-5-sonnet-v2@20241022
+  # For Claude models (set an enabled region, or `global` for Claude 5)
+  - id: vertex:claude-sonnet-5
     config:
-      region: us-east5
+      region: global
       anthropic_version: 'vertex-2023-10-16'
       max_tokens: 1024
       systemInstruction: 'You are a helpful assistant'
@@ -734,8 +728,8 @@ See [Google's SafetySetting API documentation](https://ai.google.dev/api/generat
 
 - Support for text, code, and analysis tasks
 - Tool use (function calling) capabilities
-- Available in multiple regions (us-east5, europe-west1, asia-southeast1) plus the `global` endpoint for Opus 4.7
-- Claude Opus 4.7 and 4.8: promptfoo automatically omits deprecated sampling parameters and converts configured manual thinking (`type: enabled`) to adaptive thinking before forwarding the request to Vertex's `rawPredict` endpoint
+- Available in multiple regions (us-east5, europe-west1, asia-southeast1) plus the `global` endpoint for the Claude 5 models and Opus 4.7/4.8
+- Fable/Mythos 5, Opus 5, Sonnet 5, and Opus 4.7/4.8: promptfoo automatically omits deprecated sampling parameters (`temperature`, `top_p`, `top_k`) and converts configured manual thinking (`type: enabled`) to adaptive thinking before forwarding the request to Vertex's `rawPredict` endpoint
 - Quota limits vary by model version (20-245 QPM)
 
 ## Advanced Usage
@@ -832,20 +826,20 @@ You need to:
 
 2. Pick a supported region. Common choices:
    - `us-east5` and `europe-west1` for Claude 3.x / 4.x models
-   - `global` for the global endpoint (Claude Opus 4.7 and other newer models with dynamic routing)
+   - `global` for the global endpoint (the Claude 5 models, Opus 4.7/4.8, and other newer models with dynamic routing)
    - US and EU multi-region endpoints where enabled
 
 Example configuration with correct region:
 
 ```yaml
 providers:
-  - id: vertex:claude-opus-4-7
+  - id: vertex:claude-opus-5
     config:
       region: global
       anthropic_version: 'vertex-2023-10-16'
       max_tokens: 1024
 
-  - id: vertex:claude-3-5-sonnet-v2@20241022
+  - id: vertex:claude-sonnet-4-5@20250929
     config:
       region: us-east5 # or europe-west1
       anthropic_version: 'vertex-2023-10-16'
@@ -928,10 +922,10 @@ providers:
     config:
       systemInstruction: 'You are a helpful assistant'
 
-  # Also works with Claude models (require specific regions like us-east5)
-  - id: vertex:claude-sonnet-4-6
+  # Also works with Claude models
+  - id: vertex:claude-sonnet-5
     config:
-      region: us-east5
+      region: global
       systemInstruction: 'You are a helpful assistant'
 ```
 
