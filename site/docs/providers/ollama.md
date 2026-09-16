@@ -109,6 +109,7 @@ Ollama's current [Options struct](https://github.com/ollama/ollama/blob/main/api
 `use_mmap`, `num_thread`, and `draft_num_predict`.
 
 Note that `max_tokens` is an OpenAI key — Ollama ignores it, so use `num_predict`.
+`typical_p` is accepted today but marked deprecated upstream, so prefer `top_p` or `min_p`.
 
 Options that newer Ollama releases removed (`mirostat`, `mirostat_tau`, `mirostat_eta`,
 `tfs_z`, `num_gqa`, `f16_kv`, `logits_all`, `vocab_only`, `low_vram`, `use_mlock`,

@@ -126,6 +126,14 @@ const OllamaNonNestedOptionKeys = new Set<string>([
 ]);
 
 /**
+ * Keys that are never user-supplied Ollama options, so reporting them as "dropped" would
+ * be noise. `basePath` is injected into every provider config by loadApiProvider
+ * (src/providers/index.ts), and `showThinking` is a promptfoo-side rendering option.
+ * src/providers/envoy.ts:44 strips `basePath` for the same reason.
+ */
+const OllamaInternalConfigKeys = new Set<string>(['showThinking', 'basePath']);
+
+/**
  * Options Ollama has dropped from its Options struct. Still forwarded -- modern servers
  * ignore unknown option keys, and an older OLLAMA_BASE_URL may still honor them -- but
  * worth telling the user they are almost certainly doing nothing.
@@ -165,7 +173,7 @@ function buildOllamaOptions(config: OllamaCompletionOptions): Record<string, any
           deprecated.push(key);
         }
       }
-    } else if (key !== 'showThinking') {
+    } else if (!OllamaInternalConfigKeys.has(key)) {
       dropped.push(key);
     }
     return acc;
