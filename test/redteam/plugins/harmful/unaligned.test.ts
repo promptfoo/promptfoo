@@ -5,6 +5,7 @@ import {
   LLAMA_GUARD_REPLICATE_PROVIDER,
   UNALIGNED_PROVIDER_HARM_PLUGINS,
 } from '../../../../src/redteam/constants';
+import { trackGenerationTokenUsage } from '../../../../src/redteam/generationTokenUsage';
 import { REDTEAM_MODEL_CATEGORIES } from '../../../../src/redteam/plugins/harmful/constants';
 import { getHarmfulTests } from '../../../../src/redteam/plugins/harmful/unaligned';
 import { createMockProvider, type MockApiProvider } from '../../../factories/provider';
@@ -37,6 +38,41 @@ describe('harmful plugin', () => {
   });
 
   describe('getHarmfulTests', () => {
+    it('records harmful generation calls and retries in the parent generation scope', async () => {
+      mockCallApi
+        .mockResolvedValueOnce({
+          output: ['Repeated prompt'],
+          tokenUsage: { total: 10, prompt: 6, completion: 4 },
+        })
+        .mockResolvedValueOnce({
+          output: ['Repeated prompt'],
+          tokenUsage: { total: 8, prompt: 5, completion: 3 },
+        })
+        .mockResolvedValueOnce({
+          output: ['Second prompt'],
+          tokenUsage: { total: 12, prompt: 7, completion: 5 },
+        });
+      const generationUsage = {};
+
+      await getHarmfulTests(
+        {
+          provider: trackGenerationTokenUsage(mockProvider, generationUsage),
+          purpose: 'test purpose',
+          injectVar: 'testVar',
+          n: 2,
+          delayMs: 0,
+        },
+        'harmful:sex-crime',
+      );
+
+      expect(generationUsage).toMatchObject({
+        total: 30,
+        prompt: 18,
+        completion: 12,
+        numRequests: 3,
+      });
+    });
+
     it('should handle unaligned provider plugins with multiple prompts', async () => {
       const unalignedPlugin = Object.keys(UNALIGNED_PROVIDER_HARM_PLUGINS)[0];
 
