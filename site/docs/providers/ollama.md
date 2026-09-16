@@ -60,7 +60,44 @@ providers:
       temperature: 0.7
       top_p: 0.9
       think: true # Enable thinking/reasoning mode (top-level API parameter)
+      showThinking: true # Include the reasoning trace in the output (default: true)
 ```
+
+## Reasoning models
+
+Reasoning models (`qwen3`, `deepseek-r1`, `gpt-oss`, and others) return their reasoning
+trace in a separate `thinking` field rather than in the response content. Promptfoo
+prepends it to the output as `Thinking: ...`, matching the behavior of the OpenAI and
+Anthropic providers.
+
+Note that recent Ollama versions emit `thinking` for these models **by default**, without
+you setting `think: true`. If you only want the final answer, you have two options:
+
+```yaml title="promptfooconfig.yaml"
+providers:
+  # Keep the model reasoning, but exclude the trace from the output your assertions see
+  - id: ollama:chat:qwen3
+    config:
+      showThinking: false
+
+  # Or turn reasoning off entirely at the model level
+  - id: ollama:chat:qwen3
+    config:
+      think: false
+```
+
+`showThinking` is a promptfoo-side rendering option and is never sent to the Ollama API.
+
+:::warning
+Reasoning tokens count against `num_predict`. If the budget is exhausted inside the
+thinking block, the model never emits any content — the output will contain only the
+reasoning trace, and `finish-reason` will be `length`. Raise `num_predict` or set
+`think: false` if you need a short answer from a reasoning model.
+:::
+
+Responses also carry a normalized `finishReason` (`stop`, `length`, …) derived from
+Ollama's `done_reason`, which you can assert on with
+[`finish-reason`](/docs/configuration/expected-outputs/deterministic/#finish-reason).
 
 You can also pass arbitrary fields directly to the Ollama API using the `passthrough` option:
 
