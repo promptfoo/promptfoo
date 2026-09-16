@@ -76,13 +76,16 @@ export const McpConfigInputSchema = z.strictObject({
     .describe(
       'Response transform expression or file:// module reference; evaluated only at runtime',
     ),
-  responseParser: z.string().optional().describe('Deprecated alias for transformResponse'),
+  responseParser: z.string().optional().meta({
+    description: 'Deprecated alias for transformResponse',
+    deprecated: true,
+  }),
   timeout: z
     .number()
     .nonnegative()
     .optional()
     .describe(
-      'Request timeout in milliseconds; omitted uses MCP_REQUEST_TIMEOUT_MS then the SDK default. Zero leaves the SDK timeout unchanged',
+      'Request timeout in milliseconds; omitted uses MCP_REQUEST_TIMEOUT_MS then the SDK default of 60000 (60 seconds). Zero leaves the SDK timeout unchanged',
     ),
   resetTimeoutOnProgress: z
     .boolean()
@@ -125,14 +128,49 @@ export const McpConfigSchema = McpConfigInputSchema.loose().extend({
   server: McpServerSchema.optional(),
   servers: z.array(McpServerSchema).optional(),
   transformResponse: McpResponseTransformSchema.optional(),
-  responseParser: McpResponseTransformSchema.optional(),
+  responseParser: McpResponseTransformSchema.optional().meta({
+    ...McpConfigInputSchema.shape.responseParser.meta(),
+  }),
 });
+
+interface McpRequestOptions {
+  /**
+   * Request timeout in milliseconds for MCP operations.
+   * Uses MCP_REQUEST_TIMEOUT_MS when omitted, then the SDK default of 60000 (60 seconds).
+   * Zero leaves the SDK timeout unchanged.
+   */
+  timeout?: z.input<typeof McpConfigInputSchema>['timeout'];
+  /**
+   * Reset the request timeout when progress notifications arrive.
+   * Useful for long-running operations that send periodic progress updates. Defaults to false.
+   */
+  resetTimeoutOnProgress?: z.input<typeof McpConfigInputSchema>['resetTimeoutOnProgress'];
+  /**
+   * Maximum total request duration in milliseconds, regardless of progress notifications.
+   * Zero or omitted adds no maximum.
+   */
+  maxTotalTimeout?: z.input<typeof McpConfigInputSchema>['maxTotalTimeout'];
+  /** Ping the MCP server after connecting to verify it is responsive. Defaults to false. */
+  pingOnConnect?: z.input<typeof McpConfigInputSchema>['pingOnConnect'];
+}
 
 export type McpServerInput = z.input<typeof McpServerInputSchema>;
 export type McpServerParsed = z.output<typeof McpServerSchema>;
-export type McpConfigInput = z.input<typeof McpConfigInputSchema>;
-export type McpConfig = z.input<typeof McpConfigSchema>;
-export type McpConfigParsed = z.output<typeof McpConfigSchema>;
+
+export interface McpConfigInput extends McpRequestOptions, z.input<typeof McpConfigInputSchema> {
+  /** @deprecated Use transformResponse instead. */
+  responseParser?: z.input<typeof McpConfigInputSchema>['responseParser'];
+}
+
+export interface McpConfig extends McpRequestOptions, z.input<typeof McpConfigSchema> {
+  /** @deprecated Use transformResponse instead. */
+  responseParser?: z.input<typeof McpConfigSchema>['responseParser'];
+}
+
+export interface McpConfigParsed extends McpRequestOptions, z.output<typeof McpConfigSchema> {
+  /** @deprecated Use transformResponse instead. */
+  responseParser?: z.output<typeof McpConfigSchema>['responseParser'];
+}
 
 export const McpConfigInputJsonSchema = z.toJSONSchema(McpConfigInputSchema, {
   target: 'draft-07',

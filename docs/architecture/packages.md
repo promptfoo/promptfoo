@@ -133,9 +133,17 @@ Export fails for unrepresentable types rather than replacing them with permissiv
 `{}` branches. This export is independent of the whole-file configuration schema;
 this change does not wire provider-specific checks into that generator or add MCP
 configuration-management tools.
-`McpConfigInput` and `McpServerInput` are inferred serialized input types;
+`McpConfigInput` and `McpServerInput` are schema-derived serialized input types;
 `McpConfig` also permits function-valued transforms for in-process callers.
 `McpConfigParsed` and `McpServerParsed` describe runtime parsing results.
+
+The public config interfaces preserve property JSDoc and `@deprecated` annotations
+for TypeScript editors; their field types still come from the Zod schemas, with
+type-equivalence tests guarding against drift. Schema descriptions and deprecation
+metadata separately feed JSON Schema and OpenAPI consumers. Package-artifact tests
+verify that documentation survives in both ESM and CommonJS declarations.
+The documented 60000 ms SDK timeout is a fallback, not a schema default, so an
+omitted timeout still allows `MCP_REQUEST_TIMEOUT_MS` to take effect.
 
 `McpConfigSchema` defaults omitted `enabled` to true and normalizes auth. It accepts
 direct functions for `transformResponse` and `responseParser`, while the input

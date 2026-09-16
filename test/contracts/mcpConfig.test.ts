@@ -8,7 +8,13 @@ import {
   McpServerInputSchema,
 } from '../../src/contracts';
 
-import type { McpConfigInput, McpConfigParsed, McpServerInput } from '../../src/contracts';
+import type {
+  McpConfig,
+  McpConfigInput,
+  McpConfigParsed,
+  McpServerInput,
+} from '../../src/contracts';
+import type { MCPConfig } from '../../src/providers/mcp/types';
 
 const oauth = { type: 'oauth', clientId: '{{ CLIENT_ID }}', clientSecret: '{{ CLIENT_SECRET }}' };
 const valid: unknown[] = [
@@ -235,6 +241,34 @@ describe('MCP configuration contracts', () => {
       McpServerInputSchema.safeParse({ url: 'https://mcp.example.test', auth: { type: 'api_key' } })
         .success,
     ).toBe(false);
+  });
+
+  it('preserves documentation metadata without applying a timeout default', () => {
+    const properties = McpConfigInputJsonSchema.properties!;
+    expect(properties.timeout).toMatchObject({
+      description: expect.stringContaining('60000 (60 seconds)'),
+    });
+    expect(properties.timeout).toMatchObject({
+      description: expect.stringContaining('MCP_REQUEST_TIMEOUT_MS'),
+    });
+    expect(properties.timeout).not.toHaveProperty('default');
+    expect(properties.responseParser).toMatchObject({
+      description: 'Deprecated alias for transformResponse',
+      deprecated: true,
+    });
+    expect(McpConfigSchema.shape.responseParser.meta()).toMatchObject({ deprecated: true });
+    for (const schema of [McpConfigInputSchema, McpConfigSchema]) {
+      expect(schema.parse({})).not.toHaveProperty('timeout');
+      expect(schema.parse({ timeout: 0 }).timeout).toBe(0);
+      expect(schema.parse({ timeout: 1234 }).timeout).toBe(1234);
+    }
+  });
+
+  it('keeps documented public types equivalent to their inferred schemas', () => {
+    expectTypeOf<McpConfigInput>().toEqualTypeOf<z.input<typeof McpConfigInputSchema>>();
+    expectTypeOf<McpConfig>().toEqualTypeOf<z.input<typeof McpConfigSchema>>();
+    expectTypeOf<McpConfigParsed>().toEqualTypeOf<z.output<typeof McpConfigSchema>>();
+    expectTypeOf<MCPConfig>().toEqualTypeOf<McpConfig>();
   });
 
   it('infers the connection requirement and distinguishes raw input from parsed defaults', () => {

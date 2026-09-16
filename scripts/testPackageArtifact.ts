@@ -8,6 +8,7 @@ import path from 'node:path';
 import { brotliCompressSync, gzipSync } from 'node:zlib';
 
 import { satisfies } from 'semver';
+import { API } from 'typescript/unstable/sync';
 import { shouldCopyDrizzlePath } from './postbuild';
 
 type PackFile = {
@@ -335,6 +336,60 @@ function runInstalledBinVersion(consumerDir: string, configDir: string, binName:
   }
 
   return run(binPath, ['--version'], consumerDir, envOverrides);
+}
+
+function assertMcpTypeDocumentation(installedPackageDir: string): void {
+  const api = new API();
+  try {
+    for (const declaration of ['contracts.d.ts', 'contracts.d.cts']) {
+      const declarationPath = path.join(installedPackageDir, 'dist', 'src', declaration);
+      const snapshot = api.updateSnapshot({ openFiles: [declarationPath] });
+      const project = snapshot.getDefaultProjectForFile(declarationPath);
+      assert(project, `Missing declaration project: ${declaration}`);
+      const checker = project.checker;
+      const source = project.program.getSourceFile(declarationPath);
+      assert(source, `Missing declaration source: ${declaration}`);
+      const moduleSymbol = checker.getSymbolAtLocation(source);
+      assert(moduleSymbol, `Missing declaration module: ${declaration}`);
+      const exports = checker.getExportsOfModule(moduleSymbol);
+
+      for (const name of ['McpConfigInput', 'McpConfig', 'McpConfigParsed']) {
+        const symbol = exports.find((entry) => entry.name === name);
+        assert(symbol, `Missing ${name} in ${declaration}`);
+        const configType = checker.getDeclaredTypeOfSymbol(symbol);
+        for (const property of [
+          'timeout',
+          'resetTimeoutOnProgress',
+          'maxTotalTimeout',
+          'pingOnConnect',
+        ]) {
+          const member = checker.getPropertyOfType(configType, property);
+          assert(member, `Missing ${name}.${property} in ${declaration}`);
+          const documentation = checker.getDocumentationCommentOfSymbol(member);
+          assert(
+            documentation.length > 0,
+            `Missing JSDoc for ${name}.${property} in ${declaration}`,
+          );
+          if (property === 'timeout') {
+            assert.match(documentation, /60000 \(60 seconds\)/);
+            assert.match(documentation, /MCP_REQUEST_TIMEOUT_MS/);
+          }
+        }
+        const responseParser = checker.getPropertyOfType(configType, 'responseParser');
+        assert(responseParser, `Missing ${name}.responseParser in ${declaration}`);
+        const deprecated = checker.getJsDocTagsOfSymbol(responseParser);
+        assert(
+          deprecated?.some(
+            (tag) => tag.name === 'deprecated' && tag.text?.includes('transformResponse'),
+          ),
+          `Missing responseParser deprecation in ${name} in ${declaration}`,
+        );
+      }
+      snapshot.dispose();
+    }
+  } finally {
+    api.close();
+  }
 }
 
 function writeConsumerScripts(consumerDir: string): void {
@@ -711,6 +766,7 @@ async function main(): Promise<void> {
     assert.equal(installedPackageJson.version, packResult.version);
     assertExportsResolve(installedPackageDir, installedPackageJson);
     assertInstalledRefParserTransport(installedPackageDir);
+    assertMcpTypeDocumentation(installedPackageDir);
 
     writeConsumerScripts(consumerDir);
     run(process.execPath, ['import-package.mjs'], consumerDir);
