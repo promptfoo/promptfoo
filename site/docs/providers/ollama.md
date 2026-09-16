@@ -163,7 +163,7 @@ tests:
 Tools can also be loaded from an external file, which keeps large schemas out of the
 config:
 
-```yaml title="promptfooconfig.yaml"
+```yaml
 providers:
   - id: ollama:chat:llama3.3
     config:
@@ -344,8 +344,13 @@ By default, promptfoo evaluates all providers concurrently for each prompt. Howe
 promptfoo eval -j 1
 ```
 
-This sets concurrency to 1, which means requests are issued one at a time rather than
-in parallel, in test-case order.
+This serializes the eval's **target** calls: one provider and prompt at a time, in
+test-case order.
+
+Model-graded assertions run on a separate path. When grading grouping is active they are
+serialized too, but if it is disabled — by a per-eval timeout or a `{{_conversation}}`
+variable — up to `PROMPTFOO_ASSERTIONS_MAX_CONCURRENCY` grader calls (3 by default) can
+still overlap within a single test case.
 
 :::caution
 Serial execution does **not** by itself keep only one model in memory. Ollama holds each
@@ -354,7 +359,7 @@ two providers serially can still leave both resident — confirm with `ollama ps
 
 To actually free a model as soon as its request finishes, set `keep_alive: 0`:
 
-```yaml title="promptfooconfig.yaml"
+```yaml
 providers:
   - id: ollama:chat:llama3.2
     config:
