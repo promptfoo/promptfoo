@@ -1,11 +1,13 @@
 import { afterEach, beforeEach, describe, expect, it, type Mock, vi } from 'vitest';
+import cliState from '../../src/cliState';
 import { evaluate, runEval } from '../../src/evaluator';
 import logger from '../../src/logger';
 import { nodeEvaluatorRuntime } from '../../src/node/evaluatorRuntime';
+import { RedteamGraderBase } from '../../src/redteam/plugins/base';
 import { resolveTracingOptions } from '../../src/redteam/providers/tracingOptions';
 import { getProviderCallTracingContext } from '../../src/scheduler/providerCallExecutionContext';
 import * as evaluatorTracing from '../../src/tracing/evaluatorTracing';
-import { getTraceStore } from '../../src/tracing/store';
+import { getTraceStore, TraceLimitError } from '../../src/tracing/store';
 import { createMockProvider } from '../factories/provider';
 
 import type { EvaluatorRuntime } from '../../src/evaluator/runtime';
@@ -19,7 +21,10 @@ import type {
 } from '../../src/types/index';
 
 // Mock dependencies
-vi.mock('../../src/tracing/store');
+vi.mock('../../src/tracing/store', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../../src/tracing/store')>()),
+  getTraceStore: vi.fn(),
+}));
 const mockFlushOtel = vi.hoisted(() => vi.fn().mockResolvedValue(undefined));
 const mockFetchTraceContext = vi.hoisted(() => vi.fn());
 const mockInitializeOtel = vi.hoisted(() => vi.fn());
@@ -42,7 +47,8 @@ vi.mock('../../src/tracing/traceContext', async (importOriginal) => ({
 }));
 
 // Mock evaluatorTracing module
-vi.mock('../../src/tracing/evaluatorTracing', () => ({
+vi.mock('../../src/tracing/evaluatorTracing', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../../src/tracing/evaluatorTracing')>()),
   generateTraceId: vi.fn(() => 'abcdef1234567890abcdef1234567890'),
   generateSpanId: vi.fn(() => '0123456789abcdef'),
   generateTraceparent: vi.fn((traceId, spanId) => `00-${traceId}-${spanId}-01`),
@@ -50,7 +56,6 @@ vi.mock('../../src/tracing/evaluatorTracing', () => ({
   startOtlpReceiverIfNeeded: vi.fn(),
   stopOtlpReceiverIfNeeded: vi.fn(),
   isOtlpReceiverStarted: vi.fn(() => false),
-  isTracingEnabled: vi.fn((test) => test.metadata?.tracingEnabled === true),
 }));
 
 describe('evaluator trace integration', () => {
@@ -453,6 +458,85 @@ describe('evaluator trace integration', () => {
       });
     });
 
+    it.each([
+      { suiteEnabled: false, globalEnabled: true, include: false },
+      { suiteEnabled: true, globalEnabled: false, include: true },
+      { suiteEnabled: false, globalEnabled: true, override: true, include: true },
+      { suiteEnabled: true, globalEnabled: false, override: false, include: false },
+    ])(
+      'honors the evaluation SQL trace policy $suiteEnabled with test override $override',
+      async ({ suiteEnabled, globalEnabled, override, include }) => {
+        const previousConfig = cliState.config;
+        try {
+          cliState.config = {
+            redteam: { tracing: { enabled: true, includeInGrading: globalEnabled } },
+          } as typeof cliState.config;
+          const grade = vi.spyOn(RedteamGraderBase.prototype, 'getResult').mockResolvedValue({
+            grade: { pass: true, score: 1, reason: 'safe' },
+            rubric: 'safe',
+          });
+          const options = createRunOptions(
+            createMockProvider({ response: { output: 'Refused.' } }),
+          );
+          options.testSuite = {
+            ...tracingSuite,
+            redteam: {
+              tracing: { enabled: true, includeInGrading: suiteEnabled },
+            } as TestSuite['redteam'],
+          };
+          options.test = {
+            ...options.test,
+            metadata: {
+              ...options.test.metadata,
+              pluginId: 'sql-injection',
+              purpose: 'Protect records.',
+              ...(override === undefined ? {} : { tracing: { includeInGrading: override } }),
+            },
+            assert: [{ type: 'promptfoo:redteam:sql-injection' }],
+          };
+          mockTraceStore.getTrace.mockResolvedValue({
+            traceId,
+            spans: [
+              {
+                spanId: 'sql-span',
+                name: 'read_query',
+                startTime: 1000,
+                attributes: {
+                  'tool.name': 'read_query',
+                  'db.statement': 'SELECT PRIVATE_SUITE_SQL FROM records',
+                },
+              },
+            ],
+          });
+          for (const run of [
+            () => runEval(options),
+            () =>
+              evaluate(
+                {
+                  ...options.testSuite!,
+                  providers: [options.provider],
+                  prompts: [options.prompt],
+                  tests: [options.test],
+                },
+                mockEval,
+                { maxConcurrency: 1 },
+              ),
+          ]) {
+            grade.mockClear();
+            await run();
+            expect(grade).toHaveBeenCalled();
+            expect(JSON.stringify(grade.mock.calls).includes('PRIVATE_SUITE_SQL')).toBe(include);
+            expect(mockFetchTraceContext).toHaveBeenLastCalledWith(
+              traceId,
+              expect.objectContaining({ requireComplete: include }),
+            );
+          }
+        } finally {
+          cliState.config = previousConfig;
+        }
+      },
+    );
+
     it('fetches external traces before running trace-aware assertions', async () => {
       const provider = createMockProvider({ response: { output: 'Target output' } });
       const options = createRunOptions(provider);
@@ -467,6 +551,7 @@ describe('evaluator trace integration', () => {
           providerConfig,
           queryDelay: 750,
           maxRetries: 5,
+          waitForStableSpans: true,
           retryDelayMs: 1000,
           redactAttributes: ['secret'],
         }),
@@ -694,6 +779,61 @@ describe('evaluator trace integration', () => {
         '[Evaluator] Failed to fetch external traces: Error: Tempo unavailable',
       );
     });
+
+    it.each(['promptfoo:redteam:sql-injection', 'promptfoo:redteam:shell-injection'] as const)(
+      'records an error when external evidence collection fails for %s',
+      async (type) => {
+        const grade = vi.spyOn(RedteamGraderBase.prototype, 'getResult').mockResolvedValue({
+          grade: { pass: true, score: 1, reason: 'No evidence' },
+          rubric: 'Fixture',
+        });
+        for (const error of [new TraceLimitError(), new Error('Tempo unavailable')]) {
+          const options = createRunOptions(
+            createMockProvider({ response: { output: 'Target output' } }),
+          );
+          options.test.assert = [{ type: 'assert-set', assert: [{ type }] }];
+          options.test.metadata = {
+            ...options.test.metadata,
+            purpose: 'Fixture',
+            tracing: { enabled: true },
+          };
+          mockFetchTraceContext.mockRejectedValueOnce(error);
+          const [result] = await runEval(options);
+          expect(result.success).toBe(false);
+          expect(result.failureReason).toBe(2);
+          expect(result.error).toContain(error.message);
+        }
+        expect(grade).not.toHaveBeenCalled();
+      },
+    );
+
+    it.each([{ enabled: false }, { enabled: true, includeInGrading: false }])(
+      'preserves grading when execution tracing is disabled (%j)',
+      async (tracing) => {
+        const grade = vi.spyOn(RedteamGraderBase.prototype, 'getResult').mockResolvedValue({
+          grade: { pass: true, score: 1, reason: 'Fixture' },
+          rubric: 'Fixture',
+        });
+        const options = createRunOptions(
+          createMockProvider({ response: { output: 'Target output' } }),
+        );
+        options.test.metadata = { ...options.test.metadata, purpose: 'Fixture', tracing };
+        options.test.assert = [
+          {
+            type: 'assert-set',
+            assert: [
+              { type: 'javascript', value: 'true' },
+              { type: 'promptfoo:redteam:sql-injection' },
+            ],
+          },
+        ];
+        mockFetchTraceContext.mockRejectedValueOnce(new Error('Tempo unavailable'));
+        const [result] = await runEval(options);
+        expect(result.success).toBe(true);
+        expect(result.error).toBeUndefined();
+        expect(grade).toHaveBeenCalled();
+      },
+    );
 
     it('preserves successful provider responses when trace collection fails', async () => {
       const warning = vi.spyOn(logger, 'warn').mockImplementation(() => logger);

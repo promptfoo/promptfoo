@@ -125,6 +125,47 @@ describe('BraintrustProvider', () => {
     expect(body.query).toContain('created >= now() - INTERVAL 1 DAY');
   });
 
+  it.each([undefined, 1])(
+    'bounds ordinary reads and detects oversized uncapped snapshots: maxSpans=%s',
+    async (maxSpans) => {
+      const oversized = Array.from({ length: 10_001 }, (_, index) => ({
+        ...rows[0],
+        span_id: `span-${index}`,
+      }));
+      mockedFetch.mockImplementation(async (_, options) => {
+        const query = JSON.parse(options?.body as string).query as string;
+        const limit = Number(query.match(/LIMIT (\d+)/)?.[1]);
+        return response({ rows: oversized.slice(0, limit) });
+      });
+
+      const result = new BraintrustProvider(config).fetchTrace(TRACE_ID, { maxSpans });
+      if (maxSpans === undefined) {
+        await expect(result).rejects.toMatchObject({ limitExceeded: true });
+      } else {
+        expect((await result)?.spans).toHaveLength(maxSpans);
+      }
+    },
+  );
+
+  it('accepts a complete trace at the span limit', async () => {
+    mockedFetch.mockResolvedValue(
+      response({
+        rows: Array.from({ length: 10_000 }, (_, index) => ({
+          ...rows[0],
+          span_id: `span-${index}`,
+        })),
+      }),
+    );
+    expect((await new BraintrustProvider(config).fetchTrace(TRACE_ID))?.spans).toHaveLength(10_000);
+  });
+
+  it.each([-1, 0])('bounds non-positive span limits: %s', async (maxSpans) => {
+    const result = await new BraintrustProvider(config).fetchTrace(TRACE_ID, { maxSpans });
+    expect(result?.spans).toHaveLength(1);
+    const query = JSON.parse(mockedFetch.mock.calls[0][1]?.body as string).query;
+    expect(query).toMatch(/LIMIT 1$/);
+  });
+
   it('links deeply nested spans to their immediate parent', async () => {
     mockedFetch.mockResolvedValue(
       response({
@@ -249,9 +290,10 @@ describe('BraintrustProvider', () => {
     const cancel = vi.spyOn(oversizedResponse.body!, 'cancel');
     mockedFetch.mockResolvedValue(oversizedResponse);
 
-    await expect(new BraintrustProvider(config).fetchTrace(TRACE_ID)).rejects.toThrow(
-      'maximum response size',
-    );
+    await expect(new BraintrustProvider(config).fetchTrace(TRACE_ID)).rejects.toMatchObject({
+      message: expect.stringContaining('maximum response size'),
+      limitExceeded: true,
+    });
     expect(cancel).toHaveBeenCalledOnce();
   });
 
@@ -271,9 +313,10 @@ describe('BraintrustProvider', () => {
         }),
       );
 
-      await expect(new BraintrustProvider(config).fetchTrace(TRACE_ID)).rejects.toThrow(
-        'maximum response size',
-      );
+      await expect(new BraintrustProvider(config).fetchTrace(TRACE_ID)).rejects.toMatchObject({
+        message: expect.stringContaining('maximum response size'),
+        limitExceeded: true,
+      });
       expect(cancel).toHaveBeenCalledOnce();
     },
   );
@@ -283,9 +326,9 @@ describe('BraintrustProvider', () => {
 
     expect((await provider.fetchTrace(TRACE_ID, { maxSpans: 1 }))?.spans).toHaveLength(1);
     expect(
-      (await provider.fetchTrace(TRACE_ID, { earliestStartTime: 1704067200050 }))?.spans.map(
-        (span) => span.name,
-      ),
+      (
+        await provider.fetchTrace(TRACE_ID, { earliestStartTime: 1704067200050, maxSpans: 1 })
+      )?.spans.map((span) => span.name),
     ).toEqual(['tool.search']);
   });
 

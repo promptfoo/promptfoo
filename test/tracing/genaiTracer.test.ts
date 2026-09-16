@@ -795,6 +795,15 @@ describe('genaiTracer', () => {
       );
     });
 
+    it.each(['ghp_', 'gho_', 'ghu_', 'ghs_', 'ghr_', 'github_pat_'])(
+      'redacts %s credentials from unlabelled body text',
+      (prefix) => {
+        const token = prefix + 'a'.repeat(36);
+        expect(sanitizeBody(`echo ${token}`)).toBe('echo <REDACTED_API_KEY>');
+        expect(sanitizeBody(`See ${prefix} documentation`)).toBe(`See ${prefix} documentation`);
+      },
+    );
+
     it('should redact OpenAI API keys from request body', async () => {
       const contextWithBody = {
         ...baseContext,

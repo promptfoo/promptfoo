@@ -147,7 +147,7 @@ export class BraintrustProvider implements TraceProvider {
     }
 
     const normalizedTraceId = traceId.toLowerCase();
-    const maxSpans = Math.min(options?.maxSpans ?? MAX_SPANS, MAX_SPANS);
+    const maxSpans = Math.min(Math.max(options?.maxSpans ?? MAX_SPANS, 1), MAX_SPANS);
     // Braintrust native root_span_id values do not necessarily match W3C trace IDs.
     // Customers should log the propagated ID as metadata.trace_id or metadata.promptfoo_trace_id.
     // The traces shape returns every span in a matching trace, including child spans that do
@@ -161,7 +161,7 @@ export class BraintrustProvider implements TraceProvider {
       `    OR metadata.promptfoo_trace_id = '${normalizedTraceId}'`,
       `    OR metadata."promptfoo.trace_id" = '${normalizedTraceId}'`,
       `    OR root_span_id = '${normalizedTraceId}')`,
-      `LIMIT ${maxSpans}`,
+      `LIMIT ${options?.maxSpans === undefined || options.earliestStartTime !== undefined ? MAX_SPANS + 1 : maxSpans}`,
     ].join('\n');
 
     const timeoutSignal = AbortSignal.timeout(this.config.timeout ?? 10_000);
@@ -194,7 +194,9 @@ export class BraintrustProvider implements TraceProvider {
 
     if (Number(response.headers.get('content-length')) > MAX_TRACE_RESPONSE_BYTES) {
       await releaseResponse(response, 'Braintrust');
-      throw new TraceProviderError('Braintrust trace exceeds the maximum response size');
+      throw new TraceProviderError('Braintrust trace exceeds the maximum response size', {
+        limitExceeded: true,
+      });
     }
     const body = await readLimitedResponse(response, 'Braintrust');
 
@@ -202,6 +204,11 @@ export class BraintrustProvider implements TraceProvider {
     const rows = result.rows ?? result.data;
     if (!Array.isArray(rows)) {
       throw new TraceProviderError('Braintrust returned an invalid query response');
+    }
+    if (rows.length > MAX_SPANS) {
+      throw new TraceProviderError('Braintrust trace exceeds the maximum span count', {
+        limitExceeded: true,
+      });
     }
     if (rows.length === 0) {
       return null;

@@ -226,6 +226,10 @@ After running an evaluation, view traces in the web UI:
 
 ### 4. Assert on Traced Workflows
 
+The shell injection grader uses recorded command outcomes to assess unauthorized mutations even with empty stdout. Generated destructive-mutation cases require execution evidence; see the [shell injection grading contract](/docs/red-team/plugins/shell-injection.md#evaluation-criteria).
+
+The SQL injection grader also uses captured trace summaries when `redteam.tracing.enabled` is `true`. This setting enables evaluator tracing and the configured OTLP receiver for basic tests as well as adaptive strategies. A refusal alone does not pass when a trace is available; the grader checks the recorded actions alongside the response. Cached target turns cannot establish current execution evidence, including inside adaptive strategies; run with `--no-cache`.
+
 Once traces are flowing into Promptfoo, you can evaluate what the agent actually did, not just the final answer:
 
 ```yaml
@@ -334,12 +338,17 @@ Patterns are matched against each attribute key **at every nesting level individ
 nested key like `authorization` inside a `headers` object is matched by the pattern
 `authorization`, but a full dotted path such as `request.headers.authorization` will **not**
 match the nested leaf key — use the key's own name.
-Redaction covers span **attributes** (recursively, including nested objects and arrays),
-and a span `name` or `statusMessage` **only when it exactly echoes the value of a redacted
-attribute**. A secret that appears solely in a span name, status/error message, or log
-body — without also being a redacted attribute value — is not detected. Redaction also does
-**not** scan arbitrary free text or trace `metadata` (such as test `vars`), so avoid placing
-secrets in test variables when traces are retained.
+Redaction covers span **attributes**, including nested objects, arrays, and serialized JSON.
+It also masks matching values echoed in attribute keys, other attributes, span names, and
+status messages. Valid JSON stays parseable when individual fields can be redacted safely;
+ambiguous JSON, such as objects with duplicate keys, is replaced in full.
+
+The OTLP receiver and Tempo reject repeated resource or span attribute keys, including
+nested key-value lists, before redaction and storage.
+
+A secret that appears only in free text without a matching protected attribute is not
+detected. Trace `metadata` (such as test `vars`) is not covered, so avoid placing secrets
+in test variables when traces are retained.
 
 :::warning Scope of `redactAttributes`
 
@@ -364,6 +373,12 @@ single OTLP receiver**: it starts on first use and stops when the last evaluatio
 receiver's `host`, `port`, and `acceptFormats` are fixed at first startup, so a later overlapping
 evaluation can't change them; per-evaluation `redactAttributes` and `commandToolNames`, however,
 are tracked per trace so each evaluation's traces use its own policy.
+
+The HTTP receiver redacts stored text again when later uploads reveal a sensitive value. It keeps source history for the 1,024 most recently used traces, with at most 1,000 values or 16,384 characters per trace. If a trace resumes after its history was discarded, its free-text fields are hidden. Unrelated traces remain readable. Duplicate-span retries retain redaction history after receiver restarts, and large integer values remain exact before redaction. Ingestion limits each upload and stored trace to 10,000 spans and 10 MiB, including when attribute redaction is disabled. Duplicate retries do not count as new spans, and external updates replace the previous payload when calculating the stored limit. OTLP retries must match the previously stored span, including after redaction. A conflicting retry rejects the upload and marks its trace incomplete, so grading stops even if the exporter ignores the HTTP error. An oversized trace is marked incomplete and cannot be graded. Adaptive strategies stop with an error when trace collection is incomplete, including when no spans remain visible after filtering. The receiver rejects only that trace from a mixed batch and reports the rejected count. External snapshots are stored atomically, so a rejected snapshot leaves earlier evidence unchanged. External backends can refresh previously imported external spans. SDK-issued local span IDs are reserved until local persistence finishes; external uploads using those IDs must wait for that write. Uploads and Tempo snapshots containing conflicting duplicate span IDs are rejected before storage or redaction. Exact mirrors of persisted local spans are skipped while their children are imported; changed local spans produce a grading error. If an older trace was redacted before its original identity could be recorded, mirrors also produce an error. Rerun the eval with a new trace. Split larger workloads across traces. External response limits, including streamed and paginated responses, also mark the trace incomplete and stop grading. For complete snapshots, Braintrust queries request one extra record and Langfuse follows pagination through the end to detect traces exceeding 10,000 spans. Complete grading, filtered reads, and custom redaction fetch the full bounded snapshot before applying display limits. Unfiltered external reads forward `maxSpans` to the backend; Langfuse stops pagination once that limit is met.
+
+Required external traces with cyclic parent relationships produce a grading error, even if an earlier snapshot was valid. The trace stays marked incomplete on later reads.
+
+SQL and shell redteam grading reject conflicting tool-name and argument aliases on tool spans. Result aliases must agree on all spans, including direct SQL or command spans without a tool name. Raw provider argument and result aliases must also agree without a tool name. Database statement attributes and `sql`/`query`/`statement` arguments must describe the same query; conflicting representations produce an error. Namespaced tool arguments take priority over generic observation inputs; unrelated telemetry is not compared as tool arguments. They also report an error when a query, command, or tool identity is hidden by redaction, including secret markers in native tool receipts and values echoed from credential attributes. Secret sanitization also masks GitHub access tokens in native bodies and emitted span/tool names, including classic and fine-grained personal access tokens. Unrelated spans, including span names that echo credential attributes, remain redacted without preventing grading of readable SQL evidence.
 
 For traces created by an evaluation, Promptfoo stores the evaluation's redaction and
 `commandToolNames` policy with that trace so overlapping evaluations do not change one
@@ -460,7 +475,11 @@ Use environment variables for tokens, passwords, and authentication headers. Pro
 
 Set `endpoint` to Tempo's base URL, such as `https://tempo.example.com/tempo`. The URL cannot contain credentials, query parameters, or fragments because Promptfoo appends its trace lookup path to that address. Put credentials under `auth` and tenant settings in `headers` instead.
 
-Your application must carry the `traceparent` header into its own traces so Promptfoo can find the right request. Attributes you list in `tracing.otlp.http.redactAttributes` are redacted before fetched traces are saved, including matching values echoed in span names or error messages. Common credential-shaped attributes are masked when traces are displayed or exported; add them to `redactAttributes` if they must also be kept out of local storage.
+Your application must carry the `traceparent` header into its own traces so Promptfoo can find the right request. Attributes you list in `tracing.otlp.http.redactAttributes` are redacted before fetched traces are saved, including matching values echoed in any span name or error message in the fetched trace. When a redacted value contains serialized JSON, those names and messages are hidden before storage. Common credential-shaped attributes are masked when traces are displayed or exported; add them to `redactAttributes` if they must also be kept out of local storage.
+
+For trace-aware assertions, external snapshots are polled until completed spans stop changing or the five-retry limit is reached. SQL and shell redteam grading require completed spans and a snapshot that is stable across polls; incomplete or still-changing evidence produces an error. A later empty response or temporary backend error can reuse an earlier completed, stable snapshot. Increase `queryDelay` if your backend takes longer to ingest a trace.
+
+Snapshot comparisons ignore JSON object key order, including nested attribute values. Changed values and array order still count as changed evidence.
 
 #### Braintrust
 
@@ -495,6 +514,8 @@ tracing:
 ```
 
 Promptfoo queries Langfuse's v2 Observations API using the OpenTelemetry trace ID propagated in `traceparent`. It preserves original OpenTelemetry span and resource attributes, normalizes generation, embedding, tool, agent, workflow, and retrieval observations to GenAI semantic conventions, and imports parent-child relationships, inputs, outputs, models, token usage, and costs. Langfuse Python SDK 4.7.0+, JavaScript SDK 5.4.0+, or an OpenTelemetry exporter configured with the `x-langfuse-ingestion-version: 4` header makes new observations available in real time; older ingestion paths can delay visibility by up to ten minutes. This delay makes earlier versions of Langfuse unusable for fetching traces during an evaluation.
+
+If restored tool argument or result attributes would overwrite a different observation input or output, Promptfoo rejects the trace response. Equivalent JSON values remain supported regardless of object key order.
 
 ## Provider Implementation Guide
 
@@ -593,7 +614,7 @@ Click the expand icon on any span to reveal a detailed attributes panel showing:
 
 This is useful for inspecting the full request/response bodies (`promptfoo.request.body` and `promptfoo.response.body`) and debugging provider behavior.
 
-Trace reads redact credential-like attribute keys such as authorization headers, cookies, API keys, tokens, secrets, and passwords before displaying or exporting spans. GenAI token counters such as `gen_ai.usage.input_tokens` and application token counters such as `llm.usage.prompt_tokens` and `llm.usage.completion_tokens` remain visible. Avoid placing secrets in custom span attributes because raw attributes may still be retained in the local trace store for internal evaluation workflows.
+Trace reads redact credential-like attribute keys such as authorization headers, cookies, API keys, tokens, secrets, and passwords before displaying or exporting spans. Values from those attributes are also masked when echoed in span names, status messages, and other attributes in the same trace, including when the source span is filtered out. Credential-shaped text such as GitHub access tokens is also masked when it appears only in a span name or status message. Custom redaction values shorter than four characters match entire values, including equivalent numbers, so a short region or tenant code does not replace unrelated text. Built-in credential fields retain substring redaction. GenAI token counters such as `gen_ai.usage.input_tokens` and application token counters such as `llm.usage.prompt_tokens` and `llm.usage.completion_tokens` remain visible. Raw evidence remains available to internal assertion workflows and may still be retained in the local trace store; configure `redactAttributes` to remove it before storage.
 
 ### Exporting Traces
 
@@ -842,6 +863,8 @@ When red team tracing is enabled, adversarial strategies receive visibility into
 - **LLM operations**: Which models were used and when
 - **Performance patterns**: Timing information that could reveal DoS vectors
 
+Attacker summaries show at most 500 characters per field and 20 observations. These display limits leave the original grading evidence intact.
+
 Example trace summary provided to an attacker:
 
 ```
@@ -889,6 +912,8 @@ redteam:
     - jailbreak # Iterative strategy that benefits from trace feedback
 ```
 
+You can enable tracing for an individual test with `metadata.tracing.enabled: true`, including in `defaultTest`. This creates its trace context and starts the configured OTLP receiver even when suite-level tracing is disabled. Strategy overrides such as `redteam.tracing.strategies.goat.enabled: true` also collect traces for tests with the matching `metadata.strategyId`.
+
 Promptfoo automatically selects spans that describe model calls, tool executions, guardrail
 decisions, or errors. It recognizes OpenTelemetry `gen_ai.*` attributes, common tool and
 guardrail attributes, and older `llm.*` attributes. Useful spans are included even when the
@@ -912,6 +937,32 @@ redteam:
 Span names come from your application's instrumentation, so choose patterns that match the
 names in your traces. An explicit filter can also include an operation that Promptfoo would
 otherwise leave out.
+
+#### SQL and shell injection grading
+
+Enable `redteam.tracing.enabled` and `includeInGrading` to grade captured SQL and shell actions. Root tracing alone does not send this evidence to the grader. Native MCP tool calls can supply the same summary without collected spans.
+
+Shell grading combines spans with native tool calls, including nested `function.name` and `function.arguments` receipts. Set `tracing.commandToolNames` for custom command tools. A generic `execute` dispatcher counts as a shell tool when its arguments contain `cmd`, `command`, or `commands`, or when it is listed in `commandToolNames`. Matching native and traced call IDs count once; explicit errors and incomplete outcomes remain visible. Destructive-mutation cases require command evidence.
+
+SQL and shell grading reject invalid or conflicting call-ID and boolean outcome aliases. Equivalent native receipts with one ID are reconciled once; conflicting duplicates produce an error. Raw request envelopes without a result retain an unknown outcome, while MCP content results remain available for grading.
+
+Conflicting `db.query.text` and `db.statement` values produce a grading error for SQL operations. Shell exit-code fields (`exitCode`, `exit_code`, and `process.exit.code`) must be integers and agree when supplied together.
+
+SQL grading recognizes `sql` arguments and `read_query` calls with string or object arguments. Generic `query` tools require SQL syntax; ordinary search queries do not count. The summary includes query structure, status codes, and explicit authorization and row-count outcomes. It omits connection data, bound parameters, returned rows, free-form status messages, SQL literals, and comments. Repeated literal text uses the same placeholder. Incomplete literals or comments and unsupported quoted-literal or executable-comment syntax produce a grading error. Use bound parameters to keep SQL values out of telemetry.
+
+Set the span attribute `db.system.name` (or `db.system`) to identify the database when using quoted identifiers. Both attributes must identify the same database; equivalent supported names such as `postgres` and `postgresql` are accepted. PostgreSQL double quotes, MySQL backticks, and SQL Server or SQLite brackets preserve table and column names in the grading evidence. Double quotes in MySQL, SQL Server, and SQLite can also delimit strings depending on database settings; these ambiguous forms produce a grading error. Use unambiguous quoting instead.
+
+PostgreSQL summaries follow the default `standard_conforming_strings=on`: a backslash in an ordinary string does not escape its closing quote. `E'…'` strings and their continuations support backslash escapes. SQLite and SQL Server strings escape quotes by doubling them; a backslash cannot escape a quote. SQL Server also supports `N'…'` Unicode strings and backslash-newline continuations. BigQuery summaries omit values in single, double, and triple quotes, including raw strings and byte literals. Quoted identifiers retain their original whitespace.
+
+Dialect metadata also controls dollar quotes and nested comments. PostgreSQL dollar-quoted values and Snowflake `$$…$$` values are omitted; dollar signs in MySQL/MariaDB identifiers remain visible. PostgreSQL and SQL Server block comments can nest, while SQLite, MySQL, and MariaDB comments end at the first `*/`. Ambiguous dollar quoting or nested comments in other dialects produce a grading error.
+
+All SQL and shell operations must fit within the 24-step evidence limit. Unrelated spans fill the remaining space and may be omitted. SQL queries longer than 400 characters, before or after redaction, produce a grading error; other span and tool names are shortened to 400 characters. Adaptive strategies also stop when required SQL evidence is hidden or omitted.
+
+Query text honors `tracing.otlp.http.redactAttributes`, including values echoed in other names and queries. A `query` pattern removes query text from the summary. When nested attributes exceed the redaction limit or a redacted value contains serialized JSON, derived names and query text are hidden. Basic and Bearer credentials are removed from span and tool names before grading.
+
+Later external snapshots update imported spans as operations complete. External telemetry cannot replace spans already owned by the local evaluator. Missing, empty, failed, oversized, or conflicting trace collection produces a grading error when SQL or shell trace grading is enabled. Cached responses also produce an error; rerun with `--no-cache`. Disabling trace grading preserves response grading.
+
+Grading waits through a bounded collection window, including when early snapshots are unchanged. Local assertion grading defaults to six reads at 250 ms intervals; `PROMPTFOO_TRACE_FETCH_MAX_ATTEMPTS` and `PROMPTFOO_TRACE_FETCH_RETRY_DELAY_MS` control these reads. Adaptive grading uses `maxRetries` and `retryDelayMs` for local and external traces.
 
 ### Strategy-Specific Configuration
 

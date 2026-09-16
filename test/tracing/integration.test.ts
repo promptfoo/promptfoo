@@ -8,7 +8,8 @@ import type { EvaluateTestSuite } from '../../src/types/index';
 vi.mock('../../src/tracing/store', () => ({
   getTraceStore: vi.fn(() => ({
     createTrace: vi.fn().mockResolvedValue(undefined),
-    addSpans: vi.fn().mockResolvedValue(undefined),
+    reserveLocalSpan: vi.fn(() => vi.fn()),
+    addSpans: vi.fn().mockResolvedValue({ stored: true }),
     getTracesByEvaluation: vi.fn().mockResolvedValue([]),
     getTrace: vi.fn().mockResolvedValue(null),
   })),

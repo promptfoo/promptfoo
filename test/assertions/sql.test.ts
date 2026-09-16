@@ -1,11 +1,275 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { handleContainsSql, handleIsSql } from '../../src/assertions/sql';
+import { redactSqlLiteralsAndComments, stripIgnoredSqlText } from '../../src/assertions/sqlLexer';
 
 import type { Assertion, AssertionParams, GradingResult } from '../../src/types/index';
 
 const assertion: Assertion = {
   type: 'is-sql',
 };
+
+describe('SQL trace value redaction', () => {
+  it.each(
+    ["'", '"'].flatMap((quote) =>
+      ['', 'b', 'B', 'r', 'br', 'RB'].map((prefix) => ({ quote, prefix })),
+    ),
+  )('omits BigQuery triple-quoted values (prefix=$prefix, quote=$quote)', ({ quote, prefix }) => {
+    const delimiter = quote.repeat(3);
+    const query = `SELECT ${prefix}${delimiter}prefix ${quote}PRIVATE_VALUE${quote} suffix${delimiter} AS data`;
+    expect(redactSqlLiteralsAndComments(query, 'bigquery')).toBe(
+      `SELECT ${prefix ? prefix + ' ' : ''}:literal_1 AS data`,
+    );
+    expect(stripIgnoredSqlText(query, 'bigquery')).not.toContain('PRIVATE_VALUE');
+  });
+
+  it.each(["'", '"'])('preserves BigQuery triple-quote boundaries for %s', (quote) => {
+    const delimiter = quote.repeat(3);
+    const literal = `${delimiter}prefix ${quote}); DROP TABLE hidden; -- ${quote}suffix${delimiter}`;
+    expect(redactSqlLiteralsAndComments(`SELECT ${literal}`, 'bigquery')).toBe('SELECT :literal_1');
+    expect(redactSqlLiteralsAndComments(`SELECT ${literal}; DROP TABLE users`, 'bigquery')).toBe(
+      'SELECT :literal_1 ; DROP TABLE users',
+    );
+    const escaped = `${delimiter}prefix\\${delimiter}PRIVATE_VALUE suffix${delimiter}`;
+    expect(redactSqlLiteralsAndComments(`SELECT ${escaped}`, 'bigquery')).toBe('SELECT :literal_1');
+    expect(() =>
+      redactSqlLiteralsAndComments(`SELECT ${delimiter}PRIVATE_VALUE`, 'bigquery'),
+    ).toThrow('unclosed literal');
+  });
+
+  it.each([
+    ['mysql', 'alias$x$'],
+    ['mariadb', '$x$'],
+    ['postgresql', 'alias$x$'],
+    ['postgres', 'alias$x$'],
+  ])('preserves statements between dollar-bearing identifiers in %s', (database, identifier) => {
+    const query = `SELECT 1 AS ${identifier}; DROP TABLE users; SELECT 1 AS ${identifier}`;
+    expect(redactSqlLiteralsAndComments(query, database)).toBe(
+      `SELECT :literal_1 AS ${identifier}; DROP TABLE users; SELECT :literal_1 AS ${identifier}`,
+    );
+    expect(stripIgnoredSqlText(query, database)).toContain('DROP TABLE users');
+  });
+
+  it.each(['sqlite', 'mysql', 'mariadb'])(
+    'preserves statements after the first block-comment terminator in %s',
+    (database) => {
+      for (const comment of ['/* /* */', '/*/*/']) {
+        const query = `SELECT 1 ${comment}; DROP TABLE users; /* */ -- */`;
+        expect(redactSqlLiteralsAndComments(query, database)).toBe(
+          'SELECT :literal_1 ; DROP TABLE users;',
+        );
+        expect(stripIgnoredSqlText(query, database)).toContain('DROP TABLE users');
+      }
+    },
+  );
+
+  it.each(['postgresql', 'postgres', 'sqlite', 'mssql', 'microsoft.sql_server', 'TransactSQL'])(
+    'preserves statements after ordinary backslash literals in %s',
+    (database) => {
+      const query = String.raw`SELECT 'private\'; DROP TABLE users; -- '`;
+      expect(redactSqlLiteralsAndComments(query, database)).toBe(
+        'SELECT :literal_1 ; DROP TABLE users;',
+      );
+      expect(stripIgnoredSqlText(query, database)).toContain('DROP TABLE users');
+    },
+  );
+
+  it.each(['sqlite', 'mssql', 'microsoft.sql_server', 'TransactSQL'])(
+    'keeps %s doubled-quote string contents private',
+    (database) => {
+      const query = String.raw`SELECT 'private\''still literal; DROP TABLE users';`;
+      expect(redactSqlLiteralsAndComments(query, database)).toBe('SELECT :literal_1 ;');
+    },
+  );
+
+  it('preserves SQL Server Unicode string boundaries', () => {
+    expect(
+      redactSqlLiteralsAndComments(String.raw`SELECT N'private\'; DROP TABLE users; -- '`, 'mssql'),
+    ).toBe('SELECT N :literal_1 ; DROP TABLE users;');
+    expect(
+      redactSqlLiteralsAndComments(String.raw`SELECT N'private\''still literal';`, 'mssql'),
+    ).toBe('SELECT N :literal_1 ;');
+  });
+
+  it.each([
+    ['E', '\n'],
+    ['e', '\n'],
+    ['E', ' -- comment\n'],
+    ['E', ' /* comment */\n'],
+  ])('keeps %s string escapes and continuations private (%j)', (prefix, separator) => {
+    const query = `SELECT ${prefix}'first'${separator}${String.raw`'private\'value'; DROP TABLE users;`}`;
+    const result = redactSqlLiteralsAndComments(query, 'postgresql');
+    expect(result).toContain('DROP TABLE users');
+    expect(result).not.toContain('private');
+    expect(result).not.toContain('value');
+  });
+
+  it.each([String.raw`"path\"`, String.raw`"path  \"`])(
+    'preserves PostgreSQL identifiers ending in a backslash: %s',
+    (identifier) => {
+      const query = `SELECT ${identifier} FROM records; DROP TABLE users; -- "`;
+      expect(redactSqlLiteralsAndComments(query, 'postgresql')).toBe(
+        `SELECT ${identifier} FROM records; DROP TABLE users;`,
+      );
+    },
+  );
+
+  it.each(['#>', '#>>', '#-'])('preserves PostgreSQL JSON operator %s', (operator) => {
+    const result = redactSqlLiteralsAndComments(
+      `SELECT payload ${operator} '{private}' FROM records WHERE owner='private'`,
+      'postgresql',
+    );
+    expect(result).toBe(
+      `SELECT payload ${operator} :literal_1 FROM records WHERE owner= :literal_2`,
+    );
+  });
+
+  it('preserves PostgreSQL XOR and SQL Server temporary-table names', () => {
+    expect(redactSqlLiteralsAndComments('SELECT 5 # 3 FROM records WHERE id=7', 'postgres')).toBe(
+      'SELECT :literal_1 # :literal_2 FROM records WHERE id= :literal_3',
+    );
+    expect(redactSqlLiteralsAndComments('SELECT * FROM #records WHERE id=7', 'mssql')).toBe(
+      'SELECT * FROM #records WHERE id= :literal_1',
+    );
+  });
+
+  it.each(['mysql', 'mariadb', 'bigquery', 'clickhouse'])(
+    'removes hash comments for %s',
+    (database) => {
+      expect(
+        redactSqlLiteralsAndComments(
+          "SELECT id FROM records # private comment\nWHERE owner='private'",
+          database,
+        ),
+      ).toBe('SELECT id FROM records WHERE owner= :literal_1');
+    },
+  );
+
+  it.each(['', 'unknown'])('rejects ambiguous hash syntax for %s', (database) => {
+    expect(() => redactSqlLiteralsAndComments('SELECT a # b FROM records', database)).toThrow(
+      'ambiguous hash syntax',
+    );
+  });
+
+  it.each(['', 'unknown'])('rejects ambiguous bracketed text for %s', (database) => {
+    expect(() => redactSqlLiteralsAndComments('SELECT [private value]', database)).toThrow(
+      'ambiguous quoted text',
+    );
+  });
+
+  it.each(['postgresql', 'bigquery'])(
+    'preserves array subscripts in %s trace summaries',
+    (database) => {
+      expect(redactSqlLiteralsAndComments('SELECT arr[1] FROM records', database)).toBe(
+        'SELECT arr[ :literal_1 ] FROM records',
+      );
+    },
+  );
+
+  it('preserves MySQL subtraction and removes ClickHouse slash comments', () => {
+    expect(redactSqlLiteralsAndComments('SELECT a--b FROM records', 'mysql')).toBe(
+      'SELECT a--b FROM records',
+    );
+    expect(
+      redactSqlLiteralsAndComments(
+        'SELECT a FROM records // private comment\nWHERE b=1',
+        'clickhouse',
+      ),
+    ).toBe('SELECT a FROM records WHERE b= :literal_1');
+  });
+
+  it('preserves bind placeholders and repeated literal identities', () => {
+    const result = redactSqlLiteralsAndComments(
+      'SELECT ?1, $2, :3, @4 FROM customer2 WHERE id=7 OR 7=7',
+    );
+    expect(result).toContain('SELECT ?1, $2, :3, @4 FROM customer2');
+    expect(result).toMatch(/id= (:literal_\d+) OR \1 = \1/);
+    expect(result).not.toContain('7');
+    expect(redactSqlLiteralsAndComments('SELECT :literal_1, 7')).toBe(
+      'SELECT :literal_1, :literal__1',
+    );
+  });
+
+  it('handles long runs of placeholder-prefix collisions', () => {
+    const existing = `:literal${'_'.repeat(64_000)}1`;
+    const query = `SELECT ${existing}, 7`;
+    expect(stripIgnoredSqlText(query, 'postgresql')).toBe(query);
+    expect(redactSqlLiteralsAndComments(query, 'postgresql')).toBe(
+      `SELECT ${existing}, :literal${'_'.repeat(64_001)}1`,
+    );
+  });
+
+  it.each(['postgresql', 'postgres', 'mssql', 'microsoft.sql_server', 'TransactSQL'])(
+    'omits escaped literal contents and nested comments in %s',
+    (database) => {
+      const result = redactSqlLiteralsAndComments(
+        "SELECT 'private ''word', 12 /* outer /* inner */ hidden */ FROM records",
+        database,
+      );
+      expect(result).toBe('SELECT :literal_1 , :literal_2 FROM records');
+    },
+  );
+
+  it.each([
+    ['postgresql', '$tag$'],
+    ['postgres', '$$'],
+    ['snowflake', '$$'],
+  ])('omits supported dollar-quoted values for %s', (database, delimiter) => {
+    expect(
+      redactSqlLiteralsAndComments(`SELECT ${delimiter}private${delimiter}; SELECT 1`, database),
+    ).toBe('SELECT :literal_1 ; SELECT :literal_2');
+  });
+
+  it.each(['', 'unknown'])(
+    'rejects ambiguous dollar quotes and nested comments without a supported dialect (%s)',
+    (database) => {
+      for (const query of [
+        'SELECT $tag$private$tag$',
+        'SELECT 1 /* outer /* inner */ private */',
+      ]) {
+        expect(() => redactSqlLiteralsAndComments(query, database)).toThrow(
+          'cannot be safely graded',
+        );
+      }
+    },
+  );
+
+  it.each([
+    "SELECT 'unclosed",
+    'SELECT $$unclosed',
+    "SELECT q'[private]'",
+    'SELECT /*! private */ 1',
+  ])('rejects syntax whose contents cannot be safely summarized: %s', (query) => {
+    expect(() => redactSqlLiteralsAndComments(query)).toThrow('cannot be safely graded');
+  });
+
+  it('rejects unclosed PostgreSQL nested comments', () => {
+    expect(() =>
+      redactSqlLiteralsAndComments('SELECT 1 /* outer /* inner */', 'postgresql'),
+    ).toThrow('unclosed comment');
+  });
+
+  it.each([
+    ['postgresql', '"payroll"'],
+    ['postgresql', '"payroll  archive"'],
+    ['mysql', '`admin_users`'],
+    ['mssql', '[private_records]'],
+    ['microsoft.sql_server', '[private_records]'],
+    ['sqlite', '[private_records]'],
+  ])('preserves quoted identifiers for %s', (database, identifier) => {
+    expect(redactSqlLiteralsAndComments(`SELECT * FROM ${identifier} WHERE id=7`, database)).toBe(
+      `SELECT * FROM ${identifier} WHERE id= :literal_1`,
+    );
+  });
+
+  it.each(['', 'mysql', 'mariadb', 'sqlite', 'mssql', 'microsoft.sql_server'])(
+    'rejects ambiguous double-quoted values for database %s',
+    (database) => {
+      expect(() => redactSqlLiteralsAndComments('SELECT "private value"', database)).toThrow(
+        'ambiguous quoted text',
+      );
+    },
+  );
+});
 
 describe('is-sql assertion', () => {
   // -------------------------------------------------- Basic Tests ------------------------------------------------------ //

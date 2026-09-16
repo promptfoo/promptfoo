@@ -207,6 +207,67 @@ describe('LangfuseProvider', () => {
   });
 
   it.each([
+    ['tool.arguments', { query: 'other records' }],
+    ['gen_ai.tool.call.arguments', { query: 'other records' }],
+    ['gen_ai.tool.call.arguments', null],
+    ['gen_ai.tool.call.result', { count: 5 }],
+    ['gen_ai.tool.call.result', ''],
+  ] as const)('rejects conflicting restored tool data in %s (%j)', async (key, value) => {
+    mockedFetch.mockResolvedValue(
+      response({
+        data: [
+          {
+            ...observations[0],
+            name: 'search',
+            type: 'TOOL',
+            input: '{"query":"customer orders"}',
+            output: '{"count":3}',
+            metadata: { attributes: { [key]: value } },
+          },
+        ],
+      }),
+    );
+
+    await expect(new LangfuseProvider(config).fetchTrace(TRACE_ID)).rejects.toMatchObject({
+      name: 'TraceProviderError',
+      retryable: false,
+      message: 'Langfuse tool observation has conflicting input or output attributes',
+    });
+  });
+
+  it.each([true, false])(
+    'restores equivalent tool data and original names (observation data present: %s)',
+    async (hasObservationData) => {
+      const attributes = {
+        'gen_ai.tool.name': 'inventory.search',
+        'tool.name': 'inventory.search',
+        'tool.arguments': '{"limit":3,"query":"customer orders"}',
+        'gen_ai.tool.call.arguments': { limit: 3, query: 'customer orders' },
+        'gen_ai.tool.call.result': '{"count":2,"items":["one","two"]}',
+      };
+      mockedFetch.mockResolvedValue(
+        response({
+          data: [
+            {
+              ...observations[0],
+              name: 'Search inventory',
+              type: 'TOOL',
+              input: hasObservationData ? '{"query":"customer orders","limit":3}' : undefined,
+              output: hasObservationData ? { items: ['one', 'two'], count: 2 } : undefined,
+              metadata: { attributes },
+            },
+          ],
+        }),
+      );
+
+      const span = (await new LangfuseProvider(config).fetchTrace(TRACE_ID))?.spans[0];
+
+      expect(span?.attributes).toMatchObject(attributes);
+      expect(getToolNameFromAttributes(span?.attributes)).toBe('inventory.search');
+    },
+  );
+
+  it.each([
     { type: 'GENERATION', operation: 'chat' },
     { type: 'EMBEDDING', operation: 'embeddings' },
     { type: 'TOOL', operation: 'execute_tool' },
@@ -538,14 +599,53 @@ describe('LangfuseProvider', () => {
     );
   });
 
-  it('caps the returned span count and avoids unnecessary pagination', async () => {
-    mockedFetch.mockResolvedValue(response({ data: observations, meta: { cursor: 'next-page' } }));
+  it('stops an explicitly limited read before fetching the next page', async () => {
+    mockedFetch
+      .mockResolvedValueOnce(response({ data: [observations[0]], meta: { cursor: 'next-page' } }))
+      .mockResolvedValueOnce(response({ data: [observations[1]], meta: {} }));
 
     expect(
       (await new LangfuseProvider(config).fetchTrace(TRACE_ID, { maxSpans: 1 }))?.spans,
     ).toHaveLength(1);
-    expect(mockedFetch).toHaveBeenCalledTimes(1);
+    expect(mockedFetch).toHaveBeenCalledOnce();
     expect(new URL(String(mockedFetch.mock.calls[0][0])).searchParams.get('limit')).toBe('1');
+  });
+
+  it.each(['cursor', 'page'])('detects an oversized trace across %s pages', async (pagination) => {
+    const oversized = Array.from({ length: 10_001 }, (_, index) => ({
+      ...observations[0],
+      id: `span-${index}`,
+    }));
+    mockedFetch.mockImplementation(async (url) => {
+      const params = new URL(String(url)).searchParams;
+      const page = Number(params.get('page') ?? params.get('cursor') ?? 1);
+      return response({
+        data: oversized.slice((page - 1) * 1_000, page * 1_000),
+        meta:
+          pagination === 'page'
+            ? { page, totalPages: 11 }
+            : page < 11
+              ? { cursor: String(page + 1) }
+              : {},
+      });
+    });
+    await expect(new LangfuseProvider(config).fetchTrace(TRACE_ID)).rejects.toMatchObject({
+      limitExceeded: true,
+    });
+    expect(mockedFetch).toHaveBeenCalledTimes(11);
+  });
+
+  it('accepts a complete trace at the span limit', async () => {
+    mockedFetch.mockResolvedValue(
+      response({
+        data: Array.from({ length: 10_000 }, (_, index) => ({
+          ...observations[0],
+          id: `span-${index}`,
+        })),
+        meta: {},
+      }),
+    );
+    expect((await new LangfuseProvider(config).fetchTrace(TRACE_ID))?.spans).toHaveLength(10_000);
   });
 
   it('never sends a non-positive page limit', async () => {
@@ -592,9 +692,10 @@ describe('LangfuseProvider', () => {
       new Response('{}', { headers: { 'content-length': String(10 * 1024 * 1024 + 1) } }),
     );
 
-    await expect(new LangfuseProvider(config).fetchTrace(TRACE_ID)).rejects.toThrow(
-      'maximum response size',
-    );
+    await expect(new LangfuseProvider(config).fetchTrace(TRACE_ID)).rejects.toMatchObject({
+      message: expect.stringContaining('maximum response size'),
+      limitExceeded: true,
+    });
   });
 
   it('applies the response size limit across paginated observation requests', async () => {
@@ -608,9 +709,10 @@ describe('LangfuseProvider', () => {
     const cancel = vi.spyOn(secondPage.body!, 'cancel');
     mockedFetch.mockResolvedValueOnce(firstPage).mockResolvedValueOnce(secondPage);
 
-    await expect(new LangfuseProvider(config).fetchTrace(TRACE_ID)).rejects.toThrow(
-      'maximum response size',
-    );
+    await expect(new LangfuseProvider(config).fetchTrace(TRACE_ID)).rejects.toMatchObject({
+      message: expect.stringContaining('maximum response size'),
+      limitExceeded: true,
+    });
     expect(cancel).toHaveBeenCalledOnce();
   });
 
@@ -624,9 +726,10 @@ describe('LangfuseProvider', () => {
     });
     mockedFetch.mockResolvedValue(new Response(body, { headers: { 'content-length': '1' } }));
 
-    await expect(new LangfuseProvider(config).fetchTrace(TRACE_ID)).rejects.toThrow(
-      'maximum response size',
-    );
+    await expect(new LangfuseProvider(config).fetchTrace(TRACE_ID)).rejects.toMatchObject({
+      message: expect.stringContaining('maximum response size'),
+      limitExceeded: true,
+    });
     expect(cancel).toHaveBeenCalledOnce();
   });
 

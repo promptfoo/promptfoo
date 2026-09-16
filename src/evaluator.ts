@@ -10,6 +10,7 @@ import {
   getAssertionBaseType,
   hasTraceAwareAssertions,
   MODEL_GRADED_ASSERTION_TYPES,
+  requiresExecutionEvidence,
   runAssertions,
   runCompareAssertion,
 } from './assertions/index';
@@ -47,6 +48,8 @@ import telemetry from './telemetry';
 import {
   generateTraceContextIfNeeded,
   isOtlpReceiverStarted,
+  isTracingEnabled,
+  isTracingEnabledForSuite,
   startOtlpReceiverIfNeeded,
   stopOtlpReceiverIfNeeded,
 } from './tracing/evaluatorTracing';
@@ -939,7 +942,6 @@ async function callProviderForRunEval({
         repeatIndex,
         test,
         testIndex,
-        testSuite,
         traceContext,
         vars,
       });
@@ -1002,7 +1004,7 @@ async function collectExternalTraceAfterProviderCall({
     !response?.error &&
     response?.output !== null &&
     response?.output !== undefined &&
-    hasTraceAwareAssertions(test.assert);
+    hasTraceAwareAssertions(test.assert, test);
 
   try {
     if (needsTraceForGrading) {
@@ -1014,6 +1016,8 @@ async function collectExternalTraceAfterProviderCall({
       providerConfig: tracingConfig?.provider,
       queryDelay: tracingConfig?.queryDelay,
       maxRetries: needsTraceForGrading ? 5 : 0,
+      waitForStableSpans: needsTraceForGrading,
+      requireComplete: needsTraceForGrading,
       retryDelayMs: 1000,
       includeInternalSpans: true,
       sanitizeAttributes: true,
@@ -1033,6 +1037,12 @@ async function collectExternalTraceAfterProviderCall({
       }
       return;
     }
+    if (
+      needsTraceForGrading &&
+      test.assert?.some((assertion) => requiresExecutionEvidence(assertion, test))
+    ) {
+      throw error;
+    }
     logger.warn(`[Evaluator] Failed to fetch external traces: ${error}`);
   }
 }
@@ -1049,12 +1059,11 @@ async function callActiveProvider({
   repeatIndex,
   test,
   testIndex,
-  testSuite,
   traceContext,
   vars,
 }: Pick<
   RunEvalOptions,
-  'abortSignal' | 'evalId' | 'provider' | 'rateLimitRegistry' | 'repeatIndex' | 'test' | 'testSuite'
+  'abortSignal' | 'evalId' | 'provider' | 'rateLimitRegistry' | 'repeatIndex' | 'test'
 > & {
   filters: RunEvalOptions['nunjucksFilters'];
   onProviderInvoked: () => void;
@@ -1099,9 +1108,7 @@ async function callActiveProvider({
             async (context) => activeProvider.callApi(renderedPrompt, context, callApiOptions),
           )
         : activeProvider.callApi(renderedPrompt, callApiContext, callApiOptions);
-    return testSuite?.tracing
-      ? cliState.withRequestTracingConfig(testSuite.tracing, invoke)
-      : invoke();
+    return invoke();
   };
   const response = rateLimitRegistry
     ? await rateLimitRegistry.execute(activeProvider, callApi, createProviderRateLimitOptions())
@@ -1432,7 +1439,7 @@ async function gradeRunEvalResponse({
   const traceId = getTraceId(traceContext);
   if (
     traceId &&
-    hasTraceAwareAssertions(test.assert) &&
+    hasTraceAwareAssertions(test.assert, test) &&
     !isExternalTraceProvider(testSuite?.tracing?.provider)
   ) {
     await flushOtel();
@@ -1607,7 +1614,15 @@ export async function runEval(options: RunEvalOptions): Promise<EvaluateResult[]
   );
 }
 
-async function runEvalInternal({
+async function runEvalInternal(options: RunEvalOptions): Promise<EvaluateResult[]> {
+  return cliState.withRequestTracingConfig(
+    options.testSuite?.tracing ?? { enabled: false },
+    () => runEvalWithTracing(options),
+    options.testSuite?.redteam?.tracing ?? {},
+  );
+}
+
+async function runEvalWithTracing({
   provider,
   prompt, // raw prompt
   test,
@@ -2903,7 +2918,7 @@ function createRunEvalTest(
     options: testOptions,
   };
 
-  if (!isTracingEnabledForTest(testSuite, testCase)) {
+  if (!isTracingEnabled(testCase, testSuite)) {
     return baseTest;
   }
   return {
@@ -2914,20 +2929,6 @@ function createRunEvalTest(
       evaluationId: evalId,
     },
   };
-}
-
-function isTracingEnabledForTest(testSuite: TestSuite, testCase: AtomicTestCase) {
-  const tracingEnvEnabled = getEnvBool('PROMPTFOO_TRACING_ENABLED', false);
-  const tracingEnabled =
-    tracingEnvEnabled ||
-    testCase.metadata?.tracingEnabled === true ||
-    testSuite.tracing?.enabled === true;
-
-  logger.debug(
-    `[Evaluator] Tracing check: env=${tracingEnvEnabled}, testCase.metadata?.tracingEnabled=${testCase.metadata?.tracingEnabled}, testSuite.tracing?.enabled=${testSuite.tracing?.enabled}, tracingEnabled=${tracingEnabled}`,
-  );
-
-  return tracingEnabled;
 }
 
 function markComparisonRows(
@@ -5030,13 +5031,7 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
 
   async evaluate(): Promise<TEvaluation> {
     // Initialize OTEL SDK if tracing is enabled
-    // Check env flag, test suite level, and default test metadata
-    const tracingEnabled =
-      getEnvBool('PROMPTFOO_TRACING_ENABLED', false) ||
-      this.testSuite.tracing?.enabled === true ||
-      (typeof this.testSuite.defaultTest === 'object' &&
-        this.testSuite.defaultTest?.metadata?.tracingEnabled === true) ||
-      this.testSuite.tests?.some((t) => t.metadata?.tracingEnabled === true);
+    const tracingEnabled = isTracingEnabledForSuite(this.testSuite);
     let otelInitialized = false;
     let otlpReceiverAcquired = false;
 

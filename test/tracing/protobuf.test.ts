@@ -296,7 +296,7 @@ describe('Protobuf decoding', () => {
       // Check that attributes are present
       const attrs = span.attributes!;
       expect(attrs.find((a) => a.key === 'string.attr')?.value?.stringValue).toBe('hello');
-      expect(attrs.find((a) => a.key === 'int.attr')?.value?.intValue).toBe(123);
+      expect(longToNumber(attrs.find((a) => a.key === 'int.attr')?.value?.intValue)).toBe(123);
       expect(attrs.find((a) => a.key === 'double.attr')?.value?.doubleValue).toBeCloseTo(3.14);
       expect(attrs.find((a) => a.key === 'bool.attr')?.value?.boolValue).toBe(true);
       expect(attrs.find((a) => a.key === 'array.attr')?.value?.arrayValue?.values).toHaveLength(2);

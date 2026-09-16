@@ -1,8 +1,11 @@
+import { createHash } from 'node:crypto';
+
 import { asc, eq, sql } from 'drizzle-orm';
 import { getDb } from '../database/index';
 import { spansTable, tracesTable } from '../database/tables';
 import logger from '../logger';
-import { sanitizeTraceAttributes } from './sanitizeAttributes';
+import { sanitizeBody } from './genaiTracer';
+import { getTraceTextRedactor, sanitizeTraceAttributes } from './sanitizeAttributes';
 import { isRelevantSpan, matchesSpanFilter } from './spanFilter';
 import { SPAN_ROLE_ATTRIBUTE } from './spanRoles';
 
@@ -45,28 +48,125 @@ export interface TraceSpanQueryOptions extends TraceAttributeSanitizationOptions
 export interface AddSpansOptions {
   skipTraceCheck?: boolean;
   warnIfMissingTrace?: boolean;
+  updateExisting?: boolean;
+  source?: 'external';
+  redactSpans?: (spans: SpanData[]) => SpanData[];
 }
 
-function serializeSpan(
-  span: typeof spansTable.$inferSelect,
-  shouldSanitizeAttributes = true,
-): SpanData {
-  const rawAttributes = span.attributes ?? undefined;
+const EXTERNAL_SPAN_IDS_KEY = 'promptfooExternalSpanIds';
+// Keep the persisted key compatible with traces written before external retry checks.
+const SPAN_HASHES_KEY = 'promptfooLocalSpanHashes';
 
+function comparableSpan(span: SpanData) {
+  const attributes = { ...span.attributes };
+  delete attributes['promptfoo.redaction.history'];
   return {
+    spanId: span.spanId,
+    parentSpanId: span.parentSpanId || undefined,
+    name: span.name,
+    startTime: span.startTime,
+    endTime: span.endTime ?? undefined,
+    attributes,
+    statusCode: span.statusCode ?? 0,
+    statusMessage: span.statusMessage ?? '',
+  };
+}
+
+function spanHash(span: SpanData): string {
+  return createHash('sha256')
+    .update(
+      JSON.stringify(comparableSpan(span), (_key, value) =>
+        value && typeof value === 'object' && !Array.isArray(value)
+          ? Object.fromEntries(
+              Object.entries(value).sort(([left], [right]) =>
+                left < right ? -1 : left > right ? 1 : 0,
+              ),
+            )
+          : value,
+      ),
+    )
+    .digest('hex');
+}
+
+function serializeTraceMetadata(metadata: Record<string, unknown> | null | undefined) {
+  if (!metadata) {
+    return undefined;
+  }
+  const result = { ...metadata };
+  delete result[SPAN_HASHES_KEY];
+  return result;
+}
+
+export class TraceLimitError extends Error {
+  constructor() {
+    super('Trace limit exceeded (10,000 spans or 10 MiB per trace)');
+    this.name = 'TraceLimitError';
+  }
+}
+
+function validateTracePayloadSize(
+  spans: SpanData[],
+  updateExisting: boolean,
+  storedSizes: { spanId: string; bytes: number }[] = [],
+): void {
+  const sizes = new Map(storedSizes.map((span) => [span.spanId, span.bytes]));
+  for (const span of spans) {
+    if (updateExisting || !sizes.has(span.spanId)) {
+      sizes.set(
+        span.spanId,
+        Buffer.byteLength(span.spanId) +
+          Buffer.byteLength(span.parentSpanId ?? '') +
+          Buffer.byteLength(span.name) +
+          Buffer.byteLength(JSON.stringify(span.attributes) ?? '') +
+          Buffer.byteLength(span.statusMessage ?? ''),
+      );
+    }
+  }
+  if (
+    sizes.size > 10_000 ||
+    [...sizes.values()].reduce((total, bytes) => total + bytes, 0) > 10 * 1024 * 1024
+  ) {
+    throw new TraceLimitError();
+  }
+}
+
+function serializeSpans(
+  spans: (typeof spansTable.$inferSelect)[],
+  shouldSanitizeAttributes = true,
+): SpanData[] {
+  const sanitized = spans.map((span) => ({
     spanId: span.spanId,
     parentSpanId: span.parentSpanId ?? undefined,
     name: span.name,
     startTime: span.startTime,
     endTime: span.endTime ?? undefined,
-    attributes: rawAttributes
+    attributes: span.attributes
       ? shouldSanitizeAttributes
-        ? sanitizeTraceAttributes(rawAttributes)
-        : rawAttributes
+        ? sanitizeTraceAttributes(span.attributes)
+        : span.attributes
       : undefined,
     statusCode: span.statusCode ?? undefined,
     statusMessage: span.statusMessage ?? undefined,
-  };
+  }));
+  if (!shouldSanitizeAttributes) {
+    return sanitized;
+  }
+  const redactAttributeText = getTraceTextRedactor(
+    spans.map((span, index) => ({
+      original: span.attributes,
+      sanitized: sanitized[index].attributes,
+    })),
+    '<redacted>',
+  );
+  const redactText = (value: string) => sanitizeBody(redactAttributeText(value));
+  return sanitized.map((span, index) => ({
+    ...span,
+    name: redactText(span.name),
+    statusMessage: span.statusMessage === undefined ? undefined : redactText(span.statusMessage),
+    attributes: span.attributes
+      ? sanitizeTraceAttributes(spans[index].attributes, { redactText })
+      : undefined,
+  }));
 }
 
 function isGraderOwnedSpan(
@@ -147,6 +247,16 @@ function computeDepth(
 
 export class TraceStore {
   private db: Awaited<ReturnType<typeof getDb>> | null = null;
+  private static readonly pendingLocalSpans = new Set<string>();
+
+  /** Protect SDK-issued IDs until their local export finishes. Shared across store instances. */
+  reserveLocalSpan(traceId: string, spanId: string): () => void {
+    const key = `${traceId}:${spanId}`;
+    TraceStore.pendingLocalSpans.add(key);
+    return () => {
+      TraceStore.pendingLocalSpans.delete(key);
+    };
+  }
 
   private async getDatabase() {
     if (!this.db) {
@@ -162,6 +272,10 @@ export class TraceStore {
         `[TraceStore] Creating trace ${trace.traceId} for evaluation ${trace.evaluationId}`,
       );
       const db = await this.getDatabase();
+      const metadata = serializeTraceMetadata(trace.metadata);
+      if (metadata) {
+        delete metadata[EXTERNAL_SPAN_IDS_KEY];
+      }
       await db
         .insert(tracesTable)
         .values({
@@ -170,7 +284,7 @@ export class TraceStore {
           evaluationId: trace.evaluationId,
           testCaseId: trace.testCaseId,
           createdAt: Date.now(),
-          metadata: trace.metadata,
+          metadata,
         })
         .onConflictDoNothing({ target: tracesTable.traceId })
         .run();
@@ -215,36 +329,256 @@ export class TraceStore {
         logger.debug(`[TraceStore] Trace ${traceId} found, proceeding with span insertion`);
       }
 
-      const spanRecords = spans.map((span) => {
-        logger.debug(`[TraceStore] Preparing span ${span.spanId} (${span.name}) for insertion`);
-        return {
-          id: crypto.randomUUID(),
-          traceId,
-          spanId: span.spanId,
-          parentSpanId: span.parentSpanId,
-          name: span.name,
-          startTime: span.startTime,
-          endTime: span.endTime,
-          attributes: span.attributes,
-          statusCode: span.statusCode,
-          statusMessage: span.statusMessage,
-        };
+      // Only the store may create persisted redaction-history markers.
+      spans = spans.map((span) => {
+        if (
+          !span.attributes ||
+          !Object.prototype.hasOwnProperty.call(span.attributes, 'promptfoo.redaction.history')
+        ) {
+          return span;
+        }
+        const attributes = { ...span.attributes };
+        delete attributes['promptfoo.redaction.history'];
+        return { ...span, attributes };
       });
 
-      if (spanRecords.length === 0) {
-        return { stored: true };
-      }
+      const insertSpans = async (connection: Pick<typeof db, 'insert'>, incoming: SpanData[]) => {
+        const spanRecords = incoming.map((span) => {
+          logger.debug(`[TraceStore] Preparing span ${span.spanId} (${span.name}) for insertion`);
+          return {
+            id: crypto.randomUUID(),
+            traceId,
+            spanId: span.spanId,
+            parentSpanId: span.parentSpanId,
+            name: span.name,
+            startTime: span.startTime,
+            endTime: span.endTime,
+            attributes: span.attributes,
+            statusCode: span.statusCode,
+            statusMessage: span.statusMessage,
+          };
+        });
 
-      await db
-        .insert(spansTable)
-        .values(spanRecords)
-        .onConflictDoNothing({ target: [spansTable.traceId, spansTable.spanId] })
-        .run();
-      logger.debug(
-        `[TraceStore] Successfully added ${spanRecords.length} spans to trace ${traceId}`,
-      );
+        if (spanRecords.length === 0) {
+          return;
+        }
+
+        for (let index = 0; index < spanRecords.length; index += 500) {
+          const insert = connection
+            .insert(spansTable)
+            .values(spanRecords.slice(index, index + 500));
+          const target = [spansTable.traceId, spansTable.spanId];
+          await (options?.updateExisting
+            ? insert.onConflictDoUpdate({
+                target,
+                set: {
+                  parentSpanId: sql`excluded.parent_span_id`,
+                  name: sql`excluded.name`,
+                  startTime: sql`excluded.start_time`,
+                  endTime: sql`excluded.end_time`,
+                  attributes: sql`excluded.attributes`,
+                  statusCode: sql`excluded.status_code`,
+                  statusMessage: sql`excluded.status_message`,
+                },
+              })
+            : insert.onConflictDoNothing({ target })
+          ).run();
+        }
+      };
+
+      const redact = options?.redactSpans;
+      await db.transaction(async (tx) => {
+        const payloadBytes = sql<number>`
+            length(cast(${spansTable.spanId} as blob))
+            + coalesce(length(cast(${spansTable.parentSpanId} as blob)), 0)
+            + length(cast(${spansTable.name} as blob))
+            + coalesce(length(cast(${spansTable.attributes} as blob)), 0)
+            + coalesce(length(cast(${spansTable.statusMessage} as blob)), 0)
+          `;
+        const [size] = await tx
+          .select({
+            count: sql<number>`count(*)`,
+            bytes: sql<number>`coalesce(sum(${payloadBytes}), 0)`,
+          })
+          .from(spansTable)
+          .where(eq(spansTable.traceId, traceId));
+        // Bound each input before hydrating existing payloads, including duplicate uploads.
+        if (
+          size.count > 10_000 ||
+          spans.length > 10_000 ||
+          size.bytes > 10 * 1024 * 1024 ||
+          Buffer.byteLength(JSON.stringify(spans)) > 10 * 1024 * 1024
+        ) {
+          throw new TraceLimitError();
+        }
+        const uniqueSpans = new Map<string, SpanData>();
+        for (const span of spans) {
+          const previous = uniqueSpans.get(span.spanId);
+          if (previous && spanHash(previous) !== spanHash(span)) {
+            throw Object.assign(new Error('Conflicting duplicate span IDs in one upload.'), {
+              name: 'TraceEvidenceError',
+            });
+          }
+          uniqueSpans.set(span.spanId, span);
+        }
+        spans = [...uniqueSpans.values()];
+        const storedSizes = await tx
+          .select({ spanId: spansTable.spanId, bytes: payloadBytes })
+          .from(spansTable)
+          .where(eq(spansTable.traceId, traceId));
+        validateTracePayloadSize(spans, options?.updateExisting ?? false, storedSizes);
+        const [trace] = await tx
+          .select({ metadata: tracesTable.metadata })
+          .from(tracesTable)
+          .where(eq(tracesTable.traceId, traceId));
+        const metadata = { ...trace?.metadata };
+        const storedIds = new Set(storedSizes.map((span) => span.spanId));
+        const imported = metadata[EXTERNAL_SPAN_IDS_KEY];
+        const externalIds = new Set<string>(
+          Array.isArray(imported)
+            ? imported.filter((id): id is string => typeof id === 'string' && storedIds.has(id))
+            : [],
+        );
+        const spanHashes = new Map<string, string>(
+          Object.entries((metadata[SPAN_HASHES_KEY] ?? {}) as Record<string, string>),
+        );
+        let metadataChanged = false;
+        const saveMetadata = async () => {
+          if (!metadataChanged) {
+            return;
+          }
+          if (spanHashes.size) {
+            metadata[SPAN_HASHES_KEY] = Object.fromEntries(spanHashes);
+          } else {
+            delete metadata[SPAN_HASHES_KEY];
+          }
+          await tx
+            .update(tracesTable)
+            .set({ metadata })
+            .where(eq(tracesTable.traceId, traceId))
+            .run();
+        };
+        if (options?.source === 'external') {
+          if (spans.some((span) => TraceStore.pendingLocalSpans.has(`${traceId}:${span.spanId}`))) {
+            throw Object.assign(
+              new Error('External trace spans conflict with pending locally owned span IDs.'),
+              {
+                name: 'TraceEvidenceError',
+              },
+            );
+          }
+          const immutableIds = new Set(
+            [...storedIds].filter((id) => !externalIds.has(id) || !options.updateExisting),
+          );
+          if (spans.some((span) => immutableIds.has(span.spanId))) {
+            const stored = await tx
+              .select()
+              .from(spansTable)
+              .where(eq(spansTable.traceId, traceId));
+            const storedSpans = new Map(
+              serializeSpans(stored, false).map((span) => [span.spanId, span]),
+            );
+            spans = spans.filter((span) => {
+              if (!immutableIds.has(span.spanId)) {
+                return true;
+              }
+              const previous = storedSpans.get(span.spanId)!;
+              // Never infer raw equality from values that a previous redactor removed.
+              const expected =
+                spanHashes.get(span.spanId) ??
+                (previous.attributes?.['promptfoo.redaction.history'] === '[REDACTED]'
+                  ? undefined
+                  : spanHash(previous));
+              if (expected !== spanHash(span)) {
+                throw Object.assign(
+                  new Error(
+                    externalIds.has(span.spanId)
+                      ? 'Conflicting retry for an externally owned span ID.'
+                      : 'External trace spans conflict with locally owned span IDs.',
+                  ),
+                  { name: 'TraceEvidenceError' },
+                );
+              }
+              return false;
+            });
+          }
+          for (const span of spans) {
+            externalIds.add(span.spanId);
+            if (options.updateExisting) {
+              spanHashes.delete(span.spanId);
+            }
+          }
+          metadata[EXTERNAL_SPAN_IDS_KEY] = [...externalIds];
+          metadataChanged = true;
+        } else if (options?.updateExisting) {
+          for (const span of spans) {
+            metadataChanged = spanHashes.delete(span.spanId) || metadataChanged;
+          }
+        }
+        if (!redact) {
+          await saveMetadata();
+          await insertSpans(tx, spans);
+          return;
+        }
+        const stored = await tx.select().from(spansTable).where(eq(spansTable.traceId, traceId));
+        const existing = serializeSpans(stored, false);
+        const original = [...existing, ...spans];
+        const sanitized = redact(original);
+        const redactedSpanIds = new Set(
+          sanitized
+            .filter(
+              (span, index) =>
+                JSON.stringify(span) !== JSON.stringify(original[index]) &&
+                /\[(?:REDACTED|TRUNCATED)\]/.test(JSON.stringify(span)),
+            )
+            .map((span) => span.spanId),
+        );
+        for (const [index, span] of sanitized.entries()) {
+          if (redactedSpanIds.has(span.spanId)) {
+            const previous = original[index];
+            if (
+              previous.attributes?.['promptfoo.redaction.history'] !== '[REDACTED]' &&
+              (index < existing.length || !storedIds.has(span.spanId) || options?.updateExisting)
+            ) {
+              spanHashes.set(span.spanId, spanHash(previous));
+              metadataChanged = true;
+            }
+            span.attributes = { ...span.attributes, 'promptfoo.redaction.history': '[REDACTED]' };
+          }
+        }
+        // Redaction history markers can also increase the stored payload.
+        validateTracePayloadSize(sanitized, options?.updateExisting ?? false);
+        for (const [index, previous] of existing.entries()) {
+          const span = sanitized[index];
+          if (JSON.stringify(previous) === JSON.stringify(span)) {
+            continue;
+          }
+          await tx
+            .update(spansTable)
+            .set({
+              name: span.name,
+              attributes: span.attributes,
+              statusMessage: span.statusMessage,
+            })
+            .where(eq(spansTable.id, stored[index].id))
+            .run();
+        }
+        await saveMetadata();
+        await insertSpans(tx, sanitized.slice(existing.length));
+      });
+      logger.debug(`[TraceStore] Successfully added ${spans.length} spans to trace ${traceId}`);
       return { stored: true };
     } catch (error) {
+      if (error instanceof TraceLimitError) {
+        await this.markTraceIncomplete(traceId);
+      } else if (
+        options?.source === 'external' &&
+        !options.updateExisting &&
+        error instanceof Error &&
+        error.name === 'TraceEvidenceError'
+      ) {
+        await this.markTraceIncomplete(traceId, 'conflicting trace evidence');
+      }
       logger.error(`[TraceStore] Failed to add spans: ${error}`);
       throw error;
     }
@@ -281,8 +615,8 @@ export class TraceStore {
             traceId: trace.traceId,
             evaluationId: trace.evaluationId,
             testCaseId: trace.testCaseId,
-            metadata: trace.metadata ?? undefined,
-            spans: spans.map((span) => serializeSpan(span, shouldSanitize)),
+            metadata: serializeTraceMetadata(trace.metadata),
+            spans: serializeSpans(spans, shouldSanitize),
           };
         }),
       );
@@ -325,13 +659,24 @@ export class TraceStore {
         traceId: trace.traceId,
         evaluationId: trace.evaluationId,
         testCaseId: trace.testCaseId,
-        metadata: trace.metadata ?? undefined,
-        spans: spans.map((span) => serializeSpan(span, shouldSanitize)),
+        metadata: serializeTraceMetadata(trace.metadata),
+        spans: serializeSpans(spans, shouldSanitize),
       };
     } catch (error) {
       logger.error(`[TraceStore] Failed to get trace: ${error}`);
       throw error;
     }
+  }
+
+  async markTraceIncomplete(traceId: string, reason = 'limit exceeded'): Promise<void> {
+    const db = await this.getDatabase();
+    await db
+      .update(tracesTable)
+      .set({
+        metadata: sql`json_set(coalesce(${tracesTable.metadata}, '{}'), '$.promptfooTraceIncomplete', ${reason})`,
+      })
+      .where(eq(tracesTable.traceId, traceId))
+      .run();
   }
 
   async getTraceMetadata(traceId: string): Promise<Record<string, any> | undefined> {
@@ -344,7 +689,7 @@ export class TraceStore {
         .where(eq(tracesTable.traceId, traceId))
         .limit(1);
 
-      return traces.length > 0 ? (traces[0].metadata ?? {}) : undefined;
+      return traces.length > 0 ? (serializeTraceMetadata(traces[0].metadata) ?? {}) : undefined;
     } catch (error) {
       logger.error(`[TraceStore] Failed to get trace metadata: ${error}`);
       throw error;
@@ -406,7 +751,8 @@ export class TraceStore {
       const spanMap = new Map<string, SpanData>();
       const depthCache = new Map<string, number>();
 
-      for (const row of rows) {
+      const serialized = serializeSpans(rows, shouldSanitize);
+      for (const [index, row] of rows.entries()) {
         if (earliestStartTime && row.startTime < earliestStartTime) {
           continue;
         }
@@ -417,20 +763,14 @@ export class TraceStore {
           continue;
         }
 
-        const spanData: SpanData = {
-          spanId: row.spanId,
-          parentSpanId: row.parentSpanId ?? undefined,
-          name: row.name,
-          startTime: row.startTime,
-          endTime: row.endTime ?? undefined,
-          attributes: shouldSanitize ? sanitizeTraceAttributes(rawAttributes) : rawAttributes,
-          statusCode: row.statusCode ?? undefined,
-          statusMessage: row.statusMessage ?? undefined,
+        const spanData = {
+          ...serialized[index],
+          attributes: serialized[index].attributes ?? {},
         };
 
         const hasExplicitFilter = Boolean(spanFilter?.length);
 
-        if (hasExplicitFilter && !matchesSpanFilter(spanData.name, spanFilter!)) {
+        if (hasExplicitFilter && !matchesSpanFilter(row.name, spanFilter!)) {
           continue;
         }
 
