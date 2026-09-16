@@ -5,44 +5,39 @@ description: "Run open-source LLMs locally using Ollama's streamlined interface 
 
 # Ollama
 
-The `ollama` provider is compatible with [Ollama](https://github.com/jmorganca/ollama), which enables access to Llama, Mixtral, Mistral, and more.
+The `ollama` provider is compatible with [Ollama](https://github.com/ollama/ollama), which enables access to Llama, Mixtral, Mistral, and more.
 
-You can use its `/api/generate` endpoint by specifying any of the following providers from the [Ollama library](https://ollama.ai/library):
+You can use its `/api/generate` endpoint by specifying any of the following providers from the [Ollama library](https://ollama.com/library):
 
 - `ollama:completion:llama3.2`
 - `ollama:completion:llama3.3`
+- `ollama:completion:qwen3`
+- `ollama:completion:gemma3`
 - `ollama:completion:phi4`
-- `ollama:completion:qwen2.5`
-- `ollama:completion:granite3.2`
-- `ollama:completion:deepcoder`
 - `ollama:completion:codellama`
-- `ollama:completion:llama2-uncensored`
 - ...
+
+A bare `ollama:<model>` (for example `ollama:llama3.2`) also works and routes to the
+completion provider.
 
 Or, use the `/api/chat` endpoint for chat-formatted prompts:
 
 - `ollama:chat:llama3.2`
 - `ollama:chat:llama3.2:1b`
-- `ollama:chat:llama3.2:3b`
 - `ollama:chat:llama3.3`
-- `ollama:chat:llama3.3:70b`
+- `ollama:chat:qwen3`
+- `ollama:chat:qwen3:0.6b`
+- `ollama:chat:gemma3`
 - `ollama:chat:phi4`
-- `ollama:chat:phi4-mini`
-- `ollama:chat:qwen2.5`
-- `ollama:chat:qwen2.5:14b`
-- `ollama:chat:qwen2.5:72b`
-- `ollama:chat:qwq:32b`
-- `ollama:chat:granite3.2`
-- `ollama:chat:granite3.2:2b`
-- `ollama:chat:granite3.2:8b`
-- `ollama:chat:deepcoder`
-- `ollama:chat:deepcoder:1.5b`
-- `ollama:chat:deepcoder:14b`
-- `ollama:chat:mixtral:8x7b`
-- `ollama:chat:mixtral:8x22b`
+- `ollama:chat:deepseek-r1`
+- `ollama:chat:mistral`
 - ...
 
-We also support the `/api/embeddings` endpoint via `ollama:embeddings:<model name>` for model-graded assertions such as [similarity](/docs/configuration/expected-outputs/similar/).
+Small models are useful for smoke-testing a config without a long download —
+`qwen3:0.6b` (~500MB) supports both tools and reasoning, and `all-minilm` (~45MB)
+covers embeddings.
+
+We also support the `/api/embed` endpoint via `ollama:embeddings:<model name>` (or the singular `ollama:embedding:<model name>`) for model-graded assertions such as [similarity](/docs/configuration/expected-outputs/similar/).
 
 Supported environment variables:
 
@@ -50,7 +45,9 @@ Supported environment variables:
 - `OLLAMA_API_KEY` - (optional) api key that is passed as the Bearer token in the Authorization Header when calling the API
 - `REQUEST_TIMEOUT_MS` - request timeout in milliseconds
 
-To pass configuration options to Ollama, use the `config` key like so:
+To pass configuration options to Ollama, use the `config` key. See Ollama's
+[parameter reference](https://github.com/ollama/ollama/blob/main/docs/modelfile.mdx#parameter)
+for what each one does:
 
 ```yaml title="promptfooconfig.yaml"
 providers:
@@ -60,16 +57,72 @@ providers:
       temperature: 0.7
       top_p: 0.9
       think: true # Enable thinking/reasoning mode (top-level API parameter)
+      showThinking: true # Include the reasoning trace in the output (default: true)
+      keep_alive: '5m' # How long Ollama keeps the model loaded after the request
 ```
 
-You can also pass arbitrary fields directly to the Ollama API using the `passthrough` option:
+## Reasoning models
+
+Reasoning models (`qwen3`, `deepseek-r1`, `gpt-oss`, and others) return their reasoning
+trace in a separate `thinking` field rather than in the response content. Promptfoo
+prepends it to the output as `Thinking: ...`, matching the behavior of the OpenAI and
+Anthropic providers.
+
+Note that recent Ollama versions emit `thinking` for these models **by default**, without
+you setting `think: true`. If you only want the final answer, you have two options:
+
+```yaml title="promptfooconfig.yaml"
+providers:
+  # Keep the model reasoning, but exclude the trace from the output your assertions see
+  - id: ollama:chat:qwen3
+    config:
+      showThinking: false
+
+  # Or turn reasoning off entirely at the model level
+  - id: ollama:chat:qwen3
+    config:
+      think: false
+```
+
+`showThinking` is a promptfoo-side rendering option and is never sent to the Ollama API.
+
+:::warning
+Reasoning tokens count against `num_predict`. If the budget is exhausted inside the
+thinking block, the model never emits any content — the output will contain only the
+reasoning trace, and `finish-reason` will be `length`. Raise `num_predict` or set
+`think: false` if you need a short answer from a reasoning model.
+:::
+
+Responses also carry a normalized `finishReason` (`stop`, `length`, …) derived from
+Ollama's `done_reason`, which you can assert on with
+[`finish-reason`](/docs/configuration/expected-outputs/deterministic/#finish-reason).
+
+Config keys promptfoo does not recognize are **silently dropped** before the request is
+sent. Run with `LOG_LEVEL=debug` to see which. The supported `options` keys track
+Ollama's current [Options struct](https://github.com/ollama/ollama/blob/main/api/types.go):
+`num_predict`, `num_keep`, `seed`, `top_k`, `top_p`, `min_p`, `typical_p`,
+`repeat_last_n`, `temperature`, `repeat_penalty`, `presence_penalty`,
+`frequency_penalty`, `stop`, `num_ctx`, `num_batch`, `num_gpu`, `main_gpu`,
+`use_mmap`, `num_thread`, and `draft_num_predict`.
+
+Note that `max_tokens` is an OpenAI key — Ollama ignores it, so use `num_predict`.
+`typical_p` is accepted today but marked deprecated upstream, so prefer `top_p` or `min_p`.
+
+Options that newer Ollama releases removed (`mirostat`, `mirostat_tau`, `mirostat_eta`,
+`tfs_z`, `num_gqa`, `f16_kv`, `logits_all`, `vocab_only`, `low_vram`, `use_mlock`,
+`embedding_only`, `rope_frequency_base`, `rope_frequency_scale`, `penalize_newline`) are
+still forwarded so configs pointed at an older `OLLAMA_BASE_URL` keep working. Current
+servers ignore them, and promptfoo logs a debug notice when you use one.
+
+You can also pass arbitrary fields directly to the Ollama API using the `passthrough`
+option. A `passthrough.options` object is merged into the computed options rather than
+replacing them:
 
 ```yaml title="promptfooconfig.yaml"
 providers:
   - id: ollama:chat:llama3.3
     config:
       passthrough:
-        keep_alive: '5m'
         format: 'json'
         # Any other Ollama API fields
 ```
@@ -108,6 +161,21 @@ tests:
       - type: is-valid-openai-tools-call
 ```
 
+Tools can also be loaded from an external file, which keeps large schemas out of the
+config:
+
+```yaml
+providers:
+  - id: ollama:chat:llama3.3
+    config:
+      tools: file://tools.json
+```
+
+:::note
+`tools` only applies to `ollama:chat:*`. The `/api/generate` endpoint used by
+`ollama:completion:*` has no tool support, so a `tools` block there has no effect.
+:::
+
 ## Using Ollama as a Local Grading Provider
 
 ### Using Ollama for Model-Graded Assertions
@@ -132,7 +200,7 @@ defaultTest:
 
 providers:
   - ollama:chat:llama3.3
-  - ollama:chat:qwen2.5:14b
+  - ollama:chat:qwen3:8b
 
 tests:
   - vars:
@@ -148,7 +216,7 @@ tests:
         threshold: 0.85
 ```
 
-When running with `--max-concurrency 1` and no per-eval timeout, Promptfoo groups eligible model-graded assertion calls by grading provider ID to reduce local model switching. This is not request batching; each assertion call still runs separately, and report row order is unchanged.
+When running with `--max-concurrency 1`, no per-eval timeout, and no conversation variables (`{{_conversation}}`), Promptfoo groups eligible model-graded assertion calls by grading provider ID to reduce local model switching. This is not request batching; each assertion call still runs separately, and report row order is unchanged.
 
 ### Using Ollama Embedding Models for Similarity Assertions
 
@@ -195,6 +263,35 @@ tests:
   # Your test cases here
 ```
 
+### Embedding input length
+
+Embedding models have small context windows — `all-minilm` defaults to 256 tokens and
+tops out at 512. Promptfoo sends `truncate: false`, so input that exceeds the window
+fails with an explicit error rather than silently embedding only the first N tokens and
+producing a plausible-but-wrong similarity score:
+
+```
+Ollama API error: 400 Bad Request: the input length exceeds the context length.
+Raise `config.num_ctx` (up to the model's own maximum, shown by `ollama show all-minilm`),
+or set `config.truncate: true` to embed only the first num_ctx tokens -- note that
+truncating silently changes similarity scores.
+```
+
+Both remedies are configurable:
+
+```yaml title="promptfooconfig.yaml"
+defaultTest:
+  options:
+    provider:
+      embedding:
+        id: ollama:embeddings:all-minilm
+        config:
+          num_ctx: 512 # raise the window (bounded by the model's maximum)
+          # truncate: true  # or accept truncation
+          # dimensions: 128 # Matryoshka models only
+          # keep_alive: 5m
+```
+
 Popular Ollama embedding models include:
 
 - `ollama:embeddings:nomic-embed-text` - General purpose embeddings
@@ -226,7 +323,7 @@ Make sure the Ollama server is listening on `0.0.0.0` so it accepts remote conne
 If locally developing with `localhost` (promptfoo's default),
 and Ollama API calls are failing with `ECONNREFUSED`,
 then there may be an IPv4 vs IPv6 issue going on with `localhost`.
-Ollama's default host uses [`127.0.0.1`](https://github.com/jmorganca/ollama/blob/main/api/client.go#L19),
+Ollama's default host uses [`127.0.0.1`](https://github.com/ollama/ollama/blob/main/envconfig/config.go),
 which is an IPv4 address.
 The possible issue here arises from `localhost` being bound to an IPv6 address,
 as configured by the operating system's `hosts` file.
@@ -248,11 +345,35 @@ By default, promptfoo evaluates all providers concurrently for each prompt. Howe
 promptfoo eval -j 1
 ```
 
-This sets concurrency to 1, which means:
+This serializes the eval's **target** calls: one provider and prompt at a time.
 
-1. Evaluations happen one provider at a time, then one prompt at a time.
-2. Only one model is loaded into memory, conserving system resources.
-3. You can easily swap models between evaluations without conflicts.
+Ordering caveat: the evaluator runs test cases marked `options.runSerially` as a separate
+partition ahead of the rest, so a config using that option does not execute in strict
+test-case order even at `-j 1`.
+
+Model-graded assertions run on a separate path. When grading grouping is active they are
+serialized too, but if it is disabled — by a per-eval timeout or a `{{_conversation}}`
+variable — up to `PROMPTFOO_ASSERTIONS_MAX_CONCURRENCY` grader calls (3 by default) can
+still overlap within a single test case.
+
+:::caution
+Serial execution does **not** by itself keep only one model in memory. Ollama holds each
+model it has loaded for its own `keep_alive` window (5 minutes by default), so evaluating
+two providers serially can still leave both resident — confirm with `ollama ps`.
+
+To actually free a model as soon as its request finishes, set `keep_alive: 0`:
+
+```yaml
+providers:
+  - id: ollama:chat:llama3.2
+    config:
+      keep_alive: 0 # unload immediately after each request
+  - id: ollama:chat:qwen3
+    config:
+      keep_alive: 0
+```
+
+:::
 
 This approach is particularly useful for:
 
