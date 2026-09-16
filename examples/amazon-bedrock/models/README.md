@@ -7,6 +7,8 @@ npx promptfoo@latest init --example amazon-bedrock/models
 cd amazon-bedrock/models
 ```
 
+> **Legacy examples:** Nova Premier (`amazon.nova-premier-v1:0`) and Nova Sonic (`amazon.nova-sonic-v1:0`) have [Bedrock end-of-life dates of September 14, 2026](https://docs.aws.amazon.com/bedrock/latest/userguide/model-lifecycle.html). New customers cannot use these Legacy models; select an Active model for new evals.
+
 ## Prerequisites
 
 1. Set up your AWS credentials:
