@@ -7,21 +7,22 @@ description: Compare OpenAI Assistant configurations and measure performance acr
 # How to evaluate OpenAI Assistants
 
 :::warning
-The Assistants API is deprecated and scheduled to shut down on August 26, 2026. Use the
+The native OpenAI Assistants API shut down on August 26, 2026. Use the
 Responses API for new integrations and follow OpenAI's
 [Assistants migration guide](https://developers.openai.com/api/docs/guides/migrate-to-responses#assistants-api).
 :::
 
-The legacy Assistants API provides managed message state, code interpreter, and file search for
-existing integrations.
+The legacy examples below require an endpoint that still implements the Assistants API. Set
+`OPENAI_API_BASE_URL` to your compatible endpoint, or set `config.apiBaseUrl` for each provider.
+These examples no longer work against OpenAI's native API.
 
 [Test-driven development](/docs/intro#workflow-and-philosophy) allows you to compare prompts, models, and tools while measuring improvement and avoiding unexplained regressions. It's an example of [systematic iteration vs. trial and error](https://ianww.com/blog/2023/05/21/prompt-engineering-framework).
 
-This guide walks you through using promptfoo to select the best prompt, model, and tools using OpenAI's Assistants API. It assumes that you've already [set up](/docs/getting-started) promptfoo.
+This guide preserves the legacy workflow for comparing prompts, models, and tools on an Assistants-compatible endpoint. It assumes that you've already [set up](/docs/getting-started) promptfoo.
 
 ## Step 1: Create an assistant
 
-Use the [OpenAI playground](https://platform.openai.com/playground) to create an assistant. The eval will use this assistant with different instructions and models.
+Create or select an assistant using your compatible endpoint's management interface or API. The eval will use this assistant with different instructions and models.
 
 Add your desired functions and enable code interpreter and file search as desired.
 
