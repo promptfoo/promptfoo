@@ -63,6 +63,9 @@ function transformSpan(row: BraintrustSpan): SpanData {
     typeof spanId !== 'string' ||
     !spanId.trim() ||
     startTime === undefined ||
+    [row.metadata, row.metrics, row.span_attributes].some(
+      (value) => value != null && (typeof value !== 'object' || Array.isArray(value)),
+    ) ||
     (row.metrics?.end != null && (endTime === undefined || endTime < startTime)) ||
     (row.span_parents != null &&
       (!Array.isArray(row.span_parents) ||

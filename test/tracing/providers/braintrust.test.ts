@@ -87,6 +87,25 @@ describe('BraintrustProvider', () => {
   });
 
   it.each(
+    ['metadata', 'metrics', 'span_attributes'].flatMap((field) =>
+      ['invalid', [], null, undefined].map((value) => ({ field, value })),
+    ),
+  )('validates the shape of $field before truncation: $value', async ({ field, value }) => {
+    mockedFetch.mockResolvedValueOnce(
+      response({ rows: [rows[1], { ...rows[0], [field]: value }] }),
+    );
+    const result = new BraintrustProvider(config).fetchTrace(TRACE_ID, { maxSpans: 1 });
+    if (value == null) {
+      expect((await result)?.spans).toHaveLength(1);
+    } else {
+      await expect(result).rejects.toMatchObject({
+        invalidEvidence: true,
+        retryable: false,
+      });
+    }
+  });
+
+  it.each(
     [false, true].flatMap((conflict) => [undefined, 1].map((maxSpans) => ({ conflict, maxSpans }))),
   )(
     'checks duplicate evidence before truncation (conflict=$conflict, maxSpans=$maxSpans)',
