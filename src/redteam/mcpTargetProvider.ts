@@ -132,7 +132,10 @@ class RedteamMcpTargetProvider implements ApiProvider {
             value: prompt,
           },
           options,
-        );
+        ).catch((error: unknown) => {
+          materializationUsage = { tokenUsage: getErrorTokenUsage(error) };
+          throw error;
+        });
 
         if (remoteMaterializedPrompt) {
           materializedPrompt = remoteMaterializedPrompt.prompt;
