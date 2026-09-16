@@ -319,8 +319,17 @@ function createStrippedView(folded: string): string {
   return folded.toLowerCase().replace(/[\u0000-\u001F\u007F]+/g, ' ');
 }
 
+function capInput(raw: string): string {
+  return raw.length > MAX_INPUT_CHARS ? raw.slice(0, MAX_INPUT_CHARS) : raw;
+}
+
+function createViews(capped: string, decoded: string): NormalizationResult {
+  const { folded, decodedAligned } = foldAndCollapseSeparators(decoded);
+  return { capped, decoded, decodedAligned, folded, stripped: createStrippedView(folded) };
+}
+
 export function normalize(raw: string): NormalizationResult {
-  const capped = raw.length > MAX_INPUT_CHARS ? raw.slice(0, MAX_INPUT_CHARS) : raw;
+  const capped = capInput(raw);
 
   let working = capped;
   for (let pass = 0; pass < MAX_NORMALIZATION_PASSES; pass++) {
@@ -334,19 +343,12 @@ export function normalize(raw: string): NormalizationResult {
     }
   }
 
-  const decoded = working;
-  const { folded, decodedAligned } = foldAndCollapseSeparators(decoded);
-  const stripped = createStrippedView(folded);
-
-  return { capped, decoded, decodedAligned, folded, stripped };
+  return createViews(capped, working);
 }
 
 function createRawViews(raw: string): NormalizationResult {
-  const capped = raw.length > MAX_INPUT_CHARS ? raw.slice(0, MAX_INPUT_CHARS) : raw;
-  const decoded = capped;
-  const { folded, decodedAligned } = foldAndCollapseSeparators(decoded);
-  const stripped = createStrippedView(folded);
-  return { capped, decoded, decodedAligned, folded, stripped };
+  const capped = capInput(raw);
+  return createViews(capped, capped);
 }
 
 function isEncodedFormPresent(capped: string): boolean {
@@ -1081,10 +1083,9 @@ function getRules(config?: PluginConfig): PathTraversalOutputRule[] {
 }
 
 function hasCustomPatterns(config?: PluginConfig): boolean {
-  return Boolean(
-    config?.pathTraversalOutputPatterns &&
-      Array.isArray(config.pathTraversalOutputPatterns) &&
-      config.pathTraversalOutputPatterns.length > 0,
+  return (
+    Array.isArray(config?.pathTraversalOutputPatterns) &&
+    config.pathTraversalOutputPatterns.length > 0
   );
 }
 
@@ -1168,7 +1169,8 @@ function detectPathTraversalOutputWithRules(
 
   for (const window of detectionWindows) {
     const normalized = normalize(window);
-    const rawViews = createRawViews(window);
+    // Only needed to decide `encoded`, i.e. after a rule has already matched.
+    let rawViews: NormalizationResult | undefined;
 
     for (const rule of rules) {
       if (matchesByRuleId.has(rule.id)) {
@@ -1183,7 +1185,8 @@ function detectPathTraversalOutputWithRules(
         description: rule.description,
         evidence,
         encoded:
-          findRuleEvidence(rawViews, rule) === undefined && isEncodedFormPresent(normalized.capped),
+          findRuleEvidence((rawViews ??= createRawViews(window)), rule) === undefined &&
+          isEncodedFormPresent(normalized.capped),
       });
     }
   }
