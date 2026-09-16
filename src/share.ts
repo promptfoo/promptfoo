@@ -17,7 +17,7 @@ import {
 } from './util/cloud';
 import { fetchWithProxy } from './util/fetch/index';
 import { createBlobInlineCache, inlineBlobRefsForShare } from './util/inlineBlobsForShare';
-import { redactAzureBlobSasTokens } from './util/sanitizer';
+import { redactAzureBlobSasTokens, sanitizeTracingConfigForPersistence } from './util/sanitizer';
 
 import type Eval from './models/eval';
 import type EvalResult from './models/evalResult';
@@ -121,6 +121,18 @@ function findLargestResultSize(results: EvalResult[], sampleSize: number = 1000)
   return maxSize;
 }
 
+function getEffectiveShareTeamId(eval_: Eval): string | undefined {
+  const unifiedConfigTeamId = eval_.config?.metadata?.configId
+    ? eval_.config.metadata.teamId
+    : undefined;
+  if (unifiedConfigTeamId) {
+    return unifiedConfigTeamId;
+  }
+
+  const currentOrgId = cloudConfig.getCurrentOrganizationId();
+  return cloudConfig.getCurrentTeamId(currentOrgId);
+}
+
 // This sends the eval record to the remote server
 async function sendEvalRecord(
   evalRecord: Eval,
@@ -129,10 +141,12 @@ async function sendEvalRecord(
 ): Promise<string> {
   // Fetch traces for the eval
   const traces = await evalRecord.getTraces();
-  const redactedConfig = redactAzureBlobSasTokens(evalRecord.config);
+  const redactedConfig = redactAzureBlobSasTokens(
+    sanitizeTracingConfigForPersistence(evalRecord.config),
+  );
 
-  // Inject current team ID into config metadata if cloud is enabled
-  // This ensures the eval is created in the correct team (not the default team)
+  // Preserve the verified runtime team on server-issued unified configs. For
+  // other configs, use the current CLI team to avoid falling back to default.
   let evalData: Record<string, unknown> = {
     ...evalRecord,
     config: redactedConfig,
@@ -140,16 +154,15 @@ async function sendEvalRecord(
     traces,
   };
   if (cloudConfig.isEnabled()) {
-    const currentOrgId = cloudConfig.getCurrentOrganizationId();
-    const currentTeamId = cloudConfig.getCurrentTeamId(currentOrgId);
-    if (currentTeamId) {
+    const effectiveTeamId = getEffectiveShareTeamId(evalRecord);
+    if (effectiveTeamId) {
       evalData = {
         ...evalData,
         config: {
           ...(redactedConfig || {}),
           metadata: {
             ...(redactedConfig?.metadata || {}),
-            teamId: currentTeamId,
+            teamId: effectiveTeamId,
           },
         },
       };
@@ -452,10 +465,8 @@ async function sendChunkedResults(
   // Prepare headers
   const headers: Record<string, string> = {
     'Content-Type': 'application/json',
+    ...(cloudConfig.isEnabled() ? (cloudConfig.getAuthHeaders() ?? {}) : {}),
   };
-  if (cloudConfig.isEnabled()) {
-    headers['Authorization'] = `Bearer ${cloudConfig.getApiKey()}`;
-  }
 
   // Use total row count (not distinct test count) since we iterate over all result rows
   const totalResults = await evalRecord.getTotalResultRowCount();
@@ -715,27 +726,24 @@ export async function createShareableUrl(
 }
 
 /**
- * Checks whether an eval has been shared to the current team.
+ * Checks whether an eval has been shared to its effective runtime team.
  * @param eval_ The eval to check.
- * @returns True if the eval has been shared to the current team, false otherwise.
+ * @returns True if the eval has been shared to the effective team, false otherwise.
  */
 export async function hasEvalBeenShared(eval_: Eval): Promise<boolean> {
   try {
-    // Get current team ID to scope the check to current team only
-    // This prevents false positives when eval exists in a different team
-    const currentOrgId = cloudConfig.getCurrentOrganizationId();
-    const currentTeamId = cloudConfig.getCurrentTeamId(currentOrgId);
+    const effectiveTeamId = getEffectiveShareTeamId(eval_);
 
     // GET /api/results/:id with optional teamId scope
-    const url = currentTeamId
-      ? `results/${eval_.id}?teamId=${currentTeamId}`
+    const url = effectiveTeamId
+      ? `results/${eval_.id}?teamId=${encodeURIComponent(effectiveTeamId)}`
       : `results/${eval_.id}`;
     const res = await makeCloudRequest(url, 'GET');
     switch (res.status) {
-      // 200: Eval already exists in the current team.
+      // 200: Eval already exists in the effective team.
       case 200:
         return true;
-      // 404: Eval not found in the current team.
+      // 404: Eval not found in the effective team.
       case 404:
         return false;
       default:
@@ -803,7 +811,7 @@ export async function createShareableModelAuditUrl(
 
   const headers = {
     'Content-Type': 'application/json',
-    ...(cloudConfig.isEnabled() && { Authorization: `Bearer ${cloudConfig.getApiKey()}` }),
+    ...(cloudConfig.isEnabled() ? (cloudConfig.getAuthHeaders() ?? {}) : {}),
   };
 
   const url = `${apiBaseUrl}/api/v1/model-audits/share`;

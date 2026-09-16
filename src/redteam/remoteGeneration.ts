@@ -1,12 +1,25 @@
+import { context, propagation } from '@opentelemetry/api';
 import cliState from '../cliState';
 import { getEnvBool, getEnvString } from '../envars';
 import { isLoggedIntoCloud } from '../globalConfig/accounts';
 import { CloudConfig } from '../globalConfig/cloud';
 import { hasCodexDefaultCredentials } from '../providers/openai/codexDefaults';
+import { remoteGenerationContextPayload as buildRemoteGenerationContextPayload } from './remoteGenerationContext';
+
+export { remoteGenerationContextPayload } from './remoteGenerationContext';
+export { getCloudTargetIdFromProviders } from './remoteGenerationContextFromProviders';
 
 interface ShouldGenerateRemoteOptions {
   canUseCodexDefaultProvider?: boolean;
   requireEmbeddingProvider?: boolean;
+}
+
+// Provider implementations already depend on this module. Re-exporting the leaf helper here
+// avoids introducing a providers -> redteam context dependency solely for payload construction.
+export function providerRemoteGenerationContextPayload(contextOrCloudTargetId?: unknown): {
+  targetId?: string;
+} {
+  return buildRemoteGenerationContextPayload(contextOrCloudTargetId);
 }
 
 /**
@@ -41,8 +54,13 @@ export function getRemoteGenerationUrl(): string {
 export function getRemoteGenerationHeaders(
   extraHeaders?: Record<string, string>,
 ): Record<string, string> {
+  const propagatedHeaders: Record<string, string> = {};
+  propagation.inject(context.active(), propagatedHeaders);
+
   return {
     'Content-Type': 'application/json',
+    ...(propagatedHeaders.traceparent ? { traceparent: propagatedHeaders.traceparent } : {}),
+    ...(propagatedHeaders.tracestate ? { tracestate: propagatedHeaders.tracestate } : {}),
     ...extraHeaders,
   };
 }

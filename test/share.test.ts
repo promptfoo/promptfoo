@@ -70,6 +70,10 @@ vi.mock('../src/globalConfig/cloud', () => {
     getCurrentTeamId: vi.fn(),
     getCurrentOrganizationId: vi.fn(),
     getAppUrl: vi.fn(),
+    getAuthHeaders: vi.fn(() => {
+      const apiKey = cloudConfig.getApiKey();
+      return apiKey ? { Authorization: `Bearer ${apiKey}` } : undefined;
+    }),
   };
 
   return { cloudConfig };
@@ -440,6 +444,67 @@ describe('createShareableUrl', () => {
     expect(mockEval.useOldResults).toHaveBeenCalled();
   });
 
+  it('preserves the runtime team from a server-issued unified config', async () => {
+    vi.mocked(cloudConfig.isEnabled).mockReturnValue(true);
+    vi.mocked(cloudConfig.getAppUrl).mockReturnValue('https://app.example.com');
+    vi.mocked(cloudConfig.getApiHost).mockReturnValue('https://api.example.com');
+    vi.mocked(cloudConfig.getApiKey).mockReturnValue('mock-api-key');
+    vi.mocked(cloudConfig.getCurrentOrganizationId).mockReturnValue('org-123');
+    vi.mocked(cloudConfig.getCurrentTeamId).mockReturnValue('current-team');
+
+    const mockEval = buildMockEval();
+    mockEval.config = {
+      ...(mockEval.config ?? {}),
+      metadata: {
+        configId: 'org-scoped-template',
+        teamId: 'provider-team',
+      },
+    };
+
+    mockFetch
+      .mockResolvedValueOnce({
+        ok: true,
+        json: () => Promise.resolve({ id: 'mock-eval-id' }),
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        json: () => Promise.resolve({}),
+      });
+
+    await createShareableUrl(mockEval as Eval);
+
+    const requestBody = JSON.parse(mockFetch.mock.calls[0][1].body);
+    expect(requestBody.config.metadata).toMatchObject({
+      configId: 'org-scoped-template',
+      teamId: 'provider-team',
+    });
+  });
+
+  it('uses the current CLI team when runtime metadata is absent', async () => {
+    vi.mocked(cloudConfig.isEnabled).mockReturnValue(true);
+    vi.mocked(cloudConfig.getAppUrl).mockReturnValue('https://app.example.com');
+    vi.mocked(cloudConfig.getApiHost).mockReturnValue('https://api.example.com');
+    vi.mocked(cloudConfig.getApiKey).mockReturnValue('mock-api-key');
+    vi.mocked(cloudConfig.getCurrentOrganizationId).mockReturnValue('org-123');
+    vi.mocked(cloudConfig.getCurrentTeamId).mockReturnValue('current-team');
+
+    const mockEval = buildMockEval();
+    mockFetch
+      .mockResolvedValueOnce({
+        ok: true,
+        json: () => Promise.resolve({ id: 'mock-eval-id' }),
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        json: () => Promise.resolve({}),
+      });
+
+    await createShareableUrl(mockEval as Eval);
+
+    const requestBody = JSON.parse(mockFetch.mock.calls[0][1].body);
+    expect(requestBody.config.metadata.teamId).toBe('current-team');
+  });
+
   it('Cloud: creates correct URL (uses server-assigned ID for idempotency)', async () => {
     vi.mocked(cloudConfig.isEnabled).mockReturnValue(true);
     vi.mocked(cloudConfig.getAppUrl).mockReturnValue('https://app.example.com');
@@ -781,6 +846,72 @@ describe('createShareableUrl', () => {
       );
       expect(mockFetch.mock.calls[0][1].body).not.toContain('azure-secret');
     });
+
+    it.each([false, true])(
+      'removes in-memory tracing credentials before sharing with cloud enabled: %s',
+      async (cloudEnabled) => {
+        vi.mocked(cloudConfig.isEnabled).mockReturnValue(cloudEnabled);
+        vi.mocked(cloudConfig.getAppUrl).mockReturnValue('https://app.example.com');
+        vi.mocked(cloudConfig.getApiHost).mockReturnValue('https://api.example.com');
+        vi.mocked(cloudConfig.getCurrentTeamId).mockReturnValue('team-456');
+        mockEval.config = {
+          env: { TEMPO_REFERENCE: 'nested-secret', SAFE_REGION: 'us-west-2' },
+          tracing: {
+            enabled: true,
+            provider: {
+              id: 'tempo',
+              endpoint: 'https://tempo.example.com/tempo?opaque=endpoint-secret',
+              auth: {
+                username: 'trace-reader',
+                password: 'runtime-password',
+                token: 'runtime-token',
+              },
+              headers: {
+                Authorization: 'Bearer runtime-header',
+                'X-Tempo-Reader': 'tiny',
+                'X-Honeycomb-Team': '{{ env.TEMPO_REFERENCE }}',
+                'X-Scope-OrgID': 'tenant-a',
+              },
+            },
+          },
+        };
+        mockFetch
+          .mockResolvedValueOnce({
+            ok: true,
+            json: () => Promise.resolve({ id: mockEval.id }),
+          })
+          .mockResolvedValueOnce({
+            ok: true,
+            json: () => Promise.resolve({}),
+          });
+
+        await createShareableUrl(mockEval as Eval);
+
+        const requestBody = mockFetch.mock.calls[0][1].body;
+        const sharedConfig = JSON.parse(requestBody).config;
+        expect(sharedConfig.tracing.provider).toEqual({
+          id: 'tempo',
+          endpoint: 'https://tempo.example.com/tempo',
+          auth: { username: 'trace-reader' },
+          headers: {
+            'X-Honeycomb-Team': '{{ env.TEMPO_REFERENCE }}',
+            'X-Scope-OrgID': 'tenant-a',
+          },
+        });
+        expect(sharedConfig.env).toEqual({ SAFE_REGION: 'us-west-2' });
+        for (const secret of [
+          'endpoint-secret',
+          'runtime-password',
+          'runtime-token',
+          'runtime-header',
+          'nested-secret',
+          '"tiny"',
+        ]) {
+          expect(requestBody).not.toContain(secret);
+        }
+        expect(mockEval.config.tracing?.provider?.headers?.['X-Tempo-Reader']).toBe('tiny');
+      },
+    );
 
     it('includes eval tags in the shared config payload', async () => {
       vi.mocked(cloudConfig.isEnabled).mockReturnValue(false);
@@ -1208,6 +1339,48 @@ describe('hasEvalBeenShared', () => {
     expect(result).toBe(true);
     // Verify teamId is passed in the request URL
     expect(makeRequest).toHaveBeenCalledWith(expect.stringContaining('teamId=team-456'), 'GET');
+  });
+
+  it('checks the runtime team for a server-issued unified config', async () => {
+    const mockEval: Partial<Eval> = {
+      config: {
+        metadata: {
+          configId: 'org-scoped-template',
+          teamId: 'runtime-team',
+        },
+      },
+      id: randomUUID(),
+    };
+
+    vi.mocked(makeRequest).mockResolvedValue({ status: 200 } as Response);
+
+    const result = await hasEvalBeenShared(mockEval as Eval);
+
+    expect(result).toBe(true);
+    expect(makeRequest).toHaveBeenCalledWith(expect.stringContaining('teamId=runtime-team'), 'GET');
+    expect(makeRequest).not.toHaveBeenCalledWith(expect.stringContaining('teamId=team-456'), 'GET');
+  });
+
+  it('ignores unverified metadata team context', async () => {
+    const mockEval: Partial<Eval> = {
+      config: {
+        metadata: {
+          teamId: 'unverified-team',
+        },
+      },
+      id: randomUUID(),
+    };
+
+    vi.mocked(makeRequest).mockResolvedValue({ status: 200 } as Response);
+
+    const result = await hasEvalBeenShared(mockEval as Eval);
+
+    expect(result).toBe(true);
+    expect(makeRequest).toHaveBeenCalledWith(expect.stringContaining('teamId=team-456'), 'GET');
+    expect(makeRequest).not.toHaveBeenCalledWith(
+      expect.stringContaining('teamId=unverified-team'),
+      'GET',
+    );
   });
 
   it('returns false if the server returns 404', async () => {
