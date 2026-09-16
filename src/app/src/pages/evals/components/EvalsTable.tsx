@@ -28,6 +28,7 @@ interface EvalsTableProps {
   focusedEvalId?: string;
   showUtilityButtons?: boolean;
   filterByDatasetId?: boolean;
+  focusedDatasetId?: string | null;
   deletionEnabled?: boolean;
 }
 
@@ -53,6 +54,7 @@ export default function EvalsTable({
   focusedEvalId,
   showUtilityButtons = false,
   filterByDatasetId = false,
+  focusedDatasetId,
   deletionEnabled = false,
 }: EvalsTableProps) {
   if (filterByDatasetId) {
@@ -69,20 +71,27 @@ export default function EvalsTable({
   const location = useLocation();
   const useServerPagination = !filterByDatasetId;
 
-  const fetchResults = useCallback(async ({ signal, limit, offset }: FetchResultsOptions) => {
-    const searchParams = new URLSearchParams();
-    if (limit !== undefined) {
-      searchParams.set('limit', String(limit));
-      searchParams.set('offset', String(offset ?? 0));
-    }
+  // Fetch evals from the API. `datasetId` narrows the query server-side; `limit`/`offset`
+  // opt into the paginated response shape.
+  const fetchResults = useCallback(
+    async ({ signal, limit, offset }: FetchResultsOptions) => {
+      const searchParams: string[] = [];
+      if (filterByDatasetId && focusedDatasetId) {
+        searchParams.push(`datasetId=${encodeURIComponent(focusedDatasetId)}`);
+      }
+      if (limit !== undefined) {
+        searchParams.push(`limit=${limit}`, `offset=${offset ?? 0}`);
+      }
 
-    const url = searchParams.size > 0 ? `/results?${searchParams.toString()}` : '/results';
-    const response = await callApi(url, { cache: 'no-store', signal });
-    if (!response.ok) {
-      throw new Error('Failed to fetch evals');
-    }
-    return (await response.json()) as ResultsResponse;
-  }, []);
+      const url = searchParams.length > 0 ? `/results?${searchParams.join('&')}` : '/results';
+      const response = await callApi(url, { cache: 'no-store', signal });
+      if (!response.ok) {
+        throw new Error('Failed to fetch evals');
+      }
+      return (await response.json()) as ResultsResponse;
+    },
+    [filterByDatasetId, focusedDatasetId],
+  );
 
   const fetchEvals = useCallback(
     async (signal: AbortSignal) => {
@@ -326,7 +335,11 @@ export default function EvalsTable({
           ]
         : []),
       {
-        accessorKey: 'description',
+        id: 'description',
+        // accessorFn (not accessorKey) ensures every row is searched. TanStack Table
+        // infers column types from the first row, so a leading row with description:
+        // null would silently drop this column from global search.
+        accessorFn: (row) => row.description || row.label,
         header: 'Description',
         enableSorting: enableClientSorting,
         cell: ({ row }) => {

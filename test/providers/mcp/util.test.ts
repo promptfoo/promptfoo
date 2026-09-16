@@ -4,14 +4,20 @@ import {
   discoverTokenEndpoint,
   getAuthHeaders,
   getAuthQueryParams,
+  getMcpErrorMessage,
+  getOAuthTokenWithExpiry,
+  isMcpErrorResult,
   isMcpToolNameFilter,
 } from '../../../src/providers/mcp/util';
 
-import type { MCPServerConfig } from '../../../src/providers/mcp/types';
+import type {
+  MCPOAuthClientCredentialsAuth,
+  MCPServerConfig,
+} from '../../../src/providers/mcp/types';
 
 // Mock fetchWithProxy for discovery tests
 const mockFetch = vi.fn();
-vi.mock('../../../src/util/fetch', () => ({
+vi.mock('../../../src/util/fetch/index', () => ({
   fetchWithProxy: (...args: unknown[]) => mockFetch(...args),
 }));
 
@@ -25,6 +31,40 @@ describe('isMcpToolNameFilter', () => {
     expect(isMcpToolNameFilter('file://tools.json')).toBe(false);
     expect(isMcpToolNameFilter(['file://tools.json'])).toBe(false);
     expect(isMcpToolNameFilter([{ type: 'function', function: { name: 'lookup' } }])).toBe(false);
+  });
+});
+
+describe('isMcpErrorResult', () => {
+  it('flags results with a thrown SDK error', () => {
+    expect(isMcpErrorResult({ content: '', error: 'connection lost' })).toBe(true);
+  });
+
+  it('flags results with a protocol-level isError flag', () => {
+    expect(isMcpErrorResult({ content: 'Path traversal not allowed', isError: true })).toBe(true);
+  });
+
+  it('does not flag successful results', () => {
+    expect(isMcpErrorResult({ content: 'ok' })).toBe(false);
+  });
+});
+
+describe('getMcpErrorMessage', () => {
+  it('prefers the thrown-error message', () => {
+    expect(getMcpErrorMessage({ content: 'ignored', error: 'connection lost' })).toBe(
+      'connection lost',
+    );
+  });
+
+  it('falls back to the tool error content', () => {
+    expect(getMcpErrorMessage({ content: 'Path traversal not allowed', isError: true })).toBe(
+      'Path traversal not allowed',
+    );
+  });
+
+  it('falls back to a generic message when an error result has no content', () => {
+    expect(getMcpErrorMessage({ content: '', isError: true })).toBe(
+      'Tool returned an error result',
+    );
   });
 });
 
@@ -319,5 +359,66 @@ describe('discoverTokenEndpoint', () => {
     await expect(discoverTokenEndpoint('https://example.com')).rejects.toThrow(
       /Failed to discover OAuth token endpoint/,
     );
+  });
+});
+
+describe('getOAuthTokenWithExpiry', () => {
+  beforeEach(() => {
+    mockFetch.mockReset();
+  });
+
+  afterEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it('scopes cached tokens by the discovered token endpoint', async () => {
+    mockFetch.mockImplementation(async (url: string) => {
+      const parsedUrl = new URL(url);
+      if (parsedUrl.pathname.endsWith('/.well-known/oauth-authorization-server')) {
+        return {
+          ok: true,
+          json: async () => ({
+            token_endpoint:
+              parsedUrl.hostname === 'agent-a.example.com'
+                ? 'https://auth-a.example.com/oauth/token'
+                : 'https://auth-b.example.com/oauth/token',
+          }),
+        };
+      }
+
+      if (url === 'https://auth-a.example.com/oauth/token') {
+        return {
+          ok: true,
+          json: async () => ({ access_token: 'token-a', expires_in: 3600 }),
+        };
+      }
+
+      if (url === 'https://auth-b.example.com/oauth/token') {
+        return {
+          ok: true,
+          json: async () => ({ access_token: 'token-b', expires_in: 3600 }),
+        };
+      }
+
+      throw new Error(`Unexpected URL: ${url}`);
+    });
+
+    const auth: MCPOAuthClientCredentialsAuth = {
+      type: 'oauth',
+      grantType: 'client_credentials',
+      clientId: 'shared-client',
+      clientSecret: 'secret',
+    };
+
+    const firstToken = await getOAuthTokenWithExpiry(auth, 'https://agent-a.example.com/a2a');
+    const secondToken = await getOAuthTokenWithExpiry(auth, 'https://agent-b.example.com/a2a');
+
+    expect(firstToken.accessToken).toBe('token-a');
+    expect(secondToken.accessToken).toBe('token-b');
+    expect(
+      mockFetch.mock.calls
+        .map(([url]) => String(url))
+        .filter((url) => url.includes('/oauth/token')),
+    ).toEqual(['https://auth-a.example.com/oauth/token', 'https://auth-b.example.com/oauth/token']);
   });
 });
