@@ -285,7 +285,12 @@ describe('importCommand', () => {
       expect(importedEval!.evaluationDurationMs).toBe(4198);
     });
 
-    it('should import traces and attach them to the imported eval', async () => {
+    it.each([
+      { timestamp: 15, timestampNanos: '15000000' },
+      { timestamp: 15 },
+      { timestamp: 1_789_523_000_123.4568, timestampNanos: '1789523000123456789' },
+      { timestamp: 1_789_523_000_000.0078, timestampNanos: '1789523000000007920' },
+    ])('should import traces and attach them to the imported eval: %j', async (eventTime) => {
       const sampleFilePath = path.join(__dirname, '../__fixtures__/sample-export.json');
       const sampleData = JSON.parse(fs.readFileSync(sampleFilePath, 'utf-8'));
       sampleData.traces = [
@@ -307,8 +312,7 @@ describe('importCommand', () => {
               events: [
                 {
                   name: 'observed',
-                  timestamp: 15,
-                  timestampNanos: '15000000',
+                  ...eventTime,
                   attributes: { handled: true },
                 },
               ],
@@ -343,8 +347,7 @@ describe('importCommand', () => {
           events: [
             {
               name: 'observed',
-              timestamp: 15,
-              timestampNanos: '15000000',
+              ...eventTime,
               attributes: { handled: true },
             },
           ],
@@ -1575,6 +1578,7 @@ describe('importCommand', () => {
       { events: {} },
       { events: [null] },
       { events: [{ name: 'verifier', timestamp: 'invalid' }] },
+      { events: [{ name: 'progress', timestamp: 15, timestampNanos: '16000000' }] },
     ])('preserves the existing eval when imported events are malformed: %j', async ({ events }) => {
       const sampleFilePath = path.join(__dirname, '../__fixtures__/sample-export.json');
       const replacement = JSON.parse(fs.readFileSync(sampleFilePath, 'utf8'));

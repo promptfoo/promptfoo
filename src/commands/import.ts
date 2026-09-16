@@ -258,15 +258,24 @@ const importedTraceSchema = z.object({
         incomplete: z.literal(false).optional(),
         events: z
           .array(
-            z.object({
-              name: traceTextSchema,
-              timestamp: z.number().finite().nonnegative(),
-              timestampNanos: z
-                .string()
-                .refine((value) => /^\d{1,20}$/.test(value) && BigInt(value) <= 0xffffffffffffffffn)
-                .optional(),
-              attributes: traceAttributesSchema.optional(),
-            }),
+            z
+              .object({
+                name: traceTextSchema,
+                timestamp: z.number().finite().nonnegative(),
+                timestampNanos: z
+                  .string()
+                  .refine(
+                    (value) => /^\d{1,20}$/.test(value) && BigInt(value) <= 0xffffffffffffffffn,
+                  )
+                  .optional(),
+                attributes: traceAttributesSchema.optional(),
+              })
+              .refine(
+                ({ timestamp, timestampNanos }) =>
+                  timestampNanos === undefined ||
+                  Math.abs(timestamp - Number(timestampNanos) / 1_000_000) <=
+                    Number.EPSILON * Math.max(1, timestamp),
+              ),
           )
           .optional(),
       })
