@@ -3,6 +3,7 @@ import { evaluate, runEval } from '../../src/evaluator';
 import logger from '../../src/logger';
 import { nodeEvaluatorRuntime } from '../../src/node/evaluatorRuntime';
 import { resolveTracingOptions } from '../../src/redteam/providers/tracingOptions';
+import { getProviderCallTracingContext } from '../../src/scheduler/providerCallExecutionContext';
 import * as evaluatorTracing from '../../src/tracing/evaluatorTracing';
 import { getTraceStore } from '../../src/tracing/store';
 import { createMockProvider } from '../factories/provider';
@@ -477,6 +478,60 @@ describe('evaluator trace integration', () => {
       expect(mockFetchTraceContext.mock.invocationCallOrder[0]).toBeLessThan(
         mockTraceStore.getTrace.mock.invocationCallOrder[0],
       );
+    });
+
+    it('attributes the trace to the provider override that handles the test', async () => {
+      const configuredProvider = createMockProvider({ id: 'configured-provider' });
+      const overrideProvider = createMockProvider({
+        id: 'override-provider',
+        response: { output: 'Override response' },
+      });
+      const options = createRunOptions(configuredProvider);
+      options.test.provider = overrideProvider;
+
+      const [result] = await runEval(options);
+
+      expect(result.response?.output).toBe('Override response');
+      expect(overrideProvider.callApi).toHaveBeenCalledOnce();
+      expect(configuredProvider.callApi).not.toHaveBeenCalled();
+      expect(evaluatorTracing.generateTraceContextIfNeeded).toHaveBeenCalledWith(
+        options.test,
+        undefined,
+        options.testIdx,
+        options.promptIdx,
+        options.testSuite,
+        expect.objectContaining({ providerId: 'override-provider' }),
+      );
+    });
+
+    it('passes the real evaluation test index to the active provider', async () => {
+      const provider = createMockProvider({ response: { output: 'Target output' } });
+      const options = createRunOptions(provider, { testIdx: 7 });
+
+      await runEval(options);
+
+      expect(provider.callApi).toHaveBeenCalledWith(
+        expect.any(String),
+        expect.objectContaining({ testIdx: 7 }),
+        undefined,
+      );
+    });
+
+    it('scopes the real evaluation test index to grading without adding user variables', async () => {
+      let activeTestIndex: number | undefined;
+      const provider = createMockProvider({
+        callApi: async () => {
+          activeTestIndex = getProviderCallTracingContext()?.testIndex;
+          return { output: 'Target output' };
+        },
+      });
+      const options = createRunOptions(provider, { testIdx: 7 });
+      options.test.vars = { input: 'ordinary user variable' };
+
+      await runEval(options);
+
+      expect(activeTestIndex).toBe(7);
+      expect(options.test.vars).toEqual({ input: 'ordinary user variable' });
     });
 
     it('renders trace-provider credentials and suite environment overrides for programmatic evals', async () => {

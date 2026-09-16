@@ -191,13 +191,96 @@ describe('fetchTraceContext', () => {
       queryDelay: 0,
     });
 
-    expect(fetchTrace).toHaveBeenCalledWith('trace-1', undefined);
+    expect(fetchTrace).toHaveBeenCalledWith('trace-1', { earliestStartTime: 150 });
     expect(storedSpans).toEqual([previousTurn, currentTurn]);
     expect(mocks.getSpans).toHaveBeenCalledWith(
       'trace-1',
       expect.objectContaining({ earliestStartTime: 150 }),
     );
     expect(result?.spans.map((span) => span.name)).toEqual(['current.call']);
+  });
+
+  it('forwards query bounds and cancellation without exposing store-only options', async () => {
+    const controller = new AbortController();
+    const fetchTrace = mockExternalTrace([
+      { spanId: 'current', name: 'target.call', startTime: 200 },
+    ]);
+
+    await fetchTraceContext('trace-1', {
+      providerConfig,
+      abortSignal: controller.signal,
+      earliestStartTime: 150,
+      includeInternalSpans: true,
+      maxRetries: 0,
+      maxSpans: 50,
+      queryDelay: 0,
+      sanitizeAttributes: false,
+    });
+
+    expect(fetchTrace).toHaveBeenCalledWith('trace-1', {
+      abortSignal: controller.signal,
+      earliestStartTime: 150,
+      maxSpans: 50,
+    });
+  });
+
+  it.each([
+    { label: 'internal spans are excluded', filters: { includeInternalSpans: false } },
+    { label: 'span names are filtered', filters: { spanFilter: ['*tool*'] } },
+  ])('applies the span limit after filtering when $label', async ({ filters }) => {
+    const spans = [
+      {
+        spanId: 'internal',
+        name: 'internal.setup',
+        startTime: 1,
+        attributes: { 'otel.span.kind': 'internal' },
+      },
+      {
+        spanId: 'tool',
+        name: 'execute_tool search',
+        startTime: 2,
+        attributes: { 'gen_ai.tool.name': 'search' },
+      },
+    ];
+    const fetchTrace = vi.fn().mockImplementation(async (_traceId, options) => ({
+      fetchedAt: 123,
+      spans: options?.maxSpans === undefined ? spans : spans.slice(0, options.maxSpans),
+      traceId: 'trace-1',
+    }));
+    mocks.createTraceProvider.mockReturnValue({ fetchTrace, id: 'tempo' });
+
+    const result = await fetchTraceContext('trace-1', {
+      providerConfig,
+      maxRetries: 0,
+      maxSpans: 1,
+      queryDelay: 0,
+      ...filters,
+    });
+
+    expect(fetchTrace).toHaveBeenCalledWith('trace-1', undefined);
+    expect(result?.spans.map((span) => span.name)).toEqual(['execute_tool search']);
+  });
+
+  it('preserves time bounds and cancellation when the result limit must be applied locally', async () => {
+    const controller = new AbortController();
+    const fetchTrace = mockExternalTrace([
+      { spanId: 'tool', name: 'execute_tool search', startTime: 200 },
+    ]);
+
+    await fetchTraceContext('trace-1', {
+      providerConfig,
+      abortSignal: controller.signal,
+      earliestStartTime: 150,
+      maxRetries: 0,
+      maxSpans: 50,
+      queryDelay: 0,
+      spanFilter: ['tool'],
+    });
+
+    expect(fetchTrace).toHaveBeenCalledWith('trace-1', {
+      abortSignal: controller.signal,
+      earliestStartTime: 150,
+    });
   });
 
   it('discards cyclic parent relationships while preserving valid spans', async () => {

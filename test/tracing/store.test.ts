@@ -432,6 +432,9 @@ describe('TraceStore', () => {
             'gen_ai.usage.input_tokens': 100,
             'gen_ai.usage.output_tokens': 50,
             'gen_ai.usage.total_tokens': 150,
+            'llm.usage.prompt_tokens': 100,
+            'llm.usage.completion_tokens': 50,
+            'llm.usage.total_tokens': 150,
           },
           statusCode: null,
           statusMessage: null,
@@ -470,6 +473,9 @@ describe('TraceStore', () => {
         'gen_ai.usage.input_tokens': 100,
         'gen_ai.usage.output_tokens': 50,
         'gen_ai.usage.total_tokens': 150,
+        'llm.usage.prompt_tokens': 100,
+        'llm.usage.completion_tokens': 50,
+        'llm.usage.total_tokens': 150,
       });
     });
 

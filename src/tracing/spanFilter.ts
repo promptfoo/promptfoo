@@ -1,3 +1,4 @@
+import { SPAN_ROLE_ATTRIBUTE } from './spanRoles';
 import {
   COMMAND_ATTRIBUTE_KEYS,
   getFirstStringAttribute,
@@ -12,6 +13,10 @@ interface SpanRelevanceInput {
 
 /** Identifies spans that describe model, tool, command, search, guardrail, or error activity. */
 export function isRelevantSpan(span: SpanRelevanceInput): boolean {
+  if (span.attributes?.[SPAN_ROLE_ATTRIBUTE] === 'grader') {
+    return false;
+  }
+
   if (
     span.statusCode === 2 ||
     getToolNameFromAttributes(span.attributes) ||

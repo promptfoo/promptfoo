@@ -4,6 +4,12 @@ import { setEnvOverridesProvider } from './envOverrides';
 
 import type { TestSuite, UnifiedConfig } from './types/index';
 
+export interface ActiveOtlpReceiver {
+  host: string;
+  port: number;
+  acceptFormats: readonly ('json' | 'protobuf')[];
+}
+
 interface CliState {
   basePath?: string;
   config?: Partial<UnifiedConfig>;
@@ -51,12 +57,14 @@ interface CliState {
   // Maximum concurrency from CLI -j flag (propagated to providers like Python)
   maxConcurrency?: number;
   readonly requestTracingConfig?: TestSuite['tracing'];
+  readonly activeOtlpReceiver?: ActiveOtlpReceiver;
 
   withMaxConcurrency<T>(maxConcurrency: number, fn: () => Promise<T>): Promise<T>;
   withRequestTracingConfig<T>(
     tracingConfig: NonNullable<TestSuite['tracing']>,
     fn: () => Promise<T>,
   ): Promise<T>;
+  setActiveOtlpReceiver(receiver?: ActiveOtlpReceiver): void;
 }
 
 const maxConcurrencyContext = new AsyncLocalStorage<{ maxConcurrency: number | undefined }>();
@@ -64,6 +72,7 @@ const requestTracingConfigContext = new AsyncLocalStorage<{
   tracingConfig: NonNullable<TestSuite['tracing']>;
 }>();
 let globalMaxConcurrency: number | undefined;
+let activeOtlpReceiver: ActiveOtlpReceiver | undefined;
 
 const state: CliState = {
   get maxConcurrency() {
@@ -87,11 +96,19 @@ const state: CliState = {
   get requestTracingConfig() {
     return requestTracingConfigContext.getStore()?.tracingConfig;
   },
+  get activeOtlpReceiver() {
+    return activeOtlpReceiver;
+  },
   withRequestTracingConfig<T>(
     tracingConfig: NonNullable<TestSuite['tracing']>,
     fn: () => Promise<T>,
   ): Promise<T> {
     return requestTracingConfigContext.run({ tracingConfig }, fn);
+  },
+  setActiveOtlpReceiver(receiver?: ActiveOtlpReceiver): void {
+    activeOtlpReceiver = receiver
+      ? { ...receiver, acceptFormats: [...receiver.acceptFormats] }
+      : undefined;
   },
 };
 
