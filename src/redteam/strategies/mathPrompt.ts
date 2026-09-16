@@ -2,6 +2,7 @@ import async from 'async';
 import { Presets, SingleBar } from 'cli-progress';
 import dedent from 'dedent';
 import logger from '../../logger';
+import { describeFetchError } from '../../util/fetch/errors';
 import invariant from '../../util/invariant';
 import { extractFirstJsonObject } from '../../util/json';
 import { shouldGenerateRemote } from '../remoteGeneration';
@@ -90,7 +91,7 @@ export async function generateMathPrompt(
 
     return allResults;
   } catch (error) {
-    logger.error(`Error in remote MathPrompt generation: ${error}`);
+    logger.error(`Error in remote MathPrompt generation: ${describeFetchError(error)}`);
     return [];
   }
 }
