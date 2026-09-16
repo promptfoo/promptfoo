@@ -18,6 +18,7 @@ import {
   enableCache,
   fetchWithCache,
   getCache,
+  getHeadersForCacheKey,
   isCacheEnabled,
   withCacheEnabled,
   withCacheNamespace,
@@ -35,6 +36,7 @@ vi.mock('../src/globalConfig/cloud', () => ({
   cloudConfig: {
     getApiHost: vi.fn().mockReturnValue('https://api.promptfoo.app'),
     getApiKey: vi.fn(() => process.env.PROMPTFOO_API_KEY),
+    getAuthHeaderName: vi.fn().mockReturnValue('Authorization'),
     getCurrentOrganizationId: vi.fn().mockReturnValue('org-1'),
     getCurrentTeamId: vi.fn(),
   },
@@ -344,6 +346,7 @@ describe('fetchWithCache', () => {
     mockFetchWithRetries.mockReset();
     vi.mocked(cloudConfig.getCurrentOrganizationId).mockReturnValue('org-1');
     vi.mocked(cloudConfig.getCurrentTeamId).mockReset().mockReturnValue(undefined);
+    vi.mocked(cloudConfig.getAuthHeaderName).mockReset().mockReturnValue('Authorization');
     await clearCache();
     enableCache();
   });
@@ -1269,6 +1272,127 @@ describe('fetchWithCache', () => {
         }
       } finally {
         restoreEnv();
+      }
+    });
+
+    it('should key cloud requests by the configured auth header name, not always Authorization', async () => {
+      const cache = getCache();
+      const restoreEnv = mockProcessEnv({ PROMPTFOO_API_KEY: 'same-cloud-token' });
+      mockFetchWithRetries.mockResolvedValue(mockFetchWithRetriesResponse(true, { data: 'ok' }));
+
+      try {
+        const requestOptions = {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ task: 'same-body' }),
+        };
+
+        vi.mocked(cloudConfig.getAuthHeaderName).mockReturnValue('Authorization');
+        await fetchWithCache('https://api.promptfoo.app/api/v1/task', requestOptions, 1000);
+
+        // Same token, same body, but a different configured header name — the request
+        // actually sent differs (the token is injected under a different header), so this
+        // must be a separate cache entry rather than a hit on the Authorization-keyed one.
+        vi.mocked(cloudConfig.getAuthHeaderName).mockReturnValue('X-Promptfoo-Api-Key');
+        await fetchWithCache('https://api.promptfoo.app/api/v1/task', requestOptions, 1000);
+
+        expect(mockFetchWithRetries).toHaveBeenCalledTimes(2);
+
+        const cacheKeys = vi.mocked(cache.set).mock.calls.map(([cacheKey]) => String(cacheKey));
+        expect(cacheKeys).toHaveLength(2);
+        expect(cacheKeys[0]).not.toEqual(cacheKeys[1]);
+        for (const cacheKey of cacheKeys) {
+          expect(cacheKey).not.toContain('same-cloud-token');
+        }
+      } finally {
+        restoreEnv();
+      }
+    });
+
+    it('should fingerprint the cloud auth value under a custom header name even for a short token', async () => {
+      // Regression guard: isSecretField/looksLikeSecret are name/pattern heuristics that
+      // miss a custom header name (e.g. X-Promptfoo-Api-Key normalizes to a name outside
+      // SECRET_FIELD_NAMES) and a short on-prem token (looksLikeSecret's Bearer pattern
+      // requires 20+ chars). getHeadersForCacheKey must fingerprint the injected cloud
+      // credential unconditionally, not rely on those heuristics, so a short token under a
+      // custom header name is still never embedded raw in the cache key.
+      const cache = getCache();
+      vi.mocked(cloudConfig.getAuthHeaderName).mockReturnValue('X-Promptfoo-Api-Key');
+      mockFetchWithRetries.mockResolvedValue(mockFetchWithRetriesResponse(true, { data: 'ok' }));
+
+      try {
+        const requestOptions = {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ task: 'same-body' }),
+        };
+
+        const restoreEnv = mockProcessEnv({ PROMPTFOO_API_KEY: 'short-tok-one' });
+        await fetchWithCache('https://api.promptfoo.app/api/v1/task', requestOptions, 1000);
+
+        // Different short token, same everything else — a distinct cache entry proves the
+        // token value is incorporated into the key (fingerprinted), not dropped or ignored.
+        mockProcessEnv({ PROMPTFOO_API_KEY: 'short-tok-two' });
+        await fetchWithCache('https://api.promptfoo.app/api/v1/task', requestOptions, 1000);
+
+        expect(mockFetchWithRetries).toHaveBeenCalledTimes(2);
+
+        const cacheKeys = vi.mocked(cache.set).mock.calls.map(([cacheKey]) => String(cacheKey));
+        expect(cacheKeys).toHaveLength(2);
+        expect(cacheKeys[0]).not.toEqual(cacheKeys[1]);
+        for (const cacheKey of cacheKeys) {
+          expect(cacheKey).not.toContain('short-tok-one');
+          expect(cacheKey).not.toContain('short-tok-two');
+        }
+
+        restoreEnv();
+      } finally {
+        vi.mocked(cloudConfig.getAuthHeaderName).mockReset().mockReturnValue('Authorization');
+      }
+    });
+
+    it('should fingerprint a custom cloud auth header even when a caller pre-sets it explicitly', () => {
+      // Regression guard: resolveGuardrailsApi() (src/guardrails.ts) attaches the cloud
+      // auth header itself, via cloudConfig.getAuthHeaders(), before the request reaches
+      // getHeadersForCacheKey. The header is then already present, so the old
+      // `!headers.has(cloudAuthHeaderName)` injection guard must not gate fingerprinting —
+      // otherwise this falls through to the generic isSecretField/looksLikeSecret
+      // heuristics, which miss both a custom header name and a short token.
+      const restoreEnv = mockProcessEnv({ PROMPTFOO_API_KEY: 'short-tok' });
+      try {
+        vi.mocked(cloudConfig.getAuthHeaderName).mockReturnValue('X-Promptfoo-Api-Key');
+
+        const headers = getHeadersForCacheKey('https://api.promptfoo.app/api/v1/task', {
+          headers: { 'X-Promptfoo-Api-Key': 'Bearer short-tok' },
+        });
+
+        const entry = headers.find(([name]) => name === 'x-promptfoo-api-key');
+        expect(entry).toBeDefined();
+        expect(entry?.[1]).toEqual({ __promptfooSecretFingerprint: expect.any(String) });
+      } finally {
+        restoreEnv();
+        vi.mocked(cloudConfig.getAuthHeaderName).mockReset().mockReturnValue('Authorization');
+      }
+    });
+
+    it('should fingerprint an injected cloud auth header under a mixed-case configured name', () => {
+      // Regression guard: Headers.entries() always lowercases names, but the header name
+      // this function injects under is recorded with whatever casing getAuthHeaderName()
+      // returns. A mixed-case configured name must still match at fingerprint time.
+      const restoreEnv = mockProcessEnv({ PROMPTFOO_API_KEY: 'short-tok' });
+      try {
+        vi.mocked(cloudConfig.getAuthHeaderName).mockReturnValue('X-Promptfoo-Api-Key');
+
+        const headers = getHeadersForCacheKey('https://api.promptfoo.app/api/v1/task', {
+          headers: { 'Content-Type': 'application/json' },
+        });
+
+        const entry = headers.find(([name]) => name === 'x-promptfoo-api-key');
+        expect(entry).toBeDefined();
+        expect(entry?.[1]).toEqual({ __promptfooSecretFingerprint: expect.any(String) });
+      } finally {
+        restoreEnv();
+        vi.mocked(cloudConfig.getAuthHeaderName).mockReset().mockReturnValue('Authorization');
       }
     });
 

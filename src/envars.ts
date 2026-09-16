@@ -119,6 +119,7 @@ type EnvVars = {
   PROMPTFOO_CACHE_TTL?: number;
   PROMPTFOO_CACHE_TYPE?: 'memory' | 'disk';
   PROMPTFOO_CLOUD_API_URL?: string;
+  PROMPTFOO_CLOUD_AUTH_HEADER?: string;
   PROMPTFOO_CONFIG_DIR?: string;
   PROMPTFOO_CSV_DELIMITER?: string;
   PROMPTFOO_CSV_STRICT?: boolean;
@@ -338,6 +339,7 @@ type EnvVars = {
   HYPERBOLIC_API_KEY?: string;
 
   // Langfuse
+  LANGFUSE_BASE_URL?: string;
   LANGFUSE_HOST?: string;
   LANGFUSE_PUBLIC_KEY?: string;
   LANGFUSE_SECRET_KEY?: string;
