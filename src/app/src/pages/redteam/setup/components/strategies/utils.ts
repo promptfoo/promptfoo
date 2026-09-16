@@ -160,6 +160,13 @@ const STRATEGY_PROFILES: Record<Strategy, StrategyProfile> = {
     reason: 'Jailbreak variants can require multiple attempts per test.',
   },
   'jailbreak:composite': MODERATE_PROFILE,
+  'jailbreak:goblin': {
+    minMultiplier: 6,
+    likelyMultiplier: 10,
+    maxMultiplier: 15,
+    ceilingMultiplier: 22,
+    reason: 'Goblin can branch into additional target-facing turns.',
+  },
   'jailbreak:hydra': {
     minMultiplier: 6,
     likelyMultiplier: 10,
@@ -214,6 +221,7 @@ const STRATEGY_SCALING_SETTINGS: Partial<Record<Strategy, StrategyScalingSetting
   goat: { key: 'maxTurns', defaultValue: 5 },
   'indirect-web-pwn': { key: 'maxTurns', defaultValue: 5 },
   jailbreak: { key: 'numIterations', defaultValue: 10 },
+  'jailbreak:goblin': { key: 'maxTurns', defaultValue: 10 },
   'jailbreak:hydra': { key: 'maxTurns', defaultValue: 10 },
   'jailbreak:meta': { key: 'numIterations', defaultValue: 10 },
   'mischievous-user': { key: 'maxTurns', defaultValue: 5 },

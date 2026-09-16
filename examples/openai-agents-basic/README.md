@@ -13,7 +13,7 @@ This example demonstrates how to use the OpenAI Agents SDK with promptfoo to cre
 
 ## Prerequisites
 
-- Node.js 20+ (use `nvm use` to align with `.nvmrc`)
+- Node.js >=22.22.0 (Node.js 24 LTS recommended); use `nvm use` to align with `.nvmrc`
 - OpenAI API key
 - The `@openai/agents` SDK (installed via npm)
 
@@ -107,7 +107,7 @@ export default new Agent({
   - Use check_inventory to see what items, equipment, and gold players have
   - Use check_character_stats to view player abilities, HP, AC, and level
   - Use describe_scene to paint vivid, atmospheric pictures of locations`,
-  model: 'gpt-5-mini',
+  model: 'gpt-5.6-luna',
   tools: gameTools,
 });
 ```
