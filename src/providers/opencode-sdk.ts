@@ -1408,10 +1408,9 @@ export class OpenCodeSDKProvider implements ApiProvider {
         serverOptions.config = serverConfig;
       }
 
-      const opencodePromise = this.withTemporaryOpenCodeTraceparent(traceparent, () =>
+      const opencode = await this.withTemporaryOpenCodeTraceparent(traceparent, () =>
         createOpencode(serverOptions),
       );
-      const opencode = await opencodePromise;
       this.client = opencode.client;
       this.server = opencode.server;
       this.activeTraceparent = traceparent;
