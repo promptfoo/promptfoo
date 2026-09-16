@@ -1,5 +1,8 @@
+import * as path from 'path';
+
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { renderMetricName, runAssertions } from '../../src/assertions/index';
+import { importModule } from '../../src/esm';
 import { OpenAiChatCompletionProvider } from '../../src/providers/openai/chat';
 import { DefaultGradingJsonProvider } from '../../src/providers/openai/defaults';
 import { ReplicateModerationProvider } from '../../src/providers/replicate';
@@ -142,6 +145,31 @@ describe('runAssertions', () => {
     expect(result).toMatchObject({
       pass: false,
       reason: 'Expected output "Actual output" to equal "Expected output"',
+    });
+  });
+
+  it('should not fail when a weight-zero assertion script cannot load', async () => {
+    vi.mocked(path.resolve).mockReturnValue('/base/path/checks/assert.js');
+    vi.mocked(importModule).mockRejectedValueOnce(new Error('Unable to load assertion script'));
+
+    const result = await runAssertions({
+      prompt: 'Some prompt',
+      provider: new OpenAiChatCompletionProvider('gpt-4o-mini'),
+      test: {
+        assert: [
+          {
+            type: 'javascript',
+            script: 'file://checks/assert.js',
+            weight: 0,
+          },
+        ],
+      },
+      providerResponse: { output: 'Expected output' },
+    });
+
+    expect(result).toMatchObject({
+      pass: true,
+      reason: 'All assertions passed',
     });
   });
 
