@@ -337,13 +337,12 @@ function isUsableCount(value: unknown): value is number {
 }
 
 function getCountError(assertion: Assertion): string | undefined {
-  const countLabel = CHARACTER_COUNT_ASSERTION_TYPES.has(assertion.type) ? 'character' : 'word';
-  if (
-    !WORD_COUNT_ASSERTION_TYPES.has(assertion.type) &&
-    !CHARACTER_COUNT_ASSERTION_TYPES.has(assertion.type)
-  ) {
+  const isCharacterCount = CHARACTER_COUNT_ASSERTION_TYPES.has(assertion.type);
+  if (!isCharacterCount && !WORD_COUNT_ASSERTION_TYPES.has(assertion.type)) {
     return undefined;
   }
+
+  const countLabel = isCharacterCount ? 'character' : 'word';
 
   if (isUsableCount(assertion.value)) {
     return undefined;
