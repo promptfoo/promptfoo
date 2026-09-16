@@ -2,12 +2,13 @@ import fs from 'fs';
 import os from 'os';
 import path from 'path';
 
-import yaml from 'js-yaml';
+import * as yaml from 'js-yaml';
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
-import { doEval } from '../../../src/commands/eval';
 import * as evaluatorModule from '../../../src/evaluator';
 import logger from '../../../src/logger';
 import Eval from '../../../src/models/eval';
+import { doEval } from '../../../src/node/doEval';
+import { mockProcessEnv } from '../../util/utils';
 import type { Command } from 'commander';
 
 import type { CommandLineOptions, EvaluateOptions, TestSuite } from '../../../src/types/index';
@@ -131,6 +132,86 @@ describe('evaluateOptions behavior', () => {
   afterAll(() => {
     process.exit = originalExit;
     fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  describe('generation accounting provenance', () => {
+    function generationConfig(metadata: Record<string, unknown>) {
+      return {
+        metadata,
+        providers: [{ id: 'echo' }],
+        prompts: ['Hello'],
+        tests: [{ vars: {} }],
+      };
+    }
+
+    it('removes copied generation charges from a newly created evaluation', async () => {
+      const configFile = writeTempConfig(
+        tmpDir,
+        'test-stale-generation-accounting.yaml',
+        generationConfig({
+          owner: 'preserved metadata',
+          generationAccounting: {
+            id: 'previous-generation',
+            tokenUsage: { total: 40, numRequests: 4 },
+          },
+        }),
+      );
+
+      await doEval({ table: false, write: false, config: [configFile] }, {}, undefined, {});
+
+      const evalRecord = evaluateMock.mock.calls.at(-1)?.[1] as Eval;
+      expect(evalRecord.config.metadata).toEqual({ owner: 'preserved metadata' });
+      expect(evalRecord.getStats().tokenUsage.generation).toBeUndefined();
+    });
+
+    it('replaces copied generation charges with accounting from the current run', async () => {
+      const configFile = writeTempConfig(
+        tmpDir,
+        'test-current-generation-accounting.yaml',
+        generationConfig({
+          generationAccounting: {
+            id: 'previous-generation',
+            tokenUsage: { total: 40, numRequests: 4 },
+          },
+        }),
+      );
+      const currentUsage = { total: 12, prompt: 8, completion: 4, numRequests: 1 };
+
+      await doEval({ table: false, write: false, config: [configFile] }, {}, undefined, {
+        generationEventId: 'current-generation',
+        generationTokenUsage: currentUsage,
+      });
+
+      const evalRecord = evaluateMock.mock.calls.at(-1)?.[1] as Eval;
+      expect(evalRecord.config.metadata?.generationAccounting).toEqual({
+        id: 'current-generation',
+        tokenUsage: currentUsage,
+      });
+      expect(evalRecord.getStats().tokenUsage.generation).toMatchObject(currentUsage);
+    });
+
+    it('preserves existing generation charges when resuming the same evaluation', async () => {
+      const generationAccounting = {
+        id: 'original-generation',
+        tokenUsage: { total: 40, prompt: 25, completion: 15, numRequests: 4 },
+      };
+      const resumeEval = new Eval(generationConfig({ generationAccounting }), {
+        id: 'eval-resume-generation-accounting',
+        persisted: true,
+      });
+      const findByIdSpy = vi.spyOn(Eval, 'findById').mockResolvedValue(resumeEval);
+
+      try {
+        await doEval({ table: false, resume: resumeEval.id } as any, {}, undefined, {});
+
+        expect(resumeEval.config.metadata?.generationAccounting).toEqual(generationAccounting);
+        expect(resumeEval.getStats().tokenUsage.generation).toMatchObject(
+          generationAccounting.tokenUsage,
+        );
+      } finally {
+        findByIdSpy.mockRestore();
+      }
+    });
   });
 
   describe('Reading values from config file', () => {
@@ -646,6 +727,203 @@ describe('evaluateOptions behavior', () => {
       expect(options.filterRange).toBeUndefined();
     });
 
+    it.each([
+      ['--filter-targets', 'filterTargets'],
+      ['--filter-providers', 'filterProviders'],
+    ] as const)('should persist and restore %s for resumed evaluations', async (_flag, key) => {
+      const tempConfig = writeTempConfig(tmpDir, `test-${key}.yaml`, {
+        providers: [
+          { id: 'echo', label: 'excluded-target' },
+          { id: 'echo', label: 'selected-target' },
+        ],
+        prompts: ['Hello'],
+        tests: [{ vars: {} }],
+      });
+
+      await doEval(
+        {
+          table: false,
+          write: false,
+          config: [tempConfig],
+          [key]: 'selected-target',
+        },
+        {},
+        undefined,
+        {},
+      );
+
+      const initialSuite = evaluateMock.mock.calls.at(-1)?.[0] as TestSuite;
+      const initialEval = evaluateMock.mock.calls.at(-1)?.[1] as Eval;
+      expect(initialSuite.providers.map((provider) => provider.label)).toEqual(['selected-target']);
+      expect(initialEval.runtimeOptions?.providerFilter).toBe('selected-target');
+
+      const resumeEval = new Eval(initialEval.config, {
+        id: `eval-resume-${key}`,
+        persisted: true,
+        runtimeOptions: initialEval.runtimeOptions,
+      });
+      const findByIdSpy = vi.spyOn(Eval, 'findById').mockResolvedValue(resumeEval);
+      evaluateMock.mockClear();
+
+      try {
+        await doEval(
+          {
+            table: false,
+            resume: resumeEval.id,
+          } as any,
+          {},
+          undefined,
+          {},
+        );
+
+        const resumedSuite = evaluateMock.mock.calls.at(-1)?.[0] as TestSuite;
+        expect(resumedSuite.providers.map((provider) => provider.label)).toEqual([
+          'selected-target',
+        ]);
+      } finally {
+        findByIdSpy.mockRestore();
+      }
+    });
+
+    it('resolves persisted trace-provider credential references when resuming an eval', async () => {
+      const restoreEnv = mockProcessEnv({
+        PROMPTFOO_TEST_TEMPO_RESUME_TOKEN: 'resumed-tempo-runtime-secret',
+      });
+      const resumeEval = new Eval(
+        {
+          providers: [{ id: 'echo', label: 'traced-target' }],
+          prompts: ['Hello'],
+          tests: [{ vars: {} }],
+          tracing: {
+            enabled: true,
+            provider: {
+              id: 'tempo',
+              endpoint: 'https://tempo.example.com',
+              auth: { token: '{{ env.PROMPTFOO_TEST_TEMPO_RESUME_TOKEN }}' },
+              headers: {
+                Authorization: 'Bearer {{ env.PROMPTFOO_TEST_TEMPO_RESUME_TOKEN }}',
+              },
+            },
+          },
+        },
+        { id: 'eval-resume-tempo-credentials', persisted: true },
+      );
+      const findByIdSpy = vi.spyOn(Eval, 'findById').mockResolvedValue(resumeEval);
+
+      try {
+        await doEval({ table: false, resume: resumeEval.id } as any, {}, undefined, {});
+
+        const resumedSuite = evaluateMock.mock.calls.at(-1)?.[0] as TestSuite;
+        expect(resumedSuite.tracing?.provider?.auth?.token).toBe('resumed-tempo-runtime-secret');
+        expect(resumedSuite.tracing?.provider?.headers?.Authorization).toBe(
+          'Bearer resumed-tempo-runtime-secret',
+        );
+        expect(resumeEval.config.tracing?.provider?.auth?.token).toBe(
+          '{{ env.PROMPTFOO_TEST_TEMPO_RESUME_TOKEN }}',
+        );
+      } finally {
+        findByIdSpy.mockRestore();
+        restoreEnv();
+      }
+    });
+
+    it('resolves nested persisted environment references before resuming trace retrieval', async () => {
+      const restoreEnv = mockProcessEnv({
+        PROMPTFOO_TEST_TEMPO_SOURCE_SECRET: 'nested-tempo-runtime-secret',
+      });
+      const resumeEval = new Eval(
+        {
+          providers: [{ id: 'echo', label: 'traced-target' }],
+          prompts: ['Hello'],
+          tests: [{ vars: {} }],
+          env: {
+            PROMPTFOO_TEST_TEMPO_READER: '{{ env.PROMPTFOO_TEST_TEMPO_SOURCE_SECRET }}',
+          },
+          tracing: {
+            enabled: true,
+            provider: {
+              id: 'tempo',
+              endpoint: 'https://tempo.example.com',
+              auth: { token: '{{ env.PROMPTFOO_TEST_TEMPO_READER }}' },
+              headers: {
+                'X-Tempo-Reader': '{{ env.PROMPTFOO_TEST_TEMPO_READER }}',
+              },
+            },
+          },
+        },
+        { id: 'eval-resume-nested-tempo-credentials', persisted: true },
+      );
+      const findByIdSpy = vi.spyOn(Eval, 'findById').mockResolvedValue(resumeEval);
+
+      try {
+        await doEval({ table: false, resume: resumeEval.id } as any, {}, undefined, {});
+
+        const resumedSuite = evaluateMock.mock.calls.at(-1)?.[0] as TestSuite;
+        expect(resumedSuite.tracing?.provider?.auth?.token).toBe('nested-tempo-runtime-secret');
+        expect(resumedSuite.tracing?.provider?.headers?.['X-Tempo-Reader']).toBe(
+          'nested-tempo-runtime-secret',
+        );
+        expect(resumeEval.config.env).toEqual({
+          PROMPTFOO_TEST_TEMPO_READER: '{{ env.PROMPTFOO_TEST_TEMPO_SOURCE_SECRET }}',
+        });
+      } finally {
+        findByIdSpy.mockRestore();
+        restoreEnv();
+      }
+    });
+
+    it('should not treat evaluateOptions.providerFilter as a provider selection', async () => {
+      const tempConfig = writeTempConfig(tmpDir, 'test-ignored-provider-filter.yaml', {
+        evaluateOptions: {
+          providerFilter: 'selected-target',
+        },
+        providers: [
+          { id: 'echo', label: 'excluded-target' },
+          { id: 'echo', label: 'selected-target' },
+        ],
+        prompts: ['Hello'],
+        tests: [{ vars: {} }],
+      });
+
+      await doEval({ table: false, write: false, config: [tempConfig] }, {}, undefined, {});
+
+      const testSuite = evaluateMock.mock.calls.at(-1)?.[0] as TestSuite;
+      const evalRecord = evaluateMock.mock.calls.at(-1)?.[1] as Eval;
+      const options = evaluateMock.mock.calls.at(-1)?.[2] as EvaluateOptions;
+      expect(testSuite.providers.map((provider) => provider.label)).toEqual([
+        'excluded-target',
+        'selected-target',
+      ]);
+      expect(evalRecord.runtimeOptions?.providerFilter).toBeUndefined();
+      expect(options).not.toHaveProperty('providerFilter');
+    });
+
+    it('should make commandLineOptions.filterSample repeatable with a configured seed', async () => {
+      const tempConfig = writeTempConfig(tmpDir, 'test-filter-sample-seed.yaml', {
+        commandLineOptions: {
+          filterSample: 2,
+          filterSampleSeed: 42,
+        },
+        providers: ['echo'],
+        prompts: ['Hello {{input}}'],
+        tests: [
+          { vars: { input: 'one' } },
+          { vars: { input: 'two' } },
+          { vars: { input: 'three' } },
+        ],
+      });
+
+      await doEval({ table: false, write: false, config: [tempConfig] }, {}, undefined, {});
+      const firstSuite = evaluateMock.mock.calls.at(-1)?.[0] as TestSuite;
+      await doEval({ table: false, write: false, config: [tempConfig] }, {}, undefined, {});
+      const secondSuite = evaluateMock.mock.calls.at(-1)?.[0] as TestSuite;
+
+      expect(firstSuite.tests?.map((test) => test.vars?.input)).toEqual(['two', 'three']);
+      expect(firstSuite.tests?.map((test) => test.vars?.input)).toEqual(
+        secondSuite.tests?.map((test) => test.vars?.input),
+      );
+    });
+
     it('should use evaluateOptions.filterRange when command-line defaults do not set it', async () => {
       const tempConfig = writeTempConfig(tmpDir, 'test-evaluate-options-filter-range.yaml', {
         evaluateOptions: {
@@ -680,6 +958,91 @@ describe('evaluateOptions behavior', () => {
       expect(options.filterRange).toBeUndefined();
     });
 
+    it('should suppress the implicit default test when filters remove explicit tests', async () => {
+      const tempConfig = writeTempConfig(tmpDir, 'test-pattern-filter-empty.yaml', {
+        providers: ['echo'],
+        prompts: ['Hello {{input}}'],
+        tests: [{ description: 'kept only by matching filters', vars: { input: 'one' } }],
+      });
+
+      await doEval(
+        {
+          table: false,
+          write: false,
+          config: [tempConfig],
+          filterPattern: 'no match',
+        },
+        {},
+        undefined,
+        {},
+      );
+
+      expect(evaluateMock).toHaveBeenCalled();
+      const testSuite = evaluateMock.mock.calls.at(-1)?.[0] as TestSuite;
+      expect(testSuite.tests).toHaveLength(0);
+      expect(testSuite.scenarios).toEqual([]);
+    });
+
+    it.each([
+      ['--filter-pattern', { filterPattern: 'no match' }],
+      ['--filter-metadata', { filterMetadata: 'category=drop' }],
+    ])('should apply %s to the implicit default test', async (_filterName, filterOptions) => {
+      const tempConfig = writeTempConfig(tmpDir, 'test-filter-implicit-default.yaml', {
+        providers: ['echo'],
+        prompts: ['Hello'],
+        defaultTest: {
+          metadata: { category: 'keep' },
+          assert: [{ type: 'contains', value: 'Hello' }],
+        },
+      });
+
+      await doEval(
+        {
+          table: false,
+          write: false,
+          config: [tempConfig],
+          ...filterOptions,
+        },
+        {},
+        undefined,
+        {},
+      );
+
+      expect(evaluateMock).toHaveBeenCalled();
+      const testSuite = evaluateMock.mock.calls.at(-1)?.[0] as TestSuite;
+      expect(testSuite.tests).toHaveLength(0);
+      expect(testSuite.scenarios).toEqual([]);
+    });
+
+    it('should filter an implicit default test by inherited metadata', async () => {
+      const tempConfig = writeTempConfig(tmpDir, 'test-filter-implicit-default-metadata.yaml', {
+        providers: ['echo'],
+        prompts: ['Hello'],
+        defaultTest: {
+          metadata: { category: 'keep' },
+          assert: [{ type: 'contains', value: 'Hello' }],
+        },
+      });
+
+      await doEval(
+        {
+          table: false,
+          write: false,
+          config: [tempConfig],
+          filterMetadata: 'category=keep',
+        },
+        {},
+        undefined,
+        {},
+      );
+
+      expect(evaluateMock).toHaveBeenCalled();
+      const testSuite = evaluateMock.mock.calls.at(-1)?.[0] as TestSuite;
+      expect(testSuite.tests).toHaveLength(1);
+      expect(testSuite.tests?.[0].metadata).toEqual({ category: 'keep' });
+      expect(testSuite.scenarios).toBeUndefined();
+    });
+
     it('should apply filterRange to the implicit default test', async () => {
       const tempConfig = writeTempConfig(tmpDir, 'test-filter-range-implicit-default.yaml', {
         providers: ['echo'],
@@ -705,6 +1068,34 @@ describe('evaluateOptions behavior', () => {
       expect(testSuite.tests).toHaveLength(1);
       expect(evalRecord.runtimeOptions?.filterRange).toBe('0:1');
       expect(options.filterRange).toBeUndefined();
+    });
+
+    it('should not synthesize a default test from explicitly empty scenarios', async () => {
+      const tempConfig = writeTempConfig(tmpDir, 'test-filter-range-empty-scenarios.yaml', {
+        providers: ['echo'],
+        prompts: ['Hello'],
+        scenarios: [],
+        defaultTest: {
+          assert: [{ type: 'contains', value: 'Hello' }],
+        },
+      });
+
+      await doEval(
+        {
+          table: false,
+          write: false,
+          config: [tempConfig],
+          filterRange: '0:1',
+        },
+        {},
+        undefined,
+        {},
+      );
+
+      expect(evaluateMock).toHaveBeenCalled();
+      const testSuite = evaluateMock.mock.calls.at(-1)?.[0] as TestSuite;
+      expect(testSuite.tests).toHaveLength(0);
+      expect(testSuite.scenarios).toEqual([]);
     });
 
     it('should preserve empty filterRange slices for the implicit default test', async () => {
@@ -782,45 +1173,48 @@ describe('evaluateOptions behavior', () => {
     it.each([
       ['commandLineOptions', { commandLineOptions: { filterRange: '1:2' } }],
       ['evaluateOptions', { evaluateOptions: { filterRange: '1:2' } }],
-    ])('should restore legacy %s.filterRange when resuming evals without persisted runtime options', async (_source, legacyConfig) => {
-      const resumeEval = new Eval(
-        {
-          ...legacyConfig,
-          providers: ['echo'],
-          prompts: ['Hello {{name}}'],
-          tests: [
-            { vars: { name: 'Alice' } },
-            { vars: { name: 'Bob' } },
-            { vars: { name: 'Carol' } },
-          ],
-        },
-        {
-          id: 'eval-resume-without-filter-range',
-          persisted: true,
-        },
-      );
-      const findByIdSpy = vi.spyOn(Eval, 'findById').mockResolvedValue(resumeEval);
-
-      try {
-        await doEval(
+    ])(
+      'should restore legacy %s.filterRange when resuming evals without persisted runtime options',
+      async (_source, legacyConfig) => {
+        const resumeEval = new Eval(
           {
-            table: false,
-            resume: 'eval-resume-without-filter-range',
-          } as any,
-          {},
-          undefined,
+            ...legacyConfig,
+            providers: ['echo'],
+            prompts: ['Hello {{name}}'],
+            tests: [
+              { vars: { name: 'Alice' } },
+              { vars: { name: 'Bob' } },
+              { vars: { name: 'Carol' } },
+            ],
+          },
           {
-            filterRange: '0:1',
+            id: 'eval-resume-without-filter-range',
+            persisted: true,
           },
         );
+        const findByIdSpy = vi.spyOn(Eval, 'findById').mockResolvedValue(resumeEval);
 
-        expect(evaluateMock).toHaveBeenCalled();
-        const options = evaluateMock.mock.calls.at(-1)?.[2] as EvaluateOptions;
-        expect(options.filterRange).toBe('1:2');
-      } finally {
-        findByIdSpy.mockRestore();
-      }
-    });
+        try {
+          await doEval(
+            {
+              table: false,
+              resume: 'eval-resume-without-filter-range',
+            } as any,
+            {},
+            undefined,
+            {
+              filterRange: '0:1',
+            },
+          );
+
+          expect(evaluateMock).toHaveBeenCalled();
+          const options = evaluateMock.mock.calls.at(-1)?.[2] as EvaluateOptions;
+          expect(options.filterRange).toBe('1:2');
+        } finally {
+          findByIdSpy.mockRestore();
+        }
+      },
+    );
 
     it('should warn and ignore CLI --filter-range when resuming with a different persisted range', async () => {
       const resumeEval = new Eval(
