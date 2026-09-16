@@ -2786,44 +2786,44 @@ describe('ResultsTable Variable JSON Formatting', () => {
     expect(codeBlocks.some((text) => text?.includes('"decoded": true'))).toBe(true);
   });
 
-  it.each([
-    false,
-    true,
-  ])('prettifies JSON without changing noncanonical tokens when markdown rendering is %s', (renderMarkdown) => {
-    const lossyJson =
-      '{"id":9007199254740993,"overflow":1e400,"negativeZero":-0,"scaled":1.2300,"dup":1,"dup":2,"10":"ten","2":"two"}';
-    mockTableState(
-      createMockTable({
-        vars: [lossyJson],
-        transformedDisplayVars: { __transformed_payload: lossyJson },
-      }),
-    );
-    vi.mocked(useResultsViewSettingsStore).mockImplementation(() => ({
-      inComparisonMode: false,
-      renderMarkdown,
-      prettifyJson: true,
-    }));
+  it.each([false, true])(
+    'prettifies JSON without changing noncanonical tokens when markdown rendering is %s',
+    (renderMarkdown) => {
+      const lossyJson =
+        '{"id":9007199254740993,"overflow":1e400,"negativeZero":-0,"scaled":1.2300,"dup":1,"dup":2,"10":"ten","2":"two"}';
+      mockTableState(
+        createMockTable({
+          vars: [lossyJson],
+          transformedDisplayVars: { __transformed_payload: lossyJson },
+        }),
+      );
+      vi.mocked(useResultsViewSettingsStore).mockImplementation(() => ({
+        inComparisonMode: false,
+        renderMarkdown,
+        prettifyJson: true,
+      }));
 
-    const { container } = renderWithProviders(<ResultsTable {...defaultProps} />);
+      const { container } = renderWithProviders(<ResultsTable {...defaultProps} />);
 
-    const renderedValues = Array.from(
-      container.querySelectorAll(
-        renderMarkdown ? 'code' : '[data-testid="prettified-json-variable"]',
-      ),
-    )
-      .map((cell) => cell.textContent ?? '')
-      .filter((text) => text.includes('9007199254740993'));
+      const renderedValues = Array.from(
+        container.querySelectorAll(
+          renderMarkdown ? 'code' : '[data-testid="prettified-json-variable"]',
+        ),
+      )
+        .map((cell) => cell.textContent ?? '')
+        .filter((text) => text.includes('9007199254740993'));
 
-    expect(renderedValues).toHaveLength(2);
-    for (const text of renderedValues) {
-      expect(text).toContain('"overflow": 1e400');
-      expect(text).toContain('"negativeZero": -0');
-      expect(text).toContain('"scaled": 1.2300');
-      expect(text.match(/"dup"/g)).toHaveLength(2);
-      expect(text.indexOf('"10"')).toBeLessThan(text.indexOf('"2"'));
-      expect(text).not.toContain('9007199254740992');
-    }
-  });
+      expect(renderedValues).toHaveLength(2);
+      for (const text of renderedValues) {
+        expect(text).toContain('"overflow": 1e400');
+        expect(text).toContain('"negativeZero": -0');
+        expect(text).toContain('"scaled": 1.2300');
+        expect(text.match(/"dup"/g)).toHaveLength(2);
+        expect(text.indexOf('"10"')).toBeLessThan(text.indexOf('"2"'));
+        expect(text).not.toContain('9007199254740992');
+      }
+    },
+  );
 
   it('preserves escape tokens and punctuation inside JSON strings', () => {
     const escapedJson = String.raw`{"text":"quote: \" slash: \\ braces: {[,]} colon: :","unicode":"\u0061","solidus":"\/"}`;
@@ -2845,33 +2845,33 @@ describe('ResultsTable Variable JSON Formatting', () => {
     );
   });
 
-  it.each([
-    false,
-    true,
-  ])('preserves malformed JSON-looking strings when markdown rendering is %s', (renderMarkdown) => {
-    const malformedObject = '{"broken": }';
-    const malformedArray = '[1,]';
-    mockTableState(
-      createMockTable({
-        vars: [malformedObject],
-        transformedDisplayVars: { __transformed_payload: malformedArray },
-      }),
-    );
-    vi.mocked(useResultsViewSettingsStore).mockImplementation(() => ({
-      inComparisonMode: false,
-      renderMarkdown,
-      prettifyJson: true,
-    }));
+  it.each([false, true])(
+    'preserves malformed JSON-looking strings when markdown rendering is %s',
+    (renderMarkdown) => {
+      const malformedObject = '{"broken": }';
+      const malformedArray = '[1,]';
+      mockTableState(
+        createMockTable({
+          vars: [malformedObject],
+          transformedDisplayVars: { __transformed_payload: malformedArray },
+        }),
+      );
+      vi.mocked(useResultsViewSettingsStore).mockImplementation(() => ({
+        inComparisonMode: false,
+        renderMarkdown,
+        prettifyJson: true,
+      }));
 
-    const { container } = renderWithProviders(<ResultsTable {...defaultProps} />);
+      const { container } = renderWithProviders(<ResultsTable {...defaultProps} />);
 
-    expect(container).toHaveTextContent(malformedObject);
-    expect(container).toHaveTextContent(malformedArray);
-    expect(container.querySelector('[data-testid="prettified-json-variable"]')).toBeNull();
-    expect(container.querySelectorAll('[data-testid="literal-json-variable"]')).toHaveLength(
-      renderMarkdown ? 2 : 0,
-    );
-  });
+      expect(container).toHaveTextContent(malformedObject);
+      expect(container).toHaveTextContent(malformedArray);
+      expect(container.querySelector('[data-testid="prettified-json-variable"]')).toBeNull();
+      expect(container.querySelectorAll('[data-testid="literal-json-variable"]')).toHaveLength(
+        renderMarkdown ? 2 : 0,
+      );
+    },
+  );
 
   it('accepts only JSON whitespace at the boundaries of JSON-looking strings', () => {
     const legalWhitespace = ' \t\r\n{"legal":[1,2]}\n\t ';
@@ -2979,45 +2979,45 @@ describe('ResultsTable Variable JSON Formatting', () => {
     expect(container).not.toHaveTextContent(JSON_DISPLAY_LIMIT_MESSAGE_FOR_TEST);
   });
 
-  it.each([
-    false,
-    true,
-  ])('bounds structured transformed values when prettification is %s', (prettifyJson) => {
-    let deeplyNestedValue: Record<string, unknown> = { leaf: true };
-    for (let index = 0; index < 100; index++) {
-      deeplyNestedValue = { child: deeplyNestedValue };
-    }
-    mockTableState(
-      createMockTable({
-        vars: [],
-        transformedDisplayVars: {
-          __transformed_small: { decoded: true },
-          __transformed_deep: deeplyNestedValue,
-        },
-      }),
-    );
-    vi.mocked(useResultsViewSettingsStore).mockImplementation(() => ({
-      inComparisonMode: false,
-      renderMarkdown: false,
-      prettifyJson,
-    }));
+  it.each([false, true])(
+    'bounds structured transformed values when prettification is %s',
+    (prettifyJson) => {
+      let deeplyNestedValue: Record<string, unknown> = { leaf: true };
+      for (let index = 0; index < 100; index++) {
+        deeplyNestedValue = { child: deeplyNestedValue };
+      }
+      mockTableState(
+        createMockTable({
+          vars: [],
+          transformedDisplayVars: {
+            __transformed_small: { decoded: true },
+            __transformed_deep: deeplyNestedValue,
+          },
+        }),
+      );
+      vi.mocked(useResultsViewSettingsStore).mockImplementation(() => ({
+        inComparisonMode: false,
+        renderMarkdown: false,
+        prettifyJson,
+      }));
 
-    const { container } = renderWithProviders(
-      <ResultsTable {...defaultProps} maxTextLength={1_000} />,
-    );
+      const { container } = renderWithProviders(
+        <ResultsTable {...defaultProps} maxTextLength={1_000} />,
+      );
 
-    expect(container).toHaveTextContent(JSON_DISPLAY_LIMIT_MESSAGE_FOR_TEST);
-    if (prettifyJson) {
-      expect(
-        Array.from(container.querySelectorAll('[data-testid="prettified-json-variable"]')).map(
-          (cell) => cell.textContent,
-        ),
-      ).toContain('{\n  "decoded": true\n}');
-    } else {
-      expect(container).toHaveTextContent('{"decoded":true}');
-      expect(container.querySelector('[data-testid="prettified-json-variable"]')).toBeNull();
-    }
-  });
+      expect(container).toHaveTextContent(JSON_DISPLAY_LIMIT_MESSAGE_FOR_TEST);
+      if (prettifyJson) {
+        expect(
+          Array.from(container.querySelectorAll('[data-testid="prettified-json-variable"]')).map(
+            (cell) => cell.textContent,
+          ),
+        ).toContain('{\n  "decoded": true\n}');
+      } else {
+        expect(container).toHaveTextContent('{"decoded":true}');
+        expect(container.querySelector('[data-testid="prettified-json-variable"]')).toBeNull();
+      }
+    },
+  );
 
   it('falls back safely when an object cannot be serialized or coerced', () => {
     const unrenderable = {
@@ -3147,39 +3147,39 @@ describe('ResultsTable Variable JSON Formatting', () => {
     ).toBe(true);
   });
 
-  it.each([
-    false,
-    true,
-  ])('keeps over-budget valid JSON literal when markdown rendering is %s', (renderMarkdown) => {
-    const expansiveJson = JSON.stringify({
-      label: '**keep-stars**',
-      values: Array.from({ length: 100 }, () => 0),
-    });
-    expect(expansiveJson.length).toBeLessThan(512);
-    mockTableState(createMockTable({ vars: [expansiveJson] }));
-    vi.mocked(useResultsViewSettingsStore).mockImplementation(() => ({
-      inComparisonMode: false,
-      renderMarkdown,
-      prettifyJson: true,
-    }));
+  it.each([false, true])(
+    'keeps over-budget valid JSON literal when markdown rendering is %s',
+    (renderMarkdown) => {
+      const expansiveJson = JSON.stringify({
+        label: '**keep-stars**',
+        values: Array.from({ length: 100 }, () => 0),
+      });
+      expect(expansiveJson.length).toBeLessThan(512);
+      mockTableState(createMockTable({ vars: [expansiveJson] }));
+      vi.mocked(useResultsViewSettingsStore).mockImplementation(() => ({
+        inComparisonMode: false,
+        renderMarkdown,
+        prettifyJson: true,
+      }));
 
-    const { container } = renderWithProviders(
-      <ResultsTable {...defaultProps} maxTextLength={1_000} />,
-    );
-
-    expect(container.textContent).toContain(expansiveJson);
-    expect(container.querySelector('[data-testid="prettified-json-variable"]')).toBeNull();
-    expect(
-      Array.from(container.querySelectorAll('strong')).some((element) =>
-        element.textContent?.includes('keep-stars'),
-      ),
-    ).toBe(false);
-    if (renderMarkdown) {
-      expect(container.querySelector('[data-testid="literal-json-variable"]')?.textContent).toBe(
-        expansiveJson,
+      const { container } = renderWithProviders(
+        <ResultsTable {...defaultProps} maxTextLength={1_000} />,
       );
-    }
-  });
+
+      expect(container.textContent).toContain(expansiveJson);
+      expect(container.querySelector('[data-testid="prettified-json-variable"]')).toBeNull();
+      expect(
+        Array.from(container.querySelectorAll('strong')).some((element) =>
+          element.textContent?.includes('keep-stars'),
+        ),
+      ).toBe(false);
+      if (renderMarkdown) {
+        expect(container.querySelector('[data-testid="literal-json-variable"]')?.textContent).toBe(
+          expansiveJson,
+        );
+      }
+    },
+  );
 
   it('memoizes JSON parsing across unrelated table renders', () => {
     const json = '{"memoized":true}';
