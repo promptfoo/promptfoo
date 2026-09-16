@@ -22,7 +22,7 @@ export const handleAnswerRelevance = async ({
     ...(await matchesAnswerRelevance(
       input,
       output,
-      assertion.threshold ?? 0,
+      assertion.threshold ?? 0.7,
       test.options,
       providerCallContext,
     )),

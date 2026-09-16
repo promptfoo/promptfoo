@@ -162,7 +162,8 @@ describe('handleAnswerRelevance', () => {
     ).rejects.toThrow('answer-relevance assertion type must have a prompt');
   });
 
-  it('should use default threshold of 0 if not specified', async () => {
+  it('should use a default threshold of 0.7 when not specified', async () => {
+    // Regression test for #9848.
     const mockMatchesAnswerRelevance = vi.mocked(matchesAnswerRelevance);
     mockMatchesAnswerRelevance.mockResolvedValue({
       pass: true,
@@ -193,7 +194,7 @@ describe('handleAnswerRelevance', () => {
     expect(mockMatchesAnswerRelevance).toHaveBeenCalledWith(
       'test prompt',
       'test output',
-      0,
+      0.7,
       {},
       undefined,
     );

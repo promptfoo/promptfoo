@@ -679,6 +679,10 @@ Model-graded assertions like `llm-rubric` determine PASS/FAIL using two mechanis
 
 This means a result like `{"pass": true, "score": 0}` will pass without a threshold, but fail with `threshold: 1`.
 
+:::note
+Mechanism 1 does not apply to assertions that carry a built-in default threshold. `answer-relevance` (0.7), `g-eval` (0.7), and `similar` (0.75) apply their default when you omit `threshold`, so a low score fails even with no threshold configured.
+:::
+
 **Common issue**: Tests show PASS even when scores are low
 
 ```yaml
