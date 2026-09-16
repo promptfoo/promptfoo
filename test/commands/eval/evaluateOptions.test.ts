@@ -692,6 +692,7 @@ describe('evaluateOptions behavior', () => {
       const initialEval = evaluateMock.mock.calls.at(-1)?.[1] as Eval;
       expect(initialSuite.providers.map((provider) => provider.label)).toEqual(['selected-target']);
       expect(initialEval.runtimeOptions?.providerFilter).toBe('selected-target');
+      expect(initialEval.runtimeOptions?.configBasePath).toBe(path.dirname(tempConfig));
 
       const resumeEval = new Eval(initialEval.config, {
         id: `eval-resume-${key}`,
