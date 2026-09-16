@@ -633,6 +633,53 @@ describe('OllamaChatProvider', () => {
     });
   });
 
+  it.each([false, true])(
+    'should collect tool calls across streaming chunks (with content: %s)',
+    async (withContent) => {
+      const chunks = [
+        {
+          message: {
+            role: 'assistant',
+            content: withContent ? 'Checking ' : '',
+            tool_calls: [{ function: { name: 'get_weather', arguments: { city: 'Amsterdam' } } }],
+          },
+          done: false,
+        },
+        {
+          message: {
+            role: 'assistant',
+            content: withContent ? 'weather.' : '',
+            tool_calls: [{ function: { name: 'get_weather', arguments: '{"city":"Paris"}' } }],
+          },
+          done: false,
+        },
+        {
+          message: { role: 'assistant', content: '' },
+          done: true,
+          prompt_eval_count: 10,
+          eval_count: 20,
+        },
+      ];
+      vi.mocked(fetchWithCache).mockResolvedValue({
+        data: `${chunks.map((chunk) => JSON.stringify(chunk)).join('\n')}\n`,
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+        headers: {},
+      });
+
+      const result = await new OllamaChatProvider('llama3.3').callApi('Compare the weather');
+      const toolCalls = [
+        { function: { name: 'get_weather', arguments: '{"city":"Amsterdam"}' } },
+        { function: { name: 'get_weather', arguments: '{"city":"Paris"}' } },
+      ];
+      expect(result.output).toEqual(
+        withContent ? { content: 'Checking weather.', tool_calls: toolCalls } : toolCalls,
+      );
+      expect(result.tokenUsage).toEqual({ prompt: 10, completion: 20, total: 30 });
+    },
+  );
+
   it('should handle multiple tool calls in response', async () => {
     const mockResponse = {
       data: '{"message":{"role":"assistant","content":"","images":null,"tool_calls":[{"function":{"name":"get_weather","arguments":"{\\"location\\":\\"Amsterdam\\",\\"unit\\":\\"celsius\\"}"}},{"function":{"name":"get_weather","arguments":"{\\"location\\":\\"Paris\\",\\"unit\\":\\"celsius\\"}"}}]},"done":true}\n',
