@@ -1,14 +1,10 @@
 import asyncio
 import json
-import os
 import re
 import textwrap
 from typing import Any, Dict
 
 from crewai import LLM, Agent, Crew, Task
-
-# ✅ Load the OpenAI API key from the environment
-OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 
 
 def get_recruitment_agent(model: str = "openai/gpt-4.1") -> Crew:
@@ -25,7 +21,7 @@ def get_recruitment_agent(model: str = "openai/gpt-4.1") -> Crew:
             You never fail to return a valid JSON object as your final answer.
         """).strip(),
         verbose=False,
-        llm=LLM(model=model, api_key=OPENAI_API_KEY),
+        llm=LLM(model=model),
     )
 
     task = Task(
@@ -62,12 +58,6 @@ async def run_recruitment_agent(prompt, model="openai/gpt-4.1"):
     Runs the recruitment agent with a given job requirements prompt.
     Returns a structured JSON-like dictionary with candidate info.
     """
-    # Check if API key is set
-    if not OPENAI_API_KEY:
-        return {
-            "error": "OpenAI API key not found. Please set the OPENAI_API_KEY environment variable or create a .env file with your API key."
-        }
-
     crew = get_recruitment_agent(model)
     try:
         # ⚡ Trigger the agent to start working

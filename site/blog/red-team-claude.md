@@ -25,6 +25,16 @@ This guide shows you how to quickly red team Claude 4 Sonnet using [Promptfoo](h
 
 <!-- truncate -->
 
+:::note Updated September 2026
+
+The narrative below dates from the Claude 4 launch, but the configs have been refreshed
+to model IDs that are live today. Two things changed with the Claude 5 generation: the
+models sample adaptively and reject `temperature`, `top_p`, and `top_k`, and manual
+thinking budgets (`thinking: { type: enabled, budget_tokens: N }`) are replaced by
+`thinking: { type: adaptive }` plus an `effort` level.
+
+:::
+
 ## Quick Start: Red Team Claude 4 Sonnet
 
 Let's start with a simple setup to test Claude 4 Sonnet, then explore more advanced options.
@@ -41,8 +51,8 @@ export ANTHROPIC_API_KEY=your_anthropic_api_key
 ### Step 1: Initialize Your Project
 
 ```bash
-npx promptfoo@latest redteam init claude-4-redteam --no-gui
-cd claude-4-redteam
+npx promptfoo@latest redteam init claude-redteam --no-gui
+cd claude-redteam
 ```
 
 ### Step 2: Configure Claude 4 Sonnet
@@ -52,8 +62,8 @@ Edit `promptfooconfig.yaml`:
 ```yaml
 # yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
 targets:
-  - id: anthropic:messages:claude-sonnet-4-20250514
-    label: claude-sonnet-4
+  - id: anthropic:messages:claude-sonnet-5
+    label: claude-sonnet-5
 
 redteam:
   # Replace this purpose with a description of how you're going to use the model:
@@ -89,11 +99,11 @@ Claude 4's extended thinking feature introduces unique security challenges. When
 
 ```yaml
 targets:
-  - id: anthropic:messages:claude-sonnet-4-20250514
+  - id: anthropic:messages:claude-sonnet-5
     config:
       thinking:
-        type: 'enabled'
-        budget_tokens: 16000
+        type: 'adaptive'
+      effort: 'high' # low | medium | high | xhigh | max
 
 redteam:
   plugins:
@@ -159,14 +169,14 @@ For the more powerful Opus model with thinking enabled:
 
 ```yaml
 targets:
-  - id: anthropic:messages:claude-opus-4-20250514
-    label: claude-opus-4
+  - id: anthropic:messages:claude-opus-5
+    label: claude-opus-5
     config:
-      temperature: 0.7
-      max_tokens: 8000 # Opus supports more output
+      max_tokens: 32000 # Opus supports up to 128K output tokens
+      stream: true # Required by the SDK above 21,333 max_tokens
       thinking:
-        type: 'enabled'
-        budget_tokens: 32000 # Maximum thinking budget
+        type: 'adaptive'
+      effort: 'max' # Deepest reasoning — costs the most thinking tokens
 
 redteam:
   plugins:
@@ -180,8 +190,8 @@ Test multiple models simultaneously:
 
 ```yaml
 targets:
-  - anthropic:messages:claude-sonnet-4-20250514
-  - anthropic:messages:claude-opus-4-20250514
+  - anthropic:messages:claude-sonnet-5
+  - anthropic:messages:claude-opus-5
   - openai:gpt-4o # Compare with competitors
 ```
 
@@ -221,4 +231,4 @@ Create `custom-tests.yaml`:
 - [Promptfoo Red Team Documentation](/docs/red-team/quickstart/)
 - [LLM Vulnerability Types](/docs/red-team/llm-vulnerability-types/)
 - [Red Team Strategies](/docs/red-team/strategies/)
-- [Claude 4 Best Practices](https://docs.anthropic.com/en/docs/build-with-claude/prompt-engineering/claude-4-best-practices)
+- [Claude Prompting Best Practices](https://platform.claude.com/docs/en/build-with-claude/prompt-engineering/claude-prompting-best-practices)

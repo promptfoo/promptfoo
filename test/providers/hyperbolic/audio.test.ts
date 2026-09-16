@@ -153,6 +153,48 @@ describe('HyperbolicAudioProvider', () => {
       },
     );
 
+    it.each([
+      undefined,
+      'https://api.hyperbolic.xyz/v1',
+      'https://api.hyperbolic.xyz/v1/',
+      'https://API.HYPERBOLIC.XYZ:443/v1',
+    ])('omits explicit legacy fields for native endpoint %s', async (apiBaseUrl) => {
+      vi.mocked(fetchWithCache).mockResolvedValue({
+        data: { audio: 'base64audio' },
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+      });
+      const provider = createHyperbolicAudioProvider('hyperbolic:audio:local-identity', {
+        config: {
+          apiKey: 'test-key',
+          apiBaseUrl,
+          model: 'legacy-model',
+          voice: 'alloy',
+          speaker: 'EN-US',
+        },
+      });
+
+      const result = await provider.callApi('Hello', {
+        prompt: {
+          raw: 'Hello',
+          label: 'Hello',
+          config: {
+            model: 'prompt-model',
+            voice: 'prompt-voice',
+            apiBaseUrl: 'https://custom.example/v2',
+            speaker: 'EN-AU',
+          },
+        },
+        vars: {},
+      });
+
+      const [url, request] = vi.mocked(fetchWithCache).mock.calls[0];
+      expect(url).toBe(`${apiBaseUrl || 'https://api.hyperbolic.xyz/v1'}/audio/generation`);
+      expect(JSON.parse(request?.body as string)).toEqual({ text: 'Hello', speaker: 'EN-AU' });
+      expect(result.audio?.format).toBe('mp3');
+    });
+
     it('preserves custom endpoint metadata and explicit legacy parameter overrides', async () => {
       vi.mocked(fetchWithCache).mockResolvedValue({
         data: { audio: 'base64audio' },
@@ -173,7 +215,11 @@ describe('HyperbolicAudioProvider', () => {
         prompt: {
           raw: 'Hello',
           label: 'Hello',
-          config: { model: 'tenant:custom/model', voice: 'custom-voice' },
+          config: {
+            model: 'tenant:custom/model',
+            voice: 'custom-voice',
+            apiBaseUrl: 'https://api.hyperbolic.xyz/v1',
+          },
         },
         vars: {},
       });

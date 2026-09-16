@@ -347,6 +347,9 @@
         "JFROG_API_KEY": {
           "type": "string"
         },
+        "LANGFUSE_BASE_URL": {
+          "type": "string"
+        },
         "LANGFUSE_HOST": {
           "type": "string"
         },
@@ -513,6 +516,9 @@
           "type": "string"
         },
         "SLACK_BOT_TOKEN": {
+          "type": "string"
+        },
+        "TOGETHER_API_KEY": {
           "type": "string"
         },
         "VERCEL_AI_GATEWAY_API_KEY": {
@@ -1807,6 +1813,9 @@
                     "JFROG_API_KEY": {
                       "type": "string"
                     },
+                    "LANGFUSE_BASE_URL": {
+                      "type": "string"
+                    },
                     "LANGFUSE_HOST": {
                       "type": "string"
                     },
@@ -1973,6 +1982,9 @@
                       "type": "string"
                     },
                     "SLACK_BOT_TOKEN": {
+                      "type": "string"
+                    },
+                    "TOGETHER_API_KEY": {
                       "type": "string"
                     },
                     "VERCEL_AI_GATEWAY_API_KEY": {

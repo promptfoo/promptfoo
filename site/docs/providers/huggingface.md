@@ -220,7 +220,7 @@ providers:
   - id: huggingface:text-generation:gemma-7b-it
     config:
       apiEndpoint: '{{env.HF_INFERENCE_ENDPOINT}}'
-      # apiKey: abc123   # Or set HF_API_TOKEN environment variable
+      # apiKey: abc123   # Or set HF_TOKEN environment variable
 
 tests:
   - vars:

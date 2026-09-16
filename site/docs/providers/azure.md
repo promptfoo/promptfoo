@@ -564,7 +564,7 @@ defaultTest:
 
 For `text-embedding-3` deployments, set `config.dimensions` to request shorter vectors. Omit it to use the model's default vector size. Use the same embedding model and dimensions for indexed documents and queries; changing either requires rebuilding existing vectors. Azure deployment names are user-defined and remain unchanged by this option.
 
-Note that any moderation tasks will still use the OpenAI API.
+By default, moderation tasks use the OpenAI API. If you configure `AZURE_CONTENT_SAFETY_ENDPOINT`, they use Azure Content Safety instead.
 
 ## Configuration
 
@@ -654,7 +654,7 @@ The `azureAuthorityHost` defaults to `https://login.microsoftonline.com` if not 
 
 ## Model-Graded Tests
 
-[Model-graded assertions](/docs/configuration/expected-outputs/model-graded/) such as `factuality` or `llm-rubric` use a default OpenAI grader model unless overridden. When `AZURE_DEPLOYMENT_NAME` is set (and `OPENAI_API_KEY` is not), promptfoo automatically uses the specified Azure deployment for grading. You can also explicitly override the grader as shown below.
+[Model-graded assertions](/docs/configuration/expected-outputs/model-graded/) such as `factuality` or `llm-rubric` use a default OpenAI grader model unless overridden. When both `AZURE_DEPLOYMENT_NAME` and `AZURE_OPENAI_DEPLOYMENT_NAME` are set (and `OPENAI_API_KEY` is not), promptfoo automatically uses the Azure default for grading, provided Azure authentication is configured. You can also explicitly override the grader as shown below.
 
 The easiest way to do this for _all_ your test cases is to add the [`defaultTest`](/docs/configuration/guide/#default-test-cases) property to your config:
 

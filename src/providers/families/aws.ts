@@ -62,10 +62,10 @@ export const awsProviderFactories: ProviderFactory[] = [
         );
       }
 
-      // Bare and explicit Converse/InvokeModel aliases for OpenAI frontier models (gpt-5.x)
-      // and xAI Grok (grok-4.3) must route through Bedrock's OpenAI-compatible Responses API on
-      // the regional mantle endpoint — never the native InvokeModel/Converse APIs. Route those
-      // aliases before the per-type handlers so
+      // Preserve the established Mantle Responses route for bare frontier model IDs and
+      // their legacy Converse/InvokeModel aliases. Runtime inference profiles are distinct
+      // IDs; an explicit converse: profile reaches the native Converse handler below. Route
+      // bare aliases before the per-type handlers so
       // `bedrock:openai.gpt-5.6-sol`, `bedrock:xai.grok-4.3`, and the explicit
       // `bedrock:converse:`/`bedrock:completion:` forms all resolve correctly. Open-weight
       // gpt-oss models fall through to InvokeModel/Converse below.
@@ -83,15 +83,15 @@ export const awsProviderFactories: ProviderFactory[] = [
             ? splits[1]
             : undefined;
       // Prefixed Grok ids are never mantle ids — the mantle endpoint 404s on them. Most are
-      // simply invalid, but Grok 4.6 publishes real inference profiles that the native
-      // InvokeModel/Converse APIs serve with ordinary AWS credentials, so those fall through to
-      // the handlers below. An explicit `bedrock:mantle:` request is rejected either way.
+      // simply invalid, but Grok 4.6 publishes Runtime profiles. Preserve their existing
+      // routing; recommend explicit Converse in docs because the current AWS card does not
+      // list InvokeModel. An explicit `bedrock:mantle:` request is rejected either way.
       const routedGrokModel = modelType === 'mantle' ? modelName : candidateResponsesModel;
       if (routedGrokModel && isRejectedPrefixedGrokId(routedGrokModel, modelType === 'mantle')) {
         throw new Error(
           `Amazon Bedrock model "${routedGrokModel}" is not a valid Grok mantle id. Use the bare ` +
             `"bedrock:xai.grok-4.3" id for mantle-served Grok models, or an inference profile ` +
-            `such as "bedrock:us.xai.grok-4.6" for Grok models Bedrock serves natively.`,
+            `such as "bedrock:converse:us.xai.grok-4.6" for Grok models Bedrock serves natively.`,
         );
       }
       // Gate the (heavy) openaiResponses import behind the lightweight routing predicate so
@@ -105,9 +105,8 @@ export const awsProviderFactories: ProviderFactory[] = [
         });
       }
       // Handle the OpenAI-compatible Chat Completions API on the mantle endpoint
-      // (`bedrock:mantle:<id>`). This is the only way to reach mantle Chat Completions models
-      // that the native InvokeModel/Converse APIs don't serve (e.g. zai.glm-4.6, deepseek.v3.1,
-      // google.gemma-4-*, the mantle-namespaced qwen *-instruct ids).
+      // (`bedrock:mantle:<id>`). Mantle uses its own model namespace, independent of
+      // whether Runtime also offers the model through another API.
       if (modelType === 'mantle') {
         const { createBedrockMantleChatProvider } = await import('../bedrock/mantleChat');
         return createBedrockMantleChatProvider(modelName, {
@@ -141,18 +140,14 @@ export const awsProviderFactories: ProviderFactory[] = [
         return new LumaRayVideoProvider(videoModelName, providerOptions);
       }
 
-      // Handle Nova Reel video model. Canonical forms: `bedrock:video:amazon.nova-reel-v1:1`
-      // (explicit model) or `bedrock:video` (defaults the model). The model segment is used
-      // verbatim as the Bedrock modelId, so the `video:` prefix is required to carry the full
-      // id — `bedrock:amazon.nova-reel-v1:1` would collapse the model name to its version tail.
-      // Match when modelType names a nova-reel model, or modelType is 'video' with a
-      // nova-reel or empty model segment.
+      // Preserve the full versioned ID for both bare and explicit Nova Reel video selectors.
       if (
         modelType.includes('amazon.nova-reel') ||
         (modelType === 'video' && (modelName.includes('amazon.nova-reel') || modelName === ''))
       ) {
         const { NovaReelVideoProvider } = await import('../bedrock/nova-reel');
-        const videoModelName = modelName || 'amazon.nova-reel-v1:1';
+        const videoModelName =
+          modelType === 'video' ? modelName || 'amazon.nova-reel-v1:1' : splits.slice(1).join(':');
         return new NovaReelVideoProvider(videoModelName, providerOptions);
       }
 
