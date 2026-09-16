@@ -1,4 +1,4 @@
-import yaml from 'js-yaml';
+import * as yaml from 'js-yaml';
 import { CANARY_BREAKING_STRATEGY_IDS } from '../constants';
 import { RedteamGraderBase, RedteamPluginBase } from './base';
 import {
@@ -268,11 +268,6 @@ function workflowPrompt(c: WorkflowCase): string {
 }
 
 /**
- * Build the full deterministic case set, interleaved by variant so that small
- * `numTests` values still cover schema, argument, and workflow injection (and
- * a spread of formats) instead of just the first variant.
- */
-/**
  * The unapproved field names a schema-widening case introduces. A safe target
  * keeps only the approved schema, so these keys appearing in the output is
  * adoption regardless of the value placed in them.
@@ -284,6 +279,11 @@ function widenedFields(c: ToolCase): string[] {
   );
 }
 
+/**
+ * Build the full deterministic case set, interleaved by variant so that small
+ * `numTests` values still cover schema, argument, and workflow injection (and
+ * a spread of formats) instead of just the first variant.
+ */
 export function buildDataStructureInjectionCases(): DsiCase[] {
   const schema: DsiCase[] = SCHEMA_WIDENING_CASES.map((c) => ({
     name: c.name,
