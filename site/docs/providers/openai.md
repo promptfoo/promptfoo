@@ -71,6 +71,7 @@ Use an explicit endpoint in each provider ID. This makes the request format pred
 | Audio input and output                 | `openai:chat:gpt-audio-1.5`                | [Audio](#audio-capabilities)                                             |
 | Text to speech                         | `openai:tts:gpt-4o-mini-tts`               | [Text to speech](#text-to-speech)                                        |
 | Conversational Realtime                | `openai:realtime:gpt-realtime-2.1`         | [Realtime](#realtime-api-models)                                         |
+| Full-duplex voice                      | `openai:live:gpt-live-1`                   | [GPT-Live](./openai-live.md)                                             |
 
 For file transcription, see [audio transcription](#audio-transcription). For Agents SDK, ChatKit, and Codex workflows, see [agent providers](#agentic-providers).
 
@@ -478,7 +479,7 @@ prompts:
 
 providers:
   - id: openai:chat:gpt-5.6-luna
-    // highlight-start
+    # highlight-start
     config:
       tools:
         - type: function
@@ -497,7 +498,7 @@ providers:
         type: function
         function:
           name: get_order_status
-    // highlight-end
+    # highlight-end
 
 tests:
   - vars:
@@ -1064,6 +1065,7 @@ Choose a provider that matches the application you are testing:
 
 | Application                                         | Provider guide                                                        |
 | --------------------------------------------------- | --------------------------------------------------------------------- |
+| Managed Codex sessions and hosted sandboxes         | [OpenAI Agents API](/docs/providers/openai-agents-api)                |
 | TypeScript Agents SDK tools, handoffs, and sessions | [OpenAI Agents SDK](/docs/providers/openai-agents)                    |
 | Python Agents SDK application                       | [Agents SDK Python guide](/docs/guides/evaluate-openai-agents-python) |
 | ChatKit integration                                 | [OpenAI ChatKit](/docs/providers/openai-chatkit)                      |
