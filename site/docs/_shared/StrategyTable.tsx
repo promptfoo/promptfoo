@@ -12,13 +12,13 @@ const categoryOrder: (typeof strategies)[number]['category'][] = [
   'Custom',
 ];
 
-const groupedStrategies = strategies.reduce((acc, strategy) => {
+const groupedStrategies = strategies.reduce<GroupedStrategies>((acc, strategy) => {
   if (!acc[strategy.category]) {
     acc[strategy.category] = [];
   }
   acc[strategy.category].push(strategy);
   return acc;
-}, {} as GroupedStrategies);
+}, {});
 
 Object.values(groupedStrategies).forEach((categoryStrategies) => {
   categoryStrategies.sort((a, b) => a.displayName.localeCompare(b.displayName));

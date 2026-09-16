@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { fetchWithCache } from '../../src/cache';
 import {
   CometApiImageProvider,
@@ -28,7 +28,15 @@ vi.mock('../../src/providers/openai/embedding', async (importOriginal) => {
     OpenAiEmbeddingProvider: vi.fn(),
   };
 });
-vi.mock('../../src/cache');
+vi.mock('../../src/cache', async (importOriginal) => ({
+  ...(await importOriginal()),
+  fetchWithCache: vi.fn(),
+}));
+
+afterEach(() => {
+  vi.resetAllMocks();
+  clearCometApiModelsCache();
+});
 
 describe('createCometApiProvider', () => {
   beforeEach(() => {
@@ -110,6 +118,9 @@ describe('fetchCometApiModels', () => {
       'https://api.cometapi.com/v1/models',
       { headers: { Accept: 'application/json', Authorization: 'Bearer sk-test' } },
       expect.any(Number),
+      'json',
+      true,
+      2,
     );
     // All models should be included - no filtering based on model names
     expect(models).toEqual([

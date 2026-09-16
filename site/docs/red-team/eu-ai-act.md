@@ -54,7 +54,7 @@ redteam:
     - eu:ai-act
   strategies:
     - jailbreak
-    - prompt-injection
+    - jailbreak-templates
 ```
 
 Or target specific articles or risk categories:
@@ -102,7 +102,7 @@ redteam:
     - jailbreak
     - jailbreak:tree
     - jailbreak:composite
-    - prompt-injection
+    - jailbreak-templates
 ```
 
 Or use the EU AI Act shorthand:
@@ -297,7 +297,7 @@ redteam:
     - excessive-agency
   strategies:
     - jailbreak
-    - prompt-injection
+    - jailbreak-templates
 ```
 
 Or use the EU AI Act shorthand:
@@ -480,7 +480,7 @@ redteam:
     - eu:ai-act
   strategies:
     - jailbreak
-    - prompt-injection
+    - jailbreak-templates
 ```
 
 This tests across both prohibited practices and high-risk system requirements.
@@ -549,7 +549,7 @@ redteam:
     - iso:42001
   strategies:
     - jailbreak
-    - prompt-injection
+    - jailbreak-templates
 ```
 
 ## What's Next
