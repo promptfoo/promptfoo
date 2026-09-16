@@ -212,6 +212,7 @@ export async function runRedteamConversation({
   let bestResponse = '';
   let finalIteration = numIterations;
   let bestInjectVar: string | undefined = undefined;
+  let lastInjectVar: string | undefined;
   let targetPrompt: string | null = null;
   let storedGraderResult: GradingResult | undefined = undefined;
   let bestGraderResult: GradingResult | undefined;
@@ -461,6 +462,7 @@ export async function runRedteamConversation({
       promptIdx: context?.promptIdx,
     });
     lastResponse = targetResponse;
+    lastInjectVar = finalInjectVar;
     accumulateResponseTokenUsage(totalTokenUsage, targetResponse);
     logger.debug('[Iterative] Raw target response', { response: targetResponse });
     if (targetResponse.error) {
@@ -858,14 +860,14 @@ export async function runRedteamConversation({
   }
 
   return {
-    output: bestResponse || lastResponse?.output || '',
+    output: bestInjectVar === undefined ? lastResponse?.output || '' : bestResponse,
     ...(lastResponse?.error ? { error: lastResponse.error } : {}),
-    prompt: bestInjectVar,
+    prompt: bestInjectVar ?? lastInjectVar,
     metadata: {
       finalIteration,
       highestScore,
       redteamHistory: previousOutputs,
-      redteamFinalPrompt: bestInjectVar,
+      redteamFinalPrompt: bestInjectVar ?? lastInjectVar,
       storedGraderResult: bestGraderResult
         ? withGradingUsage(bestGraderResult, storedGraderResult?.tokensUsed)
         : storedGraderResult,

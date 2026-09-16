@@ -129,6 +129,32 @@ describe('redteam strategy result grading', () => {
     expect(result.pass).toBe(true);
   });
 
+  it('retains prior strategy usage when stale-grade regrading throws', async () => {
+    vi.spyOn(RedteamGraderBase.prototype, 'getResult').mockRejectedValue(
+      new Error('Grader unavailable'),
+    );
+    const result = await runAssertions({
+      prompt: originalPrompt,
+      test,
+      providerResponse: {
+        output: 'A different target response',
+        metadata: {
+          redteamFinalPrompt: attackPrompt,
+          storedGraderResult: storedResult,
+          redteamHistory: [{ graderError: 'Earlier outage' }, { prompt: attackPrompt, output }],
+        },
+      },
+    });
+    expect(result.tokensUsed).toMatchObject({
+      total: 30,
+      prompt: 20,
+      completion: 10,
+      numRequests: 2,
+    });
+    expect(result.componentResults?.[0].metadata?.gradingIncomplete).toBe(true);
+    expect(storedResult.tokensUsed.total).toBe(30);
+  });
+
   it('preserves cache accounting when fresh grading has no prior strategy usage', async () => {
     vi.spyOn(RedteamGraderBase.prototype, 'getResult').mockResolvedValue({
       grade: {

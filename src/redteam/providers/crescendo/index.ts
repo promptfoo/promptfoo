@@ -469,6 +469,12 @@ export class CrescendoProvider implements ApiProvider {
           traceSnapshots,
           { inputMaterialization, materializationHandled, materializedVars },
         );
+        if (transformResult?.error) {
+          if (transformResult.tokenUsage) {
+            accumulateAttackerTokenUsage(totalTokenUsage, transformResult);
+          }
+          continue;
+        }
         lastResponse = response;
         lastResponseMessages = [...this.memory.getConversation(this.targetConversationId)];
         lastTransformResult = transformResult;
@@ -541,6 +547,13 @@ export class CrescendoProvider implements ApiProvider {
               shouldFetchTrace,
               traceSnapshots,
             );
+
+          if (unblockingTransform?.error) {
+            if (unblockingTransform.tokenUsage) {
+              accumulateAttackerTokenUsage(totalTokenUsage, unblockingTransform);
+            }
+            continue;
+          }
 
           if (unblockingTransform?.tokenUsage) {
             accumulateAttackerTokenUsage(totalTokenUsage, unblockingTransform);
@@ -1083,28 +1096,34 @@ export class CrescendoProvider implements ApiProvider {
       [this.config.injectVar], // Skip template rendering for injection variable to prevent double-evaluation
     );
 
+    const pendingMessages: Message[] = [];
     try {
       const parsed = extractFirstJsonObject<Message[]>(renderedPrompt);
       // If successful, then load it directly into the chat history
       for (const message of parsed) {
         if (
           message.role === 'system' &&
-          this.memory.getConversation(this.targetConversationId).some((m) => m.role === 'system')
+          [...this.memory.getConversation(this.targetConversationId), ...pendingMessages].some(
+            (m) => m.role === 'system',
+          )
         ) {
           // No duplicate system messages
           continue;
         }
-        this.memory.addMessage(this.targetConversationId, message);
+        pendingMessages.push(message);
       }
     } catch {
       // Otherwise, just send the rendered prompt as a string
-      this.memory.addMessage(this.targetConversationId, {
+      pendingMessages.push({
         role: 'user',
         content: renderedPrompt,
       });
     }
 
-    const conversationHistory = this.memory.getConversation(this.targetConversationId);
+    const conversationHistory = [
+      ...this.memory.getConversation(this.targetConversationId),
+      ...pendingMessages,
+    ];
     let targetPrompt: string;
 
     if (this.stateful) {
@@ -1233,6 +1252,9 @@ export class CrescendoProvider implements ApiProvider {
       targetContext,
       options,
     );
+    for (const message of pendingMessages) {
+      this.memory.addMessage(this.targetConversationId, message);
+    }
     targetResponse = await externalizeResponseForRedteamHistory(targetResponse, {
       evalId: context?.evaluationId,
       testIdx: context?.testIdx,

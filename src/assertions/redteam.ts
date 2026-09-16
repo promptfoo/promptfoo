@@ -255,6 +255,12 @@ export const handleRedteam = async ({
     }
   }
 
+  // A stale verdict is unusable, but its strategy grading calls still incurred usage.
+  const tokensUsed =
+    hasStrategyGrade && storedResult.tokensUsed
+      ? cloneTokenUsageBreakdown(storedResult.tokensUsed)
+      : undefined;
+
   try {
     const { grade, rubric, suggestions } = await grader.getResult(
       effectivePrompt,
@@ -267,11 +273,6 @@ export const handleRedteam = async ({
       gradingContext,
     );
 
-    // A stale verdict is unusable, but its strategy grading calls still incurred usage.
-    const tokensUsed =
-      hasStrategyGrade && storedResult.tokensUsed
-        ? cloneTokenUsageBreakdown(storedResult.tokensUsed)
-        : undefined;
     if (tokensUsed && grade.tokensUsed) {
       accumulateTokenUsage(
         tokensUsed,
@@ -328,6 +329,7 @@ export const handleRedteam = async ({
         score: 0,
         reason: `Some grading calls failed during iterative testing. Check the Messages tab for details.`,
         assertion,
+        ...(tokensUsed ? { tokensUsed } : {}),
         metadata: {
           ...test.metadata,
           gradingIncomplete: true,

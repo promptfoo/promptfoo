@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { getGradingInputHash } from '../../../src/redteam/grading/storedResult';
 import RedteamIterativeProvider, {
   runRedteamConversation,
 } from '../../../src/redteam/providers/iterative';
@@ -930,6 +931,35 @@ describe('RedteamIterativeProvider', () => {
         });
         expect(result.metadata.redteamHistory[0].score).toBeUndefined();
       });
+
+      it.each(['zero ratings', 'judge errors'])(
+        'retains the last prompt when no best turn is selected (%s)',
+        async (scenario) => {
+          grades(
+            { pass: true, score: 1, reason: 'First verdict' },
+            { pass: true, score: 1, reason: 'Second verdict' },
+          );
+          mockGetTargetResponse
+            .mockResolvedValueOnce({ output: 'first response' })
+            .mockResolvedValueOnce({ output: 'second response' });
+          const judge =
+            scenario === 'zero ratings'
+              ? judgeRating(0)
+              : async () => ({ error: 'judge unavailable' });
+          mockRedteamProvider.callApi
+            .mockImplementationOnce(attackerTurn('first attack'))
+            .mockImplementationOnce(judge)
+            .mockImplementationOnce(attackerTurn('second attack'))
+            .mockImplementationOnce(judge);
+          const result = await runConversation(2);
+          expect(result.output).toBe('second response');
+          expect(result.prompt).toBe('second attack');
+          expect(result.metadata.redteamFinalPrompt).toBe('second attack');
+          expect(result.metadata.storedGraderResult?.metadata?.redteamGradingInputHash).toBe(
+            getGradingInputHash('second attack', 'second response', undefined, 'test-plugin'),
+          );
+        },
+      );
 
       it('should report the turn that failed even when an earlier turn scored higher', async () => {
         grades(
