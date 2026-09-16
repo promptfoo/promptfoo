@@ -19,7 +19,7 @@ description: 'Public Google Sheet Example'
 prompts:
   - 'Please translate the following text to {{language}}: {{input}}'
 providers:
-  - anthropic:messages:claude-3-5-sonnet-20241022
+  - anthropic:messages:claude-sonnet-4-6
   - openai:chat:gpt-5
 // highlight-start
 tests: https://docs.google.com/spreadsheets/d/1eqFnv1vzkPvS7zG-mYsqNDwOzvSaiIAsKB3zKg9H18c/edit?usp=sharing
@@ -108,7 +108,7 @@ This behavior helps prevent accidental data overwrites while keeping your evalua
 
 Results are written with columns for test variables followed by prompt outputs. Prompt columns include the provider in the header using the format `[provider] prompt-label`. For example, with two providers testing the same prompt:
 
-| language | input       | [openai:gpt-5] Translate | [anthropic:claude-4.5-sonnet] Translate |
+| language | input       | [openai:gpt-5] Translate | [anthropic:claude-sonnet-4-5] Translate |
 | -------- | ----------- | ------------------------ | --------------------------------------- |
 | French   | Hello world | Bonjour le monde         | Bonjour monde                           |
 
@@ -122,7 +122,7 @@ prompts:
   - file://prompt1.txt
   - file://prompt2.txt
 providers:
-  - anthropic:messages:claude-3-5-sonnet-20241022
+  - anthropic:messages:claude-sonnet-4-6
   - openai:chat:gpt-5-mini
 tests: https://docs.google.com/spreadsheets/d/1eqFnv1vzkPvS7zG-mYsqNDwOzvSaiIAsKB3zKg9H18c/edit?usp=sharing
 defaultTest:

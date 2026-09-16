@@ -78,6 +78,38 @@ describe('matchesSearchRubric', () => {
     );
   });
 
+  it('keeps reserved output and rubric vars ahead of user vars', async () => {
+    const { matchesSearchRubric } = await import('../../src/matchers/search');
+    mocks.loadApiProvider.mockResolvedValue(mocks.webSearchProvider);
+
+    await matchesSearchRubric(
+      'rubric from assertion',
+      'output from provider',
+      {
+        provider: 'openai:responses:gpt-5.5-2026-04-23',
+        rubricPrompt: 'output={{ output }}\nrubric={{ rubric }}\nextra={{ extra }}',
+      },
+      {
+        output: 'vars output sentinel',
+        rubric: 'vars rubric sentinel',
+        extra: 'kept user var',
+      },
+    );
+
+    const callApiMock = vi.mocked(mocks.webSearchProvider.callApi);
+    const [prompt, callApiContext] = callApiMock.mock.calls[0];
+    expect(prompt).toContain('output=output from provider');
+    expect(prompt).toContain('rubric=rubric from assertion');
+    expect(prompt).toContain('extra=kept user var');
+    expect(prompt).not.toContain('vars output sentinel');
+    expect(prompt).not.toContain('vars rubric sentinel');
+    expect(callApiContext?.vars).toMatchObject({
+      output: 'output from provider',
+      rubric: 'rubric from assertion',
+      extra: 'kept user var',
+    });
+  });
+
   it('throws when grading config is missing', async () => {
     const { matchesSearchRubric } = await import('../../src/matchers/search');
 
@@ -139,23 +171,51 @@ describe('matchesSearchRubric', () => {
         pass: false,
         score: 0,
         reason: 'Search rubric evaluation failed: search unavailable',
+        metadata: { graderError: true },
       }),
     );
   });
 
-  it('falls back to simple pass parsing when JSON extraction fails', async () => {
+  it.each([
+    'service unavailable',
+    'verdict includes "pass": true',
+    '{}',
+    '{"score": 0}',
+    '{"pass": "false"}',
+    '{"pass": null}',
+  ])('tags an unusable search verdict as a grader failure: %s', async (output) => {
     const { matchesSearchRubric } = await import('../../src/matchers/search');
     mocks.webSearchProvider.callApi = vi.fn(
       async (): Promise<ProviderResponse> => ({
-        output: 'verdict includes "pass": true',
+        output,
+        tokenUsage: { total: 5, prompt: 3, completion: 2 },
       }),
     ) as ApiProvider['callApi'];
 
     await expect(matchesSearchRubric('Confirm current facts', 'output', {})).resolves.toEqual(
       expect.objectContaining({
-        pass: true,
-        score: 1,
-        reason: 'verdict includes "pass": true',
+        pass: false,
+        score: 0,
+        reason:
+          'Search rubric evaluation failed: Expected a JSON object with a boolean "pass" field',
+        metadata: { graderError: true },
+        tokensUsed: { total: 5, prompt: 3, completion: 2 },
+      }),
+    );
+  });
+
+  it('accepts a valid negative verdict inside surrounding text', async () => {
+    const { matchesSearchRubric } = await import('../../src/matchers/search');
+    vi.mocked(mocks.webSearchProvider.callApi).mockResolvedValue({
+      output: 'Search complete.\n```json\n{"pass": false, "reason": "Fact is incorrect"}\n```',
+    });
+
+    await expect(matchesSearchRubric('Confirm current facts', 'output', {})).resolves.toEqual(
+      expect.objectContaining({
+        pass: false,
+        score: 0,
+        reason: 'Fact is incorrect',
+        metadata: { searchResults: [], searchProvider: mocks.webSearchProvider.id() },
       }),
     );
   });

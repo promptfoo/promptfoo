@@ -255,13 +255,16 @@ describe('CustomTargetConfiguration - Config Field Handling', () => {
     expect(mockUpdateCustomTarget).toHaveBeenCalledWith('config', newConfig);
   });
 
-  it('should handle invalid JSON without calling updateCustomTarget', async () => {
+  it('should preserve the last valid config and report invalid JSON', async () => {
     const user = userEvent.setup();
+    const onConfigErrorChange = vi.fn();
     renderWithProviders(
       <CustomTargetConfiguration
         {...defaultProps}
+        selectedTarget={{ id: 'custom', config: { temperature: 0.7 } }}
         updateCustomTarget={mockUpdateCustomTarget}
         setRawConfigJson={mockSetRawConfigJson}
+        onConfigErrorChange={onConfigErrorChange}
       />,
     );
 
@@ -280,8 +283,8 @@ describe('CustomTargetConfiguration - Config Field Handling', () => {
     // Should still call setRawConfigJson to update the display
     expect(mockSetRawConfigJson).toHaveBeenCalledWith(invalidJson);
 
-    // Should NOT call updateCustomTarget since JSON parsing failed
     expect(mockUpdateCustomTarget).not.toHaveBeenCalled();
+    expect(onConfigErrorChange).toHaveBeenLastCalledWith('Invalid JSON configuration');
   });
 
   it('should show error state when bodyError is provided', () => {
@@ -390,6 +393,26 @@ describe('Targets Component', () => {
   });
 
   describe('HTTP Target Configuration', () => {
+    it.each([
+      ['HTTP', 'http'],
+      ['WebSocket', 'websocket'],
+      ['browser', 'browser'],
+    ])('renders a legacy %s target with a null config safely', (_case, id) => {
+      (useRedTeamConfig as any).mockReturnValue({
+        config: {
+          target: { id, label: `${id} target`, config: null },
+          plugins: [],
+          strategies: [],
+        },
+        updateConfig: mockUpdateConfig,
+      });
+
+      expect(() =>
+        renderWithProviders(<Targets onNext={mockOnNext} onBack={mockOnBack} />),
+      ).not.toThrow();
+      expect(screen.getAllByRole('button', { name: /Next/i })[0]).toBeDisabled();
+    });
+
     it('should enable the Next button only when HTTP target has valid URL and both tests pass', async () => {
       const user = userEvent.setup();
       (useRedTeamConfig as any).mockReturnValue({

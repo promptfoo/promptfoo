@@ -145,25 +145,25 @@ describe('readPrompts', () => {
     expect(fs.readFileSync).toHaveBeenCalledTimes(1);
   });
 
-  it.each([
-    ['prompts.txt'],
-    'prompts.txt',
-  ])(`should read a single prompt file with input:%p`, async (promptPath) => {
-    vi.mocked(fs.statSync).mockReturnValueOnce({ isDirectory: () => false } as fs.Stats);
-    vi.mocked(fs.readFileSync).mockReturnValue('Test prompt 1\n---\nTest prompt 2');
-    vi.mocked(globSync).mockImplementation((pathOrGlob) => [pathOrGlob.toString()]);
-    await expect(readPrompts(promptPath)).resolves.toEqual([
-      {
-        label: 'prompts.txt: Test prompt 1',
-        raw: 'Test prompt 1',
-      },
-      {
-        label: 'prompts.txt: Test prompt 2',
-        raw: 'Test prompt 2',
-      },
-    ]);
-    expect(fs.readFileSync).toHaveBeenCalledTimes(1);
-  });
+  it.each([['prompts.txt'], 'prompts.txt'])(
+    `should read a single prompt file with input:%p`,
+    async (promptPath) => {
+      vi.mocked(fs.statSync).mockReturnValueOnce({ isDirectory: () => false } as fs.Stats);
+      vi.mocked(fs.readFileSync).mockReturnValue('Test prompt 1\n---\nTest prompt 2');
+      vi.mocked(globSync).mockImplementation((pathOrGlob) => [pathOrGlob.toString()]);
+      await expect(readPrompts(promptPath)).resolves.toEqual([
+        {
+          label: 'prompts.txt: Test prompt 1',
+          raw: 'Test prompt 1',
+        },
+        {
+          label: 'prompts.txt: Test prompt 2',
+          raw: 'Test prompt 2',
+        },
+      ]);
+      expect(fs.readFileSync).toHaveBeenCalledTimes(1);
+    },
+  );
 
   it('should read multiple prompt files', async () => {
     vi.mocked(fs.readFileSync).mockImplementation((filePath) => {
