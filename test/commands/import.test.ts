@@ -1,21 +1,34 @@
 import fs from 'fs';
 import path from 'path';
 
+import { createClient } from '@libsql/client/node';
 import { Command } from 'commander';
+import { sql } from 'drizzle-orm';
+import express from 'express';
+import request from 'supertest';
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
-import { getBlobByHash, resetBlobStorageProvider, setBlobStorageProvider } from '../../src/blobs';
+import {
+  getBlobByHash,
+  getShareAuthorizedBlob,
+  resetBlobStorageProvider,
+  setBlobStorageProvider,
+  storeBlob,
+} from '../../src/blobs';
 import * as blobRefs from '../../src/blobs/blobRefs';
 import { FilesystemBlobStorageProvider } from '../../src/blobs/filesystemProvider';
 import { importCommand } from '../../src/commands/import';
 import { getDb } from '../../src/database/index';
-import { evalsToPromptsTable } from '../../src/database/tables';
+import { updateSignalFile, updateSignalFileForDeletedEvals } from '../../src/database/signal';
+import { evalsTable, evalsToPromptsTable } from '../../src/database/tables';
 import logger from '../../src/logger';
 import { runDbMigrations } from '../../src/migrate';
 import Eval from '../../src/models/eval';
 import EvalResult from '../../src/models/evalResult';
+import { blobsRouter } from '../../src/server/routes/blobs';
 import { TraceStore } from '../../src/tracing/store';
 import { ResultFailureReason } from '../../src/types/index';
 import { sha256 } from '../../src/util/createHash';
+import { createOutputData } from '../../src/util/output';
 import { createTempDir, mockProcessEnv, removeTempDir } from '../util/utils';
 
 vi.mock('../../src/logger', () => ({
@@ -33,6 +46,17 @@ vi.mock('../../src/telemetry', () => ({
   },
 }));
 
+vi.mock('../../src/database/signal', async () => {
+  const actual = await vi.importActual('../../src/database/signal');
+  return {
+    ...actual,
+    updateSignalFile: vi.fn(),
+    updateSignalFileForDeletedEvals: vi.fn(),
+  };
+});
+
+const SHARED_CACHE_MEMORY_URL = 'file::memory:?cache=shared';
+
 describe('importCommand', () => {
   let program: Command;
   let tempFilePath: string;
@@ -46,18 +70,18 @@ describe('importCommand', () => {
     process.exitCode = undefined;
 
     // Clear all tables before each test
-    const db = getDb();
+    const db = await getDb();
     // Delete related tables first
-    db.run('DELETE FROM blob_references');
-    db.run('DELETE FROM blob_assets');
-    db.run('DELETE FROM spans');
-    db.run('DELETE FROM traces');
-    db.run('DELETE FROM eval_results');
-    db.run('DELETE FROM evals_to_datasets');
-    db.run('DELETE FROM evals_to_prompts');
-    db.run('DELETE FROM evals_to_tags');
+    await db.run('DELETE FROM blob_references');
+    await db.run('DELETE FROM blob_assets');
+    await db.run('DELETE FROM spans');
+    await db.run('DELETE FROM traces');
+    await db.run('DELETE FROM eval_results');
+    await db.run('DELETE FROM evals_to_datasets');
+    await db.run('DELETE FROM evals_to_prompts');
+    await db.run('DELETE FROM evals_to_tags');
     // Then delete from main table
-    db.run('DELETE FROM evals');
+    await db.run('DELETE FROM evals');
   });
 
   afterEach(() => {
@@ -131,6 +155,45 @@ describe('importCommand', () => {
       expect(await Eval.findById(evalId)).toBeUndefined();
       expect(process.exitCode).toBe(1);
     });
+
+    it('reports a schema mismatch for valid JSONL that is not an OpenAI Evals export', async () => {
+      // Every line is valid JSON, so the whole-file JSON.parse fails but the
+      // JSONL path succeeds. The error must describe the schema mismatch
+      // rather than re-throw the misleading whole-file JSON parse error.
+      const filePath = path.join(__dirname, `temp-bad-jsonl-${Date.now()}.json`);
+      fs.writeFileSync(filePath, ['{"foo":1}', '{"bar":2}'].join('\n'));
+      tempFilePath = filePath;
+
+      importCommand(program);
+      await program.parseAsync(['node', 'test', 'import', filePath]);
+
+      expect(logger.error).toHaveBeenCalledWith(
+        expect.stringMatching(/parsed as JSONL but line 1 is not a valid OpenAI Evals row/),
+      );
+      expect(process.exitCode).toBe(1);
+    });
+
+    it('imports successfully when evaluationCreatedAt is corrupt', async () => {
+      // Regression: a present-but-unparseable timestamp reached
+      // createEvalId().toISOString() and crashed mid-import with an opaque
+      // "Invalid time value".
+      const sampleFilePath = path.join(__dirname, '../__fixtures__/sample-export.json');
+      const sampleData = JSON.parse(fs.readFileSync(sampleFilePath, 'utf-8'));
+      sampleData.metadata.evaluationCreatedAt = 'this-is-not-a-date';
+      const filePath = path.join(__dirname, `temp-bad-date-${Date.now()}.json`);
+      fs.writeFileSync(filePath, JSON.stringify(sampleData));
+      tempFilePath = filePath;
+
+      importCommand(program);
+      await program.parseAsync(['node', 'test', 'import', filePath]);
+
+      expect(logger.error).not.toHaveBeenCalledWith(expect.stringMatching(/Invalid time value/));
+      expect(logger.warn).toHaveBeenCalledWith(
+        expect.stringMatching(/unparseable metadata\.evaluationCreatedAt/),
+      );
+      expect(process.exitCode).not.toBe(1);
+      expect(await Eval.findById(sampleData.evalId)).toBeDefined();
+    });
   });
 
   describe('with real sample file', () => {
@@ -162,6 +225,7 @@ describe('importCommand', () => {
       // Also verify that eval results were imported
       const results = await EvalResult.findManyByEvalId(importedEval!.id);
       expect(results.length).toBe(4); // Based on sample file having 4 results
+      expect(updateSignalFile).toHaveBeenCalledWith(importedEval!.id);
     });
 
     it('should preserve createdAt timestamp from metadata', async () => {
@@ -304,6 +368,24 @@ describe('importCommand', () => {
       expect(traces[0].traceId).toBe('trace-valid');
     });
 
+    it('should clear result trace linkage when the exported trace is absent', async () => {
+      const sampleFilePath = path.join(__dirname, '../__fixtures__/sample-export.json');
+      const sampleData = JSON.parse(fs.readFileSync(sampleFilePath, 'utf-8'));
+      sampleData.results.results[0].traceId = 'trace-missing-from-export';
+      sampleData.results.results[0].evaluationId = 'eval-from-another-machine';
+
+      const filePath = path.join(__dirname, `temp-unlinked-trace-${Date.now()}.json`);
+      fs.writeFileSync(filePath, JSON.stringify(sampleData));
+      tempFilePath = filePath;
+
+      importCommand(program);
+      await program.parseAsync(['node', 'test', 'import', filePath]);
+
+      const [result] = await EvalResult.findManyByEvalId(sampleData.evalId);
+      expect(result.toEvaluateResult().traceId).toBeUndefined();
+      expect(result.toEvaluateResult().evaluationId).toBeUndefined();
+    });
+
     it('should import embedded blob assets before recording result references', async () => {
       const blobDir = createTempDir('promptfoo-import-blobs-');
       setBlobStorageProvider(new FilesystemBlobStorageProvider({ basePath: blobDir }));
@@ -334,26 +416,245 @@ describe('importCommand', () => {
         expect(imported.data).toEqual(data);
         expect(imported.metadata.mimeType).toBe('image/png');
 
-        const references = (await getDb().all(
-          `SELECT blob_hash, eval_id FROM blob_references WHERE blob_hash = '${hash}'`,
-        )) as Array<{ blob_hash: string; eval_id: string }>;
-        expect(references).toContainEqual({ blob_hash: hash, eval_id: sampleData.evalId });
+        const db = await getDb();
+        const references = (await db.all(
+          sql`SELECT blob_hash, eval_id, location FROM blob_references WHERE blob_hash = ${hash}`,
+        )) as Array<{ blob_hash: string; eval_id: string; location: string }>;
+        expect(references).toContainEqual({
+          blob_hash: hash,
+          eval_id: sampleData.evalId,
+          location: 'import',
+        });
       } finally {
         resetBlobStorageProvider();
         removeTempDir(blobDir);
       }
     });
 
-    it('should downgrade active embedded blob MIME types during import', async () => {
+    it('imports a reference-only v3 result without adopting a file from a failed store', async () => {
+      const blobDir = createTempDir('promptfoo-import-unregistered-blob-');
+      const restoreEnv = mockProcessEnv({ PROMPTFOO_INLINE_MEDIA: 'false' });
+      setBlobStorageProvider(new FilesystemBlobStorageProvider({ basePath: blobDir }));
+
+      try {
+        const sampleFilePath = path.join(__dirname, '../__fixtures__/sample-export.json');
+        const sampleData = JSON.parse(fs.readFileSync(sampleFilePath, 'utf-8'));
+        const data = Buffer.from(
+          'unregistered file retained after failed import-store transaction',
+        );
+        const hash = sha256(data);
+        const uri = `promptfoo://blob/${hash}`;
+        const db = await getDb();
+
+        await expect(
+          storeBlob(data, 'image/png', { evalId: 'missing-blob-import-eval' }),
+        ).rejects.toThrow();
+        const blobPath = path.join(blobDir, hash.slice(0, 2), hash.slice(2, 4), hash);
+        const metadata = fs.readFileSync(`${blobPath}.meta.json`, 'utf8');
+        expect(fs.readFileSync(blobPath)).toEqual(data);
+        expect(await db.all(sql`SELECT hash FROM blob_assets WHERE hash = ${hash}`)).toEqual([]);
+        expect(await db.all(sql`SELECT id FROM blob_references WHERE blob_hash = ${hash}`)).toEqual(
+          [],
+        );
+
+        expect(sampleData.results.version).toBe(3);
+        sampleData.results.results = [sampleData.results.results[0]];
+        sampleData.results.results[0].response = { output: uri };
+        delete sampleData.blobAssets;
+        const filePath = path.join(blobDir, 'reference-only.json');
+        fs.writeFileSync(filePath, JSON.stringify(sampleData));
+
+        importCommand(program);
+        await program.parseAsync(['node', 'test', 'import', filePath]);
+
+        expect(process.exitCode).toBeUndefined();
+        expect(logger.error).not.toHaveBeenCalled();
+        const imported = await EvalResult.findManyByEvalId(sampleData.evalId);
+        expect(imported).toHaveLength(1);
+        expect(imported[0].toEvaluateResult().response?.output).toBe(uri);
+        expect(await db.all(sql`SELECT hash FROM blob_assets WHERE hash = ${hash}`)).toEqual([]);
+        expect(await db.all(sql`SELECT id FROM blob_references WHERE blob_hash = ${hash}`)).toEqual(
+          [],
+        );
+        expect(fs.readFileSync(blobPath)).toEqual(data);
+        expect(fs.readFileSync(`${blobPath}.meta.json`, 'utf8')).toBe(metadata);
+        await expect(getShareAuthorizedBlob(hash, sampleData.evalId)).resolves.toBeNull();
+        const evalRecord = await Eval.findById(sampleData.evalId);
+        const exported = await createOutputData(evalRecord!, null, { includeMedia: true });
+        expect(exported.blobAssets).toBeUndefined();
+      } finally {
+        resetBlobStorageProvider();
+        restoreEnv();
+        removeTempDir(blobDir);
+      }
+    });
+
+    it.each([
+      {
+        storedMimeType: 'text/html',
+        importedMimeType: 'text/html',
+        expectedMimeType: 'application/octet-stream',
+        redirect: false,
+        contents: Buffer.from('<!doctype html><title>retained fixture</title>'),
+      },
+      {
+        storedMimeType: 'image/svg+xml',
+        importedMimeType: 'image/svg+xml',
+        expectedMimeType: 'application/octet-stream',
+        redirect: false,
+        contents: Buffer.from(
+          '<svg xmlns="http://www.w3.org/2000/svg"><title>retained fixture</title></svg>',
+        ),
+      },
+      {
+        storedMimeType: 'text/html',
+        importedMimeType: 'image/png',
+        expectedMimeType: 'image/png',
+        redirect: false,
+        contents: Buffer.from('<!doctype html><title>cross-label fixture</title>'),
+      },
+      {
+        storedMimeType: 'image/svg+xml',
+        importedMimeType: 'audio/wav',
+        expectedMimeType: 'audio/wav',
+        redirect: false,
+        contents: Buffer.from(
+          '<svg xmlns="http://www.w3.org/2000/svg"><title>cross-label fixture</title></svg>',
+        ),
+      },
+      {
+        storedMimeType: 'image/png',
+        importedMimeType: 'image/png',
+        expectedMimeType: 'image/png',
+        redirect: true,
+        contents: Buffer.from(
+          'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+a5K0AAAAASUVORK5CYII=',
+          'base64',
+        ),
+      },
+    ])(
+      'serves retained $storedMimeType imported as $importedMimeType with registered MIME',
+      async ({ storedMimeType, importedMimeType, expectedMimeType, redirect, contents }) => {
+        const blobDir = createTempDir('promptfoo-import-retained-mime-');
+        const restoreEnv = mockProcessEnv({ PROMPTFOO_INLINE_MEDIA: 'false' });
+        const provider = new FilesystemBlobStorageProvider({ basePath: blobDir });
+        setBlobStorageProvider(provider);
+        const destination = express().get('/asset', (_req, res) => {
+          res.setHeader('Content-Type', storedMimeType);
+          res.send(Buffer.from(contents));
+        });
+        const destinationServer = destination.listen(0, '127.0.0.1');
+        await new Promise<void>((resolve, reject) => {
+          destinationServer.once('listening', resolve);
+          destinationServer.once('error', reject);
+        });
+        const address = destinationServer.address();
+        if (!address || typeof address === 'string') {
+          throw new Error('Expected local destination address');
+        }
+        const getUrl = vi
+          .spyOn(provider, 'getUrl')
+          .mockResolvedValue(`http://127.0.0.1:${address.port}/asset`);
+        const app = express().use('/api/blobs', blobsRouter);
+
+        try {
+          const data = Buffer.from(contents);
+          const hash = sha256(data);
+          const uri = `promptfoo://blob/${hash}`;
+          const db = await getDb();
+          const failure = await storeBlob(data, storedMimeType, {
+            evalId: 'missing-orphan-mime-eval',
+          }).catch((error: Error) => error);
+          expect(failure).toBeInstanceOf(Error);
+          expect(String((failure as Error).cause)).toMatch(/FOREIGN KEY constraint failed/);
+          const blobPath = path.join(blobDir, hash.slice(0, 2), hash.slice(2, 4), hash);
+          const metadata = fs.readFileSync(`${blobPath}.meta.json`, 'utf8');
+          expect(JSON.parse(metadata).mimeType).toBe(storedMimeType);
+          expect(await db.all(sql`SELECT hash FROM blob_assets WHERE hash = ${hash}`)).toEqual([]);
+          expect((await request(app).get(`/api/blobs/${hash}`)).status).toBe(404);
+
+          const sampleFilePath = path.join(__dirname, '../__fixtures__/sample-export.json');
+          const sampleData = JSON.parse(fs.readFileSync(sampleFilePath, 'utf-8'));
+          expect(sampleData.results.version).toBe(3);
+          sampleData.results.results = [sampleData.results.results[0]];
+          sampleData.results.results[0].response = { output: uri };
+          sampleData.blobAssets = [
+            {
+              hash,
+              mimeType: importedMimeType,
+              sizeBytes: data.length,
+              data: data.toString('base64'),
+            },
+          ];
+          const filePath = path.join(blobDir, 'retained-mime.json');
+          fs.writeFileSync(filePath, JSON.stringify(sampleData));
+          importCommand(program);
+          await program.parseAsync(['node', 'test', 'import', filePath]);
+
+          expect(process.exitCode).toBeUndefined();
+          expect(logger.error).not.toHaveBeenCalled();
+          expect(await db.all(sql`SELECT mime_type FROM blob_assets WHERE hash = ${hash}`)).toEqual(
+            [{ mime_type: expectedMimeType }],
+          );
+          expect(
+            await db.all(
+              sql`SELECT eval_id, location FROM blob_references WHERE blob_hash = ${hash}`,
+            ),
+          ).toEqual([{ eval_id: sampleData.evalId, location: 'import' }]);
+          const response = await request(app)
+            .get(`/api/blobs/${hash}`)
+            .redirects(1)
+            .buffer(true)
+            .parse((res, callback) => {
+              const chunks: Buffer[] = [];
+              res.on('data', (chunk: Buffer) => chunks.push(chunk));
+              res.on('end', () => callback(null, Buffer.concat(chunks)));
+            });
+          expect(response.status).toBe(200);
+          expect(response.body).toEqual(data);
+          expect(response.headers['content-type']).toBe(expectedMimeType);
+          if (redirect) {
+            expect(getUrl).toHaveBeenCalledOnce();
+            expect(getUrl.mock.calls[0][0]).toBe(hash);
+          } else {
+            expect(getUrl).not.toHaveBeenCalled();
+            expect(response.headers['x-content-type-options']).toBe('nosniff');
+          }
+          expect(response.headers['content-disposition']).toBe(
+            expectedMimeType === 'application/octet-stream' ? 'attachment' : undefined,
+          );
+          expect(fs.readFileSync(blobPath)).toEqual(data);
+          expect(fs.readFileSync(`${blobPath}.meta.json`, 'utf8')).toBe(metadata);
+          await expect(getShareAuthorizedBlob(hash, 'unrelated-eval')).resolves.toBeNull();
+          await db.run(sql`DELETE FROM blob_references WHERE blob_hash = ${hash}`);
+          expect((await request(app).get(`/api/blobs/${hash}`)).status).toBe(403);
+          expect(fs.readFileSync(blobPath)).toEqual(data);
+        } finally {
+          getUrl.mockRestore();
+          await new Promise<void>((resolve, reject) => {
+            destinationServer.close((error) => (error ? reject(error) : resolve()));
+          });
+          resetBlobStorageProvider();
+          restoreEnv();
+          removeTempDir(blobDir);
+        }
+      },
+    );
+
+    it.each([false, true])('downgrades active imported MIME types (orphan=%s)', async (orphan) => {
       const blobDir = createTempDir('promptfoo-import-active-mime-blobs-');
       setBlobStorageProvider(new FilesystemBlobStorageProvider({ basePath: blobDir }));
 
       try {
         const sampleFilePath = path.join(__dirname, '../__fixtures__/sample-export.json');
         const sampleData = JSON.parse(fs.readFileSync(sampleFilePath, 'utf-8'));
-        const htmlData = Buffer.from('<script>alert(document.domain)</script>');
+        const htmlData = Buffer.from(
+          `<script>alert(document.domain) /* orphan=${orphan} */</script>`,
+        );
         const htmlHash = sha256(htmlData);
-        const svgData = Buffer.from('<svg onload="alert(document.domain)" />');
+        const svgData = Buffer.from(
+          `<svg data-orphan="${orphan}" onload="alert(document.domain)" />`,
+        );
         const svgHash = sha256(svgData);
         sampleData.results.results[0].response = {
           output: `promptfoo://blob/${htmlHash} promptfoo://blob/${svgHash}`,
@@ -373,6 +674,20 @@ describe('importCommand', () => {
           },
         ];
 
+        if (orphan) {
+          for (const asset of sampleData.blobAssets) {
+            await expect(
+              storeBlob(Buffer.from(asset.data, 'base64'), asset.mimeType, {
+                evalId: 'missing-active-mime-eval',
+              }),
+            ).rejects.toThrow();
+          }
+          const db = await getDb();
+          expect(
+            await db.all(sql`SELECT hash FROM blob_assets WHERE hash IN (${htmlHash}, ${svgHash})`),
+          ).toEqual([]);
+        }
+
         const filePath = path.join(__dirname, `temp-active-mime-blob-${Date.now()}.json`);
         fs.writeFileSync(filePath, JSON.stringify(sampleData));
         tempFilePath = filePath;
@@ -382,6 +697,25 @@ describe('importCommand', () => {
 
         expect((await getBlobByHash(htmlHash)).metadata.mimeType).toBe('application/octet-stream');
         expect((await getBlobByHash(svgHash)).metadata.mimeType).toBe('application/octet-stream');
+        const db = await getDb();
+        const assets = await db.all(
+          sql`SELECT mime_type FROM blob_assets WHERE hash IN (${htmlHash}, ${svgHash})`,
+        );
+        expect(assets).toHaveLength(2);
+        expect(assets).toEqual([
+          { mime_type: 'application/octet-stream' },
+          { mime_type: 'application/octet-stream' },
+        ]);
+        expect((await getShareAuthorizedBlob(htmlHash, sampleData.evalId))?.metadata.mimeType).toBe(
+          'application/octet-stream',
+        );
+        const evalRecord = await Eval.findById(sampleData.evalId);
+        const exported = await createOutputData(evalRecord!, null, { includeMedia: true });
+        expect(exported.blobAssets).toHaveLength(2);
+        expect(exported.blobAssets?.map((asset) => asset.mimeType)).toEqual([
+          'application/octet-stream',
+          'application/octet-stream',
+        ]);
       } finally {
         resetBlobStorageProvider();
         removeTempDir(blobDir);
@@ -425,8 +759,9 @@ describe('importCommand', () => {
         const imported = await getBlobByHash(hash);
         expect(imported.data).toEqual(data);
 
-        const references = (await getDb().all(
-          `SELECT blob_hash, eval_id, location FROM blob_references WHERE blob_hash = '${hash}'`,
+        const db = await getDb();
+        const references = (await db.all(
+          sql`SELECT blob_hash, eval_id, location FROM blob_references WHERE blob_hash = ${hash}`,
         )) as Array<{ blob_hash: string; eval_id: string; location: string }>;
         expect(references).toContainEqual({
           blob_hash: hash,
@@ -618,7 +953,22 @@ describe('importCommand', () => {
           id: evalId,
           createdAt: '2024-01-02T03:04:05.000Z',
           author: 'legacy-author',
-          config: { description: 'legacy import' },
+          config: {
+            description: 'legacy import',
+            redteam: {},
+            tracing: {
+              enabled: true,
+              provider: {
+                id: 'tempo',
+                endpoint: 'https://tempo.example.com',
+                auth: { token: 'imported-legacy-secret' },
+                headers: {
+                  Authorization: 'Bearer imported-header-secret',
+                  'X-Scope-OrgID': 'tenant-a',
+                },
+              },
+            },
+          },
           results: {
             version: 2,
             timestamp: '2024-01-02T03:04:05.000Z',
@@ -636,6 +986,18 @@ describe('importCommand', () => {
       const importedEval = await Eval.findById(evalId);
       expect(importedEval).toBeDefined();
       expect(importedEval!.author).toBe('legacy-author');
+      expect(JSON.stringify(importedEval!.config)).not.toContain('imported-legacy-secret');
+      expect(JSON.stringify(importedEval!.config)).not.toContain('imported-header-secret');
+      expect(importedEval!.config.tracing?.provider?.headers).toEqual({
+        'X-Scope-OrgID': 'tenant-a',
+      });
+      const db = await getDb();
+      const storedEval = await db
+        .select({ isRedteam: evalsTable.isRedteam })
+        .from(evalsTable)
+        .where(sql`${evalsTable.id} = ${evalId}`)
+        .get();
+      expect(storedEval?.isRedteam).toBe(true);
       expect(await importedEval!.toEvaluateSummary()).toMatchObject({
         version: 2,
         results: [{ success: true, vars: { topic: 'legacy' } }],
@@ -754,12 +1116,10 @@ describe('importCommand', () => {
       expect(results).toHaveLength(2);
       expect(results.map((result) => result.testIdx)).toEqual([0, 0]);
       expect(new Set(results.map((result) => result.promptId)).size).toBe(2);
+      const db = await getDb();
+      const promptLinks = await db.select().from(evalsToPromptsTable).all();
       expect(
-        getDb()
-          .select()
-          .from(evalsToPromptsTable)
-          .all()
-          .filter((promptLink) => promptLink.evalId === importedEvals[0].id),
+        promptLinks.filter((promptLink) => promptLink.evalId === importedEvals[0].id),
       ).toHaveLength(2);
 
       const errorResult = results.find(
@@ -1032,6 +1392,8 @@ describe('importCommand', () => {
           spans: [{ spanId: 'span-duplicate-import', name: 'span', startTime: 10 }],
         },
       ];
+      sampleData.results.results[0].traceId = 'trace-duplicate-import';
+      sampleData.results.results[0].evaluationId = sampleData.evalId;
 
       const filePath = path.join(__dirname, `temp-trace-new-id-${Date.now()}.json`);
       fs.writeFileSync(filePath, JSON.stringify(sampleData));
@@ -1057,6 +1419,47 @@ describe('importCommand', () => {
       expect(duplicateTraces[0].spans).toEqual([
         expect.objectContaining({ spanId: 'span-duplicate-import' }),
       ]);
+
+      const [duplicateResult] = await EvalResult.findManyByEvalId(duplicateEval!.id);
+      expect(duplicateResult.toEvaluateResult()).toMatchObject({
+        traceId: duplicateTraces[0].traceId,
+        evaluationId: duplicateEval!.id,
+      });
+    });
+
+    it('keeps the trace id and rewrites evaluationId on a default import (no --new-id)', async () => {
+      // The most common import path: trace ids are preserved (no collision) and the result's
+      // evaluationId is corrected to the imported eval id even if the export carried a stale one.
+      const sampleFilePath = path.join(__dirname, '../__fixtures__/sample-export.json');
+      const sampleData = JSON.parse(fs.readFileSync(sampleFilePath, 'utf-8'));
+      sampleData.traces = [
+        {
+          traceId: 'trace-default-import',
+          evaluationId: 'eval-from-original-machine',
+          testCaseId: 'trace-case',
+          spans: [{ spanId: 'span-default-import', name: 'span', startTime: 10 }],
+        },
+      ];
+      sampleData.results.results[0].traceId = 'trace-default-import';
+      sampleData.results.results[0].evaluationId = 'eval-from-original-machine';
+
+      const filePath = path.join(__dirname, `temp-trace-default-${Date.now()}.json`);
+      fs.writeFileSync(filePath, JSON.stringify(sampleData));
+      tempFilePath = filePath;
+
+      importCommand(program);
+      await program.parseAsync(['node', 'test', 'import', filePath]);
+
+      const traceStore = new TraceStore();
+      const traces = await traceStore.getTracesByEvaluation(sampleData.evalId);
+      expect(traces).toHaveLength(1);
+      expect(traces[0].traceId).toBe('trace-default-import');
+
+      const [result] = await EvalResult.findManyByEvalId(sampleData.evalId);
+      expect(result.toEvaluateResult()).toMatchObject({
+        traceId: 'trace-default-import',
+        evaluationId: sampleData.evalId,
+      });
     });
 
     it('should remap imported trace IDs that already belong to another eval', async () => {
@@ -1070,6 +1473,8 @@ describe('importCommand', () => {
           spans: [{ spanId: 'span-original', name: 'original span', startTime: 10 }],
         },
       ];
+      sampleData.results.results[0].traceId = 'trace-cross-eval-collision';
+      sampleData.results.results[0].evaluationId = sampleData.evalId;
 
       const filePath = path.join(__dirname, `temp-trace-collision-${Date.now()}.json`);
       fs.writeFileSync(filePath, JSON.stringify(sampleData));
@@ -1103,6 +1508,12 @@ describe('importCommand', () => {
       expect(importedTraces[0].spans).toEqual([
         expect.objectContaining({ spanId: 'span-imported' }),
       ]);
+
+      const [importedResult] = await EvalResult.findManyByEvalId(collidingData.evalId);
+      expect(importedResult.toEvaluateResult()).toMatchObject({
+        traceId: importedTraces[0].traceId,
+        evaluationId: collidingData.evalId,
+      });
     });
 
     it('should replace existing eval with --force flag', async () => {
@@ -1133,6 +1544,7 @@ describe('importCommand', () => {
       expect(logger.info).toHaveBeenCalledWith(
         expect.stringMatching(/has been successfully imported/),
       );
+      expect(updateSignalFileForDeletedEvals).not.toHaveBeenCalled();
 
       // Should still have only 1 eval in database (replaced, not duplicated)
       const allEvals = await Eval.getMany(10);
@@ -1172,9 +1584,21 @@ describe('importCommand', () => {
       vi.clearAllMocks();
       process.exitCode = undefined;
 
-      const program2 = new Command();
-      importCommand(program2);
-      await program2.parseAsync(['node', 'test', 'import', '--force', filePath]);
+      const lockHolder = createClient({ url: SHARED_CACHE_MEMORY_URL });
+      const writeTx = await lockHolder.transaction('write');
+      try {
+        await writeTx.execute({
+          sql: 'UPDATE evals SET description = description WHERE id = ?',
+          args: [sampleData.evalId],
+        });
+
+        const program2 = new Command();
+        importCommand(program2);
+        await program2.parseAsync(['node', 'test', 'import', '--force', filePath]);
+      } finally {
+        await writeTx.rollback().catch(() => undefined);
+        lockHolder.close();
+      }
 
       expect(logger.error).toHaveBeenCalledWith(
         expect.stringContaining('Embedded blob hash mismatch'),
@@ -1265,6 +1689,7 @@ describe('importCommand', () => {
         expect(logger.error).toHaveBeenCalledWith(
           expect.stringContaining('was deleted for a --force replacement'),
         );
+        expect(updateSignalFileForDeletedEvals).toHaveBeenCalledWith([sampleData.evalId]);
         expect(process.exitCode).toBe(1);
         // The original results are gone — the disclosure tells the user why.
         expect(await EvalResult.findManyByEvalId(sampleData.evalId)).toHaveLength(0);

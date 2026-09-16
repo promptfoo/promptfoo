@@ -45,7 +45,13 @@ export function isRateLimitWrapped(provider: ApiProvider): boolean {
  */
 export function createProviderRateLimitOptions(): RateLimitExecuteOptions<ProviderResponse> {
   return {
-    getHeaders: getProviderResponseHeaders,
+    // A hard quota is not retried, so its headers must not feed the shared
+    // rate-limit state either: a billing 429 that also carries
+    // `x-ratelimit-remaining-*: 0` and a reset timestamp would otherwise
+    // park every queued and subsequent call until that reset instead of
+    // letting them fail fast.
+    getHeaders: (result: ProviderResponse | undefined) =>
+      result?.metadata?.rateLimitKind === 'quota' ? undefined : getProviderResponseHeaders(result),
     isRateLimited: isProviderResponseRateLimited,
     getRetryAfter: (result: ProviderResponse | undefined, error: Error | undefined) => {
       const rawHeaders = getProviderResponseHeaders(result);
@@ -57,8 +63,8 @@ export function createProviderRateLimitOptions(): RateLimitExecuteOptions<Provid
         }
         // Check retry-after-ms first (milliseconds)
         if (headers['retry-after-ms']) {
-          const ms = parseInt(headers['retry-after-ms'], 10);
-          if (!isNaN(ms) && ms >= 0) {
+          const ms = Number.parseInt(headers['retry-after-ms'], 10);
+          if (Number.isFinite(ms) && ms >= 0) {
             return ms;
           }
         }
@@ -73,7 +79,8 @@ export function createProviderRateLimitOptions(): RateLimitExecuteOptions<Provid
       // Try to extract from error message (some providers include it)
       const match = error?.message?.match(/\bretry after (\d+)\b/i);
       if (match) {
-        return parseInt(match[1], 10) * 1000;
+        const retryAfterMs = Number.parseInt(match[1], 10) * 1000;
+        return Number.isFinite(retryAfterMs) ? retryAfterMs : undefined;
       }
       return undefined;
     },
