@@ -323,7 +323,7 @@ describe('runEval', () => {
     const result = results[0];
     const conversationKey = buildConversationKey(mockProvider, prompt, test);
     expect(result.success).toBe(true);
-    expect(conversations).toHaveProperty(conversationKey);
+    expect(conversations).toHaveProperty([conversationKey]);
     expect(conversations[conversationKey]).toHaveLength(1);
     expect(conversations[conversationKey][0]).toEqual({
       prompt: 'Hello ',
@@ -351,8 +351,55 @@ describe('runEval', () => {
     });
     const result = results[0];
     expect(result.success).toBe(true);
-    expect(conversations).toHaveProperty(buildConversationKey(mockProvider, prompt, test));
+    expect(conversations).toHaveProperty([buildConversationKey(mockProvider, prompt, test)]);
   });
+
+  it.each([
+    {
+      description: 'legacy provider, prompt, and conversation keys',
+      conversationId: '1:shared',
+      promptIdx: 0,
+    },
+    {
+      description: 'column-aware conversation keys',
+      conversationId: '0:shared',
+      promptIdx: 1,
+    },
+  ])(
+    'keeps colon-delimited identifiers from colliding for $description',
+    async ({ conversationId, promptIdx }) => {
+      const conversations = {};
+      const promptTemplate =
+        '{% if _conversation.length %}prior={{ _conversation[0].output }} {% endif %}now={{ turn }}';
+
+      await runEval({
+        ...defaultOptions,
+        provider: mockProvider,
+        prompt: { raw: promptTemplate, label: 'first prompt', id: 'prompt:1' },
+        test: { metadata: { conversationId: 'shared' }, vars: { turn: 'first' } },
+        conversations,
+        registers: {},
+      });
+
+      await runEval({
+        ...defaultOptions,
+        promptIdx,
+        provider: mockProvider,
+        prompt: { raw: promptTemplate, label: 'second prompt', id: 'prompt' },
+        test: { metadata: { conversationId }, vars: { turn: 'second' } },
+        conversations,
+        registers: {},
+      });
+
+      expect(mockProvider.callApi).toHaveBeenNthCalledWith(
+        2,
+        'now=second',
+        expect.anything(),
+        undefined,
+      );
+      expect(Object.keys(conversations)).toHaveLength(2);
+    },
+  );
 
   it('should include sessionId from response in result metadata', async () => {
     const conversations: Record<string, any[]> = {};

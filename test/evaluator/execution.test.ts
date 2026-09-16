@@ -437,19 +437,19 @@ describeEvaluator('evaluator execution control', () => {
       id: 'stateful-provider',
       name: 'resumed sessions',
     },
-  ])('forces concurrency to 1 for $name supplied through a test provider', async ({
-    config,
-    id,
-  }) => {
-    const { maxActiveCalls } = await runConcurrencyProbe(
-      '{{ question }}',
-      2,
-      {},
-      { config, id: vi.fn().mockReturnValue(id) },
-    );
+  ])(
+    'forces concurrency to 1 for $name supplied through a test provider',
+    async ({ config, id }) => {
+      const { maxActiveCalls } = await runConcurrencyProbe(
+        '{{ question }}',
+        2,
+        {},
+        { config, id: vi.fn().mockReturnValue(id) },
+      );
 
-    expect(maxActiveCalls).toBe(1);
-  });
+      expect(maxActiveCalls).toBe(1);
+    },
+  );
 
   it('serializes conversation prompts whose function may add provider-managed state', async () => {
     const { maxActiveCalls } = await runConcurrencyProbe(
@@ -1098,77 +1098,77 @@ describeEvaluator('evaluator execution control', () => {
     );
   });
 
-  it.each([
-    false,
-    true,
-  ])('serializes a disabled turn before a later history consumer (runSerially=%s)', async (runSerially) => {
-    let activeCalls = 0;
-    let maxActiveCalls = 0;
-    let markFirstStarted!: () => void;
-    let releaseFirst!: () => void;
-    const renderedPrompts: string[] = [];
-    const firstStarted = new Promise<void>((resolve) => {
-      markFirstStarted = resolve;
-    });
-    const firstRelease = new Promise<void>((resolve) => {
-      releaseFirst = resolve;
-    });
-    const provider: ApiProvider = {
-      id: vi.fn().mockReturnValue('test-provider'),
-      callApi: vi.fn().mockImplementation(async (prompt: string) => {
-        renderedPrompts.push(prompt);
-        activeCalls += 1;
-        maxActiveCalls = Math.max(maxActiveCalls, activeCalls);
+  it.each([false, true])(
+    'serializes a disabled turn before a later history consumer (runSerially=%s)',
+    async (runSerially) => {
+      let activeCalls = 0;
+      let maxActiveCalls = 0;
+      let markFirstStarted!: () => void;
+      let releaseFirst!: () => void;
+      const renderedPrompts: string[] = [];
+      const firstStarted = new Promise<void>((resolve) => {
+        markFirstStarted = resolve;
+      });
+      const firstRelease = new Promise<void>((resolve) => {
+        releaseFirst = resolve;
+      });
+      const provider: ApiProvider = {
+        id: vi.fn().mockReturnValue('test-provider'),
+        callApi: vi.fn().mockImplementation(async (prompt: string) => {
+          renderedPrompts.push(prompt);
+          activeCalls += 1;
+          maxActiveCalls = Math.max(maxActiveCalls, activeCalls);
 
-        const question = prompt.includes('current=Q1') ? 'Q1' : 'Q2';
-        if (question === 'Q1') {
-          markFirstStarted();
-          await firstRelease;
-        }
+          const question = prompt.includes('current=Q1') ? 'Q1' : 'Q2';
+          if (question === 'Q1') {
+            markFirstStarted();
+            await firstRelease;
+          }
 
-        activeCalls -= 1;
-        return {
-          output: question,
-          tokenUsage: { total: 1, prompt: 1, completion: 0, cached: 0, numRequests: 1 },
-        };
-      }),
-    };
-    const testSuite: TestSuite = {
-      providers: [provider],
-      prompts: [
-        toPrompt(
-          'history={% for completion in _conversation %}{{ completion.output }},{% endfor %} current={{ question }}',
-        ),
-      ],
-      tests: [
-        {
-          vars: { question: 'Q1' },
-          metadata: { conversationId: 'convo-a' },
-          options: { disableConversationVar: true },
-        },
-        {
-          vars: { question: 'Q2' },
-          metadata: { conversationId: 'convo-a' },
-          ...(runSerially ? { options: { runSerially: true } } : {}),
-        },
-      ],
-    };
+          activeCalls -= 1;
+          return {
+            output: question,
+            tokenUsage: { total: 1, prompt: 1, completion: 0, cached: 0, numRequests: 1 },
+          };
+        }),
+      };
+      const testSuite: TestSuite = {
+        providers: [provider],
+        prompts: [
+          toPrompt(
+            'history={% for completion in _conversation %}{{ completion.output }},{% endfor %} current={{ question }}',
+          ),
+        ],
+        tests: [
+          {
+            vars: { question: 'Q1' },
+            metadata: { conversationId: 'convo-a' },
+            options: { disableConversationVar: true },
+          },
+          {
+            vars: { question: 'Q2' },
+            metadata: { conversationId: 'convo-a' },
+            ...(runSerially ? { options: { runSerially: true } } : {}),
+          },
+        ],
+      };
 
-    const evalRecord = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
-    const evalPromise = evaluate(testSuite, evalRecord, { maxConcurrency: 2 });
-    await firstStarted;
-    await Promise.resolve();
-    await Promise.resolve();
-    const callCountBeforeRelease = vi.mocked(provider.callApi).mock.calls.length;
-    releaseFirst();
-    await evalPromise;
+      const evalRecord = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
+      const evalPromise = evaluate(testSuite, evalRecord, { maxConcurrency: 2 });
+      await firstStarted;
+      await Promise.resolve();
+      await Promise.resolve();
+      const callCountBeforeRelease = vi.mocked(provider.callApi).mock.calls.length;
+      releaseFirst();
+      await evalPromise;
 
-    expect(callCountBeforeRelease).toBe(1);
-    expect(maxActiveCalls).toBe(1);
-    expect(renderedPrompts.find((prompt) => prompt.includes('current=Q2'))).toContain(
-      'history=Q1, current=Q2',
-    );
-  });
+      expect(callCountBeforeRelease).toBe(1);
+      expect(maxActiveCalls).toBe(1);
+      expect(renderedPrompts.find((prompt) => prompt.includes('current=Q2'))).toContain(
+        'history=Q1, current=Q2',
+      );
+    },
+  );
 
   it('preserves source order when a per-test prefix introduces _conversation', async () => {
     const callOrder: string[] = [];
