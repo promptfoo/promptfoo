@@ -6,31 +6,31 @@ prompts:
     {{math_problem}}
 
 providers:
-  - id: openai:responses:o3-mini
-    label: o3-mini-reasoning
+  - id: openai:responses:gpt-5.6-sol
+    label: gpt-5.6-sol-reasoning
     config:
-      max_output_tokens: 1000
+      max_output_tokens: 4096
       reasoning:
         effort: 'high'
       user: 'math-student-001'
 
-  - id: openai:responses:o3-pro
-    label: o3-pro-reasoning
+  - id: openai:responses:gpt-6-astra
+    label: gpt-6-astra-reasoning
     config:
-      max_output_tokens: 2000
+      max_output_tokens: 8192
       reasoning:
         effort: 'high'
 
-  - id: openai:responses:o4-mini
-    label: o4-mini-reasoning
+  - id: openai:responses:gpt-5.6-terra
+    label: gpt-5.6-terra-reasoning
     config:
-      max_output_tokens: 1000
+      max_output_tokens: 4096
       reasoning:
         effort: 'medium'
-  - id: openai:responses:gpt-5.4
-    label: gpt-5.4-none-reasoning
+  - id: openai:responses:gpt-5.6-luna
+    label: gpt-5.6-luna-none-reasoning
     config:
-      max_output_tokens: 1000
+      max_output_tokens: 4096
       reasoning:
         effort: 'none'
 

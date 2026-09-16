@@ -1,4 +1,4 @@
-import { createHash } from 'crypto';
+import { createHash, randomUUID } from 'crypto';
 import fs from 'fs/promises';
 import path from 'path';
 
@@ -876,6 +876,11 @@ async function doGenerateRedteamInternal(
       ...(contexts && contexts.length > 0 ? { contexts } : {}),
     };
     const generationRequestCount = generationTokenUsage.numRequests ?? 0;
+    const generation = {
+      id: options.generationRunId ?? randomUUID(),
+      generatedAt: new Date().toISOString(),
+      ...(generationRequestCount > 0 ? { tokenUsage: generationTokenUsage } : {}),
+    };
     if (generationRequestCount > 0) {
       const hasReportedGenerationTokens =
         (generationTokenUsage.total ?? 0) > 0 ||
@@ -919,6 +924,8 @@ async function doGenerateRedteamInternal(
         typeof existingYaml.defaultTest === 'object' ? existingYaml.defaultTest : {};
       const existingMetadata = { ...(existingYaml.metadata || {}) };
       delete existingMetadata.generationTokenUsage;
+      delete existingMetadata.generation;
+      delete existingMetadata.generationAccounting;
       const updatedYaml: Partial<UnifiedConfig> = {
         ...existingYaml,
         ...(options.description ? { description: options.description } : {}),
@@ -938,6 +945,7 @@ async function doGenerateRedteamInternal(
             ? { configHash: await getConfigHash(configPath, options) }
             : { configHash: 'force-regenerate' }),
           ...((generationTokenUsage.numRequests ?? 0) > 0 && { generationTokenUsage }),
+          generation,
           ...(pluginSeverityOverridesId ? { pluginSeverityOverridesId } : {}),
         },
       };
@@ -1000,11 +1008,14 @@ async function doGenerateRedteamInternal(
       existingConfig.redteam = { ...(existingConfig.redteam || {}), ...updatedRedteamConfig };
       const existingMetadata = { ...(existingConfig.metadata || {}) };
       delete existingMetadata.generationTokenUsage;
+      delete existingMetadata.generation;
+      delete existingMetadata.generationAccounting;
       // Add the config hash to metadata
       existingConfig.metadata = {
         ...existingMetadata,
         configHash: await getConfigHash(configPath, options),
         ...((generationTokenUsage.numRequests ?? 0) > 0 && { generationTokenUsage }),
+        generation,
       };
       const author = getAuthor();
       const userEmail = getUserEmail();
@@ -1045,9 +1056,10 @@ async function doGenerateRedteamInternal(
       ret = writePromptfooConfig(
         {
           ...(options.description ? { description: options.description } : {}),
-          ...((generationTokenUsage.numRequests ?? 0) > 0
-            ? { metadata: { generationTokenUsage } }
-            : {}),
+          metadata: {
+            ...((generationTokenUsage.numRequests ?? 0) > 0 ? { generationTokenUsage } : {}),
+            generation,
+          },
           tests: redteamTests,
         },
         'redteam.yaml',
