@@ -1,12 +1,13 @@
 import logger from '../../logger';
 import { remoteGenerationContextPayload } from '../remoteGenerationContext';
 import { getAttackProviderFullId, isAttackProvider } from '../shared/attackProviders';
+import { withPersistableGenerationProvider } from './types';
 import { wouldUnicodeNormalizationChange } from './unicodeNormalization';
 import { pluginMatchesStrategyTargets } from './util';
 
 import type { TestCase, TestCaseWithPlugin } from '../../types/index';
 import type { LayerConfig } from '../shared/runtimeTransform';
-import type { Strategy } from './types';
+import type { Strategy, StrategyRuntimeContext } from './types';
 
 interface LayerTestCaseState {
   testCase: TestCaseWithPlugin;
@@ -50,6 +51,7 @@ export async function addLayerTestCases(
   config: Record<string, unknown>,
   strategies: Strategy[],
   loadStrategy: (strategyPath: string) => Promise<Strategy>,
+  runtimeContext?: StrategyRuntimeContext,
 ): Promise<TestCase[]> {
   // Compose strategies in-order. Config example:
   // { steps: [ 'base64', { id: 'rot13' } ] }
@@ -89,6 +91,13 @@ export async function addLayerTestCases(
 
       // Get the full provider ID
       const providerId = getAttackProviderFullId(stepObj.id);
+      const shouldPersistGenerationProvider = [
+        'promptfoo:redteam:crescendo',
+        'promptfoo:redteam:custom',
+        'promptfoo:redteam:iterative',
+        'promptfoo:redteam:iterative:meta',
+        'promptfoo:redteam:iterative:tree',
+      ].includes(providerId);
       const metricSuffix = getMetricSuffix(stepObj.id);
       const label = typeof config?.label === 'string' ? config.label : undefined;
       const scanId = crypto.randomUUID();
@@ -126,7 +135,9 @@ export async function addLayerTestCases(
             config: {
               injectVar,
               scanId,
-              ...stepObj.config,
+              ...(shouldPersistGenerationProvider
+                ? withPersistableGenerationProvider(stepObj.config || {}, runtimeContext)
+                : stepObj.config),
               ...remoteGenerationContextPayload(
                 typeof config?.targetId === 'string' ? config.targetId : undefined,
               ),
@@ -182,11 +193,12 @@ export async function addLayerTestCases(
       pluginMatchesStrategyTargets(testCase, stepObj.id, stepTargets as string[] | undefined),
     );
 
+    const stepConfig = {
+      ...(stepObj.config || {}),
+      ...(config || {}),
+    };
+
     if (stepObj.id === 'unicode-normalization') {
-      const stepConfig = {
-        ...(stepObj.config || {}),
-        ...(config || {}),
-      };
       const changeMask = applicable.map(({ testCase }) =>
         wouldUnicodeNormalizationChange(testCase, injectVar, stepConfig),
       );
@@ -212,14 +224,10 @@ export async function addLayerTestCases(
       continue;
     }
 
-    const next = await stepAction(
-      applicable.map(({ testCase }) => testCase),
-      injectVar,
-      {
-        ...(stepObj.config || {}),
-        ...(config || {}),
-      },
-    );
+    const applicableTestCases = applicable.map(({ testCase }) => testCase);
+    const next = runtimeContext
+      ? await stepAction(applicableTestCases, injectVar, stepConfig, undefined, runtimeContext)
+      : await stepAction(applicableTestCases, injectVar, stepConfig);
 
     // Feed output to next step. If a step yields nothing, subsequent steps operate on empty set.
     current = next.map((testCase) => ({

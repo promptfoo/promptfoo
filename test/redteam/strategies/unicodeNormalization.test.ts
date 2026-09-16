@@ -36,16 +36,14 @@ describe('unicode normalization strategy', () => {
       expect(resolveUnicodeNormalizationForm({ form })).toBe(form);
     });
 
-    it.each([
-      { form: 'nfkd' },
-      { form: 'invalid' },
-      { form: 42 },
-      { form: null },
-    ])('rejects an invalid form: $form', (config) => {
-      expect(() => resolveUnicodeNormalizationForm(config)).toThrow(
-        'Unicode normalization strategy form must be one of: NFC, NFD, NFKC, NFKD',
-      );
-    });
+    it.each([{ form: 'nfkd' }, { form: 'invalid' }, { form: 42 }, { form: null }])(
+      'rejects an invalid form: $form',
+      (config) => {
+        expect(() => resolveUnicodeNormalizationForm(config)).toThrow(
+          'Unicode normalization strategy form must be one of: NFC, NFD, NFKC, NFKD',
+        );
+      },
+    );
   });
 
   describe('normalizeUnicode', () => {

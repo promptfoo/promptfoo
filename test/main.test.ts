@@ -528,6 +528,9 @@ describe('shutdownGracefully', () => {
     expect(mockTelemetryShutdown).toHaveBeenCalled();
     expect(mockCloseLogger).toHaveBeenCalled();
     expect(mockCloseDbIfOpen).toHaveBeenCalled();
+    expect(mockCloseDbIfOpen.mock.invocationCallOrder[0]).toBeLessThan(
+      mockCloseLogger.mock.invocationCallOrder[0],
+    );
     expect(mockDispatcherDestroy).toHaveBeenCalled();
   });
 
@@ -565,6 +568,38 @@ describe('shutdownGracefully', () => {
     expect(mockTelemetryShutdown).toHaveBeenCalled();
     expect(mockCloseDbIfOpen).toHaveBeenCalled();
     expect(mockDispatcherDestroy).toHaveBeenCalled();
+  });
+
+  it('should continue cleanup when database close times out', async () => {
+    let resolveDbClose!: () => void;
+    const markDbCloseResolved = vi.fn();
+    mockCloseDbIfOpen.mockImplementation(
+      () =>
+        new Promise<void>((resolve) => {
+          resolveDbClose = resolve;
+        }),
+    );
+
+    const shutdownPromise = shutdownGracefully();
+
+    await vi.advanceTimersByTimeAsync(1100);
+
+    expect(mockDispatcherDestroy).toHaveBeenCalled();
+    expect(mockCloseLogger).not.toHaveBeenCalled();
+    expect(process.exit).not.toHaveBeenCalled();
+
+    await vi.advanceTimersByTimeAsync(500);
+    markDbCloseResolved();
+    resolveDbClose();
+    await shutdownPromise;
+    expect(mockCloseLogger).toHaveBeenCalled();
+    expect(markDbCloseResolved.mock.invocationCallOrder[0]).toBeLessThan(
+      mockCloseLogger.mock.invocationCallOrder[0],
+    );
+    expect(process.exit).not.toHaveBeenCalled();
+
+    await vi.advanceTimersByTimeAsync(100);
+    expect(process.exit).toHaveBeenCalledWith(0);
   });
 
   it('should handle dispatcher.destroy() timeout', async () => {
