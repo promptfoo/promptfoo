@@ -5,6 +5,7 @@ import {
 } from '@asteasolutions/zod-to-openapi';
 import { describe, expect, it } from 'vitest';
 import { z } from 'zod';
+import { McpConfigInputSchema } from '../../src/contracts/providerConfig/mcp';
 
 extendZodWithOpenApi(z);
 
@@ -16,6 +17,38 @@ function generateSchemas(registry: OpenAPIRegistry) {
 }
 
 describe('zod-to-openapi compatibility', () => {
+  it('preserves MCP descriptions and deprecation without inventing timeout defaults', () => {
+    const registry = new OpenAPIRegistry();
+    registry.registerPath({
+      method: 'post',
+      path: '/mcp-config',
+      request: {
+        body: { content: { 'application/json': { schema: McpConfigInputSchema } } },
+      },
+      responses: { 200: { description: 'Valid configuration' } },
+    });
+    const document = new OpenApiGeneratorV31(registry.definitions).generateDocument({
+      openapi: '3.1.0',
+      info: { title: 'MCP documentation', version: '1.0.0' },
+    });
+    const body = document.paths?.['/mcp-config'].post?.requestBody;
+    const schema = body && 'content' in body ? body.content['application/json'].schema : undefined;
+    expect(schema).toMatchObject({
+      properties: {
+        timeout: {
+          type: 'number',
+          description: expect.stringContaining('60000 (60 seconds)'),
+        },
+        responseParser: {
+          type: 'string',
+          description: 'Deprecated alias for transformResponse',
+          deprecated: true,
+        },
+      },
+    });
+    expect(schema).not.toHaveProperty('properties.timeout.default');
+  });
+
   it('preserves discriminator mappings for nested discriminated unions', () => {
     const registry = new OpenAPIRegistry();
     const circle = z.object({ type: z.literal('circle') }).openapi('Circle');

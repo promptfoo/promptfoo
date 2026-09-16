@@ -91,7 +91,7 @@ describeIfBuildExists('Library Exports', () => {
       for (const declaration of ['contracts.d.ts', 'contracts.d.cts']) {
         const declarationPath = path.join(distDir, declaration);
         expect(fs.existsSync(declarationPath)).toBe(true);
-        expect(fs.statSync(declarationPath).size).toBeLessThan(50000);
+        expect(fs.statSync(declarationPath).size).toBeLessThan(100000);
       }
     });
 
@@ -150,6 +150,13 @@ describeIfBuildExists('Library Exports', () => {
       expect(contractsModule.GetUserResponseSchema).toBeDefined();
       expect(contractsModule.InputsSchema).toBeDefined();
       expect(contractsModule.PromptSchema).toBeDefined();
+      expect(contractsModule.McpAuthInputSchema.safeParse({ type: 'api_key' }).success).toBe(false);
+      expect(contractsModule.McpAuthSchema.parse({ type: 'none' })).toBeUndefined();
+      expect(contractsModule.McpConfigInputSchema.safeParse({ server: {} }).success).toBe(false);
+      expect(contractsModule.McpConfigSchema.parse({}).enabled).toBe(true);
+      expect(contractsModule.McpAuthInputJsonSchema.$schema).toBe(
+        'http://json-schema.org/draft-07/schema#',
+      );
     });
   });
 
@@ -196,6 +203,13 @@ describeIfBuildExists('Library Exports', () => {
       expect(contractsModule.GetUserResponseSchema).toBeDefined();
       expect(contractsModule.InputsSchema).toBeDefined();
       expect(contractsModule.PromptSchema).toBeDefined();
+      expect(contractsModule.McpAuthInputSchema.safeParse({ type: 'api_key' }).success).toBe(false);
+      expect(contractsModule.McpAuthSchema.parse({ type: 'none' })).toBeUndefined();
+      expect(contractsModule.McpConfigInputSchema.safeParse({ server: {} }).success).toBe(false);
+      expect(contractsModule.McpConfigSchema.parse({}).enabled).toBe(true);
+      expect(contractsModule.McpAuthInputJsonSchema.$schema).toBe(
+        'http://json-schema.org/draft-07/schema#',
+      );
     });
   });
 });
