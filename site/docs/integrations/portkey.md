@@ -7,6 +7,8 @@ description: Integrate Portkey AI gateway with promptfoo for LLM testing, includ
 
 Portkey is an AI observability suite that includes prompt management capabilities.
 
+The examples below use OpenAI's current `gpt-5.6` model identifier.
+
 To reference prompts in Portkey:
 
 1. Set the `PORTKEY_API_KEY` environment variable.
@@ -18,7 +20,7 @@ To reference prompts in Portkey:
      - 'portkey://pp-test-promp-669f48'
 
    providers:
-     - openai:gpt-5-mini
+     - openai:gpt-5.6
 
    tests:
      - vars:
@@ -39,16 +41,40 @@ Example:
 
 ```yaml
 providers:
-  id: portkey:gpt-5-mini
+  id: portkey:gpt-5.6
   config:
     portkeyProvider: openai
 ```
+
+### Credentials
+
+A Portkey request can carry two credentials, and they are sent in different places:
+
+| Credential                  | Sent as                 | Set with                                        |
+| --------------------------- | ----------------------- | ----------------------------------------------- |
+| Your Portkey key            | `x-portkey-api-key`     | `PORTKEY_API_KEY`, or `portkeyApiKey` in config |
+| The upstream provider's key | `Authorization: Bearer` | `OPENAI_API_KEY`, or `apiKey` in config         |
+
+When Portkey holds the provider credential — a model catalog provider slug or a virtual key — the Portkey key is all you need, and promptfoo does not forward a provider key. A provider key is only sent for direct passthrough, such as `portkeyProvider: openai` with no slug.
+
+To send additional headers, use `config.headers`:
+
+```yaml
+providers:
+  - id: portkey:gpt-5.6
+    config:
+      portkeyProvider: openai
+      headers:
+        x-my-header: my-value
+```
+
+### Other options
 
 More complex portkey configurations are also supported.
 
 ```yaml
 providers:
-  id: portkey:gpt-5-mini
+  id: portkey:gpt-5.6
   config:
     # Can alternatively set environment variable, e.g. PORTKEY_API_KEY
     portkeyApiKey: xxx

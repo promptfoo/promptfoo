@@ -44,10 +44,3 @@ export function getUpdateCommands(options: UpdateCommandOptions): UpdateCommandR
     commandType: isNpx ? 'npx' : 'npm',
   };
 }
-
-export function getUpdateCommandLabel(isNpx: boolean, isPrimary: boolean): string {
-  if (isPrimary) {
-    return 'Copy Command';
-  }
-  return isNpx ? 'or global install' : 'or npx';
-}
