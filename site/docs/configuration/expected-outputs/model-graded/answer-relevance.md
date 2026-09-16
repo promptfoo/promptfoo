@@ -72,8 +72,8 @@ assert:
   - type: answer-relevance
     threshold: 0.8
     provider:
-      text: anthropic:claude-2
-      embedding: cohere:embed-english-v3.0
+      text: anthropic:claude-sonnet-4-6
+      embedding: cohere:embedding:embed-english-v3.0
 ```
 
 ### Customizing the Prompt

@@ -3,6 +3,7 @@ import { fetchHuggingFaceDataset } from '../../../src/integrations/huggingfaceDa
 import logger from '../../../src/logger';
 import { matchesLlmRubric } from '../../../src/matchers/llmGrading';
 import {
+  processImageToJpeg,
   UnsafeBenchGrader,
   UnsafeBenchPlugin,
   VALID_CATEGORIES,
@@ -36,6 +37,17 @@ afterAll(() => {
   restoreEnv();
 });
 
+describe('processImageToJpeg', () => {
+  it('preserves a JPEG that is already within the size limit', async () => {
+    const jpegBase64 =
+      '/9j/2wBDAAYEBQYFBAYGBQYHBwYIChAKCgkJChQODwwQFxQYGBcUFhYaHSUfGhsjHBYWICwgIyYnKSopGR8tMC0oMCUoKSj/2wBDAQcHBwoIChMKChMoGhYaKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCj/wAARCAABAAIDASIAAhEBAxEB/8QAFQABAQAAAAAAAAAAAAAAAAAAAAf/xAAUEAEAAAAAAAAAAAAAAAAAAAAA/8QAFQEBAQAAAAAAAAAAAAAAAAAABgj/xAAUEQEAAAAAAAAAAAAAAAAAAAAA/9oADAMBAAIRAxEAPwCdABykX//Z';
+
+    await expect(processImageToJpeg(Buffer.from(jpegBase64, 'base64'))).resolves.toBe(
+      `data:image/jpeg;base64,${jpegBase64}`,
+    );
+  });
+});
+
 // Need to access the DatasetManager - since it's a private implementation detail,
 // we need to mock the relevant methods of UnsafeBenchPlugin
 vi.mock('../../../src/redteam/plugins/unsafebench', async () => {
@@ -58,8 +70,7 @@ vi.mock('../../../src/redteam/plugins/unsafebench', async () => {
         );
         if (invalidCategories.length > 0) {
           logger.warn(
-            `[unsafebench] Invalid categories: ${invalidCategories.join(', ')}. 
-          Valid categories are: ${originalModule.VALID_CATEGORIES.join(', ')}`,
+            `[unsafebench] Invalid categories: ${invalidCategories.join(', ')}. Valid categories are: ${originalModule.VALID_CATEGORIES.join(', ')}`,
           );
         }
       }
@@ -250,7 +261,7 @@ describe('UnsafeBenchPlugin', () => {
 
     // Create plugin with an invalid category
     new UnsafeBenchPlugin({ type: 'test' }, 'testing purposes', 'image', {
-      categories: ['InvalidCategory' as any],
+      categories: ['InvalidCategory' as unknown as (typeof VALID_CATEGORIES)[number]],
     });
 
     expect(loggerWarnSpy).toHaveBeenCalledTimes(1);
