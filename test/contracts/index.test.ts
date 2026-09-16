@@ -96,6 +96,15 @@ describe('contracts leaf surface', () => {
       }
     });
 
+    it('preserves ANTHROPIC_CUSTOM_HEADERS so provider-scoped header clearing is valid', () => {
+      const parsed = ProviderEnvOverridesSchema.safeParse({ ANTHROPIC_CUSTOM_HEADERS: '' });
+
+      expect(parsed.success).toBe(true);
+      if (parsed.success) {
+        expect(parsed.data).toHaveProperty('ANTHROPIC_CUSTOM_HEADERS', '');
+      }
+    });
+
     it('preserves PROMPTFOO_STRICT_CONFIG for suite-scoped API evaluation', () => {
       const parsed = ProviderEnvOverridesSchema.safeParse({
         PROMPTFOO_STRICT_CONFIG: 'true',
@@ -145,8 +154,27 @@ describe('contracts leaf surface', () => {
           numRequests: 1,
           completionDetails: { reasoning: 1 },
         },
+        attacker: {
+          prompt: 8,
+          completion: 2,
+          total: 10,
+          numRequests: 1,
+        },
+        generation: { prompt: 12, completion: 4, total: 16, numRequests: 2 },
       });
       expect(parsed.success).toBe(true);
+      expect(parsed).toMatchObject({
+        success: true,
+        data: {
+          attacker: {
+            prompt: 8,
+            completion: 2,
+            total: 10,
+            numRequests: 1,
+          },
+          generation: { prompt: 12, completion: 4, total: 16, numRequests: 2 },
+        },
+      });
     });
 
     it('parses CompletionTokenDetailsSchema with all fields', () => {

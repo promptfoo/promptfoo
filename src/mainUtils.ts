@@ -254,15 +254,9 @@ export const shutdownGracefully = async (): Promise<void> => {
     });
   }
 
-  logger.debug('Closing logger file transports');
+  const dbClosePromise = closeDbIfOpen();
+  await withTimeout(dbClosePromise, 'closeDbIfOpen()');
 
-  try {
-    await withTimeout(closeLogger(), 'closeLogger()');
-  } catch {
-    // Can't log since logger might be closed.
-  }
-
-  await closeDbIfOpen();
   clearAgentCache();
 
   try {
@@ -270,6 +264,16 @@ export const shutdownGracefully = async (): Promise<void> => {
     await withTimeout(dispatcher.destroy(), 'dispatcher.destroy()');
   } catch {
     // Silently handle dispatcher destroy errors.
+  }
+
+  // Keep logging available until the database cleanup settles.
+  await dbClosePromise;
+
+  logger.debug('Closing logger file transports');
+  try {
+    await withTimeout(closeLogger(), 'closeLogger()');
+  } catch {
+    // Can't log since logger might be closed.
   }
 
   clearTimeout(forceExitTimeout);
