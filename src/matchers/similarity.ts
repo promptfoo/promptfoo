@@ -56,9 +56,8 @@ function buildSimilarityResult(
   if (metric === 'euclidean') {
     // For distance metrics: lower is better, threshold is maximum distance
     const distance = similarity;
-    const pass = inverse
-      ? distance >= threshold - Number.EPSILON
-      : distance <= threshold + Number.EPSILON;
+    const meetsThreshold = distance <= threshold + Number.EPSILON;
+    const pass = meetsThreshold !== inverse;
     // Convert distance to a 0-1 score: score = 1 / (1 + distance)
     const normalizedScore = 1 / (1 + distance);
     const score = inverse ? 1 - normalizedScore : normalizedScore;
@@ -80,9 +79,8 @@ function buildSimilarityResult(
   }
 
   // For similarity metrics: higher is better, threshold is minimum similarity
-  const pass = inverse
-    ? similarity <= threshold + Number.EPSILON
-    : similarity >= threshold - Number.EPSILON;
+  const meetsThreshold = similarity >= threshold - Number.EPSILON;
+  const pass = meetsThreshold !== inverse;
   const score = inverse ? 1 - similarity : similarity;
   const greaterThanReason = `Similarity ${similarity.toFixed(2)} is greater than or equal to threshold ${threshold}`;
   const lessThanReason = `Similarity ${similarity.toFixed(2)} is less than threshold ${threshold}`;
