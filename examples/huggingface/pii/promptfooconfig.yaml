@@ -12,10 +12,11 @@ defaultTest:
     provider:
       id: huggingface:token-classification:bigcode/starpii
       config:
+        apiEndpoint: '{{env.HF_STARPII_ENDPOINT}}'
         wait_for_model: true
   assert:
     - type: not-classifier
-      # Assert that outputs are not PII, with a PII score of less than 0.5
+      # Assert that outputs are not PII, with a PII score of less than 0.75
       threshold: 0.75
 
 tests:
