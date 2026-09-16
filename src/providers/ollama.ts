@@ -315,6 +315,9 @@ export class OllamaCompletionProvider implements ApiProvider {
           total: response.tokenUsage.total,
         };
       }
+      if (response.finishReason) {
+        result.finishReasons = [response.finishReason];
+      }
       return result;
     };
 
@@ -468,6 +471,9 @@ export class OllamaChatProvider implements ApiProvider {
           completion: response.tokenUsage.completion,
           total: response.tokenUsage.total,
         };
+      }
+      if (response.finishReason) {
+        result.finishReasons = [response.finishReason];
       }
       return result;
     };
