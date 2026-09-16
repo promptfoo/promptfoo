@@ -3,7 +3,7 @@ import { GoogleAuthManager } from './auth';
 import { GoogleLiveProvider } from './live';
 
 import type { EnvOverrides } from '../../types/env';
-import type { ProviderOptions } from '../../types/index';
+import type { ProviderOptions } from '../../types/providers';
 import type { CompletionOptions } from './types';
 
 export class VertexLiveProvider extends GoogleLiveProvider {
