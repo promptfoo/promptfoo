@@ -92,6 +92,7 @@ export const PROVIDER_DOCUMENTATION_MAP: Record<string, string> = {
   'simulated-user': `${BASE_DOCS_URL}/simulated-user`,
   togetherai: `${BASE_DOCS_URL}/togetherai`,
   together: `${BASE_DOCS_URL}/togetherai`,
+  volcengine: `${BASE_DOCS_URL}/volcengine`,
   watsonx: `${BASE_DOCS_URL}/watsonx`,
   webhook: `${BASE_DOCS_URL}/webhook`,
   'manual-input': `${BASE_DOCS_URL}/manual-input`,
