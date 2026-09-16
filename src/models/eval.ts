@@ -1244,7 +1244,8 @@ export default class Eval {
     filters?: string[];
   }): Promise<number[]> {
     const whereSql = this.buildFilterWhereSql(opts);
-    const rows = await getDb().all<PromptIndexRow>(sql`
+    const db = await getDb();
+    const rows = await db.all<PromptIndexRow>(sql`
       WITH filtered_test_indices AS (
         SELECT DISTINCT test_idx
         FROM eval_results
