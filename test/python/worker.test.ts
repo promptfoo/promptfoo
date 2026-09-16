@@ -5,6 +5,7 @@ import path from 'path';
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 import logger from '../../src/logger';
 import { MAX_STDERR_BUFFER_LENGTH, PythonWorker } from '../../src/python/worker';
+import type { PythonShell } from 'python-shell';
 
 vi.mock('../../src/logger', () => ({
   default: {
@@ -703,6 +704,360 @@ def call_api(prompt, options, context):
       expect(result).toHaveProperty('embedding');
       expect(Array.isArray(result.embedding)).toBe(true);
       expect(result.embedding.length).toBeGreaterThan(0);
+    },
+    TEST_TIMEOUT,
+  );
+});
+
+describeOrSkip('PythonWorker process lifecycle', () => {
+  const fixturesDir = path.join(__dirname, 'fixtures');
+  const importErrorPath = path.join(fixturesDir, 'lifecycle_import_error_provider.py');
+  const slowPath = path.join(fixturesDir, 'lifecycle_slow_provider.py');
+  const ignoreSignalsPath = path.join(fixturesDir, 'lifecycle_ignore_signals_provider.py');
+  const cleanupPath = path.join(fixturesDir, 'lifecycle_cleanup_provider.py');
+  const cleanupHelperPidPath = `${cleanupPath}.helper.pid`;
+  const helperProcessPath = path.join(fixturesDir, 'lifecycle_helper_process_provider.py');
+  const helperPidPath = `${helperProcessPath}.helper.pid`;
+
+  const getProcess = (worker: PythonWorker) =>
+    (worker as unknown as { process: PythonShell | null }).process;
+
+  const isProcessAlive = (pid: number) => {
+    try {
+      process.kill(pid, 0);
+      return true;
+    } catch {
+      return false;
+    }
+  };
+
+  beforeAll(async () => {
+    await fs.promises.mkdir(fixturesDir, { recursive: true });
+
+    await fs.promises.writeFile(
+      importErrorPath,
+      `
+raise RuntimeError("provider failed to import")
+
+def call_api(prompt, options, context):
+    return {"output": prompt}
+`,
+    );
+
+    await fs.promises.writeFile(
+      slowPath,
+      `
+import time
+
+def call_api(prompt, options, context):
+    if prompt == "slow":
+        time.sleep(10)
+    return {"output": prompt}
+`,
+    );
+
+    await fs.promises.writeFile(
+      ignoreSignalsPath,
+      `
+import signal
+import time
+
+signal.signal(signal.SIGINT, signal.SIG_IGN)
+signal.signal(signal.SIGTERM, signal.SIG_IGN)
+
+def call_api(prompt, options, context):
+    if prompt == "slow":
+        time.sleep(10)
+    return {"output": prompt}
+`,
+    );
+
+    // Starts a helper process that inherits the worker's stdout and stderr and outlives it,
+    // like a script that launches a model server or a multiprocessing pool.
+    await fs.promises.writeFile(
+      helperProcessPath,
+      `
+import os
+import subprocess
+import sys
+import time
+
+def call_api(prompt, options, context):
+    if prompt in ("slow", "crash"):
+        helper = subprocess.Popen([sys.executable, "-c", "import time; time.sleep(60)"])
+        with open(${JSON.stringify(helperPidPath)}, "a") as pid_file:
+            print(helper.pid, file=pid_file)
+        if prompt == "crash":
+            os._exit(1)
+        time.sleep(10)
+    return {"output": prompt}
+`,
+    );
+
+    // Cleans up the helper it starts in a finally block, as a well-behaved script would.
+    await fs.promises.writeFile(
+      cleanupPath,
+      `
+import subprocess
+import sys
+import time
+
+def call_api(prompt, options, context):
+    if prompt == "slow":
+        helper = subprocess.Popen([sys.executable, "-c", "import time; time.sleep(60)"])
+        with open(${JSON.stringify(cleanupHelperPidPath)}, "w") as pid_file:
+            pid_file.write(str(helper.pid))
+        try:
+            time.sleep(10)
+        finally:
+            helper.kill()
+            helper.wait()
+    return {"output": prompt}
+`,
+    );
+  });
+
+  afterAll(async () => {
+    for (const fixturePath of [
+      importErrorPath,
+      slowPath,
+      ignoreSignalsPath,
+      helperProcessPath,
+      cleanupPath,
+    ]) {
+      fs.rmSync(fixturePath, { force: true });
+    }
+  });
+
+  // Kills the helper processes a fixture started, which outlive the Python worker on purpose.
+  const readHelperPids = (pidPath: string) =>
+    fs.existsSync(pidPath)
+      ? fs.readFileSync(pidPath, 'utf8').split(/\s+/).filter(Boolean).map(Number)
+      : [];
+  const readHelperPid = (pidPath: string) => readHelperPids(pidPath)[0];
+
+  const killHelperProcess = (pidPath = helperPidPath) => {
+    const helperPids = readHelperPids(pidPath);
+    fs.rmSync(pidPath, { force: true });
+    for (const helperPid of helperPids) {
+      try {
+        process.kill(helperPid, 'SIGKILL');
+      } catch {
+        // Already exited
+      }
+    }
+  };
+
+  it(
+    'should fail startup immediately when the script exits before becoming ready',
+    async () => {
+      const worker = new PythonWorker(importErrorPath, 'call_api');
+
+      try {
+        // Previously the worker restarted the failing script and only gave up when the
+        // 30s ready timeout fired, with "Worker failed to become ready within timeout".
+        await expect(worker.initialize()).rejects.toThrow(
+          'Python worker exited before becoming ready (exit code 1)',
+        );
+        expect(logger.warn).not.toHaveBeenCalledWith(expect.stringContaining('restarting'));
+      } finally {
+        await worker.shutdown();
+      }
+    },
+    TEST_TIMEOUT,
+  );
+
+  it(
+    'should replace a timed-out process without counting the timeout as a crash',
+    async () => {
+      const worker = new PythonWorker(slowPath, 'call_api', undefined, 1000);
+      await worker.initialize();
+
+      try {
+        // As many timeouts as maxCrashes: if timeouts counted as crashes the worker would die.
+        for (let attempt = 0; attempt < 3; attempt++) {
+          await expect(worker.call('call_api', ['slow', {}, {}])).rejects.toThrow(
+            'Python worker timed out after 1000ms',
+          );
+          await vi.waitFor(() => expect(worker.isReady()).toBe(true), { timeout: 3_000 });
+        }
+
+        // Previously the next request was sent to the process still running the slow call,
+        // so it waited behind it and timed out too.
+        await expect(worker.call('call_api', ['fast', {}, {}])).resolves.toEqual({
+          output: 'fast',
+        });
+        expect(worker.isDead()).toBe(false);
+      } finally {
+        await worker.shutdown();
+      }
+    },
+    TEST_TIMEOUT,
+  );
+
+  it(
+    'should force-kill a timed-out process that ignores interrupt and termination signals',
+    async () => {
+      const worker = new PythonWorker(ignoreSignalsPath, 'call_api', undefined, 1000);
+      await worker.initialize();
+      const pid = getProcess(worker)?.childProcess.pid;
+      expect(pid).toBeDefined();
+
+      try {
+        await expect(worker.call('call_api', ['slow', {}, {}])).rejects.toThrow(
+          'Python worker timed out after 1000ms',
+        );
+        await vi.waitFor(() => expect(isProcessAlive(pid!)).toBe(false), { timeout: 5_000 });
+        await vi.waitFor(() => expect(worker.isReady()).toBe(true), { timeout: 3_000 });
+        await expect(worker.call('call_api', ['fast', {}, {}])).resolves.toEqual({
+          output: 'fast',
+        });
+      } finally {
+        await worker.shutdown();
+      }
+    },
+    TEST_TIMEOUT,
+  );
+
+  it(
+    'should restart after a timeout while a subprocess still holds the worker output streams',
+    async () => {
+      const worker = new PythonWorker(helperProcessPath, 'call_api', undefined, 1000);
+      await worker.initialize();
+
+      try {
+        await expect(worker.call('call_api', ['slow', {}, {}])).rejects.toThrow(
+          'Python worker timed out after 1000ms',
+        );
+        // The helper keeps stdout and stderr open, so the process never "closes". The
+        // worker previously waited for that forever and never restarted.
+        await vi.waitFor(() => expect(worker.isReady()).toBe(true), { timeout: 5_000 });
+        await expect(worker.call('call_api', ['fast', {}, {}])).resolves.toEqual({
+          output: 'fast',
+        });
+      } finally {
+        await worker.shutdown();
+        killHelperProcess();
+      }
+    },
+    TEST_TIMEOUT,
+  );
+
+  it(
+    'should detect a crash while a subprocess still holds the worker output streams',
+    async () => {
+      // Long enough that a request timeout can't be mistaken for crash detection.
+      const worker = new PythonWorker(helperProcessPath, 'call_api', undefined, 10_000);
+      await worker.initialize();
+
+      try {
+        await expect(worker.call('call_api', ['crash', {}, {}])).rejects.toThrow(
+          'Worker crashed (exit code 1)',
+        );
+      } finally {
+        await worker.shutdown();
+        killHelperProcess();
+      }
+    },
+    TEST_TIMEOUT,
+  );
+
+  it(
+    'should count a crash toward the limit when the request times out before the exit is handled',
+    async () => {
+      // Shorter than the output-stream drain, so the timeout fires before the crash is handled.
+      const worker = new PythonWorker(helperProcessPath, 'call_api', undefined, 800);
+      await worker.initialize();
+
+      try {
+        for (let attempt = 1; attempt <= 3; attempt++) {
+          await expect(worker.call('call_api', ['crash', {}, {}])).rejects.toThrow(
+            'Worker crashed (exit code 1)',
+          );
+          if (attempt < 3) {
+            await vi.waitFor(() => expect(worker.isReady()).toBe(true), { timeout: 5_000 });
+          }
+        }
+        // Previously each crash was handled as a timeout, which doesn't count toward the
+        // limit, so the worker kept restarting instead of stopping after three in a row.
+        await vi.waitFor(() => expect(worker.isDead()).toBe(true), { timeout: 5_000 });
+      } finally {
+        await worker.shutdown();
+        killHelperProcess();
+      }
+    },
+    TEST_TIMEOUT,
+  );
+
+  it(
+    'should let a timed-out script clean up the subprocesses it started',
+    async () => {
+      const worker = new PythonWorker(cleanupPath, 'call_api', undefined, 1000);
+      await worker.initialize();
+
+      try {
+        await expect(worker.call('call_api', ['slow', {}, {}])).rejects.toThrow(
+          'Python worker timed out after 1000ms',
+        );
+        const helperPid = readHelperPid(cleanupHelperPidPath);
+        expect(helperPid).toBeDefined();
+        // The worker is interrupted rather than terminated outright, so the script's finally
+        // block runs and stops its helper before the process is replaced.
+        await vi.waitFor(() => expect(isProcessAlive(helperPid!)).toBe(false), {
+          timeout: 5_000,
+        });
+      } finally {
+        await worker.shutdown();
+        killHelperProcess(cleanupHelperPidPath);
+      }
+    },
+    TEST_TIMEOUT,
+  );
+
+  it(
+    'should wait for a timed-out process to stop before shutdown resolves',
+    async () => {
+      // Ignores SIGINT and SIGTERM, so stopping it takes the full grace period before SIGKILL.
+      const worker = new PythonWorker(ignoreSignalsPath, 'call_api', undefined, 1000);
+      await worker.initialize();
+      const pid = getProcess(worker)?.childProcess.pid;
+      expect(pid).toBeDefined();
+
+      await expect(worker.call('call_api', ['slow', {}, {}])).rejects.toThrow(
+        'Python worker timed out after 1000ms',
+      );
+      // Shut down while the timed-out process is still being stopped. Previously shutdown
+      // returned at once and left that process running.
+      await worker.shutdown();
+
+      expect(isProcessAlive(pid!)).toBe(false);
+    },
+    TEST_TIMEOUT,
+  );
+
+  it(
+    'should not start a new process when shut down while a call is being dispatched',
+    async () => {
+      const worker = new PythonWorker(slowPath, 'call_api', undefined, 1000);
+      await worker.initialize();
+
+      // shutdown() runs while call() is still writing its request files.
+      const call = worker.call('call_api', ['fast', {}, {}]);
+      const shutdown = worker.shutdown();
+
+      await expect(call).rejects.toThrow('Worker shutting down');
+      await shutdown;
+
+      // Previously the request stayed pending until its timeout fired after shutdown and
+      // restarted the worker, leaving a Python process that nothing would ever stop. No
+      // request timer may remain armed, and nothing may be running.
+      expect((worker as unknown as { requestTimeout: unknown }).requestTimeout).toBeNull();
+      expect(getProcess(worker)).toBeNull();
+      expect(worker.isReady()).toBe(false);
+      expect(logger.warn).not.toHaveBeenCalledWith(expect.stringContaining('restarting'));
+      await expect(worker.call('call_api', ['after shutdown', {}, {}])).rejects.toThrow(
+        'Worker shutting down',
+      );
     },
     TEST_TIMEOUT,
   );

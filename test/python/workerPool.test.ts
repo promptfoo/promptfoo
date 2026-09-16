@@ -1,8 +1,10 @@
 import fs from 'fs';
 import path from 'path';
 
-import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
+import { PythonWorker } from '../../src/python/worker';
 import { PythonWorkerPool } from '../../src/python/workerPool';
+import type { PythonShell } from 'python-shell';
 
 // Windows CI has severe filesystem delays (antivirus, etc.) - allow up to 90s
 // Non-Windows CI can also have timing variance with Python IPC, so use 15s (matching windows-path.test.ts)
@@ -211,4 +213,367 @@ def call_embedding_api(prompt, options, context):
     },
     TEST_TIMEOUT,
   );
+});
+
+describeOrSkip('PythonWorkerPool crash recovery', () => {
+  const fixturesDir = path.join(__dirname, 'fixtures');
+  const crashScriptPath = path.join(fixturesDir, 'pool_crash_on_marker_provider.py');
+  const brokenOnRestartPath = path.join(fixturesDir, 'pool_break_on_restart_provider.py');
+  const slowScriptPath = path.join(fixturesDir, 'pool_slow_provider.py');
+  const exitAfterReplyPath = path.join(fixturesDir, 'pool_exit_after_reply_provider.py');
+  const exitHelperPidPath = `${exitAfterReplyPath}.helper.pid`;
+
+  beforeAll(() => {
+    if (!fs.existsSync(fixturesDir)) {
+      fs.mkdirSync(fixturesDir, { recursive: true });
+    }
+
+    fs.writeFileSync(
+      crashScriptPath,
+      `
+import os
+
+def call_api(prompt, options, context):
+    if "CRASH" in prompt:
+        os._exit(1)
+    return {"output": f"ok: {prompt}"}
+`,
+    );
+
+    fs.writeFileSync(
+      slowScriptPath,
+      `
+import time
+
+def call_api(prompt, options, context):
+    if prompt == "slow":
+        time.sleep(10)
+    return {"output": prompt}
+`,
+    );
+
+    // Replies, then exits shortly afterwards while a helper still holds the worker's output
+    // streams, so the worker only learns about the exit once they have drained.
+    fs.writeFileSync(
+      exitAfterReplyPath,
+      `
+import os
+import subprocess
+import sys
+import threading
+
+def call_api(prompt, options, context):
+    if prompt == "exit soon":
+        helper = subprocess.Popen([sys.executable, "-c", "import time; time.sleep(60)"])
+        with open(${JSON.stringify(exitHelperPidPath)}, "w") as pid_file:
+            pid_file.write(str(helper.pid))
+        threading.Timer(0.2, lambda: os._exit(3)).start()
+    return {"output": prompt}
+`,
+    );
+  });
+
+  afterAll(() => {
+    for (const fixturePath of [
+      crashScriptPath,
+      brokenOnRestartPath,
+      slowScriptPath,
+      exitAfterReplyPath,
+    ]) {
+      fs.rmSync(fixturePath, { force: true });
+    }
+  });
+
+  it(
+    'should reject queued and new requests once every worker has crashed instead of hanging',
+    async () => {
+      const pool = new PythonWorkerPool(crashScriptPath, 'call_api', 1);
+      await pool.initialize();
+
+      try {
+        const results = await Promise.allSettled([
+          pool.execute('call_api', ['CRASH 1', {}, {}]),
+          pool.execute('call_api', ['CRASH 2', {}, {}]),
+          pool.execute('call_api', ['CRASH 3', {}, {}]),
+          // Queued behind three consecutive crashes; previously this never settled.
+          pool.execute('call_api', ['queued after crashes', {}, {}]),
+        ]);
+
+        expect(results.map((result) => result.status)).toEqual([
+          'rejected',
+          'rejected',
+          'rejected',
+          'rejected',
+        ]);
+        const reasons = results.map((result) =>
+          result.status === 'rejected' ? (result.reason as Error).message : '',
+        );
+        expect(reasons.slice(0, 3)).toEqual([
+          'Worker crashed (exit code 1)',
+          'Worker crashed (exit code 1)',
+          'Worker crashed (exit code 1)',
+        ]);
+        expect(reasons[3]).toContain('crashed and could not be restarted');
+
+        await expect(pool.execute('call_api', ['new request', {}, {}])).rejects.toThrow(
+          'crashed and could not be restarted',
+        );
+      } finally {
+        await pool.shutdown();
+      }
+    },
+    TEST_TIMEOUT,
+  );
+
+  it(
+    'should reject queued requests when a crashed worker cannot restart',
+    async () => {
+      // Crashes and leaves the module unimportable, so every automatic restart fails.
+      fs.writeFileSync(
+        brokenOnRestartPath,
+        `
+import os
+
+def call_api(prompt, options, context):
+    with open(__file__, "w") as module_file:
+        module_file.write('raise RuntimeError("module broken after crash")\\n')
+    os._exit(1)
+`,
+      );
+      const pool = new PythonWorkerPool(brokenOnRestartPath, 'call_api', 1);
+
+      try {
+        await pool.initialize();
+
+        const [crashed, queued] = await Promise.allSettled([
+          pool.execute('call_api', ['crash', {}, {}]),
+          // Previously a failed restart was only logged, so this never settled. Failed
+          // restarts now count toward the crash limit, so the worker gives up after three.
+          pool.execute('call_api', ['queued behind failed restart', {}, {}]),
+        ]);
+
+        expect(crashed).toMatchObject({
+          status: 'rejected',
+          reason: expect.objectContaining({ message: 'Worker crashed (exit code 1)' }),
+        });
+        expect(queued).toMatchObject({
+          status: 'rejected',
+          reason: expect.objectContaining({
+            message: expect.stringContaining('crashed and could not be restarted'),
+          }),
+        });
+      } finally {
+        await pool.shutdown();
+      }
+    },
+    TEST_TIMEOUT,
+  );
+
+  it(
+    'should keep serving when crashes are separated by successful calls',
+    async () => {
+      const pool = new PythonWorkerPool(crashScriptPath, 'call_api', 1);
+      await pool.initialize();
+
+      try {
+        // More total crashes than maxCrashes, but never consecutive.
+        for (let attempt = 1; attempt <= 4; attempt++) {
+          await expect(pool.execute('call_api', [`CRASH ${attempt}`, {}, {}])).rejects.toThrow(
+            'Worker crashed',
+          );
+          await expect(pool.execute('call_api', [`healthy ${attempt}`, {}, {}])).resolves.toEqual({
+            output: `ok: healthy ${attempt}`,
+          });
+        }
+      } finally {
+        await pool.shutdown();
+      }
+    },
+    TEST_TIMEOUT,
+  );
+
+  it(
+    'should queue a request that arrives after the worker process exited',
+    async () => {
+      const isProcessAlive = (pid: number) => {
+        try {
+          process.kill(pid, 0);
+          return true;
+        } catch {
+          return false;
+        }
+      };
+      const pool = new PythonWorkerPool(exitAfterReplyPath, 'call_api', 1);
+      await pool.initialize();
+      const worker = (pool as unknown as { workers: Array<{ process: PythonShell | null }> })
+        .workers[0];
+      const workerPid = worker.process?.childProcess.pid;
+      expect(workerPid).toBeDefined();
+
+      try {
+        await expect(pool.execute('call_api', ['exit soon', {}, {}])).resolves.toEqual({
+          output: 'exit soon',
+        });
+        await vi.waitFor(() => expect(isProcessAlive(workerPid!)).toBe(false), {
+          timeout: 3_000,
+        });
+
+        // Previously this was sent to the exited process while its streams drained, and
+        // failed with "Worker crashed" instead of waiting for the restart.
+        await expect(pool.execute('call_api', ['after exit', {}, {}])).resolves.toEqual({
+          output: 'after exit',
+        });
+      } finally {
+        await pool.shutdown();
+        if (fs.existsSync(exitHelperPidPath)) {
+          try {
+            process.kill(Number(fs.readFileSync(exitHelperPidPath, 'utf8')), 'SIGKILL');
+          } catch {
+            // Already exited
+          }
+          fs.rmSync(exitHelperPidPath, { force: true });
+        }
+      }
+    },
+    TEST_TIMEOUT,
+  );
+
+  it(
+    'should serve a request queued behind a timed-out call from the restarted process',
+    async () => {
+      const pool = new PythonWorkerPool(slowScriptPath, 'call_api', 1, undefined, 1000);
+      await pool.initialize();
+
+      try {
+        const [timedOut, queued] = await Promise.allSettled([
+          pool.execute('call_api', ['slow', {}, {}]),
+          // Previously this was sent to the process still running the slow call and timed out.
+          pool.execute('call_api', ['fast', {}, {}]),
+        ]);
+
+        expect(timedOut).toMatchObject({
+          status: 'rejected',
+          reason: expect.objectContaining({ message: 'Python worker timed out after 1000ms' }),
+        });
+        expect(queued).toEqual({ status: 'fulfilled', value: { output: 'fast' } });
+      } finally {
+        await pool.shutdown();
+      }
+    },
+    TEST_TIMEOUT,
+  );
+});
+
+describe('PythonWorkerPool worker failures', () => {
+  type FakeWorkerState = { ready: boolean; busy: boolean; dead: boolean };
+  type TestablePool = {
+    isInitialized: boolean;
+    processQueue(): void;
+    queue: unknown[];
+    workers: unknown[];
+  };
+
+  const createFakeWorker = (state: FakeWorkerState) => ({
+    isReady: () => state.ready,
+    isBusy: () => state.busy,
+    isDead: () => state.dead,
+    call: vi.fn().mockResolvedValue({ output: 'served' }),
+    shutdown: vi.fn().mockResolvedValue(undefined),
+  });
+
+  const createPoolWithWorkers = (...workers: ReturnType<typeof createFakeWorker>[]) => {
+    const pool = new PythonWorkerPool('/scripts/provider.py', 'call_api', workers.length);
+    const testable = pool as unknown as TestablePool;
+    testable.workers = workers;
+    testable.isInitialized = true;
+    return { pool, testable };
+  };
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it('should keep a request queued while another worker can still recover', async () => {
+    const recoveringState = { ready: false, busy: false, dead: false };
+    const deadWorker = createFakeWorker({ ready: false, busy: false, dead: true });
+    const recoveringWorker = createFakeWorker(recoveringState);
+    const { pool, testable } = createPoolWithWorkers(deadWorker, recoveringWorker);
+
+    const queued = pool.execute('call_api', ['hello', {}, {}]);
+    expect(testable.queue).toHaveLength(1);
+
+    recoveringState.ready = true;
+    testable.processQueue();
+
+    await expect(queued).resolves.toEqual({ output: 'served' });
+    expect(recoveringWorker.call).toHaveBeenCalledWith('call_api', ['hello', {}, {}]);
+    expect(deadWorker.call).not.toHaveBeenCalled();
+  });
+
+  it('should reject queued and new requests once the last worker dies', async () => {
+    const lastState = { ready: false, busy: false, dead: false };
+    const { pool, testable } = createPoolWithWorkers(
+      createFakeWorker({ ready: false, busy: false, dead: true }),
+      createFakeWorker(lastState),
+    );
+
+    const queued = pool.execute('call_api', ['hello', {}, {}]);
+    expect(testable.queue).toHaveLength(1);
+
+    lastState.dead = true;
+    testable.processQueue();
+
+    await expect(queued).rejects.toThrow(
+      'All 2 Python worker(s) for /scripts/provider.py crashed and could not be restarted',
+    );
+    expect(testable.queue).toHaveLength(0);
+    await expect(pool.execute('call_api', ['later', {}, {}])).rejects.toThrow(
+      'crashed and could not be restarted',
+    );
+  });
+
+  it('should reject new requests as soon as shutdown starts', async () => {
+    let finishShutdown: () => void = () => {};
+    const worker = createFakeWorker({ ready: true, busy: false, dead: false });
+    worker.shutdown.mockImplementation(
+      () =>
+        new Promise<void>((resolve) => {
+          finishShutdown = resolve;
+        }),
+    );
+    const { pool } = createPoolWithWorkers(worker);
+
+    const shutdown = pool.shutdown();
+    await expect(pool.execute('call_api', ['during shutdown', {}, {}])).rejects.toThrow(
+      'Worker pool not initialized',
+    );
+    expect(worker.call).not.toHaveBeenCalled();
+
+    finishShutdown();
+    await shutdown;
+  });
+
+  it('should shut down workers that started when another worker fails to start', async () => {
+    const startupError = new Error('Python worker exited before becoming ready (exit code 1)');
+    let startedWorkers = 0;
+    const initializeSpy = vi
+      .spyOn(PythonWorker.prototype, 'initialize')
+      .mockImplementation(async () => {
+        startedWorkers += 1;
+        if (startedWorkers === 2) {
+          throw startupError;
+        }
+      });
+    const shutdownSpy = vi.spyOn(PythonWorker.prototype, 'shutdown').mockResolvedValue(undefined);
+    const pool = new PythonWorkerPool('/scripts/provider.py', 'call_api', 3);
+
+    await expect(pool.initialize()).rejects.toBe(startupError);
+
+    expect(initializeSpy).toHaveBeenCalledTimes(3);
+    expect(shutdownSpy).toHaveBeenCalledTimes(3);
+    expect(pool.getWorkerCount()).toBe(0);
+    await expect(pool.execute('call_api', ['hello', {}, {}])).rejects.toThrow(
+      'Worker pool not initialized',
+    );
+  });
 });
