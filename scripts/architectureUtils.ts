@@ -3,7 +3,7 @@ import { builtinModules } from 'node:module';
 import path from 'node:path';
 
 import { globSync } from 'glob';
-import ts from 'typescript';
+import { type Node, parseSync, Visitor } from 'oxc-parser';
 
 export interface LayerDefinition {
   name: string;
@@ -268,67 +268,73 @@ export function getLayerForFile(relativePath: string, config: LayerConfig): stri
   return 'unclassified';
 }
 
+function getStaticModuleSpecifier(node: Node): string | undefined {
+  if (node.type === 'Literal' && typeof node.value === 'string') {
+    return node.value;
+  }
+
+  if (node.type === 'TemplateLiteral' && node.expressions.length === 0) {
+    return node.quasis[0]?.value.cooked ?? undefined;
+  }
+
+  return undefined;
+}
+
 export function extractModuleSpecifiers(sourceText: string, filePath: string): string[] {
-  const sourceFile = ts.createSourceFile(
-    filePath,
-    sourceText,
-    ts.ScriptTarget.Latest,
-    true,
-    filePath.endsWith('.tsx') ? ts.ScriptKind.TSX : ts.ScriptKind.TS,
-  );
+  const result = parseSync(filePath, sourceText);
+  if (result.errors.length > 0) {
+    throw new Error(`Could not parse ${filePath}: ${result.errors[0].message}`);
+  }
+
   const specifiers: string[] = [];
 
-  function addStaticCallSpecifier(node: ts.CallExpression): void {
-    if (node.arguments.length !== 1 || !ts.isStringLiteralLike(node.arguments[0])) {
-      return;
-    }
+  new Visitor({
+    ImportDeclaration(node) {
+      specifiers.push(node.source.value);
+    },
+    ExportAllDeclaration(node) {
+      specifiers.push(node.source.value);
+    },
+    ExportNamedDeclaration(node) {
+      if (node.source) {
+        specifiers.push(node.source.value);
+      }
+    },
+    ImportExpression(node) {
+      const specifier = getStaticModuleSpecifier(node.source);
+      if (specifier !== undefined) {
+        specifiers.push(specifier);
+      }
+    },
+    TSImportEqualsDeclaration(node) {
+      if (node.moduleReference.type === 'TSExternalModuleReference') {
+        specifiers.push(node.moduleReference.expression.value);
+      }
+    },
+    TSImportType(node) {
+      specifiers.push(node.source.value);
+    },
+    CallExpression(node) {
+      if (node.arguments.length !== 1) {
+        return;
+      }
 
-    if (
-      node.expression.kind === ts.SyntaxKind.ImportKeyword ||
-      (ts.isIdentifier(node.expression) && node.expression.text === 'require') ||
-      (ts.isPropertyAccessExpression(node.expression) &&
-        ts.isIdentifier(node.expression.expression) &&
-        node.expression.expression.text === 'require' &&
-        node.expression.name.text === 'resolve')
-    ) {
-      specifiers.push(node.arguments[0].text);
-    }
-  }
+      const specifier = getStaticModuleSpecifier(node.arguments[0]);
+      if (
+        specifier !== undefined &&
+        ((node.callee.type === 'Identifier' && node.callee.name === 'require') ||
+          (node.callee.type === 'MemberExpression' &&
+            !node.callee.computed &&
+            node.callee.object.type === 'Identifier' &&
+            node.callee.object.name === 'require' &&
+            node.callee.property.type === 'Identifier' &&
+            node.callee.property.name === 'resolve'))
+      ) {
+        specifiers.push(specifier);
+      }
+    },
+  }).visit(result.program);
 
-  function visit(node: ts.Node): void {
-    if (
-      (ts.isImportDeclaration(node) || ts.isExportDeclaration(node)) &&
-      node.moduleSpecifier &&
-      ts.isStringLiteralLike(node.moduleSpecifier)
-    ) {
-      specifiers.push(node.moduleSpecifier.text);
-    }
-
-    if (
-      ts.isImportEqualsDeclaration(node) &&
-      ts.isExternalModuleReference(node.moduleReference) &&
-      node.moduleReference.expression &&
-      ts.isStringLiteralLike(node.moduleReference.expression)
-    ) {
-      specifiers.push(node.moduleReference.expression.text);
-    }
-
-    if (
-      ts.isImportTypeNode(node) &&
-      ts.isLiteralTypeNode(node.argument) &&
-      ts.isStringLiteralLike(node.argument.literal)
-    ) {
-      specifiers.push(node.argument.literal.text);
-    }
-
-    if (ts.isCallExpression(node)) {
-      addStaticCallSpecifier(node);
-    }
-
-    ts.forEachChild(node, visit);
-  }
-
-  visit(sourceFile);
   return specifiers;
 }
 

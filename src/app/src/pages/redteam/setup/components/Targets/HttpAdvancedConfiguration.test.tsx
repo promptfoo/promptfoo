@@ -96,32 +96,32 @@ describe('HttpAdvancedConfiguration', () => {
       },
     ];
 
-    it.each(testCases)('should render toggle switch as $expectedChecked when $description', async ({
-      config,
-      expectedChecked,
-    }) => {
-      const user = userEvent.setup();
-      const selectedTarget: ProviderOptions = {
-        id: 'http-provider',
-        config: config as ProviderOptions['config'],
-      };
+    it.each(testCases)(
+      'should render toggle switch as $expectedChecked when $description',
+      async ({ config, expectedChecked }) => {
+        const user = userEvent.setup();
+        const selectedTarget: ProviderOptions = {
+          id: 'http-provider',
+          config: config as ProviderOptions['config'],
+        };
 
-      renderWithProviders(
-        <HttpAdvancedConfiguration
-          selectedTarget={selectedTarget}
-          updateCustomTarget={mockUpdateCustomTarget}
-        />,
-      );
+        renderWithProviders(
+          <HttpAdvancedConfiguration
+            selectedTarget={selectedTarget}
+            updateCustomTarget={mockUpdateCustomTarget}
+          />,
+        );
 
-      // Click on Token Estimation tab
-      const tokenEstimationTab = screen.getByRole('tab', { name: /Token Estimation/i });
-      await user.click(tokenEstimationTab);
+        // Click on Token Estimation tab
+        const tokenEstimationTab = screen.getByRole('tab', { name: /Token Estimation/i });
+        await user.click(tokenEstimationTab);
 
-      const toggleSwitch = screen.getByRole('switch', { name: 'Enable token estimation' });
-      // Radix Switch uses data-state attribute instead of checked
-      const isChecked = toggleSwitch.getAttribute('data-state') === 'checked';
-      expect(isChecked).toBe(expectedChecked);
-    });
+        const toggleSwitch = screen.getByRole('switch', { name: 'Enable token estimation' });
+        // Radix Switch uses data-state attribute instead of checked
+        const isChecked = toggleSwitch.getAttribute('data-state') === 'checked';
+        expect(isChecked).toBe(expectedChecked);
+      },
+    );
   });
 
   it("should update selectedTarget.config.tokenEstimation to { enabled: true, multiplier: 1.3 } when the 'Enable token estimation' switch is toggled on", async () => {

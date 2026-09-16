@@ -60,27 +60,27 @@ Nscale supports many popular models with competitive pricing:
 
 - `openai/gpt-oss-120b` - OpenAI's 120B open-weight model
 - `openai/gpt-oss-20b` - OpenAI's 20B model
-- `qwen/qwen-3-235b-a22b-instruct` - Qwen 3 235B model
-- `qwen/qwen-3-235b-a22b-instruct-2507` - Qwen 3 235B Instruct 2507
-- `qwen/qwen-3-4b-thinking-2507` - Qwen 3 4B Thinking 2507
-- `qwen/qwen-3-8b` - Qwen 3 8B model
-- `qwen/qwen-3-14b` - Qwen 3 14B model
-- `qwen/qwen-3-32b` - Qwen 3 32B model
-- `qwen/qwen-2.5-coder-3b-instruct` - Qwen 2.5 Coder 3B Instruct
-- `qwen/qwen-2.5-coder-7b-instruct` - Qwen 2.5 Coder 7B Instruct
-- `qwen/qwen-2.5-coder-32b-instruct` - Qwen 2.5 Coder 32B Instruct
-- `qwen/qwq-32b` - Qwen QwQ 32B model
-- `meta/llama-3.3-70b-instruct` - Meta's Llama 3.3 70B model
-- `meta/llama-3.1-8b-instruct` - Meta's Llama 3.1 8B model
-- `meta/llama-4-scout-17b-16e-instruct` - Llama 4 Scout 17B model (Image-Text-to-Text)
-- `deepseek/deepseek-r1-distill-llama-70b` - DeepSeek R1 Distill Llama 70B
-- `deepseek/deepseek-r1-distill-llama-8b` - DeepSeek R1 Distill Llama 8B
-- `deepseek/deepseek-r1-distill-qwen-1.5b` - DeepSeek R1 Distill Qwen 1.5B
-- `deepseek/deepseek-r1-distill-qwen-7b` - DeepSeek R1 Distill Qwen 7B
-- `deepseek/deepseek-r1-distill-qwen-14b` - DeepSeek R1 Distill Qwen 14B
-- `deepseek/deepseek-r1-distill-qwen-32b` - DeepSeek R1 Distill Qwen 32B
-- `mistral/devstral-small-2505` - Mistral's Devstral Small model
-- `mistral/mixtral-8x22b-instruct-v0.1` - Mixtral 8x22B Instruct
+- `Qwen/Qwen3-235B-A22B` - Qwen 3 235B model
+- `Qwen/Qwen3-235B-A22B-Instruct-2507` - Qwen 3 235B Instruct 2507
+- `Qwen/Qwen3-4B-Thinking-2507` - Qwen 3 4B Thinking 2507
+- `Qwen/Qwen3-8B` - Qwen 3 8B model
+- `Qwen/Qwen3-14B` - Qwen 3 14B model
+- `Qwen/Qwen3-32B` - Qwen 3 32B model
+- `Qwen/Qwen2.5-Coder-3B-Instruct` - Qwen 2.5 Coder 3B Instruct
+- `Qwen/Qwen2.5-Coder-7B-Instruct` - Qwen 2.5 Coder 7B Instruct
+- `Qwen/Qwen2.5-Coder-32B-Instruct` - Qwen 2.5 Coder 32B Instruct
+- `Qwen/QwQ-32B` - Qwen QwQ 32B model
+- `meta-llama/Llama-3.3-70B-Instruct` - Meta's Llama 3.3 70B model
+- `meta-llama/Llama-3.1-8B-Instruct` - Meta's Llama 3.1 8B model
+- `meta-llama/Llama-4-Scout-17B-16E-Instruct` - Llama 4 Scout 17B model (Image-Text-to-Text)
+- `deepseek-ai/DeepSeek-R1-Distill-Llama-70B` - DeepSeek R1 Distill Llama 70B
+- `deepseek-ai/DeepSeek-R1-Distill-Llama-8B` - DeepSeek R1 Distill Llama 8B
+- `deepseek-ai/DeepSeek-R1-Distill-Qwen-1.5B` - DeepSeek R1 Distill Qwen 1.5B
+- `deepseek-ai/DeepSeek-R1-Distill-Qwen-7B` - DeepSeek R1 Distill Qwen 7B
+- `deepseek-ai/DeepSeek-R1-Distill-Qwen-14B` - DeepSeek R1 Distill Qwen 14B
+- `deepseek-ai/DeepSeek-R1-Distill-Qwen-32B` - DeepSeek R1 Distill Qwen 32B
+- `mistralai/Devstral-Small-2505` - Mistral's Devstral Small model
+- `mistralai/Mixtral-8x22B-Instruct-v0.1` - Mixtral 8x22B Instruct
 
 **Embedding Models:**
 
@@ -88,10 +88,9 @@ Nscale supports many popular models with competitive pricing:
 
 **Text-to-Image Models:**
 
-- `BlackForestLabs/FLUX.1-schnell` - Flux.1 Schnell image generation model
+- `black-forest-labs/FLUX.1-schnell` - Flux.1 Schnell image generation model
 - `stabilityai/stable-diffusion-xl-base-1.0` - Stable Diffusion XL 1.0
-- `ByteDance/SDXL-Lightning-4step` - SDXL Lightning 4-step
-- `ByteDance/SDXL-Lightning-8step` - SDXL Lightning 8-step
+- `ByteDance/SDXL-Lightning` - SDXL Lightning
 
 ## Pricing & Usage
 
