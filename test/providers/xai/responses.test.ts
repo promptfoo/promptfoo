@@ -1,10 +1,29 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import logger from '../../../src/logger';
 import { XAIResponsesProvider } from '../../../src/providers/xai/responses';
 
 const mockMaybeLoadToolsFromExternalFile = vi.hoisted(() => vi.fn());
 
 const mockFetchWithCache = vi.hoisted(() => vi.fn());
 const mockFetchWithProxy = vi.hoisted(() => vi.fn());
+
+const DEFAULT_TEST_MODEL = 'grok-4.3';
+const createMockResponseData = (model: string = DEFAULT_TEST_MODEL) => ({
+  id: 'resp_123',
+  model,
+  output: [
+    {
+      type: 'message',
+      role: 'assistant',
+      content: [{ type: 'output_text', text: 'hello' }],
+    },
+  ],
+  usage: {
+    input_tokens: 10,
+    output_tokens: 5,
+    total_tokens: 15,
+  },
+});
 
 class TestableXAIResponsesProvider extends XAIResponsesProvider {
   public getResolvedApiKey(): string | undefined {
@@ -51,22 +70,7 @@ describe('XAIResponsesProvider', () => {
     // Default passthrough: return whatever tools array is passed in
     mockMaybeLoadToolsFromExternalFile.mockImplementation((tools: any) => Promise.resolve(tools));
     mockFetchWithCache.mockResolvedValue({
-      data: {
-        id: 'resp_123',
-        model: 'grok-4.3',
-        output: [
-          {
-            type: 'message',
-            role: 'assistant',
-            content: [{ type: 'output_text', text: 'hello' }],
-          },
-        ],
-        usage: {
-          input_tokens: 10,
-          output_tokens: 5,
-          total_tokens: 15,
-        },
-      },
+      data: createMockResponseData(),
       cached: false,
       status: 200,
       statusText: 'OK',
@@ -171,6 +175,58 @@ describe('XAIResponsesProvider', () => {
     expect(provider.getResolvedApiUrl()).toBe('https://eu-west-1.api.x.ai/v1');
   });
 
+  it('rejects unsupported reasoning effort values for Grok 4.5 and its aliases', async () => {
+    for (const modelName of ['grok-4.5', 'grok-4.5-latest', 'grok-build-latest']) {
+      for (const effort of ['none', 'xhigh']) {
+        const provider = new XAIResponsesProvider(modelName, {
+          config: { passthrough: { reasoning: { effort } } },
+        });
+
+        await expect(provider.getRequestBody('hello')).rejects.toThrow(
+          `xAI model ${modelName} does not support reasoning.effort ${JSON.stringify(effort)}`,
+        );
+      }
+    }
+  });
+
+  it('renders templated Grok 4.5 reasoning effort before validation', async () => {
+    const provider = new XAIResponsesProvider('grok-4.5', {
+      config: { reasoning: { effort: '{{effort}}' as any } },
+    });
+
+    const { body } = await provider.getRequestBody('hello', {
+      prompt: { raw: 'hello', label: 'hello' },
+      vars: { effort: 'high' },
+    });
+
+    expect(body.reasoning).toEqual({ effort: 'high' });
+  });
+
+  it('rejects unsupported templated Grok 4.5 reasoning effort after rendering', async () => {
+    const provider = new XAIResponsesProvider('grok-4.5', {
+      config: { passthrough: { reasoning: { effort: '{{effort}}' } } },
+    });
+
+    await expect(
+      provider.getRequestBody('hello', {
+        prompt: { raw: 'hello', label: 'hello' },
+        vars: { effort: 'none' },
+      }),
+    ).rejects.toThrow('xAI model grok-4.5 does not support reasoning.effort "none"');
+  });
+
+  it('preserves broader reasoning effort values for models that support them', async () => {
+    const grok43 = new XAIResponsesProvider('grok-4.3', {
+      config: { reasoning: { effort: 'none' } },
+    });
+    const multiAgent = new XAIResponsesProvider('grok-4.20-multi-agent', {
+      config: { reasoning: { effort: 'xhigh' } },
+    });
+
+    expect((await grok43.getRequestBody('hello')).body.reasoning).toEqual({ effort: 'none' });
+    expect((await multiAgent.getRequestBody('hello')).body.reasoning).toEqual({ effort: 'xhigh' });
+  });
+
   it('honors env overrides for authentication and base URL', () => {
     const provider = new TestableXAIResponsesProvider('grok-4.3', {
       env: {
@@ -216,6 +272,130 @@ describe('XAIResponsesProvider', () => {
     expect(result.cost).toBe(1.25);
   });
 
+  it('honors explicit custom cost overrides when the API also returns cost ticks', async () => {
+    mockFetchWithCache.mockResolvedValueOnce({
+      data: {
+        ...createMockResponseData('grok-4.5'),
+        usage: {
+          input_tokens: 10,
+          output_tokens: 5,
+          total_tokens: 15,
+          cost_in_usd_ticks: 12_500_000_000,
+        },
+      },
+      cached: false,
+      status: 200,
+      statusText: 'OK',
+    });
+
+    const provider = new XAIResponsesProvider('grok-4.5', {
+      config: { apiKey: 'test-key', cost: 0.001 },
+    });
+
+    const result = await provider.callApi('hello');
+
+    expect(result.cost).toBe(0.015);
+  });
+
+  it('reports zero incremental cost for promptfoo-cached responses', async () => {
+    mockFetchWithCache.mockResolvedValueOnce({
+      data: {
+        ...createMockResponseData('grok-4.5'),
+        usage: {
+          input_tokens: 10,
+          output_tokens: 5,
+          total_tokens: 15,
+          cost_in_usd_ticks: 12_500_000_000,
+        },
+      },
+      cached: true,
+      status: 200,
+      statusText: 'OK',
+    });
+
+    const provider = new XAIResponsesProvider('grok-4.5', {
+      config: { apiKey: 'test-key' },
+    });
+
+    const result = await provider.callApi('hello');
+
+    expect(result.cached).toBe(true);
+    expect(result.cost).toBe(0);
+  });
+
+  it('leaves cost unknown when neither usage ticks nor fallback token counts are available', async () => {
+    mockFetchWithCache.mockResolvedValueOnce({
+      data: {
+        ...createMockResponseData('unknown-model'),
+        usage: undefined,
+      },
+      cached: false,
+      status: 200,
+      statusText: 'OK',
+    });
+
+    const provider = new XAIResponsesProvider('unknown-model', {
+      config: { apiKey: 'test-key' },
+    });
+
+    const result = await provider.callApi('hello');
+
+    expect(result.cost).toBeUndefined();
+  });
+
+  it('uses fallback pricing for Grok 4.20 responses', async () => {
+    mockFetchWithCache.mockResolvedValueOnce({
+      data: createMockResponseData('grok-4.20'),
+      cached: false,
+      status: 200,
+      statusText: 'OK',
+    });
+
+    const provider = new XAIResponsesProvider('grok-4.20', {
+      config: { apiKey: 'test-key' },
+    });
+
+    const result = await provider.callApi('hello');
+
+    expect(result.cost).toBeCloseTo(0.000025, 8);
+  });
+
+  it('prefers billed cost ticks over calculated cost when reasoning tokens are present', async () => {
+    mockFetchWithCache.mockResolvedValueOnce({
+      data: {
+        ...createMockResponseData(),
+        id: 'resp_124',
+        output: [
+          {
+            type: 'message',
+            role: 'assistant',
+            content: [{ type: 'output_text', text: 'hello with reasoning' }],
+          },
+        ],
+        usage: {
+          input_tokens: 10,
+          output_tokens: 5,
+          total_tokens: 15,
+          output_tokens_details: {
+            reasoning_tokens: 100,
+          },
+          cost_in_usd_ticks: 12_500_000_000,
+        },
+      },
+      cached: false,
+      status: 200,
+      statusText: 'OK',
+    });
+
+    const provider = new XAIResponsesProvider(DEFAULT_TEST_MODEL, {
+      config: { apiKey: 'test-key' },
+    });
+
+    const result = await provider.callApi('hello');
+
+    expect(result.cost).toBe(1.25);
+  });
+
   it('falls back to calculated xAI pricing when cost ticks are absent', async () => {
     mockFetchWithCache.mockResolvedValueOnce({
       data: {
@@ -248,8 +428,123 @@ describe('XAIResponsesProvider', () => {
 
     const result = await provider.callApi('hello');
 
-    expect(result.cost).toBeCloseTo(0.0000325, 10);
+    // output_tokens (5) already includes the 3 reasoning tokens, so they are
+    // not billed twice: 10 input @ $1.25/M + 5 output @ $2.50/M.
+    expect(result.cost).toBeCloseTo(0.000025, 8);
     expect(result.tokenUsage?.completionDetails?.reasoning).toBe(3);
+  });
+
+  it('applies cache-read pricing when cost ticks are absent', async () => {
+    mockFetchWithCache.mockResolvedValueOnce({
+      data: {
+        id: 'resp_cached',
+        model: 'grok-4.3',
+        output: [
+          {
+            type: 'message',
+            role: 'assistant',
+            content: [{ type: 'output_text', text: 'hello' }],
+          },
+        ],
+        usage: {
+          input_tokens: 10,
+          output_tokens: 5,
+          total_tokens: 15,
+          input_tokens_details: {
+            cached_tokens: 8,
+          },
+        },
+      },
+      cached: false,
+      status: 200,
+      statusText: 'OK',
+    });
+
+    const provider = new XAIResponsesProvider('grok-4.3', {
+      config: { apiKey: 'test-key' },
+    });
+
+    const result = await provider.callApi('hello');
+
+    // 2 uncached input @ $1.25/M + 8 cached input @ $0.20/M + 5 output @ $2.50/M.
+    expect(result.cost).toBeCloseTo(0.0000166, 10);
+    expect(result.tokenUsage?.completionDetails?.cacheReadInputTokens).toBe(8);
+  });
+
+  it('honors explicit cache-read pricing overrides', async () => {
+    mockFetchWithCache.mockResolvedValueOnce({
+      data: {
+        id: 'resp_cached_override',
+        model: 'grok-4.3',
+        output: [
+          {
+            type: 'message',
+            role: 'assistant',
+            content: [{ type: 'output_text', text: 'hello' }],
+          },
+        ],
+        usage: {
+          input_tokens: 10,
+          output_tokens: 5,
+          total_tokens: 15,
+          input_tokens_details: { cached_tokens: 8 },
+        },
+      },
+      cached: false,
+      status: 200,
+      statusText: 'OK',
+    });
+
+    const provider = new XAIResponsesProvider('grok-4.3', {
+      config: {
+        apiKey: 'test-key',
+        inputCost: 3e-6,
+        outputCost: 15e-6,
+        cacheReadCost: 0.75e-6,
+      },
+    });
+
+    const result = await provider.callApi('hello');
+
+    // 2 uncached input @ $3/M + 8 cached input @ $0.75/M + 5 output @ $15/M.
+    expect(result.cost).toBeCloseTo(0.000087, 10);
+  });
+
+  it('keeps fallback xAI pricing when input tokens are zero', async () => {
+    mockFetchWithCache.mockResolvedValueOnce({
+      data: {
+        id: 'resp_zero_input',
+        model: 'grok-4.3',
+        output: [
+          {
+            type: 'message',
+            role: 'assistant',
+            content: [{ type: 'output_text', text: 'hello' }],
+          },
+        ],
+        usage: {
+          input_tokens: 0,
+          output_tokens: 5,
+          total_tokens: 8,
+          output_tokens_details: {
+            reasoning_tokens: 3,
+          },
+        },
+      },
+      cached: false,
+      status: 200,
+      statusText: 'OK',
+    });
+
+    const provider = new XAIResponsesProvider('grok-4.3', {
+      config: { apiKey: 'test-key' },
+    });
+
+    const result = await provider.callApi('hello');
+
+    // 0 input @ $1.25/M + 5 output @ $2.50/M (output_tokens already includes
+    // the 3 reasoning tokens, so reasoning is not added on top).
+    expect(result.cost).toBeCloseTo(0.0000125, 10);
   });
 
   it('parses streamed Responses API events', async () => {
@@ -293,6 +588,7 @@ describe('XAIResponsesProvider', () => {
   });
 
   it('ignores malformed SSE events when later streamed output is valid', async () => {
+    const sensitivePayload = 'not-json-secret-sentinel';
     mockFetchWithProxy.mockResolvedValueOnce({
       status: 200,
       statusText: 'OK',
@@ -300,7 +596,7 @@ describe('XAIResponsesProvider', () => {
         [
           'data: {"type":"response.output_text.delta","delta":"hel"}',
           '',
-          'data: not-json',
+          `data: ${sensitivePayload}`,
           '',
           'data: {"type":"response.output_text.delta","delta":"lo"}',
           '',
@@ -319,6 +615,10 @@ describe('XAIResponsesProvider', () => {
     const result = await provider.callApi('hello');
 
     expect(result.output).toBe('final from completed');
+    expect(logger.debug).toHaveBeenCalledWith('[xAI Responses] Ignoring malformed SSE payload', {
+      dataLength: sensitivePayload.length,
+    });
+    expect(JSON.stringify(vi.mocked(logger.debug).mock.calls)).not.toContain(sensitivePayload);
   });
 
   it('accumulates nested output_text deltas from streamed Responses API events', async () => {
@@ -469,6 +769,30 @@ describe('XAIResponsesProvider', () => {
     const result = await provider.callApi('hello');
 
     expect(result.output).toBe('hello');
+  });
+
+  it('fails closed on a terminal SSE error after partial output', async () => {
+    mockFetchWithProxy.mockResolvedValueOnce({
+      status: 200,
+      statusText: 'OK',
+      body: createSSEStream(
+        [
+          'data: {"type":"response.output_text.delta","delta":"partial answer"}',
+          '',
+          'data: {"type":"error","error":{"code":"server_error","message":"capacity exhausted"}}',
+          '',
+        ].join('\n'),
+      ),
+    });
+    const provider = new XAIResponsesProvider('grok-4.3', {
+      config: { apiKey: 'test-key', stream: true },
+    });
+
+    const result = await provider.callApi('hello');
+
+    expect(result.error).toContain('xAI streaming response error (server_error)');
+    expect(result.error).toContain('capacity exhausted');
+    expect(result.output).toBeUndefined();
   });
 
   it('preserves completed-response annotations for streamed output text', async () => {

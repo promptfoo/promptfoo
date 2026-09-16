@@ -1,9 +1,12 @@
 import { OpenAiResponsesProvider } from '../openai/responses';
 import {
+  buildOpenClawCallContext,
+  buildOpenClawHeaders,
   buildOpenClawModelName,
   buildOpenClawProviderOptions,
   DEFAULT_GATEWAY_HOST,
   DEFAULT_GATEWAY_PORT,
+  normalizeOpenClawAgentId,
   resolveOpenClawBillingModelName,
 } from './shared';
 
@@ -14,6 +17,7 @@ import type {
   ProviderResponse,
 } from '../../types/providers';
 import type { OpenAiCompletionOptions } from '../openai/types';
+import type { OpenClawConfig } from './types';
 
 function inferHiddenCachedInputTokensFromOpenClawUsage(usage: any): number {
   const inputTokens = usage?.input_tokens;
@@ -41,24 +45,28 @@ function inferHiddenCachedInputTokensFromOpenClawUsage(usage: any): number {
  * Requires `gateway.http.endpoints.responses.enabled=true` in OpenClaw config.
  *
  * Usage:
- *   openclaw:responses       - default agent (main)
+ *   openclaw:responses       - configured default agent
  *   openclaw:responses:main  - explicit agent ID
  *   openclaw:responses:X     - custom agent ID
  */
 export class OpenClawResponsesProvider extends OpenAiResponsesProvider {
-  private agentId: string;
+  private agentId: string | undefined;
 
-  constructor(agentId: string, providerOptions: ProviderOptions = {}) {
-    super(buildOpenClawModelName(agentId), buildOpenClawProviderOptions(agentId, providerOptions));
-    this.agentId = agentId;
+  constructor(agentId: string | undefined, providerOptions: ProviderOptions = {}) {
+    const normalizedAgentId = normalizeOpenClawAgentId(agentId);
+    super(
+      buildOpenClawModelName(normalizedAgentId),
+      buildOpenClawProviderOptions(normalizedAgentId, providerOptions),
+    );
+    this.agentId = normalizedAgentId;
   }
 
   id(): string {
-    return `openclaw:responses:${this.agentId}`;
+    return this.agentId ? `openclaw:responses:${this.agentId}` : 'openclaw:responses';
   }
 
   toString(): string {
-    return `[OpenClaw Responses Provider ${this.agentId}]`;
+    return `[OpenClaw Responses Provider ${this.agentId ?? 'default'}]`;
   }
 
   getApiUrlDefault(): string {
@@ -130,11 +138,25 @@ export class OpenClawResponsesProvider extends OpenAiResponsesProvider {
     context?: CallApiContextParams,
     callApiOptions?: CallApiOptionsParams,
   ) {
-    const result = await super.getOpenAiBody(prompt, context, callApiOptions);
+    const result = await super.getOpenAiBody(
+      prompt,
+      buildOpenClawCallContext(context),
+      callApiOptions,
+    );
     // OpenClaw's Responses endpoint doesn't support the `text` format parameter
     if ('text' in result.body) {
       delete (result.body as Record<string, unknown>).text;
     }
-    return result;
+    return {
+      ...result,
+      body: {
+        ...result.body,
+        model: this.modelName,
+      },
+      config: {
+        ...result.config,
+        headers: buildOpenClawHeaders(this.agentId, result.config as OpenClawConfig),
+      },
+    };
   }
 }
