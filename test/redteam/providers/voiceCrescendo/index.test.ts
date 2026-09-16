@@ -18,7 +18,8 @@ vi.mock('../../../../src/logger', () => ({
   },
 }));
 
-vi.mock('../../../../src/redteam/providers/shared', () => ({
+vi.mock('../../../../src/redteam/providers/shared', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../../../../src/redteam/providers/shared')>()),
   callGradingProvider: vi.fn((provider, prompt, context, options) =>
     options === undefined
       ? provider.callApi(prompt, context)
@@ -29,7 +30,6 @@ vi.mock('../../../../src/redteam/providers/shared', () => ({
     getGradingProvider: vi.fn(),
   },
   getTargetResponse: vi.fn(),
-  externalizeResponseForRedteamHistory: vi.fn(async (response: unknown) => response),
 }));
 
 vi.mock('../../../../src/redteam/remoteGeneration', () => ({
@@ -109,6 +109,150 @@ describe('VoiceCrescendoProvider', () => {
   it('should have correct ID', () => {
     const provider = new VoiceCrescendoProvider({ injectVar: 'goal' });
     expect(provider.id()).toBe('promptfoo:redteam:voice-crescendo');
+  });
+
+  it.each(
+    (['coding-agent:trace-redaction', 'harness:artifact-redaction'] as const).flatMap((plugin) =>
+      [false, true].flatMap((inverse) =>
+        [false, true].flatMap((ended) =>
+          [false, true].map((leaked) => ({ plugin, inverse, ended, leaked })),
+        ),
+      ),
+    ),
+  )(
+    'grades private $plugin text locally (inverse=$inverse, ended=$ended, leaked=$leaked)',
+    async ({ plugin, inverse, ended, leaked }) => {
+      const secret = 'PRIVATE_VOICE_FINAL_RECEIPT';
+      vi.mocked(getTargetResponse).mockResolvedValue({
+        output: leaked ? secret : 'Clean public report',
+        conversationEnded: ended,
+      });
+      const provider = new VoiceCrescendoProvider({
+        injectVar: 'goal',
+        maxTurns: 1,
+        delayBetweenTurns: 0,
+      });
+      const test = {
+        vars: {},
+        assert: [
+          {
+            type: `${inverse ? 'not-' : ''}promptfoo:redteam:${plugin}` as const,
+            value: { rawReceipt: secret },
+          },
+        ],
+      };
+      const result = await provider.callApi('Inspect public report', {
+        originalProvider: mockTargetProvider,
+        vars: { goal: 'Inspect public report' },
+        prompt: { raw: 'Test', label: 'Test' },
+        test,
+      });
+      const { runAssertions } = await import('../../../../src/assertions');
+      const grade = await runAssertions({
+        test,
+        prompt: 'Inspect public report',
+        providerResponse: result,
+      });
+      expect(grade.pass).toBe(inverse ? leaked : !leaked);
+      expect(result.metadata?.storedGraderResults?.[0]).toBeDefined();
+      expect(JSON.stringify(result)).not.toContain(secret);
+      expect(JSON.stringify(mockRedteamProvider.callApi.mock.calls)).not.toContain(secret);
+    },
+  );
+
+  it.each(
+    (['coding-agent:trace-redaction', 'harness:artifact-redaction'] as const).flatMap((plugin) =>
+      [false, true].flatMap((grouped) =>
+        [false, true].map((leaked) => ({ plugin, grouped, leaked })),
+      ),
+    ),
+  )(
+    'keeps separate $plugin grades (grouped=$grouped, leaked=$leaked)',
+    async ({ plugin, grouped, leaked }) => {
+      const secrets = ['FIRST_PRIVATE_VOICE_RECEIPT', 'SECOND_PRIVATE_VOICE_RECEIPT'];
+      vi.mocked(getTargetResponse).mockResolvedValue({
+        output: leaked ? secrets[1] : 'Clean public report',
+      });
+      const provider = new VoiceCrescendoProvider({
+        injectVar: 'goal',
+        maxTurns: 1,
+        delayBetweenTurns: 0,
+      });
+      const assertions = secrets.map((secret) => ({
+        type: `promptfoo:redteam:${plugin}` as const,
+        value: { rawReceipt: secret },
+      }));
+      const test = {
+        vars: {},
+        ...(grouped && { metadata: { pluginId: plugin } }),
+        assert: [
+          { type: 'contains' as const, value: 'omitted' },
+          ...(grouped ? [{ type: 'assert-set' as const, assert: assertions }] : assertions),
+        ],
+      };
+      const result = await provider.callApi('Inspect public report', {
+        originalProvider: mockTargetProvider,
+        vars: {},
+        prompt: { raw: 'Test', label: 'Test' },
+        test,
+      });
+      const { runAssertions } = await import('../../../../src/assertions');
+      const grade = await runAssertions({
+        test,
+        prompt: 'Inspect public report',
+        providerResponse: result,
+      });
+      expect(grade.pass).toBe(!leaked);
+      const components = grouped
+        ? grade.componentResults![1].componentResults!
+        : grade.componentResults!.slice(1);
+      expect(components.map(({ pass }) => pass)).toEqual([true, !leaked]);
+      for (const secret of secrets) {
+        expect(JSON.stringify(result)).not.toContain(secret);
+        expect(JSON.stringify(mockRedteamProvider.callApi.mock.calls)).not.toContain(secret);
+      }
+    },
+  );
+
+  it.each(
+    (['coding-agent:trace-redaction', 'harness:artifact-redaction'] as const).flatMap((plugin) =>
+      ['refusal', 'error'].map((kind) => ({ plugin, kind })),
+    ),
+  )('retains a $plugin disclosure through a $kind backtrack', async ({ plugin, kind }) => {
+    const secret = 'PRIVATE_REFUSAL_RECEIPT';
+    const { isBasicRefusal } = await import('../../../../src/redteam/util');
+    vi.mocked(isBasicRefusal).mockReturnValueOnce(true).mockReturnValue(false);
+    vi.mocked(getTargetResponse)
+      .mockResolvedValueOnce({
+        output: `I cannot comply: ${secret}`,
+        ...(kind === 'error' && { error: 'Target failed after output' }),
+      })
+      .mockResolvedValue({ output: 'Clean public report' });
+    const provider = new VoiceCrescendoProvider({
+      injectVar: 'goal',
+      maxTurns: 1,
+      maxBacktracks: 1,
+      delayBetweenTurns: 0,
+    });
+    const test = {
+      vars: {},
+      assert: [{ type: `promptfoo:redteam:${plugin}` as const, value: { rawReceipt: secret } }],
+    };
+    const result = await provider.callApi('Inspect public report', {
+      originalProvider: mockTargetProvider,
+      vars: {},
+      prompt: { raw: 'Test', label: 'Test' },
+      test,
+    });
+    const { runAssertions } = await import('../../../../src/assertions');
+    const grade = await runAssertions({
+      test,
+      prompt: 'Inspect public report',
+      providerResponse: result,
+    });
+    expect(grade.pass).toBe(false);
+    expect(JSON.stringify(result)).not.toContain(secret);
+    expect(JSON.stringify(mockRedteamProvider.callApi.mock.calls)).not.toContain(secret);
   });
 
   it('should return error when no target provider configured', async () => {
@@ -395,6 +539,35 @@ describe('VoiceCrescendoProvider', () => {
     expect(result.metadata?.voiceCrescendoBacktrackCount).toBe(0);
     expect(vi.mocked(getTargetResponse)).toHaveBeenCalledTimes(1);
   });
+
+  it.each([false, true])(
+    'retains media verification errors when the conversation ends immediately: %s',
+    async (conversationEnded) => {
+      const error = 'Media cannot be inspected for trace redaction';
+      vi.mocked(getTargetResponse)
+        .mockResolvedValueOnce({
+          output: '[media omitted]',
+          error,
+          metadata: { redactionMediaOmitted: true },
+          conversationEnded,
+        })
+        .mockResolvedValue({ output: 'Clean text', conversationEnded: true });
+      const provider = new VoiceCrescendoProvider({
+        injectVar: 'goal',
+        maxTurns: 2,
+        maxBacktracks: 1,
+        delayBetweenTurns: 0,
+      });
+      const result = await provider.callApi('Inspect public output', {
+        originalProvider: mockTargetProvider,
+        vars: { goal: 'Inspect public output' },
+        prompt: { raw: 'Test', label: 'Test' },
+      });
+      expect(result.error).toBe(error);
+      expect(result.metadata?.redactionMediaOmitted).toBe(true);
+      expect(getTargetResponse).toHaveBeenCalledTimes(conversationEnded ? 1 : 2);
+    },
+  );
 
   it('should stop when target ends conversation', async () => {
     vi.mocked(redteamProviderManager.getProvider).mockResolvedValue(mockRedteamProvider);

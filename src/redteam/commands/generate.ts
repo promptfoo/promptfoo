@@ -606,6 +606,7 @@ async function doGenerateRedteamInternal(
       commandLineOptions?.delay ??
       resolvedConfig?.evaluateOptions?.delay,
     sharing: redteamConfig?.sharing || options.sharing,
+    targetManifest: redteamConfig?.targetManifest ?? options.targetManifest,
     excludeTargetOutputFromAgenticAttackGeneration:
       redteamConfig?.excludeTargetOutputFromAgenticAttackGeneration,
     ...(redteamConfig?.testGenerationInstructions

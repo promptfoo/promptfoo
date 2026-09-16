@@ -1433,6 +1433,65 @@ describe('RedteamGraderBase', () => {
     );
   });
 
+  it.each(
+    ['coding-agent:trace-redaction', 'harness:artifact-redaction'].flatMap((pluginId) =>
+      ['primary', 'secondary', 'set'].map((mode) => ({ pluginId, mode })),
+    ),
+  )('excludes private model-grading inputs for $pluginId ($mode)', async ({ pluginId, mode }) => {
+    grader.rubric =
+      'Public {{value.goal}} {{value.rawReceipt}} {{value.rawReceiptPath}} <UserQuery>{{prompt}}</UserQuery>';
+    grader.id =
+      mode === 'primary' ? `promptfoo:redteam:${pluginId}` : 'promptfoo:redteam:contracts';
+    vi.mocked(matchesLlmRubric).mockResolvedValue({
+      pass: true,
+      score: 1,
+      reason: 'Public text',
+    });
+    const images = [{ data: 'data:image/png;base64,PRIVATE_SCREENSHOT', mimeType: 'image/png' }];
+    await grader.getResult(
+      'Inspect PRIVATE_RENDERED_PROMPT',
+      'Public report',
+      {
+        ...mockTest,
+        assert:
+          mode === 'primary'
+            ? []
+            : mode === 'secondary'
+              ? [{ type: `promptfoo:redteam:${pluginId}` }]
+              : [{ type: 'assert-set', assert: [{ type: `promptfoo:redteam:${pluginId}` }] }],
+      },
+      undefined,
+      {
+        goal: 'report',
+        rawReceipt: 'PRIVATE_SIBLING_RECEIPT',
+        rawReceiptPath: '/private/receipt.txt',
+      },
+      undefined,
+      true,
+      { imageOutputs: images, providerResponse: { output: 'Public report', images } },
+    );
+    expect(JSON.stringify(vi.mocked(matchesLlmRubric).mock.calls)).not.toContain(
+      'PRIVATE_RENDERED_PROMPT',
+    );
+    expect(matchesLlmRubric).toHaveBeenCalledWith(
+      expect.any(String),
+      'Public report',
+      expect.any(Object),
+    );
+    expect(JSON.stringify(vi.mocked(matchesLlmRubric).mock.calls)).not.toContain(
+      'PRIVATE_SCREENSHOT',
+    );
+    expect(JSON.stringify(vi.mocked(matchesLlmRubric).mock.calls)).not.toContain(
+      'PRIVATE_SIBLING_RECEIPT',
+    );
+    expect(JSON.stringify(vi.mocked(matchesLlmRubric).mock.calls)).not.toContain(
+      '/private/receipt.txt',
+    );
+    expect(vi.mocked(matchesLlmRubric).mock.calls[0][0]).toContain(
+      'Public report [REDACTED] [REDACTED]',
+    );
+  });
+
   it('should prefer remote grading when test options only contain a target provider', async () => {
     cliState.config = {
       redteam: {},
@@ -2491,6 +2550,30 @@ describe('RedteamGraderBase', () => {
       );
     });
 
+    it('should default traceSummary to an empty string when gradingContext is omitted', async () => {
+      const mockResult: GradingResult = {
+        pass: true,
+        score: 1,
+        reason: 'Test passed',
+      };
+      vi.mocked(matchesLlmRubric).mockResolvedValue(mockResult);
+
+      const TestGraderWithOptionalTrace = class extends RedteamGraderBase {
+        id = 'test-grader-optional-trace';
+        rubric = 'Test rubric. Trace summary: "{{ traceSummary }}".';
+      };
+
+      const traceGrader = new TestGraderWithOptionalTrace();
+
+      await traceGrader.getResult('test prompt', 'test output', mockTest, undefined, undefined);
+
+      expect(matchesLlmRubric).toHaveBeenCalledWith(
+        expect.stringContaining('Trace summary: ""'),
+        'test output',
+        expect.any(Object),
+      );
+    });
+
     it('should pass gradingContext traceContext to rubric vars', async () => {
       const mockResult: GradingResult = {
         pass: true,
@@ -2650,7 +2733,7 @@ describe('RedteamGraderBase', () => {
       const InternalContextGrader = class extends RedteamGraderBase {
         id = 'test-grader-internal-context';
         rubric =
-          'Image outputs: {% if imageOutputs %}{{ imageOutputs }}{% endif %} Provider response: {% if providerResponse %}{{ providerResponse }}{% endif %} Raw: {% if providerResponse %}{{ providerResponse.raw }}{% endif %}';
+          'Image outputs: {% if imageOutputs %}{{ imageOutputs }}{% endif %} Provider response: {% if providerResponse %}{{ providerResponse }}{% endif %} Raw: {% if providerResponse %}{{ providerResponse.raw }}{% endif %} Trace: {% if traceData %}{{ traceData | dump }}{% endif %}';
       };
 
       const customPropsGrader = new InternalContextGrader();
@@ -2664,6 +2747,19 @@ describe('RedteamGraderBase', () => {
         undefined,
         undefined,
         {
+          traceData: {
+            traceId: 'trace',
+            evaluationId: 'eval',
+            testCaseId: 'test',
+            spans: [
+              {
+                spanId: 'span',
+                name: 'tool execution',
+                startTime: 0,
+                attributes: { secret: 'synthetic-raw-trace-receipt' },
+              },
+            ],
+          },
           imageOutputs: [{ data: 'data:image/png;base64,abc123', mimeType: 'image/png' }],
           providerResponse: {
             output: 'test output',
@@ -2677,6 +2773,9 @@ describe('RedteamGraderBase', () => {
       expect(rubricCall).not.toContain('abc123');
       expect(rubricCall).not.toContain('raw provider internals');
       expect(rubricCall).not.toContain('metadata should not be exposed');
+      expect(JSON.stringify((matchesLlmRubric as Mock).mock.calls[0])).not.toContain(
+        'synthetic-raw-trace-receipt',
+      );
     });
 
     it('should work when gradingContext is undefined', async () => {

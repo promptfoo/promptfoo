@@ -37,10 +37,19 @@ import {
   type TraceData,
   type VarValue,
 } from '../types/index';
+import { processFileReference } from '../util/file';
 import { isJavascriptFile } from '../util/fileExtensions';
 import invariant from '../util/invariant';
+import { sanitizeCodingAgentVerifierInputs } from '../util/sanitizer';
 import { getNunjucksEngine } from '../util/templates';
 import { sleep } from '../util/time';
+import {
+  getProtectedAssertionValue,
+  REDACTED_PROMPT,
+  requiresTraceRedaction,
+  sanitizeRedactionResult,
+  TRACE_REDACTION_ASSERTIONS,
+} from '../util/traceRedaction';
 import { transform } from '../util/transform';
 import { loadYaml } from '../util/yamlLoad';
 import { handleAgentRubric } from './agentRubric';
@@ -100,7 +109,7 @@ import {
   handleTrajectoryToolSequence,
   handleTrajectoryToolUsed,
 } from './trajectory';
-import { coerceString, getFinalTest, loadFromJavaScriptFile, processFileReference } from './utils';
+import { coerceString, getFinalTest, loadFromJavaScriptFile } from './utils';
 import { handleWebhook } from './webhook';
 import { handleWordCount } from './wordCount';
 import { handleIsXml } from './xml';
@@ -167,7 +176,11 @@ function assertionMayNeedTraceContext(assertion: AssertionOrSet): boolean {
     return assertion.assert.some(assertionMayNeedTraceContext);
   }
 
-  if (assertion.type.startsWith('promptfoo:redteam:coding-agent:')) {
+  const baseType = getAssertionBaseType(assertion);
+  if (
+    baseType.startsWith('promptfoo:redteam:coding-agent:') ||
+    baseType.startsWith('promptfoo:redteam:harness:')
+  ) {
     return true;
   }
 
@@ -428,6 +441,23 @@ async function runAssertionInternal({
   traceId?: string;
   traceData?: TraceData | null;
 }): Promise<GradingResult> {
+  if (
+    requiresTraceRedaction(test.assert) &&
+    !TRACE_REDACTION_ASSERTIONS.has(getAssertionBaseType(assertion))
+  ) {
+    prompt = prompt === undefined ? undefined : REDACTED_PROMPT;
+    providerResponse = sanitizeRedactionResult({
+      response: providerResponse,
+      testCase: test,
+    }).response;
+    test = sanitizeCodingAgentVerifierInputs(
+      { ...test, vars: vars || test.vars },
+      { preservePaths: false },
+    );
+    vars = test.vars;
+    traceId = undefined;
+    traceData = null;
+  }
   // Use resolved vars if provided, otherwise fall back to test.vars
   const resolvedVars = vars || test.vars || {};
 
@@ -475,7 +505,7 @@ async function runAssertionInternal({
 
   // Render assertion values
   type ValueFromScriptType = string | boolean | number | GradingResult | object | undefined;
-  let renderedValue = assertion.value;
+  let renderedValue = getProtectedAssertionValue(assertion);
   let valueFromScript: ValueFromScriptType;
   if (typeof renderedValue === 'string') {
     if (renderedValue.startsWith('file://')) {

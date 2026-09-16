@@ -1,7 +1,11 @@
 import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 import logger from '../../src/logger';
 import { runDbMigrations } from '../../src/migrate';
-import EvalResult, { sanitizeProvider } from '../../src/models/evalResult';
+import EvalResult, {
+  sanitizeProvider,
+  sanitizeResultForJsonlArtifact,
+} from '../../src/models/evalResult';
+import { processString } from '../../src/prompts/processors/string';
 import { hashPrompt } from '../../src/prompts/utils';
 import { WebSocketProvider } from '../../src/providers/websocket';
 import {
@@ -18,11 +22,678 @@ import {
   setCachedStandaloneEvals,
 } from '../../src/util/standaloneEvalCache';
 import { createEvaluateResult } from '../factories/eval';
-import { createMockProvider, createProviderResponse } from '../factories/provider';
+import {
+  createMockProvider,
+  createProviderResponse,
+  createRequiredTokenUsage,
+} from '../factories/provider';
 import { createAtomicTestCase, createPrompt } from '../factories/testSuite';
 import { mockProcessEnv } from '../util/utils';
 
 describe('EvalResult', () => {
+  it.each([undefined, 42, { text: 'PRIVATE_MALFORMED_LABEL' }])(
+    'omits malformed labels from legacy privacy prompts: %j',
+    (label) => {
+      const row = createEvaluateResult({
+        ...mockEvaluateResult,
+        prompt: { raw: 'Private prompt', label: label as unknown as string },
+        testCase: { assert: [{ type: 'promptfoo:redteam:harness:artifact-redaction' }] },
+      });
+      const projected = sanitizeResultForJsonlArtifact(row);
+      expect(projected.prompt.label).toContain('Prompt omitted');
+      expect(JSON.stringify(projected.prompt)).not.toContain('PRIVATE_MALFORMED_LABEL');
+      expect(row.prompt.label).toBe(label);
+    },
+  );
+
+  it.each(
+    (['coding-agent:trace-redaction', 'harness:artifact-redaction'] as const).flatMap((pluginId) =>
+      [false, true].map((wrapped) => ({ pluginId, wrapped })),
+    ),
+  )(
+    'omits mirrored privacy prompt labels for $pluginId with wrapped=$wrapped',
+    async ({ pluginId, wrapped }) => {
+      const raw = 'Inspect PRIVATE_PROMPT_LABEL_RECEIPT';
+      const [prompt] = processString({ raw });
+      if (wrapped) {
+        prompt.label = `Prompt: ${raw}`;
+      }
+      prompt.display = `Legacy: ${raw}`;
+      const row = createEvaluateResult({
+        ...mockEvaluateResult,
+        prompt,
+        testCase: { assert: [{ type: `promptfoo:redteam:${pluginId}` as const }] },
+        response: { output: 'Public report' },
+      });
+      const saved = await EvalResult.createFromEvaluateResult('private-label-' + pluginId, row);
+      const [bulk] = await EvalResult.createManyFromEvaluateResult(
+        [row],
+        'private-label-bulk-' + pluginId,
+      );
+      for (const result of [
+        sanitizeResultForJsonlArtifact(row),
+        saved.toEvaluateResult(),
+        bulk.toEvaluateResult(),
+      ]) {
+        expect(JSON.stringify(result.prompt)).not.toContain('PRIVATE_PROMPT_LABEL_RECEIPT');
+        expect(result.prompt.label).toContain('Prompt omitted');
+      }
+      expect(prompt.label).toContain(raw);
+      expect(sanitizeResultForJsonlArtifact({ ...row, testCase: { assert: [] } }).prompt).toEqual(
+        prompt,
+      );
+    },
+  );
+
+  it.each(
+    (['coding-agent:trace-redaction', 'harness:artifact-redaction'] as const).flatMap((pluginId) =>
+      [false, true].map((hasResponse) => ({ pluginId, hasResponse })),
+    ),
+  )(
+    'omits rendered privacy prompts for $pluginId with response=$hasResponse',
+    async ({ pluginId, hasResponse }) => {
+      const secret = 'PRIVATE_RENDERED_PROMPT_RECEIPT';
+      const row = createEvaluateResult({
+        ...mockEvaluateResult,
+        prompt: {
+          raw: `Inspect ${secret}`,
+          label: 'Public prompt',
+          config: { rawReceipt: secret },
+        },
+        testCase: {
+          assert: [
+            { type: 'assert-set', assert: [{ type: `promptfoo:redteam:${pluginId}` as const }] },
+          ],
+          vars: { rawReceipt: secret },
+        },
+        vars: { rawReceipt: secret },
+        response: hasResponse ? { output: 'Clean report' } : undefined,
+      });
+      const saved = await EvalResult.createFromEvaluateResult('private-prompt-' + pluginId, row);
+      const [bulk] = await EvalResult.createManyFromEvaluateResult(
+        [row],
+        'private-prompt-bulk-' + pluginId,
+      );
+      for (const result of [
+        sanitizeResultForJsonlArtifact(row),
+        saved.toEvaluateResult(),
+        bulk.toEvaluateResult(),
+      ]) {
+        expect(JSON.stringify(result)).not.toContain(secret);
+        expect(result.prompt.raw).toContain('Prompt omitted');
+        expect(result.prompt.label).toBe('Public prompt');
+        expect(result.promptIdx).toBe(row.promptIdx);
+      }
+      const legacy = new EvalResult({
+        ...saved,
+        prompt: row.prompt,
+        response: saved.response ?? null,
+      });
+      expect(JSON.stringify(legacy.toEvaluateResult())).not.toContain(secret);
+      expect(row.prompt.raw).toContain(secret);
+      expect(sanitizeResultForJsonlArtifact({ ...row, testCase: { assert: [] } }).prompt.raw).toBe(
+        row.prompt.raw,
+      );
+    },
+  );
+
+  it.each([undefined, 'ordinary-plugin'])(
+    'redacts restored metadata when privacy comes from assertions and pluginId is %s',
+    async (pluginId) => {
+      const secret = 'PRIVATE_RESTORED_METADATA';
+      const metadata = { pluginId, pluginConfig: { rawReceipt: secret }, goal: 'Public goal' };
+      const row = createEvaluateResult({
+        ...mockEvaluateResult,
+        testCase: {
+          assert: [
+            {
+              type: 'assert-set',
+              assert: [{ type: 'promptfoo:redteam:harness:artifact-redaction' }],
+            },
+          ],
+          metadata: metadata as AtomicTestCase['metadata'],
+        },
+        metadata: { pluginConfig: secret },
+        response: { output: 'Clean report', metadata: { pluginConfig: secret } },
+        gradingResult: {
+          pass: false,
+          score: 0,
+          reason: 'Sensitive value found',
+          componentResults: [{ pass: false, score: 0, reason: 'Sensitive value found', metadata }],
+        },
+      });
+      const saved = await EvalResult.createFromEvaluateResult('private-restored-metadata', row);
+      const [bulk] = await EvalResult.createManyFromEvaluateResult(
+        [row],
+        'private-restored-metadata-bulk',
+      );
+      for (const result of [
+        sanitizeResultForJsonlArtifact(row),
+        saved.toEvaluateResult(),
+        bulk.toEvaluateResult(),
+      ]) {
+        expect(JSON.stringify(result)).not.toContain(secret);
+        expect(result.metadata?.pluginConfig).toMatchObject({ rawReceipt: '[REDACTED]' });
+        expect(result.testCase.metadata?.goal).toBe('Public goal');
+      }
+      expect(row.testCase.metadata?.pluginConfig).toEqual({ rawReceipt: secret });
+    },
+  );
+
+  it.each(['coding-agent:trace-redaction', 'harness:artifact-redaction'] as const)(
+    'retains test-owned metadata after removing %s provider echoes',
+    async (pluginId) => {
+      const secret = 'PRIVATE_METADATA_ECHO';
+      const metadata = {
+        pluginId,
+        strategyId: 'basic',
+        goal: 'Inspect a public report',
+        pluginConfig: { rawReceipt: secret },
+      };
+      const echoes = Object.fromEntries(Object.keys(metadata).map((key) => [key, secret]));
+      const row = createEvaluateResult({
+        ...mockEvaluateResult,
+        testCase: {
+          assert: [{ type: `promptfoo:redteam:${pluginId}` }],
+          metadata: metadata as AtomicTestCase['metadata'],
+        },
+        metadata: { ...echoes, unrelated: 'retained' },
+        response: { output: 'Clean report', metadata: echoes },
+      });
+      const saved = await EvalResult.createFromEvaluateResult('metadata-echo-' + pluginId, row);
+      const [bulk] = await EvalResult.createManyFromEvaluateResult(
+        [row],
+        'metadata-echo-bulk-' + pluginId,
+      );
+      for (const result of [
+        sanitizeResultForJsonlArtifact(row),
+        saved.toEvaluateResult(),
+        bulk.toEvaluateResult(),
+      ]) {
+        expect(result.metadata).toMatchObject({
+          pluginId,
+          strategyId: 'basic',
+          goal: metadata.goal,
+          unrelated: 'retained',
+        });
+        expect(JSON.stringify(result)).not.toContain(secret);
+      }
+    },
+  );
+
+  it.each(['coding-agent:trace-redaction', 'harness:artifact-redaction'] as const)(
+    'omits numeric provider receipts from public %s accounting',
+    async (pluginId) => {
+      const secret = '1234567890123456';
+      const accounting = {
+        tokenUsage: {
+          prompt: Number(secret),
+          completionDetails: { reasoning: Number(secret) },
+          incurredTokenUsage: { prompt: Number(secret) },
+        },
+        cost: Number(secret),
+        incurredCost: Number(secret),
+        latencyMs: Number(secret),
+      };
+      const row = createEvaluateResult({
+        ...mockEvaluateResult,
+        ...accounting,
+        tokenUsage: createRequiredTokenUsage(accounting.tokenUsage),
+        response: { output: 'Clean report', ...accounting },
+        testCase: {
+          assert: [{ type: `promptfoo:redteam:${pluginId}`, value: { rawReceipt: secret } }],
+        },
+      });
+      const artifact = sanitizeResultForJsonlArtifact(row);
+      const saved = await EvalResult.createFromEvaluateResult('numeric-receipt-' + pluginId, row);
+      const [bulk] = await EvalResult.createManyFromEvaluateResult(
+        [row],
+        'numeric-bulk-' + pluginId,
+      );
+      for (const value of [artifact, saved.toEvaluateResult(), bulk.toEvaluateResult()]) {
+        expect(JSON.stringify(value)).not.toContain(secret);
+      }
+      expect(row.response?.tokenUsage?.prompt).toBe(Number(secret));
+    },
+  );
+
+  it.each(
+    ['coding-agent:trace-redaction', 'harness:artifact-redaction'].flatMap((pluginId) =>
+      [false, true].map((hasResponse) => [pluginId, hasResponse] as const),
+    ),
+  )('omits private errors for %s with response=%s', async (pluginId, hasResponse) => {
+    const secret = 'PRIVATE_ERROR_RECEIPT_8964';
+    const row = createEvaluateResult({
+      ...mockEvaluateResult,
+      testCase: { assert: [{ type: `promptfoo:redteam:${pluginId}` as const }] },
+      error: `Request failed: ${secret}`,
+      failureReason: ResultFailureReason.ERROR,
+      success: false,
+      metadata: { errorContext: { statusText: secret, responseSnippet: secret } },
+      response: hasResponse ? { error: secret, metadata: { diagnostic: secret } } : undefined,
+    });
+    if (!hasResponse) {
+      delete row.response;
+    }
+    const artifact = sanitizeResultForJsonlArtifact(row);
+    const saved = await EvalResult.createFromEvaluateResult('private-error-' + pluginId, row);
+    const [bulk] = await EvalResult.createManyFromEvaluateResult(
+      [row],
+      'private-error-bulk-' + pluginId,
+    );
+    for (const value of [artifact, saved.toEvaluateResult(), bulk.toEvaluateResult()]) {
+      expect(JSON.stringify(value)).not.toContain(secret);
+      expect(value.failureReason).toBe(ResultFailureReason.ERROR);
+      expect(value.success).toBe(false);
+      expect(value.error).toContain('Error details omitted');
+    }
+    expect(row.error).toContain(secret);
+  });
+
+  it.each(
+    [
+      'coding-agent:trace-redaction',
+      'harness:artifact-redaction',
+      'coding-agent:mcp-resource-injection',
+      'coding-agent:connector-parameter-exfil',
+    ].flatMap((pluginId) =>
+      ['metadata', 'direct', 'nested'].map((source) => [pluginId, source] as const),
+    ),
+  )(
+    'redacts verifier inputs in public %s result copies with %s ownership',
+    async (pluginId, source) => {
+      const secret = 'protected fixture receipt';
+      const value = {
+        rawReceipt: secret,
+        mcpResource: { sourceOnlyValue: secret, sourceOnlyValues: [secret] },
+        connectorProtectedValue: secret,
+        connectorProtectedValues: [secret],
+        protectedConnectorValue: secret,
+        protectedConnectorValues: [secret],
+        connectorParameterExfil: { protectedValue: secret, protectedValues: [secret] },
+        sensitiveValues: [secret],
+        protectedFiles: [{ path: 'protected.txt', expectedContent: secret }],
+        rawReceiptPath: 'fixtures/receipt.txt',
+      };
+      const row = createEvaluateResult({
+        ...mockEvaluateResult,
+        testCase: {
+          assert:
+            source === 'nested'
+              ? [{ type: 'assert-set', assert: [{ type: `promptfoo:redteam:${pluginId}`, value }] }]
+              : [{ type: `promptfoo:redteam:${pluginId}`, value }],
+          ...(source === 'metadata' && {
+            metadata: { pluginId, pluginConfig: value } as AtomicTestCase['metadata'],
+          }),
+          vars: { ...value, publicValue: 'original' },
+        },
+        vars: { ...value, publicValue: 'streamed' },
+        metadata: { pluginId, pluginConfig: value },
+        gradingResult: {
+          pass: true,
+          score: 1,
+          reason: 'ok',
+          componentResults: [
+            {
+              pass: true,
+              score: 1,
+              reason: 'ok',
+              metadata: { pluginId, pluginConfig: value },
+            },
+          ],
+        },
+      });
+      const artifact = sanitizeResultForJsonlArtifact(row);
+      expect(JSON.stringify(artifact)).not.toContain(secret);
+      expect(JSON.stringify(artifact)).toContain('fixtures/receipt.txt');
+      expect(artifact.vars?.publicValue).toBe('streamed');
+      const saved = await EvalResult.createFromEvaluateResult('verifier-result-' + pluginId, row);
+      const [bulk] = await EvalResult.createManyFromEvaluateResult(
+        [row],
+        'verifier-bulk-' + pluginId,
+      );
+      for (const result of [saved, bulk]) {
+        const persisted = await EvalResult.findById(result.id);
+        expect(JSON.stringify(persisted?.toEvaluateResult())).not.toContain(secret);
+        expect(JSON.stringify(persisted?.gradingResult)).toContain('fixtures/receipt.txt');
+      }
+      const legacy = new EvalResult({
+        ...saved,
+        testCase: row.testCase,
+        response: saved.response ?? null,
+      });
+      expect(JSON.stringify(legacy.toEvaluateResult())).not.toContain(secret);
+      expect(legacy.toEvaluateResult().vars?.publicValue).toBe('original');
+      expect(JSON.stringify(row)).toContain(secret);
+    },
+  );
+
+  it.each(
+    ['coding-agent:trace-redaction', 'harness:artifact-redaction'].flatMap((pluginId) =>
+      [false, true].map((hasResponse) => [pluginId, hasResponse] as const),
+    ),
+  )(
+    'omits grader prompts and private verifier paths for %s with response=%s',
+    async (pluginId, hasResponse) => {
+      const secret = 'PRIVATE_GRADER_PROMPT_RECEIPT';
+      const safeEvidence = {
+        failureKind: 'redacted-artifact-sensitive-value',
+        artifactByteLength: 42,
+        redactedArtifactByteLength: 42,
+        redactedArtifactSha256: 'a'.repeat(64),
+        redactionReceiptByteLength: 12,
+        redactionReceiptSha256: 'b'.repeat(64),
+      };
+      const grade = {
+        pass: true,
+        score: 1,
+        reason: 'Public report checked.',
+        metadata: {
+          renderedGradingPrompt: `Inspect the output: ${secret}`,
+          cachedResponse: false,
+          verifierEvidence: {
+            ...safeEvidence,
+            artifactPath: '/PRIVATE_VERIFIER_PATH/report',
+            redactedArtifactPath: '/PRIVATE_VERIFIER_PATH/redacted',
+            receiptSourcePath: '/PRIVATE_VERIFIER_PATH/receipt',
+          },
+        },
+      };
+      const row = createEvaluateResult({
+        ...mockEvaluateResult,
+        testCase: { assert: [{ type: `promptfoo:redteam:${pluginId}` as const }] },
+        response: { output: secret },
+        gradingResult: { ...grade, componentResults: [{ ...grade, componentResults: [grade] }] },
+      });
+      if (!hasResponse) {
+        delete row.response;
+      }
+      const saved = await EvalResult.createFromEvaluateResult('grader-prompt-' + pluginId, row);
+      const [bulk] = await EvalResult.createManyFromEvaluateResult(
+        [row],
+        'grader-bulk-' + pluginId,
+      );
+      for (const result of [sanitizeResultForJsonlArtifact(row), saved, bulk]) {
+        expect(JSON.stringify(result.gradingResult)).not.toContain(secret);
+        expect(JSON.stringify(result.gradingResult)).not.toContain('PRIVATE_VERIFIER_PATH');
+        expect(result.gradingResult).toMatchObject({
+          pass: true,
+          score: 1,
+          reason: grade.reason,
+          metadata: { cachedResponse: false, verifierEvidence: safeEvidence },
+        });
+      }
+      const ordinary = sanitizeResultForJsonlArtifact({ ...row, testCase: { assert: [] } });
+      expect(ordinary.gradingResult?.metadata?.renderedGradingPrompt).toContain(secret);
+      expect(row.gradingResult?.metadata?.renderedGradingPrompt).toContain(secret);
+      expect(JSON.stringify(ordinary.gradingResult)).toContain('PRIVATE_VERIFIER_PATH');
+      expect(JSON.stringify(row.gradingResult)).toContain('PRIVATE_VERIFIER_PATH');
+    },
+  );
+
+  it.each(['coding-agent:trace-redaction', 'harness:artifact-redaction'])(
+    'omits leaked text and provider metadata from public %s result copies',
+    async (pluginId) => {
+      const secret = 'PRIVATE_TEXT_RECEIPT_8964';
+      const row = createEvaluateResult({
+        ...mockEvaluateResult,
+        response: {
+          output: secret,
+          sessionId: secret,
+          metadata: { diagnostic: secret },
+          tokenUsage: { prompt: secret, completion: 2 } as any,
+          cost: 0.01,
+        },
+        metadata: {
+          diagnostic: secret,
+          sessionId: secret,
+          custom: 'retained',
+          redteamHistory: [{ prompt: 'Inspect', output: secret }],
+        },
+        tokenUsage: { prompt: secret, completion: 2 } as any,
+        testCase: { assert: [{ type: `promptfoo:redteam:${pluginId}` as const }] },
+        gradingResult: { pass: false, score: 0, reason: 'Protected receipt found.' },
+      });
+      const artifact = sanitizeResultForJsonlArtifact(row);
+      expect(JSON.stringify(artifact)).not.toContain(secret);
+      expect(artifact.response).toMatchObject({
+        metadata: { redactionContentOmitted: true },
+      });
+      expect(artifact.metadata?.custom).toBe('retained');
+      const saved = await EvalResult.createFromEvaluateResult('text-copy-' + pluginId, row);
+      const [bulk] = await EvalResult.createManyFromEvaluateResult([row], 'text-bulk-' + pluginId);
+      for (const result of [saved, bulk]) {
+        const persisted = await EvalResult.findById(result.id);
+        expect(JSON.stringify(persisted?.toEvaluateResult())).not.toContain(secret);
+        expect(persisted?.gradingResult?.reason).toBe('Protected receipt found.');
+      }
+      expect(row.response?.output).toBe(secret);
+    },
+  );
+
+  it.each(['coding-agent:trace-redaction', 'harness:artifact-redaction'])(
+    'omits image-bearing %s responses and their metadata echoes from result copies',
+    async (pluginId) => {
+      const image =
+        'data:image/svg+xml;base64,' +
+        Buffer.from(
+          '<svg xmlns="http://www.w3.org/2000/svg"><text>PRIVATE_PIXEL_RECEIPT</text></svg>',
+        ).toString('base64');
+      const response = {
+        output: `![report](${image})`,
+        images: [{ data: image, mimeType: 'image/svg+xml' }],
+        raw: { image },
+        metadata: { screenshot: image },
+        cost: 0.01,
+      };
+      const row = createEvaluateResult({
+        ...mockEvaluateResult,
+        response,
+        testCase: {
+          assert: [
+            {
+              type: 'assert-set',
+              assert: [
+                {
+                  type: `promptfoo:redteam:${pluginId}` as const,
+                },
+              ],
+            },
+          ],
+        },
+        metadata: { screenshot: image, custom: 'retained' },
+      });
+      const artifact = sanitizeResultForJsonlArtifact(row);
+      expect(JSON.stringify(artifact)).not.toContain(image);
+      expect(artifact.response).toMatchObject({
+        metadata: { redactionMediaOmitted: true },
+      });
+      expect(artifact.metadata?.custom).toBe('retained');
+      expect(row.response?.images?.[0].data).toBe(image);
+      const saved = await EvalResult.createFromEvaluateResult('image-redaction-copy', row, {
+        persist: false,
+      });
+      expect(JSON.stringify(saved.toEvaluateResult())).not.toContain(image);
+    },
+  );
+
+  it.each(['coding-agent:trace-redaction', 'harness:artifact-redaction'])(
+    'omits audio-bearing %s responses from result copies',
+    async (pluginId) => {
+      const data = Buffer.from('PRIVATE_AUDIO_ARTIFACT_RECEIPT').toString('base64');
+      const response = {
+        output: data,
+        audio: { data, format: 'wav' },
+        raw: { data },
+        metadata: { audioEcho: data },
+        cost: 0.01,
+      };
+      const row = createEvaluateResult({
+        ...mockEvaluateResult,
+        response,
+        testCase: { assert: [{ type: `promptfoo:redteam:${pluginId}` as const }] },
+        metadata: { audioEcho: data, custom: 'retained' },
+      });
+      const artifact = sanitizeResultForJsonlArtifact(row);
+      expect(JSON.stringify(artifact)).not.toContain(data);
+      expect(artifact.response).toMatchObject({
+        metadata: { redactionMediaOmitted: true },
+      });
+      expect(artifact.metadata?.custom).toBe('retained');
+      const saved = await EvalResult.createFromEvaluateResult('audio-redaction-copy', row, {
+        persist: false,
+      });
+      expect(JSON.stringify(saved.toEvaluateResult())).not.toContain(data);
+      expect(row.response?.audio?.data).toBe(data);
+    },
+  );
+
+  it.each([
+    'output-pdf',
+    'output-encoded-text',
+    'output-buffer',
+    'output-buffer-object',
+    'output-buffer-json',
+    'output-typed-array',
+    'output-array-buffer',
+    'output-data-view',
+    'output-image',
+    'output-audio',
+    'metadata-audio',
+    'turn-audio',
+    'nested-image',
+    'image-json',
+    'a2a-media',
+    'blob-output',
+    'svg-output',
+    'image-input',
+    'encoded-image-input',
+    'url-encoded-image-input',
+    'quoted-image-input',
+  ] as const)('omits private media in supported response shapes: %s', async (mode) => {
+    const secret = 'PRIVATE_EMBEDDED_MEDIA_8964';
+    const data = Buffer.from(secret).toString('base64');
+    const image = `data:image/png;base64,${data}`;
+    const bytes = Uint8Array.from(Buffer.from(secret));
+    const media = {
+      'output-pdf': { output: `data:application/pdf;base64,${data}` },
+      'output-encoded-text': { output: `data:text/plain;base64,${data}` },
+      'output-buffer': { output: Buffer.from(secret) },
+      'output-buffer-object': { output: Buffer.from(secret).toJSON() },
+      'output-buffer-json': { output: JSON.stringify(Buffer.from(secret)) },
+      'output-typed-array': { output: bytes },
+      'output-array-buffer': { output: bytes.buffer },
+      'output-data-view': { output: new DataView(bytes.buffer) },
+      'output-image': { output: image },
+      'output-audio': { output: `data:audio/wav;base64,${data}` },
+      'metadata-audio': { metadata: { audio: { data, format: 'wav' } } },
+      'turn-audio': { turns: [{ audio: { data, format: 'wav' } }] },
+      'nested-image': { metadata: { content: [{ image_url: { url: image } }] } },
+      'image-json': { output: JSON.stringify({ data: [{ b64_json: data }] }) },
+      'a2a-media': {
+        output: JSON.stringify({
+          parts: [{ filename: 'report.png', mediaType: 'image/png', raw: data }],
+        }),
+      },
+      'blob-output': { output: `promptfoo://blob/${'a'.repeat(64)}` },
+      'svg-output': {
+        output: `<svg xmlns="http://www.w3.org/2000/svg"><text>${secret}</text></svg>`,
+      },
+      'image-input': { output: `<input type=image src="https://example.invalid/${secret}.png">` },
+      'encoded-image-input': {
+        output: `<input type="im&#97;ge" src="https://example.invalid/${secret}.png">`,
+      },
+      'url-encoded-image-input': {
+        output: encodeURIComponent(
+          `<input type="image" src="https://example.invalid/${secret}.png">`,
+        ),
+      },
+      'quoted-image-input': {
+        output: `<input title="a > b" TYPE='IMAGE' src="https://example.invalid/${secret}.png">`,
+      },
+    }[mode];
+    const row = createEvaluateResult({
+      ...mockEvaluateResult,
+      response: { output: 'Clean report', ...media, cost: 0.01 },
+      testCase: { assert: [{ type: 'promptfoo:redteam:coding-agent:trace-redaction' }] },
+    });
+    const artifact = sanitizeResultForJsonlArtifact(row);
+    expect(artifact.response).toMatchObject({
+      metadata: { redactionMediaOmitted: true },
+    });
+    expect(JSON.stringify(artifact)).not.toContain(data);
+    expect(JSON.stringify(artifact)).not.toContain(secret);
+    const saved = await EvalResult.createFromEvaluateResult('embedded-media-copy', row, {
+      persist: false,
+    });
+    expect(saved.response).toMatchObject({ metadata: { redactionMediaOmitted: true } });
+    expect(row.response).toMatchObject(media);
+  });
+
+  it('redacts verifier config in result metadata when the response has no metadata', async () => {
+    const secret = 'PRIVATE_RESULT_METADATA_RECEIPT';
+    const metadata = {
+      pluginId: 'coding-agent:trace-redaction',
+      pluginConfig: { secretFileValue: secret },
+      label: 'Public label',
+    };
+    const row = createEvaluateResult({
+      ...mockEvaluateResult,
+      metadata,
+      response: { output: 'Clean' },
+      testCase: {
+        metadata,
+        assert: [{ type: 'promptfoo:redteam:coding-agent:trace-redaction' }],
+      },
+    });
+    const artifact = sanitizeResultForJsonlArtifact(row);
+    const saved = await EvalResult.createFromEvaluateResult('private-result-metadata', row, {
+      persist: false,
+    });
+    for (const result of [artifact, saved]) {
+      expect(JSON.stringify(result.metadata)).not.toContain(secret);
+      expect(result.metadata?.label).toBe('Public label');
+    }
+    expect(row.metadata?.pluginConfig).toEqual({ secretFileValue: secret });
+  });
+
+  it('omits private raw provider data without changing ordinary raw responses', async () => {
+    const raw = { privateReceipt: 'PRIVATE_RAW_PROVIDER_8964' };
+    const row = createEvaluateResult({
+      ...mockEvaluateResult,
+      response: { output: 'Clean report', raw },
+      testCase: { assert: [{ type: 'promptfoo:redteam:harness:artifact-redaction' }] },
+    });
+    const artifact = sanitizeResultForJsonlArtifact(row);
+    expect(artifact.response?.raw).toBeUndefined();
+    expect(artifact.response?.metadata?.redactionContentOmitted).toBe(true);
+    const saved = await EvalResult.createFromEvaluateResult('private-raw-copy', row, {
+      persist: false,
+    });
+    expect(saved.response?.raw).toBeUndefined();
+    expect(row.response?.raw).toEqual(raw);
+    row.testCase.assert = [{ type: 'equals', value: 'Clean report' }];
+    expect(sanitizeResultForJsonlArtifact(row).response?.raw).toEqual(raw);
+  });
+
+  it('preserves audio responses for ordinary assertions', () => {
+    const response = { output: 'audio', audio: { data: 'private-audio', format: 'wav' } };
+    expect(
+      sanitizeResultForJsonlArtifact({
+        response,
+        testCase: { assert: [{ type: 'contains', value: 'audio' }] },
+      }).response,
+    ).toEqual(response);
+  });
+
+  it('preserves image responses for ordinary assertions', () => {
+    const row = {
+      response: { output: 'image', images: [{ data: 'data:image/png;base64,abc' }] },
+      testCase: { assert: [{ type: 'contains', value: 'image' }] },
+    };
+    expect(sanitizeResultForJsonlArtifact(row).response).toEqual(row.response);
+  });
+
   beforeAll(async () => {
     await runDbMigrations();
   });

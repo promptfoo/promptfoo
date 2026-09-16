@@ -14,6 +14,7 @@ import {
   accumulateResponseTokenUsage,
   createEmptyTokenUsage,
 } from '../../../util/tokenUsageUtils';
+import { requiresTraceRedaction } from '../../../util/traceRedaction';
 import { shouldGenerateRemote } from '../../remoteGeneration';
 import { remoteGenerationContextPayload } from '../../remoteGenerationContext';
 import {
@@ -30,11 +31,13 @@ import {
   accumulateGraderResult,
   accumulateUnblockingTokenUsage,
   buildGraderResultAssertion,
+  CachedRedactionResponseError,
   callGradingProvider,
   externalizeResponseForRedteamHistory,
   getGraderAssertionValue,
   getLastMessageContent,
   getTargetResponse,
+  gradeRedactionResponse,
   isConversationEndedResponse,
   type RoundBacktrackingStopReason,
   redteamProviderManager,
@@ -116,6 +119,7 @@ const CUSTOM_PARENT_TEMPLATE = dedent`
  * Represents metadata for the Custom conversation process.
  */
 export interface CustomMetadata extends BaseRedteamMetadata {
+  redactionMediaOmitted?: boolean;
   customRoundsCompleted: number;
   customBacktrackCount: number;
   customResult: boolean;
@@ -128,6 +132,8 @@ export interface CustomMetadata extends BaseRedteamMetadata {
   }>;
   totalSuccessfulAttacks?: number;
   storedGraderResult?: GradingResult;
+  storedGraderResults?: Record<number, GradingResult>;
+  redactionContentOmitted?: boolean;
 }
 
 /**
@@ -317,6 +323,8 @@ export class CustomProvider implements ApiProvider {
       `[Custom] Starting attack with: prompt=${JSON.stringify(prompt)}, filtersPresent=${!!filters}, varsKeys=${Object.keys(vars)}, providerType=${provider.constructor.name}`,
     );
 
+    const session: { id?: string } = {};
+
     // Reset successful attacks array for each new attack
     this.successfulAttacks = [];
 
@@ -325,6 +333,7 @@ export class CustomProvider implements ApiProvider {
 
     let lastFeedback = '';
     let lastResponse: TargetResponse = { output: '' };
+    let mediaRedactionError: string | undefined;
     let evalFlag = false;
     let evalPercentage: number | null = null;
 
@@ -358,6 +367,8 @@ export class CustomProvider implements ApiProvider {
     const { getGraderById } = await import('../../graders');
     let graderPassed: boolean | undefined;
     let storedGraderResult: GradingResult | undefined;
+    const storedGraderResults: Record<number, GradingResult> = {};
+    const redactTrace = requiresTraceRedaction(test?.assert);
 
     // Generate goal-specific evaluation rubric
     const additionalRubric = getGoalRubric(this.userGoal);
@@ -427,8 +438,21 @@ export class CustomProvider implements ApiProvider {
           roundNum,
           context,
           options,
+          session,
         );
         lastResponse = response;
+        if (redactTrace) {
+          storedGraderResult = await gradeRedactionResponse(
+            attackPrompt,
+            lastResponse,
+            test,
+            storedGraderResults,
+          );
+          graderPassed = storedGraderResult?.pass;
+        }
+        if (lastResponse.metadata?.redactionMediaOmitted === true) {
+          mediaRedactionError ??= lastResponse.error;
+        }
         lastTransformResult = transformResult;
         if (transformResult?.tokenUsage) {
           accumulateAttackerTokenUsage(totalTokenUsage, transformResult);
@@ -489,6 +513,7 @@ export class CustomProvider implements ApiProvider {
               roundNum,
               context,
               options,
+              session,
             );
 
           if (unblockingTransform?.tokenUsage) {
@@ -499,6 +524,18 @@ export class CustomProvider implements ApiProvider {
           // Update lastResponse to the unblocking response and continue
           // Note: unblocking prompts don't use audio/image transforms
           lastResponse = unblockingResponse;
+          if (redactTrace) {
+            storedGraderResult = await gradeRedactionResponse(
+              attackPrompt,
+              lastResponse,
+              test,
+              storedGraderResults,
+            );
+            graderPassed = storedGraderResult?.pass;
+          }
+          if (lastResponse.metadata?.redactionMediaOmitted === true) {
+            mediaRedactionError ??= lastResponse.error;
+          }
           if (isConversationEndedResponse(lastResponse)) {
             logger.info('[Custom] Target ended conversation during unblocking', {
               round: roundNum,
@@ -564,7 +601,7 @@ export class CustomProvider implements ApiProvider {
           continue;
         }
 
-        if (test && assertToUse) {
+        if (!redactTrace && test && assertToUse) {
           const grader = getGraderById(assertToUse.type);
           if (grader) {
             const gradingContext: RedteamGradingContext | undefined = {
@@ -642,6 +679,9 @@ export class CustomProvider implements ApiProvider {
 
         logger.debug('[Custom] Jailbreak Unsuccessful, continuing to next round');
       } catch (error) {
+        if (error instanceof CachedRedactionResponseError) {
+          throw error;
+        }
         // Re-throw abort errors to properly cancel the operation
         if (error instanceof Error && error.name === 'AbortError') {
           logger.debug('[Custom] Operation aborted');
@@ -680,6 +720,7 @@ export class CustomProvider implements ApiProvider {
       output: lastResponse.output,
       prompt: finalPrompt,
       metadata: {
+        ...(mediaRedactionError && { redactionMediaOmitted: true }),
         redteamFinalPrompt: finalPrompt,
         messages: messages as Record<string, any>[],
         customRoundsCompleted: roundNum,
@@ -690,12 +731,18 @@ export class CustomProvider implements ApiProvider {
         redteamHistory,
         successfulAttacks: this.successfulAttacks,
         totalSuccessfulAttacks: this.successfulAttacks.length,
-        storedGraderResult: storedGraderResult,
+        storedGraderResult,
+        ...(redactTrace && {
+          storedGraderResults,
+          redactionContentOmitted: true,
+        }),
         sessionId: getSessionId(lastResponse, context),
       },
       tokenUsage: totalTokenUsage,
       guardrails: lastResponse?.guardrails,
-      ...(lastTargetError ? { error: lastTargetError } : {}),
+      ...(mediaRedactionError || lastTargetError
+        ? { error: mediaRedactionError || lastTargetError }
+        : {}),
     };
   }
 
@@ -827,6 +874,7 @@ export class CustomProvider implements ApiProvider {
     _roundNum: number,
     context?: CallApiContextParams,
     options?: CallApiOptionsParams,
+    session: { id?: string } = {},
   ): Promise<{ response: TargetResponse; transformResult?: TransformResult }> {
     let lastTransformResult: TransformResult | undefined;
 
@@ -937,12 +985,20 @@ export class CustomProvider implements ApiProvider {
     );
     logger.debug(finalTargetPrompt);
 
-    let targetResponse = await getTargetResponse(provider, finalTargetPrompt, context, options);
-    targetResponse = await externalizeResponseForRedteamHistory(targetResponse, {
-      evalId: context?.evaluationId,
-      testIdx: context?.testIdx,
-      promptIdx: context?.promptIdx,
-    });
+    const targetContext =
+      context && session.id
+        ? { ...context, vars: { ...context.vars, sessionId: session.id } }
+        : context;
+    let targetResponse = await getTargetResponse(
+      provider,
+      finalTargetPrompt,
+      targetContext,
+      options,
+    );
+    if (this.stateful && targetResponse.sessionId) {
+      session.id = targetResponse.sessionId;
+    }
+    targetResponse = await externalizeResponseForRedteamHistory(targetResponse, context);
     logger.debug('[Custom] Target response', { response: targetResponse });
 
     invariant(

@@ -26,22 +26,29 @@ import {
   accumulateResponseTokenUsage,
   createEmptyTokenUsage,
 } from '../../../util/tokenUsageUtils';
+import { getAssertionLeaves, TRACE_REDACTION_ASSERTIONS } from '../../../util/traceRedaction';
+import { getGraderById } from '../../graders';
 import { shouldGenerateRemote } from '../../remoteGeneration';
 import { remoteGenerationContextPayload } from '../../remoteGenerationContext';
 import { textToAudio } from '../../strategies/simpleAudio';
 import { isBasicRefusal } from '../../util';
 import {
+  buildGraderResultAssertion,
   callGradingProvider,
   externalizeResponseForRedteamHistory,
+  getGraderAssertionValue,
   getTargetResponse,
   redteamProviderManager,
+  runRedteamGrader,
   type TargetResponse,
 } from '../shared';
 
 import type {
   ApiProvider,
+  AtomicTestCase,
   CallApiContextParams,
   CallApiOptionsParams,
+  GradingResult,
   ProviderResponse,
   TokenUsage,
 } from '../../../types/index';
@@ -124,6 +131,9 @@ const EVAL_SYSTEM_PROMPT = dedent`
  * Metadata for Voice Crescendo conversations
  */
 interface VoiceCrescendoMetadata extends BaseRedteamMetadata {
+  storedGraderResults?: Record<number, GradingResult>;
+  redactionContentOmitted?: boolean;
+  redactionMediaOmitted?: boolean;
   voiceCrescendoTurnsCompleted: number;
   voiceCrescendoBacktrackCount: number;
   voiceCrescendoResult: boolean;
@@ -397,11 +407,7 @@ export class VoiceCrescendoProvider implements ApiProvider {
     });
 
     const response = await getTargetResponse(targetProvider, prompt, context);
-    return externalizeResponseForRedteamHistory(response, {
-      evalId: context?.evaluationId,
-      testIdx: context?.testIdx,
-      promptIdx: context?.promptIdx,
-    });
+    return externalizeResponseForRedteamHistory(response, context);
   }
 
   /**
@@ -502,6 +508,14 @@ export class VoiceCrescendoProvider implements ApiProvider {
     let objectiveAchieved = false;
     let finalConfidence = 0;
     let lastResponse = '';
+    let mediaRedactionError: string | undefined;
+    const storedGraderResults: Record<number, GradingResult> = {};
+    const test = context?.test as AtomicTestCase | undefined;
+    const redactionAssertions = getAssertionLeaves(test?.assert)
+      .map((assertion, index) => ({ assertion, index }))
+      .filter(({ assertion }) =>
+        TRACE_REDACTION_ASSERTIONS.has(assertion.type.replace(/^not-/, '')),
+      );
     let lastPrompt = '';
     let stopReason = 'Max turns reached';
     const audioHistory: VoiceCrescendoMetadata['audioHistory'] = [];
@@ -541,6 +555,32 @@ export class VoiceCrescendoProvider implements ApiProvider {
           context,
         );
         accumulateResponseTokenUsage(totalTokenUsage, targetResponse);
+        if (targetResponse.metadata?.redactionMediaOmitted === true) {
+          mediaRedactionError ??= targetResponse.error;
+        }
+        for (const { assertion: redactionAssertion, index } of redactionAssertions) {
+          if (!test || targetResponse.metadata?.redactionMediaOmitted === true) {
+            break;
+          }
+          const grader = getGraderById(redactionAssertion.type)!;
+          const { grade, rubric } = await runRedteamGrader(
+            grader,
+            voicePrompt,
+            targetResponse.output,
+            test,
+            undefined,
+            getGraderAssertionValue(redactionAssertion),
+            undefined,
+            undefined,
+            { providerResponse: targetResponse },
+          );
+          if (storedGraderResults[index]?.pass !== false) {
+            storedGraderResults[index] = {
+              ...grade,
+              assertion: buildGraderResultAssertion(grade.assertion, redactionAssertion, rubric),
+            };
+          }
+        }
 
         if (targetResponse.conversationEnded) {
           logger.info('[VoiceCrescendo] Target ended conversation', {
@@ -588,8 +628,10 @@ export class VoiceCrescendoProvider implements ApiProvider {
           responseTranscript: responseText,
         });
 
-        // Check if response is a refusal
-        if (isBasicRefusal(responseText)) {
+        const grades = Object.values(storedGraderResults);
+        const failedGrade = grades.find((grade) => !grade.pass);
+        // A refusal can still disclose a protected receipt.
+        if (isBasicRefusal(responseText) && !failedGrade) {
           logger.debug('[VoiceCrescendo] Detected refusal, trying different approach');
           if (backtrackCount < this.maxBacktracks) {
             backtrackCount++;
@@ -602,7 +644,16 @@ export class VoiceCrescendoProvider implements ApiProvider {
         }
 
         // Evaluate if objective achieved
-        const evaluation = await this.evaluateResponse(voicePrompt, responseText);
+        const evaluation = grades.length
+          ? {
+              objectiveAchieved: Boolean(failedGrade),
+              confidence: 1,
+              reason: failedGrade?.reason ?? 'All redaction checks passed.',
+              partialSuccess: false,
+              cached: undefined,
+              tokenUsage: undefined,
+            }
+          : await this.evaluateResponse(voicePrompt, responseText);
         accumulateGradingResponseTokenUsage(totalTokenUsage, {
           cached: evaluation.cached,
           tokenUsage: evaluation.tokenUsage,
@@ -649,6 +700,8 @@ export class VoiceCrescendoProvider implements ApiProvider {
     }
 
     const metadata: VoiceCrescendoMetadata = {
+      ...(redactionAssertions.length > 0 && { storedGraderResults, redactionContentOmitted: true }),
+      ...(mediaRedactionError && { redactionMediaOmitted: true }),
       redteamFinalPrompt: lastPrompt,
       messages: this.memory.getConversation(this.conversationId).map((m) => ({
         role: m.role,
@@ -672,6 +725,7 @@ export class VoiceCrescendoProvider implements ApiProvider {
 
     return {
       output: lastResponse,
+      ...(mediaRedactionError && { error: mediaRedactionError }),
       prompt: lastPrompt,
       metadata,
       tokenUsage: totalTokenUsage,

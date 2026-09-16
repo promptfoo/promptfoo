@@ -2,14 +2,10 @@ import * as fs from 'fs';
 import * as path from 'path';
 
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import {
-  coerceString,
-  getFinalTest,
-  loadFromJavaScriptFile,
-  processFileReference,
-} from '../../src/assertions/utils';
+import { coerceString, getFinalTest, loadFromJavaScriptFile } from '../../src/assertions/utils';
 import cliState from '../../src/cliState';
 import { importModule } from '../../src/esm';
+import { processFileReference } from '../../src/util/file';
 import { createMockProvider as createFactoryProvider } from '../factories/provider';
 
 import type { ApiProvider, Assertion, TestCase } from '../../src/types/index';

@@ -1,4 +1,6 @@
-import type { TestCase } from '../../types/index';
+import { getAgenticAttackProfile } from '../agenticProfile';
+
+import type { ProviderOptions, TestCase } from '../../types/index';
 import type { Inputs } from '../../types/shared';
 
 interface AdaptiveMultiTurnStrategyDefinition {
@@ -61,9 +63,35 @@ export function addHydra(
   injectVar: string,
   config: Record<string, any>,
 ): TestCase[] {
-  return createAdaptiveMultiTurnStrategy({
+  const { redteamProvider: _redteamProvider, ...providerConfig } = config;
+  const transformed = createAdaptiveMultiTurnStrategy({
     providerName: 'promptfoo:redteam:hydra',
     metricSuffix: 'Hydra',
     strategyId: 'jailbreak:hydra',
-  })(testCases, injectVar, config);
+  })(testCases, injectVar, providerConfig);
+
+  return transformed.map((testCase) => {
+    const agenticAttackProfile = getAgenticAttackProfile(testCase.metadata);
+    if (!agenticAttackProfile) {
+      return testCase;
+    }
+    const provider = testCase.provider as ProviderOptions;
+    const sendCurrentTurnOnly =
+      config.sendCurrentTurnOnly ?? agenticAttackProfile.strategyHints?.hydra?.sendCurrentTurnOnly;
+
+    return {
+      ...testCase,
+      provider: {
+        ...provider,
+        config: {
+          ...provider.config,
+          ...(sendCurrentTurnOnly === undefined ? {} : { sendCurrentTurnOnly }),
+        },
+      },
+      metadata: {
+        ...testCase.metadata,
+        ...(testCase.metadata?.agenticAttackProfile ? {} : { agenticAttackProfile }),
+      },
+    };
+  });
 }

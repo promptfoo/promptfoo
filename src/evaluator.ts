@@ -29,6 +29,11 @@ import { maybeEmitAzureOpenAiWarning } from './providers/azure/warnings';
 import { providerRegistry } from './providers/providerRegistry';
 import { isPromptfooSampleTarget } from './providers/shared';
 import { maybeWrapMcpProviderForRedteam } from './redteam/mcpTargetProvider';
+import {
+  hasProtectedReceiptFiles,
+  withMcpLedgerScope,
+  withProtectedReceiptScope,
+} from './redteam/plugins/codingAgent/verifiers';
 import { redteamProviderManager } from './redteam/providers/shared';
 import { throwIfTargetPromptExceedsMaxChars } from './redteam/shared/promptLength';
 import { getSessionId } from './redteam/util';
@@ -109,6 +114,11 @@ import {
   createEmptyAssertions,
   createEmptyTokenUsage,
 } from './util/tokenUsageUtils';
+import {
+  requiresTraceRedaction,
+  sanitizeRedactionResult,
+  TRUSTED_REDACTION_GRADER,
+} from './util/traceRedaction';
 import { TransformInputType, transform } from './util/transform';
 import type { SingleBar } from 'cli-progress';
 import type winston from 'winston';
@@ -631,25 +641,29 @@ function applyGradingError(row: EvaluateResult, error: unknown, abortSignal?: Ab
   // non-aborted run is a real bug, and a real SyntaxError caught microseconds
   // after an unrelated abort is also a real bug.
   const aborted = Boolean(abortSignal?.aborted) && isAbortError(error);
+  const message = sanitizeRedactionResult({
+    testCase: row.testCase,
+    error: errorAsError
+      ? aborted
+        ? errorAsError.message
+        : (errorAsError.stack ?? errorAsError.message)
+      : String(error),
+  }).error;
 
   if (aborted) {
-    // Skip stack serialization on the abort path — debug logs usually go
-    // unread and a noisy shutdown can fire this per row.
-    const shortMessage = errorAsError?.message ?? String(error);
     logger.debug('Assertion grading aborted', {
-      error: shortMessage,
+      error: message,
       promptIdx: row.promptIdx,
       testIdx: row.testIdx,
     });
-    row.error = `${ABORTED_GRADING_PREFIX}${shortMessage}`;
+    row.error = `${ABORTED_GRADING_PREFIX}${message}`;
   } else {
-    const fullMessage = errorAsError ? (errorAsError.stack ?? errorAsError.message) : String(error);
     logger.error('Assertion grading failed during eval', {
-      error: fullMessage,
+      error: message,
       promptIdx: row.promptIdx,
       testIdx: row.testIdx,
     });
-    row.error = fullMessage;
+    row.error = message;
   }
   row.failureReason = ResultFailureReason.ERROR;
   row.success = false;
@@ -1161,8 +1175,25 @@ function sanitizeResponseMetadata(response: ProviderResponse) {
   if (!response.metadata) {
     return;
   }
-  const sanitizedMetadata = safeJsonStringify(response.metadata);
+  const original = response.metadata;
+  const sanitizedMetadata = safeJsonStringify(original);
   response.metadata = sanitizedMetadata ? JSON.parse(sanitizedMetadata) : {};
+  const grades = [
+    [original.storedGraderResult, response.metadata!.storedGraderResult],
+    ...Object.entries(original.storedGraderResults ?? {}).map(([index, grade]) => [
+      grade,
+      response.metadata!.storedGraderResults?.[Number(index)],
+    ]),
+  ];
+  for (const [source, sanitized] of grades) {
+    if (
+      sanitized?.assertion &&
+      Object.getOwnPropertyDescriptor(source?.assertion ?? {}, TRUSTED_REDACTION_GRADER)?.value ===
+        true
+    ) {
+      Object.defineProperty(sanitized.assertion, TRUSTED_REDACTION_GRADER, { value: true });
+    }
+  }
 }
 
 function updateConversationHistory({
@@ -1528,6 +1559,9 @@ async function transformRunEvalResponse({
   }
 
   invariant(processedResponse.output != null, 'Response output should not be null');
+  if (requiresTraceRedaction(test.assert)) {
+    return { processedResponse, providerTransformedOutput };
+  }
   const blobbedResponse = await extractAndStoreBinaryData(processedResponse, {
     evalId,
     testIdx,
@@ -1603,7 +1637,10 @@ export function getTraceLinkage(
 export async function runEval(options: RunEvalOptions): Promise<EvaluateResult[]> {
   return withCacheNamespace(
     getRepeatCacheNamespace(options.repeatIndex, options.evaluateOptions),
-    () => runEvalInternal(options),
+    () =>
+      withProtectedReceiptScope([options.test], () => runEvalInternal(options), {
+        inherit: true,
+      }),
   );
 }
 
@@ -1685,105 +1722,109 @@ async function runEvalInternal({
         );
     const executionTraceContext = traceContext;
     const runExecution = () =>
-      withTestCaseSpan(
-        executionTraceContext?.rootSpan,
-        async () => {
-          const providerCall = await callProviderForRunEval({
-            abortSignal,
-            evalId,
-            filters,
-            promptForRender: {
-              ...state.promptForRender,
-              config: rendered.setup.prompt.config,
-            },
-            provider,
-            rateLimitRegistry,
-            renderedPrompt: rendered.renderedPrompt,
-            repeatIndex,
-            test,
-            testIndex,
-            testSuite,
-            traceContext: executionTraceContext,
-            vars: state.vars,
-          });
-          const response = normalizeCachedTargetResponse(providerCall.response);
-          latencyMs = providerCall.latencyMs;
+      withMcpLedgerScope(test, omitEvalRuntimeVars(state.vars), (captureMcpLedgers) =>
+        withTestCaseSpan(
+          executionTraceContext?.rootSpan,
+          async () => {
+            const providerCall = await callProviderForRunEval({
+              abortSignal,
+              evalId,
+              filters,
+              promptForRender: {
+                ...state.promptForRender,
+                config: rendered.setup.prompt.config,
+              },
+              provider,
+              rateLimitRegistry,
+              renderedPrompt: rendered.renderedPrompt,
+              repeatIndex,
+              test,
+              testIndex,
+              testSuite,
+              traceContext: executionTraceContext,
+              vars: state.vars,
+            });
+            captureMcpLedgers(providerCall.response.cached);
+            const response = normalizeCachedTargetResponse(providerCall.response);
+            latencyMs = providerCall.latencyMs;
+            const publicResponse = sanitizeRedactionResult({ response, testCase: test }).response;
 
-          updateConversationHistory({
-            conversationKey: state.conversationKey,
-            conversations,
-            renderedJson: rendered.renderedJson,
-            renderedPrompt: rendered.renderedPrompt,
-            response,
-          });
+            updateConversationHistory({
+              conversationKey: state.conversationKey,
+              conversations,
+              renderedJson: rendered.renderedJson,
+              renderedPrompt: rendered.renderedPrompt,
+              response: publicResponse,
+            });
 
-          logger.debug('Evaluator response', {
-            responsePreview: (safeJsonStringify(response) ?? '').slice(0, 100),
-          });
-          logger.debug(
-            `Evaluator checking cached flag: response.cached = ${Boolean(response.cached)}, provider.delay = ${provider.delay}`,
-          );
+            logger.debug('Evaluator response', {
+              responsePreview: (safeJsonStringify(publicResponse) ?? '').slice(0, 100),
+            });
+            logger.debug(
+              `Evaluator checking cached flag: response.cached = ${Boolean(response.cached)}, provider.delay = ${provider.delay}`,
+            );
 
-          await applyProviderDelayIfNeeded(provider, response);
+            await applyProviderDelayIfNeeded(provider, response);
 
-          // The __eval* runtime vars were exposed to prompt/provider rendering above.
-          // Build a copy without them for the persisted result, assertions, and
-          // graders. state.vars itself is left intact — it is shared by reference
-          // with the provider call context.
-          const persistedVars = omitEvalRuntimeVars(state.vars);
+            // The __eval* runtime vars were exposed to prompt/provider rendering above.
+            // Build a copy without them for the persisted result, assertions, and
+            // graders. state.vars itself is left intact — it is shared by reference
+            // with the provider call context.
+            const persistedVars = omitEvalRuntimeVars(state.vars);
 
-          const ret = createEvaluateResult({
-            fileMetadata: state.fileMetadata,
-            latencyMs,
-            prompt,
-            promptIdx: promptIndex,
-            rendered,
-            response,
-            setup,
-            test,
-            testIdx: testIndex,
-            traceContext: executionTraceContext,
-            evalId,
-            vars: persistedVars,
-          });
+            const ret = createEvaluateResult({
+              fileMetadata: state.fileMetadata,
+              latencyMs,
+              prompt,
+              promptIdx: promptIndex,
+              rendered,
+              response,
+              setup,
+              test,
+              testIdx: testIndex,
+              traceContext: executionTraceContext,
+              evalId,
+              vars: persistedVars,
+            });
 
-          invariant(ret.tokenUsage, 'This is always defined, just doing this to shut TS up');
+            invariant(ret.tokenUsage, 'This is always defined, just doing this to shut TS up');
 
-          trackProviderUsage(provider, response);
-          await applyRunEvalResponseOutcome({
-            abortSignal,
-            deferGrading,
-            evalId,
-            isRedteam,
-            latencyMs,
-            prompt,
-            promptIdx: promptIndex,
-            provider,
-            providerCallQueue,
-            rateLimitRegistry,
-            renderedPrompt: rendered.renderedPrompt,
-            response,
-            ret,
-            test,
-            testIdx: testIndex,
-            testSuite,
-            traceContext: executionTraceContext,
-            vars: persistedVars,
-          });
+            trackProviderUsage(provider, publicResponse);
+            await applyRunEvalResponseOutcome({
+              abortSignal,
+              deferGrading,
+              evalId,
+              isRedteam,
+              latencyMs,
+              prompt,
+              promptIdx: promptIndex,
+              provider,
+              providerCallQueue,
+              rateLimitRegistry,
+              renderedPrompt: rendered.renderedPrompt,
+              response,
+              ret,
+              test,
+              testIdx: testIndex,
+              testSuite,
+              traceContext: executionTraceContext,
+              vars: persistedVars,
+            });
 
-          // Update token usage stats
-          if (response.tokenUsage) {
-            accumulateResponseTokenUsage(ret.tokenUsage, response);
-          }
+            // Update token usage stats
+            if (response.tokenUsage) {
+              accumulateResponseTokenUsage(ret.tokenUsage, response);
+            }
 
-          if (test.options?.storeOutputAs && ret.response?.output && registers) {
-            // Save the output in a register for later use
-            registers[test.options.storeOutputAs] = ret.response.output;
-          }
+            if (test.options?.storeOutputAs && ret.response?.output && registers) {
+              // Save the output in a register for later use
+              registers[test.options.storeOutputAs] = sanitizeRedactionResult(ret).response?.output;
+            }
 
-          return [ret];
-        },
-        (rows) => deferredGradingPromises.get(rows[0]),
+            return [ret];
+          },
+          (rows) => deferredGradingPromises.get(rows[0]),
+        ),
       );
     return executionTraceContext
       ? await withProviderCallTracingContext(
@@ -1808,11 +1849,16 @@ async function runEvalInternal({
     // Don't log AbortError - these are expected when scan is aborted (e.g., target unavailable)
     const isAbortError = err instanceof Error && err.name === 'AbortError';
     if (!isAbortError) {
-      logger.error('Provider call failed during eval', logContext);
+      logger.error(
+        'Provider call failed during eval',
+        requiresTraceRedaction(test.assert)
+          ? { promptIdx: promptIndex, testIdx: testIndex, error: 'Private provider error omitted.' }
+          : logContext,
+      );
     }
 
     return [
-      {
+      sanitizeRedactionResult({
         ...setup,
         // Exclude the __eval* runtime vars from the persisted error result.
         vars: omitEvalRuntimeVars(setup.vars),
@@ -1828,7 +1874,7 @@ async function runEvalInternal({
         promptId: prompt.id || '',
         metadata,
         ...getTraceLinkage(traceContext, evalId),
-      },
+      }),
     ];
   }
 }
@@ -2937,6 +2983,11 @@ function markComparisonRows(
 ) {
   for (const evalOption of runEvalOptions) {
     if (evalOption.test.assert?.some((a) => a.type === 'select-best')) {
+      if (requiresTraceRedaction(evalOption.test.assert)) {
+        throw new Error(
+          'select-best cannot compare responses omitted for trace/artifact redaction.',
+        );
+      }
       rowsWithSelectBestAssertion.add(evalOption.testIdx);
     }
     if (evalOption.test.assert?.some((a) => a.type === 'max-score')) {
@@ -3340,6 +3391,11 @@ function usesExampleProvider(testSuite: TestSuite) {
   });
 }
 
+type PreparedReceiptHook = { elapsedMs: number } & (
+  | { status: 'ready' }
+  | { status: 'failed' | 'timed-out'; error: unknown }
+);
+
 class Evaluator<TEvaluation extends EvaluationRecord, TResult extends EvaluationStoreResult> {
   store: EvaluationStore<TEvaluation, TResult>;
   testSuite: TestSuite;
@@ -3349,6 +3405,7 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
   registers: EvalRegisters;
   fileWriters: EvaluatorResultWriter[];
   rateLimitRegistry: RateLimitRegistry | undefined;
+  private preparedReceiptHooks = new WeakMap<AtomicTestCase, PreparedReceiptHook>();
   constructor(
     testSuite: TestSuite,
     store: EvaluationStore<TEvaluation, TResult>,
@@ -3444,6 +3501,7 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
   }
 
   private trackRowStats(row: EvaluateResult): void {
+    row = sanitizeRedactionResult(row);
     if (row.success) {
       this.stats.successes++;
     } else if (row.failureReason === ResultFailureReason.ERROR) {
@@ -3464,11 +3522,12 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
   // that never stream) to override stale entries in the recovery merge.
   private trackFinalJsonlResult(row: TResult | EvaluateResult): void {
     if (this.fileWriters.length > 0 && this.store.resultPersistenceFailed) {
-      this.store.recordFinalResult(this.store.toEvaluateResult(row));
+      this.store.recordFinalResult(sanitizeRedactionResult(this.store.toEvaluateResult(row)));
     }
   }
 
   private async persistEvalRow(row: EvaluateResult): Promise<void> {
+    row = sanitizeRedactionResult(row);
     try {
       await this.store.appendResult(row);
     } catch (error) {
@@ -3500,6 +3559,7 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
     promptEvalCount: number;
     row: EvaluateResult;
   }): void {
+    row = sanitizeRedactionResult(row);
     metrics.score += row.score;
     for (const [key, value] of Object.entries(row.namedScores)) {
       accumulateNamedMetric(metrics, {
@@ -3570,6 +3630,103 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
     );
   }
 
+  private async *prepareProtectedReceiptTests(
+    evalSteps: RunEvalOptions[],
+    testSuite: TestSuite,
+    abortSignal: AbortSignal,
+  ) {
+    const cloneAssertion = (assertion: Assertion): Assertion => ({
+      ...assertion,
+      ...(assertion.value && typeof assertion.value === 'object'
+        ? { value: structuredClone(assertion.value) }
+        : {}),
+    });
+    const cloneTest = (test: AtomicTestCase): AtomicTestCase => ({
+      ...test,
+      vars: structuredClone(test.vars ?? {}),
+      assert: test.assert?.map((assertion) =>
+        assertion.type === 'assert-set'
+          ? { ...assertion, assert: assertion.assert.map(cloneAssertion) }
+          : cloneAssertion(assertion),
+      ),
+    });
+    // Capture every existing receipt before a hook can replace a shared file.
+    for (const { test } of evalSteps) {
+      if (abortSignal.aborted) {
+        return;
+      }
+      yield test;
+    }
+    if (!testSuite.extensions?.length) {
+      return;
+    }
+    for (const evalStep of evalSteps) {
+      if (abortSignal.aborted) {
+        return;
+      }
+      if (!hasProtectedReceiptFiles(evalStep.test)) {
+        continue;
+      }
+      // Timeout execution copies RunEvalOptions but retains this per-case test object.
+      evalStep.test = cloneTest(evalStep.test);
+      const startedAt = Date.now();
+      const timeoutMs = this.options.timeoutMs || getEvalTimeoutMs();
+      let timeoutId: NodeJS.Timeout | undefined;
+      let timedOut = false;
+      let onAbort: () => void;
+      try {
+        const interrupted = new Promise<never>((_, reject) => {
+          onAbort = () => reject(new Error('Operation cancelled'));
+          abortSignal.addEventListener('abort', onAbort, { once: true });
+          if (timeoutMs > 0) {
+            timeoutId = setTimeout(() => {
+              timedOut = true;
+              reject(new Error(`Evaluation timed out after ${timeoutMs}ms`));
+            }, timeoutMs);
+          }
+        });
+        const hook = withCacheNamespace(
+          getRepeatCacheNamespace(evalStep.repeatIndex, evalStep.evaluateOptions),
+          () =>
+            withMcpLedgerScope(evalStep.test, evalStep.test.vars ?? {}, () =>
+              runExtensionHook(testSuite.extensions, 'beforeEach', { test: evalStep.test }),
+            ),
+        );
+        const prepared = await Promise.race([hook, interrupted]);
+        evalStep.test = cloneTest(prepared.test);
+        this.preparedReceiptHooks.set(evalStep.test, {
+          status: 'ready',
+          elapsedMs: Date.now() - startedAt,
+        });
+        // Preserve each hook's value before another hook or target can replace it.
+        yield evalStep.test;
+      } catch (error) {
+        if (abortSignal.aborted) {
+          return;
+        }
+        if (timedOut) {
+          // The hook may still change receipt files. Keep every target stopped.
+          for (const pending of evalSteps) {
+            this.preparedReceiptHooks.set(pending.test, {
+              status: 'timed-out',
+              error,
+              elapsedMs: Date.now() - startedAt,
+            });
+          }
+          return;
+        }
+        this.preparedReceiptHooks.set(evalStep.test, {
+          status: 'failed',
+          error,
+          elapsedMs: Date.now() - startedAt,
+        });
+      } finally {
+        clearTimeout(timeoutId);
+        abortSignal.removeEventListener('abort', onAbort!);
+      }
+    }
+  }
+
   private async runEvalStepAfterBeforeEach(
     evalStep: RunEvalOptions,
     {
@@ -3584,12 +3741,18 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
       testSuite: TestSuite;
     },
   ) {
-    const beforeEachOut = await runExtensionHook(testSuite.extensions, 'beforeEach', {
-      test: evalStep.test,
-    });
-    evalStep.test = beforeEachOut.test;
+    const prepared = this.preparedReceiptHooks.get(evalStep.test);
+    if (prepared && prepared.status !== 'ready') {
+      throw prepared.error;
+    }
+    if (prepared === undefined) {
+      const beforeEachOut = await withMcpLedgerScope(evalStep.test, evalStep.test.vars ?? {}, () =>
+        runExtensionHook(testSuite.extensions, 'beforeEach', { test: evalStep.test }),
+      );
+      evalStep.test = beforeEachOut.test;
+    }
 
-    const rows = await runEvalInternal({
+    const rows = await runEval({
       ...evalStep,
       deferGrading,
       providerCallQueue: deferGrading ? providerCallQueue : undefined,
@@ -3728,6 +3891,11 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
   ) {
     const { deferGrading = false, providerCallQueue } = processOptions;
     const timeoutMs = context.options.timeoutMs || getEvalTimeoutMs();
+    const prepared = this.preparedReceiptHooks.get(evalStep.test);
+    if (prepared?.status === 'timed-out') {
+      await this.addEvalStepTimeoutResult(evalStep, index, timeoutMs, prepared.error, context);
+      return;
+    }
 
     if (timeoutMs <= 0) {
       return await this.processEvalStep(
@@ -3769,11 +3937,14 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
           context,
         ),
         new Promise<void>((_, reject) => {
-          timeoutId = setTimeout(() => {
-            didTimeout = true;
-            abortController.abort();
-            reject(new Error(`Evaluation timed out after ${timeoutMs}ms`));
-          }, timeoutMs);
+          timeoutId = setTimeout(
+            () => {
+              didTimeout = true;
+              abortController.abort();
+              reject(new Error(`Evaluation timed out after ${timeoutMs}ms`));
+            },
+            Math.max(0, timeoutMs - (prepared?.elapsedMs ?? 0)),
+          );
         }),
       ]);
     } catch (error) {
@@ -3803,7 +3974,7 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
       error,
     );
     this.trackFinalJsonlResult(timeoutResult);
-    await this.store.appendResult(timeoutResult);
+    await this.store.appendResult(sanitizeRedactionResult(timeoutResult));
     this.stats.errors++;
 
     const { metrics } = context.prompts[evalStep.promptIdx];
@@ -4653,7 +4824,7 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
       const evalStep = runEvalOptions[i];
       const timeoutResult = createMaxDurationTimeoutResult(evalStep, maxEvalTimeMs, startTime);
       this.trackFinalJsonlResult(timeoutResult);
-      await this.store.appendResult(timeoutResult);
+      await this.store.appendResult(sanitizeRedactionResult(timeoutResult));
       this.stats.errors++;
       const { metrics } = prompts[evalStep.promptIdx];
       if (metrics) {
@@ -4972,24 +5143,32 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
       progressBarManager.installLogInterceptor();
     }
 
-    const interruptedEval = await this.executeEvalSteps({
-      checkAbort,
-      ciProgressReporter,
-      combinedAbortSignal,
-      concurrentRunEvalOptions,
-      evalStepIndexMap,
-      globalTimeout,
-      groupedRunEvalOptions: [...serialRunEvalOptions, ...concurrentRunEvalOptions],
-      isEvalTimedOut: () => evalTimedOut,
-      isWebUI,
-      maxEvalTimeMs,
-      processingContext,
-      processedIndices,
-      progressBarManager,
-      prompts,
-      serialRunEvalOptions,
-      shouldGroupGradingByProvider,
-    });
+    const interruptedEval = await withProtectedReceiptScope(
+      this.prepareProtectedReceiptTests(
+        [...serialRunEvalOptions, ...concurrentRunEvalOptions],
+        testSuite,
+        combinedAbortSignal,
+      ),
+      () =>
+        this.executeEvalSteps({
+          checkAbort,
+          ciProgressReporter,
+          combinedAbortSignal,
+          concurrentRunEvalOptions,
+          evalStepIndexMap,
+          globalTimeout,
+          groupedRunEvalOptions: [...serialRunEvalOptions, ...concurrentRunEvalOptions],
+          isEvalTimedOut: () => evalTimedOut,
+          isWebUI,
+          maxEvalTimeMs,
+          processingContext,
+          processedIndices,
+          progressBarManager,
+          prompts,
+          serialRunEvalOptions,
+          shouldGroupGradingByProvider,
+        }),
+    );
     if (interruptedEval) {
       return interruptedEval;
     }

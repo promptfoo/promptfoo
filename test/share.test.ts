@@ -17,6 +17,7 @@ import {
 } from '../src/share';
 import { makeRequest } from '../src/util/cloud';
 import { inlineBlobRefsForShare } from '../src/util/inlineBlobsForShare';
+import { createLegacyRedactionSummary } from './factories/eval';
 
 import type Eval from '../src/models/eval';
 import type EvalResult from '../src/models/evalResult';
@@ -121,6 +122,46 @@ vi.mock('../src/constants', async () => {
     getDefaultShareViewBaseUrl: vi.fn().mockReturnValue('https://promptfoo.app'),
     getShareViewBaseUrl: vi.fn().mockReturnValue('https://promptfoo.app'),
   };
+});
+
+it.each(['privateEnv', 'mcpPrivateEnv'])(
+  'redacts private environment map %s from sharing',
+  async (key) => {
+    vi.mocked(cloudConfig.isEnabled).mockReturnValue(false);
+    const evaluation = buildMockEval() as Eval;
+    evaluation.config = {
+      redteam: {
+        plugins: [
+          {
+            id: 'coding-agent:codex-config-poisoning',
+            config: { [key]: { PROD_API_TOKEN: 'PRIVATE_SHARED_ENV_VALUE' } },
+          },
+        ],
+      },
+    };
+    const original = JSON.stringify(evaluation.config);
+    mockFetch.mockResolvedValue({ ok: true, json: async () => ({ id: 'shared-eval' }) });
+    await createShareableUrl(evaluation, { silent: true });
+    const initial = JSON.parse(mockFetch.mock.calls[0][1].body);
+    expect(JSON.stringify(initial.config)).not.toContain('PRIVATE_SHARED_ENV_VALUE');
+    expect(initial.config.redteam.plugins[0].config[key]).toBe('[REDACTED]');
+    expect(JSON.stringify(evaluation.config)).toBe(original);
+  },
+);
+
+it('redacts legacy privacy copies from the initial share payload', async () => {
+  vi.mocked(cloudConfig.isEnabled).mockReturnValue(false);
+  const original = createLegacyRedactionSummary('promptfoo:redteam:harness:artifact-redaction');
+  const snapshot = JSON.stringify(original);
+  const evaluation = buildMockEval() as Eval;
+  evaluation.oldResults = original;
+  mockFetch.mockResolvedValue({ ok: true, json: async () => ({ id: 'shared-eval' }) });
+  await createShareableUrl(evaluation, { silent: true });
+  const initial = JSON.parse(mockFetch.mock.calls[0][1].body);
+  expect(initial.oldResults.version).toBe(2);
+  expect(JSON.stringify(initial)).not.toContain('PRIVATE_LEGACY_RECEIPT');
+  expect(JSON.stringify(initial)).toContain('ordinary output');
+  expect(JSON.stringify(original)).toBe(snapshot);
 });
 
 describe('stripAuthFromUrl', () => {

@@ -16,7 +16,7 @@ import {
 } from '../database/tables';
 import { getAuthor } from '../globalConfig/accounts';
 import logger from '../logger';
-import Eval, { createEvalId } from '../models/eval';
+import Eval, { createEvalId, sanitizeLegacyResults } from '../models/eval';
 import { notifyEvaluationChanged, notifyEvaluationsDeleted } from '../models/evalMutation';
 import { generateIdFromPrompt } from '../models/prompt';
 import {
@@ -31,7 +31,7 @@ import {
 } from '../types/index';
 import invariant from '../util/invariant';
 import { sha256 } from './createHash';
-import { restoreAzureBlobSasTokens, sanitizeTracingConfigForPersistence } from './sanitizer';
+import { restoreAzureBlobSasTokens, sanitizeConfigForPersistence } from './sanitizer';
 import {
   getCachedStandaloneEvals,
   getStandaloneEvalCacheKey,
@@ -52,6 +52,8 @@ export async function writeResultsToDatabase(
   createdAt = createdAt || (results.timestamp ? new Date(results.timestamp) : new Date());
   const evalId = createEvalId(createdAt);
   const db = await getDb();
+  const persistedConfig = sanitizeConfigForPersistence(config);
+  results = sanitizeLegacyResults(results, config);
 
   await db.transaction(async (tx) => {
     await tx
@@ -61,7 +63,7 @@ export async function writeResultsToDatabase(
         createdAt: createdAt.getTime(),
         author: getAuthor(),
         description: config.description,
-        config: sanitizeTracingConfigForPersistence(config),
+        config: persistedConfig,
         results,
         isRedteam: config.redteam !== undefined,
       })
@@ -100,7 +102,7 @@ export async function writeResultsToDatabase(
 
     // Record dataset relation
     const datasetId = sha256(JSON.stringify(config.tests || []));
-    const testsForStorage = Array.isArray(config.tests) ? config.tests : [];
+    const testsForStorage = Array.isArray(persistedConfig.tests) ? persistedConfig.tests : [];
 
     // Log when non-array tests are converted to empty array for database storage
     if (config.tests && !Array.isArray(config.tests)) {
