@@ -207,8 +207,8 @@ function transformSpan(
 
   const startTime = nanoToMs(span.startTimeUnixNano);
   const endTimeUnixNano = span.endTimeUnixNano;
-  const endTime = endTimeUnixNano ? nanoToMs(endTimeUnixNano) : undefined;
-  if (endTimeUnixNano && BigInt(endTimeUnixNano) < BigInt(span.startTimeUnixNano)) {
+  const endTime = endTimeUnixNano === undefined ? undefined : nanoToMs(endTimeUnixNano);
+  if (endTimeUnixNano !== undefined && BigInt(endTimeUnixNano) < BigInt(span.startTimeUnixNano)) {
     throw new Error('Span end time must not precede its start time');
   }
 
@@ -306,13 +306,23 @@ export class TempoProvider implements TraceProvider {
         throw new Error('Tempo returned an invalid trace response');
       }
       for (const batch of data.batches) {
-        if (!batch || !Array.isArray(batch.scopeSpans)) {
-          throw new Error('Tempo batch must contain a scopeSpans array');
+        if (
+          !batch ||
+          !Array.isArray(batch.scopeSpans) ||
+          (batch.resource != null &&
+            (typeof batch.resource !== 'object' || Array.isArray(batch.resource)))
+        ) {
+          throw new Error('Tempo returned an invalid resource batch');
         }
         const resourceAttributes = attributesToRecord(batch.resource?.attributes);
         for (const scopeSpan of batch.scopeSpans) {
-          if (!scopeSpan || !Array.isArray(scopeSpan.spans)) {
-            throw new Error('Tempo scope must contain a spans array');
+          if (
+            !scopeSpan ||
+            !Array.isArray(scopeSpan.spans) ||
+            (scopeSpan.scope != null &&
+              (typeof scopeSpan.scope !== 'object' || Array.isArray(scopeSpan.scope)))
+          ) {
+            throw new Error('Tempo returned an invalid scope');
           }
           for (const span of scopeSpan.spans) {
             const normalized = transformSpan(

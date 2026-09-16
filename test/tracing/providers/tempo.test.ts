@@ -215,6 +215,10 @@ describe('TempoProvider', () => {
     { field: 'name', change: { name: ' ' } },
     { field: 'timestamp', change: { startTimeUnixNano: 'invalid' } },
     { field: 'interval', change: { endTimeUnixNano: '1' } },
+    ...['', null, 0, false].map((endTimeUnixNano) => ({
+      field: 'end timestamp',
+      change: { endTimeUnixNano },
+    })),
     { field: 'status message', change: { status: { message: 3 } } },
     { field: 'span ID', change: { spanId: '!!!' } },
     { field: 'parent ID', change: { parentSpanId: '!!!' } },
@@ -610,6 +614,25 @@ describe('TempoProvider', () => {
       ).rejects.toMatchObject({ name: 'TraceProviderError', invalidEvidence: true });
     },
   );
+
+  it.each(
+    ['resource', 'scope'].flatMap((field) =>
+      [[], 'invalid', 0, false, null, undefined].map((value) => ({ field, value })),
+    ),
+  )('validates optional $field objects: $value', async ({ field, value }) => {
+    const data = structuredClone(traceResponse);
+    const batch = data.batches[0];
+    Object.assign(field === 'resource' ? batch : batch.scopeSpans[0], { [field]: value });
+    mockedFetch.mockResolvedValueOnce(response(data));
+    const result = new TempoProvider({ id: 'tempo', endpoint: 'http://tempo:3200' }).fetchTrace(
+      TRACE_ID,
+    );
+    if (value == null) {
+      expect((await result)?.spans).toHaveLength(2);
+    } else {
+      await expect(result).rejects.toMatchObject({ invalidEvidence: true, retryable: false });
+    }
+  });
 
   it('forwards bearer authentication, tenant headers, and cancellation', async () => {
     const controller = new AbortController();

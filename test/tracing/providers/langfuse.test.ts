@@ -517,12 +517,15 @@ describe('LangfuseProvider', () => {
     expect(await new LangfuseProvider(config).fetchTrace(TRACE_ID)).toBeNull();
   });
 
-  it('accepts zero-page pagination metadata for an empty trace lookup', async () => {
-    mockedFetch.mockResolvedValue(response({ data: [], meta: { page: 1, totalPages: 0 } }));
+  it.each([undefined, null, { page: 1, totalPages: 0 }])(
+    'accepts empty pagination metadata for an empty trace lookup: %j',
+    async (meta) => {
+      mockedFetch.mockResolvedValue(response({ data: [], meta }));
 
-    expect(await new LangfuseProvider(config).fetchTrace(TRACE_ID)).toBeNull();
-    expect(mockedFetch).toHaveBeenCalledOnce();
-  });
+      expect(await new LangfuseProvider(config).fetchTrace(TRACE_ID)).toBeNull();
+      expect(mockedFetch).toHaveBeenCalledOnce();
+    },
+  );
 
   it('returns null when Langfuse does not recognize the requested endpoint', async () => {
     mockedFetch.mockResolvedValue(response({ error: 'not found' }, 404));
@@ -669,6 +672,7 @@ describe('LangfuseProvider', () => {
 
   it.each([
     { result: 'not observations' },
+    ...[[], 'invalid', 0, false].map((meta) => ({ data: observations, meta })),
     { data: observations, meta: { cursor: 123 } },
     { data: observations, meta: { page: 0, totalPages: 2 } },
     { data: observations, meta: { page: 2, totalPages: 1 } },

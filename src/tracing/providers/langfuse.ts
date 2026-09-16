@@ -498,7 +498,10 @@ export class LangfuseProvider implements TraceProvider {
       const body = await readLimitedResponse(response, 'Langfuse', remainingBytes);
       remainingBytes -= new TextEncoder().encode(body).byteLength;
       const result = parseJsonValue(body) as LangfuseObservationsResponse;
-      if (!Array.isArray(result?.data)) {
+      if (
+        !Array.isArray(result?.data) ||
+        (result.meta != null && (typeof result.meta !== 'object' || Array.isArray(result.meta)))
+      ) {
         throw new TraceProviderError('Langfuse returned an invalid observations response', {
           invalidEvidence: true,
         });
