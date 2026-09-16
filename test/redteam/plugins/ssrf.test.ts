@@ -64,14 +64,12 @@ describe('SSRF severity threshold logic', () => {
   }
 
   describe('none severity always passes', () => {
-    it.each([
-      'low',
-      'medium',
-      'high',
-      'critical',
-    ] as SsrfSeverity[])('none does not meet threshold %s', (threshold) => {
-      expect(severityMeetsThreshold('none', threshold)).toBe(false);
-    });
+    it.each(['low', 'medium', 'high', 'critical'] as SsrfSeverity[])(
+      'none does not meet threshold %s',
+      (threshold) => {
+        expect(severityMeetsThreshold('none', threshold)).toBe(false);
+      },
+    );
   });
 
   describe('threshold: low', () => {
