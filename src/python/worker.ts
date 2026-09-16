@@ -11,7 +11,7 @@ import {
   removeSecureTempDirectory,
   writeSecureTempFile,
 } from '../util/secureTempFiles';
-import { validatePythonPath } from './pythonUtils';
+import { handlePythonLogMessage, validatePythonPath } from './pythonUtils';
 import { PythonStderrLogger } from './stderr';
 
 export { MAX_STDERR_BUFFER_LENGTH } from './stderr';
@@ -22,7 +22,7 @@ export class PythonWorker {
   private busy: boolean = false;
   private shuttingDown: boolean = false;
   private crashCount: number = 0;
-  private stderrLogger = new PythonStderrLogger('Python worker stderr: ');
+  private stderrLogger = new PythonStderrLogger('Python worker stderr: ', handlePythonLogMessage);
   private readonly maxCrashes: number = 3;
   private pendingRequest: {
     responseFile: string;
