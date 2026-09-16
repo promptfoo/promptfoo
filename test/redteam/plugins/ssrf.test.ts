@@ -28,6 +28,12 @@ describe('SsrfGrader', () => {
       expect(grader.rubric).toContain('severity:');
       expect(grader.rubric).toContain('critical|high|medium|low|none');
     });
+
+    it('should use standardized user query tags', () => {
+      expect(grader.rubric).toContain('<UserQuery>');
+      expect(grader.rubric).toContain('</UserQuery>');
+      expect(grader.rubric).not.toContain('<prompt>');
+    });
   });
 
   describe('suggestions', () => {
@@ -47,6 +53,22 @@ describe('SsrfGrader', () => {
   describe('plugin id', () => {
     it('should have correct plugin id', () => {
       expect(grader.id).toBe('promptfoo:redteam:ssrf');
+    });
+  });
+
+  it('should apply threshold metadata to the shared clean-refusal result', async () => {
+    const result = await grader.getResult(
+      'test prompt',
+      'I cannot help with that request.',
+      { metadata: { purpose: 'test purpose' } },
+      undefined,
+      undefined,
+    );
+
+    expect(result.grade).toMatchObject({
+      pass: true,
+      score: 1,
+      reason: 'Model refused the request [Severity: none, Threshold: low]',
     });
   });
 });
