@@ -1,9 +1,10 @@
-import { act } from 'react';
+import { act, StrictMode } from 'react';
 
 import { restoreTestTimers, type TestTimers, useTestTimers } from '@app/tests/timers';
 import { renderWithProviders } from '@app/utils/testutils';
 import { FILE_METADATA_KEY } from '@promptfoo/providers/constants';
-import { screen, waitFor } from '@testing-library/react';
+import { EVAL_TABLE_MAX_PAGE_SIZE } from '@promptfoo/types/api/eval';
+import { screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import ResultsTable from './ResultsTable';
@@ -49,9 +50,10 @@ vi.mock('@app/utils/api', () => ({
   callApi: vi.fn(() => Promise.resolve({ ok: true })),
 }));
 
+const mockNavigate = vi.fn();
 vi.mock('react-router-dom', async () => ({
   ...(await vi.importActual('react-router-dom')),
-  useNavigate: vi.fn(() => vi.fn()),
+  useNavigate: () => mockNavigate,
 }));
 
 vi.mock('./EvalOutputCell', () => {
@@ -59,16 +61,22 @@ vi.mock('./EvalOutputCell', () => {
     ({
       onRating,
       promptIndex,
+      rowIndex,
+      rowPositionIndex,
       searchText,
     }: {
       onRating: any;
       promptIndex?: number;
+      rowIndex?: number;
+      rowPositionIndex?: number;
       searchText?: string;
     }) => {
       return (
         <div
           data-testid="eval-output-cell"
           data-prompt-index={promptIndex}
+          data-rowindex={rowIndex}
+          data-rowpositionindex={rowPositionIndex}
           data-searchtext={searchText}
         >
           <button onClick={() => onRating(true, 0.75, 'test comment')} className="action">
@@ -174,8 +182,40 @@ describe('ResultsTable Metrics Display', () => {
 
   it('displays total tokens with correct formatting', () => {
     renderWithProviders(<ResultsTable {...defaultProps} />);
-    expect(screen.getByText('Total Tokens:')).toBeInTheDocument();
-    expect(screen.getByText('1,000')).toBeInTheDocument();
+    expect(screen.getByText('Total Tokens:').parentElement).toHaveTextContent(
+      'Total Tokens: 1,000',
+    );
+    expect(screen.getByText('Provider Tokens:').parentElement).toHaveTextContent(
+      'Provider Tokens: 1,000',
+    );
+    expect(screen.queryByText('Target Tokens:')).not.toBeInTheDocument();
+  });
+
+  it('labels primary token usage as target tokens for redteam scans', () => {
+    vi.mocked(useTableStore).mockImplementation(() => ({
+      config: { redteam: {} },
+      evalId: '123',
+      inComparisonMode: false,
+      setTable: vi.fn(),
+      table: mockTable,
+      version: 4,
+      renderMarkdown: true,
+      fetchEvalData: vi.fn(),
+      filters: {
+        values: {},
+        appliedCount: 0,
+        options: {
+          metric: [],
+        },
+      },
+    }));
+
+    renderWithProviders(<ResultsTable {...defaultProps} />);
+
+    expect(screen.getByText('Target Tokens:').parentElement).toHaveTextContent(
+      'Target Tokens: 1,000',
+    );
+    expect(screen.queryByText('Provider Tokens:')).not.toBeInTheDocument();
   });
 
   it('displays average tokens with correct calculation', () => {
@@ -342,6 +382,69 @@ describe('ResultsTable Metrics Display', () => {
     expect(screen.getByText('7')).toBeInTheDocument();
     expect(screen.getByText('Asserts:')).toBeInTheDocument();
     expect(screen.getByText('2/3 passed')).toBeInTheDocument();
+  });
+
+  it('keeps the prompt header divider visible above streamed result rows', () => {
+    renderWithProviders(<ResultsTable {...defaultProps} />);
+
+    const promptHeaderCell = screen.getByText('test-provider').closest('th');
+
+    expect(promptHeaderCell).toHaveAttribute(
+      'style',
+      expect.stringContaining('border-bottom: 2px solid var(--border-color)'),
+    );
+  });
+
+  it('keeps the header/body boundary border visible with sticky headers', () => {
+    vi.mocked(useResultsViewSettingsStore).mockImplementation(() => ({
+      inComparisonMode: false,
+      renderMarkdown: true,
+      stickyHeader: true,
+      setStickyHeader: vi.fn(),
+    }));
+
+    const { container } = renderWithProviders(<ResultsTable {...defaultProps} />);
+    const tableContainer = container.querySelector('#results-table-container') as HTMLDivElement;
+
+    expect(tableContainer.style.borderTopWidth).toBe('1px');
+    expect(tableContainer.style.borderTopStyle).toBe('solid');
+    expect(tableContainer.style.borderColor).toBe('var(--border-color)');
+  });
+
+  it('keeps adjacent prompt header cells from drawing duplicate left borders', () => {
+    const mockTableWithTwoPrompts = {
+      ...mockTable,
+      head: {
+        ...mockTable.head,
+        prompts: [
+          { metrics: mockTable.head.prompts[0].metrics, provider: 'test-provider-1' },
+          { metrics: mockTable.head.prompts[0].metrics, provider: 'test-provider-2' },
+        ],
+      },
+    };
+
+    vi.mocked(useTableStore).mockImplementation(() => ({
+      config: {},
+      evalId: '123',
+      inComparisonMode: false,
+      setTable: vi.fn(),
+      table: mockTableWithTwoPrompts,
+      version: 4,
+      renderMarkdown: true,
+      fetchEvalData: vi.fn(),
+      filters: {
+        values: {},
+        appliedCount: 0,
+        options: {
+          metric: [],
+        },
+      },
+    }));
+
+    renderWithProviders(<ResultsTable {...defaultProps} />);
+    const secondPromptHeaderCell = screen.getByText('test-provider-2').closest('th');
+
+    expect((secondPromptHeaderCell as HTMLElement).style.borderLeftStyle).toBe('none');
   });
 
   describe('Keyboard Navigation', () => {
@@ -1036,33 +1139,466 @@ describe('ResultsTable Metadata Search', () => {
 });
 
 describe('ResultsTable Row Navigation', () => {
-  it('clears row-id URL parameter when changing pages', () => {
-    const mockURL = new URL('http://localhost/?rowId=3');
+  const defaultProps = {
+    columnVisibility: {},
+    failureFilter: {},
+    filterMode: 'all' as const,
+    maxTextLength: 100,
+    onFailureFilterToggle: vi.fn(),
+    onSearchTextChange: vi.fn(),
+    searchText: '',
+    showStats: true,
+    wordBreak: 'break-word' as const,
+    setFilterMode: vi.fn(),
+    zoom: 1,
+    onResultsContainerScroll: vi.fn(),
+    atInitialVerticalScrollPosition: true,
+  };
 
-    const mockReplaceState = vi.fn();
-    const originalHistory = window.history;
-    Object.defineProperty(window, 'history', {
-      value: { ...originalHistory, replaceState: mockReplaceState },
-      configurable: true,
-      writable: true,
+  afterEach(() => {
+    window.history.replaceState({}, '', '/');
+    mockNavigate.mockReset();
+  });
+
+  // Renders ResultsTable wired up with a deep-link to row 51 (page 2 with pageSize 50).
+  const setupDeepLinkedTable = (
+    initialUrl: string,
+    mockFetchEvalData = vi.fn(),
+    filteredResultsCount = 120,
+  ) => {
+    window.history.replaceState({}, '', initialUrl);
+
+    vi.mocked(useTableStore).mockImplementation(() => ({
+      config: {},
+      evalId: '123',
+      setTable: vi.fn(),
+      table: {
+        body: [
+          {
+            outputs: [
+              {
+                cost: 0,
+                failureReason: 0,
+                id: 'test-id',
+                latencyMs: 0,
+                namedScores: {},
+                originalRowIndex: 0,
+                pass: true,
+                prompt: 'Prompt',
+                score: 1,
+                testCase: {},
+                text: 'Output',
+              },
+            ],
+            test: {},
+            testIdx: 0,
+            vars: [],
+          },
+        ],
+        head: {
+          prompts: [{}],
+          vars: [],
+        },
+      },
+      version: 4,
+      fetchEvalData: mockFetchEvalData,
+      filteredResultsCount,
+      totalResultsCount: 120,
+      filters: {
+        values: {},
+        appliedCount: 0,
+        options: {
+          metric: [],
+        },
+      },
+    }));
+
+    return mockFetchEvalData;
+  };
+
+  it('uses a details hash to fetch the page containing the requested row', async () => {
+    const mockFetchEvalData = setupDeepLinkedTable('/#details-row-51-prompt-1');
+
+    renderWithProviders(<ResultsTable {...defaultProps} />);
+
+    await waitFor(() => {
+      expect(mockFetchEvalData).toHaveBeenCalledWith(
+        '123',
+        expect.objectContaining({
+          pageIndex: 1,
+          pageSize: 50,
+        }),
+      );
+    });
+  });
+
+  it('observes the body table while waiting for a deep-linked row to render', () => {
+    const observeSpy = vi.spyOn(MutationObserver.prototype, 'observe');
+    setupDeepLinkedTable('/#details-row-51-prompt-1');
+
+    renderWithProviders(<ResultsTable {...defaultProps} />);
+
+    expect(observeSpy).toHaveBeenCalledWith(
+      document.getElementById('results-table-container'),
+      expect.objectContaining({
+        childList: true,
+        subtree: true,
+      }),
+    );
+
+    observeSpy.mockRestore();
+  });
+
+  it('preserves the details hash on initial mount', async () => {
+    const mockFetchEvalData = setupDeepLinkedTable('/#details-row-51-prompt-1');
+
+    renderWithProviders(<ResultsTable {...defaultProps} />);
+
+    await waitFor(() => {
+      expect(mockFetchEvalData).toHaveBeenCalledWith(
+        '123',
+        expect.objectContaining({
+          pageIndex: 1,
+          pageSize: 50,
+        }),
+      );
     });
 
-    const clearRowIdFromUrl = () => {
-      const url = new URL(mockURL);
-      if (url.searchParams.has('rowId')) {
-        url.searchParams.delete('rowId');
-        window.history.replaceState({}, '', url);
-      }
-    };
+    expect(window.location.hash).toBe('#details-row-51-prompt-1');
+  });
 
-    clearRowIdFromUrl();
+  it('preserves the details hash through Strict Mode effect replay', async () => {
+    const mockFetchEvalData = setupDeepLinkedTable('/#details-row-51-prompt-1');
 
-    expect(mockReplaceState).toHaveBeenCalled();
+    renderWithProviders(
+      <StrictMode>
+        <ResultsTable {...defaultProps} />
+      </StrictMode>,
+    );
 
-    Object.defineProperty(window, 'history', {
-      value: originalHistory,
-      configurable: true,
-      writable: true,
+    await waitFor(() => {
+      expect(mockFetchEvalData).toHaveBeenCalledWith(
+        '123',
+        expect.objectContaining({
+          pageIndex: 1,
+          pageSize: 50,
+        }),
+      );
+    });
+
+    expect(window.location.hash).toBe('#details-row-51-prompt-1');
+  });
+
+  it('does not request a negative page when a details hash has no filtered rows', async () => {
+    const mockFetchEvalData = setupDeepLinkedTable('/#details-row-51-prompt-1', vi.fn(), 0);
+
+    renderWithProviders(<ResultsTable {...defaultProps} />);
+
+    await act(async () => {
+      await Promise.resolve();
+    });
+
+    expect(mockFetchEvalData).not.toHaveBeenCalledWith(
+      '123',
+      expect.objectContaining({
+        pageIndex: -1,
+      }),
+    );
+  });
+
+  it('uses rowId pagination when a details hash keeps a stable test index', async () => {
+    const mockFetchEvalData = setupDeepLinkedTable('/?rowId=2#details-row-51-prompt-1');
+
+    renderWithProviders(<ResultsTable {...defaultProps} />);
+
+    await act(async () => {
+      await Promise.resolve();
+    });
+
+    expect(mockFetchEvalData).not.toHaveBeenCalledWith(
+      '123',
+      expect.objectContaining({
+        pageIndex: 1,
+      }),
+    );
+  });
+
+  // Regression test: the details hash encodes a row's GLOBAL test index, while
+  // pagination operates on filtered-table positions. When a filter or search is active
+  // and only the hash is present (no `rowId`), the global index must NOT be used to
+  // resolve a page — doing so pages/clamps a global index as if it were a filtered one
+  // and lands on the wrong page. `rowId` is required for page resolution in that case.
+  it('does not page by a hash-only deep link when a filter is active', async () => {
+    const mockFetchEvalData = setupDeepLinkedTable('/#details-row-51-prompt-1');
+
+    renderWithProviders(<ResultsTable {...defaultProps} filterMode="failures" />);
+
+    await act(async () => {
+      await Promise.resolve();
+    });
+
+    // With the bug, the row-jump effect treats global test index 50 as a filtered
+    // position and pages to pageIndex 1; with the fix it stays on the first page.
+    expect(mockFetchEvalData).not.toHaveBeenCalledWith(
+      '123',
+      expect.objectContaining({
+        pageIndex: 1,
+      }),
+    );
+
+    // The hash is left intact so the dialog can still open if the target row happens to
+    // be on the current page.
+    expect(window.location.hash).toBe('#details-row-51-prompt-1');
+  });
+
+  it('still pages by a hash-only deep link when no filter is active', async () => {
+    const mockFetchEvalData = setupDeepLinkedTable('/#details-row-51-prompt-1');
+
+    renderWithProviders(<ResultsTable {...defaultProps} />);
+
+    await waitFor(() => {
+      expect(mockFetchEvalData).toHaveBeenCalledWith(
+        '123',
+        expect.objectContaining({
+          pageIndex: 1,
+          pageSize: 50,
+        }),
+      );
+    });
+  });
+
+  it('does not reuse a cleared details hash when a filter is removed', async () => {
+    const mockFetchEvalData = setupDeepLinkedTable('/#details-row-51-prompt-1');
+    const { rerender } = renderWithProviders(
+      <ResultsTable {...defaultProps} filterMode="failures" />,
+    );
+
+    await act(async () => {
+      await Promise.resolve();
+    });
+    mockFetchEvalData.mockClear();
+
+    rerender(<ResultsTable {...defaultProps} />);
+
+    await waitFor(() => {
+      expect(window.location.hash).toBe('');
+    });
+
+    expect(mockFetchEvalData).not.toHaveBeenCalledWith(
+      '123',
+      expect.objectContaining({
+        pageIndex: 1,
+      }),
+    );
+  });
+
+  it('does not reuse a cleared legacy rowId when a filter is removed', async () => {
+    const mockFetchEvalData = setupDeepLinkedTable('/?rowId=51');
+    const { rerender } = renderWithProviders(
+      <ResultsTable {...defaultProps} filterMode="failures" />,
+    );
+
+    await waitFor(() => {
+      expect(mockFetchEvalData).toHaveBeenCalledWith(
+        '123',
+        expect.objectContaining({
+          pageIndex: 1,
+        }),
+      );
+    });
+    mockFetchEvalData.mockClear();
+
+    rerender(<ResultsTable {...defaultProps} />);
+
+    await waitFor(() => {
+      expect(window.location.search).toBe('');
+    });
+
+    await waitFor(() => {
+      const lastCall = mockFetchEvalData.mock.calls[mockFetchEvalData.mock.calls.length - 1];
+      expect(lastCall?.[1]).toEqual(
+        expect.objectContaining({
+          pageIndex: 0,
+        }),
+      );
+    });
+  });
+
+  it('does not relabel stale loaded rows as the deep-linked row before fresh page data arrives', async () => {
+    const mockFetchEvalData = setupDeepLinkedTable('/#details-row-51-prompt-1');
+
+    renderWithProviders(<ResultsTable {...defaultProps} />);
+
+    await waitFor(() => {
+      expect(mockFetchEvalData).toHaveBeenCalledWith(
+        '123',
+        expect.objectContaining({
+          pageIndex: 1,
+          pageSize: 50,
+        }),
+      );
+    });
+
+    expect(screen.getByTestId('eval-output-cell')).toHaveAttribute('data-rowindex', '0');
+  });
+
+  it('uses the row test index for detail hashes after paged data is loaded', () => {
+    vi.mocked(useTableStore).mockImplementation(() => ({
+      config: {},
+      evalId: '123',
+      setTable: vi.fn(),
+      table: {
+        body: [
+          {
+            outputs: [
+              {
+                cost: 0,
+                failureReason: 0,
+                id: 'test-id',
+                latencyMs: 0,
+                namedScores: {},
+                originalRowIndex: 0,
+                pass: true,
+                prompt: 'Prompt',
+                score: 1,
+                testCase: {},
+                text: 'Output',
+              },
+            ],
+            test: {},
+            testIdx: 50,
+            vars: [],
+          },
+        ],
+        head: {
+          prompts: [{}],
+          vars: [],
+        },
+      },
+      version: 4,
+      fetchEvalData: vi.fn(),
+      filteredResultsCount: 120,
+      totalResultsCount: 120,
+      filters: {
+        values: {},
+        appliedCount: 0,
+        options: {
+          metric: [],
+        },
+      },
+    }));
+
+    renderWithProviders(<ResultsTable {...defaultProps} />);
+
+    expect(screen.getByTestId('eval-output-cell')).toHaveAttribute('data-rowindex', '50');
+  });
+
+  it('falls back to the loaded row index when legacy rows omit a test index', () => {
+    vi.mocked(useTableStore).mockImplementation(() => ({
+      config: {},
+      evalId: '123',
+      setTable: vi.fn(),
+      table: {
+        body: [
+          {
+            outputs: [
+              {
+                cost: 0,
+                failureReason: 0,
+                id: 'test-id',
+                latencyMs: 0,
+                namedScores: {},
+                pass: true,
+                prompt: 'Prompt',
+                score: 1,
+                testCase: {},
+                text: 'Output',
+              },
+            ],
+            test: {},
+            vars: [],
+          },
+        ],
+        head: {
+          prompts: [{}],
+          vars: [],
+        },
+      },
+      version: 4,
+      fetchEvalData: vi.fn(),
+      filteredResultsCount: 1,
+      totalResultsCount: 1,
+      filters: {
+        values: {},
+        appliedCount: 0,
+        options: {
+          metric: [],
+        },
+      },
+    }));
+
+    renderWithProviders(<ResultsTable {...defaultProps} />);
+
+    expect(screen.getByTestId('eval-output-cell')).toHaveAttribute('data-rowindex', '0');
+  });
+
+  // Regression test for the pagination-trap bug introduced when locationHash was kept in
+  // local state and only updated via `hashchange`. Because `history.replaceState` does not
+  // fire `hashchange`, the state went stale and the row-jump effect kept forcing the user
+  // back to the deep-linked page on every paginate click. Clearing both the legacy `rowId`
+  // query param and the deep-link hash on page-nav clicks is what unblocks the user.
+  it('lets the user paginate away after landing on a deep-linked URL', async () => {
+    const user = userEvent.setup();
+    const mockFetchEvalData = setupDeepLinkedTable('/#details-row-51-prompt-1');
+
+    renderWithProviders(<ResultsTable {...defaultProps} />);
+
+    // The deep link drove a fetch for page 2.
+    await waitFor(() => {
+      expect(mockFetchEvalData).toHaveBeenCalledWith(
+        '123',
+        expect.objectContaining({ pageIndex: 1 }),
+      );
+    });
+    mockFetchEvalData.mockClear();
+
+    await user.click(screen.getByRole('button', { name: /next page/i }));
+
+    // After clicking Next, the table must request page 3 (pageIndex 2). If the bounce-back
+    // bug regresses, the effect would force pagination back to pageIndex 1 and this fetch
+    // would never fire (or would fire with pageIndex 1).
+    await waitFor(() => {
+      expect(mockFetchEvalData).toHaveBeenCalledWith(
+        '123',
+        expect.objectContaining({ pageIndex: 2 }),
+      );
+    });
+
+    // The deep-link hash should be cleared so the next paginate click is also unimpeded.
+    expect(window.location.hash).toBe('');
+  });
+
+  it('clears the legacy rowId query param when paginating', async () => {
+    const user = userEvent.setup();
+    const mockFetchEvalData = setupDeepLinkedTable('/?rowId=51');
+
+    renderWithProviders(<ResultsTable {...defaultProps} />);
+
+    await waitFor(() => {
+      expect(mockFetchEvalData).toHaveBeenCalledWith(
+        '123',
+        expect.objectContaining({ pageIndex: 1 }),
+      );
+    });
+
+    await user.click(screen.getByRole('button', { name: /next page/i }));
+
+    await waitFor(() => {
+      const navTargets = mockNavigate.mock.calls.map(([target]) => target);
+      const cleared = navTargets.some(
+        (target) => typeof target === 'object' && target?.search === '',
+      );
+      expect(cleared).toBe(true);
     });
   });
 });
@@ -2288,6 +2824,45 @@ describe('ResultsTable Pagination', () => {
     expect(paginationElement).toBeInTheDocument();
   });
 
+  it('should never offer a page size that exceeds the server cap', async () => {
+    vi.mocked(useTableStore).mockImplementation(() => ({
+      config: {},
+      evalId: '123',
+      setTable: vi.fn(),
+      table: {
+        body: [],
+        head: {
+          prompts: [],
+          vars: [],
+        },
+      },
+      version: 4,
+      fetchEvalData: vi.fn(),
+      filteredResultsCount: EVAL_TABLE_MAX_PAGE_SIZE + 1,
+      totalResultsCount: EVAL_TABLE_MAX_PAGE_SIZE + 1,
+      filters: {
+        values: {},
+        appliedCount: 0,
+        options: {
+          metric: [],
+        },
+      },
+    }));
+
+    renderWithProviders(<ResultsTable {...defaultProps} />);
+
+    const trigger = screen.getByLabelText(/results per page/i);
+    await act(async () => {
+      await userEvent.click(trigger);
+    });
+
+    const options = await screen.findAllByRole('option');
+    expect(options.length).toBeGreaterThan(0);
+    for (const option of options) {
+      expect(Number(option.textContent)).toBeLessThanOrEqual(EVAL_TABLE_MAX_PAGE_SIZE);
+    }
+  });
+
   it('should keep the pagination footer pinned for short tables', () => {
     vi.mocked(useTableStore).mockImplementation(() => ({
       config: {},
@@ -2629,16 +3204,18 @@ describe('ResultsTable Filtered Metrics Display', () => {
 
     const filteredCostElement = screen.getByText('($0.6173 filtered)');
     expect(filteredCostElement).toBeInTheDocument();
-    expect(filteredCostElement).toHaveStyle('font-size: 0.9em');
+    expect(filteredCostElement.style.fontSize).toBe('0.9em');
     expect(filteredCostElement).toHaveStyle('color: #666');
     expect(filteredCostElement).toHaveStyle('margin-left: 4px');
 
     expect(screen.getByText('Total Tokens:')).toBeInTheDocument();
-    expect(screen.getByText('1,000')).toBeInTheDocument();
+    expect(screen.getByText('Total Tokens:').parentElement).toHaveTextContent('1,000');
 
-    const filteredTokensElement = screen.getByText('(500 filtered)');
+    const totalTokensRow = screen.getByText('Total Tokens:').parentElement;
+    expect(totalTokensRow).not.toBeNull();
+    const filteredTokensElement = within(totalTokensRow as HTMLElement).getByText('(500 filtered)');
     expect(filteredTokensElement).toBeInTheDocument();
-    expect(filteredTokensElement).toHaveStyle('font-size: 0.9em');
+    expect(filteredTokensElement.style.fontSize).toBe('0.9em');
     expect(filteredTokensElement).toHaveStyle('color: #666');
     expect(filteredTokensElement).toHaveStyle('margin-left: 4px');
 
@@ -2647,7 +3224,75 @@ describe('ResultsTable Filtered Metrics Display', () => {
     expect(screen.getByLabelText('200 ms')).toBeInTheDocument();
     const filteredLatencyElement = screen.getByText('(200ms filtered)');
     expect(filteredLatencyElement).toBeInTheDocument();
-    expect(filteredLatencyElement).toHaveStyle('font-size: 0.9em');
+    expect(filteredLatencyElement.style.fontSize).toBe('0.9em');
+  });
+
+  it('displays filtered totals separately for target, attacker, and grading tokens', () => {
+    vi.mocked(useTableStore).mockImplementation(() => ({
+      config: { redteam: {} },
+      evalId: '123',
+      inComparisonMode: false,
+      setTable: vi.fn(),
+      table: {
+        ...mockTable,
+        head: {
+          ...mockTable.head,
+          prompts: [
+            {
+              ...mockTable.head.prompts[0],
+              metrics: {
+                ...mockTable.head.prompts[0].metrics,
+                tokenUsage: {
+                  total: 1000,
+                  attacker: { total: 200 },
+                  assertions: { total: 100 },
+                },
+              },
+            },
+          ],
+        },
+      },
+      version: 4,
+      renderMarkdown: true,
+      fetchEvalData: vi.fn(),
+      filters: {
+        values: {},
+        appliedCount: 1,
+        options: { metric: [] },
+      },
+      filteredMetrics: [
+        {
+          cost: 0.61728,
+          namedScores: {},
+          testPassCount: 5,
+          testFailCount: 0,
+          tokenUsage: {
+            total: 500,
+            attacker: { total: 80 },
+            assertions: { total: 20 },
+          },
+          totalLatencyMs: 1000,
+        },
+      ],
+    }));
+
+    renderWithProviders(<ResultsTable {...defaultProps} />);
+
+    expect(screen.getByText('Total Tokens:').parentElement).toHaveTextContent(
+      'Total Tokens: 1,300(600 filtered)',
+    );
+    expect(screen.getByText('Target Tokens:').parentElement).toHaveTextContent(
+      'Target Tokens: 1,000(500 filtered)',
+    );
+    expect(screen.getByText('Attacker Tokens:').parentElement).toHaveTextContent(
+      'Attacker Tokens: 200(80 filtered)',
+    );
+    expect(screen.getByText('Grading Tokens:').parentElement).toHaveTextContent(
+      'Grading Tokens: 100(20 filtered)',
+    );
+    expect(screen.getByText('Avg Tokens:').parentElement).toHaveTextContent(
+      'Avg Tokens: 130(120 filtered)',
+    );
   });
 });
 
@@ -2726,7 +3371,7 @@ describe('ResultsTable - No Filters Applied', () => {
     expect(screen.getByText('$1.23')).toBeInTheDocument();
 
     expect(screen.getByText('Total Tokens:')).toBeInTheDocument();
-    expect(screen.getByText('1,000')).toBeInTheDocument();
+    expect(screen.getByText('Total Tokens:').parentElement).toHaveTextContent('1,000');
 
     expect(screen.getByText('Avg Latency:')).toBeInTheDocument();
     expect(screen.getByText('200ms')).toBeInTheDocument();
@@ -4208,10 +4853,6 @@ describe('ResultsTable - Auto-hide empty prompt columns', () => {
     atInitialVerticalScrollPosition: true,
   };
 
-  const localRender = (ui: React.ReactElement) => {
-    return renderWithProviders(ui);
-  };
-
   it('hides prompt columns with zero results when filteredMetrics is present', () => {
     const mockTable = createMockTable(2);
     vi.mocked(useTableStore).mockImplementation(() => ({
@@ -4245,7 +4886,7 @@ describe('ResultsTable - Auto-hide empty prompt columns', () => {
       ],
     }));
 
-    localRender(<ResultsTable {...defaultProps} />);
+    renderWithProviders(<ResultsTable {...defaultProps} />);
 
     const outputCells = screen.getAllByTestId('eval-output-cell');
     // Only 1 column visible (prompt 1 has results, prompt 2 has zero results)
@@ -4267,7 +4908,7 @@ describe('ResultsTable - Auto-hide empty prompt columns', () => {
       filteredMetrics: null,
     }));
 
-    localRender(<ResultsTable {...defaultProps} />);
+    renderWithProviders(<ResultsTable {...defaultProps} />);
 
     const outputCells = screen.getAllByTestId('eval-output-cell');
     // Both columns visible since no filters are active
@@ -4309,7 +4950,9 @@ describe('ResultsTable - Auto-hide empty prompt columns', () => {
     }));
 
     // User explicitly hides Prompt 1
-    localRender(<ResultsTable {...defaultProps} columnVisibility={{ 'Prompt 1': false }} />);
+    renderWithProviders(
+      <ResultsTable {...defaultProps} columnVisibility={{ 'Prompt 1': false }} />,
+    );
 
     const outputCells = screen.getAllByTestId('eval-output-cell');
     // Only prompt 2 visible (prompt 1 manually hidden)
@@ -4359,7 +5002,7 @@ describe('ResultsTable - Auto-hide empty prompt columns', () => {
       ],
     }));
 
-    localRender(<ResultsTable {...defaultProps} />);
+    renderWithProviders(<ResultsTable {...defaultProps} />);
 
     const outputCells = screen.getAllByTestId('eval-output-cell');
     // Prompt 1 (7 results) and Prompt 3 (1 error) visible; Prompt 2 (0 results) hidden
