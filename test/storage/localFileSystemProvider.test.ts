@@ -101,77 +101,80 @@ describe('LocalFileSystemProvider', () => {
     ['missing', undefined],
     ['malformed', '{not-json'],
     ['mismatched', JSON.stringify({ contentHash: 'f'.repeat(64) })],
-  ] as const)('preserves valid legacy files when sidecar metadata is %s', async (_sidecarState, sidecarContents) => {
-    tempDir = createTempDir('promptfoo-media-');
-    const payload = Buffer.from('legacy media');
-    const contentHash = createHash('sha256').update(payload).digest('hex');
-    const legacyKey = `audio/${contentHash.slice(0, 12)}.wav`;
-    const legacyPath = path.join(tempDir, legacyKey);
+  ] as const)(
+    'preserves valid legacy files when sidecar metadata is %s',
+    async (_sidecarState, sidecarContents) => {
+      tempDir = createTempDir('promptfoo-media-');
+      const payload = Buffer.from('legacy media');
+      const contentHash = createHash('sha256').update(payload).digest('hex');
+      const legacyKey = `audio/${contentHash.slice(0, 12)}.wav`;
+      const legacyPath = path.join(tempDir, legacyKey);
 
-    fs.mkdirSync(path.dirname(legacyPath), { recursive: true });
-    fs.writeFileSync(legacyPath, payload);
-    if (sidecarContents !== undefined) {
-      fs.writeFileSync(`${legacyPath}.meta.json`, sidecarContents);
-    }
-    fs.writeFileSync(
-      path.join(tempDir, 'hash-index.json'),
-      JSON.stringify({ [contentHash]: legacyKey }),
-    );
+      fs.mkdirSync(path.dirname(legacyPath), { recursive: true });
+      fs.writeFileSync(legacyPath, payload);
+      if (sidecarContents !== undefined) {
+        fs.writeFileSync(`${legacyPath}.meta.json`, sidecarContents);
+      }
+      fs.writeFileSync(
+        path.join(tempDir, 'hash-index.json'),
+        JSON.stringify({ [contentHash]: legacyKey }),
+      );
 
-    const provider = new LocalFileSystemProvider({ basePath: tempDir });
-    const result = await provider.store(payload, {
-      contentType: 'audio/wav',
-      mediaType: 'audio',
-    });
+      const provider = new LocalFileSystemProvider({ basePath: tempDir });
+      const result = await provider.store(payload, {
+        contentType: 'audio/wav',
+        mediaType: 'audio',
+      });
 
-    expect(result.deduplicated).toBe(true);
-    expect(result.ref.key).toBe(legacyKey);
-    expect(await provider.retrieve(legacyKey)).toEqual(payload);
-    expect(fs.existsSync(path.join(tempDir, 'audio', `${contentHash}.wav`))).toBe(false);
-  });
+      expect(result.deduplicated).toBe(true);
+      expect(result.ref.key).toBe(legacyKey);
+      expect(await provider.retrieve(legacyKey)).toEqual(payload);
+      expect(fs.existsSync(path.join(tempDir, 'audio', `${contentHash}.wav`))).toBe(false);
+    },
+  );
 
-  it.each([
-    'mismatched',
-    'stale',
-  ] as const)('recovers from a legacy hash-index entry with %s sidecar metadata', async (sidecarState) => {
-    tempDir = createTempDir('promptfoo-media-');
-    const payload = Buffer.from('original media');
-    const overwrittenPayload = Buffer.from('collision replacement');
-    const contentHash = createHash('sha256').update(payload).digest('hex');
-    const overwrittenHash = `${contentHash.slice(0, 12)}${'f'.repeat(52)}`;
-    const legacyKey = `audio/${contentHash.slice(0, 12)}.wav`;
-    const legacyPath = path.join(tempDir, legacyKey);
+  it.each(['mismatched', 'stale'] as const)(
+    'recovers from a legacy hash-index entry with %s sidecar metadata',
+    async (sidecarState) => {
+      tempDir = createTempDir('promptfoo-media-');
+      const payload = Buffer.from('original media');
+      const overwrittenPayload = Buffer.from('collision replacement');
+      const contentHash = createHash('sha256').update(payload).digest('hex');
+      const overwrittenHash = `${contentHash.slice(0, 12)}${'f'.repeat(52)}`;
+      const legacyKey = `audio/${contentHash.slice(0, 12)}.wav`;
+      const legacyPath = path.join(tempDir, legacyKey);
 
-    fs.mkdirSync(path.dirname(legacyPath), { recursive: true });
-    fs.writeFileSync(legacyPath, overwrittenPayload);
-    fs.writeFileSync(
-      `${legacyPath}.meta.json`,
-      JSON.stringify({
-        contentHash: sidecarState === 'stale' ? contentHash : overwrittenHash,
-      }),
-    );
-    fs.writeFileSync(
-      path.join(tempDir, 'hash-index.json'),
-      JSON.stringify({ [contentHash]: legacyKey, [overwrittenHash]: legacyKey }),
-    );
+      fs.mkdirSync(path.dirname(legacyPath), { recursive: true });
+      fs.writeFileSync(legacyPath, overwrittenPayload);
+      fs.writeFileSync(
+        `${legacyPath}.meta.json`,
+        JSON.stringify({
+          contentHash: sidecarState === 'stale' ? contentHash : overwrittenHash,
+        }),
+      );
+      fs.writeFileSync(
+        path.join(tempDir, 'hash-index.json'),
+        JSON.stringify({ [contentHash]: legacyKey, [overwrittenHash]: legacyKey }),
+      );
 
-    const provider = new LocalFileSystemProvider({ basePath: tempDir });
-    const result = await provider.store(payload, {
-      contentType: 'audio/wav',
-      mediaType: 'audio',
-    });
+      const provider = new LocalFileSystemProvider({ basePath: tempDir });
+      const result = await provider.store(payload, {
+        contentType: 'audio/wav',
+        mediaType: 'audio',
+      });
 
-    expect(result.deduplicated).toBe(false);
-    expect(result.ref.key).toBe(`audio/${contentHash}.wav`);
-    expect(await provider.retrieve(result.ref.key)).toEqual(payload);
-    expect(fs.readFileSync(legacyPath)).toEqual(overwrittenPayload);
+      expect(result.deduplicated).toBe(false);
+      expect(result.ref.key).toBe(`audio/${contentHash}.wav`);
+      expect(await provider.retrieve(result.ref.key)).toEqual(payload);
+      expect(fs.readFileSync(legacyPath)).toEqual(overwrittenPayload);
 
-    const hashIndex = JSON.parse(
-      fs.readFileSync(path.join(tempDir, 'hash-index.json'), 'utf8'),
-    ) as Record<string, string>;
-    expect(hashIndex[contentHash]).toBe(result.ref.key);
-    expect(hashIndex[overwrittenHash]).toBe(legacyKey);
-  });
+      const hashIndex = JSON.parse(
+        fs.readFileSync(path.join(tempDir, 'hash-index.json'), 'utf8'),
+      ) as Record<string, string>;
+      expect(hashIndex[contentHash]).toBe(result.ref.key);
+      expect(hashIndex[overwrittenHash]).toBe(legacyKey);
+    },
+  );
 
   it('recovers from a hash-index entry with a malformed media key', async () => {
     tempDir = createTempDir('promptfoo-media-');
