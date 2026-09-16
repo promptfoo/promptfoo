@@ -73,9 +73,11 @@ describe('OllamaCompletionProvider', () => {
     expect(result.error).toContain('API call error: Error: API error');
   });
 
+  // fetchWithCache is called with format 'text' here, so `data` is always a string --
+  // the error body has to be parsed out of it rather than read off an object.
   it('should handle API response with error field', async () => {
     const mockResponse = {
-      data: { error: 'some error occurred' },
+      data: '{"error":"some error occurred"}',
       cached: false,
       status: 200,
       statusText: 'OK',
@@ -88,6 +90,98 @@ describe('OllamaCompletionProvider', () => {
     const result = await provider.callApi('test prompt');
 
     expect(result.error).toBe('Ollama error: some error occurred');
+  });
+
+  it.each([
+    [404, 'Not Found', `model 'llama3.3' not found`],
+    [500, 'Internal Server Error', 'option "num_predict" must be of type integer'],
+    [401, 'Unauthorized', 'Unauthorized'],
+  ])(
+    'should surface a %i error body instead of an empty output',
+    async (status, statusText, msg) => {
+      vi.mocked(fetchWithCache).mockResolvedValue({
+        data: JSON.stringify({ error: msg }),
+        cached: false,
+        status,
+        statusText,
+        headers: {},
+      });
+
+      const provider = new OllamaCompletionProvider('llama3.3');
+      const result = await provider.callApi('test prompt');
+
+      expect(result.error).toBe(`Ollama API error: ${status} ${statusText}: ${msg}`);
+      expect(result.output).toBeUndefined();
+    },
+  );
+
+  it('should surface a non-2xx response whose body is not JSON', async () => {
+    vi.mocked(fetchWithCache).mockResolvedValue({
+      data: '<html><body>502 Bad Gateway</body></html>',
+      cached: false,
+      status: 502,
+      statusText: 'Bad Gateway',
+      headers: {},
+    });
+
+    const provider = new OllamaCompletionProvider('llama3.3');
+    const result = await provider.callApi('test prompt');
+
+    expect(result.error).toContain('Ollama API error: 502 Bad Gateway');
+    expect(result.output).toBeUndefined();
+  });
+
+  it('should treat an unfollowed 3xx as a failure rather than empty output', async () => {
+    // fetchWithCache returns every !response.ok body, which includes 3xx.
+    vi.mocked(fetchWithCache).mockResolvedValue({
+      data: '',
+      cached: false,
+      status: 300,
+      statusText: 'Multiple Choices',
+      headers: {},
+    });
+
+    const provider = new OllamaCompletionProvider('llama3.3');
+    const result = await provider.callApi('test prompt');
+
+    expect(result.error).toBe('Ollama API error: 300 Multiple Choices');
+    expect(result.output).toBeUndefined();
+  });
+
+  it('should evict a detected HTTP 200 error body from the cache', async () => {
+    const deleteFromCache = vi.fn().mockResolvedValue(undefined);
+    vi.mocked(fetchWithCache).mockResolvedValue({
+      data: '{"error":"transient failure"}',
+      cached: false,
+      status: 200,
+      statusText: 'OK',
+      headers: {},
+      deleteFromCache,
+    });
+
+    const provider = new OllamaCompletionProvider('llama3.3');
+    const result = await provider.callApi('test prompt');
+
+    // The 'text' format means fetchWithCache cannot spot the error key itself, so an
+    // HTTP 200 error body would otherwise be replayed for the full cache TTL.
+    expect(result.error).toBe('Ollama error: transient failure');
+    expect(deleteFromCache).toHaveBeenCalledTimes(1);
+  });
+
+  it('should surface a non-2xx response with an empty body', async () => {
+    vi.mocked(fetchWithCache).mockResolvedValue({
+      data: '',
+      cached: false,
+      status: 503,
+      statusText: 'Service Unavailable',
+      headers: {},
+    });
+
+    const provider = new OllamaCompletionProvider('llama3.3');
+    const result = await provider.callApi('test prompt');
+
+    expect(result.error).toBe('Ollama API error: 503 Service Unavailable');
+    expect(result.output).toBeUndefined();
   });
 
   it('should handle invalid JSON response', async () => {
@@ -273,7 +367,7 @@ describe('OllamaChatProvider', () => {
 
   it('should handle chat API response with error field', async () => {
     const mockResponse = {
-      data: { error: 'chat error occurred' },
+      data: '{"error":"chat error occurred"}',
       cached: false,
       status: 200,
       statusText: 'OK',
@@ -286,6 +380,70 @@ describe('OllamaChatProvider', () => {
     const result = await provider.callApi('test prompt');
 
     expect(result.error).toBe('Ollama error: chat error occurred');
+  });
+
+  it.each([
+    [404, 'Not Found', `model 'llama3.3' not found`],
+    [400, 'Bad Request', '"all-minilm" does not support chat'],
+    [401, 'Unauthorized', 'Unauthorized'],
+  ])(
+    'should surface a %i error body instead of an empty output',
+    async (status, statusText, msg) => {
+      vi.mocked(fetchWithCache).mockResolvedValue({
+        data: JSON.stringify({ error: msg }),
+        cached: false,
+        status,
+        statusText,
+        headers: {},
+      });
+
+      const provider = new OllamaChatProvider('llama3.3');
+      const result = await provider.callApi('test prompt');
+
+      expect(result.error).toBe(`Ollama API error: ${status} ${statusText}: ${msg}`);
+      expect(result.output).toBeUndefined();
+    },
+  );
+
+  it('should surface an error record emitted partway through a 200 stream', async () => {
+    // /api/chat can start streaming, then fail: HTTP is already 200 and the body is
+    // multi-line, so the whole body does not parse as a single JSON value.
+    vi.mocked(fetchWithCache).mockResolvedValue({
+      data:
+        '{"message":{"role":"assistant","content":"Partial"},"done":false}\n' +
+        '{"error":"an unexpected error was encountered while running the model"}\n',
+      cached: false,
+      status: 200,
+      statusText: 'OK',
+      headers: {},
+    });
+
+    const provider = new OllamaChatProvider('llama3.3');
+    const result = await provider.callApi('test prompt');
+
+    expect(result.error).toBe(
+      'Ollama error: an unexpected error was encountered while running the model',
+    );
+    // Must not silently return the partial content as a success.
+    expect(result.output).toBeUndefined();
+  });
+
+  it('should not mistake a successful NDJSON stream for an error body', async () => {
+    vi.mocked(fetchWithCache).mockResolvedValue({
+      data:
+        '{"message":{"role":"assistant","content":"Hello"},"done":false}\n' +
+        '{"message":{"role":"assistant","content":" there"},"done":true,"prompt_eval_count":3,"eval_count":2}\n',
+      cached: false,
+      status: 200,
+      statusText: 'OK',
+      headers: {},
+    });
+
+    const provider = new OllamaChatProvider('llama3.3');
+    const result = await provider.callApi('test prompt');
+
+    expect(result.error).toBeUndefined();
+    expect(result.output).toBe('Hello there');
   });
 
   it('should handle invalid JSON response', async () => {
@@ -820,6 +978,45 @@ describe('OllamaEmbeddingProvider', () => {
     expect(result).toEqual({
       embedding: [0.1, 0.2, 0.3],
     });
+  });
+
+  it.each([
+    [404, 'Not Found', `model 'llama3.3' not found`],
+    [400, 'Bad Request', 'invalid input'],
+  ])(
+    'should surface a %i embeddings error body instead of a missing-embedding error',
+    async (status, statusText, msg) => {
+      vi.mocked(fetchWithCache).mockResolvedValue({
+        data: { error: msg },
+        cached: false,
+        status,
+        statusText,
+        headers: {},
+      });
+
+      const provider = new OllamaEmbeddingProvider('llama3.3');
+      const result = await provider.callEmbeddingApi('test text');
+
+      expect(result.error).toBe(`Ollama API error: ${status} ${statusText}: ${msg}`);
+      expect(result.embedding).toBeUndefined();
+    },
+  );
+
+  it('should preserve a non-2xx JSON body that has no top-level error key', async () => {
+    // A gateway in front of Ollama may return e.g. {"message":"invalid token"}; the
+    // diagnostic must survive rather than collapsing to just the status line.
+    vi.mocked(fetchWithCache).mockResolvedValue({
+      data: { message: 'invalid token' },
+      cached: false,
+      status: 401,
+      statusText: 'Unauthorized',
+      headers: {},
+    });
+
+    const provider = new OllamaEmbeddingProvider('llama3.3');
+    const result = await provider.callEmbeddingApi('test text');
+
+    expect(result.error).toBe('Ollama API error: 401 Unauthorized: {"message":"invalid token"}');
   });
 
   it('should handle embeddings API errors', async () => {
