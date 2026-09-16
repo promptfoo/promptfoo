@@ -2,7 +2,7 @@ import type { AssistantCreationOptions, FunctionDefinition } from '@azure/openai
 
 import type { EnvOverrides } from '../../types/env';
 import type { MCPConfig } from '../mcp/types';
-import type { AssistantFunctionCallback } from '../openai/types';
+import type { AssistantFunctionCallback, GPT5ReasoningEffort } from '../openai/types';
 
 /**
  * Options for configuring retry behavior
@@ -50,6 +50,8 @@ export interface AzureCompletionOptions {
   systemPrompt?: string;
 
   // OpenAI params
+  /** Output vector size for embeddings from text-embedding-3 and later models. */
+  dimensions?: number;
   max_tokens?: number;
   temperature?: number;
   top_p?: number;
@@ -70,7 +72,12 @@ export interface AzureCompletionOptions {
       parameters: any;
     };
   }[];
-  tool_choice?: 'none' | 'auto' | { type: 'function'; function?: { name: string } };
+  tool_choice?:
+    | 'none'
+    | 'auto'
+    | 'required'
+    | { type: 'function'; function?: { name: string } }
+    | { type: 'function'; name: string };
   response_format?:
     | { type: 'json_object' }
     | {
@@ -89,7 +96,7 @@ export interface AzureCompletionOptions {
       };
   stop?: string[];
   seed?: number;
-  reasoning_effort?: 'low' | 'medium' | 'high';
+  reasoning_effort?: GPT5ReasoningEffort;
   /**
    * Controls the verbosity of the model's responses. Only used for reasoning models (GPT-5, o1, o3, etc.).
    */
@@ -109,6 +116,8 @@ export interface AzureCompletionOptions {
  * Options shared by Azure chat and responses providers.
  */
 export interface AzureChatResponsesOptions extends AzureCompletionOptions {
+  /** Underlying model ID for request compatibility and cost estimates when the deployment is aliased. */
+  modelName?: string;
   /**
    * When true, omit hardcoded defaults for temperature, max_tokens, top_p, etc.
    * Only values explicitly set via config or environment variables will be sent.
@@ -121,10 +130,19 @@ export interface AzureModelCost {
   cost: {
     input: number;
     output: number;
+    cacheRead?: number;
+    cacheReadAudio?: number;
+    cacheReadImage?: number;
+    audioInput?: number;
+    audioOutput?: number;
+    imageInput?: number;
+    imageOutput?: number;
+    priorityMultiplier?: number;
     longContext?: {
       threshold: number;
       input: number;
       output: number;
+      cacheRead?: number;
     };
   };
 }

@@ -366,11 +366,155 @@ function parseScanOutput(scanOutput: string): ScanResponse {
 //   scan starts (promptfoo and its dependency tree work without lifecycle scripts)
 // - sanitized env (createSubprocessEnv) with tokens stripped, plus every env-level
 //   npm config override removed (see below)
-// - cwd outside the checked-out workspace: npm's global mode documents (and testing
-//   confirms) that it ignores the per-project .npmrc, but the workspace holds the
-//   untrusted PR being scanned — no cwd-derived npm config (registry, proxy,
-//   strict-ssl, ignore-scripts…) may ever be in scope
-async function installPromptfooCli(promptfooVersion: string): Promise<void> {
+// - cwd and local install prefix outside the checked-out workspace: the workspace
+//   holds the untrusted PR being scanned, so no cwd-derived npm config (registry,
+//   proxy, strict-ssl, ignore-scripts…) may ever be in scope
+// - both npm and the scanner run under the action runtime, not a possibly unsupported
+//   Node version selected by the calling workflow
+// Distinct from isPathWithinOrEqualTo below, which stays string-prefix based on purpose:
+// path.relative() case-folds on win32, and that function documents a deliberate
+// case-sensitive comparison. Do not collapse the two.
+function isPathWithinDirectory(directory: string, candidate: string): boolean {
+  const relativePath = path.relative(directory, candidate);
+  return (
+    !relativePath ||
+    (relativePath !== '..' &&
+      !relativePath.startsWith(`..${path.sep}`) &&
+      !path.isAbsolute(relativePath))
+  );
+}
+
+/** Containment that excludes the directory itself, for paths that must name a file inside it. */
+function isFileWithinDirectory(directory: string, candidate: string): boolean {
+  return (
+    Boolean(path.relative(directory, candidate)) && isPathWithinDirectory(directory, candidate)
+  );
+}
+
+function getNpmCliCandidates(directory: string): string[] {
+  return [
+    // Windows Node distributions install npm alongside node.exe.
+    path.join(directory, 'node_modules', 'npm', 'bin', 'npm-cli.js'),
+    // Linux/macOS Node distributions install npm under the sibling lib directory.
+    path.join(directory, '..', 'lib', 'node_modules', 'npm', 'bin', 'npm-cli.js'),
+  ];
+}
+
+function resolveSafeNpmCliCandidate(
+  directory: string,
+  canonicalWorkspace: string,
+): string | undefined {
+  for (const candidate of getNpmCliCandidates(directory)) {
+    if (!fs.existsSync(candidate)) {
+      continue;
+    }
+
+    try {
+      const canonicalCandidate = fs.realpathSync(candidate);
+      if (!isPathWithinDirectory(canonicalWorkspace, canonicalCandidate)) {
+        return canonicalCandidate;
+      }
+    } catch {
+      // A disappearing or inaccessible PATH entry is not a usable npm install.
+    }
+  }
+
+  return undefined;
+}
+
+function resolveNpmCliPath(): string {
+  const actionNodeDir = path.dirname(process.execPath);
+  for (const candidate of getNpmCliCandidates(actionNodeDir)) {
+    if (fs.existsSync(candidate)) {
+      return fs.realpathSync(candidate);
+    }
+  }
+
+  const workspace = path.resolve(process.env.GITHUB_WORKSPACE || process.cwd());
+  const canonicalWorkspace = fs.realpathSync(workspace);
+  const executableNames = process.platform === 'win32' ? ['npm.cmd', 'npm.exe', 'npm'] : ['npm'];
+  const visited = new Set<string>();
+
+  for (const directory of (process.env.PATH || '').split(path.delimiter)) {
+    if (!directory || !path.isAbsolute(directory) || visited.has(directory)) {
+      continue;
+    }
+    visited.add(directory);
+
+    // PATH often contains checkout-derived bins. A PR must not gain npm-code
+    // execution merely by placing a lookalike npm-cli.js under one of them.
+    if (isPathWithinDirectory(workspace, directory)) {
+      continue;
+    }
+
+    const npmExecutable = executableNames
+      .map((executableName) => path.join(directory, executableName))
+      .find((candidate) => fs.existsSync(candidate));
+    if (!npmExecutable) {
+      continue;
+    }
+
+    let canonicalDirectory: string;
+    let canonicalExecutable: string;
+    try {
+      canonicalDirectory = fs.realpathSync(directory);
+      canonicalExecutable = fs.realpathSync(npmExecutable);
+    } catch {
+      continue;
+    }
+
+    if (
+      isPathWithinDirectory(canonicalWorkspace, canonicalDirectory) ||
+      isPathWithinDirectory(canonicalWorkspace, canonicalExecutable)
+    ) {
+      continue;
+    }
+
+    // Unix npm shims are normally symlinks directly to npm-cli.js.
+    if (path.basename(canonicalExecutable) === 'npm-cli.js') {
+      return canonicalExecutable;
+    }
+
+    const npmCliPath = resolveSafeNpmCliCandidate(directory, canonicalWorkspace);
+    if (npmCliPath) {
+      return npmCliPath;
+    }
+  }
+
+  throw new Error('npm CLI not found; install npm or configure Node.js with actions/setup-node');
+}
+
+function resolveInstalledPromptfooEntrypoint(installDir: string): string {
+  const packageDir = path.join(installDir, 'node_modules', 'promptfoo');
+  const packageManifest = JSON.parse(
+    fs.readFileSync(path.join(packageDir, 'package.json'), 'utf-8'),
+  ) as {
+    bin?: string | Record<string, unknown>;
+  };
+  const relativeEntrypoint =
+    typeof packageManifest.bin === 'string' ? packageManifest.bin : packageManifest.bin?.promptfoo;
+
+  if (typeof relativeEntrypoint !== 'string' || !relativeEntrypoint) {
+    throw new Error('Installed promptfoo package does not declare a promptfoo executable');
+  }
+
+  const entrypoint = path.resolve(packageDir, relativeEntrypoint);
+  if (!isFileWithinDirectory(packageDir, entrypoint)) {
+    throw new Error('Installed promptfoo executable must remain within its package directory');
+  }
+
+  // npm generally rejects unsafe tar entries, but canonicalizing also prevents a
+  // package-internal symlink from redirecting the OIDC-bearing scanner elsewhere.
+  const canonicalPackageDir = fs.realpathSync(packageDir);
+  const canonicalEntrypoint = fs.realpathSync(entrypoint);
+  if (!isFileWithinDirectory(canonicalPackageDir, canonicalEntrypoint)) {
+    throw new Error('Installed promptfoo executable must remain within its package directory');
+  }
+
+  return canonicalEntrypoint;
+}
+
+async function installPromptfooCli(promptfooVersion: string): Promise<string> {
   const installCwd = process.env.RUNNER_TEMP || os.tmpdir();
 
   // npm reads its registry (and other config) from both env vars and user/global
@@ -381,29 +525,37 @@ async function installPromptfooCli(promptfooVersion: string): Promise<void> {
   //  - strip every npm_config_*/NPM_CONFIG_* env var, and
   //  - point --userconfig/--globalconfig at fresh empty files so no on-disk .npmrc is
   //    consulted (two distinct paths: npm rejects loading one file as both).
-  // The pinned version therefore resolves from the runner's default (public) registry.
+  // The pinned version therefore resolves from the explicitly selected public registry.
   // This deliberately bypasses runner-admin npm mirrors configured via env or .npmrc
   // for this one install (the SaaS scan already requires public egress); the scan
   // subprocess keeps workflow-provided npm config because its nested npx (MCP)
   // invocations rely on it.
   const env = createSubprocessEnv();
+  // The isolated install always uses the public registry; inherited private-registry
+  // credentials are unnecessary here but remain available to the scanner's nested npx.
+  delete env.NODE_AUTH_TOKEN;
+  delete env.NPM_TOKEN;
   for (const key of Object.keys(env)) {
     if (key.toLowerCase().startsWith('npm_config_')) {
       delete env[key];
     }
   }
-  const npmrcDir = fs.mkdtempSync(path.join(installCwd, 'promptfoo-npmrc-'));
-  const emptyUserConfig = path.join(npmrcDir, 'user');
-  const emptyGlobalConfig = path.join(npmrcDir, 'global');
+  const installDir = fs.mkdtempSync(path.join(installCwd, 'promptfoo-install-'));
+  const emptyUserConfig = path.join(installDir, 'user');
+  const emptyGlobalConfig = path.join(installDir, 'global');
+  const npmCliPath = resolveNpmCliPath();
 
   core.info(`📦 Installing promptfoo@${promptfooVersion}...`);
   await exec.exec(
-    'npm',
+    process.execPath,
     [
+      npmCliPath,
       'install',
-      '-g',
+      '--prefix',
+      installDir,
       `promptfoo@${promptfooVersion}`,
       '--ignore-scripts',
+      '--registry=https://registry.npmjs.org/',
       '--userconfig',
       emptyUserConfig,
       '--globalconfig',
@@ -412,6 +564,8 @@ async function installPromptfooCli(promptfooVersion: string): Promise<void> {
     { env, cwd: installCwd },
   );
   core.info('✅ Promptfoo installed successfully');
+
+  return resolveInstalledPromptfooEntrypoint(installDir);
 }
 
 async function runPromptfooScan(
@@ -419,7 +573,7 @@ async function runPromptfooScan(
   oidcToken: string | undefined,
   promptfooVersion: string,
 ): Promise<ScanResponse> {
-  await installPromptfooCli(promptfooVersion);
+  const promptfooEntrypoint = await installPromptfooCli(promptfooVersion);
 
   core.info('🚀 Running promptfoo code-scans run...');
 
@@ -427,7 +581,7 @@ async function runPromptfooScan(
   let scanError = '';
   const scanEnv = createScanEnv(oidcToken);
 
-  const exitCode = await exec.exec('promptfoo', cliArgs, {
+  const exitCode = await exec.exec(process.execPath, [promptfooEntrypoint, ...cliArgs], {
     env: scanEnv,
     listeners: {
       stdout: (data: Buffer) => {

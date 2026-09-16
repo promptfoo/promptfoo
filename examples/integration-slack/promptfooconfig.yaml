@@ -2,7 +2,7 @@
 description: Human feedback via Slack
 
 # Prerequisites:
-# 1. Install the Slack Web API: npm install @slack/web-api
+# 1. Install the Slack Web API: npm install @slack/web-api@^8
 # 2. Set SLACK_BOT_TOKEN environment variable
 # 3. Replace C_YOUR_CHANNEL_ID with your actual Slack channel ID
 
