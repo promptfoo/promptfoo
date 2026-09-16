@@ -63,6 +63,28 @@ providers:
       apiKeyEnvar: MY_PROXY_KEY # optional: read the Bearer token from $MY_PROXY_KEY
 ```
 
+## Cost reporting
+
+By default, promptfoo uses the [reported `usage.cost`](https://openrouter.ai/docs/cookbook/administration/usage-accounting) as the charge to your OpenRouter account. Missing or invalid charges remain unknown. Reported upstream amounts remain separate metadata fields.
+
+For responses explicitly marked `usage.is_byok: true`, generic `cost` is unavailable unless you configure complete, valid token rates. With [Bring Your Own Key (BYOK)](https://openrouter.ai/docs/guides/overview/auth/byok), your upstream provider bills inference separately, so a zero or fee-only OpenRouter charge does not establish the combined cost. Responses with a missing or invalid BYOK flag continue to use the reported account charge; their route remains unknown in metadata.
+
+To supply your own per-token estimate, configure `cost`, or both `inputCost` and `outputCost`. Valid configured rates take priority over reported billing, including for BYOK. Both prompt and completion token counts are required. Incomplete or invalid rates or counts leave cost unknown. This estimate is based on your configured rates, not a reconciled invoice.
+
+Successful responses expose validated billing facts under `metadata.openrouter`:
+
+| Field                                                          | Meaning                                                        |
+| -------------------------------------------------------------- | -------------------------------------------------------------- |
+| `accountCharge`                                                | Reported charge to your OpenRouter account, including zero.    |
+| `isByok`                                                       | Reported boolean route flag; omitted when missing or invalid.  |
+| `reportedUpstreamInferenceCost`                                | OpenRouter-reported upstream inference amount, when available. |
+| `reportedUpstreamPromptCost`, `reportedUpstreamCompletionCost` | Independently reported prompt and completion components.       |
+| `reportedServerToolCost`                                       | Reported server tool component, when available.                |
+
+Missing or invalid amounts are omitted. These fields appear in response details and JSON exports, independently of any configured estimate. Cost assertions require a known cost; their existing error handling can omit response metadata from the exported error row. General cost totals sum only known costs and can therefore be incomplete when some responses have unavailable cost.
+
+Cache replays retain logical cost and billing metadata. The evaluator records zero additional incurred cost for cached responses with a known cost.
+
 ## Features
 
 - Access to 300+ models through a single API
