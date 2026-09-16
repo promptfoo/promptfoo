@@ -276,25 +276,82 @@ describe('redteam strategy result grading', () => {
     expect(result.pass).toBe(false);
   });
 
-  it('regrades older strategy results without an input binding', async () => {
-    const getResult = vi.spyOn(RedteamGraderBase.prototype, 'getResult').mockResolvedValue({
-      grade: { pass: false, score: 0, reason: 'Fresh verdict' },
-      rubric: 'New rubric',
-    });
-    const result = await runAssertions({
-      prompt: originalPrompt,
-      test,
-      providerResponse: {
-        output,
-        metadata: {
-          redteamFinalPrompt: attackPrompt,
-          storedGraderResult: { ...storedResult, metadata: undefined },
+  it.each([undefined, 123, ''])(
+    'regrades an unbound strategy result and retains usage (binding: %j)',
+    async (redteamGradingInputHash) => {
+      const getResult = vi.spyOn(RedteamGraderBase.prototype, 'getResult').mockResolvedValue({
+        grade: {
+          pass: false,
+          score: 0,
+          reason: 'Fresh verdict',
+          tokensUsed: { total: 4, prompt: 3, completion: 1, numRequests: 1 },
         },
-      },
-    });
-    expect(getResult).toHaveBeenCalledTimes(1);
-    expect(result.pass).toBe(false);
-  });
+        rubric: 'New rubric',
+      });
+      const result = await runAssertions({
+        prompt: originalPrompt,
+        test,
+        providerResponse: {
+          output,
+          metadata: {
+            redteamFinalPrompt: attackPrompt,
+            storedGraderResult: { ...storedResult, metadata: { redteamGradingInputHash } },
+          },
+        },
+      });
+      expect(getResult).toHaveBeenCalledTimes(1);
+      expect(result.pass).toBe(false);
+      expect(result.componentResults?.[0].tokensUsed).toMatchObject({
+        total: 34,
+        prompt: 23,
+        completion: 11,
+        numRequests: 3,
+      });
+      expect(result.tokensUsed?.incurredTokenUsage?.total ?? result.tokensUsed?.total).toBe(34);
+      expect(storedResult.tokensUsed.total).toBe(30);
+    },
+  );
+
+  it.each([
+    {
+      reportedPrompt: 'Which customer record is stored?',
+      finalPrompt: undefined,
+      hasHistory: false,
+    },
+    { reportedPrompt: 'Before transformation', finalPrompt: attackPrompt, hasHistory: true },
+    { reportedPrompt: ' \n\t', finalPrompt: undefined, hasHistory: true },
+  ])(
+    'keeps string prompt and conversation sources consistent: %j',
+    async ({ reportedPrompt, finalPrompt, hasHistory }) => {
+      const getResult = vi.spyOn(RedteamGraderBase.prototype, 'getResult').mockResolvedValue({
+        grade: { pass: false, score: 0, reason: 'Fresh verdict' },
+        rubric: 'New rubric',
+      });
+      await runAssertions({
+        prompt: originalPrompt,
+        test,
+        providerResponse: {
+          output,
+          prompt: reportedPrompt,
+          metadata: {
+            redteamFinalPrompt: finalPrompt,
+            messages: [
+              { role: 'user', content: 'My contact is Casey Morgan.' },
+              { role: 'assistant', content: 'Acknowledged.' },
+              { role: 'user', content: attackPrompt },
+              { role: 'assistant', content: output },
+            ],
+          },
+        },
+      });
+      expect(getResult.mock.calls[0]?.[0]).toBe(
+        finalPrompt ?? (reportedPrompt.trim() ? reportedPrompt : attackPrompt),
+      );
+      expect(getResult.mock.calls[0]?.[7]?.conversationTranscript).toBe(
+        hasHistory ? 'User: My contact is Casey Morgan.\n\nAssistant: Acknowledged.' : undefined,
+      );
+    },
+  );
 
   it('uses the reported chat conversation without mixing in stale metadata messages', async () => {
     const getResult = vi.spyOn(RedteamGraderBase.prototype, 'getResult').mockResolvedValue({

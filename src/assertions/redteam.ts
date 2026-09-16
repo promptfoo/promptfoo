@@ -63,13 +63,12 @@ function matchesStoredGraderResult(
           : undefined;
 
   // A target can return arbitrary metadata. Only the configured attack executor
-  // may supply a reusable grade; a marker in the response is not provenance.
+  // may supply a grade or its usage; a marker in the response is not provenance.
   if (
     !pluginId ||
     !test.metadata?.strategyId ||
     !providerId?.startsWith('promptfoo:redteam:') ||
-    !isAttackProvider(providerId) ||
-    typeof storedResult.metadata?.redteamGradingInputHash !== 'string'
+    !isAttackProvider(providerId)
   ) {
     return false;
   }
@@ -172,10 +171,17 @@ export const handleRedteam = async ({
   const hasFinalPrompt =
     typeof providerResponse.metadata?.redteamFinalPrompt === 'string' &&
     providerResponse.metadata.redteamFinalPrompt.trim();
-  const { lastUserPrompt, conversationTranscript } =
-    (hasFinalPrompt && savedConversation.lastUserPrompt) || !reportedConversation.lastUserPrompt
-      ? savedConversation
-      : reportedConversation;
+  let conversation = savedConversation;
+  if (!hasFinalPrompt || !savedConversation.lastUserPrompt) {
+    if (typeof providerResponse.prompt === 'string' && providerResponse.prompt.trim()) {
+      // A reported string supplies no prior turns. Do not combine it with unrelated
+      // saved messages unless the strategy supplied an authoritative final prompt.
+      conversation = {};
+    } else if (reportedConversation.lastUserPrompt) {
+      conversation = reportedConversation;
+    }
+  }
+  const { lastUserPrompt, conversationTranscript } = conversation;
   const effectivePrompt = getRedteamPrompt(prompt, test, providerResponse, lastUserPrompt);
   invariant(effectivePrompt, `Grader ${baseType} must have a prompt`);
 
@@ -255,7 +261,7 @@ export const handleRedteam = async ({
     }
   }
 
-  // A stale verdict is unusable, but its strategy grading calls still incurred usage.
+  // Stale or unbound verdicts need fresh grading, but trusted strategy usage remains.
   const tokensUsed =
     hasStrategyGrade && storedResult.tokensUsed
       ? cloneTokenUsageBreakdown(storedResult.tokensUsed)
