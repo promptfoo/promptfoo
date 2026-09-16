@@ -247,6 +247,33 @@ export function accumulateNamedMetric(
   setOwnMetricValue(accumulator.namedScoreWeights, metricName, nextWeight);
 }
 
+/**
+ * Prompt metrics whose named metric totals an evaluation carried over from a previous run.
+ *
+ * Retry can only keep the live evaluator's named metric totals when `evaluate()` seeded the
+ * prompt from the stored metrics, because a read-side recalculation rebuilds those totals from
+ * persisted rows and deliberately refuses to execute stored metric name templates. Object
+ * identity used to answer that question, but seeded metrics are `structuredClone`d per column,
+ * so the clone is registered here instead. A WeakSet keeps the marker out of the
+ * `CompletedPrompt` payload that gets persisted and shared.
+ */
+const namedMetricsSeededFromPreviousRun = new WeakSet<object>();
+
+/** Records that `metrics` was seeded from a previous run's totals. Returns the same object. */
+export function markNamedMetricsSeededFromPreviousRun<T extends object>(metrics: T): T {
+  namedMetricsSeededFromPreviousRun.add(metrics);
+  return metrics;
+}
+
+/** True when `metrics` was seeded from a previous run's totals by the current process. */
+export function wereNamedMetricsSeededFromPreviousRun(metrics: unknown): boolean {
+  return (
+    typeof metrics === 'object' &&
+    metrics !== null &&
+    namedMetricsSeededFromPreviousRun.has(metrics)
+  );
+}
+
 export function backfillNamedScoreWeights(accumulator: NamedMetricAccumulator): void {
   accumulator.namedScoreWeights ||= {};
 

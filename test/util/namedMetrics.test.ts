@@ -2,8 +2,10 @@ import { describe, expect, it } from 'vitest';
 import {
   accumulateNamedMetric,
   backfillNamedScoreWeights,
+  markNamedMetricsSeededFromPreviousRun,
   type NamedMetricAccumulator,
   renderPersistedMetricName,
+  wereNamedMetricsSeededFromPreviousRun,
 } from '../../src/util/namedMetrics';
 
 describe('accumulateNamedMetric', () => {
@@ -104,66 +106,65 @@ describe('accumulateNamedMetric', () => {
     });
   });
 
-  it.each([
-    'constructor',
-    'toString',
-    '__proto__',
-  ])('stores prototype-colliding metric name %s as an own numeric property', (metricName) => {
-    const metrics: NamedMetricAccumulator = {
-      namedScores: {},
-      namedScoresCount: {},
-      namedScoreWeights: {},
-    };
+  it.each(['constructor', 'toString', '__proto__'])(
+    'stores prototype-colliding metric name %s as an own numeric property',
+    (metricName) => {
+      const metrics: NamedMetricAccumulator = {
+        namedScores: {},
+        namedScoresCount: {},
+        namedScoreWeights: {},
+      };
 
-    accumulateNamedMetric(metrics, {
-      metricName,
-      metricValue: 0.8,
-      gradingResult: undefined,
-    });
-    accumulateNamedMetric(metrics, {
-      metricName,
-      metricValue: 0.8,
-      gradingResult: undefined,
-    });
+      accumulateNamedMetric(metrics, {
+        metricName,
+        metricValue: 0.8,
+        gradingResult: undefined,
+      });
+      accumulateNamedMetric(metrics, {
+        metricName,
+        metricValue: 0.8,
+        gradingResult: undefined,
+      });
 
-    expect(Object.prototype.hasOwnProperty.call(metrics.namedScores, metricName)).toBe(true);
-    expect(Object.prototype.hasOwnProperty.call(metrics.namedScoresCount, metricName)).toBe(true);
-    expect(Object.prototype.hasOwnProperty.call(metrics.namedScoreWeights, metricName)).toBe(true);
-    expect(metrics.namedScores[metricName]).toBe(1.6);
-    expect(metrics.namedScoresCount[metricName]).toBe(2);
-    expect(metrics.namedScoreWeights?.[metricName]).toBe(2);
-  });
+      expect(Object.prototype.hasOwnProperty.call(metrics.namedScores, metricName)).toBe(true);
+      expect(Object.prototype.hasOwnProperty.call(metrics.namedScoresCount, metricName)).toBe(true);
+      expect(Object.prototype.hasOwnProperty.call(metrics.namedScoreWeights, metricName)).toBe(
+        true,
+      );
+      expect(metrics.namedScores[metricName]).toBe(1.6);
+      expect(metrics.namedScoresCount[metricName]).toBe(2);
+      expect(metrics.namedScoreWeights?.[metricName]).toBe(2);
+    },
+  );
 
-  it.each([
-    null,
-    '2',
-    Number.NaN,
-    Number.POSITIVE_INFINITY,
-  ])('treats invalid stored weight %s as an unweighted contribution', (invalidWeight) => {
-    const metrics: NamedMetricAccumulator = {
-      namedScores: {},
-      namedScoresCount: {},
-      namedScoreWeights: {},
-    };
+  it.each([null, '2', Number.NaN, Number.POSITIVE_INFINITY])(
+    'treats invalid stored weight %s as an unweighted contribution',
+    (invalidWeight) => {
+      const metrics: NamedMetricAccumulator = {
+        namedScores: {},
+        namedScoresCount: {},
+        namedScoreWeights: {},
+      };
 
-    accumulateNamedMetric(metrics, {
-      metricName: 'accuracy',
-      metricValue: 0.8,
-      gradingResult: {
-        namedScoreWeights: { accuracy: invalidWeight },
-        componentResults: [
-          { assertion: { metric: 'accuracy' } },
-          { assertion: { metric: 'accuracy' } },
-        ],
-      },
-    });
+      accumulateNamedMetric(metrics, {
+        metricName: 'accuracy',
+        metricValue: 0.8,
+        gradingResult: {
+          namedScoreWeights: { accuracy: invalidWeight },
+          componentResults: [
+            { assertion: { metric: 'accuracy' } },
+            { assertion: { metric: 'accuracy' } },
+          ],
+        },
+      });
 
-    expect(metrics).toEqual({
-      namedScores: { accuracy: 0.8 },
-      namedScoresCount: { accuracy: 2 },
-      namedScoreWeights: { accuracy: 2 },
-    });
-  });
+      expect(metrics).toEqual({
+        namedScores: { accuracy: 0.8 },
+        namedScoresCount: { accuracy: 2 },
+        namedScoreWeights: { accuracy: 2 },
+      });
+    },
+  );
 
   it('preserves a finite zero stored weight', () => {
     const metrics: NamedMetricAccumulator = {
@@ -399,5 +400,43 @@ describe('backfillNamedScoreWeights', () => {
 
     expect(Object.prototype.hasOwnProperty.call(metrics.namedScoreWeights, '__proto__')).toBe(true);
     expect(metrics.namedScoreWeights?.__proto__).toBe(2);
+  });
+});
+
+describe('namedMetricsSeededFromPreviousRun', () => {
+  it('marks the exact object it is given and returns it', () => {
+    const metrics = { namedScores: {}, namedScoresCount: {}, namedScoreWeights: {} };
+
+    expect(markNamedMetricsSeededFromPreviousRun(metrics)).toBe(metrics);
+    expect(wereNamedMetricsSeededFromPreviousRun(metrics)).toBe(true);
+  });
+
+  it('does not treat copies or unrelated values as seeded', () => {
+    const metrics = markNamedMetricsSeededFromPreviousRun({
+      namedScores: { quality: 3 },
+      namedScoresCount: { quality: 2 },
+      namedScoreWeights: { quality: 4 },
+    });
+
+    expect(wereNamedMetricsSeededFromPreviousRun({ ...metrics })).toBe(false);
+    expect(wereNamedMetricsSeededFromPreviousRun(structuredClone(metrics))).toBe(false);
+    expect(wereNamedMetricsSeededFromPreviousRun(undefined)).toBe(false);
+    expect(wereNamedMetricsSeededFromPreviousRun(null)).toBe(false);
+    expect(wereNamedMetricsSeededFromPreviousRun('metrics')).toBe(false);
+  });
+
+  it('keeps the marker off the serialized payload', () => {
+    const metrics = markNamedMetricsSeededFromPreviousRun({
+      namedScores: { quality: 3 },
+      namedScoresCount: { quality: 2 },
+      namedScoreWeights: { quality: 4 },
+    });
+
+    expect(Object.keys(metrics)).toEqual(['namedScores', 'namedScoresCount', 'namedScoreWeights']);
+    expect(JSON.parse(JSON.stringify(metrics))).toEqual({
+      namedScores: { quality: 3 },
+      namedScoresCount: { quality: 2 },
+      namedScoreWeights: { quality: 4 },
+    });
   });
 });

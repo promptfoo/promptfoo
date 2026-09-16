@@ -15,15 +15,14 @@ import {
   getPersistedProviderFilterOptions,
   getProviderFilterRegexError,
 } from '../util/eval/filterProviders';
-import { accumulateNamedMetric } from '../util/namedMetrics';
+import { accumulateNamedMetric, wereNamedMetricsSeededFromPreviousRun } from '../util/namedMetrics';
 import { filterFiniteScores } from '../util/numeric';
 import { writeMultipleOutputs } from '../util/output';
 import { getOutputFileFormat } from '../util/outputFormats';
 import { shouldShareResults } from '../util/sharing';
 import {
-  accumulateAssertionTokenUsage,
+  accumulateGradingTokenUsage,
   accumulateResponseTokenUsage,
-  createEmptyAssertions,
   createEmptyTokenUsage,
 } from '../util/tokenUsageUtils';
 
@@ -81,21 +80,28 @@ function isCompleteFiniteNamedMetrics(metrics: PromptMetrics | undefined): boole
   );
 }
 
-/** Capture prompt metric identity before retry so preservation is used only when evaluate() reused it. */
+/**
+ * Capture prompt metric completeness before retry so preservation is used only when evaluate()
+ * carried those totals forward.
+ *
+ * `evaluate()` seeds each column from the stored prompt's metrics, but it clones them, so the
+ * carry-over cannot be detected by comparing object identity. `buildCompletedPrompts` marks the
+ * seeded clones instead, and the marker survives cloning because it lives in a WeakSet rather
+ * than in the metrics payload.
+ */
 export function createNamedMetricsPreservationGuard(evalRecord: Eval) {
   const originalHasDerivedMetrics = Boolean(evalRecord.config.derivedMetrics?.length);
-  const snapshots = evalRecord.prompts.map(({ metrics }) => ({
-    complete: isCompleteFiniteNamedMetrics(metrics),
-    metrics,
-  }));
+  const completeSnapshots = evalRecord.prompts.map(({ metrics }) =>
+    isCompleteFiniteNamedMetrics(metrics),
+  );
 
   return (retriedEval: Eval, derivedMetrics: TestSuite['derivedMetrics']): boolean =>
     !originalHasDerivedMetrics &&
     !derivedMetrics?.length &&
-    snapshots.length === retriedEval.prompts.length &&
-    snapshots.every(
-      (snapshot, index) =>
-        snapshot.complete && snapshot.metrics === retriedEval.prompts[index]?.metrics,
+    completeSnapshots.length === retriedEval.prompts.length &&
+    completeSnapshots.every(
+      (complete, index) =>
+        complete && wereNamedMetricsSeededFromPreviousRun(retriedEval.prompts[index]?.metrics),
     );
 }
 
@@ -280,6 +286,7 @@ export async function recalculatePromptMetrics(
       namedScoresCount: Record<string, number>;
       namedScoreWeights?: Record<string, number>;
       cost: number;
+      incurredCost?: number;
     }
   >();
 
@@ -338,6 +345,12 @@ export async function recalculatePromptMetrics(
         // Update scores and other metrics
         metrics.score += result.score ?? 0;
         metrics.totalLatencyMs += result.latencyMs || 0;
+        const incurredCost =
+          result.response?.incurredCost ?? (result.response?.cached ? 0 : undefined);
+        if (incurredCost !== undefined || metrics.incurredCost !== undefined) {
+          metrics.incurredCost =
+            (metrics.incurredCost ?? metrics.cost) + (incurredCost ?? result.cost ?? 0);
+        }
         metrics.cost += result.cost || 0;
 
         if (!options.preserveNamedMetrics) {
@@ -363,20 +376,14 @@ export async function recalculatePromptMetrics(
 
         // Update token usage
         if (result.response?.tokenUsage) {
-          accumulateResponseTokenUsage(metrics.tokenUsage, {
-            tokenUsage: result.response.tokenUsage,
-          });
+          accumulateResponseTokenUsage(metrics.tokenUsage, result.response);
         }
 
         // Update assertion token usage
         if (result.gradingResult?.tokensUsed) {
-          if (!metrics.tokenUsage.assertions) {
-            metrics.tokenUsage.assertions = createEmptyAssertions();
-          }
-          accumulateAssertionTokenUsage(
-            metrics.tokenUsage.assertions,
-            result.gradingResult.tokensUsed,
-          );
+          accumulateGradingTokenUsage(metrics.tokenUsage, result.gradingResult.tokensUsed, {
+            cached: result.gradingResult.metadata?.cachedResponse,
+          });
         }
       }
 
