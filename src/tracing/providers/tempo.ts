@@ -4,6 +4,7 @@ import {
   MAX_TRACE_RESPONSE_BYTES,
   readLimitedResponse,
   releaseResponse,
+  validateTraceProviderEndpoint,
 } from './fetch';
 import { TraceProviderError } from './types';
 
@@ -53,9 +54,6 @@ const TRACE_ID_PATTERN = /^[0-9a-f]{32}$/i;
 const BASE64_TRACE_ID_PATTERN = /^[A-Za-z0-9+/]{22}(?:==)?$/;
 const SPAN_ID_PATTERN = /^[0-9a-f]{16}$/i;
 const BASE64_SPAN_ID_PATTERN = /^[A-Za-z0-9+/]{11}=?$/;
-const TRACE_CREDENTIAL_PATH_SEGMENT =
-  /^(?:[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}|[0-9a-f]{32,}|(?:token|key|secret|credential|auth|sk|sk-proj|sk-ant)[-_][a-z0-9._-]{8,}|AKIA[A-Z0-9]{16}|AIza[a-zA-Z0-9_-]{35}|[a-zA-Z0-9+/=_-]{64,}|eyJ[a-zA-Z0-9_-]*\.[a-zA-Z0-9_-]+\.[a-zA-Z0-9_-]+)$/i;
-
 function nanoToMs(value: string): number {
   const milliseconds = BigInt(value) / 1_000_000n;
   if (milliseconds < 0n || milliseconds > BigInt(Number.MAX_SAFE_INTEGER)) {
@@ -240,31 +238,7 @@ export class TempoProvider implements TraceProvider {
       throw new Error('Tempo provider requires endpoint configuration');
     }
 
-    let endpoint: URL;
-    try {
-      endpoint = new URL(config.endpoint);
-    } catch {
-      throw new Error('Tempo provider endpoint must be a valid HTTP or HTTPS URL');
-    }
-    const hasCredentialPath = endpoint.pathname.split('/').some((segment) => {
-      try {
-        return TRACE_CREDENTIAL_PATH_SEGMENT.test(decodeURIComponent(segment));
-      } catch {
-        return true;
-      }
-    });
-    if (
-      !['http:', 'https:'].includes(endpoint.protocol) ||
-      endpoint.username ||
-      endpoint.password ||
-      endpoint.search ||
-      endpoint.hash ||
-      hasCredentialPath
-    ) {
-      throw new Error(
-        'Tempo provider endpoint must be an HTTP or HTTPS URL without credentials, query parameters, or fragments',
-      );
-    }
+    validateTraceProviderEndpoint(config.endpoint, 'Tempo');
     if (
       config.timeout !== undefined &&
       (!Number.isSafeInteger(config.timeout) || config.timeout <= 0)

@@ -154,50 +154,62 @@ function createGeneratedFile(
   };
 }
 
+/** Percent-decode a URL path, leaving it alone if it is not valid encoding. */
+function decodeUrlPath(value: string): string {
+  try {
+    return decodeURIComponent(value);
+  } catch {
+    return value;
+  }
+}
+
 export function normalizeFilePath(filePath: string): string {
   if (!filePath.startsWith('file://')) {
+    // Plain paths pass through untouched, which is also how a Windows UNC share is
+    // addressed: `\\server\share\report.pdf` is already absolute, so resolvePath()
+    // leaves it alone. See the shorthand note below for why UNC cannot use file://.
     return filePath;
   }
 
-  // Only a file URL with an empty authority (file:///abs/path) names an absolute
-  // local path. Anything else is promptfoo's long-standing shorthand for a
-  // relative path -- file://fixtures/a.pdf, or file://./fixtures/a.pdf once the
-  // var holding it has been rendered. That matches `parseFileUrl`, which every
-  // other `file://` consumer in promptfoo goes through and which strips the
-  // scheme unconditionally.
-  //
-  // The authority has to be checked before handing the URL to fileURLToPath,
-  // because that function disagrees with itself across platforms: POSIX throws
-  // ERR_INVALID_FILE_URL_HOST on a non-empty host, but Windows happily converts
-  // it to a UNC/device path (\\.\fixtures\a.pdf), which is never a valid local
-  // path and reaches the filesystem as an ENOENT.
-  //
-  // A hosted file URL is therefore always read as the shorthand, because
-  // `file://server/share/a.pdf` and `file://fixtures/a.pdf` are syntactically
-  // identical and only the second has a documented meaning. A genuine UNC path
-  // stays reachable through either spelling that is unambiguous -- a plain
-  // `\\server\share\a.pdf` with no scheme, or the empty-authority
-  // `file:////server/share/a.pdf` -- both of which `path.isAbsolute` accepts on
-  // win32 and neither of which collides with a relative path.
-  let hasEmptyAuthority = false;
-  try {
-    hasEmptyAuthority = new URL(filePath).host === '';
-  } catch {
-    hasEmptyAuthority = false;
+  let url = filePath;
+  if (url.startsWith('file://localhost/')) {
+    url = `file:///${url.slice('file://localhost/'.length)}`;
   }
 
-  if (hasEmptyAuthority) {
+  // Windows drive paths, in any of file://C:/..., file:///C:/..., file://C:\...,
+  // file:///C:\... . path.normalize() converts separators per-platform and matches what
+  // fileURLToPath() returns for these on Windows, so no process.platform branch is needed
+  // and the behaviour stays deterministic in tests on every OS.
+  const winDriveMatch = url.match(/^file:\/\/\/?([a-zA-Z]:[\\/].*)$/);
+  if (winDriveMatch) {
+    return path.normalize(decodeUrlPath(winDriveMatch[1]));
+  }
+
+  // A rooted URL (file:///...) is a real file URL, so percent-encoding is meaningful.
+  if (url.startsWith('file:///')) {
     try {
-      return fileURLToPath(filePath);
+      return fileURLToPath(url);
     } catch {
-      // Fall through to the relative shorthand below.
+      // fileURLToPath rejects a driveless path on Windows (ERR_INVALID_FILE_URL_PATH), so
+      // decode here too -- otherwise a %20 survives into the filename on Windows only.
+      return decodeUrlPath(url.slice('file://'.length));
     }
   }
 
-  return filePath.slice('file://'.length);
+  // Promptfoo's long-standing shorthand for relative paths: file://relative/path.ext.
+  //
+  // This deliberately wins over reading the authority as a UNC host: `file://host/share`
+  // and `file://relative/path` are the same string shape, so supporting one necessarily
+  // breaks the other, and the shorthand is the documented, far more common form. A UNC
+  // share is still reachable by dropping the scheme (`\\server\share\report.pdf`),
+  // which returns above untouched.
+  //
+  // Not decoded, unlike the URL-shaped branches above: this is a path with a scheme
+  // prefix rather than a real URL, so a literal `%` in a filename must survive.
+  return url.slice('file://'.length);
 }
 
-function resolvePath(filePath: string): string {
+export function resolvePath(filePath: string): string {
   const withoutFileScheme = normalizeFilePath(filePath);
   if (path.isAbsolute(withoutFileScheme)) {
     return withoutFileScheme;

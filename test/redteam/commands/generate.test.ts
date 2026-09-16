@@ -512,6 +512,11 @@ describe('doGenerateRedteam', () => {
             prompt: 13,
             total: 20,
           },
+          generation: expect.objectContaining({
+            id: expect.any(String),
+            generatedAt: expect.any(String),
+            tokenUsage: { cached: 0, completion: 7, numRequests: 2, prompt: 13, total: 20 },
+          }),
         }),
       }),
       'output.yaml',

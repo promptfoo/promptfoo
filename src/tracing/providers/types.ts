@@ -17,7 +17,7 @@ export interface TraceProviderAuth {
  */
 export interface TraceProviderConfig {
   /** Provider identifier */
-  id: 'tempo' | 'braintrust' | 'jaeger' | 'local';
+  id: 'tempo' | 'braintrust' | 'langfuse' | 'jaeger' | 'local';
 
   /** Base endpoint URL for the trace backend */
   endpoint?: string;
