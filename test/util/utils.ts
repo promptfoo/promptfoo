@@ -156,13 +156,53 @@ export function mockGlobal<T>(name: string, value: T): () => void {
   };
 }
 
+/**
+ * Creates a unique temporary directory in the operating system temp location.
+ *
+ * @param prefix - Optional directory name prefix. Defaults to `promptfoo-test-`.
+ * @returns The absolute path to the newly created temporary directory.
+ */
 export function createTempDir(prefix = 'promptfoo-test-'): string {
   return fs.mkdtempSync(path.join(os.tmpdir(), prefix));
 }
 
+/**
+ * Removes a temporary directory created during tests.
+ *
+ * If `tempDir` is undefined, this function is a no-op. Otherwise, it retries recursive removal
+ * briefly to tolerate transient file-handle contention on Windows.
+ *
+ * @param tempDir - Absolute or relative path to the temporary directory to remove.
+ */
 export function removeTempDir(tempDir: string | undefined): void {
   if (!tempDir) {
     return;
   }
-  fs.rmSync(tempDir, { recursive: true, force: true });
+  // On Windows, file handles can linger briefly after a stream is closed, so an
+  // immediate recursive delete may throw ENOTEMPTY/EBUSY/EPERM. Retry with a short
+  // backoff (a no-op on POSIX, where these errors don't occur).
+  fs.rmSync(tempDir, { recursive: true, force: true, maxRetries: 3, retryDelay: 100 });
+}
+
+/**
+ * Builds environment overrides that make a spawned Node process report `version` as its own
+ * `process.version`, for exercising runtime-version guards against versions that are not
+ * installed. The override is applied through a `--import` preload so it takes effect before
+ * the target module runs.
+ *
+ * Prefer a real Node executable where one is available — this only fakes the reported version,
+ * not the runtime's actual behavior.
+ *
+ * @param version - The version string to report, e.g. `v20.20.0`.
+ * @returns Environment overrides to merge into the spawn's `env`.
+ */
+export function spoofedNodeVersionEnv(version: string): NodeJS.ProcessEnv {
+  const preload = encodeURIComponent(
+    `Object.defineProperty(process, "version", { value: ${JSON.stringify(version)} })`,
+  );
+  return {
+    NODE_OPTIONS: [process.env.NODE_OPTIONS, `--import=data:text/javascript,${preload}`]
+      .filter(Boolean)
+      .join(' '),
+  };
 }

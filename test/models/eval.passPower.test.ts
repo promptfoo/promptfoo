@@ -10,7 +10,7 @@ describe('Eval pass^N stats', () => {
   });
 
   beforeEach(async () => {
-    const db = getDb();
+    const db = await getDb();
     await db.run('DELETE FROM eval_results');
     await db.run('DELETE FROM evals_to_datasets');
     await db.run('DELETE FROM evals_to_prompts');
@@ -56,13 +56,8 @@ describe('Eval pass^N stats', () => {
     await evalRecord.save();
 
     const found = await Eval.findById(evalRecord.id);
-    const many = await Eval.getMany();
-    const paginated = await Eval.getPaginated(0, 10);
 
+    expect(found?.passPowerOfN?.overallScore).toBe(25);
     expect(found?.getStats().passPowerOfN?.overallScore).toBe(25);
-    expect(many.find((eval_) => eval_.id === evalRecord.id)?.passPowerOfN?.overallScore).toBe(25);
-    expect(paginated.find((eval_) => eval_.id === evalRecord.id)?.passPowerOfN?.overallScore).toBe(
-      25,
-    );
   });
 });

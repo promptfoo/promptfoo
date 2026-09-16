@@ -3,6 +3,7 @@ import logger from '../../../logger';
 import { PromptfooHarmfulCompletionProvider } from '../../../providers/promptfoo';
 import { retryWithDeduplication, sampleArray } from '../../../util/generation';
 import { sleep } from '../../../util/time';
+import { trackAdditionalGenerationProvider } from '../../generationTokenUsage';
 import {
   extractMaterializedVariablesFromJsonWithMetadata,
   extractPromptFromTags,
@@ -74,16 +75,20 @@ async function processPromptForInputs(
 }
 
 export async function getHarmfulTests(
-  { purpose, injectVar, n, delayMs = 0, config }: PluginActionParams,
+  { provider, purpose, injectVar, n, delayMs = 0, config, targetId }: PluginActionParams,
   plugin: keyof typeof UNALIGNED_PROVIDER_HARM_PLUGINS,
 ): Promise<TestCase[]> {
   const maxHarmfulTests = getEnvInt('PROMPTFOO_MAX_HARMFUL_TESTS_PER_REQUEST', 5);
-  const unalignedProvider = new PromptfooHarmfulCompletionProvider({
-    purpose,
-    n: Math.min(n, maxHarmfulTests),
-    harmCategory: plugin,
-    config,
-  });
+  const unalignedProvider = trackAdditionalGenerationProvider(
+    new PromptfooHarmfulCompletionProvider({
+      purpose,
+      n: Math.min(n, maxHarmfulTests),
+      harmCategory: plugin,
+      config,
+      targetId,
+    }),
+    provider,
+  );
 
   const generatePrompts = async (): Promise<string[]> => {
     const result = await unalignedProvider.callApi('');

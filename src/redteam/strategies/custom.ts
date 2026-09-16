@@ -25,7 +25,7 @@ export function addCustom(
       },
       assert: testCase.assert?.map((assertion) => ({
         ...assertion,
-        metric: `${assertion.metric}/${displayName}`,
+        metric: assertion.metric ? `${assertion.metric}/${displayName}` : assertion.metric,
       })),
       metadata: {
         ...testCase.metadata,
