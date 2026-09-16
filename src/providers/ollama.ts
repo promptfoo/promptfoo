@@ -36,6 +36,7 @@ interface OllamaCompletionOptions {
   main_gpu?: number;
   use_mmap?: boolean;
   num_thread?: number;
+  draft_num_predict?: number;
 
   // Removed from Ollama's Options struct in newer releases, but still forwarded so
   // configs pointed at an older OLLAMA_BASE_URL keep working. Modern servers ignore
@@ -88,6 +89,7 @@ const OllamaCompletionOptionKeys = new Set<keyof OllamaCompletionOptions>([
   'main_gpu',
   'use_mmap',
   'num_thread',
+  'draft_num_predict',
   'tfs_z',
   'num_gqa',
   'f16_kv',

@@ -106,7 +106,7 @@ Ollama's current [Options struct](https://github.com/ollama/ollama/blob/main/api
 `num_predict`, `num_keep`, `seed`, `top_k`, `top_p`, `min_p`, `typical_p`,
 `repeat_last_n`, `temperature`, `repeat_penalty`, `presence_penalty`,
 `frequency_penalty`, `stop`, `num_ctx`, `num_batch`, `num_gpu`, `main_gpu`,
-`use_mmap`, and `num_thread`.
+`use_mmap`, `num_thread`, and `draft_num_predict`.
 
 Note that `max_tokens` is an OpenAI key — Ollama ignores it, so use `num_predict`.
 
