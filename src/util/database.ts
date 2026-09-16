@@ -31,7 +31,7 @@ import {
 } from '../types/index';
 import invariant from '../util/invariant';
 import { sha256 } from './createHash';
-import { restoreAzureBlobSasTokens } from './sanitizer';
+import { restoreAzureBlobSasTokens, sanitizeTracingConfigForPersistence } from './sanitizer';
 import {
   getCachedStandaloneEvals,
   getStandaloneEvalCacheKey,
@@ -61,7 +61,7 @@ export async function writeResultsToDatabase(
         createdAt: createdAt.getTime(),
         author: getAuthor(),
         description: config.description,
-        config,
+        config: sanitizeTracingConfigForPersistence(config),
         results,
         isRedteam: config.redteam !== undefined,
       })

@@ -339,17 +339,17 @@ describe('CLI Smoke Tests', () => {
       expect(entrypointResult.stdout.trim()).toBe(mainResult.stdout.trim());
     });
 
-    it.each([
-      'v20.20.0',
-      'v22.21.9',
-    ])('1.7.5 - shipped runtime guard rejects unsupported Node.js %s', (version) => {
-      const { stderr, exitCode } = runEntrypointWithNodeVersion(version);
+    it.each(['v20.20.0', 'v22.21.9'])(
+      '1.7.5 - shipped runtime guard rejects unsupported Node.js %s',
+      (version) => {
+        const { stderr, exitCode } = runEntrypointWithNodeVersion(version);
 
-      expect(exitCode).toBe(1);
-      expect(stderr).toContain(`Detected: ${version}`);
-      expect(stderr).toContain('Required: >=22.22.0');
-      expect(stderr).toContain('Install a supported Node.js version and try again.');
-    });
+        expect(exitCode).toBe(1);
+        expect(stderr).toContain(`Detected: ${version}`);
+        expect(stderr).toContain('Required: >=22.22.0');
+        expect(stderr).toContain('Install a supported Node.js version and try again.');
+      },
+    );
 
     it('1.7.6 - shipped runtime guard accepts the minimum supported Node.js version', () => {
       const { stdout, exitCode } = runEntrypointWithNodeVersion('v22.22.0');
@@ -432,37 +432,40 @@ describe('CLI Smoke Tests', () => {
           });
         },
       ],
-    ])('1.8.%# - keeps %s stdout machine-readable under --verbose and LOG_LEVEL=debug', async (_label, outputArgs, assertPayload) => {
-      const { stdout, stderr, exitCode } = await runEntrypointAsync(
-        [
-          'code-scans',
-          'run',
-          repoDir,
-          '--diffs-only',
-          '--api-host',
-          apiHost,
-          '--base',
-          'main',
-          '--compare',
-          'HEAD',
-          ...outputArgs,
-          '--verbose',
-        ],
-        {
-          env: {
-            LOG_LEVEL: 'debug',
-            NODE_NO_WARNINGS: '1',
-            PROMPTFOO_DISABLE_UPDATE: 'true',
+    ])(
+      '1.8.%# - keeps %s stdout machine-readable under --verbose and LOG_LEVEL=debug',
+      async (_label, outputArgs, assertPayload) => {
+        const { stdout, stderr, exitCode } = await runEntrypointAsync(
+          [
+            'code-scans',
+            'run',
+            repoDir,
+            '--diffs-only',
+            '--api-host',
+            apiHost,
+            '--base',
+            'main',
+            '--compare',
+            'HEAD',
+            ...outputArgs,
+            '--verbose',
+          ],
+          {
+            env: {
+              LOG_LEVEL: 'debug',
+              NODE_NO_WARNINGS: '1',
+              PROMPTFOO_DISABLE_UPDATE: 'true',
+            },
           },
-        },
-      );
+        );
 
-      expect(exitCode).toBe(0);
-      expect(stderr).toBe('');
+        expect(exitCode).toBe(0);
+        expect(stderr).toBe('');
 
-      const payload = JSON.parse(stdout) as Record<string, unknown>;
-      assertPayload(payload);
-    });
+        const payload = JSON.parse(stdout) as Record<string, unknown>;
+        assertPayload(payload);
+      },
+    );
 
     it('1.8.2 - keeps structured config failures off stdout', async () => {
       const missingConfigPath = path.join(repoDir, 'definitely-missing-code-scan-config.yaml');

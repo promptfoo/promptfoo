@@ -680,56 +680,55 @@ describe('code-scan-action main', () => {
       expect(mocks.fs.existsSync).not.toHaveBeenCalledWith(untrustedNpmExecutable);
     });
 
-    it.each([
-      'directory',
-      'executable',
-      'npm-cli',
-    ])('rejects a PATH %s symlink that resolves inside the untrusted checkout', async (symlinkTarget) => {
-      const workspace = path.resolve('/test/workspace');
-      const untrustedNodeDir = path.join(os.tmpdir(), 'untrusted-node20');
-      const trustedNodeDir = path.join(os.tmpdir(), 'trusted-node20');
-      const executableName = process.platform === 'win32' ? 'npm.cmd' : 'npm';
-      const untrustedNpmExecutable = path.join(untrustedNodeDir, executableName);
-      const trustedNpmExecutable = path.join(trustedNodeDir, executableName);
-      const untrustedNpmCliPath = path.join(
-        untrustedNodeDir,
-        'node_modules',
-        'npm',
-        'bin',
-        'npm-cli.js',
-      );
-      const trustedNpmCliPath = path.join(
-        trustedNodeDir,
-        'node_modules',
-        'npm',
-        'bin',
-        'npm-cli.js',
-      );
-      const existingPaths = new Set([
-        untrustedNpmExecutable,
-        untrustedNpmCliPath,
-        trustedNpmExecutable,
-        trustedNpmCliPath,
-      ]);
-      mockProcessEnv({ PATH: [untrustedNodeDir, trustedNodeDir].join(path.delimiter) });
-      mocks.fs.existsSync.mockImplementation((candidate: PathLike) => {
-        return existingPaths.has(String(candidate));
-      });
-      mocks.fs.realpathSync.mockImplementation((candidate: string) => {
-        if (
-          (symlinkTarget === 'directory' && candidate === untrustedNodeDir) ||
-          (symlinkTarget === 'executable' && candidate === untrustedNpmExecutable) ||
-          (symlinkTarget === 'npm-cli' && candidate === untrustedNpmCliPath)
-        ) {
-          return path.join(workspace, 'attacker', 'npm-cli.js');
-        }
-        return candidate;
-      });
+    it.each(['directory', 'executable', 'npm-cli'])(
+      'rejects a PATH %s symlink that resolves inside the untrusted checkout',
+      async (symlinkTarget) => {
+        const workspace = path.resolve('/test/workspace');
+        const untrustedNodeDir = path.join(os.tmpdir(), 'untrusted-node20');
+        const trustedNodeDir = path.join(os.tmpdir(), 'trusted-node20');
+        const executableName = process.platform === 'win32' ? 'npm.cmd' : 'npm';
+        const untrustedNpmExecutable = path.join(untrustedNodeDir, executableName);
+        const trustedNpmExecutable = path.join(trustedNodeDir, executableName);
+        const untrustedNpmCliPath = path.join(
+          untrustedNodeDir,
+          'node_modules',
+          'npm',
+          'bin',
+          'npm-cli.js',
+        );
+        const trustedNpmCliPath = path.join(
+          trustedNodeDir,
+          'node_modules',
+          'npm',
+          'bin',
+          'npm-cli.js',
+        );
+        const existingPaths = new Set([
+          untrustedNpmExecutable,
+          untrustedNpmCliPath,
+          trustedNpmExecutable,
+          trustedNpmCliPath,
+        ]);
+        mockProcessEnv({ PATH: [untrustedNodeDir, trustedNodeDir].join(path.delimiter) });
+        mocks.fs.existsSync.mockImplementation((candidate: PathLike) => {
+          return existingPaths.has(String(candidate));
+        });
+        mocks.fs.realpathSync.mockImplementation((candidate: string) => {
+          if (
+            (symlinkTarget === 'directory' && candidate === untrustedNodeDir) ||
+            (symlinkTarget === 'executable' && candidate === untrustedNpmExecutable) ||
+            (symlinkTarget === 'npm-cli' && candidate === untrustedNpmCliPath)
+          ) {
+            return path.join(workspace, 'attacker', 'npm-cli.js');
+          }
+          return candidate;
+        });
 
-      const { npmCliPath } = await importActionAndGetNpmInstallCall();
+        const { npmCliPath } = await importActionAndGetNpmInstallCall();
 
-      expect(npmCliPath).toBe(trustedNpmCliPath);
-    });
+        expect(npmCliPath).toBe(trustedNpmCliPath);
+      },
+    );
 
     it('does not execute an npm-cli.js from a PATH directory without an npm executable', async () => {
       const untrustedNodeDir = path.join(os.tmpdir(), 'untrusted-node20');

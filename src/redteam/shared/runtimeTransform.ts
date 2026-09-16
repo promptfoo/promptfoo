@@ -9,10 +9,11 @@
  */
 
 import logger from '../../logger';
+import { accumulateTokenUsage } from '../../util/tokenUsageUtils';
 import { remoteGenerationContextPayload } from '../remoteGenerationContext';
 
 import type { MediaData } from '../../storage/types';
-import type { TestCaseWithPlugin } from '../../types';
+import type { TestCaseWithPlugin, TokenUsage } from '../../types';
 // Import type only to avoid circular dependency - actual Strategies loaded dynamically
 import type { Strategy } from '../strategies/types';
 
@@ -42,6 +43,8 @@ export interface TransformResult {
   displayVars?: Record<string, string>;
   /** Metadata from the transform (e.g., webPageUuid, webPageUrl from indirect-web-pwn) */
   metadata?: Record<string, unknown>;
+  /** Auxiliary model usage consumed while producing the transformed attack prompt. */
+  tokenUsage?: TokenUsage;
 }
 
 /**
@@ -123,6 +126,7 @@ export async function applyRuntimeTransforms(
 
   let audioApplied = false;
   let imageApplied = false;
+  let tokenUsage: TokenUsage | undefined;
 
   for (const layer of layerConfigs) {
     const layerId = typeof layer === 'string' ? layer : layer.id;
@@ -154,13 +158,18 @@ export async function applyRuntimeTransforms(
       const transformed = result[0];
 
       if (transformed) {
+        const { runtimeTokenUsage, ...metadata } = transformed.metadata ?? {};
+        if (runtimeTokenUsage && typeof runtimeTokenUsage === 'object') {
+          tokenUsage ??= {};
+          accumulateTokenUsage(tokenUsage, runtimeTokenUsage as TokenUsage, true);
+        }
         // Preserve context metadata (evaluationId, testCaseId, purpose, goal) across transforms
         // by merging original metadata first, then transformed metadata on top
         testCase = {
           ...transformed,
           metadata: {
             ...testCase.metadata,
-            ...transformed.metadata,
+            ...metadata,
             pluginId: testCase.metadata.pluginId,
           },
         };
@@ -175,6 +184,7 @@ export async function applyRuntimeTransforms(
         prompt: originalPrompt,
         originalPrompt,
         error: errorMsg,
+        ...(tokenUsage ? { tokenUsage } : {}),
       };
     }
   }
@@ -205,6 +215,7 @@ export async function applyRuntimeTransforms(
     prompt: transformedPrompt,
     originalPrompt,
     ...(Object.keys(displayVars).length > 0 && { displayVars }),
+    ...(tokenUsage ? { tokenUsage } : {}),
     // Include metadata from the transform (e.g., webPageUuid from indirect-web-pwn)
     metadata: testCase.metadata,
   };
