@@ -662,7 +662,7 @@ describe('TestCasesSection', () => {
             } as ProgressEvent<FileReader>);
         });
       } as unknown as typeof FileReader;
-      vi.mocked(yaml.load).mockReturnValue({
+      vi.mocked(loadYaml).mockReturnValue({
         description: 'Imported C',
         vars: { input: 'c' },
       });
