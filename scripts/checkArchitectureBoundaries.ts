@@ -2,6 +2,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import {
+  buildArchitectureReport,
   compareEdgesToBaseline,
   computeCrossLayerEdges,
   computeStronglyConnectedComponents,
@@ -16,7 +17,41 @@ import {
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const config = readLayerConfig(repoRoot);
-const sourceScan = scanArchitectureSources(repoRoot, config);
+const jsonMode = process.argv.includes('--json');
+const reportMode = process.argv.includes('--report') || jsonMode;
+const log = jsonMode ? console.error : console.log;
+const sourceScan = scanArchitectureSources(repoRoot, config, { includeFacade: reportMode });
+if (reportMode) {
+  const entrypoints = process.argv
+    .filter((arg) => arg.startsWith('--entrypoint='))
+    .map((arg) => arg.slice('--entrypoint='.length));
+  const report = buildArchitectureReport(
+    repoRoot,
+    config,
+    sourceScan,
+    entrypoints.length > 0 ? entrypoints : undefined,
+  );
+  if (jsonMode) {
+    console.log(JSON.stringify(report, null, 2));
+    // Keep stdout machine-readable; normal checks still run and set the exit status.
+  } else {
+    log('Architecture source views (syntax classification; not emitted or bundled code):');
+    for (const [kind, view] of Object.entries(report.views)) {
+      log(
+        `- ${kind}: ${view.references} references, ${view.crossLayerReferences} cross-layer references, ${view.fileCycles.length} file cycles`,
+      );
+    }
+    log(
+      `- ${report.unresolvedInternal.length} unresolved internal references (including non-TypeScript assets); ${report.computedReferences.length} computed loaders; ${report.unscannedInternal.length} references beyond the scanned scope`,
+    );
+    for (const [entrypoint, reach] of Object.entries(report.entrypoints)) {
+      log(
+        `- ${entrypoint}: ${reach.combined.files.length} combined / ${reach.value.files.length} value-capable / ${reach.valueAndDeferred.files.length} value-capable plus deferred reachable files`,
+      );
+    }
+    log('Use --json for reference locations, cycles, and reachable files.');
+  }
+}
 const violations = findViolations(repoRoot, config, sourceScan);
 
 const facadeViolations = violations.filter((v) => v.kind === 'facade');
@@ -111,7 +146,7 @@ if (config.maxStronglyConnectedComponentSize !== undefined) {
       '\nBreaking a cross-layer cycle should lower maxStronglyConnectedComponentSize in architecture/layers.json; new cycles are not allowed.',
     );
   } else if (largestCycle < config.maxStronglyConnectedComponentSize) {
-    console.log(
+    log(
       `Note: largest dependency cycle is now ${largestCycle} layers (ratchet is ${config.maxStronglyConnectedComponentSize}). ` +
         'Lower maxStronglyConnectedComponentSize in architecture/layers.json to lock in the progress.',
     );
@@ -135,7 +170,7 @@ if (regressions.length > 0) {
   );
 }
 if (improvements.length > 0) {
-  console.log(
+  log(
     `Note: ${improvements.length} cross-layer edge(s) shrank below baseline. Run \`npm run architecture:baseline\` to lock in the reduction.`,
   );
 }
@@ -164,11 +199,11 @@ if (config.tierOrder !== undefined) {
   const backEdges = findBackEdges(edges, config.tierOrder);
   if (backEdges.length > 0) {
     const totalBackImports = backEdges.reduce((sum, edge) => sum + edge.count, 0);
-    console.log(
-      `\nRemaining back-edges versus target order (${backEdges.length} edges / ${totalBackImports} imports to reach a DAG):`,
+    log(
+      `\nRemaining back-edges versus target order (${backEdges.length} edges / ${totalBackImports} references; informational order violations):`,
     );
     for (const edge of [...backEdges].sort((left, right) => left.count - right.count)) {
-      console.log(`- ${edge.from} -> ${edge.to}: ${edge.count} imports`);
+      log(`- ${edge.from} -> ${edge.to}: ${edge.count} imports`);
     }
   }
 }
@@ -179,5 +214,5 @@ const dagChecksFailed =
 if (violations.length > 0 || unclassifiedFiles.length > 0 || dagChecksFailed) {
   process.exitCode = 1;
 } else {
-  console.log('Architecture boundaries passed.');
+  log('Architecture boundaries passed.');
 }
