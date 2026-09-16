@@ -1,7 +1,12 @@
 import fs from 'fs';
 import path from 'path';
 
-import { maybeLoadConfigFromExternalFile } from './file';
+import {
+  formatFileNotFoundError,
+  formatFileReadError,
+  maybeLoadConfigFromExternalFile,
+  resolveFileProtocolPath,
+} from './file';
 import invariant from './invariant';
 import { loadYaml } from './yamlLoad';
 
@@ -141,16 +146,39 @@ export function readProviderConfigFile(
   basePath?: string,
 ): ProviderConfigFile {
   const relativePath = providerPath.slice('file://'.length);
-  const resolvedPath = path.isAbsolute(relativePath)
-    ? relativePath
-    : path.join(basePath || process.cwd(), relativePath);
+  const resolvedPath = resolveFileProtocolPath(providerPath, basePath);
+
+  if (!fs.existsSync(resolvedPath)) {
+    throw new Error(
+      `Provider file not found: ${resolvedPath}\n\n${formatFileNotFoundError({
+        filePath: resolvedPath,
+        basePath,
+        docsUrl: 'https://promptfoo.dev/docs/providers/file/',
+      })}`,
+    );
+  }
 
   let rawContent: unknown;
   try {
     rawContent = loadYaml(fs.readFileSync(resolvedPath, 'utf8'));
   } catch (err) {
+    if ((err as NodeJS.ErrnoException).code === 'ENOENT') {
+      throw new Error(
+        `Provider file not found: ${resolvedPath}\n\n${formatFileNotFoundError({
+          filePath: resolvedPath,
+          basePath,
+          docsUrl: 'https://promptfoo.dev/docs/providers/file/',
+        })}`,
+      );
+    }
+
     throw new Error(
-      `Failed to load provider config ${relativePath}: ${err instanceof Error ? err.message : err}`,
+      `Failed to load provider config ${relativePath}: ${err instanceof Error ? err.message : err}\n\n${formatFileReadError(
+        {
+          filePath: resolvedPath,
+          error: err,
+        },
+      )}`,
     );
   }
   const fileContent = maybeLoadConfigFromExternalFile(rawContent) as

@@ -180,6 +180,7 @@ beforeEach(() => {
   mockExecFile.mockReset();
   mockFsReadFileSync.mockReset();
   mockFsExistsSync.mockReset();
+  mockFsExistsSync.mockReturnValue(true);
   mockFsMkdirSync.mockReset();
   mockFsWriteFileSync.mockReset();
 });
@@ -456,6 +457,10 @@ describe('call provider apis', () => {
     ['./path/to/file.py run', './path/to/file.py', ['run']],
     ['"/Path/To/My File.py"', '/Path/To/My File.py', []],
   ])('ScriptCompletionProvider callApi with script %s', (script, inputFile, inputArgs) => {
+    beforeEach(() => {
+      mockFsExistsSync.mockReturnValue(false);
+    });
+
     it('returns expected output', async () => {
       const mockResponse = 'Test script output';
       const mockChildProcess = {
@@ -509,6 +514,8 @@ describe('call provider apis', () => {
 describe('loadApiProvider', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    // Default mock for fs.existsSync to return true (file exists)
+    vi.mocked(fs.existsSync).mockReturnValue(true);
   });
 
   afterEach(() => {
