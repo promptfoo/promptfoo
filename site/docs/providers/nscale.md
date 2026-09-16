@@ -20,6 +20,8 @@ Alternatively, you can add it to your `.env` file:
 NSCALE_SERVICE_TOKEN=your_service_token_here
 ```
 
+You can also supply `config.apiKey` or select a credential variable with `config.apiKeyEnvar`. Nscale does not fall back to `OPENAI_API_KEY` by default; set `apiKeyEnvar: OPENAI_API_KEY` to use that variable explicitly. The same credential rules apply when you set a custom `apiBaseUrl`.
+
 ### Obtaining Credentials
 
 You can obtain service tokens by:
