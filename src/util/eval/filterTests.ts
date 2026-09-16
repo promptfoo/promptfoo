@@ -51,6 +51,8 @@ export interface FilterOptions {
   firstN?: number | string;
   /** Key-value pair(s) (format: "key=value") to filter tests by metadata. Multiple values use AND logic. */
   metadata?: string | string[];
+  /** Key-value pair(s) (format: "key=value") to filter tests by metadata. Multiple values use OR logic. */
+  metadataAny?: string | string[];
   /** Regular expression pattern to filter tests by description */
   pattern?: string;
   /** Zero-based test index range in start:end format. End is exclusive. */
@@ -63,6 +65,51 @@ export interface FilterOptions {
 
 type Tests = NonNullable<TestSuite['tests']>;
 type TestFilterFn = (test: TestCase) => boolean;
+type MetadataFilter = { key: string; value: string };
+
+function parseMetadataFilters(
+  filters: string | string[] | undefined,
+  flag: '--filter-metadata' | '--filter-metadata-any',
+): MetadataFilter[] {
+  const normalizedFilters = filters ? (Array.isArray(filters) ? filters : [filters]) : [];
+  return normalizedFilters.map((filter) => {
+    const [key, ...valueParts] = filter.split('=');
+    const value = valueParts.join('='); // Rejoin in case value contains '='
+    if (!key || value === undefined || value === '') {
+      throw new Error(`${flag} must be specified in key=value format`);
+    }
+    return { key, value };
+  });
+}
+
+function createMetadataFilter(options: FilterOptions): TestFilterFn | undefined {
+  if (!options.metadata && !options.metadataAny) {
+    return undefined;
+  }
+
+  const allFilters = parseMetadataFilters(options.metadata, '--filter-metadata');
+  const anyFilters = parseMetadataFilters(options.metadataAny, '--filter-metadata-any');
+
+  logger.debug(
+    `Filtering for metadata conditions: AND [${allFilters.map((f) => `${f.key}=${f.value}`).join(', ')}], OR [${anyFilters.map((f) => `${f.key}=${f.value}`).join(', ')}]`,
+  );
+
+  return (test) => {
+    if (!test.metadata) {
+      logger.debug(`Test has no metadata: ${test.description || 'unnamed test'}`);
+      return false;
+    }
+
+    const matches = ({ key, value }: MetadataFilter) => {
+      const testValue = test.metadata?.[key];
+      return Array.isArray(testValue)
+        ? testValue.some((item) => item.toString().includes(value))
+        : testValue !== undefined && testValue.toString().includes(value);
+    };
+
+    return allFilters.every(matches) && (anyFilters.length === 0 || anyFilters.some(matches));
+  };
+}
 
 function createSeededRandom(seed: number): () => number {
   const stringSeed = String(seed);
@@ -157,7 +204,7 @@ async function filterErrorTests(
  */
 export async function filterTests(testSuite: TestSuite, options: FilterOptions): Promise<Tests> {
   let tests = testSuite.tests || [];
-  let metadataFilter: TestFilterFn | undefined;
+  const metadataFilter = createMetadataFilter(options);
 
   logger.debug(`Starting filterTests with options: ${JSON.stringify(options)}`);
   logger.debug(`Initial test count: ${tests.length}`);
@@ -167,55 +214,8 @@ export async function filterTests(testSuite: TestSuite, options: FilterOptions):
     return tests;
   }
 
-  if (options.metadata) {
-    // Normalize to array for consistent handling
-    const metadataFilters = Array.isArray(options.metadata) ? options.metadata : [options.metadata];
-
-    // Validate all filters first
-    const parsedFilters: Array<{ key: string; value: string }> = [];
-    for (const filter of metadataFilters) {
-      const [key, ...valueParts] = filter.split('=');
-      const value = valueParts.join('='); // Rejoin in case value contains '='
-      if (!key || value === undefined || value === '') {
-        throw new Error('--filter-metadata must be specified in key=value format');
-      }
-      parsedFilters.push({ key, value });
-    }
-
-    logger.debug(
-      `Filtering for metadata conditions (AND logic): ${parsedFilters.map((f) => `${f.key}=${f.value}`).join(', ')}`,
-    );
+  if (metadataFilter) {
     logger.debug(`Before metadata filter: ${tests.length} tests`);
-
-    metadataFilter = (test) => {
-      if (!test.metadata) {
-        logger.debug(`Test has no metadata: ${test.description || 'unnamed test'}`);
-        return false;
-      }
-
-      // ALL conditions must match (AND logic)
-      for (const { key, value } of parsedFilters) {
-        const testValue = test.metadata[key];
-        let matches = false;
-
-        if (Array.isArray(testValue)) {
-          // For array metadata, check if any value includes the search term
-          matches = testValue.some((v) => v.toString().includes(value));
-        } else if (testValue !== undefined) {
-          // For single value metadata, check if it includes the search term
-          matches = testValue.toString().includes(value);
-        }
-
-        if (!matches) {
-          logger.debug(
-            `Test "${test.description || 'unnamed test'}" metadata doesn't match. Expected ${key} to include ${value}, got ${JSON.stringify(test.metadata)}`,
-          );
-          return false;
-        }
-      }
-
-      return true;
-    };
     tests = tests.filter(metadataFilter);
 
     logger.debug(`After metadata filter: ${tests.length} tests remain`);
