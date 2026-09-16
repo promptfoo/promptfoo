@@ -1,0 +1,61 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: Compare Codex Security scan models and depth
+
+prompts:
+  - |
+    Review the repository for authorization bypass, insecure trust in client-controlled
+    request headers, and sensitive-data exposure. Validate each finding before reporting it.
+
+providers:
+  - id: openai:codex-security:gpt-5.6-terra
+    label: standard-terra-medium
+    config:
+      operation: security-scan
+      repository: ./fixture
+      model_reasoning_effort: medium
+      max_cost_usd: 1
+
+  - id: openai:codex-security:gpt-5.6-sol
+    label: standard-sol-high
+    config:
+      operation: security-scan
+      repository: ./fixture
+      model_reasoning_effort: high
+      max_cost_usd: 1
+
+  - id: openai:codex-security:gpt-5.6-sol
+    label: deep-sol-high
+    config:
+      operation: deep-security-scan
+      repository: ./fixture
+      model_reasoning_effort: high
+      workers: 2
+      max_discovery_runs: 4
+      max_cost_usd: 2
+
+defaultTest:
+  assert:
+    - type: is-json
+    - type: javascript
+      value: |
+        const scan = JSON.parse(output);
+        const findings = scan.findings?.findings ?? [];
+        const matched = findings.some((finding) => {
+          const text = `${finding.title ?? ''} ${finding.summary ?? ''}`.toLowerCase();
+          return ['authorization', 'authentication', 'access control', 'admin'].some((term) =>
+            text.includes(term),
+          );
+        });
+        return {
+          pass: matched,
+          score: matched ? 1 : 0,
+          reason: matched
+            ? `Found authorization bypass among ${findings.length} reported findings`
+            : `Did not find authorization bypass among ${findings.length} reported findings`,
+        };
+    - type: cost
+      threshold: 2
+
+tests:
+  - description: Detects the intentionally forgeable administrator header
+    vars: {}

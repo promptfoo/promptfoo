@@ -309,6 +309,63 @@ describe('loadApiProvider', () => {
     expect(provider.delay).toBe(2000);
   });
 
+  it('resolves a templated Codex subtype before merging credential aliases', async () => {
+    const provider = await loadApiProvider('openai:{{ env.KIND }}', {
+      env: { KIND: 'codex-sdk', OPENAI_API_KEY: 'suite-key' },
+      options: { env: { CODEX_API_KEY: 'provider-key' } },
+    });
+    expect((provider as OpenAICodexSDKProvider).getApiKey()).toBe('provider-key');
+  });
+
+  it('resolves a cloud Codex subtype template before merging credential aliases', async () => {
+    vi.mocked(getProviderFromCloud).mockResolvedValue({
+      id: 'openai:{{ env.KIND }}',
+      env: { KIND: 'codex-sdk', CODEX_API_KEY: 'cloud-key' },
+    });
+    const provider = await loadApiProvider(`${CLOUD_PROVIDER_PREFIX}123`, {
+      env: { OPENAI_API_KEY: 'suite-key' },
+    });
+    expect((provider as OpenAICodexSDKProvider).getApiKey()).toBe('cloud-key');
+  });
+
+  it('resolves a file Codex subtype template before merging credential aliases', async () => {
+    vi.mocked(fs.readFileSync).mockReturnValue('provider config');
+    vi.mocked(loadYaml).mockReturnValue({
+      id: 'openai:{{ env.KIND }}',
+      env: { KIND: 'codex-sdk', OPENAI_API_KEY: 'file-key' },
+    });
+    const provider = await loadApiProvider('file://provider.yaml', {
+      env: { CODEX_API_KEY: 'suite-key' },
+    });
+    expect((provider as OpenAICodexSDKProvider).getApiKey()).toBe('suite-key');
+  });
+
+  it.each([
+    { cloud: { CODEX_API_KEY: 'cloud-key' }, local: undefined, expected: 'cloud-key' },
+    {
+      cloud: { OPENAI_API_KEY: 'cloud-key' },
+      local: { CODEX_API_KEY: 'local-key' },
+      expected: 'local-key',
+    },
+    {
+      cloud: { CODEX_API_KEY: 'cloud-key' },
+      local: { OPENAI_API_KEY: 'local-key' },
+      expected: 'local-key',
+    },
+  ])(
+    'preserves cloud Codex credential scope across aliases: $expected',
+    async ({ cloud, local, expected }) => {
+      vi.mocked(getProviderFromCloud).mockResolvedValue({ id: 'openai:codex-sdk', env: cloud });
+      const provider = await loadApiProvider(`${CLOUD_PROVIDER_PREFIX}123`, {
+        env: { OPENAI_API_KEY: 'suite-key', OPENAI_API_BASE_URL: 'https://suite.example/v1' },
+        options: { env: local },
+      });
+      expect(provider).toBeInstanceOf(OpenAICodexSDKProvider);
+      expect((provider as OpenAICodexSDKProvider).getApiKey()).toBe(expected);
+      expect(provider).toHaveProperty('env.OPENAI_API_BASE_URL', 'https://suite.example/v1');
+    },
+  );
+
   it('should merge cloud provider env with local env overrides', async () => {
     vi.mocked(getProviderFromCloud).mockResolvedValue({
       id: 'file://integrations/external_api.py:query',
@@ -494,34 +551,21 @@ describe('loadApiProvider', () => {
     expect(provider).toBeDefined();
   });
 
-  it('should route the new bare gpt-5.6 alias to Chat Completions', async () => {
-    const provider = await loadApiProvider('openai:gpt-5.6');
+  it.each(['gpt-5.6', 'gpt-6-astra', 'gpt-5.6-sol', 'gpt-5.6-terra', 'gpt-5.6-luna'])(
+    'should route bare %s to Responses',
+    async (model) => {
+      const provider = await loadApiProvider(`openai:${model}`);
 
-    expect(OpenAiChatCompletionProvider).toHaveBeenCalledWith('gpt-5.6', expect.any(Object));
-    expect(provider).toBeDefined();
-  });
-
-  it.each([
-    'gpt-5.6-sol',
-    'gpt-5.6-terra',
-    'gpt-5.6-luna',
-  ])('should preserve bare %s Responses routing', async (model) => {
-    const provider = await loadApiProvider(`openai:${model}`);
-
-    expect(OpenAiResponsesProvider).toHaveBeenCalledWith(model, expect.any(Object));
-    expect(OpenAiChatCompletionProvider).not.toHaveBeenCalled();
-    expect(provider).toBeDefined();
-  });
+      expect(OpenAiResponsesProvider).toHaveBeenCalledWith(model, expect.any(Object));
+      expect(OpenAiChatCompletionProvider).not.toHaveBeenCalled();
+      expect(provider).toBeDefined();
+    },
+  );
 
   it.each([
-    'gpt-5-codex',
     'gpt-5-codex-mini',
     'gpt-5-pro',
     'gpt-5-pro-2025-10-06',
-    'gpt-5.1-codex',
-    'gpt-5.1-codex-max',
-    'gpt-5.1-codex-mini',
-    'gpt-5.2-codex',
     'gpt-5.2-pro',
     'gpt-5.2-pro-2025-12-11',
     'gpt-5.3-codex',
@@ -529,8 +573,6 @@ describe('loadApiProvider', () => {
     'o1-pro-2025-03-19',
     'o3-pro',
     'o3-pro-2025-06-10',
-    'computer-use-preview',
-    'computer-use-preview-2025-03-11',
   ])('should auto-route bare Responses-only model %s to Responses', async (model) => {
     const actualChatProvider = await vi.importActual<typeof import('../src/providers/openai/chat')>(
       '../src/providers/openai/chat',
@@ -602,19 +644,22 @@ describe('loadApiProvider', () => {
       OpenAiResponsesProvider,
       'gpt-4.1',
     ],
-  ])('should allow a Codex-named model on a custom OpenAI-compatible gateway for %s', async (route, config, expectedProvider, expectedModel) => {
-    const provider = await loadApiProvider(route, {
-      options: { config: { ...config, apiBaseUrl: 'https://gateway.example/v1' } },
-    });
+  ])(
+    'should allow a Codex-named model on a custom OpenAI-compatible gateway for %s',
+    async (route, config, expectedProvider, expectedModel) => {
+      const provider = await loadApiProvider(route, {
+        options: { config: { ...config, apiBaseUrl: 'https://gateway.example/v1' } },
+      });
 
-    expect(expectedProvider).toHaveBeenCalledWith(
-      expectedModel,
-      expect.objectContaining({
-        config: expect.objectContaining({ apiBaseUrl: 'https://gateway.example/v1' }),
-      }),
-    );
-    expect(provider).toBeDefined();
-  });
+      expect(expectedProvider).toHaveBeenCalledWith(
+        expectedModel,
+        expect.objectContaining({
+          config: expect.objectContaining({ apiBaseUrl: 'https://gateway.example/v1' }),
+        }),
+      );
+      expect(provider).toBeDefined();
+    },
+  );
 
   it('should allow the documented gpt-5-codex-mini Responses replacement', async () => {
     const provider = await loadApiProvider('openai:responses:gpt-5-codex-mini');
@@ -636,64 +681,64 @@ describe('loadApiProvider', () => {
     expect(provider.id()).toBe(expectedId);
   });
 
-  it.each([
-    'gpt-5-search-api',
-    'gpt-5-search-api-2025-10-14',
-  ])('should auto-route bare Chat Completions search model %s to Chat Completions', async (model) => {
-    const actualChatProvider = await vi.importActual<typeof import('../src/providers/openai/chat')>(
-      '../src/providers/openai/chat',
-    );
-    const originalChatModelNames = (OpenAiChatCompletionProvider as any).OPENAI_CHAT_MODEL_NAMES;
-    const chatModelNames = actualChatProvider.OpenAiChatCompletionProvider.OPENAI_CHAT_MODEL_NAMES;
+  it.each(['gpt-5-search-api', 'gpt-5-search-api-2025-10-14'])(
+    'should auto-route bare Chat Completions search model %s to Chat Completions',
+    async (model) => {
+      const actualChatProvider = await vi.importActual<
+        typeof import('../src/providers/openai/chat')
+      >('../src/providers/openai/chat');
+      const originalChatModelNames = (OpenAiChatCompletionProvider as any).OPENAI_CHAT_MODEL_NAMES;
+      const chatModelNames =
+        actualChatProvider.OpenAiChatCompletionProvider.OPENAI_CHAT_MODEL_NAMES;
 
-    expect(chatModelNames).toContain(model);
-    (OpenAiChatCompletionProvider as any).OPENAI_CHAT_MODEL_NAMES = chatModelNames;
-    try {
-      const provider = await loadApiProvider(`openai:${model}`);
+      expect(chatModelNames).toContain(model);
+      (OpenAiChatCompletionProvider as any).OPENAI_CHAT_MODEL_NAMES = chatModelNames;
+      try {
+        const provider = await loadApiProvider(`openai:${model}`);
 
-      expect(OpenAiChatCompletionProvider).toHaveBeenCalledWith(model, expect.any(Object));
-      expect(OpenAiResponsesProvider).not.toHaveBeenCalled();
-      expect(provider).toBeDefined();
-    } finally {
-      (OpenAiChatCompletionProvider as any).OPENAI_CHAT_MODEL_NAMES = originalChatModelNames;
-    }
-  });
+        expect(OpenAiChatCompletionProvider).toHaveBeenCalledWith(model, expect.any(Object));
+        expect(OpenAiResponsesProvider).not.toHaveBeenCalled();
+        expect(provider).toBeDefined();
+      } finally {
+        (OpenAiChatCompletionProvider as any).OPENAI_CHAT_MODEL_NAMES = originalChatModelNames;
+      }
+    },
+  );
 
-  it.each([
-    'babbage-002',
-    'davinci-002',
-    'gpt-3.5-turbo-instruct',
-    'gpt-3.5-turbo-instruct-0914',
-  ])('should auto-route bare legacy Completions model %s to Completions', async (model) => {
-    const actualChatProvider = await vi.importActual<typeof import('../src/providers/openai/chat')>(
-      '../src/providers/openai/chat',
-    );
-    const actualCompletionProvider = await vi.importActual<
-      typeof import('../src/providers/openai/completion')
-    >('../src/providers/openai/completion');
-    const originalChatModelNames = (OpenAiChatCompletionProvider as any).OPENAI_CHAT_MODEL_NAMES;
-    const originalCompletionModelNames = (OpenAiCompletionProvider as any)
-      .OPENAI_COMPLETION_MODEL_NAMES;
-    const chatModelNames = actualChatProvider.OpenAiChatCompletionProvider.OPENAI_CHAT_MODEL_NAMES;
-    const completionModelNames =
-      actualCompletionProvider.OpenAiCompletionProvider.OPENAI_COMPLETION_MODEL_NAMES;
+  it.each(['babbage-002', 'davinci-002', 'gpt-3.5-turbo-instruct', 'gpt-3.5-turbo-instruct-0914'])(
+    'should auto-route bare legacy Completions model %s to Completions',
+    async (model) => {
+      const actualChatProvider = await vi.importActual<
+        typeof import('../src/providers/openai/chat')
+      >('../src/providers/openai/chat');
+      const actualCompletionProvider = await vi.importActual<
+        typeof import('../src/providers/openai/completion')
+      >('../src/providers/openai/completion');
+      const originalChatModelNames = (OpenAiChatCompletionProvider as any).OPENAI_CHAT_MODEL_NAMES;
+      const originalCompletionModelNames = (OpenAiCompletionProvider as any)
+        .OPENAI_COMPLETION_MODEL_NAMES;
+      const chatModelNames =
+        actualChatProvider.OpenAiChatCompletionProvider.OPENAI_CHAT_MODEL_NAMES;
+      const completionModelNames =
+        actualCompletionProvider.OpenAiCompletionProvider.OPENAI_COMPLETION_MODEL_NAMES;
 
-    expect(chatModelNames).not.toContain(model);
-    expect(completionModelNames).toContain(model);
-    (OpenAiChatCompletionProvider as any).OPENAI_CHAT_MODEL_NAMES = chatModelNames;
-    (OpenAiCompletionProvider as any).OPENAI_COMPLETION_MODEL_NAMES = completionModelNames;
-    try {
-      const provider = await loadApiProvider(`openai:${model}`);
+      expect(chatModelNames).not.toContain(model);
+      expect(completionModelNames).toContain(model);
+      (OpenAiChatCompletionProvider as any).OPENAI_CHAT_MODEL_NAMES = chatModelNames;
+      (OpenAiCompletionProvider as any).OPENAI_COMPLETION_MODEL_NAMES = completionModelNames;
+      try {
+        const provider = await loadApiProvider(`openai:${model}`);
 
-      expect(OpenAiCompletionProvider).toHaveBeenCalledWith(model, expect.any(Object));
-      expect(OpenAiChatCompletionProvider).not.toHaveBeenCalled();
-      expect(provider).toBeDefined();
-    } finally {
-      (OpenAiChatCompletionProvider as any).OPENAI_CHAT_MODEL_NAMES = originalChatModelNames;
-      (OpenAiCompletionProvider as any).OPENAI_COMPLETION_MODEL_NAMES =
-        originalCompletionModelNames;
-    }
-  });
+        expect(OpenAiCompletionProvider).toHaveBeenCalledWith(model, expect.any(Object));
+        expect(OpenAiChatCompletionProvider).not.toHaveBeenCalled();
+        expect(provider).toBeDefined();
+      } finally {
+        (OpenAiChatCompletionProvider as any).OPENAI_CHAT_MODEL_NAMES = originalChatModelNames;
+        (OpenAiCompletionProvider as any).OPENAI_COMPLETION_MODEL_NAMES =
+          originalCompletionModelNames;
+      }
+    },
+  );
 
   it.each([
     'gpt-4o-mini-tts',
@@ -742,15 +787,15 @@ describe('loadApiProvider', () => {
     }
   });
 
-  it.each([
-    'tts',
-    'speech',
-  ])('should route explicit openai:%s providers to speech', async (type) => {
-    const provider = await loadApiProvider(`openai:${type}:gpt-4o-mini-tts`);
+  it.each(['tts', 'speech'])(
+    'should route explicit openai:%s providers to speech',
+    async (type) => {
+      const provider = await loadApiProvider(`openai:${type}:gpt-4o-mini-tts`);
 
-    expect(OpenAiTtsProvider).toHaveBeenCalledWith('gpt-4o-mini-tts', expect.any(Object));
-    expect(provider).toBeDefined();
-  });
+      expect(OpenAiTtsProvider).toHaveBeenCalledWith('gpt-4o-mini-tts', expect.any(Object));
+      expect(provider).toBeDefined();
+    },
+  );
 
   it('should default OpenAI speech to a current TTS model', async () => {
     const provider = await loadApiProvider('openai:tts');
@@ -759,80 +804,78 @@ describe('loadApiProvider', () => {
     expect(provider).toBeDefined();
   });
 
-  it.each([
-    'gpt-realtime-2.1',
-    'gpt-realtime-2.1-mini',
-  ])('should auto-route bare Realtime model %s to Realtime', async (model) => {
-    const actualChatProvider = await vi.importActual<typeof import('../src/providers/openai/chat')>(
-      '../src/providers/openai/chat',
-    );
-    const actualCompletionProvider = await vi.importActual<
-      typeof import('../src/providers/openai/completion')
-    >('../src/providers/openai/completion');
-    const actualTtsProvider = await vi.importActual<typeof import('../src/providers/openai/tts')>(
-      '../src/providers/openai/tts',
-    );
-    const actualRealtimeProvider = await vi.importActual<
-      typeof import('../src/providers/openai/realtime')
-    >('../src/providers/openai/realtime');
-    const originalChatModelNames = (OpenAiChatCompletionProvider as any).OPENAI_CHAT_MODEL_NAMES;
-    const originalCompletionModelNames = (OpenAiCompletionProvider as any)
-      .OPENAI_COMPLETION_MODEL_NAMES;
-    const originalTtsModelNames = (OpenAiTtsProvider as any).OPENAI_TTS_MODEL_NAMES;
-    const originalRealtimeModelNames = (OpenAiRealtimeProvider as any).OPENAI_REALTIME_MODEL_NAMES;
-    const chatModelNames = actualChatProvider.OpenAiChatCompletionProvider.OPENAI_CHAT_MODEL_NAMES;
-    const completionModelNames =
-      actualCompletionProvider.OpenAiCompletionProvider.OPENAI_COMPLETION_MODEL_NAMES;
-    const ttsModelNames = actualTtsProvider.OpenAiTtsProvider.OPENAI_TTS_MODEL_NAMES;
-    const realtimeModelNames =
-      actualRealtimeProvider.OpenAiRealtimeProvider.OPENAI_REALTIME_MODEL_NAMES;
+  it.each(['gpt-realtime-2.1', 'gpt-realtime-2.1-mini', 'gpt-4o-mini-realtime-preview-2024-12-17'])(
+    'should auto-route bare Realtime model %s to Realtime',
+    async (model) => {
+      const actualChatProvider = await vi.importActual<
+        typeof import('../src/providers/openai/chat')
+      >('../src/providers/openai/chat');
+      const actualCompletionProvider = await vi.importActual<
+        typeof import('../src/providers/openai/completion')
+      >('../src/providers/openai/completion');
+      const actualTtsProvider = await vi.importActual<typeof import('../src/providers/openai/tts')>(
+        '../src/providers/openai/tts',
+      );
+      const actualRealtimeProvider = await vi.importActual<
+        typeof import('../src/providers/openai/realtime')
+      >('../src/providers/openai/realtime');
+      const originalChatModelNames = (OpenAiChatCompletionProvider as any).OPENAI_CHAT_MODEL_NAMES;
+      const originalCompletionModelNames = (OpenAiCompletionProvider as any)
+        .OPENAI_COMPLETION_MODEL_NAMES;
+      const originalTtsModelNames = (OpenAiTtsProvider as any).OPENAI_TTS_MODEL_NAMES;
+      const originalRealtimeModelNames = (OpenAiRealtimeProvider as any)
+        .OPENAI_REALTIME_MODEL_NAMES;
+      const chatModelNames =
+        actualChatProvider.OpenAiChatCompletionProvider.OPENAI_CHAT_MODEL_NAMES;
+      const completionModelNames =
+        actualCompletionProvider.OpenAiCompletionProvider.OPENAI_COMPLETION_MODEL_NAMES;
+      const ttsModelNames = actualTtsProvider.OpenAiTtsProvider.OPENAI_TTS_MODEL_NAMES;
+      const realtimeModelNames =
+        actualRealtimeProvider.OpenAiRealtimeProvider.OPENAI_REALTIME_MODEL_NAMES;
 
-    expect(chatModelNames).not.toContain(model);
-    expect(completionModelNames).not.toContain(model);
-    expect(ttsModelNames).not.toContain(model);
-    expect(realtimeModelNames).toContain(model);
-    (OpenAiChatCompletionProvider as any).OPENAI_CHAT_MODEL_NAMES = chatModelNames;
-    (OpenAiCompletionProvider as any).OPENAI_COMPLETION_MODEL_NAMES = completionModelNames;
-    (OpenAiTtsProvider as any).OPENAI_TTS_MODEL_NAMES = ttsModelNames;
-    (OpenAiRealtimeProvider as any).OPENAI_REALTIME_MODEL_NAMES = realtimeModelNames;
-    try {
-      const provider = await loadApiProvider(`openai:${model}`);
+      expect(chatModelNames).not.toContain(model);
+      expect(completionModelNames).not.toContain(model);
+      expect(ttsModelNames).not.toContain(model);
+      expect(realtimeModelNames).toContain(model);
+      (OpenAiChatCompletionProvider as any).OPENAI_CHAT_MODEL_NAMES = chatModelNames;
+      (OpenAiCompletionProvider as any).OPENAI_COMPLETION_MODEL_NAMES = completionModelNames;
+      (OpenAiTtsProvider as any).OPENAI_TTS_MODEL_NAMES = ttsModelNames;
+      (OpenAiRealtimeProvider as any).OPENAI_REALTIME_MODEL_NAMES = realtimeModelNames;
+      try {
+        const provider = await loadApiProvider(`openai:${model}`);
 
-      expect(OpenAiRealtimeProvider).toHaveBeenCalledWith(model, expect.any(Object));
-      expect(OpenAiChatCompletionProvider).not.toHaveBeenCalled();
+        expect(OpenAiRealtimeProvider).toHaveBeenCalledWith(model, expect.any(Object));
+        expect(OpenAiChatCompletionProvider).not.toHaveBeenCalled();
+        expect(provider).toBeDefined();
+      } finally {
+        (OpenAiChatCompletionProvider as any).OPENAI_CHAT_MODEL_NAMES = originalChatModelNames;
+        (OpenAiCompletionProvider as any).OPENAI_COMPLETION_MODEL_NAMES =
+          originalCompletionModelNames;
+        (OpenAiTtsProvider as any).OPENAI_TTS_MODEL_NAMES = originalTtsModelNames;
+        (OpenAiRealtimeProvider as any).OPENAI_REALTIME_MODEL_NAMES = originalRealtimeModelNames;
+      }
+    },
+  );
+
+  it.each(['gpt-6-astra', 'gpt-5.6', 'gpt-5.6-sol', 'gpt-5.6-terra', 'gpt-5.6-luna'])(
+    'should route explicit Chat %s IDs to Chat Completions',
+    async (model) => {
+      const provider = await loadApiProvider(`openai:chat:${model}`);
+
+      expect(OpenAiChatCompletionProvider).toHaveBeenCalledWith(model, expect.any(Object));
       expect(provider).toBeDefined();
-    } finally {
-      (OpenAiChatCompletionProvider as any).OPENAI_CHAT_MODEL_NAMES = originalChatModelNames;
-      (OpenAiCompletionProvider as any).OPENAI_COMPLETION_MODEL_NAMES =
-        originalCompletionModelNames;
-      (OpenAiTtsProvider as any).OPENAI_TTS_MODEL_NAMES = originalTtsModelNames;
-      (OpenAiRealtimeProvider as any).OPENAI_REALTIME_MODEL_NAMES = originalRealtimeModelNames;
-    }
-  });
+    },
+  );
 
-  it.each([
-    'gpt-5.6',
-    'gpt-5.6-sol',
-    'gpt-5.6-terra',
-    'gpt-5.6-luna',
-  ])('should route explicit Chat %s IDs to Chat Completions', async (model) => {
-    const provider = await loadApiProvider(`openai:chat:${model}`);
+  it.each(['gpt-6-astra', 'gpt-5.6', 'gpt-5.6-sol', 'gpt-5.6-terra', 'gpt-5.6-luna'])(
+    'should route explicit Responses %s IDs to Responses',
+    async (model) => {
+      const provider = await loadApiProvider(`openai:responses:${model}`);
 
-    expect(OpenAiChatCompletionProvider).toHaveBeenCalledWith(model, expect.any(Object));
-    expect(provider).toBeDefined();
-  });
-
-  it.each([
-    'gpt-5.6',
-    'gpt-5.6-sol',
-    'gpt-5.6-terra',
-    'gpt-5.6-luna',
-  ])('should route explicit Responses %s IDs to Responses', async (model) => {
-    const provider = await loadApiProvider(`openai:responses:${model}`);
-
-    expect(OpenAiResponsesProvider).toHaveBeenCalledWith(model, expect.any(Object));
-    expect(provider).toBeDefined();
-  });
+      expect(OpenAiResponsesProvider).toHaveBeenCalledWith(model, expect.any(Object));
+      expect(provider).toBeDefined();
+    },
+  );
 
   it('should load OpenAI Codex provider with model from provider path', async () => {
     const provider = await loadApiProvider('openai:codex:gpt-5.4');
@@ -1043,10 +1086,7 @@ describe('loadApiProvider', () => {
 
   it('should load OpenAI chat provider with default model', async () => {
     const provider = await loadApiProvider('openai:chat');
-    expect(OpenAiChatCompletionProvider).toHaveBeenCalledWith(
-      'gpt-4.1-2025-04-14',
-      expect.any(Object),
-    );
+    expect(OpenAiChatCompletionProvider).toHaveBeenCalledWith('gpt-5.6-terra', expect.any(Object));
     expect(provider).toBeDefined();
   });
 
@@ -1095,26 +1135,8 @@ describe('loadApiProvider', () => {
     expect(provider).toBeDefined();
   });
 
-  it('should load GitHub provider with default model', async () => {
-    const provider = await loadApiProvider('github:');
-    expect(OpenAiChatCompletionProvider).toHaveBeenCalledWith('openai/gpt-5', {
-      config: expect.objectContaining({
-        apiBaseUrl: 'https://models.github.ai/inference',
-        apiKeyEnvar: 'GITHUB_TOKEN',
-      }),
-    });
-    expect(provider).toBeDefined();
-  });
-
-  it('should load GitHub provider with specific model', async () => {
-    const provider = await loadApiProvider('github:openai/gpt-4o-mini');
-    expect(OpenAiChatCompletionProvider).toHaveBeenCalledWith('openai/gpt-4o-mini', {
-      config: expect.objectContaining({
-        apiBaseUrl: 'https://models.github.ai/inference',
-        apiKeyEnvar: 'GITHUB_TOKEN',
-      }),
-    });
-    expect(provider).toBeDefined();
+  it.each(['github:', 'github:openai/gpt-4o-mini'])('rejects retired provider %s', async (id) => {
+    await expect(loadApiProvider(id)).rejects.toThrow('GitHub Models was retired');
   });
 
   it('should load HTTP provider', async () => {
@@ -1251,6 +1273,18 @@ describe('loadApiProvider', () => {
     await expect(loadApiProvider('file://test.yaml')).rejects.toThrow(
       'Multiple providers found in test.yaml. Use loadApiProviders instead of loadApiProvider.',
     );
+  });
+
+  it('preserves Codex alias precedence when loading a provider config file', async () => {
+    vi.mocked(fs.readFileSync).mockReturnValue('provider config');
+    vi.mocked(loadYaml).mockReturnValue({
+      id: 'openai:codex-sdk',
+      env: { OPENAI_API_KEY: 'file-key' },
+    });
+    const provider = await loadApiProvider('file://provider.yaml', {
+      env: { CODEX_API_KEY: 'suite-key' },
+    });
+    expect((provider as OpenAICodexSDKProvider).getApiKey()).toBe('suite-key');
   });
 
   it('should handle file provider with environment variables', async () => {
