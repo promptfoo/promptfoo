@@ -447,6 +447,26 @@ assert:
     value: output.includes('error')
 ```
 
+### `GradingResult` reason behavior with `not-javascript`
+
+When your function returns a full `GradingResult` object, the `reason` field is always preserved verbatim regardless of whether inversion changes the outcome. This lets you write negation-aware messages directly in the function:
+
+```yaml
+assert:
+  - type: not-javascript
+    value: |
+      const hasFoo = output.includes('foo');
+      return {
+        pass: hasFoo,
+        score: hasFoo ? 1 : 0,
+        reason: hasFoo
+          ? 'Output contained "foo" — this is forbidden'
+          : 'Output correctly omitted "foo"',
+      };
+```
+
+If the function returns a plain `boolean` or `number`, the standard failure message (`Custom function returned true/false`) is used when the assertion fails.
+
 ## Other assertion types
 
 For more info on assertions, see [Test assertions](/docs/configuration/expected-outputs).
