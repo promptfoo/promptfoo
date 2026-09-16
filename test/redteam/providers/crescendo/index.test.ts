@@ -1968,6 +1968,68 @@ describe('CrescendoProvider', () => {
       });
     });
 
+    it('preserves cached attacker and judge footprint without counting it as incurred provider usage', async () => {
+      const provider = new CrescendoProvider({
+        injectVar: 'objective',
+        maxTurns: 1,
+        redteamProvider: mockRedTeamProvider,
+      });
+      const { TokenUsageTracker } = await import('../../../../src/util/tokenUsage');
+      const tracker = TokenUsageTracker.getInstance();
+
+      mockRedTeamProvider.callApi.mockResolvedValue({
+        cached: true,
+        output: JSON.stringify({
+          generatedQuestion: 'test question',
+          rationaleBehindJailbreak: 'test rationale',
+          lastResponseSummary: 'test summary',
+        }),
+        tokenUsage: { total: 75, prompt: 35, completion: 40, numRequests: 1, cached: 0 },
+      });
+      mockTargetProvider.callApi.mockResolvedValue({
+        output: 'target response',
+        tokenUsage: { total: 100, prompt: 40, completion: 60, numRequests: 1, cached: 0 },
+      });
+      mockScoringProvider.callApi.mockResolvedValue({
+        cached: true,
+        output: JSON.stringify({
+          value: false,
+          metadata: 50,
+          rationale: 'Not successful',
+        }),
+        tokenUsage: { total: 40, prompt: 18, completion: 22, numRequests: 1, cached: 0 },
+      });
+
+      const result = await provider.callApi('test prompt', {
+        originalProvider: mockTargetProvider,
+        vars: { objective: 'test objective' },
+        prompt: { raw: 'test prompt', label: 'test' },
+      });
+
+      expect(result.tokenUsage).toMatchObject({
+        total: 100,
+        numRequests: 1,
+        attacker: { total: 75, numRequests: 1 },
+        assertions: { total: 80, numRequests: 2 },
+        incurredTokenUsage: {
+          total: 100,
+          numRequests: 1,
+          attacker: { total: 0, numRequests: 0 },
+          assertions: { total: 0, numRequests: 0 },
+        },
+      });
+      expect(tracker.getProviderUsage('mock-redteam')).toMatchObject({
+        total: 0,
+        cached: 75,
+        numRequests: 0,
+      });
+      expect(tracker.getProviderUsage('mock-scoring')).toMatchObject({
+        total: 0,
+        cached: 80,
+        numRequests: 0,
+      });
+    });
+
     it('should accumulate token usage with unblocking responses', async () => {
       const provider = new CrescendoProvider({
         injectVar: 'objective',

@@ -35,6 +35,46 @@ describe('normalizeMatcherTokenUsage', () => {
       cached: 10,
     });
   });
+
+  it('preserves incurred usage and completion details for mixed cached and fresh grading', () => {
+    expect(
+      normalizeMatcherTokenUsage({
+        total: 100,
+        prompt: 70,
+        completion: 30,
+        cached: 70,
+        numRequests: 2,
+        completionDetails: { reasoning: 9 },
+        incurredTokenUsage: {
+          total: 30,
+          prompt: 20,
+          completion: 10,
+          numRequests: 1,
+          completionDetails: { reasoning: 4 },
+        },
+      }),
+    ).toMatchObject({
+      total: 100,
+      prompt: 70,
+      completion: 30,
+      cached: 70,
+      numRequests: 2,
+      completionDetails: { reasoning: 9 },
+      incurredTokenUsage: {
+        total: 30,
+        prompt: 20,
+        completion: 10,
+        numRequests: 1,
+        completionDetails: { reasoning: 4 },
+      },
+    });
+  });
+
+  it('does not add incurred accounting when the provider did not report it', () => {
+    expect(normalizeMatcherTokenUsage({ total: 30, numRequests: 1 })).not.toHaveProperty(
+      'incurredTokenUsage',
+    );
+  });
 });
 
 describe('splitIntoSentences', () => {
