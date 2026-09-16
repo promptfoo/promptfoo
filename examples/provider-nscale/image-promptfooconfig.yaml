@@ -1,11 +1,11 @@
 description: 'Nscale Image Generation Example - comparing different image models'
 
 providers:
-  - id: nscale:image:BlackForestLabs/FLUX.1-schnell
+  - id: nscale:image:black-forest-labs/FLUX.1-schnell
     config:
       size: '1024x1024'
       n: 1
-  - id: nscale:image:ByteDance/SDXL-Lightning-4step
+  - id: nscale:image:ByteDance/SDXL-Lightning
     config:
       size: '1024x1024'
       n: 1

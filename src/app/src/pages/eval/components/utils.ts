@@ -162,7 +162,7 @@ export function hashVarSchema(varNames: string[]): string {
  */
 export function getDefaultHiddenVarNames(
   varNames: string[],
-  resultsTableConfig: Partial<UnifiedConfig>['resultsTable'] | undefined,
+  resultsTableConfig: UnifiedConfig['resultsTable'],
 ): string[] {
   const defaultVisibleVars = resultsTableConfig?.defaultVisibleVars;
   if (defaultVisibleVars) {

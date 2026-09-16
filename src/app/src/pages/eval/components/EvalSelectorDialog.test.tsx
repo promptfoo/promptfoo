@@ -59,6 +59,7 @@ describe('EvalSelectorDialog', () => {
     const mockOnClose = vi.fn();
     const mockOnEvalSelected = vi.fn();
     const focusedEvalId = 'test-eval-id';
+    const focusedDatasetId = 'test-dataset-id';
     const filterByDatasetId = true;
 
     render(
@@ -68,6 +69,7 @@ describe('EvalSelectorDialog', () => {
           onClose={mockOnClose}
           onEvalSelected={mockOnEvalSelected}
           focusedEvalId={focusedEvalId}
+          focusedDatasetId={focusedDatasetId}
           filterByDatasetId={filterByDatasetId}
         />
       </MemoryRouter>,
@@ -76,6 +78,7 @@ describe('EvalSelectorDialog', () => {
     expect(MockedEvalsTable).toHaveBeenCalledWith(
       expect.objectContaining({
         focusedEvalId: focusedEvalId,
+        focusedDatasetId: focusedDatasetId,
         filterByDatasetId: filterByDatasetId,
       }),
       undefined,

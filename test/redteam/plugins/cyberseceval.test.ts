@@ -3,7 +3,7 @@ import { CyberSecEvalPlugin } from '../../../src/redteam/plugins/cyberseceval';
 import { fetchWithTimeout } from '../../../src/util/fetch/index';
 import { createMockProvider, type MockApiProvider } from '../../factories/provider';
 
-vi.mock('../../../src/util/fetch', async (importOriginal) => {
+vi.mock('../../../src/util/fetch/index', async (importOriginal) => {
   return {
     ...(await importOriginal()),
     fetchWithTimeout: vi.fn(),
