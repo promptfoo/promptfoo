@@ -46,6 +46,10 @@ export interface ProviderConfig {
   passthrough?: object;
 }
 
+/** A finite, non-negative number: the shape every token count and per-token rate must have. */
+const isNonNegativeFinite = (value: unknown): value is number =>
+  typeof value === 'number' && Number.isFinite(value) && value >= 0;
+
 /**
  * Calculates the cost of an API call based on the model and token usage.
  *
@@ -63,14 +67,7 @@ export function calculateCost(
   completionTokens: number | undefined,
   models: ProviderModel[],
 ): number | undefined {
-  if (
-    typeof promptTokens !== 'number' ||
-    typeof completionTokens !== 'number' ||
-    !Number.isFinite(promptTokens) ||
-    !Number.isFinite(completionTokens) ||
-    promptTokens < 0 ||
-    completionTokens < 0
-  ) {
+  if (!isNonNegativeFinite(promptTokens) || !isNonNegativeFinite(completionTokens)) {
     return undefined;
   }
 
@@ -85,8 +82,8 @@ export function calculateCost(
     config.outputCost ?? config.cost ?? longContextCost?.output ?? modelCost?.output;
 
   if (
-    (inputCost !== undefined && (!Number.isFinite(inputCost) || inputCost < 0)) ||
-    (outputCost !== undefined && (!Number.isFinite(outputCost) || outputCost < 0)) ||
+    (inputCost !== undefined && !isNonNegativeFinite(inputCost)) ||
+    (outputCost !== undefined && !isNonNegativeFinite(outputCost)) ||
     (promptTokens !== 0 && inputCost === undefined) ||
     (completionTokens !== 0 && outputCost === undefined)
   ) {

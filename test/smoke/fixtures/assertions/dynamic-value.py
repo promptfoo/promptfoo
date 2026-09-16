@@ -6,5 +6,5 @@ Tests that file:// references in assertion values use script output.
 """
 
 
-def get_value():
-    return "PythonDynamicValue"
+def get_assert(_output, _context):
+    return "PythonScriptValue"
