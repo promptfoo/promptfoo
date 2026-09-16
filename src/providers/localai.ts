@@ -86,7 +86,7 @@ export class LocalAiChatProvider extends LocalAiGenericProvider {
       };
     }
 
-    if (!data.choices?.[0]?.message) {
+    if (!data?.choices?.[0]?.message) {
       return {
         error: `Malformed response data: ${JSON.stringify(data)}`,
       };
@@ -176,7 +176,7 @@ export class LocalAiCompletionProvider extends LocalAiGenericProvider {
       };
     }
 
-    if (!data.choices?.[0]) {
+    if (!data?.choices?.[0]) {
       return {
         error: `Malformed response data: ${JSON.stringify(data)}`,
       };

@@ -140,4 +140,22 @@ describe('LocalAI empty choices handling', () => {
 
     expect(result.error).toContain('Malformed response data');
   });
+
+  it('returns a clean malformed-response error on a null body (chat)', async () => {
+    vi.mocked(fetchWithCache).mockResolvedValue({ data: null } as any);
+
+    const provider = new LocalAiChatProvider('test-model', { config: {} });
+    const result = await provider.callApi('Test prompt');
+
+    expect(result.error).toContain('Malformed response data');
+  });
+
+  it('returns a clean malformed-response error on a null body (completion)', async () => {
+    vi.mocked(fetchWithCache).mockResolvedValue({ data: null } as any);
+
+    const provider = new LocalAiCompletionProvider('test-model', { config: {} });
+    const result = await provider.callApi('Test prompt');
+
+    expect(result.error).toContain('Malformed response data');
+  });
 });
