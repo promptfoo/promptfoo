@@ -1,20 +1,17 @@
 import { Presets, SingleBar } from 'cli-progress';
-import { fetchWithCache } from '../../cache';
 import { VERSION } from '../../constants';
-import { getUserEmail } from '../../globalConfig/accounts';
 import logger from '../../logger';
-import { getRequestTimeoutMs } from '../../providers/shared';
 import { isMediaStorageEnabled, storeMedia } from '../../storage';
 import invariant from '../../util/invariant';
 import {
   getRemoteGenerationExplicitlyDisabledError,
-  getRemoteGenerationHeaders,
-  getRemoteGenerationUrl,
   neverGenerateRemote,
 } from '../remoteGeneration';
 import { remoteGenerationContextPayload } from '../remoteGenerationContext';
+import { postRemoteGenerationTask } from '../remoteGenerationTask';
 
 import type { TestCase } from '../../types/index';
+import type { StrategyRuntimeContext } from './types';
 
 /**
  * Result of text-to-audio conversion
@@ -33,7 +30,12 @@ export interface TextToAudioResult {
 export async function textToAudio(
   text: string,
   language: string = 'en',
-  options?: { evalId?: string; storeToStorage?: boolean; targetId?: string },
+  options?: {
+    evalId?: string;
+    storeToStorage?: boolean;
+    targetId?: string;
+    runtimeContext?: StrategyRuntimeContext;
+  },
 ): Promise<TextToAudioResult> {
   // Check if remote generation is disabled
   if (neverGenerateRemote()) {
@@ -48,23 +50,18 @@ export async function textToAudio(
       text,
       language,
       version: VERSION,
-      email: getUserEmail(),
       ...remoteGenerationContextPayload(options?.targetId),
     };
 
     interface AudioGenerationResponse {
       error?: string;
       audioBase64?: string;
+      tokenUsage?: unknown;
     }
 
-    const { data } = await fetchWithCache<AudioGenerationResponse>(
-      getRemoteGenerationUrl(),
-      {
-        method: 'POST',
-        headers: getRemoteGenerationHeaders(),
-        body: JSON.stringify(payload),
-      },
-      getRequestTimeoutMs(),
+    const { data } = await postRemoteGenerationTask<AudioGenerationResponse>(
+      payload,
+      options?.runtimeContext,
     );
 
     if (data.error || !data.audioBase64) {
@@ -114,6 +111,8 @@ export async function addAudioToBase64(
   testCases: TestCase[],
   injectVar: string,
   config: Record<string, any> = {},
+  _strategyId?: string,
+  runtimeContext?: StrategyRuntimeContext,
 ): Promise<TestCase[]> {
   const audioTestCases: TestCase[] = [];
   const evalId = config.evalId;
@@ -150,6 +149,7 @@ export async function addAudioToBase64(
     const audioResult = await textToAudio(originalText, language, {
       evalId,
       targetId: typeof config.targetId === 'string' ? config.targetId : undefined,
+      runtimeContext,
     });
 
     audioTestCases.push({

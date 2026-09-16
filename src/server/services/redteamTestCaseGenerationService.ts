@@ -11,13 +11,39 @@ import {
   getRemoteGenerationUrl,
   neverGenerateRemote,
 } from '../../redteam/remoteGeneration';
+import { BaseTokenUsageSchema } from '../../types/shared';
 import { sha256 } from '../../util/createHash';
 import { fetchWithRetries } from '../../util/fetch/index';
 import { extractFirstJsonObject } from '../../util/json';
 
 import type { ConversationMessage } from '../../redteam/types';
+import type { TokenUsage } from '../../types/shared';
 
 const MULTI_TURN_EMAIL = 'anonymous@promptfoo.dev';
+
+function getRemoteTokenUsage(value: unknown): TokenUsage | undefined {
+  const parsedTokenUsage = BaseTokenUsageSchema.safeParse(value);
+  return parsedTokenUsage.success ? parsedTokenUsage.data : undefined;
+}
+
+async function getRemoteGenerationError(task: string, response: Response): Promise<Error> {
+  const responseText = await response.text();
+  let tokenUsage: TokenUsage | undefined;
+  try {
+    tokenUsage = getRemoteTokenUsage(JSON.parse(responseText)?.tokenUsage);
+  } catch {
+    tokenUsage = undefined;
+  }
+
+  const error = new Error(`${task} task failed with status ${response.status}: ${responseText}`);
+  return tokenUsage ? Object.assign(error, { tokenUsage }) : error;
+}
+
+function getRemoteValidationError(message: string, usage: unknown): Error {
+  const error = new Error(message);
+  const tokenUsage = getRemoteTokenUsage(usage);
+  return tokenUsage ? Object.assign(error, { tokenUsage }) : error;
+}
 
 export class RemoteGenerationDisabledError extends Error {
   constructor() {
@@ -102,11 +128,17 @@ export interface MultiTurnPromptParams {
 export interface MultiTurnPromptResult {
   prompt: string;
   metadata: Record<string, unknown>;
+  tokenUsage?: TokenUsage;
 }
 
-type MultiTurnHandler = (
-  ctx: MultiTurnHandlerContext,
-) => Promise<{ prompt: string; done: boolean; metadata: Record<string, unknown> }>;
+type MultiTurnHandlerResult = {
+  prompt: string;
+  done: boolean;
+  metadata: Record<string, unknown>;
+  tokenUsage?: TokenUsage;
+};
+
+type MultiTurnHandler = (ctx: MultiTurnHandlerContext) => Promise<MultiTurnHandlerResult>;
 
 interface MultiTurnHandlerContext extends MultiTurnPromptParams {
   conversationHistory: ConversationMessage[];
@@ -146,7 +178,7 @@ export async function generateMultiTurnPrompt(
     pluginId: params.pluginId,
   });
 
-  const { prompt, done, metadata } = await handler({
+  const { prompt, done, metadata, tokenUsage } = await handler({
     ...params,
     conversationHistory,
     lastAssistantMessage: getLastAssistantMessage(conversationHistory),
@@ -161,6 +193,7 @@ export async function generateMultiTurnPrompt(
 
   return {
     prompt,
+    tokenUsage,
     metadata: {
       ...metadata,
       multiTurn: {
@@ -245,9 +278,7 @@ function getStringMetadataValue(
   return typeof value === 'string' ? value : undefined;
 }
 
-async function handleGoatStrategy(
-  ctx: MultiTurnHandlerContext,
-): Promise<{ prompt: string; done: boolean; metadata: Record<string, unknown> }> {
+async function handleGoatStrategy(ctx: MultiTurnHandlerContext): Promise<MultiTurnHandlerResult> {
   const goatBody = {
     task: 'goat',
     goal: ctx.effectiveGoal,
@@ -275,7 +306,7 @@ async function handleGoatStrategy(
   );
 
   if (!response.ok) {
-    throw new Error(`GOAT task failed with status ${response.status}: ${await response.text()}`);
+    throw await getRemoteGenerationError('GOAT', response);
   }
 
   const data = await response.json();
@@ -283,7 +314,10 @@ async function handleGoatStrategy(
   const nextQuestion = attackerMessage?.content;
 
   if (!nextQuestion || typeof nextQuestion !== 'string') {
-    throw new Error('GOAT task did not return a valid next question');
+    throw getRemoteValidationError(
+      'GOAT task did not return a valid next question',
+      data?.tokenUsage,
+    );
   }
 
   const done = nextQuestion.trim() === '###STOP###' || ctx.turn + 1 >= ctx.resolvedMaxTurns;
@@ -291,6 +325,7 @@ async function handleGoatStrategy(
   return {
     prompt: nextQuestion,
     done,
+    tokenUsage: getRemoteTokenUsage(data?.tokenUsage),
     metadata: {
       ...ctx.baseMetadata,
       goal: ctx.effectiveGoal,
@@ -304,7 +339,7 @@ async function handleGoatStrategy(
 
 async function handleMischievousUserStrategy(
   ctx: MultiTurnHandlerContext,
-): Promise<{ prompt: string; done: boolean; metadata: Record<string, unknown> }> {
+): Promise<MultiTurnHandlerResult> {
   const metadataInstructions = getStringMetadataValue(ctx.baseMetadata, 'instructions');
   const instructions =
     typeof ctx.generatedPrompt === 'string' && ctx.generatedPrompt.trim().length > 0
@@ -329,9 +364,7 @@ async function handleMischievousUserStrategy(
   );
 
   if (!response.ok) {
-    throw new Error(
-      `Mischievous User task failed with status ${response.status}: ${await response.text()}`,
-    );
+    throw await getRemoteGenerationError('Mischievous User', response);
   }
 
   const data = await response.json();
@@ -344,7 +377,10 @@ async function handleMischievousUserStrategy(
         : '';
 
   if (!nextMessage) {
-    throw new Error('Mischievous User task did not return a valid message');
+    throw getRemoteValidationError(
+      'Mischievous User task did not return a valid message',
+      data?.tokenUsage,
+    );
   }
 
   const done = nextMessage.trim() === '###STOP###' || ctx.turn + 1 >= ctx.resolvedMaxTurns;
@@ -352,6 +388,7 @@ async function handleMischievousUserStrategy(
   return {
     prompt: nextMessage,
     done,
+    tokenUsage: getRemoteTokenUsage(data?.tokenUsage),
     metadata: {
       ...ctx.baseMetadata,
       goal: ctx.effectiveGoal,
@@ -363,9 +400,7 @@ async function handleMischievousUserStrategy(
   };
 }
 
-async function handleHydraStrategy(
-  ctx: MultiTurnHandlerContext,
-): Promise<{ prompt: string; done: boolean; metadata: Record<string, unknown> }> {
+async function handleHydraStrategy(ctx: MultiTurnHandlerContext): Promise<MultiTurnHandlerResult> {
   return handleHydraLikeStrategy(ctx, {
     strategyName: 'Hydra',
     metadataPrefix: 'hydra',
@@ -373,9 +408,7 @@ async function handleHydraStrategy(
   });
 }
 
-async function handleGoblinStrategy(
-  ctx: MultiTurnHandlerContext,
-): Promise<{ prompt: string; done: boolean; metadata: Record<string, unknown> }> {
+async function handleGoblinStrategy(ctx: MultiTurnHandlerContext): Promise<MultiTurnHandlerResult> {
   return handleHydraLikeStrategy(ctx, {
     strategyName: 'Goblin',
     metadataPrefix: 'goblin',
@@ -390,7 +423,7 @@ async function handleHydraLikeStrategy(
     metadataPrefix: 'hydra' | 'goblin';
     taskId: 'hydra-decision' | 'goblin-decision';
   },
-): Promise<{ prompt: string; done: boolean; metadata: Record<string, unknown> }> {
+): Promise<MultiTurnHandlerResult> {
   const turnNumber = ctx.turn + 1;
   const stateful =
     typeof ctx.stateful === 'boolean'
@@ -469,9 +502,7 @@ async function handleHydraLikeStrategy(
   );
 
   if (!response.ok) {
-    throw new Error(
-      `${options.strategyName} task failed with status ${response.status}: ${await response.text()}`,
-    );
+    throw await getRemoteGenerationError(options.strategyName, response);
   }
 
   const data = await response.json();
@@ -486,7 +517,10 @@ async function handleHydraLikeStrategy(
           : '';
 
   if (!nextPrompt) {
-    throw new Error(`${options.strategyName} task did not return a valid next prompt`);
+    throw getRemoteValidationError(
+      `${options.strategyName} task did not return a valid next prompt`,
+      data?.tokenUsage,
+    );
   }
 
   const done = nextPrompt.trim() === '###STOP###' || turnNumber >= ctx.resolvedMaxTurns;
@@ -494,6 +528,7 @@ async function handleHydraLikeStrategy(
   return {
     prompt: nextPrompt,
     done,
+    tokenUsage: getRemoteTokenUsage(data?.tokenUsage),
     metadata: {
       ...ctx.baseMetadata,
       goal: ctx.effectiveGoal,
@@ -509,7 +544,7 @@ async function handleHydraLikeStrategy(
 
 async function handleCrescendoLikeStrategy(
   ctx: MultiTurnHandlerContext,
-): Promise<{ prompt: string; done: boolean; metadata: Record<string, unknown> }> {
+): Promise<MultiTurnHandlerResult> {
   const strategyLabel = ctx.strategyId === 'custom' ? 'Custom Multi-turn' : 'Multi-turn Crescendo';
   const roundNumber = ctx.turn + 1;
   const customStrategyText =
@@ -556,9 +591,7 @@ async function handleCrescendoLikeStrategy(
   );
 
   if (!response.ok) {
-    throw new Error(
-      `Crescendo task failed with status ${response.status}: ${await response.text()}`,
-    );
+    throw await getRemoteGenerationError('Crescendo', response);
   }
 
   const data = await response.json();
@@ -577,7 +610,10 @@ async function handleCrescendoLikeStrategy(
   const nextQuestion = parsedResult?.generatedQuestion;
 
   if (!nextQuestion || typeof nextQuestion !== 'string') {
-    throw new Error('Crescendo task did not return a valid generated question');
+    throw getRemoteValidationError(
+      'Crescendo task did not return a valid generated question',
+      data?.tokenUsage,
+    );
   }
 
   const done = nextQuestion.trim() === '###STOP###' || roundNumber >= ctx.resolvedMaxTurns;
@@ -585,6 +621,7 @@ async function handleCrescendoLikeStrategy(
   return {
     prompt: nextQuestion,
     done,
+    tokenUsage: getRemoteTokenUsage(data?.tokenUsage),
     metadata: {
       ...ctx.baseMetadata,
       goal: ctx.effectiveGoal,

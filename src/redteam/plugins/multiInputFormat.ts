@@ -85,8 +85,73 @@ function cleanPrompt(prompt: string): string {
   return cleaned.trim();
 }
 
-function collectPromptAfterEmptyMarker(lines: string[], startIndex: number): string {
+type JsonPrefixState = {
+  escaped: boolean;
+  inString: boolean;
+  invalid: boolean;
+  stack: string[];
+  started: boolean;
+};
+
+function updateJsonStringState(state: JsonPrefixState, char: string): void {
+  if (state.escaped) {
+    state.escaped = false;
+  } else if (char === '\\') {
+    state.escaped = true;
+  } else if (char === '"') {
+    state.inString = false;
+  }
+}
+
+function updateJsonPrefixState(state: JsonPrefixState, line: string): void {
+  if (state.invalid) {
+    return;
+  }
+
+  for (const char of line) {
+    if (!state.started) {
+      if (/\s/.test(char)) {
+        continue;
+      }
+      if (char !== '{' && char !== '[') {
+        state.invalid = true;
+        return;
+      }
+      state.started = true;
+    }
+
+    if (state.inString) {
+      updateJsonStringState(state, char);
+      continue;
+    }
+
+    if (char === '"') {
+      state.inString = true;
+    } else if (char === '{' || char === '[') {
+      state.stack.push(char);
+    } else if (char === '}' || char === ']') {
+      const expected = char === '}' ? '{' : '[';
+      if (state.stack.pop() !== expected) {
+        state.invalid = true;
+        return;
+      }
+    }
+  }
+}
+
+function collectPromptAfterEmptyMarker(
+  lines: string[],
+  startIndex: number,
+  preserveBlankLines = false,
+): string {
   const promptLines: string[] = [];
+  const jsonPrefixState: JsonPrefixState = {
+    escaped: false,
+    inString: false,
+    invalid: false,
+    stack: [],
+    started: false,
+  };
 
   for (let i = startIndex; i < lines.length; i++) {
     const line = lines[i];
@@ -96,7 +161,19 @@ function collectPromptAfterEmptyMarker(lines: string[], startIndex: number): str
       if (promptLines.length === 0) {
         continue;
       }
-      break;
+      if (!preserveBlankLines) {
+        break;
+      }
+
+      if (
+        !jsonPrefixState.started ||
+        jsonPrefixState.invalid ||
+        (!jsonPrefixState.inString && jsonPrefixState.stack.length === 0)
+      ) {
+        break;
+      }
+      promptLines.push(line);
+      continue;
     }
 
     if (hasPromptBoundaryMarker(trimmedLine)) {
@@ -104,6 +181,7 @@ function collectPromptAfterEmptyMarker(lines: string[], startIndex: number): str
     }
 
     promptLines.push(line);
+    updateJsonPrefixState(jsonPrefixState, line);
   }
 
   return promptLines.join('\n').trim();
@@ -176,7 +254,7 @@ function parseMultiLinePrompts(
     const prompt = removePrefix(lines[promptIndex].trim(), 'Prompt');
 
     if (prompt.length === 0) {
-      const promptAfterEmptyMarker = collectPromptAfterEmptyMarker(lines, promptIndex + 1);
+      const promptAfterEmptyMarker = collectPromptAfterEmptyMarker(lines, promptIndex + 1, true);
       if (promptAfterEmptyMarker.length > 0) {
         prompts.push(promptAfterEmptyMarker);
       }
@@ -206,7 +284,7 @@ function parseLegacyPrompts(lines: string[]): { __prompt: string }[] {
     prompt = cleanPrompt(prompt);
 
     if (prompt.length === 0) {
-      return collectPromptAfterEmptyMarker(lines, lineIndex + 1);
+      return collectPromptAfterEmptyMarker(lines, lineIndex + 1, true);
     }
 
     return prompt;
