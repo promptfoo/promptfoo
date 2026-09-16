@@ -82,7 +82,7 @@ export function getUnifiedConfig(
       }),
       strategies: config.strategies.map((strategy) => {
         if (typeof strategy === 'string') {
-          if (MULTI_TURN_STRATEGIES.includes(strategy as any) && config.target.config.stateful) {
+          if (MULTI_TURN_STRATEGIES.includes(strategy as any) && config.target.config?.stateful) {
             return { id: strategy, config: { stateful: true } };
           }
           return { id: strategy };
@@ -90,7 +90,7 @@ export function getUnifiedConfig(
 
         // Determine if this is a stateful multi-turn strategy
         const isStatefulMultiTurn =
-          MULTI_TURN_STRATEGIES.includes(strategy.id as any) && config.target.config.stateful;
+          MULTI_TURN_STRATEGIES.includes(strategy.id as any) && config.target.config?.stateful;
 
         // Check if we have any custom configuration
         const hasCustomConfig = strategy.config && Object.keys(strategy.config).length > 0;
