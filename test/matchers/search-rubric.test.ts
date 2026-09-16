@@ -171,23 +171,51 @@ describe('matchesSearchRubric', () => {
         pass: false,
         score: 0,
         reason: 'Search rubric evaluation failed: search unavailable',
+        metadata: { graderError: true },
       }),
     );
   });
 
-  it('falls back to simple pass parsing when JSON extraction fails', async () => {
+  it.each([
+    'service unavailable',
+    'verdict includes "pass": true',
+    '{}',
+    '{"score": 0}',
+    '{"pass": "false"}',
+    '{"pass": null}',
+  ])('tags an unusable search verdict as a grader failure: %s', async (output) => {
     const { matchesSearchRubric } = await import('../../src/matchers/search');
     mocks.webSearchProvider.callApi = vi.fn(
       async (): Promise<ProviderResponse> => ({
-        output: 'verdict includes "pass": true',
+        output,
+        tokenUsage: { total: 5, prompt: 3, completion: 2 },
       }),
     ) as ApiProvider['callApi'];
 
     await expect(matchesSearchRubric('Confirm current facts', 'output', {})).resolves.toEqual(
       expect.objectContaining({
-        pass: true,
-        score: 1,
-        reason: 'verdict includes "pass": true',
+        pass: false,
+        score: 0,
+        reason:
+          'Search rubric evaluation failed: Expected a JSON object with a boolean "pass" field',
+        metadata: { graderError: true },
+        tokensUsed: { total: 5, prompt: 3, completion: 2 },
+      }),
+    );
+  });
+
+  it('accepts a valid negative verdict inside surrounding text', async () => {
+    const { matchesSearchRubric } = await import('../../src/matchers/search');
+    vi.mocked(mocks.webSearchProvider.callApi).mockResolvedValue({
+      output: 'Search complete.\n```json\n{"pass": false, "reason": "Fact is incorrect"}\n```',
+    });
+
+    await expect(matchesSearchRubric('Confirm current facts', 'output', {})).resolves.toEqual(
+      expect.objectContaining({
+        pass: false,
+        score: 0,
+        reason: 'Fact is incorrect',
+        metadata: { searchResults: [], searchProvider: mocks.webSearchProvider.id() },
       }),
     );
   });

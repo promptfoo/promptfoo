@@ -36,14 +36,14 @@ export const ANTHROPIC_MODELS = [
     },
   })),
   // Claude Sonnet 5 — the most agentic Sonnet, with a 1M context window and effort
-  // levels. Uses standard list pricing ($3/$15); the launch introductory pricing
-  // ($2/$10, through Aug 31, 2026) is intentionally not encoded here. The full 1M
+  // levels. The launch pricing ($2/$10) became permanent on August 10, 2026;
+  // Anthropic canceled the previously announced September price increase. The full 1M
   // context bills at this flat rate — prompt size never changes the per-token price.
   ...['claude-sonnet-5'].map((model) => ({
     id: model,
     cost: {
-      input: 3 / 1e6, // $3 / MTok
-      output: 15 / 1e6, // $15 / MTok
+      input: 2 / 1e6, // $2 / MTok
+      output: 10 / 1e6, // $10 / MTok
     },
   })),
   // Claude Mythos Preview - gated research preview for defensive cybersecurity (Project Glasswing)
@@ -680,7 +680,13 @@ export function calculateAnthropicCost(
   cacheCreationTokens?: number,
 ): number | undefined {
   const pricingModelName = normalizeAnthropicModelName(modelName);
-  const modelInfo = ANTHROPIC_MODELS.find((model) => model.id === pricingModelName);
+  // Bedrock has an independent price table. Keep its existing Sonnet 5 estimate
+  // until the AWS rate is reconciled separately from native Claude pricing.
+  const pricingModels =
+    pricingModelName !== modelName && pricingModelName === 'claude-sonnet-5'
+      ? [{ id: pricingModelName, cost: { input: 3 / 1e6, output: 15 / 1e6 } }]
+      : ANTHROPIC_MODELS;
+  const modelInfo = pricingModels.find((model) => model.id === pricingModelName);
   // A model name that normalizeAnthropicModelName rewrote carries a Bedrock
   // prefix. Bare and geo-prefixed Bedrock IDs bill at the regional premium;
   // only the `global.` endpoint bills at base rate.
@@ -731,7 +737,7 @@ export function calculateAnthropicCost(
       effectiveConfig,
       promptTokens,
       completionTokens,
-      ANTHROPIC_MODELS,
+      pricingModels,
     ),
   );
 }
