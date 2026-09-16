@@ -2249,6 +2249,35 @@ describe('OpenAiAgentsApiProvider', () => {
     expect(result.error!.length).toBeLessThan(1_100);
   });
 
+  it('reads successful streamless polyfill responses', async () => {
+    vi.mocked(fetchWithRetries).mockImplementation(async (url, options) => {
+      const response = defaultResponse(new URL(String(url)).pathname, options?.method);
+      return {
+        ok: response.ok,
+        status: response.status,
+        statusText: response.statusText,
+        headers: response.headers,
+        body: null,
+        text: () => response.text(),
+      } as unknown as Response;
+    });
+    expect(await provider().callApi('hi')).toMatchObject({ output: '42' });
+  });
+
+  it('preserves error details from a streamless polyfill', async () => {
+    vi.mocked(fetchWithRetries).mockResolvedValueOnce({
+      ok: false,
+      status: 400,
+      statusText: 'Bad Request',
+      headers: new Headers(),
+      body: null,
+      text: async () => JSON.stringify({ error: { message: 'invalid session option' } }),
+    } as unknown as Response);
+    expect(await provider().callApi('hi')).toMatchObject({
+      error: expect.stringContaining('invalid session option'),
+    });
+  });
+
   it('stops reading oversized successful response streams', async () => {
     let cancelled = false;
     const body = new ReadableStream<Uint8Array>({
