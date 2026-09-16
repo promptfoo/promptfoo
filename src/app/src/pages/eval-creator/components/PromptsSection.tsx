@@ -12,6 +12,7 @@ import {
 } from '@app/components/ui/dialog';
 import { ContentCopyIcon, DeleteIcon, EditIcon, UploadIcon } from '@app/components/ui/icons';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@app/components/ui/tooltip';
+import { Typography } from '@app/components/ui/typography';
 import { useToast } from '@app/hooks/useToast';
 import { cn } from '@app/lib/utils';
 import { useStore } from '@app/stores/evalConfig';
@@ -157,7 +158,9 @@ const PromptsSection = ({ onOpenYamlEditor }: PromptsSectionProps) => {
 
       {/* Header */}
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <h3 className="text-xl font-semibold">Prompts</h3>
+        <Typography variant="title" as="h3">
+          Prompts
+        </Typography>
         <div className="flex flex-wrap items-center gap-2">
           {canEditInlinePrompts && (
             <>
