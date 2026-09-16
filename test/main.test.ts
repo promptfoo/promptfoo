@@ -291,7 +291,7 @@ describe('addCommonOptionsRecursively', () => {
     const hasSubSubSubCommandEnvFileOption = level3Command.options.some(
       (option) => option.long === '--env-file' || option.long === '--env-path',
     );
-    const hasSubSubSubCommandLogFileOption = subSubSubCommand.options.some(
+    const hasSubSubSubCommandLogFileOption = level3Command.options.some(
       (option) => option.long === '--log-file',
     );
 
