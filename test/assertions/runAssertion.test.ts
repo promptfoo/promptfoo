@@ -265,6 +265,18 @@ describe('runAssertion', () => {
     });
   });
 
+  it('should dispatch character-count assertions to the registered handler', async () => {
+    const result = await runAssertion({
+      prompt: 'Some prompt',
+      provider: createMockProvider(),
+      assertion: { type: 'character-count', value: 3 },
+      test: {} as AtomicTestCase,
+      providerResponse: { output: 'A😀B' },
+    });
+
+    expect(result).toMatchObject({ pass: true, score: 1, reason: 'Assertion passed' });
+  });
+
   it('should fail when the equality assertion fails', async () => {
     const output = 'Actual output';
 
