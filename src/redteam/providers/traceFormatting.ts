@@ -82,6 +82,5 @@ export function formatTraceForMetadata(trace: TraceContextData): Record<string, 
     traceId: trace.traceId,
     fetchedAt: trace.fetchedAt,
     spanCount: view.spans.length,
-    insights: view.insights,
   };
 }
