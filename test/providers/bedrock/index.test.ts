@@ -3712,9 +3712,9 @@ describe('AWS_BEDROCK_MODELS mapping', () => {
     expect(AWS_BEDROCK_MODELS['us.amazon.nova-micro-v1:0']).toBe(BEDROCK_MODEL.AMAZON_NOVA);
     expect(AWS_BEDROCK_MODELS['us.amazon.nova-pro-v1:0']).toBe(BEDROCK_MODEL.AMAZON_NOVA);
     expect(AWS_BEDROCK_MODELS['us.amazon.nova-premier-v1:0']).toBe(BEDROCK_MODEL.AMAZON_NOVA);
-    expect(AWS_BEDROCK_MODELS['us.anthropic.claude-3-5-haiku-20241022-v1:0']).toBe(
-      BEDROCK_MODEL.CLAUDE_MESSAGES,
-    );
+    // Withdrawn from Bedrock in every commercial region; deregistered so it raises
+    // "Unknown Amazon Bedrock model" instead of silently hitting the Claude catch-all.
+    expect(AWS_BEDROCK_MODELS['us.anthropic.claude-3-5-haiku-20241022-v1:0']).toBeUndefined();
     expect(AWS_BEDROCK_MODELS['us.anthropic.claude-3-5-sonnet-20240620-v1:0']).toBe(
       BEDROCK_MODEL.CLAUDE_MESSAGES,
     );
