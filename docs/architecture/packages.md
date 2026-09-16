@@ -78,8 +78,9 @@ const auth = McpAuthSchema.optional().parse(request.auth);
 
 The input schema leaves an omitted OAuth grant unset and preserves explicit
 no-auth tags. The runtime schema defaults the grant to `client_credentials` and
-maps no-auth tags to `undefined`. Both retain existing unknown-property stripping;
-do not use their parsed output as a lossless round trip for stored configuration.
+maps no-auth tags to `undefined`. The input schema rejects unknown auth properties,
+while the runtime schema and legacy exports retain their existing stripping behavior.
+Do not use runtime parsing as a lossless round trip for stored configuration.
 Neither schema renders templates, resolves credentials, reads files, discovers
 OAuth endpoints, or makes requests. Scope strings remain strings until runtime
 rendering and normalization.
@@ -111,6 +112,12 @@ one nonempty command, path, or URL. These are union branches that all validate
 the known fields, including nested auth; an invalid auth object cannot pass by
 selecting another connection branch.
 
+The input schemas are strict authoring contracts: unknown properties are rejected
+at the configuration root, in every server connection variant, and in every auth
+variant. This catches misspelled fields instead of silently accepting or dropping
+them. Header names and environment-variable names remain open maps of string values.
+These contracts are distinct from the compatibility-oriented runtime schemas below.
+
 ```typescript
 import { McpConfigInputSchema, McpConfigSchema } from 'promptfoo/contracts';
 
@@ -122,6 +129,10 @@ const config = McpConfigSchema.parse(input);
 
 `McpConfigInputJsonSchema` exports the complete input contract as draft-07 JSON
 Schema, including the nested authentication and connection requirements.
+Export fails for unrepresentable types rather than replacing them with permissive
+`{}` branches. This export is independent of the whole-file configuration schema;
+this change does not wire provider-specific checks into that generator or add MCP
+configuration-management tools.
 `McpConfigInput` and `McpServerInput` are inferred serialized input types;
 `McpConfig` also permits function-valued transforms for in-process callers.
 `McpConfigParsed` and `McpServerParsed` describe runtime parsing results.
@@ -131,8 +142,11 @@ direct functions for `transformResponse` and `responseParser`, while the input
 schema accepts only strings in those fields. Parsing never calls transforms or
 loads referenced files. Timeouts must be finite nonnegative numbers; zero retains
 the existing runtime fallback behavior. Timeout and credential resolution defaults
-remain in their existing execution helpers. Root and server extension properties
-are preserved; auth retains its existing stripping behavior.
+remain in their existing execution helpers. Runtime parsing preserves root and
+server extension properties; runtime auth retains its existing stripping behavior.
+These compatibility rules do not weaken authoring validation or its JSON Schema.
+Consumers editing older configurations with unknown properties need an explicit
+preservation or migration policy, not a parse-and-save operation that drops data.
 
 The standalone MCP provider and shared `MCPClient` parse this configuration before
 initializing SDK clients or opening connections. Embedded integrations using that

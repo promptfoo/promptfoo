@@ -1,5 +1,6 @@
 import Ajv from 'ajv';
 import { describe, expect, expectTypeOf, it, vi } from 'vitest';
+import { z } from 'zod';
 import {
   McpConfigInputJsonSchema,
   McpConfigInputSchema,
@@ -28,7 +29,6 @@ const valid: unknown[] = [
   },
   { server: { command: 'node', path: './server.js', url: 'https://mcp.example.test' } },
   { server: { command: '', path: '', url: 'https://mcp.example.test' } },
-  { server: { command: 'node', extra: { keep: true } }, extra: { keep: true } },
   {
     enabled: true,
     server: { command: 'node', args: ['./single.js'] },
@@ -110,7 +110,8 @@ describe('MCP configuration contracts', () => {
       ],
       extension: { keep: true },
     };
-    expect(McpConfigInputSchema.parse(input)).toEqual(input);
+    expect(McpConfigInputSchema.safeParse(input).success).toBe(false);
+    expect(validateJson(input)).toBe(false);
     const parsed = McpConfigSchema.parse(input);
     expect(parsed.enabled).toBe(true);
     expect(parsed.servers?.[0].auth).toEqual({ ...oauth, grantType: 'client_credentials' });
@@ -118,7 +119,75 @@ describe('MCP configuration contracts', () => {
     expect(parsed.servers?.[0].extension).toEqual({ keep: true });
     expect(parsed.extension).toEqual({ keep: true });
     expect(input.servers[0].auth).not.toHaveProperty('grantType');
+    expect(input).not.toHaveProperty('enabled');
+  });
+
+  it.each([
+    { timeuot: 1000 },
+    { server: { command: 'node', arguments: ['server.js'] } },
+    { server: { path: './server.py', environment: { KEY: 'value' } } },
+    { servers: [{ url: 'https://mcp.example.test', header: { KEY: 'value' } }] },
+    {
+      server: {
+        command: 'node',
+        path: './server.js',
+        url: 'https://mcp.example.test',
+        extra: true,
+      },
+    },
+    {
+      server: {
+        url: 'https://mcp.example.test',
+        auth: { type: 'bearer', token: 'key', placement: 'query' },
+      },
+    },
+    {
+      servers: [
+        {
+          url: 'https://mcp.example.test',
+          auth: { type: 'api_key', value: 'key', api_key: 'legacy', extra: true },
+        },
+      ],
+    },
+  ])(
+    'rejects unknown owned fields in authoring without tightening runtime compatibility: %j',
+    (input) => {
+      expect(McpConfigInputSchema.safeParse(input).success).toBe(false);
+      expect(validateJson(input)).toBe(false);
+      expect(McpConfigSchema.safeParse(input).success).toBe(true);
+    },
+  );
+
+  it('preserves raw input and leaves string-valued maps open', () => {
+    const input = {
+      server: {
+        url: 'https://mcp.example.test',
+        headers: { 'X-Custom-Header': 'value' },
+        env: { CUSTOM_ENV: 'value' },
+        auth: oauth,
+      },
+    };
+    expect(McpConfigInputSchema.parse(input)).toEqual(input);
+    expect(validateJson(input)).toBe(true);
     expect(McpConfigInputSchema.parse(input)).not.toHaveProperty('enabled');
+    expect(McpConfigInputSchema.parse(input).server?.auth).not.toHaveProperty('grantType');
+  });
+
+  it('exports serializable contracts without a permissive unrepresentable fallback', () => {
+    expect(
+      z.toJSONSchema(McpConfigInputSchema, {
+        target: 'draft-07',
+        io: 'input',
+        unrepresentable: 'throw',
+      }),
+    ).toEqual(McpConfigInputJsonSchema);
+    expect(() =>
+      z.toJSONSchema(McpConfigSchema, {
+        target: 'draft-07',
+        io: 'input',
+        unrepresentable: 'throw',
+      }),
+    ).toThrow();
   });
 
   it('preserves function transforms only in the in-process schema without calling them', () => {
@@ -128,6 +197,36 @@ describe('MCP configuration contracts', () => {
     expect(McpConfigSchema.parse(input).responseParser).toBe(transform);
     expect(McpConfigInputSchema.safeParse(input).success).toBe(false);
     expect(transform).not.toHaveBeenCalled();
+  });
+
+  it('advertises closed objects, typed maps, and field descriptions', () => {
+    expect(McpConfigInputJsonSchema).toMatchObject({
+      additionalProperties: false,
+      properties: {
+        timeout: {
+          type: 'number',
+          minimum: 0,
+          description: expect.stringContaining('milliseconds'),
+        },
+        server: {
+          anyOf: expect.arrayContaining([
+            expect.objectContaining({
+              additionalProperties: false,
+              required: ['command'],
+              properties: expect.objectContaining({
+                command: {
+                  type: 'string',
+                  minLength: 1,
+                  description: expect.stringContaining('stdio'),
+                },
+                headers: expect.objectContaining({ additionalProperties: { type: 'string' } }),
+                env: expect.objectContaining({ additionalProperties: { type: 'string' } }),
+              }),
+            }),
+          ]),
+        },
+      },
+    });
   });
 
   it('validates nested auth in the server schema independently', () => {

@@ -339,6 +339,17 @@ function runInstalledBinVersion(consumerDir: string, configDir: string, binName:
 
 function writeConsumerScripts(consumerDir: string): void {
   const authAssertions = [
+    "const extensionConfig = { server: { command: 'node', extension: true }, extension: true };",
+    'if (McpConfigInputSchema.safeParse(extensionConfig).success) {',
+    "  throw new Error('MCP authoring config accepted extension fields');",
+    '}',
+    'const compatibleConfig = McpConfigSchema.parse(extensionConfig);',
+    'if (compatibleConfig.extension !== true || compatibleConfig.server.extension !== true) {',
+    "  throw new Error('MCP runtime config lost extension fields');",
+    '}',
+    "if (McpAuthInputSchema.safeParse({ type: 'bearer', token: 'key', typo: true }).success) {",
+    "  throw new Error('MCP authoring auth accepted an unknown field');",
+    '}',
     "const mcpInput = { servers: [{ url: 'https://mcp.example.test', auth: { type: 'api_key', api_key: 'key' } }] };",
     "if ('enabled' in McpConfigInputSchema.parse(mcpInput)) {",
     "  throw new Error('MCP config input parsing inserted defaults');",

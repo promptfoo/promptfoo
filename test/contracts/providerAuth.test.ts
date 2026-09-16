@@ -27,8 +27,8 @@ const validInputs: unknown[] = [
   { type: 'api_key', api_key: ' ' },
   { type: 'api_key', value: 'key', placement: 'header', keyName: 'X-Key' },
   { type: 'api_key', value: 'key', placement: 'query', keyName: '' },
-  { type: 'api_key', value: '{{ token }}', extra: 'ignored' },
-  { type: 'bearer', token: '{{ secrets.TOKEN }}', extra: 'ignored' },
+  { type: 'api_key', value: '{{ token }}' },
+  { type: 'bearer', token: '{{ secrets.TOKEN }}' },
   clientCredentials,
   { ...clientCredentials, grantType: 'client_credentials' },
   { ...clientCredentials, scopes: 'read write' },
@@ -119,13 +119,17 @@ describe('MCP auth contracts', () => {
     expect(McpAuthSchema.parse(input)).toEqual(input);
   });
 
-  it('retains object stripping without mutating the submitted configuration', () => {
-    const input = { type: 'bearer', token: 'token', extra: { retainedInInput: true } };
-    expect(McpAuthInputSchema.parse(input)).toEqual({ type: 'bearer', token: 'token' });
-    expect(McpAuthSchema.parse(input)).toEqual({ type: 'bearer', token: 'token' });
-    expect(input.extra).toEqual({ retainedInInput: true });
-    expect(validateJson(input)).toBe(true);
-  });
+  it.each(validInputs)(
+    'rejects unknown authoring fields while retaining runtime stripping: %j',
+    (auth) => {
+      const input = { ...(auth as object), extra: { retainedInInput: true } };
+      expect(McpAuthInputSchema.safeParse(input).success).toBe(false);
+      expect(validateJson(input)).toBe(false);
+      expect(McpAuthSchema.parse(input)).toEqual(McpAuthSchema.parse(auth));
+      expect(A2AAuthSchema.parse(input)).toEqual(McpAuthSchema.parse(auth));
+      expect(input.extra).toEqual({ retainedInInput: true });
+    },
+  );
 
   it('composes with request schemas and retains nested Zod error paths', () => {
     const requestSchema = z.object({ auth: McpAuthInputSchema });
