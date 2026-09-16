@@ -129,11 +129,41 @@ export async function transformMCPConfigToClaudeCode(
     serverConfigs.push(config.server);
   }
 
+  // An explicit `name` owns its key, so two servers sharing one is a config error.
+  // Checked before transforming, which would otherwise fetch OAuth tokens for a
+  // configuration we are about to reject.
+  const names = serverConfigs.flatMap((server) => server.name ?? []);
+  const duplicateName = names.find((name, index) => names.indexOf(name) !== index);
+  if (duplicateName) {
+    throw new Error(
+      `Duplicate Claude Agent SDK MCP server \`${duplicateName}\`; give each configured server a unique \`name\`.`,
+    );
+  }
+
   const servers = await Promise.all(
     serverConfigs.map((server) => transformMCPServerConfigToClaudeCode(server)),
   );
 
-  return Object.fromEntries(servers);
+  // An unnamed server falls back to a coarse identifier that several servers can
+  // share, so suffix collisions instead of letting `Object.fromEntries` drop one.
+  // The key becomes the SDK's server name — it lands in `mcp__<key>__<tool>` and in
+  // debug logs — so it deliberately carries no `args`, `env`, or auth values.
+  const taken = new Set(names);
+  const entries = servers.map((server, index) => {
+    const { name, url, command } = serverConfigs[index];
+    if (name) {
+      return [name, server] as const;
+    }
+    const fallback = url ?? command ?? 'default';
+    let key = fallback;
+    for (let suffix = 2; taken.has(key); suffix++) {
+      key = `${fallback}_${suffix}`;
+    }
+    taken.add(key);
+    return [key, server] as const;
+  });
+
+  return Object.fromEntries(entries);
 }
 
 export function validateMCPConfigForClaudeCode(config: MCPConfig): void {
@@ -197,9 +227,8 @@ export function validateMCPConfigForClaudeCode(config: MCPConfig): void {
 
 async function transformMCPServerConfigToClaudeCode(
   config: MCPServerConfig,
-): Promise<[string, ClaudeCodeMcpServerConfig]> {
-  const key = config.name ?? config.url ?? config.command ?? 'default';
-  let out: ClaudeCodeMcpServerConfig | undefined;
+): Promise<ClaudeCodeMcpServerConfig> {
+  let out: ClaudeCodeMcpServerConfig;
 
   if (config.url) {
     // Render environment variables in auth config
@@ -242,5 +271,5 @@ async function transformMCPServerConfigToClaudeCode(
     throw new Error('MCP configuration cannot be converted to Claude Agent SDK MCP server config');
   }
 
-  return [key, out];
+  return out;
 }
