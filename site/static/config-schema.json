@@ -3375,6 +3375,15 @@
         "maxConcurrency": {
           "type": "number"
         },
+        "passPower": {
+          "type": "number",
+          "exclusiveMinimum": 0
+        },
+        "passPowerThreshold": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 100
+        },
         "progressCallback": {},
         "repeat": {
           "type": "number"
@@ -3441,6 +3450,15 @@
           "type": "integer",
           "minimum": 0,
           "maximum": 9007199254740991
+        },
+        "passPower": {
+          "type": "number",
+          "exclusiveMinimum": 0
+        },
+        "passPowerThreshold": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 100
         },
         "vars": {
           "type": "string"
