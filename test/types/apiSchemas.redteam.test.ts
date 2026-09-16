@@ -7,7 +7,7 @@ import {
   SuccessResponseSchema,
 } from '../../src/types/api/common';
 import { ConfigSchemas } from '../../src/types/api/configs';
-import { EvalSchemas } from '../../src/types/api/eval';
+import { EVAL_TABLE_MAX_PAGE_SIZE, EvalSchemas } from '../../src/types/api/eval';
 import { MediaSchemas } from '../../src/types/api/media';
 import { ModelAuditSchemas } from '../../src/types/api/modelAudit';
 import { ProviderSchemas } from '../../src/types/api/providers';
@@ -406,8 +406,9 @@ describe('API schema red-team coverage', () => {
         RedteamSchemas.GenerateTest.Response.parse({
           testCases: [{ prompt: 'one', context: 'ctx', metadata: { index: 1 } }],
           count: 1,
+          tokenUsage: { total: 3, prompt: 2, completion: 1, numRequests: 1 },
         }),
-      ).toMatchObject({ count: 1 });
+      ).toMatchObject({ count: 1, tokenUsage: { total: 3, numRequests: 1 } });
       expect(
         RedteamSchemas.GenerateTest.Response.safeParse({
           testCases: [{ prompt: 'one', context: 'ctx' }],
@@ -603,6 +604,18 @@ describe('API schema red-team coverage', () => {
       expect(EvalSchemas.Table.Query.safeParse({ limit: '1.5' }).success).toBe(false);
       expect(EvalSchemas.Table.Query.safeParse({ offset: '1.5' }).success).toBe(false);
       expect(EvalSchemas.Table.Query.safeParse({ format: 'xml' }).success).toBe(false);
+    });
+
+    it('should reject excessive table page sizes if the request is not an export', () => {
+      expect(
+        EvalSchemas.Table.Query.safeParse({ limit: String(EVAL_TABLE_MAX_PAGE_SIZE + 1) }).success,
+      ).toBe(false);
+      expect(
+        EvalSchemas.Table.Query.safeParse({
+          format: 'csv',
+          limit: String(EVAL_TABLE_MAX_PAGE_SIZE + 1),
+        }).success,
+      ).toBe(true);
     });
 
     it('accepts single comparison eval IDs for metadata keys and rejects empty metadata probes', () => {

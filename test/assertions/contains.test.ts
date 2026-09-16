@@ -68,24 +68,6 @@ describe('handleContains', () => {
     });
   });
 
-  it('should handle number values', () => {
-    const params: AssertionParams = {
-      ...defaultParams,
-      assertion: { type: 'contains', value: '42' },
-      renderedValue: '42' as AssertionValue,
-      outputString: 'The answer is 42',
-      inverse: false,
-    };
-
-    const result = handleContains(params);
-    expect(result).toEqual({
-      pass: true,
-      score: 1,
-      reason: 'Assertion passed',
-      assertion: params.assertion,
-    });
-  });
-
   it('should handle inverse assertion correctly', () => {
     const params: AssertionParams = {
       ...defaultParams,
@@ -173,6 +155,55 @@ describe('handleIContains', () => {
       reason: 'Assertion passed',
       assertion: params.assertion,
     });
+  });
+});
+
+describe.each([
+  ['contains', handleContains],
+  ['icontains', handleIContains],
+] as const)('%s numeric values', (type, handler) => {
+  it.each([
+    {
+      outputString: 'There are 0 errors',
+      pass: true,
+      reason: 'Assertion passed',
+    },
+    {
+      outputString: 'no digits here',
+      pass: false,
+      reason: 'Expected output to contain "0"',
+    },
+  ])('should return pass=$pass for 0', ({ outputString, pass, reason }) => {
+    const params: AssertionParams = {
+      ...defaultParams,
+      baseType: type,
+      assertion: { type, value: 0 },
+      renderedValue: 0,
+      outputString,
+      inverse: false,
+    };
+
+    expect(handler(params)).toEqual({
+      pass,
+      score: pass ? 1 : 0,
+      reason,
+      assertion: params.assertion,
+    });
+  });
+
+  it('should reject NaN', () => {
+    const params: AssertionParams = {
+      ...defaultParams,
+      baseType: type,
+      assertion: { type, value: Number.NaN },
+      renderedValue: Number.NaN,
+      outputString: 'NaN',
+      inverse: false,
+    };
+
+    expect(() => handler(params)).toThrow(
+      `"${type}" assertion type must have a string or number value`,
+    );
   });
 });
 

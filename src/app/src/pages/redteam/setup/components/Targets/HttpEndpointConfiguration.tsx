@@ -1,6 +1,6 @@
 import './syntax-highlighting.css';
 
-import { useCallback, useId, useRef, useState } from 'react';
+import { useCallback, useEffect, useId, useRef, useState } from 'react';
 
 import { Button } from '@app/components/ui/button';
 import Editor from '@app/components/ui/code-editor';
@@ -31,7 +31,7 @@ import { Switch } from '@app/components/ui/switch';
 import Prism from '@app/lib/prism';
 import { cn } from '@app/lib/utils';
 import { callApi } from '@app/utils/api';
-import yaml from 'js-yaml';
+import * as yaml from 'js-yaml';
 import {
   AlignLeft,
   Check,
@@ -60,6 +60,7 @@ interface HttpEndpointConfigurationProps {
   setUrlError: (error: string | null) => void;
   onTargetTested?: (success: boolean) => void;
   onSessionTested?: (success: boolean) => void;
+  isTargetConfigInvalid?: () => boolean;
 }
 
 interface GeneratedConfig {
@@ -97,6 +98,7 @@ const HttpEndpointConfiguration = ({
   setUrlError,
   onTargetTested,
   onSessionTested,
+  isTargetConfigInvalid,
 }: HttpEndpointConfigurationProps): React.ReactElement => {
   const [requestBody, setRequestBody] = useState(
     typeof selectedTarget.config.body === 'string'
@@ -162,9 +164,23 @@ Content-Type: application/json
 
   // Request body type (json or text)
   const [requestBodyType, setRequestBodyType] = useState<'json' | 'text'>('json');
+  const targetUrl =
+    (typeof selectedTarget.config.url === 'string' && selectedTarget.config.url.trim()) ||
+    (/^https?:\/\//i.test(selectedTarget.id) ? selectedTarget.id : undefined);
+  const [urlInput, setUrlInput] = useState(() => targetUrl ?? '');
+  const isUrlInputFocused = useRef(false);
+  useEffect(() => {
+    if (!isUrlInputFocused.current) {
+      setUrlInput(targetUrl ?? '');
+    }
+  }, [targetUrl]);
 
   // Handle test target
   const handleTestTarget = useCallback(async () => {
+    if (isTargetConfigInvalid?.()) {
+      onTargetTested?.(false);
+      return;
+    }
     const requestId = ++testRequestIdRef.current;
     const testedTarget = selectedTarget;
     const isCurrentRequest = () =>
@@ -175,7 +191,6 @@ Content-Type: application/json
 
     // Validate URL before testing (skip validation for raw request mode)
     if (!testedTarget.config?.request) {
-      const targetUrl = testedTarget.config?.url;
       if (!targetUrl || targetUrl.trim() === '' || targetUrl === 'http') {
         setTestResultState({
           target: testedTarget,
@@ -281,7 +296,7 @@ Content-Type: application/json
         setTestRunningTarget(null);
       }
     }
-  }, [selectedTarget, onTargetTested]);
+  }, [selectedTarget, onTargetTested, targetUrl, isTargetConfigInvalid]);
 
   // Auto-size the raw request textarea between 10rem and 40rem based on line count
   const computeRawTextareaHeight = useCallback((text: string) => {
@@ -657,8 +672,18 @@ ${exampleRequest}`;
                 </Select>
                 <Input
                   id="url"
-                  value={selectedTarget.config.url}
-                  onChange={(e) => updateCustomTarget('url', e.target.value)}
+                  value={urlInput}
+                  onChange={(e) => {
+                    setUrlInput(e.target.value);
+                    updateCustomTarget('url', e.target.value);
+                  }}
+                  onFocus={() => {
+                    isUrlInputFocused.current = true;
+                  }}
+                  onBlur={() => {
+                    isUrlInputFocused.current = false;
+                    setUrlInput(targetUrl ?? '');
+                  }}
                   className={cn('min-w-0 flex-1', urlError && 'border-destructive')}
                   placeholder="https://example.com/api/chat"
                 />
@@ -853,6 +878,7 @@ ${exampleRequest}`;
             variant="outline"
             size="sm"
             onClick={() => setResponseTestOpen(true)}
+            disabled={isTargetConfigInvalid?.()}
             className="absolute right-2 top-2 z-10"
           >
             <Play className="mr-1 size-4" />
@@ -870,9 +896,8 @@ ${exampleRequest}`;
           testResult={testResult}
           handleTestTarget={handleTestTarget}
           disabled={
-            selectedTarget.config.request
-              ? !selectedTarget.config.request
-              : !selectedTarget.config.url
+            Boolean(isTargetConfigInvalid?.()) ||
+            (selectedTarget.config.request ? !selectedTarget.config.request : !targetUrl)
           }
           detailsExpanded={testDetailsExpanded}
           onDetailsExpandedChange={setTestDetailsExpanded}
@@ -1001,6 +1026,7 @@ ${exampleRequest}`;
         updateCustomTarget={updateCustomTarget}
         defaultRequestTransform={selectedTarget.config.transformRequest}
         onSessionTested={onSessionTested}
+        isTargetConfigInvalid={isTargetConfigInvalid}
       />
 
       {/* Response Transform Test Dialog */}
@@ -1009,6 +1035,7 @@ ${exampleRequest}`;
         onClose={() => setResponseTestOpen(false)}
         currentTransform={selectedTarget.config.transformResponse || ''}
         onApply={(code) => updateCustomTarget('transformResponse', code)}
+        isTargetConfigInvalid={isTargetConfigInvalid}
       />
     </div>
   );

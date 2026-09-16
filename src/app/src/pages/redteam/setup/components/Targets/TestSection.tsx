@@ -82,6 +82,9 @@ const TestSection: React.FC<TestSectionProps> = ({
     typeof testResult?.configuration_change_suggestion?.transformResponse === 'string'
       ? testResult.configuration_change_suggestion.transformResponse
       : undefined;
+  const targetUrl =
+    (typeof selectedTarget.config.url === 'string' && selectedTarget.config.url.trim()) ||
+    (/^https?:\/\//i.test(selectedTarget.id) ? selectedTarget.id : undefined);
 
   return (
     <div className="mt-6 overflow-hidden rounded-lg border border-border bg-card">
@@ -115,7 +118,7 @@ const TestSection: React.FC<TestSectionProps> = ({
           {isTestRunning ? 'Testing...' : 'Test Target'}
         </Button>
 
-        {!selectedTarget.config.url && !selectedTarget.config.request && (
+        {!targetUrl && !selectedTarget.config.request && (
           <Alert variant="warning" className="mb-3">
             <AlertCircle className="size-4" />
             <AlertContent>
@@ -233,9 +236,9 @@ const TestSection: React.FC<TestSectionProps> = ({
                     <div className="flex min-w-0 flex-1 flex-col space-y-1.5">
                       <Label className="text-sm font-medium">Request</Label>
                       <div className="min-w-0 flex-1 space-y-2 rounded-md border border-border bg-muted/30 p-3">
-                        {selectedTarget.config.url && (
+                        {targetUrl && (
                           <>
-                            <CodeBlock label="URL">{selectedTarget.config.url}</CodeBlock>
+                            <CodeBlock label="URL">{targetUrl}</CodeBlock>
                             <CodeBlock label="Method">
                               {selectedTarget.config.method || 'POST'}
                             </CodeBlock>

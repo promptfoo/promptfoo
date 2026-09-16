@@ -67,7 +67,7 @@ That's it! You've created your first custom Ruby provider.
 When Promptfoo evaluates a test case with a Ruby provider:
 
 1. **Promptfoo** prepares the prompt based on your configuration
-2. **Ruby Script** is called with three parameters:
+2. **Promptfoo** invokes `call_api` in your Ruby script with three parameters:
    - `prompt`: The final prompt string
    - `options`: Provider configuration from your YAML
    - `context`: Variables and metadata for the current test
@@ -97,14 +97,17 @@ def call_api(prompt, options, context)
   # Main function for text generation tasks
 end
 
-def call_embedding_api(prompt, options, context)
+def call_embedding_api(prompt, options)
   # For embedding generation tasks
 end
 
-def call_classification_api(prompt, options, context)
+def call_classification_api(prompt, options)
   # For classification tasks
 end
 ```
+
+`context` is passed to `call_api` only. Embedding and classification handlers receive `prompt` and
+`options`.
 
 ### Understanding Parameters
 
@@ -142,7 +145,7 @@ Contains your provider configuration and metadata:
   'id' => 'file://my_provider.rb',
   'config' => {
     # Your custom configuration from promptfooconfig.yaml
-    'model_name' => 'gpt-3.5-turbo',
+    'model' => 'gpt-4.1-mini',
     'temperature' => 0.7,
     'max_tokens' => 100,
 
@@ -154,7 +157,7 @@ Contains your provider configuration and metadata:
 
 #### The `context` Parameter
 
-Provides information about the current test case:
+For `call_api`, this provides information about the current test case:
 
 ```ruby
 {
@@ -170,7 +173,7 @@ Provides information about the current test case:
     'vars' => { ... },
     'metadata' => {
       'pluginId' => '...',   # Redteam plugin (e.g. "promptfoo:redteam:harmful:hate")
-      'strategyId' => '...',  # Redteam strategy (e.g. "jailbreak", "prompt-injection")
+      'strategyId' => '...',  # Redteam strategy (e.g. "jailbreak", "jailbreak-templates")
     },
   },
 }
@@ -186,32 +189,22 @@ Non-serializable fields (`logger`, `getCache`, `filters`, `originalProvider`) ar
 
 ### Return Format
 
-Your function must return a hash with these fields:
+Your function must return a hash containing `output` or `error`, plus any optional fields:
 
 ```ruby
 def call_api(prompt, options, context)
-  # Required field
-  result = {
-    'output' => 'Your response here'
-  }
-
-  # Optional fields
-  result['tokenUsage'] = {
-    'total' => 150,
-    'prompt' => 50,
-    'completion' => 100
-  }
-
-  result['cost'] = 0.0025  # in dollars
-  result['cached'] = false
-  result['logProbs'] = [-0.5, -0.3, -0.1]
-
-  # Error handling
   if something_went_wrong
-    result['error'] = 'Description of what went wrong'
+    return { 'error' => 'Description of what went wrong' }
   end
 
-  result
+  {
+    'output' => 'Your response here',
+    'tokenUsage' => { 'total' => 150, 'prompt' => 50, 'completion' => 100 },
+    'cost' => 0.0025, # in dollars
+    'cached' => false,
+    'logProbs' => [-0.5, -0.3, -0.1],
+    'guardrails' => { 'flagged' => false }
+  }
 end
 ```
 
@@ -235,9 +228,18 @@ The types passed into the Ruby script function and the `ProviderResponse` return
 
 # TokenUsage
 {
-  'total' => Integer,
-  'prompt' => Integer,
-  'completion' => Integer
+  'total' => Integer (optional),
+  'prompt' => Integer (optional),
+  'completion' => Integer (optional),
+  'numRequests' => Integer (optional)
+}
+
+# GuardrailResponse
+{
+  'flagged' => Boolean (optional),
+  'flaggedInput' => Boolean (optional),
+  'flaggedOutput' => Boolean (optional),
+  'reason' => String (optional)
 }
 
 # ProviderResponse
@@ -248,6 +250,7 @@ The types passed into the Ruby script function and the `ProviderResponse` return
   'cost' => Float (optional),
   'cached' => Boolean (optional),
   'logProbs' => Array[Float] (optional),
+  'guardrails' => GuardrailResponse (optional),
   'metadata' => Hash (optional)
 }
 
@@ -268,7 +271,7 @@ The types passed into the Ruby script function and the `ProviderResponse` return
 
 :::tip
 
-Always include the `output` field in your response, even if it's an empty string when an error occurs.
+Return at least one of `output` or `error`. Represent an expected safety block as a non-empty `output` plus `guardrails`; use `error` for provider or guardrail execution failures.
 
 :::
 
@@ -303,7 +306,7 @@ def call_api(prompt, options, context)
   request['Authorization'] = "Bearer #{ENV['OPENAI_API_KEY']}"
 
   request.body = JSON.generate({
-    model: config['model'] || 'gpt-3.5-turbo',
+    model: config['model'] || 'gpt-4.1-mini',
     messages: messages,
     temperature: config['temperature'] || 0.7,
     max_tokens: config['max_tokens'] || 150
@@ -470,8 +473,8 @@ npx promptfoo@latest eval
 
 Promptfoo automatically detects your Ruby installation in this priority order:
 
-1. **Environment variable**: `PROMPTFOO_RUBY` (if set)
-2. **Provider config**: `rubyExecutable` in your config
+1. **Provider config**: `rubyExecutable` in your config
+2. **Environment variable**: `PROMPTFOO_RUBY` (if set)
 3. **Windows detection**: Uses `where ruby` (Windows only)
 4. **Smart detection**: Uses `ruby -e "puts RbConfig.ruby"` to find the actual Ruby path
 5. **Fallback commands**:
@@ -542,6 +545,8 @@ def call_api(prompt, options, context)
         'output' => 'I cannot process this request.',
         'guardrails' => {
           'flagged' => true,
+          'flaggedInput' => true,
+          'flaggedOutput' => false,
           'reason' => 'Prohibited content detected'
         }
       }
@@ -553,15 +558,25 @@ def call_api(prompt, options, context)
 
   # Post-process checks
   if check_output_safety(result)
-    { 'output' => result }
+    {
+      'output' => result,
+      'guardrails' => { 'flagged' => false }
+    }
   else
     {
       'output' => '[Content filtered]',
-      'guardrails' => { 'flagged' => true }
+      'guardrails' => {
+        'flagged' => true,
+        'flaggedInput' => false,
+        'flaggedOutput' => true,
+        'reason' => 'Generated content failed output safety checks'
+      }
     }
   end
 end
 ```
+
+Set the aggregate `flagged` field explicitly; the directional fields do not control the [`guardrails` assertion](/docs/configuration/expected-outputs/guardrails) by themselves. Return guardrail service failures through `error` rather than treating them as unflagged.
 
 ## Troubleshooting
 
