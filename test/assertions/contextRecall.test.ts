@@ -127,7 +127,7 @@ describe('handleContextRecall', () => {
     );
   });
 
-  it('should use default threshold of 0 when not provided', async () => {
+  it('should use default threshold of 0.5 when not provided', async () => {
     const mockResult = { pass: true, score: 1, reason: 'Perfect match' };
     mockMatchesContextRecall.mockResolvedValue(mockResult);
     vi.mocked(contextUtils.resolveContext).mockResolvedValue('test context');
@@ -162,11 +162,69 @@ describe('handleContextRecall', () => {
     expect(mockMatchesContextRecall).toHaveBeenCalledWith(
       'test context',
       'test value',
-      0,
+      0.5,
       {},
       { context: 'test context' },
       undefined,
     );
+  });
+
+  it('should invert omitted-threshold not-context-recall results', async () => {
+    const mockResult = {
+      pass: false,
+      score: 0.4,
+      reason: 'Recall 0.40 is < 0.5',
+      metadata: {
+        score: 0.4,
+        totalSentences: 1,
+        attributedSentences: 0,
+      },
+    };
+    mockMatchesContextRecall.mockResolvedValue(mockResult);
+    vi.mocked(contextUtils.resolveContext).mockResolvedValue('test context');
+
+    const mockProvider = createMockProvider({ response: {} });
+
+    const params: AssertionParams = {
+      assertion: { type: 'not-context-recall' },
+      renderedValue: 'test value',
+      prompt: 'test prompt',
+      test: { vars: { context: 'test context' }, options: {} },
+      baseType: 'context-recall',
+      assertionValueContext: {
+        prompt: 'test prompt',
+        vars: { context: 'test context' },
+        test: { vars: { context: 'test context' }, options: {} },
+        logProbs: undefined,
+        provider: mockProvider,
+        providerResponse: undefined,
+      },
+      inverse: true,
+      output: 'test output',
+      outputString: 'test output',
+      provider: mockProvider,
+      providerResponse: {} as ProviderResponse,
+    };
+
+    const result = await handleContextRecall(params);
+
+    expect(mockMatchesContextRecall).toHaveBeenCalledWith(
+      'test context',
+      'test value',
+      0.5,
+      {},
+      { context: 'test context' },
+      undefined,
+    );
+    expect(result.pass).toBe(true);
+    expect(result.score).toBe(0.6);
+    expect(result.reason).toBe('Recall 0.40 is < 0.5');
+    expect(result.metadata).toEqual({
+      context: 'test context',
+      score: 0.4,
+      totalSentences: 1,
+      attributedSentences: 0,
+    });
   });
 
   it('should fall back to prompt when no context variable', async () => {
@@ -212,7 +270,7 @@ describe('handleContextRecall', () => {
     expect(mockMatchesContextRecall).toHaveBeenCalledWith(
       'test prompt',
       'test output',
-      0,
+      0.5,
       {},
       {},
       undefined,
@@ -259,7 +317,7 @@ describe('handleContextRecall', () => {
       'prompt',
       {},
     );
-    expect(mockMatchesContextRecall).toHaveBeenCalledWith('ctx', 'val', 0, {}, {}, undefined);
+    expect(mockMatchesContextRecall).toHaveBeenCalledWith('ctx', 'val', 0.5, {}, {}, undefined);
   });
 
   it('should throw error when renderedValue is not a string', async () => {
