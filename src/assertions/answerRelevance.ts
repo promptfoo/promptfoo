@@ -1,6 +1,6 @@
 import { matchesAnswerRelevance } from '../matchers/rag';
 import invariant from '../util/invariant';
-import { DEFAULT_RAG_ASSERTION_THRESHOLD } from './ragDefaults';
+import { applyRagInverse, DEFAULT_RAG_ASSERTION_THRESHOLD } from './ragDefaults';
 
 import type { AssertionParams, GradingResult } from '../types/index';
 
@@ -10,6 +10,7 @@ export const handleAnswerRelevance = async ({
   prompt,
   test,
   providerCallContext,
+  inverse,
 }: AssertionParams): Promise<GradingResult> => {
   invariant(
     typeof output === 'string',
@@ -20,12 +21,15 @@ export const handleAnswerRelevance = async ({
 
   return {
     assertion,
-    ...(await matchesAnswerRelevance(
-      input,
-      output,
-      assertion.threshold ?? DEFAULT_RAG_ASSERTION_THRESHOLD,
-      test.options,
-      providerCallContext,
-    )),
+    ...applyRagInverse(
+      await matchesAnswerRelevance(
+        input,
+        output,
+        assertion.threshold ?? DEFAULT_RAG_ASSERTION_THRESHOLD,
+        test.options,
+        providerCallContext,
+      ),
+      inverse,
+    ),
   };
 };

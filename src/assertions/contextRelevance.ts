@@ -1,7 +1,7 @@
 import { matchesContextRelevance } from '../matchers/rag';
 import invariant from '../util/invariant';
 import { resolveContext } from './contextUtils';
-import { DEFAULT_RAG_ASSERTION_THRESHOLD } from './ragDefaults';
+import { applyRagInverse, DEFAULT_RAG_ASSERTION_THRESHOLD } from './ragDefaults';
 
 import type { AssertionParams, GradingResult } from '../types/index';
 
@@ -22,6 +22,7 @@ export const handleContextRelevance = async ({
   prompt,
   providerResponse,
   providerCallContext,
+  inverse,
 }: AssertionParams): Promise<GradingResult> => {
   invariant(test.vars, 'context-relevance assertion requires a test with variables');
   invariant(
@@ -48,7 +49,7 @@ export const handleContextRelevance = async ({
 
   return {
     assertion,
-    ...result,
+    ...applyRagInverse(result, inverse),
     metadata: {
       context,
       ...(result.metadata || {}),

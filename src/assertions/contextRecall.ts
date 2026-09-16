@@ -1,7 +1,7 @@
 import { matchesContextRecall } from '../matchers/rag';
 import invariant from '../util/invariant';
 import { resolveContext } from './contextUtils';
-import { DEFAULT_RAG_ASSERTION_THRESHOLD } from './ragDefaults';
+import { applyRagInverse, DEFAULT_RAG_ASSERTION_THRESHOLD } from './ragDefaults';
 
 import type { AssertionParams, GradingResult } from '../types/index';
 
@@ -23,6 +23,7 @@ export const handleContextRecall = async ({
   output,
   providerResponse,
   providerCallContext,
+  inverse,
 }: AssertionParams): Promise<GradingResult> => {
   invariant(
     typeof renderedValue === 'string',
@@ -44,7 +45,7 @@ export const handleContextRecall = async ({
 
   return {
     assertion,
-    ...result,
+    ...applyRagInverse(result, inverse),
     metadata: {
       context,
       ...(result.metadata || {}),

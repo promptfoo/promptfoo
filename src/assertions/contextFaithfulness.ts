@@ -1,7 +1,7 @@
 import { matchesContextFaithfulness } from '../matchers/rag';
 import invariant from '../util/invariant';
 import { resolveContext } from './contextUtils';
-import { DEFAULT_RAG_ASSERTION_THRESHOLD } from './ragDefaults';
+import { applyRagInverse, DEFAULT_RAG_ASSERTION_THRESHOLD } from './ragDefaults';
 
 import type { AssertionParams, GradingResult } from '../types/index';
 
@@ -22,6 +22,7 @@ export async function handleContextFaithfulness({
   prompt,
   providerResponse,
   providerCallContext,
+  inverse,
 }: AssertionParams): Promise<GradingResult> {
   invariant(test.vars, 'context-faithfulness assertion requires a test with variables');
   invariant(
@@ -44,15 +45,18 @@ export async function handleContextFaithfulness({
 
   return {
     assertion,
-    ...(await matchesContextFaithfulness(
-      test.vars.query,
-      output,
-      context,
-      assertion.threshold ?? DEFAULT_RAG_ASSERTION_THRESHOLD,
-      test.options,
-      test.vars,
-      providerCallContext,
-    )),
+    ...applyRagInverse(
+      await matchesContextFaithfulness(
+        test.vars.query,
+        output,
+        context,
+        assertion.threshold ?? DEFAULT_RAG_ASSERTION_THRESHOLD,
+        test.options,
+        test.vars,
+        providerCallContext,
+      ),
+      inverse,
+    ),
     metadata: {
       context,
     },
