@@ -5,13 +5,15 @@ prompts:
   - 'What is the weather like in {{city}}?'
 
 providers:
-  - id: 'openai:chat:gpt-4.1-mini'
+  - id: 'openai:chat:gpt-5.6-luna'
     label: 'functions-defined-in-external-file'
     config:
+      reasoning_effort: none
       functions: file://get_current_weather.yaml
-  - id: 'openai:chat:gpt-4.1-mini'
+  - id: 'openai:chat:gpt-5.6-luna'
     label: 'functions-defined-in-config'
     config:
+      reasoning_effort: none
       functions:
         [
           {
