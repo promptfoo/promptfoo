@@ -91,9 +91,9 @@ declare const __SITE_BUILD_TIMESTAMP__: string | undefined;
  * reader after hydration.
  *
  * DefinePlugin replaces `__SITE_BUILD_TIMESTAMP__` with the same string literal in both
- * the server and the client bundle, so the two can never disagree. The trade-off is
- * explicit: **statuses roll over on rebuild, not on the wire.** Rebuild/redeploy the site
- * to move a finished event into the past list.
+ * the server and the client bundle, so their initial renders agree. The events index
+ * refreshes statuses against the visitor's clock after hydration and at each closing
+ * time, so a new deploy is not required to retire a finished event.
  *
  * Outside webpack the identifier is undefined and this falls back to the current time,
  * which is the right behavior for tests and node scripts.
@@ -104,10 +104,10 @@ const STATUS_REFERENCE_TIME: number = (() => {
   return Number.isNaN(parsed) ? Date.now() : parsed;
 })();
 
-// Helper to determine event status based on date. Nothing should re-derive this on the
-// client: `Event.status` is computed once here, at module scope, from the snapshot above.
-function getEventStatus(endDate: string): EventStatus {
-  return Date.parse(endDate) < STATUS_REFERENCE_TIME ? 'past' : 'upcoming';
+// Build-safe initial statuses use the shared snapshot. The events page passes the visitor
+// clock explicitly when it refreshes those statuses after hydration.
+function getEventStatus(endDate: string, referenceTime = STATUS_REFERENCE_TIME): EventStatus {
+  return Date.parse(endDate) < referenceTime ? 'past' : 'upcoming';
 }
 
 // Event Data
@@ -318,10 +318,10 @@ export const events: Event[] = [
     slug: 'blackhat-2026',
     name: 'Promptfoo at Black Hat USA 2026',
     shortName: 'Black Hat 2026',
-    status: getEventStatus('2026-08-06T18:00:00-07:00'),
+    status: getEventStatus('2026-08-06T16:00:00-07:00'),
     type: 'conference',
     startDate: '2026-08-01T09:00:00-07:00', // PDT
-    endDate: '2026-08-06T18:00:00-07:00', // PDT
+    endDate: '2026-08-06T16:00:00-07:00', // PDT
     location: {
       venue: 'Mandalay Bay Convention Center',
       city: 'Las Vegas',
@@ -330,9 +330,9 @@ export const events: Event[] = [
     },
     booth: 'Booth #2967',
     description:
-      'Promptfoo demos at OpenAI booth #2967 in the Black Hat Business Hall, Aug 4-6: application-specific agent attacks, full transcripts, and CI regression tests.',
+      'Promptfoo demonstrated AI agent attacks, full transcripts, and regression tests at OpenAI booth #2967 in the Black Hat Business Hall, Aug 4-6.',
     fullDescription:
-      'Promptfoo is part of OpenAI. Find the team at OpenAI booth #2967 in the Business Hall, open Aug 4-6. We run automated red teaming against real LLM apps, keep the transcript for every attempt, and show how a confirmed finding becomes a regression test that runs in CI.',
+      'Black Hat USA 2026 ran Aug 1-6. Promptfoo, part of OpenAI, demonstrated AI application attacks, confirmed findings, and regression tests at OpenAI booth #2967 in the Business Hall, Aug 4-6.',
     cardImage: '/img/events/blackhat-2026.jpg',
     heroImage: '/img/events/blackhat-2026.jpg',
     customPageUrl: '/events/blackhat-2026',
@@ -342,10 +342,10 @@ export const events: Event[] = [
     slug: 'defcon-2026',
     name: 'Promptfoo at DEF CON 34',
     shortName: 'DEF CON 34',
-    status: getEventStatus('2026-08-09T18:00:00-07:00'),
+    status: getEventStatus('2026-08-09T16:00:00-07:00'),
     type: 'conference',
     startDate: '2026-08-06T09:00:00-07:00', // PDT
-    endDate: '2026-08-09T18:00:00-07:00', // PDT
+    endDate: '2026-08-09T16:00:00-07:00', // PDT
     location: {
       venue: 'Las Vegas Convention Center (West Hall)',
       city: 'Las Vegas',
@@ -354,9 +354,9 @@ export const events: Event[] = [
     },
     booth: 'Booth #1412',
     description:
-      'At OpenAI booth #1412 in West Hall, see Promptfoo test agent permissions, tool abuse, memory poisoning, and indirect prompt injection.',
+      'Promptfoo demonstrated AI agent red teaming at OpenAI booth #1412 in West Hall, Aug 7-9, including prompt injection and tool misuse.',
     fullDescription:
-      "DEF CON 34's theme is Agency: charting your own course with the tech you use. Promptfoo is part of OpenAI, so find the team at OpenAI booth #1412 in West Hall, red teaming agents in the open — agent permissions, excessive agency, tool abuse, memory poisoning, and indirect prompt injection.",
+      'DEF CON 34 ran Aug 6-9 with the theme Agency. Promptfoo, part of OpenAI, demonstrated agent permissions, tool misuse, memory poisoning, and prompt injection at OpenAI booth #1412 in West Hall, Aug 7-9.',
     cardImage: '/img/events/defcon-2026.jpg',
     heroImage: '/img/events/defcon-2026.jpg',
     customPageUrl: '/events/defcon-2026',
@@ -725,14 +725,21 @@ export const events: Event[] = [
 ];
 
 // Helper functions
-export function getUpcomingEvents(): Event[] {
-  return events
+export function getEventsAt(referenceTime: number): Event[] {
+  return events.map((event) => {
+    const status = getEventStatus(event.endDate, referenceTime);
+    return event.status === status ? event : { ...event, status };
+  });
+}
+
+export function getUpcomingEvents(source: readonly Event[] = events): Event[] {
+  return source
     .filter((event) => event.status === 'upcoming')
     .sort((a, b) => new Date(a.startDate).getTime() - new Date(b.startDate).getTime());
 }
 
-export function getPastEvents(): Event[] {
-  return events
+export function getPastEvents(source: readonly Event[] = events): Event[] {
+  return source
     .filter((event) => event.status === 'past')
     .sort((a, b) => new Date(b.startDate).getTime() - new Date(a.startDate).getTime());
 }
@@ -749,8 +756,8 @@ export function getEventsByType(type: EventType): Event[] {
   return events.filter((event) => event.type === type);
 }
 
-export function getFeaturedEvent(): Event | undefined {
-  const upcoming = getUpcomingEvents();
+export function getFeaturedEvent(source: readonly Event[] = events): Event | undefined {
+  const upcoming = getUpcomingEvents(source);
   return upcoming.length > 0 ? upcoming[0] : undefined;
 }
 
