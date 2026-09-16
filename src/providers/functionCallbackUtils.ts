@@ -4,7 +4,7 @@ import {
   loadCallbackFromFileUrl,
   wrapError,
 } from '../util/functions/loadFunction';
-import { getMcpErrorMessage, isMcpErrorResult } from './mcp/util';
+import { getMcpErrorMessage, isMcpErrorResult, normalizeMcpContent } from './mcp/util';
 import { withGenAIToolSpan } from './tracing';
 
 import type {
@@ -15,6 +15,12 @@ import type {
   ToolCall,
 } from './functionCallbackTypes';
 import type { MCPClient } from './mcp/client';
+import type { McpToolCallEntry } from './mcp/types';
+
+/** Optional sink for the MCP tool calls a `processCall(s)` run executed. */
+interface ProcessCallOptions {
+  toolCalls?: McpToolCallEntry[];
+}
 
 /**
  * Resolve a `file://` callback reference through the shared path-traversal guard,
@@ -128,15 +134,23 @@ export class FunctionCallbackHandler {
    * @param call The function call to process (can be various formats)
    * @param callbacks Configuration mapping function names to callbacks
    * @param context Optional context to pass to the callback
+   * @param options Optional sink collecting the MCP tool calls that ran
    * @returns The result of processing
    */
   async processCall(
     call: FunctionCall | ToolCall | any,
     callbacks?: FunctionCallbackConfig,
     context?: any,
+    options?: ProcessCallOptions,
   ): Promise<FunctionCallResult> {
     // Extract function information from various formats
     const functionInfo = this.extractFunctionInfo(call);
+    const callId =
+      typeof call?.call_id === 'string'
+        ? call.call_id
+        : typeof call?.id === 'string'
+          ? call.id
+          : undefined;
 
     // Check if this is an MCP tool first (before checking function callbacks)
     if (this.mcpClient && functionInfo) {
@@ -147,7 +161,12 @@ export class FunctionCallbackHandler {
       }
 
       if (this.mcpToolNames.has(functionInfo.name)) {
-        return await this.executeMcpTool(functionInfo.name, functionInfo.arguments);
+        return await this.executeMcpTool(
+          functionInfo.name,
+          functionInfo.arguments,
+          callId,
+          options?.toolCalls,
+        );
       }
     }
 
@@ -166,11 +185,7 @@ export class FunctionCallbackHandler {
         functionInfo.arguments || '{}',
         callbacks,
         context,
-        typeof call?.call_id === 'string'
-          ? call.call_id
-          : typeof call?.id === 'string'
-            ? call.id
-            : undefined,
+        callId,
       );
       return {
         output: result,
@@ -206,14 +221,14 @@ export class FunctionCallbackHandler {
    * @param calls Array of calls or a single call
    * @param callbacks Configuration mapping function names to callbacks
    * @param context Optional context to pass to callbacks
-   * @param options Processing options
+   * @param options Optional sink collecting the MCP tool calls that ran
    * @returns Processed output in appropriate format
    */
   async processCalls(
     calls: any,
     callbacks?: FunctionCallbackConfig,
     context?: any,
-    _options?: { returnRawOnError?: boolean },
+    options?: ProcessCallOptions,
   ): Promise<any> {
     if (!calls) {
       return calls;
@@ -222,9 +237,16 @@ export class FunctionCallbackHandler {
     const isArray = Array.isArray(calls);
     const callsArray = isArray ? calls : [calls];
 
+    // The calls run concurrently, so give each its own bucket and drain them in order:
+    // a shared sink would record MCP calls by latency instead of by the model's call order.
+    const sink = options?.toolCalls;
+    const buckets = sink ? callsArray.map((): McpToolCallEntry[] => []) : undefined;
     const results = await Promise.all(
-      callsArray.map((call) => this.processCall(call, callbacks, context)),
+      callsArray.map((call, index) =>
+        this.processCall(call, callbacks, context, buckets && { toolCalls: buckets[index] }),
+      ),
     );
+    sink?.push(...(buckets?.flat() ?? []));
 
     // If any callback succeeded, return processed results
     const hasSuccess = results.some(
@@ -337,64 +359,45 @@ export class FunctionCallbackHandler {
   }
 
   /**
-   * Executes an MCP tool
+   * Executes an MCP tool, recording it in `toolCalls` when the caller supplied a sink so
+   * the provider can publish it as `metadata.toolCalls`.
    */
-  private async executeMcpTool(toolName: string, args: unknown): Promise<FunctionCallResult> {
+  private async executeMcpTool(
+    toolName: string,
+    args: unknown,
+    callId?: string,
+    toolCalls?: McpToolCallEntry[],
+  ): Promise<FunctionCallResult> {
+    // Declared outside the try so the catch below can still report the arguments;
+    // parsing stays inside it, so malformed JSON keeps failing the call as before.
+    let parsedArgs: any;
+    const record = (output: unknown, is_error: boolean) => {
+      toolCalls?.push({ id: callId, name: toolName, input: parsedArgs ?? args, output, is_error });
+    };
+
     try {
       if (!this.mcpClient) {
         throw new Error('MCP client not available');
       }
 
       // Parse arguments: support stringified JSON, object, or empty
-      const parsedArgs =
+      parsedArgs =
         args == null || args === '' ? {} : typeof args === 'string' ? JSON.parse(args) : args;
       const result = await this.mcpClient.callTool(toolName, parsedArgs);
 
       if (isMcpErrorResult(result)) {
-        return {
-          output: `MCP Tool Error (${toolName}): ${getMcpErrorMessage(result)}`,
-          isError: true,
-        };
+        const errorMessage = getMcpErrorMessage(result);
+        record(errorMessage, true);
+        return { output: `MCP Tool Error (${toolName}): ${errorMessage}`, isError: true };
       }
 
-      // Normalize MCP content to a readable string to avoid "[object Object]"
-      const normalizeContent = (content: any): string => {
-        if (content == null) {
-          return '';
-        }
-        if (typeof content === 'string') {
-          return content;
-        }
-        if (Array.isArray(content)) {
-          return content
-            .map((part) => {
-              if (typeof part === 'string') {
-                return part;
-              }
-              if (part && typeof part === 'object') {
-                if ('text' in part && (part as any).text != null) {
-                  return String((part as any).text);
-                }
-                if ('json' in part) {
-                  return JSON.stringify((part as any).json);
-                }
-                if ('data' in part) {
-                  return JSON.stringify((part as any).data);
-                }
-                return JSON.stringify(part);
-              }
-              return String(part);
-            })
-            .join('\n');
-        }
-        return JSON.stringify(content);
-      };
-
-      const content = normalizeContent(result?.content);
+      const content = normalizeMcpContent(result?.content);
+      record(content, false);
       return { output: `MCP Tool Result (${toolName}): ${content}`, isError: false };
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : String(error);
       logger.debug(`MCP tool execution failed for ${toolName}: ${errorMessage}`);
+      record(errorMessage, true);
       return {
         output: `MCP Tool Error (${toolName}): ${errorMessage}`,
         isError: true,
