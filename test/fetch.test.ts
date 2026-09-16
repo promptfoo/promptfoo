@@ -19,6 +19,7 @@ import {
   handleRateLimit,
   isRateLimited,
   isTransientError,
+  readBoundedText,
 } from '../src/util/fetch/index';
 import { withFetchRetryContext } from '../src/util/fetch/retryContext';
 import { sleep } from '../src/util/time';
@@ -725,6 +726,26 @@ describe('fetchWithProxy', () => {
     await fetchWithProxy('https://example.com');
 
     expect(ProxyAgent).not.toHaveBeenCalled();
+  });
+
+  it.each(['0', '-2', '2foo', '1.5', '', '9007199254740992', 'Infinity'])(
+    'falls back to CLI concurrency for invalid pool size %j',
+    async (value) => {
+      vi.mocked(getEnvString).mockImplementation((key, fallback) =>
+        key === 'PROMPTFOO_FETCH_CONNECTIONS' ? value : fallback,
+      );
+      cliState.maxConcurrency = 3;
+      await fetchWithProxy('https://example.com');
+      expect(Agent).toHaveBeenCalledWith(expect.objectContaining({ connections: 3 }));
+    },
+  );
+
+  it('accepts a positive integer pool size with whitespace', async () => {
+    vi.mocked(getEnvString).mockImplementation((key, fallback) =>
+      key === 'PROMPTFOO_FETCH_CONNECTIONS' ? ' 12 ' : fallback,
+    );
+    await fetchWithProxy('https://example.com');
+    expect(Agent).toHaveBeenCalledWith(expect.objectContaining({ connections: 12 }));
   });
 
   it('should read REQUEST_TIMEOUT_MS when creating the default agent', async () => {
@@ -1827,17 +1848,26 @@ describe('fetchWithRetries', () => {
   });
 
   describe('HttpRateLimitError classification', () => {
+    it('does not inspect a streamless rate-limit body', async () => {
+      const text = vi
+        .fn()
+        .mockResolvedValue(JSON.stringify({ error: { code: 'insufficient_quota' } }));
+      vi.mocked(global.fetch).mockResolvedValue(createMockResponse({ status: 429, text }));
+      const error = await fetchWithRetries('https://example.com', {}, 1000, 0).catch((err) => err);
+      expect(error).toMatchObject({ kind: 'rate_limit' });
+      expect(text).not.toHaveBeenCalled();
+    });
+
     function rateLimitedJsonResponse(opts: {
       headers?: Headers;
       body?: unknown;
       statusText?: string;
     }): Response {
       const text = JSON.stringify(opts.body ?? {});
-      return createMockResponse({
+      return new Response(text, {
         status: 429,
         statusText: opts.statusText ?? 'Too Many Requests',
         headers: opts.headers ?? new Headers(),
-        text: () => Promise.resolve(text),
       });
     }
 
@@ -2011,11 +2041,9 @@ describe('fetchWithRetries', () => {
     });
 
     it('falls back to status-only when body has no JSON code', async () => {
-      const response = createMockResponse({
+      const response = new Response('plain text rate limit notice', {
         status: 429,
         statusText: 'Too Many Requests',
-        headers: new Headers(),
-        text: () => Promise.resolve('plain text rate limit notice'),
       });
       vi.mocked(global.fetch).mockResolvedValue(response);
 
@@ -2684,5 +2712,42 @@ describe('fetchWithRetries with disableTransientRetries', () => {
     // So we should see exactly 1 fetch call
     expect(mockFetch).toHaveBeenCalledTimes(1);
     expect(result).toBe(transientResponse);
+  });
+});
+
+describe('readBoundedText', () => {
+  it.each([undefined, '1', '1000000'])(
+    'does not buffer a streamless body with length %s',
+    async (length) => {
+      const text = vi.fn().mockResolvedValue('oversized body');
+      const response = {
+        body: null,
+        headers: new Headers(length ? { 'content-length': length } : {}),
+        text,
+      } as unknown as Response;
+      expect(await readBoundedText(response, 4, { requireStream: true })).toBe('');
+      expect(text).not.toHaveBeenCalled();
+    },
+  );
+
+  it('preserves the legacy streamless fallback for ordinary response consumers', async () => {
+    const response = {
+      body: null,
+      headers: new Headers(),
+      text: vi.fn().mockResolvedValue('hello'),
+    } as unknown as Response;
+    expect(await readBoundedText(response, 4)).toBe('hell');
+  });
+
+  it('bounds streamed bytes and cancels the reader', async () => {
+    const cancel = vi.fn();
+    const body = new ReadableStream({
+      start(controller) {
+        controller.enqueue(new TextEncoder().encode('abcdefgh'));
+      },
+      cancel,
+    });
+    expect(await readBoundedText(new Response(body), 4)).toBe('abcd');
+    expect(cancel).toHaveBeenCalledOnce();
   });
 });
