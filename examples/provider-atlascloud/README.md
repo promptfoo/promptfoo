@@ -2,7 +2,7 @@
 
 This directory contains an example configuration for using [Atlas Cloud](https://www.atlascloud.ai/) with promptfoo.
 
-Atlas Cloud exposes an OpenAI-compatible LLM API, so it is a good fit for prompt and model evaluation workflows across multiple model families behind a single provider account.
+The example uses the `deepseek-v3` chat model ID from Atlas Cloud's [first-model guide](https://www.atlascloud.ai/docs/en/models/get-start). Choose other models using the exact IDs and supported options in Atlas Cloud's model library.
 
 ## Prerequisites
 
@@ -25,23 +25,21 @@ npx promptfoo eval -c promptfooconfig.yaml
 
 The included `promptfooconfig.yaml` demonstrates:
 
-- Multiple Atlas Cloud-hosted chat models
-- Standard OpenAI-style generation parameters
-- A mix of deterministic and rubric-based assertions
+- Atlas Cloud chat requests with generation parameters
+- Deterministic assertions on the responses
 
 ## Provider Syntax
 
 ```yaml
 providers:
-  - id: atlascloud:deepseek-ai/DeepSeek-V3-0324
-  - id: atlascloud:qwen/qwen3-32b
+  - id: atlascloud:deepseek-v3
 ```
 
 ## Custom Gateway Example
 
 ```yaml
 providers:
-  - id: atlascloud:deepseek-ai/DeepSeek-V3-0324
+  - id: atlascloud:deepseek-v3
     config:
       apiBaseUrl: https://proxy.example.com/atlas/v1
       apiKeyEnvar: MY_ATLASCLOUD_TOKEN

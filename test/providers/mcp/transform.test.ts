@@ -261,6 +261,22 @@ describe('transformMCPConfigToClaudeCode', () => {
     ).resolves.toEqual({});
   });
 
+  it('uses the singular server when it shares a key with a plural server', async () => {
+    await expect(
+      transformMCPConfigToClaudeCode({
+        enabled: true,
+        server: { name: 'shared', command: 'single-server' },
+        servers: [{ name: 'shared', command: 'plural-server' }],
+      }),
+    ).resolves.toEqual({ shared: { type: 'stdio', command: 'single-server', args: [] } });
+  });
+
+  it('rejects a server without a URL, command, or path', async () => {
+    await expect(transformMCPConfigToClaudeCode({ enabled: true, server: {} })).rejects.toThrow(
+      'MCP configuration cannot be converted to Claude Agent SDK MCP server config',
+    );
+  });
+
   it('rejects unsupported tool filters instead of silently dropping them', async () => {
     await expect(
       transformMCPConfigToClaudeCode({
@@ -336,6 +352,53 @@ describe('transformMCPConfigToClaudeCode', () => {
     );
   });
 
+  it('preserves per-server env for command-based stdio servers', async () => {
+    await expect(
+      transformMCPConfigToClaudeCode({
+        enabled: true,
+        server: {
+          name: 'server-with-env',
+          command: 'npx',
+          args: ['-y', 'my-mcp-server'],
+          env: { FOO: 'bar', BAZ: 'qux' },
+        },
+      }),
+    ).resolves.toEqual({
+      'server-with-env': {
+        type: 'stdio',
+        command: 'npx',
+        args: ['-y', 'my-mcp-server'],
+        env: { FOO: 'bar', BAZ: 'qux' },
+      },
+    });
+  });
+
+  it('preserves per-server env for path-based stdio servers', async () => {
+    const isPy = 'server.py'.endsWith('.py');
+    const expectedCommand = isPy
+      ? process.platform === 'win32'
+        ? 'python'
+        : 'python3'
+      : process.execPath;
+    await expect(
+      transformMCPConfigToClaudeCode({
+        enabled: true,
+        server: {
+          name: 'python-server-with-env',
+          path: 'server.py',
+          env: { PYTHON_VAR: '123' },
+        },
+      }),
+    ).resolves.toEqual({
+      'python-server-with-env': {
+        type: 'stdio',
+        command: expectedCommand,
+        args: ['server.py'],
+        env: { PYTHON_VAR: '123' },
+      },
+    });
+  });
+
   it.each([
     null,
     [],
@@ -349,6 +412,9 @@ describe('transformMCPConfigToClaudeCode', () => {
     { enabled: true, server: { command: 'mcp-server', args: 'not-an-array' } },
     { enabled: true, server: { url: 'https://example.test', headers: 'not-an-object' } },
     { enabled: true, server: { url: 'https://example.test', auth: [] } },
+    { enabled: true, server: { command: 'mcp-server', env: 'not-an-object' } },
+    { enabled: true, server: { command: 'mcp-server', env: ['array'] } },
+    { enabled: true, server: { command: 'mcp-server', env: { KEY: 123 } } },
   ])('rejects malformed MCP config %#', async (config) => {
     await expect(transformMCPConfigToClaudeCode(config as any)).rejects.toThrow(
       /MCP.*(object|boolean|malformed)/,
