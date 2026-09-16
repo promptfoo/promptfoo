@@ -107,6 +107,8 @@ Each assertion grades evidence scoped to its own plugin. This lets one target em
 
 Grading metadata includes the trace ID and span count. Raw span names are omitted because they can contain sensitive values.
 
+Adaptive result trace references contain only the trace ID, fetch time, and span count. Text summaries remain controlled by the redteam tracing configuration.
+
 ## Example
 
 ```yaml title="promptfooconfig.yaml"
