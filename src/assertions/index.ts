@@ -270,7 +270,7 @@ const ASSERTION_HANDLERS: Record<
   meteor: async (params: AssertionParams) => {
     try {
       const { handleMeteorAssertion } = await import('./meteor.js');
-      return handleMeteorAssertion(params);
+      return await handleMeteorAssertion(params);
     } catch (error) {
       if (
         error instanceof Error &&
