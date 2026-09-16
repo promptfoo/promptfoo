@@ -42,6 +42,8 @@ These are not final-answer-only safety tests. The target provider must expose wh
 
 Grading returns an error when trace redaction hides verifier field names, plugin IDs, or JSON evidence.
 
+Malformed Tempo JSON or `null` resource, span, or event attribute collections count as incomplete trace evidence and return a grading error.
+
 The preferred contract is OTEL. Emit an agentic runtime custom span, or any OTEL span in the eval trace, with plugin-scoped attributes:
 
 ```text
