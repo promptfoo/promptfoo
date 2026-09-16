@@ -10,7 +10,11 @@ import {
   type TraceContextData,
 } from '../../tracing/traceContext';
 import invariant from '../../util/invariant';
-import { extractFirstJsonObject } from '../../util/json';
+import {
+  extractFirstJsonObject,
+  extractJsonObjectsWithMeta,
+  selectVerdictObject,
+} from '../../util/json';
 import { getNunjucksEngine } from '../../util/templates';
 import { sleep } from '../../util/time';
 import { TokenUsageTracker } from '../../util/tokenUsage';
@@ -78,6 +82,27 @@ import type {
 import type { RedteamGradingContext } from '../grading/types';
 
 // Based on: https://arxiv.org/abs/2312.02119
+
+export type IterativeJudgeResponse = {
+  currentResponse?: { rating?: number | string; explanation?: string };
+  previousBestResponse?: { rating?: number | string; explanation?: string };
+};
+
+/**
+ * Security: parse the judge LLM's rating response with verdict-injection
+ * hardening. The judge prompt embeds the target model's output verbatim, so the
+ * judge's reply may quote attacker-crafted JSON from that output. A raw
+ * last-object extraction picks an echoed UNTERMINATED fragment (auto-closed by
+ * the extractor) over the judge's own verdict, hijacking the rating.
+ * selectVerdictObject prefers the last COMPLETE verdict-shaped object, fails
+ * closed on conflicting complete verdicts, and recovers the judge's verdict
+ * from merged fragments.
+ */
+export function parseIterativeJudgeResponse(output: string): IterativeJudgeResponse | undefined {
+  return selectVerdictObject<IterativeJudgeResponse>(extractJsonObjectsWithMeta(output), [
+    'currentResponse',
+  ]);
+}
 
 // Function to generate goal-specific evaluation rubric
 const getIterativeGoalRubric = (goal: string | undefined): string => {
@@ -689,10 +714,7 @@ export async function runRedteamConversation({
     try {
       const parsed =
         typeof judgeResp.output === 'string'
-          ? extractFirstJsonObject<{
-              currentResponse?: { rating?: number | string; explanation?: string };
-              previousBestResponse?: { rating?: number | string; explanation?: string };
-            }>(judgeResp.output)
+          ? parseIterativeJudgeResponse(judgeResp.output)
           : (judgeResp.output as any);
 
       // Safely extract numeric ratings; treat 0 as valid

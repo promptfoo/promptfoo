@@ -9,7 +9,12 @@ import {
   type TraceContextData,
 } from '../../../tracing/traceContext';
 import invariant from '../../../util/invariant';
-import { extractFirstJsonObject, isValidJson } from '../../../util/json';
+import {
+  extractFirstJsonObject,
+  extractJsonObjectsWithMeta,
+  isValidJson,
+  selectVerdictObject,
+} from '../../../util/json';
 import { getNunjucksEngine } from '../../../util/templates';
 import { sleep } from '../../../util/time';
 import { TokenUsageTracker } from '../../../util/tokenUsage';
@@ -173,6 +178,28 @@ export class MemorySystem {
     this.conversations.set(newConversationId, newConversation);
     return newConversationId;
   }
+}
+
+export type CrescendoScoreResponse = {
+  value: boolean;
+  description?: string;
+  rationale?: string;
+  metadata: number;
+};
+
+/**
+ * Security: parse the refusal/eval judge LLM's scoring response with
+ * verdict-injection hardening. The judge prompt embeds the target model's
+ * output verbatim (responseToEvaluateInput), so the judge's reply may quote
+ * attacker-crafted JSON from that output. A raw last-object extraction picks an
+ * echoed UNTERMINATED fragment (auto-closed by the extractor) over the judge's
+ * own verdict, flipping the objective-achieved / refusal boolean — a jailbroken
+ * model can grade itself safe. selectVerdictObject prefers the last COMPLETE
+ * verdict-shaped object, fails closed on conflicting complete verdicts, and
+ * recovers the judge's verdict from merged fragments.
+ */
+export function parseCrescendoScoreResponse(output: string): CrescendoScoreResponse | undefined {
+  return selectVerdictObject<CrescendoScoreResponse>(extractJsonObjectsWithMeta(output), ['value']);
 }
 
 export class CrescendoProvider implements ApiProvider {
@@ -1324,17 +1351,16 @@ export class CrescendoProvider implements ApiProvider {
 
     const parsed =
       typeof refusalResponse.output === 'string'
-        ? extractFirstJsonObject<{
-            value: boolean;
-            metadata: number;
-            rationale: string;
-          }>(refusalResponse.output)
+        ? parseCrescendoScoreResponse(refusalResponse.output)
         : refusalResponse.output;
 
     logger.debug('[Crescendo] Refusal score parsed response', { parsed });
-    invariant(typeof parsed.value === 'boolean', 'Expected refusal grader value to be a boolean');
     invariant(
-      typeof parsed.metadata === 'number',
+      parsed != null && typeof parsed.value === 'boolean',
+      'Expected refusal grader value to be a boolean',
+    );
+    invariant(
+      parsed != null && typeof parsed.metadata === 'number',
       'Expected refusal grader metadata to be a number',
     );
 
@@ -1390,21 +1416,16 @@ export class CrescendoProvider implements ApiProvider {
 
     const parsed =
       typeof evalResponse.output === 'string'
-        ? extractFirstJsonObject<{
-            value: boolean;
-            description: string;
-            rationale: string;
-            metadata: number;
-          }>(evalResponse.output)
+        ? parseCrescendoScoreResponse(evalResponse.output)
         : evalResponse.output;
 
     logger.debug('[Crescendo] Eval score parsed response', { parsed });
     invariant(
-      typeof parsed.value === 'boolean',
+      parsed != null && typeof parsed.value === 'boolean',
       `Expected eval grader value to be a boolean: ${parsed}`,
     );
     invariant(
-      typeof parsed.metadata === 'number',
+      parsed != null && typeof parsed.metadata === 'number',
       `Expected eval grader metadata to be a number: ${parsed}`,
     );
 
