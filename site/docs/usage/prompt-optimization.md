@@ -2,7 +2,7 @@
 title: Prompt Optimization
 sidebar_position: 11
 sidebar_label: Prompt optimization
-description: Optimize one prompt against one provider with promptfoo. Learn how candidate search, validation splits, target selection, and result review work.
+description: Optimize one prompt against one provider with promptfoo. Learn how candidate search, validation splits, target selection, and result review work safely.
 ---
 
 # Prompt Optimization
@@ -74,6 +74,10 @@ promptfoo optimize --validation-split 0.2
 ```
 
 With `0.2`, promptfoo searches on roughly 80% of the configured tests and judges candidate adoption on the held-out 20%. The split is optional and may be any value greater than `0` and less than or equal to `0.5`.
+
+:::note
+Validation splitting requires explicit `tests`. If your config uses `scenarios`, expand them into explicit test cases before passing `--validation-split`.
+:::
 
 ## Practical guidance
 

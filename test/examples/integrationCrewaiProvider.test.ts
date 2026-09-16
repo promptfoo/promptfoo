@@ -4,7 +4,7 @@ import os from 'os';
 import path from 'path';
 
 import Ajv from 'ajv';
-import yaml from 'js-yaml';
+import * as yaml from 'js-yaml';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
 describe('integration-crewai example provider', () => {
@@ -19,9 +19,11 @@ describe('integration-crewai example provider', () => {
 import os
 
 class LLM:
-    def __init__(self, model, api_key):
+    def __init__(self, model, api_key=None):
         assert model == os.environ["EXPECTED_MODEL"]
-        assert api_key == os.environ["OPENAI_API_KEY"]
+        # CrewAI resolves credentials for the selected provider, so the example
+        # must not force an OpenAI key onto every model.
+        assert api_key is None
 
 class Agent:
     def __init__(self, **kwargs):
@@ -229,13 +231,6 @@ print(json.dumps(result))
       'test-key',
     );
     expect(Object.is(negativeZero.output.score, -0)).toBe(true);
-  });
-
-  it('reports a missing OpenAI API key before constructing the crew', () => {
-    expect(callProvider('{}')).toEqual({
-      error: expect.stringContaining('OpenAI API key not found'),
-      raw: '',
-    });
   });
 
   it('rejects candidate objects that violate the configured output schema', () => {

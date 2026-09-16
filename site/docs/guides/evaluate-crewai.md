@@ -39,8 +39,8 @@ After setting `OPENAI_API_KEY`, continue at Step 6. The remaining commands use a
 Before starting, make sure you have:
 
 - Python 3.10 through 3.13
-- Node.js `^20.20.0` or `>=22.22.0`
-- OpenAI API access for the configured model
+- Node.js `>=22.22.0`
+- OpenAI API access for GPT-4.1, the model selected by this example
 - An OpenAI API key
 
 ## Step 1: Initial Setup
@@ -73,7 +73,7 @@ And check npm (Node package manager):
 npm -v
 ```
 
-Promptfoo requires Node.js `^20.20.0` or `>=22.22.0`.
+Promptfoo requires Node.js `>=22.22.0`.
 
 **Why do we need these?**
 
@@ -177,15 +177,12 @@ Inside your project folder, create a file called `agent.py` that contains the Cr
 ````python
 import asyncio
 import json
-import os
 import textwrap
 from decimal import Decimal
 from typing import Any, Dict, NoReturn
 
 from crewai import LLM, Agent, Crew, Task
 
-# ✅ Load the OpenAI API key from the environment
-OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 MAX_SAFE_JSON_INTEGER = (1 << 53) - 1
 
 
@@ -241,7 +238,6 @@ def get_recruitment_agent(model: str = "openai/gpt-4.1") -> Crew:
     Creates a CrewAI recruitment agent setup.
     This agent’s goal: find candidates that match the supplied job requirements.
     """
-    llm = LLM(model=model, api_key=OPENAI_API_KEY)
     agent = Agent(
         role="Senior Recruiter specializing in technical roles",
         goal="Find the best candidates for a given set of job requirements and return candidates with a short summary in valid JSON format.",
@@ -250,7 +246,9 @@ def get_recruitment_agent(model: str = "openai/gpt-4.1") -> Crew:
             Return a single valid JSON object as your final answer.
         """).strip(),
         verbose=False,
-        llm=llm,
+        # CrewAI resolves credentials for the selected provider, so no explicit
+        # API key is passed here.
+        llm=LLM(model=model),
     )
 
     task = Task(
@@ -295,17 +293,19 @@ async def run_recruitment_agent(prompt, model="openai/gpt-4.1"):
     Returns a structured JSON-like dictionary with candidate info.
     Raises RecruitmentAgentError when the provider cannot return valid output.
     """
-    # Check if API key is set
-    if not OPENAI_API_KEY:
-        raise RecruitmentAgentError(
-            "OpenAI API key not found. Set OPENAI_API_KEY in the environment or load it with promptfoo --env-file."
-        )
-
+    crew = get_recruitment_agent(model)
     try:
-        crew = get_recruitment_agent(model)
-
         # ⚡ Trigger the agent to start working
-        output_text = crew.kickoff(inputs={"job_requirements": prompt}).raw.strip()
+        result = crew.kickoff(inputs={"job_requirements": prompt})
+
+        # The result might be a string, or an object with a 'raw' attribute.
+        output_text = ""
+        if result:
+            if hasattr(result, "raw") and result.raw:
+                output_text = result.raw
+            elif isinstance(result, str):
+                output_text = result
+        output_text = output_text.strip()
 
         if not output_text:
             raise RecruitmentAgentError("CrewAI agent returned an empty response.")
@@ -327,7 +327,7 @@ async def run_recruitment_agent(prompt, model="openai/gpt-4.1"):
                 parse_float=parse_safe_json_float,
                 parse_int=parse_safe_json_int,
             )
-        except (json.JSONDecodeError, ValueError) as e:
+        except ValueError as e:
             raise RecruitmentAgentError(
                 f"Failed to parse JSON from agent output: {str(e)}", json_string
             ) from e
@@ -377,6 +377,12 @@ if __name__ == "__main__":
     # 📦 Print the result to console
     print("Provider result:", json.dumps(result, indent=2))
 ```
+
+CrewAI receives the model through `Agent(llm=LLM(...))`. Use its `provider/model`
+format, such as `openai/gpt-4.1`, for the custom provider’s `config.model` field.
+CrewAI resolves credentials for the selected provider. If you change providers,
+install that provider’s required CrewAI dependencies and set its credentials,
+such as `ANTHROPIC_API_KEY` for Anthropic.
 
 ### Edit `promptfooconfig.yaml`
 
@@ -474,7 +480,7 @@ tests:
 
 Now that everything is set up, it’s time to run your first real evaluation!
 
-In your terminal, first **export your OpenAI API key** so CrewAI can authenticate with OpenAI:
+For the default OpenAI model, first **export your OpenAI API key**:
 
 ```
 export OPENAI_API_KEY="sk-xxx-your-api-key-here"

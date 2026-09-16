@@ -1,14 +1,11 @@
 import asyncio
 import json
-import os
 import textwrap
 from decimal import Decimal
 from typing import Any, Dict, NoReturn
 
 from crewai import LLM, Agent, Crew, Task
 
-# ✅ Load the OpenAI API key from the environment
-OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 MAX_SAFE_JSON_INTEGER = (1 << 53) - 1
 
 
@@ -64,7 +61,6 @@ def get_recruitment_agent(model: str = "openai/gpt-4.1") -> Crew:
     Creates a CrewAI recruitment agent setup.
     This agent's goal: find candidates that match the supplied job requirements.
     """
-    llm = LLM(model=model, api_key=OPENAI_API_KEY)
     agent = Agent(
         role="Senior Recruiter specializing in technical roles",
         goal="Find the best candidates for a given set of job requirements and return candidates with a short summary in valid JSON format.",
@@ -73,7 +69,9 @@ def get_recruitment_agent(model: str = "openai/gpt-4.1") -> Crew:
             Return a single valid JSON object as your final answer.
         """).strip(),
         verbose=False,
-        llm=llm,
+        # CrewAI resolves credentials for the selected provider, so no explicit
+        # API key is passed here.
+        llm=LLM(model=model),
     )
 
     task = Task(
@@ -118,17 +116,19 @@ async def run_recruitment_agent(prompt, model="openai/gpt-4.1"):
     Returns a structured JSON-like dictionary with candidate info.
     Raises RecruitmentAgentError when the provider cannot return valid output.
     """
-    # Check if API key is set
-    if not OPENAI_API_KEY:
-        raise RecruitmentAgentError(
-            "OpenAI API key not found. Set OPENAI_API_KEY in the environment or load it with promptfoo --env-file."
-        )
-
+    crew = get_recruitment_agent(model)
     try:
-        crew = get_recruitment_agent(model)
-
         # ⚡ Trigger the agent to start working
-        output_text = crew.kickoff(inputs={"job_requirements": prompt}).raw.strip()
+        result = crew.kickoff(inputs={"job_requirements": prompt})
+
+        # The result might be a string, or an object with a 'raw' attribute.
+        output_text = ""
+        if result:
+            if hasattr(result, "raw") and result.raw:
+                output_text = result.raw
+            elif isinstance(result, str):
+                output_text = result
+        output_text = output_text.strip()
 
         if not output_text:
             raise RecruitmentAgentError("CrewAI agent returned an empty response.")
@@ -150,7 +150,7 @@ async def run_recruitment_agent(prompt, model="openai/gpt-4.1"):
                 parse_float=parse_safe_json_float,
                 parse_int=parse_safe_json_int,
             )
-        except (json.JSONDecodeError, ValueError) as e:
+        except ValueError as e:
             raise RecruitmentAgentError(
                 f"Failed to parse JSON from agent output: {str(e)}", json_string
             ) from e
@@ -158,6 +158,7 @@ async def run_recruitment_agent(prompt, model="openai/gpt-4.1"):
     except RecruitmentAgentError:
         raise
     except Exception as e:
+        # 🔥 Catch and report any error as part of the output
         raise RecruitmentAgentError(f"An unexpected error occurred: {str(e)}") from e
 
 
