@@ -1,9 +1,9 @@
 import { getEnvString } from '../../envars';
 import logger from '../../logger';
+import { resolveProviderApiKey } from '../credentials';
 import { throwConfigurationError } from './util';
 import type { TokenCredential } from '@azure/identity';
 
-import type { EnvVarKey } from '../../envars';
 import type { EnvOverrides } from '../../types/env';
 import type {
   ApiProvider,
@@ -24,6 +24,13 @@ export class AzureGenericProvider implements ApiProvider {
   authHeaders?: Record<string, string>;
 
   protected initializationPromise: Promise<void> | null = null;
+
+  /** Cached Entra ID credential; reused so @azure/identity can manage its own token cache. */
+  private cachedCredential?: TokenCredential;
+  /** Expiry of the currently cached Entra ID bearer token (ms epoch), if token auth is in use. */
+  private authTokenExpiresOnTimestamp?: number;
+  /** Refresh the bearer token when it is within this window of expiring. */
+  private static readonly TOKEN_REFRESH_WINDOW_MS = 5 * 60 * 1000;
 
   constructor(deploymentName: string, options: AzureProviderOptions = {}) {
     const { config, id, env } = options;
@@ -61,20 +68,31 @@ export class AzureGenericProvider implements ApiProvider {
     if (this.initializationPromise != null) {
       await this.initializationPromise;
     }
+    await this.refreshAuthTokenIfNeeded();
+  }
+
+  /**
+   * Re-mint the Entra ID bearer token when it is at/near expiry. Subclasses call
+   * ensureInitialized() at the start of every request, so this keeps long-running evals from
+   * failing with 401 once the initial token (cached once in initialize()) expires. No-op for
+   * api-key auth, and conservative when the token expiry is unknown.
+   */
+  private async refreshAuthTokenIfNeeded(): Promise<void> {
+    if (!this.authHeaders?.Authorization) {
+      return; // api-key auth (or not yet initialized) — nothing to refresh
+    }
+    const expiresAt = this.authTokenExpiresOnTimestamp;
+    if (expiresAt === undefined) {
+      return; // expiry unknown — preserve prior behavior rather than force a refetch
+    }
+    if (Date.now() < expiresAt - AzureGenericProvider.TOKEN_REFRESH_WINDOW_MS) {
+      return; // still valid
+    }
+    this.authHeaders = await this.getAuthHeaders();
   }
 
   getApiKey(): string | undefined {
-    return (
-      this.config?.apiKey ||
-      (this.config?.apiKeyEnvar
-        ? getEnvString(this.config.apiKeyEnvar as EnvVarKey) ||
-          this.env?.[this.config.apiKeyEnvar as keyof EnvOverrides]
-        : undefined) ||
-      this.env?.AZURE_API_KEY ||
-      getEnvString('AZURE_API_KEY') ||
-      this.env?.AZURE_OPENAI_API_KEY ||
-      getEnvString('AZURE_OPENAI_API_KEY')
-    );
+    return resolveProviderApiKey(this.config, this.env, ['AZURE_API_KEY', 'AZURE_OPENAI_API_KEY']);
   }
 
   getApiKeyOrThrow(): string {
@@ -99,19 +117,24 @@ export class AzureGenericProvider implements ApiProvider {
       this.env?.AZURE_AUTHORITY_HOST ||
       getEnvString('AZURE_AUTHORITY_HOST');
 
+    if (this.cachedCredential) {
+      // Reuse the credential so @azure/identity can serve/refresh tokens from its own cache.
+      return this.cachedCredential;
+    }
+
     try {
       const { ClientSecretCredential, AzureCliCredential } = await import('@azure/identity');
 
       if (clientSecret && clientId && tenantId) {
-        const credential = new ClientSecretCredential(tenantId, clientId, clientSecret, {
+        this.cachedCredential = new ClientSecretCredential(tenantId, clientId, clientSecret, {
           authorityHost: authorityHost || 'https://login.microsoftonline.com',
         });
-        return credential;
+        return this.cachedCredential;
       }
 
       // Fallback to Azure CLI
-      const credential = new AzureCliCredential();
-      return credential;
+      this.cachedCredential = new AzureCliCredential();
+      return this.cachedCredential;
     } catch (err) {
       logger.error(`Error loading @azure/identity: ${err}`);
       throw new Error(
@@ -132,6 +155,8 @@ export class AzureGenericProvider implements ApiProvider {
     if (!tokenResponse) {
       throwConfigurationError('Failed to retrieve access token.');
     }
+    // Track expiry so ensureInitialized() can refresh the token before it lapses mid-run.
+    this.authTokenExpiresOnTimestamp = tokenResponse.expiresOnTimestamp;
     return tokenResponse.token;
   }
 

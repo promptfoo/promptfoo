@@ -213,6 +213,7 @@ Tune the threshold on labeled paraphrases before using it as a release gate.
 | Format must be exact        | [`is-json`](/docs/configuration/expected-outputs/deterministic#is-json), [`contains`](/docs/configuration/expected-outputs/deterministic#contains), [`regex`](/docs/configuration/expected-outputs/deterministic#regex) |
 | Semantic match is enough    | [`similar`](/docs/configuration/expected-outputs/similar)                                                                                                                                                               |
 | Output must compile/execute | [JavaScript](/docs/configuration/expected-outputs/javascript) or [Python](/docs/configuration/expected-outputs/python) assertions                                                                                       |
+| Workspace/tool evidence     | [`agent-rubric`](/docs/configuration/expected-outputs/model-graded/agent-rubric)                                                                                                                                        |
 | Fresh facts needed          | [`search-rubric`](/docs/configuration/expected-outputs/model-graded/search-rubric)                                                                                                                                      |
 | Adversarial inputs          | [Red teaming](/docs/red-team/quickstart/) (judges can be manipulated)                                                                                                                                                   |
 
@@ -1063,6 +1064,7 @@ npx promptfoo eval --filter-metadata risk=high --grader openai:responses:gpt-5.4
 | Type                                                                                                 | Purpose                                           | Default model               |
 | ---------------------------------------------------------------------------------------------------- | ------------------------------------------------- | --------------------------- |
 | [`llm-rubric`](/docs/configuration/expected-outputs/model-graded/llm-rubric)                         | General rubric evaluation                         | Varies by API key           |
+| [`agent-rubric`](/docs/configuration/expected-outputs/model-graded/agent-rubric)                     | Rubric + coding-agent tool/workspace evidence     | OpenAI Codex SDK            |
 | [`g-eval`](/docs/configuration/expected-outputs/model-graded/g-eval)                                 | Chain-of-thought scoring (uses CoT internally)    | Varies by API key           |
 | [`factuality`](/docs/configuration/expected-outputs/model-graded/factuality)                         | Fact consistency against a reference              | Varies by API key           |
 | [`search-rubric`](/docs/configuration/expected-outputs/model-graded/search-rubric)                   | Rubric + web search                               | Web-search-capable provider |
@@ -1090,6 +1092,9 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      - uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6
+        with:
+          node-version: '24'
       - uses: promptfoo/promptfoo-action@v1
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
