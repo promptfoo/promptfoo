@@ -421,30 +421,27 @@ describe('doGenerateRedteam', () => {
     );
   });
 
-  it.each([
-    { envFile: [] },
-    { envFile: [''] },
-    { envFile: [' ', ','] },
-  ])('preserves a forwarded envPath when the local envFile value is effectively empty: $envFile', async ({
-    envFile,
-  }) => {
-    const envPath = ['cli.env'];
+  it.each([{ envFile: [] }, { envFile: [''] }, { envFile: [' ', ','] }])(
+    'preserves a forwarded envPath when the local envFile value is effectively empty: $envFile',
+    async ({ envFile }) => {
+      const envPath = ['cli.env'];
 
-    await doGenerateRedteam({
-      output: 'output.yaml',
-      config: 'config.yaml',
-      cache: true,
-      defaultConfig: {},
-      envFile,
-      envPath,
-      write: false,
-    });
+      await doGenerateRedteam({
+        output: 'output.yaml',
+        config: 'config.yaml',
+        cache: true,
+        defaultConfig: {},
+        envFile,
+        envPath,
+        write: false,
+      });
 
-    expect(configModule.resolveConfigs).toHaveBeenCalledWith(
-      expect.objectContaining({ envPath }),
-      {},
-    );
-  });
+      expect(configModule.resolveConfigs).toHaveBeenCalledWith(
+        expect.objectContaining({ envPath }),
+        {},
+      );
+    },
+  );
 
   it.each([
     ['filterProviders value', { filterProviders: 'team-a' }, { filterProviders: 'team-b' }],

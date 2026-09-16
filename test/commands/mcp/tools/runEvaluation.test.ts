@@ -11,18 +11,6 @@ vi.mock('../../../../src/telemetry', () => ({
   default: { record: vi.fn() },
 }));
 
-const mockFilteredEvaluate = vi.hoisted(() =>
-  vi.fn().mockResolvedValue({
-    id: 'filtered-eval-123',
-    toEvaluateSummary: vi.fn().mockResolvedValue({
-      version: 3,
-      stats: { successes: 1, failures: 0, errors: 0 },
-      results: [],
-      prompts: [],
-    }),
-  }),
-);
-
 // Mock dependencies before importing the module
 vi.mock('../../../../src/logger', () => ({
   default: {
@@ -78,28 +66,17 @@ vi.mock('../../../../src/node/doEval', () => ({
   }),
 }));
 
-vi.mock('../../../../src/evaluator', () => ({
-  evaluate: mockFilteredEvaluate,
-}));
-
-vi.mock('../../../../src/models/eval', () => ({
-  default: {
-    create: vi.fn().mockResolvedValue({ id: 'filtered-eval-record' }),
-  },
-}));
+// `evaluate` is spied on rather than replaced so tests that exercise the real
+// filtered path still run actual providers; tests that only assert on the options
+// passed through opt out with `mockResolvedValueOnce`.
+vi.mock('../../../../src/evaluator', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../../../../src/evaluator')>();
+  return { ...actual, evaluate: vi.fn(actual.evaluate) };
+});
 
 describe('runEvaluation tool', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    mockFilteredEvaluate.mockReset().mockResolvedValue({
-      id: 'filtered-eval-123',
-      toEvaluateSummary: vi.fn().mockResolvedValue({
-        version: 3,
-        stats: { successes: 1, failures: 0, errors: 0 },
-        results: [],
-        prompts: [],
-      }),
-    });
   });
 
   afterEach(() => {
@@ -367,6 +344,20 @@ describe('runEvaluation tool', () => {
         },
       } as any);
 
+      const Eval = (await import('../../../../src/models/eval')).default;
+      vi.spyOn(Eval, 'create').mockResolvedValueOnce({ id: 'filtered-eval-record' } as any);
+
+      const { evaluate } = await import('../../../../src/evaluator');
+      vi.mocked(evaluate).mockResolvedValueOnce({
+        id: 'filtered-eval-123',
+        toEvaluateSummary: vi.fn().mockResolvedValue({
+          version: 3,
+          stats: { successes: 1, failures: 0, errors: 0 },
+          results: [],
+          prompts: [],
+        }),
+      } as any);
+
       const { registerRunEvaluationTool } = await import(
         '../../../../src/commands/mcp/tools/runEvaluation'
       );
@@ -383,7 +374,7 @@ describe('runEvaluation tool', () => {
       });
 
       expect(result.isError).toBeFalsy();
-      expect(mockFilteredEvaluate).toHaveBeenCalledWith(
+      expect(evaluate).toHaveBeenCalledWith(
         expect.anything(),
         expect.anything(),
         expect.objectContaining({ strictConfigEnabled: true }),

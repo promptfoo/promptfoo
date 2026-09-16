@@ -2413,20 +2413,25 @@ export function findTestsWithoutAssertions(
 ): number[] {
   const offenders: number[] = [];
   for (let i = 0; i < tests.length; i++) {
-    const test = tests[i];
-    if (!test) {
-      continue;
+    if (lacksEffectiveAssertions(tests[i], defaultTest)) {
+      offenders.push(i);
     }
-    const inheritsDefaultAssertions = test.options?.disableDefaultAsserts !== true;
-    if (
-      hasEffectiveAssertions(test.assert) ||
-      (inheritsDefaultAssertions && hasEffectiveAssertions(defaultTest?.assert))
-    ) {
-      continue;
-    }
-    offenders.push(i);
   }
   return offenders;
+}
+
+function lacksEffectiveAssertions(
+  test: TestCase | undefined,
+  defaultTest?: Partial<TestCase>,
+): boolean {
+  if (!test) {
+    return false;
+  }
+  const inheritsDefaultAssertions = test.options?.disableDefaultAsserts !== true;
+  return !(
+    hasEffectiveAssertions(test.assert) ||
+    (inheritsDefaultAssertions && hasEffectiveAssertions(defaultTest?.assert))
+  );
 }
 
 function hasEffectiveAssertions(
@@ -2461,7 +2466,7 @@ function enforceStrictAssertionsOnEvaluatedRows(
   const offenders = [
     ...new Set(
       runEvalOptions
-        .filter(({ test }) => findTestsWithoutAssertions([test]).length > 0)
+        .filter(({ test }) => lacksEffectiveAssertions(test))
         .map(({ testIdx }) => testIdx),
     ),
   ];
