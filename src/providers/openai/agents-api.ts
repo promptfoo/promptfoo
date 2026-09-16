@@ -745,18 +745,26 @@ export class OpenAiAgentsApiProvider extends OpenAiGenericProvider {
       if (vars) {
         config = renderConfigTemplates(mergedConfig, vars, Object.keys(vars)) as AgentsApiOptions;
       }
-      if (endpointOverride && promptConfig?.headers === undefined && config.headers) {
-        const inheritedHeaderCount = Object.keys(config.headers).length;
-        const sanitizedHeaders = sanitizeObject({ headers: config.headers }).headers;
-        config.headers = Object.fromEntries(
-          Object.entries(config.headers).filter(
+      if (endpointOverride && this.config.headers) {
+        const inheritedHeaders = renderConfigTemplates(
+          this.config.headers,
+          vars ?? {},
+          Object.keys(vars ?? {}),
+        ) as NonNullable<AgentsApiOptions['headers']>;
+        const sanitizedHeaders = sanitizeObject({ headers: inheritedHeaders }).headers;
+        const safeHeaders = Object.fromEntries(
+          Object.entries(inheritedHeaders).filter(
             ([name]) =>
               !isCredentialName(name) &&
               !/(?:^|[-_])auth(?:$|[-_])/i.test(name) &&
               sanitizedHeaders[name] !== REDACTED,
           ),
         );
-        removedInheritedHeaders = Object.keys(config.headers).length < inheritedHeaderCount;
+        removedInheritedHeaders =
+          Object.keys(safeHeaders).length < Object.keys(inheritedHeaders).length;
+        if (promptConfig?.headers === undefined) {
+          config.headers = safeHeaders;
+        }
       }
       // Keep request credentials and lifecycle settings isolated across concurrent calls.
       const callProvider = new OpenAiAgentsApiProvider(this.modelOverride, {
@@ -764,7 +772,13 @@ export class OpenAiAgentsApiProvider extends OpenAiGenericProvider {
         env: this.env,
       });
       if (removedInheritedHeaders && !callProvider.sendsToOpenAiApi()) {
-        callProvider.config.useDefaultApiKey = false;
+        const { hasCustomHeader } = scanRequestHeaders(
+          new Headers(callProvider.getOpenAiRequestHeaders()),
+          new Set<string>(),
+        );
+        if (!hasCustomHeader) {
+          callProvider.config.useDefaultApiKey = false;
+        }
       }
       collectCallCredentials(this, callProvider.inheritedCredentials);
       const spanContext = buildChatSpanContext({

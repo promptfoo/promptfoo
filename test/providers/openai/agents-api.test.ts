@@ -866,17 +866,77 @@ describe('OpenAiAgentsApiProvider', () => {
           },
         );
 
-        it('requires replacement credentials instead of falling back to an ambient key', async () => {
+        it.each([{}, { 'Content-Type': 'application/json' }, { Accept: 'application/json' }])(
+          'does not substitute ambient credentials for explicit non-credential headers %j',
+          async (headers) => {
+            mockProcessEnv({ OPENAI_API_KEY: 'offline-ambient-key' });
+            const result = await new OpenAiAgentsApiProvider('', {
+              config: {
+                apiBaseUrl: 'https://gateway.example/v1',
+                apiKeyRequired: false,
+                headers: { 'X-Goog-Iap-Jwt-Assertion': fakeJwt },
+              },
+            }).callApi('hi', promptContext({ ...endpointConfig, headers }));
+
+            expect(result.output).toBe('42');
+            expect(result.metadata?.sessionDeleted).toBe(true);
+            for (const [, request] of vi.mocked(fetchWithRetries).mock.calls) {
+              expect(new Headers(request!.headers).get('Authorization')).toBeNull();
+              expect(new Headers(request!.headers).get('X-Goog-Iap-Jwt-Assertion')).toBeNull();
+            }
+          },
+        );
+
+        it.each([undefined, {}, { Accept: 'application/json' }])(
+          'requires replacement credentials instead of falling back to an ambient key: %j',
+          async (headers) => {
+            mockProcessEnv({ OPENAI_API_KEY: 'offline-ambient-key' });
+            const result = await new OpenAiAgentsApiProvider('', {
+              config: {
+                apiBaseUrl: 'https://gateway.example/v1',
+                headers: { 'X-Goog-Iap-Jwt-Assertion': fakeJwt },
+              },
+            }).callApi('hi', promptContext({ ...endpointConfig, headers }));
+
+            expect(result.error).toContain('API key');
+            expect(fetchWithRetries).not.toHaveBeenCalled();
+          },
+        );
+
+        it.each([
+          { 'X-Goog-Iap-Jwt-Assertion': 'offline-replacement-credential' },
+          { 'api-key': 'offline-replacement-credential' },
+          { Authorization: 'Bearer offline-replacement-credential' },
+        ])('preserves explicitly supplied gateway credentials %j', async (headers) => {
           mockProcessEnv({ OPENAI_API_KEY: 'offline-ambient-key' });
           const result = await new OpenAiAgentsApiProvider('', {
             config: {
               apiBaseUrl: 'https://gateway.example/v1',
               headers: { 'X-Goog-Iap-Jwt-Assertion': fakeJwt },
             },
-          }).callApi('hi', promptContext(endpointConfig));
+          }).callApi('hi', promptContext({ ...endpointConfig, headers }));
 
-          expect(result.error).toContain('API key');
-          expect(fetchWithRetries).not.toHaveBeenCalled();
+          expect(result.output).toBe('42');
+          for (const [, request] of vi.mocked(fetchWithRetries).mock.calls) {
+            const requestHeaders = new Headers(request!.headers);
+            for (const [name, value] of Object.entries(headers)) {
+              expect(requestHeaders.get(name)).toBe(value);
+            }
+            expect(requestHeaders.get('Authorization')).toBe(headers.Authorization ?? null);
+          }
+        });
+
+        it('preserves ambient authentication when only standard headers were inherited', async () => {
+          mockProcessEnv({ OPENAI_API_KEY: 'offline-ambient-key' });
+          const result = await new OpenAiAgentsApiProvider('', {
+            config: {
+              apiBaseUrl: 'https://gateway.example/v1',
+              headers: { Accept: 'application/json' },
+            },
+          }).callApi('hi', promptContext({ ...endpointConfig, headers: {} }));
+
+          expect(result.output).toBe('42');
+          expect(requestAuthorizations()).toEqual(new Set(['Bearer offline-ambient-key']));
         });
 
         it.each([{ apiKey: 'offline-replacement-key' }, { apiKeyEnvar: 'REPLACEMENT_KEY' }])(
@@ -891,7 +951,10 @@ describe('OpenAiAgentsApiProvider', () => {
                 apiBaseUrl: 'https://gateway.example/v1',
                 headers: { 'X-Goog-Iap-Jwt-Assertion': fakeJwt },
               },
-            }).callApi('hi', promptContext({ ...endpointConfig, ...credentialConfig }));
+            }).callApi(
+              'hi',
+              promptContext({ ...endpointConfig, ...credentialConfig, headers: {} }),
+            );
 
             expect(result.output).toBe('42');
             for (const [, request] of vi.mocked(fetchWithRetries).mock.calls) {
