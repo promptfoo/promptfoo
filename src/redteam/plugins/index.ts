@@ -354,7 +354,7 @@ async function fetchRemoteTestCases(
   config: PluginConfig,
   redteamGenerationContext?: RedteamGenerationContext | string,
   provider?: ApiProvider,
-): Promise<TestCase[]> {
+): Promise<{ testCases: TestCase[]; message?: string }> {
   invariant(
     !getEnvBool('PROMPTFOO_DISABLE_REDTEAM_REMOTE_GENERATION'),
     'fetchRemoteTestCases should never be called when remote generation is disabled',
@@ -367,7 +367,7 @@ async function fetchRemoteTestCases(
 
   if (remoteHealth.status !== 'OK') {
     logger.error(`Error generating test cases for ${key}: ${remoteHealth.message}`);
-    return [];
+    return { testCases: [] };
   }
 
   // Strip graderExamples before sending - they're not used during generation,
@@ -395,6 +395,7 @@ async function fetchRemoteTestCases(
 
   interface PluginGenerationResponse extends RemoteMaterializationResponse {
     result?: TestCase[];
+    message?: string;
     tokenUsage?: TokenUsage;
   }
 
@@ -415,20 +416,20 @@ async function fetchRemoteTestCases(
     }
     if (status !== 200 || !data || !data.result || !Array.isArray(data.result)) {
       logger.error(`Error generating test cases for ${key}: ${statusText} ${JSON.stringify(data)}`);
-      return [];
+      return { testCases: [] };
     }
     if (requiresRemoteMaterialization(config?.inputs)) {
       assertRemoteMaterializationHandled(data, `Remote plugin generation for ${key}`);
     }
     const ret = data.result;
     logger.debug(`Received remote generation for ${key}:\n${JSON.stringify(ret)}`);
-    return ret;
+    return { testCases: ret, message: data.message };
   } catch (err) {
     if (provider && !responseRecorded) {
       recordGenerationTokenUsage(provider, { tokenUsage: getErrorTokenUsage(err) });
     }
     logger.error(`Error generating test cases for ${key}: ${err}`);
-    return [];
+    return { testCases: [] };
   }
 }
 
@@ -463,7 +464,7 @@ function createPluginFactory<T extends PluginConfig>(
         ).generateTests(n, delayMs);
       }
       const pluginId = getShortPluginId(key);
-      const testCases = await fetchRemoteTestCases(
+      const { testCases, message } = await fetchRemoteTestCases(
         key,
         purpose,
         injectVar,
@@ -484,6 +485,7 @@ function createPluginFactory<T extends PluginConfig>(
             ...configWithDefaults,
             modifiers: computedModifiers,
           },
+          ...(message ? { generationMessage: message } : {}),
         },
       }));
     },
@@ -590,7 +592,7 @@ const piiPlugins: PluginFactory[] = PII_PLUGINS.map((category: string) => ({
   action: async (params: PluginActionParams) => {
     if (shouldGenerateRemote()) {
       const pluginId = getShortPluginId(category);
-      const testCases = await fetchRemoteTestCases(
+      const { testCases, message } = await fetchRemoteTestCases(
         category,
         params.purpose,
         params.injectVar,
@@ -609,6 +611,7 @@ const piiPlugins: PluginFactory[] = PII_PLUGINS.map((category: string) => ({
             ...params.config,
             modifiers: computedModifiers,
           },
+          ...(message ? { generationMessage: message } : {}),
         },
       }));
     }
@@ -633,7 +636,7 @@ const biasPlugins: PluginFactory[] = BIAS_PLUGINS.map((category: string) => ({
     }
 
     const pluginId = getShortPluginId(category);
-    const testCases = await fetchRemoteTestCases(
+    const { testCases, message } = await fetchRemoteTestCases(
       category,
       params.purpose,
       params.injectVar,
@@ -652,6 +655,7 @@ const biasPlugins: PluginFactory[] = BIAS_PLUGINS.map((category: string) => ({
           ...params.config,
           modifiers: computedModifiers,
         },
+        ...(message ? { generationMessage: message } : {}),
       },
     }));
   },
@@ -680,7 +684,7 @@ function createRemotePlugin<T extends PluginConfig>(
         return [];
       }
       const pluginId = getShortPluginId(key);
-      const testCases: TestCase[] = await fetchRemoteTestCases(
+      const { testCases, message } = await fetchRemoteTestCases(
         key,
         purpose,
         injectVar,
@@ -699,6 +703,7 @@ function createRemotePlugin<T extends PluginConfig>(
             ...configWithDefaults,
             modifiers: computedModifiers,
           },
+          ...(message ? { generationMessage: message } : {}),
         },
       }));
 
