@@ -40,7 +40,7 @@ describe('handleEquals', () => {
     expect(result.pass).toBe(true);
   });
 
-  it('fails equals when an object value cannot equal non-JSON output', async () => {
+  it('fails equals when an object value does not match non-JSON output', async () => {
     const params: AssertionParams = {
       ...defaultParams,
       assertion: { type: 'equals', value: { foo: 'bar' } },
@@ -51,5 +51,77 @@ describe('handleEquals', () => {
 
     const result = await handleEquals(params);
     expect(result.pass).toBe(false);
+  });
+
+  it('passes equals when an object value matches valid JSON output', async () => {
+    const params: AssertionParams = {
+      ...defaultParams,
+      assertion: { type: 'equals', value: { foo: 'bar' } },
+      renderedValue: { foo: 'bar' } as AssertionValue,
+      outputString: '{"foo":"bar"}',
+      inverse: false,
+    };
+
+    const result = await handleEquals(params);
+    expect(result.pass).toBe(true);
+  });
+
+  it('fails equals when an object value does not match valid JSON output', async () => {
+    const params: AssertionParams = {
+      ...defaultParams,
+      assertion: { type: 'equals', value: { foo: 'bar' } },
+      renderedValue: { foo: 'bar' } as AssertionValue,
+      outputString: '{"foo":"baz"}',
+      inverse: false,
+    };
+
+    const result = await handleEquals(params);
+    expect(result.pass).toBe(false);
+  });
+
+  it.each([
+    {
+      name: 'passes equals for matching primitive values',
+      assertionType: 'equals' as const,
+      expectedValue: 'hello world',
+      outputString: 'hello world',
+      inverse: false,
+      expectedPass: true,
+    },
+    {
+      name: 'fails equals for different primitive values',
+      assertionType: 'equals' as const,
+      expectedValue: 'goodbye world',
+      outputString: 'hello world',
+      inverse: false,
+      expectedPass: false,
+    },
+    {
+      name: 'fails not-equals for matching primitive values',
+      assertionType: 'not-equals' as const,
+      expectedValue: 'hello world',
+      outputString: 'hello world',
+      inverse: true,
+      expectedPass: false,
+    },
+    {
+      name: 'passes not-equals for different primitive values',
+      assertionType: 'not-equals' as const,
+      expectedValue: 'goodbye world',
+      outputString: 'hello world',
+      inverse: true,
+      expectedPass: true,
+    },
+  ])('$name', async ({ assertionType, expectedValue, outputString, inverse, expectedPass }) => {
+    const params: AssertionParams = {
+      ...defaultParams,
+      assertion: { type: assertionType, value: expectedValue },
+      renderedValue: expectedValue as AssertionValue,
+      outputString,
+      inverse,
+    };
+
+    const result = await handleEquals(params);
+    expect(result.pass).toBe(expectedPass);
   });
 });

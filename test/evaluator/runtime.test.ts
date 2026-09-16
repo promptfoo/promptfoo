@@ -9,6 +9,7 @@ import {
   type InMemoryEvaluation,
   InMemoryEvaluationStore,
 } from '../../src/evaluator/inMemoryStore';
+import logger from '../../src/logger';
 import Eval from '../../src/models/eval';
 import { EvalEvaluationStore } from '../../src/node/evaluationStore';
 import { ResultFailureReason, type TestSuite } from '../../src/types/index';
@@ -219,23 +220,48 @@ describeEvaluator('evaluator runtime ports', () => {
     expect(resultWriter.close).toHaveBeenCalledOnce();
   });
 
-  it('surfaces a close failure after attempting every writer', async () => {
+  it('attempts every writer and recovers a close failure when results persisted', async () => {
     const failingWriter = createResultWriter();
     failingWriter.close.mockRejectedValue(new Error('close unavailable'));
     const healthyWriter = createResultWriter();
     const runtime = createRuntime([failingWriter, healthyWriter]);
+    const warnSpy = vi.spyOn(logger, 'warn').mockImplementation(() => logger);
     const testSuite: TestSuite = {
       providers: [mockApiProvider],
       prompts: [toPrompt('Test prompt')],
       tests: [{}],
     };
 
-    await expect(evaluate(testSuite, createEvalRecord(), {}, runtime)).rejects.toThrow(
-      'close unavailable',
-    );
+    try {
+      // Results persisted to the DB, so the post-run rewrite regenerates the JSONL from it;
+      // a close error is logged, not fatal to an otherwise-successful run.
+      await expect(evaluate(testSuite, createEvalRecord(), {}, runtime)).resolves.toBeDefined();
+      expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('close unavailable'));
+    } finally {
+      warnSpy.mockRestore();
+    }
 
     expect(failingWriter.close).toHaveBeenCalledOnce();
     expect(healthyWriter.close).toHaveBeenCalledOnce();
+  });
+
+  it('surfaces a close failure when result persistence also failed', async () => {
+    const failingWriter = createResultWriter();
+    failingWriter.close.mockRejectedValue(new Error('close unavailable'));
+    const runtime = createRuntime([failingWriter]);
+    const evalRecord = createEvalRecord();
+    // Persistence failed, so the streamed JSONL is the only copy of the results and a
+    // close error (possible truncation) must not be swallowed.
+    vi.spyOn(evalRecord, 'addResult').mockRejectedValue(new Error('database unavailable'));
+    const testSuite: TestSuite = {
+      providers: [mockApiProvider],
+      prompts: [toPrompt('Test prompt')],
+      tests: [{}],
+    };
+
+    await expect(evaluate(testSuite, evalRecord, {}, runtime)).rejects.toThrow('close unavailable');
+
+    expect(failingWriter.close).toHaveBeenCalledOnce();
   });
 
   it('persists per-call timeout rows without streaming them', async () => {

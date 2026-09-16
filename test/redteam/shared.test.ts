@@ -108,7 +108,12 @@ vi.mock('../../src/util/config/manage', async (importOriginal) => {
 });
 vi.mock('fs');
 vi.mock('fs/promises');
-vi.mock('js-yaml');
+// js-yaml v5 is native ESM with a sealed namespace, so vi.spyOn cannot patch it.
+// Wrap dump in a spy-able mock that keeps the real implementation.
+vi.mock('js-yaml', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('js-yaml')>();
+  return { ...actual, dump: vi.fn(actual.dump) };
+});
 vi.mock('os');
 
 describe('doRedteamRun', () => {
@@ -205,6 +210,42 @@ describe('doRedteamRun', () => {
       expect.anything(),
       expect.anything(),
     );
+  });
+
+  it('attributes generation usage only when this run generated the test suite', async () => {
+    const tokenUsage = { total: 42, prompt: 30, completion: 12, numRequests: 3 };
+    vi.mocked(doGenerateRedteam).mockImplementation(async (options) => ({
+      metadata: {
+        generation: { id: options.generationRunId, tokenUsage },
+      },
+    }));
+
+    await doRedteamRun({});
+
+    expect(doEval).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.anything(),
+      expect.anything(),
+      expect.objectContaining({
+        generationEventId: expect.any(String),
+        generationTokenUsage: tokenUsage,
+      }),
+    );
+  });
+
+  it('does not charge an evaluation for a reused generated test suite', async () => {
+    vi.mocked(doGenerateRedteam).mockResolvedValue({
+      metadata: {
+        generation: {
+          id: 'previous-generation',
+          tokenUsage: { total: 42, numRequests: 3 },
+        },
+      },
+    });
+
+    await doRedteamRun({});
+
+    expect(vi.mocked(doEval).mock.calls[0][3]).not.toHaveProperty('generationTokenUsage');
   });
 
   describe('liveRedteamConfig temporary file handling', () => {
