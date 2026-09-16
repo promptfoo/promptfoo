@@ -37,6 +37,8 @@ export class MCPProvider implements ApiProvider {
 
     this.mcpClient = new MCPClient(this.config);
     this.initializationPromise = this.initialize();
+    // Initialization starts eagerly, so mark the rejection as observed until callers await it.
+    void this.initializationPromise.catch(() => undefined);
     this.transformResponse = loadTransformModule(
       this.config.transformResponse || this.config.responseParser,
     ).then(createTransformResponse);

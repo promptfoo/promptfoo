@@ -36,7 +36,7 @@ export async function addBestOfNTestCases(
           ]
         : testCase.assert?.map((assertion) => ({
             ...assertion,
-            metric: `${assertion.metric}/BestOfN`,
+            metric: assertion.metric ? `${assertion.metric}/BestOfN` : assertion.metric,
           })),
     };
   });

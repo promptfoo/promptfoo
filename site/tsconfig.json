@@ -1,10 +1,19 @@
 {
   // This file is not used in compilation. It is here just for a nice editor experience.
-  "extends": "@tsconfig/docusaurus/tsconfig.json",
   "compilerOptions": {
-    "ignoreDeprecations": "6.0",
-    "baseUrl": ".",
-    "resolveJsonModule": true
+    "allowJs": true,
+    "esModuleInterop": true,
+    "jsx": "react",
+    "lib": ["dom"],
+    "module": "esnext",
+    "moduleResolution": "bundler",
+    "noEmit": true,
+    "paths": {
+      "@site/*": ["./*"]
+    },
+    "resolveJsonModule": true,
+    "skipLibCheck": true,
+    "types": ["node", "@docusaurus/module-type-aliases", "@docusaurus/theme-classic"]
   },
   "exclude": ["**/__tests__/**", "**/*.test.ts", "**/*.test.tsx"]
 }
