@@ -2,6 +2,45 @@
 // Keep this module free of SDK, environment, and other server-only imports.
 export type BedrockApiMode = 'invoke' | 'converse' | 'responses' | 'chat' | 'messages';
 
+export function isRejectedPrefixedMythosId(modelName: string): boolean {
+  return /^[^.]+\.(anthropic\.claude-mythos-5)$/.test(modelName);
+}
+
+// Grok 4.6 profiles are served natively; all inference profiles are invalid Mantle IDs.
+// These are the backend's existing compatibility rules, not an exhaustive model catalog.
+const NATIVE_GROK_PROFILE_MODELS = new Set(['us.xai.grok-4.6', 'global.xai.grok-4.6']);
+
+export function isRejectedPrefixedGrokId(
+  modelName: string,
+  explicitMantleRequest: boolean,
+): boolean {
+  return (
+    modelName.includes('.xai.') &&
+    (explicitMantleRequest || !NATIVE_GROK_PROFILE_MODELS.has(modelName))
+  );
+}
+
+const RUNTIME_MESSAGES_MODELS = new Set([
+  'us.anthropic.claude-fable-5-1',
+  'global.anthropic.claude-fable-5-1',
+  'us.anthropic.claude-mythos-5-1',
+  'global.anthropic.claude-mythos-5-1',
+]);
+
+export function isBedrockRuntimeMessagesModel(modelName: string): boolean {
+  return RUNTIME_MESSAGES_MODELS.has(modelName);
+}
+
+export function isBedrockAnthropicMessagesModel(modelName: string): boolean {
+  return (
+    [
+      'anthropic.claude-fable-5',
+      'anthropic.claude-mythos-5',
+      'anthropic.claude-fable-5-1',
+    ].includes(modelName) || isBedrockRuntimeMessagesModel(modelName)
+  );
+}
+
 export function isBedrockOpenAiResponsesModel(modelName: string): boolean {
   return modelName.startsWith('openai.') && !modelName.includes('gpt-oss');
 }

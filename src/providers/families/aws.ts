@@ -1,7 +1,12 @@
 import { AwsBedrockConverseProvider } from '../bedrock/converse';
 import { AwsBedrockCompletionProvider, AwsBedrockEmbeddingProvider } from '../bedrock/index';
-import { isRejectedPrefixedGrokId } from '../bedrock/mantle';
-import { getBedrockTextRoute, requiresBedrockAnthropicMessagesModel } from '../bedrock/routing';
+import {
+  getBedrockTextRoute,
+  isBedrockAnthropicMessagesModel,
+  isRejectedPrefixedGrokId,
+  isRejectedPrefixedMythosId,
+  requiresBedrockAnthropicMessagesModel,
+} from '../bedrock/routing';
 
 import type { ProviderFactory } from '../registryTypes';
 
@@ -25,16 +30,16 @@ export const awsProviderFactories: ProviderFactory[] = [
             : isLegacyType
               ? modelName
               : undefined;
-      const prefixedMythosModel = anthropicModel?.match(/^[^.]+\.(anthropic\.claude-mythos-5)$/);
-      if (prefixedMythosModel) {
+      if (anthropicModel && isRejectedPrefixedMythosId(anthropicModel)) {
         throw new Error(
           `Amazon Bedrock model "${anthropicModel}" is not a valid Mythos model ID. ` +
-            `Use "bedrock:${prefixedMythosModel[1]}"; Mythos does not support geo or global inference IDs.`,
+            `Use "bedrock:anthropic.claude-mythos-5"; Mythos does not support geo or global inference IDs.`,
         );
       }
       if (anthropicModel && /^(?:(?:us|global)\.)?anthropic\.claude-/.test(anthropicModel)) {
-        const { createBedrockAnthropicMessagesProvider, isBedrockAnthropicMessagesModel } =
-          await import('../bedrock/anthropicMessages');
+        const { createBedrockAnthropicMessagesProvider } = await import(
+          '../bedrock/anthropicMessages'
+        );
         if (requiresBedrockAnthropicMessagesModel(anthropicModel) && isLegacyType) {
           throw new Error(
             `Amazon Bedrock model "${anthropicModel}" uses the Anthropic Messages API, not ` +

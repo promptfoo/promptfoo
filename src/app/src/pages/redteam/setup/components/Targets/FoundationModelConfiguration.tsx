@@ -6,7 +6,12 @@ import { Label } from '@app/components/ui/label';
 import {
   type BedrockApiMode,
   getBedrockTextRoute,
+  isBedrockAnthropicMessagesModel,
+  isBedrockGptOssResponsesModel,
+  isBedrockMantleResponsesModel,
   isBedrockOpenAiResponsesModel,
+  isRejectedPrefixedGrokId,
+  isRejectedPrefixedMythosId,
   requiresBedrockAnthropicMessagesModel,
 } from '@promptfoo/providers/bedrock/routing';
 import {
@@ -29,9 +34,18 @@ const BEDROCK_API_OPTIONS: { value: BedrockApiMode; label: string }[] = [
   { value: 'invoke', label: 'InvokeModel' },
   { value: 'converse', label: 'Converse' },
   { value: 'responses', label: 'Responses API' },
-  { value: 'chat', label: 'Chat Completions (Mantle)' },
+  { value: 'chat', label: 'Chat Completions' },
   { value: 'messages', label: 'Anthropic Messages' },
 ];
+
+const BEDROCK_API_HELP: Record<BedrockApiMode, string> = {
+  invoke: 'Uses the model-specific InvokeModel API on Bedrock Runtime.',
+  converse:
+    'Uses the Bedrock Converse API on Bedrock Runtime, with native tool calling and MCP support.',
+  responses: 'Uses the OpenAI-compatible Responses API.',
+  chat: 'Uses the OpenAI-compatible Chat Completions API.',
+  messages: 'Uses the Anthropic Messages API.',
+};
 
 interface MCPServerConfig {
   name: string;
@@ -57,14 +71,47 @@ const buildBedrockProviderId = (apiMode: BedrockApiMode, modelId: string): strin
   return apiMode === 'converse' ? `bedrock:converse:${modelId}` : `bedrock:${modelId}`;
 };
 
-const isBedrockApiOptionDisabled = (apiMode: BedrockApiMode, modelId: string): boolean => {
-  if (getBedrockTextRoute(buildBedrockProviderId(apiMode, modelId))?.apiMode !== apiMode) {
-    return true;
+// Match the backend's model-family checks, not a regional availability catalog.
+const getBedrockApiError = (apiMode: BedrockApiMode, modelId: string): string | undefined => {
+  if (!modelId) {
+    return 'Enter a model ID.';
+  }
+  if (apiMode !== 'chat' && isRejectedPrefixedMythosId(modelId)) {
+    return 'Mythos 5 requires the bare anthropic.claude-mythos-5 ID and Anthropic Messages API.';
+  }
+  if (
+    (apiMode === 'invoke' || apiMode === 'converse' || apiMode === 'chat') &&
+    isRejectedPrefixedGrokId(modelId, apiMode === 'chat')
+  ) {
+    return 'This Grok inference-profile ID is not supported by the selected API.';
+  }
+  if (
+    apiMode === 'responses' &&
+    !isBedrockMantleResponsesModel(modelId) &&
+    !isBedrockGptOssResponsesModel(modelId)
+  ) {
+    return 'Responses requires a bare OpenAI frontier or Grok ID, or a GPT OSS ID without -1:0.';
+  }
+  if (apiMode === 'messages' && !isBedrockAnthropicMessagesModel(modelId)) {
+    return 'This model ID is not supported by the Bedrock Anthropic Messages adapter.';
   }
   if (apiMode === 'invoke' || apiMode === 'converse') {
-    return requiresBedrockAnthropicMessagesModel(modelId);
+    if (requiresBedrockAnthropicMessagesModel(modelId)) {
+      return 'This model requires the Anthropic Messages API.';
+    }
   }
-  return apiMode === 'chat' && isBedrockOpenAiResponsesModel(modelId);
+  if (apiMode === 'chat' && isBedrockOpenAiResponsesModel(modelId)) {
+    return 'This OpenAI model requires the Responses API.';
+  }
+  return undefined;
+};
+
+const getBedrockApiOptionError = (apiMode: BedrockApiMode, modelId: string): string | undefined => {
+  const route = getBedrockTextRoute(buildBedrockProviderId(apiMode, modelId));
+  if (route?.apiMode !== apiMode) {
+    return 'This model ID routes to a different API. Select the API shown for its provider ID.';
+  }
+  return getBedrockApiError(apiMode, route.modelId);
 };
 
 const isServerConfigured = (server: MCPServerConfig): boolean =>
@@ -89,6 +136,13 @@ const FoundationModelConfiguration = ({
   const [modelId, setModelId] = useState(
     isBedrock ? getBedrockModelFromId(selectedTarget.id) : selectedTarget.id || '',
   );
+  const bedrockApiError = bedrockApiMode ? getBedrockApiError(bedrockApiMode, modelId) : undefined;
+  const bedrockApiOptions = isBedrock
+    ? BEDROCK_API_OPTIONS.map((option) => ({
+        ...option,
+        error: getBedrockApiOptionError(option.value, modelId),
+      }))
+    : [];
   const [isAdvancedOpen, setIsAdvancedOpen] = useState(false);
   const [isMcpOpen, setIsMcpOpen] = useState(Boolean(selectedTarget.config?.mcp?.servers?.length));
   const [isBedrockSettingsOpen, setIsBedrockSettingsOpen] = useState(
@@ -285,28 +339,51 @@ const FoundationModelConfiguration = ({
                 id="bedrock-api-mode"
                 className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background"
                 value={bedrockApiMode}
+                aria-invalid={Boolean(bedrockApiError)}
+                aria-describedby={
+                  bedrockApiError ? 'bedrock-api-help bedrock-api-error' : 'bedrock-api-help'
+                }
                 onChange={(e) =>
                   updateProviderId(
                     buildBedrockProviderId(e.target.value as BedrockApiMode, modelId),
                   )
                 }
               >
-                {BEDROCK_API_OPTIONS.map(({ value, label }) => (
-                  <option
-                    key={value}
-                    value={value}
-                    disabled={isBedrockApiOptionDisabled(value, modelId)}
-                  >
+                {bedrockApiOptions.map(({ value, label, error }) => (
+                  <option key={value} value={value} disabled={Boolean(error)} title={error}>
                     {label}
                   </option>
                 ))}
               </select>
-              <p className="text-sm text-muted-foreground">
-                Choose an API supported by your model. Responses and Chat Completions use
-                OpenAI-compatible formats; Messages uses the Anthropic format. Converse supports
-                Bedrock-native tool calling and MCP servers. Legacy model aliases display the API
-                they actually use.
+              <p id="bedrock-api-help" className="text-sm text-muted-foreground">
+                {bedrockApiMode && BEDROCK_API_HELP[bedrockApiMode]}{' '}
+                {isBedrockHttpApi &&
+                  (selectedTarget.config?.apiBaseUrl
+                    ? 'Uses your custom endpoint from Advanced Configuration.'
+                    : bedrockApiMode === 'messages'
+                      ? 'Promptfoo selects Bedrock Mantle or Runtime based on the model ID. You can configure a custom endpoint under Advanced Configuration.'
+                      : 'Promptfoo defaults to the Bedrock Mantle endpoint. You can configure a custom endpoint under Advanced Configuration.')}
               </p>
+              {bedrockApiError && (
+                <p id="bedrock-api-error" role="alert" className="text-sm text-destructive">
+                  {bedrockApiError} Change the model ID or API; your existing configuration has not
+                  been changed automatically.
+                </p>
+              )}
+              {modelId && bedrockApiOptions.some(({ error }) => error) && (
+                <details id="bedrock-api-unavailable" className="text-sm text-muted-foreground">
+                  <summary className="cursor-pointer">Unavailable APIs for this model ID</summary>
+                  <ul className="mt-2 list-disc space-y-1 pl-5">
+                    {bedrockApiOptions
+                      .filter(({ error }) => error)
+                      .map(({ value, label, error }) => (
+                        <li key={value}>
+                          {label}: {error}
+                        </li>
+                      ))}
+                  </ul>
+                </details>
+              )}
             </div>
           )}
 

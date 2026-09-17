@@ -442,6 +442,111 @@ describe('FoundationModelConfiguration', () => {
     expect(screen.queryByText('MCP Servers')).not.toBeInTheDocument();
   });
 
+  it('disables unsupported APIs and explains why without changing a native target', async () => {
+    const user = userEvent.setup();
+    render(
+      <FoundationModelConfiguration
+        selectedTarget={{ id: 'bedrock:global.anthropic.claude-sonnet-5', config: {} }}
+        updateCustomTarget={mockUpdateCustomTarget}
+        providerType="bedrock"
+      />,
+    );
+    expect(screen.getByRole('option', { name: 'Responses API' })).toBeDisabled();
+    expect(screen.getByRole('option', { name: 'Anthropic Messages' })).toBeDisabled();
+    expect(screen.getByRole('option', { name: 'Converse' })).toBeEnabled();
+    await user.selectOptions(screen.getByLabelText(/Bedrock API/i), 'responses');
+    expect(mockUpdateCustomTarget).not.toHaveBeenCalled();
+    await user.click(screen.getByText('Unavailable APIs for this model ID'));
+    expect(screen.getByText(/Responses requires a bare OpenAI/)).toBeVisible();
+    expect(
+      screen.getByText(/not supported by the Bedrock Anthropic Messages adapter/),
+    ).toBeVisible();
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+  });
+
+  it('keeps native Grok profiles available without offering them through Mantle', () => {
+    render(
+      <FoundationModelConfiguration
+        selectedTarget={{ id: 'bedrock:converse:us.xai.grok-4.6', config: {} }}
+        updateCustomTarget={mockUpdateCustomTarget}
+        providerType="bedrock"
+      />,
+    );
+    expect(screen.getByRole('option', { name: 'InvokeModel' })).toBeEnabled();
+    expect(screen.getByRole('option', { name: 'Converse' })).toBeEnabled();
+    expect(screen.getByRole('option', { name: 'Responses API' })).toBeDisabled();
+    expect(screen.getByRole('option', { name: 'Chat Completions' })).toBeDisabled();
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+    expect(mockUpdateCustomTarget).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ['bedrock:responses:global.anthropic.claude-sonnet-5', 'responses'],
+    ['bedrock:responses:openai.gpt-oss-120b-1:0', 'responses'],
+    ['bedrock:messages:openai.gpt-oss-120b', 'messages'],
+    ['bedrock:mantle:openai.gpt-5.5', 'chat'],
+    ['bedrock:converse:anthropic.claude-mythos-5', 'converse'],
+    ['bedrock:converse:us.anthropic.claude-mythos-5', 'converse'],
+    ['bedrock:mantle:us.xai.grok-4.6', 'chat'],
+    ['bedrock:converse:us.xai.grok-4.3', 'converse'],
+  ])('reports an invalid existing target %s without rewriting it', (id, mode) => {
+    render(
+      <FoundationModelConfiguration
+        selectedTarget={{ id, config: { max_tokens: 512, profile: 'work' } }}
+        updateCustomTarget={mockUpdateCustomTarget}
+        providerType="bedrock"
+      />,
+    );
+    expect(screen.getByLabelText(/Bedrock API/i)).toHaveValue(mode);
+    expect(screen.getByLabelText(/Bedrock API/i)).toHaveAttribute('aria-invalid', 'true');
+    expect(screen.getByRole('alert')).toHaveTextContent(/not been changed automatically/);
+    expect(mockUpdateCustomTarget).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ['bedrock:amazon.nova-pro-v1:0', 'model-specific InvokeModel API on Bedrock Runtime'],
+    ['bedrock:converse:amazon.nova-pro-v1:0', 'Bedrock Converse API on Bedrock Runtime'],
+    ['bedrock:responses:openai.gpt-oss-120b', 'OpenAI-compatible Responses API'],
+    ['bedrock:mantle:zai.glm-4.6', 'OpenAI-compatible Chat Completions API'],
+    ['bedrock:messages:anthropic.claude-fable-5', 'Anthropic Messages API'],
+  ])('explains the API format for %s', (id, explanation) => {
+    render(
+      <FoundationModelConfiguration
+        selectedTarget={{ id, config: {} }}
+        updateCustomTarget={mockUpdateCustomTarget}
+        providerType="bedrock"
+      />,
+    );
+    expect(screen.getByRole('option', { name: 'Chat Completions' })).toBeInTheDocument();
+    expect(screen.getByLabelText(/Bedrock API/i)).toHaveAccessibleDescription(
+      expect.stringContaining(explanation),
+    );
+    if (id.includes(':responses:') || id.includes(':mantle:')) {
+      expect(screen.getByText(/defaults to the Bedrock Mantle endpoint/)).toBeInTheDocument();
+    }
+    if (id.includes(':messages:')) {
+      expect(screen.getByText(/Mantle or Runtime based on the model ID/)).toBeInTheDocument();
+    }
+  });
+
+  it.each([
+    'bedrock:responses:openai.gpt-oss-120b',
+    'bedrock:mantle:custom.future-model',
+    'bedrock:messages:us.anthropic.claude-fable-5-1',
+  ])('acknowledges a custom endpoint for %s without inventing new model restrictions', (id) => {
+    render(
+      <FoundationModelConfiguration
+        selectedTarget={{ id, config: { apiBaseUrl: 'https://proxy.example/v1' } }}
+        updateCustomTarget={mockUpdateCustomTarget}
+        providerType="bedrock"
+      />,
+    );
+    expect(screen.getByText(/Uses your custom endpoint/)).toBeInTheDocument();
+    expect(screen.queryByText(/defaults to the Bedrock Mantle endpoint/)).not.toBeInTheDocument();
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+    expect(mockUpdateCustomTarget).not.toHaveBeenCalled();
+  });
+
   it('should preserve the Responses prefix and use Responses-specific settings', async () => {
     const user = userEvent.setup();
     render(

@@ -51,6 +51,36 @@ afterEach(() => {
   container = undefined;
 });
 
+it('keeps unsupported API choices disabled and explains them', async () => {
+  const initial = { id: 'bedrock:global.anthropic.claude-sonnet-5', config: { max_tokens: 512 } };
+  renderEditor(initial);
+  await expect.element(page.getByRole('option', { name: 'Responses API' })).toBeDisabled();
+  await expect.element(page.getByRole('option', { name: 'Anthropic Messages' })).toBeDisabled();
+  await page.getByText('Unavailable APIs for this model ID').click();
+  await expect.element(page.getByText(/Responses requires a bare OpenAI/)).toBeVisible();
+  await expect.element(page.getByTestId('saved-target')).toHaveTextContent(JSON.stringify(initial));
+});
+
+it('shows an invalid saved target and clears the error only after an explicit edit', async () => {
+  const initial = {
+    id: 'bedrock:responses:global.anthropic.claude-sonnet-5',
+    config: { max_output_tokens: 512, profile: 'work' },
+  };
+  renderEditor(initial);
+  await expect
+    .element(page.getByRole('alert'))
+    .toHaveTextContent(
+      'Responses requires a bare OpenAI frontier or Grok ID, or a GPT OSS ID without -1:0. ' +
+        'Change the model ID or API; your existing configuration has not been changed automatically.',
+    );
+  await expect.element(page.getByTestId('saved-target')).toHaveTextContent(JSON.stringify(initial));
+  await page.getByLabelText('Model ID', { exact: false }).fill('openai.gpt-oss-120b');
+  await expect.element(page.getByRole('alert')).not.toBeInTheDocument();
+  await expect
+    .element(page.getByTestId('saved-target'))
+    .toHaveTextContent(JSON.stringify({ ...initial, id: 'bedrock:responses:openai.gpt-oss-120b' }));
+});
+
 it('round-trips native, Responses, and Chat Completions configuration in a real browser', async () => {
   const config = { max_tokens: 512, region: 'us-west-2', profile: 'work' };
   await renderEditor({ id: 'bedrock:openai.gpt-oss-120b-1:0', config });

@@ -1,5 +1,34 @@
 import { describe, expect, it } from 'vitest';
-import { getBedrockTextRoute } from '../../../src/providers/bedrock/routing';
+import {
+  getBedrockTextRoute,
+  isRejectedPrefixedGrokId,
+  isRejectedPrefixedMythosId,
+} from '../../../src/providers/bedrock/routing';
+
+describe('Bedrock inference-profile compatibility', () => {
+  it.each([
+    ['xai.grok-4.3', false, false],
+    ['xai.grok-4.3', true, false],
+    ['us.xai.grok-4.6', false, false],
+    ['global.xai.grok-4.6', false, false],
+    ['us.xai.grok-4.6', true, true],
+    ['global.xai.grok-4.6', true, true],
+    ['us.xai.grok-4.3', false, true],
+    ['eu.xai.grok-4.6', false, true],
+    ['custom.future-model', false, false],
+  ])('checks Grok ID %s with explicit Mantle=%s', (id, explicitMantle, rejected) => {
+    expect(isRejectedPrefixedGrokId(id, explicitMantle)).toBe(rejected);
+  });
+
+  it.each([
+    ['anthropic.claude-mythos-5', false],
+    ['us.anthropic.claude-mythos-5', true],
+    ['global.anthropic.claude-mythos-5', true],
+    ['us.anthropic.claude-mythos-5-1', false],
+  ])('checks Mythos ID %s', (id, rejected) => {
+    expect(isRejectedPrefixedMythosId(id)).toBe(rejected);
+  });
+});
 
 describe('getBedrockTextRoute', () => {
   it.each([

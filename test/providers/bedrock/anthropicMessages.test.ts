@@ -4,8 +4,8 @@ import {
   BedrockAnthropicMessagesProvider,
   createBedrockAnthropicMessagesProvider,
   getBedrockAnthropicBaseUrl,
-  isBedrockAnthropicMessagesModel,
 } from '../../../src/providers/bedrock/anthropicMessages';
+import { isBedrockAnthropicMessagesModel } from '../../../src/providers/bedrock/routing';
 import { mockProcessEnv } from '../../util/utils';
 import type Anthropic from '@anthropic-ai/sdk';
 

@@ -5,6 +5,7 @@ import {
   resolveBedrockMantleApiKey,
   resolveBedrockMantleRegion,
 } from './mantle';
+import { isBedrockRuntimeMessagesModel } from './routing';
 import { BedrockTokenProvider } from './tokenProvider';
 import type { ClientOptions } from '@anthropic-ai/sdk';
 
@@ -12,23 +13,6 @@ import type { ProviderOptions } from '../../types/providers';
 
 export const DEFAULT_BEDROCK_ANTHROPIC_REGION = 'us-east-1';
 const FABLE_MANTLE_REGIONS = new Set(['us-east-1', 'eu-north-1']);
-const RUNTIME_MESSAGES_MODELS = new Set([
-  'us.anthropic.claude-fable-5-1',
-  'global.anthropic.claude-fable-5-1',
-  'us.anthropic.claude-mythos-5-1',
-  'global.anthropic.claude-mythos-5-1',
-]);
-
-const BEDROCK_ANTHROPIC_MESSAGES_MODELS = [
-  'anthropic.claude-fable-5',
-  'anthropic.claude-mythos-5',
-  'anthropic.claude-fable-5-1',
-  ...RUNTIME_MESSAGES_MODELS,
-];
-
-export function isBedrockAnthropicMessagesModel(modelName: string): boolean {
-  return BEDROCK_ANTHROPIC_MESSAGES_MODELS.includes(modelName);
-}
 
 export function getBedrockAnthropicBaseUrl(region: string, useRuntime = false): string {
   // Validate the region before interpolating either host, which receives an API key.
@@ -83,7 +67,7 @@ export class BedrockAnthropicMessagesProvider extends AnthropicMessagesProvider 
       this.config.apiBaseUrl ||
       getBedrockAnthropicBaseUrl(
         resolveBedrockMantleRegion(this.config, this.env, DEFAULT_BEDROCK_ANTHROPIC_REGION),
-        RUNTIME_MESSAGES_MODELS.has(this.modelName),
+        isBedrockRuntimeMessagesModel(this.modelName),
       )
     );
   }
@@ -151,7 +135,8 @@ export function createBedrockAnthropicMessagesProvider(
   }
 
   const apiBaseUrl =
-    config.apiBaseUrl || getBedrockAnthropicBaseUrl(region, RUNTIME_MESSAGES_MODELS.has(modelName));
+    config.apiBaseUrl ||
+    getBedrockAnthropicBaseUrl(region, isBedrockRuntimeMessagesModel(modelName));
 
   return new BedrockAnthropicMessagesProvider(modelName, {
     ...providerOptions,
