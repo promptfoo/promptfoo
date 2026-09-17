@@ -21,6 +21,7 @@ import {
   OPENAI_TARGET_PLACEHOLDER,
 } from '../constants';
 import { SetupSection } from '../SetupSection';
+import BedrockAuthentication from './BedrockAuthentication';
 
 import type { ProviderOptions } from '../../types';
 
@@ -144,7 +145,16 @@ const FoundationModelConfiguration = ({
   const [isAdvancedOpen, setIsAdvancedOpen] = useState(false);
   const [isMcpOpen, setIsMcpOpen] = useState(Boolean(selectedTarget.config?.mcp?.servers?.length));
   const [isBedrockSettingsOpen, setIsBedrockSettingsOpen] = useState(
-    isBedrock && Boolean(selectedTarget.config?.region || selectedTarget.config?.profile),
+    isBedrock &&
+      Boolean(
+        selectedTarget.config?.region ||
+          selectedTarget.config?.profile ||
+          selectedTarget.config?.apiKey ||
+          selectedTarget.config?.accessKeyId ||
+          selectedTarget.config?.secretAccessKey ||
+          selectedTarget.config?.sessionToken ||
+          selectedTarget.config?.apiKeyRequired === false,
+      ),
   );
 
   useEffect(() => {
@@ -539,7 +549,7 @@ const FoundationModelConfiguration = ({
         {isBedrock && (
           <SetupSection
             title="Bedrock Settings"
-            description="Configure the AWS region and optional credential profile"
+            description="Configure the AWS region and authentication"
             isExpanded={isBedrockSettingsOpen}
             onExpandedChange={setIsBedrockSettingsOpen}
             className="mt-4"
@@ -570,30 +580,11 @@ const FoundationModelConfiguration = ({
                 </p>
               </div>
 
-              <div className="space-y-2">
-                <Label htmlFor="bedrock-profile">AWS Profile</Label>
-                <Input
-                  id="bedrock-profile"
-                  value={selectedTarget.config?.profile ?? ''}
-                  onChange={(e) => updateCustomTarget('profile', e.target.value || undefined)}
-                  placeholder="default"
-                />
-                <p className="text-sm text-muted-foreground">
-                  {isBedrockHttpApi ? (
-                    <>
-                      Optional AWS credential profile used to generate refreshable Bedrock tokens
-                      when no bearer token is supplied. Leave blank to resolve AWS credentials from
-                      the environment or default credential chain.
-                    </>
-                  ) : (
-                    <>
-                      Optional SSO profile from <code>~/.aws/config</code>. Used when no explicit
-                      credentials or bearer token are supplied. Leave blank to use the default
-                      credential chain.
-                    </>
-                  )}
-                </p>
-              </div>
+              <BedrockAuthentication
+                config={selectedTarget.config ?? {}}
+                isHttpApi={isBedrockHttpApi}
+                updateCustomTarget={updateCustomTarget}
+              />
 
               {isBedrockNativeApi && (
                 <div className="space-y-2">
@@ -681,25 +672,20 @@ const FoundationModelConfiguration = ({
               </p>
             </div>
 
-            <div className="space-y-2">
-              <Label htmlFor="api-key">{isBedrock ? 'Bedrock Bearer Token' : 'API Key'}</Label>
-              <Input
-                id="api-key"
-                type="password"
-                value={selectedTarget.config?.apiKey ?? ''}
-                onChange={(e) => updateCustomTarget('apiKey', e.target.value || undefined)}
-              />
-              <p className="text-sm text-muted-foreground">
-                {isBedrock ? (
-                  <>
-                    Optional — uses <code>AWS_BEARER_TOKEN_BEDROCK</code> when unset, then AWS
-                    credentials. Supplied tokens are used as-is and are not automatically refreshed.
-                  </>
-                ) : (
-                  <>Optional - defaults to {providerInfo.envVar} environment variable</>
-                )}
-              </p>
-            </div>
+            {!isBedrock && (
+              <div className="space-y-2">
+                <Label htmlFor="api-key">API Key</Label>
+                <Input
+                  id="api-key"
+                  type="password"
+                  value={selectedTarget.config?.apiKey ?? ''}
+                  onChange={(e) => updateCustomTarget('apiKey', e.target.value || undefined)}
+                />
+                <p className="text-sm text-muted-foreground">
+                  Optional - defaults to {providerInfo.envVar} environment variable
+                </p>
+              </div>
+            )}
 
             {(!isBedrock || isBedrockHttpApi) && (
               <div className="space-y-2">

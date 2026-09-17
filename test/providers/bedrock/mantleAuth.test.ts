@@ -115,31 +115,48 @@ describe('Bedrock Mantle request authentication', () => {
     vi.resetAllMocks();
   });
 
-  it.each(Object.keys(factories) as Array<keyof typeof factories>)(
-    '%s resolves fresh credentials on successive calls',
-    async (route) => {
-      generateToken.mockResolvedValueOnce('first-token').mockResolvedValueOnce('second-token');
-      const provider = factories[route]({ profile: 'bedrock-profile', region: 'us-east-1' });
-      expect(provider.requiresApiKey()).toBe(false);
-      expect(provider.getApiKey()).toBeUndefined();
-      const first = await provider.callApi('Capital of France?');
-      const second = await provider.callApi('Capital of France?');
-      expect(first.output).toBe('Paris');
-      expect(second.output).toBe('Paris');
-      const header = route === 'messages' ? 'x-api-key' : 'authorization';
-      const prefix = route === 'messages' ? '' : 'Bearer ';
-      expect(sentHeaders.map((headers) => headers.get(header))).toEqual([
-        `${prefix}first-token`,
-        `${prefix}second-token`,
-      ]);
-      expect(sentHeaders.every((headers) => !headers.has('x-proxy-secret'))).toBe(true);
-      expect(getTokenProvider).toHaveBeenCalledExactlyOnceWith({
-        profile: 'bedrock-profile',
-        region: 'us-east-1',
-      });
-      expect(provider.config.apiKey).toBeUndefined();
+  describe.each([
+    { profile: 'bedrock-profile' },
+    {
+      accessKeyId: 'selected-key',
+      secretAccessKey: 'selected-secret',
+      sessionToken: 'selected-session',
     },
-  );
+  ])('with explicit AWS configuration %j', (credentials) => {
+    beforeEach(() => {
+      const restoreBase = restoreEnv;
+      const restoreToken = mockProcessEnv({ AWS_BEARER_TOKEN_BEDROCK: 'ambient-token' });
+      restoreEnv = () => {
+        restoreToken();
+        restoreBase();
+      };
+    });
+    it.each(Object.keys(factories) as Array<keyof typeof factories>)(
+      '%s resolves fresh credentials on successive calls',
+      async (route) => {
+        generateToken.mockResolvedValueOnce('first-token').mockResolvedValueOnce('second-token');
+        const provider = factories[route]({ ...credentials, region: 'us-east-1' });
+        expect(provider.requiresApiKey()).toBe(false);
+        expect(provider.getApiKey()).toBeUndefined();
+        const first = await provider.callApi('Capital of France?');
+        const second = await provider.callApi('Capital of France?');
+        expect(first.output).toBe('Paris');
+        expect(second.output).toBe('Paris');
+        const header = route === 'messages' ? 'x-api-key' : 'authorization';
+        const prefix = route === 'messages' ? '' : 'Bearer ';
+        expect(sentHeaders.map((headers) => headers.get(header))).toEqual([
+          `${prefix}first-token`,
+          `${prefix}second-token`,
+        ]);
+        expect(sentHeaders.every((headers) => !headers.has('x-proxy-secret'))).toBe(true);
+        expect(getTokenProvider).toHaveBeenCalledExactlyOnceWith({
+          ...('profile' in credentials ? credentials : { credentials }),
+          region: 'us-east-1',
+        });
+        expect(provider.config.apiKey).toBeUndefined();
+      },
+    );
+  });
 
   it.each(Object.keys(factories) as Array<keyof typeof factories>)(
     '%s keeps explicit bearer tokens unchanged',

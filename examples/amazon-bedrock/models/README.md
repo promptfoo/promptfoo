@@ -253,8 +253,9 @@ For the OpenAI-compatible Responses API variant, use
 `AWS_BEARER_TOKEN_BEDROCK` or standard AWS credentials (explicit keys, a named
 profile, or the default credential chain). With AWS credentials, Promptfoo generates
 short-lived bearer tokens for requests using the optional
-`@aws/bedrock-token-generator` package. Unset `AWS_BEARER_TOKEN_BEDROCK` when using
-AWS credentials so an existing environment token does not take precedence.
+`@aws/bedrock-token-generator` package. Explicit `config.accessKeyId` / `config.secretAccessKey`
+or `config.profile` override environment bearer tokens. Unset `AWS_BEARER_TOKEN_BEDROCK`
+when relying on environment AWS credentials or the default credential chain instead.
 
 Run the OpenAI example with:
 
@@ -285,7 +286,7 @@ The frontier example (`promptfooconfig.openai-frontier.yaml`) demonstrates OpenA
   export AWS_BEARER_TOKEN_BEDROCK="your_bedrock_api_key"
   ```
 
-  Unset `AWS_BEARER_TOKEN_BEDROCK` when using AWS credentials so an existing environment token does not take precedence.
+  Explicit AWS keys or `config.profile` override environment bearer tokens. Unset `AWS_BEARER_TOKEN_BEDROCK` when relying on environment AWS credentials or the default credential chain instead.
 
 - **Native Reasoning Effort**: GPT-5.6 supports `none`, `low`, `medium`, `high`, `xhigh`, and `max` (`minimal` is not supported by these Bedrock models).
 - **Prompt caching and streaming**: The example marks its stable system instructions with an explicit cache breakpoint, uses a stable `prompt_cache_key`, and enables streaming for Luna. Cache reads receive a 90% discount; cache writes cost 1.25x the uncached input rate.

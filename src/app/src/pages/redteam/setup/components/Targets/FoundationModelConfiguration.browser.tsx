@@ -51,6 +51,54 @@ afterEach(() => {
   container = undefined;
 });
 
+it('groups authentication under Bedrock Settings and persists only the selected credentials', async () => {
+  renderEditor({
+    id: 'bedrock:responses:openai.gpt-5.6-sol',
+    config: { region: 'us-east-2', apiKey: 'old-token' },
+  });
+  await expect.element(page.getByLabelText('Bedrock Bearer Token')).toHaveValue('old-token');
+  const auth = page.getByLabelText('Authentication', { exact: true });
+  await auth.selectOptions('keys');
+  await page.getByLabelText('AWS Access Key ID').fill('test-access');
+  await page.getByLabelText('AWS Secret Access Key').fill('test-secret');
+  await page.getByLabelText('AWS Session Token (optional)').fill('test-session');
+  await expect.element(page.getByRole('alert')).not.toBeInTheDocument();
+  await expect.element(page.getByTestId('saved-target')).toHaveTextContent(
+    JSON.stringify({
+      id: 'bedrock:responses:openai.gpt-5.6-sol',
+      config: {
+        region: 'us-east-2',
+        accessKeyId: 'test-access',
+        secretAccessKey: 'test-secret',
+        sessionToken: 'test-session',
+      },
+    }),
+  );
+  await page.getByLabelText('Bedrock API', { exact: false }).selectOptions('chat');
+  await expect.element(auth).toHaveValue('keys');
+  await auth.selectOptions('profile');
+  await page.getByLabelText('AWS Profile').fill('work');
+  await expect.element(page.getByTestId('saved-target')).toHaveTextContent(
+    JSON.stringify({
+      id: 'bedrock:mantle:openai.gpt-5.6-sol',
+      config: { region: 'us-east-2', profile: 'work' },
+    }),
+  );
+  await auth.selectOptions('bearer');
+  await page.getByLabelText('Bedrock Bearer Token').fill('new-token');
+  await page.getByRole('button', { name: /Bedrock Settings/ }).click();
+  await page.getByRole('button', { name: /Advanced Configuration/ }).click();
+  await expect.element(page.getByLabelText('Bedrock Bearer Token')).not.toBeInTheDocument();
+  await page.getByRole('button', { name: /Bedrock Settings/ }).click();
+  await auth.selectOptions('default');
+  await expect.element(page.getByTestId('saved-target')).toHaveTextContent(
+    JSON.stringify({
+      id: 'bedrock:mantle:openai.gpt-5.6-sol',
+      config: { region: 'us-east-2' },
+    }),
+  );
+});
+
 it('allows selecting an API before fixing its model ID', async () => {
   const initial = { id: 'bedrock:global.anthropic.claude-sonnet-5', config: { max_tokens: 512 } };
   renderEditor(initial);

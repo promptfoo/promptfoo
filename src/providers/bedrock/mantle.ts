@@ -36,9 +36,21 @@ export function resolveBedrockMantleApiKey(
   // var instead.
   const explicitKey =
     typeof config.apiKey === 'string' && !config.apiKey.includes('{{') ? config.apiKey : undefined;
-  // Optional-auth custom endpoints must not inherit unrelated AWS credentials. Preserve
-  // deliberately configured keys, but suppress both provider and process environment fallback.
-  if (config.apiKeyRequired === false) {
+  // Explicit AWS credentials/profile select the target's principal ahead of environment
+  // bearer tokens. Include partial tuples so validation fails instead of using another account.
+  // Match the token provider's treatment of empty values and unresolved templates.
+  const hasExplicitAwsCredentials = [
+    'accessKeyId',
+    'secretAccessKey',
+    'sessionToken',
+    'profile',
+  ].some((key) => {
+    const value = config[key];
+    return typeof value === 'string' && value.trim() && !value.includes('{{');
+  });
+  // Optional-auth custom endpoints also suppress all ambient authentication.
+  // An explicitly configured bearer token retains highest priority in either case.
+  if (config.apiKeyRequired === false || hasExplicitAwsCredentials) {
     return explicitKey || undefined;
   }
   return explicitKey || env?.AWS_BEARER_TOKEN_BEDROCK || getEnvString('AWS_BEARER_TOKEN_BEDROCK');

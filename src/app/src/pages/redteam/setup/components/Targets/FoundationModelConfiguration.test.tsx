@@ -628,6 +628,7 @@ describe('FoundationModelConfiguration', () => {
     await user.click(maxOutputTokensInput);
     await user.paste('2048');
     expect(mockUpdateCustomTarget).toHaveBeenLastCalledWith('max_output_tokens', 2048);
+    await user.click(screen.getByRole('button', { name: /Bedrock Settings/ }));
     expect(screen.getByText(/AWS_BEARER_TOKEN_BEDROCK/)).toBeInTheDocument();
   });
 
@@ -724,9 +725,7 @@ describe('FoundationModelConfiguration', () => {
       expect(mockUpdateCustomTarget).not.toHaveBeenCalled();
       expect(screen.queryByText('MCP Servers')).not.toBeInTheDocument();
       expect(screen.queryByLabelText('Inference Model Type')).not.toBeInTheDocument();
-      expect(
-        screen.getByText(/Configure the AWS region and optional credential profile/),
-      ).toBeInTheDocument();
+      expect(screen.getByText(/Configure the AWS region and authentication/)).toBeInTheDocument();
       expect(screen.getByText(/model-specific default/)).toBeInTheDocument();
       expect(screen.getByText(/generate refreshable Bedrock tokens/)).toBeInTheDocument();
       await user.click(screen.getByRole('button', { name: /Advanced Configuration/ }));
@@ -734,8 +733,8 @@ describe('FoundationModelConfiguration', () => {
         mode === 'responses' ? 'Max Output Tokens' : 'Max Tokens',
       );
       expect(tokenField).toHaveValue(mode === 'responses' ? 512 : 1024);
-      expect(screen.getByLabelText('Bedrock Bearer Token')).toBeInTheDocument();
-      expect(screen.getByText(/not automatically refreshed/)).toBeInTheDocument();
+      expect(screen.queryByLabelText('Bedrock Bearer Token')).not.toBeInTheDocument();
+      expect(screen.getByLabelText('Authentication')).toHaveValue('profile');
       expect(screen.getByLabelText('API Base URL')).toHaveAttribute(
         'placeholder',
         'Use the provider-selected Bedrock endpoint',
@@ -815,7 +814,8 @@ describe('FoundationModelConfiguration', () => {
     expect(screen.getByLabelText('Inference Model Type')).toBeInTheDocument();
     await user.click(screen.getByRole('button', { name: /Advanced Configuration/ }));
     expect(screen.queryByLabelText('API Base URL')).not.toBeInTheDocument();
-    expect(screen.getByLabelText('Bedrock Bearer Token')).toBeInTheDocument();
+    expect(screen.queryByLabelText('Bedrock Bearer Token')).not.toBeInTheDocument();
+    expect(screen.getByLabelText('Authentication')).toHaveValue('default');
   });
 
   it('does not relabel specialized Bedrock providers as InvokeModel', () => {
