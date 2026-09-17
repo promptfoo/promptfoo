@@ -85,6 +85,7 @@ If you are working in the Promptfoo repository, run the example from the reposit
 npm run local -- eval \
   -c examples/integration-aisix/promptfooconfig.yaml \
   --no-cache \
+  --no-share \
   -o /tmp/aisix-promptfoo-results.json
 ```
 
@@ -94,6 +95,7 @@ For the published CLI package, run:
 npx promptfoo@latest eval \
   -c promptfooconfig.yaml \
   --no-cache \
+  --no-share \
   -o /tmp/aisix-promptfoo-results.json
 ```
 
