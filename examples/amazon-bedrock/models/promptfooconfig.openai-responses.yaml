@@ -1,8 +1,12 @@
 # yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
 description: 'OpenAI GPT OSS through the Amazon Bedrock Responses API'
 
-# Export an Amazon Bedrock API key before running:
-#   export AWS_BEARER_TOKEN_BEDROCK="..."
+# Authentication: use an Amazon Bedrock API key OR standard AWS credentials.
+# API key: export AWS_BEARER_TOKEN_BEDROCK="..."
+# AWS credentials: use explicit keys, config.profile/AWS_PROFILE, or the default
+# credential chain. Promptfoo generates short-lived bearer tokens for requests
+# using the optional @aws/bedrock-token-generator package.
+# Unset AWS_BEARER_TOKEN_BEDROCK when using AWS credentials to avoid overriding them.
 
 prompts:
   - 'Answer concisely: {{question}}'

@@ -249,8 +249,12 @@ The OpenAI example (`promptfooconfig.openai.yaml`) demonstrates OpenAI's GPT-OSS
 
 For the OpenAI-compatible Responses API variant, use
 `promptfooconfig.openai-responses.yaml`. It targets the shorter mantle model id
-`openai.gpt-oss-120b` through `bedrock:responses:` and requires
-`AWS_BEARER_TOKEN_BEDROCK`.
+`openai.gpt-oss-120b` through `bedrock:responses:`. Authenticate with either
+`AWS_BEARER_TOKEN_BEDROCK` or standard AWS credentials (explicit keys, a named
+profile, or the default credential chain). With AWS credentials, Promptfoo generates
+short-lived bearer tokens for requests using the optional
+`@aws/bedrock-token-generator` package. Unset `AWS_BEARER_TOKEN_BEDROCK` when using
+AWS credentials so an existing environment token does not take precedence.
 
 Run the OpenAI example with:
 
@@ -275,11 +279,13 @@ The frontier example (`promptfooconfig.openai-frontier.yaml`) demonstrates OpenA
 ### Key Features
 
 - **Responses API**: Frontier models are served through Bedrock's OpenAI-compatible Responses API (`https://bedrock-mantle.<region>.api.aws/openai/v1/responses`), not `InvokeModel` or `Converse`. Promptfoo routes `bedrock:openai.gpt-5.x` there automatically and preserves the Bedrock model ID.
-- **Bedrock API key auth**: Unlike the gpt-oss models (AWS SDK credentials), the frontier models authenticate with an Amazon Bedrock API key. Export it first:
+- **Authentication**: Use standard AWS credentials (explicit keys, a named profile, or the default credential chain) to generate short-lived bearer tokens with the optional `@aws/bedrock-token-generator` package. Alternatively, supply an Amazon Bedrock API key:
 
   ```bash
   export AWS_BEARER_TOKEN_BEDROCK="your_bedrock_api_key"
   ```
+
+  Unset `AWS_BEARER_TOKEN_BEDROCK` when using AWS credentials so an existing environment token does not take precedence.
 
 - **Native Reasoning Effort**: GPT-5.6 supports `none`, `low`, `medium`, `high`, `xhigh`, and `max` (`minimal` is not supported by these Bedrock models).
 - **Prompt caching and streaming**: The example marks its stable system instructions with an explicit cache breakpoint, uses a stable `prompt_cache_key`, and enables streaming for Luna. Cache reads receive a 90% discount; cache writes cost 1.25x the uncached input rate.
