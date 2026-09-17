@@ -442,7 +442,7 @@ describe('FoundationModelConfiguration', () => {
     expect(screen.queryByText('MCP Servers')).not.toBeInTheDocument();
   });
 
-  it('disables unsupported APIs and explains why without changing a native target', async () => {
+  it('allows choosing the API first and validates the model against that choice', async () => {
     const user = userEvent.setup();
     render(
       <FoundationModelConfiguration
@@ -451,20 +451,20 @@ describe('FoundationModelConfiguration', () => {
         providerType="bedrock"
       />,
     );
-    expect(screen.getByRole('option', { name: 'Responses API' })).toBeDisabled();
-    expect(screen.getByRole('option', { name: 'Anthropic Messages' })).toBeDisabled();
+    expect(screen.getByRole('option', { name: 'Responses API' })).toBeEnabled();
+    expect(screen.getByRole('option', { name: 'Anthropic Messages' })).toBeEnabled();
     expect(screen.getByRole('option', { name: 'Converse' })).toBeEnabled();
     await user.selectOptions(screen.getByLabelText(/Bedrock API/i), 'responses');
-    expect(mockUpdateCustomTarget).not.toHaveBeenCalled();
-    await user.click(screen.getByText('Unavailable APIs for this model ID'));
-    expect(screen.getByText(/Responses requires a bare OpenAI/)).toBeVisible();
+    expect(screen.getByLabelText(/Bedrock API/i)).toHaveValue('responses');
+    expect(screen.getByLabelText(/Model ID/i)).toHaveAttribute('aria-invalid', 'true');
+    expect(screen.getByRole('alert')).toHaveTextContent(/Responses requires a bare OpenAI/);
+    await user.selectOptions(screen.getByLabelText(/Bedrock API/i), 'messages');
     expect(
       screen.getByText(/not supported by the Bedrock Anthropic Messages adapter/),
     ).toBeVisible();
-    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
   });
 
-  it('keeps native Grok profiles available without offering them through Mantle', () => {
+  it('keeps all API choices available for native Grok profiles', () => {
     render(
       <FoundationModelConfiguration
         selectedTarget={{ id: 'bedrock:converse:us.xai.grok-4.6', config: {} }}
@@ -474,8 +474,8 @@ describe('FoundationModelConfiguration', () => {
     );
     expect(screen.getByRole('option', { name: 'InvokeModel' })).toBeEnabled();
     expect(screen.getByRole('option', { name: 'Converse' })).toBeEnabled();
-    expect(screen.getByRole('option', { name: 'Responses API' })).toBeDisabled();
-    expect(screen.getByRole('option', { name: 'Chat Completions' })).toBeDisabled();
+    expect(screen.getByRole('option', { name: 'Responses API' })).toBeEnabled();
+    expect(screen.getByRole('option', { name: 'Chat Completions' })).toBeEnabled();
     expect(screen.queryByRole('alert')).not.toBeInTheDocument();
     expect(mockUpdateCustomTarget).not.toHaveBeenCalled();
   });
@@ -498,8 +498,8 @@ describe('FoundationModelConfiguration', () => {
       />,
     );
     expect(screen.getByLabelText(/Bedrock API/i)).toHaveValue(mode);
-    expect(screen.getByLabelText(/Bedrock API/i)).toHaveAttribute('aria-invalid', 'true');
-    expect(screen.getByRole('alert')).toHaveTextContent(/not been changed automatically/);
+    expect(screen.getByLabelText(/Model ID/i)).toHaveAttribute('aria-invalid', 'true');
+    expect(screen.getByRole('alert')).toBeInTheDocument();
     expect(mockUpdateCustomTarget).not.toHaveBeenCalled();
   });
 
@@ -545,6 +545,53 @@ describe('FoundationModelConfiguration', () => {
     expect(screen.queryByText(/defaults to the Bedrock Mantle endpoint/)).not.toBeInTheDocument();
     expect(screen.queryByRole('alert')).not.toBeInTheDocument();
     expect(mockUpdateCustomTarget).not.toHaveBeenCalled();
+  });
+
+  it('rehydrates the API and model when an external target replaces an edited target', async () => {
+    const user = userEvent.setup();
+    const props = { updateCustomTarget: mockUpdateCustomTarget, providerType: 'bedrock' };
+    const { rerender } = render(
+      <FoundationModelConfiguration
+        {...props}
+        selectedTarget={{ id: 'bedrock:amazon.nova-pro-v1:0', config: {} }}
+      />,
+    );
+    await user.selectOptions(screen.getByLabelText(/Bedrock API/i), 'responses');
+    rerender(
+      <FoundationModelConfiguration
+        {...props}
+        selectedTarget={{ id: 'bedrock:messages:anthropic.claude-fable-5', config: {} }}
+      />,
+    );
+    expect(screen.getByLabelText(/Bedrock API/i)).toHaveValue('messages');
+    expect(screen.getByLabelText(/Model ID/i)).toHaveValue('anthropic.claude-fable-5');
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+  });
+
+  it.each([
+    ['gpt-5.6-sol', 'bedrock:responses:openai.gpt-5.6-sol'],
+    ['gpt-oss-120b', 'bedrock:responses:openai.gpt-oss-120b'],
+    ['openai.gpt-5.6-sol', 'bedrock:responses:openai.gpt-5.6-sol'],
+    ['custom.model', 'bedrock:responses:custom.model'],
+    ['us.openai.gpt-5.6-sol', 'bedrock:responses:us.openai.gpt-5.6-sol'],
+    [
+      'arn:aws:bedrock:us-east-1:123:application-inference-profile/example',
+      'bedrock:responses:arn:aws:bedrock:us-east-1:123:application-inference-profile/example',
+    ],
+  ])('normalizes only recognized GPT shorthand %s', async (model, expectedId) => {
+    const user = userEvent.setup();
+    render(
+      <FoundationModelConfiguration
+        selectedTarget={{ id: 'bedrock:responses:openai.gpt-5.5', config: {} }}
+        updateCustomTarget={mockUpdateCustomTarget}
+        providerType="bedrock"
+      />,
+    );
+    const input = screen.getByLabelText(/Model ID/i);
+    await user.clear(input);
+    await user.paste(model);
+    expect(input).toHaveValue(model);
+    expect(mockUpdateCustomTarget).toHaveBeenLastCalledWith('id', expectedId);
   });
 
   it('should preserve the Responses prefix and use Responses-specific settings', async () => {
@@ -735,8 +782,9 @@ describe('FoundationModelConfiguration', () => {
   });
 
   it.each(['bedrock:openai.gpt-5.5', 'bedrock:anthropic.claude-mythos-5'])(
-    'does not offer native APIs that would reroute or reject %s',
-    (id) => {
+    'allows selecting native APIs but reports incompatible model %s',
+    async (id) => {
+      const user = userEvent.setup();
       render(
         <FoundationModelConfiguration
           selectedTarget={{ id, config: {} }}
@@ -744,8 +792,11 @@ describe('FoundationModelConfiguration', () => {
           providerType="bedrock"
         />,
       );
-      expect(screen.getByRole('option', { name: 'InvokeModel' })).toBeDisabled();
-      expect(screen.getByRole('option', { name: 'Converse' })).toBeDisabled();
+      expect(screen.getByRole('option', { name: 'InvokeModel' })).toBeEnabled();
+      expect(screen.getByRole('option', { name: 'Converse' })).toBeEnabled();
+      await user.selectOptions(screen.getByLabelText(/Bedrock API/i), 'converse');
+      expect(screen.getByLabelText(/Bedrock API/i)).toHaveValue('converse');
+      expect(screen.getByLabelText(/Model ID/i)).toHaveAttribute('aria-invalid', 'true');
     },
   );
 

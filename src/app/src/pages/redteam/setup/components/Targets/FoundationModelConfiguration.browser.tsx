@@ -5,7 +5,7 @@ import { flushSync } from 'react-dom';
 import { createRoot, type Root } from 'react-dom/client';
 
 import { afterEach, expect, it } from 'vitest';
-import { page } from 'vitest/browser';
+import { page, userEvent } from 'vitest/browser';
 import FoundationModelConfiguration from './FoundationModelConfiguration';
 
 import type { ProviderOptions } from '../../types';
@@ -51,14 +51,29 @@ afterEach(() => {
   container = undefined;
 });
 
-it('keeps unsupported API choices disabled and explains them', async () => {
+it('allows selecting an API before fixing its model ID', async () => {
   const initial = { id: 'bedrock:global.anthropic.claude-sonnet-5', config: { max_tokens: 512 } };
   renderEditor(initial);
-  await expect.element(page.getByRole('option', { name: 'Responses API' })).toBeDisabled();
-  await expect.element(page.getByRole('option', { name: 'Anthropic Messages' })).toBeDisabled();
-  await page.getByText('Unavailable APIs for this model ID').click();
-  await expect.element(page.getByText(/Responses requires a bare OpenAI/)).toBeVisible();
+  await expect.element(page.getByRole('option', { name: 'Responses API' })).toBeEnabled();
+  await expect.element(page.getByRole('option', { name: 'Anthropic Messages' })).toBeEnabled();
   await expect.element(page.getByTestId('saved-target')).toHaveTextContent(JSON.stringify(initial));
+  await page.getByLabelText('Bedrock API', { exact: false }).selectOptions('responses');
+  await expect.element(page.getByRole('alert')).toBeVisible();
+  await page.getByLabelText('Model ID', { exact: false }).fill('');
+  await userEvent.type(page.getByLabelText('Model ID', { exact: false }), 'gpt-5.6-sol');
+  await expect
+    .element(page.getByLabelText('Model ID', { exact: false }))
+    .toHaveValue('gpt-5.6-sol');
+  await expect
+    .element(page.getByLabelText('Bedrock API', { exact: false }))
+    .toHaveValue('responses');
+  await expect.element(page.getByRole('alert')).not.toBeInTheDocument();
+  await expect.element(page.getByTestId('saved-target')).toHaveTextContent(
+    JSON.stringify({
+      id: 'bedrock:responses:openai.gpt-5.6-sol',
+      config: { max_output_tokens: 512 },
+    }),
+  );
 });
 
 it('shows an invalid saved target and clears the error only after an explicit edit', async () => {
@@ -70,8 +85,7 @@ it('shows an invalid saved target and clears the error only after an explicit ed
   await expect
     .element(page.getByRole('alert'))
     .toHaveTextContent(
-      'Responses requires a bare OpenAI frontier or Grok ID, or a GPT OSS ID without -1:0. ' +
-        'Change the model ID or API; your existing configuration has not been changed automatically.',
+      'Responses requires a bare OpenAI frontier or Grok ID, or a GPT OSS ID without -1:0.',
     );
   await expect.element(page.getByTestId('saved-target')).toHaveTextContent(JSON.stringify(initial));
   await page.getByLabelText('Model ID', { exact: false }).fill('openai.gpt-oss-120b');
@@ -79,6 +93,59 @@ it('shows an invalid saved target and clears the error only after an explicit ed
   await expect
     .element(page.getByTestId('saved-target'))
     .toHaveTextContent(JSON.stringify({ ...initial, id: 'bedrock:responses:openai.gpt-oss-120b' }));
+});
+
+it.each(['openai.gpt-oss-120b-1:0', 'gpt-oss-120b-1:0'])(
+  'keeps InvokeModel selected while typing %s character by character',
+  async (model) => {
+    renderEditor({ id: 'bedrock:amazon.nova-pro-v1:0', config: { max_tokens: 512 } });
+    const input = page.getByLabelText('Model ID', { exact: false });
+    await input.fill('');
+    await userEvent.type(input, model);
+    await expect.element(input).toHaveValue(model);
+    await expect
+      .element(page.getByLabelText('Bedrock API', { exact: false }))
+      .toHaveValue('invoke');
+    await expect.element(page.getByRole('alert')).not.toBeInTheDocument();
+    await expect.element(page.getByTestId('saved-target')).toHaveTextContent(
+      JSON.stringify({
+        id: 'bedrock:openai.gpt-oss-120b-1:0',
+        config: { max_tokens: 512 },
+      }),
+    );
+  },
+);
+
+it('keeps an explicitly chosen incompatible API selected until the user changes it', async () => {
+  renderEditor({ id: 'bedrock:responses:openai.gpt-5.6-sol', config: { max_output_tokens: 512 } });
+  const api = page.getByLabelText('Bedrock API', { exact: false });
+  await api.selectOptions('converse');
+  await expect.element(api).toHaveValue('converse');
+  await expect.element(page.getByRole('alert')).toBeVisible();
+  await page.getByLabelText('Model ID', { exact: false }).fill('amazon.nova-pro-v1:0');
+  await expect.element(api).toHaveValue('converse');
+  await expect.element(page.getByRole('alert')).not.toBeInTheDocument();
+  await expect.element(page.getByTestId('saved-target')).toHaveTextContent(
+    JSON.stringify({
+      id: 'bedrock:converse:amazon.nova-pro-v1:0',
+      config: { max_tokens: 512 },
+    }),
+  );
+});
+
+it('validates GPT shorthand against Messages without changing the selected API', async () => {
+  renderEditor({ id: 'bedrock:messages:anthropic.claude-fable-5', config: {} });
+  await page.getByLabelText('Model ID', { exact: false }).fill('gpt-5.6-sol');
+  await expect
+    .element(page.getByLabelText('Bedrock API', { exact: false }))
+    .toHaveValue('messages');
+  await expect.element(page.getByRole('alert')).toBeVisible();
+  await expect.element(page.getByTestId('saved-target')).toHaveTextContent(
+    JSON.stringify({
+      id: 'bedrock:messages:openai.gpt-5.6-sol',
+      config: {},
+    }),
+  );
 });
 
 it('round-trips native, Responses, and Chat Completions configuration in a real browser', async () => {
@@ -123,7 +190,7 @@ it('resolves a legacy Responses alias without rewriting the saved provider', asy
     .element(page.getByLabelText('Bedrock API', { exact: false }))
     .toHaveValue('responses');
   await expect.element(page.getByTestId('saved-target')).toHaveTextContent(JSON.stringify(initial));
-  await expect.element(page.getByRole('option', { name: 'Converse' })).toBeDisabled();
+  await expect.element(page.getByRole('option', { name: 'Converse' })).toBeEnabled();
   await page.getByRole('button', { name: /Advanced Configuration/ }).click();
   await expect.element(page.getByLabelText('Max Output Tokens')).toHaveValue(512);
   await page.getByLabelText('Model ID', { exact: false }).fill('openai.gpt-5.4');

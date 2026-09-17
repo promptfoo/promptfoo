@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 
 import { Button } from '@app/components/ui/button';
 import { Input } from '@app/components/ui/input';
@@ -60,6 +60,11 @@ const getBedrockModelFromId = (id?: string): string => {
 };
 
 const buildBedrockProviderId = (apiMode: BedrockApiMode, modelId: string): string => {
+  // Accept familiar GPT names in the editor; persist Bedrock's canonical namespace.
+  // Do not guess namespaces for custom IDs, inference profiles, or ARNs.
+  if (/^gpt-(?:\d|oss-)/.test(modelId)) {
+    modelId = `openai.${modelId}`;
+  }
   if (apiMode === 'responses' || apiMode === 'chat') {
     const prefix = apiMode === 'chat' ? 'mantle' : 'responses';
     return `bedrock:${prefix}:${modelId.replace(/^(openai\.gpt-oss-(?:20b|120b))-1:0$/, '$1')}`;
@@ -96,6 +101,9 @@ const getBedrockApiError = (apiMode: BedrockApiMode, modelId: string): string | 
     return 'This model ID is not supported by the Bedrock Anthropic Messages adapter.';
   }
   if (apiMode === 'invoke' || apiMode === 'converse') {
+    if (isBedrockMantleResponsesModel(modelId)) {
+      return 'This model uses the Responses API. Select Responses or enter a model for the selected API.';
+    }
     if (requiresBedrockAnthropicMessagesModel(modelId)) {
       return 'This model requires the Anthropic Messages API.';
     }
@@ -104,14 +112,6 @@ const getBedrockApiError = (apiMode: BedrockApiMode, modelId: string): string | 
     return 'This OpenAI model requires the Responses API.';
   }
   return undefined;
-};
-
-const getBedrockApiOptionError = (apiMode: BedrockApiMode, modelId: string): string | undefined => {
-  const route = getBedrockTextRoute(buildBedrockProviderId(apiMode, modelId));
-  if (route?.apiMode !== apiMode) {
-    return 'This model ID routes to a different API. Select the API shown for its provider ID.';
-  }
-  return getBedrockApiError(apiMode, route.modelId);
 };
 
 const isServerConfigured = (server: MCPServerConfig): boolean =>
@@ -129,20 +129,18 @@ const FoundationModelConfiguration = ({
 }: FoundationModelConfigurationProps) => {
   const isBedrock = providerType === 'bedrock';
   const bedrockRoute = isBedrock ? getBedrockTextRoute(selectedTarget.id || 'bedrock:') : undefined;
-  const bedrockApiMode = bedrockRoute?.apiMode;
+  const [bedrockApiMode, setBedrockApiMode] = useState(bedrockRoute?.apiMode);
+  const lastEditedTarget = useRef<{ id: string; providerType: string } | undefined>(undefined);
   const isBedrockHttpApi =
     bedrockApiMode === 'responses' || bedrockApiMode === 'chat' || bedrockApiMode === 'messages';
   const isBedrockNativeApi = bedrockApiMode === 'invoke' || bedrockApiMode === 'converse';
   const [modelId, setModelId] = useState(
     isBedrock ? getBedrockModelFromId(selectedTarget.id) : selectedTarget.id || '',
   );
-  const bedrockApiError = bedrockApiMode ? getBedrockApiError(bedrockApiMode, modelId) : undefined;
-  const bedrockApiOptions = isBedrock
-    ? BEDROCK_API_OPTIONS.map((option) => ({
-        ...option,
-        error: getBedrockApiOptionError(option.value, modelId),
-      }))
-    : [];
+  const bedrockApiError =
+    isBedrock && bedrockApiMode
+      ? getBedrockApiError(bedrockApiMode, bedrockRoute?.modelId ?? modelId)
+      : undefined;
   const [isAdvancedOpen, setIsAdvancedOpen] = useState(false);
   const [isMcpOpen, setIsMcpOpen] = useState(Boolean(selectedTarget.config?.mcp?.servers?.length));
   const [isBedrockSettingsOpen, setIsBedrockSettingsOpen] = useState(
@@ -150,24 +148,52 @@ const FoundationModelConfiguration = ({
   );
 
   useEffect(() => {
-    setModelId(isBedrock ? getBedrockModelFromId(selectedTarget.id) : selectedTarget.id || '');
-  }, [isBedrock, selectedTarget.id]);
+    // Parent echoes of our own edits must not replace the draft or re-infer the API
+    // from a partially typed model ID. External target changes still rehydrate both.
+    if (
+      lastEditedTarget.current?.id === selectedTarget.id &&
+      lastEditedTarget.current?.providerType === providerType
+    ) {
+      return;
+    }
+    lastEditedTarget.current = undefined;
+    const route =
+      providerType === 'bedrock' ? getBedrockTextRoute(selectedTarget.id || 'bedrock:') : undefined;
+    setBedrockApiMode(route?.apiMode);
+    setModelId(
+      providerType === 'bedrock'
+        ? getBedrockModelFromId(selectedTarget.id)
+        : selectedTarget.id || '',
+    );
+  }, [providerType, selectedTarget.id]);
 
   const handleModelIdChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const newId = e.target.value;
     setModelId(newId);
-    updateProviderId(bedrockApiMode ? buildBedrockProviderId(bedrockApiMode, newId) : newId);
+    updateProviderId(
+      isBedrock && bedrockApiMode ? buildBedrockProviderId(bedrockApiMode, newId) : newId,
+    );
   };
 
-  const updateProviderId = (id: string) => {
-    const apiMode = isBedrock ? getBedrockTextRoute(id)?.apiMode : undefined;
+  const updateProviderId = (id: string, apiMode = bedrockApiMode) => {
     const source = bedrockApiMode === 'responses' ? 'max_output_tokens' : 'max_tokens';
     const destination = apiMode === 'responses' ? 'max_output_tokens' : 'max_tokens';
     if (source !== destination && selectedTarget.config?.[source] !== undefined) {
       const { [source]: limit, ...config } = selectedTarget.config;
       updateCustomTarget('config', { ...config, [destination]: limit });
     }
+    lastEditedTarget.current = { id, providerType };
     updateCustomTarget('id', id);
+  };
+
+  const handleBedrockApiChange = (apiMode: BedrockApiMode) => {
+    const id = buildBedrockProviderId(apiMode, modelId);
+    const convertedModel = getBedrockModelFromId(id);
+    setBedrockApiMode(apiMode);
+    setModelId(
+      modelId.startsWith('gpt-') ? convertedModel.replace(/^openai\./, '') : convertedModel,
+    );
+    updateProviderId(id, apiMode);
   };
 
   const updateMCPServers = (servers: MCPServerConfig[]) => {
@@ -316,7 +342,7 @@ const FoundationModelConfiguration = ({
 
   const providerInfo = getProviderInfo(providerType);
 
-  if (isBedrock && !bedrockRoute) {
+  if (isBedrock && !bedrockApiMode) {
     return (
       <p className="mt-4 text-sm text-muted-foreground">
         This Bedrock provider uses a specialized API. Edit its configuration in the YAML editor.
@@ -339,18 +365,11 @@ const FoundationModelConfiguration = ({
                 id="bedrock-api-mode"
                 className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background"
                 value={bedrockApiMode}
-                aria-invalid={Boolean(bedrockApiError)}
-                aria-describedby={
-                  bedrockApiError ? 'bedrock-api-help bedrock-api-error' : 'bedrock-api-help'
-                }
-                onChange={(e) =>
-                  updateProviderId(
-                    buildBedrockProviderId(e.target.value as BedrockApiMode, modelId),
-                  )
-                }
+                aria-describedby="bedrock-api-help"
+                onChange={(e) => handleBedrockApiChange(e.target.value as BedrockApiMode)}
               >
-                {bedrockApiOptions.map(({ value, label, error }) => (
-                  <option key={value} value={value} disabled={Boolean(error)} title={error}>
+                {BEDROCK_API_OPTIONS.map(({ value, label }) => (
+                  <option key={value} value={value}>
                     {label}
                   </option>
                 ))}
@@ -364,26 +383,6 @@ const FoundationModelConfiguration = ({
                       ? 'Promptfoo selects Bedrock Mantle or Runtime based on the model ID. You can configure a custom endpoint under Advanced Configuration.'
                       : 'Promptfoo defaults to the Bedrock Mantle endpoint. You can configure a custom endpoint under Advanced Configuration.')}
               </p>
-              {bedrockApiError && (
-                <p id="bedrock-api-error" role="alert" className="text-sm text-destructive">
-                  {bedrockApiError} Change the model ID or API; your existing configuration has not
-                  been changed automatically.
-                </p>
-              )}
-              {modelId && bedrockApiOptions.some(({ error }) => error) && (
-                <details id="bedrock-api-unavailable" className="text-sm text-muted-foreground">
-                  <summary className="cursor-pointer">Unavailable APIs for this model ID</summary>
-                  <ul className="mt-2 list-disc space-y-1 pl-5">
-                    {bedrockApiOptions
-                      .filter(({ error }) => error)
-                      .map(({ value, label, error }) => (
-                        <li key={value}>
-                          {label}: {error}
-                        </li>
-                      ))}
-                  </ul>
-                </details>
-              )}
             </div>
           )}
 
@@ -395,7 +394,27 @@ const FoundationModelConfiguration = ({
             value={modelId}
             onChange={handleModelIdChange}
             placeholder={providerInfo.placeholder}
+            aria-invalid={Boolean(bedrockApiError)}
+            aria-describedby={
+              isBedrock
+                ? bedrockApiError
+                  ? 'bedrock-model-help bedrock-model-error'
+                  : 'bedrock-model-help'
+                : undefined
+            }
           />
+          {isBedrock && (
+            <p id="bedrock-model-help" className="text-sm text-muted-foreground">
+              Choose an API, then enter its model ID. GPT names such as <code>gpt-5.6-sol</code> are
+              saved with Bedrock's <code>openai.</code> prefix. Full Bedrock model IDs are also
+              accepted.
+            </p>
+          )}
+          {bedrockApiError && (
+            <p id="bedrock-model-error" role="alert" className="text-sm text-destructive">
+              {bedrockApiError}
+            </p>
+          )}
           <p className="text-sm text-muted-foreground">
             {isBedrock
               ? `Provider ID: ${selectedTarget.id || 'bedrock:<model>'}. `
