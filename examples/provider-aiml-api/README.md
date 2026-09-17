@@ -25,7 +25,7 @@ This example compares three different models:
 
 - **DeepSeek R1** - Advanced reasoning model
 - **GPT-4.1 Mini** - Fast and cost-effective
-- **Claude 4 Sonnet** - Balanced performance
+- **Claude Sonnet 5** - Balanced performance
 
 The models are asked to tell jokes about different topics, and we evaluate:
 

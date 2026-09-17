@@ -3,10 +3,12 @@ description: 'Bedrock Claude Eval'
 prompts:
   - 'Write a tweet about {{topic}}'
 providers:
-  - id: bedrock:arn:aws:bedrock:us-east-2::inference-profile/global.anthropic.claude-opus-4-6-v1
-    label: Claude Opus 4.6
+  # Inference-profile ARN form. Only profiles that actually exist are usable here:
+  # Claude exposes `global.` profiles for Opus 4.7/4.8/5, Sonnet 5, and Fable/Mythos 5 —
+  # there is no `global.anthropic.claude-opus-4-6` profile.
+  - id: bedrock:arn:aws:bedrock:us-east-2::inference-profile/global.anthropic.claude-opus-4-7
+    label: Claude Opus 4.7 (global profile ARN)
     config:
-      temperature: 1
       max_tokens: 2048
       region: us-east-2
       inferenceModelType: claude
@@ -35,16 +37,17 @@ providers:
       temperature: 1
       max_tokens: 2048
       region: us-west-2
-  - id: bedrock:us.anthropic.claude-sonnet-4-6
-    label: Claude Sonnet 4.6 with Thinking
+  # Adaptive thinking replaces the manual `budget_tokens` budget, which Claude 4.7+ and
+  # the Claude 5 family reject. Bedrock's InvokeModel path exposes no `effort` field, so
+  # the model uses its default reasoning depth; use `bedrock:converse:` to set effort.
+  - id: bedrock:us.anthropic.claude-sonnet-5
+    label: Claude Sonnet 5 with Thinking
     config:
-      temperature: 1
       max_tokens: 2048
       region: us-west-2
       showThinking: true
       thinking:
-        type: enabled
-        budget_tokens: 1024
+        type: adaptive
   - id: bedrock:us.anthropic.claude-opus-4-6-v1
     label: Claude Opus 4.6 (inference profile)
     config:

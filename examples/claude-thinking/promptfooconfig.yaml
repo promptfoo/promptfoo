@@ -3,25 +3,31 @@ description: 'Claude Thinking Example'
 prompts:
   - file://prompts.txt
 providers:
-  - id: anthropic:claude-sonnet-4-6
+  # Adaptive thinking is the current mechanism: Claude decides how much to think, and
+  # `effort` — not a token budget — is the depth control. Manual `budget_tokens` is
+  # rejected with a 400 on every Claude 4.7+ model.
+  - id: anthropic:messages:claude-opus-5
     config:
       stream: true # Required for thinking operations
       thinking:
-        type: 'enabled'
-        budget_tokens: 16000
+        type: 'adaptive'
+        display: 'summarized' # Default is 'omitted' (empty thinking text)
+      effort: xhigh
       max_tokens: 32000
-  - id: anthropic:messages:claude-sonnet-4-6
+  - id: anthropic:messages:claude-sonnet-5
     config:
-      stream: true # Required for thinking operations
+      stream: true
       thinking:
-        type: 'enabled'
-        budget_tokens: 16000
+        type: 'adaptive'
+        display: 'summarized'
+      effort: high
       max_tokens: 32000
-  # Claude Haiku 4.5 via AWS Bedrock
+  # Claude Haiku 4.5 via AWS Bedrock. Haiku 4.5 predates adaptive thinking, so it still
+  # takes an explicit budget and does not accept `effort`.
   - id: bedrock:us.anthropic.claude-haiku-4-5-20251001-v1:0
     config:
       temperature: 1 # Required when thinking is enabled on Bedrock
-      stream: true # Required for thinking operations
+      stream: true
       thinking:
         type: 'enabled'
         budget_tokens: 16000
