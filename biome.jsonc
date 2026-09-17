@@ -1,5 +1,5 @@
 {
-  "$schema": "https://biomejs.dev/schemas/2.5.8/schema.json",
+  "$schema": "https://biomejs.dev/schemas/2.5.12/schema.json",
   "vcs": {
     "enabled": true,
     "clientKind": "git",
@@ -18,6 +18,8 @@
       "**/*.mjs",
       "**/*.cjs",
       "!!.codex",
+      // Unmodified upstream js-yaml distribution bundled for installed agent skills.
+      "!!plugins/promptfoo/skills/promptfoo-provider-setup/scripts/vendor",
       "!!drizzle",
       "!!src/app/src/polyfills",
       "!!**/node_modules",
