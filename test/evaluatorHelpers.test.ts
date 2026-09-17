@@ -513,6 +513,32 @@ describe('evaluatorHelpers', () => {
       });
     });
 
+    it('should preserve placeholder-like text assembled by variable substitution', async () => {
+      const renderedPrompt = await renderPrompt(
+        toPrompt('{{ template }}'),
+        {
+          foo: 'FOO',
+          payload: '\u0000promptfoo-nunjucks-block-',
+          template: '{% raw %}{{ foo }}{% endraw %}{{ payload }}0\u0000',
+        },
+        {},
+      );
+      expect(renderedPrompt).toBe('{{ foo }}\u0000promptfoo-nunjucks-block-0\u0000');
+    });
+
+    it('should preserve quoted variables after expression operators', async () => {
+      const renderedPrompt = await renderPrompt(
+        toPrompt('{{ template }}'),
+        {
+          myVar: 'VALUE',
+          prefix: 'Prefix: ',
+          template: "{{ prefix ~ '{{ myVar }}' }}",
+        },
+        {},
+      );
+      expect(renderedPrompt).toBe('Prefix: {{ myVar }}');
+    });
+
     it('should render variables that are template strings', async () => {
       const prompt = toPrompt('{{ var1 }}');
       const renderedPrompt = await renderPrompt(prompt, { var1: '{{ var2 }}', var2: 'value2' }, {});
