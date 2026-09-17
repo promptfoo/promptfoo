@@ -46,6 +46,8 @@ export SNOWFLAKE_ACCOUNT_IDENTIFIER="myorg-myaccount"
 export SNOWFLAKE_API_KEY="your-bearer-token"
 ```
 
+For per-provider connections, set `config.accountIdentifier` and `config.apiKey` together. An explicit `config.apiKey` takes precedence over a provider `env.SNOWFLAKE_API_KEY`, which takes precedence over eval or process tokens.
+
 Then use the provider without specifying credentials:
 
 ```yaml

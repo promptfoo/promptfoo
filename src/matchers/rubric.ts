@@ -6,6 +6,7 @@ import cliState from '../cliState';
 import { getEnvBool, getEnvInt } from '../envars';
 import logger from '../logger';
 import { getDefaultProviders } from '../providers/defaults';
+import { getOriginalProvider } from '../scheduler/providerWrapper';
 import { getNunjucksEngineForFilePath, maybeLoadFromExternalFile } from '../util/file';
 import { isJavascriptFile } from '../util/fileExtensions';
 import { parseFileUrl } from '../util/functions/loadFunction';
@@ -421,8 +422,15 @@ function appendMediaToContent(
 
 function getMultimodalPromptFormat(provider: ApiProvider): MultimodalPromptFormat {
   try {
-    const providerId = provider.id();
-    if (isResponsesCompatibleProvider(provider, providerId)) {
+    const originalProvider = getOriginalProvider(provider);
+    if (
+      originalProvider.constructor?.name === 'GeminiImageProvider' ||
+      originalProvider.constructor?.name === 'GoogleLiveProvider'
+    ) {
+      return 'google';
+    }
+    const providerId = originalProvider.id();
+    if (isResponsesCompatibleProvider(originalProvider, providerId)) {
       return 'responses';
     }
     if (isAnthropicCompatibleProviderId(providerId)) {
