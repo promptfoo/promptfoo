@@ -3,10 +3,10 @@
  * against all of them instead of separately in each metric's own file.
  *
  * Why a shared table: these metrics are maintained independently, so a property
- * can quietly hold in three of them and not the fourth. That is exactly how the
- * two defects already fixed in this family got in. ROUGE-L/ROUGE-S scored
- * identical text below 1.0 because the LCS tokens were deduplicated, and BLEU
- * scored a blank reference at 9.99e-8 while GLEU scored the same input 0. Both
+ * can quietly hold in three of them and not the fourth. That is exactly how two
+ * defects in this family got in. ROUGE-L/ROUGE-S scored identical text below 1.0
+ * because js-rouge deduplicated matches before 3.2.1, and BLEU scored a blank
+ * reference at 9.99e-8 while GLEU scored the same input 0. Both
  * were single-metric bugs that a cross-metric property would have caught on the
  * day they landed.
  *
