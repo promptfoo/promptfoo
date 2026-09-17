@@ -28,6 +28,7 @@ export const ProviderEnvOverridesSchema = z.object({
   AZURE_OPENAI_EMBEDDING_DEPLOYMENT_NAME: z.string().optional(),
   AZURE_TENANT_ID: z.string().optional(),
   AZURE_TOKEN_SCOPE: z.string().optional(),
+  CHEAPERINFERENCE_API_KEY: z.string().optional(),
   CLAUDE_CODE_USE_BEDROCK: z.string().optional(),
   CLAUDE_CODE_USE_VERTEX: z.string().optional(),
   CLAUDE_CONFIG_DIR: z.string().optional(),
