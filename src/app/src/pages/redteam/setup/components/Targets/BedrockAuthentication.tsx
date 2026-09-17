@@ -6,13 +6,13 @@ import type { ProviderOptions } from '../../types';
 type AuthMethod = 'default' | 'profile' | 'keys' | 'bearer' | 'custom';
 type Config = NonNullable<ProviderOptions['config']>;
 
-function getAuthMethod(config: Config): AuthMethod {
+function getAuthMethod(config: Config, isHttpApi: boolean): AuthMethod {
   const configured = (value: unknown) =>
     typeof value === 'string' && value.trim() && !value.includes('{{');
   if (configured(config.apiKey)) {
     return 'bearer';
   }
-  if (config.apiKeyRequired === false) {
+  if (isHttpApi && config.apiKeyRequired === false) {
     return 'custom';
   }
   if ([config.accessKeyId, config.secretAccessKey, config.sessionToken].some(configured)) {
@@ -42,7 +42,7 @@ export default function BedrockAuthentication({
   isHttpApi: boolean;
   updateCustomTarget: (field: string, value: unknown) => void;
 }) {
-  const method = getAuthMethod(config);
+  const method = getAuthMethod(config, isHttpApi);
   const changeMethod = (next: AuthMethod) => {
     const {
       apiKey: _apiKey,

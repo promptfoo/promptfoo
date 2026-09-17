@@ -144,4 +144,18 @@ describe('BedrockAuthentication', () => {
     );
     expect(screen.getByText(/Unset AWS_BEARER_TOKEN_BEDROCK/)).toBeInTheDocument();
   });
+
+  it('does not describe native APIs as unauthenticated when a saved HTTP flag is present', () => {
+    const update = vi.fn();
+    render(
+      <BedrockAuthentication
+        config={{ profile: 'work', apiKeyRequired: false }}
+        isHttpApi={false}
+        updateCustomTarget={update}
+      />,
+    );
+    expect(screen.getByLabelText('Authentication')).toHaveValue('profile');
+    expect(screen.queryByText(/Automatic authentication is disabled/)).not.toBeInTheDocument();
+    expect(update).not.toHaveBeenCalled();
+  });
 });
