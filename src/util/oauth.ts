@@ -21,6 +21,8 @@ export interface TokenRefreshLock {
  */
 export interface OAuthTokenConfig {
   tokenUrl: string;
+  /** Discovered endpoints must not redirect configured credentials elsewhere. */
+  redirect?: RequestRedirect;
   grantType: 'client_credentials' | 'password';
   clientId?: string;
   clientSecret?: string;
@@ -74,6 +76,7 @@ export async function fetchOAuthToken(config: OAuthTokenConfig): Promise<OAuthTo
 
   const response = await fetchWithProxy(config.tokenUrl, {
     method: 'POST',
+    ...(config.redirect ? { redirect: config.redirect } : {}),
     headers: {
       'Content-Type': 'application/x-www-form-urlencoded',
     },

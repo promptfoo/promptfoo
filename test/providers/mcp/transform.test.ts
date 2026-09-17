@@ -1,4 +1,9 @@
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
+import { fetchWithProxy } from '../../../src/util/fetch/index';
+
+vi.mock('../../../src/util/fetch/index');
+afterEach(() => vi.resetAllMocks());
+
 import {
   transformMCPConfigToClaudeCode,
   transformMCPToolsToAnthropic,
@@ -782,5 +787,35 @@ describe('transformMCPToolsToGoogle', () => {
 
     expect(parameters?.type).toBe('OBJECT');
     expect(parameters?.properties).toEqual({});
+  });
+});
+
+describe('Claude MCP OAuth discovery', () => {
+  it('discovers the token endpoint from the remote server URL', async () => {
+    vi.mocked(fetchWithProxy)
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({ token_endpoint: 'https://claude-discovery.example.com/token' }),
+        ),
+      )
+      .mockResolvedValueOnce(
+        new Response(JSON.stringify({ access_token: 'fixture-token', expires_in: 3600 })),
+      );
+    const result = await transformMCPConfigToClaudeCode({
+      server: {
+        name: 'remote',
+        url: 'https://claude-discovery.example.com/mcp/',
+        auth: { type: 'oauth', clientId: 'fixture-client', clientSecret: 'fixture-secret' },
+      },
+    });
+    expect(fetchWithProxy).toHaveBeenNthCalledWith(
+      1,
+      'https://claude-discovery.example.com/mcp/.well-known/oauth-authorization-server',
+      { redirect: 'error' },
+    );
+    expect(result.remote).toMatchObject({
+      url: 'https://claude-discovery.example.com/mcp/',
+      headers: { Authorization: 'Bearer fixture-token' },
+    });
   });
 });

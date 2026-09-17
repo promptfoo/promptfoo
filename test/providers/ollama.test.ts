@@ -627,71 +627,6 @@ describe('OllamaChatProvider', () => {
     expect(provider.toString()).toBe('[Ollama Chat Provider llama3.3]');
   });
 
-  it('should handle think configuration when it is not provided', async () => {
-    const provider = new OllamaCompletionProvider('llama3.3');
-    const mockResponse = {
-      data: '',
-      cached: false,
-      status: 200,
-      statusText: 'OK',
-      headers: {},
-    };
-
-    vi.mocked(fetchWithCache).mockResolvedValue(mockResponse);
-
-    await provider.callApi('test prompt');
-
-    expect(vi.mocked(fetchWithCache).mock.calls[0]).toBeDefined();
-    const call = vi.mocked(fetchWithCache).mock.calls[0] as any;
-    expect(JSON.parse(call[1].body).think).toBeFalsy();
-  });
-
-  it('should handle think configuration when it is false', async () => {
-    const provider = new OllamaCompletionProvider('llama3.3', {
-      config: {
-        think: false,
-      },
-    });
-    const mockResponse = {
-      data: '',
-      cached: false,
-      status: 200,
-      statusText: 'OK',
-      headers: {},
-    };
-
-    vi.mocked(fetchWithCache).mockResolvedValue(mockResponse);
-
-    await provider.callApi('test prompt');
-
-    expect(vi.mocked(fetchWithCache).mock.calls[0]).toBeDefined();
-    const call = vi.mocked(fetchWithCache).mock.calls[0] as any;
-    expect(JSON.parse(call[1].body).think).toBeFalsy();
-  });
-
-  it('should handle think configuration when it is true', async () => {
-    const provider = new OllamaCompletionProvider('llama3.3', {
-      config: {
-        think: true,
-      },
-    });
-    const mockResponse = {
-      data: '',
-      cached: false,
-      status: 200,
-      statusText: 'OK',
-      headers: {},
-    };
-
-    vi.mocked(fetchWithCache).mockResolvedValue(mockResponse);
-
-    await provider.callApi('test prompt');
-
-    expect(vi.mocked(fetchWithCache).mock.calls[0]).toBeDefined();
-    const call = vi.mocked(fetchWithCache).mock.calls[0] as any;
-    expect(JSON.parse(call[1].body).think).toBeTruthy();
-  });
-
   it('should set the cached flag and report cached token usage on a cache hit', async () => {
     vi.mocked(fetchWithCache).mockResolvedValue({
       data: '{"message":{"role":"assistant","content":"hi"},"done":true,"prompt_eval_count":10,"eval_count":20}\n',
@@ -1735,4 +1670,32 @@ describe('OllamaEmbeddingProvider', () => {
 
     expect(result.error).toContain('API response error:');
   });
+});
+
+describe.each([
+  ['completion', OllamaCompletionProvider, '/api/generate'],
+  ['chat', OllamaChatProvider, '/api/chat'],
+] as const)('Ollama %s think configuration', (_name, Provider, endpoint) => {
+  beforeEach(() => vi.resetAllMocks());
+
+  it.each([undefined, false, true])(
+    'forwards think exactly when configured as %s',
+    async (think) => {
+      vi.mocked(fetchWithCache).mockResolvedValue({
+        data: '',
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+        headers: {},
+      });
+      const provider = new Provider('llama3.3', { config: think === undefined ? {} : { think } });
+      await provider.callApi('test prompt');
+      expect(fetchWithCache).toHaveBeenCalledTimes(1);
+      const [url, options] = vi.mocked(fetchWithCache).mock.calls[0];
+      expect(url).toContain(endpoint);
+      const body = JSON.parse(String(options?.body));
+      expect(body.think).toBe(think);
+      expect(Object.hasOwn(body, 'think')).toBe(think !== undefined);
+    },
+  );
 });

@@ -172,6 +172,7 @@ async function transformMCPServerConfigToClaudeCode(
     if (requiresAsyncAuth(renderedConfig) && renderedConfig.auth?.type === 'oauth') {
       oauthToken = await getOAuthToken(
         renderedConfig.auth as MCPOAuthClientCredentialsAuth | MCPOAuthPasswordAuth,
+        config.url,
       );
     }
 

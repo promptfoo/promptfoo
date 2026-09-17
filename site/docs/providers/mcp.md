@@ -219,7 +219,7 @@ If `tokenUrl` is not specified, the provider automatically discovers the token e
 2. RFC 8414 path-aware: `{origin}/.well-known/oauth-authorization-server{path}`
 3. Root level: `{origin}/.well-known/oauth-authorization-server`
 
-For maximum compatibility, explicitly configure `tokenUrl` when possible.
+Discovered token endpoints must use the same origin (scheme, host, and port) as the configured server URL. Discovery and discovered token requests reject redirects to keep OAuth credentials at that origin. If your identity provider uses a different origin or a redirecting endpoint, configure its final `tokenUrl` explicitly.
 
 **Token Refresh Behavior:**
 

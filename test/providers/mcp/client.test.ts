@@ -119,9 +119,12 @@ vi.mock('@modelcontextprotocol/sdk/client/sse.js', async (importOriginal) => {
 
 // Import the mocked modules after mocking
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
-import { SSEClientTransport } from '@modelcontextprotocol/sdk/client/sse.js';
+import { SSEClientTransport, SseError } from '@modelcontextprotocol/sdk/client/sse.js';
 import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js';
-import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/streamableHttp.js';
+import {
+  StreamableHTTPClientTransport,
+  StreamableHTTPError,
+} from '@modelcontextprotocol/sdk/client/streamableHttp.js';
 import cliState from '../../../src/cliState';
 import { MCPClient } from '../../../src/providers/mcp/client';
 import { createDeferred } from '../../util/utils';
@@ -1440,6 +1443,73 @@ describe('MCPClient', () => {
   });
 
   describe('OAuth authentication', () => {
+    it.each([401, 403, 'sse', 'sdk'] as const)(
+      'refreshes once for a reliable auth error: %s',
+      async (kind) => {
+        const { UnauthorizedError } = await import('@modelcontextprotocol/sdk/client/auth.js');
+        const error =
+          kind === 'sdk'
+            ? new UnauthorizedError()
+            : kind === 'sse'
+              ? new SseError(
+                  403,
+                  'HTTP failure',
+                  Object.assign(new Event('error'), { code: 403, message: 'HTTP failure' }),
+                )
+              : new StreamableHTTPError(kind, 'HTTP failure');
+        mockClient.callTool.mockRejectedValue(error);
+        mcpClient = new MCPClient({
+          server: {
+            url: 'https://mcp.example.com',
+            auth: {
+              type: 'oauth',
+              clientId: 'client',
+              clientSecret: 'secret',
+              tokenUrl: 'https://auth.example.com/token',
+            },
+          },
+        });
+        await mcpClient.initialize();
+        await expect(mcpClient.callTool('tool1', {})).resolves.toEqual({
+          content: '',
+          error: error.message,
+        });
+        expect(mockClient.callTool).toHaveBeenCalledTimes(2);
+        expect(mockGetOAuthTokenWithExpiry).toHaveBeenCalledTimes(2);
+      },
+    );
+
+    it.each([
+      'token argument is required',
+      'record 401 was not found',
+      'Unauthorized operation on token field',
+      'authorization_endpoint is not a supported argument',
+    ])('does not replay ordinary tool failures: %s', async (message) => {
+      const { McpError } = await import('@modelcontextprotocol/sdk/types.js');
+      const error =
+        message === 'record 401 was not found' ? new McpError(401, message) : new Error(message);
+      mockClient.callTool.mockRejectedValue(error);
+      mcpClient = new MCPClient({
+        server: {
+          url: 'https://mcp.example.com',
+          auth: {
+            type: 'oauth',
+            clientId: 'test-client',
+            clientSecret: 'test-secret',
+            tokenUrl: 'https://auth.example.com/token',
+          },
+        },
+      });
+      await mcpClient.initialize();
+      await expect(mcpClient.callTool('tool1', {})).resolves.toEqual({
+        content: '',
+        error: error.message,
+      });
+      expect(mockClient.callTool).toHaveBeenCalledTimes(1);
+      expect(mockGetOAuthTokenWithExpiry).toHaveBeenCalledTimes(1);
+      expect(mockClient.close).not.toHaveBeenCalled();
+    });
+
     it('should use static headers for OAuth with tokenUrl configured', async () => {
       mockClient.connect.mockResolvedValueOnce(undefined);
       mockClient.listTools.mockResolvedValueOnce({
@@ -1771,7 +1841,7 @@ describe('MCPClient', () => {
       const reconnectStarted = createDeferred<void>();
       const reconnectContinue = createDeferred<void>();
       const oldClient = createMockClient(
-        vi.fn().mockRejectedValueOnce(new Error('401 Unauthorized')),
+        vi.fn().mockRejectedValueOnce(new StreamableHTTPError(401, 'Unauthorized')),
       );
       const refreshedClient = createMockClient(
         vi.fn().mockResolvedValue({ content: 'refreshed-result' }),
@@ -1938,8 +2008,8 @@ describe('MCPClient', () => {
       const oldClient = createMockClient(
         vi
           .fn()
-          .mockRejectedValueOnce(new Error('401 Unauthorized'))
-          .mockRejectedValueOnce(new Error('401 Unauthorized')),
+          .mockRejectedValueOnce(new StreamableHTTPError(401, 'Unauthorized'))
+          .mockRejectedValueOnce(new StreamableHTTPError(401, 'Unauthorized')),
       );
       const refreshedClient = createMockClient(vi.fn().mockResolvedValue({ content: 'result' }));
       vi.mocked(Client)
