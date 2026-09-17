@@ -23,6 +23,15 @@ export function canGenerateRemoteWithSelection(runtimeContext?: StrategyRuntimeC
 }
 
 /**
+ * Eval-time counterpart to {@link canGenerateRemoteWithSelection} for attack
+ * providers that only receive a config.redteamProvider (no StrategyRuntimeContext).
+ * An explicit redteamProvider is source: 'explicit' and must stay local.
+ */
+export function canGenerateRemoteWithConfiguredProvider(redteamProvider?: unknown): boolean {
+  return !redteamProvider;
+}
+
+/**
  * Resolves the provider a local strategy phase should call without re-running
  * global precedence. Declarative specs remain runtime-only here, allowing JSON
  * variants without ever serializing provider options.

@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { runAssertions } from '../../../../src/assertions/index';
 import * as evaluatorHelpers from '../../../../src/evaluatorHelpers';
+import { PromptfooChatCompletionProvider } from '../../../../src/providers/promptfoo';
 import { CrescendoProvider, MemorySystem } from '../../../../src/redteam/providers/crescendo/index';
 import { redteamProviderManager, tryUnblocking } from '../../../../src/redteam/providers/shared';
 import { shouldGenerateRemote } from '../../../../src/redteam/remoteGeneration';
@@ -280,6 +281,43 @@ describe('CrescendoProvider', () => {
 
   it('should return correct provider id', () => {
     expect(crescendoProvider.id()).toBe('promptfoo:redteam:crescendo');
+  });
+
+  it('keeps an explicit redteamProvider local when remote generation is otherwise enabled', async () => {
+    vi.mocked(shouldGenerateRemote).mockReturnValue(true);
+    vi.mocked(PromptfooChatCompletionProvider).mockClear();
+
+    const provider = new CrescendoProvider({
+      injectVar: 'objective',
+      redteamProvider: 'ollama:chat:llama3.1:8b',
+    });
+
+    await (provider as any).getRedTeamProvider();
+    await (provider as any).getScoringProvider();
+
+    expect(PromptfooChatCompletionProvider).not.toHaveBeenCalled();
+    expect(redteamProviderManager.getProvider).toHaveBeenCalledWith({
+      provider: 'ollama:chat:llama3.1:8b',
+      preferSmallModel: false,
+      jsonOnly: true,
+    });
+    expect(redteamProviderManager.getGradingProvider).toHaveBeenCalledWith({});
+  });
+
+  it('uses remote generation when no redteamProvider is configured', async () => {
+    vi.mocked(shouldGenerateRemote).mockReturnValue(true);
+    vi.mocked(PromptfooChatCompletionProvider).mockClear();
+
+    const provider = new CrescendoProvider({
+      injectVar: 'objective',
+    } as any);
+
+    await (provider as any).getRedTeamProvider();
+    await (provider as any).getScoringProvider();
+
+    expect(PromptfooChatCompletionProvider).toHaveBeenCalledTimes(2);
+    expect(redteamProviderManager.getProvider).not.toHaveBeenCalled();
+    expect(redteamProviderManager.getGradingProvider).not.toHaveBeenCalled();
   });
 
   it('should include sessionId from context vars when response is missing it', async () => {
@@ -3135,7 +3173,6 @@ describe('CrescendoProvider - perTurnLayers configuration', () => {
     const provider = new CrescendoProvider({
       injectVar: 'objective',
       maxTurns: 1,
-      redteamProvider: mockRedTeamProvider,
       stateful: true,
       inputs: {
         document: {
@@ -3147,7 +3184,7 @@ describe('CrescendoProvider - perTurnLayers configuration', () => {
           type: 'text',
         },
       },
-    });
+    } as any);
 
     mockTargetProvider.callApi.mockResolvedValue({
       output: 'target response',
@@ -3204,7 +3241,6 @@ describe('CrescendoProvider - perTurnLayers configuration', () => {
     const provider = new CrescendoProvider({
       injectVar: 'objective',
       maxTurns: 1,
-      redteamProvider: mockRedTeamProvider,
       stateful: true,
       inputs: {
         document: {
@@ -3216,7 +3252,7 @@ describe('CrescendoProvider - perTurnLayers configuration', () => {
           type: 'text',
         },
       },
-    });
+    } as any);
 
     mockTargetProvider.callApi.mockResolvedValue({
       output: 'target response',

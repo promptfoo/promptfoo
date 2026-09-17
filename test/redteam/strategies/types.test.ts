@@ -1,12 +1,50 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { redteamProviderManager } from '../../../src/redteam/providers/shared';
 import {
+  canGenerateRemoteWithConfiguredProvider,
+  canGenerateRemoteWithSelection,
   getStrategyGenerationProvider,
   withPersistableGenerationProvider,
 } from '../../../src/redteam/strategies/types';
 
 afterEach(() => {
   vi.restoreAllMocks();
+});
+
+describe('canGenerateRemoteWithSelection', () => {
+  it('allows remote generation for the built-in default and unset selections', () => {
+    expect(canGenerateRemoteWithSelection()).toBe(true);
+    expect(
+      canGenerateRemoteWithSelection({
+        generationProviderSelection: {
+          provider: { id: () => 'default' } as any,
+          source: 'default',
+        },
+      }),
+    ).toBe(true);
+  });
+
+  it('keeps explicit, cached, and fallback selections local', () => {
+    for (const source of ['explicit', 'cache', 'fallback'] as const) {
+      expect(
+        canGenerateRemoteWithSelection({
+          generationProviderSelection: {
+            provider: { id: () => source } as any,
+            source,
+          },
+        }),
+      ).toBe(false);
+    }
+  });
+});
+
+describe('canGenerateRemoteWithConfiguredProvider', () => {
+  it('allows remote generation only when no redteamProvider is configured', () => {
+    expect(canGenerateRemoteWithConfiguredProvider()).toBe(true);
+    expect(canGenerateRemoteWithConfiguredProvider(undefined)).toBe(true);
+    expect(canGenerateRemoteWithConfiguredProvider('ollama:chat:llama3.1:8b')).toBe(false);
+    expect(canGenerateRemoteWithConfiguredProvider({ id: 'ollama:chat:llama3.1:8b' })).toBe(false);
+  });
 });
 
 describe('getStrategyGenerationProvider', () => {
