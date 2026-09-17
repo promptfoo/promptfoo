@@ -1746,6 +1746,26 @@ describe('shared redteam provider utilities', () => {
       });
     });
 
+    it.each([
+      { total: 35, prompt: 20, completion: 15, cached: 10 },
+      { prompt: 20, completion: 15, cached: 10 },
+      { total: 20, cached: 35 },
+      { total: 0, cached: 35 },
+    ])(
+      'counts all replayed tokens when cached only reports the prompt-cache portion: %j',
+      (tokensUsed) => {
+        expect(
+          accumulateGraderResult(undefined, {
+            pass: true,
+            score: 1,
+            reason: 'Cached verdict',
+            metadata: { cachedResponse: true },
+            tokensUsed: { ...tokensUsed, numRequests: 1 },
+          }).tokensUsed,
+        ).toEqual({ total: 0, prompt: 0, completion: 0, cached: 35, numRequests: 0 });
+      },
+    );
+
     it('preserves fresh grading usage before and after a cached middle turn', () => {
       const first = {
         pass: true,

@@ -163,17 +163,20 @@ function createInitialGradingContext({
  * As the name implies, this function "handles" redteam assertions by either calling the
  * grader or preferably returning a `storedGraderResult` if it exists on the provider response.
  */
-export const handleRedteam = async ({
-  assertion,
-  baseType,
-  test,
-  prompt,
-  outputString,
-  provider,
-  renderedValue,
-  providerResponse,
-  assertionValueContext,
-}: AssertionParams): Promise<GradingResult> => {
+export const handleRedteam = async (
+  {
+    assertion,
+    baseType,
+    test,
+    prompt,
+    outputString,
+    provider,
+    renderedValue,
+    providerResponse,
+    assertionValueContext,
+  }: AssertionParams,
+  claimStoredGradingUsage: () => boolean = () => true,
+): Promise<GradingResult> => {
   // Skip grading if stored result exists from strategy execution for this specific assertion
   const savedConversation = getTargetConversation(providerResponse.metadata?.messages);
   const reportedConversation = getTargetConversation(providerResponse.prompt);
@@ -181,13 +184,18 @@ export const handleRedteam = async ({
     typeof providerResponse.metadata?.redteamFinalPrompt === 'string' &&
     providerResponse.metadata.redteamFinalPrompt.trim();
   let conversation = savedConversation;
+  let gradingMessages = providerResponse.metadata?.messages;
   if (!hasFinalPrompt || !savedConversation.lastUserPrompt) {
     if (typeof providerResponse.prompt === 'string' && providerResponse.prompt.trim()) {
       // A reported string supplies no prior turns. Do not combine it with unrelated
       // saved messages unless the strategy supplied an authoritative final prompt.
       conversation = {};
-    } else if (reportedConversation.lastUserPrompt) {
+      gradingMessages = undefined;
+    } else if (Array.isArray(providerResponse.prompt)) {
+      // A reported chat is authoritative even without a usable user message.
+      // Let prompt fallback handle that case without inheriting unrelated history.
       conversation = reportedConversation;
+      gradingMessages = reportedConversation.lastUserPrompt ? providerResponse.prompt : undefined;
     }
   }
   const { lastUserPrompt, conversationTranscript } = conversation;
@@ -207,6 +215,10 @@ export const handleRedteam = async ({
   const storedResult = providerResponse.metadata?.storedGraderResult as GradingResult | undefined;
   const hasStrategyGrade =
     storedResult && matchesStoredGraderResult(assertion, storedResult, test, provider);
+  const getStoredTokens = () =>
+    hasStrategyGrade && storedResult.tokensUsed && claimStoredGradingUsage()
+      ? cloneTokenUsageBreakdown(storedResult.tokensUsed)
+      : undefined;
   if (
     hasStrategyGrade &&
     typeof storedResult.metadata?.redteamGradingAssertionHash === 'string' &&
@@ -215,7 +227,7 @@ export const handleRedteam = async ({
       getGradingInputHash(
         effectivePrompt,
         outputString,
-        gradesCurrentTurnOnly ? undefined : providerResponse.metadata?.messages,
+        gradesCurrentTurnOnly ? undefined : gradingMessages,
         test.metadata?.pluginId,
       )
   ) {
@@ -227,6 +239,7 @@ export const handleRedteam = async ({
 
     return {
       ...storedResult,
+      tokensUsed: getStoredTokens(),
       assertion: {
         ...(storedResult.assertion ?? assertion),
         value: storedResult.assertion?.value || assertion.value,
@@ -282,12 +295,6 @@ export const handleRedteam = async ({
     }
   }
 
-  // Stale or unbound verdicts need fresh grading, but trusted strategy usage remains.
-  const tokensUsed =
-    hasStrategyGrade && storedResult.tokensUsed
-      ? cloneTokenUsageBreakdown(storedResult.tokensUsed)
-      : undefined;
-
   try {
     const { grade, rubric, suggestions } = await grader.getResult(
       effectivePrompt,
@@ -300,16 +307,20 @@ export const handleRedteam = async ({
       gradingContext,
     );
 
+    // Claim only when producing a result: a failed grader must not consume the
+    // usage that another matching assertion can still preserve.
+    const tokensUsed = getStoredTokens();
     if (tokensUsed && grade.tokensUsed) {
       accumulateTokenUsage(
         tokensUsed,
         grade.metadata?.cachedResponse === true
           ? {
               total: 0,
-              cached:
-                grade.tokensUsed.cached ||
-                grade.tokensUsed.total ||
-                (grade.tokensUsed.prompt ?? 0) + (grade.tokensUsed.completion ?? 0),
+              cached: Math.max(
+                grade.tokensUsed.cached ?? 0,
+                grade.tokensUsed.total ??
+                  (grade.tokensUsed.prompt ?? 0) + (grade.tokensUsed.completion ?? 0),
+              ),
               numRequests: 0,
             }
           : grade.tokensUsed,
@@ -344,6 +355,7 @@ export const handleRedteam = async ({
 
     // Only handle gracefully if this is an iterative test with SOME (not all) grader errors
     if (test.metadata?.strategyId && hasAnyErrors && !allTurnsHaveErrors) {
+      const tokensUsed = getStoredTokens();
       const errorMessage = error instanceof Error ? error.message : String(error);
       logger.warn('[Redteam] Grading failed for iterative test with some prior grader errors', {
         error: errorMessage,

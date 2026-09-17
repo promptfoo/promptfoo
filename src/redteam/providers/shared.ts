@@ -713,7 +713,7 @@ export function accumulateGraderResult(
         total: 0,
         prompt: 0,
         completion: 0,
-        cached: cachedTokens || reportedTotal,
+        cached: Math.max(cachedTokens, reportedTotal),
         numRequests: 0,
       };
     }

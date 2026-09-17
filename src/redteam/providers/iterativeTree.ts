@@ -905,7 +905,8 @@ async function runRedteamConversation({
           }),
         );
 
-        if (score > maxScore) {
+        const isNewBest = score > maxScore;
+        if (isNewBest) {
           maxScore = score;
           bestResponse = targetResponse.output;
           bestNode.prompt = newInjectVar;
@@ -1032,10 +1033,7 @@ async function runRedteamConversation({
                 assertion: assertToUse,
               },
             );
-            if (
-              targetResponse.output === bestResponse &&
-              finalInjectVar === bestFinalAttackPrompt
-            ) {
+            if (isNewBest) {
               bestGraderResult = storedGraderResult;
             }
             graderPassed = grade.pass;
