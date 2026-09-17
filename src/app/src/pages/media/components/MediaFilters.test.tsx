@@ -81,9 +81,7 @@ describe('MediaFilters', () => {
     it('renders the sort dropdown', () => {
       render(<MediaFilters {...defaultProps} />);
 
-      // Find by the combobox within the sort select
-      const sortTriggers = screen.getAllByRole('combobox');
-      expect(sortTriggers.length).toBeGreaterThan(0);
+      expect(screen.getByRole('combobox', { name: 'Sort media' })).toBeInTheDocument();
     });
 
     it('shows the current sort option', () => {
@@ -98,7 +96,7 @@ describe('MediaFilters', () => {
       render(<MediaFilters {...defaultProps} onSortChange={onSortChange} />);
 
       // Click the sort dropdown (first combobox)
-      const sortTrigger = screen.getAllByRole('combobox')[0];
+      const sortTrigger = screen.getByRole('combobox', { name: 'Sort media' });
       await user.click(sortTrigger);
 
       // Select "Oldest first"
@@ -136,14 +134,13 @@ describe('MediaFilters', () => {
       { evalId: 'eval-3', description: 'Third Test' },
     ];
 
-    it('renders the eval filter button', () => {
+    it('renders the eval filter opener with durable accessible naming', () => {
       render(<MediaFilters {...defaultProps} evals={mockEvals} />);
 
-      // The button has role="combobox" from the component
-      const buttons = screen.getAllByRole('combobox');
-      // Find the one that contains "All Evaluations" text
-      const evalButton = buttons.find((btn) => btn.textContent?.includes('All Evaluations'));
-      expect(evalButton).toBeInTheDocument();
+      const evalFilterButton = screen.getByRole('button', { name: 'All Evaluations' });
+      expect(evalFilterButton).toHaveAttribute('aria-haspopup', 'listbox');
+      expect(evalFilterButton).toHaveAttribute('aria-expanded', 'false');
+      expect(evalFilterButton).toHaveAccessibleDescription('Filter media by evaluation');
     });
 
     it('shows "All Evaluations" when no filter is selected', () => {
@@ -155,17 +152,85 @@ describe('MediaFilters', () => {
     it('shows the selected evaluation description', () => {
       render(<MediaFilters {...defaultProps} evals={mockEvals} evalFilter="eval-2" />);
 
-      expect(screen.getByText('Second Evaluation')).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: 'Second Evaluation' })).toHaveAccessibleDescription(
+        'Filter media by evaluation',
+      );
     });
 
     it('opens the popover on click', async () => {
       const user = userEvent.setup();
       render(<MediaFilters {...defaultProps} evals={mockEvals} />);
 
-      await user.click(screen.getByText('All Evaluations'));
+      await user.click(screen.getByRole('button', { name: 'All Evaluations' }));
 
       // The popover should show search input and eval options
-      expect(await screen.findByPlaceholderText('Search evaluations...')).toBeInTheDocument();
+      expect(await screen.findByLabelText('Search evaluations')).toHaveFocus();
+    });
+
+    it('keeps listbox options out of the sequential tab order', async () => {
+      const user = userEvent.setup();
+      render(<MediaFilters {...defaultProps} evals={mockEvals} />);
+
+      await user.click(screen.getByRole('button', { name: 'All Evaluations' }));
+
+      expect(await screen.findByRole('option', { name: 'All Evaluations' })).toHaveAttribute(
+        'tabindex',
+        '-1',
+      );
+      expect(screen.getByRole('option', { name: 'First Evaluation' })).toHaveAttribute(
+        'tabindex',
+        '-1',
+      );
+    });
+
+    it('opens, navigates, and selects options from the eval filter trigger with the keyboard', async () => {
+      const user = userEvent.setup();
+      const onEvalFilterChange = vi.fn();
+      render(
+        <MediaFilters
+          {...defaultProps}
+          evals={mockEvals}
+          onEvalFilterChange={onEvalFilterChange}
+        />,
+      );
+
+      const evalFilterButton = screen.getByRole('button', { name: 'All Evaluations' });
+      evalFilterButton.focus();
+
+      await user.keyboard('{ArrowDown}');
+
+      expect(evalFilterButton).toHaveAttribute('aria-expanded', 'true');
+      expect(await screen.findByRole('listbox', { name: 'Evaluations' })).toBeInTheDocument();
+
+      const evalSearchCombobox = screen.getByRole('combobox', { name: 'Search evaluations' });
+      await user.keyboard('{ArrowDown}');
+      expect(evalSearchCombobox.getAttribute('aria-activedescendant')).toMatch(/-option-0$/);
+
+      await user.keyboard('{ArrowDown}');
+      expect(evalSearchCombobox.getAttribute('aria-activedescendant')).toMatch(/-option-1$/);
+
+      await user.keyboard('{Enter}');
+
+      expect(onEvalFilterChange).toHaveBeenCalledWith('eval-1');
+      expect(evalFilterButton).toHaveAttribute('aria-expanded', 'false');
+    });
+
+    it('closes a keyboard-open eval filter with escape', async () => {
+      const user = userEvent.setup();
+      render(<MediaFilters {...defaultProps} evals={mockEvals} />);
+
+      const evalFilterButton = screen.getByRole('button', { name: 'All Evaluations' });
+      evalFilterButton.focus();
+
+      await user.keyboard('{ArrowDown}');
+      expect(evalFilterButton).toHaveAttribute('aria-expanded', 'true');
+
+      await user.keyboard('{Escape}');
+
+      expect(evalFilterButton).toHaveAttribute('aria-expanded', 'false');
+      expect(
+        screen.queryByRole('combobox', { name: 'Search evaluations' }),
+      ).not.toBeInTheDocument();
     });
 
     it('calls onEvalSearchQueryChange when typing in search', async () => {
@@ -179,14 +244,35 @@ describe('MediaFilters', () => {
         />,
       );
 
-      await user.click(screen.getByText('All Evaluations'));
+      await user.click(screen.getByRole('button', { name: 'All Evaluations' }));
 
-      const searchInput = await screen.findByPlaceholderText('Search evaluations...');
+      const searchInput = await screen.findByLabelText('Search evaluations');
       await user.type(searchInput, 'Sec');
 
       // Each keystroke fires onChange; since value is controlled and not updated
       // in this test, each call receives just the typed character
       expect(onEvalSearchQueryChange).toHaveBeenCalledTimes(3);
+    });
+
+    it('supports keyboard navigation and selection from the search input context', async () => {
+      const user = userEvent.setup();
+      const onEvalFilterChange = vi.fn();
+
+      render(
+        <MediaFilters
+          {...defaultProps}
+          evals={mockEvals}
+          onEvalFilterChange={onEvalFilterChange}
+        />,
+      );
+
+      await user.click(screen.getByRole('button', { name: 'All Evaluations' }));
+
+      const searchInput = await screen.findByLabelText('Search evaluations');
+      searchInput.focus();
+      await user.keyboard('{ArrowDown}{ArrowDown}{Enter}');
+
+      expect(onEvalFilterChange).toHaveBeenCalledWith('eval-1');
     });
 
     it('shows "No evaluations found" when evals list is empty', async () => {
@@ -195,7 +281,9 @@ describe('MediaFilters', () => {
 
       await user.click(screen.getByText('All Evaluations'));
 
-      expect(await screen.findByText('No evaluations found')).toBeInTheDocument();
+      expect(await screen.findByRole('status', { name: '' })).toHaveTextContent(
+        'No evaluations found',
+      );
     });
 
     it('calls onEvalFilterChange when an evaluation is selected', async () => {
@@ -233,7 +321,7 @@ describe('MediaFilters', () => {
       await user.click(screen.getByText('First Evaluation'));
 
       // Wait for popover to open
-      await screen.findByPlaceholderText('Search evaluations...');
+      await screen.findByLabelText('Search evaluations');
 
       // Click "All Evaluations" option in the listbox
       const allEvalsOption = screen.getByRole('option', { name: 'All Evaluations' });
@@ -248,7 +336,10 @@ describe('MediaFilters', () => {
 
       await user.click(screen.getByText('All Evaluations'));
 
-      expect(await screen.findByText('Loading evaluations...')).toBeInTheDocument();
+      expect(await screen.findByRole('status')).toHaveTextContent('Loading evaluations...');
+      const listbox = screen.getByRole('listbox', { name: 'Evaluations' });
+      expect(listbox).toHaveAttribute('aria-busy', 'true');
+      expect(listbox).not.toContainElement(screen.getByRole('status'));
     });
 
     it('shows error state when evalsError is set', async () => {
@@ -257,7 +348,7 @@ describe('MediaFilters', () => {
 
       await user.click(screen.getByText('All Evaluations'));
 
-      expect(await screen.findByText('Failed to load evaluations')).toBeInTheDocument();
+      expect(await screen.findByRole('alert')).toHaveTextContent('Failed to load evaluations');
     });
 
     it('clears search query when clear button is clicked', async () => {
@@ -272,15 +363,12 @@ describe('MediaFilters', () => {
         />,
       );
 
-      await user.click(screen.getByText('All Evaluations'));
+      await user.click(screen.getByRole('button', { name: 'All Evaluations' }));
 
-      // Find and click the clear button (X icon button near the search input)
-      const clearButtons = screen.getAllByRole('button');
-      const clearButton = clearButtons.find(
-        (btn) => btn.querySelector('svg') && btn.classList.contains('h-6'),
-      );
-      expect(clearButton).toBeInTheDocument();
-      await user.click(clearButton!);
+      expect(await screen.findByLabelText('Search evaluations')).toBeInTheDocument();
+
+      const clearButton = screen.getByRole('button', { name: 'Clear evaluation search' });
+      await user.click(clearButton);
 
       expect(onEvalSearchQueryChange).toHaveBeenCalledWith('');
     });

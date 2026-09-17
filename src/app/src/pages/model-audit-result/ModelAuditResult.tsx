@@ -21,6 +21,7 @@ import {
 import { ArrowBackIcon, DeleteIcon, DownloadIcon, MoreVertIcon } from '@app/components/ui/icons';
 import { Spinner } from '@app/components/ui/spinner';
 import { MODEL_AUDIT_ROUTES } from '@app/constants/routes';
+import { usePageMeta } from '@app/hooks/usePageMeta';
 import { Link as RouterLink, useNavigate, useParams } from 'react-router-dom';
 import { ResultPageSkeleton } from '../model-audit/components/ModelAuditSkeleton';
 import ResultsTab from '../model-audit/components/ResultsTab';
@@ -45,8 +46,15 @@ export default function ModelAuditResult() {
   const [showFilesDialog, setShowFilesDialog] = useState(false);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
+  const currentScan = scan?.id === id ? scan : null;
 
   useEffect(() => {
+    // React Router reuses this component across /model-audit/:id navigations, so a
+    // previously loaded scan can linger. Clear it whenever the id changes so the page
+    // title (and error state) never keeps identifying the prior scan while the next one
+    // loads, is missing, or fails to load.
+    setScan(null);
+
     if (!id) {
       setError('No scan ID provided');
       setIsLoading(false);
@@ -104,24 +112,31 @@ export default function ModelAuditResult() {
   }, [id, deleteHistoricalScan, navigate]);
 
   const handleDownload = useCallback(() => {
-    if (!scan?.results) {
+    if (!currentScan?.results) {
       return;
     }
 
-    const json = JSON.stringify(scan.results, null, 2);
+    const json = JSON.stringify(currentScan.results, null, 2);
     const blob = new Blob([json], { type: 'application/json' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = `model-audit-${scan.id}.json`;
+    a.download = `model-audit-${currentScan.id}.json`;
     a.click();
     URL.revokeObjectURL(url);
-  }, [scan]);
+  }, [currentScan]);
 
-  const severityCounts = useSeverityCounts(scan?.results?.issues);
-  const hasFindings = scan ? scan.hasErrors || hasModelAuditFindings(scan.results) : false;
+  const severityCounts = useSeverityCounts(currentScan?.results?.issues);
+  const hasFindings = currentScan
+    ? currentScan.hasErrors || hasModelAuditFindings(currentScan.results)
+    : false;
 
-  if (isLoading) {
+  usePageMeta({
+    title: currentScan?.name || id || 'Model Audit Result',
+    description: 'View model audit scan results',
+  });
+
+  if (isLoading || (scan && !currentScan)) {
     return (
       <div className="min-h-screen bg-zinc-50 dark:bg-zinc-950 py-8">
         <div className="container max-w-7xl mx-auto px-4">
@@ -131,7 +146,7 @@ export default function ModelAuditResult() {
     );
   }
 
-  if (error || !scan) {
+  if (error || !currentScan) {
     return (
       <div className="min-h-screen bg-zinc-50 dark:bg-zinc-950 py-8">
         <div className="container max-w-2xl mx-auto px-4">
@@ -195,10 +210,10 @@ export default function ModelAuditResult() {
   return (
     <div className="min-h-screen bg-zinc-50 dark:bg-zinc-950">
       <ScanResultHeader
-        name={scan.name || 'Model Security Scan'}
-        modelPath={scan.modelPath}
-        createdAt={new Date(scan.createdAt).toISOString()}
-        author={scan.author ?? undefined}
+        name={currentScan.name || 'Model Security Scan'}
+        modelPath={currentScan.modelPath}
+        createdAt={new Date(currentScan.createdAt).toISOString()}
+        author={currentScan.author ?? undefined}
         severityCounts={severityCounts}
         hasFindings={hasFindings}
         topBar={topBar}
@@ -208,25 +223,25 @@ export default function ModelAuditResult() {
       <div className="container max-w-7xl mx-auto px-4 py-8">
         <Card className="bg-white dark:bg-zinc-900">
           <CardContent className="pt-6">
-            {scan.results && (
+            {currentScan.results && (
               <ResultsTab
-                scanResults={scan.results}
+                scanResults={currentScan.results}
                 onShowFilesDialog={() => setShowFilesDialog(true)}
-                totalChecks={scan.totalChecks}
-                passedChecks={scan.passedChecks}
-                failedChecks={scan.failedChecks}
+                totalChecks={currentScan.totalChecks}
+                passedChecks={currentScan.passedChecks}
+                failedChecks={currentScan.failedChecks}
               />
             )}
           </CardContent>
         </Card>
 
         {/* Scanned Files Dialog */}
-        {scan.results && (
+        {currentScan.results && (
           <ScannedFilesDialog
             open={showFilesDialog}
             onClose={() => setShowFilesDialog(false)}
-            scanResults={scan.results}
-            paths={((scan.metadata?.originalPaths as string[] | undefined) ?? []).map(
+            scanResults={currentScan.results}
+            paths={((currentScan.metadata?.originalPaths as string[] | undefined) ?? []).map(
               (p: string) => ({
                 path: p,
                 type: p.endsWith('/') ? ('directory' as const) : ('file' as const),
