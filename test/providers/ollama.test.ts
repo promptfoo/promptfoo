@@ -1460,9 +1460,95 @@ describe('Ollama provider tracing', () => {
   });
 });
 
+describe('Ollama endpoint key matrix', () => {
+  beforeEach(() => {
+    vi.resetAllMocks();
+  });
+
+  // Guards the invariant behind the endpoint warning: a key listed as accepted for an
+  // endpoint MUST be forwarded by that endpoint's provider. If it is listed but not
+  // forwarded, the user gets neither the parameter nor a warning -- a silent drop.
+  it.each([
+    ['chat', ['think', 'keep_alive', 'format', 'truncate']],
+    [
+      'completion',
+      ['think', 'keep_alive', 'format', 'truncate', 'suffix', 'system', 'template', 'raw'],
+    ],
+    ['embedding', ['keep_alive', 'truncate', 'dimensions']],
+  ])('every accepted %s key reaches the wire', async (kind, keys) => {
+    const values: Record<string, any> = {
+      think: false,
+      keep_alive: '5m',
+      format: 'json',
+      truncate: false,
+      suffix: 'S',
+      system: 'SYS',
+      template: 'T',
+      raw: true,
+      dimensions: 128,
+    };
+    const config = Object.fromEntries((keys as string[]).map((k) => [k, values[k]]));
+
+    vi.mocked(fetchWithCache).mockResolvedValue({
+      data:
+        kind === 'embedding'
+          ? ({ embeddings: [[0.1]] } as any)
+          : kind === 'chat'
+            ? '{"message":{"role":"assistant","content":"hi"},"done":true}\n'
+            : '{"response":"hi","done":true}\n',
+      cached: false,
+      status: 200,
+      statusText: 'OK',
+      headers: {},
+    });
+
+    if (kind === 'embedding') {
+      await new OllamaEmbeddingProvider('all-minilm', { config: config as any }).callEmbeddingApi(
+        'text',
+      );
+    } else if (kind === 'chat') {
+      await new OllamaChatProvider('m', { config: config as any }).callApi('p');
+    } else {
+      await new OllamaCompletionProvider('m', { config: config as any }).callApi('p');
+    }
+
+    const body = JSON.parse(vi.mocked(fetchWithCache).mock.calls[0][1]?.body as string);
+    for (const key of keys as string[]) {
+      expect(body[key]).toBeDefined();
+      expect(body.options?.[key]).toBeUndefined();
+    }
+  });
+});
+
 describe('OllamaEmbeddingProvider', () => {
   beforeEach(() => {
     vi.resetAllMocks();
+  });
+
+  it('should warn for a key the embed endpoint does not accept', async () => {
+    const warnSpy = vi.spyOn(logger, 'warn').mockImplementation(() => logger);
+    vi.mocked(fetchWithCache).mockResolvedValue({
+      data: { embeddings: [[0.1]] },
+      cached: false,
+      status: 200,
+      statusText: 'OK',
+      headers: {},
+    });
+
+    const provider = new OllamaEmbeddingProvider('all-minilm', {
+      config: { format: 'json', suffix: 'X' } as any,
+    });
+    await provider.callEmbeddingApi('test text');
+
+    const body = JSON.parse(vi.mocked(fetchWithCache).mock.calls[0][1]?.body as string);
+    const warnings = warnSpy.mock.calls.map((c) => String(c[0]));
+    warnSpy.mockRestore();
+
+    // Every key allowed for an endpoint must be forwarded by it; otherwise the key is
+    // silently dropped rather than warned about.
+    expect(body.format).toBeUndefined();
+    expect(warnings.some((w) => w.includes('embedding endpoint does not accept'))).toBe(true);
+    expect(warnings.some((w) => w.includes('format'))).toBe(true);
   });
 
   it('should call the /api/embed endpoint and return the embedding with token usage', async () => {

@@ -161,7 +161,11 @@ const OllamaEndpointTopLevelKeys: Record<'completion' | 'chat' | 'embedding', Se
     'raw',
   ]),
   chat: new Set(['think', 'keep_alive', 'format', 'truncate', 'tools']),
-  embedding: new Set(['keep_alive', 'truncate', 'dimensions', 'format']),
+  // NOTE: every key listed here must actually be forwarded by that provider, otherwise
+  // it is silently dropped instead of warned about. `format` is deliberately absent from
+  // embedding: /api/embed returns vectors, so structured output is meaningless there and
+  // callEmbeddingApi does not send it.
+  embedding: new Set(['keep_alive', 'truncate', 'dimensions']),
 };
 
 /**
