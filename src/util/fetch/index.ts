@@ -13,13 +13,14 @@ import { parseRateLimitHeaders } from '../../scheduler/headerParser';
 import invariant from '../../util/invariant';
 import { sleep } from '../../util/time';
 import { sanitizeUrl, sanitizeUrlForLogging } from '../sanitizer';
+import { CloudAuthRedirectError } from './cloudAuthRedirects';
 import {
   extractRateLimitErrorCode,
   extractRateLimitErrorType,
   HttpRateLimitError,
   type SystemError,
 } from './errors';
-import { monkeyPatchFetch } from './monkeyPatchFetch';
+import { monkeyPatchFetch, preserveCloudAuthRedirects } from './monkeyPatchFetch';
 import { getFetchRetryContextMaxRetries } from './retryContext';
 import { stripDecompressionHeaders } from './stripDecompressionHeaders';
 
@@ -206,6 +207,7 @@ export async function fetchWithProxy(
   options: FetchOptions = {},
   abortSignal?: AbortSignal,
 ): Promise<Response> {
+  options = preserveCloudAuthRedirects(url, options);
   let finalUrl = url;
   let finalUrlString = getFetchUrlString(url);
 
@@ -739,6 +741,7 @@ export async function fetchWithRetries(
   timeout: number,
   maxRetries?: number,
 ): Promise<Response> {
+  options = preserveCloudAuthRedirects(url, options);
   const contextMaxRetries = getFetchRetryContextMaxRetries();
   maxRetries = Math.max(0, maxRetries ?? contextMaxRetries ?? 4);
 
@@ -775,10 +778,12 @@ export async function fetchWithRetries(
         throw getAbortError(signal);
       }
 
-      // Structured rate-limit errors are already final (quota fail-fast or
-      // retries exhausted) and carry retry-after / reset metadata. Don't
-      // swallow them in the generic retry path.
-      if (error instanceof HttpRateLimitError || error instanceof RequestAuthenticationError) {
+      // Do not retry policy rejections, credential failures, or already-final rate-limit errors.
+      if (
+        error instanceof CloudAuthRedirectError ||
+        error instanceof HttpRateLimitError ||
+        error instanceof RequestAuthenticationError
+      ) {
         throw error;
       }
 

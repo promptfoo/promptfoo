@@ -1,4 +1,4 @@
-import { act, fireEvent, render, screen } from '@testing-library/react';
+import { act, render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import FoundationModelConfiguration from './FoundationModelConfiguration';
@@ -588,7 +588,9 @@ describe('FoundationModelConfiguration', () => {
         'placeholder',
         'Use the provider-selected Bedrock endpoint',
       );
-      fireEvent.change(tokenField, { target: { value: '2048' } });
+      await user.click(tokenField);
+      await user.keyboard('{Control>}a{/Control}');
+      await user.paste('2048');
       expect(mockUpdateCustomTarget).toHaveBeenLastCalledWith(
         mode === 'responses' ? 'max_output_tokens' : 'max_tokens',
         2048,

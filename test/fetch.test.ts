@@ -58,9 +58,9 @@ vi.mock('../src/logger', () => ({
 
 vi.mock('../src/globalConfig/cloud', () => ({
   cloudConfig: {
-    getApiHost: vi.fn().mockReturnValue('https://api.promptfoo.dev'),
+    getApiHost: vi.fn(),
     getApiKey: vi.fn(),
-    getAuthHeaderName: vi.fn().mockReturnValue('Authorization'),
+    getAuthHeaderName: vi.fn(),
     getCurrentOrganizationId: vi.fn(),
     getCurrentTeamId: vi.fn(),
   },
@@ -158,6 +158,11 @@ vi.mock('../src/cliState', () => ({
   },
 }));
 
+beforeEach(() => {
+  vi.mocked(cloudConfig.getApiHost).mockReset().mockReturnValue('https://api.promptfoo.dev');
+  vi.mocked(cloudConfig.getAuthHeaderName).mockReset().mockReturnValue('Authorization');
+});
+
 describe('fetchWithProxy', () => {
   beforeEach(() => {
     restoreFetchTestEnv();
@@ -165,8 +170,6 @@ describe('fetchWithProxy', () => {
     vi.clearAllMocks();
     clearAgentCache();
     vi.spyOn(global, 'fetch').mockResolvedValue(new Response());
-    vi.mocked(cloudConfig.getApiHost).mockReturnValue('https://api.promptfoo.dev');
-    vi.mocked(cloudConfig.getAuthHeaderName).mockReturnValue('Authorization');
     vi.mocked(ProxyAgent).mockClear();
     cliState.basePath = undefined;
     cliState.maxConcurrency = undefined;
