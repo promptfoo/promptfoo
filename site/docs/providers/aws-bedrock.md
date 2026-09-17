@@ -1113,8 +1113,9 @@ whose underlying credentials it does not have.
 For a profile, omit `apiKey` and `AWS_BEARER_TOKEN_BEDROCK` and set `config.profile`
 or `AWS_PROFILE`. [AWS short-term keys](https://docs.aws.amazon.com/bedrock/latest/userguide/api-keys.html)
 last up to 12 hours or the remaining session duration. Long-term keys last until their
-configured expiry and are intended for exploration. `apiKeyRequired: false` skips token
-generation for custom endpoints without auth; an explicitly supplied key is still sent.
+configured expiry and are intended for exploration. `apiKeyRequired: false` ignores provider and
+process environment bearer tokens and skips token generation for custom endpoints without auth.
+An explicit `config.apiKey` or authentication header is still sent.
 
 ```yaml
 providers:
