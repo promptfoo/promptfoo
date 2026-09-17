@@ -122,6 +122,7 @@ describe('GoogleLiveProvider', () => {
     // call history but preserves implementations, and async work scheduled by
     // a prior test can still record calls before the next test runs.
     mockFetchWithProxy.mockReset();
+    mockImportModule.mockReset();
     vi.mocked(getGoogleAccessToken).mockReset().mockResolvedValue(undefined);
 
     const spawnMock = vi.mocked((await import('child_process')).spawn);
@@ -326,6 +327,61 @@ describe('GoogleLiveProvider', () => {
         } else {
           expect(generationConfig).not.toHaveProperty('thinkingConfig');
         }
+      },
+    );
+
+    it.each([
+      ['gemini-3.8-live', false],
+      [extendedModel, false],
+      ['gemini-3.8-live', true],
+      [extendedModel, true],
+    ] as const)(
+      'sanitizes snake-case tool parameters in the %s setup frame (single external tool: %s)',
+      async (modelName, singleExternalTool) => {
+        const tools = [
+          {
+            function_declarations: [
+              {
+                name: 'lookup',
+                parameters: {
+                  type: 'object' as const,
+                  additionalProperties: false,
+                  $schema: 'https://json-schema.org/draft/2020-12/schema',
+                  properties: { code: { type: 'string' as const, default: 'ignored' } },
+                  required: ['code'],
+                },
+              },
+            ],
+          },
+        ];
+        const original = structuredClone(tools);
+        if (singleExternalTool) {
+          mockImportModule.mockResolvedValueOnce({ getTools: () => tools[0] });
+        }
+        provider = new GoogleLiveProvider(modelName, {
+          config: {
+            apiKey: 'test-api-key',
+            tools: singleExternalTool ? 'file://tools.js:getTools' : tools,
+          },
+        });
+        connect(() =>
+          emit({
+            serverContent: { outputTranscription: { text: 'Done' }, turnComplete: true },
+            interactionStatus: 'IDLE',
+          }),
+        );
+        expect((await provider.callApi('Look up the code')).error).toBeUndefined();
+        const tool = JSON.parse(mockWs.send.mock.calls[0][0] as string).setup.tools[0];
+        expect(tool).not.toHaveProperty('function_declarations');
+        expect(tool.functionDeclarations[0].parameters).toEqual({
+          type: 'OBJECT',
+          properties: { code: { type: 'STRING' } },
+          required: ['code'],
+        });
+        if (modelName === extendedModel) {
+          expect(tool.functionDeclarations[0].behavior).toBe('NON_BLOCKING');
+        }
+        expect(tools).toEqual(original);
       },
     );
 

@@ -436,25 +436,14 @@ export class GoogleLiveProvider implements ApiProvider {
     const fileTools = configTools
       ? await maybeLoadToolsFromExternalFile(configTools, context?.vars)
       : [];
-    const normalizedTools = Array.isArray(fileTools)
-      ? normalizeTools(fileTools)
-      : fileTools
-        ? [fileTools]
-        : [];
+    const normalizedTools = normalizeTools(
+      Array.isArray(fileTools) ? fileTools : fileTools ? [fileTools] : [],
+    );
     const requestTools = toolsDisabled
       ? removeGoogleFunctionDeclarations(normalizedTools)
       : normalizedTools;
     if (usesInteractionStatus) {
       for (const tool of requestTools) {
-        // Both spellings are accepted in provider configs. Enforce asynchronous
-        // behavior after normalizing so snake-case tools cannot bypass the check.
-        if (tool.function_declarations) {
-          tool.functionDeclarations = [
-            ...(tool.functionDeclarations ?? []),
-            ...tool.function_declarations,
-          ];
-          delete tool.function_declarations;
-        }
         if (
           tool.functionDeclarations?.some(
             (declaration: FunctionDeclaration) => declaration.behavior === 'BLOCKING',

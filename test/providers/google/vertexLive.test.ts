@@ -3,6 +3,10 @@ import WebSocket from 'ws';
 import logger from '../../../src/logger';
 import { GoogleAuthManager } from '../../../src/providers/google/auth';
 import { VertexLiveProvider } from '../../../src/providers/google/vertexLive';
+import { loadApiProvider } from '../../../src/providers/index';
+import { TestProviderRequestSchema } from '../../../src/types/api/providers';
+import { TestSuiteConfigSchema } from '../../../src/types/index';
+import { ProviderOptionsSchema } from '../../../src/validators/providers';
 import { mockProcessEnv } from '../../util/utils';
 
 import type { CallApiContextParams, ProviderOptions } from '../../../src/types/index';
@@ -173,6 +177,36 @@ describe('VertexLiveProvider', () => {
     await complete();
     await result;
   });
+
+  it.each(['provider', 'suite', 'provider-test request'])(
+    'preserves Google Cloud aliases through parsed %s config and provider loading',
+    async (source) => {
+      const id = `vertex:live:${model}`;
+      const env = { GOOGLE_CLOUD_PROJECT: 'parsed-project', GOOGLE_CLOUD_LOCATION: 'europe-west4' };
+      const options =
+        source === 'provider'
+          ? ProviderOptionsSchema.parse({ id, env })
+          : source === 'provider-test request'
+            ? TestProviderRequestSchema.parse({ providerOptions: { id, env } }).providerOptions
+            : {};
+      const suiteEnv =
+        source === 'suite'
+          ? TestSuiteConfigSchema.parse({ prompts: ['Hello'], providers: [id], env }).env
+          : undefined;
+      const provider = await loadApiProvider(id, { options, env: suiteEnv });
+      expect(provider).toBeInstanceOf(VertexLiveProvider);
+      const { result } = await start(provider as VertexLiveProvider);
+      const setup = sent()[0].setup;
+      await complete();
+      expect((await result).error).toBeUndefined();
+      expect(setup.model).toBe(
+        `projects/parsed-project/locations/europe-west4/publishers/google/models/${model}`,
+      );
+      expect(vi.mocked(WebSocket).mock.calls[0][0]).toContain(
+        'wss://europe-west4-aiplatform.googleapis.com/',
+      );
+    },
+  );
 
   it('does not fall back to API keys when ADC is unavailable', async () => {
     mockAuth.mockRejectedValue(new Error('credential details must not be exposed'));
