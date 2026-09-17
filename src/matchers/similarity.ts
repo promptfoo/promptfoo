@@ -3,6 +3,7 @@ import { getDefaultProviders } from '../providers/defaults';
 import { doRemoteGrading } from '../remoteGrading';
 import { accumulateTokenUsage } from '../util/tokenUsageUtils';
 import {
+  callEmbeddingProvider,
   callGradingProvider,
   getAndCheckProvider,
   getRemoteGradingContext,
@@ -141,13 +142,13 @@ async function calculateProviderSimilarity(
     callGradingProvider(
       finalProvider,
       'similarity.embedding',
-      () => callEmbeddingApi.call(finalProvider, expected),
+      () => callEmbeddingProvider(finalProvider, expected),
       { operationName: 'embeddings' },
     ),
     callGradingProvider(
       finalProvider,
       'similarity.embedding',
-      () => callEmbeddingApi.call(finalProvider, output),
+      () => callEmbeddingProvider(finalProvider, output),
       { operationName: 'embeddings' },
     ),
   ]);
