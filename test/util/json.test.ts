@@ -362,6 +362,31 @@ describe('json utilities', () => {
       ]);
     });
 
+    it('should ignore quotes and braces inside comments', () => {
+      expect(extractJsonObjects('{"a": 1 // note: "unfinished\n}')).toEqual([{ a: 1 }]);
+      expect(extractJsonObjects('{"a": 1 # note: "unfinished\n}')).toEqual([{ a: 1 }]);
+      expect(extractJsonObjects('{"a": 1, // }\n"b": 2}')).toEqual([{ a: 1, b: 2 }]);
+    });
+
+    it('should not treat // inside a URL as a comment', () => {
+      expect(extractJsonObjects('{url: http://example.com/a, b: "}"}')).toEqual([
+        { url: 'http://example.com/a', b: '}' },
+      ]);
+    });
+
+    it('should track single-quoted scalars', () => {
+      expect(extractJsonObjects(`{reason: 'said: "admin', score: 1}`)).toEqual([
+        { reason: 'said: "admin', score: 1 },
+      ]);
+      expect(extractJsonObjects(`{a: 'it''s }', b: 1}`)).toEqual([{ a: "it's }", b: 1 }]);
+    });
+
+    it('should not treat an apostrophe inside a plain scalar as opening a string', () => {
+      expect(extractJsonObjects(`{a: don't panic, b: "}"}`)).toEqual([
+        { a: "don't panic", b: '}' },
+      ]);
+    });
+
     describe('convertSlashCommentsToHash', () => {
       it('should convert basic // comments to # comments', () => {
         const input = 'some text // this is a comment';
