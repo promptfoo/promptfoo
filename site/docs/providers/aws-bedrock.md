@@ -296,6 +296,14 @@ Credentials are resolved in the following priority order:
 
 The first available credential method is used automatically.
 
+The HTTP Responses, Mantle Chat Completions, and Anthropic Messages adapters use a shared
+bearer-token flow. An explicit `config.apiKey` takes precedence over
+`AWS_BEARER_TOKEN_BEDROCK`. Without a bearer token, they generate short-term tokens from
+AWS credentials: provider `config` takes precedence over provider `env`, then process
+environment and the AWS default credential chain. Credential tuples are kept together;
+an explicit profile overrides ambient access keys. See [OpenAI Models](#openai-models)
+for the refresh behavior. Native InvokeModel and Converse keep their existing AWS SDK auth.
+
 ### Authentication Options
 
 #### 1. Explicit credentials (highest priority)
@@ -516,7 +524,7 @@ providers:
       region: 'us-east-1'
       temperature: 0.7
       max_tokens: 256
-  - id: bedrock:openai.gpt-5.6-sol # frontier: Responses API, needs a Bedrock API key
+  - id: bedrock:openai.gpt-5.6-sol # frontier: Responses API, uses a Bedrock key or AWS credentials
     config:
       region: 'us-east-2'
       apiKey: '{{env.AWS_BEARER_TOKEN_BEDROCK}}'
@@ -846,8 +854,8 @@ providers:
 
 The `us.` profile keeps routing within its geography; `global.` permits worldwide
 routing. The Messages route uses
-`https://bedrock-runtime.<region>.amazonaws.com/anthropic` and requires a Bedrock
-API key. Mythos 5.1 requires provider approval. Both 5.1 models retain always-on
+`https://bedrock-runtime.<region>.amazonaws.com/anthropic` and accepts a Bedrock
+API key or generates one from AWS credentials. Mythos 5.1 requires provider approval. Both 5.1 models retain always-on
 thinking and use a cache-read price of $0.25 per million tokens before regional
 premiums.
 
@@ -867,7 +875,8 @@ Bedrock's Anthropic-compatible Messages endpoint through the explicit
 [Claude Mythos 5](https://docs.aws.amazon.com/bedrock/latest/userguide/model-card-anthropic-claude-mythos-5.html)
 is available only through the Anthropic-compatible Messages endpoint in `us-east-1`.
 Promptfoo routes the bare `bedrock:anthropic.claude-mythos-5` ID to that endpoint.
-Set a Bedrock API key in `AWS_BEARER_TOKEN_BEDROCK` or `config.apiKey`:
+Set a Bedrock API key in `AWS_BEARER_TOKEN_BEDROCK` or `config.apiKey`, or configure
+an AWS profile/role for automatic short-term token generation:
 
 ```yaml
 providers:
@@ -1092,11 +1101,20 @@ Authentication accepts either a pre-generated **Amazon Bedrock API key** or AWS 
   `profile` / `AWS_PROFILE`, or the default AWS credential chain to generate a short-lived
   Bedrock bearer token.
 
-Generated tokens are resolved before every request, so a long-running scan automatically picks
-up refreshed IAM role or SSO credentials. Concurrent requests share one in-flight generation.
+The same token provider serves Responses, Mantle Chat Completions, and Anthropic Messages.
+Tokens are resolved for each call, each background Responses poll/cancellation, and each
+Messages SDK request (including retries and tool continuations). Concurrent callers share
+one in-flight generation. Refresh works while the underlying role or SSO credential source
+can renew; copied `AWS_SESSION_TOKEN` credentials still expire and must be replaced.
 The AWS principal still needs permission to invoke the selected Bedrock model. A directly
 configured `AWS_BEARER_TOKEN_BEDROCK` is used as supplied; promptfoo cannot refresh a token
 whose underlying credentials it does not have.
+
+For a profile, omit `apiKey` and `AWS_BEARER_TOKEN_BEDROCK` and set `config.profile`
+or `AWS_PROFILE`. [AWS short-term keys](https://docs.aws.amazon.com/bedrock/latest/userguide/api-keys.html)
+last up to 12 hours or the remaining session duration. Long-term keys last until their
+configured expiry and are intended for exploration. `apiKeyRequired: false` skips token
+generation for custom endpoints without auth; an explicitly supplied key is still sent.
 
 ```yaml
 providers:
@@ -1322,15 +1340,15 @@ Gemma 4 use the `/openai/v1/chat/completions` variant. Use the
 namespace, including Qwen `*-instruct` IDs; a Runtime model ID or inference profile is not
 interchangeable with a Mantle ID.
 
-Like the other mantle paths, it authenticates with an **Amazon Bedrock API key**
-(`AWS_BEARER_TOKEN_BEDROCK`, or `config.apiKey`):
+Like Responses and Messages, it accepts a **Bedrock API key** or generates short-term
+tokens from AWS credentials. For example, use a shared-config/SSO profile:
 
 ```yaml
 providers:
   - id: bedrock:mantle:zai.glm-4.6
     config:
       region: us-west-2
-      apiKey: '{{env.AWS_BEARER_TOKEN_BEDROCK}}' # or just export AWS_BEARER_TOKEN_BEDROCK
+      profile: bedrock-prod # or set AWS_PROFILE; omit to use the default credential chain
       max_tokens: 1024
 ```
 
@@ -1697,8 +1715,8 @@ The following environment variables can be used to configure the Bedrock provide
 
 - `AWS_BEARER_TOKEN_BEDROCK`: pre-generated Bedrock bearer token
 - `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, `AWS_SESSION_TOKEN`: standard AWS
-  credentials used to generate short-lived bearer tokens for Bedrock Responses
-- `AWS_PROFILE`: AWS shared-config profile used for generated Bedrock Responses tokens
+  credentials used to generate short-lived bearer tokens for Responses, Mantle Chat, and Messages
+- `AWS_PROFILE`: AWS shared-config profile used for generated Bedrock bearer tokens
 
 **Configuration:**
 
