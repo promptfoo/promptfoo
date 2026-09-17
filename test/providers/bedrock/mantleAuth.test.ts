@@ -14,6 +14,14 @@ import {
 } from '../../../src/providers/bedrock/openaiResponses';
 import { mockProcessEnv } from '../../util/utils';
 
+import type { FetchOptions } from '../../../src/util/fetch/types';
+
+async function resolveHeaders(init?: FetchOptions): Promise<Headers> {
+  const headers = new Headers(await init?.getAuthHeaders?.(init.signal ?? undefined));
+  new Headers(init?.headers).forEach((value, name) => headers.set(name, value));
+  return headers;
+}
+
 const { generateToken, getTokenProvider } = vi.hoisted(() => ({
   generateToken: vi.fn<() => Promise<string>>(),
   getTokenProvider: vi.fn(),
@@ -80,7 +88,7 @@ describe('Bedrock Mantle request authentication', () => {
     vi.mocked(fetchWithCache)
       .mockReset()
       .mockImplementation(async (_url, init) => {
-        sentHeaders.push(new Headers(init?.headers));
+        sentHeaders.push(await resolveHeaders(init));
         return {
           data: {
             ...completed,
@@ -175,7 +183,7 @@ describe('Bedrock Mantle request authentication', () => {
       controller.abort();
       await rejected;
       resolveToken('later-token');
-      expect(fetchWithCache).not.toHaveBeenCalled();
+      expect(sentHeaders).toHaveLength(0);
     },
   );
 
@@ -185,7 +193,7 @@ describe('Bedrock Mantle request authentication', () => {
       .mockResolvedValueOnce('poll-token')
       .mockResolvedValueOnce('cancel-token');
     vi.mocked(fetchWithCache).mockImplementation(async (_url, init) => {
-      sentHeaders.push(new Headers(init?.headers));
+      sentHeaders.push(await resolveHeaders(init));
       if (init?.method === 'GET') {
         return {
           data: { error: { message: 'denied' } },

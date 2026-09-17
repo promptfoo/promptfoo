@@ -379,7 +379,7 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
     if (this.initializationPromise != null) {
       await this.initializationPromise;
     }
-    const apiKey = await this.getApiKeyForRequest(callApiOptions?.abortSignal);
+    const apiKey = this.getApiKey();
     if (this.requiresApiKey() && !apiKey) {
       throw new Error(this.getMissingApiKeyErrorMessage());
     }
@@ -425,6 +425,7 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
     apiKey?: string,
   ): Promise<ProviderResponse> {
     const { body, config } = await this.getOpenAiBody(prompt, context, callApiOptions);
+    const getAuthHeaders = this.getRequestAuthentication();
 
     type OpenAIChatCompletionResponse = OpenAI.ChatCompletion & {
       choices: Array<
@@ -474,10 +475,11 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
-            ...(apiKey ? { Authorization: `Bearer ${apiKey}` } : {}),
+            ...(apiKey && !getAuthHeaders ? { Authorization: `Bearer ${apiKey}` } : {}),
             ...this.getOpenAiRequestHeaders(config.headers),
           },
           body: JSON.stringify(body),
+          ...(getAuthHeaders ? { getAuthHeaders } : {}),
           ...(callApiOptions?.abortSignal ? { signal: callApiOptions.abortSignal } : {}),
         },
         getRequestTimeoutMs(),
@@ -526,6 +528,9 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
         };
       }
     } catch (err) {
+      if (callApiOptions?.abortSignal?.aborted) {
+        callApiOptions.abortSignal.throwIfAborted();
+      }
       logger.error(`API call error: ${String(err)}`);
       await deleteFromCache?.();
       // Preserve the structured rate-limit signal so the scheduler honors

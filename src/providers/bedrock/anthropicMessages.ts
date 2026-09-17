@@ -92,8 +92,13 @@ export class BedrockAnthropicMessagesProvider extends AnthropicMessagesProvider 
     return false;
   }
 
-  protected override supportsDynamicAuthentication(): boolean {
-    return true;
+  protected override validateAuthentication(): void {
+    // The fetch hook validates AWS credentials at each SDK HTTP attempt, not at construction.
+  }
+
+  protected override shouldCacheResponses(): boolean {
+    // AWS credentials may rotate to a different principal; we have no stable cache identity.
+    return false;
   }
 
   protected override getGenAISystem(): string {

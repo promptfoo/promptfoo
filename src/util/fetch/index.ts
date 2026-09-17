@@ -25,6 +25,31 @@ import { stripDecompressionHeaders } from './stripDecompressionHeaders';
 
 import type { FetchOptions } from './types';
 
+// Credential failures are not transient HTTP failures and must not be retried by this layer.
+class RequestAuthenticationError extends Error {}
+
+async function resolveAuthenticationHeaders(
+  getAuthHeaders: NonNullable<FetchOptions['getAuthHeaders']>,
+  explicitHeaders: HeadersInit | undefined,
+  signal: AbortSignal | null | undefined,
+): Promise<Record<string, string>> {
+  signal?.throwIfAborted();
+  let headers: Headers;
+  try {
+    headers = new Headers(await getAuthHeaders(signal ?? undefined));
+  } catch (error) {
+    signal?.throwIfAborted();
+    throw new RequestAuthenticationError(
+      error instanceof Error ? error.message : 'Request authentication failed',
+      { cause: error },
+    );
+  }
+  signal?.throwIfAborted();
+  // Never mutate the original headers: a retry must not inherit the previous attempt's token.
+  new Headers(explicitHeaders).forEach((value, name) => headers.set(name, value));
+  return Object.fromEntries(headers);
+}
+
 // Cached agents to avoid recreating on every request.
 // Keep separate entries per resolved connection count so overlapping requests
 // with different request-scoped concurrency caps do not evict each other.
@@ -196,8 +221,9 @@ export async function fetchWithProxy(
     : options.signal;
 
   // This is overridden globally but Node v20 is still complaining so we need to add it here too
+  const { getAuthHeaders, ...requestOptions } = options;
   const finalOptions: FetchOptions & { dispatcher?: any } = {
-    ...options,
+    ...requestOptions,
     headers: getFetchWithProxyHeaders(url, options),
     signal: combinedSignal,
   };
@@ -277,7 +303,18 @@ export async function fetchWithProxy(
   const maxTransientRetries = disableTransientRetries ? 0 : 3;
 
   for (let attempt = 0; attempt <= maxTransientRetries; attempt++) {
-    const response = await monkeyPatchFetch(finalUrl, finalOptions);
+    let attemptOptions = finalOptions;
+    if (getAuthHeaders) {
+      attemptOptions = {
+        ...finalOptions,
+        headers: await resolveAuthenticationHeaders(
+          getAuthHeaders,
+          finalOptions.headers,
+          combinedSignal,
+        ),
+      };
+    }
+    const response = await monkeyPatchFetch(finalUrl, attemptOptions);
 
     if (!disableTransientRetries && isTransientError(response) && attempt < maxTransientRetries) {
       const backoffMs = Math.pow(2, attempt) * 1000; // 1s, 2s, 4s
@@ -741,7 +778,7 @@ export async function fetchWithRetries(
       // Structured rate-limit errors are already final (quota fail-fast or
       // retries exhausted) and carry retry-after / reset metadata. Don't
       // swallow them in the generic retry path.
-      if (error instanceof HttpRateLimitError) {
+      if (error instanceof HttpRateLimitError || error instanceof RequestAuthenticationError) {
         throw error;
       }
 

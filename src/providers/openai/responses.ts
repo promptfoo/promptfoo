@@ -45,6 +45,7 @@ import type {
   CallApiOptionsParams,
   ProviderResponse,
 } from '../../types/index';
+import type { FetchOptions } from '../../util/fetch/types';
 import type { OpenAiCompletionOptions, ReasoningEffort } from './types';
 
 // OpenAI SDK has APIError class for exceptions, but not a type for error responses
@@ -104,7 +105,7 @@ let nextBackgroundProviderScope = 0;
 type BackgroundRequest = {
   method: string;
   headers: Record<string, string>;
-  refreshHeaders?: (signal?: AbortSignal) => Promise<Record<string, string>>;
+  getAuthHeaders?: FetchOptions['getAuthHeaders'];
   body: string;
   cacheScope: string;
   hasPerPromptAuthorization: boolean;
@@ -257,17 +258,15 @@ function getBackgroundCacheIdentity(
 async function cancelBackgroundResponse(
   responseId: string,
   url: string,
-  headers: Record<string, string> | NonNullable<BackgroundRequest['refreshHeaders']>,
+  { headers, getAuthHeaders }: Pick<BackgroundRequest, 'headers' | 'getAuthHeaders'>,
 ): Promise<void> {
   try {
     await fetchWithCache<OpenAIResponsesResponse>(
       appendOpenAiApiPath(url, `${encodeURIComponent(responseId)}/cancel`),
       {
         method: 'POST',
-        headers:
-          typeof headers === 'function'
-            ? await headers(AbortSignal.timeout(BACKGROUND_RESPONSE_CANCEL_TIMEOUT_MS))
-            : headers,
+        headers,
+        ...(getAuthHeaders ? { getAuthHeaders } : {}),
       },
       BACKGROUND_RESPONSE_CANCEL_TIMEOUT_MS,
       'json',
@@ -282,7 +281,7 @@ async function cancelBackgroundResponse(
 async function pollBackgroundResponse(
   initial: OpenAIResponsesResponse,
   url: string,
-  headers: Record<string, string> | NonNullable<BackgroundRequest['refreshHeaders']>,
+  authentication: Pick<BackgroundRequest, 'headers' | 'getAuthHeaders'>,
   timeout: number,
   maxRetries?: number,
   signal?: AbortSignal,
@@ -317,7 +316,7 @@ async function pollBackgroundResponse(
       const remainingMs = deadline - Date.now();
       if (remainingMs <= 0) {
         if (cancelOnStop) {
-          await cancelBackgroundResponse(initial.id, url, headers);
+          await cancelBackgroundResponse(initial.id, url, authentication);
         }
         return {
           data,
@@ -334,7 +333,10 @@ async function pollBackgroundResponse(
         appendOpenAiApiPath(url, encodeURIComponent(initial.id)),
         {
           method: 'GET',
-          headers: typeof headers === 'function' ? await headers(pollSignal) : headers,
+          headers: authentication.headers,
+          ...(authentication.getAuthHeaders
+            ? { getAuthHeaders: authentication.getAuthHeaders }
+            : {}),
           signal: pollSignal,
         },
         remainingMs,
@@ -350,7 +352,7 @@ async function pollBackgroundResponse(
         const shouldCancel =
           status >= 400 && status < 500 && ![404, 408, 409, 410, 425, 429].includes(status);
         if (shouldCancel) {
-          await cancelBackgroundResponse(initial.id, url, headers);
+          await cancelBackgroundResponse(initial.id, url, authentication);
         }
         return {
           data,
@@ -365,13 +367,13 @@ async function pollBackgroundResponse(
   } catch (error) {
     if (signal?.aborted) {
       if (cancelOnStop) {
-        await cancelBackgroundResponse(initial.id, url, headers);
+        await cancelBackgroundResponse(initial.id, url, authentication);
       }
       throw error;
     }
     if (deadlineSignal?.aborted || Date.now() >= deadline) {
       if (cancelOnStop) {
-        await cancelBackgroundResponse(initial.id, url, headers);
+        await cancelBackgroundResponse(initial.id, url, authentication);
       }
       return {
         data,
@@ -405,7 +407,12 @@ async function createBackgroundResponseWithCancellation(
   if (!inFlight) {
     const promise = fetchWithCache<OpenAIResponsesResponse>(
       url,
-      { method: request.method, headers: request.headers, body: request.body },
+      {
+        method: request.method,
+        headers: request.headers,
+        body: request.body,
+        ...(request.getAuthHeaders ? { getAuthHeaders: request.getAuthHeaders } : {}),
+      },
       timeout,
       'json',
       effectiveCacheOptions,
@@ -446,11 +453,7 @@ async function createBackgroundResponseWithCancellation(
           created.data.id &&
           (created.data.status === 'queued' || created.data.status === 'in_progress')
         ) {
-          await cancelBackgroundResponse(
-            created.data.id,
-            url,
-            request.refreshHeaders ?? request.headers,
-          );
+          await cancelBackgroundResponse(created.data.id, url, request);
         }
         await created.deleteFromCache?.();
       })
@@ -508,7 +511,7 @@ async function resolveBackgroundResponse(
   const polled = await pollBackgroundResponse(
     initial,
     url,
-    request.refreshHeaders ?? request.headers,
+    request,
     timeout,
     maxRetries,
     request.signal,
@@ -522,7 +525,7 @@ async function resolveBackgroundResponse(
   await deleteFromCache?.();
   const retried = await createBackgroundResponseWithCancellation(
     url,
-    { ...request, headers: (await request.refreshHeaders?.(request.signal)) ?? request.headers },
+    request,
     Math.max(1, deadline - Date.now()),
     cancelOnStop,
     maxRetries,
@@ -543,7 +546,7 @@ async function resolveBackgroundResponse(
       ...(await pollBackgroundResponse(
         retried.data,
         url,
-        request.refreshHeaders ?? request.headers,
+        request,
         timeout,
         maxRetries,
         request.signal,
@@ -1077,7 +1080,7 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
     if (callApiOptions?.abortSignal?.aborted) {
       throw getAbortError(callApiOptions.abortSignal);
     }
-    const apiKey = await this.getApiKeyForRequest(callApiOptions?.abortSignal);
+    const apiKey = this.getApiKey();
     if (this.requiresApiKey() && !apiKey) {
       throw new Error(this.getMissingApiKeyErrorMessage());
     }
@@ -1199,11 +1202,11 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
         ...(key && !hasCustomHeader('authorization') ? { Authorization: `Bearer ${key}` } : {}),
         ...customHeaders,
       });
+      const getAuthHeaders = this.getRequestAuthentication();
       const request = {
         method: 'POST',
-        headers: buildHeaders(apiKey),
-        refreshHeaders: async (signal?: AbortSignal) =>
-          buildHeaders(await this.getApiKeyForRequest(signal)),
+        headers: buildHeaders(getAuthHeaders ? undefined : apiKey),
+        ...(getAuthHeaders ? { getAuthHeaders } : {}),
         body: JSON.stringify(body),
         cacheScope: this.backgroundCacheScope,
         hasPerPromptAuthorization: Object.keys(context?.prompt?.config?.headers ?? {}).some(
@@ -1280,6 +1283,7 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
                 method: request.method,
                 headers: request.headers,
                 body: request.body,
+                ...(request.getAuthHeaders ? { getAuthHeaders: request.getAuthHeaders } : {}),
                 signal: controller.signal,
               },
               timeout,
@@ -1317,7 +1321,7 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
             };
           } catch (err) {
             if (backgroundResponseId) {
-              await cancelBackgroundResponse(backgroundResponseId, url, request.refreshHeaders);
+              await cancelBackgroundResponse(backgroundResponseId, url, request);
             }
             if (controller.signal.aborted && !abortSignal?.aborted) {
               throw new Error(`OpenAI streaming response timed out after ${timeout}ms`);
@@ -1393,6 +1397,7 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
                 method: request.method,
                 headers: request.headers,
                 body: request.body,
+                ...(request.getAuthHeaders ? { getAuthHeaders: request.getAuthHeaders } : {}),
                 ...(request.signal ? { signal: request.signal } : {}),
               },
               timeout,

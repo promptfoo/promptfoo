@@ -522,9 +522,19 @@ export class AnthropicMessagesProvider extends AnthropicGenericProvider {
     );
   }
 
-  /** Cloud adapters can supply credentials through the SDK transport for each request. */
-  protected supportsDynamicAuthentication(): boolean {
-    return false;
+  /** Adapters with transport-managed authentication can defer validation to HTTP dispatch. */
+  protected validateAuthentication(): void {
+    if (!this.apiKey && !this.usingClaudeCodeOAuth) {
+      throw new Error(
+        'Anthropic API key is not set. Set the ANTHROPIC_API_KEY environment variable or add `apiKey` to the provider config. ' +
+          'Alternatively, if you have an active Claude Code session, set `apiKeyRequired: false` in the provider config to authenticate via Claude Code.',
+      );
+    }
+  }
+
+  /** Independent of authentication: adapters decide whether their response cache is safe. */
+  protected shouldCacheResponses(): boolean {
+    return true;
   }
 
   async callApi(prompt: string, context?: CallApiContextParams): Promise<ProviderResponse> {
@@ -533,12 +543,7 @@ export class AnthropicMessagesProvider extends AnthropicGenericProvider {
       await this.initializationPromise;
     }
 
-    if (!this.apiKey && !this.usingClaudeCodeOAuth && !this.supportsDynamicAuthentication()) {
-      throw new Error(
-        'Anthropic API key is not set. Set the ANTHROPIC_API_KEY environment variable or add `apiKey` to the provider config. ' +
-          'Alternatively, if you have an active Claude Code session, set `apiKeyRequired: false` in the provider config to authenticate via Claude Code.',
-      );
-    }
+    this.validateAuthentication();
 
     // Re-check expiry at request time so we fail with an actionable message
     // ("run `claude /login`") instead of a raw 401 from the SDK. The
@@ -1012,8 +1017,7 @@ export class AnthropicMessagesProvider extends AnthropicGenericProvider {
     const shouldUseResponseCache =
       isCacheEnabled() &&
       config.mcp?.enabled !== true &&
-      // A renewable credential chain can resolve to a different principal on a later call.
-      !this.supportsDynamicAuthentication() &&
+      this.shouldCacheResponses() &&
       !this.hasCustomHeaders() &&
       Object.keys(config.headers ?? {}).length === 0;
 

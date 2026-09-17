@@ -111,8 +111,11 @@ export class BedrockOpenAiResponsesProvider extends OpenAiResponsesProvider {
     this.bedrockTokenProvider = new BedrockTokenProvider(this.config, providerOptions.env, region);
   }
 
-  protected async getApiKeyForRequest(signal?: AbortSignal): Promise<string | undefined> {
-    return this.bedrockTokenProvider.getToken(signal);
+  protected override getRequestAuthentication() {
+    return async (signal?: AbortSignal): Promise<Record<string, string>> => {
+      const token = await this.bedrockTokenProvider.getToken(signal);
+      return token ? { Authorization: `Bearer ${token}` } : {};
+    };
   }
 
   // Credentials may be resolved from a role/profile at request time.

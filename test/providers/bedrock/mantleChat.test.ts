@@ -202,7 +202,7 @@ describe('bedrock mantle Chat Completions provider', () => {
         'https://bedrock-mantle.us-west-2.api.aws/v1/chat/completions',
         expect.objectContaining({
           method: 'POST',
-          headers: expect.objectContaining({ Authorization: 'Bearer bedrock-key' }),
+          getAuthHeaders: expect.any(Function),
         }),
         expect.any(Number),
         'json',

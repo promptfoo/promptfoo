@@ -190,7 +190,7 @@ describe('bedrock openaiResponses helper', () => {
       expect(fetchWithCache).toHaveBeenCalledWith(
         'https://bedrock-mantle.us-east-1.api.aws/v1/responses',
         expect.objectContaining({
-          headers: expect.objectContaining({ Authorization: 'Bearer env-bedrock-key' }),
+          getAuthHeaders: expect.any(Function),
         }),
         expect.any(Number),
         'json',
@@ -585,8 +585,8 @@ describe('bedrock openaiResponses helper', () => {
       expect(fetchWithCache).toHaveBeenCalledWith(
         'https://bedrock-mantle.us-east-2.api.aws/openai/v1/responses',
         expect.objectContaining({
+          getAuthHeaders: expect.any(Function),
           headers: {
-            Authorization: 'Bearer env-bedrock-key',
             'Content-Type': 'application/json',
             'x-custom-header': 'preserved',
           },
@@ -607,7 +607,7 @@ describe('bedrock openaiResponses helper', () => {
       expect(fetchWithCache).toHaveBeenCalledWith(
         'https://bedrock-mantle.us-east-2.api.aws/openai/v1/responses',
         expect.objectContaining({
-          headers: expect.objectContaining({ Authorization: 'Bearer env-bedrock-key' }),
+          getAuthHeaders: expect.any(Function),
         }),
         expect.any(Number),
         'json',
@@ -675,7 +675,7 @@ describe('bedrock openaiResponses helper', () => {
         expect(fetchWithCache).toHaveBeenCalledWith(
           'https://bedrock-mantle.us-east-2.api.aws/openai/v1/responses',
           expect.objectContaining({
-            headers: expect.objectContaining({ Authorization: 'Bearer env-bedrock-key' }),
+            getAuthHeaders: expect.any(Function),
             body: expect.stringContaining(`"model":"${modelId}"`),
           }),
           expect.any(Number),
@@ -861,7 +861,7 @@ describe('bedrock openaiResponses helper', () => {
       expect(fetchWithCache).toHaveBeenCalledWith(
         'https://bedrock-mantle.us-west-2.api.aws/openai/v1/responses',
         expect.objectContaining({
-          headers: expect.objectContaining({ Authorization: 'Bearer env-bedrock-key' }),
+          getAuthHeaders: expect.any(Function),
         }),
         expect.any(Number),
         'json',

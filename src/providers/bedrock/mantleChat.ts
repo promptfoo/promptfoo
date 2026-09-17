@@ -84,8 +84,11 @@ export class BedrockMantleChatProvider extends OpenAiChatCompletionProvider {
     return resolveBedrockMantleApiKey(this.config, this.env);
   }
 
-  protected getApiKeyForRequest(signal?: AbortSignal): Promise<string | undefined> {
-    return this.bedrockTokenProvider.getToken(signal);
+  protected override getRequestAuthentication() {
+    return async (signal?: AbortSignal): Promise<Record<string, string>> => {
+      const token = await this.bedrockTokenProvider.getToken(signal);
+      return token ? { Authorization: `Bearer ${token}` } : {};
+    };
   }
 
   getOpenAiRequestHeaders(
