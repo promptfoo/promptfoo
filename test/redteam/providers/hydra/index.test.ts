@@ -1,6 +1,12 @@
 import { afterEach, beforeAll, beforeEach, describe, expect, it, Mock, vi } from 'vitest';
+import * as blobExtractor from '../../../../src/blobs/extractor';
 import * as evaluatorHelpers from '../../../../src/evaluatorHelpers';
 import { PromptfooChatCompletionProvider } from '../../../../src/providers/promptfoo';
+import {
+  getGradingAssertionHash,
+  getGradingInputHash,
+} from '../../../../src/redteam/grading/storedResult';
+import * as shared from '../../../../src/redteam/providers/shared';
 import {
   neverGenerateRemote,
   shouldGenerateRemote,
@@ -269,6 +275,48 @@ describe('HydraProvider', () => {
   });
 
   describe('callApi() - basic functionality', () => {
+    it('returns the externalized output bound to its stored grade', async () => {
+      const enabled = vi.spyOn(blobExtractor, 'isBlobStorageEnabled').mockReturnValue(true);
+      const externalize = vi
+        .spyOn(shared, 'externalizeResponseForRedteamHistory')
+        .mockImplementation(async (response) => ({
+          ...response,
+          output: 'blob://synthetic-image',
+        }));
+      try {
+        mockAgentProvider.callApi.mockResolvedValue({ output: 'Attack message' });
+        mockTargetProvider.callApi.mockResolvedValue({
+          output: 'data:image/png;base64,c3ludGhldGlj',
+        });
+        const assertion = { type: 'promptfoo:redteam:pii' as const };
+        const provider = new HydraProvider({ injectVar: 'input', maxTurns: 1 });
+        const result = await provider.callApi('', {
+          originalProvider: mockTargetProvider,
+          vars: { input: 'test goal' },
+          prompt: { raw: '{{input}}', label: 'test' },
+          test: {
+            assert: [assertion],
+            metadata: { goal: 'test goal', pluginId: 'pii:social' },
+          } as any,
+        });
+        expect(externalize).toHaveBeenCalledOnce();
+        expect(result.output).toBe('blob://synthetic-image');
+        expect(mockGrader.getResult.mock.calls[0][1]).toBe(result.output);
+        expect(result.metadata?.storedGraderResult?.metadata).toMatchObject({
+          redteamGradingInputHash: getGradingInputHash(
+            result.metadata?.redteamFinalPrompt as string,
+            result.output as string,
+            undefined,
+            'pii:social',
+          ),
+          redteamGradingAssertionHash: getGradingAssertionHash(assertion),
+        });
+      } finally {
+        enabled.mockRestore();
+        externalize.mockRestore();
+      }
+    });
+
     it('should execute single turn attack successfully', async () => {
       mockAgentProvider.callApi.mockResolvedValue({
         output: 'Attack message',
@@ -1308,6 +1356,14 @@ describe('HydraProvider', () => {
         true,
         false,
       ]);
+      expect(mockGetResult.mock.calls[1][0]).toBe(followUp);
+      expect(mockGetResult.mock.calls[1][7]).not.toHaveProperty('conversationTranscript');
+      expect(response.metadata.messages).toEqual([
+        { role: 'user', content: openingQuestion },
+        { role: 'assistant', content: publicCapabilities },
+        { role: 'user', content: followUp },
+        { role: 'assistant', content: disclosure },
+      ]);
       expect(response.metadata.successfulAttacks).toEqual([
         expect.objectContaining({ turn: 2, message: followUp, response: disclosure }),
       ]);
@@ -1359,6 +1415,10 @@ describe('HydraProvider', () => {
       const result = await provider.callApi('', context);
 
       expect(result.metadata?.storedGraderResult).toEqual({
+        metadata: {
+          redteamGradingInputHash: expect.any(String),
+          redteamGradingAssertionHash: expect.any(String),
+        },
         ...graderResult,
         assertion: { type: 'harmful:test', value: testRubric },
       });
@@ -2261,7 +2321,7 @@ describe('HydraProvider', () => {
     it('should include redteamHistory with media fields when perTurnLayers is configured', async () => {
       // Configure the hoisted mock to return audio/image data for this test
       mockApplyRuntimeTransforms.mockResolvedValueOnce({
-        transformedPrompt: 'transformed attack',
+        prompt: 'transformed attack',
         audio: { data: 'base64-audio-data', format: 'mp3' },
         image: { data: 'base64-image-data', format: 'png' },
       });
@@ -2294,6 +2354,10 @@ describe('HydraProvider', () => {
 
       const result = await provider.callApi('', context);
 
+      expect(mockGetGraderById.mock.results[0].value.getResult.mock.calls[0][0]).toBe(
+        'transformed attack',
+      );
+      expect(result.metadata?.redteamFinalPrompt).toBe('transformed attack');
       // Verify redteamHistory is populated
       expect(result.metadata?.redteamHistory).toBeDefined();
       expect(Array.isArray(result.metadata?.redteamHistory)).toBe(true);
