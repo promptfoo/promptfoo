@@ -1095,11 +1095,14 @@ configured; GPT-5.6 region availability is checked before a request is made.
 
 Authentication accepts either a pre-generated **Amazon Bedrock API key** or AWS credentials:
 
-- Set `AWS_BEARER_TOKEN_BEDROCK` (or `config.apiKey`) to use a bearer token directly.
-- Otherwise, promptfoo uses `accessKeyId` / `secretAccessKey` / `sessionToken`, the
-  standard `AWS_ACCESS_KEY_ID` / `AWS_SECRET_ACCESS_KEY` / `AWS_SESSION_TOKEN` variables,
-  `profile` / `AWS_PROFILE`, or the default AWS credential chain to generate a short-lived
-  Bedrock bearer token.
+- `config.apiKey` takes highest priority and is used as a bearer token directly.
+- Otherwise, explicit `config.accessKeyId` / `config.secretAccessKey` (and optional
+  `config.sessionToken`) or `config.profile` generate short-lived tokens, overriding
+  provider and process `AWS_BEARER_TOKEN_BEDROCK` values. Incomplete explicit keys fail
+  validation rather than falling back to another credential source.
+- Without explicit authentication, `AWS_BEARER_TOKEN_BEDROCK` is used first. If absent,
+  standard AWS credential variables, `AWS_PROFILE`, or the default AWS credential chain
+  are used to generate a short-lived Bedrock bearer token.
 
 The same token provider serves Responses, Mantle Chat Completions, and Anthropic Messages.
 Tokens are resolved for each call, each background Responses poll/cancellation, and each
@@ -1110,8 +1113,8 @@ The AWS principal still needs permission to invoke the selected Bedrock model. A
 configured `AWS_BEARER_TOKEN_BEDROCK` is used as supplied; promptfoo cannot refresh a token
 whose underlying credentials it does not have.
 
-For a profile, omit `apiKey` and `AWS_BEARER_TOKEN_BEDROCK` and set `config.profile`
-or `AWS_PROFILE`. [AWS short-term keys](https://docs.aws.amazon.com/bedrock/latest/userguide/api-keys.html)
+For a profile, omit `apiKey` and set `config.profile`. If using `AWS_PROFILE` instead,
+also unset `AWS_BEARER_TOKEN_BEDROCK`. [AWS short-term keys](https://docs.aws.amazon.com/bedrock/latest/userguide/api-keys.html)
 last up to 12 hours or the remaining session duration. Long-term keys last until their
 configured expiry and are intended for exploration. `apiKeyRequired: false` ignores provider and
 process environment bearer tokens and skips token generation for custom endpoints without auth.
