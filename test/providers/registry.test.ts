@@ -1686,9 +1686,42 @@ describe('Provider Registry', () => {
       options: bareOptions,
     };
 
+    it('rejects a Vertex Live route without a model', async () => {
+      const factory = (await getProviderFactories('vertex:live:')).find((f) =>
+        f.test('vertex:live:'),
+      );
+      await expect(factory!.create('vertex:live:', bareOptions, bareContext)).rejects.toThrow(
+        'Missing model name',
+      );
+    });
+
     it.each([
       [
+        'vertex:live:gemini-live-2.5-flash-native-audio',
+        async () => (await import('../../src/providers/google/vertexLive')).VertexLiveProvider,
+      ],
+      [
+        'vertex:live:gemini-3.8-live',
+        async () => (await import('../../src/providers/google/vertexLive')).VertexLiveProvider,
+      ],
+      [
+        'vertex:live:gemini-3.8-live-extended-thinking',
+        async () => (await import('../../src/providers/google/vertexLive')).VertexLiveProvider,
+      ],
+      [
         'google:live:gemini-live-2.5-flash-preview',
+        async () => (await import('../../src/providers/google/live')).GoogleLiveProvider,
+      ],
+      [
+        'palm:live:gemini-3.8-live',
+        async () => (await import('../../src/providers/google/live')).GoogleLiveProvider,
+      ],
+      [
+        'google:live:gemini-3.8-live',
+        async () => (await import('../../src/providers/google/live')).GoogleLiveProvider,
+      ],
+      [
+        'google:live:gemini-3.8-live-extended-thinking',
         async () => (await import('../../src/providers/google/live')).GoogleLiveProvider,
       ],
       [

@@ -1,12 +1,13 @@
 # yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
-description: Compare Gemini 3.8 Live models
+description: Grade Vertex Live response transcripts
 
 prompts:
   - 'Answer briefly: {{question}}'
 
 providers:
-  - google:live:gemini-3.8-live
-  - google:live:gemini-3.8-live-extended-thinking
+  - id: vertex:live:gemini-live-2.5-flash-native-audio
+    config:
+      region: us-central1
 
 defaultTest:
   assert:
