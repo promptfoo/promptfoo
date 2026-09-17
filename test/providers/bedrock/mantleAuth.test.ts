@@ -1,8 +1,17 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { fetchWithCache } from '../../../src/cache';
-import { createBedrockAnthropicMessagesProvider } from '../../../src/providers/bedrock/anthropicMessages';
-import { createBedrockMantleChatProvider } from '../../../src/providers/bedrock/mantleChat';
-import { createBedrockOpenAiResponsesProvider } from '../../../src/providers/bedrock/openaiResponses';
+import {
+  BedrockAnthropicMessagesProvider,
+  createBedrockAnthropicMessagesProvider,
+} from '../../../src/providers/bedrock/anthropicMessages';
+import {
+  BedrockMantleChatProvider,
+  createBedrockMantleChatProvider,
+} from '../../../src/providers/bedrock/mantleChat';
+import {
+  BedrockGptOssResponsesProvider,
+  createBedrockOpenAiResponsesProvider,
+} from '../../../src/providers/bedrock/openaiResponses';
 import { mockProcessEnv } from '../../util/utils';
 
 const { generateToken, getTokenProvider } = vi.hoisted(() => ({
@@ -57,6 +66,9 @@ describe('Bedrock Mantle request authentication', () => {
       AWS_BEDROCK_REGION: undefined,
       AWS_DEFAULT_REGION: undefined,
       OPENAI_API_KEY: 'unrelated-openai-key',
+      OPENAI_API_HOST: 'unrelated.example',
+      OPENAI_BASE_URL: 'https://unrelated.example/v1',
+      ANTHROPIC_BASE_URL: 'https://unrelated.example/anthropic',
       ANTHROPIC_API_KEY: 'unrelated-anthropic-key',
       ANTHROPIC_AUTH_TOKEN: 'unrelated-anthropic-token',
       ANTHROPIC_CUSTOM_HEADERS:
@@ -244,6 +256,31 @@ describe('Bedrock Mantle request authentication', () => {
       config: { inputCost: 0.01, outputCost: 0.02 },
     });
     expect((await provider.callApi('hello')).cost).toBe(0.04);
+  });
+
+  it('isolates directly constructed HTTP adapters from ambient vendor endpoints', async () => {
+    const responses = new BedrockGptOssResponsesProvider('openai.gpt-oss-120b');
+    const chat = new BedrockMantleChatProvider('zai.glm-4.6');
+    const messages = new BedrockAnthropicMessagesProvider('anthropic.claude-fable-5', {
+      config: { stream: false },
+    });
+    expect(responses.getApiUrl()).toBe('https://bedrock-mantle.us-east-1.api.aws/v1');
+    expect(chat.getApiUrl()).toBe('https://bedrock-mantle.us-east-1.api.aws/v1');
+    expect(messages.getApiBaseUrl()).toBe('https://bedrock-mantle.us-east-1.api.aws/anthropic');
+    for (const provider of [responses, chat, messages]) {
+      expect((await provider.callApi('hello')).output).toBe('Paris');
+    }
+    expect(vi.mocked(fetchWithCache).mock.calls.map(([url]) => url)).toEqual([
+      'https://bedrock-mantle.us-east-1.api.aws/v1/responses',
+      'https://bedrock-mantle.us-east-1.api.aws/v1/chat/completions',
+    ]);
+    expect(vi.mocked(globalThis.fetch).mock.calls[0][0]).toBe(
+      'https://bedrock-mantle.us-east-1.api.aws/anthropic/v1/messages',
+    );
+    expect(getTokenProvider).toHaveBeenCalledTimes(3);
+    for (const [options] of getTokenProvider.mock.calls) {
+      expect(options.region).toBe('us-east-1');
+    }
   });
 
   it.each(Object.keys(factories) as Array<keyof typeof factories>)(

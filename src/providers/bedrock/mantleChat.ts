@@ -69,7 +69,12 @@ export class BedrockMantleChatProvider extends OpenAiChatCompletionProvider {
         ? DEFAULT_BEDROCK_MANTLE_GROK_CHAT_REGION
         : DEFAULT_BEDROCK_MANTLE_CHAT_REGION,
     );
-    this.bedrockTokenProvider = new BedrockTokenProvider(options.config ?? {}, options.env, region);
+    // Pin direct construction too, before any AWS credential can be resolved.
+    this.config = {
+      ...this.config,
+      apiBaseUrl: this.config.apiBaseUrl || getBedrockMantleChatBaseUrl(region, modelName),
+    };
+    this.bedrockTokenProvider = new BedrockTokenProvider(this.config, options.env, region);
   }
 
   requiresApiKey(): boolean {

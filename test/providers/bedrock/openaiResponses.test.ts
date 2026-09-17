@@ -752,22 +752,16 @@ describe('bedrock openaiResponses helper', () => {
       },
     );
 
-    it('falls back to the base OpenAI URL when constructed directly without apiBaseUrl', () => {
-      // The factory always sets config.apiBaseUrl, so the `|| super.getApiUrl()` fallback in the
-      // override is only reachable by a direct caller. Exercise it: with no apiBaseUrl, getApiUrl()
-      // must delegate to the base provider (never the mantle endpoint).
+    it('pins directly constructed providers to Bedrock without apiBaseUrl', () => {
       restoreEnv = mockProcessEnv({
-        OPENAI_API_HOST: undefined,
-        OPENAI_BASE_URL: undefined,
-        OPENAI_API_BASE_URL: undefined,
+        OPENAI_API_HOST: 'unrelated.example',
+        OPENAI_BASE_URL: 'https://unrelated.example/v1',
+        OPENAI_API_BASE_URL: 'https://unrelated.example/v1',
       });
       const direct = new BedrockOpenAiResponsesProvider('openai.gpt-5.5', {
         config: { apiKey: 'k' },
       });
-      expect(direct.getApiUrl()).not.toContain('bedrock-mantle');
-      expect(direct.getApiUrl()).toBe(
-        new OpenAiResponsesProvider('gpt-5.5', { config: { apiKey: 'k' } }).getApiUrl(),
-      );
+      expect(direct.getApiUrl()).toBe('https://bedrock-mantle.us-east-2.api.aws/openai/v1');
     });
   });
 

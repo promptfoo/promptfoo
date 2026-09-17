@@ -82,6 +82,16 @@ export class BedrockAnthropicMessagesProvider extends AnthropicMessagesProvider 
     return resolveBedrockMantleApiKey(this.config, this.env);
   }
 
+  getApiBaseUrl(): string {
+    return (
+      this.config.apiBaseUrl ||
+      getBedrockAnthropicBaseUrl(
+        resolveBedrockMantleRegion(this.config, this.env, DEFAULT_BEDROCK_ANTHROPIC_REGION),
+        RUNTIME_MESSAGES_MODELS.has(this.modelName),
+      )
+    );
+  }
+
   requiresApiKey(): boolean {
     return false;
   }

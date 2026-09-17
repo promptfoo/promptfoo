@@ -92,8 +92,21 @@ export class BedrockOpenAiResponsesProvider extends OpenAiResponsesProvider {
     const config = providerOptions.config ?? {};
     const region =
       providerOptions.bedrockRegion ??
-      resolveBedrockMantleRegion(config, providerOptions.env, DEFAULT_BEDROCK_OPENAI_REGION);
-    this.bedrockTokenProvider = new BedrockTokenProvider(config, providerOptions.env, region);
+      resolveBedrockMantleRegion(
+        config,
+        providerOptions.env,
+        isBedrockGrokModel(modelName)
+          ? DEFAULT_BEDROCK_GROK_REGION
+          : isBedrockGptOssResponsesModel(modelName)
+            ? DEFAULT_BEDROCK_MANTLE_RESPONSES_REGION
+            : DEFAULT_BEDROCK_OPENAI_REGION,
+      );
+    // Direct construction must be as isolated from ambient OpenAI endpoints as the factory.
+    this.config = {
+      ...this.config,
+      apiBaseUrl: getBedrockResponsesBaseUrl(modelName, region, config.apiBaseUrl),
+    };
+    this.bedrockTokenProvider = new BedrockTokenProvider(this.config, providerOptions.env, region);
   }
 
   protected async getApiKeyForRequest(signal?: AbortSignal): Promise<string | undefined> {
