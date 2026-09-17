@@ -76,6 +76,21 @@ describe('contracts leaf surface', () => {
   });
 
   describe('ProviderEnvOverridesSchema', () => {
+    it('preserves Google Cloud project and location aliases', () => {
+      const env = {
+        GOOGLE_CLOUD_PROJECT: 'live-project',
+        GOOGLE_CLOUD_LOCATION: 'europe-west4',
+      };
+      expect(ProviderEnvOverridesSchema.parse(env)).toEqual(env);
+    });
+
+    it.each(['GOOGLE_CLOUD_PROJECT', 'GOOGLE_CLOUD_LOCATION'])(
+      'rejects non-string %s values',
+      (key) => {
+        expect(ProviderEnvOverridesSchema.safeParse({ [key]: 123 }).success).toBe(false);
+      },
+    );
+
     it('parses a known env key', () => {
       const parsed = ProviderEnvOverridesSchema.safeParse({ OPENAI_API_KEY: 'sk-known' });
       expect(parsed.success).toBe(true);

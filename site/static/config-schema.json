@@ -314,6 +314,12 @@
         "GOOGLE_API_KEY": {
           "type": "string"
         },
+        "GOOGLE_CLOUD_PROJECT": {
+          "type": "string"
+        },
+        "GOOGLE_CLOUD_LOCATION": {
+          "type": "string"
+        },
         "GOOGLE_PROJECT_ID": {
           "type": "string"
         },
@@ -1782,6 +1788,12 @@
                       "type": "string"
                     },
                     "GOOGLE_API_KEY": {
+                      "type": "string"
+                    },
+                    "GOOGLE_CLOUD_PROJECT": {
+                      "type": "string"
+                    },
+                    "GOOGLE_CLOUD_LOCATION": {
                       "type": "string"
                     },
                     "GOOGLE_PROJECT_ID": {
