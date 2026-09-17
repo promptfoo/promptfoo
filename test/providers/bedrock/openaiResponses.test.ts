@@ -219,7 +219,7 @@ describe('bedrock openaiResponses helper', () => {
       const provider = createBedrockOpenAiResponsesProvider('openai.gpt-5.5', {
         config: { apiKey: '{{env.AWS_BEARER_TOKEN_BEDROCK}}' },
       });
-      expect((provider.config as any).apiKey).toBe('real-key');
+      expect(provider.getApiKey()).toBe('real-key');
     });
 
     it('targets the mantle endpoint for the configured region with config.apiKey', () => {
@@ -246,7 +246,7 @@ describe('bedrock openaiResponses helper', () => {
       expect((provider.config as any).apiBaseUrl).toBe(
         'https://bedrock-mantle.us-east-2.api.aws/openai/v1',
       );
-      expect((provider.config as any).apiKey).toBe('env-bedrock-key');
+      expect(provider.getApiKey()).toBe('env-bedrock-key');
     });
 
     it.each(GPT_5_6_MODELS)('uses the shared GA default region for %s', (modelId) => {
@@ -561,7 +561,7 @@ describe('bedrock openaiResponses helper', () => {
       const provider = createBedrockOpenAiResponsesProvider('openai.gpt-5.4', {
         env: { AWS_BEARER_TOKEN_BEDROCK: 'override-key', AWS_REGION: 'us-west-2' } as any,
       });
-      expect((provider.config as any).apiKey).toBe('override-key');
+      expect(provider.getApiKey()).toBe('override-key');
       expect((provider.config as any).apiBaseUrl).toBe(
         'https://bedrock-mantle.us-west-2.api.aws/openai/v1',
       );
@@ -799,7 +799,7 @@ describe('bedrock openaiResponses helper', () => {
       expect((provider.config as any).apiBaseUrl).toBe(
         'https://bedrock-mantle.us-west-2.api.aws/openai/v1',
       );
-      expect((provider.config as any).apiKey).toBe('env-bedrock-key');
+      expect(provider.getApiKey()).toBe('env-bedrock-key');
     });
 
     it('allows Grok to use the AWS credential chain without a configured bearer token', () => {

@@ -522,13 +522,18 @@ export class AnthropicMessagesProvider extends AnthropicGenericProvider {
     );
   }
 
+  /** Cloud adapters can supply credentials through the SDK transport for each request. */
+  protected supportsDynamicAuthentication(): boolean {
+    return false;
+  }
+
   async callApi(prompt: string, context?: CallApiContextParams): Promise<ProviderResponse> {
     // Wait for MCP initialization if it's in progress
     if (this.initializationPromise != null) {
       await this.initializationPromise;
     }
 
-    if (!this.apiKey && !this.usingClaudeCodeOAuth) {
+    if (!this.apiKey && !this.usingClaudeCodeOAuth && !this.supportsDynamicAuthentication()) {
       throw new Error(
         'Anthropic API key is not set. Set the ANTHROPIC_API_KEY environment variable or add `apiKey` to the provider config. ' +
           'Alternatively, if you have an active Claude Code session, set `apiKeyRequired: false` in the provider config to authenticate via Claude Code.',
@@ -1007,6 +1012,8 @@ export class AnthropicMessagesProvider extends AnthropicGenericProvider {
     const shouldUseResponseCache =
       isCacheEnabled() &&
       config.mcp?.enabled !== true &&
+      // A renewable credential chain can resolve to a different principal on a later call.
+      !this.supportsDynamicAuthentication() &&
       !this.hasCustomHeaders() &&
       Object.keys(config.headers ?? {}).length === 0;
 

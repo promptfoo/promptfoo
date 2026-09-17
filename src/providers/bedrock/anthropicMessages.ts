@@ -5,6 +5,7 @@ import {
   resolveBedrockMantleApiKey,
   resolveBedrockMantleRegion,
 } from './mantle';
+import { BedrockTokenProvider } from './tokenProvider';
 import type { ClientOptions } from '@anthropic-ai/sdk';
 
 import type { ProviderOptions } from '../../types/providers';
@@ -43,17 +44,50 @@ export function getBedrockAnthropicBaseUrl(region: string, useRuntime = false): 
 
 export class BedrockAnthropicMessagesProvider extends AnthropicMessagesProvider {
   // Bedrock's Anthropic-compatible endpoint authenticates with an API key via
-  // x-api-key (the factory guarantees one). Never fall back to a local Claude
+  // x-api-key resolved for each HTTP request. Never fall back to a local Claude
   // Code OAuth session — that would send an Anthropic OAuth token to the
   // Bedrock host.
   static override readonly SUPPORTS_CLAUDE_CODE_OAUTH = false;
 
   protected override buildAnthropicClientOptions(options: ClientOptions): ClientOptions {
-    return buildIsolatedAnthropicClientOptions(options, this.env, this.apiKey);
+    const config = this.config;
+    const region = resolveBedrockMantleRegion(config, this.env, DEFAULT_BEDROCK_ANTHROPIC_REGION);
+    const tokens = new BedrockTokenProvider(config, this.env, region);
+    const isolated = buildIsolatedAnthropicClientOptions(options, this.env, undefined);
+    const fetch = options.fetch ?? globalThis.fetch;
+    return {
+      ...isolated,
+      // Explicit nulls prevent SDK fallback to Anthropic credentials. The transport below
+      // authenticates every HTTP operation, including retries and tool continuations.
+      apiKey: null,
+      authToken: null,
+      defaultHeaders: {
+        ...isolated.defaultHeaders,
+        'x-api-key': null,
+        authorization: null,
+      },
+      fetch: async (input, init) => {
+        const token = await tokens.getToken(init?.signal ?? undefined);
+        const headers = new Headers(init?.headers);
+        // Ambient headers were suppressed above. Explicit per-request proxy auth still wins.
+        if (token && !headers.has('x-api-key') && !headers.has('authorization')) {
+          headers.set('x-api-key', token);
+        }
+        return fetch(input, { ...init, headers });
+      },
+    };
   }
 
-  protected override hasCustomHeaders(): boolean {
+  getApiKey(): string | undefined {
+    return resolveBedrockMantleApiKey(this.config, this.env);
+  }
+
+  requiresApiKey(): boolean {
     return false;
+  }
+
+  protected override supportsDynamicAuthentication(): boolean {
+    return true;
   }
 
   protected override getGenAISystem(): string {
@@ -71,16 +105,6 @@ export function createBedrockAnthropicMessagesProvider(
     providerOptions.env,
     DEFAULT_BEDROCK_ANTHROPIC_REGION,
   );
-  const apiKey = resolveBedrockMantleApiKey(config, providerOptions.env);
-
-  if (!apiKey) {
-    throw new Error(
-      `Amazon Bedrock model "${modelName}" is served through Bedrock's Anthropic-compatible ` +
-        `Messages API. Set AWS_BEARER_TOKEN_BEDROCK (or config.apiKey). See ` +
-        `https://www.promptfoo.dev/docs/providers/aws-bedrock/#claude-fable-and-mythos-models`,
-    );
-  }
-
   if (!config.apiBaseUrl && modelName === 'anthropic.claude-mythos-5' && region !== 'us-east-1') {
     throw new Error(
       `Amazon Bedrock model "${modelName}" is only available in us-east-1 through the default ` +
@@ -120,6 +144,6 @@ export function createBedrockAnthropicMessagesProvider(
 
   return new BedrockAnthropicMessagesProvider(modelName, {
     ...providerOptions,
-    config: { ...config, apiBaseUrl, apiKey },
+    config: { ...config, apiBaseUrl },
   });
 }

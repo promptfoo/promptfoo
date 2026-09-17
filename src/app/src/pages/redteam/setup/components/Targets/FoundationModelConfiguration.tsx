@@ -54,8 +54,9 @@ const getBedrockModelFromId = (id?: string): string => {
 
 const buildBedrockProviderId = (apiMode: BedrockApiMode, modelId: string): string => {
   if (apiMode === 'responses') {
-    return `bedrock:responses:${modelId}`;
+    return `bedrock:responses:${modelId.replace(/^(openai\.gpt-oss-(?:20b|120b))-1:0$/, '$1')}`;
   }
+  modelId = modelId.replace(/^(openai\.gpt-oss-(?:20b|120b))$/, '$1-1:0');
   return apiMode === 'converse' ? `bedrock:converse:${modelId}` : `bedrock:${modelId}`;
 };
 
@@ -94,6 +95,12 @@ const FoundationModelConfiguration = ({
   };
 
   const updateBedrockApiMode = (apiMode: BedrockApiMode) => {
+    const source = bedrockApiMode === 'responses' ? 'max_output_tokens' : 'max_tokens';
+    const destination = apiMode === 'responses' ? 'max_output_tokens' : 'max_tokens';
+    if (source !== destination && selectedTarget.config?.[source] !== undefined) {
+      const { [source]: limit, ...config } = selectedTarget.config;
+      updateCustomTarget('config', { ...config, [destination]: limit });
+    }
     updateCustomTarget('id', buildBedrockProviderId(apiMode, modelId));
   };
 
@@ -409,7 +416,7 @@ const FoundationModelConfiguration = ({
             title="Bedrock Settings"
             description={
               bedrockApiMode === 'responses'
-                ? 'AWS region and Bedrock API key settings for the mantle Responses endpoint'
+                ? 'AWS region and credential profile for the Mantle Responses endpoint'
                 : 'AWS region and credential profile (required for non-default-region deployments)'
             }
             isExpanded={isBedrockSettingsOpen}
@@ -440,21 +447,19 @@ const FoundationModelConfiguration = ({
                 </p>
               </div>
 
-              {bedrockApiMode !== 'responses' && (
-                <div className="space-y-2">
-                  <Label htmlFor="bedrock-profile">AWS Profile</Label>
-                  <Input
-                    id="bedrock-profile"
-                    value={selectedTarget.config?.profile ?? ''}
-                    onChange={(e) => updateCustomTarget('profile', e.target.value || undefined)}
-                    placeholder="default"
-                  />
-                  <p className="text-sm text-muted-foreground">
-                    Optional - SSO profile name from <code>~/.aws/config</code>. Falls back to the
-                    default credential chain when unset.
-                  </p>
-                </div>
-              )}
+              <div className="space-y-2">
+                <Label htmlFor="bedrock-profile">AWS Profile</Label>
+                <Input
+                  id="bedrock-profile"
+                  value={selectedTarget.config?.profile ?? ''}
+                  onChange={(e) => updateCustomTarget('profile', e.target.value || undefined)}
+                  placeholder="default"
+                />
+                <p className="text-sm text-muted-foreground">
+                  Optional - SSO profile name from <code>~/.aws/config</code>. Falls back to the
+                  default credential chain when unset.
+                </p>
+              </div>
 
               {bedrockApiMode !== 'responses' && (
                 <div className="space-y-2">

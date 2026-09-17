@@ -104,6 +104,7 @@ let nextBackgroundProviderScope = 0;
 type BackgroundRequest = {
   method: string;
   headers: Record<string, string>;
+  refreshHeaders?: (signal?: AbortSignal) => Promise<Record<string, string>>;
   body: string;
   cacheScope: string;
   hasPerPromptAuthorization: boolean;
@@ -256,12 +257,18 @@ function getBackgroundCacheIdentity(
 async function cancelBackgroundResponse(
   responseId: string,
   url: string,
-  headers: Record<string, string>,
+  headers: Record<string, string> | NonNullable<BackgroundRequest['refreshHeaders']>,
 ): Promise<void> {
   try {
     await fetchWithCache<OpenAIResponsesResponse>(
       appendOpenAiApiPath(url, `${encodeURIComponent(responseId)}/cancel`),
-      { method: 'POST', headers },
+      {
+        method: 'POST',
+        headers:
+          typeof headers === 'function'
+            ? await headers(AbortSignal.timeout(BACKGROUND_RESPONSE_CANCEL_TIMEOUT_MS))
+            : headers,
+      },
       BACKGROUND_RESPONSE_CANCEL_TIMEOUT_MS,
       'json',
       true,
@@ -275,7 +282,7 @@ async function cancelBackgroundResponse(
 async function pollBackgroundResponse(
   initial: OpenAIResponsesResponse,
   url: string,
-  headers: Record<string, string>,
+  headers: Record<string, string> | NonNullable<BackgroundRequest['refreshHeaders']>,
   timeout: number,
   maxRetries?: number,
   signal?: AbortSignal,
@@ -325,7 +332,11 @@ async function pollBackgroundResponse(
       const pollSignal = signal ? AbortSignal.any([signal, deadlineSignal]) : deadlineSignal;
       const polled = await fetchWithCache<OpenAIResponsesResponse>(
         appendOpenAiApiPath(url, encodeURIComponent(initial.id)),
-        { method: 'GET', headers, signal: pollSignal },
+        {
+          method: 'GET',
+          headers: typeof headers === 'function' ? await headers(pollSignal) : headers,
+          signal: pollSignal,
+        },
         remainingMs,
         'json',
         true,
@@ -435,7 +446,11 @@ async function createBackgroundResponseWithCancellation(
           created.data.id &&
           (created.data.status === 'queued' || created.data.status === 'in_progress')
         ) {
-          await cancelBackgroundResponse(created.data.id, url, request.headers);
+          await cancelBackgroundResponse(
+            created.data.id,
+            url,
+            request.refreshHeaders ?? request.headers,
+          );
         }
         await created.deleteFromCache?.();
       })
@@ -493,7 +508,7 @@ async function resolveBackgroundResponse(
   const polled = await pollBackgroundResponse(
     initial,
     url,
-    request.headers,
+    request.refreshHeaders ?? request.headers,
     timeout,
     maxRetries,
     request.signal,
@@ -507,7 +522,7 @@ async function resolveBackgroundResponse(
   await deleteFromCache?.();
   const retried = await createBackgroundResponseWithCancellation(
     url,
-    request,
+    { ...request, headers: (await request.refreshHeaders?.(request.signal)) ?? request.headers },
     Math.max(1, deadline - Date.now()),
     cancelOnStop,
     maxRetries,
@@ -528,7 +543,7 @@ async function resolveBackgroundResponse(
       ...(await pollBackgroundResponse(
         retried.data,
         url,
-        request.headers,
+        request.refreshHeaders ?? request.headers,
         timeout,
         maxRetries,
         request.signal,
@@ -674,7 +689,6 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
     'gpt-4o-2024-08-06',
     'gpt-4o-2024-11-20',
     'gpt-4o-2024-05-13',
-    'gpt-4o-2024-07-18',
     'gpt-4o-mini',
     'gpt-4o-mini-2024-07-18',
     'gpt-4.1',
@@ -686,8 +700,6 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
     // GPT-5 models
     'gpt-5',
     'gpt-5-2025-08-07',
-    'gpt-5-chat',
-    'gpt-5-chat-latest',
     'gpt-5-nano',
     'gpt-5-nano-2025-08-07',
     'gpt-5-mini',
@@ -697,19 +709,12 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
     // GPT-5.1 models
     'gpt-5.1',
     'gpt-5.1-2025-11-13',
-    'gpt-5.1-codex',
-    'gpt-5.1-codex-max',
-    'gpt-5.1-codex-mini',
-    'gpt-5.1-chat-latest',
     // GPT-5.2 models
     'gpt-5.2',
     'gpt-5.2-2025-12-11',
-    'gpt-5.2-chat-latest',
-    'gpt-5.2-codex',
     'gpt-5.2-pro',
     'gpt-5.2-pro-2025-12-11',
     // GPT-5.3 models
-    'gpt-5.3-chat-latest',
     'gpt-5.3-codex',
     // GPT-6 Astra
     'gpt-6-astra',
@@ -732,18 +737,11 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
     'gpt-5.4-nano-2026-03-17',
     'gpt-5.4-pro',
     'gpt-5.4-pro-2026-03-05',
-    // Computer use model
-    'computer-use-preview',
-    'computer-use-preview-2025-03-11',
     // NOTE: gpt-image-1, gpt-image-1-mini, and gpt-image-1.5 are NOT supported with the Responses API.
     // Use openai:image:gpt-image-1, openai:image:gpt-image-1-mini, or openai:image:gpt-image-1.5 instead (which uses /images/generations endpoint)
     // Reasoning models
     'o1',
     'o1-2024-12-17',
-    'o1-preview',
-    'o1-preview-2024-09-12',
-    'o1-mini',
-    'o1-mini-2024-09-12',
     'o1-pro',
     'o1-pro-2025-03-19',
     'o3-pro',
@@ -754,15 +752,7 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
     'o4-mini-2025-04-16',
     'o3-mini',
     'o3-mini-2025-01-31',
-    // GPT-4.5 models deprecated as of 2025-07-14, removed from API
-    'codex-mini-latest',
-    'gpt-5-codex',
     'gpt-5-codex-mini',
-    // Deep research models
-    'o3-deep-research',
-    'o3-deep-research-2025-06-26',
-    'o4-mini-deep-research',
-    'o4-mini-deep-research-2025-06-26',
   ];
 
   config: OpenAiCompletionOptions;
@@ -1079,15 +1069,6 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
     };
   }
 
-  /**
-   * Resolve the credential used for one request. Most OpenAI-compatible providers have a static
-   * API key, but subclasses may need an asynchronous request-scoped credential (for example, a
-   * short-lived cloud-provider bearer token).
-   */
-  protected async getApiKeyForRequest(): Promise<string | undefined> {
-    return this.getApiKey();
-  }
-
   async callApi(
     prompt: string,
     context?: CallApiContextParams,
@@ -1096,7 +1077,7 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
     if (callApiOptions?.abortSignal?.aborted) {
       throw getAbortError(callApiOptions.abortSignal);
     }
-    const apiKey = await this.getApiKeyForRequest();
+    const apiKey = await this.getApiKeyForRequest(callApiOptions?.abortSignal);
     if (this.requiresApiKey() && !apiKey) {
       throw new Error(this.getMissingApiKeyErrorMessage());
     }
@@ -1213,15 +1194,16 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
       const customHeaders = this.getOpenAiRequestHeaders(config.headers);
       const hasCustomHeader = (name: string) =>
         Object.keys(customHeaders).some((header) => header.toLowerCase() === name);
+      const buildHeaders = (key: string | undefined) => ({
+        ...(hasCustomHeader('content-type') ? {} : { 'Content-Type': 'application/json' }),
+        ...(key && !hasCustomHeader('authorization') ? { Authorization: `Bearer ${key}` } : {}),
+        ...customHeaders,
+      });
       const request = {
         method: 'POST',
-        headers: {
-          ...(hasCustomHeader('content-type') ? {} : { 'Content-Type': 'application/json' }),
-          ...(apiKey && !hasCustomHeader('authorization')
-            ? { Authorization: `Bearer ${apiKey}` }
-            : {}),
-          ...customHeaders,
-        },
+        headers: buildHeaders(apiKey),
+        refreshHeaders: async (signal?: AbortSignal) =>
+          buildHeaders(await this.getApiKeyForRequest(signal)),
         body: JSON.stringify(body),
         cacheScope: this.backgroundCacheScope,
         hasPerPromptAuthorization: Object.keys(context?.prompt?.config?.headers ?? {}).some(
@@ -1335,7 +1317,7 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
             };
           } catch (err) {
             if (backgroundResponseId) {
-              await cancelBackgroundResponse(backgroundResponseId, url, request.headers);
+              await cancelBackgroundResponse(backgroundResponseId, url, request.refreshHeaders);
             }
             if (controller.signal.aborted && !abortSignal?.aborted) {
               throw new Error(`OpenAI streaming response timed out after ${timeout}ms`);

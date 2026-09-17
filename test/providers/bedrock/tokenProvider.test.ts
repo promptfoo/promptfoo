@@ -43,6 +43,115 @@ describe('BedrockTokenProvider', () => {
     expect(getTokenProvider).not.toHaveBeenCalled();
   });
 
+  it('does not generate credentials for a no-auth custom endpoint', async () => {
+    const provider = new BedrockTokenProvider({ apiKeyRequired: false }, undefined, 'us-east-1');
+    await expect(provider.getToken()).resolves.toBeUndefined();
+    expect(getTokenProvider).not.toHaveBeenCalled();
+  });
+
+  it.each(['config', 'provider'] as const)(
+    'prefers a %s profile over ambient credentials',
+    async (scope) => {
+      const restore = mockProcessEnv({
+        AWS_ACCESS_KEY_ID: 'ambient',
+        AWS_SECRET_ACCESS_KEY: 'ambient-secret',
+        AWS_SESSION_TOKEN: 'ambient-session',
+      });
+      try {
+        const provider = new BedrockTokenProvider(
+          scope === 'config' ? { profile: 'selected' } : {},
+          scope === 'provider' ? { AWS_PROFILE: 'selected' } : undefined,
+          'us-west-2',
+        );
+        await provider.getToken();
+        expect(getTokenProvider).toHaveBeenCalledWith({ region: 'us-west-2', profile: 'selected' });
+      } finally {
+        restore();
+      }
+    },
+  );
+
+  it('never combines explicit keys with an ambient session token', async () => {
+    const provider = new BedrockTokenProvider(
+      { accessKeyId: 'explicit', secretAccessKey: 'explicit-secret' },
+      { AWS_SESSION_TOKEN: 'other-account-session' },
+      'us-east-1',
+    );
+    await provider.getToken();
+    expect(getTokenProvider).toHaveBeenCalledWith({
+      region: 'us-east-1',
+      credentials: { accessKeyId: 'explicit', secretAccessKey: 'explicit-secret' },
+    });
+  });
+
+  it('passes the selected process profile instead of ambient key credentials', async () => {
+    const restore = mockProcessEnv({
+      AWS_PROFILE: 'selected',
+      AWS_ACCESS_KEY_ID: 'ambient',
+      AWS_SECRET_ACCESS_KEY: 'ambient-secret',
+    });
+    try {
+      await new BedrockTokenProvider({}, undefined, 'us-east-1').getToken();
+      expect(getTokenProvider).toHaveBeenCalledWith({ profile: 'selected', region: 'us-east-1' });
+    } finally {
+      restore();
+    }
+  });
+
+  it('passes process credentials as a complete tuple', async () => {
+    const restore = mockProcessEnv({
+      AWS_ACCESS_KEY_ID: 'access',
+      AWS_SECRET_ACCESS_KEY: 'secret',
+      AWS_SESSION_TOKEN: 'session',
+    });
+    try {
+      await new BedrockTokenProvider({}, undefined, 'us-east-1').getToken();
+      expect(getTokenProvider).toHaveBeenCalledWith({
+        region: 'us-east-1',
+        credentials: { accessKeyId: 'access', secretAccessKey: 'secret', sessionToken: 'session' },
+      });
+    } finally {
+      restore();
+    }
+  });
+
+  it('rejects a partial config tuple instead of filling it from another source', async () => {
+    const provider = new BedrockTokenProvider(
+      { accessKeyId: 'explicit' },
+      { AWS_SECRET_ACCESS_KEY: 'other-account-secret' },
+      'us-east-1',
+    );
+    await expect(provider.getToken()).rejects.toThrow(/incomplete/);
+    expect(getTokenProvider).not.toHaveBeenCalled();
+  });
+
+  it('cancels one credential wait without cancelling a concurrent caller', async () => {
+    let resolveToken!: (value: string) => void;
+    generateToken.mockReturnValueOnce(
+      new Promise<string>((resolve) => {
+        resolveToken = resolve;
+      }),
+    );
+    const provider = new BedrockTokenProvider({}, undefined, 'us-east-1');
+    const abort = new AbortController();
+    const first = provider.getToken(abort.signal);
+    const second = provider.getToken();
+    const rejected = expect(first).rejects.toMatchObject({ name: 'AbortError' });
+    abort.abort();
+    await rejected;
+    resolveToken('valid-token');
+    await expect(second).resolves.toBe('valid-token');
+    expect(generateToken).toHaveBeenCalledTimes(1);
+  });
+
+  it('does not discover credentials for an already cancelled request', async () => {
+    const provider = new BedrockTokenProvider({}, undefined, 'us-east-1');
+    await expect(provider.getToken(AbortSignal.abort())).rejects.toMatchObject({
+      name: 'AbortError',
+    });
+    expect(getTokenProvider).not.toHaveBeenCalled();
+  });
+
   it('uses a provider env bearer token without loading the generator', async () => {
     const provider = new BedrockTokenProvider(
       {},

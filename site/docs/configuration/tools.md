@@ -54,7 +54,7 @@ Define your tools once in OpenAI format and reuse them across all providers usin
 
 ```yaml
 providers:
-  - id: openai:gpt-4o
+  - id: openai:chat:gpt-5.4-mini
     config:
       tools: &tools # Anchor: define tools once
         - type: function
@@ -71,7 +71,7 @@ providers:
     config:
       tools: *tools # Alias: reuse the same tools
 
-  - id: google:gemini-2.0-flash
+  - id: google:gemini-2.5-flash
     config:
       tools: *tools # Alias: works here too
 ```

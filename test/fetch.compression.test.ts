@@ -142,6 +142,24 @@ describe('fetchWithProxy compressed responses', () => {
     },
   );
 
+  it('rejects compressed responses that expand beyond the transport limit', async () => {
+    const body = gzipSync(Buffer.alloc(64 * 1024 * 1024 + 1, 'a'));
+    const url = await startServer((_req, res) => {
+      res.writeHead(200, {
+        'content-type': 'application/octet-stream',
+        'content-encoding': 'gzip',
+        'content-length': String(body.length),
+      });
+      res.end(body);
+    });
+
+    await expect(
+      fetchWithProxy(url).then((response) => response.arrayBuffer()),
+    ).rejects.toMatchObject({
+      cause: { code: 'UND_ERR_RES_EXCEEDED_MAX_SIZE' },
+    });
+  });
+
   it('preserves Content-Length on uncompressed responses', async () => {
     // Regression: the strip interceptor must only remove headers when the
     // decompress interceptor actually decoded the body. A plain response keeps

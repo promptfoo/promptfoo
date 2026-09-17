@@ -357,18 +357,13 @@ describe('aws bedrock provider factory routing', () => {
   });
 
   it.each([
-    'bedrock:us.openai.gpt-5.6-sol',
-    'bedrock:eu.openai.gpt-5.6-terra',
-    'bedrock:global.openai.gpt-5.6-luna',
     'bedrock:us.openai.gpt-5.5',
     'bedrock:eu.openai.gpt-5.4',
     'bedrock:global.openai.gpt-5.5',
   ])(
     'rejects region/geo-prefixed frontier id %s with a clear error pointing at the bare id',
     async (providerPath) => {
-      // AWS does not offer Geo/Global inference profiles for the frontier models, so these are
-      // not real Bedrock ids. They must not be routed to the mantle endpoint; instead the
-      // InvokeModel fallback throws an actionable error suggesting the supported bare id.
+      // These older IDs retain their existing Mantle Responses guidance.
       restoreEnv = mockProcessEnv({ AWS_BEARER_TOKEN_BEDROCK: 'env-bedrock-key' });
       const provider = await bedrockFactory.create(providerPath, { config: {} }, ctx);
       expect(provider).not.toBeInstanceOf(OpenAiResponsesProvider);
@@ -377,4 +372,28 @@ describe('aws bedrock provider factory routing', () => {
       );
     },
   );
+
+  it.each(['us.openai.gpt-5.6-sol', 'global.openai.gpt-5.6-terra', 'in.openai.gpt-5.6-luna'])(
+    'preserves the explicit Converse profile %s and explains unsupported Invoke use',
+    async (model) => {
+      const converse = await bedrockFactory.create(`bedrock:converse:${model}`, {}, ctx);
+      expect(converse).toBeInstanceOf(AwsBedrockConverseProvider);
+      expect((converse as AwsBedrockConverseProvider).modelName).toBe(model);
+
+      const invoke = await bedrockFactory.create(`bedrock:${model}`, {}, ctx);
+      await expect(invoke.callApi('hello')).rejects.toThrow(`bedrock:converse:${model}`);
+    },
+  );
+
+  it.each([
+    ['bedrock:amazon.nova-reel-v1:0', 'amazon.nova-reel-v1:0'],
+    ['bedrock:amazon.nova-reel-v1:1', 'amazon.nova-reel-v1:1'],
+    ['bedrock:video:amazon.nova-reel-v1:1', 'amazon.nova-reel-v1:1'],
+    ['bedrock:video', 'amazon.nova-reel-v1:1'],
+  ])('preserves the selected Reel ID for %s', async (selector, model) => {
+    const { NovaReelVideoProvider } = await import('../../../src/providers/bedrock/nova-reel');
+    const provider = await bedrockFactory.create(selector, {}, ctx);
+    expect(provider).toBeInstanceOf(NovaReelVideoProvider);
+    expect((provider as InstanceType<typeof NovaReelVideoProvider>).modelName).toBe(model);
+  });
 });

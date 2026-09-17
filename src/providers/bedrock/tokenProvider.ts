@@ -19,6 +19,7 @@ interface BedrockTokenGeneratorOptions {
 export interface BedrockTokenProviderConfig {
   accessKeyId?: unknown;
   apiKey?: unknown;
+  apiKeyRequired?: boolean;
   profile?: unknown;
   secretAccessKey?: unknown;
   sessionToken?: unknown;
@@ -43,12 +44,33 @@ export class BedrockTokenProvider {
     private readonly region: string,
   ) {}
 
-  async getToken(): Promise<string> {
+  async getToken(signal?: AbortSignal): Promise<string | undefined> {
+    signal?.throwIfAborted();
     const configuredToken = resolveBedrockMantleApiKey(this.config, this.env);
     if (configuredToken) {
       return configuredToken;
     }
+    if (this.config.apiKeyRequired === false) {
+      return undefined;
+    }
 
+    const generation = this.getGeneratedToken();
+    if (!signal) {
+      return generation;
+    }
+    let onAbort: () => void;
+    const aborted = new Promise<never>((_resolve, reject) => {
+      onAbort = () => reject(signal.reason);
+      signal.addEventListener('abort', onAbort, { once: true });
+    });
+    try {
+      return await Promise.race([generation, aborted]);
+    } finally {
+      signal.removeEventListener('abort', onAbort!);
+    }
+  }
+
+  private async getGeneratedToken(): Promise<string> {
     if (this.generationLock !== undefined) {
       return this.generationLock;
     }
@@ -72,7 +94,7 @@ export class BedrockTokenProvider {
       throw new Error(
         'Unable to generate a short-lived Amazon Bedrock bearer token using AWS credentials. ' +
           'Set AWS_BEARER_TOKEN_BEDROCK directly, or configure AWS credentials with permission ' +
-          'to call bedrock:InvokeModel. ' +
+          'to invoke the selected Bedrock model. ' +
           (error instanceof Error ? error.message : String(error)),
       );
     }
@@ -110,44 +132,53 @@ export class BedrockTokenProvider {
   }
 
   private getCredentialOptions(): Pick<BedrockTokenGeneratorOptions, 'credentials' | 'profile'> {
-    const accessKeyId = this.getConfiguredValue('accessKeyId', 'AWS_ACCESS_KEY_ID');
-    const secretAccessKey = this.getConfiguredValue('secretAccessKey', 'AWS_SECRET_ACCESS_KEY');
-    const sessionToken = this.getConfiguredValue('sessionToken', 'AWS_SESSION_TOKEN');
-
-    if (accessKeyId || secretAccessKey || sessionToken) {
-      if (!accessKeyId || !secretAccessKey) {
-        throw new Error(
-          'AWS access credentials are incomplete. Set both AWS_ACCESS_KEY_ID and ' +
-            'AWS_SECRET_ACCESS_KEY (and AWS_SESSION_TOKEN when required).',
-        );
-      }
-      return {
-        credentials: {
-          accessKeyId,
-          secretAccessKey,
-          ...(sessionToken ? { sessionToken } : {}),
-        },
+    // Select credentials as a tuple from one source. Never attach an ambient session token
+    // to another account's explicit keys. Within each source, explicit keys precede a profile.
+    const sources = [
+      this.config,
+      {
+        accessKeyId: this.env?.AWS_ACCESS_KEY_ID,
+        secretAccessKey: this.env?.AWS_SECRET_ACCESS_KEY,
+        sessionToken: this.env?.AWS_SESSION_TOKEN,
+        profile: this.env?.AWS_PROFILE,
+      },
+      {
+        profile: getEnvString('AWS_PROFILE'),
+      },
+      {
+        accessKeyId: getEnvString('AWS_ACCESS_KEY_ID'),
+        secretAccessKey: getEnvString('AWS_SECRET_ACCESS_KEY'),
+        sessionToken: getEnvString('AWS_SESSION_TOKEN'),
+      },
+    ];
+    for (const source of sources) {
+      const value = (key: keyof BedrockTokenProviderConfig): string | undefined => {
+        const v = source[key as keyof typeof source];
+        return typeof v === 'string' && v.trim() && !v.includes('{{') ? v : undefined;
       };
+      const accessKeyId = value('accessKeyId');
+      const secretAccessKey = value('secretAccessKey');
+      const sessionToken = value('sessionToken');
+      if (accessKeyId || secretAccessKey || sessionToken) {
+        if (!accessKeyId || !secretAccessKey) {
+          throw new Error(
+            'AWS access credentials are incomplete. Set both AWS_ACCESS_KEY_ID and ' +
+              'AWS_SECRET_ACCESS_KEY (and AWS_SESSION_TOKEN when required).',
+          );
+        }
+        return {
+          credentials: {
+            accessKeyId,
+            secretAccessKey,
+            ...(sessionToken ? { sessionToken } : {}),
+          },
+        };
+      }
+      const profile = value('profile');
+      if (profile) {
+        return { profile };
+      }
     }
-
-    const profile = this.getConfiguredValue('profile', 'AWS_PROFILE');
-    return profile ? { profile } : {};
-  }
-
-  private getConfiguredValue(
-    configKey: keyof BedrockTokenProviderConfig,
-    envKey: 'AWS_ACCESS_KEY_ID' | 'AWS_PROFILE' | 'AWS_SECRET_ACCESS_KEY' | 'AWS_SESSION_TOKEN',
-  ): string | undefined {
-    const configValue = this.config[configKey];
-    if (typeof configValue === 'string' && configValue.trim() && !configValue.includes('{{')) {
-      return configValue;
-    }
-
-    const providerValue = this.env?.[envKey];
-    if (typeof providerValue === 'string' && providerValue.trim()) {
-      return providerValue;
-    }
-
-    return getEnvString(envKey);
+    return {};
   }
 }

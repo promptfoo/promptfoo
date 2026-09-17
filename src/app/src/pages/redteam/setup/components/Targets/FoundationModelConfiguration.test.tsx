@@ -126,7 +126,7 @@ describe('FoundationModelConfiguration', () => {
     const modelIdInput = screen.getByRole('textbox', { name: /Model ID/i });
     expect(modelIdInput).toHaveAttribute(
       'placeholder',
-      'openai:gpt-6-astra, openai:gpt-5.6-sol, openai:gpt-5.5',
+      'openai:gpt-5.6-luna, openai:gpt-5.6-terra, openai:gpt-5.6-sol, openai:gpt-6-astra',
     );
 
     const documentationLink = screen.getByRole('link', { name: /OpenAI documentation/ });
@@ -251,7 +251,7 @@ describe('FoundationModelConfiguration', () => {
     let modelIdInput = screen.getByRole('textbox', { name: /Model ID/i });
     expect(modelIdInput).toHaveAttribute(
       'placeholder',
-      'openai:gpt-6-astra, openai:gpt-5.6-sol, openai:gpt-5.5',
+      'openai:gpt-5.6-luna, openai:gpt-5.6-terra, openai:gpt-5.6-sol, openai:gpt-6-astra',
     );
     let documentationLink = screen.getByRole('link', { name: /OpenAI documentation/ });
     expect(documentationLink).toHaveAttribute(
@@ -437,7 +437,7 @@ describe('FoundationModelConfiguration', () => {
 
     expect(mockUpdateCustomTarget).toHaveBeenCalledWith(
       'id',
-      'bedrock:responses:openai.gpt-oss-120b-1:0',
+      'bedrock:responses:openai.gpt-oss-120b',
     );
     expect(screen.queryByText('MCP Servers')).not.toBeInTheDocument();
   });
@@ -477,6 +477,67 @@ describe('FoundationModelConfiguration', () => {
     await user.paste('2048');
     expect(mockUpdateCustomTarget).toHaveBeenLastCalledWith('max_output_tokens', 2048);
     expect(screen.getByText(/AWS_BEARER_TOKEN_BEDROCK/)).toBeInTheDocument();
+  });
+
+  it.each([
+    [
+      'bedrock:openai.gpt-oss-120b-1:0',
+      'responses',
+      'bedrock:responses:openai.gpt-oss-120b',
+      'max_tokens',
+      'max_output_tokens',
+    ],
+    [
+      'bedrock:responses:openai.gpt-oss-20b',
+      'invoke',
+      'bedrock:openai.gpt-oss-20b-1:0',
+      'max_output_tokens',
+      'max_tokens',
+    ],
+    [
+      'bedrock:responses:openai.gpt-oss-120b',
+      'converse',
+      'bedrock:converse:openai.gpt-oss-120b-1:0',
+      'max_output_tokens',
+      'max_tokens',
+    ],
+  ])(
+    'preserves token limits when switching %s to %s',
+    async (id, mode, expectedId, source, destination) => {
+      const user = userEvent.setup();
+      render(
+        <FoundationModelConfiguration
+          selectedTarget={{ id, config: { [source]: 4096, region: 'us-east-1' } }}
+          updateCustomTarget={mockUpdateCustomTarget}
+          providerType="bedrock"
+        />,
+      );
+      await user.selectOptions(screen.getByLabelText(/Bedrock API/i), mode);
+      expect(mockUpdateCustomTarget).toHaveBeenCalledWith('config', {
+        [destination]: 4096,
+        region: 'us-east-1',
+      });
+      expect(mockUpdateCustomTarget).toHaveBeenLastCalledWith('id', expectedId);
+    },
+  );
+
+  it('allows editing an AWS profile for Responses authentication', async () => {
+    const user = userEvent.setup();
+    render(
+      <FoundationModelConfiguration
+        selectedTarget={{
+          id: 'bedrock:responses:openai.gpt-oss-120b',
+          config: { profile: 'old-profile' },
+        }}
+        updateCustomTarget={mockUpdateCustomTarget}
+        providerType="bedrock"
+      />,
+    );
+    const profile = screen.getByLabelText(/AWS Profile/i);
+    expect(profile).toHaveValue('old-profile');
+    await user.tripleClick(profile);
+    await user.paste('bedrock-prod');
+    expect(mockUpdateCustomTarget).toHaveBeenLastCalledWith('profile', 'bedrock-prod');
   });
 
   it('should render Bedrock Converse MCP configuration and save servers under config.mcp', async () => {
