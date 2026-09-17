@@ -282,6 +282,9 @@ type EnvVars = {
 
   CEREBRAS_API_KEY?: string;
 
+  // Cheaper Inference
+  CHEAPERINFERENCE_API_KEY?: string;
+
   // Azure OpenAI auth params
   AZURE_AUTHORITY_HOST?: string;
   AZURE_CLIENT_ID?: string;
