@@ -16,6 +16,14 @@ Installing this plugin supplies instructions; it does not configure a tenant,
 sign the user in, or grant access. This workflow currently supports Codex only;
 do not apply its TOML or callback settings to Claude Code or another client.
 
+## 0. Check local prerequisites
+
+Follow the [shared prerequisite check](../promptfoo-provider-setup/references/local-prerequisites.md)
+to check supported Node.js and npm, then the installed Promptfoo CLI. When Node
+needs installation, give the operating-system-specific steps and Enterprise IT
+callout. Help install the latest Promptfoo if absent, preserving existing project
+installs. Report local readiness separately from the MCP connection below.
+
 ## 1. Start with the Enterprise Server URL
 
 Ask for the Enterprise Server URL if the user has not supplied it or connection

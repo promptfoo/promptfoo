@@ -26,7 +26,7 @@ const expectedSkillDirs = [
   'promptfoo-redteam-run',
   'promptfoo-redteam-setup',
 ];
-const expectedPluginVersion = '0.2.2';
+const expectedPluginVersion = '0.2.3';
 const expectedFixtureDirs = [
   'evals-json-rubric',
   'evals-local-js',
@@ -1878,6 +1878,7 @@ describe('promptfoo plugin package (Codex + Claude Code)', () => {
       'skills/promptfoo-evals/references/eval-patterns.md',
       'skills/promptfoo-provider-setup/SKILL.md',
       'skills/promptfoo-provider-setup/agents/openai.yaml',
+      'skills/promptfoo-provider-setup/references/local-prerequisites.md',
       'skills/promptfoo-provider-setup/references/provider-patterns.md',
       'skills/promptfoo-provider-setup/scripts/openapi-operation-to-config.mjs',
       'skills/promptfoo-provider-setup/scripts/response-contract.mjs',
@@ -1891,6 +1892,31 @@ describe('promptfoo plugin package (Codex + Claude Code)', () => {
       'skills/promptfoo-redteam-setup/references/redteam-setup-patterns.md',
       'skills/promptfoo-redteam-setup/scripts/openapi-operation-to-redteam-config.mjs',
     ]);
+  });
+
+  it('preserves the shared prerequisite reference when the skills tree is copied on its own', () => {
+    const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'promptfoo-skill-prerequisites-'));
+    try {
+      const copiedSkills = path.join(tempDir, 'skills');
+      fs.cpSync(path.join(pluginRoot, 'skills'), copiedSkills, { recursive: true });
+      const sharedReference = path.join(
+        copiedSkills,
+        'promptfoo-provider-setup',
+        'references',
+        'local-prerequisites.md',
+      );
+      for (const skill of expectedSkillDirs) {
+        const skillRoot = path.join(copiedSkills, skill);
+        const body = readText(path.join(skillRoot, 'SKILL.md'));
+        const links = [...body.matchAll(/\[[^\]]+\]\(([^)]+local-prerequisites\.md)\)/g)];
+        expect(links, skill).toHaveLength(1);
+        const resolvedReference = path.resolve(skillRoot, links[0][1]);
+        expect(resolvedReference, skill).toBe(sharedReference);
+        expect(fs.statSync(resolvedReference).isFile(), skill).toBe(true);
+      }
+    } finally {
+      fs.rmSync(tempDir, { recursive: true, force: true });
+    }
   });
 
   it('keeps the fixture matrix intentional and mapped to the four skills', () => {

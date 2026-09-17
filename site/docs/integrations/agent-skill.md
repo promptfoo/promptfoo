@@ -140,6 +140,13 @@ Each skill consists of a `SKILL.md` with workflow instructions plus a
 `references/` directory of assertion types, provider patterns, and config
 examples (provider and redteam setup also include a `scripts/` directory).
 
+All five bundled skills share a prerequisite check for supported Node.js, npm,
+and the Promptfoo CLI. It preserves existing project installations and helps
+install the latest Promptfoo when absent. If Node.js needs installation, the
+agent provides steps for your operating system and a reminder to check with
+your IT team for enterprise-specific instructions. See [installation](../installation.md)
+for runtime requirements. Local CLI readiness is separate from Enterprise MCP authentication.
+
 ## Usage
 
 To connect Codex to Promptfoo Enterprise, install the plugin and start a Codex

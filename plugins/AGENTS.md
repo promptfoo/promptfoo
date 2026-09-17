@@ -47,6 +47,11 @@ Each skill should keep:
 Keep examples one reference hop away from `SKILL.md`; avoid README-style files
 inside skill folders.
 
+All five bundled skills share the local Node.js/Promptfoo prerequisite workflow
+in `skills/promptfoo-provider-setup/references/local-prerequisites.md`. Link to
+that reference rather than duplicating installation instructions. Keep it inside
+the skills tree so whole-tree manual installs preserve the shared reference.
+
 ## Provider And Redteam Assumptions
 
 - Treat Python providers as first-class alongside JavaScript providers.
