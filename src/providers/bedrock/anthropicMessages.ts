@@ -30,10 +30,6 @@ export function isBedrockAnthropicMessagesModel(modelName: string): boolean {
   return BEDROCK_ANTHROPIC_MESSAGES_MODELS.includes(modelName);
 }
 
-export function requiresBedrockAnthropicMessagesModel(modelName: string): boolean {
-  return modelName === 'anthropic.claude-mythos-5';
-}
-
 export function getBedrockAnthropicBaseUrl(region: string, useRuntime = false): string {
   // Validate the region before interpolating either host, which receives an API key.
   const mantleOrigin = getBedrockMantleOrigin(region);

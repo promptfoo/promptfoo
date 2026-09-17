@@ -1,4 +1,4 @@
-import { act, render, screen } from '@testing-library/react';
+import { act, fireEvent, render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import FoundationModelConfiguration from './FoundationModelConfiguration';
@@ -538,6 +538,139 @@ describe('FoundationModelConfiguration', () => {
     await user.tripleClick(profile);
     await user.paste('bedrock-prod');
     expect(mockUpdateCustomTarget).toHaveBeenLastCalledWith('profile', 'bedrock-prod');
+  });
+
+  it.each([
+    ['bedrock:openai.gpt-5.5', 'responses', 'openai.gpt-5.5'],
+    ['bedrock:converse:openai.gpt-5.5', 'responses', 'openai.gpt-5.5'],
+    ['bedrock:completion:xai.grok-4.3', 'responses', 'xai.grok-4.3'],
+    ['bedrock:mantle:openai.gpt-oss-120b', 'chat', 'openai.gpt-oss-120b'],
+    ['bedrock:messages:us.anthropic.claude-fable-5-1', 'messages', 'us.anthropic.claude-fable-5-1'],
+    ['bedrock:anthropic.claude-mythos-5', 'messages', 'anthropic.claude-mythos-5'],
+  ])(
+    'displays the resolved API and settings for %s without rewriting it',
+    async (id, mode, model) => {
+      const user = userEvent.setup();
+      render(
+        <FoundationModelConfiguration
+          selectedTarget={{
+            id,
+            config: {
+              region: 'us-west-2',
+              profile: 'work',
+              max_output_tokens: 512,
+              max_tokens: 1024,
+            },
+          }}
+          updateCustomTarget={mockUpdateCustomTarget}
+          providerType="bedrock"
+        />,
+      );
+      expect(screen.getByLabelText(/Bedrock API/i)).toHaveValue(mode);
+      expect(screen.getByLabelText(/Model ID/i)).toHaveValue(model);
+      expect(screen.getByText(`Provider ID: ${id}.`, { exact: false })).toBeInTheDocument();
+      expect(mockUpdateCustomTarget).not.toHaveBeenCalled();
+      expect(screen.queryByText('MCP Servers')).not.toBeInTheDocument();
+      expect(screen.queryByLabelText('Inference Model Type')).not.toBeInTheDocument();
+      expect(
+        screen.getByText(/Configure the AWS region and optional credential profile/),
+      ).toBeInTheDocument();
+      expect(screen.getByText(/model-specific default/)).toBeInTheDocument();
+      expect(screen.getByText(/generate refreshable Bedrock tokens/)).toBeInTheDocument();
+      await user.click(screen.getByRole('button', { name: /Advanced Configuration/ }));
+      const tokenField = screen.getByLabelText(
+        mode === 'responses' ? 'Max Output Tokens' : 'Max Tokens',
+      );
+      expect(tokenField).toHaveValue(mode === 'responses' ? 512 : 1024);
+      expect(screen.getByLabelText('Bedrock Bearer Token')).toBeInTheDocument();
+      expect(screen.getByText(/not automatically refreshed/)).toBeInTheDocument();
+      expect(screen.getByLabelText('API Base URL')).toHaveAttribute(
+        'placeholder',
+        'Use the provider-selected Bedrock endpoint',
+      );
+      fireEvent.change(tokenField, { target: { value: '2048' } });
+      expect(mockUpdateCustomTarget).toHaveBeenLastCalledWith(
+        mode === 'responses' ? 'max_output_tokens' : 'max_tokens',
+        2048,
+      );
+    },
+  );
+
+  it.each([
+    [
+      'bedrock:mantle:openai.gpt-oss-120b',
+      'openai.gpt-oss-20b',
+      'bedrock:mantle:openai.gpt-oss-20b',
+    ],
+    [
+      'bedrock:messages:us.anthropic.claude-fable-5-1',
+      'global.anthropic.claude-fable-5-1',
+      'bedrock:messages:global.anthropic.claude-fable-5-1',
+    ],
+    [
+      'bedrock:completion:amazon.nova-pro-v1:0',
+      'amazon.nova-lite-v1:0',
+      'bedrock:amazon.nova-lite-v1:0',
+    ],
+  ])('preserves the API when editing %s', async (id, model, expectedId) => {
+    const user = userEvent.setup();
+    render(
+      <FoundationModelConfiguration
+        selectedTarget={{ id, config: {} }}
+        updateCustomTarget={mockUpdateCustomTarget}
+        providerType="bedrock"
+      />,
+    );
+    const input = screen.getByLabelText(/Model ID/i);
+    await user.clear(input);
+    await user.paste(model);
+    expect(mockUpdateCustomTarget).toHaveBeenLastCalledWith('id', expectedId);
+  });
+
+  it.each(['bedrock:openai.gpt-5.5', 'bedrock:anthropic.claude-mythos-5'])(
+    'does not offer native APIs that would reroute or reject %s',
+    (id) => {
+      render(
+        <FoundationModelConfiguration
+          selectedTarget={{ id, config: {} }}
+          updateCustomTarget={mockUpdateCustomTarget}
+          providerType="bedrock"
+        />,
+      );
+      expect(screen.getByRole('option', { name: 'InvokeModel' })).toBeDisabled();
+      expect(screen.getByRole('option', { name: 'Converse' })).toBeDisabled();
+    },
+  );
+
+  it('keeps native Bedrock settings separate from HTTP endpoint overrides', async () => {
+    const user = userEvent.setup();
+    render(
+      <FoundationModelConfiguration
+        selectedTarget={{
+          id: 'bedrock:converse:amazon.nova-pro-v1:0',
+          config: { region: 'eu-west-1' },
+        }}
+        updateCustomTarget={mockUpdateCustomTarget}
+        providerType="bedrock"
+      />,
+    );
+    expect(screen.getByLabelText('Inference Model Type')).toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: /Advanced Configuration/ }));
+    expect(screen.queryByLabelText('API Base URL')).not.toBeInTheDocument();
+    expect(screen.getByLabelText('Bedrock Bearer Token')).toBeInTheDocument();
+  });
+
+  it('does not relabel specialized Bedrock providers as InvokeModel', () => {
+    render(
+      <FoundationModelConfiguration
+        selectedTarget={{ id: 'bedrock:kb:example', config: {} }}
+        updateCustomTarget={mockUpdateCustomTarget}
+        providerType="bedrock"
+      />,
+    );
+    expect(screen.getByText(/specialized API/)).toBeInTheDocument();
+    expect(screen.queryByLabelText(/Bedrock API/i)).not.toBeInTheDocument();
+    expect(mockUpdateCustomTarget).not.toHaveBeenCalled();
   });
 
   it('should render Bedrock Converse MCP configuration and save servers under config.mcp', async () => {

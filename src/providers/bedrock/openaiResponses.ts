@@ -1,13 +1,15 @@
 import { OpenAiResponsesProvider } from '../openai/responses';
 import {
   getBedrockMantleOrigin,
-  isBedrockGptOssResponsesModel,
-  isBedrockGrokModel,
-  isBedrockMantleResponsesModel,
   resolveBedrockMantleApiKey,
   resolveBedrockMantleRegion,
 } from './mantle';
 import { getBedrockPricing } from './pricing';
+import {
+  isBedrockGptOssResponsesModel,
+  isBedrockGrokModel,
+  isBedrockMantleResponsesModel,
+} from './routing';
 import { BedrockTokenProvider } from './tokenProvider';
 
 import type { ProviderResponse } from '../../types/index';

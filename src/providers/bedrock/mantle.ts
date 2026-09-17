@@ -3,36 +3,6 @@ import { getEnvString } from '../../envars';
 import type { EnvOverrides } from '../../types/env';
 
 /**
- * Whether a Bedrock OpenAI model id is a frontier model served through the Responses API
- * (a bare `openai.` id that is not an open-weight `gpt-oss` model).
- */
-export function isBedrockOpenAiResponsesModel(modelName: string): boolean {
-  return modelName.startsWith('openai.') && !modelName.includes('gpt-oss');
-}
-
-/**
- * Whether a Bedrock model id is an open-weight GPT OSS model exposed by the mantle Responses API.
- *
- * The mantle ids intentionally omit the -1:0 suffix used by InvokeModel. Keep this separate
- * from isBedrockOpenAiResponsesModel: bare bedrock:openai.gpt-oss-*-1:0 ids must continue to use
- * the legacy InvokeModel route for backwards compatibility, while the explicit
- * bedrock:responses:openai.gpt-oss-* route selects this surface.
- */
-export function isBedrockGptOssResponsesModel(modelName: string): boolean {
-  return /^openai\.gpt-oss-(?:20b|120b)$/.test(modelName);
-}
-
-/**
- * Whether a Bedrock model id is a bare xAI Grok id (for example, `xai.grok-4.3`).
- *
- * @param modelName The Bedrock model identifier to evaluate.
- * @returns `true` when the model id is an xAI Grok model served as `xai.grok-*`; otherwise `false`.
- */
-export function isBedrockGrokModel(modelName: string): boolean {
-  return modelName.startsWith('xai.grok-');
-}
-
-/**
  * Inference-profile ids for Grok models that Bedrock serves natively through
  * InvokeModel/Converse rather than the mantle endpoint.
  *
@@ -72,11 +42,6 @@ export function isRejectedPrefixedGrokId(
     return false;
   }
   return explicitMantleRequest || !isBedrockNativeGrokProfileModel(modelName);
-}
-
-/** Whether a Bedrock model id is served through the mantle Responses API. */
-export function isBedrockMantleResponsesModel(modelName: string): boolean {
-  return isBedrockOpenAiResponsesModel(modelName) || isBedrockGrokModel(modelName);
 }
 
 // Region resolution intentionally mirrors AwsBedrockGenericProvider.getRegion()

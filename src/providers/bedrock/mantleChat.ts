@@ -1,11 +1,10 @@
 import { OpenAiChatCompletionProvider } from '../openai/chat';
 import {
   getBedrockMantleOrigin,
-  isBedrockGrokModel,
-  isBedrockOpenAiResponsesModel,
   resolveBedrockMantleApiKey,
   resolveBedrockMantleRegion,
 } from './mantle';
+import { isBedrockGrokModel, isBedrockOpenAiResponsesModel } from './routing';
 import { BedrockTokenProvider, type BedrockTokenProviderConfig } from './tokenProvider';
 
 type OpenAiChatProviderOptions = NonNullable<
