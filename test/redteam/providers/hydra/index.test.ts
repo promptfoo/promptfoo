@@ -306,7 +306,7 @@ describe('HydraProvider', () => {
           redteamGradingInputHash: getGradingInputHash(
             result.metadata?.redteamFinalPrompt as string,
             result.output as string,
-            result.metadata?.messages,
+            undefined,
             'pii:social',
           ),
           redteamGradingAssertionHash: getGradingAssertionHash(assertion),
@@ -1356,9 +1356,14 @@ describe('HydraProvider', () => {
         true,
         false,
       ]);
-      expect(mockGetResult.mock.calls[1][7]).toMatchObject({
-        conversationTranscript: `User: ${openingQuestion}\n\nAssistant: ${publicCapabilities}`,
-      });
+      expect(mockGetResult.mock.calls[1][0]).toBe(followUp);
+      expect(mockGetResult.mock.calls[1][7]).not.toHaveProperty('conversationTranscript');
+      expect(response.metadata.messages).toEqual([
+        { role: 'user', content: openingQuestion },
+        { role: 'assistant', content: publicCapabilities },
+        { role: 'user', content: followUp },
+        { role: 'assistant', content: disclosure },
+      ]);
       expect(response.metadata.successfulAttacks).toEqual([
         expect.objectContaining({ turn: 2, message: followUp, response: disclosure }),
       ]);

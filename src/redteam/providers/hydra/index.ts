@@ -880,8 +880,6 @@ export class HydraProvider implements ApiProvider {
           // Build grading context with image outputs, tracing, and exfil tracking data.
           const gradingContext: RedteamGradingContext = {
             providerResponse: targetResponse,
-            conversationTranscript:
-              getTargetConversation(lastResponseMessages).conversationTranscript,
             ...(targetResponse.images?.length ? { imageOutputs: targetResponse.images } : {}),
             ...(tracingOptions.includeInGrading
               ? { traceContext, traceSummary: gradingTraceSummary }
@@ -958,7 +956,6 @@ export class HydraProvider implements ApiProvider {
             {
               prompt: lastFinalAttackPrompt || nextMessage,
               output: targetResponse.output,
-              messages: this.conversationHistory,
               pluginId: test.metadata?.pluginId,
               assertion: assertToUse,
             },

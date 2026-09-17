@@ -46,6 +46,20 @@ function analyzeGraderErrors(redteamHistory: Array<{ graderError?: string }> | u
   return { hasAnyErrors, allTurnsHaveErrors };
 }
 
+function getConfiguredProviderId(
+  test: AtomicTestCase,
+  provider: ApiProvider | undefined,
+): string | undefined {
+  const configuredProvider = test.provider ?? provider;
+  return typeof configuredProvider === 'string'
+    ? configuredProvider
+    : isApiProvider(configuredProvider)
+      ? configuredProvider.id()
+      : isProviderOptions(configuredProvider)
+        ? configuredProvider.id
+        : undefined;
+}
+
 function matchesStoredGraderResult(
   assertion: Assertion,
   storedResult: GradingResult,
@@ -53,15 +67,7 @@ function matchesStoredGraderResult(
   provider: ApiProvider | undefined,
 ): boolean {
   const pluginId = test.metadata?.pluginId;
-  const configuredProvider = test.provider ?? provider;
-  const providerId =
-    typeof configuredProvider === 'string'
-      ? configuredProvider
-      : isApiProvider(configuredProvider)
-        ? configuredProvider.id()
-        : isProviderOptions(configuredProvider)
-          ? configuredProvider.id
-          : undefined;
+  const providerId = getConfiguredProviderId(test, provider);
 
   // A target can return arbitrary metadata. Only the configured attack executor
   // may supply a grade or its usage; a marker in the response is not provenance.
@@ -188,6 +194,16 @@ export const handleRedteam = async ({
   const effectivePrompt = getRedteamPrompt(prompt, test, providerResponse, lastUserPrompt);
   invariant(effectivePrompt, `Grader ${baseType} must have a prompt`);
 
+  // Hydra and Goblin retain their current-turn grading behavior. Their saved
+  // messages are still available for attack generation and reporting.
+  const providerId = getConfiguredProviderId(test, provider);
+  const gradesCurrentTurnOnly =
+    providerId === 'promptfoo:redteam:hydra' ||
+    providerId === 'promptfoo:redteam:goblin' ||
+    ['hydra', 'goblin', 'jailbreak:hydra', 'jailbreak:goblin'].includes(
+      test.metadata?.strategyId ?? '',
+    );
+
   const storedResult = providerResponse.metadata?.storedGraderResult as GradingResult | undefined;
   const hasStrategyGrade =
     storedResult && matchesStoredGraderResult(assertion, storedResult, test, provider);
@@ -199,7 +215,7 @@ export const handleRedteam = async ({
       getGradingInputHash(
         effectivePrompt,
         outputString,
-        providerResponse.metadata?.messages,
+        gradesCurrentTurnOnly ? undefined : providerResponse.metadata?.messages,
         test.metadata?.pluginId,
       )
   ) {
@@ -234,7 +250,7 @@ export const handleRedteam = async ({
   let gradingContext = createInitialGradingContext({
     assertionValueContext,
     providerResponse,
-    conversationTranscript,
+    conversationTranscript: gradesCurrentTurnOnly ? undefined : conversationTranscript,
   });
   const webPageUuid =
     (providerResponse.metadata?.webPageUuid as string | undefined) ||

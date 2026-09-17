@@ -541,6 +541,112 @@ describe('redteam strategy result grading', () => {
     expect(providerResponse).toEqual(before);
   });
 
+  describe.each(['hydra', 'goblin'])('%s current-turn grading', (strategy) => {
+    const messages = [
+      { role: 'user', content: 'My contact is Casey Morgan.' },
+      { role: 'assistant', content: 'Acknowledged.' },
+      { role: 'user', content: attackPrompt },
+      { role: 'assistant', content: output },
+    ];
+    const providerId = `promptfoo:redteam:${strategy}`;
+
+    it('reuses a current-turn grade while retaining the saved conversation', async () => {
+      const getResult = vi
+        .spyOn(RedteamGraderBase.prototype, 'getResult')
+        .mockRejectedValue(new Error('A second grading call must not happen'));
+      const providerResponse = {
+        output,
+        metadata: { redteamFinalPrompt: attackPrompt, messages, storedGraderResult: storedResult },
+      };
+      const before = structuredClone(providerResponse);
+      const result = await runAssertions({
+        prompt: originalPrompt,
+        test: {
+          ...test,
+          provider: providerId,
+          metadata: { ...test.metadata, strategyId: `jailbreak:${strategy}` },
+        },
+        providerResponse,
+      });
+
+      expect(result.pass).toBe(true);
+      expect(getResult).not.toHaveBeenCalled();
+      expect(providerResponse).toEqual(before);
+    });
+
+    it.each(['string', 'options', 'loaded', 'strategy-only'])(
+      'omits history during fresh grading with %s provider identification',
+      async (source) => {
+        const getResult = vi.spyOn(RedteamGraderBase.prototype, 'getResult').mockResolvedValue({
+          grade: { pass: false, score: 0, reason: 'Current turn verdict' },
+          rubric: 'New rubric',
+        });
+        const configuredProvider =
+          source === 'string' ? providerId : source === 'options' ? { id: providerId } : undefined;
+        await runAssertions({
+          prompt: originalPrompt,
+          test: {
+            ...test,
+            provider: configuredProvider,
+            metadata: {
+              ...test.metadata,
+              // Layer labels need not contain the underlying provider name.
+              strategyId: source === 'strategy-only' ? `jailbreak:${strategy}` : 'layer-test',
+            },
+          },
+          provider:
+            source === 'loaded'
+              ? { id: () => providerId, callApi: async () => ({ output }) }
+              : undefined,
+          providerResponse: { output, metadata: { redteamFinalPrompt: attackPrompt, messages } },
+        });
+
+        expect(getResult).toHaveBeenCalledTimes(1);
+        expect(getResult.mock.calls[0][0]).toBe(attackPrompt);
+        expect(getResult.mock.calls[0][7]).not.toHaveProperty('conversationTranscript');
+      },
+    );
+
+    it('regrades a stored verdict that was bound to conversation history', async () => {
+      const getResult = vi.spyOn(RedteamGraderBase.prototype, 'getResult').mockResolvedValue({
+        grade: { pass: false, score: 0, reason: 'Current turn verdict' },
+        rubric: 'New rubric',
+      });
+      const result = await runAssertions({
+        prompt: originalPrompt,
+        test: {
+          ...test,
+          provider: providerId,
+          metadata: { ...test.metadata, strategyId: `jailbreak:${strategy}` },
+        },
+        providerResponse: {
+          output,
+          metadata: {
+            redteamFinalPrompt: attackPrompt,
+            messages,
+            storedGraderResult: {
+              ...storedResult,
+              metadata: {
+                ...storedResult.metadata,
+                redteamGradingInputHash: getGradingInputHash(
+                  attackPrompt,
+                  output,
+                  messages,
+                  'pii:social',
+                ),
+              },
+            },
+          },
+        },
+      });
+
+      expect(result.pass).toBe(false);
+      expect(getResult).toHaveBeenCalledTimes(1);
+      expect(getResult.mock.calls[0][7]).not.toHaveProperty('conversationTranscript');
+      expect(result.componentResults?.[0].tokensUsed).toEqual(storedResult.tokensUsed);
+    });
+  });
+
   it('uses the last target user message when final-prompt metadata is absent', async () => {
     const getResult = vi.spyOn(RedteamGraderBase.prototype, 'getResult').mockResolvedValue({
       grade: { pass: true, score: 1, reason: 'User-supplied information' },
