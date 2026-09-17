@@ -150,9 +150,18 @@ const OllamaNonNestedOptionKeys = new Set<string>([
  * surfacing.
  */
 const OllamaEndpointTopLevelKeys: Record<'completion' | 'chat' | 'embedding', Set<string>> = {
-  completion: new Set(['think', 'keep_alive', 'format', 'suffix', 'system', 'template', 'raw']),
-  chat: new Set(['think', 'keep_alive', 'format', 'tools']),
-  embedding: new Set(['keep_alive', 'truncate', 'dimensions']),
+  completion: new Set([
+    'think',
+    'keep_alive',
+    'format',
+    'truncate',
+    'suffix',
+    'system',
+    'template',
+    'raw',
+  ]),
+  chat: new Set(['think', 'keep_alive', 'format', 'truncate', 'tools']),
+  embedding: new Set(['keep_alive', 'truncate', 'dimensions', 'format']),
 };
 
 /**
@@ -525,6 +534,7 @@ export class OllamaCompletionProvider implements ApiProvider {
       ...(this.config.think === undefined ? {} : { think: this.config.think }),
       ...(this.config.keep_alive === undefined ? {} : { keep_alive: this.config.keep_alive }),
       ...(this.config.format === undefined ? {} : { format: this.config.format }),
+      ...(this.config.truncate === undefined ? {} : { truncate: this.config.truncate }),
       ...(this.config.suffix === undefined ? {} : { suffix: this.config.suffix }),
       ...(this.config.system === undefined ? {} : { system: this.config.system }),
       ...(this.config.template === undefined ? {} : { template: this.config.template }),
@@ -681,6 +691,7 @@ export class OllamaChatProvider implements ApiProvider {
       ...(this.config.think === undefined ? {} : { think: this.config.think }),
       ...(this.config.keep_alive === undefined ? {} : { keep_alive: this.config.keep_alive }),
       ...(this.config.format === undefined ? {} : { format: this.config.format }),
+      ...(this.config.truncate === undefined ? {} : { truncate: this.config.truncate }),
       ...passthroughRest,
     };
 

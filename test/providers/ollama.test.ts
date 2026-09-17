@@ -860,6 +860,39 @@ describe('OllamaChatProvider', () => {
     expect(warnings.some((w) => w.includes('suffix'))).toBe(true);
   });
 
+  it.each([
+    ['chat', 'llama3.3'],
+    ['completion', 'llama3.3'],
+  ])('should forward truncate on the %s endpoint', async (kind, model) => {
+    const warnSpy = vi.spyOn(logger, 'warn').mockImplementation(() => logger);
+    vi.mocked(fetchWithCache).mockResolvedValue({
+      data:
+        kind === 'chat'
+          ? '{"message":{"role":"assistant","content":"hi"},"done":true}\n'
+          : '{"response":"hi","done":true}\n',
+      cached: false,
+      status: 200,
+      statusText: 'OK',
+      headers: {},
+    });
+
+    const provider =
+      kind === 'chat'
+        ? new OllamaChatProvider(model, { config: { truncate: false } })
+        : new OllamaCompletionProvider(model, { config: { truncate: false } });
+    await provider.callApi('test prompt');
+
+    const body = JSON.parse(vi.mocked(fetchWithCache).mock.calls[0][1]?.body as string);
+    const warnings = warnSpy.mock.calls.map((c) => String(c[0]));
+    warnSpy.mockRestore();
+
+    // truncate gates context-overflow behavior on the generation endpoints too, not
+    // just /api/embed: a long prompt with a small num_ctx returns 400 when false.
+    expect(body.truncate).toBe(false);
+    expect(body.options.truncate).toBeUndefined();
+    expect(warnings.filter((w) => w.includes('does not accept'))).toHaveLength(0);
+  });
+
   it('should not warn for keys the chat endpoint does accept', async () => {
     const warnSpy = vi.spyOn(logger, 'warn').mockImplementation(() => logger);
     vi.mocked(fetchWithCache).mockResolvedValue({
