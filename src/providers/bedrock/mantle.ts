@@ -78,6 +78,11 @@ export function resolveBedrockMantleApiKey(
   // var instead.
   const explicitKey =
     typeof config.apiKey === 'string' && !config.apiKey.includes('{{') ? config.apiKey : undefined;
+  // Optional-auth custom endpoints must not inherit unrelated AWS credentials. Preserve
+  // deliberately configured keys, but suppress both provider and process environment fallback.
+  if (config.apiKeyRequired === false) {
+    return explicitKey || undefined;
+  }
   return explicitKey || env?.AWS_BEARER_TOKEN_BEDROCK || getEnvString('AWS_BEARER_TOKEN_BEDROCK');
 }
 

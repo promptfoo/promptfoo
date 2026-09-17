@@ -49,6 +49,36 @@ describe('BedrockTokenProvider', () => {
     expect(getTokenProvider).not.toHaveBeenCalled();
   });
 
+  it.each([undefined, '', '{{ env.MISSING_TOKEN }}'])(
+    'ignores environment bearer tokens when auth is optional and apiKey is %s',
+    async (apiKey) => {
+      const restore = mockProcessEnv({ AWS_BEARER_TOKEN_BEDROCK: 'process-token' });
+      try {
+        for (const env of [undefined, { AWS_BEARER_TOKEN_BEDROCK: 'provider-token' }]) {
+          const provider = new BedrockTokenProvider(
+            { apiKeyRequired: false, apiKey, profile: 'unused-profile' },
+            env,
+            'us-east-1',
+          );
+          await expect(provider.getToken()).resolves.toBeUndefined();
+        }
+        expect(getTokenProvider).not.toHaveBeenCalled();
+      } finally {
+        restore();
+      }
+    },
+  );
+
+  it('preserves an explicit key when auth is optional', async () => {
+    const provider = new BedrockTokenProvider(
+      { apiKeyRequired: false, apiKey: 'explicit-token' },
+      { AWS_BEARER_TOKEN_BEDROCK: 'provider-token' },
+      'us-east-1',
+    );
+    await expect(provider.getToken()).resolves.toBe('explicit-token');
+    expect(getTokenProvider).not.toHaveBeenCalled();
+  });
+
   it.each(['config', 'provider'] as const)(
     'prefers a %s profile over ambient credentials',
     async (scope) => {

@@ -1,9 +1,12 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { fetchWithCache, withCacheEnabled } from '../../../src/cache';
+import { createBedrockAnthropicMessagesProvider } from '../../../src/providers/bedrock/anthropicMessages';
 import { createBedrockMantleChatProvider } from '../../../src/providers/bedrock/mantleChat';
 import { createBedrockOpenAiResponsesProvider } from '../../../src/providers/bedrock/openaiResponses';
 import { monkeyPatchFetch } from '../../../src/util/fetch/monkeyPatchFetch';
 import { mockProcessEnv } from '../../util/utils';
+
+import type { ProviderOptions } from '../../../src/types/providers';
 
 const { generateToken, getTokenProvider } = vi.hoisted(() => ({
   generateToken: vi.fn(),
@@ -36,8 +39,78 @@ describe('Bedrock authentication at the HTTP attempt boundary', () => {
   });
   afterEach(() => {
     restoreEnv();
+    vi.unstubAllGlobals();
     vi.useRealTimers();
     vi.resetAllMocks();
+  });
+
+  describe.each(['chat', 'responses', 'messages'] as const)('%s custom endpoint', (route) => {
+    const createProvider = (options: ProviderOptions) => {
+      switch (route) {
+        case 'chat':
+          return createBedrockMantleChatProvider('zai.glm-4.6', options);
+        case 'responses':
+          return createBedrockOpenAiResponsesProvider('openai.gpt-5.5', options);
+        case 'messages':
+          return createBedrockAnthropicMessagesProvider('anthropic.claude-fable-5', options);
+      }
+    };
+    it.each([
+      { name: 'no explicit auth', config: {}, expected: null },
+      { name: 'an explicit key', config: { apiKey: 'explicit-token' }, expected: 'key' },
+      {
+        name: 'an explicit header',
+        config: { headers: { Authorization: 'Bearer proxy-token' } },
+        expected: 'header',
+      },
+    ])('isolates environment credentials with $name', async ({ config, expected }) => {
+      const restore = mockProcessEnv({ AWS_BEARER_TOKEN_BEDROCK: 'process-token' });
+      const sentHeaders: Headers[] = [];
+      const fetch = vi.fn(async (_input: unknown, init?: RequestInit) => {
+        sentHeaders.push(new Headers(init?.headers));
+        return Response.json({
+          ...completed,
+          type: 'message',
+          role: 'assistant',
+          content: [{ type: 'text', text: 'Paris' }],
+          stop_reason: 'end_turn',
+        });
+      });
+      vi.mocked(monkeyPatchFetch).mockImplementation(fetch);
+      vi.stubGlobal('fetch', fetch);
+      try {
+        for (const env of [undefined, { AWS_BEARER_TOKEN_BEDROCK: 'provider-token' }]) {
+          const options = {
+            config: {
+              apiBaseUrl: 'http://127.0.0.1:12345/v1',
+              apiKeyRequired: false,
+              stream: false,
+              ...config,
+            },
+            env,
+          };
+          const provider = createProvider(options);
+          expect(provider.getApiKey()).toBe(expected === 'key' ? 'explicit-token' : undefined);
+          expect((await provider.callApi('Capital?')).output).toBe('Paris');
+        }
+        expect(sentHeaders).toHaveLength(2);
+        for (const headers of sentHeaders) {
+          expect(headers.get('authorization')).toBe(
+            expected === 'header'
+              ? 'Bearer proxy-token'
+              : expected === 'key' && route !== 'messages'
+                ? 'Bearer explicit-token'
+                : null,
+          );
+          expect(headers.get('x-api-key')).toBe(
+            expected === 'key' && route === 'messages' ? 'explicit-token' : null,
+          );
+        }
+        expect(getTokenProvider).not.toHaveBeenCalled();
+      } finally {
+        restore();
+      }
+    });
   });
 
   it.each(['chat', 'responses'] as const)(
