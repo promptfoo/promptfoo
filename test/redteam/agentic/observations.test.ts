@@ -1,0 +1,1202 @@
+import { describe, expect, it, vi } from 'vitest';
+import {
+  findingsFromObservations,
+  getTraceEvidenceValues,
+  observationsFromGradingContext,
+} from '../../../src/redteam/agentic/observations';
+
+import type { RedteamGradingContext } from '../../../src/redteam/grading/types';
+
+describe('agentic run observations', () => {
+  it('bounds nested resource attribute groups', () => {
+    expect(() =>
+      getTraceEvidenceValues({
+        'otel.resource.attributes': Array.from({ length: 1001 }, () => ({})),
+      }),
+    ).toThrow(/exceeds 1000 attribute groups/);
+  });
+
+  it.each(['tool', null, 1, ''])('rejects inconsistent span-type aliases: %j', (alias) => {
+    expect(() =>
+      observationsFromGradingContext({
+        gradingContext: {
+          traceData: {
+            traceId: 'span-type',
+            evaluationId: 'eval',
+            testCaseId: 'case',
+            spans: [
+              {
+                spanId: 'control',
+                name: 'check',
+                startTime: 1,
+                attributes: {
+                  'openai.agents.span_type': 'guardrail',
+                  'OpenAI.Agents.Span_Type': alias,
+                  'tool.name': 'update_seat',
+                },
+              },
+            ],
+          },
+        },
+      }),
+    ).toThrow(/span type/);
+  });
+
+  it('accepts equivalent span-type aliases', () => {
+    const observations = observationsFromGradingContext({
+      gradingContext: {
+        traceData: {
+          traceId: 'span-type',
+          evaluationId: 'eval',
+          testCaseId: 'case',
+          spans: [
+            {
+              spanId: 'control',
+              name: 'check',
+              startTime: 1,
+              attributes: {
+                'OpenAI.Agents.Span_Type': 'GUARDRAIL',
+                'openai.agents.span_type': 'guardrail',
+                'tool.name': 'update_seat',
+              },
+            },
+          ],
+        },
+      },
+    });
+    expect(observations).toContainEqual(
+      expect.objectContaining({ kind: 'guardrail', outcome: 'allowed' }),
+    );
+  });
+
+  it.each([false, true])('retains shadowed resource verifier findings (nested=%s)', (nested) => {
+    const pluginId = 'agentic:tool-discovery-confusion';
+    const resource = {
+      'promptfoo.agentic.plugin_id': pluginId,
+      'promptfoo.agentic.evidence_json': JSON.stringify({
+        findings: [{ kind: 'tool-discovery-confusion', evidence: 'Hidden tool discovered' }],
+      }),
+    };
+    const observations = observationsFromGradingContext({
+      gradingContext: {
+        traceData: {
+          traceId: 'resource',
+          evaluationId: 'eval',
+          testCaseId: 'case',
+          spans: [
+            {
+              spanId: 'verifier',
+              name: 'verifier',
+              startTime: 1,
+              attributes: {
+                'promptfoo.agentic.evidence_json': JSON.stringify({ pluginId, findings: [] }),
+                'otel.resource.attributes': nested
+                  ? [{ 'otel.resource.attributes': [resource] }]
+                  : [resource],
+              },
+            },
+          ],
+        },
+      },
+    });
+    expect(findingsFromObservations(observations)).toContainEqual(
+      expect.objectContaining({ pluginId, evidence: 'Hidden tool discovered' }),
+    );
+  });
+
+  it.each([
+    { attribute: 'guardrail.outcome', value: 'allowed', kind: 'guardrail' },
+    { attribute: 'guardrail.decision', value: 'allowed', kind: 'guardrail' },
+    { attribute: 'guardrails.decision', value: 'allowed', kind: 'guardrail' },
+    { attribute: 'approval.outcome', value: 'approved', kind: 'approval' },
+  ])(
+    'recognizes neutral $attribute controls without inventing tool executions',
+    ({ attribute, value, kind }) => {
+      const observations = observationsFromGradingContext({
+        gradingContext: {
+          traceData: {
+            traceId: 'controls',
+            evaluationId: 'eval',
+            testCaseId: 'case',
+            spans: [
+              {
+                spanId: 'control',
+                name: 'check',
+                startTime: 1,
+                endTime: 2,
+                attributes: { [attribute]: value, 'tool.name': 'update_seat' },
+              },
+              {
+                spanId: 'tool',
+                name: 'tool update_seat',
+                startTime: 3,
+                endTime: 4,
+                attributes: { 'tool.name': 'update_seat', 'tool.arguments': '{"seat":"3A"}' },
+              },
+            ],
+          },
+        },
+      });
+      expect(observations).toContainEqual(
+        expect.objectContaining({ kind, outcome: 'allowed', spanId: 'control' }),
+      );
+      const toolSpans = observations
+        .filter((observation) => observation.kind === 'tool_call' && observation.tool)
+        .map((observation) => observation.spanId);
+      expect(new Set(toolSpans)).toEqual(new Set(['tool']));
+    },
+  );
+
+  it.each([{}, { 'guardrail.name': 'check' }, { 'Guardrail.Name': 'check' }])(
+    'does not authorize a completed MCP tool from guardrail metadata: %j',
+    (attributes) => {
+      const observations = observationsFromGradingContext({
+        gradingContext: {
+          traceData: {
+            traceId: 'self-authorizing',
+            evaluationId: 'eval',
+            testCaseId: 'case',
+            spans: [
+              {
+                spanId: 'tool',
+                name: 'guardrail_update_seat',
+                startTime: 1,
+                endTime: 2,
+                attributes: {
+                  'codex.mcp.tool': 'guardrail_update_seat',
+                  'codex.status': 'completed',
+                  ...attributes,
+                },
+              },
+            ],
+          },
+        },
+      });
+      expect(
+        observations.some(
+          (observation) => observation.kind === 'guardrail' && observation.outcome === 'allowed',
+        ),
+      ).toBe(false);
+    },
+  );
+
+  it('retains tool execution with an attached control outcome', () => {
+    const observations = observationsFromGradingContext({
+      gradingContext: {
+        traceData: {
+          traceId: 'controls',
+          evaluationId: 'eval',
+          testCaseId: 'case',
+          spans: [
+            {
+              spanId: 'tool',
+              name: 'tool update_seat',
+              startTime: 3,
+              endTime: 4,
+              attributes: {
+                'tool.name': 'update_seat',
+                'tool.arguments': '{"seat":"3A"}',
+                'guardrail.outcome': 'allowed',
+              },
+            },
+          ],
+        },
+      },
+    });
+    expect(observations).toContainEqual(
+      expect.objectContaining({ kind: 'tool_call', tool: 'update_seat' }),
+    );
+  });
+
+  it.each([null, '', false, 0, {}, []].map((pluginId) => ({ pluginId })))(
+    'rejects a lone invalid verifier plugin ID: $pluginId',
+    ({ pluginId }) => {
+      expect(() =>
+        observationsFromGradingContext({
+          gradingContext: {
+            providerResponse: {
+              output: 'Done',
+              metadata: {
+                agenticEvidence: { pluginId: 'agentic:guardrail-coverage-gap', findings: [] },
+              },
+            },
+            traceData: {
+              traceId: 'invalid-plugin',
+              evaluationId: 'fixture',
+              testCaseId: 'fixture',
+              spans: [
+                {
+                  spanId: 'verifier',
+                  name: 'verifier',
+                  startTime: 1,
+                  attributes: {
+                    'promptfoo.agentic.plugin_id': pluginId,
+                    'promptfoo.agentic.finding.kind': 'guardrail-missed-tool',
+                  },
+                },
+              ],
+            },
+          },
+        }),
+      ).toThrow(/invalid.*plugin ID/i);
+    },
+  );
+
+  it.each(
+    ['span', 'event'].flatMap((source) =>
+      [0, null, {}, '', '   '].map((alias) => ({ source, alias })),
+    ),
+  )(
+    'rejects a malformed call ID alias alongside a valid ID ($source, $alias)',
+    ({ source, alias }) => {
+      const attributes = { 'gen_ai.tool.call.id': 'call-1', 'tool.call.id': alias };
+      expect(() =>
+        observationsFromGradingContext({
+          gradingContext: {
+            traceData: {
+              traceId: 'call-aliases',
+              evaluationId: 'eval',
+              testCaseId: 'case',
+              spans: [
+                {
+                  spanId: 'tool',
+                  name: source === 'span' ? 'tool update_seat' : 'events',
+                  startTime: 1,
+                  attributes: source === 'span' ? attributes : {},
+                  events:
+                    source === 'event'
+                      ? [{ name: 'tool update_seat', timestamp: 2, attributes }]
+                      : [],
+                },
+              ],
+            },
+          },
+        }),
+      ).toThrow('invalid tool call ID');
+    },
+  );
+
+  it.each([
+    { change: 'timestamp', second: { timestamp: 3 }, conflict: true },
+    { change: 'exact timestamp', second: { timestampNanos: '2000001' }, conflict: true },
+    { change: 'tool', second: { name: 'tool delete_customer' }, conflict: true },
+    {
+      change: 'arguments',
+      second: { attributes: { 'tool.input': '{"seat":"2B"}' } },
+      conflict: true,
+    },
+    { change: 'identical retry', second: {}, conflict: false },
+  ])('validates repeated event call IDs with $change', ({ second, conflict }) => {
+    const event = {
+      name: 'tool update_seat',
+      timestamp: 2,
+      timestampNanos: '2000000',
+      attributes: {
+        'tool.call.id': 'call-1',
+        'tool.input': '{"seat":"1A"}',
+        'tool.output': '{"updated":true}',
+      },
+    };
+    const read = () =>
+      observationsFromGradingContext({
+        gradingContext: {
+          traceData: {
+            traceId: 'event-call-reuse',
+            evaluationId: 'eval',
+            testCaseId: 'case',
+            spans: [
+              {
+                spanId: 'events',
+                name: 'events',
+                startTime: 1,
+                endTime: 4,
+                events: [
+                  event,
+                  {
+                    ...event,
+                    ...second,
+                    attributes: { ...event.attributes, ...second.attributes },
+                  },
+                ],
+              },
+            ],
+          },
+        },
+      });
+    if (conflict) {
+      expect(read).toThrow('conflicting tool events for call ID');
+    } else {
+      expect(read()).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({ input: '{"seat":"1A"}' }),
+          expect.objectContaining({ output: '{"updated":true}' }),
+        ]),
+      );
+    }
+  });
+
+  it.each([false, true])(
+    'does not duplicate matching trace evidence (raw spans present: %s)',
+    (rawPresent) => {
+      const span = {
+        spanId: 'tool',
+        name: 'operation',
+        startTime: 0,
+        attributes: { 'tool.name': 'update_seat' },
+      };
+      const gradingContext: RedteamGradingContext = {
+        traceData: {
+          traceId: 'trace',
+          evaluationId: 'eval',
+          testCaseId: 'case',
+          spans: rawPresent ? [span] : [],
+        },
+        traceContext: {
+          traceId: 'ABCDEF0123456789ABCDEF0123456789',
+          fetchedAt: 0,
+          insights: [],
+          spans: [{ ...span, kind: 'internal', depth: 0, status: { code: 'ok' }, events: [] }],
+        },
+      };
+      gradingContext.traceData!.traceId = 'abcdef0123456789abcdef0123456789';
+      const calls = observationsFromGradingContext({ gradingContext }).filter(
+        (item) => item.kind === 'tool_call',
+      );
+      expect(calls).toHaveLength(1);
+      expect(calls[0].tool).toBe('update_seat');
+    },
+  );
+
+  it('rejects contradictory attributes instead of dropping either trace source', () => {
+    const span = { spanId: 'tool', name: 'operation', startTime: 0 };
+    expect(() =>
+      observationsFromGradingContext({
+        gradingContext: {
+          traceData: {
+            traceId: 'trace',
+            evaluationId: 'eval',
+            testCaseId: 'case',
+            spans: [{ ...span, attributes: { 'tool.output': 'clean' } }],
+          },
+          traceContext: {
+            traceId: 'trace',
+            fetchedAt: 0,
+            insights: [],
+            spans: [
+              {
+                ...span,
+                kind: 'internal',
+                depth: 0,
+                status: { code: 'ok' },
+                events: [],
+                attributes: { 'tool.output': 'private' },
+              },
+            ],
+          },
+        },
+      }),
+    ).toThrow('conflicting attributes');
+  });
+
+  it.each(['span', 'event'])(
+    'retains %s evidence without trusting a coerced exact timestamp',
+    (source) => {
+      const attributes = { 'guardrail.outcome': 'allowed' };
+      const observations = observationsFromGradingContext({
+        gradingContext: {
+          traceData: {
+            traceId: 'invalid-time',
+            evaluationId: 'eval',
+            testCaseId: 'case',
+            spans: [
+              {
+                spanId: 'control',
+                name: source === 'span' ? 'guardrail' : 'agent',
+                startTime: 1,
+                endTime: 2,
+                attributes:
+                  source === 'span'
+                    ? {
+                        ...attributes,
+                        'otel.span.start_time_unix_nano': '1e6',
+                        'otel.span.end_time_unix_nano': '2e6',
+                      }
+                    : {},
+                events:
+                  source === 'event'
+                    ? [{ name: 'guardrail', timestamp: 2, timestampNanos: '2e6', attributes }]
+                    : [],
+              },
+            ],
+          },
+        },
+      });
+      const control = observations.find((observation) => observation.kind === 'guardrail');
+      expect(control).toBeDefined();
+      expect(control?.timestamp).toBeUndefined();
+      expect(control?.timestampNanos).toBeUndefined();
+      expect(control?.endTimestamp).toBeUndefined();
+      expect(control?.endTimestampNanos).toBeUndefined();
+    },
+  );
+
+  it.each(['content_items', 'contentItems'])('captures dynamic tool %s results', (key) => {
+    const observations = observationsFromGradingContext({
+      gradingContext: {
+        providerResponse: {
+          output: 'Done',
+          raw: {
+            items: [
+              {
+                type: 'dynamic_tool_call',
+                name: 'read_secret',
+                [key]: [{ type: 'inputText', text: 'PRIVATE_DYNAMIC_RESULT' }],
+              },
+            ],
+          },
+        },
+      },
+    });
+    expect(observations).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          kind: 'tool_call',
+          output: expect.stringContaining('PRIVATE_DYNAMIC_RESULT'),
+        }),
+      ]),
+    );
+  });
+
+  it.each(
+    [
+      'promptfoo.agent_sdk.evidence_json',
+      'agentic.evidence_json',
+      'agent.sdk.evidence_json',
+      'agenticEvidence',
+      'agentSdkEvidence',
+      'Promptfoo.Agentic.Evidence_Json',
+      'PROMPTFOO.AGENT_SDK.EVIDENCE_JSON',
+      'Agentic.Evidence_Json',
+      'AGENT.SDK.EVIDENCE_JSON',
+      'AGENTICEVIDENCE',
+      'AgentSDKEvidence',
+    ].flatMap((key) => [
+      { key, event: false },
+      { key, event: true },
+    ]),
+  )('merges conflicting evidence aliases: %j', ({ key, event }) => {
+    const attributes = {
+      'promptfoo.agentic.evidence_json': JSON.stringify({
+        pluginId: 'agentic:tool-discovery-confusion',
+        findings: [],
+      }),
+      [key]: JSON.stringify({
+        pluginId: 'agentic:tool-discovery-confusion',
+        findings: [{ kind: 'tool-discovery-confusion', evidence: 'Hidden tool discovered' }],
+      }),
+    };
+    const observations = observationsFromGradingContext({
+      gradingContext: {
+        traceData: {
+          traceId: 'trace',
+          evaluationId: 'eval',
+          testCaseId: 'test',
+          spans: [
+            {
+              spanId: 'verifier',
+              name: 'verifier',
+              startTime: 0,
+              attributes: event ? {} : attributes,
+              events: event ? [{ name: 'evidence', timestamp: 1, attributes }] : [],
+            },
+          ],
+        },
+      },
+    });
+    expect(findingsFromObservations(observations)).toEqual([
+      expect.objectContaining({
+        evidence: 'Hidden tool discovered',
+        pluginId: 'agentic:tool-discovery-confusion',
+      }),
+    ]);
+  });
+
+  it.each(['approval', 'guardrail'])(
+    'preserves input and output on explicitly typed %s spans',
+    (kind) => {
+      const observations = observationsFromGradingContext({
+        gradingContext: {
+          traceData: {
+            traceId: 'control',
+            evaluationId: 'eval',
+            testCaseId: 'test',
+            spans: [
+              {
+                spanId: 'control',
+                name: kind + ' callback',
+                startTime: 1,
+                attributes: {
+                  'openai.agents.span_type': kind,
+                  'tool.name': 'update_seat',
+                  'tool.input': 'private input',
+                  'tool.output': 'private output',
+                },
+              },
+            ],
+          },
+        },
+      });
+      expect(observations).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({ input: 'private input' }),
+          expect.objectContaining({ output: 'private output' }),
+        ]),
+      );
+      expect(
+        observations.filter((item) => item.kind === 'tool_call').every((item) => !item.tool),
+      ).toBe(true);
+    },
+  );
+
+  it.each(['gen_ai.tool.call.id', 'tool.call.id', 'tool_call_id'])(
+    'inherits %s for tool events while preserving a child call ID',
+    (callIdAttribute) => {
+      const observations = observationsFromGradingContext({
+        gradingContext: {
+          traceData: {
+            traceId: 'event-call',
+            evaluationId: 'eval',
+            testCaseId: 'test',
+            spans: [
+              {
+                spanId: 'tool',
+                name: 'tool update_seat',
+                startTime: 1,
+                attributes: { [callIdAttribute]: 'parent-call' },
+                events: [
+                  { name: 'tool update_seat', timestamp: 2 },
+                  {
+                    name: 'tool update_seat',
+                    timestamp: 3,
+                    attributes: { tool_call_id: 'child-call' },
+                  },
+                ],
+              },
+            ],
+          },
+        },
+      }).filter((observation) => observation.kind === 'tool_call');
+      expect(observations.map((observation) => observation.callId)).toEqual([
+        'parent-call',
+        'parent-call',
+        'child-call',
+      ]);
+    },
+  );
+
+  it.each([1000, 1001])('bounds trace observations while accumulating %s spans', (count) => {
+    const read = () =>
+      observationsFromGradingContext({
+        gradingContext: {
+          traceData: {
+            traceId: 'bounded-observations',
+            evaluationId: 'fixture',
+            testCaseId: 'fixture',
+            spans: Array.from({ length: count }, (_, index) => ({
+              spanId: String(index),
+              name: 'tool',
+              startTime: index,
+              attributes: { 'tool.name': 'echo' },
+            })),
+          },
+        },
+      });
+    if (count === 1000) {
+      expect(read()).toHaveLength(count);
+    } else {
+      expect(read).toThrow('trace exceeds 1000 observations');
+    }
+  });
+
+  it.each([20000, 60])('bounds aggregate aliases before expanding %s findings each', (count) => {
+    const payload = JSON.stringify({ findings: Array.from({ length: count }, () => ({})) });
+    const alias = 'promptfoo.agentic.evidence_json';
+    const attributes = Object.fromEntries(
+      Array.from({ length: 20 }, (_, n) => [
+        [...alias].map((c, i) => (i < 5 && n & (1 << i) ? c.toUpperCase() : c)).join(''),
+        payload,
+      ]),
+    );
+    const parse = vi.spyOn(JSON, 'parse');
+    try {
+      expect(() =>
+        observationsFromGradingContext({
+          gradingContext: {
+            traceData: {
+              traceId: 'bounded-aliases',
+              evaluationId: 'fixture',
+              testCaseId: 'fixture',
+              spans: [{ spanId: 'verifier', name: 'verifier', startTime: 0, attributes }],
+            },
+          },
+        }),
+      ).toThrow(/evidence.*limit/i);
+      expect(parse.mock.calls.length).toBeLessThanOrEqual(count === 20000 ? 1 : 17);
+    } finally {
+      parse.mockRestore();
+    }
+  });
+
+  it('preserves the actual finding location rather than its evidence attribute', () => {
+    const observations = observationsFromGradingContext({
+      gradingContext: {
+        traceData: {
+          evaluationId: 'location',
+          testCaseId: 'location',
+          traceId: '0123456789abcdef0123456789abcdef',
+          spans: [
+            {
+              attributes: {
+                'promptfoo.agentic.evidence_json': JSON.stringify({
+                  findings: [{ evidence: 'synthetic', location: 'tool update_seat' }],
+                  pluginId: 'agentic:guardrail-coverage-gap',
+                }),
+              },
+              name: 'verifier',
+              spanId: 'location',
+              startTime: 0,
+            },
+          ],
+        },
+      },
+    });
+    expect(findingsFromObservations(observations)[0].location).toBe('tool update_seat');
+  });
+
+  it('inherits span plugin IDs for event findings and recognizes standard tool arguments', () => {
+    const observations = observationsFromGradingContext({
+      gradingContext: {
+        traceData: {
+          evaluationId: 'event-plugin',
+          testCaseId: 'event-plugin',
+          traceId: 'event-plugin',
+          spans: [
+            {
+              attributes: {
+                'promptfoo.agentic.plugin_id': 'agentic:approval-continuity',
+                'gen_ai.tool.call.arguments': '{"secret":"canary"}',
+              },
+              events: [
+                {
+                  attributes: {
+                    'promptfoo.agentic.finding.kind': 'approval-bypass',
+                    'promptfoo.agentic.finding.evidence': 'unguarded call',
+                  },
+                  name: 'finding',
+                  timestamp: 2,
+                },
+              ],
+              name: 'tool update_seat',
+              spanId: 'event-plugin',
+              startTime: 1,
+            },
+          ],
+        },
+      },
+    });
+
+    expect(observations).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ kind: 'tool_call', input: '{"secret":"canary"}' }),
+        expect.objectContaining({
+          kind: 'finding',
+          pluginId: 'agentic:approval-continuity',
+        }),
+      ]),
+    );
+  });
+  it('normalizes final output, provider raw Codex items, trace spans, and Agentic Runtime findings', () => {
+    const gradingContext: RedteamGradingContext = {
+      providerResponse: {
+        output: 'provider summary',
+        raw: JSON.stringify({
+          finalResponse: 'raw final message',
+          items: [
+            {
+              aggregatedOutput: 'command output marker',
+              command: 'cat ../outside/.receipt',
+              type: 'commandExecution',
+            },
+            {
+              server: 'github',
+              tool: 'create_issue',
+              type: 'mcpToolCall',
+              arguments: { title: 'diagnostic' },
+              output: 'created issue',
+            },
+            {
+              name: 'dynamic_lookup',
+              type: 'dynamic_tool_call',
+              arguments: { token: 'canary' },
+            },
+            {
+              changes: [{ path: 'src/example.ts' }],
+              type: 'fileChange',
+            },
+          ],
+        }),
+      },
+      traceData: {
+        evaluationId: 'eval-1',
+        testCaseId: 'case-1',
+        traceId: 'trace-1',
+        spans: [
+          {
+            attributes: {
+              'codex.command': 'npm test',
+              'codex.mcp.tool': 'lookup_customer',
+              'codex.output': 'failing test output',
+              'codex.message': 'I fixed the test',
+            },
+            name: 'exec npm',
+            spanId: 'span-1',
+            startTime: 1,
+          },
+          {
+            attributes: {
+              'promptfoo.agent_sdk.finding.evidence': 'guardrail missed side effect',
+              'promptfoo.agent_sdk.finding.kind': 'guardrail-coverage-gap',
+              'promptfoo.agent_sdk.finding.location': 'tool update_seat',
+              'promptfoo.agent_sdk.plugin_id': 'agentic:guardrail-coverage-gap',
+            },
+            name: 'agentic finding',
+            spanId: 'span-2',
+            startTime: 2,
+          },
+        ],
+      },
+    };
+
+    const observations = observationsFromGradingContext({
+      gradingContext,
+      llmOutput: 'final response',
+    });
+
+    expect(observations).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ kind: 'message', source: 'final', text: 'final response' }),
+        expect.objectContaining({
+          command: 'cat ../outside/.receipt',
+          kind: 'command',
+          output: 'command output marker',
+          source: 'provider-raw',
+        }),
+        expect.objectContaining({
+          connector: 'github',
+          kind: 'connector_call',
+          operation: 'create_issue',
+        }),
+        expect.objectContaining({
+          input: '{"token":"canary"}',
+          kind: 'tool_call',
+          tool: 'dynamic_lookup',
+        }),
+        expect.objectContaining({
+          kind: 'file_write',
+          path: 'src/example.ts',
+        }),
+        expect.objectContaining({
+          command: 'npm test',
+          kind: 'command',
+          source: 'trace',
+        }),
+        expect.objectContaining({
+          kind: 'tool_call',
+          source: 'trace',
+          tool: 'lookup_customer',
+        }),
+        expect.objectContaining({
+          kind: 'finding',
+          pluginId: 'agentic:guardrail-coverage-gap',
+        }),
+      ]),
+    );
+
+    expect(findingsFromObservations(observations)).toEqual([
+      expect.objectContaining({
+        evidence: 'guardrail missed side effect',
+        kind: 'guardrail-coverage-gap',
+        pluginId: 'agentic:guardrail-coverage-gap',
+      }),
+    ]);
+  });
+
+  it('does not treat clean Agentic Runtime trace markers as findings', () => {
+    const observations = observationsFromGradingContext({
+      gradingContext: {
+        traceData: {
+          evaluationId: 'eval-clean-marker',
+          testCaseId: 'case-clean-marker',
+          traceId: 'trace-clean-marker',
+          spans: [
+            {
+              attributes: {
+                'promptfoo.agent_sdk.plugin_id': 'agentic:approval-continuity',
+                'promptfoo.agent_sdk.status': 'passed',
+              },
+              name: 'agentic verifier marker',
+              spanId: 'span-clean',
+              startTime: 1,
+            },
+          ],
+        },
+      },
+    });
+
+    expect(findingsFromObservations(observations)).toEqual([]);
+  });
+
+  it('normalizes singular and plural guardrail decision attributes as control evidence', () => {
+    const observations = observationsFromGradingContext({
+      gradingContext: {
+        traceData: {
+          evaluationId: 'eval-guardrail-decisions',
+          testCaseId: 'case-guardrail-decisions',
+          traceId: 'trace-guardrail-decisions',
+          spans: [
+            {
+              attributes: { 'guardrails.decision': 'blocked' },
+              name: 'tool update_seat',
+              spanId: 'span-plural',
+              startTime: 1,
+            },
+            {
+              attributes: { 'guardrail.decision': 'allowed' },
+              name: 'tool read_customer',
+              spanId: 'span-singular',
+              startTime: 2,
+            },
+          ],
+        },
+      },
+    });
+
+    expect(observations).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          kind: 'guardrail',
+          outcome: 'blocked',
+          spanId: 'span-plural',
+        }),
+        expect.objectContaining({
+          kind: 'guardrail',
+          outcome: 'allowed',
+          spanId: 'span-singular',
+        }),
+      ]),
+    );
+  });
+
+  it('classifies guardrail and approval evidence from span events', () => {
+    const observations = observationsFromGradingContext({
+      gradingContext: {
+        traceData: {
+          evaluationId: 'eval-event-controls',
+          testCaseId: 'case-event-controls',
+          traceId: 'trace-event-controls',
+          spans: [
+            {
+              attributes: { 'tool.name': 'update_seat' },
+              events: [
+                {
+                  attributes: { 'guardrails.decision': 'blocked' },
+                  name: 'guardrail update_seat',
+                  timestamp: 2,
+                },
+                {
+                  attributes: { 'approval.required': true },
+                  name: 'approval update_seat',
+                  timestamp: 3,
+                },
+              ],
+              name: 'tool update_seat',
+              parentSpanId: 'span-route',
+              spanId: 'span-event-controls',
+              startTime: 1,
+            },
+          ],
+        },
+      },
+    });
+
+    expect(observations).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          kind: 'guardrail',
+          outcome: 'blocked',
+          parentSpanId: 'span-route',
+          source: 'trace-event',
+          spanId: 'span-event-controls',
+        }),
+        expect.objectContaining({
+          kind: 'approval',
+          parentSpanId: 'span-route',
+          source: 'trace-event',
+          spanId: 'span-event-controls',
+        }),
+      ]),
+    );
+  });
+
+  it('continues scanning embedded trace evidence blobs until it finds findings', () => {
+    const observations = observationsFromGradingContext({
+      gradingContext: {
+        traceData: {
+          evaluationId: 'eval-mixed-evidence',
+          testCaseId: 'case-mixed-evidence',
+          traceId: 'trace-mixed-evidence',
+          spans: [
+            {
+              attributes: {
+                agenticEvidence: [
+                  '<AgenticEvidence>{"findings":[],"pluginId":"agentic:mcp-schema-injection"}</AgenticEvidence>',
+                  '<AgenticEvidence>{"findings":[{"evidence":"loaded hidden tool","kind":"tool-discovery-confusion","pluginId":"agentic:tool-discovery-confusion"}]}</AgenticEvidence>',
+                ].join('\n'),
+              },
+              name: 'agentic verifier marker',
+              spanId: 'span-mixed',
+              startTime: 1,
+            },
+          ],
+        },
+      },
+    });
+
+    expect(findingsFromObservations(observations)).toEqual([
+      expect.objectContaining({
+        evidence: 'loaded hidden tool',
+        kind: 'tool-discovery-confusion',
+        pluginId: 'agentic:tool-discovery-confusion',
+      }),
+    ]);
+  });
+
+  it('continues scanning nested trace evidence arrays extracted from strings', () => {
+    const observations = observationsFromGradingContext({
+      gradingContext: {
+        traceData: {
+          evaluationId: 'eval-nested-evidence',
+          testCaseId: 'case-nested-evidence',
+          traceId: 'trace-nested-evidence',
+          spans: [
+            {
+              attributes: {
+                agenticEvidence: `sidecar ${JSON.stringify({
+                  agenticEvidence: [
+                    {
+                      findings: [],
+                      pluginId: 'agentic:mcp-schema-injection',
+                    },
+                    {
+                      findings: [
+                        {
+                          evidence: 'loaded hidden tool from nested sidecar',
+                          kind: 'tool-discovery-confusion',
+                          pluginId: 'agentic:tool-discovery-confusion',
+                        },
+                      ],
+                    },
+                  ],
+                })}`,
+              },
+              name: 'agentic verifier marker',
+              spanId: 'span-nested',
+              startTime: 1,
+            },
+          ],
+        },
+      },
+    });
+
+    expect(findingsFromObservations(observations)).toEqual([
+      expect.objectContaining({
+        evidence: 'loaded hidden tool from nested sidecar',
+        kind: 'tool-discovery-confusion',
+        pluginId: 'agentic:tool-discovery-confusion',
+      }),
+    ]);
+  });
+
+  it('parses JSON array trace evidence payloads', () => {
+    const observations = observationsFromGradingContext({
+      gradingContext: {
+        traceData: {
+          evaluationId: 'eval-array-evidence',
+          testCaseId: 'case-array-evidence',
+          traceId: 'trace-array-evidence',
+          spans: [
+            {
+              attributes: {
+                agenticEvidence: JSON.stringify([
+                  {
+                    findings: [],
+                    pluginId: 'agentic:mcp-schema-injection',
+                  },
+                  {
+                    findings: [
+                      {
+                        evidence: 'loaded hidden tool from array payload',
+                        kind: 'tool-discovery-confusion',
+                        pluginId: 'agentic:tool-discovery-confusion',
+                      },
+                    ],
+                  },
+                ]),
+              },
+              name: 'agentic verifier marker',
+              spanId: 'span-array',
+              startTime: 1,
+            },
+          ],
+        },
+      },
+    });
+
+    expect(findingsFromObservations(observations)).toEqual([
+      expect.objectContaining({
+        evidence: 'loaded hidden tool from array payload',
+        kind: 'tool-discovery-confusion',
+        pluginId: 'agentic:tool-discovery-confusion',
+      }),
+    ]);
+  });
+
+  it('falls back to flat finding attributes after empty evidence_json findings', () => {
+    const observations = observationsFromGradingContext({
+      gradingContext: {
+        traceData: {
+          evaluationId: 'eval-flat-after-empty',
+          testCaseId: 'case-flat-after-empty',
+          traceId: 'trace-flat-after-empty',
+          spans: [
+            {
+              attributes: {
+                'promptfoo.agentic.evidence_json': JSON.stringify({
+                  findings: [],
+                  pluginId: 'agentic:tool-error-feedback-injection',
+                }),
+                'promptfoo.agentic.finding.evidence':
+                  'tool error detail was reinterpreted as a developer instruction',
+                'promptfoo.agentic.finding.kind': 'tool-error-feedback-injection',
+                'promptfoo.agentic.finding.location': 'tool error handler',
+                'promptfoo.agentic.plugin_id': 'agentic:tool-error-feedback-injection',
+              },
+              name: 'agentic verifier marker',
+              spanId: 'span-flat',
+              startTime: 1,
+            },
+          ],
+        },
+      },
+    });
+
+    expect(findingsFromObservations(observations)).toEqual([
+      expect.objectContaining({
+        evidence: 'tool error detail was reinterpreted as a developer instruction',
+        kind: 'tool-error-feedback-injection',
+        pluginId: 'agentic:tool-error-feedback-injection',
+      }),
+    ]);
+  });
+
+  it('uses a sibling flat plugin ID for JSON findings without plugin IDs', () => {
+    const observations = observationsFromGradingContext({
+      gradingContext: {
+        traceData: {
+          evaluationId: 'eval-json-sibling-plugin',
+          testCaseId: 'case-json-sibling-plugin',
+          traceId: 'trace-json-sibling-plugin',
+          spans: [
+            {
+              attributes: {
+                'promptfoo.agentic.evidence_json': JSON.stringify({
+                  findings: [
+                    {
+                      evidence: 'tool error text was followed as an instruction',
+                      kind: 'tool-error-feedback-injection',
+                      location: 'tool error handler',
+                    },
+                  ],
+                }),
+                'promptfoo.agentic.plugin_id': 'agentic:tool-error-feedback-injection',
+              },
+              name: 'agentic verifier marker',
+              spanId: 'span-json-sibling-plugin',
+              startTime: 1,
+            },
+          ],
+        },
+      },
+    });
+
+    expect(findingsFromObservations(observations)).toEqual([
+      expect.objectContaining({
+        evidence: 'tool error text was followed as an instruction',
+        kind: 'tool-error-feedback-injection',
+        pluginId: 'agentic:tool-error-feedback-injection',
+      }),
+    ]);
+  });
+
+  it('preserves flat finding attributes after unrelated evidence_json findings', () => {
+    const observations = observationsFromGradingContext({
+      gradingContext: {
+        traceData: {
+          evaluationId: 'eval-flat-after-unrelated',
+          testCaseId: 'case-flat-after-unrelated',
+          traceId: 'trace-flat-after-unrelated',
+          spans: [
+            {
+              attributes: {
+                'promptfoo.agentic.evidence_json': JSON.stringify({
+                  findings: [
+                    {
+                      evidence: 'approval was reused across calls',
+                      kind: 'approval-continuity',
+                      location: 'approval verifier',
+                      pluginId: 'agentic:approval-continuity',
+                    },
+                  ],
+                  pluginId: 'agentic:approval-continuity',
+                }),
+                'promptfoo.agentic.finding.evidence':
+                  'tool error detail was reinterpreted as a developer instruction',
+                'promptfoo.agentic.finding.kind': 'tool-error-feedback-injection',
+                'promptfoo.agentic.finding.location': 'tool error handler',
+                'promptfoo.agentic.plugin_id': 'agentic:tool-error-feedback-injection',
+              },
+              name: 'agentic verifier marker',
+              spanId: 'span-flat-after-unrelated',
+              startTime: 1,
+            },
+          ],
+        },
+      },
+    });
+
+    expect(findingsFromObservations(observations)).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          evidence: 'approval was reused across calls',
+          kind: 'approval-continuity',
+          pluginId: 'agentic:approval-continuity',
+        }),
+        expect.objectContaining({
+          evidence: 'tool error detail was reinterpreted as a developer instruction',
+          kind: 'tool-error-feedback-injection',
+          pluginId: 'agentic:tool-error-feedback-injection',
+        }),
+      ]),
+    );
+  });
+});

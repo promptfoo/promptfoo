@@ -131,6 +131,22 @@ describe('trace assertions', () => {
     ],
   };
 
+  it.each([
+    'javascript',
+    'not-javascript',
+    'promptfoo:redteam:agentic:guardrail-coverage-gap',
+  ] as const)('rejects incomplete trace evidence for %s', async (type) => {
+    await expect(
+      runAssertion({
+        assertion: { type, value: 'true' },
+        test: mockTest,
+        providerResponse: mockProviderResponse,
+        traceId: 'test-trace-id',
+        traceData: { ...mockTraceData, metadata: { promptfooTraceIncomplete: 'limit exceeded' } },
+      }),
+    ).rejects.toThrow('Cannot grade incomplete trace');
+  });
+
   describe('javascript assertions with trace', () => {
     it('uses the evaluation tracing context for the grader test index', async () => {
       const graderSpan = vi.fn();

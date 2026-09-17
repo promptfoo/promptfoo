@@ -43,11 +43,11 @@ describe('TraceStore', () => {
       onConflictDoNothing: vi.fn().mockReturnThis(),
       run: vi.fn().mockResolvedValue(undefined),
     };
-    const mockSelectChain = {
+    const mockSelectChain = Object.assign(Promise.resolve([]), {
       from: vi.fn().mockReturnThis(),
       where: vi.fn().mockReturnThis(),
       limit: vi.fn(() => Promise.resolve([])),
-    };
+    });
     mockDeleteChain = {
       where: vi.fn().mockReturnThis(),
       run: vi.fn().mockResolvedValue(undefined),
@@ -55,8 +55,22 @@ describe('TraceStore', () => {
 
     mockDb = {
       insert: vi.fn(() => mockInsertChain),
-      select: vi.fn(() => mockSelectChain),
+      select: vi.fn((selection) =>
+        selection && ('count' in selection || 'spanId' in selection)
+          ? {
+              from: vi.fn().mockReturnThis(),
+              where: vi
+                .fn()
+                .mockResolvedValue('count' in selection ? [{ count: 0, bytes: 0 }] : []),
+            }
+          : mockSelectChain,
+      ),
       delete: vi.fn(() => mockDeleteChain),
+      update: vi.fn(() => ({
+        set: vi.fn().mockReturnThis(),
+        where: vi.fn().mockReturnThis(),
+        run: vi.fn(),
+      })),
       transaction: vi.fn(async (callback) => callback(mockDb)),
     };
 
@@ -147,25 +161,94 @@ describe('TraceStore', () => {
   });
 
   describe('addSpans', () => {
-    it('ignores existing and repeated spans through the database uniqueness constraint', async () => {
-      await traceStore.addSpans(
-        'test-trace-id',
-        [
-          { spanId: 'existing', name: 'existing', startTime: 1 },
-          { spanId: 'new', name: 'new', startTime: 2 },
-          { spanId: 'new', name: 'duplicate', startTime: 3 },
-        ],
-        { skipTraceCheck: true },
-      );
+    it('marks a trace incomplete before accepting telemetry with dropped evidence', async () => {
+      const markIncomplete = vi.spyOn(traceStore, 'markTraceIncomplete').mockResolvedValue();
+      await expect(
+        traceStore.addSpans(
+          'trace',
+          [{ spanId: 'partial', name: 'verifier', startTime: 1, incomplete: true } as any],
+          { skipTraceCheck: true },
+        ),
+      ).rejects.toThrow('dropped telemetry');
+      expect(markIncomplete).toHaveBeenCalledWith('trace', 'dropped telemetry');
+      expect(mockDb.insert).not.toHaveBeenCalled();
+    });
 
-      expect(mockDb.insert().values).toHaveBeenCalledWith([
-        expect.objectContaining({ spanId: 'existing' }),
-        expect.objectContaining({ spanId: 'new', name: 'new' }),
-        expect.objectContaining({ spanId: 'new', name: 'duplicate' }),
+    it.each(['spanId', 'parentSpanId'] as const)(
+      'counts persisted %s bytes toward the cumulative limit',
+      async (field) => {
+        const where = vi
+          .fn()
+          .mockResolvedValueOnce([{ count: 1, bytes: 10 * 1024 * 1024 - 64 }])
+          .mockResolvedValueOnce([{ spanId: 'prior', bytes: 10 * 1024 * 1024 - 64 }]);
+        mockDb.select.mockReturnValue({ from: vi.fn().mockReturnThis(), where });
+        await expect(
+          traceStore.addSpans(
+            'trace',
+            [{ spanId: 'new', name: '', startTime: 1, [field]: 'x'.repeat(65) }],
+            { skipTraceCheck: true },
+          ),
+        ).rejects.toThrow('Trace redaction limit exceeded');
+        expect(mockDb.insert).not.toHaveBeenCalled();
+        expect(mockDb.update).toHaveBeenCalledOnce();
+      },
+    );
+
+    it.each(['span', 'event'])(
+      'does not persist caller-supplied %s redaction history',
+      async (source) => {
+        const attributes = { 'promptfoo.redaction.history': '[REDACTED]', note: '[REDACTED]' };
+        await traceStore.addSpans(
+          'trace',
+          [
+            {
+              spanId: 'raw',
+              name: 'execute',
+              startTime: 1,
+              attributes: source === 'span' ? attributes : {},
+              events: source === 'event' ? [{ name: 'event', timestamp: 1, attributes }] : [],
+            },
+          ],
+          { skipTraceCheck: true },
+        );
+        const stored = mockDb.insert().values.mock.calls[0][0][0];
+        expect(source === 'span' ? stored.attributes : stored.events[0].attributes).toEqual({
+          note: '[REDACTED]',
+        });
+      },
+    );
+
+    it('inserts a complete snapshot in bounded statements inside one transaction', async () => {
+      const spans = Array.from({ length: 501 }, (_, i) => ({
+        spanId: String(i),
+        name: 'tool',
+        startTime: 1,
+      }));
+      await traceStore.addSpans('trace', spans, { skipTraceCheck: true });
+      expect(mockDb.transaction).toHaveBeenCalledOnce();
+      expect(mockDb.insert().values.mock.calls.map((call: unknown[][]) => call[0].length)).toEqual([
+        500, 1,
       ]);
-      expect(mockDb.insert().values().onConflictDoNothing).toHaveBeenCalledWith(
-        expect.objectContaining({ target: expect.any(Array) }),
-      );
+    });
+
+    it('rejects a cumulative span overflow before loading stored payloads', async () => {
+      const where = vi
+        .fn()
+        .mockResolvedValueOnce([{ count: 10_000, bytes: 1 }])
+        .mockResolvedValueOnce(
+          Array.from({ length: 10_000 }, (_, index) => ({ spanId: String(index), bytes: 0 })),
+        );
+      mockDb.select.mockReturnValue({ from: vi.fn().mockReturnThis(), where });
+      const redactSpans = vi.fn((spans) => spans);
+      await expect(
+        traceStore.addSpans('full-trace', [{ spanId: 'extra', name: 'extra', startTime: 1 }], {
+          skipTraceCheck: true,
+          redactSpans,
+        }),
+      ).rejects.toThrow('Trace redaction limit exceeded');
+      expect(mockDb.select).toHaveBeenCalledTimes(2);
+      expect(redactSpans).not.toHaveBeenCalled();
+      expect(mockDb.insert).not.toHaveBeenCalled();
     });
 
     it('should add spans to an existing trace', async () => {
@@ -183,6 +266,13 @@ describe('TraceStore', () => {
           startTime: 1000,
           endTime: 2000,
           attributes: { key: 'value' },
+          events: [
+            {
+              name: 'guardrail decision',
+              timestamp: 1500,
+              attributes: { 'guardrails.decision': 'blocked' },
+            },
+          ],
         },
         {
           spanId: 'span-2',
@@ -212,6 +302,13 @@ describe('TraceStore', () => {
           startTime: 1000,
           endTime: 2000,
           attributes: { key: 'value' },
+          events: [
+            {
+              name: 'guardrail decision',
+              timestamp: 1500,
+              attributes: { 'guardrails.decision': 'blocked' },
+            },
+          ],
           statusCode: undefined,
           statusMessage: undefined,
         },
@@ -584,6 +681,21 @@ describe('TraceStore', () => {
               safe: 'ok',
             },
           },
+          events: [
+            {
+              name: 'tool error Bearer event-secret',
+              timestamp: 2250,
+              attributes: {
+                authorization: 'Bearer event-secret',
+                safe: 'ok',
+              },
+            },
+            {
+              name: 'echo Bearer trace-secret',
+              timestamp: 2260,
+              attributes: { safe: 'ok' },
+            },
+          ],
           statusCode: 1,
           statusMessage: 'ok',
         },
@@ -645,10 +757,158 @@ describe('TraceStore', () => {
                 safe: 'ok',
               },
             },
+            events: [
+              {
+                name: 'tool error <redacted>',
+                timestamp: 2250,
+                attributes: {
+                  authorization: '<redacted>',
+                  safe: 'ok',
+                },
+              },
+              {
+                name: 'echo <redacted>',
+                timestamp: 2260,
+                attributes: { safe: 'ok' },
+              },
+            ],
             statusCode: 1,
             statusMessage: 'ok',
           },
         ],
+      });
+    });
+
+    it.each(
+      (['getTrace', 'getTracesByEvaluation', 'getSpans'] as const).flatMap((method) =>
+        ['raw', 'json', 'history'].map((format) => [method, format] as const),
+      ),
+    )('redacts sibling span and event echoes in %s with %s sources', async (method, format) => {
+      const secret = 'PRIVATE_SIBLING_EVENT_SECRET';
+      const attributes =
+        format === 'raw'
+          ? { authorization: secret }
+          : format === 'json'
+            ? { payload: JSON.stringify({ authorization: secret }) }
+            : { 'promptfoo.redaction.history': '[REDACTED]' };
+      const rows = [
+        { spanId: 'source', name: 'source', startTime: 1, attributes },
+        {
+          spanId: 'echo',
+          name: `span ${secret}`,
+          startTime: 2,
+          attributes: { response: secret, nested: [{ message: `echo ${secret}` }] },
+          events: [{ name: `event ${secret}`, timestamp: 3, attributes: { output: secret } }],
+        },
+      ];
+      const query = (value: unknown, chain = false) => ({
+        from: vi.fn().mockReturnThis(),
+        where: chain ? vi.fn().mockReturnThis() : vi.fn().mockResolvedValue(value),
+        limit: vi.fn().mockResolvedValue(value),
+        orderBy: vi.fn().mockResolvedValue(value),
+      });
+      if (method !== 'getSpans') {
+        mockDb.select.mockReturnValueOnce(query([{ traceId: 'siblings' }], method === 'getTrace'));
+      }
+      mockDb.select.mockReturnValueOnce(query(rows, method === 'getSpans'));
+      expect(JSON.stringify(await traceStore[method]('siblings'))).not.toContain(secret);
+    });
+
+    it.each([true, false])(
+      'redacts text when %s event attributes exceed the depth limit',
+      async (eventAttributes) => {
+        const secret = 'PRIVATE_DEEP_STORED_VALUE';
+        let nested: Record<string, unknown> = { authorization: secret };
+        for (let i = 0; i < 25; i++) {
+          nested = { nested };
+        }
+        mockDb.select
+          .mockReturnValueOnce({
+            from: vi.fn().mockReturnThis(),
+            where: vi.fn().mockReturnThis(),
+            limit: vi.fn().mockResolvedValue([{ traceId: 'deep-stored' }]),
+          })
+          .mockReturnValueOnce({
+            from: vi.fn().mockReturnThis(),
+            where: vi.fn().mockResolvedValue([
+              {
+                spanId: 'span',
+                name: secret,
+                statusMessage: secret,
+                startTime: 1,
+                attributes: eventAttributes ? {} : nested,
+                events: [{ name: secret, timestamp: 2, attributes: eventAttributes ? nested : {} }],
+              },
+            ]),
+          });
+        expect(JSON.stringify(await traceStore.getTrace('deep-stored'))).not.toContain(secret);
+      },
+    );
+
+    it.each([true, false])(
+      'redacts overlapping span and event secrets together: %s',
+      async (longerInEvent) => {
+        const short = 'SYNTHETIC_SHORT_SECRET';
+        const long = `prefix-${short}-suffix`;
+        const spans = [
+          {
+            spanId: 'span-overlap',
+            name: long,
+            startTime: 0,
+            statusMessage: long,
+            attributes: { authorization: longerInEvent ? short : long },
+            events: [
+              { name: long, timestamp: 0, attributes: { api_key: longerInEvent ? long : short } },
+            ],
+          },
+        ];
+        mockDb.select
+          .mockReturnValueOnce({
+            from: vi.fn().mockReturnThis(),
+            where: vi.fn().mockReturnThis(),
+            limit: vi.fn().mockResolvedValue([{ traceId: 'trace-overlap' }]),
+          })
+          .mockReturnValueOnce({
+            from: vi.fn().mockReturnThis(),
+            where: vi.fn().mockResolvedValue(spans),
+          });
+        const result = await traceStore.getTrace('trace-overlap');
+        expect(result?.spans[0]).toMatchObject({
+          name: '<redacted>',
+          statusMessage: '<redacted>',
+          events: [{ name: '<redacted>', attributes: { api_key: '<redacted>' } }],
+        });
+      },
+    );
+
+    it('replaces repeated short secrets without expanding redaction markers', async () => {
+      mockDb.select
+        .mockReturnValueOnce({
+          from: vi.fn().mockReturnThis(),
+          where: vi.fn().mockReturnThis(),
+          limit: vi.fn().mockResolvedValue([{ traceId: 'duplicate-secrets' }]),
+        })
+        .mockReturnValueOnce({
+          from: vi.fn().mockReturnThis(),
+          where: vi.fn().mockResolvedValue([
+            {
+              spanId: 'span',
+              name: 'e',
+              startTime: 0,
+              statusMessage: 'e',
+              attributes: Object.fromEntries(
+                Array.from({ length: 12 }, (_, i) => [`token${i}`, 'e']),
+              ),
+              events: [{ name: 'e', timestamp: 0, attributes: { token: 'e' } }],
+            },
+          ]),
+        });
+      const result = await traceStore.getTrace('duplicate-secrets');
+      expect(result?.spans[0].name).toHaveLength('<redacted>'.length);
+      expect(result?.spans[0]).toMatchObject({
+        name: '<redacted>',
+        statusMessage: '<redacted>',
+        events: [{ name: '<redacted>' }],
       });
     });
 

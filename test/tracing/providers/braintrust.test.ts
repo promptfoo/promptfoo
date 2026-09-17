@@ -61,6 +61,89 @@ describe('BraintrustProvider', () => {
     mockedFetch.mockImplementation(async () => response({ rows }));
   });
 
+  it.each(['metadata', 'span_attributes'] as const)(
+    'keeps backend timestamps authoritative over %s timing attributes',
+    async (field) => {
+      const supplied = {
+        ...rows[0][field],
+        'otel.span.start_time_unix_nano': '1',
+        'otel.span.end_time_unix_nano': '2',
+        'fixture.label': 'retained',
+      };
+      mockedFetch.mockResolvedValueOnce(response({ rows: [{ ...rows[0], [field]: supplied }] }));
+      const span = (await new BraintrustProvider(config).fetchTrace(TRACE_ID))?.spans[0];
+      expect(span).toMatchObject({ startTime: 1704067200000, endTime: 1704067201000 });
+      expect(span?.attributes).toHaveProperty('fixture.label', 'retained');
+      expect(span?.attributes).not.toHaveProperty('otel.span.start_time_unix_nano');
+      expect(span?.attributes).not.toHaveProperty('otel.span.end_time_unix_nano');
+      expect(supplied['otel.span.start_time_unix_nano']).toBe('1');
+    },
+  );
+
+  it.each([-1, 0, 1])('clamps maxSpans=%s to at least one', async (maxSpans) => {
+    mockedFetch.mockResolvedValueOnce(
+      response({
+        rows: [...rows, { ...rows[1], id: 'third-event', span_id: 'third-span' }],
+      }),
+    );
+    expect(
+      (await new BraintrustProvider(config).fetchTrace(TRACE_ID, { maxSpans }))?.spans,
+    ).toHaveLength(1);
+  });
+
+  it.each([
+    null,
+    { ...rows[0], id: undefined, span_id: 42 },
+    { ...rows[0], created: 'invalid', metrics: { start: 'invalid' } },
+    { ...rows[0], span_parents: 42 },
+    { ...rows[0], span_parents: [42] },
+    { ...rows[0], metrics: { start: 1704067200, end: 1704067199 } },
+  ])('rejects a malformed row instead of returning a partial trace: %o', async (row) => {
+    mockedFetch.mockResolvedValue(response({ rows: [row, rows[1]] }));
+    await expect(new BraintrustProvider(config).fetchTrace(TRACE_ID)).rejects.toMatchObject({
+      invalidEvidence: true,
+    });
+  });
+
+  it.each(
+    ['metadata', 'metrics', 'span_attributes'].flatMap((field) =>
+      ['invalid', [], null, undefined].map((value) => ({ field, value })),
+    ),
+  )('validates the shape of $field before truncation: $value', async ({ field, value }) => {
+    mockedFetch.mockResolvedValueOnce(
+      response({ rows: [rows[1], { ...rows[0], [field]: value }] }),
+    );
+    const result = new BraintrustProvider(config).fetchTrace(TRACE_ID, { maxSpans: 1 });
+    if (value == null) {
+      expect((await result)?.spans).toHaveLength(1);
+    } else {
+      await expect(result).rejects.toMatchObject({
+        invalidEvidence: true,
+        retryable: false,
+      });
+    }
+  });
+
+  it.each(
+    [false, true].flatMap((conflict) => [undefined, 1].map((maxSpans) => ({ conflict, maxSpans }))),
+  )(
+    'checks duplicate evidence before truncation (conflict=$conflict, maxSpans=$maxSpans)',
+    async ({ conflict, maxSpans }) => {
+      const original = rows[0];
+      const duplicate = { ...original, ...(conflict ? { output: { unsafe: true } } : {}) };
+      mockedFetch.mockResolvedValueOnce(response({ rows: [original, duplicate], meta: {} }));
+      const result = new BraintrustProvider(config).fetchTrace(TRACE_ID, { maxSpans });
+      if (conflict) {
+        await expect(result).rejects.toMatchObject({
+          message: expect.stringMatching(/conflicting duplicate/i),
+          invalidEvidence: true,
+        });
+      } else {
+        expect((await result)?.spans).toHaveLength(1);
+      }
+    },
+  );
+
   it.each([
     { id: 'braintrust' },
     { ...config, endpoint: 'file:///tmp/traces' },
@@ -123,6 +206,39 @@ describe('BraintrustProvider', () => {
     expect(body.query).toContain(`project_logs('${PROJECT_ID}', shape => 'traces')`);
     expect(body.query).toContain(`metadata.trace_id = '${TRACE_ID}'`);
     expect(body.query).toContain('created >= now() - INTERVAL 1 DAY');
+  });
+
+  it.each([undefined, 1])(
+    'detects an oversized trace before applying maxSpans=%s',
+    async (maxSpans) => {
+      const oversized = Array.from({ length: 10_001 }, (_, index) => ({
+        ...rows[0],
+        span_id: `span-${index}`,
+      }));
+      mockedFetch.mockImplementation(async (_, options) => {
+        const query = JSON.parse(options?.body as string).query as string;
+        const limit = Number(query.match(/LIMIT (\d+)/)?.[1]);
+        return response({ rows: oversized.slice(0, limit) });
+      });
+
+      await expect(
+        new BraintrustProvider(config).fetchTrace(TRACE_ID, { maxSpans }),
+      ).rejects.toMatchObject({
+        limitExceeded: true,
+      });
+    },
+  );
+
+  it('accepts a complete trace at the span limit', async () => {
+    mockedFetch.mockResolvedValue(
+      response({
+        rows: Array.from({ length: 10_000 }, (_, index) => ({
+          ...rows[0],
+          span_id: `span-${index}`,
+        })),
+      }),
+    );
+    expect((await new BraintrustProvider(config).fetchTrace(TRACE_ID))?.spans).toHaveLength(10_000);
   });
 
   it('links deeply nested spans to their immediate parent', async () => {
@@ -249,9 +365,10 @@ describe('BraintrustProvider', () => {
     const cancel = vi.spyOn(oversizedResponse.body!, 'cancel');
     mockedFetch.mockResolvedValue(oversizedResponse);
 
-    await expect(new BraintrustProvider(config).fetchTrace(TRACE_ID)).rejects.toThrow(
-      'maximum response size',
-    );
+    await expect(new BraintrustProvider(config).fetchTrace(TRACE_ID)).rejects.toMatchObject({
+      message: expect.stringContaining('maximum response size'),
+      limitExceeded: true,
+    });
     expect(cancel).toHaveBeenCalledOnce();
   });
 
@@ -271,9 +388,10 @@ describe('BraintrustProvider', () => {
         }),
       );
 
-      await expect(new BraintrustProvider(config).fetchTrace(TRACE_ID)).rejects.toThrow(
-        'maximum response size',
-      );
+      await expect(new BraintrustProvider(config).fetchTrace(TRACE_ID)).rejects.toMatchObject({
+        message: expect.stringContaining('maximum response size'),
+        limitExceeded: true,
+      });
       expect(cancel).toHaveBeenCalledOnce();
     },
   );
@@ -289,11 +407,14 @@ describe('BraintrustProvider', () => {
     ).toEqual(['tool.search']);
   });
 
-  it('rejects malformed BTQL response payloads', async () => {
-    mockedFetch.mockResolvedValue(response({ result: 'not span rows' }));
-
-    await expect(new BraintrustProvider(config).fetchTrace(TRACE_ID)).rejects.toThrow(
-      'invalid query response',
-    );
-  });
+  it.each(['{', 'null', '42', '[]', '{"result":"not span rows"}'])(
+    'marks malformed BTQL payload %s as invalid evidence',
+    async (body) => {
+      mockedFetch.mockResolvedValue(new Response(body));
+      await expect(new BraintrustProvider(config).fetchTrace(TRACE_ID)).rejects.toMatchObject({
+        name: 'TraceProviderError',
+        invalidEvidence: true,
+      });
+    },
+  );
 });

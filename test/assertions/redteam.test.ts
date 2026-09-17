@@ -3,11 +3,209 @@ import { getAssertionBaseType, isAssertionInverse } from '../../src/assertions/i
 import { handleRedteam } from '../../src/assertions/redteam';
 import { MULTI_INPUT_VAR } from '../../src/redteam/constants';
 import { RedteamGraderBase } from '../../src/redteam/plugins/base';
+import * as indirectWebPwn from '../../src/redteam/strategies/indirectWebPwn';
 
 describe('handleRedteam', () => {
   afterEach(() => {
     vi.resetAllMocks();
+    vi.restoreAllMocks();
   });
+
+  it.each(['evaluationId', 'testUrl', 'responseUrl'])(
+    'passes exfiltration evidence to the grader using %s',
+    async (source) => {
+      const assertion = { type: 'promptfoo:redteam:harmful:hate' as const };
+      const url = 'https://example.invalid/dynamic-pages/eval-fixture/page-fixture';
+      const test = {
+        metadata: {
+          pluginId: 'harmful:hate',
+          webPageUuid: 'page-fixture',
+          ...(source === 'evaluationId' ? { evaluationId: 'eval-fixture' } : {}),
+          ...(source === 'testUrl' ? { webPageUrl: url } : {}),
+        },
+      };
+      const providerResponse = {
+        output: 'Done.',
+        metadata: source === 'responseUrl' ? { webPageUrl: url } : {},
+      };
+      const tracking = { wasExfiltrated: true, exfilCount: 1, exfilRecords: [] };
+      const lookup = vi.spyOn(indirectWebPwn, 'checkExfilTracking').mockResolvedValue(tracking);
+      const grader = vi.spyOn(RedteamGraderBase.prototype, 'getResult').mockResolvedValue({
+        grade: { pass: false, score: 0, reason: 'Exfiltration recorded' },
+        rubric: 'Check exfiltration',
+      });
+      const grade = await handleRedteam({
+        assertion,
+        baseType: assertion.type,
+        inverse: false,
+        test,
+        providerResponse,
+        assertionValueContext: {
+          prompt: 'Inspect report',
+          vars: {},
+          test,
+          logProbs: [],
+          provider: undefined,
+          providerResponse,
+        },
+        cost: 0,
+        latencyMs: 0,
+        logProbs: [],
+        output: 'Done.',
+        outputString: 'Done.',
+        prompt: 'Inspect report',
+        provider: undefined,
+        renderedValue: undefined,
+        valueFromScript: undefined,
+      });
+      expect(lookup).toHaveBeenCalledWith('page-fixture', 'eval-fixture');
+      expect(grader).toHaveBeenCalledWith(
+        'Inspect report',
+        'Done.',
+        test,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        expect.objectContaining({ ...tracking, providerResponse }),
+      );
+      expect(grade.pass).toBe(false);
+    },
+  );
+
+  it.each([
+    { pass: true, linked: false },
+    { pass: false, linked: false },
+    { pass: true, linked: true },
+  ])(
+    'uses a stored agentic verdict only without a linked trace: $pass/$linked',
+    async ({ pass, linked }) => {
+      const pluginId = 'agentic:approval-continuity';
+      const assertion = { type: `promptfoo:redteam:${pluginId}` as const };
+      const test = {
+        vars: {},
+        metadata: { pluginId, strategyId: 'jailbreak', tracing: { enabled: linked } },
+      };
+      const storedGraderResult = {
+        pass,
+        score: pass ? 1 : 0,
+        reason: 'Verified during the attack turn',
+        assertion,
+      };
+      const providerResponse = { output: 'Final response', metadata: { storedGraderResult } };
+      const grade = await handleRedteam({
+        ...(linked
+          ? {
+              providerCallContext: {
+                prompt: { raw: 'Inspect report', label: '' },
+                vars: {},
+                traceparent: `00-${'a'.repeat(32)}-${'b'.repeat(16)}-01`,
+              },
+            }
+          : {}),
+        assertion,
+        baseType: assertion.type,
+        test,
+        providerResponse,
+        assertionValueContext: {
+          prompt: 'Inspect report',
+          vars: {},
+          test,
+          logProbs: [],
+          provider: undefined,
+          providerResponse,
+        },
+        cost: 0,
+        inverse: false,
+        latencyMs: 0,
+        logProbs: [],
+        output: 'Final response',
+        outputString: 'Final response',
+        prompt: 'Inspect report',
+        provider: undefined,
+        renderedValue: undefined,
+        valueFromScript: undefined,
+      });
+      if (linked) {
+        expect(grade.pass).toBe(false);
+        expect(grade.metadata?.verifierStatus).toBe('missing-evidence');
+      } else {
+        expect(grade).toMatchObject(storedGraderResult);
+      }
+    },
+  );
+
+  it.each([
+    { strategyId: 'custom', malformed: false },
+    { strategyId: 'jailbreak:tree', malformed: false },
+    { strategyId: 'custom', malformed: true },
+    { strategyId: 'jailbreak:tree', malformed: true },
+  ])(
+    'checks the complete agentic trace after a stored $strategyId pass (malformed=$malformed)',
+    async ({ strategyId, malformed }) => {
+      const pluginId = 'agentic:guardrail-coverage-gap';
+      const assertion = { type: `promptfoo:redteam:${pluginId}` as const };
+      const test = { vars: {}, assert: [assertion], metadata: { pluginId, strategyId } };
+      const providerResponse = {
+        output: 'Done.',
+        metadata: {
+          agenticEvidence: { pluginId, findings: [] },
+          storedGraderResult: { pass: true, score: 1, reason: 'No output findings', assertion },
+          ...(malformed && {
+            redteamHistory: [{ graderError: 'An earlier grader failed' }, { output: 'Done' }],
+          }),
+        },
+      };
+      const result = handleRedteam({
+        assertion,
+        baseType: assertion.type,
+        assertionValueContext: {
+          prompt: 'Update the seat.',
+          vars: {},
+          test,
+          logProbs: [],
+          provider: undefined,
+          providerResponse,
+          trace: {
+            traceId: 'a'.repeat(32),
+            evaluationId: 'eval',
+            testCaseId: 'case',
+            spans: [
+              {
+                spanId: 'tool',
+                name: 'tool update_seat',
+                startTime: 1,
+                endTime: 2,
+                attributes: {
+                  'gen_ai.tool.name': 'update_seat',
+                  ...(malformed && { 'tool.name': 'other_tool' }),
+                },
+              },
+            ],
+          },
+        },
+        cost: 0,
+        inverse: false,
+        latencyMs: 0,
+        logProbs: [],
+        output: 'Done.',
+        outputString: 'Done.',
+        prompt: 'Update the seat.',
+        provider: undefined,
+        providerResponse,
+        renderedValue: undefined,
+        test,
+        valueFromScript: undefined,
+      });
+      if (malformed) {
+        await expect(result).rejects.toThrow('conflicting tool names');
+        return;
+      }
+      const grade = await result;
+      expect(grade.pass).toBe(false);
+      expect(grade.metadata?.deterministicFailureKind).toBe('guardrail-coverage-gap');
+    },
+  );
 
   it('returns pass with explanation when iterative strategy has SOME grader errors and re-grading fails', async () => {
     const assertion = {

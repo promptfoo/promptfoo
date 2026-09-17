@@ -53,6 +53,8 @@ const TOOL_ATTRIBUTE_FAMILIES: readonly ToolAttributeFamily[] = [
     argSuffixes: ['.args', '.arguments', '.input'],
     extraNameKeys: ['codex.mcp.tool'],
   },
+  { prefix: 'codex.tool', nameSuffixes: ['.name'] },
+  { prefix: 'mcp.tool', nameSuffixes: ['.name'] },
 ];
 
 export const TOOL_NAME_ATTRIBUTE_KEYS: readonly string[] = TOOL_ATTRIBUTE_FAMILIES.flatMap(

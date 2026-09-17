@@ -285,7 +285,12 @@ describe('importCommand', () => {
       expect(importedEval!.evaluationDurationMs).toBe(4198);
     });
 
-    it('should import traces and attach them to the imported eval', async () => {
+    it.each([
+      { timestamp: 15, timestampNanos: '15000000' },
+      { timestamp: 15 },
+      { timestamp: 1_789_523_000_123.4568, timestampNanos: '1789523000123456789' },
+      { timestamp: 1_789_523_000_000.0078, timestampNanos: '1789523000000007920' },
+    ])('should import traces and attach them to the imported eval: %j', async (eventTime) => {
       const sampleFilePath = path.join(__dirname, '../__fixtures__/sample-export.json');
       const sampleData = JSON.parse(fs.readFileSync(sampleFilePath, 'utf-8'));
       sampleData.traces = [
@@ -301,10 +306,16 @@ describe('importCommand', () => {
               startTime: 10,
               endTime: 20,
               attributes: { operation: 'search' },
-              statusCode: 1,
-            },
-            {
-              spanId: 'span-malformed',
+              parentSpanId: '',
+              statusCode: 400,
+              statusMessage: 'tool error',
+              events: [
+                {
+                  name: 'observed',
+                  ...eventTime,
+                  attributes: { handled: true },
+                },
+              ],
             },
           ],
         },
@@ -330,15 +341,22 @@ describe('importCommand', () => {
           spanId: 'span-imported',
           name: 'portable span',
           attributes: { operation: 'search' },
-          statusCode: 1,
+          parentSpanId: '',
+          statusCode: 400,
+          statusMessage: 'tool error',
+          events: [
+            {
+              name: 'observed',
+              ...eventTime,
+              attributes: { handled: true },
+            },
+          ],
         }),
       ]);
-      expect(logger.warn).toHaveBeenCalledWith(
-        expect.stringContaining('Skipping malformed trace span'),
-      );
+      expect(process.exitCode).toBeUndefined();
     });
 
-    it('should skip malformed traces and still import the eval', async () => {
+    it('rejects the whole import when a trace is malformed', async () => {
       const sampleFilePath = path.join(__dirname, '../__fixtures__/sample-export.json');
       const sampleData = JSON.parse(fs.readFileSync(sampleFilePath, 'utf-8'));
       sampleData.traces = [
@@ -359,13 +377,12 @@ describe('importCommand', () => {
       importCommand(program);
       await program.parseAsync(['node', 'test', 'import', filePath]);
 
-      expect(process.exitCode).toBeUndefined();
-      expect(logger.warn).toHaveBeenCalledWith(
-        expect.stringContaining('Skipping malformed trace during import'),
+      expect(process.exitCode).toBe(1);
+      expect(logger.error).toHaveBeenCalledWith(
+        expect.stringContaining('Invalid trace record in imported evaluation'),
       );
-      const traces = await new TraceStore().getTracesByEvaluation(sampleData.evalId);
-      expect(traces).toHaveLength(1);
-      expect(traces[0].traceId).toBe('trace-valid');
+      expect(await Eval.findById(sampleData.evalId)).toBeUndefined();
+      expect(await new TraceStore().getTracesByEvaluation(sampleData.evalId)).toEqual([]);
     });
 
     it('should clear result trace linkage when the exported trace is absent', async () => {
@@ -1556,6 +1573,269 @@ describe('importCommand', () => {
       expect(replacedEval).toBeDefined();
       expect(replacedEval!.config.description).toBe(sampleData.config.description);
     });
+
+    it.each([
+      { events: {} },
+      { events: [null] },
+      { events: [{ name: 'verifier', timestamp: 'invalid' }] },
+      { events: [{ name: 'progress', timestamp: 15, timestampNanos: '16000000' }] },
+    ])('preserves the existing eval when imported events are malformed: %j', async ({ events }) => {
+      const sampleFilePath = path.join(__dirname, '../__fixtures__/sample-export.json');
+      const replacement = JSON.parse(fs.readFileSync(sampleFilePath, 'utf8'));
+      importCommand(program);
+      await program.parseAsync(['node', 'test', 'import', sampleFilePath]);
+      replacement.traces = [
+        {
+          traceId: 'invalid-events',
+          evaluationId: replacement.evalId,
+          testCaseId: 'fixture',
+          spans: [{ spanId: 'span', name: 'verifier', startTime: 1, events }],
+        },
+      ];
+      tempFilePath = path.join(__dirname, `temp-force-events-${Date.now()}.json`);
+      fs.writeFileSync(tempFilePath, JSON.stringify(replacement));
+      const second = new Command();
+      importCommand(second);
+      await second.parseAsync(['node', 'test', 'import', '--force', tempFilePath]);
+      expect(process.exitCode).toBe(1);
+      expect(logger.error).toHaveBeenCalledWith(expect.stringContaining('trace span events'));
+      expect(await Eval.findById(replacement.evalId)).toBeDefined();
+      expect(await EvalResult.findManyByEvalId(replacement.evalId)).toHaveLength(4);
+    });
+
+    it.each(['attributes', 'status', 'events', 'equal'])(
+      'checks duplicate span %s before replacing an existing eval',
+      async (conflict) => {
+        const sampleFilePath = path.join(__dirname, '../__fixtures__/sample-export.json');
+        const replacement = JSON.parse(fs.readFileSync(sampleFilePath, 'utf8'));
+        importCommand(program);
+        await program.parseAsync(['node', 'test', 'import', sampleFilePath]);
+        const originalIds = (await EvalResult.findManyByEvalId(replacement.evalId))
+          .map((row) => row.id)
+          .sort();
+        const span = { spanId: 'span', name: 'verifier', startTime: 1 };
+        const duplicate = {
+          ...span,
+          ...(conflict === 'attributes' && { attributes: { unsafe: true } }),
+          ...(conflict === 'status' && { statusCode: 2 }),
+          ...(conflict === 'events' && { events: [{ name: 'unsafe', timestamp: 2 }] }),
+        };
+        replacement.traces = [
+          {
+            traceId: 'duplicate-spans',
+            evaluationId: replacement.evalId,
+            testCaseId: 'fixture',
+            spans: [span, duplicate],
+          },
+        ];
+        tempFilePath = path.join(__dirname, `temp-force-duplicates-${conflict}-${Date.now()}.json`);
+        fs.writeFileSync(tempFilePath, JSON.stringify(replacement));
+        const second = new Command();
+        importCommand(second);
+        await second.parseAsync(['node', 'test', 'import', '--force', tempFilePath]);
+        if (conflict === 'equal') {
+          expect(process.exitCode).toBeUndefined();
+          const traces = await new TraceStore().getTracesByEvaluation(replacement.evalId);
+          expect(traces[0].spans).toHaveLength(1);
+        } else {
+          expect(process.exitCode).toBe(1);
+          expect(logger.error).toHaveBeenCalledWith(expect.stringMatching(/conflicting/i));
+          expect(
+            (await EvalResult.findManyByEvalId(replacement.evalId)).map((row) => row.id).sort(),
+          ).toEqual(originalIds);
+        }
+      },
+    );
+
+    it.each([false, true])(
+      'rejects repeated trace IDs before forced replacement (conflict=%s)',
+      async (conflict) => {
+        const sampleFilePath = path.join(__dirname, '../__fixtures__/sample-export.json');
+        const replacement = JSON.parse(fs.readFileSync(sampleFilePath, 'utf8'));
+        importCommand(program);
+        await program.parseAsync(['node', 'test', 'import', sampleFilePath]);
+        const originalIds = (await EvalResult.findManyByEvalId(replacement.evalId))
+          .map((row) => row.id)
+          .sort();
+        const trace = {
+          traceId: 'duplicate-trace',
+          evaluationId: replacement.evalId,
+          testCaseId: 'fixture',
+          spans: [{ spanId: 'span', name: 'tool', startTime: 1 }],
+        };
+        replacement.traces = [
+          trace,
+          {
+            ...trace,
+            ...(conflict && {
+              testCaseId: 'other',
+              spans: [{ spanId: 'other', name: 'other tool', startTime: 2 }],
+            }),
+          },
+        ];
+        tempFilePath = path.join(__dirname, `temp-force-trace-ids-${conflict}-${Date.now()}.json`);
+        fs.writeFileSync(tempFilePath, JSON.stringify(replacement));
+        const second = new Command();
+        importCommand(second);
+        await second.parseAsync(['node', 'test', 'import', '--force', tempFilePath]);
+        expect(process.exitCode).toBe(1);
+        expect(logger.error).toHaveBeenCalledWith(expect.stringMatching(/duplicate trace IDs/i));
+        expect(
+          (await EvalResult.findManyByEvalId(replacement.evalId)).map((row) => row.id).sort(),
+        ).toEqual(originalIds);
+        expect(await new TraceStore().getTracesByEvaluation(replacement.evalId)).toEqual([]);
+      },
+    );
+
+    it.each([
+      { name: 'null collection', traces: null },
+      { name: 'object collection', traces: {} },
+      { name: 'null trace', traces: [null] },
+      { name: 'incomplete trace', traces: [{ traceId: 'broken', spans: [] }] },
+      {
+        name: 'null span',
+        traces: [{ traceId: 'broken', testCaseId: 'case', spans: [null] }],
+      },
+      {
+        name: 'incomplete span alongside a valid span',
+        traces: [
+          {
+            traceId: 'broken',
+            testCaseId: 'case',
+            spans: [
+              { spanId: 'valid', name: 'valid', startTime: 1 },
+              { spanId: 'incomplete', name: 'missing start time' },
+            ],
+          },
+        ],
+      },
+      ...[
+        { traceId: '' },
+        { testCaseId: '   ' },
+        { metadata: null },
+        { metadata: [] },
+        { metadata: 'invalid' },
+      ].map((fields) => ({
+        name: JSON.stringify(fields),
+        traces: [{ traceId: 'trace', testCaseId: 'case', spans: [], ...fields }],
+      })),
+      ...[
+        { spanId: '' },
+        { name: '   ' },
+        { endTime: 'invalid' },
+        { endTime: null },
+        { endTime: 0 },
+        { parentSpanId: 1 },
+        { attributes: null },
+        { attributes: [] },
+        { attributes: 'invalid' },
+        { statusCode: 'error' },
+        { statusCode: {} },
+        { statusMessage: 1 },
+        { incomplete: true },
+        { incomplete: 'yes' },
+      ].map((fields) => ({
+        name: JSON.stringify(fields),
+        traces: [
+          {
+            traceId: 'trace',
+            testCaseId: 'case',
+            spans: [{ spanId: 'span', name: 'span', startTime: 1, ...fields }],
+          },
+        ],
+      })),
+    ])('preserves stored eval and trace data for malformed $name', async ({ traces }) => {
+      const sampleFilePath = path.join(__dirname, '../__fixtures__/sample-export.json');
+      const original = JSON.parse(fs.readFileSync(sampleFilePath, 'utf8'));
+      original.traces = [
+        {
+          traceId: 'original-trace',
+          testCaseId: 'original-case',
+          spans: [{ spanId: 'original-span', name: 'original', startTime: 1 }],
+        },
+      ];
+      tempFilePath = path.join(__dirname, `temp-force-malformed-${Date.now()}.json`);
+      fs.writeFileSync(tempFilePath, JSON.stringify(original));
+      importCommand(program);
+      await program.parseAsync(['node', 'test', 'import', tempFilePath]);
+      expect(process.exitCode).toBeUndefined();
+      const originalIds = (await EvalResult.findManyByEvalId(original.evalId))
+        .map((row) => row.id)
+        .sort();
+      const traceStore = new TraceStore();
+      const originalTraces = await traceStore.getTracesByEvaluation(original.evalId);
+
+      fs.writeFileSync(
+        tempFilePath,
+        JSON.stringify({
+          ...original,
+          config: { ...original.config, description: 'replacement' },
+          traces,
+        }),
+      );
+      vi.clearAllMocks();
+      const replacement = new Command();
+      importCommand(replacement);
+      await replacement.parseAsync(['node', 'test', 'import', '--force', tempFilePath]);
+
+      expect(process.exitCode).toBe(1);
+      expect(logger.error).toHaveBeenCalledWith(expect.stringMatching(/Invalid.*trace/i));
+      expect((await Eval.findById(original.evalId))?.config).toEqual(original.config);
+      expect(
+        (await EvalResult.findManyByEvalId(original.evalId)).map((row) => row.id).sort(),
+      ).toEqual(originalIds);
+      expect(await traceStore.getTracesByEvaluation(original.evalId)).toEqual(originalTraces);
+      expect(updateSignalFile).not.toHaveBeenCalled();
+      expect(updateSignalFileForDeletedEvals).not.toHaveBeenCalled();
+    });
+
+    it.each(['count', 'bytes'])(
+      'preserves existing result identities when a forced trace exceeds %s limits',
+      async (limit) => {
+        const sampleFilePath = path.join(__dirname, '../__fixtures__/sample-export.json');
+        const replacement = JSON.parse(fs.readFileSync(sampleFilePath, 'utf8'));
+        importCommand(program);
+        await program.parseAsync(['node', 'test', 'import', sampleFilePath]);
+        const originalIds = (await EvalResult.findManyByEvalId(replacement.evalId))
+          .map((row) => row.id)
+          .sort();
+        replacement.traces = [
+          {
+            traceId: 'oversized',
+            evaluationId: replacement.evalId,
+            testCaseId: 'fixture',
+            spans:
+              limit === 'count'
+                ? Array.from({ length: 10_001 }, (_, index) => ({
+                    spanId: `span-${index}`,
+                    name: 'tool',
+                    startTime: 1,
+                  }))
+                : [
+                    {
+                      spanId: 'span',
+                      name: 'tool',
+                      startTime: 1,
+                      attributes: { output: 'x'.repeat(10 * 1024 * 1024) },
+                    },
+                  ],
+          },
+        ];
+        tempFilePath = path.join(__dirname, `temp-force-limit-${limit}-${Date.now()}.json`);
+        fs.writeFileSync(tempFilePath, JSON.stringify(replacement));
+        const second = new Command();
+        importCommand(second);
+        await second.parseAsync(['node', 'test', 'import', '--force', tempFilePath]);
+        expect(process.exitCode).toBe(1);
+        expect(logger.error).toHaveBeenCalledWith(
+          expect.stringContaining('Trace redaction limit exceeded'),
+        );
+        expect(
+          (await EvalResult.findManyByEvalId(replacement.evalId)).map((row) => row.id).sort(),
+        ).toEqual(originalIds);
+        expect(await new TraceStore().getTracesByEvaluation(replacement.evalId)).toEqual([]);
+      },
+    );
 
     it('should keep the existing eval when a --force replacement fails preflight', async () => {
       const sampleFilePath = path.join(__dirname, '../__fixtures__/sample-export.json');
