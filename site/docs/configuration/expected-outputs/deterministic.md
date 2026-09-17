@@ -65,7 +65,7 @@ These assertions can check LLM output or provider metadata directly. Configured 
 | [perplexity](#perplexity)                                       | Perplexity is below a threshold                                    |
 | [python](/docs/configuration/expected-outputs/python)           | provided Python function validates the output                      |
 | [regex](#regex)                                                 | output matches regex                                               |
-| [rouge-l](#rouge-l)                                             | Rouge-L (longest common subsequence) score is above a threshold    |
+| [rouge-l](#rouge-l)                                             | Rouge-L (summary-level LCS, ROUGE-Lsum) score is above a threshold |
 | [rouge-n](#rouge-n)                                             | Rouge-N score is above a given threshold                           |
 | [rouge-s](#rouge-s)                                             | Rouge-S (skip-bigram) score is above a threshold                   |
 | [starts-with](#starts-with)                                     | output starts with string                                          |
@@ -1332,7 +1332,9 @@ Because an LCS does not have to be contiguous, ROUGE-L rewards output that prese
 
 Use `rouge-l` when the order of the output matters and `rouge-n` when only the presence of the right words does.
 
-Scored at the sentence level: the output and the expected value are each treated as a single token sequence, so reordering whole sentences lowers the score.
+`rouge-n` does not split sentences, so a period stays attached to the word before it unless it ends the text. That is why the sentence-reorder example below scores lower on `rouge-n` than on `rouge-l`.
+
+`rouge-l` is the summary-level LCS (ROUGE-Lsum) computed by js-rouge. Both texts are split into sentences and each expected sentence is matched against every output sentence, so word order counts within a sentence but the order of whole sentences does not. For example, the output `the cat sat. a dog ran.` against the expected value `a dog ran. the cat sat.` scores 1.00 on `rouge-l` and 0.46 on `rouge-s`, which also counts order across sentences.
 
 ```yaml
 assert:
@@ -1353,11 +1355,11 @@ assert:
 
 ### Rouge-S
 
-The `rouge-s` assertion scores **skip-bigram** overlap: every ordered pair of words, however many words separate them.
+The `rouge-s` assertion scores **skip-bigram** overlap, computed by js-rouge over the whole text: every ordered pair of words, however many words separate them.
 
-Every pair carries order information, so `rouge-s` is the **strictest of the three about word order** — see the table above, where reordered text scores 1.00 on `rouge-n`, 0.50 on `rouge-l` and 0.17 on `rouge-s`. Reach for it when the relationships between terms must hold, not just the words themselves.
+Every pair carries order information, so `rouge-s` is the **strictest of the three about word order**. In the table above, reordered text scores 1.00 on `rouge-n`, 0.50 on `rouge-l` and 0.17 on `rouge-s`. Reach for it when the relationships between terms must hold, not just the words themselves.
 
-A skip-bigram needs two tokens, so an output of fewer than two words scores 0 — including a single word compared against itself.
+A skip-bigram needs two tokens, so an output or expected value with fewer than two tokens scores 0, including a single word compared against itself. Punctuation counts as a token.
 
 ```yaml
 assert:
@@ -1385,7 +1387,7 @@ tests:
 ```
 
 :::note
-All three ROUGE variants share the same 0.75 default threshold, are scored case-insensitively, and count repeated matches — a word appearing twice in both texts contributes twice. Identical text scores 1.0 on all three, with the single exception noted above: `rouge-s` needs at least two tokens. An empty output scores 0 rather than raising an error.
+All three ROUGE variants share the same 0.75 default threshold, are scored case-insensitively, and count repeated matches: a word appearing twice in both texts contributes twice. Identical text scores 1.0 on all three, with the single exception noted above: `rouge-s` needs at least two tokens. An empty or whitespace-only output or expected value scores 0 rather than raising an error.
 :::
 
 ### BLEU

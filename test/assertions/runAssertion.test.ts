@@ -1984,7 +1984,8 @@ describe('runAssertion', () => {
 
   // rouge-l / rouge-s reach users only if they are registered in ASSERTION_HANDLERS and
   // the assertion-type schema. These run through runAssertion() rather than calling the
-  // handler directly, so they fail if either registration is dropped.
+  // handler directly, so they fail if the ASSERTION_HANDLERS entry is dropped. They do not
+  // cover the type-schema entry.
   it.each([
     ['rouge-l', 'ROUGE-L'],
     ['rouge-s', 'ROUGE-S'],
@@ -2038,6 +2039,46 @@ describe('runAssertion', () => {
     expect(result.pass).toBe(true);
     expect(result.reason).toContain(`${label} score`);
   });
+
+  // js-rouge 3.2.0 deduplicated repeated matches, so this identical answer scored 0.83
+  // on ROUGE-L and 0.93 on ROUGE-S instead of 1.
+  it.each([
+    ['rouge-l', 'ROUGE-L', true, 1],
+    ['rouge-s', 'ROUGE-S', true, 1],
+    ['not-rouge-l', 'ROUGE-L', false, 0],
+    ['not-rouge-s', 'ROUGE-S', false, 0],
+  ])(
+    'should score %s on an identical answer with a repeated word as a match',
+    async (type, label, pass, score) => {
+      const result: GradingResult = await runAssertion({
+        prompt: 'Some prompt',
+        assertion: { type, value: 'The cat sat on the mat' } as Assertion,
+        test: {} as AtomicTestCase,
+        providerResponse: { output: 'The cat sat on the mat' },
+        provider: new OpenAiChatCompletionProvider('gpt-4o-mini'),
+      });
+      expect(result).toMatchObject({
+        pass,
+        score,
+        reason: `${label} score 1.00 is greater than or equal to threshold 0.75`,
+      });
+    },
+  );
+
+  it.each(['rouge-l', 'rouge-s'])(
+    'should score an empty output 0 for %s instead of throwing',
+    async (type) => {
+      const result: GradingResult = await runAssertion({
+        prompt: 'Some prompt',
+        assertion: { type, value: 'This is the expected output.' } as Assertion,
+        test: {} as AtomicTestCase,
+        providerResponse: { output: '' },
+        provider: new OpenAiChatCompletionProvider('gpt-4o-mini'),
+      });
+      expect(result.pass).toBe(false);
+      expect(result.score).toBe(0);
+    },
+  );
 
   it('should fail when the not-rouge-n assertion score is above threshold', async () => {
     const output = 'This is the expected output.';
