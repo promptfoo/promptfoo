@@ -40,8 +40,10 @@ async function resolveAuthenticationHeaders(
     headers = new Headers(await getAuthHeaders(signal ?? undefined));
   } catch (error) {
     signal?.throwIfAborted();
-    throw new RequestAuthenticationError(
-      error instanceof Error ? error.message : 'Request authentication failed',
+    throw Object.assign(
+      new RequestAuthenticationError(
+        error instanceof Error ? error.message : 'Request authentication failed',
+      ),
       { cause: error },
     );
   }
