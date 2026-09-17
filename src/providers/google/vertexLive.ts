@@ -1,6 +1,7 @@
 import { getEnvString } from '../../envars';
 import { GoogleAuthManager } from './auth';
 import { GoogleLiveProvider } from './live';
+import { getVertexApiHostForRegion } from './shared';
 
 import type { EnvOverrides } from '../../types/env';
 import type { ProviderOptions } from '../../types/providers';
@@ -68,8 +69,7 @@ export class VertexLiveProvider extends GoogleLiveProvider {
         'Vertex Live requires a project ID. Set GOOGLE_CLOUD_PROJECT or config.projectId.',
       );
     }
-    const host =
-      region === 'global' ? 'aiplatform.googleapis.com' : `${region}-aiplatform.googleapis.com`;
+    const host = getVertexApiHostForRegion(region);
     const url = `wss://${host}/ws/google.cloud.aiplatform.${apiVersion}.LlmBidiService/BidiGenerateContent`;
     let headers: Record<string, string>;
     try {

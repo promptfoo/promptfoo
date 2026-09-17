@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import WebSocket from 'ws';
 import logger from '../../../src/logger';
 import { GoogleAuthManager } from '../../../src/providers/google/auth';
+import { getVertexApiHostForRegion } from '../../../src/providers/google/shared';
 import { VertexLiveProvider } from '../../../src/providers/google/vertexLive';
 import { loadApiProvider } from '../../../src/providers/index';
 import { TestProviderRequestSchema } from '../../../src/types/api/providers';
@@ -135,14 +136,15 @@ describe('VertexLiveProvider', () => {
       'us-west1',
     ],
     [{}, 'adc-project', 'us-central1'],
+    [{ config: { region: 'us' } }, 'adc-project', 'us'],
+    [{ config: { region: 'eu' } }, 'adc-project', 'eu'],
     [{ config: { region: 'global', apiVersion: 'v1beta1' } }, 'adc-project', 'global'],
   ] as const)('resolves project and location for %j', async (options, project, region) => {
     const { result } = await start(new VertexLiveProvider(model, options as ProviderOptions));
     expect(sent()[0].setup.model).toBe(
       `projects/${project}/locations/${region}/publishers/google/models/${model}`,
     );
-    const host =
-      region === 'global' ? 'aiplatform.googleapis.com' : `${region}-aiplatform.googleapis.com`;
+    const host = getVertexApiHostForRegion(region);
     expect(vi.mocked(WebSocket).mock.calls[0][0]).toContain(`wss://${host}/`);
     if (region === 'global') {
       expect(vi.mocked(WebSocket).mock.calls[0][0]).toContain('aiplatform.v1beta1.');
