@@ -21,6 +21,10 @@ Assertions are used to compare the LLM output against expected values or conditi
 
 Different types of assertions can be used to validate the output in various ways, such as checking for equality, JSON structure, similarity, or custom functions.
 
+Red team strategies can grade responses during an attack. The final assertion check reuses a strategy grade only when the configured strategy, plugin, assertion, and recorded input/output match the returned result. Stale grades and older results without this binding receive fresh grading. When a new grade is needed, red team assertions use the final transformed attack input, then the provider-reported prompt (a nonempty string or the last user message in a chat array), then the last saved user message, falling back to the original test prompt when none is available. Prior user/assistant conversation is included as grading context, except for Hydra and Goblin, which grade the current turn without adding history. System and tool messages are not treated as user input.
+
+When no final strategy prompt is available, a provider-reported chat array without a usable user message uses the original prompt fallback instead of unrelated saved messages. Historical strategy grading usage is counted once across matching assertions, including assertion sets. Replayed grading responses count their full token usage as cached.
+
 In machine learning, "Accuracy" is a metric that measures the proportion of correct predictions made by a model out of the total number of predictions. With `promptfoo`, accuracy is defined as the proportion of prompts that produce the expected or desired output.
 
 ## Using assertions
@@ -181,10 +185,10 @@ See [Model-graded evals](/docs/configuration/expected-outputs/model-graded), [cl
 | [moderation](/docs/configuration/expected-outputs/moderation)                                        | Check output against safety policies and include provider-reported usage metrics |
 | [llm-rubric](/docs/configuration/expected-outputs/model-graded)                                      | Grade text, images, or audio against a rubric with a compatible model            |
 | [g-eval](/docs/configuration/expected-outputs/model-graded/g-eval)                                   | Chain-of-thought evaluation based on custom criteria using the G-Eval framework  |
-| [answer-relevance](/docs/configuration/expected-outputs/model-graded)                                | Ensure that LLM output is related to original query                              |
-| [context-faithfulness](/docs/configuration/expected-outputs/model-graded)                            | Ensure that LLM output uses the context                                          |
-| [context-recall](/docs/configuration/expected-outputs/model-graded)                                  | Ensure that ground truth appears in context                                      |
-| [context-relevance](/docs/configuration/expected-outputs/model-graded)                               | Ensure that context is relevant to original query                                |
+| [answer-relevance](/docs/configuration/expected-outputs/model-graded)                                | Ensure that LLM output is related to original query (default threshold 0.5)      |
+| [context-faithfulness](/docs/configuration/expected-outputs/model-graded)                            | Ensure that LLM output uses the context (default threshold 0.5)                  |
+| [context-recall](/docs/configuration/expected-outputs/model-graded)                                  | Ensure that ground truth appears in context (default threshold 0.5)              |
+| [context-relevance](/docs/configuration/expected-outputs/model-graded)                               | Ensure that context is relevant to original query (default threshold 0.5)        |
 | [conversation-relevance](/docs/configuration/expected-outputs/model-graded)                          | Ensure that responses remain relevant throughout a conversation                  |
 | [trajectory:goal-success](/docs/configuration/expected-outputs/model-graded/#trajectorygoal-success) | Use an LLM judge to decide whether the traced agent run achieved its goal        |
 | [factuality](/docs/configuration/expected-outputs/model-graded)                                      | LLM output adheres to the given facts, using Factuality method from OpenAI eval  |

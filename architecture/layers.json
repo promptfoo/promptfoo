@@ -103,7 +103,14 @@
     {
       "name": "providers",
       "roots": ["src/providers"],
-      "allowedDependencies": ["core", "legacy-contracts", "legacy-runtime", "node", "redteam"]
+      "allowedDependencies": [
+        "contracts",
+        "core",
+        "legacy-contracts",
+        "legacy-runtime",
+        "node",
+        "redteam"
+      ]
     },
     {
       "name": "node",
