@@ -616,7 +616,7 @@ describe('GoogleLiveProvider', () => {
     });
 
     it.each([false, true])(
-      'sends a delayed tool response before processing IDLE (multi-turn: %s)',
+      'waits for a fresh IDLE and answer after a delayed tool response (multi-turn: %s)',
       async (multiTurn) => {
         let resolveTool!: (value: { code: string }) => void;
         const callback = vi.fn(
@@ -631,6 +631,11 @@ describe('GoogleLiveProvider', () => {
         });
         let closedWhileWaiting = false;
         let sentWhileWaiting = 0;
+        let closedAfterStaleIdle = false;
+        let sentAfterStaleIdle = 0;
+        let closedBeforeFreshIdle = false;
+        let sentBeforeFreshIdle = 0;
+        const pcm = Buffer.from([1, 0, 2, 0]);
         provider = new GoogleLiveProvider(extendedModel, {
           config: { apiKey: 'test-api-key', functionToolCallbacks: { lookup: callback } },
         });
@@ -638,16 +643,45 @@ describe('GoogleLiveProvider', () => {
           const toolFrame = emit({
             toolCall: { functionCalls: [{ id: '1', name: 'lookup', args: {} }] },
           });
+          // Queue one IDLE before the callback starts, then another with filler
+          // content while it is running. Neither can acknowledge the tool result.
+          const earlyIdleFrame = emit({ interactionStatus: 'IDLE' });
           await flushAsyncEvents();
-          const idleFrame = emit({ interactionStatus: 'IDLE' });
+          const idleFrame = emit({
+            serverContent: {
+              outputTranscription: { text: 'Checking. ' },
+              interaction_status: 'IDLE',
+            },
+          });
           await flushAsyncEvents();
           closedWhileWaiting = mockWs.close.mock.calls.length > 0;
           sentWhileWaiting = mockWs.send.mock.calls.length;
           resolveTool({ code: 'ORCHID' });
-          await Promise.all([toolFrame, idleFrame]);
+          await Promise.all([toolFrame, earlyIdleFrame, idleFrame]);
+          closedAfterStaleIdle = mockWs.close.mock.calls.length > 0;
+          sentAfterStaleIdle = mockWs.send.mock.calls.length;
+          await emit({
+            serverContent: {
+              modelTurn: {
+                parts: [
+                  {
+                    inlineData: {
+                      mimeType: 'audio/pcm;rate=24000',
+                      data: pcm.toString('base64'),
+                    },
+                  },
+                ],
+              },
+              outputTranscription: { text: 'ORCHID' },
+              turnComplete: true,
+            },
+          });
+          closedBeforeFreshIdle = mockWs.close.mock.calls.length > 0;
+          sentBeforeFreshIdle = mockWs.send.mock.calls.length;
+          await emit({ interactionStatus: 'IDLE' });
           if (multiTurn) {
             await emit({
-              serverContent: { outputTranscription: { text: 'Done' } },
+              serverContent: { outputTranscription: { text: ' Done' } },
               interactionStatus: 'IDLE',
             });
           }
@@ -663,8 +697,16 @@ describe('GoogleLiveProvider', () => {
         );
         await framesFinished;
         expect(result.error).toBeUndefined();
+        expect(result.output).toMatchObject({
+          text: multiTurn ? 'Checking. ORCHID Done' : 'Checking. ORCHID',
+        });
+        expect(Buffer.from(result.audio!.data!, 'base64').subarray(44)).toEqual(pcm);
         expect(closedWhileWaiting).toBe(false);
         expect(sentWhileWaiting).toBe(2);
+        expect(closedAfterStaleIdle).toBe(false);
+        expect(sentAfterStaleIdle).toBe(3);
+        expect(closedBeforeFreshIdle).toBe(false);
+        expect(sentBeforeFreshIdle).toBe(3);
         expect(JSON.parse(mockWs.send.mock.calls[2][0] as string)).toEqual({
           toolResponse: {
             functionResponses: [{ id: '1', name: 'lookup', response: { code: 'ORCHID' } }],
@@ -677,6 +719,68 @@ describe('GoogleLiveProvider', () => {
         }
       },
     );
+
+    it('waits for a fresh IDLE after the last response in a tool-call batch', async () => {
+      let resolveFirst!: (value: { code: string }) => void;
+      let resolveSecond!: (value: { code: string }) => void;
+      const firstResult = new Promise<{ code: string }>((resolve) => {
+        resolveFirst = resolve;
+      });
+      const secondResult = new Promise<{ code: string }>((resolve) => {
+        resolveSecond = resolve;
+      });
+      const callback = vi
+        .fn()
+        .mockImplementationOnce(() => firstResult)
+        .mockImplementationOnce(() => secondResult);
+      let sentBeforeSecondResult = 0;
+      let closedAfterStaleIdle = false;
+      provider = new GoogleLiveProvider(extendedModel, {
+        config: { apiKey: 'test-api-key', functionToolCallbacks: { lookup: callback } },
+      });
+      connect(async () => {
+        const toolFrame = emit({
+          toolCall: {
+            functionCalls: [
+              { id: '1', name: 'lookup', args: { reservation: 'first' } },
+              { id: '2', name: 'lookup', args: { reservation: 'second' } },
+            ],
+          },
+        });
+        await flushAsyncEvents();
+        resolveFirst({ code: 'ORCHID' });
+        await flushAsyncEvents();
+        const staleIdle = emit({ interactionStatus: 'IDLE' });
+        sentBeforeSecondResult = mockWs.send.mock.calls.length;
+        resolveSecond({ code: 'LILY' });
+        await Promise.all([toolFrame, staleIdle]);
+        closedAfterStaleIdle = mockWs.close.mock.calls.length > 0;
+        await emit({
+          serverContent: { outputTranscription: { text: 'ORCHID and LILY' } },
+          interactionStatus: 'IDLE',
+        });
+      });
+      const result = await provider.callApi('Look up both codes');
+      expect(result.error).toBeUndefined();
+      expect(result.output).toMatchObject({ text: 'ORCHID and LILY' });
+      expect(callback).toHaveBeenCalledTimes(2);
+      expect(sentBeforeSecondResult).toBe(3);
+      expect(closedAfterStaleIdle).toBe(false);
+      expect(
+        mockWs.send.mock.calls.slice(2).map(([message]) => JSON.parse(message as string)),
+      ).toEqual([
+        {
+          toolResponse: {
+            functionResponses: [{ id: '1', name: 'lookup', response: { code: 'ORCHID' } }],
+          },
+        },
+        {
+          toolResponse: {
+            functionResponses: [{ id: '2', name: 'lookup', response: { code: 'LILY' } }],
+          },
+        },
+      ]);
+    });
 
     it('completes a standard Live tool follow-up containing only binary audio', async () => {
       const pcm = Buffer.from([1, 0, 2, 0]);

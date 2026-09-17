@@ -495,6 +495,8 @@ export class GoogleLiveProvider implements ApiProvider {
       let completedGenerations = 0;
       let completedTurns = 0;
       let hasPendingToolFollowup = false;
+      let receivedMessageIndex = 0;
+      let lastToolResponseMessageIndex = 0;
       let lastVideoFrameSentAt = 0;
       let hasFinalized = false;
 
@@ -946,7 +948,7 @@ export class GoogleLiveProvider implements ApiProvider {
         ws.send(JSON.stringify(setupMessage));
       };
 
-      const processMessage = async (event: WebSocket.MessageEvent) => {
+      const processMessage = async (event: WebSocket.MessageEvent, messageIndex: number) => {
         // Once the request has been resolved (e.g. by an early onclose or
         // timeout), drop any in-flight messages so they don't trigger side
         // effects like stateful-API fetches after the caller has moved on.
@@ -1053,8 +1055,10 @@ export class GoogleLiveProvider implements ApiProvider {
             const serverContent = response.serverContent ?? {};
             // Extended Thinking may finish several spoken fillers before its
             // reasoning and asynchronous tool calls finish. Only IDLE ends the input.
+            // A queued IDLE received before we sent a tool response describes the
+            // old state, even if the callback finished before we process it.
             const inputComplete = usesInteractionStatus
-              ? interactionComplete
+              ? interactionComplete && messageIndex > lastToolResponseMessageIndex
               : serverContent.turnComplete;
             const hasModelOutput =
               Boolean(serverContent.modelTurn?.parts?.length) ||
@@ -1182,6 +1186,7 @@ export class GoogleLiveProvider implements ApiProvider {
                   const toolMessage = usesRealtimeTextInput
                     ? { toolResponse: { functionResponses: [functionResponse] } }
                     : { tool_response: { function_responses: functionResponse } };
+                  lastToolResponseMessageIndex = receivedMessageIndex;
                   ws.send(JSON.stringify(toolMessage));
                 }
               }
@@ -1248,6 +1253,7 @@ export class GoogleLiveProvider implements ApiProvider {
                     ? { toolResponse: { functionResponses: [functionResponse] } }
                     : { tool_response: { function_responses: functionResponse } };
                   logger.debug(`WebSocket sent: ${JSON.stringify(toolMessage)}`);
+                  lastToolResponseMessageIndex = receivedMessageIndex;
                   ws.send(JSON.stringify(toolMessage));
                 }
               }
@@ -1320,18 +1326,19 @@ export class GoogleLiveProvider implements ApiProvider {
         }
       };
 
-      // WebSocket does not await async handlers. Preserve frame order so an IDLE
-      // frame cannot finalize or advance a turn while a tool callback is pending.
+      // WebSocket does not await async handlers. Preserve processing order and
+      // receipt order so queued pre-tool-response IDLE frames remain stale.
       let messageQueue = Promise.resolve();
       ws.onmessage = (event) => {
         if (isResolved) {
           return;
         }
+        const messageIndex = ++receivedMessageIndex;
         if (!isGemini38Live && !this.isVertex) {
-          return processMessage(event);
+          return processMessage(event, messageIndex);
         }
         armIdleTimeout();
-        messageQueue = messageQueue.then(() => processMessage(event));
+        messageQueue = messageQueue.then(() => processMessage(event, messageIndex));
         return messageQueue;
       };
 

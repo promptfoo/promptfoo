@@ -247,7 +247,7 @@ describe('VertexLiveProvider', () => {
     },
   );
 
-  it('waits for Extended Thinking IDLE and delayed tool responses', async () => {
+  it('waits for a fresh Extended Thinking IDLE after a delayed tool response', async () => {
     let finishTool!: (value: object) => void;
     const callback = vi.fn(
       () =>
@@ -271,12 +271,33 @@ describe('VertexLiveProvider', () => {
       toolCall: { functionCalls: [{ id: 'call-1', name: 'lookup', args: {} }] },
     });
     await vi.waitFor(() => expect(callback).toHaveBeenCalled());
-    const idle = complete();
+    const idle = emit({
+      serverContent: {
+        outputTranscription: { text: 'Checking. ' },
+        turnComplete: true,
+        interactionStatus: 'IDLE',
+      },
+    });
     expect(ws.close).not.toHaveBeenCalled();
     finishTool({ answer: 'ORCHID' });
     await tool;
     await idle;
-    expect(sent().at(-1)).toEqual({
+    const toolResponse = sent().at(-1);
+    const closedAfterStaleIdle = vi.mocked(ws.close).mock.calls.length > 0;
+    await emit({
+      serverContent: {
+        modelTurn: { parts: [{ inlineData: { mimeType: 'audio/pcm', data: 'AAAAAA==' } }] },
+        outputTranscription: { text: 'ORCHID' },
+        turnComplete: true,
+        interactionStatus: 'IDLE',
+      },
+    });
+    const response = await result;
+    expect(response.error).toBeUndefined();
+    expect(response.output).toMatchObject({ text: 'Checking. ORCHID' });
+    expect(response.audio?.transcript).toBe('Checking. ORCHID');
+    expect(closedAfterStaleIdle).toBe(false);
+    expect(toolResponse).toEqual({
       toolResponse: {
         functionResponses: [
           {
@@ -287,7 +308,6 @@ describe('VertexLiveProvider', () => {
         ],
       },
     });
-    expect((await result).error).toBeUndefined();
   });
 
   it.each(['functionDeclarations', 'function_declarations'])(
