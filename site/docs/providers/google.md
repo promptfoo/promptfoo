@@ -1380,6 +1380,8 @@ Where `tools.json` contains function declarations and built-in tools:
 ]
 ```
 
+Tools accept both `functionDeclarations` and `function_declarations`. If both aliases define the same function name within a tool, `functionDeclarations` takes precedence. Distinct functions from both aliases are retained.
+
 ### Built-in Tools
 
 The current Google Live API model supports built-in Google Search:
