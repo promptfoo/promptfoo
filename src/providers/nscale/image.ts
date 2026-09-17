@@ -137,7 +137,7 @@ export class NscaleImageProvider extends OpenAiImageProvider {
     const apiKey = this.getApiKey();
     if (!apiKey) {
       throw new Error(
-        `Nscale service token is not set. Set the ${this.config.apiKeyEnvar || 'NSCALE_SERVICE_TOKEN'} environment variable or add \`apiKey\` to the provider config.`,
+        `Nscale API key is not set. Set the ${this.config.apiKeyEnvar || 'NSCALE_SERVICE_TOKEN'} environment variable or add \`apiKey\` to the provider config.`,
       );
     }
 

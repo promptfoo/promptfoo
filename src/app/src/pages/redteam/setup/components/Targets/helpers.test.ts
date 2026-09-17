@@ -2,6 +2,79 @@ import { describe, expect, it } from 'vitest';
 import { getProviderType } from './helpers';
 
 describe('getProviderType', () => {
+  it.each(['llamafile', 'vllm', 'text-generation-webui'])(
+    'restores an explicitly selected %s editor without inspecting the served name or URL',
+    (type) => {
+      expect(
+        getProviderType('openai:chat:tenant/arbitrary-model', {
+          type,
+          apiBaseUrl: 'https://private.example.test/inference/v1',
+        }),
+      ).toBe(type);
+      expect(getProviderType('anthropic:messages:my-model', { type })).toBe('anthropic');
+      expect(getProviderType('openai:responses:my-model', { type })).toBe('openai');
+    },
+  );
+
+  it.each([
+    'http://localhost:8080/v1',
+    'https://deployment.example.test/api',
+    '{{ env.LOCAL_BASE_URL }}',
+  ])('uses an editable generic target for an untyped compatible endpoint %s', (apiBaseUrl) => {
+    expect(getProviderType('openai:chat:my-served-name', { apiBaseUrl })).toBe('custom');
+    expect(getProviderType('openai:chat:my-served-name', { apiBaseUrl, type: 'unknown' })).toBe(
+      'custom',
+    );
+  });
+
+  it.each([undefined, '', ' ', 'https://api.openai.com/v1', 'https://api.openai.com/v1/'])(
+    'keeps native OpenAI presentation for base URL %s',
+    (apiBaseUrl) => {
+      expect(getProviderType('openai:chat:gpt-5-mini', { apiBaseUrl })).toBe('openai');
+    },
+  );
+
+  it.each([
+    { config: { apiHost: 'private.example.test/tenant' }, expected: 'custom' },
+    { config: { apiHost: 'api.openai.com' }, expected: 'openai' },
+    {
+      config: { apiHost: 'private.example.test', apiBaseUrl: 'https://api.openai.com/v1' },
+      expected: 'custom',
+    },
+    {
+      config: { apiHost: 'api.openai.com', apiBaseUrl: 'https://private.example.test/v1' },
+      expected: 'openai',
+    },
+    { config: { apiHost: 'api.openai.com/tenant' }, expected: 'custom' },
+    { config: { apiHost: 'api.openai.com/v1' }, expected: 'custom' },
+    {
+      config: { apiHost: '', apiBaseUrl: 'https://private.example.test/v1' },
+      expected: 'custom',
+    },
+  ])(
+    'classifies the effective endpoint with apiHost precedence: $config',
+    ({ config, expected }) => {
+      expect(getProviderType('openai:chat:tenant/model.json-v2', config)).toBe(expected);
+    },
+  );
+
+  it.each([
+    ['togetherai:organization/model:revision', 'together'],
+    ['togetherai', 'together'],
+    ['together:organization/model', 'together'],
+    ['llama:organization/model:quantization', 'llama.cpp'],
+    ['llama', 'llama.cpp'],
+    ['llama.cpp', 'llama.cpp'],
+    ['bedrock:agents:deployed-agent-id', 'bedrock-agent'],
+    ['bedrock-agent', 'bedrock-agent'],
+    ['bedrock:converse:amazon.nova-lite-v1:0', 'bedrock'],
+    ['bedrock:amazon.nova-lite-v1:0', 'bedrock'],
+    ['openai:chat:togetherai/my-served-model', 'openai'],
+    ['custom:llama:my-model', 'custom'],
+  ])('maps runtime provider %s to UI type %s without inspecting model names', (id, type) => {
+    expect(getProviderType(id)).toBe(type);
+  });
+
   it.each([
     {
       providerId: 'a2a:https://agent.example.com/a2a/v1',

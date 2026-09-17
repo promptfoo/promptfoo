@@ -28,8 +28,8 @@ export class GroqProvider extends OpenAiChatCompletionProvider {
     return this.config.apiKey || getEnvString(apiKeyEnvar) || this.env?.[apiKeyEnvar];
   }
 
-  protected isReasoningModel(): boolean {
-    return isGroqReasoningModel(this.modelName) || super.isReasoningModel();
+  protected isReasoningModel(modelName = this.modelName): boolean {
+    return isGroqReasoningModel(modelName) || super.isReasoningModel(modelName);
   }
 
   protected supportsTemperature(): boolean {
@@ -57,6 +57,18 @@ export class GroqProvider extends OpenAiChatCompletionProvider {
     callApiOptions?: CallApiOptionsParams,
   ) {
     const { body, config } = await super.getOpenAiBody(prompt, context, callApiOptions);
+    if (typeof body.model === 'string' && this.isReasoningModel(body.model)) {
+      const maxCompletionTokens =
+        config.passthrough?.max_completion_tokens ??
+        config.max_completion_tokens ??
+        config.passthrough?.max_tokens ??
+        config.max_tokens ??
+        body.max_tokens;
+      if (maxCompletionTokens !== undefined) {
+        body.max_completion_tokens = maxCompletionTokens;
+      }
+      delete body.max_tokens;
+    }
     const groqConfig = this.config as GroqCompletionOptions;
 
     // Add Groq-specific reasoning parameters

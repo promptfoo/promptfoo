@@ -38,13 +38,12 @@ import {
   isValidPolicyObject,
   makeDefaultPolicyName,
 } from '@promptfoo/redteam/plugins/policy/utils';
-import { getUnifiedConfig } from '@promptfoo/redteam/sharedFrontend';
 import isEqual from 'fast-deep-equal';
 import { BarChart2, ChevronDown, Eye, Info, Play, Save, Search, Sliders, X } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { useRedTeamConfig } from '../hooks/useRedTeamConfig';
 import { useRedTeamTargetConfigValidation } from '../hooks/useRedTeamTargetConfigValidation';
-import { generateOrderedYaml } from '../utils/yamlHelpers';
+import { generateOrderedYaml, getRuntimeRedteamConfig } from '../utils/yamlHelpers';
 import DefaultTestVariables from './DefaultTestVariables';
 import { EmailVerificationDialog } from './EmailVerificationDialog';
 import EstimationsDisplay from './EstimationsDisplay';
@@ -653,7 +652,7 @@ export default function Review({
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          config: getUnifiedConfig(latestConfig),
+          config: getRuntimeRedteamConfig(latestConfig),
           force: forceRegeneration,
           verbose: latestConfig.target.config?.verbose,
           maxConcurrency,

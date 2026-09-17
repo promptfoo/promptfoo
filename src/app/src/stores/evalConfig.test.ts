@@ -1,11 +1,324 @@
-import { beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { DEFAULT_CONFIG, useStore } from './evalConfig';
+
+import type { UnifiedConfig } from '../../../types/index';
 
 describe('evalConfig store', () => {
   beforeEach(() => {
     localStorage.clear();
     // Reset the store state before each test
     useStore.getState().reset();
+  });
+
+  afterEach(() => {
+    useStore.getState().reset();
+    localStorage.clear();
+  });
+
+  describe('typed local provider imports', () => {
+    const locals = [
+      { type: 'vllm', apiBaseUrl: 'http://localhost:8000/v1' },
+      { type: 'llamafile', apiBaseUrl: 'http://localhost:8080/v1' },
+      { type: 'text-generation-webui', apiBaseUrl: 'http://localhost:5000/v1' },
+    ];
+    const entries = ['setConfig', 'updateConfig', 'rehydrate'] as const;
+
+    it.each(locals.flatMap((local) => entries.map((entry) => ({ ...local, entry }))))(
+      'normalizes $type through $entry before persistence or job creation',
+      async ({ type, apiBaseUrl, entry }) => {
+        const config = { providers: [{ id: 'openai:chat:gpt-4o', config: { type } }] };
+        if (entry === 'rehydrate') {
+          localStorage.setItem('promptfoo', JSON.stringify({ state: { config }, version: 0 }));
+          await useStore.persist.rehydrate();
+        } else {
+          useStore.getState()[entry](config);
+        }
+        const expected = [
+          {
+            id: 'openai:chat:gpt-4o',
+            config: { type, apiBaseUrl, apiKeyRequired: false, useDefaultApiKey: false },
+          },
+        ];
+        expect(useStore.getState().config.providers).toEqual(expected);
+        expect(useStore.getState().getTestSuite().providers).toEqual(expected);
+        expect(JSON.parse(localStorage.getItem('promptfoo')!).state.config.providers).toEqual(
+          expected,
+        );
+      },
+    );
+
+    it.each(['object', 'map', 'array-map'])(
+      'retains the %s provider shape while normalizing local options',
+      (shape) => {
+        const options = { label: 'Imported local', config: { type: 'vllm' } };
+        // Legacy imports can contain a single options object or provider map.
+        const providers: unknown =
+          shape === 'object'
+            ? { id: 'openai:chat:gpt-4o', ...options }
+            : shape === 'map'
+              ? { 'openai:chat:gpt-4o': options }
+              : [{ 'openai:chat:gpt-4o': options }];
+        useStore.getState().setConfig({ providers: providers as UnifiedConfig['providers'] });
+        const expectedOptions = {
+          ...options,
+          config: {
+            type: 'vllm',
+            apiBaseUrl: 'http://localhost:8000/v1',
+            apiKeyRequired: false,
+            useDefaultApiKey: false,
+          },
+        };
+        expect(useStore.getState().config.providers).toEqual(
+          shape === 'object'
+            ? { id: 'openai:chat:gpt-4o', ...expectedOptions }
+            : shape === 'map'
+              ? { 'openai:chat:gpt-4o': expectedOptions }
+              : [{ 'openai:chat:gpt-4o': expectedOptions }],
+        );
+      },
+    );
+
+    it.each([false, true])('preserves explicit options with authentication policy %s', (flag) => {
+      const provider = {
+        id: 'openai:chat:tenant/model.py:Q4_K_M',
+        label: 'Private local',
+        config: {
+          type: 'vllm',
+          apiBaseUrl: 'https://base.example.test/v1',
+          apiHost: 'host.example.test',
+          apiKey: 'synthetic-inline-key',
+          apiKeyEnvar: 'LOCAL_MODEL_KEY',
+          apiKeyRequired: flag,
+          useDefaultApiKey: flag,
+          model: 'served-model',
+          stop: ['<end>'],
+          passthrough: { chat_template_kwargs: { enable_thinking: false } },
+        },
+      };
+      useStore.getState().setConfig({ providers: [provider] });
+      expect(useStore.getState().config.providers).toEqual([provider]);
+      expect(useStore.getState().getTestSuite().providers).toEqual([provider]);
+    });
+
+    it('uses the provider-map ID when an imported options ID is blank', () => {
+      const providers: unknown = {
+        'openai:chat:gpt-4o': { id: '', config: { type: 'vllm' } },
+      };
+      useStore.getState().setConfig({ providers: providers as UnifiedConfig['providers'] });
+      expect(useStore.getState().config.providers).toEqual({
+        'openai:chat:gpt-4o': {
+          id: '',
+          config: {
+            type: 'vllm',
+            apiBaseUrl: 'http://localhost:8000/v1',
+            apiKeyRequired: false,
+            useDefaultApiKey: false,
+          },
+        },
+      });
+    });
+
+    it.each(
+      [
+        { route: 'openai:chat:gpt-4o', id: 'local-target', local: true },
+        { route: 'openai:chat:gpt-4o', id: 'anthropic:messages:identity', local: true },
+        { route: 'anthropic:messages:claude-sonnet', id: 'openai:chat:identity', local: false },
+      ].flatMap((target) => entries.map((entry) => ({ ...target, entry }))),
+    )(
+      'normalizes map route $route with identity $id through $entry',
+      async ({ route, id, local, entry }) => {
+        const options = {
+          id,
+          label: 'Imported identity',
+          config: { type: 'vllm', temperature: 0.2 },
+        };
+        const config = { providers: [{ [route]: options }] };
+        if (entry === 'rehydrate') {
+          localStorage.setItem('promptfoo', JSON.stringify({ state: { config }, version: 0 }));
+          await useStore.persist.rehydrate();
+        } else {
+          useStore.getState()[entry](config);
+        }
+        const expected = [
+          {
+            [route]: {
+              ...options,
+              config: local
+                ? {
+                    ...options.config,
+                    apiBaseUrl: 'http://localhost:8000/v1',
+                    apiKeyRequired: false,
+                    useDefaultApiKey: false,
+                  }
+                : options.config,
+            },
+          },
+        ];
+        expect(useStore.getState().config.providers).toEqual(expected);
+        expect(useStore.getState().getTestSuite().providers).toEqual(expected);
+        expect(JSON.parse(localStorage.getItem('promptfoo')!).state.config.providers).toEqual(
+          expected,
+        );
+      },
+    );
+
+    it('does not repair malformed configs or change nonlocal providers', () => {
+      const providers = [
+        ...[null, [], 'invalid'].map((config) => ({ id: 'openai:chat:gpt-4o', config })),
+        { id: 'anthropic:messages:claude-sonnet', config: { type: 'vllm' } },
+        { id: 'openai:chat:gpt-4o', config: { temperature: 0.2 } },
+      ];
+      useStore.getState().setConfig({ providers: providers as UnifiedConfig['providers'] });
+      expect(useStore.getState().config.providers).toEqual(providers);
+    });
+  });
+
+  describe('default API key selector persistence', () => {
+    const names = ['useDefaultApiKey', 'use_default_api_key', 'use-default-api-key'];
+    const malformed = [
+      'short-local-secret',
+      '{{vars.short_local_secret}}',
+      1,
+      null,
+      { value: 'short-local-secret' },
+      ['short-local-secret'],
+    ];
+
+    it.each(
+      names.flatMap((name) =>
+        ['setConfig', 'updateConfig', 'rehydrate'].flatMap((entry) =>
+          [
+            '{{ local_secret }}',
+            '{{ local_secret | trim }}',
+            '{{ local_secret | unsafe_filter }}',
+          ].map((value) => ({ name, entry, value })),
+        ),
+      ),
+    )('removes the source of $name=$value through $entry', async ({ name, entry, value }) => {
+      const config = {
+        providers: [{ id: 'openai:chat:gpt-4o', config: { [name]: value, temperature: 0.2 } }],
+        defaultTest: { vars: { local_secret: 'synthetic-short-value', visible: 'keep' } },
+        tests: [{ vars: { local_secret: 'synthetic-test-value', visible: 'also keep' } }],
+      };
+      if (entry === 'rehydrate') {
+        localStorage.setItem('promptfoo', JSON.stringify({ state: { config }, version: 0 }));
+        await useStore.persist.rehydrate();
+      } else {
+        useStore.getState()[entry as 'setConfig' | 'updateConfig'](config);
+        expect(useStore.getState().config).toMatchObject(config);
+      }
+      const saved = localStorage.getItem('promptfoo')!;
+      const persisted = JSON.parse(saved).state.config;
+      expect(persisted.providers[0].config).toEqual({ temperature: 0.2 });
+      expect(persisted.defaultTest.vars).toEqual({ visible: 'keep' });
+      expect(persisted.tests[0].vars).toEqual({ visible: 'also keep' });
+      expect(saved).not.toContain('local_secret');
+      expect(saved).not.toContain('synthetic-short-value');
+      expect(saved).not.toContain('synthetic-test-value');
+      if (entry === 'rehydrate') {
+        expect(useStore.getState().config.providers).toEqual(persisted.providers);
+        expect(useStore.getState().config.defaultTest).toEqual(persisted.defaultTest);
+      }
+    });
+
+    it('removes an environment source without touching unrelated variables or tool schemas', () => {
+      const tools = [
+        {
+          type: 'function',
+          function: {
+            name: 'read',
+            parameters: {
+              type: 'object',
+              properties: { useDefaultApiKey: { type: 'string', description: '{{ ordinary }}' } },
+            },
+          },
+        },
+      ];
+      useStore.getState().setConfig({
+        providers: [
+          {
+            id: 'openai:chat:gpt-4o',
+            config: { useDefaultApiKey: '{{ env.LOCAL_SOURCE }}', tools },
+          },
+        ],
+        env: { LOCAL_SOURCE: 'synthetic-environment-value', VISIBLE: 'keep' },
+        defaultTest: { vars: { ordinary: 'unreferenced content' } },
+      });
+      const persisted = JSON.parse(localStorage.getItem('promptfoo')!).state.config;
+      expect(persisted.env).toEqual({ VISIBLE: 'keep' });
+      expect(persisted.defaultTest.vars).toEqual({ ordinary: 'unreferenced content' });
+      expect(persisted.providers[0].config).toEqual({ tools });
+    });
+
+    it('also removes a source independently referenced by an API key', () => {
+      useStore.getState().setConfig({
+        providers: [
+          {
+            id: 'openai:chat:gpt-4o',
+            config: { useDefaultApiKey: '{{ local_secret }}', apiKey: '{{ local_secret }}' },
+          },
+        ],
+        defaultTest: { vars: { local_secret: 'synthetic-independent-value', visible: 'keep' } },
+      });
+      const persisted = JSON.parse(localStorage.getItem('promptfoo')!).state.config;
+      expect(persisted.providers[0].config).toEqual({ apiKey: '{{ local_secret }}' });
+      expect(persisted.defaultTest.vars).toEqual({ visible: 'keep' });
+    });
+
+    it.each(names.flatMap((name) => [false, true].map((value) => ({ name, value }))))(
+      'preserves the literal $value selector $name through persistence and rehydration',
+      async ({ name, value }) => {
+        const provider = { id: 'openai:chat:gpt-4o', config: { [name]: value, temperature: 0.2 } };
+        useStore.getState().setConfig({ providers: [provider] });
+        const saved = localStorage.getItem('promptfoo')!;
+        expect(JSON.parse(saved).state.config.providers).toEqual([provider]);
+        useStore.setState({ config: {} });
+        localStorage.setItem('promptfoo', saved);
+        await useStore.persist.rehydrate();
+        expect(useStore.getState().config.providers).toEqual([provider]);
+      },
+    );
+
+    it.each(names.flatMap((name) => malformed.map((value) => ({ name, value }))))(
+      'drops malformed $name=$value from persistence without changing the live config',
+      ({ name, value }) => {
+        const provider = { id: 'openai:chat:gpt-4o', config: { [name]: value, temperature: 0.2 } };
+        useStore.getState().updateConfig({ providers: [provider] });
+        expect(useStore.getState().config.providers).toEqual([provider]);
+        const saved = localStorage.getItem('promptfoo')!;
+        expect(JSON.parse(saved).state.config.providers[0].config).toEqual({ temperature: 0.2 });
+        expect(saved).not.toContain('short-local-secret');
+        expect(saved).not.toContain('short_local_secret');
+      },
+    );
+
+    it.each(names.flatMap((name) => malformed.map((value) => ({ name, value }))))(
+      'removes historical malformed $name=$value on rehydrate and rewrites storage',
+      async ({ name, value }) => {
+        localStorage.setItem(
+          'promptfoo',
+          JSON.stringify({
+            state: {
+              config: {
+                providers: [
+                  {
+                    id: 'openai:chat:gpt-4o',
+                    config: { [name]: value, temperature: 0.2 },
+                  },
+                ],
+              },
+            },
+            version: 0,
+          }),
+        );
+        await useStore.persist.rehydrate();
+        const expected = [{ id: 'openai:chat:gpt-4o', config: { temperature: 0.2 } }];
+        expect(useStore.getState().config.providers).toEqual(expected);
+        expect(JSON.parse(localStorage.getItem('promptfoo')!).state.config.providers).toEqual(
+          expected,
+        );
+      },
+    );
   });
 
   describe('config management', () => {
@@ -881,6 +1194,7 @@ describe('evalConfig store', () => {
               googleAuthOptions: { keyFilename: '/var/run/secrets/another.json' },
               apiBearerTokenEnvar: 'CUSTOM_WATSONX_BEARER',
               apiKeyRequired: false,
+              useDefaultApiKey: false,
               isPayPerToken: true,
               prompt_cache_key: 'partition-a',
               max_new_tokens: 32,
@@ -889,6 +1203,10 @@ describe('evalConfig store', () => {
               max_thinking_tokens: 4096,
               endpoint: 'https://example.com',
             } as any,
+          },
+          {
+            id: 'openai:chat:local-model',
+            config: { useDefaultApiKey: 'short-local-secret' as any },
           },
         ],
         env: {
@@ -903,6 +1221,7 @@ describe('evalConfig store', () => {
         googleAuthOptions: { keyFilename: '/var/run/secrets/another.json' },
         apiBearerTokenEnvar: 'CUSTOM_WATSONX_BEARER',
         apiKeyRequired: false,
+        useDefaultApiKey: false,
         isPayPerToken: true,
         prompt_cache_key: 'partition-a',
         max_new_tokens: 32,
@@ -911,6 +1230,7 @@ describe('evalConfig store', () => {
         max_thinking_tokens: 4096,
         endpoint: 'https://example.com',
       });
+      expect(persisted.providers[1].config).toEqual({});
       expect(persisted.env.LANGFUSE_SECRET_KEY).toBeUndefined();
       expect(persisted.env.LANGFUSE_PUBLIC_KEY).toBe('pk-langfuse-public-id');
     });

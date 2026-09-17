@@ -96,7 +96,7 @@ export interface ProviderOptions {
     // biome-ignore lint/suspicious/noExplicitAny: Custom provider config can have anything
     [key: string]: any;
 
-    type?: 'http' | 'websocket' | 'browser';
+    type?: 'http' | 'websocket' | 'browser' | 'llamafile' | 'vllm' | 'text-generation-webui';
     // HTTP/WebSocket specific options
     url?: string;
     method?: string;
