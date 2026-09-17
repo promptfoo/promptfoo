@@ -58,7 +58,15 @@ interface OllamaCompletionOptions {
 
   // Top-level API parameters (siblings of `options`, not members of it).
   tools?: any[]; // Support for function calling/tools
-  think?: boolean; // Top-level parameter for thinking/reasoning
+  // Ollama 0.34+ accepts a boolean or a thinking level.
+  think?: boolean | 'low' | 'medium' | 'high' | 'max';
+  // Structured outputs: 'json' or a JSON schema object.
+  format?: 'json' | Record<string, any>;
+  // /api/generate only.
+  suffix?: string;
+  system?: string;
+  template?: string;
+  raw?: boolean;
   keep_alive?: string | number;
   truncate?: boolean; // /api/embed only
   dimensions?: number; // /api/embed only
@@ -109,6 +117,11 @@ const OllamaCompletionOptionKeys = new Set<keyof OllamaCompletionOptions>([
   'keep_alive',
   'truncate',
   'dimensions',
+  'format',
+  'suffix',
+  'system',
+  'template',
+  'raw',
   'passthrough',
 ]);
 
@@ -123,7 +136,37 @@ const OllamaNonNestedOptionKeys = new Set<string>([
   'keep_alive',
   'truncate',
   'dimensions',
+  'format',
+  'suffix',
+  'system',
+  'template',
+  'raw',
 ]);
+
+/**
+ * Which top-level (non-`options`) keys each endpoint actually accepts. Anything outside
+ * its endpoint's set is reported as dropped rather than vanishing silently: `suffix` on
+ * a chat provider, or `tools` on a completion provider, is a config mistake worth
+ * surfacing.
+ */
+const OllamaEndpointTopLevelKeys: Record<'completion' | 'chat' | 'embedding', Set<string>> = {
+  completion: new Set([
+    'think',
+    'keep_alive',
+    'format',
+    'truncate',
+    'suffix',
+    'system',
+    'template',
+    'raw',
+  ]),
+  chat: new Set(['think', 'keep_alive', 'format', 'truncate', 'tools']),
+  // NOTE: every key listed here must actually be forwarded by that provider, otherwise
+  // it is silently dropped instead of warned about. `format` is deliberately absent from
+  // embedding: /api/embed returns vectors, so structured output is meaningless there and
+  // callEmbeddingApi does not send it.
+  embedding: new Set(['keep_alive', 'truncate', 'dimensions']),
+};
 
 /**
  * Keys that are never user-supplied Ollama options, so reporting them as "dropped" would
@@ -161,13 +204,24 @@ const OllamaDeprecatedOptionKeys = new Set<string>([
  * previously excluded only `tools`, so `think` and the whole `passthrough` object were
  * also sent as junk `options` members.
  */
-function buildOllamaOptions(config: OllamaCompletionOptions): Record<string, any> {
+function buildOllamaOptions(
+  config: OllamaCompletionOptions,
+  endpoint: 'completion' | 'chat' | 'embedding',
+): Record<string, any> {
   const dropped: string[] = [];
+  const wrongEndpoint: string[] = [];
   const deprecated: string[] = [];
+  const supportedTopLevel = OllamaEndpointTopLevelKeys[endpoint];
   const options = Object.keys(config).reduce<Record<string, any>>((acc, key) => {
     const optionName = key as keyof OllamaCompletionOptions;
     if (OllamaCompletionOptionKeys.has(optionName)) {
-      if (!OllamaNonNestedOptionKeys.has(key)) {
+      if (OllamaNonNestedOptionKeys.has(key)) {
+        // A valid Ollama key, but not one this endpoint accepts -- it would otherwise be
+        // neither forwarded nor reported.
+        if (key !== 'passthrough' && !supportedTopLevel.has(key)) {
+          wrongEndpoint.push(key);
+        }
+      } else {
         acc[optionName] = config[optionName];
         if (OllamaDeprecatedOptionKeys.has(key)) {
           deprecated.push(key);
@@ -178,6 +232,12 @@ function buildOllamaOptions(config: OllamaCompletionOptions): Record<string, any
     }
     return acc;
   }, {});
+
+  if (wrongEndpoint.length > 0) {
+    logger.warn(
+      `[Ollama] Ignoring config keys that the ${endpoint} endpoint does not accept: ${wrongEndpoint.join(', ')}`,
+    );
+  }
 
   if (dropped.length > 0) {
     // Unrecognized keys are silently discarded, which is how `max_tokens` (an OpenAI
@@ -305,6 +365,7 @@ interface OllamaCompletionJsonL {
   sample_count?: number;
   sample_duration?: number;
   prompt_eval_count?: number;
+  prompt_eval_cached_count?: number;
   prompt_eval_duration?: number;
   eval_count?: number;
   eval_duration?: number;
@@ -333,6 +394,7 @@ interface OllamaChatJsonL {
   sample_count?: number;
   sample_duration?: number;
   prompt_eval_count?: number;
+  prompt_eval_cached_count?: number;
   prompt_eval_duration?: number;
   eval_count?: number;
   eval_duration?: number;
@@ -363,7 +425,11 @@ function collectOllamaToolCalls(lines: OllamaChatJsonL[]) {
  * (see getTokenUsage in src/providers/openai/util.ts).
  */
 function extractOllamaTokenUsage(
-  finalChunk: { prompt_eval_count?: number; eval_count?: number },
+  finalChunk: {
+    prompt_eval_count?: number;
+    prompt_eval_cached_count?: number;
+    eval_count?: number;
+  },
   cached: boolean,
 ): Partial<TokenUsage> | undefined {
   if (finalChunk.prompt_eval_count === undefined && finalChunk.eval_count === undefined) {
@@ -375,9 +441,24 @@ function extractOllamaTokenUsage(
   if (cached) {
     return { cached: total, total };
   }
-  // numRequests is intentionally omitted: tokenUsageUtils increments it by 1 when an
-  // update does not specify it, so setting it here would be a no-op.
-  return { prompt, completion, total };
+  // Ollama 0.34+ reports prompt tokens served from its own KV cache. This is a server-side
+  // prefix cache hit, not a promptfoo cache hit, so it belongs in completionDetails rather
+  // than tokenUsage.cached (which would make the row look like a promptfoo cache hit).
+  const cacheRead = finalChunk.prompt_eval_cached_count;
+  if (cacheRead !== undefined) {
+    return {
+      prompt,
+      completion,
+      total,
+      completionDetails: { cacheReadInputTokens: cacheRead },
+      numRequests: 1,
+    };
+  }
+  // Explicit: accumulateTokenUsage defaults incrementRequests to false, and matcher
+  // paths (src/matchers/rag.ts, similarity.ts) call the two-arg form, so an omitted
+  // count reports 0 grader requests. Verified this does not double-count on the
+  // evaluator path, which infers 1 when absent.
+  return { prompt, completion, total, numRequests: 1 };
 }
 
 /**
@@ -453,9 +534,15 @@ export class OllamaCompletionProvider implements ApiProvider {
       model: this.modelName,
       prompt,
       stream: false,
-      options: { ...buildOllamaOptions(this.config), ...passthroughOptions },
+      options: { ...buildOllamaOptions(this.config, 'completion'), ...passthroughOptions },
       ...(this.config.think === undefined ? {} : { think: this.config.think }),
       ...(this.config.keep_alive === undefined ? {} : { keep_alive: this.config.keep_alive }),
+      ...(this.config.format === undefined ? {} : { format: this.config.format }),
+      ...(this.config.truncate === undefined ? {} : { truncate: this.config.truncate }),
+      ...(this.config.suffix === undefined ? {} : { suffix: this.config.suffix }),
+      ...(this.config.system === undefined ? {} : { system: this.config.system }),
+      ...(this.config.template === undefined ? {} : { template: this.config.template }),
+      ...(this.config.raw === undefined ? {} : { raw: this.config.raw }),
       ...passthroughRest,
     };
 
@@ -604,9 +691,11 @@ export class OllamaChatProvider implements ApiProvider {
     const params: any = {
       model: this.modelName,
       messages,
-      options: { ...buildOllamaOptions(this.config), ...passthroughOptions },
+      options: { ...buildOllamaOptions(this.config, 'chat'), ...passthroughOptions },
       ...(this.config.think === undefined ? {} : { think: this.config.think }),
       ...(this.config.keep_alive === undefined ? {} : { keep_alive: this.config.keep_alive }),
+      ...(this.config.format === undefined ? {} : { format: this.config.format }),
+      ...(this.config.truncate === undefined ? {} : { truncate: this.config.truncate }),
       ...passthroughRest,
     };
 
@@ -741,7 +830,7 @@ export class OllamaEmbeddingProvider extends OllamaCompletionProvider {
       truncate: this.config.truncate ?? false,
       ...(this.config.dimensions === undefined ? {} : { dimensions: this.config.dimensions }),
       ...(this.config.keep_alive === undefined ? {} : { keep_alive: this.config.keep_alive }),
-      options: { ...buildOllamaOptions(this.config), ...passthroughOptions },
+      options: { ...buildOllamaOptions(this.config, 'embedding'), ...passthroughOptions },
       ...passthroughRest,
     };
 
