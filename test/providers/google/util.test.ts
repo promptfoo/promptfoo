@@ -2198,6 +2198,50 @@ describe('util', () => {
       expect(tools).toEqual(original);
     });
 
+    it.each(['identical', 'conflicting'])(
+      'prefers camel-case declarations over %s same-name aliases',
+      (duplicate) => {
+        const canonical = {
+          name: 'lookup',
+          description: 'Canonical declaration',
+          behavior: 'NON_BLOCKING' as const,
+          parameters: {
+            type: 'OBJECT' as const,
+            properties: { code: { type: 'STRING' as const } },
+          },
+        };
+        const snakeCase =
+          duplicate === 'identical'
+            ? structuredClone(canonical)
+            : {
+                name: 'lookup',
+                description: 'Legacy declaration',
+                behavior: 'BLOCKING' as const,
+                parameters: {
+                  type: 'OBJECT' as const,
+                  properties: { id: { type: 'NUMBER' as const } },
+                },
+              };
+        const tools = [
+          {
+            functionDeclarations: [canonical, { name: 'camelOnly' }],
+            function_declarations: [snakeCase, { name: 'snakeOnly' }],
+          },
+        ];
+        const original = structuredClone(tools);
+        const normalized = normalizeTools(tools);
+
+        expect(normalized[0]).not.toHaveProperty('function_declarations');
+        expect(normalized[0].functionDeclarations).toEqual([
+          canonical,
+          { name: 'camelOnly', parameters: undefined },
+          { name: 'snakeOnly', parameters: undefined },
+        ]);
+        expect(normalizeTools(normalized)).toEqual(normalized);
+        expect(tools).toEqual(original);
+      },
+    );
+
     it('should convert snake_case to camelCase for tool properties', () => {
       const tools = [
         {
