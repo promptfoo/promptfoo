@@ -144,6 +144,18 @@ const OllamaNonNestedOptionKeys = new Set<string>([
 ]);
 
 /**
+ * Which top-level (non-`options`) keys each endpoint actually accepts. Anything outside
+ * its endpoint's set is reported as dropped rather than vanishing silently: `suffix` on
+ * a chat provider, or `tools` on a completion provider, is a config mistake worth
+ * surfacing.
+ */
+const OllamaEndpointTopLevelKeys: Record<'completion' | 'chat' | 'embedding', Set<string>> = {
+  completion: new Set(['think', 'keep_alive', 'format', 'suffix', 'system', 'template', 'raw']),
+  chat: new Set(['think', 'keep_alive', 'format', 'tools']),
+  embedding: new Set(['keep_alive', 'truncate', 'dimensions']),
+};
+
+/**
  * Keys that are never user-supplied Ollama options, so reporting them as "dropped" would
  * be noise. `basePath` is injected into every provider config by loadApiProvider
  * (src/providers/index.ts), and `showThinking` is a promptfoo-side rendering option.
@@ -179,13 +191,24 @@ const OllamaDeprecatedOptionKeys = new Set<string>([
  * previously excluded only `tools`, so `think` and the whole `passthrough` object were
  * also sent as junk `options` members.
  */
-function buildOllamaOptions(config: OllamaCompletionOptions): Record<string, any> {
+function buildOllamaOptions(
+  config: OllamaCompletionOptions,
+  endpoint: 'completion' | 'chat' | 'embedding',
+): Record<string, any> {
   const dropped: string[] = [];
+  const wrongEndpoint: string[] = [];
   const deprecated: string[] = [];
+  const supportedTopLevel = OllamaEndpointTopLevelKeys[endpoint];
   const options = Object.keys(config).reduce<Record<string, any>>((acc, key) => {
     const optionName = key as keyof OllamaCompletionOptions;
     if (OllamaCompletionOptionKeys.has(optionName)) {
-      if (!OllamaNonNestedOptionKeys.has(key)) {
+      if (OllamaNonNestedOptionKeys.has(key)) {
+        // A valid Ollama key, but not one this endpoint accepts -- it would otherwise be
+        // neither forwarded nor reported.
+        if (key !== 'passthrough' && !supportedTopLevel.has(key)) {
+          wrongEndpoint.push(key);
+        }
+      } else {
         acc[optionName] = config[optionName];
         if (OllamaDeprecatedOptionKeys.has(key)) {
           deprecated.push(key);
@@ -196,6 +219,12 @@ function buildOllamaOptions(config: OllamaCompletionOptions): Record<string, any
     }
     return acc;
   }, {});
+
+  if (wrongEndpoint.length > 0) {
+    logger.warn(
+      `[Ollama] Ignoring config keys that the ${endpoint} endpoint does not accept: ${wrongEndpoint.join(', ')}`,
+    );
+  }
 
   if (dropped.length > 0) {
     // Unrecognized keys are silently discarded, which is how `max_tokens` (an OpenAI
@@ -492,7 +521,7 @@ export class OllamaCompletionProvider implements ApiProvider {
       model: this.modelName,
       prompt,
       stream: false,
-      options: { ...buildOllamaOptions(this.config), ...passthroughOptions },
+      options: { ...buildOllamaOptions(this.config, 'completion'), ...passthroughOptions },
       ...(this.config.think === undefined ? {} : { think: this.config.think }),
       ...(this.config.keep_alive === undefined ? {} : { keep_alive: this.config.keep_alive }),
       ...(this.config.format === undefined ? {} : { format: this.config.format }),
@@ -648,7 +677,7 @@ export class OllamaChatProvider implements ApiProvider {
     const params: any = {
       model: this.modelName,
       messages,
-      options: { ...buildOllamaOptions(this.config), ...passthroughOptions },
+      options: { ...buildOllamaOptions(this.config, 'chat'), ...passthroughOptions },
       ...(this.config.think === undefined ? {} : { think: this.config.think }),
       ...(this.config.keep_alive === undefined ? {} : { keep_alive: this.config.keep_alive }),
       ...(this.config.format === undefined ? {} : { format: this.config.format }),
@@ -786,7 +815,7 @@ export class OllamaEmbeddingProvider extends OllamaCompletionProvider {
       truncate: this.config.truncate ?? false,
       ...(this.config.dimensions === undefined ? {} : { dimensions: this.config.dimensions }),
       ...(this.config.keep_alive === undefined ? {} : { keep_alive: this.config.keep_alive }),
-      options: { ...buildOllamaOptions(this.config), ...passthroughOptions },
+      options: { ...buildOllamaOptions(this.config, 'embedding'), ...passthroughOptions },
       ...passthroughRest,
     };
 

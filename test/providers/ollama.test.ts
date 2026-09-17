@@ -832,6 +832,54 @@ describe('OllamaChatProvider', () => {
     expect(result.cached).toBeUndefined();
   });
 
+  it('should warn when a completion-only key is set on a chat provider', async () => {
+    const warnSpy = vi.spyOn(logger, 'warn').mockImplementation(() => logger);
+    vi.mocked(fetchWithCache).mockResolvedValue({
+      data: '{"message":{"role":"assistant","content":"hi"},"done":true}\n',
+      cached: false,
+      status: 200,
+      statusText: 'OK',
+      headers: {},
+    });
+
+    const provider = new OllamaChatProvider('qwen3', {
+      config: { suffix: 'X', system: 'terse', raw: true } as any,
+    });
+    await provider.callApi('test prompt');
+
+    const body = JSON.parse(vi.mocked(fetchWithCache).mock.calls[0][1]?.body as string);
+    const warnings = warnSpy.mock.calls.map((c) => String(c[0]));
+    warnSpy.mockRestore();
+
+    // These are valid Ollama keys, but /api/chat does not accept them. Without the
+    // endpoint check they were neither forwarded nor reported -- a silent drop.
+    expect(body.suffix).toBeUndefined();
+    expect(body.system).toBeUndefined();
+    expect(body.raw).toBeUndefined();
+    expect(warnings.some((w) => w.includes('chat endpoint does not accept'))).toBe(true);
+    expect(warnings.some((w) => w.includes('suffix'))).toBe(true);
+  });
+
+  it('should not warn for keys the chat endpoint does accept', async () => {
+    const warnSpy = vi.spyOn(logger, 'warn').mockImplementation(() => logger);
+    vi.mocked(fetchWithCache).mockResolvedValue({
+      data: '{"message":{"role":"assistant","content":"hi"},"done":true}\n',
+      cached: false,
+      status: 200,
+      statusText: 'OK',
+      headers: {},
+    });
+
+    const provider = new OllamaChatProvider('qwen3', {
+      config: { think: false, keep_alive: '5m', format: 'json' },
+    });
+    await provider.callApi('test prompt');
+    const warnings = warnSpy.mock.calls.map((c) => String(c[0]));
+    warnSpy.mockRestore();
+
+    expect(warnings.filter((w) => w.includes('does not accept'))).toHaveLength(0);
+  });
+
   it('should not report promptfoo-internal keys as dropped config', async () => {
     const debugSpy = vi.spyOn(logger, 'debug').mockImplementation(() => logger);
     vi.mocked(fetchWithCache).mockResolvedValue({
