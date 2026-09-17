@@ -161,30 +161,28 @@ function usesCustomCloudAuth(
   explicitCloudAuth = false,
 ): boolean {
   const effectiveHeaders = new Headers(headers);
-  const customBearerHeaders = Array.from(effectiveHeaders).filter(
-    ([name, value]) => name !== 'authorization' && /^Bearer\s/i.test(value),
-  );
   // Explicit validation may use a new token/header before it is saved.
   if (explicitCloudAuth) {
-    return customBearerHeaders.length > 0;
-  }
-  const cloudAuth = getCloudBearerToken(url);
-  if (customBearerHeaders.length === 0 && !cloudAuth) {
-    return false;
+    return Array.from(effectiveHeaders).some(
+      ([name, value]) => name !== 'authorization' && /^Bearer\s/i.test(value),
+    );
   }
   const headerName = getCloudAuthHeaderName().toLowerCase();
-  // Include the credential that will be injected when the request is dispatched.
-  if (cloudAuth && headerName !== 'authorization' && !effectiveHeaders.has(headerName)) {
-    return true;
+  if (headerName === 'authorization') {
+    return false;
   }
-  // Alternate Cloud endpoints must carry the saved credential, not just a
-  // matching header name that an unrelated provider might also use.
-  return customBearerHeaders.some(
-    ([name, value]) =>
-      name === headerName &&
-      (isPromptfooCloudApiHost(url) ||
-        value.replace(/^Bearer\s+/i, '') === cloudConfig.getApiKey()),
-  );
+  for (const [name, value] of effectiveHeaders) {
+    if (name === headerName) {
+      // Alternate Cloud endpoints must carry the saved credential.
+      return (
+        /^Bearer\s/i.test(value) &&
+        (isPromptfooCloudApiHost(url) ||
+          value.replace(/^Bearer\s+/i, '') === cloudConfig.getApiKey())
+      );
+    }
+  }
+  // Include the credential that will be injected when the request is dispatched.
+  return Boolean(getCloudBearerToken(url));
 }
 
 /** Capture the Cloud redirect policy before any asynchronous work or retry. */

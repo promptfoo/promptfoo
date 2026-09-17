@@ -149,6 +149,23 @@ describe('monkeyPatchFetch', () => {
     });
   });
 
+  it.each(['', 'Basic gateway-credentials'])(
+    'preserves a non-Bearer custom auth header (%j) without restricting redirects',
+    async (value) => {
+      mockOriginalFetch.mockResolvedValue(createMockResponse({ ok: true, status: 200 }));
+      vi.mocked(cloudConfig.getApiKey).mockReturnValue('saved-token');
+      vi.mocked(cloudConfig.getAuthHeaderName).mockReturnValue('X-Promptfoo-Api-Key');
+      const url = CLOUD_API_HOST + '/api/test';
+      const dispatcher = { dispatch: vi.fn() };
+      const headers = { 'x-promptfoo-api-key': value };
+
+      await monkeyPatchFetch(url, { headers, dispatcher });
+
+      expect(mockOriginalFetch).toHaveBeenCalledWith(url, { headers, dispatcher });
+      expect(mockOriginalFetch.mock.calls[0][1].dispatcher).toBe(dispatcher);
+    },
+  );
+
   it('should add authorization and current team for configured on-prem cloud task requests', async () => {
     const mockResponse = createMockResponse({ ok: true, status: 200 });
     mockOriginalFetch.mockResolvedValue(mockResponse);
