@@ -157,6 +157,22 @@ block, including the sign-in command; no reformatting is needed. The skill asks
 only for missing or conflicting values. If the menu is unavailable, ask your
 administrator whether the deployment supports MCP and request its public settings.
 
+The settings describe the server to connect to and how Codex signs in:
+
+| Setting                | Description                                                                                                                                                  | Where to find it                            |
+| ---------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------- |
+| Enterprise Server URL  | The address you use to open Promptfoo. This is enough to start discovery.                                                                                    | Your deployment's website address.          |
+| MCP URL                | The endpoint Codex sends tool requests to, such as `https://promptfoo.example.com/api/v1/mcp`. This can differ from the website address.                     | `url` in the page's Codex configuration.    |
+| Public OAuth client ID | Identifies the deployment's registered sign-in application. It is a public identifier, not a client secret or API key.                                       | `oauth.client_id` in the configuration.     |
+| Callback URL           | The local address that receives the sign-in response. Copy the full value, including its path, so it matches the registered redirect.                        | `oauth.callback_url` in the configuration.  |
+| Callback port          | The port Codex listens on locally during sign-in. It must be free and match the callback URL; it is not the Enterprise server's port.                        | `oauth.callback_port` in the configuration. |
+| Requested scopes       | The sign-in permissions. The initial integration uses `openid` for identity and `offline_access` to refresh credentials; use the deployment's supplied list. | `--scopes` in the sign-in command.          |
+
+The five connection settings after the Server URL are required before Codex can
+sign in. Your administrator must enable Enterprise MCP, configure the OAuth
+application and its exact callback, and ensure your account has access. The skill
+collects the public settings; you complete sign-in with your own account.
+
 The skill preserves other MCP servers, completes Codex's separate MCP sign-in,
 and verifies access with `list_teams` on `promptfoo-enterprise`. It does not
 provision licenses, install the Enterprise server, perform CLI login, or grant

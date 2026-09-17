@@ -60,7 +60,10 @@ for the missing or conflicting values.
 
 Both paths must yield the MCP URL, public OAuth client ID, exact callback URL
 and port, and requested scopes before configuration or MCP sign-in. Read
-`references/codex-connection.md` for field mapping, validation, and failures.
+`references/codex-connection.md` for each setting's purpose, where to find it,
+field mapping, validation, and failures. When asking for a missing setting,
+briefly explain what it controls and where to get it. The Enterprise Server URL
+starts discovery; the MCP URL is the endpoint Codex connects to.
 Use the deployment's values; do not guess them, derive a different callback,
 or register a new OAuth application.
 

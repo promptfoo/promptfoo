@@ -6,20 +6,35 @@ the user's Codex client and must already be registered by the administrator.
 
 ## Collect and validate settings
 
-Normalize browser-read and pasted settings to the same fields:
+The **Enterprise Server URL** is the address the user opens to use Promptfoo,
+such as `https://promptfoo.example.com`. It starts browser discovery and is not
+itself a Codex configuration field. After signing in, open the account menu's
+**Coding Agent Setup** page for the remaining values. **Manual setup** provides
+the TOML and sign-in command together. An administrator can supply the same
+public settings when the page is unavailable.
 
-| Field                  | TOML or labeled values                       | Structured setup data                                 |
-| ---------------------- | -------------------------------------------- | ----------------------------------------------------- |
-| MCP URL                | `mcp_servers.promptfoo-enterprise.url`       | `resourceUrl`                                         |
-| Public OAuth client ID | `oauth.client_id`                            | `clientId`                                            |
-| Exact callback URL     | `oauth.callback_url`                         | `callbackUrl`                                         |
-| Callback port          | `oauth.callback_port`                        | `callbackPort`                                        |
-| Requested scopes       | `--scopes` in the accompanying login command | `scopes`, if present, or `--scopes` in `loginCommand` |
+All five connection settings below are required by this workflow. Normalize
+browser-read and pasted settings to the same fields:
+
+| Field                  | Purpose                                                                                                                                                                             | TOML or labeled values                       | Structured setup data                                 |
+| ---------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------- | ----------------------------------------------------- |
+| MCP URL                | The server endpoint Codex sends tool requests to, for example `https://promptfoo.example.com/api/v1/mcp`. It may use a different host from the website; copy the supplied endpoint. | `mcp_servers.promptfoo-enterprise.url`       | `resourceUrl`                                         |
+| Public OAuth client ID | Identifies the deployment's registered OAuth application during sign-in. This public identifier is not a client secret or API key.                                                  | `oauth.client_id`                            | `clientId`                                            |
+| Exact callback URL     | The local address where Codex receives the browser's sign-in response. Its full URL, including the path, must match the deployment's registered redirect.                           | `oauth.callback_url`                         | `callbackUrl`                                         |
+| Callback port          | The port Codex listens on locally for that response. It must be available and match the port in the callback URL; it is not the Enterprise server's port.                           | `oauth.callback_port`                        | `callbackPort`                                        |
+| Requested scopes       | The permissions requested at sign-in. The initial integration uses `openid` for user identity and `offline_access` to refresh credentials. Copy the deployment's supplied list.     | `--scopes` in the accompanying login command | `scopes`, if present, or `--scopes` in `loginCommand` |
 
 The `oauth` fields above belong to `mcp_servers.promptfoo-enterprise.oauth`.
 Structured setup data may also contain `configuration` (the TOML block),
 `issuer`, and a readiness `status`. Check structured fields against the TOML
 when both are present; do not silently choose between conflicting values.
+
+The deployment must already support Enterprise MCP, have its OAuth application
+configured for the advertised endpoint and exact callback, and allow the user's
+account to sign in. These are administrator prerequisites; installing the plugin
+does not enable the server or grant account or team access. The public settings
+are sufficient for setup: no client secret or API key is required for this OAuth
+connection.
 
 For the paste path, a useful request is:
 
