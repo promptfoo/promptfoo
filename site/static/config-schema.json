@@ -191,6 +191,9 @@
         "ANTHROPIC_CUSTOM_HEADERS": {
           "type": "string"
         },
+        "ANTHROPIC_TEMPERATURE": {
+          "type": "string"
+        },
         "ATLASCLOUD_API_KEY": {
           "type": "string"
         },
@@ -269,6 +272,9 @@
         "CF_AIG_TOKEN": {
           "type": "string"
         },
+        "CEREBRAS_API_KEY": {
+          "type": "string"
+        },
         "COMETAPI_KEY": {
           "type": "string"
         },
@@ -284,6 +290,12 @@
         "DATABRICKS_WORKSPACE_URL": {
           "type": "string"
         },
+        "DASHSCOPE_API_KEY": {
+          "type": "string"
+        },
+        "DEEPSEEK_API_KEY": {
+          "type": "string"
+        },
         "DOCKER_MODEL_RUNNER_BASE_URL": {
           "type": "string"
         },
@@ -291,6 +303,9 @@
           "type": "string"
         },
         "ELEVENLABS_API_KEY": {
+          "type": "string"
+        },
+        "F5_API_KEY": {
           "type": "string"
         },
         "FAL_KEY": {
@@ -303,6 +318,9 @@
           "type": "string"
         },
         "GITHUB_TOKEN": {
+          "type": "string"
+        },
+        "GOOGLE_CLOUD_PROJECT": {
           "type": "string"
         },
         "GOOGLE_API_HOST": {
@@ -362,10 +380,19 @@
         "LITELLM_API_BASE": {
           "type": "string"
         },
+        "LITELLM_API_KEY": {
+          "type": "string"
+        },
         "LLAMA_BASE_URL": {
           "type": "string"
         },
+        "LLAMA_API_KEY": {
+          "type": "string"
+        },
         "LOCALAI_BASE_URL": {
+          "type": "string"
+        },
+        "LOCALAI_TEMPERATURE": {
           "type": "string"
         },
         "MISTRAL_API_BASE_URL": {
@@ -470,6 +497,9 @@
         "PALM_API_KEY": {
           "type": "string"
         },
+        "PERPLEXITY_API_KEY": {
+          "type": "string"
+        },
         "PORTKEY_API_KEY": {
           "type": "string"
         },
@@ -497,6 +527,9 @@
         "QUIVERAI_API_KEY": {
           "type": "string"
         },
+        "QWAK_TOKEN": {
+          "type": "string"
+        },
         "REPLICATE_API_KEY": {
           "type": "string"
         },
@@ -519,6 +552,9 @@
           "type": "string"
         },
         "TOGETHER_API_KEY": {
+          "type": "string"
+        },
+        "TRUEFOUNDRY_API_KEY": {
           "type": "string"
         },
         "VERCEL_AI_GATEWAY_API_KEY": {
@@ -1657,6 +1693,9 @@
                     "ANTHROPIC_CUSTOM_HEADERS": {
                       "type": "string"
                     },
+                    "ANTHROPIC_TEMPERATURE": {
+                      "type": "string"
+                    },
                     "ATLASCLOUD_API_KEY": {
                       "type": "string"
                     },
@@ -1735,6 +1774,9 @@
                     "CF_AIG_TOKEN": {
                       "type": "string"
                     },
+                    "CEREBRAS_API_KEY": {
+                      "type": "string"
+                    },
                     "COMETAPI_KEY": {
                       "type": "string"
                     },
@@ -1750,6 +1792,12 @@
                     "DATABRICKS_WORKSPACE_URL": {
                       "type": "string"
                     },
+                    "DASHSCOPE_API_KEY": {
+                      "type": "string"
+                    },
+                    "DEEPSEEK_API_KEY": {
+                      "type": "string"
+                    },
                     "DOCKER_MODEL_RUNNER_BASE_URL": {
                       "type": "string"
                     },
@@ -1757,6 +1805,9 @@
                       "type": "string"
                     },
                     "ELEVENLABS_API_KEY": {
+                      "type": "string"
+                    },
+                    "F5_API_KEY": {
                       "type": "string"
                     },
                     "FAL_KEY": {
@@ -1769,6 +1820,9 @@
                       "type": "string"
                     },
                     "GITHUB_TOKEN": {
+                      "type": "string"
+                    },
+                    "GOOGLE_CLOUD_PROJECT": {
                       "type": "string"
                     },
                     "GOOGLE_API_HOST": {
@@ -1828,10 +1882,19 @@
                     "LITELLM_API_BASE": {
                       "type": "string"
                     },
+                    "LITELLM_API_KEY": {
+                      "type": "string"
+                    },
                     "LLAMA_BASE_URL": {
                       "type": "string"
                     },
+                    "LLAMA_API_KEY": {
+                      "type": "string"
+                    },
                     "LOCALAI_BASE_URL": {
+                      "type": "string"
+                    },
+                    "LOCALAI_TEMPERATURE": {
                       "type": "string"
                     },
                     "MISTRAL_API_BASE_URL": {
@@ -1936,6 +1999,9 @@
                     "PALM_API_KEY": {
                       "type": "string"
                     },
+                    "PERPLEXITY_API_KEY": {
+                      "type": "string"
+                    },
                     "PORTKEY_API_KEY": {
                       "type": "string"
                     },
@@ -1963,6 +2029,9 @@
                     "QUIVERAI_API_KEY": {
                       "type": "string"
                     },
+                    "QWAK_TOKEN": {
+                      "type": "string"
+                    },
                     "REPLICATE_API_KEY": {
                       "type": "string"
                     },
@@ -1985,6 +2054,9 @@
                       "type": "string"
                     },
                     "TOGETHER_API_KEY": {
+                      "type": "string"
+                    },
+                    "TRUEFOUNDRY_API_KEY": {
                       "type": "string"
                     },
                     "VERCEL_AI_GATEWAY_API_KEY": {

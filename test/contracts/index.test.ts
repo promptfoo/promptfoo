@@ -76,6 +76,26 @@ describe('contracts leaf surface', () => {
   });
 
   describe('ProviderEnvOverridesSchema', () => {
+    it('preserves supported provider authentication, account and generation overrides', () => {
+      const env = {
+        ANTHROPIC_TEMPERATURE: '0',
+        CEREBRAS_API_KEY: 'fixture-cerebras-token',
+        DASHSCOPE_API_KEY: 'fixture-dashscope-token',
+        DEEPSEEK_API_KEY: 'fixture-deepseek-token',
+        F5_API_KEY: 'fixture-f5-token',
+        GOOGLE_CLOUD_PROJECT: 'fixture-project',
+        LITELLM_API_KEY: 'fixture-litellm-token',
+        LLAMA_API_KEY: 'fixture-llama-token',
+        LOCALAI_TEMPERATURE: '0',
+        PERPLEXITY_API_KEY: 'fixture-perplexity-token',
+        QWAK_TOKEN: 'fixture-qwak-token',
+        TOGETHER_API_KEY: 'fixture-together-token',
+        TRUEFOUNDRY_API_KEY: 'fixture-truefoundry-token',
+      };
+
+      expect(ProviderEnvOverridesSchema.parse(env)).toEqual(env);
+    });
+
     it('parses a known env key', () => {
       const parsed = ProviderEnvOverridesSchema.safeParse({ OPENAI_API_KEY: 'sk-known' });
       expect(parsed.success).toBe(true);
