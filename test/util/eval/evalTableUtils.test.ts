@@ -8,6 +8,7 @@ import {
   generateEvalCsv,
   getEvalTableOutputPromptLocationsBySize,
   getEvalTablePromptStrippedPayload,
+  mergeComparisonTables,
   STRIPPED_TABLE_CELL_PROMPT,
   streamEvalCsv,
 } from '../../../src/util/eval/evalTableUtils';
@@ -314,6 +315,69 @@ describe('evalTableUtils', () => {
         const accuracyIdx = headerCols.indexOf('Metric: accuracy');
         expect(rowCols[clarityIdx]).toBe('0.90');
         expect(rowCols[accuracyIdx]).toBe('0.80');
+      });
+
+      it('should keep prompt columns aligned for sparse output rows', () => {
+        const sparseOutputs = [] as EvaluateTableOutput[];
+        sparseOutputs[1] = {
+          pass: true,
+          text: 'Second output',
+          score: 0.9,
+        } as unknown as EvaluateTableOutput;
+
+        const tableWithSparseOutputs = {
+          ...mockTable,
+          body: [
+            {
+              ...mockTable.body[0],
+              outputs: sparseOutputs,
+            },
+          ],
+        };
+
+        const [headerCols, rowCols] = parseCsv(
+          evalTableToCsv(tableWithSparseOutputs),
+        ) as string[][];
+        expect(rowCols).toHaveLength(headerCols.length);
+
+        const firstPromptIdx = headerCols.indexOf('[openai:gpt-4] Prompt 1');
+        const secondPromptIdx = headerCols.indexOf('[anthropic:claude] Prompt 2');
+        expect(rowCols[firstPromptIdx]).toBe('');
+        expect(rowCols[secondPromptIdx]).toBe('Second output');
+      });
+
+      it('should use surviving redteam metadata for sparse output rows', () => {
+        const sparseOutputs = [] as EvaluateTableOutput[];
+        sparseOutputs[1] = {
+          pass: true,
+          text: 'Second output',
+          score: 0.9,
+          metadata: {
+            pluginId: 'harmful:violent-crime',
+            strategyId: 'jailbreak',
+            sessionId: 'session-2',
+          },
+        } as unknown as EvaluateTableOutput;
+
+        const tableWithSparseOutputs = {
+          ...mockTable,
+          body: [
+            {
+              ...mockTable.body[0],
+              outputs: sparseOutputs,
+            },
+          ],
+        };
+
+        const [headerCols, rowCols] = parseCsv(
+          evalTableToCsv(tableWithSparseOutputs, {
+            isRedteam: true,
+          }),
+        ) as string[][];
+
+        expect(rowCols[headerCols.indexOf('pluginId')]).toBe('harmful:violent-crime');
+        expect(rowCols[headerCols.indexOf('strategyId')]).toBe('jailbreak');
+        expect(rowCols[headerCols.indexOf('sessionId')]).toBe('session-2');
       });
 
       it('should handle null and undefined outputs', () => {
@@ -1131,6 +1195,81 @@ describe('evalTableUtils', () => {
         custom: 'data',
         nested: { value: 123 },
       });
+    });
+  });
+
+  describe('mergeComparisonTables', () => {
+    it('preserves sparse comparison output columns', () => {
+      const comparisonOutputs = [] as EvaluateTableOutput[];
+      comparisonOutputs[1] = {
+        pass: true,
+        text: 'Comparison prompt 1 output',
+      } as EvaluateTableOutput;
+
+      const merged = mergeComparisonTables('main', mockTable, [
+        {
+          evalId: 'comparison',
+          table: {
+            head: mockTable.head,
+            body: [
+              {
+                ...mockTable.body[0],
+                outputs: comparisonOutputs,
+              },
+            ],
+          },
+        },
+      ]);
+
+      expect(merged.body[0].outputs).toHaveLength(4);
+      expect(merged.body[0].outputs[2]).toBeUndefined();
+      expect(merged.body[0].outputs[3]?.text).toBe('Comparison prompt 1 output');
+    });
+
+    it('pads sparse main output columns before appending comparisons', () => {
+      const mainOutputs = [
+        {
+          pass: true,
+          text: 'Main prompt 0 output',
+        } as EvaluateTableOutput,
+      ];
+
+      const merged = mergeComparisonTables(
+        'main',
+        {
+          ...mockTable,
+          body: [
+            {
+              ...mockTable.body[0],
+              outputs: mainOutputs,
+            },
+          ],
+        },
+        [
+          {
+            evalId: 'comparison',
+            table: {
+              head: mockTable.head,
+              body: [
+                {
+                  ...mockTable.body[0],
+                  outputs: [
+                    {
+                      pass: true,
+                      text: 'Comparison prompt 0 output',
+                    } as EvaluateTableOutput,
+                  ],
+                },
+              ],
+            },
+          },
+        ],
+      );
+
+      expect(merged.body[0].outputs).toHaveLength(4);
+      expect(merged.body[0].outputs[0]?.text).toBe('Main prompt 0 output');
+      expect(merged.body[0].outputs[1]).toBeUndefined();
+      expect(merged.body[0].outputs[2]?.text).toBe('Comparison prompt 0 output');
     });
   });
 

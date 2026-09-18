@@ -7,7 +7,14 @@ import Eval, { EvalQueries } from '../../models/eval';
 import EvalResult from '../../models/evalResult';
 import { evaluateWithSource } from '../../node';
 import { EvalSchemas } from '../../types/api/eval';
-import { deleteEval, deleteEvals, updateResult, writeResultsToDatabase } from '../../util/database';
+import {
+  deleteEval,
+  deleteEvalResult,
+  deleteEvals,
+  EvalResultNotFoundError,
+  updateResult,
+  writeResultsToDatabase,
+} from '../../util/database';
 import {
   ComparisonEvalNotFoundError,
   evalTableToJson,
@@ -885,6 +892,32 @@ evalRouter.delete('/', async (req: Request, res: Response) => {
     res.status(204).send();
   } catch {
     res.status(500).json({ error: 'Failed to delete evals' });
+  }
+});
+
+/**
+ * Delete a single result row from within an eval, leaving the eval and its
+ * other results intact. Backs the `promptfoo delete eval-result` CLI so a
+ * long eval session can be recovered from a single transient failure without
+ * re-running everything.
+ */
+evalRouter.delete('/:evalId/results/:id', async (req: Request, res: Response): Promise<void> => {
+  const paramsResult = EvalSchemas.DeleteResult.Params.safeParse(req.params);
+  if (!paramsResult.success) {
+    replyValidationError(res, paramsResult.error);
+    return;
+  }
+
+  const { evalId, id } = paramsResult.data;
+  try {
+    await deleteEvalResult(evalId, id);
+    res.status(204).send();
+  } catch (error) {
+    if (error instanceof EvalResultNotFoundError) {
+      res.status(404).json({ error: 'Eval result not found' });
+      return;
+    }
+    sendError(res, 500, 'Failed to delete eval result', error);
   }
 });
 

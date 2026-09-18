@@ -261,6 +261,48 @@ describe('getStandaloneEvals', () => {
     expect(afterRow?.pluginFailCount['plugin-add']).toBe(1);
   });
 
+  it('skips sparse redteam table cells when computing per-prompt plugin counts', async () => {
+    const eval_ = await Eval.create(
+      { redteam: {} as any },
+      [
+        { raw: 'prompt zero', label: 'prompt zero' },
+        { raw: 'prompt one', label: 'prompt one' },
+      ],
+      {
+        completedPrompts: [
+          { ...completedPrompt, raw: 'prompt zero', label: 'prompt zero' },
+          { ...completedPrompt, raw: 'prompt one', label: 'prompt one' },
+        ],
+      },
+    );
+    await setIsRedteam(eval_.id, true);
+    await eval_.setResults([
+      new EvalResult({
+        id: 'sparse-prompt-one-result',
+        evalId: eval_.id,
+        promptIdx: 1,
+        testIdx: 0,
+        testCase: { vars: {}, metadata: { pluginId: 'plugin-sparse' } },
+        prompt: { raw: 'prompt one', label: 'prompt one' },
+        provider: { id: 'test-provider' },
+        response: { output: 'bad' },
+        gradingResult: null,
+        namedScores: {},
+        metadata: {},
+        success: false,
+        score: 0,
+        latencyMs: 1,
+        cost: 0,
+        failureReason: ResultFailureReason.ASSERT,
+      }),
+    ]);
+
+    const rows = (await getStandaloneEvals()).filter((row) => row.evalId === eval_.id);
+    const byPrompt = new Map(rows.map((row) => [row.raw, row]));
+    expect(byPrompt.get('prompt zero')?.pluginFailCount['plugin-sparse']).toBeUndefined();
+    expect(byPrompt.get('prompt one')?.pluginFailCount['plugin-sparse']).toBe(1);
+  });
+
   it('classifies redteam: null as redteam, matching the runtime predicate', async () => {
     const eval_ = await createEvalWithPrompts({ redteam: null as any });
 
