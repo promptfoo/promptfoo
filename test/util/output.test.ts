@@ -41,8 +41,8 @@ vi.mock('fs', async () => {
 });
 
 const mockFileHandle = vi.hoisted(() => ({
-  write: vi.fn().mockResolvedValue(undefined),
-  close: vi.fn().mockResolvedValue(undefined),
+  write: vi.fn(),
+  close: vi.fn(),
 }));
 const JSONL_TEMP_DIRECTORY = '/tmp/promptfoo-jsonl-test';
 const JSONL_BACKUP_PATH = path.join(JSONL_TEMP_DIRECTORY, 'backup.jsonl');
@@ -75,9 +75,8 @@ describe('writeOutput', () => {
   beforeEach(() => {
     const fileNotFoundError = Object.assign(new Error('ENOENT'), { code: 'ENOENT' });
     vi.clearAllMocks();
-    // Restore mock implementations that vi.resetAllMocks() clears
-    mockFileHandle.write.mockResolvedValue(undefined);
-    mockFileHandle.close.mockResolvedValue(undefined);
+    mockFileHandle.write.mockReset().mockResolvedValue(undefined);
+    mockFileHandle.close.mockReset().mockResolvedValue(undefined);
     vi.mocked(fsPromises.open).mockResolvedValue(
       mockFileHandle as unknown as fsPromises.FileHandle,
     );

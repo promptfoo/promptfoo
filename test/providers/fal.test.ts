@@ -40,7 +40,7 @@ vi.mock('../../src/envars', async (importOriginal) => {
 
 describe('Fal Provider', () => {
   beforeEach(() => {
-    vi.clearAllMocks();
+    vi.resetAllMocks();
     mockCreateClient.mockImplementation(() => ({ subscribe: mockSubscribe }));
     vi.mocked(isCacheEnabled).mockReturnValue(false);
     vi.mocked(getCache).mockReturnValue({
@@ -327,7 +327,8 @@ describe('Fal Provider', () => {
       };
 
       beforeEach(() => {
-        mockSubscribe.mockResolvedValue(mockResponse);
+        mockSubscribe.mockReset();
+        mockSubscribe.mockResolvedValueOnce(mockResponse);
       });
 
       it('should sanitize prompt in markdown output', async () => {
