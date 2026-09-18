@@ -40,9 +40,10 @@ This directory contains several example configurations for different Bedrock mod
 
 - [`promptfooconfig.claude.yaml`](promptfooconfig.claude.yaml) - Claude 4.6 Opus, Claude 4.1 Opus, Claude 4 Opus/Sonnet, Claude Haiku 4.5
 - [`promptfooconfig.openai.yaml`](promptfooconfig.openai.yaml) - OpenAI GPT-OSS models (120B and 20B) with reasoning effort
+- [`promptfooconfig.openai-responses.yaml`](promptfooconfig.openai-responses.yaml) - OpenAI GPT-OSS 120B through the Bedrock Responses API (AWS credentials or `AWS_BEARER_TOKEN_BEDROCK`)
 - [`promptfooconfig.openai-frontier.yaml`](promptfooconfig.openai-frontier.yaml) - OpenAI GPT-5.6 Sol, Terra, and Luna with reasoning, explicit prompt caching, and streaming
-- [`promptfooconfig.grok.yaml`](promptfooconfig.grok.yaml) - xAI Grok 4.3 on the Bedrock Mantle endpoint (requires `AWS_BEARER_TOKEN_BEDROCK`)
-- [`promptfooconfig.mantle.yaml`](promptfooconfig.mantle.yaml) - `bedrock:mantle:` Chat Completions endpoint for mantle-only models like GLM 4.6 and DeepSeek V3.1 (requires `AWS_BEARER_TOKEN_BEDROCK`)
+- [`promptfooconfig.grok.yaml`](promptfooconfig.grok.yaml) - xAI Grok 4.3 on the Bedrock Mantle endpoint (AWS credentials or `AWS_BEARER_TOKEN_BEDROCK`)
+- [`promptfooconfig.mantle.yaml`](promptfooconfig.mantle.yaml) - `bedrock:mantle:` Chat Completions endpoint for mantle-only models like GLM 4.6 and DeepSeek V3.1 (AWS credentials or `AWS_BEARER_TOKEN_BEDROCK`)
 - [`promptfooconfig.llama.yaml`](promptfooconfig.llama.yaml) - Llama3
 - [`promptfooconfig.mistral.yaml`](promptfooconfig.mistral.yaml) - Mistral
 - [`promptfooconfig.openai-compatible.yaml`](promptfooconfig.openai-compatible.yaml) - OpenAI-compatible families: Z.AI GLM, MiniMax, Moonshot Kimi, NVIDIA Nemotron, Google Gemma, Writer Palmyra
@@ -246,10 +247,26 @@ The OpenAI example (`promptfooconfig.openai.yaml`) demonstrates OpenAI's GPT-OSS
 - **OpenAI API Format**: Uses familiar OpenAI parameters like `max_completion_tokens`
 - **Available in us-west-2**: Ensure you have model access in the correct region
 
+For the OpenAI-compatible Responses API variant, use
+`promptfooconfig.openai-responses.yaml`. It targets the shorter mantle model id
+`openai.gpt-oss-120b` through `bedrock:responses:`. Authenticate with either
+`AWS_BEARER_TOKEN_BEDROCK` or standard AWS credentials (explicit keys, a named
+profile, or the default credential chain). With AWS credentials, Promptfoo generates
+short-lived bearer tokens for requests using the optional
+`@aws/bedrock-token-generator` package. Explicit `config.accessKeyId` / `config.secretAccessKey`
+or `config.profile` override environment bearer tokens. Unset `AWS_BEARER_TOKEN_BEDROCK`
+when relying on environment AWS credentials or the default credential chain instead.
+
 Run the OpenAI example with:
 
 ```bash
 promptfoo eval -c examples/amazon-bedrock/models/promptfooconfig.openai.yaml
+```
+
+Run the Responses API example with:
+
+```bash
+promptfoo eval -c examples/amazon-bedrock/models/promptfooconfig.openai-responses.yaml --no-cache
 ```
 
 ## OpenAI Frontier Models Example
@@ -263,11 +280,13 @@ The frontier example (`promptfooconfig.openai-frontier.yaml`) demonstrates OpenA
 ### Key Features
 
 - **Responses API**: Frontier models are served through Bedrock's OpenAI-compatible Responses API (`https://bedrock-mantle.<region>.api.aws/openai/v1/responses`), not `InvokeModel` or `Converse`. Promptfoo routes `bedrock:openai.gpt-5.x` there automatically and preserves the Bedrock model ID.
-- **Bedrock API key auth**: Unlike the gpt-oss models (AWS SDK credentials), the frontier models authenticate with an Amazon Bedrock API key. Export it first:
+- **Authentication**: Use standard AWS credentials (explicit keys, a named profile, or the default credential chain) to generate short-lived bearer tokens with the optional `@aws/bedrock-token-generator` package. Alternatively, supply an Amazon Bedrock API key:
 
   ```bash
   export AWS_BEARER_TOKEN_BEDROCK="your_bedrock_api_key"
   ```
+
+  Explicit AWS keys or `config.profile` override environment bearer tokens. Unset `AWS_BEARER_TOKEN_BEDROCK` when relying on environment AWS credentials or the default credential chain instead.
 
 - **Native Reasoning Effort**: GPT-5.6 supports `none`, `low`, `medium`, `high`, `xhigh`, and `max` (`minimal` is not supported by these Bedrock models).
 - **Prompt caching and streaming**: The example marks its stable system instructions with an explicit cache breakpoint, uses a stable `prompt_cache_key`, and enables streaming for Luna. Cache reads receive a 90% discount; cache writes cost 1.25x the uncached input rate.
