@@ -109,6 +109,8 @@ interface FilteredBasicMetricsRow {
   total_score: number;
   total_latency: number;
   total_cost: number;
+  incurred_cost: number;
+  has_incurred_cost: number;
   total_tokens: number | null;
   prompt_tokens: number | null;
   completion_tokens: number | null;
@@ -270,7 +272,7 @@ export async function calculateFilteredMetrics(
     }
 
     // Calculate metrics using optimized approach
-    return await calculateWithOptimizedQuery(opts);
+    return await calculateMetricsForResults(opts, await getDb());
   } catch (error) {
     logger.error('Failed to calculate filtered metrics with optimized query', { error });
 
@@ -297,14 +299,19 @@ async function getResultCount(whereSql: SQL<unknown>): Promise<number> {
 }
 
 /**
+ * Calculate persisted row metrics using the supplied database or transaction.
+ * Errors propagate so mutation callers can roll back rather than persist empty metrics.
+ *
  * OPTIMIZED: Single GROUP BY query aggregating ALL prompts at once.
  * This is the key performance improvement from the audit.
  *
  * SECURITY: Uses parameterized SQL queries via Drizzle's sql template strings.
  */
-async function calculateWithOptimizedQuery(opts: FilteredMetricsOptions): Promise<PromptMetrics[]> {
+export async function calculateMetricsForResults(
+  opts: FilteredMetricsOptions,
+  db: Pick<Awaited<ReturnType<typeof getDb>>, 'all'>,
+): Promise<PromptMetrics[]> {
   const { numPrompts, whereSql } = opts;
-  const db = await getDb();
 
   // Initialize empty metrics
   const metrics = createEmptyMetricsArray(numPrompts);
@@ -350,6 +357,10 @@ async function calculateWithOptimizedQuery(opts: FilteredMetricsOptions): Promis
       SUM(score) as total_score,
       SUM(latency_ms) as total_latency,
       SUM(cost) as total_cost,
+      SUM(CASE WHEN json_extract(response, '$.incurredCost') IS NOT NULL
+        OR json_extract(response, '$.cached') = 1 THEN 1 ELSE 0 END) as has_incurred_cost,
+      SUM(COALESCE(json_extract(response, '$.incurredCost'),
+        CASE WHEN json_extract(response, '$.cached') = 1 THEN 0 ELSE cost END, 0)) as incurred_cost,
       -- Token usage aggregation (token usage is inside response JSON)
       SUM(${jsonUsageTotal(response, targetPath)}) as total_tokens,
       SUM(${jsonUsageNumber(response, targetPath, 'prompt')}) as prompt_tokens,
@@ -439,6 +450,7 @@ async function calculateWithOptimizedQuery(opts: FilteredMetricsOptions): Promis
       testErrorCount: row.error_count || 0,
       totalLatencyMs: row.total_latency || 0,
       cost: row.total_cost || 0,
+      ...(row.has_incurred_cost ? { incurredCost: row.incurred_cost || 0 } : {}),
       tokenUsage: getFilteredTokenUsage(row),
       namedScores: {},
       namedScoresCount: {},
@@ -449,10 +461,10 @@ async function calculateWithOptimizedQuery(opts: FilteredMetricsOptions): Promis
   }
 
   // ===== QUERY 2: Named scores (SQL JSON aggregation) =====
-  await aggregateNamedScores(metrics, whereSql);
+  await aggregateNamedScores(metrics, whereSql, db);
 
   // ===== QUERY 3: Assertion counts (SQL JSON aggregation) =====
-  await aggregateAssertions(metrics, whereSql);
+  await aggregateAssertions(metrics, whereSql, db);
 
   logger.debug('Filtered metrics calculated', {
     numPrompts,
@@ -474,9 +486,8 @@ async function calculateWithOptimizedQuery(opts: FilteredMetricsOptions): Promis
 async function aggregateNamedScores(
   metrics: PromptMetrics[],
   whereSql: SQL<unknown>,
+  db: Pick<Awaited<ReturnType<typeof getDb>>, 'all'>,
 ): Promise<void> {
-  const db = await getDb();
-
   // Use SQLite's json_each to parse JSON in database. When newer results include
   // grading_result.namedScoreWeights, row-level named scores are weighted averages, so we
   // multiply them back into weighted totals before aggregating prompt metrics.
@@ -555,9 +566,8 @@ async function aggregateNamedScores(
 async function aggregateAssertions(
   metrics: PromptMetrics[],
   whereSql: SQL<unknown>,
+  db: Pick<Awaited<ReturnType<typeof getDb>>, 'all'>,
 ): Promise<void> {
-  const db = await getDb();
-
   // SQLite query to count assertions from nested JSON
   // This is complex but avoids fetching all results into memory
   const query = sql`

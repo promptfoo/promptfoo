@@ -1,8 +1,16 @@
 import { eq, sql } from 'drizzle-orm';
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
+import { isBlobAllowedForShare } from '../../src/blobs';
 import { getDb } from '../../src/database/index';
 import { updateSignalFile, updateSignalFileForDeletedEvals } from '../../src/database/signal';
-import { evalResultsTable, evalsTable, spansTable, tracesTable } from '../../src/database/tables';
+import {
+  blobAssetsTable,
+  blobReferencesTable,
+  evalResultsTable,
+  evalsTable,
+  spansTable,
+  tracesTable,
+} from '../../src/database/tables';
 import { getAuthor } from '../../src/globalConfig/accounts';
 import { runDbMigrations } from '../../src/migrate';
 import Eval, {
@@ -219,6 +227,296 @@ describe('evaluator', () => {
       });
       expect(findResults).not.toHaveBeenCalled();
     });
+  });
+
+  describe('setResults replacement', () => {
+    it('replaces persisted rows and clears them when given an empty set', async () => {
+      const eval_ = await EvalFactory.create({ numResults: 1 });
+      const [existing] = await EvalResult.findManyByEvalId(eval_.id);
+      expect(existing).toBeDefined();
+
+      await eval_.setResults([existing]);
+      expect(await EvalResult.findManyByEvalId(eval_.id)).toHaveLength(1);
+
+      await eval_.setResults([]);
+      expect(await EvalResult.findManyByEvalId(eval_.id)).toHaveLength(0);
+      expect(await getCachedResultsCount(eval_.id)).toBe(0);
+    });
+  });
+
+  it('prunes obsolete blob references on result replacement while retaining live references', async () => {
+    const eval_ = await EvalFactory.create({ numResults: 2 });
+    const other = await EvalFactory.create({ numResults: 1 });
+    const [retained] = await EvalResult.findManyByEvalId(eval_.id);
+    const removedHash = 'a'.repeat(64);
+    const retainedHash = 'b'.repeat(64);
+    const configHash = 'c'.repeat(64);
+    retained.response = { output: `promptfoo://blob/${retainedHash}` };
+    eval_.config = { defaultTest: { vars: { image: `promptfoo://blob/${configHash}` } } };
+    const db = await getDb();
+    await db
+      .insert(blobAssetsTable)
+      .values(
+        [removedHash, retainedHash, configHash].map((hash) => ({
+          hash,
+          sizeBytes: 1,
+          mimeType: 'image/png',
+          provider: 'filesystem',
+        })),
+      )
+      .onConflictDoNothing()
+      .run();
+    await db
+      .insert(blobReferencesTable)
+      .values([
+        ...[removedHash, retainedHash, configHash].map((blobHash, i) => ({
+          id: `replacement-ref-${i}`,
+          blobHash,
+          evalId: eval_.id,
+          kind: 'image',
+        })),
+        { id: 'other-eval-ref', blobHash: removedHash, evalId: other.id, kind: 'image' },
+      ])
+      .run();
+
+    const circular: Record<string, unknown> = {};
+    circular.self = circular;
+    const invalid = new EvalResult({ ...retained, response: { output: circular } });
+    await expect(eval_.setResults([invalid])).rejects.toThrow();
+    expect(await EvalResult.findManyByEvalId(eval_.id)).toHaveLength(2);
+    expect(await isBlobAllowedForShare(removedHash, eval_.id)).toBe(true);
+
+    await eval_.setResults([retained]);
+    expect(await isBlobAllowedForShare(removedHash, eval_.id)).toBe(false);
+    expect(await isBlobAllowedForShare(retainedHash, eval_.id)).toBe(true);
+    expect(await isBlobAllowedForShare(configHash, eval_.id)).toBe(true);
+    expect(await isBlobAllowedForShare(removedHash, other.id)).toBe(true);
+
+    await eval_.setResults([]);
+    expect(await isBlobAllowedForShare(retainedHash, eval_.id)).toBe(false);
+    expect(await isBlobAllowedForShare(configHash, eval_.id)).toBe(true);
+    expect(await db.select().from(blobAssetsTable)).toEqual(
+      expect.arrayContaining([expect.objectContaining({ hash: removedHash })]),
+    );
+  });
+
+  it('replaces persisted prompt metrics together with result rows', async () => {
+    const eval_ = await EvalFactory.create({ numResults: 2 });
+    const [retained] = await EvalResult.findManyByEvalId(eval_.id);
+    retained.success = true;
+    retained.cost = 0.25;
+    retained.response = { output: 'kept', tokenUsage: { total: 7, prompt: 5, completion: 2 } };
+    await eval_.setResults([retained]);
+    expect(eval_.getStats()).toMatchObject({ successes: 1, failures: 0, tokenUsage: { total: 7 } });
+    const loaded = await Eval.findById(eval_.id);
+    expect(loaded?.prompts[retained.promptIdx].metrics?.cost).toBe(0.25);
+    await eval_.setResults([]);
+    expect(eval_.getStats()).toMatchObject({
+      successes: 0,
+      failures: 0,
+      errors: 0,
+      tokenUsage: { total: 0 },
+    });
+    expect((await Eval.findById(eval_.id))?.getStats().successes).toBe(0);
+  });
+
+  it.each([undefined, 4])(
+    'preserves assertion-level named metric counts with stored weight %s',
+    async (weight) => {
+      const eval_ = await EvalFactory.create({ numResults: 1 });
+      const [row] = await EvalResult.findManyByEvalId(eval_.id);
+      row.testCase.vars = { suffix: 'alpha' };
+      row.namedScores = { 'quality:alpha': 0.75 };
+      row.gradingResult = {
+        pass: true,
+        score: 0.75,
+        reason: 'metric',
+        ...(weight === undefined ? {} : { namedScoreWeights: { 'quality:alpha': weight } }),
+        componentResults: [1, 0.5].map((score) => ({
+          pass: true,
+          score,
+          reason: 'component',
+          assertion: { type: 'contains' as const, value: 'x', metric: 'quality:{{ suffix }}' },
+        })),
+      };
+      await eval_.setResults([row]);
+      expect(eval_.prompts[row.promptIdx].metrics).toMatchObject({
+        namedScores: { 'quality:alpha': weight === undefined ? 0.75 : 3 },
+        namedScoresCount: { 'quality:alpha': 2 },
+        namedScoreWeights: { 'quality:alpha': weight ?? 2 },
+      });
+    },
+  );
+
+  it('retains actual-spend accounting and recalculates derived scores', async () => {
+    const eval_ = await EvalFactory.create({ numResults: 2 });
+    eval_.config.derivedMetrics = [
+      { name: 'average', value: 'quality / __count' },
+      { name: 'twice', value: 'average * 2' },
+    ];
+    const rows = await EvalResult.findManyByEvalId(eval_.id);
+    for (const row of rows) {
+      row.promptIdx = 0;
+      row.namedScores = { quality: 4 };
+      row.cost = 2;
+      row.response = { output: 'kept', incurredCost: 0.5 };
+    }
+    rows[1].response = { output: 'cached', cached: true };
+    await eval_.setResults(rows);
+    expect(eval_.prompts[0].metrics).toMatchObject({
+      cost: 4,
+      incurredCost: 0.5,
+      namedScores: { quality: 8, average: 4, twice: 8 },
+    });
+    await eval_.setResults([rows[0]]);
+    expect(eval_.prompts[0].metrics).toMatchObject({
+      cost: 2,
+      incurredCost: 0.5,
+      namedScores: { quality: 4, average: 4, twice: 8 },
+    });
+  });
+
+  it('keeps replacement usable when a derived expression has missing inputs', async () => {
+    const eval_ = await EvalFactory.create({ numResults: 1 });
+    eval_.config.derivedMetrics = [{ name: 'average', value: 'accuracy / __count' }];
+    const [row] = await EvalResult.findManyByEvalId(eval_.id);
+    row.success = false;
+    row.failureReason = ResultFailureReason.ERROR;
+    row.namedScores = {};
+    await eval_.setResults([row]);
+    expect(eval_.prompts[row.promptIdx].metrics).toMatchObject({
+      testErrorCount: 1,
+      namedScores: { average: 0 },
+    });
+  });
+
+  it.each([1, 2])(
+    'matches live derived fallback propagation across %s rows',
+    async (numResults) => {
+      const eval_ = await EvalFactory.create({ numResults });
+      eval_.config.derivedMetrics = [
+        { name: 'first', value: 'missing / __count' },
+        { name: 'second', value: 'first + 1' },
+      ];
+      const rows = await EvalResult.findManyByEvalId(eval_.id);
+      for (const row of rows) {
+        row.promptIdx = 0;
+        row.namedScores = {};
+      }
+      await eval_.setResults(rows);
+      expect(eval_.prompts[0].metrics?.namedScores).toMatchObject({
+        first: 0,
+        second: numResults === 1 ? 0 : 1,
+      });
+    },
+  );
+
+  it('rolls back replacement when derived metrics cannot be reconstructed', async () => {
+    const eval_ = await EvalFactory.create({ numResults: 1 });
+    const originalMetrics = eval_.prompts.map((p) => p.metrics);
+    eval_.config.derivedMetrics = [{ name: 'callback', value: () => 1 }];
+    await expect(eval_.setResults([])).rejects.toThrow('requires its original evaluation callback');
+    expect(await EvalResult.findManyByEvalId(eval_.id)).toHaveLength(1);
+    expect(eval_.prompts.map((p) => p.metrics)).toEqual(originalMetrics);
+  });
+
+  it('retains authorized media present only in a surviving trace', async () => {
+    const eval_ = await EvalFactory.create({ numResults: 1 });
+    const [row] = await EvalResult.findManyByEvalId(eval_.id);
+    row.traceId = 'media-trace';
+    const hash = 'd'.repeat(64);
+    const store = new TraceStore();
+    await store.createTrace({ traceId: row.traceId, evaluationId: eval_.id, testCaseId: 'test' });
+    await store.addSpans(row.traceId, [
+      {
+        spanId: 'media-span',
+        name: 'span',
+        startTime: 1,
+        attributes: { image: `promptfoo://blob/${hash}` },
+      },
+    ]);
+    const db = await getDb();
+    await db
+      .insert(blobAssetsTable)
+      .values({ hash, sizeBytes: 1, mimeType: 'image/png', provider: 'filesystem' })
+      .run();
+    await db
+      .insert(blobReferencesTable)
+      .values({ id: 'trace-media-ref', blobHash: hash, evalId: eval_.id, kind: 'image' })
+      .run();
+    await eval_.setResults([row]);
+    expect(await isBlobAllowedForShare(hash, eval_.id)).toBe(true);
+    await eval_.setResults([]);
+    expect(await isBlobAllowedForShare(hash, eval_.id)).toBe(false);
+  });
+
+  it('preserves legacy trace history when replacement rows lack trace linkage', async () => {
+    const eval_ = await EvalFactory.create({ numResults: 1 });
+    const rows = await EvalResult.findManyByEvalId(eval_.id);
+    const store = new TraceStore();
+    await store.createTrace({
+      traceId: 'legacy-trace',
+      evaluationId: eval_.id,
+      testCaseId: 'legacy-test',
+    });
+    await store.addSpans('legacy-trace', [{ spanId: 'legacy-span', name: 'legacy', startTime: 1 }]);
+    await eval_.setResults(rows);
+    const db = await getDb();
+    expect(await db.select().from(tracesTable)).toHaveLength(1);
+    expect(await db.select().from(spansTable)).toHaveLength(1);
+    await eval_.setResults([]);
+    expect(await db.select().from(tracesTable)).toHaveLength(0);
+    expect(await db.select().from(spansTable)).toHaveLength(0);
+  });
+
+  it('prunes removed traces and spans while retaining replacement and other eval traces', async () => {
+    const eval_ = await EvalFactory.create({ numResults: 2 });
+    const other = await EvalFactory.create({ numResults: 1 });
+    const [retained] = await EvalResult.findManyByEvalId(eval_.id);
+    retained.traceId = 'retained-trace';
+    const store = new TraceStore();
+    for (const [traceId, evaluationId] of [
+      ['retained-trace', eval_.id],
+      ['removed-trace', eval_.id],
+      ['other-trace', other.id],
+    ]) {
+      await store.createTrace({ traceId, evaluationId, testCaseId: 'test' });
+      await store.addSpans(traceId, [{ spanId: `${traceId}-span`, name: 'span', startTime: 1 }]);
+    }
+    const db = await getDb();
+    const circular: Record<string, unknown> = {};
+    circular.self = circular;
+    await expect(
+      eval_.setResults([new EvalResult({ ...retained, response: { output: circular } })]),
+    ).rejects.toThrow();
+    expect(await db.select().from(tracesTable)).toHaveLength(3);
+    expect(await db.select().from(spansTable)).toHaveLength(3);
+    await eval_.setResults([retained]);
+    expect((await db.select().from(tracesTable)).map((t) => t.traceId).sort()).toEqual([
+      'other-trace',
+      'retained-trace',
+    ]);
+    expect((await db.select().from(spansTable)).map((t) => t.traceId).sort()).toEqual([
+      'other-trace',
+      'retained-trace',
+    ]);
+    await eval_.setResults([]);
+    expect((await db.select().from(tracesTable)).map((t) => t.traceId)).toEqual(['other-trace']);
+    expect((await db.select().from(spansTable)).map((t) => t.traceId)).toEqual(['other-trace']);
+  });
+
+  it('reloads summaries after appending to an evaluation with loaded results', async () => {
+    const eval_ = await EvalFactory.create({ numResults: 1 });
+    await eval_.loadResults();
+    const [existing] = await EvalResult.findManyByEvalId(eval_.id);
+    const appended = new EvalResult({
+      ...existing,
+      id: 'appended-result',
+      testIdx: 1,
+      response: existing.response ?? null,
+    });
+    await eval_.appendResults([appended]);
+    expect((await eval_.toEvaluateSummary()).results).toHaveLength(2);
   });
 
   describe('fetchResultsBatched', () => {
@@ -1763,6 +2061,21 @@ describe('evaluator', () => {
         );
         expect(hasMetric).toBe(true);
       }
+    });
+
+    it('ignores malformed filter entries while applying valid filters', async () => {
+      const validFilter = JSON.stringify({
+        logicOperator: 'and',
+        type: 'metric',
+        operator: 'equals',
+        value: 'accuracy',
+      });
+      const valid = await evalWithResults.getTablePage({ filters: [validFilter] });
+      const mixed = await evalWithResults.getTablePage({
+        filters: ['{bad json', 'null', '[]', validFilter],
+      });
+      expect(mixed.filteredCount).toBe(valid.filteredCount);
+      expect(mixed.body).toEqual(valid.body);
     });
 
     it('should combine multiple filter types', async () => {

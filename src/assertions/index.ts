@@ -39,7 +39,7 @@ import {
 } from '../types/index';
 import { isJavascriptFile } from '../util/fileExtensions';
 import invariant from '../util/invariant';
-import { getNunjucksEngine } from '../util/templates';
+import { getNunjucksEngine, renderMetricName as renderNamedMetric } from '../util/templates';
 import { sleep } from '../util/time';
 import { transform } from '../util/transform';
 import { loadYaml } from '../util/yamlLoad';
@@ -330,21 +330,7 @@ export function renderMetricName(
   metric: string | undefined,
   vars: Record<string, unknown>,
 ): string | undefined {
-  if (!metric) {
-    return metric;
-  }
-  try {
-    const rendered = nunjucks.renderString(metric, vars);
-    if (rendered === '' && metric !== '') {
-      logger.debug(`Metric template "${metric}" rendered to empty string`);
-    }
-    return rendered;
-  } catch (error) {
-    logger.warn(
-      `Failed to render metric template "${metric}": ${error instanceof Error ? error.message : error}`,
-    );
-    return metric;
-  }
+  return renderNamedMetric(metric, vars);
 }
 
 /**

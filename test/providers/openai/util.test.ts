@@ -205,6 +205,20 @@ describe('getTokenUsage', () => {
 });
 
 describe('calculateOpenAICost', () => {
+  it('rejects incomplete audio usage even when one token count is zero', () => {
+    expect(calculateOpenAICost('gpt-4o-audio-preview', {}, 1000, 500, 0)).toBeUndefined();
+    expect(
+      calculateOpenAICost('gpt-4o-audio-preview', {}, 1000, 500, undefined, 0),
+    ).toBeUndefined();
+  });
+
+  it('uses long-context text rates when audio usage is present', () => {
+    const tokens = 300_000;
+    const model = 'gpt-6-astra';
+    const textCost = calculateOpenAICost(model, {}, tokens, 500);
+    expect(calculateOpenAICost(model, {}, tokens, 500, 1, 0)).toBe(textCost);
+  });
+
   it.each(['gpt-4o-mini-tts', 'gpt-4o-mini-tts-2025-12-15', 'gpt-4o-mini-tts-2025-03-20'])(
     'should recognize and price TTS model %s without treating it as a chat model',
     (model) => {
