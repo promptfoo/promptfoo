@@ -110,6 +110,20 @@ describe('runAssertion', () => {
     vi.clearAllMocks();
   });
 
+  it('should reject script on unsupported assertion types', async () => {
+    await expect(
+      runAssertion({
+        assertion: {
+          type: 'contains',
+          script: 'file://checks/assert.js',
+          value: 'Expected output',
+        },
+        test: {} as AtomicTestCase,
+        providerResponse: { output: 'Expected output' },
+      }),
+    ).rejects.toThrow('script is only supported for javascript, python, and ruby assertions');
+  });
+
   const equalityAssertion: Assertion = {
     type: 'equals',
     value: 'Expected output',
