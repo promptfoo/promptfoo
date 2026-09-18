@@ -954,6 +954,10 @@ export async function resolveConfigs(
     }
   }
 
+  const allParsedProviders = await loadApiProviders(resolvedProviderConfigs, {
+    env: config.env,
+    basePath,
+  });
   const parsedProviders = await loadApiProviders(filteredProviderConfigs, {
     env: config.env,
     basePath,
@@ -1065,10 +1069,10 @@ export async function resolveConfigs(
     typeof testSuite.defaultTest === 'object' ? testSuite.defaultTest : undefined,
   );
 
-  // Validate provider references in tests and scenarios
+  // Validate provider references in tests and scenarios against all defined providers
   validateTestProviderReferences(
     testSuite.tests || [],
-    testSuite.providers,
+    allParsedProviders,
     typeof testSuite.defaultTest === 'object' ? testSuite.defaultTest : undefined,
     testSuite.scenarios,
   );
