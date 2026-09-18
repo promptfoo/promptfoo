@@ -55,6 +55,42 @@ describe('MCPProvider', () => {
     });
   });
 
+  it('merges config.defaultArgs into tool calls, with per-call args winning', async () => {
+    mcpClientMock.callTool.mockResolvedValue({ content: 'ok', raw: {} });
+
+    const provider = new MCPProvider({
+      config: {
+        enabled: true,
+        defaultArgs: { session_id: 'sess-1', user_role: 'customer' },
+      } as any,
+    });
+    await provider.callApi(
+      '',
+      createContext({ tool: 'lookup_user', args: { id: '123', user_role: 'admin' } }),
+    );
+
+    expect(mcpClientMock.callTool).toHaveBeenCalledWith('lookup_user', {
+      session_id: 'sess-1',
+      user_role: 'admin',
+      id: '123',
+    });
+  });
+
+  it('still accepts defaultArgs passed as a constructor option', async () => {
+    mcpClientMock.callTool.mockResolvedValue({ content: 'ok', raw: {} });
+
+    const provider = new MCPProvider({
+      config: { enabled: true },
+      defaultArgs: { session_id: 'from-options' },
+    });
+    await provider.callApi('', createContext({ tool: 'lookup_user', args: { id: '123' } }));
+
+    expect(mcpClientMock.callTool).toHaveBeenCalledWith('lookup_user', {
+      session_id: 'from-options',
+      id: '123',
+    });
+  });
+
   it('should preserve MCP tool error results as direct provider output', async () => {
     const rawResult = {
       content: [{ type: 'text', text: 'Path traversal not allowed' }],
