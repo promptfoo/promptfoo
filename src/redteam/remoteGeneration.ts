@@ -177,6 +177,12 @@ export function shouldGenerateRemote(options?: ShouldGenerateRemoteOptions): boo
     return true;
   }
 
+  // An explicit opt-in (--remote or PROMPTFOO_ENABLE_REMOTE_GENERATION) forces remote on
+  // regardless of local credentials, so short-circuit before probing for them.
+  if (getEnvBool('PROMPTFOO_ENABLE_REMOTE_GENERATION') || cliState.remote) {
+    return true;
+  }
+
   // Generate remotely when local credentials for the requested task are unavailable.
   // Codex defaults only cover text default-provider paths, not redteam's task-specific
   // generation providers.
@@ -185,10 +191,8 @@ export function shouldGenerateRemote(options?: ShouldGenerateRemoteOptions): boo
     (options?.canUseCodexDefaultProvider &&
       !options?.requireEmbeddingProvider &&
       hasCodexDefaultCredentials());
-  const forceRemote =
-    getEnvBool('PROMPTFOO_ENABLE_REMOTE_GENERATION') || (cliState.remote ?? false);
 
-  return forceRemote || !hasLocalCredentials;
+  return !hasLocalCredentials;
 }
 
 /**
