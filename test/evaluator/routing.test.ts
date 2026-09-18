@@ -503,6 +503,102 @@ describeEvaluator('evaluator prompt and provider routing', () => {
     ]);
   });
 
+  it('restores distinct resumed metrics for duplicate-provider columns', async () => {
+    const firstProvider = duplicateProvider('duplicate-provider', 'First provider output');
+    const secondProvider = duplicateProvider('duplicate-provider', 'Second provider output');
+    const prompt = toPrompt('Test prompt');
+    const promptId = generateIdFromPrompt(prompt);
+
+    const testSuite: TestSuite = {
+      providers: [firstProvider, secondProvider],
+      prompts: [prompt],
+      tests: [{ vars: { input: 'value' } }],
+    };
+
+    const evalRecord = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
+    evalRecord.prompts = [
+      {
+        ...prompt,
+        id: promptId,
+        provider: 'duplicate-provider',
+        metrics: createPromptMetrics({
+          testPassCount: 5,
+          tokenUsage: createTokenUsage({ numRequests: 3 }),
+        }),
+      },
+      {
+        ...prompt,
+        id: promptId,
+        provider: 'duplicate-provider',
+        metrics: createPromptMetrics({
+          testPassCount: 10,
+          tokenUsage: createTokenUsage({ numRequests: 7 }),
+        }),
+      },
+    ];
+    evalRecord.persisted = true;
+
+    cliState.resume = true;
+    await evaluate(testSuite, evalRecord, {});
+
+    const table = await evalRecord.getTable();
+
+    expect(table.head.prompts.map((column) => column.metrics?.testPassCount)).toEqual([6, 11]);
+    expect(table.head.prompts.map((column) => column.metrics?.tokenUsage?.numRequests)).toEqual([
+      4, 8,
+    ]);
+  });
+
+  it('restores distinct resumed metrics for prompts that share a prompt id', async () => {
+    const provider = duplicateProvider('test-provider', 'Provider output');
+    const firstPrompt: Prompt = { raw: 'First raw prompt', label: 'shared-prompt-label' };
+    const secondPrompt: Prompt = { raw: 'Second raw prompt', label: 'shared-prompt-label' };
+    const promptId = generateIdFromPrompt(firstPrompt);
+
+    const testSuite: TestSuite = {
+      providers: [provider],
+      prompts: [firstPrompt, secondPrompt],
+      tests: [{ vars: { input: 'value' } }],
+    };
+
+    const evalRecord = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
+    evalRecord.prompts = [
+      {
+        ...firstPrompt,
+        id: promptId,
+        provider: 'test-provider',
+        metrics: createPromptMetrics({
+          testPassCount: 5,
+          tokenUsage: createTokenUsage({ numRequests: 3 }),
+        }),
+      },
+      {
+        ...secondPrompt,
+        id: promptId,
+        provider: 'test-provider',
+        metrics: createPromptMetrics({
+          testPassCount: 10,
+          tokenUsage: createTokenUsage({ numRequests: 7 }),
+        }),
+      },
+    ];
+    evalRecord.persisted = true;
+
+    cliState.resume = true;
+    await evaluate(testSuite, evalRecord, {});
+
+    const table = await evalRecord.getTable();
+
+    expect(table.head.prompts.map((column) => column.raw)).toEqual([
+      'First raw prompt',
+      'Second raw prompt',
+    ]);
+    expect(table.head.prompts.map((column) => column.metrics?.testPassCount)).toEqual([6, 11]);
+    expect(table.head.prompts.map((column) => column.metrics?.tokenUsage?.numRequests)).toEqual([
+      4, 8,
+    ]);
+  });
+
   it('evaluate with test-level providers filter', async () => {
     const mockProvider1: ApiProvider = {
       id: () => 'provider-1',
