@@ -10,11 +10,20 @@ vi.mock('../../../src/globalConfig/cloud');
 vi.mock('../../../src/telemetry');
 
 // Import after mocking
-import { checkEmailStatus, setUserEmail } from '../../../src/globalConfig/accounts';
+import {
+  checkEmailStatus,
+  getCloudUserEmail,
+  getUserEmail,
+  setUserEmail,
+} from '../../../src/globalConfig/accounts';
+import { cloudConfig } from '../../../src/globalConfig/cloud';
 import telemetry from '../../../src/telemetry';
 
 const mockedSetUserEmail = vi.mocked(setUserEmail);
 const mockedCheckEmailStatus = vi.mocked(checkEmailStatus);
+const mockedGetCloudUserEmail = vi.mocked(getCloudUserEmail);
+const mockedGetUserEmail = vi.mocked(getUserEmail);
+const mockedCloudConfig = vi.mocked(cloudConfig);
 const mockedTelemetry = vi.mocked(telemetry);
 
 describe('User Routes', () => {
@@ -45,10 +54,46 @@ describe('User Routes', () => {
     // Setup telemetry mock
     mockedTelemetry.record = vi.fn().mockResolvedValue(undefined);
     mockedTelemetry.saveConsent = vi.fn().mockResolvedValue(undefined);
+    mockedCloudConfig.isEnabled.mockReturnValue(false);
   });
 
   afterEach(() => {
     vi.resetAllMocks();
+  });
+
+  describe('GET /api/user/email', () => {
+    it('returns the local email when cloud authentication is disabled', async () => {
+      mockedGetUserEmail.mockReturnValue('local@example.com');
+
+      const response = await api.get('/api/user/email');
+
+      expect(response.status).toBe(200);
+      expect(response.body.email).toBe('local@example.com');
+      expect(mockedGetCloudUserEmail).not.toHaveBeenCalled();
+    });
+
+    it('returns the token-backed identity when cloud authentication is enabled', async () => {
+      mockedCloudConfig.isEnabled.mockReturnValue(true);
+      mockedGetUserEmail.mockReturnValue('stale@example.com');
+      mockedGetCloudUserEmail.mockResolvedValue('cloud-user@example.com');
+
+      const response = await api.get('/api/user/email');
+
+      expect(response.status).toBe(200);
+      expect(response.body.email).toBe('cloud-user@example.com');
+      expect(mockedGetCloudUserEmail).toHaveBeenCalledOnce();
+    });
+
+    it('does not expose cloud authentication errors', async () => {
+      mockedCloudConfig.isEnabled.mockReturnValue(true);
+      mockedGetCloudUserEmail.mockRejectedValue(new Error('token details'));
+
+      const response = await api.get('/api/user/email');
+
+      expect(response.status).toBe(500);
+      expect(response.body).toEqual({ error: 'Failed to get email' });
+      expect(response.text).not.toContain('token details');
+    });
   });
 
   describe('POST /api/user/email', () => {
@@ -77,6 +122,29 @@ describe('User Routes', () => {
       expect(mockedSetUserEmail).toHaveBeenCalledWith('test@example.com');
       expect(mockedTelemetry.record).toHaveBeenCalled();
       expect(mockedTelemetry.saveConsent).toHaveBeenCalled();
+    });
+
+    it('should reject manually changing the authenticated cloud email', async () => {
+      mockedCloudConfig.isEnabled.mockReturnValue(true);
+
+      const response = await api
+        .post('/api/user/email')
+        .send({ email: 'impersonated@example.com' });
+
+      expect(response.status).toBe(403);
+      expect(response.body.error).toBe('Email is managed through Promptfoo Cloud authentication');
+      expect(mockedSetUserEmail).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('PUT /api/user/email/clear', () => {
+    it('should reject clearing the authenticated cloud email', async () => {
+      mockedCloudConfig.isEnabled.mockReturnValue(true);
+
+      const response = await api.put('/api/user/email/clear');
+
+      expect(response.status).toBe(403);
+      expect(response.body.error).toBe('Email is managed through Promptfoo Cloud authentication');
     });
   });
 

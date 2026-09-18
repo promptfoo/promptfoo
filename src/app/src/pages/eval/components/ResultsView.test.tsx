@@ -10,9 +10,10 @@ import { useResultsViewSettingsStore, useTableStore } from './store';
 import type { ResultLightweightWithLabel } from '@promptfoo/types';
 
 // Mock all the required modules - use vi.hoisted to ensure these are available in vi.mock factories
-const { mockShowToast, mockNavigate, mockUpdateConfig } = vi.hoisted(() => ({
+const { mockShowToast, mockNavigate, mockUseCloudConfig, mockUpdateConfig } = vi.hoisted(() => ({
   mockShowToast: vi.fn(),
   mockNavigate: vi.fn(),
+  mockUseCloudConfig: vi.fn(),
   mockUpdateConfig: vi.fn(),
 }));
 
@@ -20,6 +21,10 @@ vi.mock('@app/hooks/useToast', () => ({
   useToast: () => ({
     showToast: mockShowToast,
   }),
+}));
+
+vi.mock('@app/hooks/useCloudConfig', () => ({
+  default: () => mockUseCloudConfig(),
 }));
 
 vi.mock('@app/stores/evalConfig', () => ({
@@ -247,6 +252,12 @@ beforeEach(() => {
   });
   vi.mocked(callApi).mockReset();
   vi.mocked(callApi).mockResolvedValue(createCopyEvalResponse());
+  mockUseCloudConfig.mockReturnValue({
+    data: { appUrl: 'https://app.promptfoo.app', isEnabled: false },
+    isLoading: false,
+    error: null,
+    refetch: vi.fn(),
+  });
   mockWindowOpen();
 });
 
