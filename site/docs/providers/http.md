@@ -130,12 +130,25 @@ providers:
             contentType: application/pdf
             source:
               type: path
-              path: file://./fixtures/sample-report45.pdf
+              path: file://fixtures/sample-report45.pdf
           - kind: field
             name: documentQuery
             value: '{{prompt}}'
       transformResponse: json.summary
 ```
+
+A few notes on `path` values:
+
+- A `file://` prefix on a relative path is promptfoo shorthand, not a real URL:
+  `file://fixtures/report.pdf` and `file://./fixtures/report.pdf` both resolve
+  from the config directory, and characters such as `%` are kept verbatim rather
+  than percent-decoded.
+- Absolute paths work with or without the prefix, including Windows drive paths
+  (`file:///C:/Users/me/report.pdf`, `C:\Users\me\report.pdf`).
+- To read from a Windows network share, use the UNC path without a scheme
+  (`\\server\share\report.pdf`). `file://server/share/report.pdf` is
+  indistinguishable from the relative shorthand above, so it is treated as a
+  relative path.
 
 Structured multipart requests bypass the HTTP response cache by default.
 `multipart` is mutually exclusive with `request` and `body`, and it cannot be
