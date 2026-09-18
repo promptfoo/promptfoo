@@ -10,6 +10,14 @@ export const googleProviderFactories: ProviderFactory[] = [
     create: async (providerPath, providerOptions) => {
       const splits = providerPath.split(':');
       const firstPart = splits[1];
+      if (firstPart === 'live') {
+        const modelName = splits.slice(2).join(':');
+        if (!modelName) {
+          throw new Error('Missing model name. Use vertex:live:<model>.');
+        }
+        const { VertexLiveProvider } = await import('../google/vertexLive');
+        return new VertexLiveProvider(modelName, providerOptions);
+      }
       const modelName =
         firstPart === 'chat' ? splits.slice(2).join(':') : splits.slice(1).join(':');
       if (['gemini-omni-flash-preview', 'gemini-omni-1.1-flash-preview'].includes(modelName)) {
