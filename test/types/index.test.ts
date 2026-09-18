@@ -47,10 +47,21 @@ describe('AssertionSchema', () => {
       rubricPrompt: 'Custom rubric prompt',
       metric: 'similarity_score',
       transform: 'toLowerCase()',
+      evidence: [{ from: 'metadata.fileChanges', label: 'Repository changes', maxBytes: 1024 }],
     };
 
     const result = AssertionSchema.safeParse(fullAssertion);
     expect(result.success).toBe(true);
+  });
+
+  it('should reject assertion evidence that does not explicitly select metadata', () => {
+    const result = AssertionSchema.safeParse({
+      type: 'llm-rubric',
+      value: 'Check the output',
+      evidence: [{ from: 'providerResponse.output', label: 'Output', maxBytes: 1024 }],
+    });
+
+    expect(result.success).toBe(false);
   });
 
   it('should validate all base assertion types', () => {
