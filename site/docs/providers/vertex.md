@@ -1358,6 +1358,26 @@ For more details, see:
 - [Testing Google Cloud Model Armor Guide](/docs/guides/google-cloud-model-armor/) - Complete guide on testing Model Armor with Promptfoo
 - [Model Armor Documentation](https://cloud.google.com/security-command-center/docs/model-armor-overview) - Official Google Cloud docs
 
+## Live API
+
+Use `vertex:live:<model>` for Vertex's WebSocket-based Live API. This is separate from the `google:live:` Gemini API endpoint and the `vertex:` REST chat provider.
+
+```yaml
+providers:
+  - id: vertex:live:gemini-live-2.5-flash-native-audio
+    config:
+      projectId: my-project # Or set GOOGLE_CLOUD_PROJECT / VERTEX_PROJECT_ID
+      region: us-central1 # Or set GOOGLE_CLOUD_LOCATION / VERTEX_REGION
+```
+
+Authenticate with `gcloud auth application-default login`, `GOOGLE_APPLICATION_CREDENTIALS`, or `config.credentials`. Live uses Google Cloud OAuth, not Gemini API keys or Vertex express-mode API keys. The project must have the Vertex AI API enabled and permission to use the selected model. The default location is `us-central1`; `apiVersion` accepts `v1` (default) or `v1beta1`.
+
+The provider returns audio in `response.audio` and a transcript in `output.text`. It requests audio and output transcription by default; requesting `TEXT` also uses audio plus transcription and is billed at audio rates. Use `transform: output.text` on text assertions. It shares the [Google Live configuration options](/docs/providers/google#google-live-api) for speech, system instructions, function callbacks, and finite PCM audio input. Consecutive user messages in a JSON prompt run in the same Live session.
+
+The adapter also accepts `vertex:live:gemini-3.8-live` and `vertex:live:gemini-3.8-live-extended-thinking`, including the latter's `NON_BLOCKING` tools and `IDLE` completion handling. Google names Vertex in the [model card](https://deepmind.google/models/model-cards/gemini-3-8-audio/), but these models are not yet listed in the [Cloud Live model catalog](https://docs.cloud.google.com/gemini-enterprise-agent-platform/models/live-api#supported-models). Availability must be confirmed for your project and location; use `google:live:` for Gemini API access. A model-not-found or access-denied response is an error, not a fallback to another model or API.
+
+See the [Vertex Live example](https://github.com/promptfoo/promptfoo/tree/main/examples/vertex-live) for a runnable transcript eval.
+
 ## Supported Features
 
 The Vertex AI provider supports core functionality for LLM evaluation:
@@ -1374,11 +1394,11 @@ The Vertex AI provider supports core functionality for LLM evaluation:
 | Files API                | ❌        | Upload/manage files not supported                                                         |
 | Caching API              | ⚠️        | Reference existing caches with `passthrough.cachedContent`; creation/manage not supported |
 | Implicit cache usage     | ✅        | Cached tokens and their cost are tracked                                                  |
-| Live/Realtime API        | ❌        | No Live WebSocket adapter in this provider                                                |
+| Live/Realtime API        | ✅        | Use `vertex:live:` with Google Cloud OAuth                                                |
 | Video generation         | ✅        | Use `vertex:video:` provider                                                              |
 | Image generation         | ⚠️        | [Gemini image and Imagen adapters](#image-generation-models) with `config.projectId`      |
 
-These are promptfoo provider capabilities. Google Cloud offers a separate [Gemini Live API](https://docs.cloud.google.com/gemini-enterprise-agent-platform/models/live-api); the `vertex:` provider does not currently implement its WebSocket protocol. Embedding support here covers the [text embedding request format](https://docs.cloud.google.com/gemini-enterprise-agent-platform/models/embeddings/get-text-embeddings), not every model or modality in the cloud catalog. See [image generation models](#image-generation-models) for the Imagen adapter and native Gemini image routes.
+These are promptfoo provider capabilities. [Live API](#live-api) model availability varies by project and location. Embedding support here covers the [text embedding request format](https://docs.cloud.google.com/gemini-enterprise-agent-platform/models/embeddings/get-text-embeddings), not every model or modality in the cloud catalog. See [image generation models](#image-generation-models) for the Imagen adapter and native Gemini image routes.
 
 ## See Also
 
