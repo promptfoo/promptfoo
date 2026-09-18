@@ -519,4 +519,45 @@ describe('LiteLLM Provider', () => {
       expect('max_tokens' in body).toBe(false);
     });
   });
+
+  describe('missing API key', () => {
+    it('warns when no API key resolves, since apiKeyRequired is false and the request would silently omit auth', async () => {
+      mockProcessEnv({ LITELLM_API_KEY: undefined, OPENAI_API_KEY: undefined });
+      const logger = (await import('../../src/logger')).default;
+      vi.mocked(logger.warn).mockClear();
+
+      createLiteLLMProvider('litellm:chat:gpt-4', { config: { config: {} } } as any);
+
+      expect(logger.warn).toHaveBeenCalledWith(
+        expect.stringContaining('No API key resolved'),
+        expect.anything(),
+      );
+    });
+
+    it('does not warn when LITELLM_API_KEY is set', async () => {
+      mockProcessEnv({ LITELLM_API_KEY: 'sk-litellm' });
+      const logger = (await import('../../src/logger')).default;
+      vi.mocked(logger.warn).mockClear();
+
+      createLiteLLMProvider('litellm:chat:gpt-4', { config: { config: {} } } as any);
+
+      expect(logger.warn).not.toHaveBeenCalledWith(
+        expect.stringContaining('No API key resolved'),
+        expect.anything(),
+      );
+    });
+
+    it('does not fall back to OPENAI_API_KEY, which would leak a credential across vendors', async () => {
+      mockProcessEnv({ LITELLM_API_KEY: undefined, OPENAI_API_KEY: 'sk-openai-secret' });
+      const logger = (await import('../../src/logger')).default;
+      vi.mocked(logger.warn).mockClear();
+
+      createLiteLLMProvider('litellm:chat:gpt-4', { config: { config: {} } } as any);
+
+      expect(logger.warn).toHaveBeenCalledWith(
+        expect.stringContaining('No API key resolved'),
+        expect.anything(),
+      );
+    });
+  });
 });
