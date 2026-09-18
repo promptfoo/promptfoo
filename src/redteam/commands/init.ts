@@ -309,6 +309,10 @@ export async function redteamInit(directory: string | undefined) {
       { name: 'openai:gpt-5-mini', value: 'openai:gpt-5-mini' },
       { name: 'openai:gpt-5', value: 'openai:gpt-5' },
       {
+        name: 'anthropic:claude-fable-5-1',
+        value: 'anthropic:messages:claude-fable-5-1',
+      },
+      {
         name: 'anthropic:claude-fable-5',
         value: 'anthropic:messages:claude-fable-5',
       },
@@ -329,12 +333,8 @@ export async function redteamInit(directory: string | undefined) {
         value: 'anthropic:messages:claude-opus-4-6',
       },
       {
-        name: 'anthropic:claude-opus-4-5-20251101',
-        value: 'anthropic:messages:claude-opus-4-5-20251101',
-      },
-      {
-        name: 'anthropic:claude-sonnet-4-5-20250929',
-        value: 'anthropic:messages:claude-sonnet-4-5-20250929',
+        name: 'anthropic:claude-sonnet-4-6',
+        value: 'anthropic:messages:claude-sonnet-4-6',
       },
       {
         name: 'anthropic:claude-haiku-4-5',

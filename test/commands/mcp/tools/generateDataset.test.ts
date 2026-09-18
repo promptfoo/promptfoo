@@ -33,7 +33,7 @@ describe('generateDataset tool', () => {
         { vars: [{ topic: 'gardening' }] },
       ]) {
         create.mockResolvedValueOnce({
-          model: 'claude-sonnet-4-6',
+          model: 'claude-sonnet-5',
           content: [{ type: 'text', text: JSON.stringify(output) }],
           usage: { input_tokens: 1, output_tokens: 1 },
           stop_reason: 'end_turn',
@@ -46,7 +46,7 @@ describe('generateDataset tool', () => {
       const advertisedMatch = schema.provider.description.match(/"(anthropic:[^"]+)"/);
       expect(advertisedMatch).not.toBeNull();
       const provider =
-        format === 'advertised' ? advertisedMatch![1] : 'anthropic:messages:claude-sonnet-4-6';
+        format === 'advertised' ? advertisedMatch![1] : 'anthropic:messages:claude-sonnet-5';
 
       const result = await handler({ prompt: 'Discuss {{topic}}', provider, numSamples: 1 });
       const response = JSON.parse(result.content[0].text);
@@ -55,7 +55,7 @@ describe('generateDataset tool', () => {
       expect(response.data.dataset).toEqual([{ vars: { topic: 'gardening' } }]);
       expect(create).toHaveBeenCalledTimes(2);
       for (const [request] of create.mock.calls) {
-        expect(request.model).toBe('claude-sonnet-4-6');
+        expect(request.model).toBe('claude-sonnet-5');
       }
       expect(callApi.mock.contexts[0]).toBeInstanceOf(AnthropicMessagesProvider);
     },

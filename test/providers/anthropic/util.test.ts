@@ -26,9 +26,11 @@ import type {
   MemoryToolConfig,
   WebFetchToolConfig,
   WebFetchToolConfig20260209,
+  WebFetchToolConfig20260318,
   WebFetchToolConfigV2,
   WebSearchToolConfig,
   WebSearchToolConfig20260209,
+  WebSearchToolConfig20260318,
 } from '../../../src/providers/anthropic/types';
 
 type AnthropicUsageWithOutputDetails = NonNullable<Anthropic.Messages.Message['usage']> & {
@@ -1505,6 +1507,59 @@ describe('Anthropic utilities', () => {
         allowed_domains: ['example.com'],
       });
       expect(requiredBetaFeatures).toEqual([]);
+    });
+
+    // The 2026-03-18 variants add `response_inclusion`, which lets a caller drop the
+    // nested server_tool_use/result pair so large fetched pages stay out of the transcript.
+    it('should process web_fetch_20260318 tool with response_inclusion', () => {
+      const tool: WebFetchToolConfig20260318 = {
+        type: 'web_fetch_20260318',
+        name: 'web_fetch',
+        max_uses: 3,
+        use_cache: false,
+        response_inclusion: 'excluded',
+      };
+
+      const { processedTools, requiredBetaFeatures } = processAnthropicTools([tool]);
+
+      expect(processedTools).toHaveLength(1);
+      expect(processedTools[0]).toMatchObject({
+        type: 'web_fetch_20260318',
+        name: 'web_fetch',
+        max_uses: 3,
+        use_cache: false,
+        response_inclusion: 'excluded',
+      });
+      expect(requiredBetaFeatures).toEqual([]);
+    });
+
+    it('should process web_search_20260318 tool with response_inclusion', () => {
+      const tool: WebSearchToolConfig20260318 = {
+        type: 'web_search_20260318',
+        name: 'web_search',
+        max_uses: 2,
+        response_inclusion: 'excluded',
+      };
+
+      const { processedTools, requiredBetaFeatures } = processAnthropicTools([tool]);
+
+      expect(processedTools).toHaveLength(1);
+      expect(processedTools[0]).toMatchObject({
+        type: 'web_search_20260318',
+        name: 'web_search',
+        max_uses: 2,
+        response_inclusion: 'excluded',
+      });
+      expect(requiredBetaFeatures).toEqual([]);
+    });
+
+    // `response_inclusion` only exists on the 2026-03-18 variants, so the older specs must
+    // drop it rather than forward a field the API does not accept on that version.
+    it('drops response_inclusion on tool versions that do not support it', () => {
+      const { processedTools } = processAnthropicTools([
+        { type: 'web_search_20260209', name: 'web_search', response_inclusion: 'excluded' } as any,
+      ]);
+      expect(processedTools[0]).not.toHaveProperty('response_inclusion');
     });
 
     it('should process web_fetch_20260309 tool with all optional parameters', () => {
