@@ -149,8 +149,9 @@ export function normalizeScriptResult(
     return normalizeScriptObjectResult(assertion, result, inverse, labels, reasonSuffix);
   }
 
-  const score = Number.parseFloat(String(result));
-  if (Number.isNaN(score)) {
+  const rawScore = String(result).trim();
+  const score = rawScore === '' ? Number.NaN : Number(rawScore);
+  if (!Number.isFinite(score)) {
     throw new Error(
       `${labels.language} assertion must return a boolean, number, or {pass, score, reason} object. Instead got:\n${result}`,
     );
