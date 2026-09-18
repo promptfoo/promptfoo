@@ -15,7 +15,7 @@ Output-based:
 - [`model-graded-closedqa`](/docs/configuration/expected-outputs/model-graded/model-graded-closedqa) - Checks if LLM answers meet specific requirements using OpenAI's public evals prompts.
 - [`factuality`](/docs/configuration/expected-outputs/model-graded/factuality) - Evaluates factual consistency between LLM output and a reference statement. Uses OpenAI's public evals prompt to determine if the output is factually consistent with the reference.
 - [`g-eval`](/docs/configuration/expected-outputs/model-graded/g-eval) - Uses chain-of-thought prompting to evaluate outputs against custom criteria following the G-Eval framework.
-- [`answer-relevance`](/docs/configuration/expected-outputs/model-graded/answer-relevance) - Evaluates whether LLM output is directly related to the original query.
+- [`answer-relevance`](/docs/configuration/expected-outputs/model-graded/answer-relevance) - Evaluates whether LLM output is directly related to the original query. Defaults to threshold `0.5`.
 - [`similar`](/docs/configuration/expected-outputs/similar) - Checks semantic similarity between output and expected value using embedding models.
 - [`pi`](/docs/configuration/expected-outputs/model-graded/pi) - Alternative scoring approach using a dedicated evaluation model to score inputs/outputs against criteria.
 - [`classifier`](/docs/configuration/expected-outputs/classifier) - Runs LLM output through HuggingFace text classifiers for detection of tone, bias, toxicity, and other properties. See [classifier grading docs](/docs/configuration/expected-outputs/classifier).
@@ -25,9 +25,9 @@ Output-based:
 
 Context-based:
 
-- [`context-recall`](/docs/configuration/expected-outputs/model-graded/context-recall) - ensure that ground truth appears in context
-- [`context-relevance`](/docs/configuration/expected-outputs/model-graded/context-relevance) - ensure that context is relevant to original query
-- [`context-faithfulness`](/docs/configuration/expected-outputs/model-graded/context-faithfulness) - ensure that LLM output is supported by context
+- [`context-recall`](/docs/configuration/expected-outputs/model-graded/context-recall) - ensure that ground truth appears in context. Defaults to threshold `0.5`.
+- [`context-relevance`](/docs/configuration/expected-outputs/model-graded/context-relevance) - ensure that context is relevant to original query. Defaults to threshold `0.5`.
+- [`context-faithfulness`](/docs/configuration/expected-outputs/model-graded/context-faithfulness) - ensure that LLM output is supported by context. Defaults to threshold `0.5`.
 
 Conversational:
 
@@ -259,6 +259,54 @@ override the grader. There are several ways to do this, depending on your prefer
            value: Is spoken like a pirate
            provider: openai:gpt-5.6
    ```
+
+:::caution `defaultTest.provider` also sets the grader for output-based assertions
+
+`defaultTest.provider` is the field that pins the **target model** for every test in a suite.
+For output-based model-graded assertions (`llm-rubric`, `factuality`, `g-eval`,
+`model-graded-closedqa`, `answer-relevance`, etc.) it is also consulted as a grader fallback when
+no explicit grader is configured — **after** `--grader`, `assertion.provider`, and
+`test.options.provider` / `defaultTest.options.provider` have all been checked and found absent.
+
+In practice this means the following config generates responses **and** grades them with `gpt-4.1`:
+
+```yaml
+defaultTest:
+  provider: openai:gpt-4.1 # ← also becomes the judge when no grader is set
+tests:
+  - assert:
+      - type: llm-rubric
+        value: Answers the question accurately
+```
+
+To use a dedicated judge while still pinning the target, set `defaultTest.options.provider`
+(option 2 above) or pass `--grader` on the CLI:
+
+```yaml
+defaultTest:
+  provider: openai:gpt-4.1 # target model
+  options:
+    provider: openai:gpt-5.6 # explicit judge — takes precedence over the fallback
+```
+
+**Notes:**
+
+- This fallback applies to the output-based assertions listed above. `agent-rubric` and
+  `search-rubric` use capability-specific provider selection and are not affected.
+  **Red-team runs (`promptfoo redteam run`):** `RedteamProviderManager` selects `defaultTest.provider`
+  _before_ `defaultTest.options.provider`, so setting `defaultTest.options.provider` alone does not
+  override the judge. The reliable pattern is to move the target to the top-level `providers` list
+  and reserve `defaultTest.options.provider` for the judge:
+
+```yaml
+providers:
+  - openai:gpt-4.1 # target — no longer in defaultTest.provider
+defaultTest:
+  options:
+    provider: openai:gpt-5.6 # judge — now effective in both standard and red-team grading
+```
+
+:::
 
 Use the `provider.config` field to set custom parameters such as `temperature`, `max_tokens`, or API host:
 
@@ -532,7 +580,7 @@ contextTransform: 'JSON.stringify(output, null, 2)'
 
 ### Examples
 
-Context-based metrics require a `query` and context. You must also set the `threshold` property on your test (all scores are normalized between 0 and 1).
+Context-based metrics require a `query` and context. Scores are normalized between 0 and 1; when `threshold` is omitted, `answer-relevance`, `context-recall`, `context-relevance`, and `context-faithfulness` default to `0.5`.
 
 Here's an example config using statically-defined (`test.vars.context`) context:
 
@@ -678,6 +726,10 @@ Model-graded assertions like `llm-rubric` determine PASS/FAIL using two mechanis
 2. **With threshold**: PASS requires both `pass === true` AND `score >= threshold`
 
 This means a result like `{"pass": true, "score": 0}` will pass without a threshold, but fail with `threshold: 1`.
+
+Assertions with built-in thresholds, such as `answer-relevance`, `context-recall`,
+`context-relevance`, and `context-faithfulness`, default to `0.5` when `threshold` is
+omitted.
 
 **Common issue**: Tests show PASS even when scores are low
 

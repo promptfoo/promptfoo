@@ -76,6 +76,21 @@ describe('contracts leaf surface', () => {
   });
 
   describe('ProviderEnvOverridesSchema', () => {
+    it('preserves Google Cloud project and location aliases', () => {
+      const env = {
+        GOOGLE_CLOUD_PROJECT: 'live-project',
+        GOOGLE_CLOUD_LOCATION: 'europe-west4',
+      };
+      expect(ProviderEnvOverridesSchema.parse(env)).toEqual(env);
+    });
+
+    it.each(['GOOGLE_CLOUD_PROJECT', 'GOOGLE_CLOUD_LOCATION'])(
+      'rejects non-string %s values',
+      (key) => {
+        expect(ProviderEnvOverridesSchema.safeParse({ [key]: 123 }).success).toBe(false);
+      },
+    );
+
     it('parses a known env key', () => {
       const parsed = ProviderEnvOverridesSchema.safeParse({ OPENAI_API_KEY: 'sk-known' });
       expect(parsed.success).toBe(true);
@@ -86,13 +101,21 @@ describe('contracts leaf surface', () => {
 
     it('preserves AWS_BEARER_TOKEN_BEDROCK (used by the Bedrock OpenAI Responses path)', () => {
       const parsed = ProviderEnvOverridesSchema.safeParse({
+        AWS_ACCESS_KEY_ID: 'access-key',
         AWS_BEARER_TOKEN_BEDROCK: 'bedrock-api-key',
         AWS_BEDROCK_REGION: 'us-east-2',
+        AWS_PROFILE: 'bedrock-profile',
+        AWS_SECRET_ACCESS_KEY: 'secret-key',
+        AWS_SESSION_TOKEN: 'session-token',
       });
       expect(parsed.success).toBe(true);
       if (parsed.success) {
+        expect(parsed.data.AWS_ACCESS_KEY_ID).toBe('access-key');
         expect(parsed.data.AWS_BEARER_TOKEN_BEDROCK).toBe('bedrock-api-key');
         expect(parsed.data.AWS_BEDROCK_REGION).toBe('us-east-2');
+        expect(parsed.data.AWS_PROFILE).toBe('bedrock-profile');
+        expect(parsed.data.AWS_SECRET_ACCESS_KEY).toBe('secret-key');
+        expect(parsed.data.AWS_SESSION_TOKEN).toBe('session-token');
       }
     });
 
