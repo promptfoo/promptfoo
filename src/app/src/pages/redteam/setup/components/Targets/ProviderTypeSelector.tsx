@@ -7,6 +7,7 @@ import { useTelemetry } from '@app/hooks/useTelemetry';
 import { cn } from '@app/lib/utils';
 import { CheckCircle, Edit, HelpCircle, Search, X } from 'lucide-react';
 import {
+  DEFAULT_BEDROCK_TARGET_ID,
   DEFAULT_GOOGLE_TARGET_ID,
   DEFAULT_OPENAI_TARGET_ID,
   DEFAULT_VERTEX_TARGET_ID,
@@ -665,7 +666,7 @@ export default function ProviderTypeSelector({
     } else if (value === 'bedrock') {
       setProvider(
         {
-          id: 'bedrock:global.anthropic.claude-sonnet-5',
+          id: DEFAULT_BEDROCK_TARGET_ID,
           config: {},
           label: currentLabel,
         },

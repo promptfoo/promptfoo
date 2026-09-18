@@ -1,10 +1,13 @@
 # yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
 description: 'OpenAI GPT-5.6 Sol, Terra, and Luna via Amazon Bedrock'
 
-# Frontier models are served through Bedrock's OpenAI-compatible Responses API and
-# authenticate with an Amazon Bedrock API key. Export it before running (promptfoo reads it
-# automatically — no apiKey field needed):
-#   export AWS_BEARER_TOKEN_BEDROCK="..."
+# Frontier models use Bedrock's OpenAI-compatible Responses API.
+# Authentication: use an Amazon Bedrock API key OR standard AWS credentials.
+# API key: export AWS_BEARER_TOKEN_BEDROCK="..." (no apiKey field needed).
+# AWS credentials: use explicit keys, config.profile/AWS_PROFILE, or the default
+# credential chain. Promptfoo generates short-lived bearer tokens for requests
+# using the optional @aws/bedrock-token-generator package.
+# Unset AWS_BEARER_TOKEN_BEDROCK when using AWS credentials to avoid overriding them.
 
 prompts:
   - |
