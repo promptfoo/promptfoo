@@ -4,7 +4,7 @@ This example shows how to use **CrewAI agents** with promptfoo to evaluate AI ag
 
 ## What is CrewAI?
 
-CrewAI is a framework for orchestrating role-playing, autonomous AI agents. By fostering collaborative intelligence, CrewAI empowers agents to work together seamlessly, tackling complex tasks.
+CrewAI is a framework for coordinating agents in multi-step workflows.
 
 ## Quick Start
 
@@ -19,7 +19,7 @@ cd integration-crewai
 
 This example requires the following:
 
-1. **Python 3.10+**
+1. **Python `>=3.10,<3.14`**
 2. **Node.js >=22.22.0 (Node.js 24 LTS recommended)**
 3. **Provider credentials** - The default model requires a valid OpenAI API key
 
@@ -41,7 +41,7 @@ Create a `.env` file in this directory:
 OPENAI_API_KEY=your-api-key-here
 ```
 
-If using a `.env` file, uncomment `python-dotenv` in `requirements.txt` and reinstall dependencies.
+When running the evaluation, pass this file to Promptfoo with `--env-file .env`.
 
 ## Installation
 
@@ -51,7 +51,7 @@ Install Python packages:
 pip install -r requirements.txt
 ```
 
-Note: The openai package and other dependencies (langchain, pydantic, etc.) will be automatically installed as dependencies of crewai.
+CrewAI installs the Python dependencies used by this example, including OpenAI, Pydantic, and python-dotenv; LangChain is not required.
 
 Install promptfoo CLI:
 
@@ -77,10 +77,16 @@ When using a real LLM, you may notice that the agent's output is not always reli
 
 ## Running the Evaluation
 
-Run the evaluation:
+Run the evaluation with an exported API key:
 
 ```bash
 promptfoo eval
+```
+
+Or load the key from `.env` explicitly:
+
+```bash
+promptfoo eval --env-file .env
 ```
 
 Explore results in browser:
