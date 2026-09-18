@@ -606,8 +606,16 @@ describe('CustomProvider', () => {
     expect(result.metadata?.stopReason).toBe('Grader failed');
   });
 
-  describe('when the internal evaluator fails on the round a grade is returned', () => {
-    const runRounds = async (firstGrade: Record<string, unknown>) => {
+  describe('when a grade is returned on the round', () => {
+    const evaluatorUnavailable = { error: 'scoring provider unavailable' };
+    const evaluatorNotAchieved = {
+      output: JSON.stringify({ value: false, metadata: 10, rationale: 'Not achieved' }),
+    };
+
+    const runRounds = async (
+      firstGrade: Record<string, unknown>,
+      evaluatorResponses: Record<string, unknown>[] = [evaluatorUnavailable, evaluatorNotAchieved],
+    ) => {
       const provider = new CustomProvider({
         injectVar: 'objective',
         maxTurns: 2,
@@ -639,16 +647,11 @@ describe('CustomProvider', () => {
         .mockResolvedValueOnce({ output: 'first response' })
         .mockResolvedValueOnce({ output: 'second response' });
 
-      const notRefused = {
-        output: JSON.stringify({ value: false, metadata: 0, rationale: 'Not a refusal' }),
-      };
-      mockScoringProvider.callApi
-        .mockResolvedValueOnce(notRefused)
-        .mockResolvedValueOnce({ error: 'scoring provider unavailable' })
-        .mockResolvedValueOnce(notRefused)
-        .mockResolvedValueOnce({
-          output: JSON.stringify({ value: false, metadata: 10, rationale: 'Not achieved' }),
-        });
+      // Refusal detection is deterministic, so every scoring provider call is the
+      // internal evaluator, one per round.
+      for (const evaluatorResponse of evaluatorResponses) {
+        mockScoringProvider.callApi.mockResolvedValueOnce(evaluatorResponse);
+      }
 
       const result = await provider.callApi('test prompt', {
         originalProvider: mockTargetProvider,
@@ -681,8 +684,9 @@ describe('CustomProvider', () => {
       ]);
       expect(getResult).toHaveBeenCalledTimes(1);
       expect(mockTargetProvider.callApi).toHaveBeenCalledTimes(1);
-      // The internal evaluator is not called once the grade has ended the attack.
-      expect(mockScoringProvider.callApi).toHaveBeenCalledTimes(1);
+      // The internal evaluator is the only remaining caller of the scoring provider, and it
+      // is not called once the grade has ended the attack.
+      expect(mockScoringProvider.callApi).not.toHaveBeenCalled();
     });
 
     it('should keep attacking after a grader error, which is not a verdict', async () => {
@@ -699,6 +703,27 @@ describe('CustomProvider', () => {
       expect(getResult.mock.calls[1][7]).toMatchObject({
         conversationTranscript: 'User: test prompt\n\nAssistant: first response',
       });
+    });
+
+    it('should keep attacking after a grader error even when the evaluator answers', async () => {
+      const { getResult, result } = await runRounds(
+        {
+          pass: false,
+          score: 0,
+          reason: 'Grading provider returned 503',
+          metadata: { graderError: true },
+        },
+        [evaluatorNotAchieved, evaluatorNotAchieved],
+      );
+
+      // A grader error is not a verdict whether or not the evaluator call that follows it
+      // succeeds, so the round must not be reported as a successful attack.
+      expect(result.metadata?.stopReason).toBe('Max rounds reached');
+      expect(result.metadata?.successfulAttacks).toEqual([]);
+      expect(result.metadata?.storedGraderResult).toMatchObject({ pass: true });
+      expect(getResult).toHaveBeenCalledTimes(2);
+      expect(mockTargetProvider.callApi).toHaveBeenCalledTimes(2);
+      expect(mockScoringProvider.callApi).toHaveBeenCalledTimes(2);
     });
   });
 

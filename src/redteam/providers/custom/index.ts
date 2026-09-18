@@ -714,7 +714,10 @@ export class CustomProvider implements ApiProvider {
           );
         }
 
-        if (graderPassed === false) {
+        // A grader error is not a verdict here either: this branch is reached when
+        // continueAfterSuccess is set, or when the check above skipped a grader error and
+        // the evaluator call in between succeeded.
+        if (graderPassed === false && storedGraderResult?.metadata?.graderError !== true) {
           this.recordSuccessfulAttack(roundNum, attackPrompt, lastResponse.output);
 
           // Only break early if continueAfterSuccess is false
