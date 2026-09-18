@@ -2158,6 +2158,90 @@ describe('util', () => {
   });
 
   describe('normalizeTools', () => {
+    it('merges and sanitizes both declaration spellings without mutating the input', () => {
+      const parameters = {
+        type: 'OBJECT' as const,
+        additionalProperties: false,
+        $schema: 'https://json-schema.org/draft/2020-12/schema',
+        properties: {
+          options: {
+            type: 'OBJECT' as const,
+            additionalProperties: false,
+            properties: { value: { type: 'STRING' as const, default: 'ignored' } },
+          },
+        },
+      };
+      const tools = [
+        {
+          functionDeclarations: [{ name: 'camel', parameters }],
+          function_declarations: [{ name: 'snake', parameters, behavior: 'NON_BLOCKING' as const }],
+        },
+      ];
+      const original = structuredClone(tools);
+      const normalized = normalizeTools(tools);
+
+      expect(normalized[0]).not.toHaveProperty('function_declarations');
+      expect(normalized[0].functionDeclarations?.map(({ name }) => name)).toEqual([
+        'camel',
+        'snake',
+      ]);
+      for (const declaration of normalized[0].functionDeclarations ?? []) {
+        expect(declaration.parameters).toEqual({
+          type: 'OBJECT',
+          properties: {
+            options: { type: 'OBJECT', properties: { value: { type: 'STRING' } } },
+          },
+        });
+      }
+      expect(normalized[0].functionDeclarations?.[1].behavior).toBe('NON_BLOCKING');
+      expect(normalizeTools(normalized)).toEqual(normalized);
+      expect(tools).toEqual(original);
+    });
+
+    it.each(['identical', 'conflicting'])(
+      'prefers camel-case declarations over %s same-name aliases',
+      (duplicate) => {
+        const canonical = {
+          name: 'lookup',
+          description: 'Canonical declaration',
+          behavior: 'NON_BLOCKING' as const,
+          parameters: {
+            type: 'OBJECT' as const,
+            properties: { code: { type: 'STRING' as const } },
+          },
+        };
+        const snakeCase =
+          duplicate === 'identical'
+            ? structuredClone(canonical)
+            : {
+                name: 'lookup',
+                description: 'Legacy declaration',
+                behavior: 'BLOCKING' as const,
+                parameters: {
+                  type: 'OBJECT' as const,
+                  properties: { id: { type: 'NUMBER' as const } },
+                },
+              };
+        const tools = [
+          {
+            functionDeclarations: [canonical, { name: 'camelOnly' }],
+            function_declarations: [snakeCase, { name: 'snakeOnly' }],
+          },
+        ];
+        const original = structuredClone(tools);
+        const normalized = normalizeTools(tools);
+
+        expect(normalized[0]).not.toHaveProperty('function_declarations');
+        expect(normalized[0].functionDeclarations).toEqual([
+          canonical,
+          { name: 'camelOnly', parameters: undefined },
+          { name: 'snakeOnly', parameters: undefined },
+        ]);
+        expect(normalizeTools(normalized)).toEqual(normalized);
+        expect(tools).toEqual(original);
+      },
+    );
+
     it('should convert snake_case to camelCase for tool properties', () => {
       const tools = [
         {
@@ -2257,37 +2341,40 @@ describe('util', () => {
       expect(normalized).toEqual([]);
     });
 
-    it('should sanitize function declaration schemas by removing additionalProperties', () => {
-      const tools = [
-        {
-          functionDeclarations: [
-            {
-              name: 'test_tool',
-              description: 'A test tool',
-              parameters: {
-                type: 'object',
-                properties: {
-                  query: { type: 'string' },
+    it.each(['functionDeclarations', 'function_declarations'])(
+      'sanitizes %s schemas by removing additionalProperties',
+      (key) => {
+        const tools = [
+          {
+            [key]: [
+              {
+                name: 'test_tool',
+                description: 'A test tool',
+                parameters: {
+                  type: 'object',
+                  properties: {
+                    query: { type: 'string' },
+                  },
+                  additionalProperties: false, // Should be removed
                 },
-                additionalProperties: false, // Should be removed
               },
-            },
-          ],
-        } as any,
-      ];
+            ],
+          } as any,
+        ];
 
-      const normalized = normalizeTools(tools);
+        const normalized = normalizeTools(tools);
 
-      expect(normalized[0].functionDeclarations![0].parameters).not.toHaveProperty(
-        'additionalProperties',
-      );
-      expect(normalized[0].functionDeclarations![0].parameters).toEqual({
-        type: 'OBJECT',
-        properties: {
-          query: { type: 'STRING' },
-        },
-      });
-    });
+        expect(normalized[0].functionDeclarations![0].parameters).not.toHaveProperty(
+          'additionalProperties',
+        );
+        expect(normalized[0].functionDeclarations![0].parameters).toEqual({
+          type: 'OBJECT',
+          properties: {
+            query: { type: 'STRING' },
+          },
+        });
+      },
+    );
 
     it('should sanitize nested schemas in function declarations', () => {
       const tools = [
@@ -3370,20 +3457,17 @@ describe('util', () => {
       expect(cost).toBeCloseTo(0.003, 10);
     });
 
-    it('should calculate mixed text and audio cost for gemini-3.1-flash-live-preview', () => {
-      const cost = calculateGoogleCost(
-        'gemini-3.1-flash-live-preview',
-        {},
-        1_000,
-        500,
-        false,
-        200,
-        100,
-      );
+    it.each([
+      'gemini-3.8-live',
+      'gemini-3.8-live-extended-thinking',
+      'gemini-3.1-flash-live-preview',
+    ])('should calculate mixed text and audio cost for %s', (modelName) => {
+      const cost = calculateGoogleCost(modelName, {}, 1_000, 500, false, 200, 100);
       expect(cost).toBeCloseTo((800 * 0.75 + 200 * 3 + 400 * 4.5 + 100 * 12) / 1e6, 12);
     });
 
     it.each([
+      ['gemini-live-2.5-flash-native-audio', 0.5, 2.0, 3.0, 12.0],
       ['gemini-live-2.5-flash-preview-native-audio-09-2025', 0.3, 2.0, 3.0, 12.0],
       ['gemini-2.5-flash-native-audio-latest', 0.5, 2.0, 3.0, 12.0],
       ['gemini-2.5-flash-native-audio-preview-09-2025', 0.3, 2.5, 1.0, 2.5],

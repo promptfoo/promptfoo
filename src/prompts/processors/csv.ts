@@ -10,6 +10,65 @@ type CsvParseOptionsWithColumns<T> = Omit<Options<T>, 'columns'> & {
 };
 
 /**
+ * Builds a row's label. Prompt ids are derived from the label, so a shared
+ * `basePrompt.label` must be disambiguated when a file yields multiple rows
+ * (mirroring jsonl.ts's `containsMultiple` pattern).
+ */
+function buildCsvRowLabel(
+  baseLabel: string | undefined,
+  content: string,
+  index: number,
+  hasMultipleRows: boolean,
+): string {
+  if (baseLabel) {
+    return hasMultipleRows ? `${baseLabel}: ${content}` : baseLabel;
+  }
+  return `Prompt ${index + 1} - ${content}`;
+}
+
+function buildCsvPrompts(
+  rows: Array<{ raw: string; label?: string }>,
+  basePrompt: Partial<Prompt>,
+): Prompt[] {
+  const hasMultipleRows = rows.length > 1;
+
+  const usedLabels = new Set(rows.flatMap((row) => (row.label ? [row.label] : [])));
+
+  return rows.map((row, index) => {
+    let label = row.label || buildCsvRowLabel(basePrompt.label, row.raw, index, hasMultipleRows);
+
+    if (!row.label) {
+      const initialLabel = label;
+      let suffix = 1;
+      while (usedLabels.has(label)) {
+        label = `${initialLabel} (row ${index + 1}${suffix > 1 ? `.${suffix}` : ''})`;
+        suffix++;
+      }
+      usedLabels.add(label);
+    }
+
+    const id = hasMultipleRows && basePrompt.id ? `${basePrompt.id}:${index + 1}` : basePrompt.id;
+
+    return { ...basePrompt, raw: row.raw, label, ...(id && { id }) };
+  });
+}
+
+/**
+ * Fallback for content that can't be parsed as delimited CSV: treat every
+ * non-empty line as a prompt, skipping a leading `prompt` header if present.
+ */
+function processCsvLines(content: string, basePrompt: Partial<Prompt>): Prompt[] {
+  const lines = content.split(/\r?\n/).filter((line) => line.trim());
+
+  const startIndex = lines[0]?.toLowerCase().trim() === 'prompt' ? 1 : 0;
+  const promptLines = lines.slice(startIndex);
+  return buildCsvPrompts(
+    promptLines.map((raw) => ({ raw })),
+    basePrompt,
+  );
+}
+
+/**
  * Process a CSV file containing prompts
  *
  * CSV format can be either:
@@ -30,15 +89,7 @@ export async function processCsvPrompts(
   const enforceStrict = getEnvBool('PROMPTFOO_CSV_STRICT', false);
 
   if (!content.includes(delimiter)) {
-    const lines = content.split(/\r?\n/).filter((line) => line.trim());
-
-    const startIndex = lines[0]?.toLowerCase().trim() === 'prompt' ? 1 : 0;
-
-    return lines.slice(startIndex).map((line, index) => ({
-      ...basePrompt,
-      raw: line,
-      label: basePrompt.label || `Prompt ${index + 1} - ${line}`,
-    }));
+    return processCsvLines(content, basePrompt);
   }
 
   try {
@@ -52,25 +103,12 @@ export async function processCsvPrompts(
     };
 
     const records = parse<Record<string, string>>(content, parseOptions);
-
-    return records
-      .filter((row) => row.prompt)
-      .map((row, index) => {
-        return {
-          ...basePrompt,
-          raw: row.prompt,
-          label: row.label || basePrompt.label || `Prompt ${index + 1} - ${row.prompt}`,
-        };
-      });
+    const promptRecords = records.filter((row) => row.prompt);
+    return buildCsvPrompts(
+      promptRecords.map((row) => ({ raw: row.prompt, label: row.label })),
+      basePrompt,
+    );
   } catch {
-    const lines = content.split(/\r?\n/).filter((line) => line.trim());
-
-    const startIndex = lines[0]?.toLowerCase().trim() === 'prompt' ? 1 : 0;
-
-    return lines.slice(startIndex).map((line, index) => ({
-      ...basePrompt,
-      raw: line,
-      label: basePrompt.label || `Prompt ${index + 1} - ${line}`,
-    }));
+    return processCsvLines(content, basePrompt);
   }
 }
