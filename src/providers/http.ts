@@ -9,6 +9,14 @@ import { Agent, type Dispatcher, interceptors } from 'undici';
 import { z } from 'zod';
 import { fetchWithCache } from '../cache';
 import cliState from '../cliState';
+import {
+  HttpProviderConfigFieldsSchema,
+  HttpSessionInputSchema,
+  HttpTokenEstimationInputSchema,
+} from '../contracts/providerConfig/http';
+import { HttpAuthSchema } from '../contracts/providerConfig/httpAuth';
+import { HttpSignatureAuthSchema } from '../contracts/providerConfig/httpSignature';
+import { HttpTlsFieldsSchema } from '../contracts/providerConfig/httpTls';
 import { getEnvString } from '../envars';
 import { importModule } from '../esm';
 import logger from '../logger';
@@ -708,139 +716,20 @@ function needsSignatureRefresh(timestamp: number, validityMs: number, bufferMs?:
   return timeElapsed + effectiveBufferMs >= validityMs;
 }
 
-const TokenEstimationConfigSchema = z.object({
+const TokenEstimationConfigSchema = HttpTokenEstimationInputSchema.strip().extend({
   enabled: z.boolean().prefault(false),
   multiplier: z.number().min(0.01).prefault(1.3),
 });
 
-// Base signature auth fields
-const BaseSignatureAuthSchema = z.object({
-  signatureValidityMs: z.number().prefault(300000),
-  signatureDataTemplate: z.string().prefault('{{signatureTimestamp}}'),
-  signatureAlgorithm: z.string().prefault('SHA256'),
-  signatureRefreshBufferMs: z.number().optional(),
-});
-
-// PEM signature auth schema
-const PemSignatureAuthSchema = BaseSignatureAuthSchema.extend({
-  type: z.literal('pem'),
-  privateKeyPath: z.string().optional(),
-  privateKey: z.string().optional(),
-}).refine((data) => data.privateKeyPath !== undefined || data.privateKey !== undefined, {
-  error: 'Either privateKeyPath or privateKey must be provided for PEM type',
-});
-
-// JKS signature auth schema
-const JksSignatureAuthSchema = BaseSignatureAuthSchema.extend({
-  type: z.literal('jks'),
-  keystorePath: z.string().optional(),
-  keystoreContent: z.string().optional(), // Base64 encoded JKS content
-  keystorePassword: z.string().optional(),
-  keyAlias: z.string().optional(),
-}).refine((data) => data.keystorePath !== undefined || data.keystoreContent !== undefined, {
-  error: 'Either keystorePath or keystoreContent must be provided for JKS type',
-});
-
-// PFX signature auth schema
-const PfxSignatureAuthSchema = BaseSignatureAuthSchema.extend({
-  type: z.literal('pfx'),
-  pfxPath: z.string().optional(),
-  pfxContent: z.string().optional(), // Base64 encoded PFX content
-  pfxPassword: z.string().optional(),
-  certPath: z.string().optional(),
-  keyPath: z.string().optional(),
-  certContent: z.string().optional(), // Base64 encoded certificate content
-  keyContent: z.string().optional(), // Base64 encoded private key content
-}).refine(
-  (data) => {
-    return (
-      data.pfxPath ||
-      data.pfxContent ||
-      (data.certPath && data.keyPath) ||
-      (data.certContent && data.keyContent)
-    );
-  },
-  {
-    error:
-      'Either pfxPath, pfxContent, both certPath and keyPath, or both certContent and keyContent must be provided for PFX type',
-  },
-);
-
-// Legacy signature auth schema (for backward compatibility)
-const LegacySignatureAuthSchema = z.looseObject(
-  BaseSignatureAuthSchema.extend({
-    privateKeyPath: z.string().optional(),
-    privateKey: z.string().optional(),
-    keystorePath: z.string().optional(),
-    keystorePassword: z.string().optional(),
-    keyAlias: z.string().optional(),
-    keyPassword: z.string().optional(),
-    pfxPath: z.string().optional(),
-    pfxPassword: z.string().optional(),
-    certPath: z.string().optional(),
-    keyPath: z.string().optional(),
-  }).shape,
-);
-
-// Generic certificate auth schema (for UI-based certificate uploads)
-const GenericCertificateAuthSchema = z.looseObject(
-  BaseSignatureAuthSchema.extend({
-    certificateContent: z.string().optional(),
-    certificatePassword: z.string().optional(),
-    certificateFilename: z.string().optional(),
-    type: z.enum(['pem', 'jks', 'pfx']).optional(),
-    // Include type-specific fields that might be present or added by transform
-    pfxContent: z.string().optional(),
-    pfxPassword: z.string().optional(),
-    pfxPath: z.string().optional(),
-    keystoreContent: z.string().optional(),
-    keystorePassword: z.string().optional(),
-    keystorePath: z.string().optional(),
-    privateKey: z.string().optional(),
-    privateKeyPath: z.string().optional(),
-    keyAlias: z.string().optional(),
-    certPath: z.string().optional(),
-    keyPath: z.string().optional(),
-    certContent: z.string().optional(),
-    keyContent: z.string().optional(),
-  }).shape,
-);
-
-// TLS Certificate configuration schema for HTTPS connections
-const TlsCertificateSchema = z
-  .object({
-    // CA certificate for verifying server certificates
-    ca: z.union([z.string(), z.array(z.string())]).optional(),
-    caPath: z.string().optional(),
-
-    // Client certificate for mutual TLS
-    cert: z.union([z.string(), z.array(z.string())]).optional(),
-    certPath: z.string().optional(),
-
-    // Private key for client certificate
-    key: z.union([z.string(), z.array(z.string())]).optional(),
-    keyPath: z.string().optional(),
-
-    // PFX/PKCS12 certificate bundle
-    // Supports inline content as base64-encoded string or Buffer
+const TlsCertificateSchema = HttpTlsFieldsSchema.strip()
+  .extend({
     pfx: z
       .union([z.string(), z.instanceof(Buffer)])
       .optional()
       .describe(
         'PFX/PKCS12 certificate bundle. Can be a file path via pfxPath, or inline as a base64-encoded string or Buffer',
       ),
-    pfxPath: z.string().optional().describe('Path to PFX/PKCS12 certificate file'),
-    passphrase: z.string().optional().describe('Passphrase for PFX certificate'),
-
-    // Security options
     rejectUnauthorized: z.boolean().prefault(true),
-    servername: z.string().optional(),
-
-    // Cipher configuration
-    ciphers: z.string().optional(),
-    secureProtocol: z.string().optional(),
-    minVersion: z.string().optional(),
-    maxVersion: z.string().optional(),
   })
   .refine(
     (data) => {
@@ -867,58 +756,6 @@ const TlsCertificateSchema = z
     },
   );
 
-const OAuthClientCredentialsSchema = z.object({
-  type: z.literal('oauth'),
-  grantType: z.literal('client_credentials'),
-  clientId: z.string(),
-  clientSecret: z.string(),
-  tokenUrl: z.string(),
-  scopes: z.array(z.string()).optional(),
-});
-
-const OAuthPasswordSchema = z.object({
-  type: z.literal('oauth'),
-  grantType: z.literal('password'),
-  clientId: z.string().optional(),
-  clientSecret: z.string().optional(),
-  tokenUrl: z.string(),
-  scopes: z.array(z.string()).optional(),
-  username: z.string(),
-  password: z.string(),
-});
-
-const BasicAuthSchema = z.object({
-  type: z.literal('basic'),
-  username: z.string(),
-  password: z.string(),
-});
-
-const BearerAuthSchema = z.object({
-  type: z.literal('bearer'),
-  token: z.string(),
-});
-
-const ApiKeyAuthSchema = z.object({
-  type: z.literal('api_key'),
-  value: z.string(),
-  placement: z.enum(['header', 'query']),
-  keyName: z.string(),
-});
-
-const FileAuthSchema = z.object({
-  type: z.literal('file'),
-  path: z.string().min(1),
-});
-
-const AuthSchema = z.union([
-  OAuthClientCredentialsSchema,
-  OAuthPasswordSchema,
-  BasicAuthSchema,
-  BearerAuthSchema,
-  ApiKeyAuthSchema,
-  FileAuthSchema,
-]);
-
 const FileAuthResultSchema = z.object({
   token: z.string().min(1),
   expiration: z.number().finite().nullable().optional(),
@@ -942,87 +779,50 @@ type AuthTokenRefreshLock = {
  * Configuration for a separate session endpoint that must be called before the main API.
  * The session endpoint returns a session ID that is then used in the main request.
  */
-export const SessionEndpointConfigSchema = z.object({
-  /** URL of the session endpoint */
-  url: z.string(),
-  /** HTTP method for the session endpoint (default: POST) */
+export const SessionEndpointConfigSchema = HttpSessionInputSchema.strip().extend({
   method: z.enum(['GET', 'POST']).optional().default('POST'),
-  /** Headers to send with the session endpoint request */
-  headers: z.record(z.string(), z.string()).optional(),
-  /** Request body for the session endpoint (for POST requests) */
   body: z.union([z.record(z.string(), z.any()), z.string()]).optional(),
-  /**
-   * Path to extract sessionId from response.
-   * Can be a JavaScript expression like 'data.body.sessionId' or 'data.headers["x-session-id"]'
-   */
-  responseParser: z.union([z.string(), z.function()]),
+  responseParser: z.union([z.string(), z.function()]).meta({
+    ...HttpSessionInputSchema.shape.responseParser.meta(),
+  }),
 });
 
-export const HttpProviderConfigSchema = z.object({
+export const HttpProviderConfigSchema = HttpProviderConfigFieldsSchema.strip().extend({
   body: z.union([z.record(z.string(), z.any()), z.string(), z.array(z.any())]).optional(),
-  headers: z.record(z.string(), z.string()).optional(),
-  maxRetries: z.number().min(0).optional(),
-  method: z.string().optional(),
   multipart: HttpMultipartConfigSchema.optional(),
-  queryParams: z.record(z.string(), z.string()).optional(),
-  request: z.string().optional(),
-  /**
-   * Tools to make available to the model, in OpenAI format.
-   * Use with `transformToolsFormat` to auto-convert to provider-specific format.
-   */
   tools: z.array(z.any()).optional(),
-  /**
-   * Tool choice configuration, in OpenAI format.
-   * Use with `transformToolsFormat` to auto-convert to provider-specific format.
-   */
   tool_choice: z.any().optional(),
-  /**
-   * Transform OpenAI-format tools/tool_choice to provider-specific format.
-   * Use 'openai' for OpenAI-compatible endpoints, 'anthropic' for Anthropic, etc.
-   */
-  transformToolsFormat: z.enum(['openai', 'anthropic', 'bedrock', 'google']).optional(),
-  useHttps: z
-    .boolean()
-    .optional()
-    .describe('Use HTTPS for the request. This only works with the raw request option'),
-  /**
-   * Configuration for a separate session endpoint.
-   * When configured, the provider will call this endpoint to get a session ID
-   * before making the main API request.
-   */
   session: SessionEndpointConfigSchema.optional(),
   sessionParser: z.union([z.string(), z.function()]).optional(),
-  sessionSource: z.enum(['client', 'server', 'endpoint']).optional(),
-  stateful: z.boolean().optional(),
   transformRequest: z.union([z.string(), z.function()]).optional(),
   transformResponse: z.union([z.string(), z.function()]).optional(),
-  url: z.string().optional(),
   validateStatus: z
     .union([z.string(), z.function({ input: [z.number()], output: z.boolean() })])
     .optional(),
-  /**
-   * @deprecated use transformResponse instead
-   */
-  responseParser: z.union([z.string(), z.function()]).optional(),
-  // Token estimation configuration
-  tokenEstimation: TokenEstimationConfigSchema.optional(),
-  auth: AuthSchema.optional(),
-  // Digital Signature Authentication with support for multiple certificate types
-  signatureAuth: z
-    .union([
-      LegacySignatureAuthSchema,
-      PemSignatureAuthSchema,
-      JksSignatureAuthSchema,
-      PfxSignatureAuthSchema,
-      GenericCertificateAuthSchema,
-    ])
+  responseParser: z
+    .union([z.string(), z.function()])
     .optional()
-    .transform(preprocessSignatureAuthConfig),
-  // TLS Certificate configuration for HTTPS connections
+    .meta({
+      ...HttpProviderConfigFieldsSchema.shape.responseParser.meta(),
+    }),
+  tokenEstimation: TokenEstimationConfigSchema.optional(),
+  auth: HttpAuthSchema.optional(),
+  signatureAuth: HttpSignatureAuthSchema.optional().transform(preprocessSignatureAuthConfig),
   tls: TlsCertificateSchema.optional(),
 });
 
-export type HttpProviderConfig = z.infer<typeof HttpProviderConfigSchema>;
+export interface HttpProviderConfig extends z.output<typeof HttpProviderConfigSchema> {
+  /** Tools in OpenAI format; transformToolsFormat converts them for other providers. */
+  tools?: z.output<typeof HttpProviderConfigSchema>['tools'];
+  /** Tool choice in OpenAI format; transformToolsFormat converts it for other providers. */
+  tool_choice?: z.output<typeof HttpProviderConfigSchema>['tool_choice'];
+  /** Convert OpenAI-format tools and tool_choice to the selected provider format. */
+  transformToolsFormat?: z.output<typeof HttpProviderConfigSchema>['transformToolsFormat'];
+  /** Call a separate endpoint to obtain a session ID before the main API request. */
+  session?: z.output<typeof HttpProviderConfigSchema>['session'];
+  /** @deprecated Use transformResponse instead. */
+  responseParser?: z.output<typeof HttpProviderConfigSchema>['responseParser'];
+}
 
 function contentTypeIsJson(headers: Record<string, string> | undefined) {
   if (!headers) {
