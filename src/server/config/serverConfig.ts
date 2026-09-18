@@ -15,6 +15,7 @@ interface ServerConfig {
 }
 
 let cachedConfig: ServerConfig | null = null;
+let cachedHasCustomProviderConfig: boolean | null = null;
 
 /**
  * Get the path to the UI providers config file
@@ -54,6 +55,7 @@ export function loadServerConfig(): ServerConfig {
   }
 
   const configPath = getServerConfigPath();
+  cachedHasCustomProviderConfig = configPath !== null;
 
   if (!configPath) {
     logger.debug('No server config file found, using defaults');
@@ -124,6 +126,16 @@ export function loadServerConfig(): ServerConfig {
 }
 
 /**
+ * Whether a custom provider configuration was present when the server config was loaded.
+ * This shares the server config cache lifetime so a removed or unmounted file cannot
+ * reopen unrestricted provider access until the process restarts.
+ */
+export function hasCustomProviderConfig(): boolean {
+  loadServerConfig();
+  return cachedHasCustomProviderConfig === true;
+}
+
+/**
  * Get the list of available providers
  * Validates each provider against schema and filters out invalid ones
  * @returns Array of validated provider options
@@ -155,16 +167,22 @@ export function getAvailableProviders(): ProviderOptions[] {
       continue;
     }
 
-    // Ensure id is present (required for providers even though schema makes it optional)
-    if (!result.data.id) {
-      logger.warn('Provider missing required "id" field in ui-providers.yaml, skipping', {
+    // Ensure id contains non-whitespace text (required for providers even though
+    // the schema allows other shapes) so one bad entry cannot break the catalog.
+    if (typeof result.data.id !== 'string' || result.data.id.trim().length === 0) {
+      logger.warn('Provider missing required string "id" field in ui-providers.yaml, skipping', {
         providerIndex: i,
         provider: normalized,
       });
       continue;
     }
 
-    validatedProviders.push(result.data);
+    const validatedProvider = { ...result.data };
+    if (typeof validatedProvider.label !== 'string') {
+      delete validatedProvider.label;
+    }
+
+    validatedProviders.push(validatedProvider);
   }
 
   if (validatedProviders.length < config.providers.length) {

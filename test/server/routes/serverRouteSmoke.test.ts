@@ -43,6 +43,7 @@ const mocks = vi.hoisted(() => ({
   },
   fetchWithProxy: vi.fn(),
   getAvailableProviders: vi.fn(),
+  hasCustomProviderConfig: vi.fn(),
   getBlobByHash: vi.fn(),
   getDb: vi.fn(),
   getEnvBool: vi.fn(),
@@ -226,6 +227,7 @@ vi.mock('../../../src/node/testProvider', () => ({
 
 vi.mock('../../../src/server/config/serverConfig', () => ({
   getAvailableProviders: mocks.getAvailableProviders,
+  hasCustomProviderConfig: mocks.hasCustomProviderConfig,
 }));
 
 const HTTP_METHODS = ['get', 'post', 'put', 'patch', 'delete', 'head', 'options'] as const;
@@ -300,6 +302,7 @@ function setupDefaultMocks() {
   mocks.determineShareDomain.mockReturnValue({ domain: 'https://app.promptfoo.dev' });
   mocks.evalModel.findById.mockResolvedValue(null);
   mocks.getAvailableProviders.mockReturnValue([]);
+  mocks.hasCustomProviderConfig.mockReturnValue(false);
   mocks.getEnvBool.mockReturnValue(false);
   mocks.getEnvFloat.mockReturnValue(undefined);
   mocks.getEnvInt.mockReturnValue(undefined);
@@ -587,6 +590,12 @@ const smokeCases: SmokeCase[] = [
     openApiPath: '/api/model-audit/scans/{id}',
     path: '/api/model-audit/scans/scan-1',
     expectedStatus: 404,
+  },
+  {
+    method: 'get',
+    openApiPath: '/api/providers',
+    path: '/api/providers',
+    expectedStatus: 200,
   },
   {
     method: 'get',
