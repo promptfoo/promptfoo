@@ -959,6 +959,43 @@ describe('OllamaChatProvider', () => {
     expect(body.format).toBe('json');
   });
 
+  it.each([
+    ['stringified', '{"city":"Paris"}', { city: 'Paris' }],
+    ['object', { city: 'Paris' } as any, { city: 'Paris' }],
+    ['unparseable string', 'not json', 'not json'],
+    ['JSON scalar string', '"Paris"', '"Paris"'],
+  ])(
+    'should send %s tool-call arguments to Ollama as an object where possible',
+    async (_label, input, expected) => {
+      vi.mocked(fetchWithCache).mockResolvedValue({
+        data: '{"message":{"role":"assistant","content":"ok"},"done":true}\n',
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+        headers: {},
+      });
+
+      const prompt = JSON.stringify([
+        { role: 'user', content: 'weather in Paris?' },
+        {
+          role: 'assistant',
+          tool_calls: [{ function: { name: 'get_weather', arguments: input } }],
+        },
+        { role: 'tool', content: '20C' },
+      ]);
+
+      await new OllamaChatProvider('llama3.3').callApi(prompt);
+
+      // Responses are normalized to OpenAI's stringified-arguments shape, but Ollama's
+      // own /api/chat rejects that on the way back in with HTTP 400. Non-object JSON and
+      // unparseable strings are left alone so Ollama can report a meaningful error.
+      const body = JSON.parse(vi.mocked(fetchWithCache).mock.calls[0][1]?.body as string);
+      expect(body.messages[1].tool_calls[0].function.arguments).toEqual(expected);
+      expect(body.messages[0]).toEqual({ role: 'user', content: 'weather in Paris?' });
+      expect(body.messages[2]).toEqual({ role: 'tool', content: '20C' });
+    },
+  );
+
   it('should handle tools configuration', async () => {
     const provider = new OllamaChatProvider('llama3.3', {
       config: {
