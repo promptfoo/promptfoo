@@ -293,11 +293,11 @@ The OWASP Top 10 for Agentic Applications extends and complements the OWASP LLM 
 | Agentic Risk                        | Related LLM Top 10                     |
 | ----------------------------------- | -------------------------------------- |
 | ASI01: Agent Goal Hijack            | LLM01: Prompt Injection                |
-| ASI02: Tool Misuse and Exploitation | LLM06: Excessive Agency                |
-| ASI03: Identity and Privilege Abuse | LLM06: Excessive Agency                |
-| ASI05: Unexpected Code Execution    | LLM01, LLM05: Improper Output Handling |
-| ASI06: Memory and Context Poisoning | LLM04: Data and Model Poisoning        |
-| ASI08: Cascading Failures           | LLM09: Misinformation                  |
+| ASI02: Tool Misuse and Exploitation | LLM03: Excessive Agency                |
+| ASI03: Identity and Privilege Abuse | LLM03: Excessive Agency                |
+| ASI05: Unexpected Code Execution    | LLM01, LLM10: Improper Output Handling |
+| ASI06: Memory and Context Poisoning | LLM05: Data and Model Poisoning        |
+| ASI08: Cascading Failures           | LLM07: Misinformation                  |
 
 Test both frameworks together for comprehensive coverage:
 
