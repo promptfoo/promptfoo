@@ -1105,6 +1105,17 @@
         },
         "contextTransform": {
           "type": "string"
+        },
+        "normalizeUnicode": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "string",
+              "enum": ["NFC", "NFD", "NFKC", "NFKD"]
+            }
+          ]
         }
       },
       "required": ["type"],
