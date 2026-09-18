@@ -1,3 +1,4 @@
+import { execFile } from 'child_process';
 import fs from 'fs/promises';
 import path from 'path';
 
@@ -397,10 +398,15 @@ export class PythonWorker {
   }
 
   /**
-   * Detaches a process from this worker and ends it. Closing stdin lets an idle wrapper
-   * exit. SIGINT interrupts a running call by raising KeyboardInterrupt, so the script's
-   * `finally` blocks and context managers still run and can clean up anything it started,
-   * such as subprocesses. SIGKILL follows if it still hasn't exited.
+   * Detaches a process from this worker and ends it.
+   *
+   * On POSIX, closing stdin lets an idle wrapper exit and SIGINT interrupts a running call by
+   * raising KeyboardInterrupt, so the script's `finally` blocks and context managers still run
+   * and can clean up anything it started, such as subprocesses. SIGKILL follows if it still
+   * hasn't exited. Windows has no equivalent interrupt: `ChildProcess.kill()` terminates the
+   * process outright whatever signal is named, so the script can't clean up. Kill the process
+   * tree there instead, otherwise its children are orphaned.
+   *
    * Resolves once the process has exited and its output has been handled.
    */
   private stopProcess(pythonProcess: PythonShell): Promise<void> {
@@ -427,10 +433,34 @@ export class PythonWorker {
       void closed.then(() => clearTimeout(forceKill));
 
       pythonProcess.stdin?.end();
-      pythonProcess.kill('SIGINT');
+      if (process.platform === 'win32') {
+        clearTimeout(forceKill);
+        this.killProcessTree(pythonProcess);
+      } else {
+        pythonProcess.kill('SIGINT');
+      }
     }
 
     await closed;
+  }
+
+  /**
+   * Windows only: terminates the process and its descendants, which is the closest available
+   * equivalent to letting a script stop what it started.
+   */
+  private killProcessTree(pythonProcess: PythonShell): void {
+    const pid = pythonProcess.childProcess.pid;
+    if (pid === undefined) {
+      pythonProcess.kill('SIGKILL');
+      return;
+    }
+
+    execFile('taskkill', ['/pid', String(pid), '/t', '/f'], (error) => {
+      if (error && !hasExited(pythonProcess)) {
+        logger.warn(`Python worker taskkill failed for ${this.scriptPath}: ${error}`);
+        pythonProcess.kill('SIGKILL');
+      }
+    });
   }
 
   private rejectPendingRequest(error: Error): void {

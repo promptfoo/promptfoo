@@ -12,6 +12,8 @@ export class PythonWorkerPool {
   private workers: PythonWorker[] = [];
   private queue: QueuedRequest[] = [];
   private isInitialized: boolean = false;
+  /** Shared by concurrent shutdown callers so each waits for the same cleanup. */
+  private shutdownPromise: Promise<void> | null = null;
 
   constructor(
     private scriptPath: string,
@@ -164,6 +166,11 @@ export class PythonWorkerPool {
   }
 
   async shutdown(): Promise<void> {
+    this.shutdownPromise ??= this.shutdownWorkers();
+    return this.shutdownPromise;
+  }
+
+  private async shutdownWorkers(): Promise<void> {
     logger.debug(`Shutting down Python worker pool (${this.workers.length} workers)`);
 
     // Reject new requests from now on, not only once every worker has stopped

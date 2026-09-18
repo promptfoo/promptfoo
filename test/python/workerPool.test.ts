@@ -553,6 +553,36 @@ describe('PythonWorkerPool worker failures', () => {
     await shutdown;
   });
 
+  it('should share one cleanup between concurrent shutdown calls', async () => {
+    let finishWorkerShutdown: () => void = () => {};
+    const worker = createFakeWorker({ ready: true, busy: false, dead: false });
+    worker.shutdown.mockImplementation(
+      () =>
+        new Promise<void>((resolve) => {
+          finishWorkerShutdown = resolve;
+        }),
+    );
+    const { pool } = createPoolWithWorkers(worker);
+
+    const first = pool.shutdown();
+    // A second caller, for example the SIGINT handler racing the evaluator's shutdownAll
+    const second = pool.shutdown();
+    let secondSettled = false;
+    void second.then(() => {
+      secondSettled = true;
+    });
+    await Promise.resolve();
+    await Promise.resolve();
+
+    // Previously the second call saw no workers left and resolved while they were still stopping
+    expect(secondSettled).toBe(false);
+    expect(worker.shutdown).toHaveBeenCalledTimes(1);
+
+    finishWorkerShutdown();
+    await Promise.all([first, second]);
+    expect(secondSettled).toBe(true);
+  });
+
   it('should shut down workers that started when another worker fails to start', async () => {
     const startupError = new Error('Python worker exited before becoming ready (exit code 1)');
     let startedWorkers = 0;
