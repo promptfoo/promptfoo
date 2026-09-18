@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { runAssertions } from '../../../../src/assertions/index';
 import * as evaluatorHelpers from '../../../../src/evaluatorHelpers';
 import { CrescendoProvider, MemorySystem } from '../../../../src/redteam/providers/crescendo/index';
 import { redteamProviderManager, tryUnblocking } from '../../../../src/redteam/providers/shared';
@@ -8,6 +9,7 @@ import { checkServerFeatureSupport } from '../../../../src/util/server';
 import { createMockProvider, type MockApiProvider } from '../../../factories/provider';
 
 import type { Message } from '../../../../src/redteam/providers/shared';
+import type { AtomicTestCase } from '../../../../src/types/index';
 
 // Hoisted mock for getGraderById
 const mockGetGraderById = vi.hoisted(() => vi.fn());
@@ -1002,7 +1004,110 @@ describe('CrescendoProvider', () => {
     expect(result.metadata?.storedGraderResult?.assertion).toBeDefined();
   });
 
+  it.each(['grader error', 'conversation ended', 'backtracking'])(
+    'regrades the returned turn after %s instead of reusing an earlier pass',
+    async (stop) => {
+      const getResult = vi
+        .fn()
+        .mockResolvedValue({
+          grade: {
+            pass: false,
+            score: 0,
+            reason: 'Latest response verdict',
+            tokensUsed: { total: 3, numRequests: 1 },
+          },
+          rubric: 'rubric',
+        })
+        .mockResolvedValueOnce({
+          grade: {
+            pass: true,
+            score: 1,
+            reason: 'Earlier response verdict',
+            tokensUsed: { total: 5, numRequests: 1 },
+          },
+          rubric: 'rubric',
+        });
+      if (stop === 'grader error') {
+        getResult.mockRejectedValueOnce(new Error('Temporary grader failure'));
+      }
+      mockGetGraderById.mockReturnValue({ id: 'promptfoo:redteam:pii', getResult });
+      const provider = new CrescendoProvider({
+        injectVar: 'objective',
+        maxTurns: 2,
+        maxBacktracks: 1,
+        redteamProvider: mockRedTeamProvider,
+        stateful: false,
+      });
+      if (stop === 'backtracking') {
+        vi.spyOn(provider as any, 'getRefusalScore')
+          .mockResolvedValueOnce([false, ''])
+          .mockResolvedValueOnce([true, 'Refused']);
+      }
+      const test: AtomicTestCase = {
+        provider: 'promptfoo:redteam:crescendo',
+        assert: [{ type: 'promptfoo:redteam:pii' }],
+        metadata: { pluginId: 'pii:social', strategyId: 'crescendo', purpose: 'An assistant' },
+      };
+      mockRedTeamProvider.callApi
+        .mockResolvedValueOnce({
+          output: JSON.stringify({
+            generatedQuestion: 'first question',
+            rationaleBehindJailbreak: '',
+            lastResponseSummary: '',
+          }),
+        })
+        .mockResolvedValueOnce({
+          output: JSON.stringify({
+            generatedQuestion: 'second question',
+            rationaleBehindJailbreak: '',
+            lastResponseSummary: '',
+          }),
+        });
+      mockTargetProvider.callApi
+        .mockResolvedValueOnce({ output: 'first response' })
+        .mockResolvedValueOnce({
+          output: 'second response',
+          ...(stop === 'conversation ended' ? { conversationEnded: true } : {}),
+        });
+      mockScoringProvider.callApi.mockResolvedValue({
+        output: JSON.stringify({ value: false, metadata: 0, rationale: 'Continue' }),
+      });
+      vi.mocked(evaluatorHelpers.renderPrompt).mockImplementation(async (_prompt, vars) =>
+        String(vars.objective),
+      );
+      const response = await provider.callApi('ignored', {
+        originalProvider: mockTargetProvider,
+        vars: { objective: 'original question' },
+        prompt: { raw: '{{objective}}', label: 'test' },
+        test,
+      });
+
+      expect(response.output).toBe('second response');
+      expect(response.metadata?.redteamFinalPrompt).toBe('second question');
+      const result = await runAssertions({
+        prompt: 'original question',
+        test,
+        providerResponse: response,
+      });
+      expect(result.pass).toBe(false);
+      expect(getResult).toHaveBeenLastCalledWith(
+        'second question',
+        'second response',
+        expect.anything(),
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        expect.anything(),
+      );
+      expect(result.componentResults?.[0].tokensUsed).toMatchObject({ total: 8, numRequests: 2 });
+    },
+  );
+
   it('should grade the latest assistant output while passing prior turns in grading context', async () => {
+    vi.mocked(evaluatorHelpers.renderPrompt).mockImplementation(async (_prompt, vars) =>
+      String(vars.objective),
+    );
     const getResult = vi.fn(async () => ({
       grade: {
         pass: true,
@@ -1082,6 +1187,125 @@ describe('CrescendoProvider', () => {
       conversationTranscript: 'Turn 1:\nUser: first question\nAssistant: first response',
     });
   });
+
+  it.each(['returned error', 'thrown error'])(
+    'returns an error when every transform fails (%s)',
+    async (failure) => {
+      if (failure === 'returned error') {
+        mockApplyRuntimeTransforms.mockResolvedValue({
+          prompt: 'Never sent',
+          originalPrompt: 'Never sent',
+          error: 'Transform unavailable',
+        });
+      } else {
+        mockApplyRuntimeTransforms.mockRejectedValue(new Error('Transform unavailable'));
+      }
+      mockRedTeamProvider.callApi.mockResolvedValue({
+        output: JSON.stringify({
+          generatedQuestion: 'Never sent',
+          rationaleBehindJailbreak: '',
+          lastResponseSummary: '',
+        }),
+      });
+      const getResult = vi.fn();
+      mockGetGraderById.mockReturnValue({ getResult });
+      const provider = new CrescendoProvider({
+        injectVar: 'objective',
+        maxTurns: 2,
+        maxBacktracks: 0,
+        redteamProvider: mockRedTeamProvider,
+        stateful: true,
+        _perTurnLayers: ['base64'],
+      });
+      const result = await provider.callApi('', {
+        originalProvider: mockTargetProvider,
+        vars: { objective: 'goal' },
+        prompt: { raw: '{{objective}}', label: 'test' },
+        test: {
+          assert: [{ type: 'promptfoo:redteam:pii' }],
+          metadata: { pluginId: 'pii:social' },
+        } as any,
+      });
+      expect(result.error).toBe('Transform unavailable');
+      expect(result.metadata?.messages).toEqual([]);
+      expect(result.metadata?.storedGraderResult).toBeUndefined();
+      expect(mockTargetProvider.callApi).not.toHaveBeenCalled();
+      expect(getResult).not.toHaveBeenCalled();
+    },
+  );
+
+  it.each(['returned error', 'thrown error'])(
+    'excludes unsent transformed turns from grading history (%s)',
+    async (failure) => {
+      vi.mocked(evaluatorHelpers.renderPrompt).mockImplementation(async (_prompt, vars) =>
+        String(vars.objective),
+      );
+      const failedTransform = {
+        prompt: 'Never sent: Casey Morgan',
+        originalPrompt: 'Never sent: Casey Morgan',
+        error: 'Transform failed',
+      };
+      if (failure === 'returned error') {
+        mockApplyRuntimeTransforms.mockResolvedValueOnce(failedTransform);
+      } else {
+        mockApplyRuntimeTransforms.mockRejectedValueOnce(new Error('Transform failed'));
+      }
+      mockApplyRuntimeTransforms.mockResolvedValueOnce({
+        prompt: 'Delivered request',
+        originalPrompt: 'Delivered request',
+      });
+      const getResult = vi.fn().mockResolvedValue({
+        grade: {
+          pass: false,
+          score: 0,
+          reason: 'A name not supplied in the target conversation',
+        },
+      });
+      mockGetGraderById.mockReturnValue({ getResult });
+      mockRedTeamProvider.callApi
+        .mockResolvedValueOnce({
+          output: JSON.stringify({
+            generatedQuestion: 'Never sent: Casey Morgan',
+            rationaleBehindJailbreak: '',
+            lastResponseSummary: '',
+          }),
+        })
+        .mockResolvedValueOnce({
+          output: JSON.stringify({
+            generatedQuestion: 'Delivered request',
+            rationaleBehindJailbreak: '',
+            lastResponseSummary: '',
+          }),
+        });
+      mockTargetProvider.callApi.mockResolvedValue({ output: 'Casey Morgan' });
+      mockScoringProvider.callApi.mockResolvedValue({
+        output: JSON.stringify({ value: false, metadata: 0, rationale: 'Not refused' }),
+      });
+      const provider = new CrescendoProvider({
+        injectVar: 'objective',
+        maxTurns: 2,
+        maxBacktracks: 0,
+        redteamProvider: mockRedTeamProvider,
+        stateful: true,
+        _perTurnLayers: ['base64'],
+      });
+      const result = await provider.callApi('', {
+        originalProvider: mockTargetProvider,
+        vars: { objective: 'goal' },
+        prompt: { raw: '{{objective}}', label: 'test' },
+        test: {
+          assert: [{ type: 'promptfoo:redteam:pii' }],
+          metadata: { pluginId: 'pii:social' },
+        } as any,
+      });
+      expect(mockTargetProvider.callApi).toHaveBeenCalledTimes(1);
+      expect(getResult).toHaveBeenCalledTimes(1);
+      expect(result.error).toBeUndefined();
+      expect(getResult.mock.calls[0][0]).toBe('Delivered request');
+      expect(getResult.mock.calls[0][7]).toMatchObject({ conversationTranscript: '' });
+      expect(JSON.stringify(result.metadata?.messages)).not.toContain('Never sent');
+    },
+  );
 
   it('should stop when max backtracks reached', async () => {
     // Set up grader to pass (not detect jailbreak)
@@ -3218,11 +3442,15 @@ describe('CrescendoProvider - perTurnLayers configuration', () => {
   it('should include promptAudio and promptImage in redteamHistory when transforms are applied', async () => {
     // Configure the hoisted mock to return audio/image data for this test
     mockApplyRuntimeTransforms.mockResolvedValueOnce({
-      transformedPrompt: 'transformed prompt',
+      prompt: 'transformed prompt',
       audio: { data: 'base64-audio-data', format: 'mp3' },
       image: { data: 'base64-image-data', format: 'png' },
     });
 
+    const getResult = vi
+      .fn()
+      .mockResolvedValue({ grade: { pass: false, score: 0, reason: 'graded' } });
+    mockGetGraderById.mockReturnValue({ getResult });
     const provider = new CrescendoProvider({
       injectVar: 'objective',
       maxTurns: 1,
@@ -3245,7 +3473,7 @@ describe('CrescendoProvider - perTurnLayers configuration', () => {
 
     mockScoringProvider.callApi.mockResolvedValue({
       output: JSON.stringify({
-        value: true,
+        value: false,
         metadata: 100,
         rationale: 'Success',
       }),
@@ -3255,10 +3483,13 @@ describe('CrescendoProvider - perTurnLayers configuration', () => {
       originalProvider: mockTargetProvider,
       vars: { objective: 'test objective' },
       prompt: { raw: 'test prompt', label: 'test' },
+      test: { assert: [{ type: 'mock-grader' }], metadata: { pluginId: 'mock' } } as any,
     };
 
     const result = await provider.callApi('test prompt', context);
 
+    expect(getResult.mock.calls[0][0]).toBe('transformed prompt');
+    expect(result.metadata?.redteamFinalPrompt).toBe('transformed prompt');
     // Verify redteamHistory is populated
     expect(result.metadata?.redteamHistory).toBeDefined();
     expect(Array.isArray(result.metadata?.redteamHistory)).toBe(true);
