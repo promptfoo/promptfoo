@@ -846,14 +846,6 @@ export class OpenAiAgentsApiProvider extends OpenAiGenericProvider {
     }
   }
 
-  private sendsToOpenAiApi(): boolean {
-    try {
-      return new URL(this.getApiUrl()).hostname.toLowerCase() === 'api.openai.com';
-    } catch {
-      return false;
-    }
-  }
-
   /**
    * A configured Authorization header takes precedence over this value. An explicit key, or any
    * key sent to the OpenAI API, uses Bearer auth; otherwise URL userinfo uses decoded Basic auth.

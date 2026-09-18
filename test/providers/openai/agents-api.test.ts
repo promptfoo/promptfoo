@@ -1392,7 +1392,23 @@ describe('OpenAiAgentsApiProvider', () => {
       expect(new URL(String(url)).searchParams.get('tenant')).toBe('one');
       const headers = new Headers(request!.headers);
       expect(headers.get('Authorization')).toBe('Bearer header-key');
-      expect(headers.get('OpenAI-Organization')).toBe('scoped-org');
+      // An ambient OPENAI_ORGANIZATION is not forwarded to a third-party gateway; only an
+      // explicitly configured `organization` reaches a custom endpoint (asserted below).
+      expect(headers.get('OpenAI-Organization')).toBeNull();
+    }
+
+    vi.mocked(fetchWithRetries).mockClear();
+    const explicitOrgProvider = new OpenAiAgentsApiProvider('', {
+      env: { OPENAI_API_KEY: 'scoped-key' },
+      config: {
+        apiBaseUrl: 'https://gateway.example/v1/?tenant=one',
+        organization: 'scoped-org',
+      },
+    });
+    await explicitOrgProvider.callApi('hi');
+    expect(vi.mocked(fetchWithRetries).mock.calls.length).toBeGreaterThan(0);
+    for (const [, request] of vi.mocked(fetchWithRetries).mock.calls) {
+      expect(new Headers(request!.headers).get('OpenAI-Organization')).toBe('scoped-org');
     }
   });
 

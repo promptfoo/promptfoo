@@ -380,6 +380,9 @@
         "LITELLM_API_BASE": {
           "type": "string"
         },
+        "LITELLM_API_KEY": {
+          "type": "string"
+        },
         "LLAMA_BASE_URL": {
           "type": "string"
         },
@@ -1862,6 +1865,9 @@
                       "type": "string"
                     },
                     "LITELLM_API_BASE": {
+                      "type": "string"
+                    },
+                    "LITELLM_API_KEY": {
                       "type": "string"
                     },
                     "LLAMA_BASE_URL": {
