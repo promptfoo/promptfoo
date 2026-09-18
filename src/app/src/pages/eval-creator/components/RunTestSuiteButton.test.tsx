@@ -1,4 +1,3 @@
-import { EvalHistoryProvider } from '@app/contexts/EvalHistoryContext';
 import { useStore } from '@app/stores/evalConfig';
 import {
   getCallApiMock,
@@ -13,7 +12,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import RunTestSuiteButton from './RunTestSuiteButton';
 
 const renderWithProvider = (ui: React.ReactElement) => {
-  return render(<EvalHistoryProvider>{ui}</EvalHistoryProvider>);
+  return render(ui);
 };
 
 const mockShowToast = vi.fn();

@@ -285,8 +285,6 @@ describe('fetchUserEmail', () => {
     const mockGetState = vi.fn(() => ({
       apiBaseUrl: undefined,
       setApiBaseUrl: vi.fn(),
-      fetchingPromise: null,
-      setFetchingPromise: vi.fn(),
       persistApiBaseUrl: false,
       enablePersistApiBaseUrl: vi.fn(),
     }));
