@@ -9,6 +9,7 @@ import type {
   CallApiOptionsParams,
   ProviderResponse,
 } from '../../types/index';
+import type { FetchOptions } from '../../util/fetch/types';
 import type { OpenAiSharedOptions } from './types';
 
 export const OPENAI_ORIGINATOR_HEADER = 'X-OpenAI-Originator';
@@ -139,6 +140,15 @@ export class OpenAiGenericProvider implements ApiProvider {
 
   requiresApiKey(): boolean {
     return this.config.apiKeyRequired ?? true;
+  }
+
+  /**
+   * Optional HTTP-attempt authentication, including retries, polling, and cancellation.
+   * Static-key providers use getApiKey(). Adapters opting in must separately define cache
+   * isolation via shouldBustCache(); authentication alone does not establish a cache identity.
+   */
+  protected getRequestAuthentication(): FetchOptions['getAuthHeaders'] {
+    return undefined;
   }
 
   /**

@@ -45,6 +45,12 @@ type LlmRubricGradingConfig = GradingConfig & {
 const ATTACHED_IMAGE_OUTPUT_PLACEHOLDER =
   '[Image output attached. Inspect the attached image directly for visual grading.]';
 
+/**
+ * Score cutoff applied to `llm-rubric` when the assertion does not set an explicit
+ * `threshold`. Set `threshold: 0` on the assertion to opt back into boolean-only passing.
+ */
+const DEFAULT_LLM_RUBRIC_THRESHOLD = 0.5;
+
 const FACTUALITY_CATEGORY_DESCRIPTIONS: Record<string, string> = {
   A: 'The submitted answer is a subset of the expert answer and is fully consistent with it.',
   B: 'The submitted answer is a superset of the expert answer and is fully consistent with it.',
@@ -225,7 +231,7 @@ export async function matchesLlmRubric(
         ...(imageOutputs.length ? { images: imageOutputs } : {}),
         ...getRemoteGradingContext(),
       });
-      const threshold = assertion?.threshold ?? 0.5;
+      const threshold = assertion?.threshold ?? DEFAULT_LLM_RUBRIC_THRESHOLD;
       const score = Number.isFinite(remoteResult.score)
         ? remoteResult.score
         : Number(remoteResult.pass);
@@ -247,7 +253,7 @@ export async function matchesLlmRubric(
     return await runJsonGradingPrompt({
       assertion,
       checkName: 'llm-rubric check',
-      defaultThreshold: 0.5,
+      defaultThreshold: DEFAULT_LLM_RUBRIC_THRESHOLD,
       defaultPrompt: DEFAULT_GRADING_PROMPT,
       grading,
       label: 'llm-rubric',
