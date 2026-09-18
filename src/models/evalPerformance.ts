@@ -139,11 +139,14 @@ export async function queryTestIndicesOptimized(
   } else if (mode === 'highlights') {
     baseQuery = sql`${baseQuery} AND json_extract(grading_result, '$.comment') LIKE '!highlight%'`;
   } else if (mode === 'user-rated') {
-    // Check if componentResults array contains an entry with assertion.type = 'human'
-    baseQuery = sql`${baseQuery} AND EXISTS (
-      SELECT 1
-      FROM json_each(grading_result, '$.componentResults')
-      WHERE json_extract(value, '$.assertion.type') = ${HUMAN_ASSERTION_TYPE}
+    // Match canonical component ratings and legacy top-level human assertions.
+    baseQuery = sql`${baseQuery} AND (
+      json_extract(grading_result, '$.assertion.type') = ${HUMAN_ASSERTION_TYPE}
+      OR EXISTS (
+        SELECT 1
+        FROM json_each(grading_result, '$.componentResults')
+        WHERE json_extract(value, '$.assertion.type') = ${HUMAN_ASSERTION_TYPE}
+      )
     )`;
   }
 

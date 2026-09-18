@@ -1,5 +1,10 @@
 import { z } from 'zod';
-import { EvalResultsFilterMode, EvaluateOptionsSchema, TestSuiteConfigSchema } from '../index';
+import {
+  EvalResultsFilterMode,
+  EvaluateOptionsSchema,
+  type GradingResult,
+  TestSuiteConfigSchema,
+} from '../index';
 import { EmailSchema, MessageResponseSchema } from './common';
 
 /** Eval ID parameter schema. */
@@ -261,12 +266,57 @@ export const SubmitRatingParamsSchema = z.object({
 });
 
 /** Permissive grading result schema. */
+const MAX_RATING_REQUEST_DEPTH = 100;
+
+function exceedsRatingRequestDepth(value: unknown): boolean {
+  const stack: Array<{ value: unknown; depth: number }> = [{ value, depth: 0 }];
+  const visited = new WeakSet<object>();
+  while (stack.length > 0) {
+    const current = stack.pop();
+    if (!current || current.value === null || typeof current.value !== 'object') {
+      continue;
+    }
+    if (current.depth > MAX_RATING_REQUEST_DEPTH) {
+      return true;
+    }
+    if (visited.has(current.value)) {
+      continue;
+    }
+    visited.add(current.value);
+    for (const nestedValue of Object.values(current.value)) {
+      stack.push({ value: nestedValue, depth: current.depth + 1 });
+    }
+  }
+  return false;
+}
+
 export const SubmitRatingRequestSchema = z
   .object({
     pass: z.boolean(),
     score: z.number(),
+    ratingAction: z
+      .enum(['rate', 'clear', 'update'])
+      .optional()
+      .describe('Rating intent. Omit for the legacy inferred-rating behavior.'),
+    ratingUpdate: z
+      .enum(['score', 'comment'])
+      .optional()
+      .describe('Field to update; required only when ratingAction is update.'),
   })
-  .passthrough();
+  .passthrough()
+  .refine(
+    (value) =>
+      value.ratingAction === 'update'
+        ? value.ratingUpdate !== undefined
+        : value.ratingUpdate === undefined,
+    {
+      message: 'ratingUpdate is required only when ratingAction is update',
+      path: ['ratingUpdate'],
+    },
+  )
+  .refine((value) => !exceedsRatingRequestDepth(value), {
+    message: `Rating payload must not exceed ${MAX_RATING_REQUEST_DEPTH} nested levels`,
+  });
 
 /**
  * Response is the persisted EvalResult row. The route returns the updated
@@ -279,11 +329,17 @@ export const SubmitRatingResponseSchema = z
     id: z.string(),
     success: z.boolean(),
     score: z.number(),
+    failureReason: z.union([z.literal(0), z.literal(1), z.literal(2)]),
+    // Keep the permissive runtime contract while using a shape that can be
+    // represented by the generated OpenAPI document.
+    gradingResult: z.object({}).passthrough().nullable() as z.ZodType<GradingResult | null>,
   })
   .passthrough();
 
 export type SubmitRatingParams = z.infer<typeof SubmitRatingParamsSchema>;
 export type SubmitRatingRequest = z.infer<typeof SubmitRatingRequestSchema>;
+export type SubmitRatingAction = NonNullable<SubmitRatingRequest['ratingAction']>;
+export type SubmitRatingUpdate = NonNullable<SubmitRatingRequest['ratingUpdate']>;
 export type SubmitRatingResponse = z.infer<typeof SubmitRatingResponseSchema>;
 
 // POST /api/eval (save eval to database)

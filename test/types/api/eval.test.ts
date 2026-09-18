@@ -64,23 +64,66 @@ describe('Eval API schemas', () => {
       id: 'result-123',
       success: true,
       score: 0.75,
+      failureReason: 0,
       gradingResult: { pass: true, score: 0.75, reason: 'manual override' },
       promptIdx: 0,
     });
     expect(parsed.id).toBe('result-123');
     expect(parsed.success).toBe(true);
     expect(parsed.score).toBe(0.75);
-    // Passthrough preserves additional EvalResult fields like gradingResult.
-    // The inferred Zod type carries an index signature for the passthrough
-    // bucket but doesn't statically include `gradingResult`, so cast through
-    // `unknown` to read it.
-    expect((parsed as unknown as { gradingResult: { pass: boolean } }).gradingResult.pass).toBe(
-      true,
-    );
+    expect(parsed.failureReason).toBe(0);
+    expect(parsed.gradingResult?.pass).toBe(true);
+  });
+
+  it('SubmitRating request schema accepts explicit rating intent and rejects unknown actions', () => {
+    expect(
+      EvalSchemas.SubmitRating.Request.parse({ pass: true, score: 1, ratingAction: 'rate' }),
+    ).toMatchObject({ ratingAction: 'rate' });
+    expect(
+      EvalSchemas.SubmitRating.Request.parse({
+        pass: true,
+        score: 0.5,
+        ratingAction: 'update',
+        ratingUpdate: 'score',
+      }),
+    ).toMatchObject({ ratingAction: 'update', ratingUpdate: 'score' });
+    expect(
+      EvalSchemas.SubmitRating.Request.safeParse({
+        pass: true,
+        score: 0.5,
+        ratingAction: 'update',
+      }).success,
+    ).toBe(false);
+    expect(
+      EvalSchemas.SubmitRating.Request.safeParse({
+        pass: true,
+        score: 1,
+        ratingAction: 'rate',
+        ratingUpdate: 'score',
+      }).success,
+    ).toBe(false);
+    expect(
+      EvalSchemas.SubmitRating.Request.safeParse({
+        pass: true,
+        score: 1,
+        ratingAction: 'delete-everything',
+      }).success,
+    ).toBe(false);
   });
 
   it('SubmitRating response schema rejects payloads missing the row identifier', () => {
     const result = EvalSchemas.SubmitRating.Response.safeParse({
+      success: true,
+      score: 1,
+      failureReason: 0,
+      gradingResult: null,
+    });
+    expect(result.success).toBe(false);
+  });
+
+  it('SubmitRating response schema requires fields used for UI reconciliation', () => {
+    const result = EvalSchemas.SubmitRating.Response.safeParse({
+      id: 'result-123',
       success: true,
       score: 1,
     });
