@@ -32,6 +32,7 @@ These assertions can check LLM output or provider metadata directly. Configured 
 | Assertion Type                                                  | Returns true if...                                                 |
 | --------------------------------------------------------------- | ------------------------------------------------------------------ |
 | [assert-set](#assert-set)                                       | A configurable threshold of grouped assertions pass                |
+| [character-count](#character-count)                             | output has a specific number of Unicode code points or a range     |
 | [contains](#contains)                                           | output contains substring                                          |
 | [contains-all](#contains-all)                                   | output contains all list of substrings                             |
 | [contains-any](#contains-any)                                   | output contains any of the listed substrings                       |
@@ -1962,6 +1963,35 @@ assert:
     value: 'choose the most engaging response'
     provider: openai:gpt-5-mini
 ```
+
+### Character Count
+
+The `character-count` assertion checks the number of Unicode code points in the LLM output. Astral characters such as `😀` count as one character. Combining marks and characters joined by a zero-width joiner are counted as separate code points.
+
+Values and limits must be non-negative whole numbers. Ranges are inclusive.
+
+```yaml
+assert:
+  # Exact count
+  - type: character-count
+    value: 50
+
+  # Inclusive range
+  - type: character-count
+    value:
+      min: 20
+      max: 100
+
+  # Minimum or maximum only
+  - type: character-count
+    value:
+      min: 10
+  - type: character-count
+    value:
+      max: 200
+```
+
+Use `not-character-count` to negate the check.
 
 ### Word Count
 

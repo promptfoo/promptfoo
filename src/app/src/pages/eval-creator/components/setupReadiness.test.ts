@@ -685,6 +685,32 @@ describe('setupReadiness', () => {
       ).toBe(false);
     });
 
+    it('requires a valid exact or bounded character count before running', () => {
+      const baseConfig = {
+        providers: ['openai:gpt-4.1'],
+        prompts: ['Write a concise reply'],
+      };
+
+      expect(
+        getSetupReadiness({
+          ...baseConfig,
+          tests: [{ assert: [{ type: 'character-count' }] }],
+        }).isReadyToRun,
+      ).toBe(false);
+      expect(
+        getSetupReadiness({
+          ...baseConfig,
+          tests: [{ assert: [{ type: 'character-count', value: { max: 120 } }] }],
+        }).isReadyToRun,
+      ).toBe(true);
+      expect(
+        getSetupReadiness({
+          ...baseConfig,
+          tests: [{ assert: [{ type: 'character-count', value: Number.POSITIVE_INFINITY }] }],
+        }).isReadyToRun,
+      ).toBe(false);
+    });
+
     it('requires multiple outputs for select-best comparisons', () => {
       const singleOutputConfig = {
         providers: ['openai:gpt-4.1'],
