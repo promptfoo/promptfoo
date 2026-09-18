@@ -1,6 +1,7 @@
 import { trace } from '@opentelemetry/api';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { fetchWithCache } from '../../src/cache';
+import logger from '../../src/logger';
 import {
   OllamaChatProvider,
   OllamaCompletionProvider,
@@ -201,6 +202,156 @@ describe('OllamaCompletionProvider', () => {
     expect(result.error).toContain('Ollama API response error:');
   });
 
+  it('should surface thinking output and finish reason', async () => {
+    vi.mocked(fetchWithCache).mockResolvedValue({
+      data:
+        '{"response":"","thinking":"Let me ","done":false}\n' +
+        '{"response":"","thinking":"reason.","done":true,"done_reason":"length","eval_count":32}\n',
+      cached: false,
+      status: 200,
+      statusText: 'OK',
+      headers: {},
+    });
+
+    const provider = new OllamaCompletionProvider('qwen3:0.6b');
+    const result = await provider.callApi('test prompt');
+
+    // Previously this returned '' because `thinking` was dropped entirely.
+    expect(result.output).toBe('Thinking: Let me reason.');
+    expect(result.finishReason).toBe('length');
+  });
+
+  it('should prepend thinking to response content when both are present', async () => {
+    vi.mocked(fetchWithCache).mockResolvedValue({
+      data: '{"response":"Hi!","thinking":"Short.","done":true,"done_reason":"stop"}\n',
+      cached: false,
+      status: 200,
+      statusText: 'OK',
+      headers: {},
+    });
+
+    const provider = new OllamaCompletionProvider('qwen3:0.6b');
+    const result = await provider.callApi('test prompt');
+
+    expect(result.output).toBe('Thinking: Short.\n\nHi!');
+    expect(result.finishReason).toBe('stop');
+  });
+
+  it('should omit thinking when showThinking is false, without sending it to Ollama', async () => {
+    vi.mocked(fetchWithCache).mockResolvedValue({
+      data: '{"response":"Hi!","thinking":"Short.","done":true,"done_reason":"stop"}\n',
+      cached: false,
+      status: 200,
+      statusText: 'OK',
+      headers: {},
+    });
+
+    const provider = new OllamaCompletionProvider('qwen3:0.6b', {
+      config: { showThinking: false },
+    });
+    const result = await provider.callApi('test prompt');
+
+    expect(result.output).toBe('Hi!');
+
+    // showThinking is a promptfoo-side rendering option; Ollama must never receive it.
+    const body = JSON.parse(vi.mocked(fetchWithCache).mock.calls[0][1]?.body as string);
+    expect(body.showThinking).toBeUndefined();
+    expect(body.options.showThinking).toBeUndefined();
+  });
+
+  it('should set the cached flag and report cached token usage on a completion cache hit', async () => {
+    vi.mocked(fetchWithCache).mockResolvedValue({
+      data: '{"response":"hi","done":true,"prompt_eval_count":10,"eval_count":20}\n',
+      cached: true,
+      status: 200,
+      statusText: 'OK',
+      headers: {},
+    });
+
+    const provider = new OllamaCompletionProvider('llama3.3');
+    const result = await provider.callApi('test prompt');
+
+    // The completion path builds its response separately from the chat path, so it
+    // needs its own cache-hit coverage.
+    expect(result.cached).toBe(true);
+    expect(result.tokenUsage).toEqual({ cached: 30, total: 30 });
+  });
+
+  it('should send format as a top-level parameter on the completion path too', async () => {
+    vi.mocked(fetchWithCache).mockResolvedValue({
+      data: '{"response":"{}","done":true}\n',
+      cached: false,
+      status: 200,
+      statusText: 'OK',
+      headers: {},
+    });
+
+    const schema = { type: 'object', properties: { capital: { type: 'string' } } };
+    const provider = new OllamaCompletionProvider('qwen3', { config: { format: schema } });
+    await provider.callApi('test prompt');
+
+    // Chat and completion build separate request objects, so both need coverage.
+    const body = JSON.parse(vi.mocked(fetchWithCache).mock.calls[0][1]?.body as string);
+    expect(body.format).toEqual(schema);
+    expect(body.options.format).toBeUndefined();
+  });
+
+  it('should keep an explicitly reported zero cached-prompt count', async () => {
+    vi.mocked(fetchWithCache).mockResolvedValue({
+      data: '{"response":"hi","done":true,"prompt_eval_count":10,"prompt_eval_cached_count":0,"eval_count":5}\n',
+      cached: false,
+      status: 200,
+      statusText: 'OK',
+      headers: {},
+    });
+
+    const provider = new OllamaCompletionProvider('qwen3');
+    const result = await provider.callApi('test prompt');
+
+    // 0 is a real value Ollama reports, distinct from the field being absent.
+    expect(result.tokenUsage?.completionDetails).toEqual({ cacheReadInputTokens: 0 });
+  });
+
+  it.each([
+    ['suffix', 'return result'],
+    ['system', 'You are terse.'],
+    ['template', '{{ .Prompt }}'],
+    ['raw', true],
+  ])('should forward /api/generate-only parameter %s', async (key, value) => {
+    vi.mocked(fetchWithCache).mockResolvedValue({
+      data: '{"response":"ok","done":true}\n',
+      cached: false,
+      status: 200,
+      statusText: 'OK',
+      headers: {},
+    });
+
+    const provider = new OllamaCompletionProvider('qwen2.5', {
+      config: { [key]: value } as any,
+    });
+    await provider.callApi('test prompt');
+
+    const body = JSON.parse(vi.mocked(fetchWithCache).mock.calls[0][1]?.body as string);
+    expect(body[key]).toEqual(value);
+    expect(body.options[key]).toBeUndefined();
+  });
+
+  it('should omit finishReason when done_reason is absent', async () => {
+    vi.mocked(fetchWithCache).mockResolvedValue({
+      data: '{"response":"Hi!","done":true}\n',
+      cached: false,
+      status: 200,
+      statusText: 'OK',
+      headers: {},
+    });
+
+    const provider = new OllamaCompletionProvider('llama3.3');
+    const result = await provider.callApi('test prompt');
+
+    expect(result.output).toBe('Hi!');
+    expect(result.finishReason).toBeUndefined();
+  });
+
   it('should use default id when not provided', () => {
     const provider = new OllamaCompletionProvider('llama3.3');
     expect(provider.id()).toBe('ollama:completion:llama3.3');
@@ -231,6 +382,7 @@ describe('OllamaCompletionProvider', () => {
         prompt: 26,
         completion: 259,
         total: 285,
+        numRequests: 1,
       },
     });
   });
@@ -274,6 +426,7 @@ describe('OllamaCompletionProvider', () => {
         prompt: 26,
         completion: 0,
         total: 26,
+        numRequests: 1,
       },
     });
   });
@@ -298,6 +451,7 @@ describe('OllamaCompletionProvider', () => {
         prompt: 0,
         completion: 259,
         total: 259,
+        numRequests: 1,
       },
     });
   });
@@ -538,6 +692,273 @@ describe('OllamaChatProvider', () => {
     expect(JSON.parse(call[1].body).think).toBeTruthy();
   });
 
+  it('should set the cached flag and report cached token usage on a cache hit', async () => {
+    vi.mocked(fetchWithCache).mockResolvedValue({
+      data: '{"message":{"role":"assistant","content":"hi"},"done":true,"prompt_eval_count":10,"eval_count":20}\n',
+      cached: true,
+      status: 200,
+      statusText: 'OK',
+      headers: {},
+    });
+
+    const provider = new OllamaChatProvider('llama3.3');
+    const result = await provider.callApi('test prompt');
+
+    // src/providers/AGENTS.md requires the cached flag; without it the evaluator never
+    // takes its "Skipping delay because response is cached" branch.
+    expect(result.cached).toBe(true);
+    expect(result.tokenUsage).toEqual({ cached: 30, total: 30 });
+  });
+
+  it('should merge passthrough.options instead of clobbering computed options', async () => {
+    vi.mocked(fetchWithCache).mockResolvedValue({
+      data: '{"message":{"role":"assistant","content":"hi"},"done":true}\n',
+      cached: false,
+      status: 200,
+      statusText: 'OK',
+      headers: {},
+    });
+
+    const provider = new OllamaChatProvider('llama3.3', {
+      config: { temperature: 0.5, num_predict: 64, passthrough: { options: { min_p: 0.1 } } },
+    });
+    await provider.callApi('test prompt');
+
+    const body = JSON.parse(vi.mocked(fetchWithCache).mock.calls[0][1]?.body as string);
+    // Spreading passthrough wholesale used to replace the computed options object,
+    // silently discarding temperature and num_predict.
+    expect(body.options).toEqual({ temperature: 0.5, num_predict: 64, min_p: 0.1 });
+  });
+
+  it('should forward min_p, keep_alive, and legacy options, but drop invalid keys', async () => {
+    vi.mocked(fetchWithCache).mockResolvedValue({
+      data: '{"message":{"role":"assistant","content":"hi"},"done":true}\n',
+      cached: false,
+      status: 200,
+      statusText: 'OK',
+      headers: {},
+    });
+
+    const provider = new OllamaChatProvider('llama3.3', {
+      config: {
+        min_p: 0.05,
+        draft_num_predict: 4,
+        keep_alive: '5m',
+        // Removed from current Ollama releases but still forwarded, so a config
+        // pointed at an older OLLAMA_BASE_URL keeps working.
+        mirostat: 2,
+        tfs_z: 1,
+        // Never a valid wire name: the Go field was UseNUMA with json tag "numa",
+        // and "numa" itself is gone upstream.
+        useNUMA: true,
+        // An OpenAI key Ollama ignores.
+        max_tokens: 99,
+      } as any,
+    });
+    await provider.callApi('test prompt');
+
+    const body = JSON.parse(vi.mocked(fetchWithCache).mock.calls[0][1]?.body as string);
+    expect(body.options.min_p).toBe(0.05);
+    expect(body.options.draft_num_predict).toBe(4);
+    expect(body.keep_alive).toBe('5m');
+    expect(body.options.keep_alive).toBeUndefined();
+    expect(body.options.mirostat).toBe(2);
+    expect(body.options.tfs_z).toBe(1);
+    expect(body.options.useNUMA).toBeUndefined();
+    expect(body.options.max_tokens).toBeUndefined();
+    expect(body.max_tokens).toBeUndefined();
+  });
+
+  it.each([['low'], ['medium'], ['high'], ['max'], [true], [false]])(
+    'should forward think level %s as a top-level parameter',
+    async (level) => {
+      vi.mocked(fetchWithCache).mockResolvedValue({
+        data: '{"message":{"role":"assistant","content":"hi"},"done":true}\n',
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+        headers: {},
+      });
+
+      const provider = new OllamaChatProvider('qwen3', { config: { think: level as any } });
+      await provider.callApi('test prompt');
+
+      // Ollama 0.34+ accepts a boolean or a thinking level.
+      const body = JSON.parse(vi.mocked(fetchWithCache).mock.calls[0][1]?.body as string);
+      expect(body.think).toBe(level);
+      expect(body.options.think).toBeUndefined();
+    },
+  );
+
+  it('should send format as a top-level structured-output parameter', async () => {
+    vi.mocked(fetchWithCache).mockResolvedValue({
+      data: '{"message":{"role":"assistant","content":"{}"},"done":true}\n',
+      cached: false,
+      status: 200,
+      statusText: 'OK',
+      headers: {},
+    });
+
+    const schema = { type: 'object', properties: { capital: { type: 'string' } } };
+    const provider = new OllamaChatProvider('qwen3', { config: { format: schema } });
+    await provider.callApi('test prompt');
+
+    // Previously reachable only via passthrough.
+    const body = JSON.parse(vi.mocked(fetchWithCache).mock.calls[0][1]?.body as string);
+    expect(body.format).toEqual(schema);
+    expect(body.options.format).toBeUndefined();
+  });
+
+  it('should surface prompt_eval_cached_count as cacheReadInputTokens', async () => {
+    vi.mocked(fetchWithCache).mockResolvedValue({
+      data: '{"message":{"role":"assistant","content":"hi"},"done":true,"prompt_eval_count":54,"prompt_eval_cached_count":53,"eval_count":25}\n',
+      cached: false,
+      status: 200,
+      statusText: 'OK',
+      headers: {},
+    });
+
+    const provider = new OllamaChatProvider('qwen3');
+    const result = await provider.callApi('test prompt');
+
+    // Ollama's own KV prefix cache -- NOT a promptfoo cache hit, so `cached` stays unset.
+    expect(result.tokenUsage).toEqual({
+      prompt: 54,
+      completion: 25,
+      total: 79,
+      numRequests: 1,
+      completionDetails: { cacheReadInputTokens: 53 },
+    });
+    expect(result.cached).toBeUndefined();
+  });
+
+  it('should warn when a completion-only key is set on a chat provider', async () => {
+    const warnSpy = vi.spyOn(logger, 'warn').mockImplementation(() => logger);
+    vi.mocked(fetchWithCache).mockResolvedValue({
+      data: '{"message":{"role":"assistant","content":"hi"},"done":true}\n',
+      cached: false,
+      status: 200,
+      statusText: 'OK',
+      headers: {},
+    });
+
+    const provider = new OllamaChatProvider('qwen3', {
+      config: { suffix: 'X', system: 'terse', raw: true } as any,
+    });
+    await provider.callApi('test prompt');
+
+    const body = JSON.parse(vi.mocked(fetchWithCache).mock.calls[0][1]?.body as string);
+    const warnings = warnSpy.mock.calls.map((c) => String(c[0]));
+    warnSpy.mockRestore();
+
+    // These are valid Ollama keys, but /api/chat does not accept them. Without the
+    // endpoint check they were neither forwarded nor reported -- a silent drop.
+    expect(body.suffix).toBeUndefined();
+    expect(body.system).toBeUndefined();
+    expect(body.raw).toBeUndefined();
+    expect(warnings.some((w) => w.includes('chat endpoint does not accept'))).toBe(true);
+    expect(warnings.some((w) => w.includes('suffix'))).toBe(true);
+  });
+
+  it.each([
+    ['chat', 'llama3.3'],
+    ['completion', 'llama3.3'],
+  ])('should forward truncate on the %s endpoint', async (kind, model) => {
+    const warnSpy = vi.spyOn(logger, 'warn').mockImplementation(() => logger);
+    vi.mocked(fetchWithCache).mockResolvedValue({
+      data:
+        kind === 'chat'
+          ? '{"message":{"role":"assistant","content":"hi"},"done":true}\n'
+          : '{"response":"hi","done":true}\n',
+      cached: false,
+      status: 200,
+      statusText: 'OK',
+      headers: {},
+    });
+
+    const provider =
+      kind === 'chat'
+        ? new OllamaChatProvider(model, { config: { truncate: false } })
+        : new OllamaCompletionProvider(model, { config: { truncate: false } });
+    await provider.callApi('test prompt');
+
+    const body = JSON.parse(vi.mocked(fetchWithCache).mock.calls[0][1]?.body as string);
+    const warnings = warnSpy.mock.calls.map((c) => String(c[0]));
+    warnSpy.mockRestore();
+
+    // truncate gates context-overflow behavior on the generation endpoints too, not
+    // just /api/embed: a long prompt with a small num_ctx returns 400 when false.
+    expect(body.truncate).toBe(false);
+    expect(body.options.truncate).toBeUndefined();
+    expect(warnings.filter((w) => w.includes('does not accept'))).toHaveLength(0);
+  });
+
+  it('should not warn for keys the chat endpoint does accept', async () => {
+    const warnSpy = vi.spyOn(logger, 'warn').mockImplementation(() => logger);
+    vi.mocked(fetchWithCache).mockResolvedValue({
+      data: '{"message":{"role":"assistant","content":"hi"},"done":true}\n',
+      cached: false,
+      status: 200,
+      statusText: 'OK',
+      headers: {},
+    });
+
+    const provider = new OllamaChatProvider('qwen3', {
+      config: { think: false, keep_alive: '5m', format: 'json' },
+    });
+    await provider.callApi('test prompt');
+    const warnings = warnSpy.mock.calls.map((c) => String(c[0]));
+    warnSpy.mockRestore();
+
+    expect(warnings.filter((w) => w.includes('does not accept'))).toHaveLength(0);
+  });
+
+  it('should not report promptfoo-internal keys as dropped config', async () => {
+    const debugSpy = vi.spyOn(logger, 'debug').mockImplementation(() => logger);
+    vi.mocked(fetchWithCache).mockResolvedValue({
+      data: '{"message":{"role":"assistant","content":"hi"},"done":true}\n',
+      cached: false,
+      status: 200,
+      statusText: 'OK',
+      headers: {},
+    });
+
+    // loadApiProvider injects basePath into every provider config, so without an
+    // exclusion the diagnostic fires on every request with a key the user never set.
+    const provider = new OllamaChatProvider('llama3.3', {
+      config: { temperature: 0, basePath: '/x', showThinking: false } as any,
+    });
+    await provider.callApi('test prompt');
+
+    const droppedCalls = debugSpy.mock.calls.filter((c) =>
+      String(c[0]).includes('Ignoring unsupported config keys'),
+    );
+    debugSpy.mockRestore();
+    expect(droppedCalls).toHaveLength(0);
+  });
+
+  it('should not leak think or passthrough into the nested options object', async () => {
+    vi.mocked(fetchWithCache).mockResolvedValue({
+      data: '{"message":{"role":"assistant","content":"hi"},"done":true}\n',
+      cached: false,
+      status: 200,
+      statusText: 'OK',
+      headers: {},
+    });
+
+    const provider = new OllamaChatProvider('llama3.3', {
+      config: { temperature: 0.5, think: true, passthrough: { format: 'json' } },
+    });
+    await provider.callApi('test prompt');
+
+    const body = JSON.parse(vi.mocked(fetchWithCache).mock.calls[0][1]?.body as string);
+    // think and format belong at the top level; the chat reducer used to copy them
+    // into options as junk members too.
+    expect(body.options).toEqual({ temperature: 0.5 });
+    expect(body.think).toBe(true);
+    expect(body.format).toBe('json');
+  });
+
   it('should handle tools configuration', async () => {
     const provider = new OllamaChatProvider('llama3.3', {
       config: {
@@ -615,6 +1036,7 @@ describe('OllamaChatProvider', () => {
         prompt: 26,
         completion: 259,
         total: 285,
+        numRequests: 1,
       },
     });
   });
@@ -658,6 +1080,7 @@ describe('OllamaChatProvider', () => {
         prompt: 26,
         completion: 0,
         total: 26,
+        numRequests: 1,
       },
     });
   });
@@ -682,6 +1105,7 @@ describe('OllamaChatProvider', () => {
         prompt: 0,
         completion: 259,
         total: 259,
+        numRequests: 1,
       },
     });
   });
@@ -834,9 +1258,91 @@ describe('OllamaChatProvider', () => {
       expect(result.output).toEqual(
         withContent ? { content: 'Checking weather.', tool_calls: toolCalls } : toolCalls,
       );
-      expect(result.tokenUsage).toEqual({ prompt: 10, completion: 20, total: 30 });
+      expect(result.tokenUsage).toEqual({ prompt: 10, completion: 20, total: 30, numRequests: 1 });
     },
   );
+
+  it('should accumulate message.thinking across chunks and surface finish reason', async () => {
+    vi.mocked(fetchWithCache).mockResolvedValue({
+      data:
+        '{"message":{"role":"assistant","content":"","thinking":"Let me "},"done":false}\n' +
+        '{"message":{"role":"assistant","content":"","thinking":"reason."},"done":false}\n' +
+        '{"message":{"role":"assistant","content":""},"done":true,"done_reason":"length","eval_count":32}\n',
+      cached: false,
+      status: 200,
+      statusText: 'OK',
+      headers: {},
+    });
+
+    const provider = new OllamaChatProvider('qwen3:0.6b');
+    const result = await provider.callApi('test prompt');
+
+    // Previously this returned '' because message.thinking was dropped entirely.
+    expect(result.output).toBe('Thinking: Let me reason.');
+    expect(result.finishReason).toBe('length');
+  });
+
+  it('should prepend thinking to chat content when both are present', async () => {
+    vi.mocked(fetchWithCache).mockResolvedValue({
+      data:
+        '{"message":{"role":"assistant","content":"","thinking":"Short."},"done":false}\n' +
+        '{"message":{"role":"assistant","content":"Hi!"},"done":true,"done_reason":"stop"}\n',
+      cached: false,
+      status: 200,
+      statusText: 'OK',
+      headers: {},
+    });
+
+    const provider = new OllamaChatProvider('qwen3:0.6b');
+    const result = await provider.callApi('test prompt');
+
+    expect(result.output).toBe('Thinking: Short.\n\nHi!');
+    expect(result.finishReason).toBe('stop');
+  });
+
+  it('should omit chat thinking when showThinking is false', async () => {
+    vi.mocked(fetchWithCache).mockResolvedValue({
+      data:
+        '{"message":{"role":"assistant","content":"","thinking":"Short."},"done":false}\n' +
+        '{"message":{"role":"assistant","content":"Hi!"},"done":true,"done_reason":"stop"}\n',
+      cached: false,
+      status: 200,
+      statusText: 'OK',
+      headers: {},
+    });
+
+    const provider = new OllamaChatProvider('qwen3:0.6b', { config: { showThinking: false } });
+    const result = await provider.callApi('test prompt');
+
+    expect(result.output).toBe('Hi!');
+
+    const body = JSON.parse(vi.mocked(fetchWithCache).mock.calls[0][1]?.body as string);
+    expect(body.showThinking).toBeUndefined();
+    expect(body.options.showThinking).toBeUndefined();
+  });
+
+  it('should leave the tool-call output shape untouched when thinking is present', async () => {
+    vi.mocked(fetchWithCache).mockResolvedValue({
+      data:
+        '{"message":{"role":"assistant","content":"","thinking":"Deciding."},"done":false}\n' +
+        '{"message":{"role":"assistant","content":"","tool_calls":[{"function":{"name":"get_weather","arguments":{"city":"Paris"}}}]},"done":false}\n' +
+        '{"message":{"role":"assistant","content":""},"done":true,"done_reason":"stop"}\n',
+      cached: false,
+      status: 200,
+      statusText: 'OK',
+      headers: {},
+    });
+
+    const provider = new OllamaChatProvider('qwen3:0.6b');
+    const result = await provider.callApi('test prompt');
+
+    // Tool calls must stay structured -- prepending a string would break
+    // is-valid-openai-tools-call.
+    expect(result.output).toEqual([
+      { function: { name: 'get_weather', arguments: '{"city":"Paris"}' } },
+    ]);
+    expect(result.finishReason).toBe('stop');
+  });
 
   it('should handle multiple tool calls in response', async () => {
     const mockResponse = {
@@ -954,30 +1460,198 @@ describe('Ollama provider tracing', () => {
   });
 });
 
+describe('Ollama endpoint key matrix', () => {
+  beforeEach(() => {
+    vi.resetAllMocks();
+  });
+
+  // Guards the invariant behind the endpoint warning: a key listed as accepted for an
+  // endpoint MUST be forwarded by that endpoint's provider. If it is listed but not
+  // forwarded, the user gets neither the parameter nor a warning -- a silent drop.
+  it.each([
+    ['chat', ['think', 'keep_alive', 'format', 'truncate']],
+    [
+      'completion',
+      ['think', 'keep_alive', 'format', 'truncate', 'suffix', 'system', 'template', 'raw'],
+    ],
+    ['embedding', ['keep_alive', 'truncate', 'dimensions']],
+  ])('every accepted %s key reaches the wire', async (kind, keys) => {
+    const values: Record<string, any> = {
+      think: false,
+      keep_alive: '5m',
+      format: 'json',
+      truncate: false,
+      suffix: 'S',
+      system: 'SYS',
+      template: 'T',
+      raw: true,
+      dimensions: 128,
+    };
+    const config = Object.fromEntries((keys as string[]).map((k) => [k, values[k]]));
+
+    vi.mocked(fetchWithCache).mockResolvedValue({
+      data:
+        kind === 'embedding'
+          ? ({ embeddings: [[0.1]] } as any)
+          : kind === 'chat'
+            ? '{"message":{"role":"assistant","content":"hi"},"done":true}\n'
+            : '{"response":"hi","done":true}\n',
+      cached: false,
+      status: 200,
+      statusText: 'OK',
+      headers: {},
+    });
+
+    if (kind === 'embedding') {
+      await new OllamaEmbeddingProvider('all-minilm', { config: config as any }).callEmbeddingApi(
+        'text',
+      );
+    } else if (kind === 'chat') {
+      await new OllamaChatProvider('m', { config: config as any }).callApi('p');
+    } else {
+      await new OllamaCompletionProvider('m', { config: config as any }).callApi('p');
+    }
+
+    const body = JSON.parse(vi.mocked(fetchWithCache).mock.calls[0][1]?.body as string);
+    for (const key of keys as string[]) {
+      expect(body[key]).toBeDefined();
+      expect(body.options?.[key]).toBeUndefined();
+    }
+  });
+});
+
 describe('OllamaEmbeddingProvider', () => {
   beforeEach(() => {
     vi.resetAllMocks();
   });
 
-  it('should call embeddings API and return response', async () => {
-    const mockResponse = {
-      data: {
-        embedding: [0.1, 0.2, 0.3],
-      },
+  it('should warn for a key the embed endpoint does not accept', async () => {
+    const warnSpy = vi.spyOn(logger, 'warn').mockImplementation(() => logger);
+    vi.mocked(fetchWithCache).mockResolvedValue({
+      data: { embeddings: [[0.1]] },
       cached: false,
       status: 200,
       statusText: 'OK',
       headers: {},
-    };
+    });
 
-    vi.mocked(fetchWithCache).mockResolvedValue(mockResponse);
+    const provider = new OllamaEmbeddingProvider('all-minilm', {
+      config: { format: 'json', suffix: 'X' } as any,
+    });
+    await provider.callEmbeddingApi('test text');
 
-    const provider = new OllamaEmbeddingProvider('llama3.3');
+    const body = JSON.parse(vi.mocked(fetchWithCache).mock.calls[0][1]?.body as string);
+    const warnings = warnSpy.mock.calls.map((c) => String(c[0]));
+    warnSpy.mockRestore();
+
+    // Every key allowed for an endpoint must be forwarded by it; otherwise the key is
+    // silently dropped rather than warned about.
+    expect(body.format).toBeUndefined();
+    expect(warnings.some((w) => w.includes('embedding endpoint does not accept'))).toBe(true);
+    expect(warnings.some((w) => w.includes('format'))).toBe(true);
+  });
+
+  it('should call the /api/embed endpoint and return the embedding with token usage', async () => {
+    vi.mocked(fetchWithCache).mockResolvedValue({
+      data: { embeddings: [[0.1, 0.2, 0.3]], prompt_eval_count: 4 },
+      cached: false,
+      status: 200,
+      statusText: 'OK',
+      headers: {},
+    });
+
+    const provider = new OllamaEmbeddingProvider('all-minilm');
     const result = await provider.callEmbeddingApi('test text');
 
     expect(result).toEqual({
       embedding: [0.1, 0.2, 0.3],
+      // numRequests must be explicit: the similarity matcher accumulates usage without
+      // inferring a request count, so omitting it reports zero embedding requests.
+      tokenUsage: { prompt: 4, total: 4, numRequests: 1 },
     });
+
+    // /api/embeddings is superseded upstream; it also hard-errors on long inputs.
+    const [url] = vi.mocked(fetchWithCache).mock.calls[0];
+    expect(url).toBe('http://localhost:11434/api/embed');
+  });
+
+  it('should report a cached embedding as cached usage', async () => {
+    vi.mocked(fetchWithCache).mockResolvedValue({
+      data: { embeddings: [[0.1, 0.2]], prompt_eval_count: 7 },
+      cached: true,
+      status: 200,
+      statusText: 'OK',
+      headers: {},
+    });
+
+    const provider = new OllamaEmbeddingProvider('all-minilm');
+    const result = await provider.callEmbeddingApi('test text');
+
+    expect(result.cached).toBe(true);
+    expect(result.tokenUsage).toEqual({ cached: 7, total: 7 });
+  });
+
+  it('should default truncate to false so over-long input fails loudly', async () => {
+    vi.mocked(fetchWithCache).mockResolvedValue({
+      data: { embeddings: [[0.1]] },
+      cached: false,
+      status: 200,
+      statusText: 'OK',
+      headers: {},
+    });
+
+    const provider = new OllamaEmbeddingProvider('all-minilm');
+    await provider.callEmbeddingApi('test text');
+
+    const body = JSON.parse(vi.mocked(fetchWithCache).mock.calls[0][1]?.body as string);
+    expect(body.input).toBe('test text');
+    expect(body.truncate).toBe(false);
+  });
+
+  it('should thread config through to the embeddings request', async () => {
+    vi.mocked(fetchWithCache).mockResolvedValue({
+      data: { embeddings: [[0.1]] },
+      cached: false,
+      status: 200,
+      statusText: 'OK',
+      headers: {},
+    });
+
+    const provider = new OllamaEmbeddingProvider('all-minilm', {
+      config: {
+        num_ctx: 2048,
+        truncate: true,
+        dimensions: 128,
+        keep_alive: '5m',
+      },
+    });
+    await provider.callEmbeddingApi('test text');
+
+    // Previously callEmbeddingApi built {model, prompt} and ignored config entirely,
+    // so num_ctx (the actual fix for a context-length error) was unreachable.
+    const body = JSON.parse(vi.mocked(fetchWithCache).mock.calls[0][1]?.body as string);
+    expect(body.options.num_ctx).toBe(2048);
+    expect(body.truncate).toBe(true);
+    expect(body.dimensions).toBe(128);
+    expect(body.keep_alive).toBe('5m');
+  });
+
+  it('should explain how to fix a context-length error', async () => {
+    vi.mocked(fetchWithCache).mockResolvedValue({
+      data: { error: 'the input length exceeds the context length' },
+      cached: false,
+      status: 400,
+      statusText: 'Bad Request',
+      headers: {},
+    });
+
+    const provider = new OllamaEmbeddingProvider('all-minilm');
+    const result = await provider.callEmbeddingApi('a'.repeat(5000));
+
+    expect(result.error).toContain('the input length exceeds the context length');
+    expect(result.error).toContain('num_ctx');
+    expect(result.error).toContain('truncate');
+    expect(result.embedding).toBeUndefined();
   });
 
   it.each([

@@ -1,6 +1,7 @@
 import path from 'path';
 
 import cliState from '../../cliState';
+import { type McpConfigParsed, McpConfigSchema } from '../../contracts/providerConfig/mcp';
 import { getEnvBool, getEnvInt } from '../../envars';
 import logger from '../../logger';
 import { TOKEN_REFRESH_BUFFER_MS, type TokenRefreshLock } from '../../util/oauth';
@@ -102,7 +103,7 @@ function getEffectiveRequestOptions(config: MCPConfig): MCPRequestOptions | unde
 export class MCPClient {
   private clients: Map<string, Client> = new Map();
   private tools: Map<string, MCPTool[]> = new Map();
-  private config: MCPConfig;
+  private config: McpConfigParsed;
   private transports: Map<
     string,
     StdioClientTransport | SSEClientTransport | StreamableHTTPClientTransport
@@ -136,8 +137,8 @@ export class MCPClient {
     return this.config.verbose ?? getEnvBool('MCP_VERBOSE') ?? false;
   }
 
-  constructor(config: MCPConfig) {
-    this.config = config;
+  constructor(config: unknown) {
+    this.config = McpConfigSchema.parse(config);
   }
 
   async initialize(): Promise<void> {
