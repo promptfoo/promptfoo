@@ -1,0 +1,165 @@
+/* Container */
+.container {
+  background: #0f172a;
+  border-radius: 10px;
+  margin: 1.5rem 0;
+  border: 1px solid #334155;
+  overflow: hidden;
+}
+
+/* Header */
+.header {
+  padding: 0.6rem 1rem;
+  background: rgba(255, 255, 255, 0.03);
+  border-bottom: 1px solid #334155;
+}
+
+.headerTitle {
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: #94a3b8;
+}
+
+/* Code block */
+.codeBlock {
+  margin: 0;
+  padding: 1rem 1.25rem;
+  font-family: 'SF Mono', 'Monaco', 'Inconsolata', 'Fira Code', monospace;
+  font-size: 0.82rem;
+  line-height: 1.6;
+  white-space: pre-wrap;
+  word-break: break-word;
+  overflow-x: auto;
+}
+
+/* Color coding */
+.trusted {
+  color: #86efac;
+}
+
+.untrusted {
+  color: #fde047;
+  background: rgba(253, 224, 71, 0.1);
+}
+
+.injected {
+  color: #fca5a5;
+  background: rgba(252, 165, 165, 0.1);
+}
+
+/* Legend */
+.legend {
+  display: flex;
+  gap: 1.5rem;
+  padding: 0.6rem 1rem;
+  background: rgba(0, 0, 0, 0.2);
+  border-top: 1px solid #334155;
+  flex-wrap: wrap;
+}
+
+.legendItem {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  font-size: 0.75rem;
+  color: #94a3b8;
+}
+
+.legendDotTrusted,
+.legendDotUntrusted,
+.legendDotInjected {
+  width: 10px;
+  height: 10px;
+  border-radius: 2px;
+}
+
+.legendDotTrusted {
+  background: #22c55e;
+}
+
+.legendDotUntrusted {
+  background: #eab308;
+}
+
+.legendDotInjected {
+  background: #ef4444;
+}
+
+/* Callout */
+.callout {
+  padding: 0.75rem 1rem;
+  background: rgba(239, 68, 68, 0.1);
+  border-top: 1px solid rgba(239, 68, 68, 0.2);
+  font-size: 0.85rem;
+  color: #fca5a5;
+  line-height: 1.5;
+}
+
+.callout strong {
+  color: #f87171;
+}
+
+/* Light mode */
+[data-theme='light'] .container {
+  background: #f8fafc;
+  border-color: #e2e8f0;
+}
+
+[data-theme='light'] .header {
+  background: rgba(0, 0, 0, 0.02);
+  border-color: #e2e8f0;
+}
+
+[data-theme='light'] .headerTitle {
+  color: #64748b;
+}
+
+[data-theme='light'] .codeBlock {
+  color: #334155;
+}
+
+[data-theme='light'] .trusted {
+  color: #16a34a;
+}
+
+[data-theme='light'] .untrusted {
+  color: #a16207;
+  background: rgba(234, 179, 8, 0.1);
+}
+
+[data-theme='light'] .injected {
+  color: #dc2626;
+  background: rgba(239, 68, 68, 0.1);
+}
+
+[data-theme='light'] .legend {
+  background: rgba(0, 0, 0, 0.02);
+  border-color: #e2e8f0;
+}
+
+[data-theme='light'] .legendItem {
+  color: #64748b;
+}
+
+[data-theme='light'] .callout {
+  background: rgba(239, 68, 68, 0.08);
+  border-color: rgba(239, 68, 68, 0.15);
+  color: #991b1b;
+}
+
+[data-theme='light'] .callout strong {
+  color: #dc2626;
+}
+
+/* Responsive */
+@media (max-width: 640px) {
+  .codeBlock {
+    padding: 0.75rem 1rem;
+    font-size: 0.75rem;
+  }
+
+  .legend {
+    flex-direction: column;
+    gap: 0.4rem;
+  }
+}
