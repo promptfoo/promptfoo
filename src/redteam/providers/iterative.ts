@@ -40,6 +40,7 @@ import {
 } from '../shared/runtimeTransform';
 import { Strategies } from '../strategies';
 import { checkExfilTracking } from '../strategies/indirectWebPwn';
+import { canGenerateRemoteWithConfiguredProvider } from '../strategies/types';
 import { extractInputVarsFromPrompt, extractPromptFromTags, getSessionId } from '../util';
 import {
   ATTACKER_SYSTEM_PROMPT,
@@ -140,6 +141,7 @@ export async function runRedteamConversation({
   perTurnLayers = [],
   inputs,
   targetId,
+  usingRemoteRedteamProvider = shouldGenerateRemote(),
 }: {
   context?: CallApiContextParams;
   filters: NunjucksFilterMap | undefined;
@@ -156,6 +158,7 @@ export async function runRedteamConversation({
   perTurnLayers?: LayerConfig[];
   inputs?: Inputs;
   targetId?: string;
+  usingRemoteRedteamProvider?: boolean;
 }): Promise<{
   output: string;
   prompt?: string;
@@ -221,7 +224,6 @@ export async function runRedteamConversation({
   const sessionIds: string[] = [];
 
   const totalTokenUsage = createEmptyTokenUsage();
-  const usingRemoteRedteamProvider = shouldGenerateRemote();
 
   const previousOutputs: {
     prompt: string;
@@ -890,6 +892,7 @@ class RedteamIterativeProvider implements ApiProvider {
   private readonly excludeTargetOutputFromAgenticAttackGeneration: boolean;
   private readonly gradingProvider: RedteamFileConfig['provider'];
   private readonly perTurnLayers: LayerConfig[];
+  private readonly usingRemoteRedteamProvider: boolean;
   readonly inputs?: Inputs;
 
   constructor(readonly config: Record<string, VarValue>) {
@@ -909,9 +912,12 @@ class RedteamIterativeProvider implements ApiProvider {
     );
     this.perTurnLayers = (config._perTurnLayers as LayerConfig[]) ?? [];
 
-    // Redteam provider can be set from the config.
+    // Remote task handlers only know the built-in default. An explicit
+    // redteamProvider is source: 'explicit' and must stay local.
+    this.usingRemoteRedteamProvider =
+      shouldGenerateRemote() && canGenerateRemoteWithConfiguredProvider(config.redteamProvider);
 
-    if (shouldGenerateRemote()) {
+    if (this.usingRemoteRedteamProvider) {
       this.gradingProvider = new PromptfooChatCompletionProvider({
         task: 'judge',
         jsonOnly: true,
@@ -979,6 +985,7 @@ class RedteamIterativeProvider implements ApiProvider {
         this.excludeTargetOutputFromAgenticAttackGeneration,
       inputs: this.inputs,
       targetId: typeof this.config.targetId === 'string' ? this.config.targetId : undefined,
+      usingRemoteRedteamProvider: this.usingRemoteRedteamProvider,
     });
   }
 }

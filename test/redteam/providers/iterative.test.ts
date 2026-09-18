@@ -1,8 +1,10 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { PromptfooChatCompletionProvider } from '../../../src/providers/promptfoo';
 import { getGradingInputHash } from '../../../src/redteam/grading/storedResult';
 import RedteamIterativeProvider, {
   runRedteamConversation,
 } from '../../../src/redteam/providers/iterative';
+import * as remoteGeneration from '../../../src/redteam/remoteGeneration';
 import * as traceContext from '../../../src/tracing/traceContext';
 import {
   createMockProvider,
@@ -144,6 +146,42 @@ describe('RedteamIterativeProvider', () => {
         expect(provider['numIterations']).toBe(15);
       } finally {
         restoreEnv();
+      }
+    });
+
+    it('keeps an explicit redteamProvider local when remote generation is otherwise enabled', () => {
+      const shouldGenerateRemote = vi
+        .spyOn(remoteGeneration, 'shouldGenerateRemote')
+        .mockReturnValue(true);
+
+      try {
+        const provider = new RedteamIterativeProvider({
+          injectVar: 'test',
+          redteamProvider: 'ollama:chat:llama3.1:8b',
+        });
+
+        expect(provider['redteamProvider']).toBe('ollama:chat:llama3.1:8b');
+        expect(provider['gradingProvider']).toBeUndefined();
+        expect(provider['usingRemoteRedteamProvider']).toBe(false);
+        expect(provider['redteamProvider']).not.toBeInstanceOf(PromptfooChatCompletionProvider);
+      } finally {
+        shouldGenerateRemote.mockRestore();
+      }
+    });
+
+    it('uses remote generation when no redteamProvider is configured', () => {
+      const shouldGenerateRemote = vi
+        .spyOn(remoteGeneration, 'shouldGenerateRemote')
+        .mockReturnValue(true);
+
+      try {
+        const provider = new RedteamIterativeProvider({ injectVar: 'test' });
+
+        expect(provider['usingRemoteRedteamProvider']).toBe(true);
+        expect(provider['redteamProvider']).toBeInstanceOf(PromptfooChatCompletionProvider);
+        expect(provider['gradingProvider']).toBeInstanceOf(PromptfooChatCompletionProvider);
+      } finally {
+        shouldGenerateRemote.mockRestore();
       }
     });
   });
