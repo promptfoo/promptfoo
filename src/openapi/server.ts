@@ -84,7 +84,7 @@ const OpenApiEvalTableJsonResponseSchema = z.union([
   EvalSchemas.Table.JsonExportResponse,
 ]);
 
-export const SERVER_OPENAPI_ROUTE_COUNT = 67;
+export const SERVER_OPENAPI_ROUTE_COUNT = 69;
 
 type OpenApiSchema = NonNullable<ZodMediaTypeObject['schema']>;
 type OpenApiResponse = ResponseConfig & { description: string };
@@ -588,6 +588,25 @@ export function createServerOpenApiRegistry() {
       204: noContent('Results added'),
       400: validationError(),
       404: notFound('Evaluation not found'),
+      500: serverError(),
+    },
+  });
+
+  register({
+    method: 'post',
+    path: '/api/eval/{id}/traces',
+    operationId: 'addEvalTraces',
+    tags: ['Eval', 'Traces'],
+    summary: 'Append traces to an evaluation',
+    request: {
+      params: params('AddTracesParams', EvalSchemas.AddTraces.Params),
+      body: jsonBody('AddTracesRequest', EvalSchemas.AddTraces.Request),
+    },
+    responses: {
+      204: noContent('Traces added'),
+      400: validationError(),
+      404: notFound('Evaluation not found'),
+      409: errorResponse('Trace ID already belongs to another evaluation'),
       500: serverError(),
     },
   });
@@ -1196,6 +1215,24 @@ export function createServerOpenApiRegistry() {
   });
 
   register({
+    method: 'post',
+    path: '/api/blobs',
+    operationId: 'uploadBlob',
+    tags: ['Blobs'],
+    summary: 'Upload blob bytes to local storage',
+    request: {
+      body: jsonBody('UploadBlobRequest', BlobsSchemas.Upload.Request),
+    },
+    responses: {
+      200: jsonResponse('UploadBlobResponse', BlobsSchemas.Upload.Response),
+      400: validationError(),
+      404: notFound('Blob storage is disabled or evaluation was not found'),
+      413: errorResponse('Blob exceeds maximum size'),
+      500: serverError(),
+    },
+  });
+
+  register({
     method: 'get',
     path: '/api/blobs/library',
     operationId: 'listMediaLibrary',
@@ -1235,6 +1272,7 @@ export function createServerOpenApiRegistry() {
     summary: 'Fetch blob bytes or redirect to blob storage',
     request: {
       params: params('GetBlobParams', BlobsSchemas.Get.Params),
+      query: query('GetBlobQuery', BlobsSchemas.Get.Query),
     },
     responses: {
       200: binaryResponse('Blob bytes'),

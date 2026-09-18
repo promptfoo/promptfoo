@@ -5,10 +5,11 @@ import { getDb } from '../database';
 import { blobAssetsTable, blobReferencesTable } from '../database/tables';
 import logger from '../logger';
 import { FilesystemBlobStorageProvider } from './filesystemProvider';
+import { BLOB_MIME_TYPE_FALLBACK, sanitizeBlobMimeType } from './mimeTypes';
 
 import type { BlobStorageProvider, BlobStoreResult, StoredBlob } from './types';
 
-export { BLOB_MAX_SIZE, BLOB_MIN_SIZE, BLOB_SCHEME } from './constants';
+export { BLOB_MAX_BASE64_SIZE, BLOB_MAX_SIZE, BLOB_MIN_SIZE, BLOB_SCHEME } from './constants';
 export {
   type BlobRef,
   type BlobStorageProvider,
@@ -16,24 +17,8 @@ export {
   type StoredBlob,
 } from './types';
 
-// MIME types retained by portable imports and allowed for inline blob responses.
-const SAFE_INLINE_BLOB_MIME_TYPES = new Set([
-  'image/avif',
-  'image/gif',
-  'image/jpeg',
-  'image/png',
-  'image/webp',
-  'video/mp4',
-  'video/ogg',
-  'video/webm',
-]);
-const SAFE_INLINE_AUDIO_MIME_TYPE_REGEX = /^audio\/[a-z0-9_+-]+$/i;
-
 export function isSafeInlineBlobMimeType(mimeType: string): boolean {
-  return (
-    SAFE_INLINE_BLOB_MIME_TYPES.has(mimeType.toLowerCase()) ||
-    SAFE_INLINE_AUDIO_MIME_TYPE_REGEX.test(mimeType)
-  );
+  return sanitizeBlobMimeType(mimeType) !== BLOB_MIME_TYPE_FALLBACK;
 }
 
 let defaultProvider: BlobStorageProvider | null = null;
@@ -69,6 +54,7 @@ export async function storeBlob(
     promptIdx?: number;
     location?: string;
     kind?: string;
+    kindFromMimeType?: (mimeType: string) => string;
   },
 ): Promise<BlobStoreResult> {
   const provider = getBlobStorageProvider();
@@ -92,6 +78,12 @@ export async function storeBlob(
       .onConflictDoNothing()
       .run();
 
+    const asset = await tx
+      .select({ mimeType: blobAssetsTable.mimeType })
+      .from(blobAssetsTable)
+      .where(eq(blobAssetsTable.hash, result.ref.hash))
+      .get();
+
     if (refContext?.evalId) {
       await tx
         .insert(blobReferencesTable)
@@ -102,17 +94,12 @@ export async function storeBlob(
           testIdx: refContext.testIdx,
           promptIdx: refContext.promptIdx,
           location: refContext.location,
-          kind: refContext.kind,
+          kind: refContext.kindFromMimeType?.(asset!.mimeType) ?? refContext.kind,
         })
         .onConflictDoNothing()
         .run();
     }
 
-    const asset = await tx
-      .select({ mimeType: blobAssetsTable.mimeType })
-      .from(blobAssetsTable)
-      .where(eq(blobAssetsTable.hash, result.ref.hash))
-      .get();
     return asset!.mimeType;
   });
 
@@ -130,6 +117,10 @@ export async function getBlobByHash(hash: string): Promise<StoredBlob> {
     .get();
   // Registered metadata takes precedence over sidecars retained from failed stores.
   return asset ? { ...blob, metadata: { ...blob.metadata, mimeType: asset.mimeType } } : blob;
+}
+
+export async function getBlobUrl(hash: string, expiresInSeconds?: number): Promise<string | null> {
+  return getBlobStorageProvider().getUrl(hash, expiresInSeconds);
 }
 
 export async function isBlobAllowedForShare(hash: string, evalId: string): Promise<boolean> {

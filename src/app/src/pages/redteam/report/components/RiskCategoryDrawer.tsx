@@ -278,6 +278,7 @@ const RiskCategoryDrawer = ({
               messages={chatMessages}
               displayTurnCount={maxTurns > 1}
               maxTurns={maxTurns}
+              evaluationId={evalId}
             />
           </CollapsibleContent>
         </div>

@@ -787,6 +787,79 @@ describe('EvalOutputCell', () => {
     expect(imgElement.getAttribute('src')).toMatch(/^data:image\/svg\+xml;base64,/);
   });
 
+  it('remounts blob media after a refreshed output object arrives', async () => {
+    const blobUri = `promptfoo://blob/${'a'.repeat(64)}`;
+    const propsWithBlob: MockEvalOutputCellProps = {
+      ...defaultProps,
+      output: {
+        ...defaultProps.output,
+        text: blobUri,
+      },
+    };
+    const { container, rerender } = renderWithProviders(<EvalOutputCell {...propsWithBlob} />);
+    const firstImage = container.querySelector('img');
+    expect(firstImage).not.toBeNull();
+    expect(firstImage).toHaveAttribute('src', `/api/blobs/${'a'.repeat(64)}`);
+    await userEvent.click(firstImage!);
+    const openImage = container.querySelector('img');
+    const firstLightboxImage = screen.getByAltText('Lightbox');
+    act(() => {
+      openImage!.dispatchEvent(new Event('error'));
+    });
+    act(() => {
+      firstLightboxImage.dispatchEvent(new Event('error'));
+    });
+
+    rerender(
+      <ShiftKeyProvider>
+        <EvalOutputCell
+          {...propsWithBlob}
+          output={{
+            ...propsWithBlob.output,
+          }}
+        />
+      </ShiftKeyProvider>,
+    );
+
+    const refreshedImage = container.querySelector('img');
+    expect(refreshedImage).not.toBeNull();
+    expect(refreshedImage).not.toBe(openImage);
+    expect(refreshedImage).toHaveAttribute('src', `/api/blobs/${'a'.repeat(64)}`);
+    const refreshedLightboxImage = screen.getByAltText('Lightbox');
+    expect(refreshedLightboxImage).not.toBe(firstLightboxImage);
+    expect(refreshedLightboxImage).toHaveAttribute('src', `/api/blobs/${'a'.repeat(64)}`);
+  });
+
+  it('does not remount a successfully loaded blob after a refreshed output object arrives', () => {
+    const blobUri = `promptfoo://blob/${'d'.repeat(64)}`;
+    const propsWithImage: MockEvalOutputCellProps = {
+      ...defaultProps,
+      output: {
+        ...defaultProps.output,
+        text: blobUri,
+      },
+    };
+    const { container, rerender } = renderWithProviders(<EvalOutputCell {...propsWithImage} />);
+    const firstImage = container.querySelector('img');
+    expect(firstImage).not.toBeNull();
+    act(() => {
+      firstImage!.dispatchEvent(new Event('load'));
+    });
+
+    rerender(
+      <ShiftKeyProvider>
+        <EvalOutputCell
+          {...propsWithImage}
+          output={{
+            ...propsWithImage.output,
+          }}
+        />
+      </ShiftKeyProvider>,
+    );
+
+    expect(container.querySelector('img')).toBe(firstImage);
+  });
+
   it('renders raw SVG content with leading whitespace as an image', () => {
     const svgContent =
       '  \n  <svg xmlns="http://www.w3.org/2000/svg" width="100" height="100"><rect width="100" height="100" fill="blue"/></svg>';

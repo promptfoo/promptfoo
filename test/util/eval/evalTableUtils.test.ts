@@ -8,6 +8,7 @@ import {
   generateEvalCsv,
   getEvalTableOutputPromptLocationsBySize,
   getEvalTablePromptStrippedPayload,
+  mergeComparisonTables,
   STRIPPED_TABLE_CELL_PROMPT,
   streamEvalCsv,
 } from '../../../src/util/eval/evalTableUtils';
@@ -35,6 +36,21 @@ describe('evalTableUtils', () => {
     head: { prompts: CompletedPrompt[]; vars: string[] };
     body: EvaluateTableRow[];
   };
+
+  it('attaches the owning evaluation to comparison outputs without trusting stored metadata', () => {
+    mockTable.body[0].outputs[0].sourceEvalId = 'unrelated-eval';
+    const merged = mergeComparisonTables('main-eval', mockTable, [
+      { evalId: 'comparison-eval', table: mockTable },
+    ]);
+    expect(merged.body[0].outputs.map((output) => output.sourceEvalId)).toEqual([
+      'main-eval',
+      'main-eval',
+      'comparison-eval',
+      'comparison-eval',
+    ]);
+    expect(merged.body[0].outputs.map((output) => output.sourcePromptIndex)).toEqual([0, 1, 0, 1]);
+    expect(mockTable.body[0].outputs[0].sourceEvalId).toBe('unrelated-eval');
+  });
 
   beforeEach(() => {
     mockTable = {
