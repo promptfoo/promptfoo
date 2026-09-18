@@ -1,4 +1,5 @@
 import * as fs from 'fs';
+import * as os from 'os';
 import * as path from 'path';
 
 import dedent from 'dedent';
@@ -997,7 +998,7 @@ not valid json`,
     'does not treat an external root fragment as a local description target: %s',
     async (ref) => {
       const realFs = await vi.importActual<typeof import('fs/promises')>('fs/promises');
-      const directory = await realFs.mkdtemp('/tmp/promptfoo-test-description-');
+      const directory = await realFs.mkdtemp(path.join(os.tmpdir(), 'promptfoo-test-description-'));
       await realFs.writeFile(
         path.join(directory, 'definitions.json'),
         JSON.stringify({ vars: { payload: { vars: { external: true } } } }),
