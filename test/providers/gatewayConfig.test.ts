@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { loadApiProvider } from '../../src/providers';
 
 /**
@@ -10,6 +10,10 @@ import { loadApiProvider } from '../../src/providers';
  */
 describe('gateway provider config handling', () => {
   beforeEach(() => {
+    vi.unstubAllEnvs();
+  });
+
+  afterEach(() => {
     vi.unstubAllEnvs();
   });
 
