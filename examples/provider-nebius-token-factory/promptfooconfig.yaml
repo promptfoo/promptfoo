@@ -1,0 +1,33 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: Evaluate coding answers with Nebius Token Factory
+
+prompts:
+  - 'Write a concise {{language}} function that returns the {{n}}th Fibonacci number.'
+
+providers:
+  - id: openai:chat:moonshotai/Kimi-K2.7-Code
+    label: Nebius Token Factory - Kimi K2.7 Code
+    config:
+      apiBaseUrl: https://api.tokenfactory.nebius.com/v1
+      apiKey: '{{env.NEBIUS_API_KEY}}'
+      max_tokens: 512
+      temperature: 0
+
+tests:
+  - vars:
+      language: Python
+      n: 10
+    assert:
+      - type: contains
+        value: 'def '
+      - type: contains-any
+        value: ['55', 'fibonacci', 'Fibonacci']
+
+  - vars:
+      language: TypeScript
+      n: 12
+    assert:
+      - type: contains-any
+        value: ['function', '=>']
+      - type: contains-any
+        value: ['144', 'fibonacci', 'Fibonacci']
