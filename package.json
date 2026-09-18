@@ -111,7 +111,6 @@
     "prepare": "husky || exit 0"
   },
   "overrides": {
-    "@alcalzone/ansi-tokenize": "0.3.0",
     "uri-js": "npm:uri-js-replace",
     "chokidar": "5.0.0",
     "whatwg-url": "16.0.1",
@@ -276,6 +275,7 @@
     "yaml": "^2.9.0"
   },
   "optionalDependencies": {
+    "@alcalzone/ansi-tokenize": "0.3.0",
     "@anthropic-ai/claude-agent-sdk": "0.3.263",
     "@aws/bedrock-token-generator": "^1.1.0",
     "@aws-sdk/client-bedrock-agent-runtime": "^3.1045.0",
