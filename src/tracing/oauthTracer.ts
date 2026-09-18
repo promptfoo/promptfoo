@@ -133,8 +133,9 @@ function extractHttpAttributes(urlString: string, method: string): Record<string
       attributes[HttpAttributes.SERVER_PORT] = url.protocol === 'https:' ? 443 : 80;
     }
   } catch {
-    // If URL parsing fails, just set the full URL as-is (truncated)
-    attributes[HttpAttributes.URL_FULL] = urlString.slice(0, 256);
+    // If URL parsing fails, record a truncated value with any query string removed so a
+    // credential-bearing query cannot reach the exporter through the fallback path.
+    attributes[HttpAttributes.URL_FULL] = urlString.split('?')[0].slice(0, 256);
   }
 
   return attributes;
