@@ -417,6 +417,7 @@ async function runAssertionInternal({
   traceId,
   traceData,
   evaluationId,
+  claimStoredGradingUsage,
 }: {
   prompt?: string;
   provider?: ApiProvider;
@@ -429,6 +430,7 @@ async function runAssertionInternal({
   traceId?: string;
   traceData?: TraceData | null;
   evaluationId?: string;
+  claimStoredGradingUsage?: () => boolean;
 }): Promise<GradingResult> {
   // Use resolved vars if provided, otherwise fall back to test.vars
   const resolvedVars = vars || test.vars || {};
@@ -652,7 +654,7 @@ async function runAssertionInternal({
 
   // Check for redteam assertions first
   if (assertionParams.baseType.startsWith('promptfoo:redteam:')) {
-    return handleRedteam(assertionParams);
+    return handleRedteam(assertionParams, claimStoredGradingUsage);
   }
 
   const handler = ASSERTION_HANDLERS[assertionParams.baseType as keyof typeof ASSERTION_HANDLERS];
@@ -830,6 +832,17 @@ export async function runAssertions({
     ? 1
     : ASSERTIONS_MAX_CONCURRENCY;
 
+  // All assertions (including assertion sets) share one historical strategy cost.
+  // Keep ownership local to this run so replaying a saved response starts fresh.
+  let storedGradingUsageClaimed = false;
+  const claimStoredGradingUsage = () => {
+    if (storedGradingUsageClaimed) {
+      return false;
+    }
+    storedGradingUsageClaimed = true;
+    return true;
+  };
+
   await async.forEachOfLimit(asserts, concurrency, async ({ assertion, assertResult, index }) => {
     if (assertion.type.startsWith('select-') || assertion.type === 'max-score') {
       // Select-type and max-score assertions are handled separately because they depend on multiple outputs.
@@ -848,6 +861,7 @@ export async function runAssertions({
       traceId,
       traceData: preloadedTraceData,
       evaluationId,
+      claimStoredGradingUsage,
     });
 
     assertResult.addResult({

@@ -20,6 +20,7 @@ import {
   accumulateResponseTokenUsage,
   createEmptyTokenUsage,
 } from '../../util/tokenUsageUtils';
+import { withGradingUsage } from '../grading/storedResult';
 import {
   buildPromptInputDescriptions,
   materializeInputVariablesWithMetadata,
@@ -211,8 +212,10 @@ export async function runRedteamConversation({
   let bestResponse = '';
   let finalIteration = numIterations;
   let bestInjectVar: string | undefined = undefined;
+  let lastInjectVar: string | undefined;
   let targetPrompt: string | null = null;
   let storedGraderResult: GradingResult | undefined = undefined;
+  let bestGraderResult: GradingResult | undefined;
   let stopReason: StopReason = 'Max iterations reached';
 
   const sessionIds: string[] = [];
@@ -460,6 +463,7 @@ export async function runRedteamConversation({
       promptIdx: context?.promptIdx,
     });
     lastResponse = targetResponse;
+    lastInjectVar = finalInjectVar;
     accumulateResponseTokenUsage(totalTokenUsage, targetResponse);
     logger.debug('[Iterative] Raw target response', { response: targetResponse });
     if (targetResponse.error) {
@@ -626,7 +630,7 @@ export async function runRedteamConversation({
 
         const { grade, rubric } = await runRedteamGrader(
           grader,
-          newInjectVar,
+          finalInjectVar,
           targetResponse.output,
           iterationTest,
           gradingProvider,
@@ -635,10 +639,19 @@ export async function runRedteamConversation({
           undefined,
           gradingContext,
         );
-        storedGraderResult = accumulateGraderResult(storedGraderResult, {
-          ...grade,
-          assertion: buildGraderResultAssertion(grade.assertion, assertToUse, rubric),
-        });
+        storedGraderResult = accumulateGraderResult(
+          storedGraderResult,
+          {
+            ...grade,
+            assertion: buildGraderResultAssertion(grade.assertion, assertToUse, rubric),
+          },
+          {
+            prompt: finalInjectVar,
+            output: targetResponse.output,
+            pluginId: test.metadata?.pluginId,
+            assertion: assertToUse,
+          },
+        );
       }
     }
 
@@ -681,7 +694,8 @@ export async function runRedteamConversation({
       stopReason = 'Grader failed';
       finalIteration = i + 1;
       bestResponse = targetResponse.output;
-      bestInjectVar = newInjectVar;
+      bestInjectVar = finalInjectVar;
+      bestGraderResult = storedGraderResult;
       recordTurn(undefined, tracingOptions.includeInAttack ? computedTraceSummary : undefined);
       break;
     }
@@ -778,7 +792,8 @@ export async function runRedteamConversation({
       if (currentScore > highestScore) {
         highestScore = currentScore;
         bestResponse = targetResponse.output;
-        bestInjectVar = newInjectVar;
+        bestInjectVar = finalInjectVar;
+        bestGraderResult = storedGraderResult;
       }
 
       // Check if we should exit early (but don't break yet). A real failing grade already
@@ -848,15 +863,17 @@ export async function runRedteamConversation({
   }
 
   return {
-    output: bestResponse || lastResponse?.output || '',
+    output: bestInjectVar === undefined ? lastResponse?.output || '' : bestResponse,
     ...(lastResponse?.error ? { error: lastResponse.error } : {}),
-    prompt: bestInjectVar,
+    prompt: bestInjectVar ?? lastInjectVar,
     metadata: {
       finalIteration,
       highestScore,
       redteamHistory: previousOutputs,
-      redteamFinalPrompt: bestInjectVar,
-      storedGraderResult,
+      redteamFinalPrompt: bestInjectVar ?? lastInjectVar,
+      storedGraderResult: bestGraderResult
+        ? withGradingUsage(bestGraderResult, storedGraderResult?.tokensUsed)
+        : storedGraderResult,
       stopReason: stopReason,
       sessionIds,
       traceSnapshots:

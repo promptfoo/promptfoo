@@ -14,6 +14,7 @@ import {
   accumulateResponseTokenUsage,
   createEmptyTokenUsage,
 } from '../../../util/tokenUsageUtils';
+import { getTargetConversation } from '../../grading/storedResult';
 import { shouldGenerateRemote } from '../../remoteGeneration';
 import { remoteGenerationContextPayload } from '../../remoteGenerationContext';
 import {
@@ -325,6 +326,10 @@ export class CustomProvider implements ApiProvider {
 
     let lastFeedback = '';
     let lastResponse: TargetResponse = { output: '' };
+    let hasTargetResponse = false;
+    let lastAttemptError: string | undefined;
+    let lastResponseMessages: Message[] = [];
+    let lastFinalAttackPrompt: string | undefined;
     let evalFlag = false;
     let evalPercentage: number | null = null;
 
@@ -428,8 +433,21 @@ export class CustomProvider implements ApiProvider {
           context,
           options,
         );
+        if (transformResult?.error) {
+          lastAttemptError = transformResult.error;
+          if (transformResult.tokenUsage) {
+            accumulateAttackerTokenUsage(totalTokenUsage, transformResult);
+          }
+          continue;
+        }
         lastResponse = response;
+        hasTargetResponse = true;
+        lastResponseMessages = [...this.memory.getConversation(this.targetConversationId)];
         lastTransformResult = transformResult;
+        lastFinalAttackPrompt =
+          transformResult?.prompt ||
+          getLastMessageContent(lastResponseMessages, 'user') ||
+          attackPrompt;
         if (transformResult?.tokenUsage) {
           accumulateAttackerTokenUsage(totalTokenUsage, transformResult);
         }
@@ -491,6 +509,13 @@ export class CustomProvider implements ApiProvider {
               options,
             );
 
+          if (unblockingTransform?.error) {
+            if (unblockingTransform.tokenUsage) {
+              accumulateAttackerTokenUsage(totalTokenUsage, unblockingTransform);
+            }
+            continue;
+          }
+
           if (unblockingTransform?.tokenUsage) {
             accumulateAttackerTokenUsage(totalTokenUsage, unblockingTransform);
           }
@@ -499,6 +524,11 @@ export class CustomProvider implements ApiProvider {
           // Update lastResponse to the unblocking response and continue
           // Note: unblocking prompts don't use audio/image transforms
           lastResponse = unblockingResponse;
+          lastResponseMessages = [...this.memory.getConversation(this.targetConversationId)];
+          lastFinalAttackPrompt =
+            unblockingTransform?.prompt ||
+            getLastMessageContent(lastResponseMessages, 'user') ||
+            unblockingResult.unblockingPrompt;
           if (isConversationEndedResponse(lastResponse)) {
             logger.info('[Custom] Target ended conversation during unblocking', {
               round: roundNum,
@@ -569,11 +599,13 @@ export class CustomProvider implements ApiProvider {
           if (grader) {
             const gradingContext: RedteamGradingContext | undefined = {
               providerResponse: lastResponse,
+              conversationTranscript:
+                getTargetConversation(lastResponseMessages).conversationTranscript,
               ...(lastResponse.images?.length ? { imageOutputs: lastResponse.images } : {}),
             };
             const { grade, rubric } = await runRedteamGrader(
               grader,
-              attackPrompt,
+              lastFinalAttackPrompt,
               lastResponse.output,
               test,
               provider,
@@ -583,10 +615,20 @@ export class CustomProvider implements ApiProvider {
               gradingContext,
             );
             graderPassed = grade.pass;
-            storedGraderResult = accumulateGraderResult(storedGraderResult, {
-              ...grade,
-              assertion: buildGraderResultAssertion(grade.assertion, assertToUse, rubric),
-            });
+            storedGraderResult = accumulateGraderResult(
+              storedGraderResult,
+              {
+                ...grade,
+                assertion: buildGraderResultAssertion(grade.assertion, assertToUse, rubric),
+              },
+              {
+                prompt: lastFinalAttackPrompt,
+                output: lastResponse.output,
+                messages: lastResponseMessages,
+                pluginId: test.metadata?.pluginId,
+                assertion: assertToUse,
+              },
+            );
           }
         }
 
@@ -664,6 +706,7 @@ export class CustomProvider implements ApiProvider {
           logger.debug('[Custom] Operation aborted');
           throw error;
         }
+        lastAttemptError = error instanceof Error ? error.message : String(error);
         logger.error(`[Custom] Error Running custom step: ${error}`);
       }
     }
@@ -691,8 +734,8 @@ export class CustomProvider implements ApiProvider {
       // exitReason is already properly set - either from early break or 'Max rounds reached'
     }
 
-    const messages = this.memory.getConversation(this.targetConversationId);
-    const finalPrompt = getLastMessageContent(messages, 'user');
+    const messages = lastResponseMessages;
+    const finalPrompt = lastFinalAttackPrompt || getLastMessageContent(messages, 'user');
     return {
       output: lastResponse.output,
       prompt: finalPrompt,
@@ -712,7 +755,11 @@ export class CustomProvider implements ApiProvider {
       },
       tokenUsage: totalTokenUsage,
       guardrails: lastResponse?.guardrails,
-      ...(lastTargetError ? { error: lastTargetError } : {}),
+      ...(lastTargetError
+        ? { error: lastTargetError }
+        : hasTargetResponse
+          ? {}
+          : { error: lastAttemptError || 'No target request was completed.' }),
     };
   }
 
@@ -855,28 +902,34 @@ export class CustomProvider implements ApiProvider {
       [this.config.injectVar], // Skip template rendering for injection variable to prevent double-evaluation
     );
 
+    const pendingMessages: Message[] = [];
     try {
       const parsed = extractFirstJsonObject<Message[]>(renderedPrompt);
       // If successful, then load it directly into the chat history
       for (const message of parsed) {
         if (
           message.role === 'system' &&
-          this.memory.getConversation(this.targetConversationId).some((m) => m.role === 'system')
+          [...this.memory.getConversation(this.targetConversationId), ...pendingMessages].some(
+            (m) => m.role === 'system',
+          )
         ) {
           // No duplicate system messages
           continue;
         }
-        this.memory.addMessage(this.targetConversationId, message);
+        pendingMessages.push(message);
       }
     } catch {
       // Otherwise, just send the rendered prompt as a string
-      this.memory.addMessage(this.targetConversationId, {
+      pendingMessages.push({
         role: 'user',
         content: renderedPrompt,
       });
     }
 
-    const conversationHistory = this.memory.getConversation(this.targetConversationId);
+    const conversationHistory = [
+      ...this.memory.getConversation(this.targetConversationId),
+      ...pendingMessages,
+    ];
     let finalTargetPrompt = this.stateful ? renderedPrompt : JSON.stringify(conversationHistory);
 
     // ═══════════════════════════════════════════════════════════════════════
@@ -955,6 +1008,9 @@ export class CustomProvider implements ApiProvider {
     logger.debug(finalTargetPrompt);
 
     let targetResponse = await getTargetResponse(provider, finalTargetPrompt, context, options);
+    for (const message of pendingMessages) {
+      this.memory.addMessage(this.targetConversationId, message);
+    }
     targetResponse = await externalizeResponseForRedteamHistory(targetResponse, {
       evalId: context?.evaluationId,
       testIdx: context?.testIdx,

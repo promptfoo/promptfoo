@@ -978,6 +978,11 @@ describe('CloudConfig', () => {
     });
 
     it('should not overwrite an existing authHeaderName when none is provided', () => {
+      vi.mocked(readGlobalConfig).mockReturnValue({
+        id: 'test-id',
+        cloud: { authHeaderName: 'X-Saved-Auth' },
+      });
+      cloudConfigInstance = new CloudConfig();
       cloudConfigInstance.saveValidatedApiToken(
         'token',
         'https://test.api',
@@ -992,10 +997,10 @@ describe('CloudConfig', () => {
         true,
       );
 
-      const setAuthHeaderNameCalls = vi
-        .mocked(writeGlobalConfigPartial)
-        .mock.calls.filter((call) => call[0].cloud?.authHeaderName !== undefined);
-      expect(setAuthHeaderNameCalls).toHaveLength(0);
+      expect(cloudConfigInstance.getAuthHeaderName()).toBe('X-Saved-Auth');
+      expect(writeGlobalConfigPartial).toHaveBeenLastCalledWith({
+        cloud: expect.objectContaining({ authHeaderName: 'X-Saved-Auth' }),
+      });
     });
   });
 });
