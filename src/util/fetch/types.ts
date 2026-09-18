@@ -3,6 +3,14 @@
  */
 export interface FetchOptions extends RequestInit {
   /**
+   * Resolve default authentication headers immediately before each HTTP attempt, including
+   * retries. Explicit request headers take precedence (case-insensitively). The signal includes
+   * the request timeout. The callback is never forwarded to fetch or included in cache keys.
+   * Callers must bypass caching or supply an explicit, non-secret principal-scoped cache key.
+   */
+  getAuthHeaders?: (signal?: AbortSignal) => Promise<HeadersInit>;
+
+  /**
    * Whether to compress the request body using gzip
    */
   compress?: boolean;
