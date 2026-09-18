@@ -157,7 +157,11 @@ describe('testProviderConnectivity', () => {
 
     expect(result.success).toBe(true);
     expect(result.message).toBe('Test completed successfully');
-    expect(mockEvaluate).toHaveBeenCalled();
+    expect(mockEvaluate).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.anything(),
+      expect.objectContaining({ skipStrictAssertionValidation: true }),
+    );
   });
 
   it('should use custom prompt when provided', async () => {

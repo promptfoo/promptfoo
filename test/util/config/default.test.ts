@@ -1,10 +1,15 @@
 import path from 'path';
 
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { configCache, loadDefaultConfig } from '../../../src/util/config/default';
-import { maybeReadConfig } from '../../../src/util/config/load';
+import {
+  enforceUnknownConfigKeyDiagnosticsForConfig,
+  maybeReadConfig,
+} from '../../../src/util/config/load';
+import { setExplicitCliEnvPath } from '../../../src/util/env';
 
 vi.mock('../../../src/util/config/load', () => ({
+  enforceUnknownConfigKeyDiagnosticsForConfig: vi.fn(),
   maybeReadConfig: vi.fn(),
 }));
 
@@ -12,7 +17,13 @@ describe('loadDefaultConfig', () => {
   beforeEach(() => {
     vi.resetAllMocks();
     vi.spyOn(process, 'cwd').mockImplementation(() => '/test/path');
+    setExplicitCliEnvPath(undefined);
     configCache.clear();
+  });
+
+  afterEach(() => {
+    setExplicitCliEnvPath(undefined);
+    vi.restoreAllMocks();
   });
 
   it('should return empty config when no config file is found', async () => {
@@ -27,6 +38,7 @@ describe('loadDefaultConfig', () => {
     expect(maybeReadConfig).toHaveBeenNthCalledWith(
       1,
       path.normalize('/test/path/promptfooconfig.yaml'),
+      true,
     );
   });
 
@@ -55,10 +67,12 @@ describe('loadDefaultConfig', () => {
     expect(maybeReadConfig).toHaveBeenNthCalledWith(
       1,
       path.normalize('/test/path/promptfooconfig.yaml'),
+      true,
     );
     expect(maybeReadConfig).toHaveBeenNthCalledWith(
       2,
       path.normalize('/test/path/promptfooconfig.yml'),
+      true,
     );
   });
 
@@ -72,7 +86,10 @@ describe('loadDefaultConfig', () => {
       defaultConfig: mockConfig,
       defaultConfigPath: path.join(customDir, 'promptfooconfig.yaml'),
     });
-    expect(maybeReadConfig).toHaveBeenCalledWith(path.join(customDir, 'promptfooconfig.yaml'));
+    expect(maybeReadConfig).toHaveBeenCalledWith(
+      path.join(customDir, 'promptfooconfig.yaml'),
+      true,
+    );
   });
 
   it('should use custom config name when provided', async () => {
@@ -84,7 +101,7 @@ describe('loadDefaultConfig', () => {
       defaultConfig: mockConfig,
       defaultConfigPath: path.normalize('/test/path/redteam.yaml'),
     });
-    expect(maybeReadConfig).toHaveBeenCalledWith(path.normalize('/test/path/redteam.yaml'));
+    expect(maybeReadConfig).toHaveBeenCalledWith(path.normalize('/test/path/redteam.yaml'), true);
   });
 
   it('should use different caches for different config names', async () => {
@@ -145,6 +162,51 @@ describe('loadDefaultConfig', () => {
 
     expect(result1).toEqual(result2);
     expect(maybeReadConfig).toHaveBeenCalledTimes(1);
+  });
+
+  it('should enforce diagnostics on fresh and cached direct reads', async () => {
+    const mockConfig = { prompts: ['Cached config'], providers: [], tests: [] };
+    vi.mocked(maybeReadConfig).mockResolvedValueOnce(mockConfig);
+    const configPath = path.normalize('/test/path/promptfooconfig.yaml');
+    const explicitEnvPath = ['cli.env'];
+    setExplicitCliEnvPath(explicitEnvPath);
+
+    await loadDefaultConfig();
+    await loadDefaultConfig();
+
+    expect(enforceUnknownConfigKeyDiagnosticsForConfig).toHaveBeenCalledTimes(2);
+    expect(enforceUnknownConfigKeyDiagnosticsForConfig).toHaveBeenNthCalledWith(
+      1,
+      mockConfig,
+      configPath,
+      explicitEnvPath,
+      true,
+    );
+    expect(enforceUnknownConfigKeyDiagnosticsForConfig).toHaveBeenNthCalledWith(
+      2,
+      mockConfig,
+      configPath,
+      explicitEnvPath,
+      true,
+    );
+  });
+
+  it('should preserve diagnostics while deferring enforcement to config resolution', async () => {
+    const mockConfig = { prompts: ['Deferred config'], providers: [], tests: [] };
+    vi.mocked(maybeReadConfig).mockResolvedValueOnce(mockConfig);
+
+    await loadDefaultConfig(undefined, 'promptfooconfig', {
+      deferUnknownKeyValidation: true,
+    });
+    expect(enforceUnknownConfigKeyDiagnosticsForConfig).not.toHaveBeenCalled();
+
+    await loadDefaultConfig();
+    expect(enforceUnknownConfigKeyDiagnosticsForConfig).toHaveBeenCalledWith(
+      mockConfig,
+      path.normalize('/test/path/promptfooconfig.yaml'),
+      undefined,
+      true,
+    );
   });
 
   it('should handle errors when reading config files', async () => {

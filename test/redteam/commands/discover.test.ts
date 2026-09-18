@@ -43,6 +43,13 @@ describe('ArgsSchema', () => {
     expect(success).toBe(false);
     expect(error?.issues[0].message).toBe('Cannot specify both config and target!');
   });
+
+  it('preserves the common envPath option for precedence checks', () => {
+    expect(ArgsSchema.parse({ config: 'promptfooconfig.yaml', envPath: ['cli.env'] })).toEqual({
+      config: 'promptfooconfig.yaml',
+      envPath: ['cli.env'],
+    });
+  });
 });
 
 describe('resolveDiscoveryProviderContext', () => {
