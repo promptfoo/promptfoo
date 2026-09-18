@@ -117,10 +117,45 @@ path from the allowlist. Avoid adding paths unless the dependency is
 intentionally browser-safe. Allowlist entries are exact files, not directory
 roots.
 
+## Future Package Source Coverage
+
+Architecture checks scan `src/`, `packages/`, and every configured layer root.
+New package source files therefore fail as unclassified until their ownership is
+reviewed in `architecture/layers.json`. Classification alone never exempts their
+imports from leaf rules, allowed paths, forbidden dependencies, or edge baselines.
+Nested `node_modules`, declaration files, and `packages/**/dist` output are excluded;
+use `ignoredRoots` for other generated directories. Ignored roots may name a file
+or directory.
+
+When moving a layer into a private workspace, include its implementation root and
+its compatibility shims in that layer. Configure an exact source alias such as
+`"@promptfoo/contracts": "packages/contracts/src"` if it is used; exact package
+aliases take precedence over the broad `@promptfoo` source alias. These mappings
+are architecture-analysis inputs, not a replacement for compiler/bundler aliases
+or package export validation.
+
+The TypeScript coverage check treats tracked `packages/` TypeScript files and
+configured product roots outside the usual directories as root-owned by default. Separate package compiler projects must be explicitly
+referenced from the root `tsconfig.json` (solution references are traversed).
+The nearest referenced package project owns membership even when the root or a
+parent includes the same files; configurations in the same directory combine.
+Referenced package projects own only files below their own directory; a package
+project cannot excuse missing root-source coverage. Coverage checks verify tracked
+file membership and compiler-configuration validity, including root project
+references. They do not typecheck package
+source: wire each separate package's actual typecheck into CI as part of its
+extraction, alongside artifact consumer checks.
+
+```bash
+npm run check:typescript-coverage
+npm run tsc
+```
+
 ## Dependency Ownership Report
 
-The dependency report groups direct runtime imports by the private layer that
-currently uses them:
+The dependency report groups root runtime dependencies by the private layer that
+currently uses them. Source files beneath a separate `package.json` belong to
+that package and are excluded from the root report:
 
 ```bash
 npm run deps:ownership
