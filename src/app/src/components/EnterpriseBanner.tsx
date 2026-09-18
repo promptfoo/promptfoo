@@ -28,7 +28,9 @@ const EnterpriseBanner = ({ evalId, className }: EnterpriseBannerProps) => {
           return;
         }
 
-        const response = await callApi(`/results/share/check-domain?id=${evalId}`);
+        const response = await callApi(
+          `/results/share/check-domain?id=${encodeURIComponent(evalId)}`,
+        );
 
         if (response.ok) {
           const data = await response.json();

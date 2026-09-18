@@ -16,6 +16,7 @@ const mockUseResultsViewSettingsStore = vi.fn();
 // Mock dependencies
 vi.mock('@app/utils/api', () => ({
   callApi: vi.fn(),
+  getEvalApiPath: (evalId: string, suffix = '') => `/eval/${encodeURIComponent(evalId)}${suffix}`,
   fetchUserEmail: vi.fn().mockResolvedValue(null),
   updateEvalAuthor: vi.fn(),
 }));

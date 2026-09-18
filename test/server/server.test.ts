@@ -68,6 +68,7 @@ import {
 import { ServerError } from '../../src/server/errors';
 import { handleServerError, startServer } from '../../src/server/server';
 import { promptCacheService } from '../../src/server/services/promptCacheService';
+import { BrowserBehavior, openBrowser } from '../../src/util/server';
 
 describe('server', () => {
   describe('handleServerError', () => {
@@ -191,6 +192,17 @@ describe('server', () => {
       expect(signalHandlers.has('SIGTERM')).toBe(true);
 
       // Trigger shutdown to complete the promise
+      triggerSignal('SIGINT');
+      await serverPromise;
+    });
+
+    it('should pass the initial browser path to openBrowser', async () => {
+      const serverPromise = startServer(0, BrowserBehavior.OPEN, '/eval/eval-123');
+
+      await vi.waitFor(() =>
+        expect(openBrowser).toHaveBeenCalledWith(BrowserBehavior.OPEN, 0, '/eval/eval-123'),
+      );
+
       triggerSignal('SIGINT');
       await serverPromise;
     });
