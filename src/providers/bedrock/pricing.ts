@@ -368,7 +368,10 @@ const BEDROCK_REGION_PRICING: Record<string, Record<string, BedrockPricing>> = {
   'us-gov-west-1': US_GOV_PRICING,
 };
 
-function getBedrockPricing(normalizedModelId: string, region?: string): BedrockPricing | undefined {
+export function getBedrockPricing(
+  normalizedModelId: string,
+  region?: string,
+): BedrockPricing | undefined {
   if (normalizedModelId.includes('openai.gpt-oss-') && region) {
     const pricing = GPT_OSS_REGION_PRICING[region.toLowerCase()];
     if (!pricing) {

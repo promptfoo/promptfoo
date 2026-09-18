@@ -645,6 +645,23 @@ describe('Phase 5: Provider Instrumentation Validation', () => {
       expect(span.attributes[GenAIAttributes.RESPONSE_ID]).toBe('chatcmpl-abc123');
     });
 
+    it('should capture the Ollama finish reason end to end', async () => {
+      const { OllamaCompletionProvider } = await import('../../src/providers/ollama');
+      const { fetchWithCache } = await import('../../src/cache');
+      vi.mocked(fetchWithCache).mockResolvedValue({
+        data: '{"response":"Hi!","done":true,"done_reason":"length"}\n',
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+        headers: {},
+      } as any);
+
+      await new OllamaCompletionProvider('llama3.3').callApi('test prompt');
+
+      const span = memoryExporter.getFinishedSpans()[0];
+      expect(span.attributes[GenAIAttributes.RESPONSE_FINISH_REASONS]).toEqual(['length']);
+    });
+
     it('should capture finish reasons', async () => {
       await withGenAISpan(
         { system: 'openai', operationName: 'chat', model: 'gpt-4', providerId: 'openai:gpt-4' },
