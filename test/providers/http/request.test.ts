@@ -3,7 +3,6 @@ import './setup';
 
 import path from 'path';
 
-import { trace } from '@opentelemetry/api';
 import dedent from 'dedent';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { fetchWithCache } from '../../../src/cache';
@@ -1971,23 +1970,14 @@ describe('HttpProvider with token estimation', () => {
     expect(result.tokenUsage!.total).toBe(300);
   });
 
-  it('should preserve HTTP token usage cache details on tracing spans', async () => {
-    const spanAttributes: Record<string, unknown> = {};
-    const getTracerSpy = vi.spyOn(trace, 'getTracer').mockReturnValue({
-      startActiveSpan: (_name: string, _options: unknown, _context: unknown, callback: any) =>
-        callback({
-          setAttribute: (key: string, value: unknown) => {
-            spanAttributes[key] = value;
-          },
-          setStatus: vi.fn(),
-          recordException: vi.fn(),
-          end: vi.fn(),
-        }),
-    } as any);
+  it('should preserve cache-aware token usage details from transformResponse', async () => {
     const provider = new HttpProvider('http://test.com', {
       config: {
         method: 'POST',
         body: { prompt: '{{prompt}}' },
+        tokenEstimation: {
+          enabled: true,
+        },
         transformResponse: () => ({
           output: 'Test response',
           tokenUsage: {
@@ -2011,19 +2001,19 @@ describe('HttpProvider with token estimation', () => {
       cached: false,
     });
 
-    try {
-      const result = await provider.callApi('Test prompt');
+    const result = await provider.callApi('Test prompt');
 
-      expect(result.tokenUsage?.completionDetails).toEqual({
+    // Token estimation must not rebuild (and thereby drop) provider-reported cache details.
+    expect(result.tokenUsage).toEqual({
+      prompt: 100,
+      completion: 200,
+      cached: 40,
+      total: 300,
+      completionDetails: {
         cacheReadInputTokens: 40,
         cacheCreationInputTokens: 15,
-      });
-      expect(spanAttributes['gen_ai.usage.cached_tokens']).toBe(40);
-      expect(spanAttributes['gen_ai.usage.cache_read_input_tokens']).toBe(40);
-      expect(spanAttributes['gen_ai.usage.cache_creation_input_tokens']).toBe(15);
-    } finally {
-      getTracerSpy.mockRestore();
-    }
+      },
+    });
   });
 
   it('should work with raw request mode', async () => {
