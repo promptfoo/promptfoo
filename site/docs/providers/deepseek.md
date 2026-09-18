@@ -42,7 +42,11 @@ providers:
 
 :::note
 
-The current primary API model names are `deepseek-v4-flash` and `deepseek-v4-pro`. The legacy aliases `deepseek-chat` and `deepseek-reasoner` remain available until July 24, 2026 and currently map to the non-thinking and thinking modes of `deepseek-v4-flash`, respectively.
+The current primary API model names are `deepseek-v4-flash` and `deepseek-v4-pro`. `deepseek-chat`
+and `deepseek-reasoner` are legacy aliases that map to the non-thinking and thinking modes of
+`deepseek-v4-flash`. DeepSeek announced their retirement for 2026-07-24; check
+[DeepSeek's model documentation](https://api-docs.deepseek.com/quick_start/pricing) for whether
+they still resolve before relying on them. Prefer the `deepseek-v4-*` names in new configs.
 
 :::
 
@@ -59,19 +63,22 @@ The current primary API model names are `deepseek-v4-flash` and `deepseek-v4-pro
 - 1M context window, up to 384K output tokens
 - Input: $0.003625/1M (cache hit), $0.435/1M (cache miss)
 - Output: $0.87/1M
-- Promotional pricing is documented through May 31, 2026
+
+The rates above are the ones promptfoo uses to report per-result cost. They are a point-in-time
+snapshot — check [DeepSeek's pricing page](https://api-docs.deepseek.com/quick_start/pricing) for
+current rates, and override a moved rate with `inputCost`/`outputCost` (USD per token).
 
 ### Legacy aliases
 
 ### deepseek-chat
 
-- Legacy alias that currently maps to non-thinking `deepseek-v4-flash`
-- Scheduled for retirement on July 24, 2026
+- Legacy alias that maps to non-thinking `deepseek-v4-flash`
+- Announced for retirement on 2026-07-24; prefer `deepseek-v4-flash`
 
 ### deepseek-reasoner
 
-- Legacy alias that currently maps to thinking `deepseek-v4-flash`
-- Scheduled for retirement on July 24, 2026
+- Legacy alias that maps to thinking `deepseek-v4-flash`
+- Announced for retirement on 2026-07-24; prefer `deepseek-v4-pro`
 - Supports showing or hiding reasoning content through the `showThinking` parameter
 
 :::warning
@@ -90,7 +97,7 @@ providers:
     config:
       max_tokens: 8000
       showThinking: true # Include reasoning content in output (default)
-  - id: openai:o-1
+  - id: openai:o1
     config:
       temperature: 0.0
 

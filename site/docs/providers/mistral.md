@@ -616,12 +616,12 @@ Error: 429 Too Many Requests
 - Use smaller batch sizes
 - Consider upgrading your plan
 
-```yaml
-# Reduce concurrent requests
-providers:
-  - id: mistral:mistral-large-latest
-    config:
-      timeout: 30000 # Increase timeout
+The Mistral provider has no `timeout` config option. Request timeouts come from the
+`REQUEST_TIMEOUT_MS` environment variable (default 300000), and concurrency is controlled by the
+`--max-concurrency` flag:
+
+```bash
+REQUEST_TIMEOUT_MS=600000 promptfoo eval --max-concurrency 1
 ```
 
 #### Context Length Exceeded

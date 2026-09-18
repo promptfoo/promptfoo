@@ -319,7 +319,7 @@ Error: 401 Unauthorized
 
 - Verify your `LLAMA_API_KEY` environment variable is set
 - Check that your API key is valid at llama.developer.meta.com
-- Ensure you have access to the Llama API (currently in preview)
+- Ensure your account has access to the Llama API
 
 ### Rate Limiting
 
@@ -374,7 +374,7 @@ Meta Llama API has strong data commitments:
 
 ## Examples
 
-Check out the [examples directory](https://github.com/promptfoo/promptfoo/tree/main/examples/provider-llama-cpp) for:
+Check out the [examples directory](https://github.com/promptfoo/promptfoo/tree/main/examples) for:
 
 - **Basic chat**: Simple text generation
 - **Multimodal**: Image understanding tasks

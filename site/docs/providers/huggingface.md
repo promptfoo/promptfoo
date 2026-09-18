@@ -115,7 +115,7 @@ huggingface:token-classification:dslim/bert-base-NER
 
 Embeddings with sentence-transformers:
 
-```yaml
+```text
 # Sentence similarity
 huggingface:sentence-similarity:sentence-transformers/all-MiniLM-L6-v2
 
@@ -156,7 +156,7 @@ Supported environment variables:
 - `HF_TOKEN` - your HuggingFace API token (recommended)
 - `HF_API_TOKEN` - alternative name for your HuggingFace API token
 
-The provider can pass through configuration parameters to the API. See [HuggingFace Inference API documentation](https://huggingface.co/docs/api-inference/tasks/overview) for task-specific parameters.
+The provider can pass through configuration parameters to the API. See [HuggingFace Inference Providers API reference](https://huggingface.co/docs/inference-providers/tasks/index) for task-specific parameters.
 
 Here's an example of how this provider might appear in your promptfoo config:
 
