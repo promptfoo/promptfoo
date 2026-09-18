@@ -2,13 +2,14 @@
 sidebar_position: 31
 sidebar_label: Output Formats
 title: Output Formats - Results Export and Analysis
-description: Configure output formats for LLM evaluation results. Export to HTML, JSON, CSV, and YAML formats for analysis, reporting, and data processing.
+description: Configure output formats for LLM evaluation results. Export to HTML, PDF, JSON, CSV, and YAML formats for analysis, reporting, and data processing.
 keywords:
   [
     output formats,
     evaluation results,
     export options,
     HTML reports,
+    PDF reports,
     JSON export,
     CSV analysis,
     result visualization,
@@ -29,6 +30,9 @@ promptfoo eval
 
 # Save as HTML report
 promptfoo eval --output results.html
+
+# Generate a shareable PDF report
+promptfoo eval --output results.pdf
 
 # Export as JSON for further processing
 promptfoo eval --output results.json
@@ -58,6 +62,36 @@ promptfoo eval --output report.html
 - Shareable standalone file
 
 **Use when:** Presenting results to stakeholders or reviewing outputs visually.
+
+### PDF Report
+
+Generate a portable, print-ready version of the HTML report:
+
+```bash
+promptfoo eval --output report.pdf
+```
+
+PDF export renders the HTML report with Playwright's Chromium, which ships with promptfoo
+as an optional dependency and normally needs no setup. If you installed with
+`--no-optional`, or optional dependencies were otherwise skipped, install these packages in
+the project where you run promptfoo:
+
+```bash
+npm install playwright
+npx playwright install chromium
+```
+
+:::note
+
+The PDF contains the summary metrics, the variable columns, and the results table: status,
+score, named scores, output, reason, and error. The per-result detail behind **View detail**
+in the HTML report — the rendered prompt text, latency, cost, and token counts — is built
+on demand in the browser and is not included. Use `--output report.html` or the JSON export
+when you need those fields.
+
+:::
+
+**Use when:** Sharing results with other teams via email or chat as a single fixed-layout document.
 
 ### JSON Output
 
