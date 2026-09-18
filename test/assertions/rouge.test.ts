@@ -122,6 +122,130 @@ describe('handleRougeScore', () => {
     expect(result.reason).toBe('ROUGE-S score 1.00 is greater than or equal to threshold 0.75');
   });
 
+  // A metric that scores identical text below 1.0 is broken by definition. ROUGE-N
+  // uses clipped counts for this reason (see rouge.ts). ROUGE-L and ROUGE-S delegate
+  // to js-rouge, which deduplicated matches before counting them until 3.2.1: 3.2.0
+  // scores this sentence 0.83 on ROUGE-L and 0.93 on ROUGE-S. The ROUGE-L/S cases
+  // above cannot catch that because 'The Quick Brown Fox' has no repeated token.
+  describe.each([
+    ['rouge-n', 'ROUGE-N'],
+    ['rouge-l', 'ROUGE-L'],
+    ['rouge-s', 'ROUGE-S'],
+  ])('%s', (baseType, label) => {
+    it('scores identical text 1.0 even when a token repeats', () => {
+      const text = 'the cat sat on the mat';
+      const result = handleRougeScore(makeParams(text, text, { baseType }));
+
+      expect(result.score).toBe(1);
+      expect(result.pass).toBe(true);
+      expect(result.reason).toBe(`${label} score 1.00 is greater than or equal to threshold 0.75`);
+    });
+
+    it('scores disjoint text 0', () => {
+      const result = handleRougeScore(
+        makeParams('alpha beta gamma', 'delta epsilon zeta', { baseType }),
+      );
+
+      expect(result.score).toBe(0);
+      expect(result.pass).toBe(false);
+    });
+
+    it.each(['', ' ', '\n'])('scores blank output %j 0 instead of throwing', (blank) => {
+      const result = handleRougeScore(makeParams(blank, 'the cat sat', { baseType }));
+
+      expect(result.score).toBe(0);
+      expect(result.pass).toBe(false);
+    });
+
+    it.each(['', ' ', '\n'])('scores a blank reference %j 0 instead of throwing', (blank) => {
+      const result = handleRougeScore(makeParams('the cat sat', blank, { baseType }));
+
+      expect(result.score).toBe(0);
+      expect(result.pass).toBe(false);
+    });
+
+    it.each([
+      ['', ''],
+      [' ', '\n'],
+    ])('scores a blank output %j against a blank reference %j 0', (output, reference) => {
+      const result = handleRougeScore(makeParams(output, reference, { baseType }));
+
+      expect(result.score).toBe(0);
+      expect(result.pass).toBe(false);
+    });
+  });
+
+  // These pin the js-rouge 3.2.1 behaviour that rouge-l and rouge-s rely on. On
+  // js-rouge 3.2.0 all but the single-token ROUGE-L case fail: it scores the repeated
+  // texts 0.67 and 0.40, the mid-output period 1.00 (ROUGE-L) and 0.33 (ROUGE-S) and
+  // the ROUGE-S reorder 0.29, and it throws on the ROUGE-L reorder and on a single
+  // ROUGE-S token.
+  describe('js-rouge scoring', () => {
+    it.each([
+      ['rouge-l', 'the the cat'],
+      ['rouge-s', 'the the cat'],
+      ['rouge-l', 'a b a b a'],
+      ['rouge-s', 'a b a b a'],
+    ])('%s scores identical text %j 1.0', (baseType, text) => {
+      const result = handleRougeScore(makeParams(text, text, { baseType }));
+
+      expect(result.score).toBe(1);
+      expect(result.pass).toBe(true);
+    });
+
+    it.each([
+      // Tokens [hello, world, ., next] vs [hello, world, next]: the period after
+      // "world" is its own token, so "world" still matches.
+      // L: 3 matches, P 3/4, R 3/3 -> 6/7. S: 3 of 6 vs 3 of 3 skip-bigrams -> 2/3.
+      ['rouge-l', 6 / 7, true, 'ROUGE-L score 0.86 is greater than or equal to threshold 0.75'],
+      ['rouge-s', 2 / 3, false, 'ROUGE-S score 0.67 is less than threshold 0.75'],
+    ])(
+      '%s splits a mid-output period from the word before it',
+      (baseType, expected, pass, reason) => {
+        const result = handleRougeScore(
+          makeParams('hello world. next', 'hello world next', { baseType }),
+        );
+
+        expect(result.score).toBeCloseTo(expected, 12);
+        expect(result.pass).toBe(pass);
+        expect(result.reason).toBe(reason);
+      },
+    );
+
+    it('rouge-l is summary-level (ROUGE-Lsum): reordering whole sentences scores 1.0', () => {
+      // Each reference sentence is matched against every output sentence, so the
+      // order of the sentences does not matter.
+      const result = handleRougeScore(
+        makeParams('the cat sat. a dog ran.', 'a dog ran. the cat sat.', { baseType: 'rouge-l' }),
+      );
+
+      expect(result.score).toBe(1);
+      expect(result.pass).toBe(true);
+    });
+
+    it('rouge-s scores the same sentence reorder below 1.0', () => {
+      // Tokens [the, cat, sat, ., a, dog, ran, .] vs [a, dog, ran, ., the, cat, sat, .],
+      // 28 skip-bigrams each. Matching pairs: 3 within each sentence, plus 7 that
+      // involve a period (each word before a period once, and the period pair) -> 13.
+      const result = handleRougeScore(
+        makeParams('the cat sat. a dog ran.', 'a dog ran. the cat sat.', { baseType: 'rouge-s' }),
+      );
+
+      expect(result.score).toBeCloseTo(13 / 28, 12);
+      expect(result.pass).toBe(false);
+    });
+
+    it.each([
+      ['rouge-l', 1],
+      ['rouge-s', 0],
+    ])('%s scores a single identical token %d', (baseType, expected) => {
+      // A skip-bigram needs two tokens, so ROUGE-S has nothing to match.
+      const result = handleRougeScore(makeParams('hello', 'hello', { baseType }));
+
+      expect(result.score).toBe(expected);
+    });
+  });
+
   it('should throw if renderedValue is not a string', () => {
     expect(() =>
       handleRougeScore({
