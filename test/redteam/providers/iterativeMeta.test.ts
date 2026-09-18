@@ -419,6 +419,47 @@ describe('RedteamIterativeMetaProvider', () => {
   });
 
   describe('perTurnLayers configuration', () => {
+    it('grades the transformed target input', async () => {
+      const runtime = await import('../../../src/redteam/shared/runtimeTransform');
+      const transform = vi.spyOn(runtime, 'applyRuntimeTransforms').mockResolvedValue({
+        prompt: 'encoded target input',
+        originalPrompt: 'raw attack',
+      });
+      try {
+        const getResult = vi
+          .fn()
+          .mockResolvedValue({ grade: { pass: false, score: 0, reason: 'graded' } });
+        mockGetGraderById.mockReturnValue({ getResult });
+        const test = {
+          assert: [{ type: 'promptfoo:redteam:pii' }],
+          metadata: { pluginId: 'pii:social' },
+        } as AtomicTestCase;
+        const result = await runMetaAgentRedteam({
+          context: {
+            vars: { query: 'test' },
+            prompt: { raw: '{{query}}', label: 'test' },
+            originalProvider: mockTargetProvider,
+            test,
+          },
+          filters: undefined,
+          injectVar: 'query',
+          numIterations: 1,
+          options: undefined,
+          prompt: { raw: '{{query}}', label: 'test' },
+          agentProvider: mockAgentProvider,
+          gradingProvider: mockGradingProvider,
+          targetProvider: mockTargetProvider,
+          test,
+          vars: { query: 'test' },
+          perTurnLayers: ['base64'],
+        });
+        expect(getResult.mock.calls[0][0]).toBe('encoded target input');
+        expect(result.metadata.redteamFinalPrompt).toBe('encoded target input');
+      } finally {
+        transform.mockRestore();
+      }
+    });
+
     it('should accept perTurnLayers parameter (empty array for safe testing)', async () => {
       const result = await runMetaAgentRedteam({
         context: {

@@ -6,6 +6,7 @@ import {
   isSecretField,
   looksLikeSecret,
   REDACTED,
+  sanitizeObject,
   sanitizeUrlForLogging,
 } from '../../util/sanitizer';
 import { analyzeTemplateReference } from '../../util/templates';
@@ -128,6 +129,15 @@ function isCredentialName(name: string): boolean {
   return isSecretField(name) || CREDENTIAL_NAME.test(name);
 }
 
+function isCredentialHeader(name: string, value: string): boolean {
+  return (
+    isCredentialName(name) ||
+    /(?:^|[-_])auth(?:$|[-_])/i.test(name) ||
+    getUrlCredentials(value).length > 0 ||
+    sanitizeObject({ headers: { [name]: value } }).headers[name] === REDACTED
+  );
+}
+
 function addCredential(credentials: Set<string>, value: unknown): void {
   if (typeof value !== 'string') {
     return;
@@ -198,13 +208,14 @@ function splitUserinfo(apiUrl: string): { url: string; userinfo?: string } {
  * credential derived from it, and credential-named query parameters. Raw and decoded spellings
  * are both returned for redaction.
  */
-function getUrlCredentials(value: string): string[] {
-  if (!/^[a-z][a-z\d+.-]*:\/\//i.test(value)) {
+function getUrlCredentials(value: string, includeFragment = true): string[] {
+  const trimmed = value.trim();
+  if (!/^[a-z][a-z\d+.-]*:\/\//i.test(trimmed)) {
     return [];
   }
   let url: URL;
   try {
-    url = new URL(value);
+    url = new URL(trimmed);
   } catch {
     // A malformed credential-bearing URL can be echoed only as one opaque error value.
     return sanitizeUrlForLogging(value) === value ? [] : [value];
@@ -220,7 +231,8 @@ function getUrlCredentials(value: string): string[] {
       found.push(segment, decodeUrlComponent(segment));
     }
   }
-  for (const segment of url.search.slice(1).split(/[&;]/)) {
+  const parameterParts = includeFragment ? [url.search, url.hash] : [url.search];
+  for (const segment of parameterParts.flatMap((part) => part.slice(1).split(/[&;]/))) {
     const separator = segment.indexOf('=');
     const [param] = new URLSearchParams(segment);
     if (
@@ -727,17 +739,9 @@ export class OpenAiAgentsApiProvider extends OpenAiGenericProvider {
     const promptConfig = context?.prompt?.config;
     const endpointOverride =
       promptConfig?.apiBaseUrl !== undefined || promptConfig?.apiHost !== undefined;
-    const inheritedHeaders =
-      endpointOverride && promptConfig?.headers === undefined
-        ? Object.fromEntries(
-            Object.entries(this.config.headers ?? {}).filter(
-              ([name]) => !isCredentialName(name) && !/(?:^|[-_])auth(?:$|[-_])/i.test(name),
-            ),
-          )
-        : this.config.headers;
     const mergedConfig = {
       ...this.config,
-      ...(endpointOverride && { headers: inheritedHeaders }),
+      ...(endpointOverride && { headers: undefined }),
       ...(promptConfig?.apiBaseUrl !== undefined && { apiHost: undefined }),
       ...(promptConfig?.apiHost !== undefined && { apiBaseUrl: undefined }),
       ...(promptConfig?.apiKeyEnvar !== undefined && { apiKey: undefined }),
@@ -747,17 +751,64 @@ export class OpenAiAgentsApiProvider extends OpenAiGenericProvider {
     // Promptfoo can attach a live provider here; do not render its methods or state.
     delete mergedConfig.provider;
     let config = mergedConfig;
+    const removedHeaderCredentials = new Set<string>();
     try {
+      let removedInheritedHeaders = false;
       const vars = context?.vars;
       if (vars) {
         config = renderConfigTemplates(mergedConfig, vars, Object.keys(vars)) as AgentsApiOptions;
+      }
+      if (endpointOverride && this.config.headers) {
+        const replacesHeaders = promptConfig?.headers !== undefined;
+        const { hasHeaderCredential, hasCustomHeader } = scanRequestHeaders(
+          new Headers(config.headers),
+          new Set<string>(),
+        );
+        const hasReplacementCredential =
+          replacesHeaders &&
+          (config.apiKey || config.apiKeyEnvar || hasHeaderCredential || hasCustomHeader);
+        const safeHeaders: Record<string, string> = {};
+        for (const [name, originalValue] of Object.entries(this.config.headers)) {
+          let value = String(originalValue);
+          try {
+            if (vars) {
+              value = String(renderConfigTemplates(originalValue, vars, Object.keys(vars)));
+            }
+          } catch (error) {
+            if (!replacesHeaders && !isCredentialHeader(name, value)) {
+              throw error;
+            }
+          }
+          if (isCredentialHeader(name, value)) {
+            removedInheritedHeaders ||= !hasReplacementCredential && value.trim().length > 0;
+            addCredential(removedHeaderCredentials, value);
+            collectConfigCredentials(value, removedHeaderCredentials);
+          } else {
+            safeHeaders[name] = value;
+          }
+        }
+        if (!replacesHeaders) {
+          config.headers = safeHeaders;
+        }
       }
       // Keep request credentials and lifecycle settings isolated across concurrent calls.
       const callProvider = new OpenAiAgentsApiProvider(this.modelOverride, {
         config,
         env: this.env,
       });
+      if (removedInheritedHeaders && !callProvider.sendsToOpenAiApi()) {
+        const { hasCustomHeader } = scanRequestHeaders(
+          new Headers(callProvider.getOpenAiRequestHeaders()),
+          new Set<string>(),
+        );
+        if (!hasCustomHeader) {
+          callProvider.config.useDefaultApiKey = false;
+        }
+      }
       collectCallCredentials(this, callProvider.inheritedCredentials);
+      for (const credential of removedHeaderCredentials) {
+        callProvider.inheritedCredentials.add(credential);
+      }
       const spanContext = buildChatSpanContext({
         system: 'openai',
         model: callProvider.modelName,
@@ -777,7 +828,7 @@ export class OpenAiAgentsApiProvider extends OpenAiGenericProvider {
     } catch (error) {
       options?.abortSignal?.throwIfAborted();
       // Redact this call's own key, key variable, and base URL, including prompt-level overrides.
-      const credentials = new Set<string>();
+      const credentials = new Set<string>(removedHeaderCredentials);
       collectCallCredentials(this, credentials);
       for (const callConfig of new Set([mergedConfig, config])) {
         collectCallCredentials(
@@ -834,7 +885,7 @@ export class OpenAiAgentsApiProvider extends OpenAiGenericProvider {
     const credentials = new Set<string>(this.inheritedCredentials);
     collectCallCredentials(this, credentials);
     // Userinfo and credential query parameters authenticate a gateway just as headers do.
-    const hasUrlCredential = getUrlCredentials(this.getApiUrl()).length > 0;
+    const hasUrlCredential = getUrlCredentials(this.getApiUrl(), false).length > 0;
     const { hasHeaderCredential, hasCustomHeader } = scanRequestHeaders(headers, credentials);
     this.credentials = sortCredentials(credentials);
     // Only a credential-named header or URL credential replaces the API key requirement.
