@@ -424,6 +424,7 @@ const sidebars = {
                 'guides/evaluate-llm-temperature',
                 'guides/text-to-sql-evaluation',
                 'guides/sandboxed-code-evals',
+                'guides/evaluate-e2b',
                 'guides/hle-benchmark',
               ],
             },
