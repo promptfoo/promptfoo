@@ -15,7 +15,6 @@ export class JfrogMlChatCompletionProvider extends OpenAiChatCompletionProvider 
   constructor(modelName: string, providerOptions: JfrogMlProviderOptions) {
     super(modelName, {
       ...providerOptions,
-      genAIProviderName: 'jfrog',
       config: {
         ...providerOptions.config,
         apiKeyEnvar: 'QWAK_TOKEN',

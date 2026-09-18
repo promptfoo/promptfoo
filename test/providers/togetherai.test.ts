@@ -73,7 +73,6 @@ describe('createTogetherAiProvider', () => {
 
     // Verify that the OpenAI provider was called with the correct parameters
     expect(OpenAiChatCompletionProvider).toHaveBeenCalledWith('model-name', {
-      genAIProviderName: 'togetherai',
       config: {
         apiBaseUrl: 'https://api.together.xyz/v1',
         apiKeyEnvar: 'TOGETHER_API_KEY',
@@ -169,9 +168,7 @@ describe('createTogetherAiProvider', () => {
           config: expect.objectContaining({
             passthrough: expect.objectContaining({
               temperature: 0.7,
-              passthrough: {
-                custom_param: 'value',
-              },
+              custom_param: 'value',
             }),
           }),
         }),

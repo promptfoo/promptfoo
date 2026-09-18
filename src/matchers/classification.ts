@@ -1,12 +1,7 @@
-import { getAndCheckProvider } from './providers';
-import { fail } from './shared';
+import { callGradingProvider, getAndCheckProvider } from './providers';
+import { graderFail } from './shared';
 
-import type {
-  ApiClassificationProvider,
-  CallApiContextParams,
-  GradingConfig,
-  GradingResult,
-} from '../types/index';
+import type { ApiClassificationProvider, GradingConfig, GradingResult } from '../types/index';
 
 /**
  *
@@ -21,7 +16,6 @@ export async function matchesClassification(
   output: string,
   threshold: number,
   grading?: GradingConfig,
-  providerCallContext?: CallApiContextParams,
 ): Promise<Omit<GradingResult, 'assertion'>> {
   const finalProvider = (await getAndCheckProvider(
     'classification',
@@ -30,24 +24,21 @@ export async function matchesClassification(
     'classification check',
   )) as ApiClassificationProvider;
 
-  const resp =
-    providerCallContext === undefined
-      ? await finalProvider.callClassificationApi(output)
-      : await finalProvider.callClassificationApi(output, providerCallContext);
+  const resp = await callGradingProvider(finalProvider, 'classification', () =>
+    finalProvider.callClassificationApi(output),
+  );
 
   if (!resp.classification) {
-    return fail(resp.error || 'Unknown error fetching classification');
+    return graderFail(resp.error || 'Unknown error fetching classification');
   }
+  const scores = Object.values(resp.classification);
+  if (scores.length === 0) {
+    // No scores means there is no verdict, even when a specific label was requested.
+    return graderFail('No classification scores returned');
+  }
+
   let score: number;
   if (expected === undefined) {
-    const scores = Object.values(resp.classification);
-    if (scores.length === 0) {
-      return {
-        pass: false,
-        score: 0,
-        reason: 'No classification scores returned',
-      };
-    }
     score = Math.max(...scores);
   } else {
     score = resp.classification[expected] || 0;

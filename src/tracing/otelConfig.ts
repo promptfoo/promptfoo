@@ -28,36 +28,16 @@ export interface OtelConfig {
   debug: boolean;
 }
 
-function getOtlpHttpTracesEndpoint(): string | undefined {
-  const promptfooEndpoint = getEnvString('PROMPTFOO_OTEL_ENDPOINT');
-  if (promptfooEndpoint) {
-    return promptfooEndpoint;
-  }
-
-  const tracesEndpoint = getEnvString('OTEL_EXPORTER_OTLP_TRACES_ENDPOINT');
-  if (tracesEndpoint) {
-    return tracesEndpoint;
-  }
-
-  const baseEndpoint = getEnvString('OTEL_EXPORTER_OTLP_ENDPOINT');
-  if (!baseEndpoint || baseEndpoint.replace(/\/$/, '').endsWith('/v1/traces')) {
-    return baseEndpoint || undefined;
-  }
-  return `${baseEndpoint.replace(/\/$/, '')}/v1/traces`;
-}
-
 /**
  * Get OTEL configuration from environment variables.
  */
 export function getOtelConfigFromEnv(): OtelConfig {
-  const endpoint = getOtlpHttpTracesEndpoint();
+  const endpoint =
+    getEnvString('PROMPTFOO_OTEL_ENDPOINT') || getEnvString('OTEL_EXPORTER_OTLP_ENDPOINT');
 
   return {
     enabled: getEnvBool('PROMPTFOO_OTEL_ENABLED', false),
-    serviceName:
-      getEnvString('PROMPTFOO_OTEL_SERVICE_NAME') ||
-      getEnvString('OTEL_SERVICE_NAME') ||
-      'promptfoo',
+    serviceName: getEnvString('PROMPTFOO_OTEL_SERVICE_NAME', 'promptfoo'),
     endpoint: endpoint || undefined,
     localExport: getEnvBool('PROMPTFOO_OTEL_LOCAL_EXPORT', true),
     debug: getEnvBool('PROMPTFOO_OTEL_DEBUG', false),
@@ -103,14 +83,11 @@ export function mergeOtelConfigs(
  * Get default OTEL configuration with tracing enabled.
  * Used when tracing is enabled via test metadata but no explicit config provided.
  */
-export function getDefaultOtelConfig(config?: Record<string, unknown>): OtelConfig {
+export function getDefaultOtelConfig(): OtelConfig {
   const envConfig = getOtelConfigFromEnv();
-  const mergedConfig = config
-    ? mergeOtelConfigs(envConfig, getOtelConfigFromYaml(config))
-    : envConfig;
   // Enable tracing by default when this is called (since we've determined tracing should be on)
   return {
-    ...mergedConfig,
+    ...envConfig,
     enabled: true,
   };
 }

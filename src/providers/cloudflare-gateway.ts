@@ -8,7 +8,7 @@
  *
  * Usage:
  *   cloudflare-gateway:openai:gpt-4o
- *   cloudflare-gateway:anthropic:claude-sonnet-4-20250514
+ *   cloudflare-gateway:anthropic:claude-sonnet-4-6
  *   cloudflare-gateway:groq:llama-3.3-70b-versatile
  *
  * @see https://developers.cloudflare.com/ai-gateway/
@@ -16,8 +16,10 @@
 import { getEnvString } from '../envars';
 import logger from '../logger';
 import invariant from '../util/invariant';
+import { buildIsolatedAnthropicClientOptions } from './anthropic/generic';
 import { AnthropicMessagesProvider } from './anthropic/messages';
 import { OpenAiChatCompletionProvider } from './openai/chat';
+import type { ClientOptions } from '@anthropic-ai/sdk';
 
 import type { EnvOverrides } from '../types/env';
 import type { ApiProvider, ProviderOptions } from '../types/index';
@@ -88,20 +90,6 @@ const PROVIDER_CONFIGS: Record<string, GatewayProviderConfig> = {
   huggingface: { apiKeyEnvar: 'HUGGINGFACE_API_KEY' },
   replicate: { apiKeyEnvar: 'REPLICATE_API_KEY' },
   grok: { apiKeyEnvar: 'XAI_API_KEY' },
-};
-
-const GEN_AI_PROVIDER_NAMES: Record<string, string> = {
-  openai: 'openai',
-  groq: 'groq',
-  'perplexity-ai': 'perplexity',
-  'google-ai-studio': 'gcp.gemini',
-  mistral: 'mistral_ai',
-  cohere: 'cohere',
-  'azure-openai': 'azure.ai.openai',
-  'workers-ai': 'cloudflare-ai',
-  huggingface: 'huggingface',
-  replicate: 'replicate',
-  grok: 'x_ai',
 };
 
 /**
@@ -232,6 +220,11 @@ function buildGatewayUrl(
     return `${baseUrl}/azure-openai/${resourceName}/${deploymentName}`;
   }
 
+  // Mistral's native gateway proxy retains the upstream /v1 path.
+  if (provider === 'mistral') {
+    return `${baseUrl}/mistral/v1`;
+  }
+
   if (provider === 'workers-ai') {
     invariant(modelName, 'Workers AI requires a model name (e.g., @cf/meta/llama-3.1-8b-instruct)');
     return `${baseUrl}/workers-ai/${modelName}`;
@@ -279,6 +272,10 @@ function getPassthroughConfig(
  */
 export class CloudflareGatewayOpenAiProvider extends OpenAiChatCompletionProvider {
   private underlyingProvider: string;
+
+  protected override getGenAISystem(): string {
+    return this.underlyingProvider;
+  }
 
   constructor(
     underlyingProvider: string,
@@ -340,7 +337,6 @@ export class CloudflareGatewayOpenAiProvider extends OpenAiChatCompletionProvide
 
     super(modelName, {
       ...providerOptions,
-      genAIProviderName: GEN_AI_PROVIDER_NAMES[underlyingProvider] ?? underlyingProvider,
       config,
     });
 
@@ -433,6 +429,19 @@ export class CloudflareGatewayAnthropicProvider extends AnthropicMessagesProvide
       hasApiKey: !!providerOptions.config?.apiKey,
       hasCfAigToken: !!cfAigToken,
     });
+  }
+
+  protected override buildAnthropicClientOptions(options: ClientOptions): ClientOptions {
+    return buildIsolatedAnthropicClientOptions(options, this.env, this.apiKey);
+  }
+
+  protected override hasCustomHeaders(): boolean {
+    return false;
+  }
+
+  protected override allowsClaudeGenerationFallback(): boolean {
+    // The dedicated Anthropic gateway forwards canonical model IDs to Anthropic unchanged.
+    return true;
   }
 
   id(): string {

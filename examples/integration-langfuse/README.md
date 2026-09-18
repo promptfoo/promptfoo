@@ -16,7 +16,7 @@ Labels allow you to:
 1. **Install dependencies:**
 
    ```bash
-   npm install langfuse
+   npm install @langfuse/client
    ```
 
 2. **Set environment variables:**

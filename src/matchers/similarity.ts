@@ -2,7 +2,12 @@ import cliState from '../cliState';
 import { getDefaultProviders } from '../providers/defaults';
 import { doRemoteGrading } from '../remoteGrading';
 import { accumulateTokenUsage } from '../util/tokenUsageUtils';
-import { getAndCheckProvider, getRemoteGradingContext, shouldUseRemoteGrading } from './providers';
+import {
+  callGradingProvider,
+  getAndCheckProvider,
+  getRemoteGradingContext,
+  shouldUseRemoteGrading,
+} from './providers';
 import {
   cosineSimilarity,
   dotProduct,
@@ -14,7 +19,6 @@ import {
 import type {
   ApiEmbeddingProvider,
   ApiSimilarityProvider,
-  CallApiContextParams,
   GradingConfig,
   GradingResult,
   TokenUsage,
@@ -103,10 +107,11 @@ async function calculateProviderSimilarity(
   output: string,
   metric: SimilarityMetric,
   tokensUsed: TokenUsage,
-  providerCallContext?: CallApiContextParams,
 ): Promise<number | Omit<GradingResult, 'assertion'>> {
   if (metric === 'cosine' && 'callSimilarityApi' in finalProvider) {
-    const similarityResp = await finalProvider.callSimilarityApi(expected, output);
+    const similarityResp = await callGradingProvider(finalProvider, 'similarity', () =>
+      finalProvider.callSimilarityApi(expected, output),
+    );
     accumulateTokenUsage(tokensUsed, similarityResp.tokenUsage);
     if (similarityResp.error) {
       return fail(similarityResp.error, tokensUsed);
@@ -132,13 +137,19 @@ async function calculateProviderSimilarity(
     throw new Error('Provider must implement callSimilarityApi or callEmbeddingApi');
   }
 
-  const callEmbedding = (text: string) =>
-    providerCallContext === undefined
-      ? callEmbeddingApi.call(finalProvider, text)
-      : callEmbeddingApi.call(finalProvider, text, providerCallContext);
   const [expectedEmbedding, outputEmbedding] = await Promise.all([
-    callEmbedding(expected),
-    callEmbedding(output),
+    callGradingProvider(
+      finalProvider,
+      'similarity.embedding',
+      () => callEmbeddingApi.call(finalProvider, expected),
+      { operationName: 'embeddings' },
+    ),
+    callGradingProvider(
+      finalProvider,
+      'similarity.embedding',
+      () => callEmbeddingApi.call(finalProvider, output),
+      { operationName: 'embeddings' },
+    ),
   ]);
 
   const mergedUsage = normalizeMatcherTokenUsage(undefined);
@@ -172,7 +183,6 @@ export async function matchesSimilarity(
   inverse: boolean = false,
   grading?: GradingConfig,
   metric: SimilarityMetric = 'cosine',
-  providerCallContext?: CallApiContextParams,
 ): Promise<Omit<GradingResult, 'assertion'>> {
   if (
     metric === 'cosine' &&
@@ -208,7 +218,6 @@ export async function matchesSimilarity(
     output,
     metric,
     tokensUsed,
-    providerCallContext,
   );
 
   if (typeof similarity !== 'number') {

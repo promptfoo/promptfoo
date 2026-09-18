@@ -23,7 +23,6 @@ export class ClouderaAiChatCompletionProvider extends OpenAiChatCompletionProvid
 
     super(modelName, {
       ...providerOptions,
-      genAIProviderName: 'cloudera',
       config: {
         ...providerOptions.config,
         apiKeyEnvar: 'CDP_TOKEN',

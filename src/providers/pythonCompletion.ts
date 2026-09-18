@@ -30,26 +30,6 @@ interface PythonProviderConfig {
 }
 
 type PythonApiType = 'call_api' | 'call_embedding_api' | 'call_classification_api';
-const TRACE_CACHED_RESULT_FUNCTION = '__promptfoo_trace_cached_result';
-
-function isPythonOtelEnabled(): boolean {
-  return ['true', '1', 'yes'].includes(
-    (process.env.PROMPTFOO_ENABLE_OTEL ?? '').trim().toLowerCase(),
-  );
-}
-
-function buildPythonTraceContext(
-  apiType: PythonApiType,
-  sanitizedContext: CallApiContextParams | undefined,
-) {
-  return {
-    __promptfooApiType: apiType,
-    ...(sanitizedContext?.traceparent && { traceparent: sanitizedContext.traceparent }),
-    ...(sanitizedContext?.tracestate && { tracestate: sanitizedContext.tracestate }),
-    ...(sanitizedContext?.evaluationId && { evaluationId: sanitizedContext.evaluationId }),
-    ...(sanitizedContext?.testCaseId && { testCaseId: sanitizedContext.testCaseId }),
-  };
-}
 
 function buildPythonScriptArgs(
   apiType: PythonApiType,
@@ -57,15 +37,9 @@ function buildPythonScriptArgs(
   optionsWithProcessedConfig: ProviderOptions,
   sanitizedContext: CallApiContextParams | undefined,
 ) {
-  if (apiType === 'call_api') {
-    return [prompt, optionsWithProcessedConfig, sanitizedContext];
-  }
-
-  // The wrapper consumes this internal marker and removes the third argument
-  // before invoking the user's two-argument embedding/classification function.
-  // Keeping trace context out-of-band from the user callback preserves the
-  // existing Python provider contract while enabling child-span propagation.
-  return [prompt, optionsWithProcessedConfig, buildPythonTraceContext(apiType, sanitizedContext)];
+  return apiType === 'call_api'
+    ? [prompt, optionsWithProcessedConfig, sanitizedContext]
+    : [prompt, optionsWithProcessedConfig];
 }
 
 function hasPythonResultProperty(
@@ -357,7 +331,7 @@ export class PythonProvider implements ApiProvider {
     // Create cache key including the function name to ensure different functions don't share caches
     const cacheKey = `python:${this.scriptPath}:${this.functionName || 'default'}:${apiType}:${fileHash}:${prompt}:${JSON.stringify(
       this.options,
-    )}:${JSON.stringify(apiType === 'call_api' ? context?.vars : undefined)}`;
+    )}:${JSON.stringify(context?.vars)}`;
     logger.debug(`PythonProvider cache key: ${cacheKey}`);
 
     const cache = await getCache();
@@ -370,14 +344,6 @@ export class PythonProvider implements ApiProvider {
       logger.debug(`PythonProvider cache hit: ${Boolean(cachedResult)}`);
     }
 
-    const optionsWithProcessedConfig = {
-      ...this.options,
-      config: {
-        ...this.options?.config,
-        ...this.config,
-      },
-    };
-
     if (cachedResult) {
       logger.debug(`Returning cached ${apiType} result for script ${absPath}`);
       const parsedResult = JSON.parse(cachedResult as string);
@@ -387,24 +353,19 @@ export class PythonProvider implements ApiProvider {
       );
 
       // IMPORTANT: Set cached flag to true so evaluator recognizes this as cached
-      const result = applyCachedCallApiMetadata(apiType, parsedResult);
-      if (context?.traceparent && isPythonOtelEnabled()) {
-        const sanitizedContext = sanitizeScriptContext('PythonProvider', context);
-        const traceArgs = [
-          prompt,
-          optionsWithProcessedConfig,
-          { ...buildPythonTraceContext(apiType, sanitizedContext), __promptfooCached: true },
-          result,
-        ];
-        try {
-          return await this.pool!.execute(TRACE_CACHED_RESULT_FUNCTION, traceArgs);
-        } catch (error) {
-          logger.warn(`PythonProvider could not trace cached ${apiType} result`, { error });
-        }
-      }
-      return result;
+      return applyCachedCallApiMetadata(apiType, parsedResult);
     } else {
       const sanitizedContext = sanitizeScriptContext('PythonProvider', context);
+
+      // Create a new options object with processed file references included in the config
+      // This ensures any file:// references are replaced with their actual content
+      const optionsWithProcessedConfig = {
+        ...this.options,
+        config: {
+          ...this.options?.config,
+          ...this.config, // Merge in the processed config containing resolved file references
+        },
+      };
 
       const args = buildPythonScriptArgs(
         apiType,
@@ -447,24 +408,18 @@ export class PythonProvider implements ApiProvider {
     return this.executePythonScript(prompt, context, 'call_api');
   }
 
-  async callEmbeddingApi(
-    prompt: string,
-    context?: CallApiContextParams,
-  ): Promise<ProviderEmbeddingResponse> {
+  async callEmbeddingApi(prompt: string): Promise<ProviderEmbeddingResponse> {
     if (!this.isInitialized) {
       await this.initialize();
     }
-    return this.executePythonScript(prompt, context, 'call_embedding_api');
+    return this.executePythonScript(prompt, undefined, 'call_embedding_api');
   }
 
-  async callClassificationApi(
-    prompt: string,
-    context?: CallApiContextParams,
-  ): Promise<ProviderClassificationResponse> {
+  async callClassificationApi(prompt: string): Promise<ProviderClassificationResponse> {
     if (!this.isInitialized) {
       await this.initialize();
     }
-    return this.executePythonScript(prompt, context, 'call_classification_api');
+    return this.executePythonScript(prompt, undefined, 'call_classification_api');
   }
 
   async shutdown(): Promise<void> {

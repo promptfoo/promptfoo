@@ -195,9 +195,19 @@ export OTEL_EXPORTER_OTLP_HEADERS="api-key=your-key"
 export PROMPTFOO_TRACING_ENABLED=true
 ```
 
-## Send Traces to External Collectors
+## Forward to External Collectors
 
-Promptfoo's built-in receiver stores spans from this example locally; it does not relay them. To retain spans in Promptfoo and also send them to Jaeger, Honeycomb, or another backend, configure the instrumented provider with multiple exporters or use an OpenTelemetry Collector configured to export to both destinations.
+Send traces to Jaeger, Honeycomb, or other OTLP-compatible backends:
+
+```yaml
+tracing:
+  enabled: true
+  forwarding:
+    enabled: true
+    endpoint: 'http://jaeger:4318'
+    headers:
+      'api-key': '${JAEGER_API_KEY}'
+```
 
 ## Troubleshooting
 
@@ -226,7 +236,7 @@ This example uses OpenTelemetry v2.x packages:
 | Package                                   | Version  | Purpose                  |
 | ----------------------------------------- | -------- | ------------------------ |
 | `@opentelemetry/api`                      | ^1.9.0   | Core tracing API         |
-| `@opentelemetry/sdk-trace-node`           | ^2.0.0   | Node.js tracer provider  |
-| `@opentelemetry/exporter-trace-otlp-http` | ^0.200.0 | OTLP HTTP exporter       |
-| `@opentelemetry/resources`                | ^2.0.0   | Resource attributes      |
-| `@opentelemetry/semantic-conventions`     | ^1.28.0  | Standard attribute names |
+| `@opentelemetry/sdk-trace-node`           | ^2.5.0   | Node.js tracer provider  |
+| `@opentelemetry/exporter-trace-otlp-http` | ^0.222.0 | OTLP HTTP exporter       |
+| `@opentelemetry/resources`                | ^2.5.0   | Resource attributes      |
+| `@opentelemetry/semantic-conventions`     | ^1.39.0  | Standard attribute names |

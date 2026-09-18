@@ -1,4 +1,5 @@
 import { matchesClassification } from '../matchers/classification';
+import { isGraderFailure } from '../matchers/llmGrading';
 import invariant from '../util/invariant';
 
 import type { AssertionParams, GradingResult } from '../types/index';
@@ -9,7 +10,6 @@ export async function handleClassifier({
   outputString,
   test,
   inverse,
-  providerCallContext,
 }: AssertionParams): Promise<GradingResult> {
   invariant(
     typeof renderedValue === 'string' || typeof renderedValue === 'undefined',
@@ -21,8 +21,16 @@ export async function handleClassifier({
     outputString,
     (assertion.threshold as number) ?? 1,
     test.options,
-    providerCallContext,
   );
+
+  if (isGraderFailure(classificationResult)) {
+    // A broken grader is not evidence the criterion was or was not met; never
+    // invert a transport/parse failure into a pass.
+    return {
+      assertion,
+      ...classificationResult,
+    };
+  }
 
   if (inverse) {
     classificationResult.pass = !classificationResult.pass;

@@ -57,12 +57,7 @@ describe('handleClassifier', () => {
   });
 
   it('passes rendered values, thresholds, and test options to the classifier matcher', async () => {
-    const providerCallContext = {
-      prompt: { raw: 'model output', label: 'classifier' },
-      vars: {},
-      traceparent: '00-00000000000000000000000000000001-0000000000000001-01',
-    };
-    const params = createParams({ providerCallContext });
+    const params = createParams();
 
     await expect(handleClassifier(params)).resolves.toEqual({
       assertion: params.assertion,
@@ -76,7 +71,6 @@ describe('handleClassifier', () => {
       'model output',
       0.7,
       params.test.options,
-      providerCallContext,
     );
   });
 
@@ -107,7 +101,6 @@ describe('handleClassifier', () => {
       'model output',
       1,
       params.test.options,
-      undefined,
     );
   });
 
@@ -121,4 +114,35 @@ describe('handleClassifier', () => {
     );
     expect(mockedMatchesClassification).not.toHaveBeenCalled();
   });
+
+  it.each([false, true])(
+    'preserves the full grader failure result (inverse=%s)',
+    async (inverse) => {
+      mockedMatchesClassification.mockResolvedValue({
+        pass: false,
+        score: 0,
+        reason: 'Unknown error fetching classification',
+        tokensUsed: { total: 5, prompt: 3, completion: 2 },
+        metadata: { graderError: true },
+      });
+      const params = createParams({
+        assertion: {
+          type: inverse ? 'not-classifier' : 'classifier',
+          value: 'harmful',
+          threshold: 0.5,
+        },
+        renderedValue: 'harmful',
+        inverse,
+      });
+
+      await expect(handleClassifier(params)).resolves.toEqual({
+        assertion: params.assertion,
+        pass: false,
+        score: 0,
+        reason: 'Unknown error fetching classification',
+        tokensUsed: { total: 5, prompt: 3, completion: 2 },
+        metadata: { graderError: true },
+      });
+    },
+  );
 });

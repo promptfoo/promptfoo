@@ -482,7 +482,6 @@ describe('handleSimilar', () => {
       false,
       expect.any(Object),
       'dot_product',
-      undefined,
     );
   });
 
@@ -530,17 +529,11 @@ describe('handleSimilar', () => {
       false,
       expect.any(Object),
       'euclidean',
-      undefined,
     );
   });
 
   it('should default to cosine metric when not specified', async () => {
     const mockMatchesSimilarity = vi.mocked(matchesSimilarity);
-    const providerCallContext = {
-      prompt: { raw: 'test prompt', label: 'similar' },
-      vars: {},
-      traceparent: '00-00000000000000000000000000000001-0000000000000001-01',
-    };
 
     await handleSimilar({
       assertion: {
@@ -573,7 +566,6 @@ describe('handleSimilar', () => {
       },
       output: 'hello world',
       providerResponse: { output: 'hello world' },
-      providerCallContext,
     });
 
     // Verify that matchesSimilarity was called with cosine metric (default)
@@ -584,7 +576,6 @@ describe('handleSimilar', () => {
       false,
       expect.any(Object),
       'cosine',
-      providerCallContext,
     );
   });
 });

@@ -20,6 +20,14 @@ type EnvVars = {
   //=========================================================================
   PROMPTFOO_CACHE_ENABLED?: boolean;
   PROMPTFOO_DISABLE_AJV_STRICT_MODE?: boolean;
+  /**
+   * Disables the path-traversal guard applied to `file://` callback
+   * references (e.g. `functionToolCallbacks`). When unset (default), callback
+   * paths must resolve inside the config's basePath. Setting this to `true`
+   * restores the legacy unguarded behavior — NOT recommended outside of
+   * legacy compatibility scenarios.
+   */
+  PROMPTFOO_DISABLE_CALLBACK_PATH_GUARD?: boolean;
   PROMPTFOO_DISABLE_CONVERSATION_VAR?: boolean;
   /** Disable formula-injection escaping of exported eval/redteam result CSVs. */
   PROMPTFOO_DISABLE_CSV_FORMULA_ESCAPING?: boolean;
@@ -58,6 +66,8 @@ type EnvVars = {
   PROMPTFOO_NO_TESTCASE_ASSERT_WARNING?: boolean;
   PROMPTFOO_PYTHON_DEBUG_ENABLED?: boolean;
   PROMPTFOO_RETRY_5XX?: boolean;
+  PROMPTFOO_OFFICIAL_DOCKER_IMAGE?: boolean;
+  PROMPTFOO_RUNNING_IN_DOCKER?: boolean;
   PROMPTFOO_SELF_HOSTED?: boolean;
   PROMPTFOO_SHORT_CIRCUIT_TEST_FAILURES?: boolean;
   PROMPTFOO_STRICT_FILES?: boolean;
@@ -97,21 +107,6 @@ type EnvVars = {
    * Standard OTEL environment variable for OTLP endpoint.
    */
   OTEL_EXPORTER_OTLP_ENDPOINT?: string;
-  /**
-   * Standard signal-specific OTLP/HTTP traces endpoint.
-   */
-  OTEL_EXPORTER_OTLP_TRACES_ENDPOINT?: string;
-  /**
-   * Standard OTEL service name, used when the Promptfoo-specific override is unset.
-   */
-  OTEL_SERVICE_NAME?: string;
-  /**
-   * Standard OTEL opt-in for semantic convention stability. When this includes
-   * "gen_ai_latest_experimental", built-in provider spans use the latest Gen AI
-   * convention (operation names text_completion/embeddings).
-   * When unset, legacy names (completion, embedding) are emitted.
-   */
-  OTEL_SEMCONV_STABILITY_OPT_IN?: string;
 
   //=========================================================================
   // promptfoo configuration options
@@ -124,6 +119,7 @@ type EnvVars = {
   PROMPTFOO_CACHE_TTL?: number;
   PROMPTFOO_CACHE_TYPE?: 'memory' | 'disk';
   PROMPTFOO_CLOUD_API_URL?: string;
+  PROMPTFOO_CLOUD_AUTH_HEADER?: string;
   PROMPTFOO_CONFIG_DIR?: string;
   PROMPTFOO_CSV_DELIMITER?: string;
   PROMPTFOO_CSV_STRICT?: boolean;
@@ -257,6 +253,9 @@ type EnvVars = {
 
   // Anthropic
   ANTHROPIC_API_KEY?: string;
+  // Extra headers the Anthropic SDK attaches to every request
+  // (newline-separated `Name: value` lines).
+  ANTHROPIC_CUSTOM_HEADERS?: string;
   ANTHROPIC_MAX_TOKENS?: number;
   ANTHROPIC_STOP?: string;
   ANTHROPIC_TEMPERATURE?: number;
@@ -265,6 +264,7 @@ type EnvVars = {
   ATLASCLOUD_API_KEY?: string;
 
   // AWS Bedrock
+  AWS_ACCESS_KEY_ID?: string;
   AWS_BEARER_TOKEN_BEDROCK?: string;
   AWS_BEDROCK_FREQUENCY_PENALTY?: string;
   AWS_BEDROCK_MAX_GEN_LEN?: number;
@@ -276,6 +276,11 @@ type EnvVars = {
   AWS_BEDROCK_STOP?: string;
   AWS_BEDROCK_TEMPERATURE?: number;
   AWS_BEDROCK_TOP_P?: string;
+  AWS_DEFAULT_REGION?: string;
+  AWS_PROFILE?: string;
+  AWS_REGION?: string;
+  AWS_SECRET_ACCESS_KEY?: string;
+  AWS_SESSION_TOKEN?: string;
 
   // AWS Bedrock Agents
   AWS_BEDROCK_AGENT_ID?: string;
@@ -340,6 +345,7 @@ type EnvVars = {
   HYPERBOLIC_API_KEY?: string;
 
   // Langfuse
+  LANGFUSE_BASE_URL?: string;
   LANGFUSE_HOST?: string;
   LANGFUSE_PUBLIC_KEY?: string;
   LANGFUSE_SECRET_KEY?: string;
@@ -353,6 +359,9 @@ type EnvVars = {
   // Local AI
   LOCALAI_BASE_URL?: string;
   LOCALAI_TEMPERATURE?: number;
+
+  // Meta Model API (Muse); MODEL_API_KEY is Meta's official env var
+  MODEL_API_KEY?: string;
 
   // Mistral
   MISTRAL_MAX_TOKENS?: string;

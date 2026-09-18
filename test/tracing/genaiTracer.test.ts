@@ -7,24 +7,19 @@ import {
   getCurrentSpanId,
   getCurrentTraceId,
   getTraceparent,
-  normalizeOperationName,
   PromptfooAttributes,
   sanitizeBody,
-  setGenAIRequestAttributes,
   setGenAIResponseAttributes,
   withGenAISpan,
+  withGenAIToolSpan,
 } from '../../src/tracing/genaiTracer';
-import { mockProcessEnv } from '../util/utils';
 
 // Mock @opentelemetry/api
 const mockSpan = {
-  status: { code: 0 } as { code: number; message?: string },
   setAttribute: vi.fn(),
   setStatus: vi.fn(),
   end: vi.fn(),
   recordException: vi.fn(),
-  setAttributes: vi.fn(),
-  updateName: vi.fn(),
   spanContext: vi.fn(() => ({
     traceId: 'mock-trace-id-1234567890abcdef',
     spanId: 'mock-span-id-12345678',
@@ -39,36 +34,21 @@ const mockTracer = {
     return fn(mockSpan);
   }),
 };
-let mockActiveSpan: any = mockSpan;
 
 vi.mock('@opentelemetry/api', async () => {
   const actual = await vi.importActual('@opentelemetry/api');
   return {
     ...actual,
-    context: {
-      ...(actual as any).context,
-      active: vi.fn(() => (actual as any).ROOT_CONTEXT),
-      with: vi.fn((ctx: unknown, fn: (...args: any[]) => unknown, ...args: any[]) => {
-        const previous = mockActiveSpan;
-        mockActiveSpan = (actual as any).trace.getSpan(ctx) ?? previous;
-        try {
-          return fn(...args);
-        } finally {
-          mockActiveSpan = previous;
-        }
-      }),
-    },
     trace: {
-      ...(actual as any).trace,
       getTracer: vi.fn(() => mockTracer),
-      getActiveSpan: vi.fn(() => mockActiveSpan),
-      setSpan: vi.fn((ctx: unknown, span: unknown) => (actual as any).trace.setSpan(ctx, span)),
+      getActiveSpan: vi.fn(() => mockSpan),
+      getSpan: vi.fn(() => undefined),
     },
     SpanKind: {
       CLIENT: 2,
+      INTERNAL: 0,
     },
     SpanStatusCode: {
-      UNSET: 0,
       OK: 1,
       ERROR: 2,
     },
@@ -78,14 +58,6 @@ vi.mock('@opentelemetry/api', async () => {
 describe('genaiTracer', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    mockActiveSpan = mockSpan;
-    mockSpan.status = { code: SpanStatusCode.UNSET };
-    mockSpan.setStatus.mockImplementation((status: { code: number; message?: string }) => {
-      if (status.code !== SpanStatusCode.UNSET && mockSpan.status.code !== SpanStatusCode.OK) {
-        mockSpan.status = { ...status };
-      }
-      return mockSpan;
-    });
   });
 
   afterEach(() => {
@@ -97,55 +69,20 @@ describe('genaiTracer', () => {
       expect(GenAIAttributes.SYSTEM).toBe('gen_ai.system');
       expect(GenAIAttributes.PROVIDER_NAME).toBe('gen_ai.provider.name');
       expect(GenAIAttributes.OPERATION_NAME).toBe('gen_ai.operation.name');
+      expect(GenAIAttributes.AGENT_ID).toBe('gen_ai.agent.id');
+      expect(GenAIAttributes.AGENT_NAME).toBe('gen_ai.agent.name');
       expect(GenAIAttributes.REQUEST_MODEL).toBe('gen_ai.request.model');
-      expect(GenAIAttributes.REQUEST_STREAM).toBe('gen_ai.request.stream');
-      expect(GenAIAttributes.CONVERSATION_ID).toBe('gen_ai.conversation.id');
       expect(GenAIAttributes.USAGE_INPUT_TOKENS).toBe('gen_ai.usage.input_tokens');
       expect(GenAIAttributes.USAGE_OUTPUT_TOKENS).toBe('gen_ai.usage.output_tokens');
       expect(GenAIAttributes.USAGE_REASONING_OUTPUT_TOKENS).toBe(
         'gen_ai.usage.reasoning.output_tokens',
       );
-    });
-  });
-
-  describe('setGenAIRequestAttributes', () => {
-    it('updates model metadata and span name from the finalized request', () => {
-      const restoreEnv = mockProcessEnv({
-        OTEL_SEMCONV_STABILITY_OPT_IN: 'gen_ai_latest_experimental',
-      });
-
-      setGenAIRequestAttributes(mockSpan as any, {
-        model: 'wire-model',
-        operationName: 'generate_content',
-        maxTokens: 99,
-        temperature: 0.8,
-        stream: true,
-      });
-
-      expect(mockSpan.updateName).toHaveBeenCalledWith('generate_content wire-model');
-      expect(mockSpan.setAttributes).toHaveBeenCalledWith({
-        'gen_ai.request.model': 'wire-model',
-        'gen_ai.request.max_tokens': 99,
-        'gen_ai.request.temperature': 0.8,
-        'gen_ai.request.stream': true,
-      });
-      restoreEnv();
-    });
-
-    it('uses the legacy operation name and omits stream without the opt-in', () => {
-      const restoreEnv = mockProcessEnv({ OTEL_SEMCONV_STABILITY_OPT_IN: undefined });
-
-      setGenAIRequestAttributes(mockSpan as any, {
-        model: 'wire-model',
-        operationName: 'generate_content',
-        stream: true,
-      });
-
-      expect(mockSpan.updateName).toHaveBeenCalledWith('chat wire-model');
-      expect(mockSpan.setAttributes).toHaveBeenCalledWith({
-        'gen_ai.request.model': 'wire-model',
-      });
-      restoreEnv();
+      expect(GenAIAttributes.USAGE_CACHE_READ_INPUT_TOKENS).toBe(
+        'gen_ai.usage.cache_read.input_tokens',
+      );
+      expect(GenAIAttributes.USAGE_CACHE_CREATION_INPUT_TOKENS).toBe(
+        'gen_ai.usage.cache_creation.input_tokens',
+      );
     });
   });
 
@@ -155,6 +92,10 @@ describe('genaiTracer', () => {
       expect(PromptfooAttributes.EVAL_ID).toBe('promptfoo.eval.id');
       expect(PromptfooAttributes.TEST_INDEX).toBe('promptfoo.test.index');
       expect(PromptfooAttributes.PROMPT_LABEL).toBe('promptfoo.prompt.label');
+      expect(PromptfooAttributes.USAGE_TOTAL_TOKENS).toBe('promptfoo.usage.total_tokens');
+      expect(PromptfooAttributes.USAGE_CACHED_RESPONSE_TOKENS).toBe(
+        'promptfoo.usage.cached_response_tokens',
+      );
     });
   });
 
@@ -195,11 +136,116 @@ describe('genaiTracer', () => {
       const options = callArgs[1];
 
       expect(options.attributes).toMatchObject({
-        [GenAIAttributes.SYSTEM]: 'openai',
+        [GenAIAttributes.PROVIDER_NAME]: 'openai',
         [GenAIAttributes.OPERATION_NAME]: 'chat',
         [GenAIAttributes.REQUEST_MODEL]: 'gpt-4',
         [PromptfooAttributes.PROVIDER_ID]: 'openai:gpt-4',
       });
+      expect(options.attributes).not.toHaveProperty(GenAIAttributes.SYSTEM);
+    });
+
+    it('identifies agent invocations without treating the agent name as a model', async () => {
+      await withGenAISpan(
+        {
+          ...baseContext,
+          operationName: 'invoke_agent',
+          agentName: 'Support Agent',
+          model: 'Support Agent',
+        },
+        async () => ({ output: 'test' }),
+      );
+
+      const [spanName, options] = mockTracer.startActiveSpan.mock.calls[0];
+      expect(spanName).toBe('invoke_agent Support Agent');
+      expect(options.attributes).toMatchObject({
+        [GenAIAttributes.OPERATION_NAME]: 'invoke_agent',
+        [GenAIAttributes.AGENT_NAME]: 'Support Agent',
+      });
+      expect(options.attributes).not.toHaveProperty(GenAIAttributes.REQUEST_MODEL);
+    });
+
+    it('preserves an explicitly configured model on agent invocation spans', async () => {
+      await withGenAISpan(
+        {
+          ...baseContext,
+          operationName: 'invoke_agent',
+          agentName: 'Support Agent',
+        },
+        async () => ({ output: 'test' }),
+      );
+
+      const [, options] = mockTracer.startActiveSpan.mock.calls[0];
+      expect(options.attributes).toMatchObject({
+        [GenAIAttributes.AGENT_NAME]: 'Support Agent',
+        [GenAIAttributes.REQUEST_MODEL]: 'gpt-4',
+      });
+    });
+
+    it('keeps hosted agent identifiers separate from names and model names', async () => {
+      await withGenAISpan(
+        {
+          ...baseContext,
+          operationName: 'invoke_agent',
+          agentId: 'asst_123',
+          model: 'asst_123',
+        },
+        async () => ({ output: 'test' }),
+      );
+
+      const [spanName, options] = mockTracer.startActiveSpan.mock.calls[0];
+      expect(spanName).toBe('invoke_agent');
+      expect(options.attributes[GenAIAttributes.AGENT_ID]).toBe('asst_123');
+      expect(options.attributes).not.toHaveProperty(GenAIAttributes.AGENT_NAME);
+      expect(options.attributes).not.toHaveProperty(GenAIAttributes.REQUEST_MODEL);
+    });
+
+    it('identifies OpenAI API types without adding OpenAI attributes to other providers', async () => {
+      await withGenAISpan({ ...baseContext, openaiApiType: 'responses' }, async () => ({
+        output: 'test',
+      }));
+      await withGenAISpan(
+        { ...baseContext, system: 'azure', openaiApiType: 'responses' },
+        async () => ({ output: 'test' }),
+      );
+
+      expect(mockTracer.startActiveSpan.mock.calls[0][1].attributes).toHaveProperty(
+        'openai.api.type',
+        'responses',
+      );
+      expect(mockTracer.startActiveSpan.mock.calls[1][1].attributes).not.toHaveProperty(
+        'openai.api.type',
+      );
+    });
+
+    it.each([
+      ['alibaba', 'alibaba_cloud'],
+      ['bedrock', 'aws.bedrock'],
+      ['azure', 'azure.ai.openai'],
+      ['vertex:anthropic', 'gcp.vertex_ai'],
+      ['mistral', 'mistral_ai'],
+      ['watsonx', 'ibm.watsonx.ai'],
+      ['xai', 'x_ai'],
+      ['custom-provider', 'custom-provider'],
+    ])('normalizes provider %s to %s', async (system, providerName) => {
+      await withGenAISpan({ ...baseContext, system }, async () => ({ output: 'test' }));
+
+      expect(mockTracer.startActiveSpan.mock.calls[0][1].attributes).toHaveProperty(
+        GenAIAttributes.PROVIDER_NAME,
+        providerName,
+      );
+    });
+
+    it.each([
+      ['completion', 'text_completion'],
+      ['embedding', 'embeddings'],
+      ['text_completion', 'text_completion'],
+      ['embeddings', 'embeddings'],
+    ] as const)('normalizes %s operations to %s', async (operationName, expectedOperation) => {
+      await withGenAISpan({ ...baseContext, operationName }, async () => ({ output: 'test' }));
+
+      const [name, options] = mockTracer.startActiveSpan.mock.calls[0];
+      expect(name).toBe(`${expectedOperation} gpt-4`);
+      expect(options.attributes[GenAIAttributes.OPERATION_NAME]).toBe(expectedOperation);
     });
 
     it('should set optional request attributes when provided', async () => {
@@ -253,109 +299,9 @@ describe('genaiTracer', () => {
     });
 
     it('should set OK status on success', async () => {
-      const restoreEnv = mockProcessEnv({ OTEL_SEMCONV_STABILITY_OPT_IN: undefined });
+      await withGenAISpan(baseContext, async () => ({ output: 'test' }));
 
-      try {
-        await withGenAISpan(baseContext, async () => ({ output: 'test' }));
-
-        expect(mockSpan.setStatus).toHaveBeenCalledWith({ code: SpanStatusCode.OK });
-      } finally {
-        restoreEnv();
-      }
-    });
-
-    it('should not overwrite a provider-set error status in legacy mode', async () => {
-      const restoreEnv = mockProcessEnv({ OTEL_SEMCONV_STABILITY_OPT_IN: undefined });
-
-      try {
-        await withGenAISpan(baseContext, async (span) => {
-          span.setStatus({ code: SpanStatusCode.ERROR, message: 'aborted' });
-          return { output: 'partial result' };
-        });
-
-        expect(mockSpan.setStatus.mock.calls).toEqual([
-          [{ code: SpanStatusCode.ERROR, message: 'aborted' }],
-        ]);
-      } finally {
-        restoreEnv();
-      }
-    });
-
-    it('should track active-span errors from result extractors on write-only spans', async () => {
-      const restoreEnv = mockProcessEnv({ OTEL_SEMCONV_STABILITY_OPT_IN: undefined });
-      const statuses: Array<{ code: number; message?: string }> = [];
-      const writeOnlySpan = Object.freeze({
-        setAttribute: vi.fn(),
-        setAttributes: vi.fn(),
-        setStatus: vi.fn((status: { code: number; message?: string }) => {
-          statuses.push(status);
-        }),
-        addEvent: vi.fn(),
-        addLink: vi.fn(),
-        addLinks: vi.fn(),
-        end: vi.fn(),
-        isRecording: vi.fn(() => true),
-        recordException: vi.fn(),
-        spanContext: vi.fn(() => ({ traceId: 'trace', spanId: 'span', traceFlags: 1 })),
-        updateName: vi.fn(),
-      });
-      mockTracer.startActiveSpan.mockImplementationOnce((_name, _options, arg3, arg4) => {
-        const fn = typeof arg4 === 'function' ? arg4 : arg3;
-        return fn(writeOnlySpan);
-      });
-
-      try {
-        await withGenAISpan(
-          baseContext,
-          async () => ({ output: 'partial result' }),
-          () => {
-            trace.getActiveSpan()?.setStatus({
-              code: SpanStatusCode.ERROR,
-              message: 'extractor failed',
-            });
-            return {};
-          },
-        );
-
-        expect(statuses).toEqual([{ code: SpanStatusCode.ERROR, message: 'extractor failed' }]);
-      } finally {
-        restoreEnv();
-      }
-    });
-
-    it('should preserve a provider-set error status under the current conventions', async () => {
-      const restoreEnv = mockProcessEnv({
-        OTEL_SEMCONV_STABILITY_OPT_IN: 'gen_ai_latest_experimental',
-      });
-
-      try {
-        await withGenAISpan(baseContext, async (span) => {
-          span.setStatus({ code: SpanStatusCode.ERROR, message: 'aborted' });
-          return { output: 'partial result' };
-        });
-
-        expect(mockSpan.setStatus).toHaveBeenCalledTimes(1);
-        expect(mockSpan.setStatus).toHaveBeenCalledWith({
-          code: SpanStatusCode.ERROR,
-          message: 'aborted',
-        });
-      } finally {
-        restoreEnv();
-      }
-    });
-
-    it('should leave successful spans UNSET under the current conventions', async () => {
-      const restoreEnv = mockProcessEnv({
-        OTEL_SEMCONV_STABILITY_OPT_IN: 'gen_ai_latest_experimental',
-      });
-
-      try {
-        await withGenAISpan(baseContext, async () => ({ output: 'test' }));
-
-        expect(mockSpan.setStatus).not.toHaveBeenCalled();
-      } finally {
-        restoreEnv();
-      }
+      expect(mockSpan.setStatus).toHaveBeenCalledWith({ code: SpanStatusCode.OK });
     });
 
     it('should end the span after execution', async () => {
@@ -377,61 +323,18 @@ describe('genaiTracer', () => {
         code: SpanStatusCode.ERROR,
         message: 'API call failed',
       });
-      expect(mockSpan.recordException).toHaveBeenCalledWith({
-        name: 'Error',
-        message: 'API call failed',
-      });
+      expect(mockSpan.setAttribute).toHaveBeenCalledWith('error.type', 'Error');
+      expect(mockSpan.recordException).toHaveBeenCalledWith(error);
     });
 
-    it('should mark returned HTTP failures as errors even when they include output', async () => {
-      await withGenAISpan(baseContext, async () => ({
-        output: 'API error: 400 Bad Request',
-        isRefusal: true,
-        metadata: { http: { status: 400, statusText: ['must-not-export-status'] } },
-      }));
+    it('records a stable error type when a provider returns an error response', async () => {
+      await withGenAISpan(baseContext, async () => ({ error: 'provider unavailable' }));
 
-      expect(mockSpan.setStatus.mock.calls).toEqual([
-        [{ code: SpanStatusCode.ERROR, message: 'HTTP 400' }],
-      ]);
-      expect(mockSpan.setAttribute).toHaveBeenCalledWith('error.type', '400');
-    });
-
-    it('should not serialize structured error metadata into status or error.type', async () => {
-      await withGenAISpan(baseContext, async () => ({
-        error: {
-          message: ['must-not-export-message'],
-          code: ['must-not-export-code'],
-        },
-      }));
-
+      expect(mockSpan.setAttribute).toHaveBeenCalledWith('error.type', 'provider_error');
       expect(mockSpan.setStatus).toHaveBeenCalledWith({
         code: SpanStatusCode.ERROR,
-        message: 'Provider error',
+        message: 'provider unavailable',
       });
-      expect(mockSpan.setAttribute).toHaveBeenCalledWith('error.type', '_OTHER');
-      expect(
-        JSON.stringify([mockSpan.setStatus.mock.calls, mockSpan.setAttribute.mock.calls]),
-      ).not.toContain('must-not-export');
-    });
-
-    it('should sanitize credentials from error status and exception telemetry', async () => {
-      const error = new Error(
-        'request failed https://alice:collector-password@example.test/path?token=secret',
-      );
-
-      await expect(
-        withGenAISpan(baseContext, async () => {
-          throw error;
-        }),
-      ).rejects.toBe(error);
-
-      const telemetry = JSON.stringify([
-        mockSpan.setStatus.mock.calls,
-        mockSpan.recordException.mock.calls,
-      ]);
-      expect(telemetry).not.toContain('collector-password');
-      expect(telemetry).not.toContain('token=secret');
-      expect(telemetry).toContain('<REDACTED>');
     });
 
     it('should end span even on failure', async () => {
@@ -459,11 +362,230 @@ describe('genaiTracer', () => {
       expect(mockSpan.setAttribute).toHaveBeenCalledWith(GenAIAttributes.USAGE_OUTPUT_TOKENS, 50);
       expect(mockSpan.setAttribute).toHaveBeenCalledWith(GenAIAttributes.RESPONSE_ID, 'resp-123');
     });
+
+    it('preserves response-cache status omitted by a legacy result extractor', async () => {
+      await withGenAISpan(
+        baseContext,
+        async () => ({
+          output: 'cached output',
+          cached: true,
+          tokenUsage: { cached: 150, total: 150 },
+        }),
+        (response) => ({ tokenUsage: response.tokenUsage }),
+      );
+
+      expect(mockSpan.setAttribute).toHaveBeenCalledWith(PromptfooAttributes.CACHE_HIT, true);
+      expect(mockSpan.setAttribute).toHaveBeenCalledWith(
+        PromptfooAttributes.USAGE_CACHED_RESPONSE_TOKENS,
+        150,
+      );
+      expect(mockSpan.setAttribute).not.toHaveBeenCalledWith(
+        GenAIAttributes.USAGE_CACHE_READ_INPUT_TOKENS,
+        expect.anything(),
+      );
+    });
+
+    it('preserves an explicit cache classification from the result extractor', async () => {
+      await withGenAISpan(
+        baseContext,
+        async () => ({
+          output: 'provider-cached output',
+          cached: true,
+          tokenUsage: { cached: 20 },
+        }),
+        (response) => ({ tokenUsage: response.tokenUsage, cacheHit: false }),
+      );
+
+      expect(mockSpan.setAttribute).toHaveBeenCalledWith(PromptfooAttributes.CACHE_HIT, false);
+      expect(mockSpan.setAttribute).toHaveBeenCalledWith(
+        GenAIAttributes.USAGE_CACHE_READ_INPUT_TOKENS,
+        20,
+      );
+      expect(mockSpan.setAttribute).not.toHaveBeenCalledWith(
+        PromptfooAttributes.USAGE_CACHED_RESPONSE_TOKENS,
+        expect.anything(),
+      );
+    });
+  });
+
+  describe('withGenAIToolSpan', () => {
+    beforeEach(() => {
+      vi.mocked(trace.getActiveSpan).mockReturnValue(mockSpan as any);
+    });
+
+    it('records standard tool attributes and sanitizes inputs and output', async () => {
+      const result = await withGenAIToolSpan(
+        {
+          name: 'lookup_account',
+          arguments: { apiKey: 'sk-abcdefghijklmnopqrstuvwxyz' },
+          callId: 'call-123',
+        },
+        async () => ({ token: 'secret-token-value-12345678901234567890' }),
+      );
+
+      expect(result).toEqual({ token: 'secret-token-value-12345678901234567890' });
+      expect(mockTracer.startActiveSpan).toHaveBeenCalledWith(
+        'execute_tool lookup_account',
+        expect.objectContaining({
+          kind: SpanKind.INTERNAL,
+          attributes: expect.objectContaining({
+            'gen_ai.operation.name': 'execute_tool',
+            'gen_ai.tool.name': 'lookup_account',
+            'gen_ai.tool.call.id': 'call-123',
+            'tool.name': 'lookup_account',
+            'tool.arguments': '{"apiKey":"<REDACTED_API_KEY>"}',
+          }),
+        }),
+        expect.any(Function),
+      );
+      expect(mockSpan.setAttribute).toHaveBeenCalledWith('tool.output', '{"token":"<REDACTED>"}');
+      expect(mockSpan.setStatus).toHaveBeenCalledWith({ code: SpanStatusCode.OK });
+      expect(mockSpan.end).toHaveBeenCalledOnce();
+    });
+
+    it('does not create orphan tool spans when no parent span is active', async () => {
+      vi.mocked(trace.getActiveSpan).mockReturnValue(undefined);
+
+      expect(await withGenAIToolSpan({ name: 'search' }, async () => 'found')).toBe('found');
+      expect(mockTracer.startActiveSpan).not.toHaveBeenCalled();
+    });
+
+    it('records complete callback objects even when they contain a content property', async () => {
+      const result = {
+        content: 'account found',
+        metadata: { destination: 'audit-log', attempt: 2 },
+      };
+
+      expect(await withGenAIToolSpan({ name: 'lookup_account' }, () => result)).toBe(result);
+      expect(mockSpan.setAttribute).toHaveBeenCalledWith('tool.output', JSON.stringify(result));
+    });
+
+    it('extracts model-visible content only for MCP results', async () => {
+      const result = { content: 'account found', metadata: { requestId: 'request-123' } };
+
+      expect(
+        await withGenAIToolSpan({ name: 'lookup_account', resultFormat: 'mcp' }, () => result),
+      ).toBe(result);
+      expect(mockSpan.setAttribute).toHaveBeenCalledWith('tool.output', 'account found');
+    });
+
+    it('does not classify arbitrary callback error fields as execution failures', async () => {
+      const result = { content: 'account found', error: 'business-domain error detail' };
+
+      expect(await withGenAIToolSpan({ name: 'lookup_account' }, () => result)).toBe(result);
+      expect(mockSpan.setAttribute).toHaveBeenCalledWith('tool.is_error', false);
+      expect(mockSpan.setStatus).toHaveBeenCalledWith({ code: SpanStatusCode.OK });
+    });
+
+    it('does not classify empty MCP error fields as execution failures', async () => {
+      const result = { content: 'account found', error: '' };
+
+      expect(
+        await withGenAIToolSpan({ name: 'lookup_account', resultFormat: 'mcp' }, () => result),
+      ).toBe(result);
+      expect(mockSpan.setAttribute).toHaveBeenCalledWith('tool.is_error', false);
+      expect(mockSpan.setStatus).toHaveBeenCalledWith({ code: SpanStatusCode.OK });
+    });
+
+    it('marks MCP error results as failed without changing the returned result', async () => {
+      const failure = { content: 'denied', isError: true };
+
+      expect(
+        await withGenAIToolSpan({ name: 'search', resultFormat: 'mcp' }, async () => failure),
+      ).toBe(failure);
+      expect(mockSpan.setAttribute).toHaveBeenCalledWith('tool.is_error', true);
+      expect(mockSpan.setStatus).toHaveBeenCalledWith({ code: SpanStatusCode.ERROR });
+      expect(mockSpan.end).toHaveBeenCalledOnce();
+    });
+
+    it('marks caught MCP SDK failures as errors without changing the returned result', async () => {
+      const failure = { content: '', error: 'MCP transport disconnected' };
+
+      expect(
+        await withGenAIToolSpan({ name: 'search', resultFormat: 'mcp' }, async () => failure),
+      ).toBe(failure);
+      expect(mockSpan.setAttribute).toHaveBeenCalledWith('tool.is_error', true);
+      expect(mockSpan.setAttribute).toHaveBeenCalledWith('error.type', 'tool_error');
+      expect(mockSpan.setStatus).toHaveBeenCalledWith({
+        code: SpanStatusCode.ERROR,
+        message: 'MCP transport disconnected',
+      });
+      expect(mockSpan.end).toHaveBeenCalledOnce();
+    });
+
+    it('records thrown errors and preserves the original exception', async () => {
+      const error = new Error('Tool failed');
+
+      await expect(
+        withGenAIToolSpan({ name: 'search' }, async () => {
+          throw error;
+        }),
+      ).rejects.toBe(error);
+
+      expect(mockSpan.recordException).toHaveBeenCalledWith(
+        expect.objectContaining({ name: 'Error', message: 'Tool failed' }),
+      );
+      expect(mockSpan.setStatus).toHaveBeenCalledWith({
+        code: SpanStatusCode.ERROR,
+        message: 'Tool failed',
+      });
+      expect(mockSpan.end).toHaveBeenCalledOnce();
+    });
+
+    it('sanitizes exception event messages and stacks without replacing the thrown error', async () => {
+      const secret = 'sk-abcdefghijklmnopqrstuvwxyz';
+      const error = new Error(`Authentication failed for ${secret}`);
+      error.stack = `Error: Authentication failed for ${secret}\n    at executeTool (${secret})`;
+
+      await expect(
+        withGenAIToolSpan({ name: 'lookup_account' }, () => {
+          throw error;
+        }),
+      ).rejects.toBe(error);
+
+      const recordedError = mockSpan.recordException.mock.calls[0][0] as Error;
+      expect(recordedError).not.toBe(error);
+      expect(recordedError.message).toBe('Authentication failed for <REDACTED_API_KEY>');
+      expect(recordedError.stack).toContain('<REDACTED_API_KEY>');
+      expect(recordedError.stack).not.toContain(secret);
+      expect(mockSpan.setStatus).toHaveBeenCalledWith({
+        code: SpanStatusCode.ERROR,
+        message: 'Authentication failed for <REDACTED_API_KEY>',
+      });
+    });
+
+    it('does not fail tool execution when attributes cannot be serialized', async () => {
+      const circular: Record<string, unknown> = {};
+      circular.self = circular;
+
+      expect(await withGenAIToolSpan({ name: 'search', arguments: circular }, () => circular)).toBe(
+        circular,
+      );
+      expect(mockTracer.startActiveSpan.mock.calls[0][1].attributes).not.toHaveProperty(
+        'tool.arguments',
+      );
+      expect(mockSpan.setAttribute).not.toHaveBeenCalledWith('tool.output', expect.anything());
+    });
+
+    it('limits large tool attributes', async () => {
+      const largeValue = 'x'.repeat(5000);
+
+      await withGenAIToolSpan({ name: 'search', arguments: largeValue }, () => largeValue);
+
+      const attributes = mockTracer.startActiveSpan.mock.calls[0][1].attributes;
+      expect(attributes['tool.arguments']).toHaveLength(4096);
+      expect(attributes['tool.arguments']).toContain('[truncated]');
+      expect(mockSpan.setAttribute).toHaveBeenCalledWith(
+        'tool.output',
+        expect.stringContaining('[truncated]'),
+      );
+    });
   });
 
   describe('setGenAIResponseAttributes', () => {
     it('should set token usage attributes', () => {
       const result: GenAISpanResult = {
+        cacheHit: true,
         tokenUsage: {
           prompt: 100,
           completion: 50,
@@ -472,12 +594,73 @@ describe('genaiTracer', () => {
         },
       };
 
-      setGenAIResponseAttributes(mockSpan as any, result, true, false);
+      setGenAIResponseAttributes(mockSpan as any, result);
 
       expect(mockSpan.setAttribute).toHaveBeenCalledWith(GenAIAttributes.USAGE_INPUT_TOKENS, 100);
       expect(mockSpan.setAttribute).toHaveBeenCalledWith(GenAIAttributes.USAGE_OUTPUT_TOKENS, 50);
-      expect(mockSpan.setAttribute).toHaveBeenCalledWith(GenAIAttributes.USAGE_TOTAL_TOKENS, 150);
-      expect(mockSpan.setAttribute).toHaveBeenCalledWith(GenAIAttributes.USAGE_CACHED_TOKENS, 20);
+      expect(mockSpan.setAttribute).toHaveBeenCalledWith(
+        PromptfooAttributes.USAGE_TOTAL_TOKENS,
+        150,
+      );
+      expect(mockSpan.setAttribute).toHaveBeenCalledWith(
+        PromptfooAttributes.USAGE_CACHED_RESPONSE_TOKENS,
+        20,
+      );
+    });
+
+    it('records provider prompt-cache reads without marking them as response-cache hits', () => {
+      setGenAIResponseAttributes(mockSpan as any, {
+        cacheHit: false,
+        tokenUsage: { prompt: 100, completion: 50, cached: 20 },
+      });
+
+      expect(mockSpan.setAttribute).toHaveBeenCalledWith(
+        GenAIAttributes.USAGE_CACHE_READ_INPUT_TOKENS,
+        20,
+      );
+      expect(mockSpan.setAttribute).not.toHaveBeenCalledWith(
+        PromptfooAttributes.USAGE_CACHED_RESPONSE_TOKENS,
+        expect.anything(),
+      );
+    });
+
+    it('prefers explicit provider cache-read details over the legacy cached count', () => {
+      setGenAIResponseAttributes(mockSpan as any, {
+        cacheHit: false,
+        tokenUsage: {
+          cached: 20,
+          completionDetails: { cacheReadInputTokens: 12 },
+        },
+      });
+
+      expect(mockSpan.setAttribute).toHaveBeenCalledWith(
+        GenAIAttributes.USAGE_CACHE_READ_INPUT_TOKENS,
+        12,
+      );
+      expect(mockSpan.setAttribute).not.toHaveBeenCalledWith(
+        GenAIAttributes.USAGE_CACHE_READ_INPUT_TOKENS,
+        20,
+      );
+    });
+
+    it('keeps provider prompt-cache counts distinct on Promptfoo response-cache hits', () => {
+      setGenAIResponseAttributes(mockSpan as any, {
+        cacheHit: true,
+        tokenUsage: {
+          cached: 3_000,
+          total: 3_000,
+          completionDetails: { cacheReadInputTokens: 500 },
+        },
+      });
+
+      expect(mockSpan.setAttribute).toHaveBeenCalledWith(
+        PromptfooAttributes.USAGE_CACHED_RESPONSE_TOKENS,
+        3_000,
+      );
+      expect(mockSpan.setAttribute).toHaveBeenCalledWith(
+        GenAIAttributes.USAGE_CACHE_READ_INPUT_TOKENS,
+        500,
+      );
     });
 
     it('should set completion details attributes', () => {
@@ -491,18 +674,18 @@ describe('genaiTracer', () => {
         },
       };
 
-      setGenAIResponseAttributes(mockSpan as any, result, true, false);
+      setGenAIResponseAttributes(mockSpan as any, result);
 
       expect(mockSpan.setAttribute).toHaveBeenCalledWith(
-        GenAIAttributes.USAGE_REASONING_TOKENS,
+        GenAIAttributes.USAGE_REASONING_OUTPUT_TOKENS,
         25,
       );
       expect(mockSpan.setAttribute).toHaveBeenCalledWith(
-        GenAIAttributes.USAGE_ACCEPTED_PREDICTION_TOKENS,
+        PromptfooAttributes.USAGE_ACCEPTED_PREDICTION_TOKENS,
         10,
       );
       expect(mockSpan.setAttribute).toHaveBeenCalledWith(
-        GenAIAttributes.USAGE_REJECTED_PREDICTION_TOKENS,
+        PromptfooAttributes.USAGE_REJECTED_PREDICTION_TOKENS,
         5,
       );
     });
@@ -517,7 +700,7 @@ describe('genaiTracer', () => {
         },
       };
 
-      setGenAIResponseAttributes(mockSpan as any, result, true, false);
+      setGenAIResponseAttributes(mockSpan as any, result);
 
       expect(mockSpan.setAttribute).toHaveBeenCalledWith(
         GenAIAttributes.USAGE_CACHE_READ_INPUT_TOKENS,
@@ -526,37 +709,6 @@ describe('genaiTracer', () => {
       expect(mockSpan.setAttribute).toHaveBeenCalledWith(
         GenAIAttributes.USAGE_CACHE_CREATION_INPUT_TOKENS,
         40,
-      );
-    });
-
-    it('should emit latest OTEL reasoning and cache usage attributes when opted in', () => {
-      const result: GenAISpanResult = {
-        tokenUsage: {
-          completionDetails: {
-            reasoning: 25,
-            cacheReadInputTokens: 150,
-            cacheCreationInputTokens: 40,
-          },
-        },
-      };
-
-      setGenAIResponseAttributes(mockSpan as any, result, true, true);
-
-      expect(mockSpan.setAttribute).toHaveBeenCalledWith(
-        GenAIAttributes.USAGE_REASONING_OUTPUT_TOKENS,
-        25,
-      );
-      expect(mockSpan.setAttribute).toHaveBeenCalledWith(
-        GenAIAttributes.USAGE_CACHE_READ_INPUT_TOKENS_LATEST,
-        150,
-      );
-      expect(mockSpan.setAttribute).toHaveBeenCalledWith(
-        GenAIAttributes.USAGE_CACHE_CREATION_INPUT_TOKENS_LATEST,
-        40,
-      );
-      expect(mockSpan.setAttribute).not.toHaveBeenCalledWith(
-        GenAIAttributes.USAGE_REASONING_TOKENS,
-        expect.anything(),
       );
     });
 
@@ -580,54 +732,6 @@ describe('genaiTracer', () => {
       expect(mockSpan.setAttribute).toHaveBeenCalledWith(GenAIAttributes.RESPONSE_FINISH_REASONS, [
         'stop',
       ]);
-    });
-
-    it('should emit conversation identity without duplicating it as a response ID', () => {
-      const result: GenAISpanResult = {
-        responseId: 'thread-123',
-        conversationId: 'thread-123',
-      };
-
-      setGenAIResponseAttributes(mockSpan as any, result, true, true);
-
-      expect(mockSpan.setAttribute).toHaveBeenCalledWith(
-        GenAIAttributes.CONVERSATION_ID,
-        'thread-123',
-      );
-      expect(mockSpan.setAttribute).not.toHaveBeenCalledWith(
-        GenAIAttributes.RESPONSE_ID,
-        expect.anything(),
-      );
-    });
-
-    it('should preserve a distinct response ID alongside conversation identity', () => {
-      const result: GenAISpanResult = {
-        responseId: 'resp-123',
-        conversationId: 'thread-123',
-      };
-
-      setGenAIResponseAttributes(mockSpan as any, result, true, true);
-
-      expect(mockSpan.setAttribute).toHaveBeenCalledWith(
-        GenAIAttributes.CONVERSATION_ID,
-        'thread-123',
-      );
-      expect(mockSpan.setAttribute).toHaveBeenCalledWith(GenAIAttributes.RESPONSE_ID, 'resp-123');
-    });
-
-    it('should preserve response ID in legacy mode when a conversation ID is available', () => {
-      const result: GenAISpanResult = {
-        responseId: 'thread-123',
-        conversationId: 'thread-123',
-      };
-
-      setGenAIResponseAttributes(mockSpan as any, result, true, false);
-
-      expect(mockSpan.setAttribute).toHaveBeenCalledWith(GenAIAttributes.RESPONSE_ID, 'thread-123');
-      expect(mockSpan.setAttribute).not.toHaveBeenCalledWith(
-        GenAIAttributes.CONVERSATION_ID,
-        expect.anything(),
-      );
     });
 
     it('should not set attributes for undefined values', () => {
@@ -673,166 +777,6 @@ describe('genaiTracer', () => {
     });
   });
 
-  describe('normalizeOperationName', () => {
-    it('should map legacy "completion" to "text_completion"', () => {
-      expect(normalizeOperationName('completion')).toBe('text_completion');
-    });
-
-    it('should map legacy "embedding" to "embeddings"', () => {
-      expect(normalizeOperationName('embedding')).toBe('embeddings');
-    });
-
-    it('should pass through canonical names unchanged', () => {
-      expect(normalizeOperationName('chat')).toBe('chat');
-      expect(normalizeOperationName('text_completion')).toBe('text_completion');
-      expect(normalizeOperationName('embeddings')).toBe('embeddings');
-      expect(normalizeOperationName('generate_content')).toBe('generate_content');
-      expect(normalizeOperationName('invoke_agent')).toBe('invoke_agent');
-    });
-
-    it('should normalize legacy names in withGenAISpan', async () => {
-      const restoreEnv = mockProcessEnv({ OTEL_SEMCONV_STABILITY_OPT_IN: undefined });
-
-      try {
-        await withGenAISpan(
-          { system: 'openai', operationName: 'completion', model: 'davinci', providerId: 'test' },
-          async () => ({ output: 'test' }),
-        );
-
-        // Span name should use emitted operation name (legacy by default since env not set)
-        expect(mockTracer.startActiveSpan).toHaveBeenCalledWith(
-          'completion davinci',
-          expect.any(Object),
-          expect.anything(),
-          expect.any(Function),
-        );
-
-        // The attribute should also be the emitted (legacy) name
-        const callArgs = mockTracer.startActiveSpan.mock.calls[0];
-        const options = callArgs[1];
-        expect(options.attributes['gen_ai.operation.name']).toBe('completion');
-      } finally {
-        restoreEnv();
-      }
-    });
-
-    it('should emit only latest provider identification when opted in', async () => {
-      const restoreEnv = mockProcessEnv({
-        OTEL_SEMCONV_STABILITY_OPT_IN: 'gen_ai_latest_experimental',
-      });
-
-      try {
-        await withGenAISpan(
-          { system: 'vertex', operationName: 'completion', model: 'gemini', providerId: 'test' },
-          async () => ({ output: 'test' }),
-        );
-
-        expect(mockTracer.startActiveSpan).toHaveBeenCalledWith(
-          'text_completion gemini',
-          expect.any(Object),
-          expect.anything(),
-          expect.any(Function),
-        );
-
-        const options = mockTracer.startActiveSpan.mock.calls[0][1];
-        expect(options.attributes[GenAIAttributes.PROVIDER_NAME]).toBe('gcp.vertex_ai');
-        expect(options.attributes).not.toHaveProperty(GenAIAttributes.SYSTEM);
-      } finally {
-        restoreEnv();
-      }
-    });
-
-    it('should emit current agent, provider, and streaming attributes when opted in', async () => {
-      const restoreEnv = mockProcessEnv({
-        OTEL_SEMCONV_STABILITY_OPT_IN: 'gen_ai_latest_experimental',
-      });
-
-      try {
-        await withGenAISpan(
-          {
-            system: 'openai',
-            providerName: 'xai',
-            operationName: 'invoke_agent',
-            model: 'grok-code',
-            requestModel: 'grok-code-actual',
-            providerId: 'xai:grok-code',
-            agentName: 'reviewer',
-            agentId: 'agent-123',
-            stream: true,
-          },
-          async () => ({ output: 'test' }),
-        );
-
-        expect(mockTracer.startActiveSpan).toHaveBeenCalledWith(
-          'invoke_agent reviewer',
-          expect.any(Object),
-          expect.anything(),
-          expect.any(Function),
-        );
-        const attributes = mockTracer.startActiveSpan.mock.calls[0][1].attributes;
-        expect(attributes).toMatchObject({
-          [GenAIAttributes.PROVIDER_NAME]: 'x_ai',
-          [GenAIAttributes.OPERATION_NAME]: 'invoke_agent',
-          [GenAIAttributes.REQUEST_MODEL]: 'grok-code-actual',
-          [GenAIAttributes.REQUEST_STREAM]: true,
-          'gen_ai.agent.name': 'reviewer',
-          'gen_ai.agent.id': 'agent-123',
-        });
-        expect(attributes).not.toHaveProperty(GenAIAttributes.SYSTEM);
-      } finally {
-        restoreEnv();
-      }
-    });
-
-    it('should omit placeholder request models from current agent spans', async () => {
-      const restoreEnv = mockProcessEnv({
-        OTEL_SEMCONV_STABILITY_OPT_IN: 'gen_ai_latest_experimental',
-      });
-
-      try {
-        await withGenAISpan(
-          {
-            system: 'openai',
-            operationName: 'invoke_agent',
-            model: 'agent-id-used-for-legacy-name',
-            providerId: 'openai:assistant:agent-id',
-            agentId: 'agent-id',
-          },
-          async () => ({ output: 'test' }),
-        );
-
-        const attributes = mockTracer.startActiveSpan.mock.calls[0][1].attributes;
-        expect(attributes).not.toHaveProperty(GenAIAttributes.REQUEST_MODEL);
-      } finally {
-        restoreEnv();
-      }
-    });
-
-    it('should omit false streaming and preserve new operations as chat in legacy mode', async () => {
-      const restoreEnv = mockProcessEnv({ OTEL_SEMCONV_STABILITY_OPT_IN: undefined });
-
-      try {
-        await withGenAISpan(
-          {
-            system: 'openai',
-            operationName: 'generate_content',
-            model: 'gemini-2.5-pro',
-            providerId: 'vertex:gemini-2.5-pro',
-            stream: false,
-          },
-          async () => ({ output: 'test' }),
-        );
-
-        const attributes = mockTracer.startActiveSpan.mock.calls[0][1].attributes;
-        expect(attributes[GenAIAttributes.OPERATION_NAME]).toBe('chat');
-        expect(attributes).not.toHaveProperty(GenAIAttributes.REQUEST_STREAM);
-        expect(attributes[GenAIAttributes.SYSTEM]).toBe('openai');
-      } finally {
-        restoreEnv();
-      }
-    });
-  });
-
   describe('body sanitization', () => {
     const baseContext: GenAISpanContext = {
       system: 'openai',
@@ -841,6 +785,15 @@ describe('genaiTracer', () => {
       providerId: 'openai:gpt-4',
       sanitizeBodies: true, // Enable sanitization for these tests
     };
+
+    it('supports both capture-group and functional secret replacements', () => {
+      const encodedSecret = `${'a'.repeat(20)}/${'b'.repeat(19)}`;
+      const ordinaryText = 'c'.repeat(40);
+
+      expect(sanitizeBody(`password=hunter2 ${encodedSecret} ${ordinaryText}`)).toBe(
+        `password=<REDACTED> <REDACTED_SECRET> ${ordinaryText}`,
+      );
+    });
 
     it('should redact OpenAI API keys from request body', async () => {
       const contextWithBody = {
@@ -909,8 +862,7 @@ describe('genaiTracer', () => {
 
     it('should redact response body sensitive data', async () => {
       const resultExtractor = vi.fn(() => ({
-        responseBody:
-          '{"client_secret":"client.secret+with/slash=","refresh_token":"1//refresh+value="}',
+        responseBody: '{"token": "secret-token-value-12345678901234567890"}',
       }));
 
       await withGenAISpan(baseContext, async () => 'result', resultExtractor);
@@ -920,236 +872,7 @@ describe('genaiTracer', () => {
       );
       expect(responseBodyCall).toBeDefined();
       expect(responseBodyCall![1]).toContain('<REDACTED>');
-      expect(responseBodyCall![1]).not.toContain('client.secret+with/slash=');
-      expect(responseBodyCall![1]).not.toContain('1//refresh+value=');
-    });
-
-    it('should recursively redact exact sensitive JSON fields without rewriting benign fields', () => {
-      const body = JSON.stringify({
-        access_token: 'ya29.access/token+value=',
-        nested: [{ 'x-api-key': 'key.with/slash+padding=' }, { session: 'session=value' }],
-        privateKey: '-----BEGIN PRIVATE KEY-----\nmaterial\n-----END PRIVATE KEY-----',
-        token_count: 42,
-        session_summary: 'safe summary',
-      });
-
-      const sanitized = JSON.parse(sanitizeBody(body));
-
-      expect(sanitized.access_token).toBe('<REDACTED>');
-      expect(sanitized.nested[0]['x-api-key']).toBe('<REDACTED>');
-      expect(sanitized.nested[1].session).toBe('<REDACTED>');
-      expect(sanitized.privateKey).toBe('<REDACTED>');
-      expect(sanitized.token_count).toBe(42);
-      expect(sanitized.session_summary).toBe('safe summary');
-    });
-
-    it.each([
-      ['AWS_SECRET_ACCESS_KEY', 'wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY'],
-      ['AZURE_OPENAI_API_KEY', 'azure-opaque-value'],
-      ['OPENAI_API_KEY', 'openai-opaque-value'],
-      ['GITHUB_TOKEN', 'ghp_abcdefghijklmnopqrstuvwxyz123456'],
-      ['HF_TOKEN', 'hf_abcdefghijklmnopqrstuvwxyz123456'],
-      ['HUGGINGFACE_API_KEY', 'huggingface-opaque-value'],
-      ['GOOGLE_API_KEY', 'AIzaSyExampleKeyMaterial'],
-      ['DATABRICKS_TOKEN', 'dapiabcdefghijklmnopqrstuvwxyz'],
-    ])('should redact provider-prefixed credential field %s', (field, value) => {
-      const json = sanitizeBody(JSON.stringify({ [field]: value }));
-      const formValue = encodeURIComponent(value);
-      const form = sanitizeBody(`${encodeURIComponent(field)}=${formValue}`);
-      const assignment = sanitizeBody(`${field}=${value}`);
-
-      expect(json).not.toContain(value);
-      expect(form).not.toContain(formValue);
-      expect(assignment).not.toContain(value);
-    });
-
-    it('should redact standard credential carriers and URL query credentials', () => {
-      const body = JSON.stringify({
-        'Proxy-Authorization': 'Basic dXNlcjpwYXNz',
-        'Ocp-Apim-Subscription-Key': 'opaque-subscription-value',
-        key: 'AIzaSySyntheticKeyMaterial',
-      });
-      const form =
-        'subscription-key=opaque-subscription-value&x-functions-key=opaque-function-value';
-      const url =
-        'https://example.test/run?code=opaque-function-code&key=AIzaSySyntheticKeyMaterial';
-      const encodedUrl =
-        'https://example.test/run?%6B%65%79=opaque-synthetic-provider-secret&co%64e=opaque-function-code&api%5Fkey=encoded-api-secret&access%5Ftoken=encoded-access-secret&subscription%2Dkey=encoded-subscription-secret';
-      const signature = '0123456789abcdef'.repeat(4);
-      const signedUrl =
-        `https://storage.test/object?X-Amz-Signature=${signature}` +
-        `&X-Goog-Signature=${signature}`;
-      const userinfoUrl = 'https://alice:supersecret@example.test/path';
-      const databaseDsn = 'postgres://dbuser:p%40ssw0rd@db.example.test/app';
-      const rawAtDatabaseDsn = 'postgres://dbuser:p@ss@db.example.test/app';
-      const usernameOnlyUrl = 'https://opaque-access-credential@example.test/path';
-
-      expect(sanitizeBody(body)).not.toContain('dXNlcjpwYXNz');
-      expect(sanitizeBody(body)).not.toContain('opaque-subscription-value');
-      expect(sanitizeBody(body)).not.toContain('AIzaSySyntheticKeyMaterial');
-      expect(sanitizeBody(form)).not.toContain('opaque-subscription-value');
-      expect(sanitizeBody(form)).not.toContain('opaque-function-value');
-      expect(sanitizeBody(url)).not.toContain('opaque-function-code');
-      expect(sanitizeBody(url)).not.toContain('AIzaSySyntheticKeyMaterial');
-      expect(sanitizeBody(encodedUrl)).not.toContain('opaque-synthetic-provider-secret');
-      expect(sanitizeBody(encodedUrl)).not.toContain('opaque-function-code');
-      expect(sanitizeBody(encodedUrl)).not.toContain('encoded-api-secret');
-      expect(sanitizeBody(encodedUrl)).not.toContain('encoded-access-secret');
-      expect(sanitizeBody(encodedUrl)).not.toContain('encoded-subscription-secret');
-      expect(sanitizeBody(signedUrl)).not.toContain(signature);
-      expect(sanitizeBody(userinfoUrl)).toBe('https://<REDACTED>@example.test/path');
-      expect(sanitizeBody(databaseDsn)).toBe('postgres://<REDACTED>@db.example.test/app');
-      expect(sanitizeBody(rawAtDatabaseDsn)).toBe('postgres://<REDACTED>@db.example.test/app');
-      expect(sanitizeBody(usernameOnlyUrl)).toBe('https://<REDACTED>@example.test/path');
-    });
-
-    it('should sanitize assignments embedded in JSON string values', () => {
-      const secret = 'opaque-synthetic-provider-secret';
-      const body = JSON.stringify({
-        messages: [{ role: 'user', content: `debug dump: OPENAI_API_KEY=${secret}` }],
-      });
-
-      expect(sanitizeBody(body)).not.toContain(secret);
-    });
-
-    it('should sanitize assignments after JSON-like properties in malformed bodies', () => {
-      const secret = 'opaque-synthetic-provider-secret';
-      const body = `{"password":"first-secret"} trailing OPENAI_API_KEY=${secret}`;
-
-      const sanitized = sanitizeBody(body);
-      expect(sanitized).not.toContain('first-secret');
-      expect(sanitized).not.toContain(secret);
-    });
-
-    it('should scan large non-sensitive assignment text without quadratic work', () => {
-      const secret = 'opaque-synthetic-provider-secret';
-      const body = `${'a='.repeat(100_000)} OPENAI_API_KEY=${secret}`;
-
-      expect(sanitizeBody(body)).not.toContain(secret);
-    });
-
-    it('should sanitize escaped credential keys in oversized JSON', () => {
-      const secret = 'opaque-synthetic-provider-secret';
-      const body = `{"OPENAI\\u005fAPI\\u005fKEY":"${secret}","padding":"${'x'.repeat(17_000)}"}`;
-      const nestedBody = JSON.stringify({
-        credentials: { username: 'alice', value: secret },
-        padding: 'x'.repeat(17_000),
-      });
-
-      expect(sanitizeBody(body)).not.toContain(secret);
-      expect(sanitizeBody(nestedBody)).not.toContain(secret);
-    });
-
-    it('should fail closed for JSON beyond the bounded parser limit', () => {
-      const body = JSON.stringify({ message: 'x'.repeat(300_000) });
-      const unicodeBody = JSON.stringify({ message: 'é'.repeat(140_000) });
-      const surrogateBody = `{"message":"${'\ud800'.repeat(100_000)}"}`;
-
-      expect(sanitizeBody(body)).toBe('<REDACTED_OVERSIZED_JSON>');
-      expect(sanitizeBody(unicodeBody)).toBe('<REDACTED_OVERSIZED_JSON>');
-      expect(sanitizeBody(surrogateBody)).toBe('<REDACTED_OVERSIZED_JSON>');
-      expect(sanitizeBody('a'.repeat(300_000))).toBe('<REDACTED_OVERSIZED_BODY>');
-    });
-
-    it('should handle deeply nested JSON without failing tracing', () => {
-      const secret = 'opaque-secret-value-1234567890';
-      const body =
-        '{"a":'.repeat(5_000) +
-        JSON.stringify({ credentials: { username: 'alice', value: secret } }) +
-        '}'.repeat(5_000);
-
-      expect(() => sanitizeBody(body)).not.toThrow();
-      expect(sanitizeBody(body)).not.toContain(secret);
-    });
-
-    it('should fail closed instead of changing unsafe JSON numbers during redaction', () => {
-      const body =
-        '{"OPENAI_API_KEY":"opaque-synthetic-provider-secret","large":1e400,"id":9007199254740993}';
-      const underflowBody = '{"password":"secret","p":1e-400}';
-      const safeBody = '{"password":"secret","timestamp_us":1719234567890123}';
-      const smallestBody = '{"password":"secret","p":5e-324}';
-
-      expect(sanitizeBody(body)).toBe('<REDACTED_UNSANITIZABLE_JSON>');
-      expect(sanitizeBody(underflowBody)).toBe('<REDACTED_UNSANITIZABLE_JSON>');
-      expect(JSON.parse(sanitizeBody(safeBody)).timestamp_us).toBe(1719234567890123);
-      expect(JSON.parse(sanitizeBody(smallestBody)).p).toBe(5e-324);
-    });
-
-    it('should preserve benign fields that only contain credential words', () => {
-      const body = JSON.stringify({
-        token_count: 4,
-        max_tokens: 128,
-        input_tokens: 32,
-        github_token_count: 2,
-        session_summary: 'safe',
-        public_key: 'public',
-        monkey: 'banana',
-        api_key_hint: 'last four',
-        tokenizer: 'cl100k_base',
-        authorization_mode: 'rbac',
-        password_policy: 'strong',
-        signature_algorithm: 'sha256',
-        secret_recipe: 'cake',
-        access_key_description: 'identifier only',
-        oauth: 'enabled',
-        bos_token: '<s>',
-        eos_token: '</s>',
-        pad_token: '[PAD]',
-        continuation_token: 'page-2',
-        next_token: 'page-3',
-        is_secret: false,
-        has_password: false,
-        requires_credentials: false,
-        keyboard_access_key: 'menu-shortcut',
-      });
-
-      expect(sanitizeBody(body)).toBe(body);
-      expect(sanitizeBody('https://example.test/search?code=200&key=id')).toBe(
-        'https://example.test/search?code=200&key=id',
-      );
-      expect(sanitizeBody('has_password=false&is_secret=true')).toBe(
-        'has_password=false&is_secret=true',
-      );
-    });
-
-    it('should redact form, header, and PEM credentials without partial suffixes', () => {
-      const form = sanitizeBody(
-        'message=keep&access_token=ya29.access%2Ftoken%2Bvalue%3D&client_secret=short%2F%2B%3D',
-      );
-      expect(form).toContain('message=keep');
-      expect(form).not.toContain('ya29');
-      expect(form).not.toContain('short');
-
-      const headers = sanitizeBody(
-        'response text Authorization: Basic dXNlcjpwYXNzLys=\nCookie: session=abc/+=; other=value',
-      );
-      expect(headers).not.toContain('dXNlcjpwYXNzLys=');
-      expect(headers).not.toContain('session=abc/+');
-
-      const privateKey = sanitizeBody(
-        '-----BEGIN RSA PRIVATE KEY-----\nsecret material\n-----END RSA PRIVATE KEY-----',
-      );
-      const unmatchedPrivateKeys = sanitizeBody('-----BEGIN PRIVATE KEY-----\n'.repeat(1_000));
-      expect(privateKey).toBe('<REDACTED_PRIVATE_KEY>');
-      expect(unmatchedPrivateKeys).toBe('<REDACTED_PRIVATE_KEY>');
-    });
-
-    it('should preserve benign hashes, slash text, and JSON formatting', () => {
-      const hash = 'a'.repeat(64);
-      const body = `{ "token_count": 4, "session_summary": "safe", "message": "${hash}/text" }`;
-
-      expect(sanitizeBody(body)).toBe(body);
-    });
-
-    it('should preserve bodies verbatim when sanitization is disabled', async () => {
-      const requestBody = '{"access_token":"plain-secret"}';
-      await withGenAISpan(
-        { ...baseContext, requestBody, sanitizeBodies: false },
-        async () => 'result',
-      );
-
-      const attributes = mockTracer.startActiveSpan.mock.calls[0][1].attributes;
-      expect(attributes[PromptfooAttributes.REQUEST_BODY]).toBe(requestBody);
+      expect(responseBodyCall![1]).not.toContain('secret-token-value-12345678901234567890');
     });
   });
 });

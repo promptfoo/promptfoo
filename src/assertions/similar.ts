@@ -9,7 +9,6 @@ export const handleSimilar = async ({
   outputString,
   inverse,
   test,
-  providerCallContext,
 }: AssertionParams): Promise<GradingResult> => {
   invariant(
     typeof renderedValue === 'string' || Array.isArray(renderedValue),
@@ -58,7 +57,6 @@ export const handleSimilar = async ({
           inverse,
           test.options,
           metric,
-          providerCallContext,
         );
         if (!result.pass) {
           return {
@@ -92,7 +90,6 @@ export const handleSimilar = async ({
         inverse,
         test.options,
         metric,
-        providerCallContext,
       );
       if (result.pass) {
         return {
@@ -120,7 +117,6 @@ export const handleSimilar = async ({
         inverse,
         test.options,
         metric,
-        providerCallContext,
       )),
     };
   }

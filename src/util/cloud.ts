@@ -2,15 +2,16 @@ import dedent from 'dedent';
 import { CLOUD_PROVIDER_PREFIX } from '../constants';
 import { cloudConfig } from '../globalConfig/cloud';
 import logger from '../logger';
+import { type UnifiedConfig, UnifiedConfigSchema } from '../types/index';
 import { ProviderOptionsSchema } from '../validators/providers';
 import { fetchWithProxy } from './fetch/index';
 import invariant from './invariant';
+import { normalizeProviderRef } from './providerRef';
 import { checkServerFeatureSupport } from './server';
 import { isUuid } from './uuid';
 
 import type { Plugin, Severity } from '../redteam/constants';
 import type { PoliciesById } from '../redteam/types';
-import type { UnifiedConfig } from '../types/index';
 import type { ProviderOptions } from '../types/providers';
 
 const PERMISSION_CHECK_SERVER_FEATURE_NAME = 'config-permission-check-endpoint';
@@ -26,13 +27,12 @@ const PERMISSION_CHECK_SERVER_FEATURE_DATE = '2025-09-03T14:49:11Z';
  */
 export function makeRequest(path: string, method: string, body?: any): Promise<Response> {
   const apiHost = cloudConfig.getApiHost();
-  const apiKey = cloudConfig.getApiKey();
   const url = `${apiHost}/api/v1/${path.startsWith('/') ? path.slice(1) : path}`;
   try {
     return fetchWithProxy(url, {
       method,
       body: JSON.stringify(body),
-      headers: { Authorization: `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
+      headers: { ...(cloudConfig.getAuthHeaders() ?? {}), 'Content-Type': 'application/json' },
     });
   } catch (e) {
     logger.error(`[Cloud] Failed to make request to ${url}: ${e}`);
@@ -121,23 +121,57 @@ function extractEvalConfigPayload(body: unknown): Record<string, unknown> {
 
   const nestedConfig = isRecord(bodyConfig.config) ? bodyConfig.config : undefined;
   if (!nestedConfig) {
-    return {
-      ...bodyConfig,
-      ...(typeof bodyConfig.name !== 'string' && typeof body.name === 'string'
-        ? { name: body.name }
-        : {}),
+    return mergeEvalConfigEnvelope(bodyConfig, body);
+  }
+
+  return mergeEvalConfigEnvelope(nestedConfig, bodyConfig);
+}
+
+function mergeEvalConfigEnvelope(
+  config: Record<string, unknown>,
+  envelope: Record<string, unknown>,
+): Record<string, unknown> {
+  const mergedConfig: Record<string, unknown> = {
+    ...config,
+    ...(typeof config.name !== 'string' && typeof envelope.name === 'string'
+      ? { name: envelope.name }
+      : {}),
+  };
+  const envelopeMetadata = {
+    ...(typeof envelope.teamId === 'string' ? { teamId: envelope.teamId } : {}),
+    ...(typeof envelope.id === 'string' ? { configId: envelope.id } : {}),
+  };
+
+  if (
+    Object.keys(envelopeMetadata).length > 0 &&
+    (mergedConfig.metadata === undefined || isRecord(mergedConfig.metadata))
+  ) {
+    mergedConfig.metadata = {
+      ...(isRecord(mergedConfig.metadata) ? mergedConfig.metadata : {}),
+      ...envelopeMetadata,
     };
   }
 
-  return {
-    ...nestedConfig,
-    ...(typeof nestedConfig.name !== 'string' && typeof bodyConfig.name === 'string'
-      ? { name: bodyConfig.name }
-      : {}),
-  };
+  return mergedConfig;
 }
 
 function normalizeCloudEvalProvider(provider: unknown): unknown {
+  if (isRecord(provider)) {
+    const descriptor = normalizeProviderRef(provider);
+    if (descriptor.kind === 'options' && typeof provider.id === 'string') {
+      const id = normalizeCloudEvalProvider(provider.id);
+      return id === provider.id ? provider : { ...provider, id };
+    }
+    if (descriptor.kind === 'map') {
+      const originalOptions = provider[descriptor.loadProviderPath];
+      const options =
+        isRecord(originalOptions) && typeof originalOptions.id === 'string'
+          ? { ...originalOptions, id: normalizeCloudEvalProvider(originalOptions.id) }
+          : originalOptions;
+      return { [normalizeCloudEvalProvider(descriptor.loadProviderPath) as string]: options };
+    }
+    return provider;
+  }
   if (typeof provider !== 'string') {
     return provider;
   }
@@ -147,53 +181,76 @@ function normalizeCloudEvalProvider(provider: unknown): unknown {
   return `${CLOUD_PROVIDER_PREFIX}${provider}`;
 }
 
-function normalizeCloudEvalPrompt(prompt: unknown): string {
-  if (typeof prompt === 'string') {
+function normalizeCloudEvalProviders(providers: unknown): unknown[] {
+  const providerList = Array.isArray(providers) ? providers : [providers];
+  return providerList.map(normalizeCloudEvalProvider);
+}
+
+function normalizeCloudEvalPrompt(prompt: unknown): unknown {
+  if (!isRecord(prompt)) {
     return prompt;
   }
-  if (isRecord(prompt)) {
-    if (typeof prompt.content === 'string') {
-      return prompt.content;
-    }
-    if (typeof prompt.raw === 'string') {
-      return prompt.raw;
-    }
+
+  if (typeof prompt.raw === 'string') {
+    return typeof prompt.label === 'string' ? prompt : { ...prompt, label: prompt.raw };
   }
-  return String(prompt ?? '');
+  if (typeof prompt.content === 'string') {
+    const { content, ...rest } = prompt;
+    return {
+      ...rest,
+      raw: content,
+      label: typeof prompt.label === 'string' ? prompt.label : content,
+    };
+  }
+  return prompt;
 }
 
 function normalizeEvalConfig(config: Record<string, unknown>): UnifiedConfig {
-  const providers = Array.isArray(config.providers)
-    ? config.providers
-    : Array.isArray(config.providerIds)
-      ? config.providerIds
-      : [];
-  const prompts = Array.isArray(config.prompts) ? config.prompts : [];
-  const tests = Array.isArray(config.tests)
-    ? config.tests
-    : Array.isArray(config.testCases)
-      ? config.testCases
-      : [];
+  const providers =
+    config.providers === undefined
+      ? config.providerIds === undefined
+        ? config.targets === undefined
+          ? []
+          : undefined
+        : normalizeCloudEvalProviders(config.providerIds)
+      : normalizeCloudEvalProviders(config.providers);
+  const targets =
+    config.targets === undefined ? undefined : normalizeCloudEvalProviders(config.targets);
+  const prompts =
+    config.prompts === undefined
+      ? []
+      : Array.isArray(config.prompts)
+        ? config.prompts.map(normalizeCloudEvalPrompt)
+        : config.prompts;
+  const tests =
+    config.tests === undefined
+      ? config.testCases === undefined
+        ? []
+        : config.testCases
+      : config.tests;
 
-  const commandLineOptions = {
-    ...(isRecord(config.commandLineOptions) ? config.commandLineOptions : {}),
+  const legacyCommandLineOptions = {
     ...(config.maxConcurrency == null ? {} : { maxConcurrency: config.maxConcurrency }),
     ...(config.delay == null ? {} : { delay: config.delay }),
     ...(config.verbose == null ? {} : { verbose: config.verbose }),
   };
+  const commandLineOptions =
+    config.commandLineOptions === undefined
+      ? Object.keys(legacyCommandLineOptions).length > 0
+        ? legacyCommandLineOptions
+        : undefined
+      : isRecord(config.commandLineOptions)
+        ? { ...config.commandLineOptions, ...legacyCommandLineOptions }
+        : config.commandLineOptions;
 
   const normalizedConfig: Record<string, unknown> = {
     ...config,
-    providers: providers.map(normalizeCloudEvalProvider),
-    prompts: prompts.map(normalizeCloudEvalPrompt),
+    ...(providers === undefined ? {} : { providers }),
+    ...(targets === undefined ? {} : { targets }),
+    prompts,
     tests,
+    ...(commandLineOptions === undefined ? {} : { commandLineOptions }),
   };
-
-  if (Object.keys(commandLineOptions).length > 0) {
-    normalizedConfig.commandLineOptions = commandLineOptions;
-  } else {
-    delete normalizedConfig.commandLineOptions;
-  }
 
   if (typeof config.description === 'string' && config.description.trim().length > 0) {
     normalizedConfig.description = config.description;
@@ -206,6 +263,15 @@ function normalizeEvalConfig(config: Record<string, unknown>): UnifiedConfig {
   delete normalizedConfig.maxConcurrency;
   delete normalizedConfig.delay;
   delete normalizedConfig.verbose;
+  delete normalizedConfig.name;
+
+  // Validate without replacing the config with Zod's default-injecting output.
+  UnifiedConfigSchema.parse(normalizedConfig);
+
+  if (normalizedConfig.targets !== undefined && normalizedConfig.providers === undefined) {
+    normalizedConfig.providers = normalizedConfig.targets;
+    delete normalizedConfig.targets;
+  }
 
   return normalizedConfig as UnifiedConfig;
 }
@@ -250,13 +316,12 @@ export async function getEvalConfigFromCloud(id: string): Promise<UnifiedConfig>
     );
   }
   try {
-    const body = await fetchCloudConfig(`configs/${id}`);
+    const body = await fetchCloudConfig(`eval/configs/${id}`);
     const config = normalizeEvalConfig(extractEvalConfigPayload(body));
     logger.info(`Eval config fetched from cloud: ${id}`);
     return config;
   } catch (e) {
-    logger.error(`Failed to fetch eval config from cloud: ${id}.`);
-    logger.error(String(e));
+    logger.debug('[Cloud] Failed to fetch eval config', { id, error: e });
     if (e instanceof Error) {
       throw e;
     }
@@ -359,6 +424,7 @@ export async function getPluginSeverityOverridesFromCloud(cloudProviderId: strin
 export async function getUserTeams(
   apiHost?: string,
   apiKey?: string,
+  authHeaderName?: string,
 ): Promise<
   Array<{
     id: string;
@@ -373,8 +439,9 @@ export async function getUserTeams(
     apiHost && apiKey
       ? await fetchWithProxy(`${apiHost}/api/v1/users/me/teams`, {
           headers: {
-            Authorization: `Bearer ${apiKey}`,
+            [authHeaderName || cloudConfig.getAuthHeaderName()]: `Bearer ${apiKey}`,
           },
+          skipCloudAuthInjection: true,
         })
       : await makeRequest(`/users/me/teams`, 'GET');
   if (!response.ok) {
@@ -834,9 +901,8 @@ export async function getOrgContext(): Promise<{
 
   try {
     const apiHost = cloudConfig.getApiHost();
-    const apiKey = cloudConfig.getApiKey();
     const response = await fetchWithProxy(`${apiHost}/api/v1/users/me`, {
-      headers: { Authorization: `Bearer ${apiKey}` },
+      headers: { ...(cloudConfig.getAuthHeaders() ?? {}) },
     });
 
     if (!response.ok) {

@@ -122,17 +122,13 @@ export interface CallApiOptionsParams {
 
 export interface ApiProvider extends MinimalApiProvider {
   callApi: CallApiFunction;
-  callClassificationApi?: (
-    prompt: string,
-    context?: CallApiContextParams,
-  ) => Promise<ProviderClassificationResponse>;
-  callEmbeddingApi?: (
-    input: string,
-    context?: CallApiContextParams,
-  ) => Promise<ProviderEmbeddingResponse>;
+  callClassificationApi?: (prompt: string) => Promise<ProviderClassificationResponse>;
+  callEmbeddingApi?: (input: string) => Promise<ProviderEmbeddingResponse>;
   config?: any;
   delay?: number;
   getSessionId?: () => string;
+  /** Native audio input content format accepted by this provider and its configured model. */
+  getAudioInputFormat?: () => 'openai' | 'google' | undefined;
   inputs?: Inputs;
   label?: ProviderLabel;
   transform?: string | TransformFunction;
@@ -146,10 +142,7 @@ export interface ApiProvider extends MinimalApiProvider {
 }
 
 export interface ApiEmbeddingProvider extends ApiProvider {
-  callEmbeddingApi: (
-    input: string,
-    context?: CallApiContextParams,
-  ) => Promise<ProviderEmbeddingResponse>;
+  callEmbeddingApi: (input: string) => Promise<ProviderEmbeddingResponse>;
 }
 
 export interface ApiSimilarityProvider extends ApiProvider {
@@ -157,14 +150,16 @@ export interface ApiSimilarityProvider extends ApiProvider {
 }
 
 export interface ApiClassificationProvider extends ApiProvider {
-  callClassificationApi: (
-    prompt: string,
-    context?: CallApiContextParams,
-  ) => Promise<ProviderClassificationResponse>;
+  callClassificationApi: (prompt: string) => Promise<ProviderClassificationResponse>;
 }
 
 export interface ApiModerationProvider extends ApiProvider {
-  callModerationApi: (prompt: string, response: string) => Promise<ProviderModerationResponse>;
+  callModerationApi: (
+    prompt: string,
+    response: string,
+    context?: CallApiContextParams,
+    options?: CallApiOptionsParams,
+  ) => Promise<ProviderModerationResponse>;
 }
 
 export type FilePath = string;

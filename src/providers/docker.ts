@@ -100,7 +100,6 @@ export function createDockerProvider(
 
   const openaiOptions = {
     ...options,
-    genAIProviderName: 'docker-model-runner',
     config: {
       ...(options.config || {}),
       apiBaseUrl,
@@ -120,6 +119,10 @@ export function createDockerProvider(
 }
 
 export class DMRChatCompletionProvider extends OpenAiChatCompletionProvider {
+  protected override getGenAISystem(): string {
+    return 'docker';
+  }
+
   public async callApi(
     prompt: string,
     context?: CallApiContextParams,
@@ -135,6 +138,10 @@ export class DMRChatCompletionProvider extends OpenAiChatCompletionProvider {
 }
 
 export class DMRCompletionProvider extends OpenAiCompletionProvider {
+  protected override getGenAISystem(): string {
+    return 'docker';
+  }
+
   async callApi(
     prompt: string,
     context?: CallApiContextParams,

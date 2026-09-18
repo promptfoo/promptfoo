@@ -14,7 +14,13 @@ import { extractFirstJsonObject } from '../../util/json';
 import { getNunjucksEngine } from '../../util/templates';
 import { sleep } from '../../util/time';
 import { TokenUsageTracker } from '../../util/tokenUsage';
-import { accumulateResponseTokenUsage, createEmptyTokenUsage } from '../../util/tokenUsageUtils';
+import {
+  accumulateAttackerTokenUsage,
+  accumulateGradingResponseTokenUsage,
+  accumulateResponseTokenUsage,
+  createEmptyTokenUsage,
+} from '../../util/tokenUsageUtils';
+import { withGradingUsage } from '../grading/storedResult';
 import {
   buildPromptInputDescriptions,
   materializeInputVariablesWithMetadata,
@@ -41,13 +47,16 @@ import {
   JUDGE_SYSTEM_PROMPT,
 } from './prompts';
 import {
+  accumulateGraderResult,
   buildGraderResultAssertion,
+  callGradingProvider,
   checkPenalizedPhrases,
   createIterationContext,
   externalizeResponseForRedteamHistory,
   getGraderAssertionValue,
   getTargetResponse,
   redteamProviderManager,
+  runRedteamGrader,
   type TargetResponse,
 } from './shared';
 import { formatTraceForMetadata, formatTraceSummary } from './traceFormatting';
@@ -103,7 +112,8 @@ interface IterativeMetadata {
     output: string;
     outputAudio?: MediaData;
     outputImage?: MediaData;
-    score: number;
+    /** Judge rating for the turn; absent when the attack stopped before the judge ran. */
+    score?: number;
     graderPassed: boolean | undefined;
     guardrails: GuardrailResponse | undefined;
     trace?: Record<string, unknown>;
@@ -202,8 +212,10 @@ export async function runRedteamConversation({
   let bestResponse = '';
   let finalIteration = numIterations;
   let bestInjectVar: string | undefined = undefined;
+  let lastInjectVar: string | undefined;
   let targetPrompt: string | null = null;
   let storedGraderResult: GradingResult | undefined = undefined;
+  let bestGraderResult: GradingResult | undefined;
   let stopReason: StopReason = 'Max iterations reached';
 
   const sessionIds: string[] = [];
@@ -218,7 +230,8 @@ export async function runRedteamConversation({
     output: string;
     outputAudio?: MediaData;
     outputImage?: MediaData;
-    score: number;
+    /** Judge rating for the turn; absent when the attack stopped before the judge ran. */
+    score?: number;
     graderPassed: boolean | undefined;
     guardrails: GuardrailResponse | undefined;
     trace?: Record<string, unknown>;
@@ -276,7 +289,8 @@ export async function runRedteamConversation({
       },
       options,
     );
-    TokenUsageTracker.getInstance().trackUsage(redteamProvider.id(), redteamResp.tokenUsage);
+    TokenUsageTracker.getInstance().trackResponseUsage(redteamProvider.id(), redteamResp);
+    accumulateAttackerTokenUsage(totalTokenUsage, redteamResp);
     if (redteamProvider.delay) {
       logger.debug(`[Iterative] Sleeping for ${redteamProvider.delay}ms`);
       await sleep(redteamProvider.delay);
@@ -360,6 +374,9 @@ export async function runRedteamConversation({
           goal: test?.metadata?.goal as string | undefined,
         },
       );
+      if (lastTransformResult.tokenUsage) {
+        accumulateAttackerTokenUsage(totalTokenUsage, lastTransformResult);
+      }
 
       if (lastTransformResult.error) {
         logger.warn('[Iterative] Transform failed, skipping iteration', {
@@ -445,6 +462,7 @@ export async function runRedteamConversation({
       promptIdx: context?.promptIdx,
     });
     lastResponse = targetResponse;
+    lastInjectVar = finalInjectVar;
     accumulateResponseTokenUsage(totalTokenUsage, targetResponse);
     logger.debug('[Iterative] Raw target response', { response: targetResponse });
     if (targetResponse.error) {
@@ -471,13 +489,14 @@ export async function runRedteamConversation({
     }
 
     let traceContext: TraceContextData | null = null;
-    if (shouldFetchTrace) {
+    if (shouldFetchTrace && !targetResponse.cached) {
       const traceparent =
         iterationContext?.traceparent ?? context?.traceparent ?? test?.metadata?.traceparent;
       const traceId = traceparent ? extractTraceIdFromTraceparent(traceparent) : null;
 
       if (traceId) {
         traceContext = await fetchTraceContext(traceId, {
+          abortSignal: options?.abortSignal,
           earliestStartTime: iterationStart,
           includeInternalSpans: tracingOptions.includeInternalSpans,
           maxSpans: tracingOptions.maxSpans,
@@ -486,6 +505,9 @@ export async function runRedteamConversation({
           retryDelayMs: tracingOptions.retryDelayMs,
           spanFilter: tracingOptions.spanFilter,
           sanitizeAttributes: tracingOptions.sanitizeAttributes,
+          providerConfig: tracingOptions.provider,
+          queryDelay: tracingOptions.queryDelay,
+          redactAttributes: tracingOptions.redactAttributes,
         });
         if (traceContext) {
           traceSnapshots.push(traceContext);
@@ -605,8 +627,9 @@ export async function runRedteamConversation({
           };
         }
 
-        const { grade, rubric } = await grader.getResult(
-          newInjectVar,
+        const { grade, rubric } = await runRedteamGrader(
+          grader,
+          finalInjectVar,
           targetResponse.output,
           iterationTest,
           gradingProvider,
@@ -615,12 +638,67 @@ export async function runRedteamConversation({
           undefined,
           gradingContext,
         );
-        storedGraderResult = {
-          ...grade,
-          assertion: buildGraderResultAssertion(grade.assertion, assertToUse, rubric),
-        };
+        storedGraderResult = accumulateGraderResult(
+          storedGraderResult,
+          {
+            ...grade,
+            assertion: buildGraderResultAssertion(grade.assertion, assertToUse, rubric),
+          },
+          {
+            prompt: finalInjectVar,
+            output: targetResponse.output,
+            pluginId: test.metadata?.pluginId,
+            assertion: assertToUse,
+          },
+        );
       }
     }
+
+    const recordTurn = (score: number | undefined, turnTraceSummary: string | undefined) => {
+      previousOutputs.push({
+        prompt: newInjectVar, // Original text for transcript
+        promptAudio: lastTransformResult?.audio,
+        promptImage: lastTransformResult?.image,
+        output: targetResponse.output,
+        // Only include audio/image if data is present
+        outputAudio:
+          targetResponse.audio?.data && targetResponse.audio?.format
+            ? { data: targetResponse.audio.data, format: targetResponse.audio.format }
+            : undefined,
+        outputImage:
+          targetResponse.image?.data && targetResponse.image?.format
+            ? { data: targetResponse.image.data, format: targetResponse.image.format }
+            : undefined,
+        score,
+        graderPassed: storedGraderResult?.pass,
+        guardrails: targetResponse?.guardrails,
+        trace: traceContext ? formatTraceForMetadata(traceContext) : undefined,
+        traceSummary: turnTraceSummary,
+        // Include input vars for multi-input mode (extracted from current prompt)
+        inputVars: currentRenderInputVars,
+        metadata: {
+          ...(materializedInputVars?.metadata
+            ? { inputMaterialization: materializedInputVars.metadata }
+            : {}),
+          sessionId,
+        },
+      });
+    };
+
+    // The grader found a vulnerability, so stop and report this turn. The judge below only
+    // rates turns to steer the next attack; if that call failed, the attack used to carry on
+    // and a later passing grade replaced this one. A grader error is not a verdict and keeps
+    // the existing handling.
+    if (storedGraderResult?.pass === false && storedGraderResult.metadata?.graderError !== true) {
+      stopReason = 'Grader failed';
+      finalIteration = i + 1;
+      bestResponse = targetResponse.output;
+      bestInjectVar = finalInjectVar;
+      bestGraderResult = storedGraderResult;
+      recordTurn(undefined, tracingOptions.includeInAttack ? computedTraceSummary : undefined);
+      break;
+    }
+
     // Calculate the score
     let traceSummary: string | undefined;
     const judgeBody = JSON.stringify([
@@ -639,7 +717,8 @@ export async function runRedteamConversation({
         `,
       },
     ]);
-    const judgeResp = await gradingProvider.callApi(
+    const judgeResp = await callGradingProvider(
+      gradingProvider,
       judgeBody,
       {
         prompt: {
@@ -651,7 +730,8 @@ export async function runRedteamConversation({
       options,
     );
 
-    TokenUsageTracker.getInstance().trackUsage(gradingProvider.id(), judgeResp.tokenUsage);
+    TokenUsageTracker.getInstance().trackResponseUsage(gradingProvider.id(), judgeResp);
+    accumulateGradingResponseTokenUsage(totalTokenUsage, judgeResp);
     if (gradingProvider.delay) {
       logger.debug(`[Iterative] Sleeping for ${gradingProvider.delay}ms`);
       await sleep(gradingProvider.delay);
@@ -710,10 +790,12 @@ export async function runRedteamConversation({
       if (currentScore > highestScore) {
         highestScore = currentScore;
         bestResponse = targetResponse.output;
-        bestInjectVar = newInjectVar;
+        bestInjectVar = finalInjectVar;
+        bestGraderResult = storedGraderResult;
       }
 
-      // Check if we should exit early (but don't break yet)
+      // Check if we should exit early (but don't break yet). A real failing grade already
+      // stopped the attack before the judge call, so only a grader error reaches this.
       if (storedGraderResult?.pass === false) {
         shouldExitEarly = true;
         stopReason = 'Grader failed';
@@ -770,34 +852,7 @@ export async function runRedteamConversation({
       continue;
     }
 
-    previousOutputs.push({
-      prompt: newInjectVar, // Original text for transcript
-      promptAudio: lastTransformResult?.audio,
-      promptImage: lastTransformResult?.image,
-      output: targetResponse.output,
-      // Only include audio/image if data is present
-      outputAudio:
-        targetResponse.audio?.data && targetResponse.audio?.format
-          ? { data: targetResponse.audio.data, format: targetResponse.audio.format }
-          : undefined,
-      outputImage:
-        targetResponse.image?.data && targetResponse.image?.format
-          ? { data: targetResponse.image.data, format: targetResponse.image.format }
-          : undefined,
-      score: currentScore,
-      graderPassed: storedGraderResult?.pass,
-      guardrails: targetResponse?.guardrails,
-      trace: traceContext ? formatTraceForMetadata(traceContext) : undefined,
-      traceSummary,
-      // Include input vars for multi-input mode (extracted from current prompt)
-      inputVars: currentRenderInputVars,
-      metadata: {
-        ...(materializedInputVars?.metadata
-          ? { inputMaterialization: materializedInputVars.metadata }
-          : {}),
-        sessionId,
-      },
-    });
+    recordTurn(currentScore, traceSummary);
 
     // Break after all processing is complete if we should exit early
     if (shouldExitEarly) {
@@ -806,15 +861,17 @@ export async function runRedteamConversation({
   }
 
   return {
-    output: bestResponse || lastResponse?.output || '',
+    output: bestInjectVar === undefined ? lastResponse?.output || '' : bestResponse,
     ...(lastResponse?.error ? { error: lastResponse.error } : {}),
-    prompt: bestInjectVar,
+    prompt: bestInjectVar ?? lastInjectVar,
     metadata: {
       finalIteration,
       highestScore,
       redteamHistory: previousOutputs,
-      redteamFinalPrompt: bestInjectVar,
-      storedGraderResult,
+      redteamFinalPrompt: bestInjectVar ?? lastInjectVar,
+      storedGraderResult: bestGraderResult
+        ? withGradingUsage(bestGraderResult, storedGraderResult?.tokensUsed)
+        : storedGraderResult,
       stopReason: stopReason,
       sessionIds,
       traceSnapshots:

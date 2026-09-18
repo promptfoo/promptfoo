@@ -85,7 +85,6 @@ export class FireworksProvider extends OpenAiChatCompletionProvider {
   constructor(modelName: string, providerOptions: ProviderOptions) {
     super(modelName, {
       ...providerOptions,
-      genAIProviderName: 'fireworks',
       config: buildFireworksProviderConfig(providerOptions.config, providerOptions.env),
     });
   }

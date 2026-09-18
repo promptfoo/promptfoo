@@ -9,7 +9,6 @@ export class AtlasCloudProvider extends OpenAiChatCompletionProvider {
   constructor(modelName: string, providerOptions: ProviderOptions = {}) {
     super(modelName, {
       ...providerOptions,
-      genAIProviderName: 'atlascloud',
       config: {
         ...providerOptions.config,
         apiBaseUrl: providerOptions.config?.apiBaseUrl || ATLASCLOUD_API_BASE,

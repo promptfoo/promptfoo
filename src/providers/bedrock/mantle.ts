@@ -2,29 +2,6 @@ import { getEnvString } from '../../envars';
 
 import type { EnvOverrides } from '../../types/env';
 
-/**
- * Whether a Bedrock OpenAI model id is a frontier model served through the Responses API
- * (a bare `openai.` id that is not an open-weight `gpt-oss` model).
- */
-export function isBedrockOpenAiResponsesModel(modelName: string): boolean {
-  return modelName.startsWith('openai.') && !modelName.includes('gpt-oss');
-}
-
-/**
- * Whether a Bedrock model id is a bare xAI Grok id (for example, `xai.grok-4.3`).
- *
- * @param modelName The Bedrock model identifier to evaluate.
- * @returns `true` when the model id is an xAI Grok model served as `xai.grok-*`; otherwise `false`.
- */
-export function isBedrockGrokModel(modelName: string): boolean {
-  return modelName.startsWith('xai.grok-');
-}
-
-/** Whether a Bedrock model id is served through the mantle Responses API. */
-export function isBedrockMantleResponsesModel(modelName: string): boolean {
-  return isBedrockOpenAiResponsesModel(modelName) || isBedrockGrokModel(modelName);
-}
-
 // Region resolution intentionally mirrors AwsBedrockGenericProvider.getRegion()
 // (src/providers/bedrock/base.ts): same config.region → AWS_BEDROCK_REGION head
 // plus AWS_REGION/AWS_DEFAULT_REGION fallbacks. The mantle providers wrap other
@@ -59,6 +36,23 @@ export function resolveBedrockMantleApiKey(
   // var instead.
   const explicitKey =
     typeof config.apiKey === 'string' && !config.apiKey.includes('{{') ? config.apiKey : undefined;
+  // Explicit AWS credentials/profile select the target's principal ahead of environment
+  // bearer tokens. Include partial tuples so validation fails instead of using another account.
+  // Match the token provider's treatment of empty values and unresolved templates.
+  const hasExplicitAwsCredentials = [
+    'accessKeyId',
+    'secretAccessKey',
+    'sessionToken',
+    'profile',
+  ].some((key) => {
+    const value = config[key];
+    return typeof value === 'string' && value.trim() && !value.includes('{{');
+  });
+  // Optional-auth custom endpoints also suppress all ambient authentication.
+  // An explicitly configured bearer token retains highest priority in either case.
+  if (config.apiKeyRequired === false || hasExplicitAwsCredentials) {
+    return explicitKey || undefined;
+  }
   return explicitKey || env?.AWS_BEARER_TOKEN_BEDROCK || getEnvString('AWS_BEARER_TOKEN_BEDROCK');
 }
 

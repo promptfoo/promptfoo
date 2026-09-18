@@ -54,7 +54,6 @@ export class NvidiaProvider extends OpenAiChatCompletionProvider {
 
     super(modelName, {
       ...providerOptions,
-      genAIProviderName: 'nvidia',
       config: {
         ...providerOptions.config,
         apiBaseUrl: explicitBaseUrl || envBaseUrl || NVIDIA_NIM_API_BASE_URL,

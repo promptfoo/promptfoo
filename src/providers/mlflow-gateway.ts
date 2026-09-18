@@ -91,7 +91,6 @@ export class MlflowGatewayChatCompletionProvider extends OpenAiChatCompletionPro
     super(modelName, {
       ...providerOptions,
       id: providerOptions.id || `mlflow-gateway:${modelName}`,
-      genAIProviderName: 'mlflow-gateway',
       config: mergedConfig,
     });
 

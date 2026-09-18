@@ -40,7 +40,6 @@ export class OrcaRouterProvider extends OpenAiChatCompletionProvider {
   constructor(modelName: string, providerOptions: ProviderOptions) {
     super(modelName, {
       ...providerOptions,
-      genAIProviderName: 'orcarouter',
       config: {
         ...providerOptions.config,
         apiBaseUrl: providerOptions.config?.apiBaseUrl || 'https://api.orcarouter.ai/v1',
