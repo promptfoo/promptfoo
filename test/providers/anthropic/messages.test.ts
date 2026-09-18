@@ -142,6 +142,45 @@ describe('AnthropicMessagesProvider', () => {
     expect(provider['getGenAISystem']()).toBe('anthropic');
   });
 
+  it('keeps cache policy independent of transport-managed authentication', async () => {
+    class TransportAuthenticatedProvider extends AnthropicMessagesProvider {
+      protected override validateAuthentication(): void {}
+    }
+    const restore = mockProcessEnv({ ANTHROPIC_API_KEY: undefined });
+    try {
+      enableCache();
+      const provider = new TransportAuthenticatedProvider('claude-3-5-sonnet-20241022', {
+        config: { stream: false },
+      });
+      const create = vi.spyOn(provider.anthropic.messages, 'create').mockResolvedValue({
+        content: [{ type: 'text', text: 'Paris' }],
+        usage: { input_tokens: 2, output_tokens: 1 },
+      } as Anthropic.Messages.Message);
+      await withCacheNamespace('transport-auth-policy', async () => {
+        expect((await provider.callApi('Capital?')).output).toBe('Paris');
+        expect((await provider.callApi('Capital?')).cached).toBe(true);
+      });
+      expect(create).toHaveBeenCalledTimes(1);
+    } finally {
+      restore();
+    }
+  });
+
+  it('still validates credentials when an adapter disables response caching', async () => {
+    class UncachedProvider extends AnthropicMessagesProvider {
+      protected override shouldCacheResponses(): boolean {
+        return false;
+      }
+    }
+    const restore = mockProcessEnv({ ANTHROPIC_API_KEY: undefined });
+    try {
+      const provider = new UncachedProvider('claude-3-5-sonnet-20241022');
+      await expect(provider.callApi('hello')).rejects.toThrow('Anthropic API key is not set');
+    } finally {
+      restore();
+    }
+  });
+
   describe('callApi', () => {
     const tools: Anthropic.Tool[] = [
       {

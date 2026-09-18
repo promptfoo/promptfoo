@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { handleContextFaithfulness } from '../../src/assertions/contextFaithfulness';
 import * as contextUtils from '../../src/assertions/contextUtils';
+import { DEFAULT_RAG_ASSERTION_THRESHOLD } from '../../src/assertions/ragDefaults';
 import * as matchers from '../../src/matchers/rag';
 
 vi.mock('../../src/matchers/rag');
@@ -324,12 +325,141 @@ describe('handleContextFaithfulness', () => {
       'test query',
       'raw',
       'from-transform',
-      0,
+      0.5,
       {},
       expect.any(Object),
       undefined,
     );
     expect(result.metadata).toBeDefined();
     expect(result.metadata!.context).toBe('from-transform');
+  });
+
+  it('should invert omitted-threshold not-context-faithfulness results', async () => {
+    const mockResult = { pass: false, score: 0.4, reason: 'Faithfulness 0.40 is < 0.5' };
+    vi.mocked(matchers.matchesContextFaithfulness).mockResolvedValue(mockResult);
+    vi.mocked(contextUtils.resolveContext).mockResolvedValue('test context');
+
+    const result = await handleContextFaithfulness({
+      assertion: {
+        type: 'not-context-faithfulness',
+      },
+      test: {
+        vars: {
+          query: 'What is the capital of France?',
+          context: 'Paris is the capital of France.',
+        },
+        options: {},
+      },
+      output: 'The capital of France is Paris.',
+      prompt: 'test prompt',
+      baseType: 'context-faithfulness',
+      assertionValueContext: {
+        prompt: 'test prompt',
+        vars: {
+          query: 'What is the capital of France?',
+          context: 'Paris is the capital of France.',
+        },
+        test: {
+          vars: {
+            query: 'What is the capital of France?',
+            context: 'Paris is the capital of France.',
+          },
+          options: {},
+        },
+        logProbs: null,
+        tokenUsage: null,
+        cached: false,
+        provider: null,
+        providerResponse: null,
+      },
+      inverse: true,
+      outputString: 'The capital of France is Paris.',
+      providerResponse: null,
+    } as any);
+
+    expect(matchers.matchesContextFaithfulness).toHaveBeenCalledWith(
+      'What is the capital of France?',
+      'The capital of France is Paris.',
+      'test context',
+      0.5,
+      {},
+      expect.any(Object),
+      undefined,
+    );
+    expect(result.pass).toBe(true);
+    expect(result.score).toBe(0.6);
+    expect(result.reason).toBe('Faithfulness 0.40 is < 0.5');
+    expect(result.metadata).toEqual({ context: 'test context' });
+  });
+
+  it('should fail not-context-faithfulness when the grader reports a faithful answer', async () => {
+    // The mirror of the inversion case above: when the matcher *passes*, the
+    // negated assertion must fail and report the grader's own reason rather
+    // than a synthesized "assertion passed" message.
+    const mockResult = { pass: true, score: 0.9, reason: 'Faithfulness 0.90 is >= 0.5' };
+    vi.mocked(matchers.matchesContextFaithfulness).mockResolvedValue(mockResult);
+    vi.mocked(contextUtils.resolveContext).mockResolvedValue('test context');
+
+    const result = await handleContextFaithfulness({
+      assertion: {
+        type: 'not-context-faithfulness',
+      },
+      test: {
+        vars: {
+          query: 'What is the capital of France?',
+          context: 'Paris is the capital of France.',
+        },
+        options: {},
+      },
+      output: 'The capital of France is Paris.',
+      prompt: 'test prompt',
+      baseType: 'context-faithfulness',
+      inverse: true,
+      outputString: 'The capital of France is Paris.',
+      providerResponse: null,
+    } as any);
+
+    expect(matchers.matchesContextFaithfulness).toHaveBeenCalledWith(
+      'What is the capital of France?',
+      'The capital of France is Paris.',
+      'test context',
+      DEFAULT_RAG_ASSERTION_THRESHOLD,
+      {},
+      expect.any(Object),
+      undefined,
+    );
+    expect(result.pass).toBe(false);
+    expect(result.score).toBeCloseTo(0.1);
+    expect(result.reason).toBe('Faithfulness 0.90 is >= 0.5');
+    expect(result.metadata).toEqual({ context: 'test context' });
+  });
+
+  it('should not invert grader errors for not-context-faithfulness', async () => {
+    // A grading provider that errored produced no verdict to negate. Without
+    // the `graderError` guard the inversion would turn an outage into a
+    // spurious pass, so the failure has to propagate verbatim.
+    const mockResult = {
+      pass: false,
+      score: 0,
+      reason: 'grading provider failed',
+      metadata: { graderError: true as const },
+    };
+    vi.mocked(matchers.matchesContextFaithfulness).mockResolvedValue(mockResult);
+    vi.mocked(contextUtils.resolveContext).mockResolvedValue('test context');
+
+    const result = await handleContextFaithfulness({
+      assertion: { type: 'not-context-faithfulness' },
+      test: { vars: { query: 'test query' }, options: {} },
+      output: 'test output',
+      prompt: 'test prompt',
+      baseType: 'context-faithfulness',
+      inverse: true,
+      outputString: 'test output',
+      providerResponse: null,
+    } as any);
+
+    expect(result.pass).toBe(false);
+    expect(result.score).toBe(0);
+    expect(result.reason).toBe('grading provider failed');
   });
 });

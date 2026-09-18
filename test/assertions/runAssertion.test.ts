@@ -1896,6 +1896,69 @@ describe('runAssertion', () => {
     });
   });
 
+  describe.each(['webhook', 'not-webhook'] as const)('%s response validation', (type) => {
+    it.each([
+      {},
+      { error: 'Grader unavailable' },
+      { pass: 'false' },
+      { pass: 'true' },
+      { pass: 0 },
+      { pass: 1 },
+      { pass: null },
+      { pass: [] },
+      { pass: {} },
+      null,
+      [],
+      true,
+      'false',
+    ])('rejects a response without a boolean pass: %j', async (response) => {
+      vi.mocked(fetchWithRetries).mockResolvedValueOnce(
+        new Response(JSON.stringify(response), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
+        }),
+      );
+
+      const result = await runAssertion({
+        prompt: 'Some prompt',
+        assertion: { ...webhookAssertion, type },
+        test: {} as AtomicTestCase,
+        providerResponse: { output: 'Expected output' },
+        provider: createMockProvider(),
+      });
+
+      expect(result).toMatchObject({
+        pass: false,
+        score: 0,
+        reason:
+          'Webhook error: Invariant failed: Webhook response must be a JSON object with a boolean "pass" property',
+      });
+    });
+
+    it.each([true, false])('preserves a valid pass value of %s', async (pass) => {
+      vi.mocked(fetchWithRetries).mockResolvedValueOnce(
+        new Response(JSON.stringify({ pass, score: 0.25, reason: 'Custom grade' }), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
+        }),
+      );
+
+      const result = await runAssertion({
+        prompt: 'Some prompt',
+        assertion: { ...webhookAssertion, type },
+        test: {} as AtomicTestCase,
+        providerResponse: { output: 'Expected output' },
+        provider: createMockProvider(),
+      });
+
+      expect(result).toMatchObject({
+        pass: type === 'webhook' ? pass : !pass,
+        score: type === 'webhook' ? 0.25 : 0.75,
+        reason: 'Custom grade',
+      });
+    });
+  });
+
   it('should fail when the webhook returns an error', async () => {
     const output = 'Expected output';
 

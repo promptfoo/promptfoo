@@ -347,18 +347,6 @@ export function renderMetricName(
   }
 }
 
-function getProviderDisplayName(provider?: ApiProvider): string {
-  if (provider?.label) {
-    return provider.label;
-  }
-
-  try {
-    return provider?.id() || 'unknown provider';
-  } catch {
-    return 'unknown provider';
-  }
-}
-
 function getProviderIdentifiers(provider?: ApiProvider): string[] {
   const identifiers = new Set<string>();
 
@@ -376,6 +364,10 @@ function getProviderIdentifiers(provider?: ApiProvider): string[] {
   }
 
   return Array.from(identifiers);
+}
+
+function getProviderDisplayName(provider?: ApiProvider): string {
+  return getProviderIdentifiers(provider)[0] ?? 'unknown provider';
 }
 
 function escapeRegExp(value: string): string {
@@ -577,6 +569,7 @@ async function runAssertionInternal({
   providerResponse,
   traceId,
   traceData,
+  claimStoredGradingUsage,
 }: {
   prompt?: string;
   provider?: ApiProvider;
@@ -588,6 +581,7 @@ async function runAssertionInternal({
   assertIndex?: number;
   traceId?: string;
   traceData?: TraceData | null;
+  claimStoredGradingUsage?: () => boolean;
 }): Promise<GradingResult> {
   const applyXFail = (result: GradingResult) => applyProviderXFail(assertion, result, provider);
 
@@ -811,7 +805,7 @@ async function runAssertionInternal({
 
   // Check for redteam assertions first
   if (assertionParams.baseType.startsWith('promptfoo:redteam:')) {
-    return applyXFail(await handleRedteam(assertionParams));
+    return applyXFail(await handleRedteam(assertionParams, claimStoredGradingUsage));
   }
 
   const handler = ASSERTION_HANDLERS[assertionParams.baseType as keyof typeof ASSERTION_HANDLERS];
@@ -987,6 +981,17 @@ export async function runAssertions({
     ? 1
     : ASSERTIONS_MAX_CONCURRENCY;
 
+  // All assertions (including assertion sets) share one historical strategy cost.
+  // Keep ownership local to this run so replaying a saved response starts fresh.
+  let storedGradingUsageClaimed = false;
+  const claimStoredGradingUsage = () => {
+    if (storedGradingUsageClaimed) {
+      return false;
+    }
+    storedGradingUsageClaimed = true;
+    return true;
+  };
+
   await async.forEachOfLimit(asserts, concurrency, async ({ assertion, assertResult, index }) => {
     if (assertion.type.startsWith('select-') || assertion.type === 'max-score') {
       // Select-type and max-score assertions are handled separately because they depend on multiple outputs.
@@ -1004,6 +1009,7 @@ export async function runAssertions({
       assertIndex: index,
       traceId,
       traceData: preloadedTraceData,
+      claimStoredGradingUsage,
     });
 
     assertResult.addResult({
