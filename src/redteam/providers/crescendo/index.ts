@@ -44,6 +44,7 @@ import {
   extractPromptFromTags,
   getSessionId,
   isBasicRefusal,
+  stripPromptBlockPrefix,
 } from '../../util';
 import { getGoalRubric } from '../prompts';
 import {
@@ -1017,7 +1018,7 @@ export class CrescendoProvider implements ApiProvider {
     });
 
     return {
-      generatedQuestion,
+      generatedQuestion: stripPromptBlockPrefix(generatedQuestion),
       inputMaterialization: response.inputMaterialization,
       materializationHandled: response.materializationHandled,
       materializedVars: response.materializedVars,
@@ -1052,6 +1053,7 @@ export class CrescendoProvider implements ApiProvider {
     if (extractedPrompt) {
       processedPrompt = extractedPrompt;
     }
+    processedPrompt = stripPromptBlockPrefix(processedPrompt);
 
     // Extract input vars from the processed prompt for multi-input mode
     if (this.config.inputs && shouldGenerateRemote()) {
