@@ -32,18 +32,27 @@ import type {
   ProviderOptions,
   ProviderResponse,
 } from '../../types/index';
-import type { CompletionOptions, FunctionCall } from './types';
+import type { CompletionOptions, FunctionCall, FunctionDeclaration } from './types';
 import type { GeminiFormat } from './util';
 
 const formatContentMessages = (
   contents: GeminiFormat,
   contentIndex: number,
   useRealtimeTextInput = false,
+  useManualAudioActivity = false,
+  useClientContentText = false,
 ) => {
   if (contents[contentIndex].role !== 'user') {
     throw new Error('Can only take user role inputs.');
   }
   const parts = contents[contentIndex].parts;
+
+  // Vertex 2.5 accepts clientContent text turns. Realtime text is a contextual
+  // hint there and can produce an empty turn instead of an answer; 3.8 requires
+  // realtimeInput.text, so keep its protocol separate.
+  if (useClientContentText && parts.every((part) => typeof part.text === 'string')) {
+    return [{ clientContent: { turns: [{ role: 'user', parts }], turnComplete: true } }];
+  }
 
   if (useRealtimeTextInput) {
     const mappedMessages = parts.map((part) => {
@@ -86,6 +95,24 @@ const formatContentMessages = (
     });
     const textMessages = mappedMessages.filter((message) => 'text' in message.realtimeInput);
     const contentMessages = mappedMessages.filter((message) => !('text' in message.realtimeInput));
+    if (useClientContentText && textMessages.length > 0) {
+      const text = textMessages.map((message) => message.realtimeInput.text).join('\n');
+      const hasAudio = contentMessages.some((message) => 'audio' in message.realtimeInput);
+      const clientContent = {
+        clientContent: { turns: [{ role: 'user', parts: [{ text }] }], turnComplete: !hasAudio },
+      };
+      if (hasAudio) {
+        // Supply text as context before the recording. Sending realtimeInput.text
+        // during an audio activity can interrupt it on Vertex 2.5.
+        return [
+          clientContent,
+          { realtimeInput: { activityStart: {} } },
+          ...contentMessages,
+          { realtimeInput: { activityEnd: {} } },
+        ];
+      }
+      return [...contentMessages, clientContent];
+    }
     if (textMessages.length > 0) {
       contentMessages.push({
         realtimeInput: {
@@ -94,6 +121,13 @@ const formatContentMessages = (
       } as any);
     }
     if (contentMessages.some((message) => 'audio' in message.realtimeInput)) {
+      if (useManualAudioActivity) {
+        return [
+          { realtimeInput: { activityStart: {} } },
+          ...contentMessages,
+          { realtimeInput: { activityEnd: {} } },
+        ];
+      }
       contentMessages.push({ realtimeInput: { audioStreamEnd: true } } as any);
     } else if (
       contentMessages.some((message) => 'video' in message.realtimeInput) &&
@@ -140,6 +174,32 @@ const getTokenCount = (...values: unknown[]): number => {
   return typeof value === 'number' ? Math.max(value, 0) : 0;
 };
 
+const getGemini38ConfigError = (
+  generationConfig: CompletionOptions['generationConfig'],
+  extendedThinking: boolean,
+): string | undefined => {
+  const thinking = generationConfig?.thinkingConfig;
+  if (!extendedThinking && thinking) {
+    return 'gemini-3.8-live does not support thinkingConfig. Use gemini-3.8-live-extended-thinking instead.';
+  }
+  if (thinking?.thinkingBudget !== undefined) {
+    return 'gemini-3.8-live-extended-thinking does not support thinkingBudget. Use thinkingLevel LOW, MEDIUM, or HIGH.';
+  }
+  if (
+    thinking?.thinkingLevel !== undefined &&
+    !['LOW', 'MEDIUM', 'HIGH'].includes(thinking.thinkingLevel)
+  ) {
+    return 'gemini-3.8-live-extended-thinking supports thinkingLevel LOW, MEDIUM, or HIGH.';
+  }
+  if (generationConfig?.enableAffectiveDialog !== undefined) {
+    return 'Gemini 3.8 Live does not support enableAffectiveDialog.';
+  }
+  if (generationConfig?.proactivity?.proactiveAudio === false) {
+    return 'Gemini 3.8 Live has permanently enabled proactive audio; proactivity.proactiveAudio cannot be false.';
+  }
+  return undefined;
+};
+
 /**
  * Helper function to fetch JSON with error handling
  */
@@ -183,6 +243,7 @@ export const tryGetThenPost = async <T = unknown>(url: string, data?: unknown): 
 export class GoogleLiveProvider implements ApiProvider {
   config: CompletionOptions;
   modelName: string;
+  protected readonly isVertex: boolean = false;
   private loadedFunctionCallbacks: Record<string, Function> = {};
 
   constructor(modelName: string, options: ProviderOptions) {
@@ -244,38 +305,69 @@ export class GoogleLiveProvider implements ApiProvider {
    * - Service account JSON (via config.credentials or GOOGLE_APPLICATION_CREDENTIALS)
    * - Application Default Credentials (via `gcloud auth application-default login`)
    */
-  private async getAccessToken(): Promise<string | undefined> {
-    const credentials = loadCredentials(this.config.credentials);
+  private async getAccessToken(config: CompletionOptions): Promise<string | undefined> {
+    const credentials = loadCredentials(config.credentials);
     return getGoogleAccessToken(credentials);
   }
 
-  async callApi(prompt: string, context?: CallApiContextParams): Promise<ProviderResponse> {
-    // https://cloud.google.com/vertex-ai/docs/generative-ai/model-reference/gemini#gemini-pro
-
-    // Try OAuth2 first (required for WebSocket Live API - API keys are not supported)
-    // Fall back to API key only if OAuth2 is not available
-    const accessToken = await this.getAccessToken();
-    const apiKey = this.getApiKey();
-
+  protected async getConnection(config: CompletionOptions): Promise<{
+    url: string;
+    model: string;
+    apiVersion: string;
+    headers?: Record<string, string>;
+  }> {
+    // Cloud ADC often lacks Gemini API scopes. Do not let an incidental gcloud
+    // login override an API key; explicit OAuth credentials still take priority
+    // over environment API keys. Vertex overrides this method and uses only OAuth.
+    const apiKey = config.apiKey || (config.credentials ? undefined : this.getApiKey());
+    const accessToken = apiKey ? undefined : await this.getAccessToken(config);
     if (!accessToken && !apiKey) {
       throw new Error(
-        'Google authentication is not configured. The Live API requires OAuth2 authentication.\n\n' +
+        'Google authentication is not configured. Set GOOGLE_API_KEY or GEMINI_API_KEY, or configure OAuth2 credentials.\n\n' +
           'Either:\n' +
           '1. Set up Application Default Credentials:\n' +
           '   gcloud auth application-default login --client-id-file=client_secret.json ' +
           '--scopes="https://www.googleapis.com/auth/cloud-platform,https://www.googleapis.com/auth/generative-language.retriever"\n' +
           '2. Set GOOGLE_APPLICATION_CREDENTIALS to a service account key file, or\n' +
           '3. Add `credentials` to the provider config with service account JSON\n\n' +
-          'Note: GOOGLE_API_KEY is NOT supported for the Live API WebSocket endpoint.\n' +
           'For OAuth2 setup instructions, see: https://ai.google.dev/gemini-api/docs/oauth\n' +
           'These options require the google-auth-library package to be installed.',
       );
     }
+    const prefersV1beta =
+      this.modelName.startsWith('gemini-3.1-flash-live') ||
+      this.modelName.startsWith('gemini-2.5-flash-native-audio-') ||
+      this.modelName.startsWith('gemini-live-2.5-flash-preview-native-audio-');
+    const apiVersion = config.apiVersion || (prefersV1beta ? 'v1beta' : 'v1alpha');
+    const auth = accessToken ? `access_token=${accessToken}` : `key=${apiKey}`;
+    return {
+      url: `wss://generativelanguage.googleapis.com/ws/google.ai.generativelanguage.${apiVersion}.GenerativeService.BidiGenerateContent?${auth}`,
+      model: `models/${this.modelName}`,
+      apiVersion,
+    };
+  }
 
+  async callApi(prompt: string, context?: CallApiContextParams): Promise<ProviderResponse> {
+    const isGemini38Live =
+      this.modelName === 'gemini-3.8-live' ||
+      this.modelName === 'gemini-3.8-live-extended-thinking';
+    const usesInteractionStatus = this.modelName === 'gemini-3.8-live-extended-thinking';
     const config = mergeGoogleCompletionOptions(
       this.config,
       context?.prompt?.config as Partial<CompletionOptions> | undefined,
     );
+    if (isGemini38Live) {
+      const error = getGemini38ConfigError(config.generationConfig, usesInteractionStatus);
+      if (error) {
+        return { error };
+      }
+    }
+
+    // Resolve authentication before starting tool processes or opening a socket.
+    const connection = await this.getConnection(config);
+    const usesRealtimeTextInput =
+      isGemini38Live || connection.apiVersion === 'v1beta' || this.isVertex;
+
     const { toolConfig, toolsDisabled } = resolveGoogleToolConfig(config);
 
     const { contents, systemInstruction } = geminiFormatAndSystemInstructions(
@@ -284,6 +376,21 @@ export class GoogleLiveProvider implements ApiProvider {
       config.systemInstruction,
       { useAssistantRole: config.useAssistantRole },
     );
+    // Eval audio inputs are finite recordings, so mark their boundaries explicitly
+    // instead of relying on voice activity detection to find trailing silence.
+    const useManualAudioActivity =
+      (isGemini38Live || this.isVertex) &&
+      contents.some((content) =>
+        content.parts.some((part) => {
+          const audioPart = part as {
+            inlineData?: { mimeType?: string };
+            inline_data?: { mime_type?: string };
+          };
+          return (audioPart.inlineData?.mimeType ?? audioPart.inline_data?.mime_type)?.startsWith(
+            'audio/',
+          );
+        }),
+      );
     let contentIndex = 0;
 
     let statefulApi: ChildProcess | undefined;
@@ -329,14 +436,34 @@ export class GoogleLiveProvider implements ApiProvider {
     const fileTools = configTools
       ? await maybeLoadToolsFromExternalFile(configTools, context?.vars)
       : [];
-    const normalizedTools = Array.isArray(fileTools)
-      ? normalizeTools(fileTools)
-      : fileTools
-        ? [fileTools]
-        : [];
+    const normalizedTools = normalizeTools(
+      Array.isArray(fileTools) ? fileTools : fileTools ? [fileTools] : [],
+    );
     const requestTools = toolsDisabled
       ? removeGoogleFunctionDeclarations(normalizedTools)
       : normalizedTools;
+    if (usesInteractionStatus) {
+      for (const tool of requestTools) {
+        if (
+          tool.functionDeclarations?.some(
+            (declaration: FunctionDeclaration) => declaration.behavior === 'BLOCKING',
+          )
+        ) {
+          statefulApi?.kill();
+          return {
+            error: 'gemini-3.8-live-extended-thinking requires NON_BLOCKING function declarations.',
+          };
+        }
+        if (tool.functionDeclarations) {
+          tool.functionDeclarations = tool.functionDeclarations.map(
+            (declaration: FunctionDeclaration) => ({
+              ...declaration,
+              behavior: 'NON_BLOCKING',
+            }),
+          );
+        }
+      }
+    }
 
     // Lazy-load the `ws` implementation so merely importing this module stays cheap;
     // the Live provider is itself dynamically imported by the Google provider family.
@@ -344,10 +471,6 @@ export class GoogleLiveProvider implements ApiProvider {
 
     return new Promise<ProviderResponse>((resolve) => {
       const isNativeAudioModel = this.modelName.includes('native-audio');
-      const prefersV1beta =
-        this.modelName.startsWith('gemini-3.1-flash-live') ||
-        this.modelName.startsWith('gemini-2.5-flash-native-audio-') ||
-        this.modelName.startsWith('gemini-live-2.5-flash-preview-native-audio-');
       let isResolved = false;
 
       const safeResolve = (response: ProviderResponse) => {
@@ -357,24 +480,9 @@ export class GoogleLiveProvider implements ApiProvider {
         }
       };
 
-      let { apiVersion } = config;
-      if (!apiVersion) {
-        apiVersion = prefersV1beta ? 'v1beta' : 'v1alpha';
-      }
-      const usesRealtimeTextInput = apiVersion === 'v1beta';
-
-      // Construct WebSocket URL with OAuth2 token (required) or API key (fallback, likely won't work)
-      let url: string;
-      if (accessToken) {
-        url = `wss://generativelanguage.googleapis.com/ws/google.ai.generativelanguage.${apiVersion}.GenerativeService.BidiGenerateContent?access_token=${accessToken}`;
-        logger.debug('Using OAuth2 access token for Google Live API authentication');
-      } else {
-        // Note: API keys are likely to be rejected by the Live API WebSocket endpoint
-        url = `wss://generativelanguage.googleapis.com/ws/google.ai.generativelanguage.${apiVersion}.GenerativeService.BidiGenerateContent?key=${apiKey}`;
-        logger.debug('Using API key for Google Live API authentication (may not be supported)');
-      }
-
-      const ws = new WebSocketCtor(url);
+      const ws = connection.headers
+        ? new WebSocketCtor(connection.url, { headers: connection.headers })
+        : new WebSocketCtor(connection.url);
 
       let response_text_total = '';
       const responseAudioChunks: Buffer[] = [];
@@ -387,6 +495,8 @@ export class GoogleLiveProvider implements ApiProvider {
       let completedGenerations = 0;
       let completedTurns = 0;
       let hasPendingToolFollowup = false;
+      let receivedMessageIndex = 0;
+      let lastToolResponseMessageIndex = 0;
       let lastVideoFrameSentAt = 0;
       let hasFinalized = false;
 
@@ -429,6 +539,8 @@ export class GoogleLiveProvider implements ApiProvider {
       // Extract transcription config for use in message handler
       const hasOutputTranscription =
         !!config.generationConfig?.outputAudioTranscription ||
+        isGemini38Live ||
+        this.isVertex ||
         (usesRealtimeTextInput && requestedText);
 
       const videoFrameCount = contents.reduce(
@@ -698,7 +810,7 @@ export class GoogleLiveProvider implements ApiProvider {
             config,
             Math.max(promptTokens - (billVideoPerSecond ? videoPromptTokens : 0), 0),
             billableCompletionTokens,
-            false,
+            this.isVertex,
             audioPromptTokens,
             audioCompletionTokens,
             undefined,
@@ -743,7 +855,9 @@ export class GoogleLiveProvider implements ApiProvider {
         const speechConfig = generationSpeechConfig ?? config.speechConfig;
         const outputAudioTranscription =
           configuredOutputAudioTranscription ??
-          (usesRealtimeTextInput && requestedText ? {} : undefined);
+          (isGemini38Live || this.isVertex || (usesRealtimeTextInput && requestedText)
+            ? {}
+            : undefined);
 
         let formattedSpeechConfig;
         if (speechConfig) {
@@ -769,7 +883,10 @@ export class GoogleLiveProvider implements ApiProvider {
 
         const setupMessage = {
           setup: {
-            model: `models/${this.modelName}`,
+            model: connection.model,
+            ...(useManualAudioActivity
+              ? { realtimeInputConfig: { automaticActivityDetection: { disabled: true } } }
+              : {}),
             [usesRealtimeTextInput ? 'generationConfig' : 'generation_config']: {
               context: config.context,
               examples: config.examples,
@@ -779,6 +896,14 @@ export class GoogleLiveProvider implements ApiProvider {
               topP: config.topP,
               topK: config.topK,
               ...restGenerationConfig,
+              ...(usesInteractionStatus
+                ? {
+                    thinkingConfig: {
+                      thinkingLevel: 'LOW',
+                      ...restGenerationConfig.thinkingConfig,
+                    },
+                  }
+                : {}),
               ...(effectiveResponseModalities
                 ? {
                     [usesRealtimeTextInput ? 'responseModalities' : 'response_modalities']:
@@ -823,7 +948,7 @@ export class GoogleLiveProvider implements ApiProvider {
         ws.send(JSON.stringify(setupMessage));
       };
 
-      ws.onmessage = async (event) => {
+      const processMessage = async (event: WebSocket.MessageEvent, messageIndex: number) => {
         // Once the request has been resolved (e.g. by an early onclose or
         // timeout), drop any in-flight messages so they don't trigger side
         // effects like stateful-API fetches after the caller has moved on.
@@ -844,6 +969,7 @@ export class GoogleLiveProvider implements ApiProvider {
             hasAudioContent = true;
             const audioBuffer = Buffer.isBuffer(event.data) ? event.data : Buffer.from(event.data);
             responseAudioChunks.push(audioBuffer);
+            hasPendingToolFollowup = false;
             if (isAudioExpected) {
               hasAudioStreamEnded = false;
             }
@@ -866,12 +992,26 @@ export class GoogleLiveProvider implements ApiProvider {
             return;
           }
           const response = JSON.parse(responseText);
+          // Gemini 3.8 may interleave empty frames with streamed audio. They do
+          // not signal completion and must not trigger the legacy fallback.
+          if ((isGemini38Live || this.isVertex) && Object.keys(response).length === 0) {
+            return;
+          }
+          const interactionStatus =
+            response.interactionStatus ??
+            response.interaction_status ??
+            response.serverContent?.interactionStatus ??
+            response.serverContent?.interaction_status;
+          const interactionComplete = usesInteractionStatus && interactionStatus === 'IDLE';
 
           const frameUsageMetadata = response.usageMetadata ?? response.usage_metadata;
           if (frameUsageMetadata) {
             pendingUsageMetadata = frameUsageMetadata;
           }
-          if ((response.serverContent?.turnComplete || response.toolCall) && pendingUsageMetadata) {
+          if (
+            (response.serverContent?.turnComplete || response.toolCall || interactionComplete) &&
+            pendingUsageMetadata
+          ) {
             usageMetadata.push(pendingUsageMetadata);
             pendingUsageMetadata = undefined;
           }
@@ -905,19 +1045,32 @@ export class GoogleLiveProvider implements ApiProvider {
               contents,
               contentIndex,
               usesRealtimeTextInput,
+              useManualAudioActivity,
+              this.isVertex && !isGemini38Live,
             );
             contentIndex += 1;
             logger.debug('WebSocket sent', { messageCount: contentMessages.length });
             await sendContentMessages(contentMessages);
-          } else if (response.serverContent) {
-            const { serverContent } = response;
+          } else if (response.serverContent || interactionComplete) {
+            const serverContent = response.serverContent ?? {};
+            // Extended Thinking may finish several spoken fillers before its
+            // reasoning and asynchronous tool calls finish. Only IDLE ends the input.
+            // A queued IDLE received before we sent a tool response describes the
+            // old state, even if the callback finished before we process it.
+            const inputComplete = usesInteractionStatus
+              ? interactionComplete && messageIndex > lastToolResponseMessageIndex
+              : serverContent.turnComplete;
             const hasModelOutput =
               Boolean(serverContent.modelTurn?.parts?.length) ||
               Boolean(serverContent.outputTranscription?.text) ||
-              Boolean(serverContent.generationComplete);
+              (!isGemini38Live && !this.isVertex && Boolean(serverContent.generationComplete));
             if (hasModelOutput) {
               hasPendingToolFollowup = false;
-            } else if (serverContent.turnComplete && hasPendingToolFollowup) {
+            } else if (
+              !usesInteractionStatus &&
+              serverContent.turnComplete &&
+              hasPendingToolFollowup
+            ) {
               hasPendingToolFollowup = false;
               logger.debug('Ignoring Gemini Live bookkeeping turnComplete after a tool response.');
               return;
@@ -963,12 +1116,14 @@ export class GoogleLiveProvider implements ApiProvider {
               }
             }
 
-            if (serverContent.turnComplete && contentIndex < contents.length) {
+            if (inputComplete && contentIndex < contents.length) {
               completedTurns += 1;
               const contentMessages = formatContentMessages(
                 contents,
                 contentIndex,
                 usesRealtimeTextInput,
+                useManualAudioActivity,
+                this.isVertex && !isGemini38Live,
               );
               contentIndex += 1;
               logger.debug('WebSocket sent (multi-turn)', { messageCount: contentMessages.length });
@@ -978,7 +1133,7 @@ export class GoogleLiveProvider implements ApiProvider {
               return;
             }
 
-            if (serverContent.turnComplete && contentIndex >= contents.length) {
+            if (inputComplete && contentIndex >= contents.length) {
               completedTurns += 1;
               logger.debug(
                 `Turn complete received - text expected: ${isTextExpected}, text ended: ${hasTextStreamEnded}, audio expected: ${isAudioExpected}, audio ended: ${hasAudioStreamEnded}, has audio: ${hasAudioContent}, has transcription: ${!!response_audio_transcript}`,
@@ -992,7 +1147,7 @@ export class GoogleLiveProvider implements ApiProvider {
             }
 
             if (
-              serverContent.turnComplete &&
+              inputComplete &&
               Math.max(completedGenerations, completedTurns) >= contents.length &&
               hasTextStreamEnded &&
               hasAudioStreamEnded &&
@@ -1031,6 +1186,7 @@ export class GoogleLiveProvider implements ApiProvider {
                   const toolMessage = usesRealtimeTextInput
                     ? { toolResponse: { functionResponses: [functionResponse] } }
                     : { tool_response: { function_responses: functionResponse } };
+                  lastToolResponseMessageIndex = receivedMessageIndex;
                   ws.send(JSON.stringify(toolMessage));
                 }
               }
@@ -1097,6 +1253,7 @@ export class GoogleLiveProvider implements ApiProvider {
                     ? { toolResponse: { functionResponses: [functionResponse] } }
                     : { tool_response: { function_responses: functionResponse } };
                   logger.debug(`WebSocket sent: ${JSON.stringify(toolMessage)}`);
+                  lastToolResponseMessageIndex = receivedMessageIndex;
                   ws.send(JSON.stringify(toolMessage));
                 }
               }
@@ -1110,6 +1267,7 @@ export class GoogleLiveProvider implements ApiProvider {
               if (chunk.mimeType?.includes('audio')) {
                 hasAudioContent = true;
                 responseAudioChunks.push(Buffer.from(chunk.data, 'base64'));
+                hasPendingToolFollowup = false;
               }
             }
           } else if (response.candidates?.[0]?.content?.parts) {
@@ -1117,6 +1275,7 @@ export class GoogleLiveProvider implements ApiProvider {
               if (part.inlineData?.mimeType?.includes('audio')) {
                 hasAudioContent = true;
                 responseAudioChunks.push(Buffer.from(part.inlineData.data, 'base64'));
+                hasPendingToolFollowup = false;
               }
             }
           } else if (
@@ -1129,6 +1288,7 @@ export class GoogleLiveProvider implements ApiProvider {
             !response.setupComplete &&
             !response.serverContent &&
             !response.toolCall &&
+            !interactionStatus &&
             !response.realtimeInput &&
             !response.candidates &&
             !response.streamingCustomOp
@@ -1138,6 +1298,8 @@ export class GoogleLiveProvider implements ApiProvider {
             );
             if (
               hasOutputTranscription &&
+              !isGemini38Live &&
+              !this.isVertex &&
               hasAudioContent &&
               isAudioExpected &&
               !hasAudioStreamEnded
@@ -1164,8 +1326,27 @@ export class GoogleLiveProvider implements ApiProvider {
         }
       };
 
+      // WebSocket does not await async handlers. Preserve processing order and
+      // receipt order so queued pre-tool-response IDLE frames remain stale.
+      let messageQueue = Promise.resolve();
+      ws.onmessage = (event) => {
+        if (isResolved) {
+          return;
+        }
+        const messageIndex = ++receivedMessageIndex;
+        if (!isGemini38Live && !this.isVertex) {
+          return processMessage(event, messageIndex);
+        }
+        armIdleTimeout();
+        messageQueue = messageQueue.then(() => processMessage(event, messageIndex));
+        return messageQueue;
+      };
+
       ws.onerror = (err) => {
-        logger.error(`WebSocket error for model ${this.modelName}: ${JSON.stringify(err)}`);
+        // ws error events can retain the socket and its authentication headers.
+        // Never serialize the event object into logs or exported eval errors.
+        const message = err.message || 'Connection failed';
+        logger.error('Google Live WebSocket error', { model: this.modelName, message });
         if (isNativeAudioModel) {
           logger.error(
             `Native audio model ${this.modelName} may not be available or may require different configuration`,
@@ -1174,7 +1355,7 @@ export class GoogleLiveProvider implements ApiProvider {
         clearTimeout(timeout);
         ws.close();
         safeResolve({
-          error: `WebSocket error for model ${this.modelName}: ${JSON.stringify(err)}`,
+          error: `WebSocket error for model ${this.modelName}: ${message}`,
         });
       };
 

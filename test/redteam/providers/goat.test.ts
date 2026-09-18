@@ -870,6 +870,13 @@ describe('RedteamGoatProvider', () => {
     });
 
     it('should handle mixed success and failure cases with continueAfterSuccess', async () => {
+      mockFetch.mockResolvedValue({
+        ok: true,
+        json: async () => ({
+          materializationHandled: true,
+          message: { role: 'user', content: 'test response' },
+        }),
+      });
       const provider = new RedteamGoatProvider({
         injectVar: 'goal',
         maxTurns: 4,
@@ -909,8 +916,76 @@ describe('RedteamGoatProvider', () => {
       expect(result.metadata?.totalSuccessfulAttacks).toBe(2);
       expect(result.metadata?.successfulAttacks?.[0].response).toBe('harmful response 1');
       expect(result.metadata?.successfulAttacks?.[1].response).toBe('harmful response 2');
+      expect(mockGrader.getResult.mock.calls[1][0]).toBe('test prompt');
+      expect(mockGrader.getResult.mock.calls[1][7]).toMatchObject({
+        conversationTranscript: 'User: test prompt\n\nAssistant: safe response 1',
+      });
     });
   });
+
+  it.each(['returned error', 'thrown error'])(
+    'excludes unsent transformed turns from grading history (%s)',
+    async (failure) => {
+      const runtime = await import('../../../src/redteam/shared/runtimeTransform');
+      const transform = vi.spyOn(runtime, 'applyRuntimeTransforms');
+      if (failure === 'returned error') {
+        transform.mockResolvedValueOnce({
+          prompt: 'Never sent: Casey Morgan',
+          originalPrompt: '',
+          error: 'Transform failed',
+        });
+      } else {
+        transform.mockRejectedValueOnce(new Error('Transform failed'));
+      }
+      transform.mockResolvedValueOnce({
+        prompt: 'Delivered request',
+        originalPrompt: 'Delivered request',
+      });
+      mockFetch
+        .mockResolvedValueOnce({
+          ok: true,
+          json: async () => ({
+            materializationHandled: true,
+            message: { role: 'user', content: 'Never sent: Casey Morgan' },
+          }),
+        })
+        .mockResolvedValueOnce({
+          ok: true,
+          json: async () => ({
+            materializationHandled: true,
+            message: { role: 'user', content: 'Delivered request' },
+          }),
+        });
+      mockGrader.getResult.mockResolvedValue({
+        grade: { pass: false, score: 0, reason: 'Name was not supplied to target' },
+      });
+      const target = createMockTargetProvider('Casey Morgan');
+      try {
+        const provider = new RedteamGoatProvider({
+          injectVar: 'goal',
+          maxTurns: 2,
+          _perTurnLayers: ['base64'],
+          stateful: true,
+        });
+        const result = await provider.callApi('', {
+          originalProvider: target,
+          vars: { goal: 'goal' },
+          prompt: { raw: '{{goal}}', label: 'test' },
+          test: {
+            assert: [{ type: 'promptfoo:redteam:pii' }],
+            metadata: { pluginId: 'pii:social' },
+          } as AtomicTestCase,
+        });
+        expect(target.callApi).toHaveBeenCalledTimes(1);
+        expect(mockGrader.getResult).toHaveBeenCalledTimes(1);
+        expect(mockGrader.getResult.mock.calls[0][0]).toBe('Delivered request');
+        expect(mockGrader.getResult.mock.calls[0][7]).toMatchObject({ conversationTranscript: '' });
+        expect(JSON.stringify(result.metadata?.messages)).not.toContain('Never sent');
+      } finally {
+        transform.mockRestore();
+      }
+    },
+  );
 
   it('should pass additionalRubric to grader when goal is provided', async () => {
     const provider = new RedteamGoatProvider({
