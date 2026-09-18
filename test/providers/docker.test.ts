@@ -168,7 +168,13 @@ describe('docker model runner provider', () => {
           ) => {
             Object.assign(attributes, options.attributes);
             return callback({
-              setAttribute: vi.fn(),
+              setAttribute: (key: string, value: unknown) => {
+                attributes[key] = value;
+              },
+              setAttributes: (attrs: Record<string, unknown>) => {
+                Object.assign(attributes, attrs);
+              },
+              updateName: vi.fn(),
               setStatus: vi.fn(),
               recordException: vi.fn(),
               end: vi.fn(),

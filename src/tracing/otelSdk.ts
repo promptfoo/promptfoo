@@ -60,9 +60,13 @@ export function initializeOtel(config: OtelConfig): void {
     return;
   }
 
+  // The OTLP endpoint is a credential carrier: OTEL_EXPORTER_OTLP_ENDPOINT is
+  // commonly set to `https://<token>@host` or `https://host?api-key=...` (Grafana
+  // Cloud, Honeycomb-style proxies). Log only whether an exporter is configured;
+  // the URL itself never reaches the log.
   logger.debug('[OtelSdk] Initializing OpenTelemetry SDK', {
     serviceName: config.serviceName,
-    endpoint: config.endpoint,
+    otlpExport: Boolean(config.endpoint),
     localExport: config.localExport,
   });
 
@@ -97,7 +101,7 @@ export function initializeOtel(config: OtelConfig): void {
       url: config.endpoint,
     });
     spanProcessors.push(new BatchSpanProcessor(otlpExporter));
-    logger.debug(`[OtelSdk] Added OTLP exporter to ${config.endpoint}`);
+    logger.debug('[OtelSdk] Added OTLP exporter');
   }
 
   // Create trace provider with resource and span processors

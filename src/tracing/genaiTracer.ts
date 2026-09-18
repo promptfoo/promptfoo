@@ -1,6 +1,7 @@
 import {
   type Attributes,
   context,
+  INVALID_SPAN_CONTEXT,
   propagation,
   ROOT_CONTEXT,
   type Span,
@@ -9,6 +10,7 @@ import {
   type Tracer,
   trace,
 } from '@opentelemetry/api';
+import { isTracingSuppressed } from '@opentelemetry/core';
 import logger from '../logger';
 import { getActiveSpanRole, SPAN_ROLE_ATTRIBUTE } from './spanRoles';
 
@@ -356,6 +358,21 @@ export async function withGenAISpan<T>(
   fn: (span: Span) => Promise<T>,
   resultExtractor?: (value: T) => GenAISpanResult,
 ): Promise<T> {
+  // Honor the OpenTelemetry suppression contract: hosts that embed promptfoo as a
+  // library wrap calls they do not want instrumented in `suppressTracing(context)`.
+  //
+  // The SDK tracer checks this itself, but only against the context handed to
+  // startActiveSpan -- and when `ctx.traceparent` is set (which is the norm inside a
+  // traced evaluation) that context is rebuilt from ROOT_CONTEXT, which does not
+  // carry the suppression key. Checking here is what actually keeps a suppressed
+  // call from emitting a span. Run `fn` with a non-recording span so callers that
+  // stamp effective request attributes still have a span to write to.
+  const activeContext = context.active();
+  if (isTracingSuppressed(activeContext)) {
+    const nonRecordingSpan = trace.wrapSpanContext(INVALID_SPAN_CONTEXT);
+    return context.with(trace.setSpan(activeContext, nonRecordingSpan), () => fn(nonRecordingSpan));
+  }
+
   const tracer = getGenAITracer();
   const operationName = normalizeOperationName(ctx.operationName);
 
@@ -460,6 +477,79 @@ function getProviderName(system: string): string {
   return GEN_AI_PROVIDER_NAMES[normalizedSystem] ?? baseSystem;
 }
 
+/** The sampling parameters shared by span creation and effective-request stamping. */
+type GenAIRequestParameters = Pick<
+  GenAISpanContext,
+  | 'maxTokens'
+  | 'temperature'
+  | 'topP'
+  | 'topK'
+  | 'stopSequences'
+  | 'frequencyPenalty'
+  | 'presencePenalty'
+>;
+
+/** Effective request values read back off a provider's finished wire body. */
+export type GenAIEffectiveRequest = GenAIRequestParameters & {
+  /** The model the provider actually put on the wire. */
+  model?: string;
+  /** Supplied alongside `model` so the span name can be corrected too. */
+  operationName?: GenAISpanContext['operationName'];
+};
+
+function getGenAIRequestParameterAttributes(request: GenAIRequestParameters): Attributes {
+  const attrs: Attributes = {};
+  if (request.maxTokens !== undefined) {
+    attrs[GenAIAttributes.REQUEST_MAX_TOKENS] = request.maxTokens;
+  }
+  if (request.temperature !== undefined) {
+    attrs[GenAIAttributes.REQUEST_TEMPERATURE] = request.temperature;
+  }
+  if (request.topP !== undefined) {
+    attrs[GenAIAttributes.REQUEST_TOP_P] = request.topP;
+  }
+  if (request.topK !== undefined) {
+    attrs[GenAIAttributes.REQUEST_TOP_K] = request.topK;
+  }
+  if (request.stopSequences && request.stopSequences.length > 0) {
+    attrs[GenAIAttributes.REQUEST_STOP_SEQUENCES] = request.stopSequences;
+  }
+  if (request.frequencyPenalty !== undefined) {
+    attrs[GenAIAttributes.REQUEST_FREQUENCY_PENALTY] = request.frequencyPenalty;
+  }
+  if (request.presencePenalty !== undefined) {
+    attrs[GenAIAttributes.REQUEST_PRESENCE_PENALTY] = request.presencePenalty;
+  }
+  return attrs;
+}
+
+/**
+ * Overwrite the `gen_ai.request.*` attributes once a provider has finished
+ * building its wire request.
+ *
+ * Span creation can only see `this.config`, which is not what gets sent: defaults
+ * are filled in from the environment (`OPENAI_MAX_TOKENS`, `OPENAI_TEMPERATURE`),
+ * parameters are dropped for models that reject them (reasoning models get no
+ * `temperature` and no `max_tokens`), and `passthrough` can override the model
+ * outright. Stamping the effective values makes the span describe the request that
+ * was actually made instead of the request that was configured.
+ *
+ * Only values present on `request` are written; a parameter the provider omitted
+ * from the body leaves any earlier attribute in place, so callers that want an
+ * attribute cleared must not have set it at span creation.
+ */
+export function setGenAIRequestAttributes(span: Span, request: GenAIEffectiveRequest): void {
+  const attributes = getGenAIRequestParameterAttributes(request);
+  const requestModel = request.model?.trim();
+  if (requestModel) {
+    attributes[GenAIAttributes.REQUEST_MODEL] = requestModel;
+    if (request.operationName) {
+      span.updateName(`${normalizeOperationName(request.operationName)} ${requestModel}`);
+    }
+  }
+  span.setAttributes(attributes);
+}
+
 function buildRequestAttributes(
   ctx: GenAISpanContext,
   operationName: GenAIOperationName,
@@ -495,27 +585,7 @@ function buildRequestAttributes(
   }
 
   // Optional request parameters
-  if (ctx.maxTokens !== undefined) {
-    attrs[GenAIAttributes.REQUEST_MAX_TOKENS] = ctx.maxTokens;
-  }
-  if (ctx.temperature !== undefined) {
-    attrs[GenAIAttributes.REQUEST_TEMPERATURE] = ctx.temperature;
-  }
-  if (ctx.topP !== undefined) {
-    attrs[GenAIAttributes.REQUEST_TOP_P] = ctx.topP;
-  }
-  if (ctx.topK !== undefined) {
-    attrs[GenAIAttributes.REQUEST_TOP_K] = ctx.topK;
-  }
-  if (ctx.stopSequences && ctx.stopSequences.length > 0) {
-    attrs[GenAIAttributes.REQUEST_STOP_SEQUENCES] = ctx.stopSequences;
-  }
-  if (ctx.frequencyPenalty !== undefined) {
-    attrs[GenAIAttributes.REQUEST_FREQUENCY_PENALTY] = ctx.frequencyPenalty;
-  }
-  if (ctx.presencePenalty !== undefined) {
-    attrs[GenAIAttributes.REQUEST_PRESENCE_PENALTY] = ctx.presencePenalty;
-  }
+  Object.assign(attrs, getGenAIRequestParameterAttributes(ctx));
 
   // Promptfoo context
   if (ctx.evalId) {
@@ -745,9 +815,15 @@ export function buildChatSpanContext(args: {
 
 /**
  * Extract the standard GenAI response attributes (token usage, finish reason,
- * cache hit, response body) from a ProviderResponse. Every field is optional
- * and only emitted when present, so this is safe to share across providers
- * whose responses populate different subsets.
+ * response id/model, cache hit, response body) from a ProviderResponse. Every
+ * field is optional and only emitted when present, so this is safe to share
+ * across providers whose responses populate different subsets.
+ *
+ * `gen_ai.response.id` and `gen_ai.response.model` come from the conventional
+ * `metadata.responseId` / `metadata.model` fields a provider records off the raw
+ * API payload. The response model matters because it is the *served* model, which
+ * routinely differs from the requested one (an alias resolving to a dated
+ * snapshot, a router picking a backend).
  */
 export function extractProviderResponseAttributes(response: ProviderResponse): GenAISpanResult {
   const result: GenAISpanResult = {};
@@ -759,6 +835,12 @@ export function extractProviderResponseAttributes(response: ProviderResponse): G
   }
   if (response.finishReason) {
     result.finishReasons = [response.finishReason];
+  }
+  if (typeof response.metadata?.model === 'string' && response.metadata.model) {
+    result.responseModel = response.metadata.model;
+  }
+  if (typeof response.metadata?.responseId === 'string' && response.metadata.responseId) {
+    result.responseId = response.metadata.responseId;
   }
   if (response.cached !== undefined) {
     result.cacheHit = response.cached;
