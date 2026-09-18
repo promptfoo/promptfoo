@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 import { DataTable } from '@app/components/data-table/data-table';
 import { useServerVirtualizedRows } from '@app/components/data-table/use-server-virtualized-rows';
@@ -20,6 +20,7 @@ import { callApi } from '@app/utils/api';
 import { formatDataGridDate } from '@app/utils/date';
 import invariant from '@promptfoo/util/invariant';
 import { Link, useLocation } from 'react-router-dom';
+import { useDebouncedCallback } from 'use-debounce';
 import type { EvalSummary } from '@promptfoo/types';
 import type { ColumnDef, RowSelectionState } from '@tanstack/react-table';
 
@@ -34,6 +35,9 @@ interface EvalsTableProps {
 
 const SERVER_PAGE_SIZE = 50;
 
+/** Keeps keystrokes from turning into one request each while still feeling instant. */
+const SEARCH_DEBOUNCE_MS = 200;
+
 interface ResultsResponse {
   data: EvalSummary[];
   pagination?: {
@@ -47,6 +51,31 @@ interface FetchResultsOptions {
   signal: AbortSignal;
   limit?: number;
   offset?: number;
+}
+
+function buildResultsUrl({
+  datasetId,
+  limit,
+  offset,
+  search,
+}: {
+  datasetId?: string;
+  limit?: number;
+  offset?: number;
+  search?: string;
+}) {
+  const searchParams: string[] = [];
+  if (datasetId) {
+    searchParams.push(`datasetId=${encodeURIComponent(datasetId)}`);
+  }
+  if (limit !== undefined) {
+    searchParams.push(`limit=${limit}`, `offset=${offset ?? 0}`);
+  }
+  if (search) {
+    searchParams.push(`search=${encodeURIComponent(search)}`);
+  }
+
+  return searchParams.length > 0 ? `/results?${searchParams.join('&')}` : '/results';
 }
 
 export default function EvalsTable({
@@ -67,36 +96,60 @@ export default function EvalsTable({
   const [confirmDeleteOpen, setConfirmDeleteOpen] = useState(false);
   const [rowSelection, setRowSelection] = useState<RowSelectionState>({});
   const [totalRows, setTotalRows] = useState(0);
+  // `searchInput` drives the search box; `searchQuery` is the debounced term we send to the
+  // server. Under server pagination the client only holds a window of rows, so the term has
+  // to reach the query rather than filter the rows we happen to have loaded.
+  const [searchInput, setSearchInput] = useState('');
+  const [searchQuery, setSearchQuery] = useState('');
+  const hasLoadedOnceRef = useRef(false);
 
   const location = useLocation();
   const useServerPagination = !filterByDatasetId;
+
+  const commitSearchQuery = useDebouncedCallback((value: string) => {
+    setSearchQuery(value);
+  }, SEARCH_DEBOUNCE_MS);
+
+  const handleSearchChange = useCallback(
+    (value: string) => {
+      setSearchInput(value);
+      commitSearchQuery(value);
+      if (value === '') {
+        // Clearing the box should restore the unfiltered list immediately rather than
+        // leaving the (possibly empty) result set on screen for another debounce window.
+        commitSearchQuery.flush();
+      }
+    },
+    [commitSearchQuery],
+  );
 
   // Fetch evals from the API. `datasetId` narrows the query server-side; `limit`/`offset`
   // opt into the paginated response shape.
   const fetchResults = useCallback(
     async ({ signal, limit, offset }: FetchResultsOptions) => {
-      const searchParams: string[] = [];
-      if (filterByDatasetId && focusedDatasetId) {
-        searchParams.push(`datasetId=${encodeURIComponent(focusedDatasetId)}`);
-      }
-      if (limit !== undefined) {
-        searchParams.push(`limit=${limit}`, `offset=${offset ?? 0}`);
-      }
-
-      const url = searchParams.length > 0 ? `/results?${searchParams.join('&')}` : '/results';
+      const url = buildResultsUrl({
+        datasetId: filterByDatasetId && focusedDatasetId ? focusedDatasetId : undefined,
+        limit,
+        offset,
+        search: useServerPagination ? searchQuery : undefined,
+      });
       const response = await callApi(url, { cache: 'no-store', signal });
       if (!response.ok) {
         throw new Error('Failed to fetch evals');
       }
       return (await response.json()) as ResultsResponse;
     },
-    [filterByDatasetId, focusedDatasetId],
+    [filterByDatasetId, focusedDatasetId, searchQuery, useServerPagination],
   );
 
   const fetchEvals = useCallback(
     async (signal: AbortSignal) => {
       try {
-        setIsLoading(true);
+        // Only blank the table for the very first load. A search-driven refetch keeps the
+        // current rows (and the focused search box) on screen while the request is in flight.
+        if (!hasLoadedOnceRef.current) {
+          setIsLoading(true);
+        }
         const body = await fetchResults({
           signal,
           ...(useServerPagination ? { limit: SERVER_PAGE_SIZE, offset: 0 } : {}),
@@ -110,6 +163,7 @@ export default function EvalsTable({
         }
       } finally {
         if (!signal.aborted) {
+          hasLoadedOnceRef.current = true;
           setIsLoading(false);
         }
       }
@@ -146,7 +200,7 @@ export default function EvalsTable({
     [fetchResults],
   );
 
-  const serverVirtualizationResetKey = `${location.pathname}${location.search}`;
+  const serverVirtualizationResetKey = `${location.pathname}${location.search}\u0000${searchQuery}`;
   const { serverVirtualization } = useServerVirtualizedRows<EvalSummary>({
     initialRows: useServerPagination ? evals : [],
     rowCount: useServerPagination ? totalRows : 0,
@@ -162,7 +216,7 @@ export default function EvalsTable({
     return () => {
       abortController.abort();
     };
-  }, [location.pathname, location.search, fetchEvals]);
+  }, [location.pathname, location.search, searchQuery, fetchEvals]);
 
   // Construct rows with optional filtering
   const rows = useMemo(() => {
@@ -440,6 +494,9 @@ export default function EvalsTable({
           onExportCSV={handleExportCSV}
           rowDisplayMode="server-virtualized"
           serverVirtualization={serverVirtualization}
+          manualGlobalFiltering
+          globalFilter={searchInput}
+          onGlobalFilterChange={handleSearchChange}
         />
       ) : (
         <DataTable

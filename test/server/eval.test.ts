@@ -142,6 +142,40 @@ describe('eval routes', () => {
       expect(res.status).toBe(400);
       expect(res.body.error).toContain('offset requires limit');
     });
+
+    it('should apply the search term across the whole table, not just the page', async () => {
+      const match = await Eval.create({ description: 'Persistent Python worker smoke test' }, [
+        { raw: 'Test prompt', label: 'Test prompt' },
+      ]);
+      const other = await Eval.create({ description: 'Unrelated run' }, [
+        { raw: 'Test prompt', label: 'Test prompt' },
+      ]);
+      testEvalIds.add(match.id);
+      testEvalIds.add(other.id);
+
+      const res = await api.get('/api/results?limit=1&offset=0&search=python%20worker');
+
+      expect(res.status).toBe(200);
+      expect(res.body.pagination).toMatchObject({ totalCount: 1, limit: 1, offset: 0 });
+      expect(res.body.data.map((result: { evalId: string }) => result.evalId)).toEqual([match.id]);
+    });
+
+    it('should apply the search term to unpaginated requests too', async () => {
+      const match = await Eval.create({ description: 'Searchable unpaginated run' }, [
+        { raw: 'Test prompt', label: 'Test prompt' },
+      ]);
+      const other = await Eval.create({ description: 'Another run' }, [
+        { raw: 'Test prompt', label: 'Test prompt' },
+      ]);
+      testEvalIds.add(match.id);
+      testEvalIds.add(other.id);
+
+      const res = await api.get('/api/results?search=Searchable%20unpaginated');
+
+      expect(res.status).toBe(200);
+      expect(res.body.pagination).toBeUndefined();
+      expect(res.body.data.map((result: { evalId: string }) => result.evalId)).toEqual([match.id]);
+    });
   });
 
   describe('POST /', () => {

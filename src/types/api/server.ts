@@ -36,6 +36,13 @@ const ListResultsQuerySchema = z
     includeProviders: BooleanQueryParamSchema,
     limit: z.coerce.number().int().min(1).max(500).optional(),
     offset: z.coerce.number().int().min(0).optional(),
+    // Free-text search over the eval id and description. Applied server-side so that
+    // paginated clients search the whole table rather than the page they happen to hold.
+    search: z
+      .string()
+      .max(200)
+      .transform((value) => value.trim())
+      .optional(),
   })
   .refine((value) => value.offset === undefined || value.limit !== undefined, {
     path: ['offset'],

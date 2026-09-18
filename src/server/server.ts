@@ -161,7 +161,12 @@ export function createApp() {
         {},
         {},
         {},
-        { datasetId?: string; type?: 'redteam' | 'eval'; includeProviders?: boolean }
+        {
+          datasetId?: string;
+          type?: 'redteam' | 'eval';
+          includeProviders?: boolean;
+          search?: string;
+        }
       >,
       res: Response,
     ): Promise<void> => {
@@ -170,13 +175,13 @@ export function createApp() {
         replyValidationError(res, queryResult.error);
         return;
       }
-      const { datasetId, type, includeProviders, limit, offset } = queryResult.data;
+      const { datasetId, type, includeProviders, limit, offset, search } = queryResult.data;
 
       if (limit !== undefined) {
         const pagination = { limit, offset: offset ?? 0 };
         const [previousResults, totalCount] = await Promise.all([
-          getEvalSummaries(datasetId, type, includeProviders, pagination),
-          getEvalSummariesCount(datasetId, type),
+          getEvalSummaries(datasetId, type, includeProviders, pagination, search),
+          getEvalSummariesCount(datasetId, type, search),
         ]);
         res.json(
           ServerSchemas.ResultList.Response.parse({
@@ -190,7 +195,13 @@ export function createApp() {
         return;
       }
 
-      const previousResults = await getEvalSummaries(datasetId, type, includeProviders);
+      const previousResults = await getEvalSummaries(
+        datasetId,
+        type,
+        includeProviders,
+        undefined,
+        search,
+      );
       res.json(ServerSchemas.ResultList.Response.parse({ data: previousResults }));
     },
   );

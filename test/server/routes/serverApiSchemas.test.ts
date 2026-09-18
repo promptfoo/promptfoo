@@ -174,7 +174,13 @@ describe('inline server API DTO validation', () => {
 
     expect(response.status).toBe(200);
     expect(response.body.data).toHaveLength(1);
-    expect(mockedGetEvalSummaries).toHaveBeenCalledWith(undefined, 'redteam', true);
+    expect(mockedGetEvalSummaries).toHaveBeenCalledWith(
+      undefined,
+      'redteam',
+      true,
+      undefined,
+      undefined,
+    );
   });
 
   it('rejects invalid /api/results query params', async () => {
@@ -483,7 +489,13 @@ describe('inline server API DTO validation', () => {
       mockedGetEvalSummaries.mockClear();
       const response = await api.get(`/api/results${query}`);
       expect(response.status).toBe(200);
-      expect(mockedGetEvalSummaries).toHaveBeenCalledWith(undefined, undefined, expected);
+      expect(mockedGetEvalSummaries).toHaveBeenCalledWith(
+        undefined,
+        undefined,
+        expected,
+        undefined,
+        undefined,
+      );
     }
   });
 

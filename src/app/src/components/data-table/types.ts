@@ -130,8 +130,29 @@ type DataTableAutoFilteringProps = {
 
 type DataTableFilteringProps = DataTableManualFilteringProps | DataTableAutoFilteringProps;
 
+// Discriminated union for the global search box. When manualGlobalFiltering is true the
+// table stops filtering rows itself and the owner is responsible for applying the term
+// (e.g. forwarding it to a server query). This is the global-search counterpart of
+// manualFiltering, and it is what lets a server-virtualized table keep its search box.
+type DataTableManualGlobalFilteringProps = {
+  manualGlobalFiltering: true;
+  globalFilter: string;
+  onGlobalFilterChange: (value: string) => void;
+};
+
+type DataTableAutoGlobalFilteringProps = {
+  manualGlobalFiltering?: false;
+  globalFilter?: never;
+  onGlobalFilterChange?: never;
+};
+
+type DataTableGlobalFilteringProps =
+  | DataTableManualGlobalFilteringProps
+  | DataTableAutoGlobalFilteringProps;
+
 export type DataTableProps<TData, TValue = unknown> = DataTablePropsBase<TData, TValue> &
-  DataTableFilteringProps;
+  DataTableFilteringProps &
+  DataTableGlobalFilteringProps;
 
 export interface DataTableToolbarProps<TData> {
   table: Table<TData>;

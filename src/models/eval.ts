@@ -1728,7 +1728,19 @@ interface EvalSummaryPaginationOptions {
   offset: number;
 }
 
-function buildEvalSummariesWhereClauses(datasetId?: string, type?: 'redteam' | 'eval') {
+/**
+ * Escapes the LIKE wildcards (`%`, `_`) and the escape character itself so that a user's
+ * search text is matched literally.
+ */
+function escapeLikePattern(value: string) {
+  return value.replace(/[\\%_]/g, '\\$&');
+}
+
+function buildEvalSummariesWhereClauses(
+  datasetId?: string,
+  type?: 'redteam' | 'eval',
+  search?: string,
+) {
   const whereClauses: SQL<unknown>[] = [];
 
   if (datasetId) {
@@ -1743,6 +1755,16 @@ function buildEvalSummariesWhereClauses(datasetId?: string, type?: 'redteam' | '
     }
   }
 
+  const trimmedSearch = search?.trim();
+  if (trimmedSearch) {
+    // Mirrors what the UI's global search sees: the eval id and the description (which is
+    // also what the derived `label` column renders when a description is present).
+    const pattern = `%${escapeLikePattern(trimmedSearch)}%`;
+    whereClauses.push(
+      sql`(${evalsTable.id} LIKE ${pattern} ESCAPE '\\' OR coalesce(${evalsTable.description}, '') LIKE ${pattern} ESCAPE '\\')`,
+    );
+  }
+
   return whereClauses;
 }
 
@@ -1753,6 +1775,7 @@ function buildEvalSummariesWhereClauses(datasetId?: string, type?: 'redteam' | '
  * @param type - An optional eval type to filter by.
  * @param includeProviders - An optional flag to include providers in the summary.
  * @param pagination - Optional limit/offset pagination controls.
+ * @param search - Optional free-text filter applied to the eval id and description.
  * @returns A list of eval summaries.
  */
 export async function getEvalSummaries(
@@ -1760,9 +1783,10 @@ export async function getEvalSummaries(
   type?: 'redteam' | 'eval',
   includeProviders: boolean = false,
   pagination?: EvalSummaryPaginationOptions,
+  search?: string,
 ): Promise<EvalSummary[]> {
   const db = await getDb();
-  const whereClauses = buildEvalSummariesWhereClauses(datasetId, type);
+  const whereClauses = buildEvalSummariesWhereClauses(datasetId, type, search);
 
   const query = db
     .select({
@@ -1883,9 +1907,10 @@ export async function getEvalSummaries(
 export async function getEvalSummariesCount(
   datasetId?: string,
   type?: 'redteam' | 'eval',
+  search?: string,
 ): Promise<number> {
   const db = await getDb();
-  const whereClauses = buildEvalSummariesWhereClauses(datasetId, type);
+  const whereClauses = buildEvalSummariesWhereClauses(datasetId, type, search);
 
   const result = await db
     .select({
