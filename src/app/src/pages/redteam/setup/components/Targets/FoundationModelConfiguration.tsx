@@ -15,6 +15,7 @@ import {
   requiresBedrockAnthropicMessagesModel,
 } from '@promptfoo/providers/bedrock/routing';
 import {
+  DEFAULT_BEDROCK_TARGET_ID,
   DEFAULT_GOOGLE_TARGET_ID,
   DEFAULT_OPENAI_TARGET_ID,
   DEFAULT_VERTEX_TARGET_ID,
@@ -32,9 +33,9 @@ interface FoundationModelConfigurationProps {
 }
 
 const BEDROCK_API_OPTIONS: { value: BedrockApiMode; label: string }[] = [
+  { value: 'responses', label: 'Responses API (OpenAI Models)' },
   { value: 'invoke', label: 'InvokeModel' },
   { value: 'converse', label: 'Converse' },
-  { value: 'responses', label: 'Responses API' },
   { value: 'chat', label: 'Chat Completions' },
   { value: 'messages', label: 'Anthropic Messages' },
 ];
@@ -325,8 +326,8 @@ const FoundationModelConfiguration = ({
       },
       bedrock: {
         name: 'AWS Bedrock',
-        defaultModel: 'bedrock:global.anthropic.claude-sonnet-5',
-        placeholder: 'global.anthropic.claude-sonnet-5',
+        defaultModel: DEFAULT_BEDROCK_TARGET_ID,
+        placeholder: 'gpt-5.6-sol',
         docUrl: 'https://www.promptfoo.dev/docs/providers/aws-bedrock',
         envVar: 'AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY',
       },

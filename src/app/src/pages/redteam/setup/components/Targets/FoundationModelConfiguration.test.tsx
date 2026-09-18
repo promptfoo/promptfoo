@@ -451,7 +451,7 @@ describe('FoundationModelConfiguration', () => {
         providerType="bedrock"
       />,
     );
-    expect(screen.getByRole('option', { name: 'Responses API' })).toBeEnabled();
+    expect(screen.getByRole('option', { name: 'Responses API (OpenAI Models)' })).toBeEnabled();
     expect(screen.getByRole('option', { name: 'Anthropic Messages' })).toBeEnabled();
     expect(screen.getByRole('option', { name: 'Converse' })).toBeEnabled();
     await user.selectOptions(screen.getByLabelText(/Bedrock API/i), 'responses');
@@ -474,7 +474,7 @@ describe('FoundationModelConfiguration', () => {
     );
     expect(screen.getByRole('option', { name: 'InvokeModel' })).toBeEnabled();
     expect(screen.getByRole('option', { name: 'Converse' })).toBeEnabled();
-    expect(screen.getByRole('option', { name: 'Responses API' })).toBeEnabled();
+    expect(screen.getByRole('option', { name: 'Responses API (OpenAI Models)' })).toBeEnabled();
     expect(screen.getByRole('option', { name: 'Chat Completions' })).toBeEnabled();
     expect(screen.queryByRole('alert')).not.toBeInTheDocument();
     expect(mockUpdateCustomTarget).not.toHaveBeenCalled();

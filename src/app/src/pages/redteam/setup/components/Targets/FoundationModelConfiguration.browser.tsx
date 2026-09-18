@@ -6,6 +6,7 @@ import { createRoot, type Root } from 'react-dom/client';
 
 import { afterEach, expect, it } from 'vitest';
 import { page, userEvent } from 'vitest/browser';
+import { DEFAULT_BEDROCK_TARGET_ID } from '../constants';
 import FoundationModelConfiguration from './FoundationModelConfiguration';
 
 import type { ProviderOptions } from '../../types';
@@ -49,6 +50,22 @@ afterEach(() => {
   container?.remove();
   root = undefined;
   container = undefined;
+});
+
+it('starts a new Bedrock target on Responses with the OpenAI Models label', async () => {
+  renderEditor({ id: DEFAULT_BEDROCK_TARGET_ID, config: {} });
+  await expect
+    .element(page.getByLabelText('Bedrock API', { exact: false }))
+    .toHaveValue('responses');
+  await expect
+    .element(page.getByRole('option', { name: 'Responses API (OpenAI Models)', exact: true }))
+    .toBeEnabled();
+  await expect
+    .element(page.getByLabelText('Model ID', { exact: false }))
+    .toHaveValue('openai.gpt-5.6-sol');
+  await expect.element(page.getByRole('alert')).not.toBeInTheDocument();
+  await page.getByRole('button', { name: /Advanced Configuration/ }).click();
+  await expect.element(page.getByLabelText('Max Output Tokens')).toBeVisible();
 });
 
 it('groups authentication under Bedrock Settings and persists only the selected credentials', async () => {
@@ -102,7 +119,9 @@ it('groups authentication under Bedrock Settings and persists only the selected 
 it('allows selecting an API before fixing its model ID', async () => {
   const initial = { id: 'bedrock:global.anthropic.claude-sonnet-5', config: { max_tokens: 512 } };
   renderEditor(initial);
-  await expect.element(page.getByRole('option', { name: 'Responses API' })).toBeEnabled();
+  await expect
+    .element(page.getByRole('option', { name: 'Responses API (OpenAI Models)' }))
+    .toBeEnabled();
   await expect.element(page.getByRole('option', { name: 'Anthropic Messages' })).toBeEnabled();
   await expect.element(page.getByTestId('saved-target')).toHaveTextContent(JSON.stringify(initial));
   await page.getByLabelText('Bedrock API', { exact: false }).selectOptions('responses');
