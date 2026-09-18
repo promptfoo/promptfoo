@@ -126,7 +126,6 @@ examples/ollama/
 ├── prompts/
 │   ├── llama_prompt.txt                   # Llama-style prompt format
 │   └── openai_prompt.json                 # OpenAI chat format
-├── prompts.txt                            # Additional prompt examples
 └── get_current_weather.yaml               # Tool definition for function calling
 ```
 
