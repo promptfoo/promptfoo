@@ -671,12 +671,22 @@ export const providerMap: ProviderFactory[] = [
       if (endpoint.startsWith('/')) {
         endpoint = endpoint.slice(1);
       }
+      const configuredBaseUrl =
+        providerOptions.config?.apiBaseUrl ?? getEnvString('F5_API_BASE_URL');
+      if (!configuredBaseUrl) {
+        throw new Error(
+          'F5 provider requires a gateway URL. Set `apiBaseUrl` in the provider config or the F5_API_BASE_URL environment variable.',
+        );
+      }
+      // The gateway path comes from the provider ID, so the base URL is an origin. Trim
+      // trailing slashes rather than concatenating blindly, which produced `host//path`.
+      const baseUrl = configuredBaseUrl.replace(/\/+$/, '');
       return new OpenAiChatCompletionProvider(endpoint, {
         ...providerOptions,
         config: {
           ...providerOptions.config,
-          apiBaseUrl: providerOptions.config?.apiBaseUrl + '/' + endpoint,
-          apiKeyEnvar: 'F5_API_KEY',
+          apiBaseUrl: `${baseUrl}/${endpoint}`,
+          apiKeyEnvar: providerOptions.config?.apiKeyEnvar ?? 'F5_API_KEY',
         },
       });
     },
@@ -1559,7 +1569,9 @@ export const providerMap: ProviderFactory[] = [
       providerOptions: ProviderOptions,
       _context: LoadApiProviderContext,
     ) => {
-      const modelName = providerPath.split(':')[1];
+      // Model names can contain colons (e.g. `llama:llama3:8b`), so keep everything after the
+      // first segment rather than truncating at the second.
+      const modelName = providerPath.split(':').slice(1).join(':');
       return new LlamaProvider(modelName, providerOptions);
     },
   },
