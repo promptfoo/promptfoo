@@ -1405,6 +1405,21 @@ describe('logger', () => {
       );
     });
 
+    it('should preserve session IDs while sanitizing credentials', () => {
+      logger.setStructuredLogging(true);
+
+      logger.default.info('session event', {
+        sessionID: 'session-123',
+        apiKey: 'secret-key',
+      });
+
+      expect(customLogger.info).toHaveBeenCalledWith({
+        message: 'session event',
+        sessionID: 'session-123',
+        apiKey: '[REDACTED]',
+      });
+    });
+
     it('should pass plain string when no context provided', () => {
       logger.setStructuredLogging(true);
 

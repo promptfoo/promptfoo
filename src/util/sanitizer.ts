@@ -161,7 +161,6 @@ export const SECRET_FIELD_NAMES = new Set([
   'xportkeyawssessiontoken', // x-portkey-aws-session-token
   'xsessiondata', // x-session-data
   'csrftoken', // csrf-token
-  'sessionid', // session-id
   'session', // session
   'cookie',
   'setcookie', // set-cookie
