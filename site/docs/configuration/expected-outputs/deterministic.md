@@ -1288,6 +1288,8 @@ Example response:
 
 If the webhook returns a `pass` value of `true`, the assertion will be considered successful. If it returns `false`, the assertion will fail, and the provided `reason` will be used to describe the failure.
 
+A missing or non-boolean `pass` value is a webhook error and fails both `webhook` and `not-webhook` assertions. Use JSON booleans (`true` or `false`), not strings (`"true"` or `"false"`).
+
 You may also return a score:
 
 ```json

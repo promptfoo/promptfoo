@@ -42,6 +42,7 @@
         "src/contracts/trajectory.ts",
         "src/csv.ts",
         "src/logger.ts",
+        "src/providers/bedrock/routing.ts",
         "src/providers/constants.ts",
         "src/providers/http.ts",
         "src/redteam/commands/discover.ts",
@@ -104,7 +105,14 @@
     {
       "name": "providers",
       "roots": ["src/providers"],
-      "allowedDependencies": ["core", "legacy-contracts", "legacy-runtime", "node", "redteam"]
+      "allowedDependencies": [
+        "contracts",
+        "core",
+        "legacy-contracts",
+        "legacy-runtime",
+        "node",
+        "redteam"
+      ]
     },
     {
       "name": "node",

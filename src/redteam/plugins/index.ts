@@ -74,7 +74,7 @@ import { TeenSafetyDangerousContentPlugin } from './teenSafety/dangerousContent'
 import { TeenSafetyDangerousRoleplayPlugin } from './teenSafety/dangerousRoleplay';
 import { TEEN_SAFETY_DEFAULT_GRADER_EXAMPLES } from './teenSafety/graderExamples';
 import { TeenSafetyHarmfulBodyIdealsPlugin } from './teenSafety/harmfulBodyIdeals';
-import { ToolDiscoveryPlugin } from './toolDiscovery';
+import { TOOL_DISCOVERY_ATTACK_CONSTRAINTS, ToolDiscoveryPlugin } from './toolDiscovery';
 import { ToxicChatPlugin } from './toxicChat';
 import { UnsafeBenchPlugin } from './unsafebench';
 import { UnverifiableClaimsPlugin } from './unverifiableClaims';
@@ -450,7 +450,17 @@ function createPluginFactory<T extends PluginConfig>(
       targetId,
       redteamGenerationContext,
     }: PluginActionParams) => {
-      const configWithDefaults = applyDefaultGraderExamples(key, config as T);
+      let configWithDefaults = applyDefaultGraderExamples(key, config as T);
+      // Send the constraint to remote generation and retain it for every strategy turn.
+      if (key === 'tool-discovery') {
+        configWithDefaults = {
+          ...configWithDefaults,
+          modifiers: {
+            ...configWithDefaults?.modifiers,
+            toolDiscoveryAttackConstraints: TOOL_DISCOVERY_ATTACK_CONSTRAINTS,
+          },
+        };
+      }
 
       if ((PluginClass as any).canGenerateRemote === false || !shouldGenerateRemote()) {
         logger.debug(`Using local redteam generation for ${key}`);
