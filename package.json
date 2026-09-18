@@ -2,7 +2,7 @@
   "name": "promptfoo",
   "description": "LLM eval & testing toolkit",
   "author": "Ian Webster",
-  "version": "0.123.0",
+  "version": "0.123.1",
   "license": "MIT",
   "type": "module",
   "repository": {
@@ -214,15 +214,16 @@
       "chevrotain": "11.2.0"
     },
     "webpack": "5.110.3",
-    "dompurify": "3.4.14",
+    "dompurify": "3.4.15",
     "monaco-editor": {
       ".": "0.56.0",
-      "dompurify": "3.4.14"
+      "dompurify": "3.4.15"
     }
   },
   "devDependencies": {
-    "@anthropic-ai/claude-agent-sdk": "0.3.261",
+    "@anthropic-ai/claude-agent-sdk": "0.3.263",
     "@asteasolutions/zod-to-openapi": "^9.1.0",
+    "@aws/bedrock-token-generator": "^1.1.0",
     "@aws-sdk/client-bedrock-agent-runtime": "^3.1045.0",
     "@aws-sdk/client-bedrock-runtime": "^3.1045.0",
     "@aws-sdk/client-s3": "^3.1003.0",
@@ -259,7 +260,7 @@
     "knip": "~6.27.0",
     "langium": "4.3.1",
     "node-sql-parser": "^5.4.0",
-    "oxc-parser": "^0.148.0",
+    "oxc-parser": "^0.149.0",
     "pdf-parse": "^2.4.5",
     "prettier": "^3.8.1",
     "read-excel-file": "^9.3.9",
@@ -274,7 +275,8 @@
     "yaml": "^2.9.0"
   },
   "optionalDependencies": {
-    "@anthropic-ai/claude-agent-sdk": "0.3.261",
+    "@anthropic-ai/claude-agent-sdk": "0.3.263",
+    "@aws/bedrock-token-generator": "^1.1.0",
     "@aws-sdk/client-bedrock-agent-runtime": "^3.1045.0",
     "@aws-sdk/client-bedrock-runtime": "^3.1045.0",
     "@aws-sdk/client-s3": "^3.1003.0",
