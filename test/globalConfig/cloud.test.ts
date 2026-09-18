@@ -1,7 +1,12 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import cliState from '../../src/cliState';
 import { getEnvString } from '../../src/envars';
-import { CLOUD_API_HOST, CloudConfig, cloudConfig } from '../../src/globalConfig/cloud';
+import {
+  CLOUD_API_HOST,
+  CloudConfig,
+  cloudConfig,
+  SHARING_CUTOFF_DATE,
+} from '../../src/globalConfig/cloud';
 import { readGlobalConfig, writeGlobalConfigPartial } from '../../src/globalConfig/globalConfig';
 import logger from '../../src/logger';
 import { fetchWithProxy } from '../../src/util/fetch/index';
@@ -254,14 +259,16 @@ describe('CloudConfig', () => {
       hasActiveLicense: true,
     };
 
-    it('should validate token and update config on success', async () => {
-      const mockFetchResponse = {
+    function mockTokenResponse(response: typeof mockResponse) {
+      vi.mocked(fetchWithProxy).mockResolvedValue({
         ok: true,
-        json: () => Promise.resolve(mockResponse),
-        text: () => Promise.resolve(JSON.stringify(mockResponse)),
-      } as Response;
+        json: () => Promise.resolve(response),
+        text: () => Promise.resolve(JSON.stringify(response)),
+      } as Response);
+    }
 
-      vi.mocked(fetchWithProxy).mockResolvedValue(mockFetchResponse);
+    it('should validate token and update config on success', async () => {
+      mockTokenResponse(mockResponse);
 
       const result = await cloudConfigInstance.validateAndSetApiToken(
         'test-token',
@@ -285,13 +292,7 @@ describe('CloudConfig', () => {
         hasActiveLicense: false,
         user: { ...mockResponse.user, createdAt: new Date('2026-03-10T00:00:00Z') },
       };
-      const mockFetchResponse = {
-        ok: true,
-        json: () => Promise.resolve(noLicenseResponse),
-        text: () => Promise.resolve(JSON.stringify(noLicenseResponse)),
-      } as Response;
-
-      vi.mocked(fetchWithProxy).mockResolvedValue(mockFetchResponse);
+      mockTokenResponse(noLicenseResponse);
 
       const result = await cloudConfigInstance.validateAndSetApiToken('test-token', CLOUD_API_HOST);
 
@@ -312,13 +313,7 @@ describe('CloudConfig', () => {
         hasActiveLicense: false,
         user: { ...mockResponse.user, createdAt: new Date('2026-03-01T00:00:00Z') },
       };
-      const mockFetchResponse = {
-        ok: true,
-        json: () => Promise.resolve(grandfatheredResponse),
-        text: () => Promise.resolve(JSON.stringify(grandfatheredResponse)),
-      } as Response;
-
-      vi.mocked(fetchWithProxy).mockResolvedValue(mockFetchResponse);
+      mockTokenResponse(grandfatheredResponse);
 
       const result = await cloudConfigInstance.validateAndSetApiToken('test-token', CLOUD_API_HOST);
 
@@ -328,6 +323,30 @@ describe('CloudConfig', () => {
         expect.objectContaining({
           cloud: expect.objectContaining({
             sharing: true,
+          }),
+        }),
+      );
+    });
+
+    it('should set sharing to false when user is created exactly on the cutoff date', async () => {
+      const cutoffResponse = {
+        ...mockResponse,
+        hasActiveLicense: false,
+        user: {
+          ...mockResponse.user,
+          createdAt: new Date(SHARING_CUTOFF_DATE.getTime()),
+        },
+      };
+      mockTokenResponse(cutoffResponse);
+
+      const result = await cloudConfigInstance.validateAndSetApiToken('test-token', CLOUD_API_HOST);
+
+      expect(result.hasActiveLicense).toBe(false);
+      const lastCall = vi.mocked(writeGlobalConfigPartial).mock.calls.at(-1)?.[0];
+      expect(lastCall).toEqual(
+        expect.objectContaining({
+          cloud: expect.objectContaining({
+            sharing: false,
           }),
         }),
       );
@@ -420,7 +439,7 @@ describe('CloudConfig', () => {
         name: 'On-Prem User',
         email: 'user@example.com',
         // Account created well after the public-cloud grandfathering cutoff.
-        createdAt: new Date('2026-04-01T00:00:00Z'),
+        createdAt: new Date(SHARING_CUTOFF_DATE.getTime() + 24 * 60 * 60 * 1000),
         updatedAt: new Date('2026-04-01T00:00:00Z'),
       },
       organization: {
