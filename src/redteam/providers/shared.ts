@@ -36,6 +36,11 @@ import {
   accumulateTokenUsage,
 } from '../../util/tokenUsageUtils';
 import { TransformInputType, transform } from '../../util/transform';
+import {
+  getGradingAssertionHash,
+  getGradingInputHash,
+  withGradingUsage,
+} from '../grading/storedResult';
 import { remoteGenerationContextPayload } from '../remoteGenerationContext';
 import { throwIfTargetPromptExceedsMaxChars } from '../shared/promptLength';
 import { ATTACKER_MODEL, ATTACKER_MODEL_SMALL, TEMPERATURE } from './constants';
@@ -666,7 +671,30 @@ export function runRedteamGrader<TResult, TArgs extends unknown[]>(
 export function accumulateGraderResult(
   previous: GradingResult | undefined,
   current: GradingResult,
+  input?: {
+    prompt: string;
+    output: string;
+    messages?: unknown;
+    pluginId?: string;
+    assertion?: AssertionOrSet;
+  },
 ): GradingResult {
+  if (input) {
+    current = {
+      ...current,
+      metadata: {
+        ...current.metadata,
+        redteamGradingAssertionHash: getGradingAssertionHash(input.assertion),
+        redteamGradingInputHash: getGradingInputHash(
+          input.prompt,
+          input.output,
+          input.messages,
+          input.pluginId,
+        ),
+      },
+    };
+  }
+
   const normalizeGradingTaskUsage = (result: GradingResult): TokenUsage | undefined => {
     if (!result.tokensUsed) {
       return undefined;
@@ -685,7 +713,7 @@ export function accumulateGraderResult(
         total: 0,
         prompt: 0,
         completion: 0,
-        cached: cachedTokens || reportedTotal,
+        cached: Math.max(cachedTokens, reportedTotal),
         numRequests: 0,
       };
     }
@@ -702,10 +730,7 @@ export function accumulateGraderResult(
       return current;
     }
 
-    return {
-      ...current,
-      tokensUsed,
-    };
+    return withGradingUsage(current, tokensUsed);
   }
 
   // The latest verdict can be cached even when the accumulated usage already
@@ -731,7 +756,7 @@ export function accumulateGraderResult(
     accumulateTokenUsage(tokensUsed, currentTokensUsed);
   }
 
-  return { ...current, tokensUsed };
+  return withGradingUsage(current, tokensUsed);
 }
 
 export interface Message {
