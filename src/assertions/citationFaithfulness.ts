@@ -1,6 +1,7 @@
 import { matchesCitationFaithfulness } from '../matchers/rag';
 import invariant from '../util/invariant';
 import { resolveContext } from './contextUtils';
+import { applyRagInverse } from './ragDefaults';
 
 import type { AssertionParams, GradingResult } from '../types/index';
 
@@ -49,24 +50,22 @@ export async function handleCitationFaithfulness({
     providerResponse,
   );
 
-  const result = await matchesCitationFaithfulness(
-    test.vars.query,
-    output,
-    context,
-    assertion.threshold ?? 1,
-    test.options,
-    test.vars,
-    providerCallContext,
-  );
-
-  // For `not-citation-faithfulness`, invert the verdict: it should pass when the
-  // answer IS misattributed and fail when every citation is faithful. Do NOT
-  // invert hard grader failures (outage/parse error) — those should fail either
+  // For `not-citation-faithfulness`, `applyRagInverse` flips the verdict: it passes
+  // when the answer IS misattributed and fails when every citation is faithful. It
+  // leaves hard grader failures (outage/parse error) alone — those should fail either
   // polarity rather than letting an error satisfy the negative assertion.
-  if (inverse && !result.metadata?.graderError) {
-    result.pass = !result.pass;
-    result.score = 1 - result.score;
-  }
+  const result = applyRagInverse(
+    await matchesCitationFaithfulness(
+      test.vars.query,
+      output,
+      context,
+      assertion.threshold ?? 1,
+      test.options,
+      test.vars,
+      providerCallContext,
+    ),
+    inverse,
+  );
 
   return {
     assertion,
