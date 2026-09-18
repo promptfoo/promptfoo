@@ -324,6 +324,7 @@ export default class Eval {
   _resultsLoaded: boolean = false;
   runtimeOptions?: EvalRuntimeOptions;
   _shared: boolean = false;
+  isFavorite: boolean = false;
   resultPersistenceFailed: boolean = false;
   private failedResults = new Map<string, EvaluateResult>();
   // Reconstructed EvalResults for rows that failed to persist, cached so comparison
@@ -412,6 +413,7 @@ export default class Eval {
       persisted: true,
       vars: eval_.vars || [],
       runtimeOptions: eval_.runtimeOptions ?? undefined,
+      isFavorite: eval_.isFavorite ?? false,
       durationMs,
       generationDurationMs,
       evaluationDurationMs,
@@ -440,6 +442,7 @@ export default class Eval {
         description: evalsTable.description,
         config: evalsTable.config,
         prompts: evalsTable.prompts,
+        isFavorite: evalsTable.isFavorite,
       })
       .from(evalsTable)
       .limit(limit)
@@ -454,6 +457,7 @@ export default class Eval {
           description: e.description || undefined,
           prompts: e.prompts || [],
           persisted: true,
+          isFavorite: e.isFavorite ?? false,
         }),
     );
   }
@@ -626,6 +630,7 @@ export default class Eval {
       persisted?: boolean;
       vars?: string[];
       runtimeOptions?: EvalRuntimeOptions;
+      isFavorite?: boolean;
       durationMs?: number;
       generationDurationMs?: number;
       evaluationDurationMs?: number;
@@ -643,6 +648,7 @@ export default class Eval {
     this._resultsLoaded = false;
     this.vars = opts?.vars || [];
     this.runtimeOptions = opts?.runtimeOptions;
+    this.isFavorite = opts?.isFavorite ?? false;
     this.durationMs = opts?.durationMs;
     this.generationDurationMs = opts?.generationDurationMs;
     this.evaluationDurationMs = opts?.evaluationDurationMs;
@@ -677,6 +683,7 @@ export default class Eval {
       updatedAt: getCurrentTimestamp(),
       vars: Array.from(this.vars),
       runtimeOptions: sanitizeRuntimeOptions(this.runtimeOptions),
+      isFavorite: this.isFavorite,
     };
 
     if (this.useOldResults()) {
@@ -1763,6 +1770,7 @@ export async function getEvalSummaries(
       // Configs can contain very large embedded test definitions. Only materialize them
       // for the report surface that requests provider labels.
       config: includeProviders ? evalsTable.config : sql<Partial<UnifiedConfig> | null>`NULL`,
+      isFavorite: evalsTable.isFavorite,
     })
     .from(evalsTable)
     .leftJoin(evalsToDatasetsTable, eq(evalsTable.id, evalsToDatasetsTable.evalId))
@@ -1853,6 +1861,7 @@ export async function getEvalSummaries(
       numTests: testCount,
       datasetId: result.datasetId,
       isRedteam: Boolean(result.isRedteam),
+      isFavorite: result.isFavorite ?? false,
       passRate: testRunCount > 0 ? (passCount / testRunCount) * 100 : 0,
       label: result.description ? `${result.description} (${result.evalId})` : result.evalId,
       providers: deserializedProviders,
