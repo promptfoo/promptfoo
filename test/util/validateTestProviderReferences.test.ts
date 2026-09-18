@@ -170,9 +170,7 @@ describe('validateTestProviderReferences', () => {
         createProvider('gemini'),
         createProvider('openrouter:deepseek/deepseek-r1'),
       ];
-      const tests: TestCase[] = [
-        { vars: { foo: 'bar' }, providers: ['gemini', 'openrouter:*'] },
-      ];
+      const tests: TestCase[] = [{ vars: { foo: 'bar' }, providers: ['gemini', 'openrouter:*'] }];
       expect(() => validateTestProviderReferences(tests, allDefinedProviders)).not.toThrow();
     });
   });

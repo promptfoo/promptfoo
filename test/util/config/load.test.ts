@@ -1997,6 +1997,45 @@ describe('resolveConfigs', () => {
     expect((result.testSuite.defaultTest as any)?.options?.provider).toBe('openai:gpt-4');
   });
 
+  describe('--filter-providers with test-level provider references', () => {
+    afterEach(() => {
+      vi.mocked(loadApiProviders).mockClear();
+    });
+
+    it('does not reject a test that references a provider removed by --filter-providers', async () => {
+      // The reference is to a provider that IS defined in the config but was filtered
+      // out of this run. That is a valid config, not a typo, so validation must pass.
+      const config = {
+        prompts: ['Tell me about {{topic}}'],
+        providers: ['openai:gpt-4o-mini', 'anthropic:messages:claude-sonnet-4-5'],
+        tests: [{ vars: { topic: 'AI' }, providers: ['anthropic:messages:claude-sonnet-4-5'] }],
+      };
+      vi.mocked(fs.existsSync).mockReturnValue(true);
+      vi.mocked(fs.readFileSync).mockImplementation((filePath: fs.PathOrFileDescriptor) => {
+        if (typeof filePath === 'string' && filePath.endsWith('config.yaml')) {
+          return yaml.dump(config);
+        }
+        return Buffer.from('');
+      });
+      vi.mocked(globSync).mockReturnValue(['config.yaml']);
+      vi.mocked(isCI).mockReturnValue(true);
+      vi.mocked(readPrompts).mockResolvedValue([
+        { raw: 'Tell me about {{topic}}', label: 'Tell me about {{topic}}', config: {} },
+      ]);
+      // First call = the filtered set (openai only); second = every defined provider.
+      vi.mocked(loadApiProviders)
+        .mockResolvedValueOnce([createMockProvider({ id: 'openai:gpt-4o-mini' })])
+        .mockResolvedValueOnce([
+          createMockProvider({ id: 'openai:gpt-4o-mini' }),
+          createMockProvider({ id: 'anthropic:messages:claude-sonnet-4-5' }),
+        ]);
+
+      await expect(
+        resolveConfigs({ config: ['config.yaml'], filterProviders: 'openai' }, {}),
+      ).resolves.toBeDefined();
+    });
+  });
+
   describe('--providers flag config preservation', () => {
     afterEach(() => {
       vi.mocked(readPrompts).mockClear();
