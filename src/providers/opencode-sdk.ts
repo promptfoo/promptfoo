@@ -1568,18 +1568,20 @@ export class OpenCodeSDKProvider implements ApiProvider {
    * Whether the skill tool can run for this config, so the session-history
    * round trip used for skill tracking can be skipped when it cannot.
    *
-   * OpenCode permission rules are last-match-wins and the effective ruleset
-   * starts with a wildcard deny, so the final rule covering `skill` decides.
+   * OpenCode permission rules are last-match-wins for each matching pattern.
+   * Since the prospective skill name is unknown here, any non-deny rule means
+   * a skill may run and its intermediate history must be inspected.
    */
   private isSkillToolEnabled(config: OpenCodeSDKConfig): boolean {
     const rules = this.buildEffectivePermissionRules(config);
-    for (let i = rules.length - 1; i >= 0; i--) {
-      const rule = rules[i];
-      if (rule.permission === 'skill' || rule.permission === '*') {
-        return rule.action !== 'deny';
-      }
-    }
-    return true;
+    // A pattern-specific rule only overrides earlier rules for matching skill names.
+    // We do not know which skill the model may invoke until after the call, so skip the
+    // history fetch only when every rule that could cover `skill` is a denial. Treating
+    // the final patterned rule as global loses allowed calls for policies such as
+    // { '*': 'allow', 'blocked-skill': 'deny' }.
+    return rules.some(
+      (rule) => (rule.permission === 'skill' || rule.permission === '*') && rule.action !== 'deny',
+    );
   }
 
   /**

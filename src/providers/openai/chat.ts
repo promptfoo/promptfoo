@@ -307,10 +307,7 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
       config.isReasoningModel !== false &&
       capabilityModelName.includes('gpt-oss')
     ) {
-      body.reasoning_effort = renderVarsInObject(
-        config.reasoning_effort,
-        context?.vars,
-      ) as ReasoningEffort;
+      body.reasoning_effort = renderVarsInObject(config.reasoning_effort, context?.vars);
     }
 
     // Preserve the existing nested reasoning extension for explicitly named o-series
@@ -391,7 +388,8 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
     if (this.initializationPromise != null) {
       await this.initializationPromise;
     }
-    if (this.requiresApiKey() && !this.getApiKey()) {
+    const apiKey = this.getApiKey();
+    if (this.requiresApiKey() && !apiKey) {
       throw new Error(this.getMissingApiKeyErrorMessage());
     }
 
@@ -420,7 +418,7 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
     // Wrap the API call in a span
     return withGenAISpan(
       spanContext,
-      () => this.callApiInternal(prompt, context, callApiOptions),
+      () => this.callApiInternal(prompt, context, callApiOptions, apiKey),
       extractProviderResponseAttributes,
     );
   }
@@ -433,8 +431,10 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
     prompt: string,
     context?: CallApiContextParams,
     callApiOptions?: CallApiOptionsParams,
+    apiKey?: string,
   ): Promise<ProviderResponse> {
     const { body, config } = await this.getOpenAiBody(prompt, context, callApiOptions);
+    const getAuthHeaders = this.getRequestAuthentication();
 
     type OpenAIChatCompletionResponse = OpenAI.ChatCompletion & {
       choices: Array<
@@ -484,10 +484,12 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
-            ...(this.getApiKey() ? { Authorization: `Bearer ${this.getApiKey()}` } : {}),
+            ...(apiKey && !getAuthHeaders ? { Authorization: `Bearer ${apiKey}` } : {}),
             ...this.getOpenAiRequestHeaders(config.headers),
           },
           body: JSON.stringify(body),
+          ...(getAuthHeaders ? { getAuthHeaders } : {}),
+          ...(callApiOptions?.abortSignal ? { signal: callApiOptions.abortSignal } : {}),
         },
         getRequestTimeoutMs(),
         'json',
@@ -535,6 +537,9 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
         };
       }
     } catch (err) {
+      if (callApiOptions?.abortSignal?.aborted) {
+        callApiOptions.abortSignal.throwIfAborted();
+      }
       logger.error(`API call error: ${String(err)}`);
       await deleteFromCache?.();
       // Preserve the structured rate-limit signal so the scheduler honors
