@@ -1196,6 +1196,53 @@ describe('OpenCodeSDKProvider', () => {
         ]);
       });
 
+      it('should fetch session history when a patterned policy allows some skills', async () => {
+        mockSessionPrompt.mockResolvedValue(
+          createMockPromptResponseWithAnchors('All done.', {
+            id: 'assistant-msg-1',
+            parentID: 'user-msg-1',
+          }),
+        );
+        mockSessionMessages.mockResolvedValue([
+          {
+            info: { id: 'user-msg-1', role: 'user' },
+            parts: [{ type: 'text', text: 'Use the code standards skill' }],
+          },
+          {
+            info: { id: 'intermediate-msg-1', role: 'assistant' },
+            parts: [
+              {
+                type: 'tool',
+                tool: 'skill',
+                state: { status: 'completed', input: { name: 'code-standards' } },
+              },
+            ],
+          },
+          {
+            info: { id: 'assistant-msg-1', role: 'assistant' },
+            parts: [{ type: 'text', text: 'All done.' }],
+          },
+        ]);
+
+        const provider = new OpenCodeSDKProvider({
+          config: {
+            permission: {
+              skill: {
+                '*': 'allow',
+                'blocked-skill': 'deny',
+              },
+            },
+          },
+          env: { ANTHROPIC_API_KEY: 'test-api-key' },
+        });
+        const result = await provider.callApi('Use the code standards skill');
+
+        expect(mockSessionMessages).toHaveBeenCalledTimes(1);
+        expect(result.metadata?.skillCalls).toEqual([
+          { name: 'code-standards', input: { name: 'code-standards' }, source: 'tool' },
+        ]);
+      });
+
       it('should skip session.messages fetch when tools config is omitted (all denied by default)', async () => {
         // The default tool policy denies every tool through the `*` wildcard, so
         // no tool parts can exist and the fetch must be skipped.

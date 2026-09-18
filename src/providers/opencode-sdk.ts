@@ -1572,6 +1572,12 @@ export class OpenCodeSDKProvider implements ApiProvider {
    * trip used for tool-call tracking is skipped only when every effective
    * rule is a denial.
    *
+   * OpenCode permission rules are last-match-wins for each matching pattern, and
+   * a pattern-specific rule only overrides earlier rules for the names it matches.
+   * Neither the tool nor the skill the model may invoke is known until after the
+   * call, so treating the final patterned rule as global would lose allowed calls
+   * for policies such as `{ '*': 'allow', 'blocked-skill': 'deny' }`.
+   *
    * This is deliberately conservative: pattern and last-match interactions
    * can make an earlier allow unreachable, but an unnecessary history fetch
    * is safer than dropping an executed tool call from `metadata.toolCalls`.
