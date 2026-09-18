@@ -1173,6 +1173,25 @@ describe('Provider Registry', () => {
       expect(provider.constructor.name).toBe('BedrockMantleChatProvider');
     });
 
+    it('should handle explicit bedrock Responses providers correctly', async () => {
+      const path = 'bedrock:responses:openai.gpt-oss-120b';
+      const factories = await getProviderFactories(path);
+      const factory = factories.find((f) => f.test(path));
+      expect(factory).toBeDefined();
+
+      const provider = await factory!.create(
+        path,
+        {
+          ...mockProviderOptions,
+          id: undefined,
+          config: { apiKey: 'bedrock-key', region: 'us-east-1' },
+        },
+        mockContext,
+      );
+      expect(provider.constructor.name).toBe('BedrockGptOssResponsesProvider');
+      expect(provider.id()).toBe(path);
+    });
+
     it('should handle bedrock-agent providers correctly', async () => {
       const factories = await getProviderFactories('bedrock-agent:agent-id');
       const factory = factories.find((f) => f.test('bedrock-agent:agent-id'));
@@ -1705,9 +1724,42 @@ describe('Provider Registry', () => {
       options: bareOptions,
     };
 
+    it('rejects a Vertex Live route without a model', async () => {
+      const factory = (await getProviderFactories('vertex:live:')).find((f) =>
+        f.test('vertex:live:'),
+      );
+      await expect(factory!.create('vertex:live:', bareOptions, bareContext)).rejects.toThrow(
+        'Missing model name',
+      );
+    });
+
     it.each([
       [
+        'vertex:live:gemini-live-2.5-flash-native-audio',
+        async () => (await import('../../src/providers/google/vertexLive')).VertexLiveProvider,
+      ],
+      [
+        'vertex:live:gemini-3.8-live',
+        async () => (await import('../../src/providers/google/vertexLive')).VertexLiveProvider,
+      ],
+      [
+        'vertex:live:gemini-3.8-live-extended-thinking',
+        async () => (await import('../../src/providers/google/vertexLive')).VertexLiveProvider,
+      ],
+      [
         'google:live:gemini-live-2.5-flash-preview',
+        async () => (await import('../../src/providers/google/live')).GoogleLiveProvider,
+      ],
+      [
+        'palm:live:gemini-3.8-live',
+        async () => (await import('../../src/providers/google/live')).GoogleLiveProvider,
+      ],
+      [
+        'google:live:gemini-3.8-live',
+        async () => (await import('../../src/providers/google/live')).GoogleLiveProvider,
+      ],
+      [
+        'google:live:gemini-3.8-live-extended-thinking',
         async () => (await import('../../src/providers/google/live')).GoogleLiveProvider,
       ],
       [

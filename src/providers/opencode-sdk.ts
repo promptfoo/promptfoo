@@ -415,6 +415,10 @@ interface OpenCodeClient {
     prompt: (
       parameters: Record<string, unknown>,
     ) => Promise<OpenCodeSdkResult<OpenCodePromptResponse>>;
+    messages: (
+      parameters: Record<string, unknown>,
+      options?: Record<string, unknown>,
+    ) => Promise<OpenCodeSdkResult<OpenCodeSessionMessage[]>>;
     delete: (parameters: Record<string, unknown>) => Promise<unknown>;
     abort?: (parameters: Record<string, unknown>) => Promise<unknown>;
   };
@@ -481,6 +485,8 @@ type OpenCodeTokenCache =
     };
 
 interface OpenCodeAssistantMessage {
+  id?: string;
+  parentID?: string;
   tokens?: {
     total?: number;
     input?: number;
@@ -490,6 +496,11 @@ interface OpenCodeAssistantMessage {
   };
   cost?: number;
   structured?: unknown;
+}
+
+interface OpenCodeSessionMessage {
+  info?: { id?: string };
+  parts?: OpenCodePromptPart[];
 }
 
 interface OpenCodePromptPart {
@@ -1553,6 +1564,90 @@ export class OpenCodeSDKProvider implements ApiProvider {
     };
   }
 
+  /**
+   * Whether the skill tool can run for this config, so the session-history
+   * round trip used for skill tracking can be skipped when it cannot.
+   *
+   * OpenCode permission rules are last-match-wins for each matching pattern.
+   * Since the prospective skill name is unknown here, any non-deny rule means
+   * a skill may run and its intermediate history must be inspected.
+   */
+  private isSkillToolEnabled(config: OpenCodeSDKConfig): boolean {
+    const rules = this.buildEffectivePermissionRules(config);
+    // A pattern-specific rule only overrides earlier rules for matching skill names.
+    // We do not know which skill the model may invoke until after the call, so skip the
+    // history fetch only when every rule that could cover `skill` is a denial. Treating
+    // the final patterned rule as global loses allowed calls for policies such as
+    // { '*': 'allow', 'blocked-skill': 'deny' }.
+    return rules.some(
+      (rule) => (rule.permission === 'skill' || rule.permission === '*') && rule.action !== 'deny',
+    );
+  }
+
+  /**
+   * Fetches the session message history and returns only the parts that belong
+   * to the current prompt, bounded by parentID (start) and assistantMessage.id
+   * (end) to prevent skill calls from other prompts bleeding in.
+   *
+   * Returns an empty array — which makes the caller fall back to the
+   * final-message parts — whenever the current prompt cannot be located in the
+   * history (a start/end anchor is absent from the response or fetched page).
+   * Over-attributing skill calls from earlier or concurrent prompts in a
+   * shared session would be worse than missing intermediate-turn calls.
+   */
+  private async fetchCurrentPromptParts(
+    client: OpenCodeClient,
+    session: OpenCodeSessionContext,
+    response: OpenCodeSdkResult<OpenCodePromptResponse>,
+    abortSignal?: AbortSignal,
+  ): Promise<OpenCodePromptPart[]> {
+    const assistantMessage = unwrapOpenCodeResult(response)?.info;
+    const parentId = assistantMessage?.parentID;
+    const assistantId = assistantMessage?.id;
+    if (!parentId || !assistantId) {
+      logger.debug(
+        '[OpenCode SDK] Assistant message is missing a history anchor; skipping session history fetch for skill tracking',
+      );
+      return [];
+    }
+    const messagesResult =
+      this.opencodeModule?.apiVersion === 'v2'
+        ? await client.session.messages(
+            { sessionID: session.sessionId, ...session.sessionQuery },
+            abortSignal ? { signal: abortSignal } : undefined,
+          )
+        : await client.session.messages({
+            path: getSessionPath(session.sessionId),
+            query: session.sessionQuery,
+            ...(abortSignal ? { signal: abortSignal } : {}),
+          });
+    const messages = unwrapOpenCodeResult(messagesResult) ?? [];
+    // Bound the slice with both a start anchor (parentID → user message that
+    // triggered this prompt) and an end anchor (assistantMessage.id → the
+    // response we just received). Without the end anchor, messages from a
+    // concurrent prompt on the same shared session could be included and
+    // cause skill-used to pass for the wrong evaluation row.
+    const startIndex = messages.findIndex((m) => m.info?.id === parentId);
+    if (startIndex === -1) {
+      logger.debug(
+        `[OpenCode SDK] Parent message ${parentId} not found in ${messages.length} fetched messages; falling back to final-message parts for skill tracking`,
+      );
+      return [];
+    }
+    const endIndex = messages.findIndex((m) => m.info?.id === assistantId);
+    if (endIndex < startIndex) {
+      logger.debug(
+        `[OpenCode SDK] Assistant message ${assistantId} not found after its parent in ${messages.length} fetched messages; falling back to final-message parts for skill tracking`,
+      );
+      return [];
+    }
+    const relevantMessages = messages.slice(startIndex, endIndex + 1);
+    logger.debug(
+      `[OpenCode SDK] Fetched ${messages.length} messages, using ${relevantMessages.length} (start=${startIndex} end=${endIndex}) for skill tracking`,
+    );
+    return relevantMessages.flatMap((m) => m.parts ?? []);
+  }
+
   private getSessionQueueKey(
     config: OpenCodeSDKConfig,
     workingDir: string | undefined,
@@ -1630,6 +1725,7 @@ export class OpenCodeSDKProvider implements ApiProvider {
     config: OpenCodeSDKConfig,
     response: OpenCodeSdkResult<OpenCodePromptResponse>,
     sessionId: string,
+    allSessionParts: OpenCodePromptPart[],
   ): ProviderResponse {
     const responseData = unwrapOpenCodeResult(response);
     const assistantMessage = responseData?.info;
@@ -1651,7 +1747,10 @@ export class OpenCodeSDKProvider implements ApiProvider {
     }
 
     const tokens = assistantMessage?.tokens;
-    const skillCalls = this.deriveSkillCalls(parts);
+    // Prefer full session history when available so skill calls from intermediate
+    // turns are captured. OpenCode is multi-turn: the skill tool is typically
+    // invoked before the final response, so its tool part is absent from `parts`.
+    const skillCalls = this.deriveSkillCalls(allSessionParts.length > 0 ? allSessionParts : parts);
 
     return {
       output,
@@ -1825,11 +1924,46 @@ export class OpenCodeSDKProvider implements ApiProvider {
           const response = await client.session.prompt(promptOptions);
           logger.debug(`OpenCode SDK response received`);
 
+          // The prompt has returned, so an abort from here on must not ask the
+          // server to kill the session it already answered.
+          if (abortListener && abortSignal) {
+            abortSignal.removeEventListener('abort', abortListener);
+            abortListener = undefined;
+          }
+
           if (abortSignal?.aborted) {
             return { error: 'OpenCode SDK call aborted' };
           }
 
-          const providerResponse = this.buildProviderResponse(config, response, session.sessionId);
+          // Fetch only the parts that belong to the current prompt from the session
+          // history so that deriveSkillCalls captures skill calls from intermediate
+          // turns. Gated on the effective tool policy, so the extra round trip is
+          // skipped whenever the skill tool is denied and no skill parts can exist.
+          let allSessionParts: OpenCodePromptPart[] = [];
+          if (this.isSkillToolEnabled(config)) {
+            try {
+              allSessionParts = await this.fetchCurrentPromptParts(
+                client,
+                session,
+                response,
+                abortSignal,
+              );
+            } catch (e) {
+              logger.debug(
+                `[OpenCode SDK] Could not fetch session history for skill tracking: ${e}`,
+              );
+            }
+            if (abortSignal?.aborted) {
+              return { error: 'OpenCode SDK call aborted' };
+            }
+          }
+
+          const providerResponse = this.buildProviderResponse(
+            config,
+            response,
+            session.sessionId,
+            allSessionParts,
+          );
           await cacheResponse(cacheResult, providerResponse, 'OpenCode SDK');
           logger.debug(`OpenCode SDK response: ${providerResponse.output.slice(0, 100)}...`);
           return providerResponse;
