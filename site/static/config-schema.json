@@ -3430,6 +3430,9 @@
         "silent": {
           "type": "boolean"
         },
+        "filterPattern": {
+          "type": "string"
+        },
         "filterRange": {
           "$ref": "#/definitions/__schema46"
         }
