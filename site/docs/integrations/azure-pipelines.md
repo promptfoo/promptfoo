@@ -165,7 +165,7 @@ strategy:
     gpt:
       MODEL: 'gpt-5.1'
     claude:
-      MODEL: 'claude-sonnet-4-5-20250929'
+      MODEL: 'claude-sonnet-5'
 
 steps:
   - script: |
