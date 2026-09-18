@@ -421,6 +421,40 @@ describe('combineConfigs', () => {
     });
   });
 
+  it('preserves results table settings when combining configs', async () => {
+    vi.mocked(fs.existsSync).mockReturnValue(true);
+    vi.mocked(fs.readFileSync).mockImplementation((filePath: fs.PathOrFileDescriptor) => {
+      if (typeof filePath === 'string' && filePath === 'config1.json') {
+        return JSON.stringify({
+          providers: ['provider1'],
+          prompts: ['prompt1'],
+          tests: [],
+          resultsTable: {
+            defaultHiddenVars: ['debug'],
+          },
+        });
+      }
+      if (typeof filePath === 'string' && filePath === 'config2.json') {
+        return JSON.stringify({
+          providers: ['provider2'],
+          prompts: ['prompt2'],
+          tests: [],
+          resultsTable: {
+            defaultVisibleVars: ['question', 'context'],
+          },
+        });
+      }
+      return Buffer.from('');
+    });
+
+    const result = await combineConfigs(['config1.json', 'config2.json']);
+
+    expect(result.resultsTable).toEqual({
+      defaultHiddenVars: ['debug'],
+      defaultVisibleVars: ['question', 'context'],
+    });
+  });
+
   it('preserves whether scenarios were omitted', async () => {
     const baseConfig = {
       prompts: ['prompt'],
@@ -1561,6 +1595,28 @@ describe('resolveConfigs', () => {
     await resolveConfigs(cmdObj, defaultConfig);
 
     expect(cliState.basePath).toBe(path.dirname('config.json'));
+  });
+
+  it('preserves results table settings in resolved config and test suite', async () => {
+    const cmdObj = { config: ['config.json'] };
+    const defaultConfig = {};
+    const resultsTable = { defaultVisibleVars: ['question', 'context'] };
+
+    vi.mocked(fs.existsSync).mockReturnValue(true);
+    vi.mocked(fs.readFileSync).mockReturnValue(
+      JSON.stringify({
+        prompts: ['{{question}}'],
+        providers: ['echo'],
+        tests: [{ vars: { question: 'hello', context: 'world' } }],
+        resultsTable,
+      }),
+    );
+    vi.mocked(globSync).mockReturnValueOnce(['config.json']);
+
+    const result = await resolveConfigs(cmdObj, defaultConfig);
+
+    expect(result.config.resultsTable).toEqual(resultsTable);
+    expect(result.testSuite.resultsTable).toEqual(resultsTable);
   });
 
   it('should include YAML location when an inline test references a missing prompt', async () => {
