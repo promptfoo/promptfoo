@@ -35,6 +35,8 @@ export interface EvalSummaryParams {
   failures: number;
   /** Number of test cases with errors */
   errors: number;
+  /** Number of result rows served from the response cache */
+  cachedRows?: number;
   /** Duration of the evaluation in seconds */
   duration: number;
   /** Maximum concurrent API calls during evaluation */
@@ -347,11 +349,23 @@ function getResultsLines({
   successes,
   failures,
   errors,
+  cachedRows,
   duration,
   maxConcurrency,
-}: Pick<EvalSummaryParams, 'successes' | 'failures' | 'errors' | 'duration' | 'maxConcurrency'>) {
+}: Pick<
+  EvalSummaryParams,
+  'successes' | 'failures' | 'errors' | 'cachedRows' | 'duration' | 'maxConcurrency'
+>) {
   const totalTests = successes + failures + errors;
   const errorLabel = errors === 1 ? 'error' : 'errors';
+  const cacheHitLine =
+    cachedRows === undefined
+      ? []
+      : [
+          `  ${chalk.white.bold(cachedRows.toLocaleString())} cached ${
+            cachedRows === 1 ? 'row' : 'rows'
+          }`,
+        ];
 
   return [
     '',
@@ -359,6 +373,7 @@ function getResultsLines({
     formatResultLine(successes, 'passed', successes > 0 ? '✓' : undefined, chalk.green, totalTests),
     formatResultLine(failures, 'failed', failures > 0 ? '✗' : undefined, chalk.red, totalTests),
     formatResultLine(errors, errorLabel, errors > 0 ? '✗' : undefined, chalk.red, totalTests),
+    ...cacheHitLine,
     chalk.gray(`Duration: ${formatDuration(duration)} (concurrency: ${maxConcurrency})`),
     '',
   ];

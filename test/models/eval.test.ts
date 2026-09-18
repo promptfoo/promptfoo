@@ -23,7 +23,11 @@ import {
   getStandaloneEvalCacheKey,
   setCachedStandaloneEvals,
 } from '../../src/util/standaloneEvalCache';
-import { createEvaluateResult } from '../factories/eval';
+import {
+  createCompletedPrompt,
+  createEvaluateResult,
+  createPromptMetrics,
+} from '../factories/eval';
 import EvalFactory from '../factories/evalFactory';
 
 vi.mock('../../src/globalConfig/accounts', async () => {
@@ -68,6 +72,122 @@ describe('evaluator', () => {
 
   afterEach(() => {
     vi.resetAllMocks();
+  });
+
+  describe('legacy cached-row stats', () => {
+    it('defaults missing stats and ignores malformed legacy result entries', async () => {
+      const evalId = 'legacy-cached-row-stats';
+      const db = await getDb();
+      await db
+        .insert(evalsTable)
+        .values({
+          id: evalId,
+          config: {},
+          results: {
+            version: 2,
+            timestamp: new Date().toISOString(),
+            results: [null, { response: { cached: true } }],
+            table: { head: { prompts: [], vars: [] }, body: [] },
+          },
+        })
+        .run();
+
+      const evalRecord = await Eval.findById(evalId);
+
+      expect(evalRecord?.getStats()).toMatchObject({
+        successes: 0,
+        failures: 0,
+        errors: 0,
+        cachedRows: 1,
+      });
+    });
+
+    it('derives cached rows for V4 results when prompt metrics predate the field', async () => {
+      const evalRecord = await EvalFactory.create({ numResults: 0 });
+      await evalRecord.addResult(
+        createEvaluateResult({
+          response: { output: 'cached result', cached: true },
+        }),
+      );
+
+      const summary = await evalRecord.toEvaluateSummary();
+
+      expect(summary.stats.cachedRows).toBe(1);
+    });
+
+    it('uses persisted rows when only some prompts have cached-row metrics', async () => {
+      const prompts = [
+        { raw: 'prompt one', label: 'prompt one' },
+        { raw: 'prompt two', label: 'prompt two' },
+      ];
+      const evalRecord = await Eval.create({}, prompts, { id: 'mixed-legacy-cached-stats' });
+      const promptWithCachedMetric = createCompletedPrompt('prompt one');
+      promptWithCachedMetric.metrics!.cachedRows = 1;
+      const legacyPrompt = createCompletedPrompt('prompt two');
+      await evalRecord.addPrompts([promptWithCachedMetric, legacyPrompt]);
+      legacyPrompt.metrics!.cachedRows = 1;
+      await evalRecord.addResult(
+        createEvaluateResult({ promptIdx: 0, testIdx: 0, response: { cached: true } }),
+      );
+      await evalRecord.addResult(
+        createEvaluateResult({ promptIdx: 1, testIdx: 0, response: { cached: true } }),
+      );
+
+      const summary = await evalRecord.toEvaluateSummary();
+
+      expect(summary.stats.cachedRows).toBe(2);
+    });
+
+    it('uses persisted rows when imported prompts omit metrics entirely', async () => {
+      const evalRecord = await Eval.create(
+        {},
+        [{ raw: 'imported prompt', label: 'imported prompt' }],
+        { id: 'missing-imported-prompt-metrics' },
+      );
+      await evalRecord.addPrompts([
+        { raw: 'imported prompt', label: 'imported prompt', provider: 'test-provider' },
+      ]);
+      await evalRecord.addResult(
+        createEvaluateResult({ response: { output: 'cached result', cached: true } }),
+      );
+
+      expect(evalRecord.hasLegacyCachedRowsMetrics()).toBe(true);
+      expect(await evalRecord.getCachedResponseRowsCount()).toBe(1);
+    });
+
+    it('uses persisted rows when imported evals omit prompts entirely', async () => {
+      const evalRecord = await Eval.create({}, [], { id: 'missing-imported-prompts' });
+      await evalRecord.addResult(
+        createEvaluateResult({ response: { output: 'cached result', cached: true } }),
+      );
+
+      const importedEval = await Eval.findById(evalRecord.id);
+      const summary = await importedEval!.toEvaluateSummary();
+
+      expect(summary.stats.cachedRows).toBe(1);
+    });
+
+    it.each([
+      { label: 'null', value: null },
+      { label: 'string', value: '1' },
+      { label: 'NaN', value: Number.NaN },
+    ])('uses persisted rows when imported cachedRows is $label', async ({ value }) => {
+      const evalRecord = await Eval.create(
+        {},
+        [{ raw: 'imported prompt', label: 'imported prompt' }],
+        { id: `malformed-imported-cached-rows-${String(value)}` },
+      );
+      const prompt = createCompletedPrompt('imported prompt');
+      Object.assign(prompt.metrics!, { cachedRows: value });
+      await evalRecord.addPrompts([prompt]);
+      await evalRecord.addResult(
+        createEvaluateResult({ response: { output: 'cached result', cached: true } }),
+      );
+
+      expect(evalRecord.hasLegacyCachedRowsMetrics()).toBe(true);
+      expect(evalRecord.getStats().cachedRows).toBe(0);
+      expect(await evalRecord.getCachedResponseRowsCount()).toBe(1);
+    });
   });
 
   describe('addPrompts', () => {
@@ -380,6 +500,32 @@ describe('evaluator', () => {
           response: expect.objectContaining({ output: 'Denver' }),
         }),
       );
+    });
+
+    it('updates persisted prompt cache metrics when appending cached results', async () => {
+      const eval_ = await Eval.create({}, [{ raw: 'cached prompt', label: 'cached prompt' }], {
+        id: 'set-results-cached-row',
+      });
+      await eval_.addPrompts([
+        createCompletedPrompt('cached prompt', {
+          metrics: createPromptMetrics({ cachedRows: 0 }),
+        }),
+      ]);
+      const result = await EvalResult.createFromEvaluateResult(
+        eval_.id,
+        createEvaluateResult({
+          promptIdx: 0,
+          response: { output: 'cached', cached: true },
+        }),
+        { persist: false },
+      );
+
+      await eval_.setResults([result]);
+
+      expect(eval_.getStats().cachedRows).toBe(1);
+      const reloaded = await Eval.findById(eval_.id);
+      expect(reloaded?.prompts[0].metrics?.cachedRows).toBe(1);
+      expect(reloaded?.getStats().cachedRows).toBe(1);
     });
   });
 

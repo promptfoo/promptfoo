@@ -1,9 +1,12 @@
+import { sql } from 'drizzle-orm';
 import { beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { getDb } from '../../src/database/index';
+import { evalResultsTable } from '../../src/database/tables';
 import { runDbMigrations } from '../../src/migrate';
 import Eval from '../../src/models/eval';
 import {
   clearCountCache,
+  getCachedResponseRowsCount,
   getCachedResultsCount,
   getTotalResultRowCount,
 } from '../../src/models/evalPerformance';
@@ -125,6 +128,27 @@ describe('evalPerformance', () => {
       clearCountCache(eval_.id);
       const count3 = await getCachedResultsCount(eval_.id);
       expect(count3).toBe(1);
+    });
+  });
+
+  describe('getCachedResponseRowsCount', () => {
+    it('counts cached response rows, including multiple providers for one test', async () => {
+      const { eval_ } = await createEvalWithResults(2, 3);
+      const db = await getDb();
+
+      await db.run(
+        sql`UPDATE ${evalResultsTable}
+            SET response = json_set(response, '$.cached', 1)
+            WHERE eval_id = ${eval_.id} AND test_idx = 0`,
+      );
+
+      expect(await getCachedResponseRowsCount(eval_.id)).toBe(2);
+    });
+
+    it('returns zero when no response rows are cached', async () => {
+      const { eval_ } = await createEvalWithResults(1, 1);
+
+      expect(await getCachedResponseRowsCount(eval_.id)).toBe(0);
     });
   });
 
