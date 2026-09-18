@@ -667,6 +667,42 @@ describe('Providers Routes', () => {
       expect(response.status).toBe(200);
     });
 
+    it('should pass maxRetries: 1 to provider config', async () => {
+      const mockProvider = {
+        id: vi.fn(() => 'test-provider'),
+        callApi: vi.fn(),
+        config: {},
+      } as any;
+      const provider: ProviderOptions = {
+        id: 'http://example.com/api',
+        config: {
+          maxRetries: 5,
+          timeout: 30000,
+        },
+      };
+
+      mockedLoadApiProvider.mockResolvedValue(mockProvider);
+      mockedTestProviderSession.mockResolvedValue({
+        success: true,
+        message: 'Session test successful',
+      } as any);
+
+      const response = await api.post('/api/providers/test-session').send({ provider });
+
+      expect(response.status).toBe(200);
+      expect(mockedLoadApiProvider).toHaveBeenCalledWith('http://example.com/api', {
+        options: {
+          ...provider,
+          config: {
+            maxRetries: 1,
+            timeout: 30000,
+            sessionSource: undefined,
+            sessionParser: undefined,
+          },
+        },
+      });
+    });
+
     it('should return standardized 500 errors when session provider loading fails', async () => {
       mockedLoadApiProvider.mockRejectedValue(new Error('provider unavailable'));
 
