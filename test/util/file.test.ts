@@ -1642,8 +1642,8 @@ describe('file utilities', () => {
 
       const result = validateFileReferences(
         {
-          valid: 'file://exists.yaml',
-          missing: 'file://missing.yaml',
+          prompts: ['file://exists.yaml'],
+          providers: ['file://missing.yaml'],
         },
         '/base',
       );
@@ -1656,18 +1656,99 @@ describe('file utilities', () => {
             original: 'file://missing.yaml',
             filePath: 'missing.yaml',
             functionName: undefined,
-            configPath: 'missing',
+            configPath: 'providers[0]',
           },
           resolvedPath: path.resolve('/base', 'missing.yaml'),
         },
       ]);
     });
 
+    it('validates every structural config location', () => {
+      vi.mocked(fs.existsSync).mockReturnValue(false);
+
+      const result = validateFileReferences(
+        {
+          prompts: [{ id: 'file://prompt.txt' }],
+          providers: [{ id: 'file://provider.py' }],
+          tests: ['file://tests.yaml'],
+          defaultTest: 'file://defaultTest.yaml',
+          scenarios: [{ tests: ['file://scenarioTests.yaml'] }],
+          extensions: ['file://hooks.js:beforeAll'],
+        },
+        '/base',
+      );
+
+      expect(result.valid).toBe(false);
+      expect(result.missingFiles.map(({ reference }) => reference.configPath)).toEqual([
+        'prompts[0].id',
+        'providers[0].id',
+        'tests[0]',
+        'defaultTest',
+        'scenarios[0].tests[0]',
+        'extensions[0]',
+      ]);
+    });
+
+    it('skips runtime data that promptfoo resolves lazily or writes itself', () => {
+      vi.mocked(fs.existsSync).mockReturnValue(false);
+
+      const result = validateFileReferences(
+        {
+          // examples/google-video: the user drops their own image into assets/.
+          providers: [
+            {
+              id: 'google:video:veo-3.1-generate-preview',
+              config: { image: 'file://assets/start-frame.jpg' },
+            },
+          ],
+          // examples/config-pdf-variables: PDFs are fetched by a setup script.
+          tests: [
+            {
+              vars: { paper: 'file://pdfs/arxiv_1.pdf' },
+              assert: [{ type: 'javascript', value: 'file://asserts/assert.js' }],
+            },
+          ],
+          defaultTest: { vars: { system_message: 'file://system_prompt.txt' } },
+          // examples/simple-test: an output promptfoo creates, not an input.
+          outputPath: 'file://output.csv',
+        },
+        '/base',
+      );
+
+      expect(result.valid).toBe(true);
+      expect(result.missingFiles).toEqual([]);
+      expect(fs.existsSync).not.toHaveBeenCalled();
+    });
+
+    it('resolves :functionName suffixes on non-JavaScript/Python scripts', () => {
+      // parseFileUrl only strips the suffix for .js/.ts/.py, so Ruby and Go
+      // references (examples/provider-ruby, examples/provider-golang) arrive with
+      // the function name still attached to the path.
+      vi.mocked(fs.existsSync).mockImplementation((filePath) => {
+        const normalized = String(filePath).replaceAll('\\', '/');
+        return normalized.endsWith('/provider.rb') || normalized.endsWith('/main.go');
+      });
+
+      const result = validateFileReferences(
+        {
+          providers: ['file://provider.rb:some_other_function', 'file://main.go:CallApi'],
+        },
+        '/base',
+      );
+
+      expect(result.missingFiles).toEqual([]);
+      expect(result.valid).toBe(true);
+      expect(result.validFiles.map(({ resolvedPath }) => resolvedPath)).toEqual([
+        path.resolve('/base', 'provider.rb'),
+        path.resolve('/base', 'main.go'),
+      ]);
+    });
+
     it('skips glob and templated file references during upfront validation', () => {
       const result = validateFileReferences(
         {
-          glob: 'file://fixtures/*.yaml',
-          templated: 'file://{{ env.DATASET_PATH }}',
+          prompts: ['file://fixtures/*.yaml'],
+          providers: ['file://{{ env.DATASET_PATH }}'],
         },
         '/base',
       );

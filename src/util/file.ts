@@ -357,6 +357,83 @@ export interface FileValidationResult {
   }>;
 }
 
+/**
+ * Config locations whose `file://` values describe the *structure* of the eval:
+ * prompts, provider identifiers, test/scenario/defaultTest files, and extension
+ * hooks. promptfoo always resolves these itself, so a path that does not exist is
+ * always a mistake and is worth failing fast on with a clear message.
+ *
+ * Everything else a config can hold is runtime data that promptfoo deliberately
+ * does not resolve while loading the config document, and must not be validated
+ * up front:
+ *
+ * - `vars` values and assertion `value`s — `loadFileReference` explicitly preserves
+ *   `file://` in the `vars` and `assertion` contexts so the evaluator can expand
+ *   them later, and the file may be supplied by a setup step (see
+ *   `examples/config-pdf-variables`, whose PDFs come from `fetch_pdfs.sh`).
+ * - provider `config` payloads — these are passed through to the provider, which
+ *   may fetch them lazily or never at all (see `examples/google-video`, whose
+ *   `config.image` points at an asset the user drops in themselves).
+ * - `outputPath` — a file promptfoo *writes*; `examples/simple-test` uses
+ *   `outputPath: file://output.csv`, which by definition does not exist yet.
+ */
+const VALIDATED_CONFIG_PATHS: RegExp[] = [
+  /^prompts(\[\d+\])?(\.(id|raw))?$/,
+  /^providers(\[\d+\])?(\.id)?$/,
+  /^tests(\[\d+\])?$/,
+  /^defaultTest$/,
+  /^scenarios(\[\d+\])?$/,
+  /^scenarios\[\d+\]\.tests(\[\d+\])?$/,
+  /^extensions(\[\d+\])?$/,
+];
+
+function isStructuralConfigPath(configPath: string): boolean {
+  return VALIDATED_CONFIG_PATHS.some((pattern) => pattern.test(configPath));
+}
+
+/**
+ * `parseFileUrl` only strips a `:functionName` suffix from JavaScript and Python
+ * files, so references to scripts in other languages keep the suffix in
+ * `filePath` (`file://provider.rb:some_other_function`,
+ * `file://main.go:CallApi`). Offer the suffix-stripped path as a fallback
+ * candidate so those references are not reported as missing.
+ *
+ * The suffix must be a bare identifier at the end of the path, which keeps
+ * Windows drive letters (`file://C:/scripts/provider.rb`) and POSIX filenames
+ * that merely contain a colon from being truncated. This is a plain linear scan
+ * rather than a regex so a pathological path cannot cause backtracking.
+ */
+function isBareIdentifier(value: string): boolean {
+  if (value.length === 0) {
+    return false;
+  }
+  for (let i = 0; i < value.length; i++) {
+    const code = value.charCodeAt(i);
+    const isLetter = (code >= 65 && code <= 90) || (code >= 97 && code <= 122);
+    const isUnderscore = code === 95;
+    const isDigit = code >= 48 && code <= 57;
+    if (!isLetter && !isUnderscore && !(i > 0 && isDigit)) {
+      return false;
+    }
+  }
+  return true;
+}
+
+function candidateFilePaths(filePath: string): string[] {
+  const lastColon = filePath.lastIndexOf(':');
+  if (lastColon <= 0) {
+    return [filePath];
+  }
+
+  const prefix = filePath.slice(0, lastColon);
+  const lastPrefixChar = prefix[prefix.length - 1];
+  if (lastPrefixChar === '/' || lastPrefixChar === '\\' || lastPrefixChar === ':') {
+    return [filePath];
+  }
+
+  return isBareIdentifier(filePath.slice(lastColon + 1)) ? [filePath, prefix] : [filePath];
+}
+
 export function validateFileReferences(
   config: unknown,
   basePath: string = '',
@@ -368,6 +445,10 @@ export function validateFileReferences(
   };
 
   for (const reference of extractFileReferences(config)) {
+    if (!isStructuralConfigPath(reference.configPath)) {
+      continue;
+    }
+
     if (
       hasMagic(reference.filePath) ||
       (reference.filePath.includes('{{') && reference.filePath.includes('}}'))
@@ -375,15 +456,16 @@ export function validateFileReferences(
       continue;
     }
 
-    const resolvedPath = path.isAbsolute(reference.filePath)
-      ? reference.filePath
-      : path.resolve(basePath || process.cwd(), reference.filePath);
+    const resolvedPaths = candidateFilePaths(reference.filePath).map((candidate) =>
+      path.isAbsolute(candidate) ? candidate : path.resolve(basePath || process.cwd(), candidate),
+    );
+    const existingPath = resolvedPaths.find((candidate) => fs.existsSync(candidate));
 
-    if (fs.existsSync(resolvedPath)) {
-      result.validFiles.push({ reference, resolvedPath });
+    if (existingPath) {
+      result.validFiles.push({ reference, resolvedPath: existingPath });
     } else {
       result.valid = false;
-      result.missingFiles.push({ reference, resolvedPath });
+      result.missingFiles.push({ reference, resolvedPath: resolvedPaths[0] });
     }
   }
 
@@ -443,24 +525,28 @@ export function formatMissingFileReferencesError(
   validationResult: FileValidationResult,
   basePath: string,
 ): string {
-  return dedent`
-    ${chalk.red.bold('File reference errors found in config:')}
+  // Built line by line rather than with a nested `dedent`, which would strip the
+  // indentation that keeps each reference's details attached to its bullet.
+  const details = validationResult.missingFiles
+    .map(({ reference, resolvedPath }) =>
+      [
+        `  - ${chalk.bold(reference.original)}`,
+        `    ${chalk.white('Location in config:')} ${reference.configPath}`,
+        `    ${chalk.white('Resolved path:')} ${resolvedPath}`,
+      ].join('\n'),
+    )
+    .join('\n\n');
 
-    ${validationResult.missingFiles
-      .map(
-        ({ reference, resolvedPath }) => dedent`
-      - ${chalk.bold(reference.original)}
-        ${chalk.white('Location in config:')} ${reference.configPath}
-        ${chalk.white('Resolved path:')} ${resolvedPath}
-    `,
-      )
-      .join('\n\n')}
-
-    ${chalk.white('Please verify that:')}
-      - The file paths are correct
-      - The files exist at the specified locations
-      - Paths are relative to: ${chalk.cyan(path.resolve(basePath))}
-  `;
+  return [
+    chalk.red.bold('File reference errors found in config:'),
+    '',
+    details,
+    '',
+    chalk.white('Please verify that:'),
+    '  - The file paths are correct',
+    '  - The files exist at the specified locations',
+    `  - Paths are relative to: ${chalk.cyan(path.resolve(basePath))}`,
+  ].join('\n');
 }
 
 /**
