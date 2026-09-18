@@ -7,6 +7,7 @@ import { createPlaceholderInputValue } from '../redteam/inputVariables';
 import { neverGenerateRemote } from '../redteam/remoteGeneration';
 import { doRemoteGrading } from '../remoteGrading';
 import { fetchWithProxy } from '../util/fetch/index';
+import { parseConfigurationChangeSuggestion } from '../util/httpResponseTransformSuggestion';
 import { sanitizeObject } from '../util/sanitizer';
 import {
   determineEffectiveSessionSource,
@@ -47,6 +48,7 @@ export interface ProviderTestResult {
     changes_needed?: boolean;
     changes_needed_reason?: string;
     changes_needed_suggestions?: string[];
+    configuration_change_suggestion?: { transformResponse: string };
   };
 }
 
@@ -189,6 +191,9 @@ export async function testProviderConnectivity({
       }
 
       const testAnalyzerResponseObj = await testAnalyzerResponse.json();
+      const configurationChangeSuggestion = parseConfigurationChangeSuggestion(
+        testAnalyzerResponseObj.configuration_change_suggestion,
+      );
 
       const errorMsg = result.error ?? result.response?.error ?? testAnalyzerResponseObj.error;
 
@@ -210,6 +215,7 @@ export async function testProviderConnectivity({
               changes_needed: testAnalyzerResponseObj.changes_needed,
               changes_needed_reason: testAnalyzerResponseObj.changes_needed_reason,
               changes_needed_suggestions: testAnalyzerResponseObj.changes_needed_suggestions,
+              configuration_change_suggestion: configurationChangeSuggestion,
             }
           : undefined,
       };

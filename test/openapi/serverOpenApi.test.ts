@@ -169,6 +169,8 @@ describe('server OpenAPI generation', () => {
     const providerTestRequest = (paths['/api/providers/test']?.post?.requestBody as any)?.content?.[
       'application/json'
     ]?.schema;
+    const providerTestResponse = (paths['/api/providers/test']?.post?.responses?.['200'] as any)
+      ?.content?.['application/json']?.schema;
 
     expect(telemetryRequest).toEqual(
       expect.objectContaining({
@@ -188,6 +190,10 @@ describe('server OpenAPI generation', () => {
         type: 'object',
       }),
     );
+    expect(
+      providerTestResponse?.properties?.testResult?.properties?.configuration_change_suggestion
+        ?.properties?.transformResponse,
+    ).toEqual(expect.objectContaining({ maxLength: 512, minLength: 1, type: 'string' }));
     expect(providerTestRequest.properties.providerOptions.properties.env).toBeUndefined();
   });
 
