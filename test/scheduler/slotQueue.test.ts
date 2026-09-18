@@ -1,4 +1,5 @@
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
+import { parseRateLimitHeaders } from '../../src/scheduler/headerParser';
 import { SlotQueue } from '../../src/scheduler/slotQueue';
 
 import type { ParsedRateLimitHeaders } from '../../src/scheduler/headerParser';
@@ -524,6 +525,76 @@ describe('SlotQueue', () => {
 
       expect(queue.getActiveCount()).toBe(0);
       expect(queue.getQueueDepth()).toBe(1);
+    });
+
+    it('keeps a token-exhausted request queued until the token reset', () => {
+      const now = Date.now();
+      const parsed = parseRateLimitHeaders({
+        'x-ratelimit-remaining-requests': '1',
+        'x-ratelimit-remaining-tokens': '0',
+        'x-ratelimit-reset-requests': '1s',
+        'x-ratelimit-reset-tokens': '10s',
+      });
+
+      queue.updateRateLimitState(parsed);
+      trackAcquire(queue.acquire('token-limited'));
+
+      expect(queue.getQueueDepth()).toBe(1);
+
+      vi.advanceTimersByTime(1000);
+
+      expect(Date.now()).toBe(now + 1000);
+      expect(queue.getActiveCount()).toBe(0);
+      expect(queue.getQueueDepth()).toBe(1);
+
+      vi.advanceTimersByTime(9000);
+
+      expect(queue.getActiveCount()).toBe(1);
+      expect(queue.getQueueDepth()).toBe(0);
+    });
+
+    it('does not let Retry-After be bypassed by shorter quota reset clocks', () => {
+      const parsed = parseRateLimitHeaders({
+        'x-ratelimit-remaining-requests': '1',
+        'x-ratelimit-remaining-tokens': '0',
+        'x-ratelimit-reset-requests': '1s',
+        'x-ratelimit-reset-tokens': '10s',
+      });
+
+      queue.updateRateLimitState(parsed);
+      queue.markRateLimited(30000);
+      trackAcquire(queue.acquire('retry-after-limited'));
+
+      vi.advanceTimersByTime(10000);
+
+      expect(queue.getActiveCount()).toBe(0);
+      expect(queue.getQueueDepth()).toBe(1);
+
+      vi.advanceTimersByTime(20000);
+
+      expect(queue.getActiveCount()).toBe(1);
+      expect(queue.getQueueDepth()).toBe(0);
+    });
+
+    it('does not let Retry-After shorten a longer quota reset clock', () => {
+      const resetAt = Date.now() + 60000;
+      queue.updateRateLimitState({
+        remainingTokens: 0,
+        resetAt,
+        resetAtTokens: resetAt,
+      });
+      queue.markRateLimited(30000);
+      trackAcquire(queue.acquire('longer-quota-reset'));
+
+      vi.advanceTimersByTime(30000);
+
+      expect(queue.getActiveCount()).toBe(0);
+      expect(queue.getQueueDepth()).toBe(1);
+
+      vi.advanceTimersByTime(30000);
+
+      expect(queue.getActiveCount()).toBe(1);
+      expect(queue.getQueueDepth()).toBe(0);
     });
   });
 

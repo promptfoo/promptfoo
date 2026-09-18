@@ -35,6 +35,8 @@ export class SlotQueue {
 
   // Rate limit state
   private resetAt: number | null = null;
+  private resetAtRequests: number | null = null;
+  private resetAtTokens: number | null = null;
   private remainingRequests: number | null = null;
   private remainingTokens: number | null = null;
   private requestLimit: number | null = null;
@@ -134,8 +136,14 @@ export class SlotQueue {
     }
     if (parsed.resetAt !== undefined) {
       this.resetAt = parsed.resetAt;
-      this.scheduleResetProcessing();
     }
+    if (parsed.resetAtRequests !== undefined) {
+      this.resetAtRequests = parsed.resetAtRequests;
+    }
+    if (parsed.resetAtTokens !== undefined) {
+      this.resetAtTokens = parsed.resetAtTokens;
+    }
+    this.scheduleResetProcessing();
   }
 
   /**
@@ -154,6 +162,11 @@ export class SlotQueue {
       const newResetAt = Date.now() + retryAfterMs;
       // Use the later of existing or new reset time
       this.resetAt = this.resetAt ? Math.max(this.resetAt, newResetAt) : newResetAt;
+      // Retry-After applies to the rate-limited request as a whole. Keep it
+      // as a minimum boundary for both quota clocks without shortening a
+      // provider's longer quota-specific reset window.
+      this.resetAtRequests = Math.max(this.resetAtRequests ?? this.resetAt, this.resetAt);
+      this.resetAtTokens = Math.max(this.resetAtTokens ?? this.resetAt, this.resetAt);
     } else if (!this.resetAt) {
       // No retryAfter provided and no existing reset - use conservative default
       this.resetAt = Date.now() + 60000;
@@ -199,24 +212,44 @@ export class SlotQueue {
   private isQuotaExhausted(): boolean {
     const now = Date.now();
 
-    // Check if reset time has passed - clear stale state if so
-    if (this.resetAt && now >= this.resetAt) {
+    const requestResetAt = this.resetAtRequests ?? this.resetAt;
+    if (
+      this.remainingRequests !== null &&
+      this.remainingRequests <= 0 &&
+      requestResetAt &&
+      now >= requestResetAt
+    ) {
       this.remainingRequests = null;
+      this.resetAtRequests = null;
+    }
+
+    const tokenResetAt = this.resetAtTokens ?? this.resetAt;
+    if (
+      this.remainingTokens !== null &&
+      this.remainingTokens <= 0 &&
+      tokenResetAt &&
+      now >= tokenResetAt
+    ) {
       this.remainingTokens = null;
+      this.resetAtTokens = null;
+    }
+
+    if (this.resetAt && now >= this.resetAt) {
       this.resetAt = null;
-      return false;
     }
 
     // Request quota exhausted
     if (this.remainingRequests !== null && this.remainingRequests <= 0) {
-      if (this.resetAt && now < this.resetAt) {
+      const resetAt = this.resetAtRequests ?? this.resetAt;
+      if (resetAt && now < resetAt) {
         return true;
       }
     }
 
     // Token quota exhausted
     if (this.remainingTokens !== null && this.remainingTokens <= 0) {
-      if (this.resetAt && now < this.resetAt) {
+      const resetAt = this.resetAtTokens ?? this.resetAt;
+      if (resetAt && now < resetAt) {
         return true;
       }
     }
@@ -232,16 +265,31 @@ export class SlotQueue {
       clearTimeout(this.resetTimer);
     }
 
-    if (this.resetAt && this.waiting.length > 0) {
-      const delay = Math.max(0, this.resetAt - Date.now());
+    const nextResetAt = this.getNextQuotaResetAt();
+    if (nextResetAt && this.waiting.length > 0) {
+      const delay = Math.max(0, nextResetAt - Date.now());
       this.resetTimer = setTimeout(() => {
-        // Clear exhausted state
-        this.remainingRequests = null;
-        this.remainingTokens = null;
-        this.resetAt = null;
+        this.resetTimer = null;
         this.processQueue();
       }, delay);
     }
+  }
+
+  private getNextQuotaResetAt(): number | null {
+    const resetTimes: number[] = [];
+    if (this.remainingRequests !== null && this.remainingRequests <= 0) {
+      const resetAt = this.resetAtRequests ?? this.resetAt;
+      if (resetAt) {
+        resetTimes.push(resetAt);
+      }
+    }
+    if (this.remainingTokens !== null && this.remainingTokens <= 0) {
+      const resetAt = this.resetAtTokens ?? this.resetAt;
+      if (resetAt) {
+        resetTimes.push(resetAt);
+      }
+    }
+    return resetTimes.length > 0 ? Math.min(...resetTimes) : null;
   }
 
   /**
