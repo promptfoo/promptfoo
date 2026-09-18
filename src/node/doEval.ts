@@ -783,6 +783,8 @@ export async function doEval(
       filterRange,
       maxConcurrency,
       cache,
+      // CLI --reporter flag overrides config file reporters
+      reporters: cmdObj.reporter ?? evaluateOptions.reporters,
     };
 
     if (!resumeEval && cmdObj.grader) {

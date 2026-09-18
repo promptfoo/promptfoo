@@ -3427,6 +3427,34 @@
         "isRedteam": {
           "type": "boolean"
         },
+        "reporters": {
+          "type": "array",
+          "items": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "array",
+                "items": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "object",
+                    "propertyNames": {
+                      "type": "string"
+                    },
+                    "additionalProperties": {}
+                  }
+                ],
+                "additionalItems": false,
+                "minItems": 2,
+                "maxItems": 2
+              }
+            ]
+          }
+        },
         "silent": {
           "type": "boolean"
         },
@@ -3631,6 +3659,12 @@
               }
             }
           ]
+        },
+        "reporter": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
         },
         "extension": {
           "type": "array",

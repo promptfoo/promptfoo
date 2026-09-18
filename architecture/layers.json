@@ -185,6 +185,7 @@
         "src/python",
         "src/remoteGrading.ts",
         "src/remoteScoring.ts",
+        "src/reporters",
         "src/ruby",
         "src/suggestions.ts",
         "src/table.ts",
