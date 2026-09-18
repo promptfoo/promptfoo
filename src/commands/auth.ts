@@ -489,6 +489,7 @@ export function authCommand(program: Command) {
           logger.info(`Current team: ${chalk.green(team.name)}`);
         } catch (_error) {
           logger.warn('Stored team is no longer accessible, falling back to default');
+          cloudConfig.clearCurrentTeamId(currentOrganizationId);
           const team = await resolveTeamId();
           logger.info(`Current team: ${chalk.green(team.name)} ${chalk.dim('(default)')}`);
         }

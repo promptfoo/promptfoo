@@ -339,12 +339,18 @@ function redactCredentials(text: string, credentials: readonly string[]): string
     .replace(/\b(Bearer|Basic)\s+[\w.~+/=-]{8,}/gi, `$1 ${REDACTED}`);
 }
 
+function isFiniteNonNegativeInteger(value: unknown): value is number {
+  return (
+    typeof value === 'number' && Number.isFinite(value) && Number.isInteger(value) && value >= 0
+  );
+}
+
 function isUsage(value: unknown): value is Usage {
   const usage = value as Usage | null | undefined;
   return (
-    typeof usage?.input_tokens === 'number' &&
-    typeof usage.output_tokens === 'number' &&
-    typeof usage.total_tokens === 'number'
+    isFiniteNonNegativeInteger(usage?.input_tokens) &&
+    isFiniteNonNegativeInteger(usage.output_tokens) &&
+    isFiniteNonNegativeInteger(usage.total_tokens)
   );
 }
 

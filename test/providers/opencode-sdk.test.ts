@@ -1284,6 +1284,37 @@ describe('OpenCodeSDKProvider', () => {
         errorSpy.mockRestore();
       });
 
+      it('propagates SDK error envelopes', async () => {
+        const errorSpy = vi.spyOn(logger, 'error').mockImplementation(() => {});
+        mockSessionPrompt.mockResolvedValue({ error: 'upstream unavailable' });
+
+        const provider = new OpenCodeSDKProvider({
+          env: { ANTHROPIC_API_KEY: 'test-api-key' },
+        });
+        const result = await provider.callApi('Test prompt');
+
+        expect(result.error).toBe(
+          'Error calling OpenCode SDK: OpenCode SDK prompt error: upstream unavailable',
+        );
+        errorSpy.mockRestore();
+      });
+
+      it('preserves a successful response when temporary-directory cleanup fails', async () => {
+        const debugSpy = vi.spyOn(logger, 'debug').mockImplementation(() => {});
+        rmSpy.mockRejectedValueOnce(new Error('cleanup failed'));
+
+        const provider = new OpenCodeSDKProvider({
+          env: { ANTHROPIC_API_KEY: 'test-api-key' },
+        });
+        const result = await provider.callApi('Test prompt');
+
+        expect(result.output).toBe('Test response');
+        expect(debugSpy).toHaveBeenCalledWith(
+          expect.stringContaining('Failed to remove temp directory'),
+        );
+        debugSpy.mockRestore();
+      });
+
       it('should handle empty parts in response', async () => {
         mockSessionPrompt.mockResolvedValue(createMockPromptResponse([], { input: 5, output: 10 }));
 
