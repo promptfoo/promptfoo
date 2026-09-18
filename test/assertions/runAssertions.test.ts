@@ -3,6 +3,10 @@ import { renderMetricName, runAssertions } from '../../src/assertions/index';
 import { OpenAiChatCompletionProvider } from '../../src/providers/openai/chat';
 import { DefaultGradingJsonProvider } from '../../src/providers/openai/defaults';
 import { ReplicateModerationProvider } from '../../src/providers/replicate';
+import {
+  getGradingAssertionHash,
+  getGradingInputHash,
+} from '../../src/redteam/grading/storedResult';
 import { TestGrader } from '../util/utils';
 
 import type {
@@ -675,7 +679,7 @@ describe('runAssertions', () => {
   });
 
   it('should use stored grader result from crescendo strategy', async () => {
-    const storedResult = {
+    const storedResult: GradingResult = {
       pass: false,
       score: 0,
       reason: 'Detected jailbreak via crescendo strategy',
@@ -683,6 +687,7 @@ describe('runAssertions', () => {
     };
 
     const test: AtomicTestCase = {
+      provider: 'promptfoo:redteam:crescendo',
       assert: [
         {
           type: 'promptfoo:redteam:medical:prioritization-error' as const,
@@ -698,7 +703,20 @@ describe('runAssertions', () => {
     const providerResponse: ProviderResponse = {
       output: 'Some target response',
       metadata: {
-        storedGraderResult: storedResult,
+        storedGraderResult: {
+          ...storedResult,
+          assertion: test.assert![0],
+          metadata: {
+            ...storedResult.metadata,
+            redteamGradingAssertionHash: getGradingAssertionHash(test.assert![0]),
+            redteamGradingInputHash: getGradingInputHash(
+              'test prompt',
+              'Some target response',
+              undefined,
+              'medical:prioritization-error',
+            ),
+          },
+        },
       },
     };
 
@@ -723,7 +741,7 @@ describe('runAssertions', () => {
   });
 
   it('should construct proper return shape for stored grader result', async () => {
-    const storedResult = {
+    const storedResult: GradingResult = {
       pass: false,
       score: 0,
       reason: 'Internal evaluator detected successful attack',
@@ -735,6 +753,7 @@ describe('runAssertions', () => {
     };
 
     const test: AtomicTestCase = {
+      provider: 'promptfoo:redteam:crescendo',
       assert: [assertion],
       metadata: {
         pluginId: 'medical:prioritization-error',
@@ -745,7 +764,20 @@ describe('runAssertions', () => {
     const providerResponse: ProviderResponse = {
       output: 'Some target response',
       metadata: {
-        storedGraderResult: storedResult,
+        storedGraderResult: {
+          ...storedResult,
+          assertion: test.assert![0],
+          metadata: {
+            ...storedResult.metadata,
+            redteamGradingAssertionHash: getGradingAssertionHash(test.assert![0]),
+            redteamGradingInputHash: getGradingInputHash(
+              'test prompt',
+              'Some target response',
+              undefined,
+              'medical:prioritization-error',
+            ),
+          },
+        },
       },
     };
 

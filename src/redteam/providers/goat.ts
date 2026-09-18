@@ -19,6 +19,7 @@ import {
   accumulateResponseTokenUsage,
   createEmptyTokenUsage,
 } from '../../util/tokenUsageUtils';
+import { getTargetConversation } from '../grading/storedResult';
 import { materializeInputVariablesWithMetadata } from '../inputVariables';
 import {
   getRemoteGenerationHeaders,
@@ -494,21 +495,21 @@ export default class GoatProvider implements ApiProvider {
           Object.keys(attackerVars),
         );
 
-        messages.push({
-          role: attackerMessage.role,
-          content: renderedAttackerPrompt,
-        });
+        const pendingMessage = { role: attackerMessage.role, content: renderedAttackerPrompt };
+        const turnMessages = [...messages, pendingMessage];
 
         logger.debug(
           dedent`
           ${chalk.bold.green(`GOAT turn ${turn} history:`)}
-          ${chalk.cyan(JSON.stringify(messages, null, 2))}
+          ${chalk.cyan(JSON.stringify(turnMessages, null, 2))}
         `,
         );
 
         // Get the latest message content for transforms
-        const latestMessageContent = messages[messages.length - 1].content;
-        let targetPrompt = this.config.stateful ? latestMessageContent : JSON.stringify(messages);
+        const latestMessageContent = turnMessages[turnMessages.length - 1].content;
+        let targetPrompt = this.config.stateful
+          ? latestMessageContent
+          : JSON.stringify(turnMessages);
         logger.debug(`GOAT turn ${turn} target prompt: ${renderedAttackerPrompt}`);
 
         // ═══════════════════════════════════════════════════════════════════════
@@ -554,7 +555,7 @@ export default class GoatProvider implements ApiProvider {
           // - Current turn as audio/image (the actual attack)
           if (lastTransformResult.audio || lastTransformResult.image) {
             // Build hybrid payload with conversation history + current transformed turn
-            const historyWithoutCurrentTurn = messages.slice(0, -1);
+            const historyWithoutCurrentTurn = turnMessages.slice(0, -1);
             const hybridPayload = {
               _promptfoo_audio_hybrid: true,
               history: historyWithoutCurrentTurn,
@@ -591,9 +592,6 @@ export default class GoatProvider implements ApiProvider {
           if (lastTransformResult.displayVars) {
             lastTransformDisplayVars = lastTransformResult.displayVars;
           }
-
-          // Track the final prompt sent to target for UI display (e.g., fetchPrompt for indirect-web-pwn)
-          lastFinalAttackPrompt = lastTransformResult.prompt;
         }
 
         const iterationStart = Date.now();
@@ -613,6 +611,8 @@ export default class GoatProvider implements ApiProvider {
           targetContext,
           options,
         )) as GoatProviderResponse;
+        messages.push(pendingMessage);
+        lastFinalAttackPrompt = lastTransformResult?.prompt || latestMessageContent;
 
         if (!targetResponse.cached && targetProvider.delay && targetProvider.delay > 0) {
           logger.debug(`Sleeping for ${targetProvider.delay}ms`);
@@ -753,6 +753,7 @@ export default class GoatProvider implements ApiProvider {
           // Build grading context with image outputs, tracing, and exfil tracking data.
           let gradingContext: RedteamGradingContext | undefined = {
             providerResponse: finalResponse,
+            conversationTranscript: getTargetConversation(messages).conversationTranscript,
             ...(finalResponse.images?.length ? { imageOutputs: finalResponse.images } : {}),
           };
 
@@ -807,7 +808,9 @@ export default class GoatProvider implements ApiProvider {
 
           const { grade, rubric } = await runRedteamGrader(
             grader,
-            attackerMessage.content,
+            lastFinalAttackPrompt ||
+              getLastMessageContent(messages, 'user') ||
+              attackerMessage.content,
             finalOutput,
             test,
             targetProvider,
@@ -817,10 +820,23 @@ export default class GoatProvider implements ApiProvider {
             gradingContext,
           );
           graderPassed = grade.pass;
-          storedGraderResult = accumulateGraderResult(storedGraderResult, {
-            ...grade,
-            assertion: buildGraderResultAssertion(grade.assertion, assertToUse, rubric),
-          });
+          storedGraderResult = accumulateGraderResult(
+            storedGraderResult,
+            {
+              ...grade,
+              assertion: buildGraderResultAssertion(grade.assertion, assertToUse, rubric),
+            },
+            {
+              prompt:
+                lastFinalAttackPrompt ||
+                getLastMessageContent(messages, 'user') ||
+                attackerMessage.content,
+              output: finalOutput,
+              messages: messages,
+              pluginId: test.metadata?.pluginId,
+              assertion: assertToUse,
+            },
+          );
         }
 
         if (graderPassed === false) {
