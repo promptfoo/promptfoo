@@ -10,6 +10,7 @@ import cliState from '../../src/cliState';
 import { __resetPromptConversationCacheForTests, evaluate } from '../../src/evaluator';
 import logger from '../../src/logger';
 import Eval from '../../src/models/eval';
+import { generateIdFromPrompt } from '../../src/models/prompt';
 import { providerRegistry } from '../../src/providers/providerRegistry';
 import {
   type ApiProvider,
@@ -18,6 +19,7 @@ import {
   type TestSuite,
 } from '../../src/types/index';
 import { JsonlFileWriter } from '../../src/util/exportToFile/writeToFile';
+import { wereNamedMetricsSeededFromPreviousRun } from '../../src/util/namedMetrics';
 import { sleep } from '../../src/util/time';
 import { createEmptyTokenUsage } from '../../src/util/tokenUsageUtils';
 import { toPrompt } from './helpers';
@@ -176,6 +178,84 @@ describeEvaluator('evaluator execution control', () => {
       cliState.resume = false;
       fs.rmSync(outputPath, { force: true });
     }
+  });
+
+  it('marks the prompt metrics that a resumed run seeded from the previous run', async () => {
+    const provider: ApiProvider = {
+      id: vi.fn().mockReturnValue('test-provider'),
+      callApi: vi.fn().mockResolvedValue({
+        output: 'Test output',
+        tokenUsage: createEmptyTokenUsage(),
+      }),
+    };
+    const prompt = toPrompt('Test prompt');
+    const testSuite: TestSuite = {
+      providers: [provider],
+      prompts: [prompt],
+      tests: [{}],
+    };
+    const created = await Eval.create({}, [prompt], {
+      id: randomUUID(),
+      completedPrompts: [
+        {
+          ...prompt,
+          id: generateIdFromPrompt(prompt),
+          provider: 'test-provider',
+          metrics: {
+            score: 1,
+            testPassCount: 1,
+            testFailCount: 0,
+            testErrorCount: 0,
+            assertPassCount: 0,
+            assertFailCount: 0,
+            totalLatencyMs: 0,
+            tokenUsage: createEmptyTokenUsage(),
+            namedScores: { quality: 3 },
+            namedScoresCount: { quality: 2 },
+            namedScoreWeights: { quality: 4 },
+            cost: 0,
+          },
+        },
+      ],
+    });
+    // `Eval.create` only persists `completedPrompts`; resume reads them back off the record.
+    const evalRecord = await Eval.findById(created.id);
+    expect(evalRecord).toBeDefined();
+    const storedMetrics = evalRecord!.prompts[0].metrics;
+
+    try {
+      cliState.resume = true;
+      const resumed = await evaluate(testSuite, evalRecord!, {});
+      const resumedMetrics = resumed.prompts[0].metrics;
+
+      // Columns get their own clone of the stored metrics, so object identity cannot tell
+      // callers that these totals continue the previous run's. The marker can.
+      expect(resumedMetrics).not.toBe(storedMetrics);
+      expect(resumedMetrics?.namedScores).toEqual({ quality: 3 });
+      expect(wereNamedMetricsSeededFromPreviousRun(resumedMetrics)).toBe(true);
+    } finally {
+      cliState.resume = false;
+    }
+  });
+
+  it('leaves prompt metrics unmarked when a run does not resume previous totals', async () => {
+    const provider: ApiProvider = {
+      id: vi.fn().mockReturnValue('test-provider'),
+      callApi: vi.fn().mockResolvedValue({
+        output: 'Test output',
+        tokenUsage: createEmptyTokenUsage(),
+      }),
+    };
+    const prompt = toPrompt('Test prompt');
+    const testSuite: TestSuite = {
+      providers: [provider],
+      prompts: [prompt],
+      tests: [{}],
+    };
+
+    const completed = await evaluate(testSuite, new Eval({}), {});
+
+    expect(wereNamedMetricsSeededFromPreviousRun(completed.prompts[0].metrics)).toBe(false);
   });
 
   it('keeps raw SVG text available to llm-rubric judges while indexing media metadata', async () => {

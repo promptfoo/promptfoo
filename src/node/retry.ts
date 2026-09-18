@@ -1,5 +1,5 @@
 import chalk from 'chalk';
-import { and, eq, inArray } from 'drizzle-orm';
+import { and, eq, inArray, sql } from 'drizzle-orm';
 import cliState from '../cliState';
 import { getDb } from '../database/index';
 import { evalResultsTable } from '../database/tables';
@@ -15,7 +15,8 @@ import {
   getPersistedProviderFilterOptions,
   getProviderFilterRegexError,
 } from '../util/eval/filterProviders';
-import { accumulateNamedMetric } from '../util/namedMetrics';
+import { accumulateNamedMetric, wereNamedMetricsSeededFromPreviousRun } from '../util/namedMetrics';
+import { filterFiniteScores } from '../util/numeric';
 import { writeMultipleOutputs } from '../util/output';
 import { getOutputFileFormat } from '../util/outputFormats';
 import { shouldShareResults } from '../util/sharing';
@@ -25,7 +26,7 @@ import {
   createEmptyTokenUsage,
 } from '../util/tokenUsageUtils';
 
-import type { TokenUsage } from '../types/index';
+import type { PromptMetrics, TestSuite, TokenUsage } from '../types/index';
 import type { InternalEvaluateOptions } from '../types/internal';
 
 export interface RetryCommandOptions {
@@ -34,6 +35,74 @@ export interface RetryCommandOptions {
   maxConcurrency?: number;
   delay?: number;
   share?: boolean;
+}
+
+interface RecalculatePromptMetricsOptions {
+  /**
+   * Preserve the live evaluator's named metric totals when the deleted ERROR rows had no named
+   * scores. This keeps configured Nunjucks rendering without executing templates from persisted
+   * component results during the post-retry read.
+   */
+  preserveNamedMetrics?: boolean;
+}
+
+interface DeletedErrorResultsSummary {
+  allRequestedDeleted: boolean;
+  hadNamedScores: boolean;
+}
+
+function isFiniteMetricRecord(value: unknown): value is Record<string, number> {
+  return (
+    typeof value === 'object' &&
+    value !== null &&
+    !Array.isArray(value) &&
+    Object.values(value).every((entry) => typeof entry === 'number' && Number.isFinite(entry))
+  );
+}
+
+function isCompleteFiniteNamedMetrics(metrics: PromptMetrics | undefined): boolean {
+  const namedScores = metrics?.namedScores;
+  const namedScoresCount = metrics?.namedScoresCount;
+  const namedScoreWeights = metrics?.namedScoreWeights;
+  if (
+    !isFiniteMetricRecord(namedScores) ||
+    !isFiniteMetricRecord(namedScoresCount) ||
+    !isFiniteMetricRecord(namedScoreWeights)
+  ) {
+    return false;
+  }
+
+  const metricNames = Object.keys(namedScores);
+  return [namedScoresCount, namedScoreWeights].every(
+    (record) =>
+      Object.keys(record).length === metricNames.length &&
+      metricNames.every((metricName) => Object.prototype.hasOwnProperty.call(record, metricName)),
+  );
+}
+
+/**
+ * Capture prompt metric completeness before retry so preservation is used only when evaluate()
+ * carried those totals forward.
+ *
+ * `evaluate()` seeds each column from the stored prompt's metrics, but it clones them, so the
+ * carry-over cannot be detected by comparing object identity. `buildCompletedPrompts` marks the
+ * seeded clones instead, and the marker survives cloning because it lives in a WeakSet rather
+ * than in the metrics payload.
+ */
+export function createNamedMetricsPreservationGuard(evalRecord: Eval) {
+  const originalHasDerivedMetrics = Boolean(evalRecord.config.derivedMetrics?.length);
+  const completeSnapshots = evalRecord.prompts.map(({ metrics }) =>
+    isCompleteFiniteNamedMetrics(metrics),
+  );
+
+  return (retriedEval: Eval, derivedMetrics: TestSuite['derivedMetrics']): boolean =>
+    !originalHasDerivedMetrics &&
+    !derivedMetrics?.length &&
+    completeSnapshots.length === retriedEval.prompts.length &&
+    completeSnapshots.every(
+      (complete, index) =>
+        complete && wereNamedMetricsSeededFromPreviousRun(retriedEval.prompts[index]?.metrics),
+    );
 }
 
 function getJsonlOutputPaths(outputPath: string | string[] | undefined): string[] {
@@ -144,26 +213,44 @@ export async function getErrorResultIds(evalId: string): Promise<string[]> {
  * Deletes ERROR results after successful retry.
  * Uses batch delete for better performance.
  */
-export async function deleteErrorResults(resultIds: string[]): Promise<void> {
+export function deleteErrorResults(resultIds: string[]): Promise<void>;
+export function deleteErrorResults(
+  resultIds: string[],
+  options: { reportNamedScores: true },
+): Promise<DeletedErrorResultsSummary>;
+export async function deleteErrorResults(
+  resultIds: string[],
+  options?: { reportNamedScores: true },
+): Promise<unknown> {
   if (resultIds.length === 0) {
-    return;
+    return options?.reportNamedScores
+      ? { allRequestedDeleted: true, hadNamedScores: false }
+      : undefined;
   }
 
   const db = await getDb();
-  const affectedEvals = await db
-    .selectDistinct({ evalId: evalResultsTable.evalId })
-    .from(evalResultsTable)
+  const deletedResults = await db
+    .delete(evalResultsTable)
     .where(inArray(evalResultsTable.id, resultIds))
-    .all();
+    .returning({
+      evalId: evalResultsTable.evalId,
+      hasNamedScores: sql<number>`CASE
+        WHEN ${evalResultsTable.namedScores} IS NOT NULL
+          AND ${evalResultsTable.namedScores} <> '{}'
+        THEN 1 ELSE 0 END`,
+    });
 
-  // Use batch delete with inArray for better performance
-  await db.delete(evalResultsTable).where(inArray(evalResultsTable.id, resultIds)).run();
-
-  for (const { evalId } of affectedEvals) {
+  for (const evalId of new Set(deletedResults.map(({ evalId }) => evalId))) {
     notifyEvaluationChanged(evalId);
   }
 
   logger.debug(`Deleted ${resultIds.length} error results from database`);
+  return options?.reportNamedScores
+    ? {
+        allRequestedDeleted: deletedResults.length === resultIds.length,
+        hadNamedScores: deletedResults.some(({ hasNamedScores }) => Boolean(hasNamedScores)),
+      }
+    : undefined;
 }
 
 // Batch size of 1000 balances memory usage vs. database query overhead for large evals (40K+ results)
@@ -173,7 +260,10 @@ const RECALCULATE_BATCH_SIZE = 1000;
  * Recalculates prompt metrics based on current results after ERROR results have been deleted.
  * Uses streaming batched iteration to avoid OOM with large evaluations (40K+ results).
  */
-export async function recalculatePromptMetrics(evalRecord: Eval): Promise<void> {
+export async function recalculatePromptMetrics(
+  evalRecord: Eval,
+  options: RecalculatePromptMetricsOptions = {},
+): Promise<void> {
   logger.debug('Recalculating prompt metrics after deleting ERROR results');
 
   const startTime = Date.now();
@@ -202,6 +292,7 @@ export async function recalculatePromptMetrics(evalRecord: Eval): Promise<void> 
 
   // Initialize metrics for each prompt
   for (const [promptIdx] of evalRecord.prompts.entries()) {
+    const existingMetrics = evalRecord.prompts[promptIdx].metrics;
     promptMetricsMap.set(promptIdx, {
       score: 0,
       testPassCount: 0,
@@ -211,9 +302,15 @@ export async function recalculatePromptMetrics(evalRecord: Eval): Promise<void> 
       assertFailCount: 0,
       totalLatencyMs: 0,
       tokenUsage: createEmptyTokenUsage(),
-      namedScores: {},
-      namedScoresCount: {},
-      namedScoreWeights: {},
+      namedScores: options.preserveNamedMetrics
+        ? filterFiniteScores(existingMetrics?.namedScores ?? {})
+        : {},
+      namedScoresCount: options.preserveNamedMetrics
+        ? filterFiniteScores(existingMetrics?.namedScoresCount ?? {})
+        : {},
+      namedScoreWeights: options.preserveNamedMetrics
+        ? filterFiniteScores(existingMetrics?.namedScoreWeights ?? {})
+        : {},
       cost: 0,
     });
   }
@@ -256,13 +353,15 @@ export async function recalculatePromptMetrics(evalRecord: Eval): Promise<void> 
         }
         metrics.cost += result.cost || 0;
 
-        for (const [key, value] of Object.entries(result.namedScores || {})) {
-          accumulateNamedMetric(metrics, {
-            metricName: key,
-            metricValue: value,
-            gradingResult: result.gradingResult,
-            testVars: result.testCase?.vars || {},
-          });
+        if (!options.preserveNamedMetrics) {
+          for (const [key, value] of Object.entries(result.namedScores || {})) {
+            accumulateNamedMetric(metrics, {
+              metricName: key,
+              metricValue: value,
+              gradingResult: result.gradingResult,
+              testVars: result.testCase?.vars || {},
+            });
+          }
         }
 
         // Update assertion counts
@@ -402,6 +501,7 @@ export async function retryCommand(evalId: string, cmdObj: RetryCommandOptions) 
     eventSource: 'cli',
     showProgressBar: !cmdObj.verbose, // Show progress bar unless verbose mode
   };
+  const canPreserveNamedMetrics = createNamedMetricsPreservationGuard(originalEval);
 
   try {
     // Run the retry evaluation - this will only run ERROR test cases due to retry mode
@@ -415,9 +515,16 @@ export async function retryCommand(evalId: string, cmdObj: RetryCommandOptions) 
 
     let errorRowsDeleted = false;
     try {
-      await deleteErrorResults(errorResultIds);
+      const deletion = await deleteErrorResults(errorResultIds, {
+        reportNamedScores: true,
+      });
       errorRowsDeleted = true;
-      await recalculatePromptMetrics(retriedEval);
+      await recalculatePromptMetrics(retriedEval, {
+        preserveNamedMetrics:
+          deletion.allRequestedDeleted &&
+          !deletion.hadNamedScores &&
+          canPreserveNamedMetrics(retriedEval, testSuite.derivedMetrics),
+      });
     } catch (cleanupError) {
       // Cleanup failure is non-fatal - retry itself succeeded
       logger.warn('Post-retry cleanup had issues. Retry results are saved.', {

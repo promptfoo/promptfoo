@@ -151,8 +151,8 @@ describe('CustomMetrics', () => {
       />,
     );
 
-    expect(screen.getByTestId('metric-value-metric1')).toHaveTextContent('0.00');
-    expect(screen.getByTestId('metric-value-metric2')).toHaveTextContent('0.00');
+    expect(screen.getByTestId('metric-value-metric1')).toHaveTextContent('0%');
+    expect(screen.getByTestId('metric-value-metric2')).toHaveTextContent('0%');
   });
 
   it('handles undefined or null scores correctly', () => {
@@ -364,6 +364,28 @@ describe('CustomMetrics', () => {
     const counts = { metric1: 0 };
 
     renderWithProviders(<CustomMetrics lookup={lookup} counts={counts} />);
+
+    expect(screen.getByTestId('metric-value-metric1')).toHaveTextContent('0');
+  });
+
+  it('preserves finite negative denominators for backward compatibility', () => {
+    const { rerender } = renderWithProviders(
+      <CustomMetrics lookup={{ metric1: -1 }} counts={{ metric1: -2 }} />,
+    );
+
+    expect(screen.getByTestId('metric-value-metric1')).toHaveTextContent('0.50 (-1.00/-2.00)');
+
+    rerender(<CustomMetrics lookup={{ metric1: -1 }} metricTotals={{ metric1: -2 }} />);
+    expect(screen.getByTestId('metric-value-metric1')).toHaveTextContent('50.00% (-1.00/-2.00)');
+  });
+
+  it('ignores inherited denominator properties', () => {
+    const counts = Object.create({ metric1: 2 }) as Record<string, number>;
+    const metricTotals = Object.create({ metric1: 4 }) as Record<string, number>;
+
+    renderWithProviders(
+      <CustomMetrics lookup={{ metric1: 10 }} counts={counts} metricTotals={metricTotals} />,
+    );
 
     expect(screen.getByTestId('metric-value-metric1')).toHaveTextContent('10.00');
   });

@@ -10,6 +10,7 @@ import {
   getAssertionBaseType,
   hasTraceAwareAssertions,
   MODEL_GRADED_ASSERTION_TYPES,
+  renderMetricName,
   runAssertions,
   runCompareAssertion,
 } from './assertions/index';
@@ -85,7 +86,11 @@ import {
 } from './util/gradingProvider';
 import invariant from './util/invariant';
 import { safeJsonStringify, summarizeEvaluateResultForLogging } from './util/json';
-import { accumulateNamedMetric, backfillNamedScoreWeights } from './util/namedMetrics';
+import {
+  accumulateNamedMetric,
+  backfillNamedScoreWeights,
+  markNamedMetricsSeededFromPreviousRun,
+} from './util/namedMetrics';
 import { filterFiniteScores } from './util/numeric';
 import { isPromptAllowed } from './util/promptMatching';
 import {
@@ -2335,8 +2340,10 @@ function buildCompletedPrompts(
         // to the same stored prompt. Clone its metrics so the columns do not accumulate
         // into one shared object. (Resume has deeper duplicate-provider problems; see
         // `doEval`, which rebuilds `testSuite.prompts` from the previous run's columns.)
+        // The clone is marked so retry can tell that these totals continue the previous
+        // run's, which object identity can no longer signal.
         metrics: existingPrompt?.metrics
-          ? structuredClone(existingPrompt.metrics)
+          ? markNamedMetricsSeededFromPreviousRun(structuredClone(existingPrompt.metrics))
           : createDefaultPromptMetrics(),
       });
     }
@@ -3502,12 +3509,16 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
   }): void {
     metrics.score += row.score;
     for (const [key, value] of Object.entries(row.namedScores)) {
-      accumulateNamedMetric(metrics, {
-        metricName: key,
-        metricValue: value,
-        gradingResult: row.gradingResult,
-        testVars: row.testCase?.vars || {},
-      });
+      accumulateNamedMetric(
+        metrics,
+        {
+          metricName: key,
+          metricValue: value,
+          gradingResult: row.gradingResult,
+          testVars: row.testCase?.vars || {},
+        },
+        renderMetricName,
+      );
     }
 
     if (derivedMetrics) {

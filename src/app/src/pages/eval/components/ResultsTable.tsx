@@ -72,6 +72,7 @@ import { isEncodingStrategy } from '@promptfoo/redteam/constants/strategies';
 import { useMetricsGetter, usePassingTestCounts, usePassRates, useTestCounts } from './hooks';
 import {
   getNamedMetricTotals,
+  mergeFilteredNamedMetrics,
   parseEvalOutputPromptHash,
   setEvalDetailsHash,
   useEvalDetailsHash,
@@ -1137,7 +1138,8 @@ function PromptColumnHeader({
   numGoodAsserts,
   testCounts,
   passingTestCounts,
-  metricTotals,
+  legacyMetricTotals,
+  hasCompleteFilteredMetrics,
   config,
   filterMode,
   headPromptCount,
@@ -1157,7 +1159,8 @@ function PromptColumnHeader({
   numGoodAsserts: number[];
   testCounts: PromptSummaryMetric[];
   passingTestCounts: PromptSummaryMetric[];
-  metricTotals: Record<string, number>;
+  legacyMetricTotals: Record<string, number>;
+  hasCompleteFilteredMetrics: boolean;
   config: ReturnType<typeof useTableStore.getState>['config'];
   filterMode: EvalResultsFilterMode;
   headPromptCount: number;
@@ -1168,6 +1171,21 @@ function PromptColumnHeader({
 }) {
   const columnId = `Prompt ${idx + 1}`;
   const { total: metrics, filtered: filteredMetrics } = getMetrics(idx);
+  const derivedMetricNames = config?.derivedMetrics?.map((metric) => metric.name) ?? [];
+  const displayMetrics = mergeFilteredNamedMetrics(
+    metrics,
+    hasCompleteFilteredMetrics ? filteredMetrics : null,
+    derivedMetricNames,
+  );
+  const totalMetricNames =
+    hasCompleteFilteredMetrics && filteredMetrics
+      ? derivedMetricNames.filter(
+          (metricName) =>
+            Object.prototype.hasOwnProperty.call(metrics?.namedScores ?? {}, metricName) &&
+            !Object.prototype.hasOwnProperty.call(filteredMetrics.namedScores ?? {}, metricName),
+        )
+      : [];
+  const metricTotals = getNamedMetricTotals(displayMetrics) ?? legacyMetricTotals;
 
   return (
     <div className="output-header">
@@ -1215,12 +1233,15 @@ function PromptColumnHeader({
             </div>
           </button>
         ) : null}
-        {!isRedteam && metrics?.namedScores && Object.keys(metrics.namedScores).length > 0 ? (
+        {!isRedteam &&
+        displayMetrics?.namedScores &&
+        Object.keys(displayMetrics.namedScores).length > 0 ? (
           <div className="collapse-hidden">
             <CustomMetrics
-              lookup={metrics.namedScores}
-              counts={getNamedMetricTotals(metrics)}
+              lookup={displayMetrics.namedScores}
+              counts={metricTotals}
               metricTotals={metricTotals}
+              totalMetricNames={totalMetricNames}
               onShowMore={() => setCustomMetricsDialogOpen(true)}
             />
           </div>
@@ -1676,6 +1697,7 @@ function ResultsTable({
     fetchEvalData,
     isFetching,
     filters,
+    filteredMetrics,
   } = useTableStore();
   const { inComparisonMode, comparisonEvalIds } = useResultsViewSettingsStore();
   const { setFilterMode } = useFilterMode();
@@ -1686,6 +1708,7 @@ function ResultsTable({
 
   invariant(table, 'Table should be defined');
   const { head, body } = table;
+  const hasCompleteFilteredMetrics = filteredMetrics?.length === head.prompts.length;
 
   const isRedteam = React.useMemo(() => {
     return config?.redteam !== undefined;
@@ -2159,15 +2182,7 @@ function ResultsTable({
     [tableBody],
   );
 
-  const metricTotals = React.useMemo(() => {
-    // Use the backend's already-correct metric totals instead of recalculating
-    const firstProvider = table?.head?.prompts?.[0];
-    const backendTotals = getNamedMetricTotals(firstProvider?.metrics);
-
-    if (backendTotals) {
-      return backendTotals;
-    }
-
+  const legacyMetricTotals = React.useMemo(() => {
     const totals: Record<string, number> = {};
     table?.body.forEach((row) => {
       row.test.assert?.forEach((assertion) => {
@@ -2185,7 +2200,7 @@ function ResultsTable({
       });
     });
     return totals;
-  }, [table?.head?.prompts, table?.body]);
+  }, [table?.body]);
 
   // biome-ignore lint/correctness/useExhaustiveDependencies: intentional
   const promptColumns = React.useMemo(() => {
@@ -2209,7 +2224,8 @@ function ResultsTable({
                 numGoodAsserts={numGoodAsserts}
                 testCounts={testCounts}
                 passingTestCounts={passingTestCounts}
-                metricTotals={metricTotals}
+                legacyMetricTotals={legacyMetricTotals}
+                hasCompleteFilteredMetrics={hasCompleteFilteredMetrics}
                 config={config}
                 filterMode={filterMode}
                 headPromptCount={head.prompts.length}
@@ -2276,9 +2292,10 @@ function ResultsTable({
     handleRating,
     head,
     head.prompts,
+    hasCompleteFilteredMetrics,
     isRedteam,
     maxTextLength,
-    metricTotals,
+    legacyMetricTotals,
     numAsserts,
     numGoodAsserts,
     onFailureFilterToggle,

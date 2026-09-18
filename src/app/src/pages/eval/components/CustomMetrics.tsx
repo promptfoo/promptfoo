@@ -20,6 +20,7 @@ interface CustomMetricsProps {
   lookup: Record<string, number>;
   counts?: Record<string, number>;
   metricTotals?: Record<string, number>;
+  totalMetricNames?: readonly string[];
   /**
    * How many metrics to display before truncating and rendering a "Show more" button.
    */
@@ -39,24 +40,24 @@ interface MetricValueProps {
 }
 
 const MetricValue = ({ metric, score, counts, metricTotals }: MetricValueProps) => {
-  if (metricTotals && metricTotals[metric]) {
-    if (metricTotals[metric] === 0) {
+  if (metricTotals && Object.prototype.hasOwnProperty.call(metricTotals, metric)) {
+    const total = metricTotals[metric];
+    if (!Number.isFinite(total) || total === 0) {
       return <span data-testid={`metric-value-${metric}`}>0%</span>;
     }
     return (
       <span data-testid={`metric-value-${metric}`}>
-        {((score / metricTotals[metric]) * 100).toFixed(2)}% ({score?.toFixed(2) ?? '0'}/
-        {metricTotals[metric]?.toFixed(2) ?? '0'})
+        {((score / total) * 100).toFixed(2)}% ({score?.toFixed(2) ?? '0'}/{total.toFixed(2)})
       </span>
     );
-  } else if (counts && counts[metric]) {
-    if (counts[metric] === 0) {
+  } else if (counts && Object.prototype.hasOwnProperty.call(counts, metric)) {
+    const count = counts[metric];
+    if (!Number.isFinite(count) || count === 0) {
       return <span data-testid={`metric-value-${metric}`}>0</span>;
     }
     return (
       <span data-testid={`metric-value-${metric}`}>
-        {(score / counts[metric]).toFixed(2)} ({score?.toFixed(2) ?? '0'}/
-        {counts[metric]?.toFixed(2) ?? '0'})
+        {(score / count).toFixed(2)} ({score?.toFixed(2) ?? '0'}/{count.toFixed(2)})
       </span>
     );
   }
@@ -67,6 +68,7 @@ const CustomMetrics = ({
   lookup,
   counts,
   metricTotals,
+  totalMetricNames = [],
   truncationCount = 10,
   onShowMore,
 }: CustomMetricsProps) => {
@@ -94,6 +96,7 @@ const CustomMetrics = ({
         let displayLabel: string = metric;
         let tooltipContent: React.ReactNode | null = null;
         const policyMetric = isPolicyMetric(metric);
+        const totalMetric = totalMetricNames.includes(metric);
         const filterTargetLabel = policyMetric ? 'policy' : 'metric';
         // Display a tooltip for policy metrics.
         if (policyMetric) {
@@ -121,6 +124,9 @@ const CustomMetrics = ({
               </>
             );
           }
+        }
+        if (totalMetric) {
+          displayLabel = `${displayLabel} (total)`;
         }
 
         return metric && typeof score !== 'undefined' ? (
@@ -153,6 +159,9 @@ const CustomMetrics = ({
               <TooltipContent side="top">
                 <div className="space-y-2 max-w-[400px]">
                   {tooltipContent}
+                  {totalMetric ? (
+                    <p className="text-sm">Derived metric from the unfiltered evaluation.</p>
+                  ) : null}
                   <p className="text-sm font-medium">Click to filter by this {filterTargetLabel}</p>
                 </div>
               </TooltipContent>

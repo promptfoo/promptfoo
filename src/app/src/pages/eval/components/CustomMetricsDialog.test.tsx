@@ -56,6 +56,7 @@ describe('MetricsTable', () => {
     vi.mocked(useCustomPoliciesMap).mockReturnValue({});
     vi.mocked(useTableStore).mockReturnValue({
       table: mockTableData,
+      filteredMetrics: null,
       config: {
         redteam: {
           plugins: [],
@@ -130,6 +131,162 @@ describe('MetricsTable', () => {
     expect(dataTable).toBeInTheDocument();
   });
 
+  it('uses filtered named scores and denominators when filters are active', async () => {
+    vi.mocked(useTableStore).mockReturnValue({
+      table: mockTableData,
+      filteredMetrics: [
+        {
+          namedScores: { accuracy: 1.5 },
+          namedScoresCount: { accuracy: 2 },
+        },
+      ],
+      config: { redteam: { plugins: [] } },
+      addFilter: mockAddFilter,
+      filters: {
+        values: {},
+        appliedCount: 1,
+        options: { metric: [], metadata: [] },
+      },
+    } as any);
+
+    render(<CustomMetricsDialog open={true} onClose={mockOnClose} />);
+
+    const accuracyRow = (await screen.findByText('accuracy')).closest('tr');
+    expect(accuracyRow).not.toBeNull();
+    expect(within(accuracyRow as HTMLElement).getByText('75.00%')).toBeInTheDocument();
+    expect(within(accuracyRow as HTMLElement).getByText('1.5')).toBeInTheDocument();
+    expect(within(accuracyRow as HTMLElement).getByText('2')).toBeInTheDocument();
+    expect(screen.queryByText('another-metric')).not.toBeInTheDocument();
+  });
+
+  it('labels derived metrics that remain evaluation-wide under a filter', async () => {
+    vi.mocked(useTableStore).mockReturnValue({
+      table: mockTableData,
+      filteredMetrics: [
+        {
+          namedScores: { accuracy: 1.5 },
+          namedScoresCount: { accuracy: 2 },
+        },
+      ],
+      config: {
+        redteam: { plugins: [] },
+        derivedMetrics: [{ name: 'another-metric', value: 'accuracy' }],
+      },
+      addFilter: mockAddFilter,
+      filters: {
+        values: {},
+        appliedCount: 1,
+        options: { metric: [], metadata: [] },
+      },
+    } as any);
+
+    render(<CustomMetricsDialog open={true} onClose={mockOnClose} />);
+
+    expect(await screen.findByText('another-metric (total)')).toHaveAttribute(
+      'title',
+      'Derived metric from the unfiltered evaluation',
+    );
+  });
+
+  it('preserves finite negative denominators and guards zero denominators', async () => {
+    vi.mocked(useTableStore).mockReturnValue({
+      table: {
+        ...mockTableData,
+        head: {
+          ...mockTableData.head,
+          prompts: [
+            {
+              ...mockTableData.head.prompts[0],
+              metrics: {
+                ...mockTableData.head.prompts[0].metrics,
+                namedScores: { negative: -1, zero: 1 },
+                namedScoreWeights: { negative: -2, zero: 0 },
+              },
+            },
+          ],
+        },
+      },
+      filteredMetrics: null,
+      config: { redteam: { plugins: [] } },
+      addFilter: mockAddFilter,
+      filters: {
+        values: {},
+        appliedCount: 0,
+        options: { metric: [], metadata: [] },
+      },
+    } as any);
+
+    render(<CustomMetricsDialog open={true} onClose={mockOnClose} />);
+
+    const negativeRow = (await screen.findByText('negative')).closest('tr');
+    const zeroRow = screen.getByText('zero').closest('tr');
+    expect(within(negativeRow as HTMLElement).getByText('50.00%')).toBeInTheDocument();
+    expect(within(zeroRow as HTMLElement).getByText('0.00%')).toBeInTheDocument();
+  });
+
+  it('ignores inherited scores for prototype-colliding metric names', async () => {
+    const prototypeScores = Object.fromEntries([['__proto__', 0.8]]);
+    vi.mocked(useTableStore).mockReturnValue({
+      table: {
+        ...mockTableData,
+        head: {
+          ...mockTableData.head,
+          prompts: [
+            {
+              ...mockTableData.head.prompts[0],
+              metrics: {
+                ...mockTableData.head.prompts[0].metrics,
+                namedScores: prototypeScores,
+                namedScoresCount: Object.fromEntries([['__proto__', 1]]),
+              },
+            },
+            {
+              ...mockTableData.head.prompts[0],
+              provider: 'Second Provider',
+              metrics: {
+                ...mockTableData.head.prompts[0].metrics,
+                namedScores: {},
+                namedScoresCount: {},
+              },
+            },
+          ],
+        },
+      },
+      filteredMetrics: null,
+      config: { redteam: { plugins: [] } },
+      addFilter: mockAddFilter,
+      filters: {
+        values: {},
+        appliedCount: 0,
+        options: { metric: [], metadata: [] },
+      },
+    } as any);
+
+    render(<CustomMetricsDialog open={true} onClose={mockOnClose} />);
+
+    const metricRow = (await screen.findByText('__proto__')).closest('tr');
+    expect(metricRow).not.toHaveTextContent('NaN');
+    expect(metricRow).not.toHaveTextContent('[object Object]');
+  });
+
+  it('uses total metrics when filtered metrics do not cover every comparison prompt', async () => {
+    vi.mocked(useTableStore).mockReturnValue({
+      table: mockTableData,
+      filteredMetrics: [],
+      config: { redteam: { plugins: [] } },
+      addFilter: mockAddFilter,
+      filters: {
+        values: {},
+        appliedCount: 1,
+        options: { metric: [], metadata: [] },
+      },
+    } as any);
+
+    render(<CustomMetricsDialog open={true} onClose={mockOnClose} />);
+
+    expect(await screen.findByText('another-metric')).toBeInTheDocument();
+  });
+
   it('should label a single prompt group without rendering multi-prompt summary columns', async () => {
     render(<CustomMetricsDialog open={true} onClose={mockOnClose} />);
 
@@ -137,7 +294,7 @@ describe('MetricsTable', () => {
     expect(screen.getByText('Test Provider')).toBeInTheDocument();
     expect(screen.getByText('Pass')).toBeInTheDocument();
     expect(screen.getByText('Score')).toBeInTheDocument();
-    expect(screen.getByText('Count')).toBeInTheDocument();
+    expect(screen.getByText('Denominator')).toBeInTheDocument();
     expect(screen.queryByText('Summary')).not.toBeInTheDocument();
     expect(screen.queryByText('Spread')).not.toBeInTheDocument();
   });
@@ -229,7 +386,9 @@ describe('MetricsTable', () => {
       }),
     ).toBeInTheDocument();
     expect(
-      screen.getByRole('menuitemcheckbox', { name: 'Prompt 2 - Shared Provider - Count' }),
+      screen.getByRole('menuitemcheckbox', {
+        name: 'Prompt 2 - Shared Provider - Denominator',
+      }),
     ).toBeInTheDocument();
     expect(
       screen.getByRole('menuitemcheckbox', { name: 'Summary - Avg. Pass' }),
