@@ -339,6 +339,28 @@ describe('TestCaseSchema assertScoringFunction', () => {
   });
 });
 
+describe('TestCaseSchema feedback', () => {
+  it('accepts HTTPS links with supported placeholders', () => {
+    const result = TestCaseSchema.safeParse({
+      feedback: {
+        pass: 'https://reviews.example.com/results/{{resultId}}?rating={{rating}}',
+        fail: 'https://reviews.example.com/evals/{{evalId}}/{{testCaseId}}',
+      },
+    });
+
+    expect(result.success).toBe(true);
+  });
+
+  it.each([
+    { feedback: {} },
+    { feedback: { pass: 'http://reviews.example.com/results/{{resultId}}' } },
+    { feedback: { pass: 'https://user:password@reviews.example.com/results' } },
+    { feedback: { pass: 'https://reviews.example.com/results/{{unknown}}' } },
+  ])('rejects unsafe or incomplete feedback configuration: %o', (testCase) => {
+    expect(TestCaseSchema.safeParse(testCase).success).toBe(false);
+  });
+});
+
 // Tests for #7096: Ensure TestCaseSchema.options accepts properties from all merged schemas
 // This was broken when z.intersection() generated allOf with additionalProperties:false
 describe('TestCaseSchema options (merged schema properties)', () => {

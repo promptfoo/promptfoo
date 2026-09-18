@@ -79,6 +79,28 @@ The per-test value overrides `--repeat`, `commandLineOptions.repeat`, or
 `evaluateOptions.repeat` for that test. Other tests continue to use the global repeat count.
 Repeat indexes use separate cache entries; add `--no-cache` when every run must call the provider.
 
+### Rating Feedback Links
+
+Set `feedback.pass` or `feedback.fail` to open an HTTPS link when a reviewer marks a result passed or failed in the web UI. Links open in a new tab when the rating is set. Use `defaultTest` to apply them to every test.
+
+```yaml title="promptfooconfig.yaml"
+providers:
+  - echo
+prompts:
+  - '{{question}}'
+defaultTest:
+  feedback:
+    pass: 'https://reviews.example.com/results/{{resultId}}?rating={{rating}}'
+    fail: 'https://reviews.example.com/results/{{resultId}}?rating={{rating}}'
+tests:
+  - vars:
+      question: 'What is the capital of France?'
+    metadata:
+      testCaseId: geography-001
+```
+
+Supported placeholders are `{{evalId}}`, `{{resultId}}`, `{{testCaseId}}`, and `{{rating}}`; values are URL-encoded before the link opens. Feedback links are HTTPS-only and cannot contain URL credentials. This link-only integration does not send requests or store authentication tokens.
+
 ### Filtering Tests by Provider
 
 Control which providers run specific tests using the `providers` field. This allows you to run different test suites against different models in a single evaluation:

@@ -869,6 +869,48 @@ export type ScoringFunction = (
 
 // Each test case is graded pass/fail with a score.  A test case represents a unique input to the LLM after substituting `vars` in the prompt.
 // HEADS UP: When you add a property here, you probably need to load it from `defaultTest` in evaluator.ts.
+const RATING_FEEDBACK_PLACEHOLDER_PATTERN = /\{\{([^{}]+)\}\}/g;
+const RATING_FEEDBACK_PLACEHOLDER_NAMES = new Set(['evalId', 'resultId', 'testCaseId', 'rating']);
+
+const RatingFeedbackUrlSchema = z
+  .string()
+  .min(1)
+  .refine(
+    (template) => {
+      const placeholders = Array.from(template.matchAll(RATING_FEEDBACK_PLACEHOLDER_PATTERN));
+      if (
+        placeholders.some(
+          (placeholder) =>
+            !placeholder[1] || !RATING_FEEDBACK_PLACEHOLDER_NAMES.has(placeholder[1]),
+        )
+      ) {
+        return false;
+      }
+
+      try {
+        const url = new URL(template.replace(RATING_FEEDBACK_PLACEHOLDER_PATTERN, 'placeholder'));
+        return url.protocol === 'https:' && !url.username && !url.password;
+      } catch {
+        return false;
+      }
+    },
+    {
+      error:
+        'Feedback URLs must use HTTPS without credentials and may use only {{evalId}}, {{resultId}}, {{testCaseId}}, or {{rating}} placeholders',
+    },
+  );
+
+export const RatingFeedbackSchema = z
+  .object({
+    pass: RatingFeedbackUrlSchema.optional(),
+    fail: RatingFeedbackUrlSchema.optional(),
+  })
+  .refine(({ pass, fail }) => Boolean(pass || fail), {
+    error: 'Feedback requires a pass or fail URL',
+  });
+
+export type RatingFeedback = z.infer<typeof RatingFeedbackSchema>;
+
 export const TestCaseSchema = z.object({
   // Optional description of what you're testing
   description: z.string().optional(),
@@ -929,6 +971,9 @@ export const TestCaseSchema = z.object({
 
   // The required score for this test case.  If not provided, the test case is graded pass/fail.
   threshold: z.number().optional(),
+
+  // Optional HTTPS links opened when a result is manually marked passed or failed in the web UI.
+  feedback: RatingFeedbackSchema.optional(),
 
   // Use catchall(z.any()) to allow arbitrary metadata keys while still typing known internal properties.
   // Don't use z.intersection() here as it generates allOf with additionalProperties:false
