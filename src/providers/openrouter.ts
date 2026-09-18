@@ -229,9 +229,10 @@ export class OpenRouterProvider extends OpenAiChatCompletionProvider {
     let status: number;
     let statusText: string;
     let cached = false;
+    let latencyMs: number | undefined;
 
     try {
-      ({ data, cached, status, statusText } =
+      ({ data, cached, status, statusText, latencyMs } =
         await fetchWithCache<OpenRouterChatCompletionResponse>(
           appendOpenAiApiPath(this.getApiUrl(), 'chat/completions'),
           {
@@ -324,6 +325,7 @@ export class OpenRouterProvider extends OpenAiChatCompletionProvider {
       cached,
       cost: this.calculateResponseCost(data, config),
       metadata: this.getBillingMetadata(data),
+      ...(latencyMs !== undefined && { latencyMs }),
       ...(finishReason && { finishReason }),
     };
   }
