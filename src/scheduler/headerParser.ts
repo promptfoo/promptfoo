@@ -31,6 +31,31 @@ const ANTHROPIC_HEADERS = {
   resetTokens: 'anthropic-ratelimit-tokens-reset',
 } as const;
 
+// Mistral-style headers (per-minute and per-month rate limits)
+const MISTRAL_HEADERS = {
+  remainingRequests: 'x-ratelimit-remaining-req-minute',
+  remainingRequestsPlural: 'x-ratelimit-remaining-requests-minute',
+  remainingTokens: 'x-ratelimit-remaining-tok-minute',
+  remainingTokensPlural: 'x-ratelimit-remaining-tokens-minute',
+  limitRequests: 'x-ratelimit-limit-req-minute',
+  limitRequestsPlural: 'x-ratelimit-limit-requests-minute',
+  limitTokens: 'x-ratelimit-limit-tok-minute',
+  limitTokensPlural: 'x-ratelimit-limit-tokens-minute',
+  resetRequests: 'x-ratelimit-reset-req-minute',
+  resetRequestsPlural: 'x-ratelimit-reset-requests-minute',
+  resetTokens: 'x-ratelimit-reset-tok-minute',
+  resetTokensPlural: 'x-ratelimit-reset-tokens-minute',
+  // Monthly fallback variants
+  remainingRequestsMonth: 'x-ratelimit-remaining-req-month',
+  remainingRequestsMonthPlural: 'x-ratelimit-remaining-requests-month',
+  remainingTokensMonth: 'x-ratelimit-remaining-tok-month',
+  remainingTokensMonthPlural: 'x-ratelimit-remaining-tokens-month',
+  limitRequestsMonth: 'x-ratelimit-limit-req-month',
+  limitRequestsMonthPlural: 'x-ratelimit-limit-requests-month',
+  limitTokensMonth: 'x-ratelimit-limit-tok-month',
+  limitTokensMonthPlural: 'x-ratelimit-limit-tokens-month',
+} as const;
+
 // Standard/generic headers (RFC 6585 style)
 const STANDARD_HEADERS = {
   remaining: 'ratelimit-remaining',
@@ -49,10 +74,14 @@ export function parseRateLimitHeaders(headers: Record<string, string>): ParsedRa
   const result: ParsedRateLimitHeaders = {};
   const h = lowercaseKeys(headers);
 
-  // --- Remaining counts (ordered: OpenAI, Anthropic, Standard) ---
+  // --- Remaining counts (ordered: OpenAI, Anthropic, Mistral, Standard) ---
   result.remainingRequests = parseFirstMatch(h, [
     OPENAI_HEADERS.remainingRequests,
     ANTHROPIC_HEADERS.remainingRequests,
+    MISTRAL_HEADERS.remainingRequestsPlural,
+    MISTRAL_HEADERS.remainingRequests,
+    MISTRAL_HEADERS.remainingRequestsMonthPlural,
+    MISTRAL_HEADERS.remainingRequestsMonth,
     STANDARD_HEADERS.remainingAlt,
     STANDARD_HEADERS.remaining,
   ]);
@@ -60,12 +89,20 @@ export function parseRateLimitHeaders(headers: Record<string, string>): ParsedRa
   result.remainingTokens = parseFirstMatch(h, [
     OPENAI_HEADERS.remainingTokens,
     ANTHROPIC_HEADERS.remainingTokens,
+    MISTRAL_HEADERS.remainingTokensPlural,
+    MISTRAL_HEADERS.remainingTokens,
+    MISTRAL_HEADERS.remainingTokensMonthPlural,
+    MISTRAL_HEADERS.remainingTokensMonth,
   ]);
 
-  // --- Limits (ordered: OpenAI, Anthropic, Standard) ---
+  // --- Limits (ordered: OpenAI, Anthropic, Mistral, Standard) ---
   result.limitRequests = parseFirstMatch(h, [
     OPENAI_HEADERS.limitRequests,
     ANTHROPIC_HEADERS.limitRequests,
+    MISTRAL_HEADERS.limitRequestsPlural,
+    MISTRAL_HEADERS.limitRequests,
+    MISTRAL_HEADERS.limitRequestsMonthPlural,
+    MISTRAL_HEADERS.limitRequestsMonth,
     STANDARD_HEADERS.limitAlt,
     STANDARD_HEADERS.limit,
   ]);
@@ -73,9 +110,13 @@ export function parseRateLimitHeaders(headers: Record<string, string>): ParsedRa
   result.limitTokens = parseFirstMatch(h, [
     OPENAI_HEADERS.limitTokens,
     ANTHROPIC_HEADERS.limitTokens,
+    MISTRAL_HEADERS.limitTokensPlural,
+    MISTRAL_HEADERS.limitTokens,
+    MISTRAL_HEADERS.limitTokensMonthPlural,
+    MISTRAL_HEADERS.limitTokensMonth,
   ]);
 
-  // --- Reset time (ordered: OpenAI, Anthropic, Standard) ---
+  // --- Reset time (ordered: OpenAI, Anthropic, Mistral, Standard) ---
   for (const name of [
     OPENAI_HEADERS.resetRequests,
     OPENAI_HEADERS.resetTokens,
@@ -83,6 +124,10 @@ export function parseRateLimitHeaders(headers: Record<string, string>): ParsedRa
     // Token limits bind before request limits on eval workloads, and a
     // token-limited 429 may carry only the tokens reset.
     ANTHROPIC_HEADERS.resetTokens,
+    MISTRAL_HEADERS.resetRequestsPlural,
+    MISTRAL_HEADERS.resetRequests,
+    MISTRAL_HEADERS.resetTokensPlural,
+    MISTRAL_HEADERS.resetTokens,
     STANDARD_HEADERS.resetAlt,
     STANDARD_HEADERS.reset,
   ]) {
