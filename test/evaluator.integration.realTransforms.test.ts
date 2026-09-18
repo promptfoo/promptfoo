@@ -264,7 +264,7 @@ describe('Transformation integration (real transform)', () => {
     expect(results.results[0].success).toBe(true);
   });
 
-  it('runs a loaded ProviderFunction carrying label, delay, config, and transform', async () => {
+  it('runs a loaded ProviderFunction carrying label, delay, config, metadata, and transform', async () => {
     // End-to-end coverage that goes through the package-level wiring:
     // loadApiProviders wraps a `ProviderFunction` into an `ApiProvider`, and the
     // evaluator honors every attached metadata field. Mirrors the path a Node.js
@@ -280,6 +280,7 @@ describe('Transformation integration (real transform)', () => {
     providerFn.label = 'fn-provider-with-metadata';
     providerFn.delay = 250;
     providerFn.config = { custom: 'value' };
+    providerFn.metadata = { owner: 'evals', tier: 'gold' };
     providerFn.transform = (output: unknown) => String(output).toUpperCase();
 
     const [wrapped] = await loadApiProviders([providerFn]);
@@ -287,6 +288,7 @@ describe('Transformation integration (real transform)', () => {
     expect(wrapped.label).toBe('fn-provider-with-metadata');
     expect(wrapped.delay).toBe(250);
     expect(wrapped.config).toEqual({ custom: 'value' });
+    expect(wrapped.metadata).toBe(providerFn.metadata);
     expect(wrapped.transform).toBe(providerFn.transform);
 
     const results = await evaluate(
@@ -301,6 +303,7 @@ describe('Transformation integration (real transform)', () => {
 
     // Provider-level function transform ran against the callApi output.
     expect(results.results[0].response?.output).toBe('SERVED:HI WORLD');
+    expect(results.results[0].provider.metadata).toEqual({ owner: 'evals', tier: 'gold' });
     // Delay was honored (passed to the mocked sleep).
     expect(sleepMock).toHaveBeenCalledWith(250);
   });

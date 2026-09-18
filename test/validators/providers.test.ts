@@ -30,6 +30,10 @@ describe('ProviderOptionsSchema', () => {
       prompts: ['prompt1', 'prompt2'],
       transform: 'output.toLowerCase()',
       delay: 1000,
+      metadata: {
+        owner: 'evals',
+        tier: 'gold',
+      },
     };
 
     const result = ProviderOptionsSchema.safeParse(input);
@@ -66,6 +70,9 @@ describe('ProviderSchema union', () => {
     const input = createMockProvider({
       id: 'custom-provider',
       label: 'Custom Provider',
+      metadata: {
+        owner: 'evals',
+      },
     });
 
     const result = ProviderSchema.safeParse(input);
@@ -75,6 +82,7 @@ describe('ProviderSchema union', () => {
     expect(result.data).toHaveProperty('callApi');
     expect(result.data).toHaveProperty('id');
     expect(result.data).toHaveProperty('label', 'Custom Provider');
+    expect(result.data).toHaveProperty('metadata', { owner: 'evals' });
   });
 
   it('should match ProviderOptionsSchema when no callApi function', () => {

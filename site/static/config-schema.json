@@ -157,6 +157,13 @@
               "$ref": "#/definitions/__schema8"
             }
           ]
+        },
+        "metadata": {
+          "type": "object",
+          "propertyNames": {
+            "type": "string"
+          },
+          "additionalProperties": {}
         }
       },
       "additionalProperties": false
@@ -847,6 +854,13 @@
                   "$ref": "#/definitions/__schema8"
                 }
               ]
+            },
+            "metadata": {
+              "type": "object",
+              "propertyNames": {
+                "type": "string"
+              },
+              "additionalProperties": {}
             }
           },
           "required": ["id", "callApi"],
@@ -1625,6 +1639,13 @@
                       }
                     ]
                   }
+                },
+                "metadata": {
+                  "type": "object",
+                  "propertyNames": {
+                    "type": "string"
+                  },
+                  "additionalProperties": {}
                 }
               },
               "required": ["id", "callApi"],
@@ -2154,6 +2175,13 @@
                       }
                     ]
                   }
+                },
+                "metadata": {
+                  "type": "object",
+                  "propertyNames": {
+                    "type": "string"
+                  },
+                  "additionalProperties": {}
                 }
               },
               "additionalProperties": false

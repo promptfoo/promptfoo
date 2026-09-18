@@ -77,6 +77,7 @@ export interface ProviderOptions {
   delay?: number;
   env?: EnvOverrides;
   inputs?: Inputs;
+  metadata?: Record<string, any>;
 }
 
 export interface CallApiContextParams {
@@ -131,6 +132,7 @@ export interface ApiProvider extends MinimalApiProvider {
   getAudioInputFormat?: () => 'openai' | 'google' | undefined;
   inputs?: Inputs;
   label?: ProviderLabel;
+  metadata?: Record<string, any>;
   transform?: string | TransformFunction;
   toJSON?: () => any;
   /**
