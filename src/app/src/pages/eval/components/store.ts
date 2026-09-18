@@ -220,6 +220,7 @@ interface ColumnState {
 }
 
 export type ResultsFilterType =
+  | 'error'
   | 'metric'
   | 'metadata'
   | 'plugin'
@@ -364,6 +365,7 @@ interface TableState {
     options: {
       metric: string[];
       metadata: string[];
+      error: string[];
       // Redteam-specific filter options are only available for redteam evaluations.
       plugin?: string[];
       strategy?: string[];
@@ -577,6 +579,7 @@ export const useTableStore = create<TableState>()(
             options: {
               metric: computeAvailableMetrics(table),
               metadata: [],
+              error: [],
               ...redteamOptions,
             },
             policyIdToNameMap,
@@ -601,6 +604,7 @@ export const useTableStore = create<TableState>()(
             options: {
               metric: computeAvailableMetrics(results.table),
               metadata: [],
+              error: [],
               ...redteamOptions,
             },
             policyIdToNameMap,
@@ -732,6 +736,7 @@ export const useTableStore = create<TableState>()(
               options: {
                 metric: computeAvailableMetrics(data.table),
                 metadata: [],
+                error: [],
                 ...redteamOptions,
               },
               policyIdToNameMap,
@@ -765,6 +770,7 @@ export const useTableStore = create<TableState>()(
       options: {
         metric: [],
         metadata: [],
+        error: [],
       },
     },
 

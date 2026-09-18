@@ -894,6 +894,23 @@ export default class Eval {
     return await EvalResult.findManyByEvalId(this.id, { testIdx });
   }
 
+  async getFailureSummary(): Promise<Array<{ error: string; count: number }>> {
+    const db = await getDb();
+    const rows = await db.all<{ error: string; count: number }>(sql`
+      SELECT error, COUNT(*) AS count
+      FROM eval_results
+      WHERE eval_id = ${this.id}
+        AND success = 0
+        AND error IS NOT NULL
+        AND TRIM(error) != ''
+      GROUP BY error
+      ORDER BY count DESC, error ASC
+      LIMIT 100
+    `);
+
+    return rows.map(({ error, count }) => ({ error, count: Number(count) }));
+  }
+
   /**
    * CRITICAL: Builds the WHERE SQL clause for filtering results.
    * This is the single source of truth for all filtering logic.
@@ -1053,6 +1070,8 @@ export default class Eval {
                 AND LENGTH(TRIM(COALESCE(json_each.value, ''))) > 0
             )`;
           }
+        } else if (type === 'error' && operator === 'equals') {
+          condition = sql`error = ${value}`;
         } else if (type === 'plugin') {
           const isCategory = Object.keys(PLUGIN_CATEGORIES).includes(value);
 
