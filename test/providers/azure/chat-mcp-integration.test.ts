@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { fetchWithCache } from '../../../src/cache';
 import { AzureChatCompletionProvider } from '../../../src/providers/azure/chat';
 
 const mcpMocks = vi.hoisted(() => {
@@ -163,6 +164,69 @@ describe('AzureChatCompletionProvider MCP Integration', () => {
     const handler = (providerWithoutMCP as any).functionCallbackHandler;
     expect(handler).toBeDefined();
     expect((handler as any).mcpClient).toBeUndefined();
+  });
+
+  it('publishes executed MCP tool calls as metadata.toolCalls', async () => {
+    await (provider as any).initializationPromise;
+    (provider as any).authHeaders = { 'api-key': 'test-key' };
+    vi.mocked(fetchWithCache).mockResolvedValue({
+      data: {
+        choices: [
+          {
+            index: 0,
+            message: {
+              role: 'assistant',
+              content: null,
+              tool_calls: [
+                {
+                  id: 'call_1',
+                  type: 'function',
+                  function: { name: 'list_resources', arguments: '{"kind":"tokens"}' },
+                },
+              ],
+            },
+            finish_reason: 'tool_calls',
+          },
+        ],
+        usage: { prompt_tokens: 10, completion_tokens: 5, total_tokens: 15 },
+      },
+      cached: false,
+      status: 200,
+      statusText: 'OK',
+    } as any);
+
+    const result = await provider.callApi('list the tokens');
+
+    expect(mcpMocks.mockCallTool).toHaveBeenCalledWith('list_resources', { kind: 'tokens' });
+    expect(result.metadata?.toolCalls).toEqual([
+      {
+        id: 'call_1',
+        name: 'list_resources',
+        input: { kind: 'tokens' },
+        output: 'Available resources: [button-tokens.json, color-tokens.json, spacing-tokens.json]',
+        is_error: false,
+      },
+    ]);
+  });
+
+  it('omits metadata.toolCalls when no MCP tool ran', async () => {
+    await (provider as any).initializationPromise;
+    (provider as any).authHeaders = { 'api-key': 'test-key' };
+    vi.mocked(fetchWithCache).mockResolvedValue({
+      data: {
+        choices: [
+          { index: 0, message: { role: 'assistant', content: 'hi' }, finish_reason: 'stop' },
+        ],
+        usage: { prompt_tokens: 10, completion_tokens: 5, total_tokens: 15 },
+      },
+      cached: false,
+      status: 200,
+      statusText: 'OK',
+    } as any);
+
+    const result = await provider.callApi('hello');
+
+    expect(result.metadata).toBeUndefined();
   });
 
   it('should prioritize MCP tools over function callbacks', async () => {
