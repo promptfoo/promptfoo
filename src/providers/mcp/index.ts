@@ -1,3 +1,4 @@
+import { type McpConfigParsed, McpConfigSchema } from '../../contracts/providerConfig/mcp';
 import logger from '../../logger';
 import { loadTransformModule } from '../transformUtils';
 import { MCPClient } from './client';
@@ -20,7 +21,7 @@ interface MCPProviderOptions {
 
 export class MCPProvider implements ApiProvider {
   private mcpClient: MCPClient;
-  config: MCPConfig;
+  config: McpConfigParsed;
   private defaultArgs?: Record<string, unknown>;
   private initializationPromise: Promise<void>;
   private transformResponse: Promise<
@@ -32,7 +33,7 @@ export class MCPProvider implements ApiProvider {
   >;
 
   constructor(options: MCPProviderOptions = {}) {
-    this.config = options.config || { enabled: true };
+    this.config = McpConfigSchema.parse(options.config ?? {});
     this.defaultArgs = options.defaultArgs || {};
 
     this.mcpClient = new MCPClient(this.config);
