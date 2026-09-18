@@ -39,9 +39,9 @@ providers:
 
 The Cloudera provider supports the standard [OpenAI configuration options](/docs/providers/openai#configuring-parameters) plus these additional Cloudera-specific options.
 
-`apiBaseUrl` and `apiKeyEnvar` are exceptions: the provider sets both itself (from `domain`,
-`namespace`, `endpoint`, and the `CDP_TOKEN` environment variable) and overrides anything you put
-in `config`. Use `domain`/`namespace`/`endpoint` to change the URL.
+When `apiBaseUrl` is not set, the provider builds it from `domain`, `namespace`, and `endpoint`;
+`apiKeyEnvar` defaults to `CDP_TOKEN`. Setting either explicitly overrides the default, which is
+useful when routing through a proxy.
 
 | Parameter   | Description                                                                        |
 | ----------- | ---------------------------------------------------------------------------------- |

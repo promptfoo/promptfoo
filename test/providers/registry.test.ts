@@ -1245,7 +1245,16 @@ describe('Provider Registry', () => {
       ['sagemaker:endpoint-name', 'SageMakerCompletionProvider', { modelType: 'custom' }, 'custom'],
       ['sagemaker:jumpstart:endpoint-name', 'SageMakerCompletionProvider', {}, 'jumpstart'],
       ['sagemaker:openai:endpoint-name', 'SageMakerCompletionProvider', {}, 'openai'],
-      ['sagemaker:custom:my-jumpstart-endpoint', 'SageMakerCompletionProvider', {}, 'jumpstart'],
+      // An explicit model type wins over an endpoint name containing 'jumpstart'. This
+      // previously resolved to 'jumpstart', silently discarding what the user asked for.
+      ['sagemaker:custom:my-jumpstart-endpoint', 'SageMakerCompletionProvider', {}, 'custom'],
+      [
+        'sagemaker:huggingface:my-jumpstart-endpoint',
+        'SageMakerCompletionProvider',
+        {},
+        'huggingface',
+      ],
+      ['sagemaker:jumpstart:my-jumpstart-endpoint', 'SageMakerCompletionProvider', {}, 'jumpstart'],
     ])(
       'should handle %s providers correctly',
       async (path, expectedProviderName, config, expectedModelType) => {

@@ -1,4 +1,6 @@
 import { getEnvString } from '../envars';
+import logger from '../logger';
+import { resolveProviderApiKey } from './credentials';
 import { OpenAiChatCompletionProvider } from './openai/chat';
 import { OpenAiCompletionProvider } from './openai/completion';
 import { OpenAiEmbeddingProvider } from './openai/embedding';
@@ -188,6 +190,19 @@ export function createLiteLLMProvider(
       (mergedConfig as any)[key] = config[key];
     }
   });
+
+  // `apiKeyRequired: false` means a missing key produces no Authorization header and no error,
+  // so an authenticated proxy just returns 401. Surface it here instead of failing silently.
+  if (
+    !resolveProviderApiKey(mergedConfig, options.config?.env ?? options.env, ['LITELLM_API_KEY'])
+  ) {
+    logger.warn(
+      '[LiteLLM] No API key resolved; requests will be sent without an Authorization header. ' +
+        'Set LITELLM_API_KEY (or `apiKey` in the provider config) if your proxy requires auth. ' +
+        'OPENAI_API_KEY is not used for LiteLLM: credentials are not shared across providers.',
+      { apiKeyEnvar: mergedConfig.apiKeyEnvar, apiBaseUrl: resolvedApiBaseUrl },
+    );
+  }
 
   // Construct the provider options
   const litellmConfig: ProviderOptions = {

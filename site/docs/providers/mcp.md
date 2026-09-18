@@ -294,6 +294,9 @@ providers:
       timeout: 900000 # Request timeout in milliseconds (15 minutes)
       debug: true # Enable debug logging
       verbose: true # Enable verbose output
+      defaultArgs: # Merged into every tool call; per-call arguments win
+        session_id: 'test-session'
+        user_role: 'customer'
 ```
 
 ### Response Transforms

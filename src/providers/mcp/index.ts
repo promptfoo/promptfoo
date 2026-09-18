@@ -34,7 +34,10 @@ export class MCPProvider implements ApiProvider {
 
   constructor(options: MCPProviderOptions = {}) {
     this.config = McpConfigSchema.parse(options.config ?? {});
-    this.defaultArgs = options.defaultArgs || {};
+    // `defaultArgs` is documented as a `config` key, but the registry constructs this provider
+    // with only `{ config, id }`. Read it from config so YAML configs work, keeping the
+    // constructor option for programmatic callers.
+    this.defaultArgs = options.defaultArgs ?? this.config.defaultArgs ?? {};
 
     this.mcpClient = new MCPClient(this.config);
     this.initializationPromise = this.initialize();

@@ -25,8 +25,10 @@ export class ClouderaAiChatCompletionProvider extends OpenAiChatCompletionProvid
       ...providerOptions,
       config: {
         ...providerOptions.config,
-        apiKeyEnvar: 'CDP_TOKEN',
-        apiBaseUrl: `https://${domain}/namespaces/${namespace}/endpoints/${endpoint}/v1`,
+        apiKeyEnvar: providerOptions.config?.apiKeyEnvar || 'CDP_TOKEN',
+        apiBaseUrl:
+          providerOptions.config?.apiBaseUrl ||
+          `https://${domain}/namespaces/${namespace}/endpoints/${endpoint}/v1`,
       },
     });
   }

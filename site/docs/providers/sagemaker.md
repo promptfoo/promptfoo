@@ -127,12 +127,10 @@ The SageMaker provider supports several syntax patterns:
    For AWS JumpStart foundation models that require specific input/output formats.
 
 :::caution
-An endpoint name containing `jumpstart` is coerced to the `jumpstart` model type, and that
-coercion **overrides** an explicit model type in the ID: `sagemaker:huggingface:my-jumpstart-endpoint`
-resolves to `jumpstart`, not `huggingface`. It applies only to the three-segment form — a bare
-`sagemaker:my-jumpstart-endpoint` still fails, because the model type is missing. If your endpoint
-name contains `jumpstart` but is not a JumpStart container, set `config.modelType` explicitly and
-use the two-segment ID.
+The model type you specify is always used, whatever the endpoint is named:
+`sagemaker:huggingface:my-jumpstart-endpoint` resolves to `huggingface`. There is no
+inference from the endpoint name, so a bare `sagemaker:my-jumpstart-endpoint` fails like any
+other ID without a model type.
 :::
 
 ## Examples
