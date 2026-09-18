@@ -1,6 +1,7 @@
 import async from 'async';
 import { Presets, SingleBar } from 'cli-progress';
 import logger from '../../logger';
+import { describeFetchError } from '../../util/fetch/errors';
 import invariant from '../../util/invariant';
 import {
   getRemoteGenerationExplicitlyDisabledError,
@@ -128,7 +129,7 @@ async function generateCompositePrompts(
     if (progressBar) {
       progressBar.stop();
     }
-    logger.error(`Error in composite generation: ${error}`);
+    logger.error(`Error in composite generation: ${describeFetchError(error)}`);
     return [];
   }
 }

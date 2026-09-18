@@ -6,6 +6,7 @@ import { getUserEmail } from '../../globalConfig/accounts';
 import logger from '../../logger';
 import { getRequestTimeoutMs } from '../../providers/shared';
 import { checkRemoteHealth } from '../../util/apiHealth';
+import { describeFetchError } from '../../util/fetch/errors';
 import { retryWithDeduplication } from '../../util/generation';
 import invariant from '../../util/invariant';
 import { getErrorTokenUsage } from '../../util/tokenUsageUtils';
@@ -427,7 +428,7 @@ async function fetchRemoteTestCases(
     if (provider && !responseRecorded) {
       recordGenerationTokenUsage(provider, { tokenUsage: getErrorTokenUsage(err) });
     }
-    logger.error(`Error generating test cases for ${key}: ${err}`);
+    logger.error(`Error generating test cases for ${key}: ${describeFetchError(err)}`);
     return [];
   }
 }
