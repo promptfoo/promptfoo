@@ -1323,6 +1323,22 @@ export function normalizeTools(tools: Tool[]): Tool[] {
   return tools.map((tool) => {
     const normalizedTool: Tool = { ...tool };
 
+    // Normalize declarations before sanitizing their schemas. Merge both aliases
+    // without mutating the caller's tools or retaining duplicate wire fields.
+    // The canonical camel-case declaration wins if both aliases name a function.
+    if (normalizedTool.function_declarations) {
+      const canonicalNames = new Set(
+        normalizedTool.functionDeclarations?.map((declaration) => declaration.name),
+      );
+      normalizedTool.functionDeclarations = [
+        ...(normalizedTool.functionDeclarations ?? []),
+        ...normalizedTool.function_declarations.filter(
+          (declaration) => !canonicalNames.has(declaration.name),
+        ),
+      ];
+      delete normalizedTool.function_declarations;
+    }
+
     // Use index access with type assertion to avoid TypeScript errors
     // Handle google_search -> googleSearch conversion
     if ((tool as any).google_search && !normalizedTool.googleSearch) {
