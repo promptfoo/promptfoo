@@ -407,7 +407,13 @@ interface OllamaChatJsonL {
  */
 function collectOllamaToolCalls(lines: OllamaChatJsonL[]) {
   return lines
-    .flatMap((chunk: OllamaChatJsonL) => chunk.message?.tool_calls ?? [])
+    .flatMap((chunk: OllamaChatJsonL) => {
+      const calls = chunk.message?.tool_calls;
+      // A malformed or proxied response can put anything here. Skip what we cannot
+      // read rather than throwing a TypeError that surfaces as an opaque parse error.
+      return Array.isArray(calls) ? calls : [];
+    })
+    .filter((call: any) => typeof call?.function?.name === 'string')
     .map((call: { function: { name: string; arguments: any } }) => ({
       function: {
         name: call.function.name,
@@ -599,7 +605,10 @@ export class OllamaCompletionProvider implements ApiProvider {
       // Without this it is dropped, and a `num_predict` budget spent inside the thinking
       // block yields an empty output with no explanation.
       const thinking = lines
-        .map((parsed: OllamaCompletionJsonL) => parsed.thinking ?? null)
+        .map((parsed: OllamaCompletionJsonL) => {
+          const trace = parsed.thinking;
+          return typeof trace === 'string' ? trace : null;
+        })
         .filter((s: string | null) => s !== null)
         .join('');
 
@@ -759,10 +768,10 @@ export class OllamaChatProvider implements ApiProvider {
       // Collect all content chunks
       const contentParts = lines
         .map((parsed: OllamaChatJsonL) => {
-          if (parsed.message?.content) {
-            return parsed.message.content;
-          }
-          return null;
+          // Only strings concatenate meaningfully; anything else would render as
+          // "[object Object]" in the eval output.
+          const content = parsed.message?.content;
+          return typeof content === 'string' && content ? content : null;
         })
         .filter((s: string | null) => s !== null);
 
@@ -773,7 +782,10 @@ export class OllamaChatProvider implements ApiProvider {
       // with no `think` flag sent, so dropping it silently loses the entire answer
       // whenever a `num_predict` budget is spent inside the thinking block.
       const thinking = lines
-        .map((parsed: OllamaChatJsonL) => parsed.message?.thinking ?? null)
+        .map((parsed: OllamaChatJsonL) => {
+          const trace = parsed.message?.thinking;
+          return typeof trace === 'string' ? trace : null;
+        })
         .filter((s: string | null) => s !== null)
         .join('');
 
