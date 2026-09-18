@@ -82,6 +82,7 @@ const STRATEGY_METADATA: Record<string, StrategyMetadata> = {
   camelcase: { humanExploitable: true, humanComplexity: 'low' },
   morse: { humanExploitable: true, humanComplexity: 'low' },
   piglatin: { humanExploitable: true, humanComplexity: 'low' },
+  posterior: { humanExploitable: true, humanComplexity: 'low' },
   emoji: { humanExploitable: true, humanComplexity: 'low' },
 };
 
