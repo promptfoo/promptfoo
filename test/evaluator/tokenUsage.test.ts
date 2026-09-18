@@ -5,6 +5,10 @@ import { randomUUID } from 'crypto';
 import { expect, it, vi } from 'vitest';
 import { evaluate, runEval } from '../../src/evaluator';
 import Eval from '../../src/models/eval';
+import {
+  getGradingAssertionHash,
+  getGradingInputHash,
+} from '../../src/redteam/grading/storedResult';
 import { type ApiProvider, type TestSuite } from '../../src/types/index';
 import { mockApiProvider, mockGradingApiProviderPasses, toPrompt } from './helpers';
 import { describeEvaluator } from './lifecycle';
@@ -1016,7 +1020,7 @@ describeEvaluator('evaluator token usage', () => {
 
   it('combines internal judge calls with all stored red-team grading turns exactly once', async () => {
     const redteamProvider: ApiProvider = {
-      id: vi.fn().mockReturnValue('redteam-provider-with-stored-grades'),
+      id: vi.fn().mockReturnValue('promptfoo:redteam:hydra'),
       callApi: vi.fn().mockResolvedValue({
         output: 'Target response',
         metadata: {
@@ -1024,6 +1028,18 @@ describeEvaluator('evaluator token usage', () => {
             pass: true,
             score: 1,
             reason: 'Final grading turn passed',
+            assertion: { type: 'promptfoo:redteam:harmful:hate' },
+            metadata: {
+              redteamGradingAssertionHash: getGradingAssertionHash({
+                type: 'promptfoo:redteam:harmful:hate',
+              }),
+              redteamGradingInputHash: getGradingInputHash(
+                'Test prompt',
+                'Target response',
+                undefined,
+                'harmful:hate',
+              ),
+            },
             tokensUsed: {
               total: 60,
               prompt: 36,
@@ -1063,6 +1079,7 @@ describeEvaluator('evaluator token usage', () => {
     await evaluate(testSuite, evalRecord, {});
     const summary = await evalRecord.toEvaluateSummary();
 
+    expect(summary.results[0]).toMatchObject({ success: true });
     expect(summary.stats.tokenUsage).toMatchObject({
       total: 100,
       numRequests: 1,
