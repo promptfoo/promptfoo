@@ -408,7 +408,13 @@ interface OllamaChatJsonL {
  * the way back in with HTTP 400, so feeding a previous turn's tool call into a multi-turn
  * conversation fails unless it is converted back.
  */
-function normalizeOllamaRequestMessages(messages: any[]): any[] {
+function normalizeOllamaRequestMessages(messages: unknown): unknown {
+  // parseChatPrompt returns whatever the prompt parsed to, not necessarily an array. A
+  // non-array is passed through untouched so Ollama's own validation reports it, rather
+  // than this helper throwing an opaque TypeError first.
+  if (!Array.isArray(messages)) {
+    return messages;
+  }
   return messages.map((message) => {
     const toolCalls = message?.tool_calls;
     if (!Array.isArray(toolCalls)) {
@@ -723,7 +729,7 @@ export class OllamaChatProvider implements ApiProvider {
     context?: CallApiContextParams,
   ): Promise<ProviderResponse> {
     const messages = normalizeOllamaRequestMessages(
-      parseChatPrompt<any[]>(prompt, [{ role: 'user', content: prompt }]),
+      parseChatPrompt<unknown>(prompt, [{ role: 'user', content: prompt }]),
     );
 
     const { passthroughOptions, passthroughRest } = splitOllamaPassthrough(this.config);

@@ -996,6 +996,27 @@ describe('OllamaChatProvider', () => {
     },
   );
 
+  it.each([
+    ['object', '{"role":"user","content":"hi"}'],
+    ['string', '"just a string"'],
+    ['number', '42'],
+  ])('should pass a non-array %s prompt through untouched', async (_label, prompt) => {
+    vi.mocked(fetchWithCache).mockResolvedValue({
+      data: '{"message":{"role":"assistant","content":"ok"},"done":true}\n',
+      cached: false,
+      status: 200,
+      statusText: 'OK',
+      headers: {},
+    });
+
+    await new OllamaChatProvider('llama3.3').callApi(prompt);
+
+    // parseChatPrompt returns whatever parsed, not necessarily an array. Normalizing
+    // must not throw here -- Ollama's own validation gives the useful error.
+    const body = JSON.parse(vi.mocked(fetchWithCache).mock.calls[0][1]?.body as string);
+    expect(body.messages).toEqual(JSON.parse(prompt));
+  });
+
   it('should handle tools configuration', async () => {
     const provider = new OllamaChatProvider('llama3.3', {
       config: {
