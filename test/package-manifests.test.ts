@@ -601,6 +601,29 @@ describe('package manifests', () => {
     );
   });
 
+  it('publishes the release-age-safe ANSI tokenizer pin for optional Codex Security installs', () => {
+    const packageJson = readPackageJson<
+      PackageManifest & { overrides?: Record<string, string | Record<string, string>> }
+    >('package.json');
+    const packageLock =
+      readPackageJson<
+        PackageLockManifest<PackageManifest & { version?: string; optional?: boolean }>
+      >('package-lock.json');
+    const dependencyName = '@alcalzone/ansi-tokenize';
+    const pinnedVersion = packageJson.optionalDependencies?.[dependencyName];
+    const tokenizerPackage = packageLock.packages[`node_modules/${dependencyName}`];
+    const inkPackage = packageLock.packages['node_modules/ink'];
+
+    expect(pinnedVersion).toBe('0.3.0');
+    expect(packageJson.dependencies?.[dependencyName]).toBeUndefined();
+    expect(packageJson.overrides?.[dependencyName]).toBeUndefined();
+    expect(packageLock.packages[''].optionalDependencies?.[dependencyName]).toBe(pinnedVersion);
+    expect(tokenizerPackage.version).toBe(pinnedVersion);
+    expect(tokenizerPackage.optional).toBe(true);
+    expect(inkPackage.dependencies?.[dependencyName]).toBeDefined();
+    expect(satisfies(pinnedVersion!, inkPackage.dependencies![dependencyName])).toBe(true);
+  });
+
   it('includes every browser loader in the optional production profile', () => {
     const packageJson = readPackageJson<PackageManifest>('package.json');
     const packageLock =
