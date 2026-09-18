@@ -1,0 +1,5 @@
+title: 'Conversation Ended Signal in Red Team'
+description: 'Demonstrates how a target can gracefully stop a multi-turn red team attack by returning a conversationEnded signal'
+tags:
+  - Red Teaming
+  - Multi-turn

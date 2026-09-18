@@ -1,0 +1,5 @@
+title: 'RAG Quality Evaluation'
+description: 'Evaluate RAG responses using factuality, answer relevance, context recall, context relevance, and context faithfulness metrics'
+tags:
+  - Evaluation
+  - RAG

@@ -1,0 +1,5 @@
+title: 'Ollama Local Model Comparison'
+description: 'Compare local Ollama models (Llama, uncensored) with OpenAI using different prompts'
+tags:
+  - Providers
+  - Model Comparison

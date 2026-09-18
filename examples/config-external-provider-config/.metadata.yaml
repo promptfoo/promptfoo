@@ -1,0 +1,5 @@
+title: 'External Provider Configuration File'
+description: 'Loading provider configurations including function definitions from external YAML files'
+tags:
+  - Configuration
+  - Tool Use

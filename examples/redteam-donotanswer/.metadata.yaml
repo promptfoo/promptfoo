@@ -1,0 +1,4 @@
+title: 'DoNotAnswer Safety Benchmark'
+description: 'Evaluate whether models properly refuse harmful or inappropriate queries using the DoNotAnswer dataset'
+tags:
+  - Red Teaming
