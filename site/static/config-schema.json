@@ -260,6 +260,9 @@
         "AZURE_TOKEN_SCOPE": {
           "type": "string"
         },
+        "CHEAPERINFERENCE_API_KEY": {
+          "type": "string"
+        },
         "CLAUDE_CODE_USE_BEDROCK": {
           "type": "string"
         },
@@ -1742,6 +1745,9 @@
                       "type": "string"
                     },
                     "AZURE_TOKEN_SCOPE": {
+                      "type": "string"
+                    },
+                    "CHEAPERINFERENCE_API_KEY": {
                       "type": "string"
                     },
                     "CLAUDE_CODE_USE_BEDROCK": {

@@ -674,6 +674,21 @@ describe('Provider Registry', () => {
       expect(provider.id()).toBe('atlascloud:deepseek-v3');
     });
 
+    it('should handle cheaperinference providers correctly', async () => {
+      const matchingFactories = providerMap.filter((f) =>
+        f.test('cheaperinference:claude-sonnet-5'),
+      );
+      expect(matchingFactories).toHaveLength(1);
+
+      const provider = await matchingFactories[0].create(
+        'cheaperinference:claude-sonnet-5',
+        { ...mockProviderOptions, id: undefined },
+        mockContext,
+      );
+      expect(provider).toBeDefined();
+      expect(provider.id()).toBe('cheaperinference:claude-sonnet-5');
+    });
+
     it.each(['llamaapi:vendor:model', 'llamaapi:chat:vendor:model'])(
       'routes %s uniquely to the Llama API provider',
       async (providerPath) => {
