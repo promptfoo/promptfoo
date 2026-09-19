@@ -931,6 +931,23 @@ describe('package manifests', () => {
     expect(packageLock.packages[`node_modules/${dependencyName}`].optional).toBe(true);
   });
 
+  it('keeps Codex Security optional at the locked release', () => {
+    const packageJson = readPackageJson<PackageManifest>('package.json');
+    const packageLock = readPackageJson<PackageLockManifest>('package-lock.json');
+    const dependencyName = '@openai/codex-security';
+    const optionalRange = packageJson.optionalDependencies?.[dependencyName];
+    const lockedPackage = packageLock.packages[`node_modules/${dependencyName}`];
+
+    expect(optionalRange).toBeDefined();
+    expect(minVersion(optionalRange!)?.compare('0.1.28')).toBeGreaterThanOrEqual(0);
+    expect(packageJson.dependencies?.[dependencyName]).toBeUndefined();
+    expect(packageLock.packages[''].dependencies?.[dependencyName]).toBeUndefined();
+    expect(packageLock.packages[''].optionalDependencies?.[dependencyName]).toBe(optionalRange);
+    expect(lockedPackage.version).toBeDefined();
+    expect(satisfies(lockedPackage.version!, optionalRange!)).toBe(true);
+    expect(lockedPackage.optional).toBe(true);
+  });
+
   it('keeps MCP optional while locking its Node adapter to a patched release', () => {
     const packageJson = readPackageJson<PackageManifest>('package.json');
     const packageLock = readPackageJson<{
