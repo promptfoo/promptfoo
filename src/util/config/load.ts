@@ -2,7 +2,6 @@ import * as fsPromises from 'fs/promises';
 import * as path from 'path';
 import process from 'process';
 
-import $RefParser from '@apidevtools/json-schema-ref-parser';
 import chalk from 'chalk';
 import dedent from 'dedent';
 import { globSync } from 'glob';
@@ -21,7 +20,6 @@ import {
   CommandLineOptionsSchema,
   EvaluateOptionsSchema,
   type Prompt,
-  type ProviderOptions,
   ProvidersSchema,
   type RedteamPluginObject,
   type RedteamStrategyObject,
@@ -52,6 +50,7 @@ import {
 import { validateTestProviderReferences } from '../validateTestProviderReferences';
 import { loadYaml } from '../yamlLoad';
 import { DEFAULT_CONFIG_EXTENSIONS } from './extensions';
+import { dereferenceWithStandaloneSchemas } from './jsonSchema';
 
 type ConfigResolutionLogLevel = 'error' | 'warn';
 
@@ -180,115 +179,14 @@ export function resolveCliProvidersWithConfig(
   });
 }
 
-export async function dereferenceConfig(rawConfig: UnifiedConfig): Promise<UnifiedConfig> {
-  if (getEnvBool('PROMPTFOO_DISABLE_REF_PARSER')) {
-    return rawConfig;
-  }
-
-  // Track and delete tools[i].function for each tool, preserving the rest of the properties
-  // https://github.com/promptfoo/promptfoo/issues/364
-
-  // Remove parameters from functions and tools to prevent dereferencing
-  const extractFunctionParameters = (functions: { parameters?: object }[]) => {
-    return functions.map((func) => {
-      const { parameters } = func;
-      delete func.parameters;
-      return { parameters };
-    });
-  };
-
-  const extractToolParameters = (tools: { function?: { parameters?: object } }[]) => {
-    return tools.map((tool) => {
-      const { parameters } = tool.function || {};
-      if (tool.function?.parameters) {
-        delete tool.function.parameters;
-      }
-      return { parameters };
-    });
-  };
-
-  // Restore parameters to functions and tools after dereferencing
-  const restoreFunctionParameters = (
-    functions: { parameters?: object }[],
-    parametersList: { parameters?: object }[],
-  ) => {
-    functions.forEach((func, index) => {
-      if (parametersList[index]?.parameters) {
-        func.parameters = parametersList[index].parameters;
-      }
-    });
-  };
-
-  const restoreToolParameters = (
-    tools: { function?: { parameters?: object } }[],
-    parametersList: { parameters?: object }[],
-  ) => {
-    tools.forEach((tool, index) => {
-      if (parametersList[index]?.parameters) {
-        tool.function = tool.function || {};
-        tool.function.parameters = parametersList[index].parameters;
-      }
-    });
-  };
-
-  const functionsParametersList: { parameters?: object }[][] = [];
-  const toolsParametersList: { parameters?: object }[][] = [];
-
-  if (Array.isArray(rawConfig.providers)) {
-    rawConfig.providers.forEach((provider, providerIndex) => {
-      if (typeof provider === 'string') {
-        return;
-      }
-      if (typeof provider === 'function') {
-        return;
-      }
-      if (!provider.config) {
-        // Handle when provider is a map
-        provider = Object.values(provider)[0] as ProviderOptions;
-      }
-
-      // Handle dereferencing for inline tools, but skip external file paths (which are just strings)
-      if (Array.isArray(provider.config?.functions)) {
-        functionsParametersList[providerIndex] = extractFunctionParameters(
-          provider.config.functions,
-        );
-      }
-
-      if (Array.isArray(provider.config?.tools)) {
-        toolsParametersList[providerIndex] = extractToolParameters(provider.config.tools);
-      }
-    });
-  }
-
-  // Dereference JSON
-  const config = (await $RefParser.dereference(rawConfig)) as unknown as UnifiedConfig;
-
-  // Restore functions and tools parameters
-  if (Array.isArray(config.providers)) {
-    config.providers.forEach((provider, index) => {
-      if (typeof provider === 'string') {
-        return;
-      }
-      if (typeof provider === 'function') {
-        return;
-      }
-      if (!provider.config) {
-        // Handle when provider is a map
-        provider = Object.values(provider)[0] as ProviderOptions;
-      }
-
-      if (functionsParametersList[index]) {
-        provider.config.functions = provider.config.functions || [];
-        restoreFunctionParameters(provider.config.functions, functionsParametersList[index]);
-      }
-
-      if (toolsParametersList[index]) {
-        provider.config.tools = provider.config.tools || [];
-        restoreToolParameters(provider.config.tools, toolsParametersList[index]);
-      }
-    });
-  }
-  return config;
+export async function dereferenceConfig(
+  rawConfig: UnifiedConfig,
+  schemaFileBasePath: string = '',
+): Promise<UnifiedConfig> {
+  return dereferenceWithStandaloneSchemas(rawConfig, 'config', {
+    disabled: getEnvBool('PROMPTFOO_DISABLE_REF_PARSER'),
+    schemaFileBasePath,
+  });
 }
 
 /**
@@ -340,7 +238,10 @@ export async function readConfig(configPath: string): Promise<UnifiedConfig> {
   const ext = path.parse(configPath).ext;
   if (ext === '.json' || ext === '.yaml' || ext === '.yml') {
     const rawConfig = loadYaml(await fsPromises.readFile(configPath, 'utf-8')) ?? {};
-    const dereferencedConfig = await dereferenceConfig(rawConfig as UnifiedConfig);
+    const dereferencedConfig = await dereferenceConfig(
+      rawConfig as UnifiedConfig,
+      path.dirname(configPath),
+    );
 
     // Render environment variable templates (e.g., {{ env.VAR }}) before validation.
     // This allows env vars to be used in paths and other config values.
@@ -452,9 +353,14 @@ export async function maybeReadConfig(configPath: string): Promise<UnifiedConfig
   try {
     return await readConfig(configPath);
   } catch (error) {
-    // If file doesn't exist, return undefined
-    // Note: readConfig normalizes ERR_MODULE_NOT_FOUND to ENOENT for missing JS/TS files
-    if ((error as NodeJS.ErrnoException).code === 'ENOENT') {
+    // Only treat the requested config itself as optional. Missing files referenced by an existing
+    // config are load errors and must not make the whole config appear absent.
+    const nodeError = error as NodeJS.ErrnoException;
+    if (
+      nodeError.code === 'ENOENT' &&
+      nodeError.path !== undefined &&
+      path.resolve(nodeError.path) === path.resolve(configPath)
+    ) {
       return undefined;
     }
     throw error;

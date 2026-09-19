@@ -2544,8 +2544,11 @@ describe('AnthropicMessagesProvider', () => {
             type: 'json_schema',
             schema: {
               type: 'object',
+              $defs: {
+                Name: { type: 'string' },
+              },
               properties: {
-                name: { type: 'string' },
+                name: { $ref: '#/$defs/Name' },
               },
               required: ['name'],
               additionalProperties: false,
@@ -2575,8 +2578,11 @@ describe('AnthropicMessagesProvider', () => {
               type: 'json_schema',
               schema: {
                 type: 'object',
+                $defs: {
+                  Name: { type: 'string' },
+                },
                 properties: {
-                  name: { type: 'string' },
+                  name: { $ref: '#/$defs/Name' },
                 },
                 required: ['name'],
                 additionalProperties: false,

@@ -1724,9 +1724,12 @@ describe('OpenAICodexSDKProvider', () => {
       it('should handle JSON schema output', async () => {
         const schema = {
           type: 'object',
+          $defs: {
+            Status: { type: 'string', enum: ['ok', 'error'] },
+          },
           properties: {
             summary: { type: 'string' },
-            status: { type: 'string', enum: ['ok', 'error'] },
+            status: { $ref: '#/$defs/Status' },
           },
           required: ['summary', 'status'],
         };

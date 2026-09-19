@@ -118,6 +118,12 @@ const allowedSkippedTests: AllowedSkip[] = [
     reason: 'Unix absolute-path assertions are platform-specific',
   },
   {
+    file: 'util/config/sharedSchemaDereference.test.ts',
+    kind: 'skipIf',
+    linePattern: /^it\.skipIf\(process\.platform === 'win32'\)\($/,
+    reason: 'a file named `owners.json?v=1` cannot exist on Windows (`?` is reserved in NTFS)',
+  },
+  {
     file: 'smoke/regression-0120.test.ts',
     kind: 'skipIf',
     linePattern: /^it\.skipIf\(!isGoAvailable\(\)\)\('loads and executes Go provider'/,

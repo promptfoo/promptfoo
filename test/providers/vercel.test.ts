@@ -1238,8 +1238,11 @@ describe('VercelAiProvider', () => {
 
       const testSchema = {
         type: 'object',
+        $defs: {
+          Name: { type: 'string' },
+        },
         properties: {
-          name: { type: 'string' },
+          name: { $ref: '#/$defs/Name' },
           value: { type: 'number' },
         },
       };
