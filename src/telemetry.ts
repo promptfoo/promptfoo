@@ -51,7 +51,6 @@ function getRuntimeMetadata() {
 }
 
 export class Telemetry {
-  private telemetryDisabledRecorded = false;
   private id: string | null = null;
 
   constructor(initializeImmediately: boolean = true) {
@@ -107,20 +106,12 @@ export class Telemetry {
     return getEnvBool('PROMPTFOO_DISABLE_TELEMETRY');
   }
 
-  private recordTelemetryDisabled() {
-    if (!this.telemetryDisabledRecorded) {
-      this.sendEvent('feature_used', { feature: 'telemetry disabled' });
-      this.telemetryDisabledRecorded = true;
-    }
-  }
-
   record(eventName: TelemetryEventTypes, properties: EventProperties): void {
-    this.initialize();
     if (this.disabled) {
-      this.recordTelemetryDisabled();
-    } else {
-      this.sendEvent(eventName, properties);
+      return;
     }
+    this.initialize();
+    this.sendEvent(eventName, properties);
   }
 
   private sendEvent(eventName: TelemetryEventTypes, properties: EventProperties): void {
