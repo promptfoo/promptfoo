@@ -1,4 +1,5 @@
 import dedent from 'dedent';
+import cliState from '../cliState';
 import { VERSION } from '../constants';
 import { getUserEmail } from '../globalConfig/accounts';
 import logger from '../logger';
@@ -69,7 +70,7 @@ export class PromptfooHarmfulCompletionProvider implements ApiProvider {
 
   async callApi(
     _prompt: string,
-    _context?: CallApiContextParams,
+    context?: CallApiContextParams,
     callApiOptions?: CallApiOptionsParams,
   ): Promise<ProviderResponse & { output?: string[] }> {
     // Check if remote generation is disabled
@@ -87,6 +88,7 @@ export class PromptfooHarmfulCompletionProvider implements ApiProvider {
       };
     }
 
+    const evaluationId = context?.evaluationId || cliState.evaluationId;
     const body = {
       email: getUserEmail(),
       harmCategory: this.harmCategory,
@@ -94,6 +96,7 @@ export class PromptfooHarmfulCompletionProvider implements ApiProvider {
       purpose: this.purpose,
       version: VERSION,
       config: this.config,
+      ...(evaluationId && { evaluationId }),
       ...providerRemoteGenerationContextPayload(this.redteamGenerationContext ?? this.targetId),
     };
 
@@ -226,6 +229,7 @@ export class PromptfooChatCompletionProvider implements ApiProvider {
       };
     }
 
+    const evaluationId = context?.evaluationId || cliState.evaluationId;
     const materializationContext = getRemoteMaterializationContextFromVars(context?.vars);
     const body = {
       jsonOnly: this.options.jsonOnly,
@@ -239,6 +243,13 @@ export class PromptfooChatCompletionProvider implements ApiProvider {
       ),
       // Pass inputs schema for multi-input mode
       ...(this.options.inputs && { inputs: this.options.inputs }),
+      ...(evaluationId && { evaluationId }),
+      pluginId: context?.test?.metadata?.pluginId,
+      strategyId: context?.test?.metadata?.strategyId,
+      ...(evaluationId &&
+        context?.testCaseId && {
+          testRunId: `${evaluationId}-${context.testCaseId}`,
+        }),
       ...(materializationContext ? { materializationContext } : {}),
     };
 
@@ -320,7 +331,7 @@ export class PromptfooSimulatedUserProvider implements ApiProvider {
 
   async callApi(
     prompt: string,
-    _context?: CallApiContextParams,
+    context?: CallApiContextParams,
     callApiOptions?: CallApiOptionsParams,
   ): Promise<ProviderResponse> {
     // Check if this is a redteam task
@@ -355,12 +366,16 @@ export class PromptfooSimulatedUserProvider implements ApiProvider {
     }
 
     const messages = JSON.parse(prompt);
+    const evaluationId = context?.evaluationId || cliState.evaluationId;
     const body = {
       task: this.taskId,
       instructions: this.options.instructions,
       history: messages,
       email: getUserEmail(),
       version: VERSION,
+      ...(evaluationId && { evaluationId }),
+      pluginId: context?.test?.metadata?.pluginId,
+      strategyId: context?.test?.metadata?.strategyId,
       ...providerRemoteGenerationContextPayload(
         this.options.redteamGenerationContext ?? this.options.targetId,
       ),

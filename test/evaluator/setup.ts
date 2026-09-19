@@ -188,6 +188,8 @@ vi.mock('../../src/cliState', () => ({
     resume: false,
     basePath: '',
     webUI: false,
+    evaluationId: undefined,
+    withEvaluationId: vi.fn((_evaluationId, fn) => fn()),
   },
 }));
 
