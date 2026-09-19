@@ -2273,11 +2273,17 @@ function createDefaultPromptMetrics(): PromptMetrics {
 }
 
 function buildExistingPromptsMap(store: EvaluationStore) {
-  const existingPromptsMap = new Map<string, CompletedPrompt>();
+  const existingPromptsMap = new Map<string, CompletedPrompt[]>();
   if (cliState.resume && store.persisted && store.prompts.length > 0) {
     logger.debug('Resuming evaluation: preserving metrics from previous run');
     for (const existingPrompt of store.prompts) {
-      existingPromptsMap.set(`${existingPrompt.provider}:${existingPrompt.id}`, existingPrompt);
+      const key = `${existingPrompt.provider}:${existingPrompt.id}`;
+      const storedPrompts = existingPromptsMap.get(key);
+      if (storedPrompts) {
+        storedPrompts.push(existingPrompt);
+      } else {
+        existingPromptsMap.set(key, [existingPrompt]);
+      }
     }
   }
   return existingPromptsMap;
@@ -2309,6 +2315,7 @@ function buildCompletedPrompts(
   const prompts: CompletedPrompt[] = [];
   const columnsByProvider: ProviderColumns[] = [];
   const existingPromptsMap = buildExistingPromptsMap(store);
+  const identityOccurrenceCount = new Map<string, number>();
 
   for (const provider of testSuite.providers) {
     const providerKey = getProviderIdentifier(provider);
@@ -2320,7 +2327,16 @@ function buildCompletedPrompts(
       }
 
       const promptId = generateIdFromPrompt(prompt);
-      const existingPrompt = existingPromptsMap.get(`${providerKey}:${promptId}`);
+      const identityKey = `${providerKey}:${promptId}`;
+      const occurrenceIndex = identityOccurrenceCount.get(identityKey) ?? 0;
+      identityOccurrenceCount.set(identityKey, occurrenceIndex + 1);
+      const storedPrompts = existingPromptsMap.get(identityKey);
+      // Restore colliding provider+prompt identities in stored order; reuse the
+      // last baseline when a legacy eval persisted fewer occurrences.
+      const existingPrompt =
+        storedPrompts && storedPrompts.length > 0
+          ? storedPrompts[Math.min(occurrenceIndex, storedPrompts.length - 1)]
+          : undefined;
       if (existingPrompt?.metrics) {
         backfillNamedScoreWeights(existingPrompt.metrics);
       }
@@ -2331,10 +2347,7 @@ function buildCompletedPrompts(
         id: promptId,
         provider: providerKey,
         label: prompt.label,
-        // `existingPromptsMap` is still keyed by identity, so duplicate providers resolve
-        // to the same stored prompt. Clone its metrics so the columns do not accumulate
-        // into one shared object. (Resume has deeper duplicate-provider problems; see
-        // `doEval`, which rebuilds `testSuite.prompts` from the previous run's columns.)
+        // Clone so each column accumulates independently.
         metrics: existingPrompt?.metrics
           ? structuredClone(existingPrompt.metrics)
           : createDefaultPromptMetrics(),
