@@ -1065,10 +1065,19 @@ export async function resolveConfigs(
     typeof testSuite.defaultTest === 'object' ? testSuite.defaultTest : undefined,
   );
 
-  // Validate provider references in tests and scenarios
+  // Validate provider references against every *defined* provider, not just the ones
+  // left after --filter-providers/--filter-targets: a reference to a filtered-out
+  // provider is a valid config, not a typo. Only load the full set when filtering
+  // actually removed something, so the common path does not instantiate providers
+  // the user asked to skip.
+  const allParsedProviders =
+    filteredProviderConfigs === resolvedProviderConfigs
+      ? parsedProviders
+      : await loadApiProviders(resolvedProviderConfigs, { env: config.env, basePath });
+
   validateTestProviderReferences(
     testSuite.tests || [],
-    testSuite.providers,
+    allParsedProviders,
     typeof testSuite.defaultTest === 'object' ? testSuite.defaultTest : undefined,
     testSuite.scenarios,
   );
