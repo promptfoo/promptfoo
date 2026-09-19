@@ -336,6 +336,42 @@ describe('OllamaCompletionProvider', () => {
     expect(body.options[key]).toBeUndefined();
   });
 
+  // The completion endpoint has its own parsing/accumulation branch, so the same
+  // malformed-response contract needs coverage on both sides.
+  it.each([
+    ['non-string thinking', '"thinking":{"a":1}', 'hi'],
+    ['non-string thinking with empty response', '"thinking":[1,2],"response":""', ''],
+  ])('should degrade gracefully on completion %s', async (_label, fragment, expected) => {
+    vi.mocked(fetchWithCache).mockResolvedValue({
+      data: `{"response":"hi",${fragment},"done":true}\n`,
+      cached: false,
+      status: 200,
+      statusText: 'OK',
+      headers: {},
+    });
+
+    const result = await new OllamaCompletionProvider('llama3.3').callApi('test prompt');
+
+    expect(result.error).toBeUndefined();
+    expect(result.output).toBe(expected);
+    expect(String(result.output)).not.toContain('[object Object]');
+  });
+
+  it('should render a non-string completion response as empty', async () => {
+    vi.mocked(fetchWithCache).mockResolvedValue({
+      data: '{"response":{"a":1},"done":true}\n',
+      cached: false,
+      status: 200,
+      statusText: 'OK',
+      headers: {},
+    });
+
+    const result = await new OllamaCompletionProvider('llama3.3').callApi('test prompt');
+
+    expect(result.output).toBe('');
+    expect(String(result.output)).not.toContain('[object Object]');
+  });
+
   it('should omit finishReason when done_reason is absent', async () => {
     vi.mocked(fetchWithCache).mockResolvedValue({
       data: '{"response":"Hi!","done":true}\n',

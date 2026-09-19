@@ -593,10 +593,10 @@ export class OllamaCompletionProvider implements ApiProvider {
 
       let output = lines
         .map((parsed: OllamaCompletionJsonL) => {
-          if (parsed.response) {
-            return parsed.response;
-          }
-          return null;
+          // Only strings concatenate meaningfully; anything else would render as
+          // "[object Object]" in the eval output.
+          const response = parsed.response;
+          return typeof response === 'string' && response ? response : null;
         })
         .filter((s: string | null) => s !== null)
         .join('');
