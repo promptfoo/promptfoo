@@ -1,6 +1,8 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { PromptfooChatCompletionProvider } from '../../../../src/providers/promptfoo';
 import { CustomProvider, MemorySystem } from '../../../../src/redteam/providers/custom/index';
 import { redteamProviderManager, tryUnblocking } from '../../../../src/redteam/providers/shared';
+import { shouldGenerateRemote } from '../../../../src/redteam/remoteGeneration';
 import { checkServerFeatureSupport } from '../../../../src/util/server';
 import { createMockProvider, type MockApiProvider } from '../../../factories/provider';
 
@@ -175,6 +177,28 @@ describe('CustomProvider', () => {
 
   afterEach(() => {
     vi.resetAllMocks();
+  });
+
+  it('keeps an explicit redteamProvider local for the attacker and scorer when remote generation is enabled', async () => {
+    // Regression test for https://github.com/promptfoo/promptfoo/issues/10977:
+    // a configured redteamProvider must not be swapped for the cloud provider.
+    vi.mocked(shouldGenerateRemote).mockReturnValue(true);
+
+    const provider = new CustomProvider({
+      injectVar: 'objective',
+      strategyText: 'test strategy',
+      redteamProvider: 'ollama:chat:llama3.1:8b',
+    });
+
+    const attacker = await (provider as any).getRedTeamProvider();
+    const scorer = await (provider as any).getScoringProvider();
+
+    expect(redteamProviderManager.getProvider).toHaveBeenCalledWith(
+      expect.objectContaining({ provider: 'ollama:chat:llama3.1:8b' }),
+    );
+    expect(vi.mocked(PromptfooChatCompletionProvider)).not.toHaveBeenCalled();
+    expect(attacker).toBe(mockRedTeamProvider);
+    expect(scorer).toBe(mockScoringProvider);
   });
 
   it('should initialize with default config values', () => {

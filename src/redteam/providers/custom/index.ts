@@ -230,7 +230,9 @@ export class CustomProvider implements ApiProvider {
 
   private async getRedTeamProvider(): Promise<ApiProvider> {
     if (!this.redTeamProvider) {
-      if (shouldGenerateRemote()) {
+      // Remote task handlers only know the built-in default. An explicit
+      // redteamProvider must stay local.
+      if (shouldGenerateRemote() && !this.config.redteamProvider) {
         this.redTeamProvider = new PromptfooChatCompletionProvider({
           task: 'crescendo',
           jsonOnly: true,
@@ -250,7 +252,7 @@ export class CustomProvider implements ApiProvider {
 
   private async getScoringProvider(): Promise<ApiProvider> {
     if (!this.scoringProvider) {
-      if (shouldGenerateRemote()) {
+      if (shouldGenerateRemote() && !this.config.redteamProvider) {
         this.scoringProvider = new PromptfooChatCompletionProvider({
           task: 'crescendo',
           jsonOnly: false,
