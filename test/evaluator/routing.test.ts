@@ -5,6 +5,7 @@ import { randomUUID } from 'crypto';
 import { expect, it, vi } from 'vitest';
 import cliState from '../../src/cliState';
 import { evaluate } from '../../src/evaluator';
+import logger from '../../src/logger';
 import Eval from '../../src/models/eval';
 import { generateIdFromPrompt } from '../../src/models/prompt';
 import { type ApiProvider, type Prompt, type TestSuite } from '../../src/types/index';
@@ -663,6 +664,59 @@ describeEvaluator('evaluator prompt and provider routing', () => {
 
     expect(summary.stats.successes).toBe(0);
     expect(mockProvider.callApi).toHaveBeenCalledTimes(0);
+  });
+
+  it('warns about tests whose providers are all outside the eval', async () => {
+    const warnSpy = vi.spyOn(logger, 'warn').mockImplementation(() => logger);
+    try {
+      const provider = duplicateProvider('openrouter:free', 'Output');
+      const testSuite: TestSuite = {
+        providers: [provider],
+        prompts: [{ raw: 'Test prompt', label: 'prompt1' }],
+        tests: [
+          // e.g. --filter-providers removed gemini before the eval was built
+          { description: 'gemini only', vars: { input: 'a' }, providers: ['gemini'] },
+          { description: 'runs', vars: { input: 'b' }, providers: ['openrouter:*'] },
+          { vars: { input: 'c' }, providers: ['gemini'] },
+        ],
+      };
+
+      const evalRecord = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
+      await evaluate(testSuite, evalRecord, {});
+      const summary = await evalRecord.toEvaluateSummary();
+
+      expect(summary.stats.successes).toBe(1);
+      const warnings = warnSpy.mock.calls.map(([message]) => String(message));
+      expect(warnings.filter((message) => message.includes('will not run'))).toEqual([
+        '2 test(s) will not run because none of their providers are in this eval (for example, --filter-providers excluded them): "gemini only", #3',
+      ]);
+    } finally {
+      warnSpy.mockRestore();
+    }
+  });
+
+  it('does not warn about tests that run or that opt out with an empty providers array', async () => {
+    const warnSpy = vi.spyOn(logger, 'warn').mockImplementation(() => logger);
+    try {
+      const provider = duplicateProvider('openrouter:free', 'Output');
+      const testSuite: TestSuite = {
+        providers: [provider],
+        prompts: [{ raw: 'Test prompt', label: 'prompt1' }],
+        tests: [
+          { vars: { input: 'a' }, providers: [] },
+          { vars: { input: 'b' }, providers: ['openrouter:free'] },
+          { vars: { input: 'c' } },
+        ],
+      };
+
+      const evalRecord = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
+      await evaluate(testSuite, evalRecord, {});
+
+      const warnings = warnSpy.mock.calls.map(([message]) => String(message));
+      expect(warnings.some((message) => message.includes('will not run'))).toBe(false);
+    } finally {
+      warnSpy.mockRestore();
+    }
   });
 
   it('evaluate with providers filter and providerPromptMap combined', async () => {

@@ -2124,6 +2124,112 @@ describe('resolveConfigs', () => {
       });
     });
   });
+
+  describe('test provider references with --filter-providers', () => {
+    const resolveWithTestProviders = (
+      providers: UnifiedConfig['providers'],
+      testProviders: string[],
+      cmdObj: Parameters<typeof resolveConfigs>[0] = {},
+    ) => {
+      const tests: TestCase[] = [{ vars: { topic: 'hello' }, providers: testProviders }];
+      // Other tests leave persistent return values on these shared mocks.
+      vi.mocked(readPrompts).mockResolvedValueOnce([
+        { raw: 'Say {{topic}}', label: 'Say {{topic}}' },
+      ]);
+      vi.mocked(readTests).mockResolvedValueOnce(tests);
+      return resolveConfigs(cmdObj, { prompts: ['Say {{topic}}'], providers, tests });
+    };
+
+    it('accepts references to providers that the filter excluded', async () => {
+      vi.mocked(loadApiProviders).mockResolvedValueOnce([
+        createMockProvider({ id: 'echo', label: 'openrouter:free' }),
+      ]);
+
+      const { testSuite } = await resolveWithTestProviders(
+        [
+          { id: 'echo', label: 'gemini' },
+          { id: 'echo', label: 'openrouter:free' },
+        ],
+        ['gemini', 'openrouter:*'],
+        { filterProviders: 'openrouter' },
+      );
+
+      expect(loadApiProviders).toHaveBeenCalledWith(
+        [{ id: 'echo', label: 'openrouter:free' }],
+        expect.any(Object),
+      );
+      expect(testSuite.providers.map((provider) => provider.label)).toEqual(['openrouter:free']);
+    });
+
+    it('still rejects references that match no configured provider', async () => {
+      vi.mocked(loadApiProviders).mockResolvedValueOnce([
+        createMockProvider({ id: 'echo', label: 'openrouter:free' }),
+      ]);
+
+      await expect(
+        resolveWithTestProviders(
+          [
+            { id: 'echo', label: 'gemini' },
+            { id: 'echo', label: 'openrouter:free' },
+          ],
+          ['gemni'],
+          { filterProviders: 'openrouter' },
+        ),
+      ).rejects.toThrow('references provider "gemni" which does not exist');
+    });
+
+    it('does not print credentials from an excluded provider URL in the error', async () => {
+      vi.mocked(loadApiProviders).mockResolvedValueOnce([
+        createMockProvider({ id: 'echo', label: 'openrouter:free' }),
+      ]);
+
+      const error = await resolveWithTestProviders(
+        [
+          { id: 'https://api.example.com/v1/chat?api_key=SUPERSECRET123' },
+          { id: 'echo', label: 'openrouter:free' },
+        ],
+        ['gemni'],
+        { filterProviders: 'openrouter' },
+      ).catch((err: unknown) => err);
+
+      expect(error).toBeInstanceOf(Error);
+      expect((error as Error).message).toContain('https://api.example.com/v1/chat?');
+      expect((error as Error).message).not.toContain('SUPERSECRET123');
+    });
+
+    it('filters and accepts ApiProvider instances by their id', async () => {
+      const alpha = createMockProvider({ id: 'custom:alpha' });
+      const beta = createMockProvider({ id: 'custom:beta' });
+      vi.mocked(loadApiProviders).mockResolvedValueOnce([alpha]);
+
+      const { testSuite } = await resolveWithTestProviders(
+        [alpha, beta] as unknown as UnifiedConfig['providers'],
+        ['custom:beta', 'custom:alpha'],
+        { filterProviders: 'custom:alpha' },
+      );
+
+      expect(loadApiProviders).toHaveBeenCalledWith([alpha], expect.any(Object));
+      expect(testSuite.providers.map((provider) => provider.id())).toEqual(['custom:alpha']);
+    });
+
+    it.each([
+      { filter: 'no filter', cmdObj: {} },
+      { filter: 'a filter that keeps the provider', cmdObj: { filterProviders: 'custom' } },
+    ])(
+      'rejects a configured id that differs from the loaded provider id with $filter',
+      async ({ cmdObj }) => {
+        // e.g. a file:// provider whose id() returns something else. The evaluator only matches loaded
+        // providers, so accepting this reference would silently skip the test.
+        vi.mocked(loadApiProviders).mockResolvedValueOnce([
+          createMockProvider({ id: 'my-custom' }),
+        ]);
+
+        await expect(
+          resolveWithTestProviders(['file://custom.js'], ['file://custom.js'], cmdObj),
+        ).rejects.toThrow('references provider "file://custom.js" which does not exist');
+      },
+    );
+  });
 });
 
 describe('ConfigResolutionError', () => {
