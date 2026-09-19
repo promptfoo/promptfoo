@@ -16,6 +16,7 @@ import { CrossSessionLeakGrader } from './plugins/crossSessionLeak';
 import { DataExfilGrader } from './plugins/dataExfil';
 import { DebugAccessGrader } from './plugins/debugAccess';
 import { DivergentRepetitionGrader } from './plugins/divergentRepetition';
+import { DomainHallucinationGrader } from './plugins/domainHallucination';
 import { EcommerceComplianceBypassGrader } from './plugins/ecommerce/ecommerceComplianceBypass';
 import { EcommerceOrderFraudGrader } from './plugins/ecommerce/ecommerceOrderFraud';
 import { EcommercePciDssGrader } from './plugins/ecommerce/ecommercePciDss';
@@ -151,6 +152,7 @@ export const GRADERS: Record<RedteamAssertionTypes, RedteamGraderBase> = {
   'promptfoo:redteam:data-exfil': new DataExfilGrader(),
   'promptfoo:redteam:debug-access': new DebugAccessGrader(),
   'promptfoo:redteam:divergent-repetition': new DivergentRepetitionGrader(),
+  'promptfoo:redteam:domain-hallucination': new DomainHallucinationGrader(),
   'promptfoo:redteam:ecommerce:compliance-bypass': new EcommerceComplianceBypassGrader(),
   'promptfoo:redteam:ecommerce:order-fraud': new EcommerceOrderFraudGrader(),
   'promptfoo:redteam:ecommerce:pci-dss': new EcommercePciDssGrader(),
