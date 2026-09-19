@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import cliState from '../../src/cliState';
+import logger from '../../src/logger';
 import { getGradingProvider } from '../../src/matchers/providers';
 import { loadApiProvider } from '../../src/providers/index';
 import { createMockProvider } from '../factories/provider';
@@ -9,6 +10,7 @@ vi.mock('../../src/providers', () => ({
 }));
 
 vi.mock('../../src/cliState');
+vi.mock('../../src/logger');
 
 describe('getGradingProvider', () => {
   const mockProvider = createMockProvider();
@@ -145,6 +147,45 @@ describe('getGradingProvider', () => {
         basePath: undefined,
       });
       expect(result).toBe(azureProvider);
+    });
+
+    it('should warn when defaultTest.provider implicitly selects the same grading provider', async () => {
+      const targetProvider = createMockProvider({ id: 'openai:gpt-4.1' });
+
+      (cliState as any).config = {
+        defaultTest: {
+          provider: 'openai:gpt-4.1',
+        },
+      };
+
+      vi.mocked(loadApiProvider).mockResolvedValue(targetProvider);
+
+      const result = await getGradingProvider('text', undefined, null);
+
+      expect(result).toBe(targetProvider);
+      expect(logger.warn).toHaveBeenCalledWith(
+        '[Grading] defaultTest.provider is being used as the grader because no explicit grader is configured',
+        {
+          providerId: 'openai:gpt-4.1',
+        },
+      );
+    });
+
+    it('should not warn when an explicit provider selects the grader', async () => {
+      const graderProvider = createMockProvider({ id: 'openai:gpt-5.6' });
+
+      (cliState as any).config = {
+        defaultTest: {
+          provider: 'openai:gpt-4.1',
+        },
+      };
+
+      vi.mocked(loadApiProvider).mockResolvedValue(graderProvider);
+
+      const result = await getGradingProvider('text', 'openai:gpt-5.6', null);
+
+      expect(result).toBe(graderProvider);
+      expect(logger.warn).not.toHaveBeenCalled();
     });
 
     it('should skip defaultTest.provider when it is promptfoo:simulated-user', async () => {
