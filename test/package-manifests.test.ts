@@ -724,7 +724,7 @@ describe('package manifests', () => {
     expect(developmentRange).toBeDefined();
     expect(optionalRange).toBe(developmentRange);
     expect(packageJson.dependencies?.[dependencyName]).toBeUndefined();
-    expect(minVersion(developmentRange!)?.compare('5.11.0')).toBeGreaterThanOrEqual(0);
+    expect(minVersion(developmentRange!)?.compare('5.11.1')).toBeGreaterThanOrEqual(0);
     expect(packageLock.packages[''].devDependencies?.[dependencyName]).toBe(developmentRange);
     expect(packageLock.packages[''].optionalDependencies?.[dependencyName]).toBe(optionalRange);
     expect(clientVersion).toBeDefined();
