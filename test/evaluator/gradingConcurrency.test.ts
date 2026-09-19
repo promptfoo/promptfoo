@@ -141,6 +141,39 @@ describeEvaluator('evaluator grading concurrency', () => {
     expect(callOrder).toEqual(['judge-one', 'judge-one', 'judge-two', 'judge-two']);
   });
 
+  it('processes model-graded errors row-by-row when maxErrors is enabled', async () => {
+    const provider: ApiProvider = {
+      id: vi.fn().mockReturnValue('target-provider'),
+      callApi: vi.fn(async (prompt: string) => ({
+        output: `Target output for ${prompt}`,
+        tokenUsage: createEmptyTokenUsage(),
+      })),
+    };
+    const judge: ApiProvider = {
+      id: vi.fn().mockReturnValue('judge'),
+      callApi: vi.fn().mockRejectedValue(new Error('grader unavailable')),
+    };
+    const testSuite: TestSuite = {
+      providers: [provider],
+      prompts: [toPrompt('Test prompt {{topic}}')],
+      tests: ['alpha', 'beta', 'gamma'].map((topic) => ({
+        vars: { topic },
+        assert: [{ type: 'llm-rubric', value: `Judge ${topic}`, provider: judge }],
+      })),
+    };
+
+    const evalRecord = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
+    await evaluate(testSuite, evalRecord, { maxConcurrency: 1, maxErrors: 1 });
+    const summary = await evalRecord.toEvaluateSummary();
+
+    expect(provider.callApi).toHaveBeenCalledTimes(1);
+    expect(judge.callApi).toHaveBeenCalledTimes(1);
+    expect(summary.stats.errors).toBe(1);
+    expect(summary.results).toHaveLength(1);
+    expect(summary.results[0].failureReason).toBe(ResultFailureReason.ERROR);
+    expect(summary.results[0].error).toContain('grader unavailable');
+  });
+
   it('keeps model-graded assertions row-first when prompts use _conversation', async () => {
     const callOrder: string[] = [];
     const provider: ApiProvider = {
