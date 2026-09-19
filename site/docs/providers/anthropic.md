@@ -1,4 +1,5 @@
 ---
+title: Anthropic
 sidebar_position: 2
 description: "Deploy Anthropic's Claude models including Opus, Sonnet, and Haiku for advanced reasoning and conversational AI applications"
 ---
@@ -522,7 +523,7 @@ Common use cases for caching:
 
 Cache read and creation token counts are tracked in the response's token usage details.
 
-See [Anthropic's Prompt Caching Guide](https://docs.anthropic.com/claude/docs/prompt-caching) for more details on requirements, pricing, and best practices.
+See [Anthropic's Prompt Caching Guide](https://docs.claude.com/en/docs/build-with-claude/prompt-caching) for more details on requirements, pricing, and best practices.
 
 ### Citations
 
@@ -766,7 +767,7 @@ When thinking is enabled or adaptive:
 - Previous turn thinking blocks are ignored and not counted as input tokens
 - `temperature` and `top_k` are incompatible with thinking and will be omitted with a warning
 - `top_p` is clamped to the range [0.95, 1.0] when thinking is enabled
-- Forced tool use (`tool_choice` type `any` or `tool`) is incompatible with thinking and will be omitted with a warning; use `auto` instead
+- Forced tool use (`tool_choice` type `any` or `tool`) is incompatible with `thinking: { type: 'enabled' }` (a manual budget) and with Claude Fable 5.1 and Mythos 5.1; in those cases it is omitted with a warning, so use `auto` instead. Adaptive thinking on other models accepts a forced `tool_choice`.
 
 Example response with thinking enabled:
 
@@ -832,6 +833,7 @@ providers:
   - id: anthropic:messages:claude-sonnet-4-5-20250929
     config:
       max_tokens: 64000 # Claude 4 Sonnet supports up to 64K output tokens
+      stream: true # required when max_tokens is greater than 21,333
       thinking:
         type: 'enabled'
         budget_tokens: 32000

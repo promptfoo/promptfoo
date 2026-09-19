@@ -148,7 +148,7 @@ Grok 4.5 is xAI's flagship model for coding, agentic tasks, and knowledge work:
 
 - **500K context window** with text and image input
 - **Configurable reasoning**: `reasoning_effort` accepts `low`, `medium`, or `high` (defaults to `high`); `none` is rejected
-- **Long-context pricing**: requests with at least 200K input tokens use the higher catalog rate ($4/M input, $1/M cached input, and $12/M output instead of $2/M, $0.50/M, and $6/M); Promptfoo uses the exact billed ticks when xAI returns them
+- **Long-context pricing**: requests with at least 200K input tokens use the higher catalog rate ($4/M input, $0.60/M cached input, and $12/M output instead of $2/M, $0.30/M, and $6/M); Promptfoo uses the exact billed ticks when xAI returns them
 - **Unsupported parameters**: `presence_penalty`, `frequency_penalty`, and `stop` are rejected, and Promptfoo strips them automatically
 - **Ignored parameters**: xAI silently ignores `logprobs` and `top_logprobs` on Grok 4.20 and newer models
 - **Server-side tools**: use `xai:responses:grok-4.5` for web search, X search, code execution, and MCP

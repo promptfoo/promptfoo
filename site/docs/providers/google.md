@@ -268,7 +268,7 @@ providers:
 
 # After (Vertex AI)
 providers:
-  - vertex:gemini-2.5-pro
+  - id: vertex:gemini-2.5-pro
     config:
       projectId: my-project-id
       region: us-central1
@@ -413,13 +413,13 @@ Configuration options:
 
 ```yaml
 providers:
-  - google:image:imagen-3.0-generate-002
+  - id: google:image:imagen-3.0-generate-002
     config:
-      projectId: 'your-project-id'  # Or set GOOGLE_PROJECT_ID
-      region: 'us-central1'          # Optional, defaults to us-central1
+      projectId: 'your-project-id' # Or set GOOGLE_PROJECT_ID
+      region: 'us-central1' # Optional, defaults to us-central1
       aspectRatio: '16:9'
       seed: 42
-      addWatermark: false            # Must be false when using seed
+      addWatermark: false # Must be false when using seed
 ```
 
 See the [Google Imagen example](https://github.com/promptfoo/promptfoo/tree/main/examples/google-imagen).
