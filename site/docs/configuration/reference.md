@@ -794,6 +794,9 @@ interface ProviderOptions {
   // Sleep this long before each request
   delay?: number;
 
+  // Static metadata stored with eval results for this provider
+  metadata?: Record<string, any>;
+
   // Provider-specific environment overrides
   env?: EnvOverrides;
 
@@ -1253,7 +1256,7 @@ interface EvaluateResult {
   testIdx: number;
   testCase: AtomicTestCase;
   promptId: string;
-  provider: Pick<ProviderOptions, 'id' | 'label'>;
+  provider: Pick<ProviderOptions, 'id' | 'label' | 'metadata'>;
   prompt: Prompt;
   vars: Record<string, VarValue>;
   response?: ProviderResponse;

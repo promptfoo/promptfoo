@@ -32,7 +32,7 @@ import type {
 } from '../types/providers';
 
 type ProviderFunctionWithMetadata = ProviderFunction &
-  Pick<ApiProvider, 'label' | 'transform' | 'delay' | 'inputs' | 'config'>;
+  Pick<ApiProvider, 'label' | 'transform' | 'delay' | 'inputs' | 'config' | 'metadata'>;
 
 const FORWARDED_PROVIDER_METADATA_KEYS = [
   'label',
@@ -40,6 +40,7 @@ const FORWARDED_PROVIDER_METADATA_KEYS = [
   'delay',
   'inputs',
   'config',
+  'metadata',
 ] as const satisfies ReadonlyArray<keyof ProviderFunctionWithMetadata>;
 
 function createProviderFromFunction(
@@ -147,6 +148,7 @@ export async function loadApiProvider(
       delay: options.delay ?? cloudProvider.delay,
       prompts: options.prompts ?? cloudProvider.prompts,
       inputs: options.inputs ?? cloudProvider.inputs,
+      metadata: options.metadata ?? cloudProvider.metadata,
       // Merge all three env sources: context (base) -> cloud -> local (highest priority)
       env: mergeProviderEnv(resolvedCloudPath, env, cloudProvider.env, options.env),
     };
@@ -215,6 +217,7 @@ export async function loadApiProvider(
       ret.delay = options.delay;
       ret.inputs = options.inputs;
       ret.label ||= renderEnvOnlyInObject(options.label || '', mergedEnv);
+      ret.metadata = options.metadata;
       return ret;
     }
   }

@@ -20,6 +20,7 @@ export const ProviderOptionsSchema = z.object({
   delay: z.number().optional(),
   env: ProviderEnvOverridesSchema.optional(),
   inputs: InputsSchema.optional(),
+  metadata: z.record(z.string(), z.any()).optional(),
 });
 
 const CallApiFunctionSchema = z.custom<CallApiFunction & { label?: string }>(
@@ -42,6 +43,7 @@ export const ApiProviderSchema = z.object({
   delay: z.number().optional(),
   config: z.any().optional(),
   inputs: InputsSchema.optional(),
+  metadata: z.record(z.string(), z.any()).optional(),
 });
 
 export const ProvidersSchema = z.union([

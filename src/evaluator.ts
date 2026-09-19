@@ -821,6 +821,7 @@ function createRunEvalSetup({
       id: provider.id(),
       label: provider.label,
       config: provider.config,
+      metadata: provider.metadata,
     },
     prompt: {
       raw: '',
@@ -3176,6 +3177,7 @@ function createEvalStepTimeoutResult(
       id: evalStep.provider.id(),
       label: evalStep.provider.label,
       config: evalStep.provider.config,
+      metadata: evalStep.provider.metadata,
     } as EvaluateResult['provider'],
     prompt: {
       raw: evalStep.prompt.raw,
@@ -3271,6 +3273,7 @@ function createMaxDurationTimeoutResult(
       id: evalStep.provider.id(),
       label: evalStep.provider.label,
       config: evalStep.provider.config,
+      metadata: evalStep.provider.metadata,
     } as EvaluateResult['provider'],
     prompt: {
       raw: evalStep.prompt.raw,
