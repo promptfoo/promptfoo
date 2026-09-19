@@ -284,6 +284,9 @@ export function DataTable<TData, TValue = unknown>({
   manualFiltering = false,
   columnFilters: externalColumnFilters,
   onColumnFiltersChange: externalOnColumnFiltersChange,
+  manualGlobalFiltering = false,
+  globalFilter: externalGlobalFilter,
+  onGlobalFilterChange: externalOnGlobalFilterChange,
 }: DataTableProps<TData, TValue>) {
   const [internalSorting, setInternalSorting] = React.useState<SortingState>(initialSorting);
   const sorting = controlledSorting ?? internalSorting;
@@ -294,7 +297,9 @@ export function DataTable<TData, TValue = unknown>({
     serverVirtualization != null,
   );
   const showColumnFilterControls = showFilter && (!isServerVirtualized || manualFiltering);
-  const showGlobalFilterControl = !isServerVirtualized;
+  // Server-virtualized tables can only search the page they happen to hold, so the box is
+  // hidden unless the owner opts into manual global filtering and searches server-side.
+  const showGlobalFilterControl = !isServerVirtualized || manualGlobalFiltering;
 
   React.useEffect(() => {
     if (isInvalidServerVirtualizationConfig) {
@@ -334,7 +339,27 @@ export function DataTable<TData, TValue = unknown>({
   const [columnVisibility, setColumnVisibility] =
     React.useState<VisibilityState>(initialColumnVisibility);
   const [columnSizing, setColumnSizing] = React.useState<ColumnSizingState>({});
-  const [globalFilter, setGlobalFilter] = React.useState('');
+  const [internalGlobalFilter, setInternalGlobalFilter] = React.useState('');
+  const globalFilter =
+    manualGlobalFiltering && externalGlobalFilter !== undefined
+      ? externalGlobalFilter
+      : internalGlobalFilter;
+  const globalFilterRef = React.useRef(globalFilter);
+  globalFilterRef.current = globalFilter;
+  const setGlobalFilter = React.useCallback(
+    (updater: string | ((prev: string) => string)) => {
+      const nextValue = typeof updater === 'function' ? updater(globalFilterRef.current) : updater;
+      if (manualGlobalFiltering && externalOnGlobalFilterChange) {
+        externalOnGlobalFilterChange(nextValue);
+      } else {
+        setInternalGlobalFilter(nextValue);
+      }
+    },
+    [manualGlobalFiltering, externalOnGlobalFilterChange],
+  );
+  // The owner applies the term itself when filtering is manual, so keep the client row
+  // model unfiltered while still showing the typed term in the search box.
+  const tableGlobalFilter = manualGlobalFiltering ? '' : globalFilter;
   const [internalRowSelection, setInternalRowSelection] = React.useState<RowSelectionState>({});
   const [internalExpanded, setInternalExpanded] = React.useState<ExpandedState>({});
   const scrollContainerRef = React.useRef<HTMLDivElement>(null);
@@ -469,7 +494,7 @@ export function DataTable<TData, TValue = unknown>({
       columnFilters,
       columnVisibility,
       columnSizing,
-      globalFilter,
+      globalFilter: tableGlobalFilter,
       rowSelection,
       expanded,
     },
@@ -663,7 +688,7 @@ export function DataTable<TData, TValue = unknown>({
       columnFilters,
       columnVisibility,
       columnSizing,
-      globalFilter,
+      globalFilter: tableGlobalFilter,
       rowSelection,
       expanded,
     },
@@ -714,6 +739,7 @@ export function DataTable<TData, TValue = unknown>({
             setGlobalFilter={setGlobalFilter}
             showColumnToggle={false}
             showFilter={false}
+            showGlobalFilter={showGlobalFilterControl}
             showExport={false}
             globalFilterLabel={globalFilterLabel}
             toolbarActions={toolbarActions}
@@ -740,6 +766,7 @@ export function DataTable<TData, TValue = unknown>({
             setGlobalFilter={setGlobalFilter}
             showColumnToggle={false}
             showFilter={false}
+            showGlobalFilter={showGlobalFilterControl}
             showExport={false}
             globalFilterLabel={globalFilterLabel}
             toolbarActions={toolbarActions}
@@ -770,6 +797,7 @@ export function DataTable<TData, TValue = unknown>({
             setGlobalFilter={setGlobalFilter}
             showColumnToggle={false}
             showFilter={false}
+            showGlobalFilter={showGlobalFilterControl}
             showExport={false}
             globalFilterLabel={globalFilterLabel}
             toolbarActions={toolbarActions}

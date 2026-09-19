@@ -784,6 +784,88 @@ describe('DataTable', () => {
     });
   });
 
+  describe('manual global filtering', () => {
+    const serverVirtualizationProps = {
+      rowCount: 100,
+      pageSize: 25,
+      getRow: () => undefined,
+      loadRows: vi.fn(),
+    };
+
+    it('should hide the search box for server-virtualized tables by default', () => {
+      render(
+        <DataTable
+          columns={columns}
+          data={[]}
+          rowDisplayMode="server-virtualized"
+          serverVirtualization={serverVirtualizationProps}
+        />,
+      );
+
+      expect(screen.queryByRole('searchbox')).not.toBeInTheDocument();
+    });
+
+    it('should keep the search box for server-virtualized tables when manualGlobalFiltering is enabled', async () => {
+      const user = userEvent.setup();
+      const onGlobalFilterChange = vi.fn();
+
+      render(
+        <DataTable
+          columns={columns}
+          data={[]}
+          rowDisplayMode="server-virtualized"
+          serverVirtualization={serverVirtualizationProps}
+          globalFilterLabel="Search apples"
+          manualGlobalFiltering
+          globalFilter=""
+          onGlobalFilterChange={onGlobalFilterChange}
+        />,
+      );
+
+      const searchBox = screen.getByRole('searchbox', { name: 'Search apples' });
+      await user.type(searchBox, 'a');
+
+      expect(onGlobalFilterChange).toHaveBeenCalledWith('a');
+    });
+
+    it('should reflect the externally controlled search term', () => {
+      render(
+        <DataTable
+          columns={columns}
+          data={[]}
+          rowDisplayMode="server-virtualized"
+          serverVirtualization={serverVirtualizationProps}
+          manualGlobalFiltering
+          globalFilter="external term"
+          onGlobalFilterChange={vi.fn()}
+        />,
+      );
+
+      expect(screen.getByRole('searchbox')).toHaveValue('external term');
+    });
+
+    it('should not filter rows client-side when manualGlobalFiltering is enabled', () => {
+      const data: TestRow[] = [
+        { id: '1', name: 'Apple' },
+        { id: '2', name: 'Banana' },
+      ];
+
+      render(
+        <DataTable
+          columns={columns}
+          data={data}
+          manualGlobalFiltering
+          globalFilter="Apple"
+          onGlobalFilterChange={vi.fn()}
+        />,
+      );
+
+      // The owner is responsible for applying the term, so both rows stay visible.
+      expect(screen.getByText('Apple')).toBeInTheDocument();
+      expect(screen.getByText('Banana')).toBeInTheDocument();
+    });
+  });
+
   describe('column header filters', () => {
     it('should filter rows using the text input in a header popover', async () => {
       const user = userEvent.setup();

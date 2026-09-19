@@ -1723,22 +1723,25 @@ export default class Eval {
   }
 }
 
+interface EvalSummaryPaginationOptions {
+  limit: number;
+  offset: number;
+}
+
 /**
- * Queries summaries of all evals, optionally for a given dataset.
- *
- * @param datasetId - An optional dataset ID to filter by.
- * @param type - An optional eval type to filter by.
- * @param includeProviders - An optional flag to include providers in the summary.
- * @returns A list of eval summaries.
+ * Escapes the LIKE wildcards (`%`, `_`) and the escape character itself so that a user's
+ * search text is matched literally.
  */
-export async function getEvalSummaries(
+function escapeLikePattern(value: string) {
+  return value.replace(/[\\%_]/g, '\\$&');
+}
+
+function buildEvalSummariesWhereClauses(
   datasetId?: string,
   type?: 'redteam' | 'eval',
-  includeProviders: boolean = false,
-): Promise<EvalSummary[]> {
-  const db = await getDb();
-
-  const whereClauses = [];
+  search?: string,
+) {
+  const whereClauses: SQL<unknown>[] = [];
 
   if (datasetId) {
     whereClauses.push(eq(evalsToDatasetsTable.datasetId, datasetId));
@@ -1752,7 +1755,40 @@ export async function getEvalSummaries(
     }
   }
 
-  const results = await db
+  const trimmedSearch = search?.trim();
+  if (trimmedSearch) {
+    // Mirrors what the UI's global search sees: the eval id and the description (which is
+    // also what the derived `label` column renders when a description is present).
+    const pattern = `%${escapeLikePattern(trimmedSearch)}%`;
+    whereClauses.push(
+      sql`(${evalsTable.id} LIKE ${pattern} ESCAPE '\\' OR coalesce(${evalsTable.description}, '') LIKE ${pattern} ESCAPE '\\')`,
+    );
+  }
+
+  return whereClauses;
+}
+
+/**
+ * Queries summaries of all evals, optionally for a given dataset.
+ *
+ * @param datasetId - An optional dataset ID to filter by.
+ * @param type - An optional eval type to filter by.
+ * @param includeProviders - An optional flag to include providers in the summary.
+ * @param pagination - Optional limit/offset pagination controls.
+ * @param search - Optional free-text filter applied to the eval id and description.
+ * @returns A list of eval summaries.
+ */
+export async function getEvalSummaries(
+  datasetId?: string,
+  type?: 'redteam' | 'eval',
+  includeProviders: boolean = false,
+  pagination?: EvalSummaryPaginationOptions,
+  search?: string,
+): Promise<EvalSummary[]> {
+  const db = await getDb();
+  const whereClauses = buildEvalSummariesWhereClauses(datasetId, type, search);
+
+  const query = db
     .select({
       evalId: evalsTable.id,
       createdAt: evalsTable.createdAt,
@@ -1767,8 +1803,11 @@ export async function getEvalSummaries(
     .from(evalsTable)
     .leftJoin(evalsToDatasetsTable, eq(evalsTable.id, evalsToDatasetsTable.evalId))
     .where(and(...whereClauses))
-    .orderBy(desc(evalsTable.createdAt), desc(evalsTable.id))
-    .all();
+    .orderBy(desc(evalsTable.createdAt), desc(evalsTable.id));
+
+  const results = await (pagination
+    ? query.limit(pagination.limit).offset(pagination.offset).all()
+    : query.all());
 
   /**
    * Deserialize the evals. A few things to note:
@@ -1860,4 +1899,27 @@ export async function getEvalSummaries(
         type === 'redteam' ? calculateAttackSuccessRate(testRunCount, failCount) : undefined,
     };
   });
+}
+
+/**
+ * Counts eval summaries for the given filters. Useful for server-side pagination metadata.
+ */
+export async function getEvalSummariesCount(
+  datasetId?: string,
+  type?: 'redteam' | 'eval',
+  search?: string,
+): Promise<number> {
+  const db = await getDb();
+  const whereClauses = buildEvalSummariesWhereClauses(datasetId, type, search);
+
+  const result = await db
+    .select({
+      count: sql<number>`count(distinct ${evalsTable.id})`,
+    })
+    .from(evalsTable)
+    .leftJoin(evalsToDatasetsTable, eq(evalsTable.id, evalsToDatasetsTable.evalId))
+    .where(and(...whereClauses))
+    .get();
+
+  return Number(result?.count ?? 0);
 }

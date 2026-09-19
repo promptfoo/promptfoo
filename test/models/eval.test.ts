@@ -11,6 +11,7 @@ import Eval, {
   EvalQueries,
   escapeJsonPathKey,
   getEvalSummaries,
+  getEvalSummariesCount,
 } from '../../src/models/eval';
 import { getCachedResultsCount } from '../../src/models/evalPerformance';
 import EvalResult from '../../src/models/evalResult';
@@ -435,6 +436,147 @@ describe('evaluator', () => {
       expect(evaluations[0].evalId).toBe(eval3.id);
       expect(evaluations[1].evalId).toBe(eval2.id);
       expect(evaluations[2].evalId).toBe(eval1.id);
+    });
+
+    it('should use evalId as a deterministic tie-breaker when createdAt values match', async () => {
+      const createdAt = new Date('2026-01-01T00:00:00.000Z');
+      const config = {
+        providers: [{ id: 'test-provider' }],
+        prompts: ['Test prompt'],
+        tests: [],
+      };
+      const renderedPrompts = [{ raw: 'Test prompt', label: 'Test prompt' }] as Prompt[];
+
+      await Eval.create(config, renderedPrompts, { id: 'eval-a', createdAt });
+      await Eval.create(config, renderedPrompts, { id: 'eval-b', createdAt });
+      await Eval.create(config, renderedPrompts, { id: 'eval-c', createdAt });
+
+      const evaluations = await getEvalSummaries();
+      const paginatedEvaluations = await getEvalSummaries(undefined, undefined, false, {
+        limit: 2,
+        offset: 1,
+      });
+
+      expect(evaluations.map((evaluation) => evaluation.evalId)).toEqual([
+        'eval-c',
+        'eval-b',
+        'eval-a',
+      ]);
+      expect(paginatedEvaluations.map((evaluation) => evaluation.evalId)).toEqual([
+        'eval-b',
+        'eval-a',
+      ]);
+    });
+
+    it('should paginate evaluations using limit and offset', async () => {
+      await EvalFactory.create();
+      await EvalFactory.create();
+      await EvalFactory.create();
+      await EvalFactory.create();
+
+      const allEvaluations = await getEvalSummaries();
+      const paginatedEvaluations = await getEvalSummaries(undefined, undefined, false, {
+        limit: 2,
+        offset: 1,
+      });
+
+      expect(paginatedEvaluations).toHaveLength(2);
+      expect(paginatedEvaluations.map((evaluation) => evaluation.evalId)).toEqual(
+        allEvaluations.slice(1, 3).map((evaluation) => evaluation.evalId),
+      );
+    });
+
+    it('should count evaluation summaries for pagination metadata', async () => {
+      await EvalFactory.create();
+      await EvalFactory.create();
+      await EvalFactory.create();
+
+      expect(await getEvalSummariesCount()).toBe(3);
+      expect(await getEvalSummariesCount('missing-dataset')).toBe(0);
+    });
+
+    describe('search', () => {
+      const config = {
+        providers: [{ id: 'test-provider' }],
+        prompts: ['Test prompt'],
+        tests: [],
+      };
+      const renderedPrompts = [{ raw: 'Test prompt', label: 'Test prompt' }] as Prompt[];
+
+      const createEval = (id: string, description?: string) =>
+        Eval.create(
+          { ...config, ...(description === undefined ? {} : { description }) },
+          renderedPrompts,
+          {
+            id,
+            createdAt: new Date('2026-01-01T00:00:00.000Z'),
+          },
+        );
+
+      it('should filter summaries by description and by eval id', async () => {
+        await createEval('eval-alpha');
+        await createEval('eval-beta', 'Persistent Python worker smoke test');
+
+        const byDescription = await getEvalSummaries(
+          undefined,
+          undefined,
+          false,
+          undefined,
+          'python worker',
+        );
+        expect(byDescription.map(({ evalId }) => evalId)).toEqual(['eval-beta']);
+
+        const byId = await getEvalSummaries(undefined, undefined, false, undefined, 'alpha');
+        expect(byId.map(({ evalId }) => evalId)).toEqual(['eval-alpha']);
+      });
+
+      it('should not drop rows with a null description when searching by id', async () => {
+        await createEval('eval-no-description');
+        await createEval('eval-described', 'Some description');
+
+        const summaries = await getEvalSummaries(
+          undefined,
+          undefined,
+          false,
+          undefined,
+          'no-description',
+        );
+        expect(summaries.map(({ evalId }) => evalId)).toEqual(['eval-no-description']);
+      });
+
+      it('should treat LIKE wildcards in the search term literally', async () => {
+        await createEval('eval-literal', '100% coverage');
+        await createEval('eval-other', 'partial coverage');
+
+        const summaries = await getEvalSummaries(undefined, undefined, false, undefined, '100%');
+        expect(summaries.map(({ evalId }) => evalId)).toEqual(['eval-literal']);
+
+        // A bare wildcard must not match everything.
+        expect(await getEvalSummariesCount(undefined, undefined, '%coverage')).toBe(0);
+      });
+
+      it('should count only matching summaries and paginate within them', async () => {
+        await createEval('eval-a', 'shared prefix one');
+        await createEval('eval-b', 'shared prefix two');
+        await createEval('eval-c', 'unrelated');
+
+        expect(await getEvalSummariesCount(undefined, undefined, 'shared prefix')).toBe(2);
+        const firstPage = await getEvalSummaries(
+          undefined,
+          undefined,
+          false,
+          { limit: 1, offset: 0 },
+          'shared prefix',
+        );
+        expect(firstPage).toHaveLength(1);
+      });
+
+      it('should ignore a whitespace-only search term', async () => {
+        await createEval('eval-a');
+        await createEval('eval-b');
+
+        expect(await getEvalSummariesCount(undefined, undefined, '   ')).toBe(2);
+      });
     });
 
     it('should sort timestamp ties consistently in full and filtered summaries', async () => {

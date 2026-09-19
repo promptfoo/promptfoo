@@ -109,6 +109,75 @@ describe('eval routes', () => {
     return payload;
   }
 
+  describe('get("/results")', () => {
+    it('should support paginated eval summaries', async () => {
+      const eval1 = await EvalFactory.create();
+      const eval2 = await EvalFactory.create();
+      const eval3 = await EvalFactory.create();
+      testEvalIds.add(eval1.id);
+      testEvalIds.add(eval2.id);
+      testEvalIds.add(eval3.id);
+
+      const allResults = await api.get('/api/results');
+      const paginatedResults = await api.get('/api/results?limit=2&offset=1');
+
+      expect(allResults.status).toBe(200);
+      expect(paginatedResults.status).toBe(200);
+      expect(paginatedResults.body).toMatchObject({
+        pagination: {
+          totalCount: 3,
+          limit: 2,
+          offset: 1,
+        },
+      });
+      expect(paginatedResults.body.data).toHaveLength(2);
+      expect(paginatedResults.body.data.map((result: { evalId: string }) => result.evalId)).toEqual(
+        allResults.body.data.slice(1, 3).map((result: { evalId: string }) => result.evalId),
+      );
+    });
+
+    it('should validate pagination query parameters', async () => {
+      const res = await api.get('/api/results?offset=10');
+
+      expect(res.status).toBe(400);
+      expect(res.body.error).toContain('offset requires limit');
+    });
+
+    it('should apply the search term across the whole table, not just the page', async () => {
+      const match = await Eval.create({ description: 'Persistent Python worker smoke test' }, [
+        { raw: 'Test prompt', label: 'Test prompt' },
+      ]);
+      const other = await Eval.create({ description: 'Unrelated run' }, [
+        { raw: 'Test prompt', label: 'Test prompt' },
+      ]);
+      testEvalIds.add(match.id);
+      testEvalIds.add(other.id);
+
+      const res = await api.get('/api/results?limit=1&offset=0&search=python%20worker');
+
+      expect(res.status).toBe(200);
+      expect(res.body.pagination).toMatchObject({ totalCount: 1, limit: 1, offset: 0 });
+      expect(res.body.data.map((result: { evalId: string }) => result.evalId)).toEqual([match.id]);
+    });
+
+    it('should apply the search term to unpaginated requests too', async () => {
+      const match = await Eval.create({ description: 'Searchable unpaginated run' }, [
+        { raw: 'Test prompt', label: 'Test prompt' },
+      ]);
+      const other = await Eval.create({ description: 'Another run' }, [
+        { raw: 'Test prompt', label: 'Test prompt' },
+      ]);
+      testEvalIds.add(match.id);
+      testEvalIds.add(other.id);
+
+      const res = await api.get('/api/results?search=Searchable%20unpaginated');
+
+      expect(res.status).toBe(200);
+      expect(res.body.pagination).toBeUndefined();
+      expect(res.body.data.map((result: { evalId: string }) => result.evalId)).toEqual([match.id]);
+    });
+  });
+
   describe('POST /', () => {
     it('returns 500 when v4 prompt persistence fails', async () => {
       const createSpy = vi.spyOn(Eval, 'create');
