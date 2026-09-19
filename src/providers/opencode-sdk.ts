@@ -1405,6 +1405,12 @@ export class OpenCodeSDKProvider implements ApiProvider {
 
     const sessionCacheKey = this.buildSessionKey(config, workingDir);
     if (config.persist_sessions && this.sessions.has(sessionCacheKey)) {
+      const existingIndex = this.sessionOrder.indexOf(sessionCacheKey);
+      if (existingIndex !== -1) {
+        this.sessionOrder.splice(existingIndex, 1);
+      }
+      this.sessionOrder.push(sessionCacheKey);
+
       return {
         sessionId: this.sessions.get(sessionCacheKey)!.id,
         sessionQuery,
@@ -1922,6 +1928,19 @@ export class OpenCodeSDKProvider implements ApiProvider {
           }
 
           const response = await client.session.prompt(promptOptions);
+          if (
+            response &&
+            typeof response === 'object' &&
+            'error' in response &&
+            (response as { error?: unknown }).error
+          ) {
+            const sdkError = (response as { error?: unknown }).error;
+            throw new Error(
+              `OpenCode SDK prompt error: ${
+                typeof sdkError === 'string' ? sdkError : JSON.stringify(sdkError)
+              }`,
+            );
+          }
           logger.debug(`OpenCode SDK response received`);
 
           // The prompt has returned, so an abort from here on must not ask the
@@ -1983,9 +2002,13 @@ export class OpenCodeSDKProvider implements ApiProvider {
         }
       }
 
-      // Clean up temp directory
+      // Clean up temp directory without masking the call result on cleanup failure.
       if (isTempDir && workingDir) {
-        await fsPromises.rm(workingDir, { recursive: true, force: true });
+        try {
+          await fsPromises.rm(workingDir, { recursive: true, force: true });
+        } catch (err) {
+          logger.debug(`Failed to remove temp directory ${workingDir}: ${err}`);
+        }
       }
     }
   }
