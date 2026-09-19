@@ -10,6 +10,7 @@ import {
   sanitizeObject,
   sanitizeQueryParams,
   sanitizeRuntimeOptions,
+  sanitizeRuntimeOptionsForOutput,
   sanitizeTracingConfigForPersistence,
   sanitizeUrl,
   sanitizeUrlEncodedString,
@@ -38,6 +39,15 @@ describe('sanitizeRuntimeOptions', () => {
         providerFilter: 'selected-target',
       }),
     ).toEqual({ providerFilter: 'selected-target' });
+  });
+
+  it('removes local config paths from exported runtime options', () => {
+    expect(
+      sanitizeRuntimeOptionsForOutput({
+        cache: false,
+        configBasePath: '/home/alice/acme/private-evals',
+      }),
+    ).toEqual({ cache: false });
   });
 });
 

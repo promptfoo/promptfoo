@@ -31,7 +31,7 @@ import { writeJunitXmlOutput } from './junit';
 import { getOutputFileFormat, SUPPORTED_OUTPUT_FILE_FORMATS } from './outputFormats';
 import {
   sanitizeObject,
-  sanitizeRuntimeOptions,
+  sanitizeRuntimeOptionsForOutput,
   sanitizeTracingConfigForPersistence,
 } from './sanitizer';
 import { getNunjucksEngine } from './templates';
@@ -488,7 +488,7 @@ export async function createOutputData(
     metadata: createOutputMetadata(evalRecord),
     ...(evalRecord.vars?.length > 0 && { vars: [...evalRecord.vars] }),
     ...(evalRecord.runtimeOptions && {
-      runtimeOptions: sanitizeRuntimeOptions(evalRecord.runtimeOptions),
+      runtimeOptions: sanitizeRuntimeOptionsForOutput(evalRecord.runtimeOptions),
     }),
     ...(traces && traces.length > 0 && { traces: projectTracesForOutput(traces) }),
   };
