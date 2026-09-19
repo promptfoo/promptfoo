@@ -1694,6 +1694,25 @@ describe('Provider Registry', () => {
       );
       expect(autoProvider.id()).toBe('orcarouter:orcarouter/auto');
     });
+
+    it('should handle requesty provider correctly', async () => {
+      const factory = providerMap.find((f) => f.test('requesty:openai/gpt-4o-mini'));
+      expect(factory).toBeDefined();
+
+      const requestyOptions = { ...mockProviderOptions, id: undefined };
+      const provider = await factory!.create('requesty:openai/gpt-4o-mini', requestyOptions, {
+        ...mockContext,
+        options: requestyOptions,
+      });
+      expect(provider.id()).toBe('requesty:openai/gpt-4o-mini');
+
+      const anthropicProvider = await factory!.create(
+        'requesty:anthropic/claude-sonnet-4-5',
+        requestyOptions,
+        mockContext,
+      );
+      expect(anthropicProvider.id()).toBe('requesty:anthropic/claude-sonnet-4-5');
+    });
   });
 
   describe('google: prefix routing', () => {
