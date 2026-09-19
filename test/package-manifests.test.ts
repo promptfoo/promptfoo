@@ -990,28 +990,51 @@ describe('package manifests', () => {
     }>('package-lock.json');
     const parserOverride = packageJson.overrides?.[dependencyName];
     const langiumOverride = packageJson.overrides?.langium;
+    const chevrotainOverride = packageJson.overrides?.chevrotain as
+      | Record<string, string>
+      | undefined;
+    const parserVersion = chevrotainOverride?.['.'];
+
+    expect(parserVersion, 'Chevrotain must have a pinned parser version').toBeDefined();
 
     expect(parserOverride).toEqual(
       expect.objectContaining({
         '.': expect.any(String),
-        chevrotain: '11.2.0',
+        chevrotain: parserVersion,
       }),
     );
-    const parserVersion = (parserOverride as Record<string, string>)['.'];
+    const allstarVersion = (parserOverride as Record<string, string>)['.'];
 
-    expect(minVersion(parserVersion)?.compare('0.4.4')).toBeGreaterThanOrEqual(0);
+    expect(minVersion(allstarVersion)?.compare('0.5.0')).toBeGreaterThanOrEqual(0);
     expect(langiumOverride).toEqual(
       expect.objectContaining({
-        [dependencyName]: parserVersion,
-        chevrotain: '11.2.0',
+        [dependencyName]: allstarVersion,
+        '@chevrotain/regexp-to-ast': parserVersion,
+        chevrotain: parserVersion,
       }),
     );
     expect(packageLock.packages[`node_modules/${dependencyName}`]).toEqual(
       expect.objectContaining({
         integrity: expect.stringMatching(/^sha512-/),
-        resolved: `https://registry.npmjs.org/${dependencyName}/-/${dependencyName}-${parserVersion}.tgz`,
-        version: parserVersion,
+        resolved: `https://registry.npmjs.org/${dependencyName}/-/${dependencyName}-${allstarVersion}.tgz`,
+        version: allstarVersion,
       }),
+    );
+    expect(
+      satisfies(
+        parserVersion!,
+        packageLock.packages[`node_modules/${dependencyName}`].peerDependencies?.chevrotain ?? '',
+      ),
+      `${dependencyName} must accept the pinned Chevrotain version`,
+    ).toBe(true);
+
+    const langiumPackage = packageLock.packages['node_modules/langium'];
+    expect(satisfies(parserVersion!, langiumPackage.dependencies?.chevrotain ?? '')).toBe(true);
+    expect(
+      satisfies(parserVersion!, langiumPackage.dependencies?.['@chevrotain/regexp-to-ast'] ?? ''),
+    ).toBe(true);
+    expect(satisfies(allstarVersion, langiumPackage.dependencies?.[dependencyName] ?? '')).toBe(
+      true,
     );
   });
 
