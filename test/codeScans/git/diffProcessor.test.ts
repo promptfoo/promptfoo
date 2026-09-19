@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { processDiff } from '../../../src/codeScan/git/diffProcessor';
 
 const mockExeca = vi.hoisted(() => vi.fn());
@@ -10,6 +10,10 @@ vi.mock('execa', () => ({
 describe('processDiff', () => {
   beforeEach(() => {
     mockExeca.mockReset();
+  });
+
+  afterEach(() => {
+    vi.resetAllMocks();
   });
 
   it('skips newly recognized binary formats from binary-extensions 3.2.0', async () => {
