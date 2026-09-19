@@ -11,13 +11,17 @@ import { loadApiProviders, resolveProvider } from './providers/index';
 import { createShareableUrl, isSharingEnabled } from './share';
 import { isApiProvider } from './types/providers';
 import { isTransformFunction } from './types/transform';
+import { isCloudProvider } from './util/cloud';
 import { maybeLoadFromExternalFile } from './util/file';
 import {
   buildConfiguredProviderMap,
   isProviderTypeMap,
   resolveConfiguredProviderReference,
 } from './util/gradingProvider';
+import { hasProviderConfigTemplates } from './util/gradingProviderConfig';
 import { readFilters, warnOnDegradedJsonlRecovery, writeMultipleOutputs } from './util/index';
+import { isProviderConfigFileReference, normalizeProviderRef } from './util/providerRef';
+import { renderEnvOnlyInObject } from './util/render';
 import { readTests } from './util/testCaseReader';
 import { INLINE_FUNCTION_LABEL, TRANSFORM_KEYS } from './util/transform';
 
@@ -204,7 +208,26 @@ async function resolveGradingProvider(
   provider: GradingConfig['provider'],
   providerMap: Record<string, ApiProvider>,
   context: { env?: EnvOverrides; basePath?: string },
+  deferConfigTemplates = false,
 ): Promise<GradingConfig['provider']> {
+  if (deferConfigTemplates && !isApiProvider(provider) && !isProviderTypeMap(provider)) {
+    const ref = normalizeProviderRef(provider);
+    if ('loadProviderPath' in ref) {
+      const options = 'loadOptions' in ref ? ref.loadOptions : { id: ref.loadProviderPath };
+      const env = context.env || options.env ? { ...context.env, ...options.env } : undefined;
+      const renderedPath = renderEnvOnlyInObject(ref.loadProviderPath, env);
+      if (
+        isProviderConfigFileReference(renderedPath) ||
+        isCloudProvider(renderedPath) ||
+        hasProviderConfigTemplates(options)
+      ) {
+        // Files and inline templates need final case vars. Preserve map loader
+        // paths separately from custom IDs, and carry suite env to construction.
+        const deferredOptions = env ? { ...options, env } : options;
+        return ref.kind === 'map' ? { [ref.loadProviderPath]: deferredOptions } : deferredOptions;
+      }
+    }
+  }
   if (!isProviderTypeMap(provider)) {
     return isApiProvider(provider) ? provider : resolveProvider(provider, providerMap, context);
   }
@@ -236,11 +259,28 @@ async function createRuntimeTestSuite(
   };
 }
 
+function hasAgentRubric(assertions: TestCase['assert']): boolean {
+  return (assertions || []).some((assertion) =>
+    assertion.type === 'assert-set'
+      ? hasAgentRubric(assertion.assert)
+      : assertion.type === 'agent-rubric' || assertion.type === 'not-agent-rubric',
+  );
+}
+
 async function resolveNestedProviders(
   testSuiteConfig: Omit<EvaluateTestSuite, 'author'>,
   constructedTestSuite: TestSuite,
   providerMap: Record<string, ApiProvider>,
 ): Promise<void> {
+  const usesAgentRubric = [
+    constructedTestSuite.defaultTest,
+    ...(constructedTestSuite.tests || []),
+    ...(constructedTestSuite.scenarios || []).flatMap((scenario) => [
+      ...(scenario.config || []),
+      ...(scenario.tests || []),
+    ]),
+  ].some((test) => test && typeof test === 'object' && hasAgentRubric(test.assert));
+
   if (typeof constructedTestSuite.defaultTest === 'object' && constructedTestSuite.defaultTest) {
     constructedTestSuite.defaultTest = cloneTestForResolve(constructedTestSuite.defaultTest);
 
@@ -262,6 +302,7 @@ async function resolveNestedProviders(
         constructedTestSuite.defaultTest.options.provider,
         providerMap,
         { env: testSuiteConfig.env, basePath: cliState.basePath },
+        usesAgentRubric,
       );
     }
   }
@@ -270,20 +311,24 @@ async function resolveNestedProviders(
 
   for (const test of constructedTestSuite.tests) {
     if (test.options?.provider && !isApiProvider(test.options.provider)) {
-      test.options.provider = await resolveGradingProvider(test.options.provider, providerMap, {
-        env: testSuiteConfig.env,
-        basePath: cliState.basePath,
-      });
+      test.options.provider = await resolveGradingProvider(
+        test.options.provider,
+        providerMap,
+        { env: testSuiteConfig.env, basePath: cliState.basePath },
+        usesAgentRubric,
+      );
     }
     for (const assertion of test.assert || []) {
       if (assertion.type === 'assert-set' || typeof assertion.provider === 'function') {
         continue;
       }
       if (assertion.provider && !isApiProvider(assertion.provider)) {
-        assertion.provider = await resolveGradingProvider(assertion.provider, providerMap, {
-          env: testSuiteConfig.env,
-          basePath: cliState.basePath,
-        });
+        assertion.provider = await resolveGradingProvider(
+          assertion.provider,
+          providerMap,
+          { env: testSuiteConfig.env, basePath: cliState.basePath },
+          assertion.type === 'agent-rubric' || assertion.type === 'not-agent-rubric',
+        );
       }
     }
   }
