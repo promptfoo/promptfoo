@@ -296,7 +296,7 @@
     "@modelcontextprotocol/sdk": "^1.30.0",
     "@openai/agents": "^0.11.3",
     "@openai/codex-sdk": "^0.153.2",
-    "@openai/codex-security": "^0.1.18",
+    "@openai/codex-security": "^0.1.28",
     "@opencode-ai/sdk": "^1.18.27",
     "@playwright/browser-chromium": "^1.63.0",
     "@rollup/rollup-linux-x64-gnu": "^4.63.1",
