@@ -1,0 +1,18 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: 'Smoke test - Legacy extension hook with logger (no hook-specific function name)'
+
+providers:
+  - echo
+
+prompts:
+  - 'Hello {{name}}'
+
+extensions:
+  - file://../extensions/legacy-hook.js
+
+tests:
+  - vars:
+      name: World
+    assert:
+      - type: contains
+        value: World

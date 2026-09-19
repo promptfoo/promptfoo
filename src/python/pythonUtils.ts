@@ -14,10 +14,55 @@ import {
   writeSecureTempFile,
 } from '../util/secureTempFiles';
 import { PythonStderrLogger } from './stderr';
+import type { Options as PythonShellOptions } from 'python-shell';
 
 const execFileAsync = promisify(execFile);
 
-import type { Options as PythonShellOptions } from 'python-shell';
+// Marker used by Python's promptfoo_logger to identify structured log messages
+const PYTHON_LOG_MARKER = '__PROMPTFOO_LOG__';
+
+const PYTHON_LOG_LEVELS = ['debug', 'info', 'warn', 'error'] as const;
+
+type PythonLogLevel = (typeof PYTHON_LOG_LEVELS)[number];
+
+interface PythonLogMessage {
+  marker: string;
+  version?: number;
+  level: PythonLogLevel;
+  message: string;
+  data?: Record<string, unknown>;
+}
+
+function isPythonLogLevel(value: unknown): value is PythonLogLevel {
+  return (PYTHON_LOG_LEVELS as readonly unknown[]).includes(value);
+}
+
+/**
+ * Attempts to parse a Python log message and route it to the appropriate logger level.
+ * Supports protocol version 1 (with version field) and version 0 (without version field).
+ * @param line - A line of output from Python stderr
+ * @returns true if the line was a structured log message that was handled, false otherwise
+ */
+export function handlePythonLogMessage(line: string): boolean {
+  try {
+    const parsed = JSON.parse(line) as PythonLogMessage;
+    if (parsed.marker === PYTHON_LOG_MARKER) {
+      // `level` comes from subprocess output, so only dispatch to known levels:
+      // indexing the logger with an arbitrary string could call an unrelated method.
+      const level = isPythonLogLevel(parsed.level) ? parsed.level : 'info';
+      // Format message with structured data included in the message string
+      let logMessage = `[Python] ${parsed.message}`;
+      if (parsed.data && Object.keys(parsed.data).length > 0) {
+        logMessage += ` ${JSON.stringify(parsed.data)}`;
+      }
+      logger[level](logMessage);
+      return true;
+    }
+  } catch {
+    // Not a JSON log message, fall through to default handling
+  }
+  return false;
+}
 
 /**
  * Gets an integer value from an environment variable.
@@ -335,7 +380,7 @@ export async function runPython<T = unknown>(
     await new Promise<void>((resolve, reject) => {
       try {
         const pyshell = new PythonShell('wrapper.py', pythonOptions);
-        const stderrLogger = new PythonStderrLogger();
+        const stderrLogger = new PythonStderrLogger('', handlePythonLogMessage);
 
         pyshell.stdout?.on('data', (chunk: Buffer) => {
           logger.debug(chunk.toString('utf-8').trim());

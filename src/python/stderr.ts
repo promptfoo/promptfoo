@@ -6,12 +6,22 @@ export const MAX_STDERR_BUFFER_LENGTH = 16_384;
 
 type StderrLevel = 'debug' | 'info' | 'warn' | 'error';
 
+/**
+ * Intercepts a single stderr line before it is classified by log level. Returning
+ * `true` means the line was fully handled (e.g. it was a structured promptfoo log
+ * record) and must not be logged again as raw stderr.
+ */
+export type StderrLineInterceptor = (line: string) => boolean;
+
 export class PythonStderrLogger {
   private buffer = '';
   private decoder = new StringDecoder('utf8');
   private inTraceback = false;
 
-  constructor(private readonly prefix = '') {}
+  constructor(
+    private readonly prefix = '',
+    private readonly interceptLine?: StderrLineInterceptor,
+  ) {}
 
   handleData(data: Buffer | string): void {
     const text = typeof data === 'string' ? data : this.decoder.write(data);
@@ -48,6 +58,13 @@ export class PythonStderrLogger {
 
   private logLine(line: string): void {
     if (!line.trim()) {
+      this.inTraceback = false;
+      return;
+    }
+
+    // Structured promptfoo log records are routed by the interceptor and never
+    // fall through to prefix/traceback classification.
+    if (this.interceptLine?.(line.trim())) {
       this.inTraceback = false;
       return;
     }
