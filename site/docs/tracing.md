@@ -255,6 +255,8 @@ tests:
 
 Use trajectory assertions when your spans identify tools, commands, searches, reasoning steps, or messages. Promptfoo also normalizes common command-like tool spans, including OpenAI Agents SDK `exec_command` calls with `cmd` arguments and `shell` calls with `commands` arrays, into command trajectory steps. For traced tool calls, Promptfoo recognizes both generic attributes such as `tool.name` and `tool.arguments` and framework-specific ones such as Vercel AI SDK's `ai.toolCall.name`, `ai.toolCall.args`, `ai.toolCall.arguments`, and `ai.toolCall.input`. If you only need raw span counts, durations, or error detection, use [`trace-span-count`](/docs/configuration/expected-outputs/deterministic/#trace-span-count), [`trace-span-duration`](/docs/configuration/expected-outputs/deterministic/#trace-span-duration), or [`trace-error-spans`](/docs/configuration/expected-outputs/deterministic/#trace-error-spans).
 
+The three raw-span assertions accept `value.attributes` to select spans by exact attributes in addition to their name pattern. For example, `attributes: { 'gen_ai.tool.name': 'search' }` limits a count, duration, or error-rate check to the search tool even when every tool emits a span named `execute_tool`. All supplied attributes must match; missing attributes are excluded. See the [attribute-filter examples](/docs/configuration/expected-outputs/deterministic/#trace-span-count) for supported values and presence checks.
+
 ### Turn marker spans {#per-llm-turn-spans}
 
 Several first-party providers expose turn marker spans to trace assertions. Some markers correspond to internal model generations; Codex SDK and app-server markers correspond to the protocol turn exposed by those APIs. The span name and convention depend on the provider:
