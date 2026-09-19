@@ -70,6 +70,68 @@ describe('selectMaxScore', () => {
     expect(gradingResults[2].reason).toContain('Not selected');
   });
 
+  it('should exclude metricOnly assertions when ranking outputs', async () => {
+    const outputs = ['Output 0', 'Output 1'];
+    const buildResult = (
+      realScore: number,
+      counterScore: number,
+      testIdx: number,
+    ): EvaluateResult =>
+      createEvaluateResult({
+        testIdx,
+        testCase: {
+          assert: [
+            { type: 'llm-rubric', value: 'quality' },
+            { type: 'javascript', value: String(counterScore), metric: 'tp', metricOnly: true },
+            { type: 'max-score' },
+          ],
+        },
+        prompt: createPrompt('test prompt', { label: 'test' }),
+        promptId: 'prompt-test',
+        response: { output: `Output ${testIdx}` },
+        score: realScore,
+        latencyMs: 100,
+        gradingResult: createGradingResult({
+          pass: realScore > 0.5,
+          score: realScore,
+          reason: 'Test result',
+          namedScores: {},
+          tokensUsed: { total: 0, prompt: 0, completion: 0, cached: 0 },
+          componentResults: [
+            {
+              pass: realScore > 0.5,
+              score: realScore,
+              reason: 'Rubric',
+              assertion: { type: 'llm-rubric', value: 'quality' } as Assertion,
+            },
+            {
+              pass: counterScore > 0,
+              score: counterScore,
+              reason: 'Counter',
+              assertion: {
+                type: 'javascript',
+                metric: 'tp',
+                metricOnly: true,
+              } as Assertion,
+            },
+          ],
+        }),
+        metadata: {},
+      });
+
+    // The real assertion prefers output 0 (1 > 0.6). If the metricOnly counter
+    // were counted, the aggregate would flip the winner to output 1
+    // ((1 + 0) / 2 = 0.5 vs (0.6 + 1) / 2 = 0.8).
+    const results = [buildResult(1, 0, 0), buildResult(0.6, 1, 1)];
+
+    const gradingResults = await selectMaxScore(outputs, results, mockAssertion);
+
+    expect(gradingResults[0].pass).toBe(true);
+    expect(gradingResults[1].pass).toBe(false);
+    // Only the real assertion participates in the aggregate.
+    expect(gradingResults[0].namedScores?.assertionCount).toBe(1);
+  });
+
   it('should handle ties by selecting the first output', async () => {
     const outputs = ['Output 0', 'Output 1', 'Output 2'];
     const results = [createMockResult(1.0, 0), createMockResult(1.0, 1), createMockResult(0.5, 2)];

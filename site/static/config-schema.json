@@ -1095,6 +1095,9 @@
         "weight": {
           "type": "number"
         },
+        "metricOnly": {
+          "type": "boolean"
+        },
         "provider": {},
         "rubricPrompt": {},
         "metric": {
