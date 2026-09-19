@@ -346,7 +346,7 @@
     "ajv": "^8.18.0",
     "ajv-formats": "^3.0.1",
     "async": "^3.2.6",
-    "binary-extensions": "^3.1.0",
+    "binary-extensions": "^3.2.0",
     "cache-manager": ">=7.2.8 <7.2.10",
     "chalk": "^6.0.0",
     "chokidar": "5.0.0",
