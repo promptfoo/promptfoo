@@ -1023,6 +1023,55 @@ describe('OllamaChatProvider', () => {
     expect(body.format).toBe('json');
   });
 
+  // Contract for outgoing message normalization, stated as one table so the whole input
+  // space is visible. The helper must change EXACTLY one thing -- a tool call whose
+  // `arguments` is a JSON *object* string becomes an object, because Ollama rejects the
+  // stringified form that responses are normalized to -- and must pass everything else
+  // through byte-identical without throwing.
+  const TOOL_CALL = (args: any) => [
+    { role: 'assistant', tool_calls: [{ function: { name: 'f', arguments: args } }] },
+  ];
+  it.each([
+    ['empty array', [], null],
+    ['plain message', [{ role: 'user', content: 'hi' }], null],
+    ['tool_calls null', [{ role: 'assistant', tool_calls: null }], null],
+    ['tool_calls not an array', [{ role: 'assistant', tool_calls: 'nope' }], null],
+    ['tool_calls empty', [{ role: 'assistant', tool_calls: [] }], null],
+    ['null tool call', [{ role: 'assistant', tool_calls: [null] }], null],
+    ['tool call without function', [{ role: 'assistant', tool_calls: [{}] }], null],
+    ['null function', [{ role: 'assistant', tool_calls: [{ function: null }] }], null],
+    ['arguments missing', [{ role: 'assistant', tool_calls: [{ function: { name: 'f' } }] }], null],
+    ['arguments already an object', TOOL_CALL({ a: 1 }), null],
+    ['arguments JSON array string', TOOL_CALL('[1,2]'), null],
+    ['arguments JSON null string', TOOL_CALL('null'), null],
+    ['arguments JSON number string', TOOL_CALL('42'), null],
+    ['arguments unparseable string', TOOL_CALL('{oops'), null],
+    ['arguments empty string', TOOL_CALL(''), null],
+    ['null message', [null], null],
+    ['string message', ['hello'], null],
+    ['number message', [7], null],
+    // parseChatPrompt returns whatever parsed, not necessarily an array. Non-arrays must
+    // reach Ollama so its validation reports the problem instead of us throwing first.
+    ['non-array object prompt', { role: 'user', content: 'hi' }, null],
+    ['non-array string prompt', 'plain', null],
+    ['non-array number prompt', 5, null],
+    // The single case that is transformed.
+    ['arguments JSON object string', TOOL_CALL('{"city":"Paris"}'), TOOL_CALL({ city: 'Paris' })],
+  ])('normalizes %s correctly on the way to Ollama', async (_label, input, expected) => {
+    vi.mocked(fetchWithCache).mockResolvedValue({
+      data: '{"message":{"role":"assistant","content":"ok"},"done":true}\n',
+      cached: false,
+      status: 200,
+      statusText: 'OK',
+      headers: {},
+    });
+
+    await new OllamaChatProvider('llama3.3').callApi(JSON.stringify(input));
+
+    const body = JSON.parse(vi.mocked(fetchWithCache).mock.calls[0][1]?.body as string);
+    expect(body.messages).toEqual(expected ?? input);
+  });
+
   it('should handle tools configuration', async () => {
     const provider = new OllamaChatProvider('llama3.3', {
       config: {
