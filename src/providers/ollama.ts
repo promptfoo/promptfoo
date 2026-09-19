@@ -401,6 +401,49 @@ interface OllamaChatJsonL {
 }
 
 /**
+ * Converts `function.arguments` back to an object on outgoing messages.
+ *
+ * Responses are normalized to the OpenAI shape, where `arguments` is a JSON *string*
+ * (so `is-valid-openai-tools-call` works). Ollama's own /api/chat rejects that shape on
+ * the way back in with HTTP 400, so feeding a previous turn's tool call into a multi-turn
+ * conversation fails unless it is converted back.
+ */
+function normalizeOllamaRequestMessages(messages: unknown): unknown {
+  // parseChatPrompt returns whatever the prompt parsed to, not necessarily an array. A
+  // non-array is passed through untouched so Ollama's own validation reports it, rather
+  // than this helper throwing an opaque TypeError first.
+  if (!Array.isArray(messages)) {
+    return messages;
+  }
+  return messages.map((message) => {
+    const toolCalls = message?.tool_calls;
+    if (!Array.isArray(toolCalls)) {
+      return message;
+    }
+    return {
+      ...message,
+      tool_calls: toolCalls.map((call: any) => {
+        const args = call?.function?.arguments;
+        if (typeof args !== 'string') {
+          return call;
+        }
+        try {
+          const parsed = JSON.parse(args);
+          // Only objects are valid here; leave anything else alone so Ollama can
+          // report a meaningful error rather than us silently reshaping it.
+          if (parsed === null || typeof parsed !== 'object' || Array.isArray(parsed)) {
+            return call;
+          }
+          return { ...call, function: { ...call.function, arguments: parsed } };
+        } catch {
+          return call;
+        }
+      }),
+    };
+  });
+}
+
+/**
  * Collects tool calls from every chunk (they arrive one per chunk before `done: true`)
  * and normalizes them to the OpenAI shape, where `arguments` is a JSON string rather
  * than an object.
@@ -689,7 +732,9 @@ export class OllamaChatProvider implements ApiProvider {
     prompt: string,
     context?: CallApiContextParams,
   ): Promise<ProviderResponse> {
-    const messages = parseChatPrompt(prompt, [{ role: 'user', content: prompt }]);
+    const messages = normalizeOllamaRequestMessages(
+      parseChatPrompt<unknown>(prompt, [{ role: 'user', content: prompt }]),
+    );
 
     const { passthroughOptions, passthroughRest } = splitOllamaPassthrough(this.config);
     const params: any = {
