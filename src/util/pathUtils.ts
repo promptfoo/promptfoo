@@ -59,3 +59,10 @@ export function safeJoin(...paths: string[]): string {
   }
   return path.join(...paths);
 }
+
+/**
+ * Serialize a filesystem path with URL-compatible separators.
+ */
+export function toPosixPath(filePath: string): string {
+  return filePath.replace(/\\/g, '/');
+}
