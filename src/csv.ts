@@ -199,6 +199,7 @@ export function assertionFromString(expected: string): Assertion {
       };
     } else if (
       type === 'answer-relevance' ||
+      type === 'citation-faithfulness' ||
       type === 'classifier' ||
       type === 'context-faithfulness' ||
       type === 'context-recall' ||
