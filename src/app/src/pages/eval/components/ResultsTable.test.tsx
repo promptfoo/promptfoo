@@ -79,6 +79,12 @@ vi.mock('./EvalOutputCell', () => {
           <button onClick={() => onRating(true, 0.75, 'test comment')} className="action">
             Rate
           </button>
+          <button onClick={() => onRating(undefined, 0.2, 'test comment')} tabIndex={-1}>
+            Set score
+          </button>
+          <button onClick={() => onRating(undefined, undefined, 'Updated comment')} tabIndex={-1}>
+            Comment only
+          </button>
           <button
             onClick={() => onRating(null, undefined, 'test comment')}
             className="clear"
@@ -4300,6 +4306,127 @@ describe('ResultsTable handleRating - Toggle off (null isPass) behavior', () => 
     expect(payload.componentResults).toHaveLength(1);
     expect(payload.componentResults[0].assertion.type).toBe('contains');
   });
+
+  it.each([
+    { name: 'weighted batch threshold', score: 0.84, mixed: false },
+    { name: 'mixed weighted assertions', score: 0.92, mixed: true },
+    { name: 'custom scoring result', score: 0.37, mixed: true, pass: false },
+  ])(
+    'restores $name after score-only and repeated manual ratings',
+    async ({ score, mixed, pass = true }) => {
+      const user = userEvent.setup();
+      const children = [
+        {
+          pass: true,
+          score: 1,
+          reason: 'Correct',
+          assertion: { type: 'llm-rubric', metric: 'accuracy', value: 'Correct', weight: 4 },
+        },
+        {
+          pass: false,
+          score: 0.2,
+          reason: 'Verbose',
+          assertion: { type: 'llm-rubric', metric: 'style', value: 'Concise', weight: 1 },
+        },
+      ];
+      const batch = {
+        pass: true,
+        score: 0.84,
+        reason: 'Weighted rubric score 0.84 ≥ 0.8 threshold',
+        assertion: {
+          type: 'llm-rubric',
+          rubricComponents: true,
+          threshold: 0.8,
+          value: {
+            components: [
+              { metric: 'accuracy', value: 'Correct', weight: 4 },
+              { metric: 'style', value: 'Concise' },
+            ],
+          },
+        },
+        componentResults: children,
+        metadata: { rubricComponents: true, renderedGradingPrompt: 'Shared grading prompt' },
+      };
+      const componentResults = [
+        batch,
+        ...children,
+        ...(mixed
+          ? [
+              {
+                pass: true,
+                score: 1,
+                reason: 'Matches',
+                assertion: { type: 'equals', value: 'text' },
+              },
+            ]
+          : []),
+      ];
+      const automaticResult = { pass, score, reason: 'Original automatic result' };
+      let mockTable = createMockTableWithHumanAssertion();
+      const originalOutput = mockTable.body[0].outputs[0];
+      Object.assign(originalOutput, {
+        pass,
+        score,
+        gradingResult: {
+          ...automaticResult,
+          tokensUsed: { total: 20, numRequests: 1 },
+          componentResults,
+          metadata: { providerTraceId: 'retain-me' },
+        },
+      });
+      mockSetTable.mockImplementation((table) => {
+        // Round-trip like the saved result loaded after a rating or page refresh.
+        mockTable = JSON.parse(JSON.stringify(table));
+      });
+      vi.mocked(useTableStore).mockImplementation(() => ({
+        config: {},
+        evalId: '123',
+        inComparisonMode: false,
+        setTable: mockSetTable,
+        table: mockTable,
+        version: 4,
+        renderMarkdown: true,
+        fetchEvalData: vi.fn(),
+        isFetching: false,
+        filteredResultsCount: 1,
+        filters: { values: {}, appliedCount: 0, options: { metric: [] } },
+      }));
+      const { rerender } = renderWithProviders(<ResultsTable {...defaultProps} />);
+
+      await user.click(screen.getByRole('button', { name: 'Comment only' }));
+      const commentPayload = JSON.parse(mockCallApi.mock.calls.at(-1)[1].body);
+      expect(commentPayload.metadata).toEqual({ providerTraceId: 'retain-me' });
+      rerender(<ResultsTable key={mockSetTable.mock.calls.length} {...defaultProps} />);
+
+      await user.click(screen.getByRole('button', { name: 'Set score' }));
+      const scorePayload = JSON.parse(mockCallApi.mock.calls.at(-1)[1].body);
+      expect(scorePayload.metadata.rubricBatchAutomaticResult).toEqual(automaticResult);
+      expect(scorePayload.score).toBe(0.2);
+      expect(scorePayload.componentResults).toEqual(componentResults);
+      rerender(<ResultsTable key={mockSetTable.mock.calls.length} {...defaultProps} />);
+
+      await user.click(screen.getByRole('button', { name: 'Comment only' }));
+      const ratedCommentPayload = JSON.parse(mockCallApi.mock.calls.at(-1)[1].body);
+      expect(ratedCommentPayload.metadata.rubricBatchAutomaticResult).toEqual(automaticResult);
+      rerender(<ResultsTable key={mockSetTable.mock.calls.length} {...defaultProps} />);
+
+      for (let rating = 0; rating < 2; rating++) {
+        await user.click(screen.getByRole('button', { name: 'Rate' }));
+        const ratingPayload = JSON.parse(mockCallApi.mock.calls.at(-1)[1].body);
+        expect(ratingPayload.metadata.rubricBatchAutomaticResult).toEqual(automaticResult);
+        expect(ratingPayload.score).toBe(0.75);
+        rerender(<ResultsTable key={mockSetTable.mock.calls.length} {...defaultProps} />);
+      }
+
+      await user.click(screen.getByRole('button', { name: 'Clear rating' }));
+      const clearedPayload = JSON.parse(mockCallApi.mock.calls.at(-1)[1].body);
+      expect(clearedPayload).toMatchObject(automaticResult);
+      expect(clearedPayload.metadata).toEqual({ providerTraceId: 'retain-me' });
+      expect(clearedPayload.tokensUsed).toEqual({ total: 20, numRequests: 1 });
+      expect(clearedPayload.componentResults).toEqual(componentResults);
+      expect(mockTable.body[0].outputs[0]).toMatchObject({ pass, score });
+    },
+  );
 
   it('should recalculate pass as true when all remaining assertions pass', () => {
     const mockTable = {
