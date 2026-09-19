@@ -4,6 +4,15 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [0.123.2](https://github.com/promptfoo/promptfoo/compare/0.123.1...0.123.2) (2026-09-19)
+
+### Bug Fixes
+
+- **deps:** pin ansi-tokenize to 0.3.0 ([#10990](https://github.com/promptfoo/promptfoo/issues/10990)) ([a89e3cc](https://github.com/promptfoo/promptfoo/commit/a89e3cc42eba5fbc43050959bb81581ef0f89d07))
+- **deps:** update ibm-cloud-sdk-core to v5.6.1 ([#10986](https://github.com/promptfoo/promptfoo/issues/10986)) ([17b5a0a](https://github.com/promptfoo/promptfoo/commit/17b5a0a6a6640e968380b4db50c7cb09bd3cd1f7))
+- **providers:** accept Ollama tool calls back in a multi-turn conversation ([#10980](https://github.com/promptfoo/promptfoo/issues/10980)) ([27ad4b9](https://github.com/promptfoo/promptfoo/commit/27ad4b9505a98dc733d2f4abd49b887d3c9f408d))
+- **providers:** honor bustCache in the Ollama completion provider ([#10979](https://github.com/promptfoo/promptfoo/issues/10979)) ([c0ba816](https://github.com/promptfoo/promptfoo/commit/c0ba816679f226093f4ecedeb0ed61102765a23c))
+
 ## [0.123.1](https://github.com/promptfoo/promptfoo/compare/0.123.0...0.123.1) (2026-09-18)
 
 ### Features
