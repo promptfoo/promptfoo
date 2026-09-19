@@ -814,6 +814,35 @@ function parseJsonGradingResponse(
   return { parsed: parsed as Partial<GradingResult> };
 }
 
+function resolveGradingThreshold(
+  assertion: Assertion | undefined,
+  defaultThreshold: number | undefined,
+): number | undefined {
+  const configured =
+    typeof assertion?.threshold === 'string' ? Number(assertion.threshold) : assertion?.threshold;
+  return typeof configured === 'number' && Number.isFinite(configured)
+    ? configured
+    : defaultThreshold;
+}
+
+function getJsonGradingReason(
+  parsedReason: string | undefined,
+  pass: boolean,
+  score: number,
+  threshold: number | undefined,
+): string {
+  if (parsedReason) {
+    return parsedReason;
+  }
+  if (pass) {
+    return 'Grading passed';
+  }
+  if (typeof threshold === 'number' && Number.isFinite(threshold) && score < threshold) {
+    return `Score ${score} below threshold ${threshold}`;
+  }
+  return 'Grading failed';
+}
+
 function graderFailureFromResponse(
   reason: string,
   response: ProviderResponse,
@@ -843,6 +872,7 @@ function graderFailureFromResponse(
 export async function runJsonGradingPrompt({
   assertion,
   checkName,
+  defaultThreshold,
   defaultPrompt,
   grading,
   label,
@@ -854,6 +884,7 @@ export async function runJsonGradingPrompt({
 }: {
   assertion?: Assertion;
   checkName: string;
+  defaultThreshold?: number;
   defaultPrompt: string;
   grading: GradingConfig;
   label: string;
@@ -898,24 +929,28 @@ export async function runJsonGradingPrompt({
     return failure as Omit<GradingResult, 'assertion'>;
   }
 
+  const hasPass = parsed.pass !== undefined && parsed.pass !== null;
+  const hasScore = parsed.score !== undefined && parsed.score !== null;
+  if (!hasPass && !hasScore) {
+    return graderFail(`${label} response must contain a 'pass' or 'score' field`, resp.tokenUsage);
+  }
+
   let pass = parsed.pass ?? true;
   if (typeof pass !== 'boolean') {
     pass = /^(true|yes|pass|y)$/i.test(String(pass));
   }
 
-  let score = parsed.score;
+  let score = hasScore ? parsed.score : undefined;
   if (typeof score !== 'number') {
     score = Number.isFinite(Number(score)) ? Number(score) : Number(pass);
   }
 
-  const threshold =
-    typeof assertion?.threshold === 'string' ? Number(assertion.threshold) : assertion?.threshold;
+  const threshold = resolveGradingThreshold(assertion, defaultThreshold);
   if (typeof threshold === 'number' && Number.isFinite(threshold)) {
     pass = pass && score >= threshold;
   }
 
-  const reason =
-    parsed.reason || (pass ? 'Grading passed' : `Score ${score} below threshold ${threshold}`);
+  const reason = getJsonGradingReason(parsed.reason, pass, score, threshold);
 
   let responseMetadata: Record<string, unknown> = {};
   if (resp.metadata && typeof resp.metadata === 'object' && !Array.isArray(resp.metadata)) {
