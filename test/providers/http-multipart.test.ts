@@ -7,6 +7,7 @@ import path from 'path';
 import { pathToFileURL } from 'url';
 
 import { afterEach, describe, expect, it } from 'vitest';
+import cliState from '../../src/cliState';
 import { HttpProvider } from '../../src/providers/http';
 import { normalizeFilePath, resolvePath } from '../../src/providers/httpMultipart';
 
@@ -245,6 +246,68 @@ describe('HttpProvider structured multipart requests', () => {
       contentType: 'text/plain',
     });
   });
+
+  it.each([
+    ['dot-prefixed shorthand', 'file://./fixtures/report%20final.pdf'],
+    ['bare shorthand', 'file://fixtures/report%20final.pdf'],
+  ])(
+    'resolves a %s file:// path against the config directory without percent-decoding it',
+    async (_label, configuredPath) => {
+      // Regression for #10337: on Windows these used to reach fileURLToPath(), which read
+      // the first segment as a UNC host. They are promptfoo shorthand, so they resolve
+      // against cliState.basePath instead -- and because they are paths with a scheme
+      // prefix rather than real URLs, `%20` must reach the filesystem literally instead
+      // of being decoded into a space, which would open a different (missing) file.
+      const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'promptfoo-multipart-'));
+      tempDirs.push(tempDir);
+      fs.mkdirSync(path.join(tempDir, 'fixtures'));
+      fs.writeFileSync(
+        path.join(tempDir, 'fixtures', 'report%20final.pdf'),
+        'literal percent contents',
+      );
+
+      const previousBasePath = cliState.basePath;
+      cliState.basePath = tempDir;
+
+      try {
+        const mockServer = await createMultipartDocumentSummarizerServer();
+        const provider = new HttpProvider('http', {
+          config: {
+            url: mockServer.url,
+            headers: { 'X-API-Key': 'test-api-key' },
+            multipart: {
+              parts: [
+                {
+                  kind: 'file',
+                  name: 'files',
+                  source: {
+                    type: 'path',
+                    path: configuredPath,
+                  },
+                },
+                {
+                  kind: 'field',
+                  name: 'documentQuery',
+                  value: '{{prompt}}',
+                },
+              ],
+            },
+            transformResponse: 'json.summary',
+          },
+        });
+
+        await provider.callApi('Summarize literal percent fixture');
+
+        expect(mockServer.getLastRequest()?.files[0]).toMatchObject({
+          filename: 'report%20final.pdf',
+          contentType: 'application/pdf',
+          sizeBytes: Buffer.byteLength('literal percent contents'),
+        });
+      } finally {
+        cliState.basePath = previousBasePath;
+      }
+    },
+  );
 
   it('redacts secret-like multipart text fields from debug metadata', async () => {
     const mockServer = await createMultipartDocumentSummarizerServer();
