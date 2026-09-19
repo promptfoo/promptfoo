@@ -11,15 +11,18 @@
  * - Provider inheritance
  */
 
-import { SpanKind, SpanStatusCode } from '@opentelemetry/api';
+import { context, SpanKind, SpanStatusCode, trace } from '@opentelemetry/api';
+import { suppressTracing } from '@opentelemetry/core';
 import { InMemorySpanExporter, SimpleSpanProcessor } from '@opentelemetry/sdk-trace-base';
 import { NodeTracerProvider } from '@opentelemetry/sdk-trace-node';
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
+  extractProviderResponseAttributes,
   GenAIAttributes,
   getCurrentTraceId,
   getTraceparent,
   PromptfooAttributes,
+  setGenAIRequestAttributes,
   withGenAISpan,
 } from '../../src/tracing/genaiTracer';
 import { withTargetSpan } from '../../src/tracing/targetTracer';
@@ -671,6 +674,162 @@ describe('Phase 5: Provider Instrumentation Validation', () => {
 
       const span = memoryExporter.getFinishedSpans()[0];
       expect(span.attributes[GenAIAttributes.RESPONSE_FINISH_REASONS]).toEqual(['stop', 'length']);
+    });
+  });
+
+  describe('Tracing suppression', () => {
+    const spanContext: GenAISpanContext = {
+      system: 'openai',
+      operationName: 'chat',
+      model: 'gpt-4',
+      providerId: 'openai:gpt-4',
+    };
+
+    it('should not emit a span when the active context suppresses tracing', async () => {
+      const result = await context.with(suppressTracing(context.active()), () =>
+        withGenAISpan(
+          spanContext,
+          async () => ({ output: 'test' }),
+          extractProviderResponseAttributes,
+        ),
+      );
+
+      expect(result).toEqual({ output: 'test' });
+      expect(memoryExporter.getFinishedSpans()).toHaveLength(0);
+    });
+
+    it('should stay suppressed when a traceparent reparents the span', async () => {
+      // An explicit traceparent makes withGenAISpan rebuild the parent context from
+      // ROOT_CONTEXT, which drops the suppression key -- so the SDK tracer's own
+      // suppression check no longer sees it. Tracing evaluations set a traceparent on
+      // essentially every provider call, so this is the case that matters.
+      await context.with(suppressTracing(context.active()), () =>
+        withGenAISpan(
+          {
+            ...spanContext,
+            traceparent: '00-0af7651916cd43dd8448eb211c80319c-b7ad6b7169203331-01',
+          },
+          async () => ({ output: 'test' }),
+        ),
+      );
+
+      expect(memoryExporter.getFinishedSpans()).toHaveLength(0);
+    });
+
+    it('should still hand the callback a usable non-recording span', async () => {
+      let observed: ReturnType<typeof trace.getActiveSpan>;
+      await context.with(suppressTracing(context.active()), () =>
+        withGenAISpan(spanContext, async (span) => {
+          observed = span;
+          // Providers stamp effective request attributes on this span; that must not
+          // throw just because the span is non-recording.
+          setGenAIRequestAttributes(span, { model: 'gpt-4', operationName: 'chat' });
+          return { output: 'test' };
+        }),
+      );
+
+      expect(observed!.isRecording()).toBe(false);
+      expect(observed!.spanContext().traceId).toBe('00000000000000000000000000000000');
+    });
+
+    it('should emit a span again once suppression falls out of scope', async () => {
+      await context.with(suppressTracing(context.active()), () =>
+        withGenAISpan(spanContext, async () => ({ output: 'suppressed' })),
+      );
+      await withGenAISpan(spanContext, async () => ({ output: 'recorded' }));
+
+      const spans = memoryExporter.getFinishedSpans();
+      expect(spans).toHaveLength(1);
+      expect(spans[0].name).toBe('chat gpt-4');
+    });
+  });
+
+  describe('Effective request attributes', () => {
+    it('should overwrite the request model and span name with the model actually sent', async () => {
+      await withGenAISpan(
+        {
+          system: 'openai',
+          operationName: 'chat',
+          model: 'gpt-4o-mini',
+          providerId: 'openai:gpt-4o-mini',
+        },
+        async (span) => {
+          setGenAIRequestAttributes(span, {
+            model: 'gpt-4o',
+            operationName: 'chat',
+            maxTokens: 1024,
+            temperature: 0,
+            stopSequences: ['STOP'],
+          });
+          return { output: 'test' };
+        },
+      );
+
+      const span = memoryExporter.getFinishedSpans()[0];
+      expect(span.name).toBe('chat gpt-4o');
+      expect(span.attributes[GenAIAttributes.REQUEST_MODEL]).toBe('gpt-4o');
+      expect(span.attributes[GenAIAttributes.REQUEST_MAX_TOKENS]).toBe(1024);
+      expect(span.attributes[GenAIAttributes.REQUEST_TEMPERATURE]).toBe(0);
+      expect(span.attributes[GenAIAttributes.REQUEST_STOP_SEQUENCES]).toEqual(['STOP']);
+    });
+
+    it('should leave the span name alone when no effective model is known', async () => {
+      await withGenAISpan(
+        {
+          system: 'openai',
+          operationName: 'chat',
+          model: 'gpt-4o-mini',
+          providerId: 'openai:gpt-4o-mini',
+        },
+        async (span) => {
+          setGenAIRequestAttributes(span, { operationName: 'chat', topP: 0.5 });
+          return { output: 'test' };
+        },
+      );
+
+      const span = memoryExporter.getFinishedSpans()[0];
+      expect(span.name).toBe('chat gpt-4o-mini');
+      expect(span.attributes[GenAIAttributes.REQUEST_MODEL]).toBe('gpt-4o-mini');
+      expect(span.attributes[GenAIAttributes.REQUEST_TOP_P]).toBe(0.5);
+    });
+  });
+
+  describe('Response identity attributes', () => {
+    it('should emit gen_ai.response.id and gen_ai.response.model from provider metadata', async () => {
+      await withGenAISpan(
+        {
+          system: 'openai',
+          operationName: 'chat',
+          model: 'gpt-4o-mini',
+          providerId: 'openai:gpt-4o-mini',
+        },
+        async () => ({
+          output: 'test',
+          metadata: { responseId: 'chatcmpl-abc123', model: 'gpt-4o-mini-2024-07-18' },
+        }),
+        extractProviderResponseAttributes,
+      );
+
+      const span = memoryExporter.getFinishedSpans()[0];
+      expect(span.attributes[GenAIAttributes.RESPONSE_ID]).toBe('chatcmpl-abc123');
+      expect(span.attributes[GenAIAttributes.RESPONSE_MODEL]).toBe('gpt-4o-mini-2024-07-18');
+    });
+
+    it('should ignore non-string and empty response identity metadata', async () => {
+      await withGenAISpan(
+        {
+          system: 'openai',
+          operationName: 'chat',
+          model: 'gpt-4o-mini',
+          providerId: 'openai:gpt-4o-mini',
+        },
+        async () => ({ output: 'test', metadata: { responseId: '', model: 42 } }),
+        extractProviderResponseAttributes,
+      );
+
+      const span = memoryExporter.getFinishedSpans()[0];
+      expect(span.attributes).not.toHaveProperty(GenAIAttributes.RESPONSE_ID);
+      expect(span.attributes).not.toHaveProperty(GenAIAttributes.RESPONSE_MODEL);
     });
   });
 });

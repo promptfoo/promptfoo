@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import logger from '../../src/logger';
 
 import type { OtelConfig } from '../../src/tracing/otelConfig';
 
@@ -181,6 +182,27 @@ describe('otelSdk', () => {
       // Both local and OTLP exporters - now passed via constructor
       const constructorArg = nodeTracerProviderCalls[0] as { spanProcessors?: unknown[] };
       expect(constructorArg.spanProcessors?.length).toBe(2);
+    });
+
+    it('should never log the OTLP endpoint, which carries credentials', () => {
+      // OTEL_EXPORTER_OTLP_ENDPOINT is routinely set to a URL that embeds the
+      // credential as userinfo or a query parameter.
+      const endpoint = 'https://user:s3cr3t-token@otlp.example.com/v1/traces?api-key=abc123';
+      initializeOtel({ ...defaultConfig, endpoint });
+
+      // The exporter still gets the real URL.
+      expect(otlpExporterCalls[0]).toEqual({ url: endpoint });
+
+      const logged = vi
+        .mocked(logger.debug)
+        .mock.calls.map((call) => JSON.stringify(call))
+        .join('\n');
+      expect(logged).not.toContain('s3cr3t-token');
+      expect(logged).not.toContain('abc123');
+      expect(logged).not.toContain('otlp.example.com');
+      // The operator still learns that an OTLP exporter is configured.
+      expect(logged).toContain('otlpExport');
+      expect(logged).toContain('Added OTLP exporter');
     });
 
     it('should skip local export when localExport is false', () => {

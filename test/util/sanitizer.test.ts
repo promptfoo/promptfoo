@@ -1833,6 +1833,40 @@ describe('sanitizeObject url-keyed fields', () => {
   });
 });
 
+describe('sanitizeObject endpoint-keyed fields', () => {
+  it('redacts credentials carried by an exporter endpoint URL', () => {
+    // OTLP exporter endpoints routinely embed the credential as userinfo or a
+    // query parameter (Grafana Cloud, Honeycomb-style proxies).
+    expect(
+      sanitizeObject({ endpoint: 'https://instance:glc_s3cr3t@otlp.example.com/v1/traces' }),
+    ).toEqual({ endpoint: 'https://***:***@otlp.example.com/v1/traces' });
+    expect(
+      sanitizeObject({ endpoint: 'https://otlp.example.com/v1/traces?api-key=abc123def456ghi' }),
+    ).toEqual({ endpoint: 'https://otlp.example.com/v1/traces?api-key=%5BREDACTED%5D' });
+  });
+
+  it('redacts an opaque credential carried in an endpoint path segment', () => {
+    expect(sanitizeObject({ endpoint: 'https://otlp.example.com/token/abc123def456ghi' })).toEqual({
+      endpoint: 'https://otlp.example.com/token/%5BREDACTED%5D',
+    });
+  });
+
+  it('leaves a credential-free endpoint intact', () => {
+    expect(sanitizeObject({ endpoint: 'http://localhost:4318/v1/traces' })).toEqual({
+      endpoint: 'http://localhost:4318/v1/traces',
+    });
+  });
+
+  it('leaves a non-URL endpoint value alone', () => {
+    // `endpoint` is also used for symbolic names and bare hosts; those must not be
+    // rewritten by URL parsing.
+    expect(sanitizeObject({ endpoint: 'my-collector' })).toEqual({ endpoint: 'my-collector' });
+    expect(sanitizeObject({ endpoint: 'otlp.example.com:4318' })).toEqual({
+      endpoint: 'otlp.example.com:4318',
+    });
+  });
+});
+
 describe('sanitizeBody', () => {
   it('should be an alias for sanitizeObject', () => {
     const input = { password: 'secret', data: 'public' };
