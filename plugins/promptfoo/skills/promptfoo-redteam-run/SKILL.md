@@ -13,6 +13,10 @@ Run the scoped scan, inspect its evidence, and rerun only what needs attention.
 Read `references/redteam-run-patterns.md` for commands, result inspection, and CI.
 Use `promptfoo-provider-setup` or `promptfoo-redteam-setup` if inputs are missing.
 
+Before running a CLI command, follow the
+[shared prerequisite check](../promptfoo-provider-setup/references/local-prerequisites.md)
+for Node/npm and Promptfoo. Reuse an already verified environment and its CLI invocation.
+
 ## 1. Preflight
 
 Confirm the generated config, target environment, allowed actions, test identity,
@@ -25,10 +29,8 @@ the intended vars. Use explicit smoke fixtures for targets that require real IDs
 `validate target` can make multiple calls and send config/responses to a remote
 helper; use it only when its diagnostics fit the scope.
 
-Use `npx promptfoo` to resolve the project's installed CLI and record its version. In the Promptfoo
-repository, align Node with `source ~/.nvm/nvm.sh && nvm use` and substitute
-`npm run local --` for `npx promptfoo`. Install or upgrade with
-`npx promptfoo@latest` only when needed.
+Use the CLI invocation verified by the shared prerequisite check in place of
+`npx promptfoo` below.
 
 ## 2. Run and export
 

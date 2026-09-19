@@ -1,7 +1,7 @@
 {
   "name": "promptfoo",
-  "version": "0.1.3",
-  "description": "Teaches AI coding agents to connect providers and targets, write promptfoo eval suites, and set up or run red team scans",
+  "version": "0.2.3",
+  "description": "Agent skills for connecting to Promptfoo Enterprise, configuring targets, writing evals, and running red team workflows.",
   "author": {
     "name": "Promptfoo",
     "email": "support@promptfoo.dev",

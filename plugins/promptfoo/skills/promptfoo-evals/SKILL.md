@@ -12,6 +12,10 @@ description: >
 Build an eval that answers one product question, run it, and inspect the results.
 Read `references/eval-patterns.md` for YAML, assertion, and CI examples.
 
+Before running a CLI command, follow the
+[shared prerequisite check](../promptfoo-provider-setup/references/local-prerequisites.md)
+for Node/npm and Promptfoo. Reuse an already verified environment and its CLI invocation.
+
 ## 1. Define the behavior
 
 Find an existing `promptfooconfig.yaml`, `promptfooconfig.yml`, or eval directory
@@ -59,10 +63,8 @@ Follow the repo's layout; otherwise use `evals/<suite>/` with `prompts/` and
 
 ## 4. Validate, run, inspect
 
-Use `npx promptfoo` to resolve the project's installed CLI and record its version. Install or upgrade
-with `npx promptfoo@latest` only when needed. In the Promptfoo repository, align
-Node with `source ~/.nvm/nvm.sh && nvm use` and use `npm run local --` in place
-of `npx promptfoo` below.
+Use the CLI invocation verified by the shared prerequisite check in place of
+`npx promptfoo` below.
 
 ```bash
 npx promptfoo validate config -c path/to/promptfooconfig.yaml

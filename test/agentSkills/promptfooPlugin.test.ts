@@ -20,12 +20,13 @@ const redteamSetupSkillRoot = path.join(pluginRoot, 'skills', 'promptfoo-redteam
 const redteamRunSkillRoot = path.join(pluginRoot, 'skills', 'promptfoo-redteam-run');
 const fixtureRoot = path.join(repoRoot, 'test', 'fixtures', 'agent-skills');
 const expectedSkillDirs = [
+  'promptfoo-enterprise-setup',
   'promptfoo-evals',
   'promptfoo-provider-setup',
   'promptfoo-redteam-run',
   'promptfoo-redteam-setup',
 ];
-const expectedPluginVersion = '0.1.3';
+const expectedPluginVersion = '0.2.3';
 const expectedFixtureDirs = [
   'evals-json-rubric',
   'evals-local-js',
@@ -1721,7 +1722,7 @@ describe('promptfoo plugin package (Codex + Claude Code)', () => {
     expect(manifest.name).toBe('promptfoo');
     expect(manifest.skills).toBe('./skills/');
     expect(manifest.interface.displayName).toBe('Promptfoo');
-    expect(manifest.interface.defaultPrompt).toHaveLength(3);
+    expect(manifest.interface.defaultPrompt).toHaveLength(4);
     expect(manifest.interface.defaultPrompt.every((prompt: string) => prompt.length <= 128)).toBe(
       true,
     );
@@ -1848,7 +1849,7 @@ describe('promptfoo plugin package (Codex + Claude Code)', () => {
     ).toBe(true);
   });
 
-  it('keeps the published surface to four focused skills without a meta selector', () => {
+  it('keeps the published surface to five focused skills without a meta selector', () => {
     const skillDirs = fs
       .readdirSync(path.join(pluginRoot, 'skills'), { withFileTypes: true })
       .filter((entry) => entry.isDirectory())
@@ -1869,11 +1870,15 @@ describe('promptfoo plugin package (Codex + Claude Code)', () => {
       '.claude-plugin/plugin.json',
       '.codex-plugin/plugin.json',
       'assets/promptfoo-panda.svg',
+      'skills/promptfoo-enterprise-setup/SKILL.md',
+      'skills/promptfoo-enterprise-setup/agents/openai.yaml',
+      'skills/promptfoo-enterprise-setup/references/codex-connection.md',
       'skills/promptfoo-evals/SKILL.md',
       'skills/promptfoo-evals/agents/openai.yaml',
       'skills/promptfoo-evals/references/eval-patterns.md',
       'skills/promptfoo-provider-setup/SKILL.md',
       'skills/promptfoo-provider-setup/agents/openai.yaml',
+      'skills/promptfoo-provider-setup/references/local-prerequisites.md',
       'skills/promptfoo-provider-setup/references/provider-patterns.md',
       'skills/promptfoo-provider-setup/scripts/openapi-operation-to-config.mjs',
       'skills/promptfoo-provider-setup/scripts/response-contract.mjs',
@@ -1887,6 +1892,31 @@ describe('promptfoo plugin package (Codex + Claude Code)', () => {
       'skills/promptfoo-redteam-setup/references/redteam-setup-patterns.md',
       'skills/promptfoo-redteam-setup/scripts/openapi-operation-to-redteam-config.mjs',
     ]);
+  });
+
+  it('preserves the shared prerequisite reference when the skills tree is copied on its own', () => {
+    const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'promptfoo-skill-prerequisites-'));
+    try {
+      const copiedSkills = path.join(tempDir, 'skills');
+      fs.cpSync(path.join(pluginRoot, 'skills'), copiedSkills, { recursive: true });
+      const sharedReference = path.join(
+        copiedSkills,
+        'promptfoo-provider-setup',
+        'references',
+        'local-prerequisites.md',
+      );
+      for (const skill of expectedSkillDirs) {
+        const skillRoot = path.join(copiedSkills, skill);
+        const body = readText(path.join(skillRoot, 'SKILL.md'));
+        const links = [...body.matchAll(/\[[^\]]+\]\(([^)]+local-prerequisites\.md)\)/g)];
+        expect(links, skill).toHaveLength(1);
+        const resolvedReference = path.resolve(skillRoot, links[0][1]);
+        expect(resolvedReference, skill).toBe(sharedReference);
+        expect(fs.statSync(resolvedReference).isFile(), skill).toBe(true);
+      }
+    } finally {
+      fs.rmSync(tempDir, { recursive: true, force: true });
+    }
   });
 
   it('keeps the fixture matrix intentional and mapped to the four skills', () => {
@@ -1947,6 +1977,17 @@ describe('promptfoo plugin package (Codex + Claude Code)', () => {
 
   it.each([
     {
+      skill: 'promptfoo-enterprise-setup',
+      scope: /Connect Codex.*Promptfoo Enterprise.*authenticated.*MCP server/s,
+      handoffs: ['promptfoo-provider-setup', 'promptfoo-evals'],
+      workflow: [
+        /leave any separate `promptfoo` MCP server unchanged/,
+        /Keep the supplied client ID, callback URL, and callback port exact/,
+        /Call the read-only `list_teams` tool on \*\*promptfoo-enterprise\*\*/,
+        /including an empty team list/,
+      ],
+    },
+    {
       skill: 'promptfoo-evals',
       scope: /non-redteam.*configured target/s,
       handoffs: ['promptfoo-provider-setup', 'redteam skills'],
@@ -1995,6 +2036,7 @@ describe('promptfoo plugin package (Codex + Claude Code)', () => {
     expect(docs).toContain('Via Claude Code marketplace');
     expect(docs).toContain('Via Codex plugin bundle');
     expect(docs).toContain('/plugin install promptfoo@promptfoo');
+    expect(docs).toContain('codex plugin marketplace add promptfoo/promptfoo');
     expect(docs).toContain('intentionally no meta selector skill');
     expect(docs).toContain("routes from each skill's");
     expect(docs).toContain('Python providers are first-class');
@@ -2056,7 +2098,7 @@ describe('promptfoo plugin package (Codex + Claude Code)', () => {
     expect(claudeBundle).toBe(pluginRoot);
     expect(path.resolve(repoRoot, codexEntry.source.path)).toBe(pluginRoot);
 
-    // Claude Code auto-discovers the same four skills as Codex from the shared bundle's skills/.
+    // Claude Code auto-discovers the same five skills as Codex from the shared bundle's skills/.
     const claudeSkillDirs = fs
       .readdirSync(path.join(claudeBundle, 'skills'), { withFileTypes: true })
       .filter((dirent) => dirent.isDirectory())
