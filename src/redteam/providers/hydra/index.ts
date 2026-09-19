@@ -671,6 +671,7 @@ export class HydraProvider implements ApiProvider {
       const targetContext = context
         ? {
             ...context,
+            iteration: turn,
             vars: {
               ...vars,
               ...(this.sessionId ? { sessionId: this.sessionId } : {}),

@@ -44,6 +44,8 @@ export interface TargetSpanContext {
   promptLabel?: string;
   evalId?: string;
   testIndex?: number;
+  /** Iteration/turn number (1-indexed) for multi-turn red-team strategies. */
+  iteration?: number;
   role?: Extract<PromptfooSpanRole, 'target' | 'grader'>;
 }
 
@@ -134,6 +136,9 @@ export async function withTargetSpan<T>(
   if (ctx.testIndex !== undefined) {
     attributes[PromptfooAttributes.TEST_INDEX] = ctx.testIndex;
   }
+  if (ctx.iteration !== undefined) {
+    attributes[PromptfooAttributes.ITERATION] = ctx.iteration;
+  }
 
   return getGenAITracer().startActiveSpan(
     role === 'grader'
@@ -219,6 +224,7 @@ export async function withTracedProviderCall<T extends ProviderResponse>(
       promptLabel: promptLabel ?? callContext?.prompt?.label,
       evalId: evalId ?? callContext?.evaluationId,
       testIndex,
+      iteration: callContext?.iteration,
       role,
     },
     async () => {

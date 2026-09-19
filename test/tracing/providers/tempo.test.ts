@@ -121,6 +121,52 @@ describe('TempoProvider', () => {
     );
   });
 
+  it('normalizes span events and drops malformed entries', async () => {
+    mockedFetch.mockResolvedValueOnce(
+      response({
+        batches: [
+          {
+            scopeSpans: [
+              {
+                spans: [
+                  {
+                    traceId: TRACE_ID,
+                    spanId: '0123456789abcdef',
+                    name: 'target.call',
+                    startTimeUnixNano: '1704067200000000000',
+                    events: [
+                      {
+                        name: 'tool.called',
+                        timeUnixNano: '1704067200500000000',
+                        attributes: [{ key: 'tool.name', value: { stringValue: 'search' } }],
+                      },
+                      { name: '', timeUnixNano: '1704067200600000000' },
+                      { name: 'unparseable.timestamp', timeUnixNano: 'not-a-number' },
+                    ],
+                  },
+                  {
+                    traceId: TRACE_ID,
+                    spanId: '1123456789abcdef',
+                    name: 'internal.setup',
+                    startTimeUnixNano: '1704067200100000000',
+                  },
+                ],
+              },
+            ],
+          },
+        ],
+      }),
+    );
+    const provider = new TempoProvider({ id: 'tempo', endpoint: 'http://tempo:3200' });
+
+    const result = await provider.fetchTrace(TRACE_ID);
+
+    expect(result?.spans[0].events).toEqual([
+      { name: 'tool.called', timestamp: 1704067200500, attributes: { 'tool.name': 'search' } },
+    ]);
+    expect(result?.spans[1].events).toBeUndefined();
+  });
+
   it('accepts canonical base64 span identifiers', async () => {
     const encodedResponse = structuredClone(traceResponse);
     for (const span of encodedResponse.batches[0].scopeSpans[0].spans) {

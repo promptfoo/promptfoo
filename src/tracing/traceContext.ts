@@ -138,7 +138,11 @@ function createTraceSpans(spans: SpanData[]): TraceSpan[] {
         message: span.statusMessage,
       },
       depth: depthMap.get(span.spanId) ?? 0,
-      events: [],
+      events: (span.events ?? []).map((event) => ({
+        name: event.name,
+        timestamp: event.timestamp,
+        attributes: event.attributes ?? {},
+      })),
     };
   });
 }
@@ -364,6 +368,21 @@ function redactExternalSpan(span: SpanData, redactAttributes: string[]): SpanDat
     name: scrubEcho(span.name),
     statusMessage: scrubEcho(span.statusMessage),
     attributes: sanitizedAttributes,
+    // Span events are persisted alongside the attributes, so they need the same
+    // configured redactions applied before the trace reaches local storage.
+    ...(span.events && {
+      events: span.events.map((event) => ({
+        ...event,
+        name: scrubEcho(event.name),
+        ...(event.attributes && {
+          attributes: sanitizeTraceAttributes(event.attributes, {
+            redactAttributes,
+            sanitizeSensitiveAttributes: false,
+            truncateValues: false,
+          }),
+        }),
+      })),
+    }),
   };
 }
 

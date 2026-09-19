@@ -20,6 +20,7 @@ import { HttpTlsFieldsSchema } from '../contracts/providerConfig/httpTls';
 import { getEnvString } from '../envars';
 import { importModule } from '../esm';
 import logger from '../logger';
+import { withOAuthSpan } from '../tracing/oauthTracer';
 import { stripDecompressionHeaders } from '../util/fetch/stripDecompressionHeaders';
 import {
   maybeLoadConfigFromExternalFile,
@@ -1901,7 +1902,17 @@ export class HttpProvider implements ApiProvider {
 
     logger.debug('[HTTP Provider Auth]: Starting or waiting for OAuth token refresh');
     return this.refreshTokenWithLock(cacheKey, () =>
-      this.performTokenRefresh(oauthConfig, cacheKey),
+      withOAuthSpan(
+        {
+          operation: 'token_refresh',
+          url: oauthConfig.tokenUrl,
+          grantType: oauthConfig.grantType,
+          clientId: oauthConfig.clientId,
+          scopes: oauthConfig.scopes,
+          providerType: 'http',
+        },
+        () => this.performTokenRefresh(oauthConfig, cacheKey),
+      ),
     );
   }
 

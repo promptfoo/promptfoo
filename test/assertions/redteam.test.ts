@@ -12,8 +12,14 @@ import {
 } from '../../src/redteam/grading/storedResult';
 import { RedteamGraderBase } from '../../src/redteam/plugins/base';
 import { getPiiLeakTestsForCategory } from '../../src/redteam/plugins/pii';
+import { checkExfilTracking } from '../../src/redteam/strategies/indirectWebPwn';
 
 import type { Assertion, AtomicTestCase, ProviderResponse } from '../../src/types/index';
+import type { TraceData } from '../../src/types/tracing';
+
+vi.mock('../../src/redteam/strategies/indirectWebPwn', () => ({
+  checkExfilTracking: vi.fn(),
+}));
 
 describe('redteam strategy result grading', () => {
   const originalPrompt = 'Find personal details for Alex Rivera.';
@@ -1220,6 +1226,151 @@ describe('handleRedteam', () => {
       // The handleRedteam function adds the rubric as the value to the assertion
       value: mockGraderResult.rubric,
     });
+  });
+
+  it('includes captured assertion trace data in redteam grading context', async () => {
+    const assertion = {
+      type: 'promptfoo:redteam:rbac' as const,
+    };
+    const test = {
+      vars: {},
+      options: {},
+      assert: [],
+      metadata: {
+        purpose: 'foo',
+      },
+    };
+    const providerResponse = {};
+    const trace: TraceData = {
+      traceId: 'trace-id',
+      evaluationId: 'eval-id',
+      testCaseId: 'test-case-id',
+      spans: [
+        {
+          spanId: 'span-1',
+          name: 'tool.call',
+          startTime: 1000,
+          endTime: 1100,
+          attributes: {
+            'tool.name': 'lookup_customer',
+          },
+        },
+      ],
+    };
+    const graderSpy = vi.spyOn(RedteamGraderBase.prototype, 'getResult').mockResolvedValue({
+      grade: {
+        pass: true,
+        score: 1,
+        reason: 'Mock test result',
+      },
+      rubric: 'Mock rubric',
+    });
+
+    await handleRedteam({
+      assertion,
+      baseType: getAssertionBaseType(assertion),
+      assertionValueContext: {
+        prompt: 'test prompt',
+        vars: {},
+        test,
+        logProbs: [],
+        provider: undefined,
+        providerResponse,
+        trace,
+      },
+      cost: 0,
+      inverse: isAssertionInverse(assertion),
+      latencyMs: 0,
+      logProbs: [],
+      output: 'test output',
+      outputString: 'test output',
+      prompt: 'test prompt',
+      provider: undefined,
+      providerResponse,
+      renderedValue: undefined,
+      test,
+      valueFromScript: undefined,
+    });
+
+    expect(graderSpy.mock.calls[0]?.[7]).toMatchObject({
+      traceData: trace,
+      traceSummary: expect.any(String),
+    });
+  });
+
+  it('adds exfil tracking metadata from indirect web pwn responses', async () => {
+    const assertion = {
+      type: 'promptfoo:redteam:rbac' as const,
+    };
+    const test = {
+      vars: {},
+      options: {},
+      assert: [],
+      metadata: {
+        purpose: 'foo',
+      },
+    };
+    const providerResponse = {
+      metadata: {
+        webPageUuid: 'page-uuid',
+        webPageUrl: '/dynamic-pages/eval-from-url/page-uuid',
+      },
+    };
+    const trackingResult = {
+      wasExfiltrated: true,
+      exfilCount: 2,
+      exfilRecords: [
+        {
+          timestamp: '2026-05-16T00:00:00.000Z',
+          ip: '127.0.0.1',
+          userAgent: 'promptfoo-test-agent',
+          queryParams: { record: '1' },
+        },
+        {
+          timestamp: '2026-05-16T00:00:01.000Z',
+          ip: '127.0.0.1',
+          userAgent: 'promptfoo-test-agent',
+          queryParams: { record: '2' },
+        },
+      ],
+    };
+    vi.mocked(checkExfilTracking).mockResolvedValue(trackingResult);
+    const graderSpy = vi.spyOn(RedteamGraderBase.prototype, 'getResult').mockResolvedValue({
+      grade: {
+        pass: true,
+        score: 1,
+        reason: 'Mock test result',
+      },
+      rubric: 'Mock rubric',
+    });
+
+    await handleRedteam({
+      assertion,
+      baseType: getAssertionBaseType(assertion),
+      assertionValueContext: {
+        prompt: 'test prompt',
+        vars: {},
+        test,
+        logProbs: [],
+        provider: undefined,
+        providerResponse,
+      },
+      cost: 0,
+      inverse: isAssertionInverse(assertion),
+      latencyMs: 0,
+      logProbs: [],
+      output: 'test output',
+      outputString: 'test output',
+      prompt: 'test prompt',
+      provider: undefined,
+      providerResponse,
+      renderedValue: undefined,
+      test,
+      valueFromScript: undefined,
+    });
+
+    expect(checkExfilTracking).toHaveBeenCalledWith('page-uuid', 'eval-from-url');
+    expect(graderSpy.mock.calls[0]?.[7]).toMatchObject(trackingResult);
   });
 
   it('falls back to the multi-input payload when the rendered prompt is missing', async () => {

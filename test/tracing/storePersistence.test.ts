@@ -69,6 +69,41 @@ describe('TraceStore span persistence', () => {
     expect(spans[0]).toMatchObject({ name: 'target.call', spanId: 'shared-span' });
   });
 
+  it('round-trips span events and masks credential-shaped event attributes', async () => {
+    const traceStore = await createTrace('span-events');
+
+    await traceStore.addSpans('span-events', [
+      {
+        spanId: 'event-span',
+        name: 'target.call',
+        startTime: 1,
+        attributes: { component: 'target' },
+        events: [
+          {
+            name: 'tool.called',
+            timestamp: 2,
+            attributes: { 'tool.name': 'search', authorization: 'Bearer secret' },
+          },
+        ],
+      },
+    ]);
+
+    const [sanitized] = await traceStore.getSpans('span-events');
+    expect(sanitized.events).toEqual([
+      {
+        name: 'tool.called',
+        timestamp: 2,
+        attributes: { 'tool.name': 'search', authorization: '<redacted>' },
+      },
+    ]);
+
+    const [raw] = await traceStore.getSpans('span-events', { sanitizeAttributes: false });
+    expect(raw.events?.[0].attributes).toEqual({
+      'tool.name': 'search',
+      authorization: 'Bearer secret',
+    });
+  });
+
   it('allows the same span ID in different traces', async () => {
     const firstTraceStore = await createTrace('first-trace');
     const secondTraceStore = await createTrace('second-trace');
