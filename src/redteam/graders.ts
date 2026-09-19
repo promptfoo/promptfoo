@@ -127,6 +127,7 @@ import { UnverifiableClaimsGrader } from './plugins/unverifiableClaims';
 import { VLGuardGrader } from './plugins/vlguard';
 import { VLSUGrader } from './plugins/vlsu';
 import { WordplayGrader } from './plugins/wordplay';
+import { XssOutputGrader } from './plugins/xssOutput';
 
 import type { RedteamGraderBase } from './plugins/base';
 import type { RedteamAssertionTypes } from './types';
@@ -292,6 +293,7 @@ export const GRADERS: Record<RedteamAssertionTypes, RedteamGraderBase> = {
   'promptfoo:redteam:vlguard': new VLGuardGrader(),
   'promptfoo:redteam:vlsu': new VLSUGrader(),
   'promptfoo:redteam:wordplay': new WordplayGrader(),
+  'promptfoo:redteam:xss-output': new XssOutputGrader(),
   ...createCodingAgentGraders(),
 };
 
