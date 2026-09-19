@@ -1957,6 +1957,30 @@ describe('runAssertion', () => {
         reason: 'Custom grade',
       });
     });
+
+    it.each([null, '0.5', -0.1, 1.1])('rejects an invalid score: %j', async (score) => {
+      vi.mocked(fetchWithRetries).mockResolvedValueOnce(
+        new Response(JSON.stringify({ pass: true, score }), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
+        }),
+      );
+
+      const result = await runAssertion({
+        prompt: 'Some prompt',
+        assertion: { ...webhookAssertion, type },
+        test: {} as AtomicTestCase,
+        providerResponse: { output: 'Expected output' },
+        provider: createMockProvider(),
+      });
+
+      expect(result).toMatchObject({
+        pass: false,
+        score: 0,
+        reason:
+          'Webhook error: Invariant failed: Webhook response "score" must be a finite number between 0 and 1',
+      });
+    });
   });
 
   it('should fail when the webhook returns an error', async () => {

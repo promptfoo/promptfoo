@@ -1754,6 +1754,7 @@ export class HttpProvider implements ApiProvider {
   private validateStatus: Promise<(status: number) => boolean>;
   private lastSignatureTimestamp?: number;
   private lastSignature?: string;
+  private lastSignatureConfig?: string;
   private authTokenCache = new Map<string, CachedAuthToken>();
   private tokenRefreshLocks = new Map<string, AuthTokenRefreshLock>();
   private httpsAgent?: Dispatcher;
@@ -2157,10 +2158,21 @@ export class HttpProvider implements ApiProvider {
     }
 
     const signatureAuth = this.config.signatureAuth;
+    const nunjucks = getNunjucksEngine();
+    const renderedConfig: any = {
+      ...signatureAuth,
+      privateKey: signatureAuth.privateKey
+        ? nunjucks.renderString(signatureAuth.privateKey, vars)
+        : undefined,
+    };
+    // This stays in process memory only. Do not use the logging-oriented safe
+    // serializer here: it truncates long key material and could collide.
+    const renderedConfigKey = JSON.stringify(renderedConfig);
 
     if (
       !this.lastSignatureTimestamp ||
       !this.lastSignature ||
+      this.lastSignatureConfig !== renderedConfigKey ||
       needsSignatureRefresh(
         this.lastSignatureTimestamp,
         signatureAuth.signatureValidityMs,
@@ -2170,15 +2182,6 @@ export class HttpProvider implements ApiProvider {
       logger.debug('[HTTP Provider Auth]: Generating new signature');
       this.lastSignatureTimestamp = Date.now();
 
-      // Render privateKey with template substitution
-      const nunjucks = getNunjucksEngine();
-      const renderedConfig: any = {
-        ...signatureAuth,
-        privateKey: signatureAuth.privateKey
-          ? nunjucks.renderString(signatureAuth.privateKey, vars)
-          : undefined,
-      };
-
       // Determine the signature auth type for legacy configurations
       let authConfig = renderedConfig;
       if (!('type' in renderedConfig)) {
@@ -2186,6 +2189,7 @@ export class HttpProvider implements ApiProvider {
       }
 
       this.lastSignature = await generateSignature(authConfig, this.lastSignatureTimestamp);
+      this.lastSignatureConfig = renderedConfigKey;
       logger.debug('[HTTP Provider Auth]: Generated new signature successfully');
     } else {
       logger.debug('[HTTP Provider Auth]: Using cached signature');

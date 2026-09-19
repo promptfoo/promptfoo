@@ -628,7 +628,7 @@ describe('OllamaChatProvider', () => {
   });
 
   it('should handle think configuration when it is not provided', async () => {
-    const provider = new OllamaCompletionProvider('llama3.3');
+    const provider = new OllamaChatProvider('llama3.3');
     const mockResponse = {
       data: '',
       cached: false,

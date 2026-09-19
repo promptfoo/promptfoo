@@ -1007,7 +1007,16 @@ export class CustomProvider implements ApiProvider {
     );
     logger.debug(finalTargetPrompt);
 
-    let targetResponse = await getTargetResponse(provider, finalTargetPrompt, context, options);
+    // Target providers may resolve templates, sessions, or cache keys from context.vars.
+    // Preserve that context while giving them the exact variables used to render this turn.
+    const targetVars = { ...vars, [this.config.injectVar]: attackPrompt };
+    const targetContext = context ? { ...context, vars: targetVars } : context;
+    let targetResponse = await getTargetResponse(
+      provider,
+      finalTargetPrompt,
+      targetContext,
+      options,
+    );
     for (const message of pendingMessages) {
       this.memory.addMessage(this.targetConversationId, message);
     }

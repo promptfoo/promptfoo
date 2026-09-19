@@ -127,6 +127,44 @@ describe('RSA signature authentication', () => {
     expect(crypto.createSign).toHaveBeenCalledTimes(1); // Should not be called again
   });
 
+  it('regenerates a signature when a templated private key changes', async () => {
+    const provider = new HttpProvider('http://example.com', {
+      config: {
+        method: 'POST',
+        body: { key: 'value' },
+        signatureAuth: {
+          privateKey: '-----BEGIN PRIVATE KEY-----\\n{{ key }}\\n-----END PRIVATE KEY-----',
+          signatureValidityMs: 300000,
+        },
+      },
+    });
+    vi.mocked(fetchWithCache).mockResolvedValue({
+      data: JSON.stringify({ result: 'success' }),
+      status: 200,
+      statusText: 'OK',
+      cached: false,
+    });
+
+    await provider.callApi('test', {
+      prompt: { raw: 'test', label: 'test' },
+      vars: { key: 'first-key' },
+    });
+    await provider.callApi('test', {
+      prompt: { raw: 'test', label: 'test' },
+      vars: { key: 'second-key' },
+    });
+
+    expect(crypto.createSign).toHaveBeenCalledTimes(2);
+    expect(mockSign).toHaveBeenNthCalledWith(
+      1,
+      '-----BEGIN PRIVATE KEY-----\\nfirst-key\\n-----END PRIVATE KEY-----',
+    );
+    expect(mockSign).toHaveBeenNthCalledWith(
+      2,
+      '-----BEGIN PRIVATE KEY-----\\nsecond-key\\n-----END PRIVATE KEY-----',
+    );
+  });
+
   it('should regenerate signature at the default refresh buffer boundary', async () => {
     const provider = new HttpProvider('http://example.com', {
       config: {
