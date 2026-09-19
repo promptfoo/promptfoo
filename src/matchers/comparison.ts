@@ -3,7 +3,7 @@ import { getDefaultProviders } from '../providers/defaults';
 import invariant from '../util/invariant';
 import { callProviderWithContext, getAndCheckProvider } from './providers';
 import { loadRubricPrompt, renderLlmRubricPrompt } from './rubric';
-import { fail, normalizeMatcherTokenUsage, tryParse } from './shared';
+import { graderFail, normalizeMatcherTokenUsage, tryParse } from './shared';
 
 import type {
   Assertion,
@@ -58,12 +58,19 @@ export async function matchesSelectBest(
         }
       : resp.tokenUsage,
   );
-  const cacheMetadata = resp.cached ? { metadata: { cachedResponse: true } } : {};
+  const cacheMetadataFields = resp.cached ? { cachedResponse: true } : undefined;
+  const cacheMetadata = cacheMetadataFields ? { metadata: cacheMetadataFields } : {};
+  // A grader transport/parse failure is not a verdict about any output, so tag it
+  // with `metadata.graderError` (keeping any cache provenance) rather than letting
+  // inverse- or xfail-aware callers treat it as a real comparison result.
+  const selectBestGraderFail = (reason: string) => {
+    const result = graderFail(reason, tokensUsed);
+    return { ...result, metadata: { ...result.metadata, ...cacheMetadataFields } };
+  };
   if (resp.error || !resp.output) {
-    return Array.from({ length: outputs.length }, () => ({
-      ...fail(resp.error || 'No output', tokensUsed),
-      ...cacheMetadata,
-    }));
+    return Array.from({ length: outputs.length }, () =>
+      selectBestGraderFail(resp.error || 'No output'),
+    );
   }
 
   invariant(typeof resp.output === 'string', 'select-best produced malformed response');
@@ -72,10 +79,9 @@ export async function matchesSelectBest(
   const verdict = firstIntegerMatch ? Number.parseInt(firstIntegerMatch[0], 10) : Number.NaN;
 
   if (Number.isNaN(verdict) || verdict < 0 || verdict >= outputs.length) {
-    return Array.from({ length: outputs.length }, () => ({
-      ...fail(`Invalid select-best verdict: ${verdict}`, tokensUsed),
-      ...cacheMetadata,
-    }));
+    return Array.from({ length: outputs.length }, () =>
+      selectBestGraderFail(`Invalid select-best verdict: ${verdict}`),
+    );
   }
 
   return outputs.map((_output, index) => {
