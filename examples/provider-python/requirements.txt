@@ -1,5 +1,5 @@
 annotated-types==0.6.0
-anyio==4.2.0
+anyio==4.14.2
 certifi==2025.10.5
 distro==1.9.0
 exceptiongroup==1.2.0
