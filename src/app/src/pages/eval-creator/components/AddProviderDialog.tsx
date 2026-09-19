@@ -237,6 +237,9 @@ export function getProviderTypeFromId(id: string | undefined): string | undefine
   if (id.startsWith('deepseek:')) {
     return 'deepseek';
   }
+  if (id.startsWith('volcengine:')) {
+    return 'volcengine';
+  }
   if (id.startsWith('perplexity:')) {
     return 'perplexity';
   }
