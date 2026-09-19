@@ -733,10 +733,6 @@ describe('auth command', () => {
         .mockResolvedValueOnce({
           id: 'default-team',
           name: 'Default',
-          slug: 'default',
-          organizationId: 'org-1',
-          createdAt: '2024-01-01',
-          updatedAt: '2024-01-01',
         });
 
       const currentCommand = program.commands
