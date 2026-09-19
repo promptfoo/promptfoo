@@ -336,6 +336,34 @@ describe('OllamaCompletionProvider', () => {
     expect(body.options[key]).toBeUndefined();
   });
 
+  it.each([
+    [{ bustCache: true }, true],
+    [{ debug: true }, true],
+    [{}, undefined],
+  ])('should forward bustCache %j to fetchWithCache', async (extra, expected) => {
+    vi.mocked(fetchWithCache).mockResolvedValue({
+      data: '{"response":"hi","done":true}\n',
+      cached: false,
+      status: 200,
+      statusText: 'OK',
+      headers: {},
+    });
+
+    const context = {
+      prompt: { raw: 'test prompt', label: 'test' },
+      vars: {},
+      ...extra,
+    } as CallApiContextParams;
+
+    await new OllamaCompletionProvider('llama3.3').callApi('test prompt', context);
+
+    // redteam discover and the gcg strategy pass bustCache: true directly into
+    // callApi, and a bare `ollama:<model>` id routes here -- without this the
+    // completion provider replayed cached target answers.
+    const call = vi.mocked(fetchWithCache).mock.calls[0] as any;
+    expect(call[4]).toBe(expected);
+  });
+
   it('should omit finishReason when done_reason is absent', async () => {
     vi.mocked(fetchWithCache).mockResolvedValue({
       data: '{"response":"Hi!","done":true}\n',
