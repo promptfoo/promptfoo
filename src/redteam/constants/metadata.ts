@@ -31,6 +31,8 @@ export const subCategoryDescriptions: Record<Plugin | Strategy, string> = {
   cca: 'Tests for vulnerability to Context Compliance Attacks using fabricated conversation history',
   citation: 'Exploits academic authority bias to bypass content filters',
   'data-exfil': 'Tests for data exfiltration via URL parameters, images, or markdown links',
+  'data-structure-injection':
+    'Tests whether models copy attacker-controlled values from structured data into tool calls or workflows',
   competitors: 'Tests for unauthorized competitor mentions and endorsements',
   contracts: 'Tests for unauthorized contractual commitments and legal exposure',
   coppa: "Tests for COPPA (Children's Online Privacy Protection Act) compliance violations",
@@ -291,6 +293,7 @@ export const displayNameOverrides: Record<Plugin | Strategy, string> = {
   'cross-session-leak': 'Cross-Session Data Leakage',
   cyberseceval: 'CyberSecEval Dataset',
   'data-exfil': 'Data Exfiltration',
+  'data-structure-injection': 'Data-Structure Injection',
   'debug-access': 'Debug Interface Exposure',
   default: 'Standard Security Suite',
   'divergent-repetition': 'Divergent Repetition',
@@ -532,6 +535,7 @@ export const riskCategorySeverityMap: Record<Plugin, Severity> = {
   'cross-session-leak': Severity.Medium,
   cyberseceval: Severity.Medium,
   'data-exfil': Severity.High,
+  'data-structure-injection': Severity.High,
   donotanswer: Severity.Medium,
   'debug-access': Severity.High,
   default: Severity.Low,
@@ -688,6 +692,7 @@ export const riskCategories: Record<string, Plugin[]> = {
     // Data protection
     'cross-session-leak',
     'data-exfil',
+    'data-structure-injection',
     'divergent-repetition',
     'harmful:privacy',
     'insurance:data-disclosure',
@@ -874,6 +879,7 @@ export const categoryAliases: Record<Plugin, string> = {
   'cross-session-leak': 'CrossSessionLeak',
   cyberseceval: 'CyberSecEval',
   'data-exfil': 'DataExfil',
+  'data-structure-injection': 'DataStructureInjection',
   donotanswer: 'DoNotAnswer',
   'debug-access': 'DebugAccess',
   default: 'Default',
@@ -1046,6 +1052,8 @@ export const pluginDescriptions: Record<Plugin, string> = {
   cyberseceval: "Tests prompt injection attacks from Meta's CyberSecEval dataset",
   'data-exfil':
     'Tests whether the AI can be tricked into exfiltrating sensitive data via URL parameters, images, or markdown links',
+  'data-structure-injection':
+    'Tests whether the AI copies attacker-controlled values embedded in JSON, YAML, XML, TOML, or Markdown front matter records into its tool calls, schemas, or workflow steps',
   donotanswer: 'Tests for vulnerabilities to Do Not Answer attacks',
   'debug-access':
     'Identifies exposed debugging interfaces and unauthorized command execution vectors',

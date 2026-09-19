@@ -4279,6 +4279,7 @@ describe('Language configuration', () => {
         plugins: [
           { id: 'cca', numTests: 1 }, // MULTI_INPUT_EXCLUDED_PLUGIN
           { id: 'cross-session-leak', numTests: 1 }, // MULTI_INPUT_EXCLUDED_PLUGIN
+          { id: 'data-structure-injection', numTests: 1 }, // MULTI_INPUT_EXCLUDED_PLUGIN
           { id: 'contracts', numTests: 1 }, // Regular plugin
         ],
         prompts: ['Test {{query}}'],
@@ -4287,8 +4288,13 @@ describe('Language configuration', () => {
         inputs: { query: 'user query', context: 'additional context' }, // Multi-input mode
       });
 
-      // cca and cross-session-leak should be excluded
+      // cca, cross-session-leak, and data-structure-injection should be excluded
       expect(result.testCases.length).toBeGreaterThanOrEqual(0);
+      expect(
+        result.testCases.some(
+          (testCase) => testCase.metadata?.pluginId === 'data-structure-injection',
+        ),
+      ).toBe(false);
 
       // Check that logger.info was called with skipping message
       const skipMessage = vi
@@ -4299,6 +4305,7 @@ describe('Language configuration', () => {
       expect(skipMessage).toBeDefined();
       expect(skipMessage).toContain('cca');
       expect(skipMessage).toContain('cross-session-leak');
+      expect(skipMessage).toContain('data-structure-injection');
     });
 
     it('should NOT exclude plugins when inputs is empty object', async () => {

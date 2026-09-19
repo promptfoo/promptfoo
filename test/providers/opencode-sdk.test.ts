@@ -71,12 +71,14 @@ const createMockSessionResponse = (id = 'test-session-123') => ({
 // SDK session.prompt() returns: { info: AssistantMessage, parts: Part[] }
 const createMockPromptResponse = (
   parts: Array<{
+    id?: string;
     type: string;
     text?: string;
     tool?: string;
     state?: {
       status?: string;
       input?: Record<string, unknown>;
+      output?: unknown;
       metadata?: Record<string, unknown>;
     };
   }>,
@@ -717,6 +719,39 @@ describe('OpenCodeSDKProvider', () => {
         expect(result.output).toBe('Part 1\nPart 2');
       });
 
+      it('should normalize tool parts into argument-bearing toolCalls metadata', async () => {
+        mockSessionPrompt.mockResolvedValue(
+          createMockPromptResponse([
+            {
+              id: 'call_1',
+              type: 'tool',
+              tool: 'send_email',
+              state: {
+                status: 'completed',
+                input: { to: 'support@example.com', cc: 'dsi@example.com' },
+                output: 'sent',
+              },
+            },
+            { type: 'text', text: 'Email sent.' },
+          ]),
+        );
+
+        const provider = new OpenCodeSDKProvider({
+          env: { ANTHROPIC_API_KEY: 'test-api-key' },
+        });
+        const result = await provider.callApi('Send the email');
+
+        expect(result.metadata?.toolCalls).toEqual([
+          {
+            id: 'call_1',
+            name: 'send_email',
+            input: { to: 'support@example.com', cc: 'dsi@example.com' },
+            output: 'sent',
+            is_error: false,
+          },
+        ]);
+      });
+
       it('should normalize first-class skill tool parts into skillCalls metadata', async () => {
         mockSessionPrompt.mockResolvedValue(
           createMockPromptResponse([
@@ -854,6 +889,57 @@ describe('OpenCodeSDKProvider', () => {
             input: { name: 'code-standards' },
             path: path.join('/repo/.agents/skills/code-standards', 'SKILL.md'),
             source: 'tool',
+          },
+        ]);
+      });
+
+      it('should capture ordinary tool calls from intermediate turns when skill is disabled', async () => {
+        mockSessionPrompt.mockResolvedValue(
+          createMockPromptResponseWithAnchors('Email sent.', {
+            id: 'assistant-msg-1',
+            parentID: 'user-msg-1',
+          }),
+        );
+        mockSessionMessages.mockResolvedValue([
+          {
+            info: { id: 'user-msg-1', role: 'user' },
+            parts: [{ type: 'text', text: 'Send the email' }],
+          },
+          {
+            info: { id: 'intermediate-msg-1', role: 'assistant' },
+            parts: [
+              {
+                id: 'call-1',
+                type: 'tool',
+                tool: 'send_email',
+                state: {
+                  status: 'completed',
+                  input: { to: 'support@example.com', cc: 'dsi@example.com' },
+                  output: 'sent',
+                },
+              },
+            ],
+          },
+          {
+            info: { id: 'assistant-msg-1', role: 'assistant' },
+            parts: [{ type: 'text', text: 'Email sent.' }],
+          },
+        ]);
+
+        const provider = new OpenCodeSDKProvider({
+          config: { tools: { skill: false, send_email: true } },
+          env: { ANTHROPIC_API_KEY: 'test-api-key' },
+        });
+        const result = await provider.callApi('Send the email');
+
+        expect(mockSessionMessages).toHaveBeenCalledTimes(1);
+        expect(result.metadata?.toolCalls).toEqual([
+          {
+            id: 'call-1',
+            name: 'send_email',
+            input: { to: 'support@example.com', cc: 'dsi@example.com' },
+            output: 'sent',
+            is_error: false,
           },
         ]);
       });
@@ -1058,7 +1144,7 @@ describe('OpenCodeSDKProvider', () => {
         expect(result.metadata?.skillCalls).toBeUndefined();
       });
 
-      it('should skip session.messages fetch when skill tool is disabled', async () => {
+      it('should skip session.messages fetch when every tool is disabled', async () => {
         const provider = new OpenCodeSDKProvider({
           config: { tools: { skill: false } },
           env: { ANTHROPIC_API_KEY: 'test-api-key' },
@@ -1157,9 +1243,9 @@ describe('OpenCodeSDKProvider', () => {
         ]);
       });
 
-      it('should skip session.messages fetch when tools config is omitted (skill disabled by default)', async () => {
+      it('should skip session.messages fetch when tools config is omitted (all denied by default)', async () => {
         // The default tool policy denies every tool through the `*` wildcard, so
-        // no skill parts can exist and the fetch must be skipped.
+        // no tool parts can exist and the fetch must be skipped.
         const provider = new OpenCodeSDKProvider({
           env: { ANTHROPIC_API_KEY: 'test-api-key' },
         });
