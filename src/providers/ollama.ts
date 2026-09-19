@@ -531,10 +531,13 @@ export class OllamaCompletionProvider implements ApiProvider {
       return result;
     };
 
-    return withGenAISpan(spanContext, () => this.callApiInternal(prompt), resultExtractor);
+    return withGenAISpan(spanContext, () => this.callApiInternal(prompt, context), resultExtractor);
   }
 
-  private async callApiInternal(prompt: string): Promise<ProviderResponse> {
+  private async callApiInternal(
+    prompt: string,
+    context?: CallApiContextParams,
+  ): Promise<ProviderResponse> {
     const { passthroughOptions, passthroughRest } = splitOllamaPassthrough(this.config);
     const params = {
       model: this.modelName,
@@ -570,6 +573,7 @@ export class OllamaCompletionProvider implements ApiProvider {
         },
         getRequestTimeoutMs(),
         'text',
+        context?.bustCache ?? context?.debug,
       );
     } catch (err) {
       return {
