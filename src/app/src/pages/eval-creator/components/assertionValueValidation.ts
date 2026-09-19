@@ -1,3 +1,4 @@
+import { TRAJECTORY_STEP_TYPES } from '@promptfoo/contracts/trajectory';
 import type { Assertion, AssertionType } from '@promptfoo/types';
 
 const BASE_ASSERTION_TYPES = [
@@ -62,6 +63,7 @@ const BASE_ASSERTION_TYPES = [
   'trace-span-duration',
   'trajectory:goal-success',
   'trajectory:step-count',
+  'trajectory:step-status',
   'trajectory:tool-args-match',
   'trajectory:tool-sequence',
   'trajectory:tool-used',
@@ -417,6 +419,45 @@ function getTrajectoryStepCountValueError(value: unknown): string | undefined {
   return undefined;
 }
 
+function isTemplatedString(value: unknown): boolean {
+  return typeof value === 'string' && /\{\{[\s\S]+?\}\}|\{%[\s\S]+?%\}/.test(value);
+}
+
+function getTrajectoryStepStatusValueError(value: unknown): string | undefined {
+  if (!isRecord(value) || !hasMatcherName(value)) {
+    return 'Enter JSON with a trajectory step name or pattern and status.';
+  }
+  if (
+    ['name', 'pattern', 'message'].some(
+      (field) => value[field] !== undefined && typeof value[field] !== 'string',
+    )
+  ) {
+    return 'Set trajectory step name, pattern, and message to strings.';
+  }
+  if (value.type !== undefined) {
+    const types = Array.isArray(value.type) ? value.type : [value.type];
+    if (
+      types.length === 0 ||
+      types.some(
+        (type) =>
+          !isTemplatedString(type) &&
+          !TRAJECTORY_STEP_TYPES.some((supported) => type === supported),
+      )
+    ) {
+      return `Set trajectory step type to ${TRAJECTORY_STEP_TYPES.join(', ')}, or a nonempty array of those types.`;
+    }
+  }
+  if (
+    value.status !== 'success' &&
+    value.status !== 'error' &&
+    !isTemplatedString(value.status) &&
+    (typeof value.status !== 'number' || !Number.isFinite(value.status))
+  ) {
+    return 'Set trajectory step status to "success", "error", or a numeric code.';
+  }
+  return undefined;
+}
+
 function getTrajectoryToolSequenceValueError(value: unknown): string | undefined {
   const steps = getTrajectoryToolSequenceSteps(value);
   if (!steps || steps.length === 0) {
@@ -454,6 +495,12 @@ function getStructuredValueError(assertion: Assertion): string | undefined {
     assertion.type === 'not-trajectory:step-count'
   ) {
     return getTrajectoryStepCountValueError(assertion.value);
+  }
+  if (
+    assertion.type === 'trajectory:step-status' ||
+    assertion.type === 'not-trajectory:step-status'
+  ) {
+    return getTrajectoryStepStatusValueError(assertion.value);
   }
   if (
     assertion.type === 'trajectory:tool-sequence' ||

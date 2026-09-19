@@ -236,6 +236,11 @@ tests:
       - type: trajectory:tool-used
         value: search_orders
 
+      - type: trajectory:step-status
+        value:
+          name: search_orders
+          status: success
+
       - type: trajectory:tool-args-match
         value:
           name: search_orders
