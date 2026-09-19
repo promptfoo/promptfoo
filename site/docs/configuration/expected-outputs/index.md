@@ -347,7 +347,7 @@ type AssertionResponse = string | boolean | number | GradingResult;
 type AssertFunction = (output: string, context: AssertionValueFunctionContext) => AssertionResponse;
 ```
 
-See [GradingResult definition](/docs/configuration/reference#gradingresult).
+See [GradingResult definition](/docs/configuration/types#gradingresult).
 
 Here's an example `assert.js`:
 
@@ -374,7 +374,7 @@ If the file ends in `.py`, the Python is executed:
       value: file://path/to/assert.py
 ```
 
-The assertion expects an output that is `bool`, `float`, or a JSON [GradingResult](/docs/configuration/reference#gradingresult).
+The assertion expects an output that is `bool`, `float`, or a JSON [GradingResult](/docs/configuration/types#gradingresult).
 
 For example:
 

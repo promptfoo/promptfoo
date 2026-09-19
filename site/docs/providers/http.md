@@ -593,7 +593,7 @@ This will import the function `parseResponse` from the file `path/to/parser.js`.
 
 ### Guardrails Support
 
-If your HTTP target has guardrails set up, return a non-empty `output` and a top-level `guardrails` object from the transform. The object must conform to the [GuardrailResponse](/docs/configuration/reference#guardrails) interface. `flagged` controls the assertion verdict; `flaggedInput` and `flaggedOutput` only describe which side triggered.
+If your HTTP target has guardrails set up, return a non-empty `output` and a top-level `guardrails` object from the transform. The object must conform to the [GuardrailResponse](/docs/configuration/types#guardrails) interface. `flagged` controls the assertion verdict; `flaggedInput` and `flaggedOutput` only describe which side triggered.
 
 ```yaml
 providers:

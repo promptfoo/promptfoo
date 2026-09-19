@@ -7,7 +7,7 @@ description: Test provider-reported guardrail decisions, normalize custom target
 
 # Guardrails
 
-The `guardrails` assertion grades a safety decision returned by the target. It does not run a guardrail or inspect the text. It reads the normalized `guardrails` field on the [provider response](/docs/configuration/reference#providerresponse).
+The `guardrails` assertion grades a safety decision returned by the target. It does not run a guardrail or inspect the text. It reads the normalized `guardrails` field on the [provider response](/docs/configuration/types#providerresponse).
 
 Choose the assertion based on the traffic you are testing:
 
@@ -246,4 +246,4 @@ If a dangerous test unexpectedly passes, check these conditions first:
 - An expected safety block is represented as `output`, not `error`.
 - Streaming and cached responses preserve the same final guardrail signal as non-streaming responses.
 
-See also [HTTP provider guardrails support](/docs/providers/http#guardrails-support), [Python provider guardrails](/docs/providers/python#implementing-guardrails), and the [GuardrailResponse reference](/docs/configuration/reference#guardrails).
+See also [HTTP provider guardrails support](/docs/providers/http#guardrails-support), [Python provider guardrails](/docs/providers/python#implementing-guardrails), and the [GuardrailResponse reference](/docs/configuration/types#guardrails).

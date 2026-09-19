@@ -262,7 +262,7 @@ module.exports = async (output, context) => {
 };
 ```
 
-You can also return complete [`GradingResult`](/docs/configuration/reference/#gradingresult) objects. For example:
+You can also return complete [`GradingResult`](/docs/configuration/types#gradingresult) objects. For example:
 
 ```js
 module.exports = (output, context) => {
