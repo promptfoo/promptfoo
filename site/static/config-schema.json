@@ -23,49 +23,49 @@
           "$ref": "#/definitions/__schema14"
         },
         "scenarios": {
-          "$ref": "#/definitions/__schema29"
-        },
-        "defaultTest": {
           "$ref": "#/definitions/__schema30"
         },
-        "outputPath": {
+        "defaultTest": {
           "$ref": "#/definitions/__schema31"
         },
-        "sharing": {
+        "outputPath": {
           "$ref": "#/definitions/__schema32"
         },
-        "nunjucksFilters": {
+        "sharing": {
           "$ref": "#/definitions/__schema33"
         },
-        "env": {
+        "nunjucksFilters": {
           "$ref": "#/definitions/__schema34"
         },
-        "derivedMetrics": {
+        "env": {
           "$ref": "#/definitions/__schema35"
         },
-        "extensions": {
+        "derivedMetrics": {
           "$ref": "#/definitions/__schema36"
         },
-        "metadata": {
+        "extensions": {
           "$ref": "#/definitions/__schema37"
         },
-        "redteam": {
+        "metadata": {
           "$ref": "#/definitions/__schema38"
         },
-        "writeLatestResults": {
+        "redteam": {
           "$ref": "#/definitions/__schema39"
         },
-        "tracing": {
+        "writeLatestResults": {
           "$ref": "#/definitions/__schema40"
         },
+        "tracing": {
+          "$ref": "#/definitions/__schema41"
+        },
         "evaluateOptions": {
-          "$ref": "#/definitions/__schema45"
+          "$ref": "#/definitions/__schema46"
         },
         "commandLineOptions": {
-          "$ref": "#/definitions/__schema47"
+          "$ref": "#/definitions/__schema48"
         },
         "targets": {
-          "$ref": "#/definitions/__schema48"
+          "$ref": "#/definitions/__schema49"
         }
       },
       "required": ["prompts"],
@@ -765,13 +765,13 @@
                 "$ref": "#/definitions/__schema15"
               },
               {
-                "$ref": "#/definitions/__schema28"
+                "$ref": "#/definitions/__schema29"
               }
             ]
           }
         },
         {
-          "$ref": "#/definitions/__schema28"
+          "$ref": "#/definitions/__schema29"
         }
       ]
     },
@@ -800,16 +800,16 @@
           "$ref": "#/definitions/__schema22"
         },
         "assertScoringFunction": {
-          "$ref": "#/definitions/__schema24"
-        },
-        "options": {
           "$ref": "#/definitions/__schema25"
         },
-        "threshold": {
+        "options": {
           "$ref": "#/definitions/__schema26"
         },
-        "metadata": {
+        "threshold": {
           "$ref": "#/definitions/__schema27"
+        },
+        "metadata": {
+          "$ref": "#/definitions/__schema28"
         }
       },
       "additionalProperties": false
@@ -894,9 +894,12 @@
               "assert": {
                 "type": "array",
                 "items": {
-                  "allOf": [
+                  "anyOf": [
                     {
                       "$ref": "#/definitions/__schema23"
+                    },
+                    {
+                      "$ref": "#/definitions/__schema24"
                     }
                   ]
                 }
@@ -923,6 +926,9 @@
           },
           {
             "$ref": "#/definitions/__schema23"
+          },
+          {
+            "$ref": "#/definitions/__schema24"
           }
         ]
       }
@@ -1111,6 +1117,17 @@
       "additionalProperties": false
     },
     "__schema24": {
+      "type": "object",
+      "properties": {
+        "value": {
+          "type": "string",
+          "pattern": "^file:\\/\\/.+\\.(?:json|ya?ml)$"
+        }
+      },
+      "required": ["value"],
+      "additionalProperties": false
+    },
+    "__schema25": {
       "anyOf": [
         {
           "type": "string",
@@ -1119,7 +1136,7 @@
         {}
       ]
     },
-    "__schema25": {
+    "__schema26": {
       "type": "object",
       "properties": {
         "prefix": {
@@ -1232,10 +1249,10 @@
       },
       "additionalProperties": {}
     },
-    "__schema26": {
+    "__schema27": {
       "type": "number"
     },
-    "__schema27": {
+    "__schema28": {
       "type": "object",
       "properties": {
         "pluginConfig": {},
@@ -1243,7 +1260,7 @@
       },
       "additionalProperties": {}
     },
-    "__schema28": {
+    "__schema29": {
       "type": "object",
       "properties": {
         "path": {
@@ -1286,7 +1303,7 @@
       "required": ["path"],
       "additionalProperties": false
     },
-    "__schema29": {
+    "__schema30": {
       "type": "array",
       "items": {
         "anyOf": [
@@ -1356,28 +1373,28 @@
                     "assertScoringFunction": {
                       "allOf": [
                         {
-                          "$ref": "#/definitions/__schema24"
+                          "$ref": "#/definitions/__schema25"
                         }
                       ]
                     },
                     "options": {
                       "allOf": [
                         {
-                          "$ref": "#/definitions/__schema25"
+                          "$ref": "#/definitions/__schema26"
                         }
                       ]
                     },
                     "threshold": {
                       "allOf": [
                         {
-                          "$ref": "#/definitions/__schema26"
+                          "$ref": "#/definitions/__schema27"
                         }
                       ]
                     },
                     "metadata": {
                       "allOf": [
                         {
-                          "$ref": "#/definitions/__schema27"
+                          "$ref": "#/definitions/__schema28"
                         }
                       ]
                     }
@@ -1398,7 +1415,7 @@
         ]
       }
     },
-    "__schema30": {
+    "__schema31": {
       "anyOf": [
         {
           "type": "string"
@@ -1425,23 +1442,23 @@
               "$ref": "#/definitions/__schema22"
             },
             "assertScoringFunction": {
-              "$ref": "#/definitions/__schema24"
-            },
-            "options": {
               "$ref": "#/definitions/__schema25"
             },
-            "threshold": {
+            "options": {
               "$ref": "#/definitions/__schema26"
             },
-            "metadata": {
+            "threshold": {
               "$ref": "#/definitions/__schema27"
+            },
+            "metadata": {
+              "$ref": "#/definitions/__schema28"
             }
           },
           "additionalProperties": false
         }
       ]
     },
-    "__schema31": {
+    "__schema32": {
       "anyOf": [
         {
           "type": "string"
@@ -1454,7 +1471,7 @@
         }
       ]
     },
-    "__schema32": {
+    "__schema33": {
       "anyOf": [
         {
           "type": "boolean"
@@ -1473,7 +1490,7 @@
         }
       ]
     },
-    "__schema33": {
+    "__schema34": {
       "type": "object",
       "propertyNames": {
         "type": "string"
@@ -1482,7 +1499,7 @@
         "type": "string"
       }
     },
-    "__schema34": {
+    "__schema35": {
       "anyOf": [
         {
           "$ref": "#/definitions/__schema7"
@@ -1498,7 +1515,7 @@
         }
       ]
     },
-    "__schema35": {
+    "__schema36": {
       "type": "array",
       "items": {
         "type": "object",
@@ -1519,7 +1536,7 @@
         "additionalProperties": false
       }
     },
-    "__schema36": {
+    "__schema37": {
       "anyOf": [
         {
           "type": "array",
@@ -1532,14 +1549,14 @@
         }
       ]
     },
-    "__schema37": {
+    "__schema38": {
       "type": "object",
       "propertyNames": {
         "type": "string"
       },
       "additionalProperties": {}
     },
-    "__schema38": {
+    "__schema39": {
       "type": "object",
       "properties": {
         "injectVar": {
@@ -3124,10 +3141,10 @@
         }
       }
     },
-    "__schema39": {
+    "__schema40": {
       "type": "boolean"
     },
-    "__schema40": {
+    "__schema41": {
       "type": "object",
       "properties": {
         "enabled": {
@@ -3236,19 +3253,19 @@
                   "const": "tempo"
                 },
                 "endpoint": {
-                  "$ref": "#/definitions/__schema41"
+                  "$ref": "#/definitions/__schema42"
                 },
                 "auth": {
                   "type": "object",
                   "properties": {
                     "token": {
-                      "$ref": "#/definitions/__schema42"
-                    },
-                    "username": {
                       "$ref": "#/definitions/__schema43"
                     },
-                    "password": {
+                    "username": {
                       "$ref": "#/definitions/__schema44"
+                    },
+                    "password": {
+                      "$ref": "#/definitions/__schema45"
                     }
                   },
                   "additionalProperties": false
@@ -3279,7 +3296,7 @@
                   "const": "braintrust"
                 },
                 "endpoint": {
-                  "$ref": "#/definitions/__schema41"
+                  "$ref": "#/definitions/__schema42"
                 },
                 "projectId": {
                   "type": "string",
@@ -3323,7 +3340,7 @@
                   "const": "langfuse"
                 },
                 "endpoint": {
-                  "$ref": "#/definitions/__schema41"
+                  "$ref": "#/definitions/__schema42"
                 },
                 "auth": {
                   "type": "object",
@@ -3372,13 +3389,9 @@
       "required": ["enabled"],
       "additionalProperties": false
     },
-    "__schema41": {
-      "type": "string",
-      "format": "uri"
-    },
     "__schema42": {
       "type": "string",
-      "minLength": 1
+      "format": "uri"
     },
     "__schema43": {
       "type": "string",
@@ -3389,6 +3402,10 @@
       "minLength": 1
     },
     "__schema45": {
+      "type": "string",
+      "minLength": 1
+    },
+    "__schema46": {
       "type": "object",
       "properties": {
         "cache": {
@@ -3431,15 +3448,15 @@
           "type": "boolean"
         },
         "filterRange": {
-          "$ref": "#/definitions/__schema46"
+          "$ref": "#/definitions/__schema47"
         }
       },
       "additionalProperties": false
     },
-    "__schema46": {
+    "__schema47": {
       "type": "string"
     },
-    "__schema47": {
+    "__schema48": {
       "type": "object",
       "properties": {
         "description": {
@@ -3567,7 +3584,7 @@
         "filterRange": {
           "allOf": [
             {
-              "$ref": "#/definitions/__schema46"
+              "$ref": "#/definitions/__schema47"
             }
           ]
         },
@@ -3641,7 +3658,7 @@
       },
       "additionalProperties": false
     },
-    "__schema48": {
+    "__schema49": {
       "allOf": [
         {
           "$ref": "#/definitions/__schema3"

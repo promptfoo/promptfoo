@@ -322,6 +322,26 @@ describe('readStandaloneTestsFile', () => {
     ]);
   });
 
+  it('should expand assertion includes in JSONL files relative to the test file', async () => {
+    vi.mocked(fs.readFileSync).mockImplementation((filePath) => {
+      if (String(filePath).endsWith(path.join('cases', 'tests.jsonl'))) {
+        return '{"assert":[{"value":"file://assertions/shared.yaml"}]}';
+      }
+      if (String(filePath).endsWith(path.join('cases', 'assertions', 'shared.yaml'))) {
+        return '- type: contains\n  value: expected';
+      }
+      throw new Error(`Unexpected test fixture read: ${String(filePath)}`);
+    });
+
+    const result = await readStandaloneTestsFile('cases/tests.jsonl', '/suite');
+
+    expect(result[0].assert).toEqual([{ type: 'contains', value: 'expected' }]);
+    expect(fs.readFileSync).toHaveBeenCalledWith(
+      path.resolve('/suite/cases/assertions/shared.yaml'),
+      'utf8',
+    );
+  });
+
   it('should preserve existing description from JSONL rows', async () => {
     vi.mocked(fs.readFileSync).mockReturnValue(
       `{"description":"Custom Desc","vars":{"x":"y"}}
@@ -583,6 +603,21 @@ not valid json`,
 
     expect(importModule).toHaveBeenCalledWith(expect.stringContaining('test.js'), undefined);
     expect(result).toEqual(mockTestCases);
+  });
+
+  it('should expand assertion includes returned by JS test generators relative to the script', async () => {
+    vi.mocked(importModule).mockResolvedValue([
+      { assert: [{ value: 'file://assertions/shared.yaml' }] },
+    ]);
+    vi.mocked(fs.readFileSync).mockReturnValue('- type: contains\n  value: generated');
+
+    const result = await readStandaloneTestsFile('generators/tests.js', '/suite');
+
+    expect(result[0].assert).toEqual([{ type: 'contains', value: 'generated' }]);
+    expect(fs.readFileSync).toHaveBeenCalledWith(
+      path.resolve('/suite/generators/assertions/shared.yaml'),
+      'utf8',
+    );
   });
 
   it('should pass config to JS test generator function', async () => {
@@ -1143,6 +1178,26 @@ describe('readTests', () => {
         options: {},
       },
     ]);
+  });
+
+  it('readTests expands assertion includes in a scalar JSON test file', async () => {
+    vi.mocked(fs.readFileSync).mockImplementation((filePath) => {
+      if (String(filePath).endsWith(path.join('cases', 'tests.json'))) {
+        return JSON.stringify([{ assert: [{ value: 'file://assertions/shared.yaml' }] }]);
+      }
+      if (String(filePath).endsWith(path.join('cases', 'assertions', 'shared.yaml'))) {
+        return '- type: equals\n  value: expected';
+      }
+      throw new Error(`Unexpected test fixture read: ${String(filePath)}`);
+    });
+
+    const result = await readTests('cases/tests.json', '/suite');
+
+    expect(result[0].assert).toEqual([{ type: 'equals', value: 'expected' }]);
+    expect(fs.readFileSync).toHaveBeenCalledWith(
+      path.resolve('/suite/cases/assertions/shared.yaml'),
+      'utf8',
+    );
   });
 
   it('readTests with a hashed Azure Blob Storage JSON test set', async () => {
