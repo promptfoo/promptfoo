@@ -143,7 +143,9 @@ export function registerRunEvaluationTool(server: McpServer) {
         let defaultConfig;
         let defaultConfigPath;
         try {
-          const result = await loadDefaultConfig();
+          const result = await loadDefaultConfig(undefined, 'promptfooconfig', {
+            deferUnknownKeyValidation: true,
+          });
           defaultConfig = result.defaultConfig;
           defaultConfigPath = result.defaultConfigPath;
         } catch (error) {
@@ -183,13 +185,12 @@ export function registerRunEvaluationTool(server: McpServer) {
         // to avoid process.exit(1) and maintain MCP backwards compatibility
         if (testCaseIndices !== undefined || promptFilter || providerFilter) {
           const configPaths = configPath ? [configPath] : ['promptfooconfig.yaml'];
-          const { config, testSuite } = await resolveConfigs(
+          const { config, testSuite, strictConfigEnabled } = await resolveConfigs(
             {
               config: configPaths,
             },
             defaultConfig,
           );
-
           const filteredTestSuite = { ...testSuite };
 
           if (providerFilter) {
@@ -327,6 +328,7 @@ export function registerRunEvaluationTool(server: McpServer) {
             maxConcurrency,
             timeoutMs,
             eventSource: 'mcp',
+            strictConfigEnabled,
           });
           const endTime = Date.now();
 

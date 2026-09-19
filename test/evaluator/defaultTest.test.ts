@@ -9,7 +9,7 @@ import { evaluate } from '../../src/evaluator';
 import { runExtensionHook } from '../../src/evaluatorHelpers';
 import { runDbMigrations } from '../../src/migrate';
 import Eval from '../../src/models/eval';
-import { type ApiProvider, type TestSuite } from '../../src/types/index';
+import { type ApiProvider, type TestCase, type TestSuite } from '../../src/types/index';
 import { createEmptyTokenUsage } from '../../src/util/tokenUsageUtils';
 import { mockApiProvider, resetMockProviders, toPrompt } from './helpers';
 
@@ -17,6 +17,7 @@ afterEach(async () => {
   resetMockProviders();
   vi.mocked(runExtensionHook).mockReset();
   vi.clearAllMocks();
+  vi.unstubAllEnvs();
   cliState.resume = false;
   cliState.basePath = '';
   cliState.webUI = false;
@@ -638,5 +639,158 @@ describe('defaultTest normalization for extensions', () => {
     // The assertion added by the extension should be present in the results
     const summary = await evalRecord.toEvaluateSummary();
     expect(summary.results[0].testCase.assert).toContainEqual({ type: 'is-json' });
+  });
+
+  it('applies strict no-assert validation after beforeAll adds assertions', async () => {
+    vi.stubEnv('PROMPTFOO_STRICT_CONFIG', 'true');
+    vi.mocked(runExtensionHook).mockImplementation(async (_extensions, hookName, context) => {
+      if (hookName === 'beforeAll') {
+        const suite = (context as { suite: TestSuite }).suite;
+        const defaultTest = suite.defaultTest as Exclude<typeof suite.defaultTest, string>;
+        defaultTest!.assert!.push({ type: 'contains', value: 'Test output' });
+      }
+      return context;
+    });
+
+    const testSuite: TestSuite = {
+      providers: [mockApiProvider],
+      prompts: [toPrompt('Test prompt')],
+      tests: [{}],
+      extensions: ['file://test-extension.js'],
+    };
+    const evalRecord = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
+
+    await expect(evaluate(testSuite, evalRecord, {})).resolves.toBe(evalRecord);
+  });
+
+  it('applies strict no-assert validation after beforeEach adds assertions', async () => {
+    vi.stubEnv('PROMPTFOO_STRICT_CONFIG', 'true');
+    vi.mocked(runExtensionHook).mockImplementation(async (_extensions, hookName, context) => {
+      if (hookName === 'beforeEach') {
+        const test = (context as { test: TestCase }).test;
+        return {
+          ...context,
+          test: { ...test, assert: [{ type: 'contains', value: 'Test output' }] },
+        };
+      }
+      return context;
+    });
+
+    const testSuite: TestSuite = {
+      providers: [mockApiProvider],
+      prompts: [toPrompt('Test prompt')],
+      tests: [{}],
+      extensions: ['file://test-extension.js'],
+    };
+    const evalRecord = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
+
+    await expect(evaluate(testSuite, evalRecord, {})).resolves.toBe(evalRecord);
+    expect(mockApiProvider.callApi).toHaveBeenCalledTimes(1);
+  });
+
+  it('rejects when beforeEach removes the final assertion', async () => {
+    vi.stubEnv('PROMPTFOO_STRICT_CONFIG', 'true');
+    vi.mocked(runExtensionHook).mockImplementation(async (_extensions, hookName, context) => {
+      if (hookName === 'beforeEach') {
+        const test = (context as { test: TestCase }).test;
+        return { ...context, test: { ...test, assert: [] } };
+      }
+      return context;
+    });
+
+    const testSuite: TestSuite = {
+      providers: [mockApiProvider],
+      prompts: [toPrompt('Test prompt')],
+      tests: [{ assert: [{ type: 'contains', value: 'Test output' }] }],
+      extensions: ['file://test-extension.js'],
+    };
+    const evalRecord = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
+
+    await expect(evaluate(testSuite, evalRecord, {})).rejects.toThrow(
+      /Strict config: 1 evaluated test row/,
+    );
+    expect(mockApiProvider.callApi).not.toHaveBeenCalled();
+  });
+
+  it('allows intentional internal assertion-free evaluations', async () => {
+    vi.stubEnv('PROMPTFOO_STRICT_CONFIG', 'true');
+    const testSuite: TestSuite = {
+      providers: [mockApiProvider],
+      prompts: [toPrompt('Test prompt')],
+      tests: [{}],
+    };
+    const evalRecord = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
+
+    await expect(
+      evaluate(testSuite, evalRecord, { skipStrictAssertionValidation: true }),
+    ).resolves.toBe(evalRecord);
+    expect(mockApiProvider.callApi).toHaveBeenCalledTimes(1);
+  });
+
+  it('uses a suite-scoped strict snapshot instead of ambient process state', async () => {
+    vi.stubEnv('PROMPTFOO_STRICT_CONFIG', 'false');
+    const testSuite: TestSuite = {
+      providers: [mockApiProvider],
+      prompts: [toPrompt('Test prompt')],
+      tests: [{}],
+    };
+    const strictEval = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
+
+    await expect(evaluate(testSuite, strictEval, { strictConfigEnabled: true })).rejects.toThrow(
+      /Strict config: 1 evaluated test row/,
+    );
+    expect(mockApiProvider.callApi).not.toHaveBeenCalled();
+
+    vi.stubEnv('PROMPTFOO_STRICT_CONFIG', 'true');
+    const nonStrictEval = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
+    await expect(evaluate(testSuite, nonStrictEval, { strictConfigEnabled: false })).resolves.toBe(
+      nonStrictEval,
+    );
+    expect(mockApiProvider.callApi).toHaveBeenCalledTimes(1);
+  });
+
+  it('checks scenario rows in strict mode after suite expansion', async () => {
+    vi.stubEnv('PROMPTFOO_STRICT_CONFIG', 'true');
+    const testSuite: TestSuite = {
+      providers: [mockApiProvider],
+      prompts: [toPrompt('Test prompt')],
+      scenarios: [{ config: [{ vars: { input: 'missing assertion' } }], tests: [{}] }],
+      tests: [],
+    };
+    const evalRecord = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
+
+    await expect(evaluate(testSuite, evalRecord, {})).rejects.toThrow(
+      /Strict config: 1 evaluated test row/,
+    );
+  });
+
+  it('does not reject assertion-less rows removed by final range filtering', async () => {
+    vi.stubEnv('PROMPTFOO_STRICT_CONFIG', 'true');
+    const testSuite: TestSuite = {
+      providers: [mockApiProvider],
+      prompts: [toPrompt('Test prompt')],
+      tests: [
+        { assert: [{ type: 'contains', value: 'Test output' }] },
+        { description: 'filtered assertion-less row' },
+      ],
+    };
+    const evalRecord = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
+
+    await expect(evaluate(testSuite, evalRecord, { filterRange: '0:1' })).resolves.toBe(evalRecord);
+  });
+
+  it('does not reject assertion-less rows that do not schedule a provider', async () => {
+    vi.stubEnv('PROMPTFOO_STRICT_CONFIG', 'true');
+    const testSuite: TestSuite = {
+      providers: [mockApiProvider],
+      prompts: [toPrompt('Test prompt')],
+      tests: [
+        { assert: [{ type: 'contains', value: 'Test output' }] },
+        { description: 'excluded provider row', providers: ['provider-that-is-not-selected'] },
+      ],
+    };
+    const evalRecord = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
+
+    await expect(evaluate(testSuite, evalRecord, {})).resolves.toBe(evalRecord);
   });
 });

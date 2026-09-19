@@ -8,6 +8,7 @@ import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } 
 
 // Hoisted mocks for shutdown tests
 const mockSetupEnv = vi.hoisted(() => vi.fn());
+const mockSetExplicitCliEnvPath = vi.hoisted(() => vi.fn());
 const mockSetLogLevel = vi.hoisted(() => vi.fn());
 const mockTelemetryRecord = vi.hoisted(() => vi.fn());
 const mockTelemetryInitialize = vi.hoisted(() => vi.fn());
@@ -22,7 +23,8 @@ const mockGetGlobalDispatcher = vi.hoisted(() =>
 const actualUndici = vi.hoisted(() => vi.importActual<typeof import('undici')>('undici'));
 
 // Mock the dependencies
-vi.mock('../src/util', () => ({
+vi.mock('../src/util/env', () => ({
+  setExplicitCliEnvPath: mockSetExplicitCliEnvPath,
   setupEnv: mockSetupEnv,
 }));
 
@@ -76,14 +78,21 @@ async function loadMainModule() {
 describe('setupEnvFilesFromArgv', () => {
   beforeEach(async () => {
     await loadMainModule();
+    mockSetExplicitCliEnvPath.mockReset();
     mockSetupEnv.mockReset();
     mockTelemetryInitialize.mockReset();
   });
 
-  it('should load env files before command actions run', () => {
+  afterEach(() => {
+    mockSetExplicitCliEnvPath.mockReset();
+    mockSetupEnv.mockReset();
+  });
+
+  it('should load and track env files before command actions run', async () => {
     setupEnvFilesFromArgv(['eval', '--env-file', '.env.local']);
 
     expect(mockSetupEnv).toHaveBeenCalledWith('.env.local', { refreshConfigDirectory: true });
+    expect(mockSetExplicitCliEnvPath).toHaveBeenLastCalledWith('.env.local');
     expect(mockTelemetryInitialize).toHaveBeenCalledOnce();
   });
 
@@ -108,10 +117,11 @@ describe('setupEnvFilesFromArgv', () => {
     expect(mockSetupEnv).toHaveBeenCalledWith('.env.staging', { refreshConfigDirectory: true });
   });
 
-  it('should be a no-op when no env flags are present', () => {
+  it('should be a no-op when no env flags are present', async () => {
     setupEnvFilesFromArgv(['eval', '--verbose', '--no-cache']);
 
     expect(mockSetupEnv).not.toHaveBeenCalled();
+    expect(mockSetExplicitCliEnvPath).toHaveBeenCalledWith(undefined);
   });
 
   it('should ignore --env-file= with empty value', () => {
@@ -124,6 +134,18 @@ describe('setupEnvFilesFromArgv', () => {
     setupEnvFilesFromArgv(['eval', '--env-file', '--verbose']);
 
     expect(mockSetupEnv).not.toHaveBeenCalled();
+  });
+
+  it('should not track an env path when loading it fails', () => {
+    mockSetupEnv.mockImplementationOnce(() => {
+      throw new Error('unloadable env');
+    });
+
+    expect(() => setupEnvFilesFromArgv(['eval', '--env-file', '.env.unloadable'])).toThrow(
+      'unloadable env',
+    );
+    expect(mockSetExplicitCliEnvPath).toHaveBeenLastCalledWith(undefined);
+    expect(mockSetExplicitCliEnvPath).not.toHaveBeenCalledWith('.env.unloadable');
   });
 });
 
@@ -298,17 +320,19 @@ describe('addCommonOptionsRecursively', () => {
       name: () => commandName,
       parent: null,
     });
+    const actionCommand = { setOptionValue: vi.fn() };
 
     // Test verbose option
-    preActionFn(createMockCommand({ verbose: true }));
+    preActionFn(createMockCommand({ verbose: true }), actionCommand);
     expect(mockSetLogLevel).toHaveBeenCalledWith('debug');
 
     // Test env-file option
-    preActionFn(createMockCommand({ envFile: '.env.test' }));
+    preActionFn(createMockCommand({ envFile: '.env.test' }), actionCommand);
     expect(mockSetupEnv).toHaveBeenCalledWith('.env.test');
+    expect(actionCommand.setOptionValue).toHaveBeenCalledWith('envPath', '.env.test');
 
     // Test both options together
-    preActionFn(createMockCommand({ verbose: true, envFile: '.env.combined' }));
+    preActionFn(createMockCommand({ verbose: true, envFile: '.env.combined' }), actionCommand);
     expect(mockSetLogLevel).toHaveBeenCalledWith('debug');
     expect(mockSetupEnv).toHaveBeenCalledWith('.env.combined');
   });
@@ -367,6 +391,21 @@ describe('addCommonOptionsRecursively', () => {
     );
 
     expect(mockSetupEnv).toHaveBeenCalledWith(['.env.one', '.env.two', '.env.three']);
+  });
+
+  it('forwards an ancestor-owned env option to the action command', async () => {
+    const action = vi.fn();
+    const actionCommand = program.command('forward-env').action(action);
+
+    addCommonOptionsRecursively(program);
+
+    await program.parseAsync(['forward-env', '--env-file', '.env.local'], { from: 'user' });
+
+    expect(action).toHaveBeenCalledWith(
+      expect.objectContaining({ envPath: '.env.local' }),
+      actionCommand,
+    );
+    expect(action.mock.calls[0][0].envFile).toBeUndefined();
   });
 
   it('should record telemetry once for nested subcommands', async () => {
