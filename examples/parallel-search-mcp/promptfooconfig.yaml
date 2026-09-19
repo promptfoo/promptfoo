@@ -1,0 +1,67 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: Remote MCP search and fetch smoke tests
+
+prompts:
+  - '{{prompt}}'
+
+providers:
+  - id: mcp
+    label: Parallel Search MCP
+    config:
+      enabled: true
+      server:
+        url: https://search.parallel.ai/mcp
+      tools: [web_search, web_fetch]
+      timeout: 60000
+      transformResponse: |
+        result.isError
+          ? { error: content }
+          : { output: result.structuredContent ?? JSON.parse(result.content[0].text) }
+
+defaultTest:
+  assert:
+    - type: javascript
+      value: |
+        return Array.isArray(output.results) && output.results.length > 0 &&
+          output.results.every((result) =>
+            typeof result.url === 'string' && /^https?:\/\//.test(result.url) &&
+            Array.isArray(result.excerpts) &&
+            result.excerpts.some((excerpt) => typeof excerpt === 'string' && excerpt.trim().length > 0)
+          );
+
+tests:
+  - description: Search for Promptfoo MCP documentation
+    vars:
+      prompt: |
+        {
+          "tool": "web_search",
+          "args": {
+            "objective": "Find the official Promptfoo documentation for evaluating MCP servers.",
+            "search_queries": ["promptfoo MCP provider documentation"]
+          }
+        }
+    assert:
+      - type: javascript
+        value: |
+          return output.results.some((result) => {
+            const url = new URL(result.url);
+            return (url.hostname === 'promptfoo.dev' || url.hostname === 'www.promptfoo.dev') &&
+              url.pathname.startsWith('/docs/');
+          });
+
+  - description: Fetch a public example page
+    vars:
+      prompt: |
+        {
+          "tool": "web_fetch",
+          "args": {
+            "urls": ["https://example.com"],
+            "objective": "Describe what this example domain is for.",
+            "full_content": false
+          }
+        }
+    assert:
+      - type: javascript
+        value: |
+          return Array.isArray(output.errors) && output.errors.length === 0 &&
+            output.results.some((result) => new URL(result.url).hostname === 'example.com');
