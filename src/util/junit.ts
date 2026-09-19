@@ -291,7 +291,7 @@ export async function createJunitXml(evalRecord: Eval): Promise<string> {
     indentBy: '  ',
   });
 
-  return xmlBuilder.build({
+  const xml = xmlBuilder.build({
     '?xml': {
       '@_version': '1.0',
       '@_encoding': 'UTF-8',
@@ -317,6 +317,9 @@ export async function createJunitXml(evalRecord: Eval): Promise<string> {
       })),
     },
   });
+
+  // XML 1.0 excludes control characters and unpaired UTF-16 surrogates.
+  return xml.replace(/[^\t\n\r\u0020-\ud7ff\ue000-\ufffd\u{10000}-\u{10ffff}]/gu, '');
 }
 
 export async function writeJunitXmlOutput(outputPath: string, evalRecord: Eval): Promise<void> {

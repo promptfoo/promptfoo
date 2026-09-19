@@ -3,6 +3,7 @@ import * as path from 'path';
 
 import { XMLParser } from 'fast-xml-parser';
 import * as yaml from 'js-yaml';
+import { SaxesParser } from 'saxes';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { getDb } from '../../src/database/index';
 import * as googleSheets from '../../src/googleSheets';
@@ -987,6 +988,48 @@ describe('writeOutput', () => {
       '#text': 'Reason: Evaluation error',
       '@_message': 'Evaluation error',
     });
+  });
+
+  it.each([
+    '\u0000',
+    '\u0001',
+    '\u0008',
+    '\u000e',
+    '\u001b',
+    '\u001f',
+    '\ud800',
+    '\udfff',
+    '\ufffe',
+    '\uffff',
+  ])('exports well-formed JUnit XML when names contain %j', async (invalidCharacter) => {
+    const eval_ = new Eval({});
+    await eval_.addResult({
+      success: true,
+      failureReason: ResultFailureReason.NONE,
+      score: 1,
+      namedScores: {},
+      latencyMs: 100,
+      provider: { id: 'echo', label: `target${invalidCharacter} & <model>` },
+      prompt: { raw: 'Hello', label: 'Hello' },
+      response: { output: 'Hello' },
+      vars: {},
+      promptIdx: 0,
+      testIdx: 0,
+      testCase: { description: `case${invalidCharacter} \u{1f680} \u4e2d\u6587` },
+      promptId: 'xml-characters',
+    });
+
+    const xml = await createJunitXml(eval_);
+
+    // CI report consumers require well-formed XML 1.0.
+    expect(() => new SaxesParser().write(xml).close()).not.toThrow();
+    const parsed = new XMLParser({ ignoreAttributes: false }).parse(xml);
+    expect(parsed.testsuites.testsuite['@_name']).toBe('[target & <model>] prompt 1');
+    expect(parsed.testsuites.testsuite.testcase['@_name']).toBe(
+      'test 1: case \u{1f680} \u4e2d\u6587',
+    );
+    expect(parsed.testsuites.testsuite.testcase['@_classname']).toBe('[target & <model>] prompt 1');
+    expect(parsed.testsuites['@_tests']).toBe('1');
   });
 
   it('keeps JUnit failure messages compact when raw assertion reasons are long', async () => {
