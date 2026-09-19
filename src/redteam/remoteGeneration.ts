@@ -136,7 +136,8 @@ export function getRemoteVersionUrl(): string | null {
 export function getRemoteGenerationDisabledError(strategyName: string): string {
   return (
     `${strategyName} requires remote generation, which is currently disabled for this configuration. ` +
-    'To enable it, run with --remote, set PROMPTFOO_REMOTE_GENERATION_URL to a self-hosted endpoint, ' +
+    'To enable it, run with --remote, set PROMPTFOO_ENABLE_REMOTE_GENERATION=1 (useful in CI/CD when OPENAI_API_KEY is set for other providers), ' +
+    'set PROMPTFOO_REMOTE_GENERATION_URL to a self-hosted endpoint, ' +
     'or log into Promptfoo Cloud with `promptfoo auth login`.'
   );
 }
@@ -176,6 +177,12 @@ export function shouldGenerateRemote(options?: ShouldGenerateRemoteOptions): boo
     return true;
   }
 
+  // An explicit opt-in (--remote or PROMPTFOO_ENABLE_REMOTE_GENERATION) forces remote on
+  // regardless of local credentials, so short-circuit before probing for them.
+  if (getEnvBool('PROMPTFOO_ENABLE_REMOTE_GENERATION') || cliState.remote) {
+    return true;
+  }
+
   // Generate remotely when local credentials for the requested task are unavailable.
   // Codex defaults only cover text default-provider paths, not redteam's task-specific
   // generation providers.
@@ -185,7 +192,7 @@ export function shouldGenerateRemote(options?: ShouldGenerateRemoteOptions): boo
       !options?.requireEmbeddingProvider &&
       hasCodexDefaultCredentials());
 
-  return !hasLocalCredentials || (cliState.remote ?? false);
+  return !hasLocalCredentials;
 }
 
 /**
