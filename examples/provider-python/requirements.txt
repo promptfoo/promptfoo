@@ -1,10 +1,11 @@
 annotated-types==0.6.0
-anyio==4.14.2
+# AnyIO 4.13+ requires Python 3.10; this example supports Python 3.9.
+anyio==4.12.1
 certifi==2025.10.5
 distro==1.9.0
 exceptiongroup==1.2.0
 h11==0.16.0
-httpcore==1.0.2
+httpcore==1.0.9
 httpx==0.26.0
 idna==3.15
 openai==2.3.0
