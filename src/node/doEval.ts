@@ -46,10 +46,11 @@ import {
   getPersistedProviderFilterOptions,
   getProviderFilterRegexError,
 } from '../util/eval/filterProviders';
-import { filterTests } from '../util/eval/filterTests';
+import { filterTests, reapplyTestFilter } from '../util/eval/filterTests';
 import { warnIfRedteamConfigHasNoTests } from '../util/eval/redteamWarning';
 import { generateEvalSummary } from '../util/eval/summary';
 import { maybeLoadFromExternalFile } from '../util/file';
+import { parseFileUrl } from '../util/functions/loadFunction';
 import {
   printBorder,
   setupEnv,
@@ -108,7 +109,11 @@ function runtimeTagsForEval(
 async function resolveReplayConfigs(
   evalRecord: Eval,
   action: 'resuming' | 'retrying errors for',
-): Promise<Awaited<ReturnType<typeof resolveConfigs>>> {
+): Promise<
+  Awaited<ReturnType<typeof resolveConfigs>> & {
+    varValuesFileCache: NonNullable<InternalEvaluateOptions['varValuesFileCache']>;
+  }
+> {
   const providerFilterOptions = getPersistedProviderFilterOptions(
     evalRecord.runtimeOptions?.providerFilter,
   );
@@ -134,13 +139,20 @@ async function resolveReplayConfigs(
     };
   }
 
-  const configs = await resolveConfigs(providerFilterOptions, replayConfig);
+  const configBasePath = evalRecord.runtimeOptions?.configBasePath;
+  const configs =
+    configBasePath === undefined
+      ? await resolveConfigs(providerFilterOptions, replayConfig)
+      : await resolveConfigs(providerFilterOptions, replayConfig, undefined, {
+          basePath: configBasePath,
+        });
+  const varValuesFileCache = new Map();
   // The original run filtered twice: raw configs in resolveConfigs, then instantiated
   // providers by live id()/label below in doEval. Replay both stages so the resumed
   // provider set matches the original even when an instantiated id or label diverges
   // from its raw config reference.
   configs.testSuite.providers = filterProviders(configs.testSuite.providers, providerFilter);
-  return configs;
+  return { ...configs, varValuesFileCache };
 }
 
 export class EvalRunError extends Error {
@@ -185,6 +197,80 @@ function handleRecoverableWatchError(error: unknown): boolean {
     return true;
   }
   return false;
+}
+
+function getVarWatchPaths(value: unknown, basePath: string): string[] {
+  if (typeof value === 'string' && value.startsWith('file://')) {
+    return [path.resolve(basePath, parseFileUrl(value).filePath)];
+  }
+
+  if (Array.isArray(value)) {
+    return value.flatMap((item) => getVarWatchPaths(item, basePath));
+  }
+
+  if (
+    typeof value === 'object' &&
+    value !== null &&
+    Object.prototype.hasOwnProperty.call(value, '$values')
+  ) {
+    const reference = (value as Record<string, unknown>).$values;
+    return typeof reference === 'string' && reference.startsWith('file://')
+      ? [path.resolve(basePath, parseFileUrl(reference).filePath)]
+      : [];
+  }
+
+  return [];
+}
+
+function getTestCaseWatchPaths(testCase: unknown, basePath: string): string[] {
+  if (typeof testCase === 'string') {
+    return getVarWatchPaths(testCase, basePath);
+  }
+
+  if (typeof testCase !== 'object' || testCase === null) {
+    return [];
+  }
+
+  const vars = (testCase as { vars?: unknown }).vars;
+  if (typeof vars !== 'object' || vars === null || Array.isArray(vars)) {
+    return getVarWatchPaths(vars, basePath);
+  }
+
+  return Object.values(vars).flatMap((value) => getVarWatchPaths(value, basePath));
+}
+
+function getScenarioWatchPaths(scenario: unknown, basePath: string): string[] {
+  if (typeof scenario === 'string') {
+    return getVarWatchPaths(scenario, basePath);
+  }
+
+  if (typeof scenario !== 'object' || scenario === null) {
+    return [];
+  }
+
+  const { config, tests } = scenario as { config?: unknown; tests?: unknown };
+  return [config, tests].flatMap((entries) =>
+    Array.isArray(entries)
+      ? entries.flatMap((testCase) => getTestCaseWatchPaths(testCase, basePath))
+      : [],
+  );
+}
+
+function getSuiteVarWatchPaths(
+  suite: { tests?: unknown; defaultTest?: unknown; scenarios?: unknown },
+  basePath: string,
+): string[] {
+  const testVarPaths = Array.isArray(suite.tests)
+    ? suite.tests.flatMap((testCase) => getTestCaseWatchPaths(testCase, basePath))
+    : [];
+  const defaultTestVarPaths = suite.defaultTest
+    ? getTestCaseWatchPaths(suite.defaultTest, basePath)
+    : [];
+  const scenarioVarPaths = Array.isArray(suite.scenarios)
+    ? suite.scenarios.flatMap((scenario) => getScenarioWatchPaths(scenario, basePath))
+    : [];
+
+  return [...testVarPaths, ...defaultTestVarPaths, ...scenarioVarPaths];
 }
 
 /**
@@ -287,6 +373,27 @@ function isDeclarativeConfig(configPath: string): boolean {
   return ['.yaml', '.yml', '.json'].includes(path.extname(configPath).toLowerCase());
 }
 
+async function resolveDeclarativeConfigTestWatchPaths(configPaths: string[]): Promise<string[]> {
+  const watchPaths: string[] = [];
+  for (const configPathPattern of configPaths) {
+    const resolvedConfigPaths = globSync(path.resolve(process.cwd(), configPathPattern), {
+      windowsPathsNoEscape: true,
+    });
+    for (const resolvedConfigPath of resolvedConfigPaths) {
+      if (!isDeclarativeConfig(resolvedConfigPath)) {
+        continue;
+      }
+      const rawConfig = await maybeReadConfig(resolvedConfigPath);
+      if (rawConfig?.tests != null && !Array.isArray(rawConfig.tests)) {
+        watchPaths.push(
+          ...resolveTestsWatchPaths(rawConfig.tests, path.dirname(resolvedConfigPath)),
+        );
+      }
+    }
+  }
+  return watchPaths;
+}
+
 export async function doEval(
   cmdObj: Partial<CommandLineOptions & Command>,
   defaultConfig: Partial<UnifiedConfig>,
@@ -301,6 +408,72 @@ export async function doEval(
   let testSuite: TestSuite | undefined = undefined;
   let _basePath: string | undefined = undefined;
   let commandLineOptions: Record<string, any> | undefined = undefined;
+  let varValuesFileCache: NonNullable<InternalEvaluateOptions['varValuesFileCache']> | undefined;
+  let watcher: ReturnType<typeof chokidar.watch> | undefined;
+  let watchedPaths = new Set<string>();
+  const ignoredWatchAddPaths = new Set<string>();
+
+  const getCurrentWatchPaths = async (): Promise<string[]> => {
+    const configPaths = (cmdObj.config || [defaultConfigPath]).filter(Boolean) as string[];
+    if (!config || !testSuite || configPaths.length === 0) {
+      return configPaths;
+    }
+
+    const basePath = path.resolve(_basePath || path.dirname(configPaths[0]));
+    const promptPaths = Array.isArray(config.prompts)
+      ? (config.prompts
+          .map((prompt) => {
+            if (typeof prompt === 'string' && prompt.startsWith('file://')) {
+              return path.resolve(basePath, prompt.slice('file://'.length));
+            } else if (typeof prompt === 'object' && prompt.id && prompt.id.startsWith('file://')) {
+              return path.resolve(basePath, prompt.id.slice('file://'.length));
+            }
+            return null;
+          })
+          .filter(Boolean) as string[])
+      : [];
+    const providerPaths = Array.isArray(config.providers)
+      ? (config.providers
+          .map((provider) =>
+            typeof provider === 'string' && provider.startsWith('file://')
+              ? path.resolve(basePath, provider.slice('file://'.length))
+              : null,
+          )
+          .filter(Boolean) as string[])
+      : [];
+    const varPaths = [config, testSuite].flatMap((suite) => getSuiteVarWatchPaths(suite, basePath));
+    const cliTests = cmdObj.tests || cmdObj.vars;
+    if (cliTests) {
+      varPaths.push(...resolveTestsWatchPaths(cliTests, cmdObj.tests ? process.cwd() : basePath));
+    } else {
+      varPaths.push(...resolveTestsWatchPaths(config.tests, basePath));
+      varPaths.push(...(await resolveDeclarativeConfigTestWatchPaths(configPaths)));
+    }
+
+    return Array.from(new Set([...configPaths, ...promptPaths, ...providerPaths, ...varPaths]));
+  };
+
+  const syncWatchPaths = async (ignoreAddedEvents = false): Promise<void> => {
+    if (!watcher) {
+      return;
+    }
+
+    const nextPaths = new Set(await getCurrentWatchPaths());
+    const addedPaths = [...nextPaths].filter((watchPath) => !watchedPaths.has(watchPath));
+    const removedPaths = [...watchedPaths].filter((watchPath) => !nextPaths.has(watchPath));
+
+    if (addedPaths.length > 0) {
+      if (ignoreAddedEvents) {
+        addedPaths.forEach((addedPath) => ignoredWatchAddPaths.add(addedPath));
+      }
+      watcher.add(addedPaths);
+    }
+    if (removedPaths.length > 0) {
+      removedPaths.forEach((removedPath) => ignoredWatchAddPaths.delete(removedPath));
+      await watcher.unwatch(removedPaths);
+    }
+    watchedPaths = nextPaths;
+  };
 
   const configArgs = Array.isArray(cmdObj.config)
     ? cmdObj.config
@@ -452,6 +625,7 @@ export async function doEval(
         testSuite,
         basePath: _basePath,
         commandLineOptions,
+        varValuesFileCache,
       } = await resolveReplayConfigs(resumeEval, 'resuming'));
       // Ensure prompts exactly match the previous run to preserve IDs and content
       if (Array.isArray(resumeEval.prompts) && resumeEval.prompts.length > 0) {
@@ -509,6 +683,7 @@ export async function doEval(
         testSuite,
         basePath: _basePath,
         commandLineOptions,
+        varValuesFileCache,
       } = await resolveReplayConfigs(resumeEval, 'retrying errors for'));
 
       // Ensure prompts exactly match the previous run to preserve IDs and content
@@ -523,6 +698,7 @@ export async function doEval(
         );
       }
     } else {
+      varValuesFileCache = undefined;
       ({
         config,
         testSuite,
@@ -675,7 +851,12 @@ export async function doEval(
       ? resumeFilterRange
       : (cmdObj.filterRange ?? commandLineOptions?.filterRange ?? evaluateOptions.filterRange);
     const filterSample = cmdObj.filterSample ?? commandLineOptions?.filterSample;
-    const filterSampleSeed = cmdObj.filterSampleSeed ?? commandLineOptions?.filterSampleSeed;
+    const configuredFilterSampleSeed =
+      cmdObj.filterSampleSeed ?? commandLineOptions?.filterSampleSeed;
+    const filterSampleSeed =
+      filterSample !== undefined && configuredFilterSampleSeed === undefined
+        ? Math.floor(Math.random() * Number.MAX_SAFE_INTEGER)
+        : configuredFilterSampleSeed;
     const hasActiveTestFilter =
       filterRange !== undefined ||
       cmdObj.filterFailing !== undefined ||
@@ -687,9 +868,13 @@ export async function doEval(
       filterSample !== undefined;
     const shouldApplyFiltersToImplicitDefaultTest =
       hasActiveTestFilter && canSynthesizeImplicitDefaultTest && !testSuite.tests?.length;
+    const persistedTestFilter = resumeEval?.runtimeOptions?.testFilter as FilterOptions | undefined;
+    let appliedTestFilter: FilterOptions | undefined;
 
-    // Apply filtering only when not resuming, to preserve test indices
-    if (!resumeEval) {
+    if (persistedTestFilter) {
+      appliedTestFilter = persistedTestFilter;
+      await reapplyTestFilter(testSuite, persistedTestFilter);
+    } else if (!resumeEval) {
       if (shouldApplyFiltersToImplicitDefaultTest) {
         const defaultMetadata =
           typeof testSuite.defaultTest === 'object' ? testSuite.defaultTest?.metadata : undefined;
@@ -706,6 +891,7 @@ export async function doEval(
         sample: filterSample,
         sampleSeed: filterSampleSeed,
       };
+      appliedTestFilter = hasActiveTestFilter ? filterOptions : undefined;
       testSuite.tests = await filterTests(testSuite, filterOptions);
       const shouldSuppressImplicitDefaultTest =
         testSuite.tests.length === 0 &&
@@ -845,9 +1031,27 @@ export async function doEval(
       );
     }
 
+    const configBasePath = resumeEval?.runtimeOptions?.configBasePath ?? _basePath;
+    const normalizedConfigBasePath = path.resolve(configBasePath || process.cwd());
+    varValuesFileCache ??= new Map();
+    options.expectedMatrixValuesFingerprint = resumeEval?.runtimeOptions?.matrixValuesFingerprint;
+    options.matrixValuesFingerprintError = resumeEval
+      ? `The $values files used by evaluation ${resumeEval.id} have changed. Restore the original files before replaying this evaluation.`
+      : undefined;
+    options.varValuesBasePath = normalizedConfigBasePath;
+    options.varValuesFileCache = varValuesFileCache;
+    const {
+      expectedMatrixValuesFingerprint: _expectedMatrixValuesFingerprint,
+      matrixValuesFingerprintError: _matrixValuesFingerprintError,
+      varValuesBasePath: _varValuesBasePath,
+      varValuesFileCache: _varValuesFileCache,
+      ...persistableOptions
+    } = options;
     const runtimeOptions: EvalRuntimeOptions = {
-      ...options,
+      ...persistableOptions,
       ...(providerFilter ? { providerFilter } : {}),
+      ...(configBasePath === undefined ? {} : { configBasePath: path.resolve(configBasePath) }),
+      ...(appliedTestFilter ? { testFilter: appliedTestFilter } : {}),
     };
 
     if (!resumeEval && config.metadata && 'generationAccounting' in config.metadata) {
@@ -942,7 +1146,7 @@ export async function doEval(
     try {
       ret = await evaluate(testSuite, evalRecord, {
         ...options,
-        filterRange: hasScenarios || resumeEval ? filterRange : undefined,
+        filterRange: hasScenarios || (resumeEval && !persistedTestFilter) ? filterRange : undefined,
         abortSignal: evaluateOptions.abortSignal,
         isRedteam: Boolean(config.redteam),
       });
@@ -1196,95 +1400,46 @@ export async function doEval(
             cliFallback: ret,
           });
         }
-        const basePath = path.dirname(configPaths[0]);
-        const promptPaths = Array.isArray(config.prompts)
-          ? (config.prompts
-              .map((p) => {
-                if (typeof p === 'string' && p.startsWith('file://')) {
-                  return path.resolve(basePath, p.slice('file://'.length));
-                } else if (typeof p === 'object' && p.id && p.id.startsWith('file://')) {
-                  return path.resolve(basePath, p.id.slice('file://'.length));
-                }
-                return null;
-              })
-              .filter(Boolean) as string[])
-          : [];
-        const providerPaths = Array.isArray(config.providers)
-          ? (config.providers
-              .map((p) =>
-                typeof p === 'string' && p.startsWith('file://')
-                  ? path.resolve(basePath, p.slice('file://'.length))
-                  : null,
-              )
-              .filter(Boolean) as string[])
-          : [];
-        // `--tests`, and its `--vars` alias, replace the config's own tests entirely
-        // (see resolveConfigs), so `config.tests` already holds the command-line value.
-        const cliTests = cmdObj.tests || cmdObj.vars;
-        const varPaths: string[] = [];
-        if (cliTests) {
-          // resolveConfigs loads `--tests` with no base path, so it resolves against the
-          // working directory rather than the directory holding the config file.
-          // `--vars` keeps the config's base path.
-          varPaths.push(
-            ...resolveTestsWatchPaths(cliTests, cmdObj.tests ? process.cwd() : basePath),
-          );
-        } else {
-          // The array form survives combineConfigs() untouched, so inline test cases and
-          // their `vars` file references are still readable from the resolved config.
-          varPaths.push(...resolveTestsWatchPaths(config.tests, basePath));
-          // A scalar reference (`tests: file://cases.yaml`) and a generator object are
-          // expanded into concrete test cases by combineConfigs(), so by this point the
-          // reference they came from is gone. Recover it by reading the config again.
-          for (const configPathPattern of configPaths) {
-            // --config accepts globs, which combineConfigs() expands, so expand here too
-            // rather than handing a literal wildcard to the reader.
-            const resolvedConfigPaths = globSync(path.resolve(process.cwd(), configPathPattern), {
-              windowsPathsNoEscape: true,
-            });
-            for (const resolvedConfigPath of resolvedConfigPaths) {
-              if (!isDeclarativeConfig(resolvedConfigPath)) {
-                continue;
-              }
-              const rawConfig = await maybeReadConfig(resolvedConfigPath);
-              if (rawConfig?.tests != null && !Array.isArray(rawConfig.tests)) {
-                varPaths.push(
-                  ...resolveTestsWatchPaths(rawConfig.tests, path.dirname(resolvedConfigPath)),
-                );
-              }
+        const watchPaths = await getCurrentWatchPaths();
+        watchedPaths = new Set(watchPaths);
+        watcher = chokidar.watch(watchPaths, { ignored: /^\./, persistent: true });
+        let watcherReady = false;
+        const handleWatchEvent = async (changedPath: string) => {
+          printBorder();
+          logger.info(`File change detected: ${changedPath}`);
+          printBorder();
+          clearConfigCache();
+          try {
+            await runEvaluation();
+            await syncWatchPaths(true);
+          } catch (error) {
+            if (handleRecoverableWatchError(error)) {
+              await syncWatchPaths();
+              return;
             }
+            throw error;
           }
-        }
-        const watchPaths = Array.from(
-          new Set([...configPaths, ...promptPaths, ...providerPaths, ...varPaths]),
-        );
-        const watcher = chokidar.watch(watchPaths, { ignored: /^\./, persistent: true });
+        };
+
         // Library callers own their own process lifetime, so only the CLI blocks here.
         if (isCliInvocation) {
           watchTermination = watchUntilTerminated(watcher);
         }
 
         watcher
-          .on('change', async (path) => {
-            printBorder();
-            logger.info(`File change detected: ${path}`);
-            printBorder();
-            clearConfigCache();
-            try {
-              await runEvaluation();
-            } catch (error) {
-              if (handleRecoverableWatchError(error)) {
-                return;
-              }
-              throw error;
+          .on('change', handleWatchEvent)
+          .on('add', async (addedPath) => {
+            if (watcherReady && !ignoredWatchAddPaths.delete(addedPath)) {
+              await handleWatchEvent(addedPath);
             }
           })
           .on('error', (error) => logger.error(`Watcher error: ${error}`))
-          .on('ready', () =>
+          .on('ready', () => {
+            watcherReady = true;
             watchPaths.forEach((watchPath) =>
               logger.info(`Watching for file changes on ${watchPath} ...`),
-            ),
-          );
+            );
+          });
       }
     } else {
       const passRateThreshold = getEnvFloat('PROMPTFOO_PASS_RATE_THRESHOLD', 100);
