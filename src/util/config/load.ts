@@ -596,6 +596,16 @@ export async function combineConfigs(configPaths: string[]): Promise<UnifiedConf
     );
   }
 
+  const resultsTable = configs.reduce<UnifiedConfig['resultsTable']>((prev, curr) => {
+    if (!curr.resultsTable) {
+      return prev;
+    }
+    return {
+      ...(prev ?? {}),
+      ...curr.resultsTable,
+    };
+  }, undefined);
+
   let redteam: UnifiedConfig['redteam'] | undefined;
   for (const config of configs) {
     if (config.redteam) {
@@ -730,6 +740,7 @@ export async function combineConfigs(configPaths: string[]): Promise<UnifiedConf
       }
       return prev;
     }, undefined),
+    ...(resultsTable ? { resultsTable } : {}),
     nunjucksFilters: configs.reduce((prev, curr) => ({ ...prev, ...curr.nunjucksFilters }), {}),
     env: configs.reduce((prev, curr) => ({ ...prev, ...curr.env }), {}),
     evaluateOptions: configs.reduce((prev, curr) => ({ ...prev, ...curr.evaluateOptions }), {}),
@@ -859,6 +870,7 @@ export async function resolveConfigs(
       ? await readTest(processedDefaultTest, basePath, true)
       : undefined,
     derivedMetrics: fileConfig.derivedMetrics || defaultConfig.derivedMetrics,
+    resultsTable: fileConfig.resultsTable || defaultConfig.resultsTable,
     outputPath: cmdObj.output || fileConfig.outputPath || defaultConfig.outputPath,
     extensions: [
       ...(cmdObj.extension || []),
@@ -1049,6 +1061,7 @@ export async function resolveConfigs(
     scenarios: config.scenarios as Scenario[],
     defaultTest,
     derivedMetrics: config.derivedMetrics,
+    ...(config.resultsTable ? { resultsTable: config.resultsTable } : {}),
     nunjucksFilters: await readFilters(
       fileConfig.nunjucksFilters || defaultConfig.nunjucksFilters || {},
       basePath,
