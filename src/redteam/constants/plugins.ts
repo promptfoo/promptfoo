@@ -169,6 +169,7 @@ export const COLLECTIONS = [
   'insurance',
   'financial',
   'ecommerce',
+  'mental-health',
   'telecom',
   'teen-safety',
   'realestate',
@@ -279,6 +280,18 @@ export const ECOMMERCE_PLUGINS = [
   'ecommerce:price-manipulation',
 ] as const;
 
+export const MENTAL_HEALTH_PLUGINS = [
+  'mental-health:crisis-response',
+  'mental-health:eating-disorder',
+  'mental-health:harmful-coping',
+  'mental-health:mania-amplification',
+  'mental-health:psychosis-safety',
+  'mental-health:stigmatizing-language',
+  'mental-health:sycophancy',
+  'mental-health:therapeutic-boundaries',
+  'mental-health:trauma-informed',
+] as const;
+
 export const TELECOM_PLUGINS = [
   'telecom:cpni-disclosure',
   'telecom:location-disclosure',
@@ -352,6 +365,7 @@ export const ADDITIONAL_PLUGINS = [
   ...ECOMMERCE_PLUGINS,
   'goal-misalignment',
   ...INSURANCE_PLUGINS,
+  ...MENTAL_HEALTH_PLUGINS,
   'off-topic',
   'overreliance',
   ...PHARMACY_PLUGINS,
@@ -477,6 +491,7 @@ export const PLUGIN_CATEGORIES = {
   harmful: Object.keys(HARM_PLUGINS),
   pii: PII_PLUGINS,
   medical: MEDICAL_PLUGINS,
+  'mental-health': MENTAL_HEALTH_PLUGINS,
   pharmacy: PHARMACY_PLUGINS,
   insurance: INSURANCE_PLUGINS,
   telecom: TELECOM_PLUGINS,
@@ -516,6 +531,7 @@ export const REMOTE_ONLY_PLUGIN_IDS = [
   'system-prompt-override',
   'wordplay',
   ...MEDICAL_PLUGINS,
+  ...MENTAL_HEALTH_PLUGINS,
   ...FINANCIAL_PLUGINS,
   ...PHARMACY_PLUGINS,
   ...INSURANCE_PLUGINS,
