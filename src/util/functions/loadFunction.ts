@@ -8,6 +8,12 @@ import { runPython } from '../../python/pythonUtils';
 import { isJavascriptFile, JAVASCRIPT_EXTENSIONS } from '../fileExtensions';
 
 export const functionCache: Record<string, Function> = {};
+const CALLABLE_FILE_EXTENSION_PATTERN = new RegExp(
+  `(?:${[...JAVASCRIPT_EXTENSIONS, '.py', '.rb']
+    .map((extension) => extension.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'))
+    .join('|')}):`,
+  'i',
+);
 
 interface LoadFunctionOptions {
   filePath: string;
@@ -102,12 +108,13 @@ function normalizeFilePath(filePath: string): string {
 /**
  * Extracts the file path and optional function name from a `file://` URL.
  *
- * Splits at the **last** `:` rather than the first so Windows drive-letter
- * prefixes (`C:`, `D:`, ...) are preserved in `filePath`. The `lastColonIndex
- * > 1` guard prevents splitting at a leading drive-letter colon (`file://C:`
- * with no function name) or at the empty-path edge case (`file://:fn`). Only
- * JavaScript and Python callback files support the named-export suffix, so
- * colons in other valid POSIX paths remain part of the path.
+ * Splits at the first `:` that immediately follows a callable file extension
+ * (JavaScript/TypeScript, `.py`, `.rb`) rather than at an arbitrary colon, so
+ * Windows drive-letter prefixes (`C:`, `D:`, ...), colons inside directory or
+ * file names, and namespace separators inside the function name itself (e.g.
+ * Ruby's `MyModule::Nested.method`) are all preserved. Only callable files
+ * support the named-export suffix, so colons in other valid POSIX paths remain
+ * part of the path.
  *
  * Examples:
  *   `file://callbacks.js`             → `{ filePath: 'callbacks.js' }`
@@ -115,6 +122,7 @@ function normalizeFilePath(filePath: string): string {
  *   `file://C:/cb.js:fn`              → `{ filePath: 'C:/cb.js', functionName: 'fn' }`
  *   `file://C:`                       → `{ filePath: 'C:' }` (drive-letter colon preserved)
  *   `file://2026-05-27T12:00:00.js`   → `{ filePath: '2026-05-27T12:00:00.js' }` (colon is part of path)
+ *   `file://cb.rb:Mod::Nested.fn`     → `{ filePath: 'cb.rb', functionName: 'Mod::Nested.fn' }`
  *
  * @param fileUrl The `file://` URL.
  * @returns The file path and optional function name.
@@ -126,22 +134,13 @@ export function parseFileUrl(fileUrl: string): { filePath: string; functionName?
   }
 
   const urlWithoutProtocol = fileUrl.slice('file://'.length);
-  const lastColonIndex = urlWithoutProtocol.lastIndexOf(':');
+  const functionSeparator = CALLABLE_FILE_EXTENSION_PATTERN.exec(urlWithoutProtocol);
 
-  if (lastColonIndex > 1) {
-    const candidateFilePath = urlWithoutProtocol.slice(0, lastColonIndex);
-
-    // Only executable function files support a :functionName suffix. This preserves
-    // colons that are part of a valid file or directory name on POSIX systems.
-    if (!isJavascriptFile(candidateFilePath) && !candidateFilePath.endsWith('.py')) {
-      return {
-        filePath: normalizeFilePath(urlWithoutProtocol),
-      };
-    }
-
+  if (functionSeparator?.index !== undefined) {
+    const separatorIndex = functionSeparator.index + functionSeparator[0].length - 1;
     return {
-      filePath: normalizeFilePath(candidateFilePath),
-      functionName: urlWithoutProtocol.slice(lastColonIndex + 1),
+      filePath: normalizeFilePath(urlWithoutProtocol.slice(0, separatorIndex)),
+      functionName: urlWithoutProtocol.slice(separatorIndex + 1),
     };
   }
 
