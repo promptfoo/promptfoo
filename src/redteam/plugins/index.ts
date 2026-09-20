@@ -60,6 +60,7 @@ import { getHarmfulTests } from './harmful/unaligned';
 import { ImitationPlugin } from './imitation';
 import { IntentPlugin } from './intent';
 import { OverreliancePlugin } from './overreliance';
+import { PathTraversalOutputPlugin } from './pathTraversalOutput';
 import { getPiiLeakTestsForCategory } from './pii';
 import { PlinyPlugin } from './pliny';
 import { PolicyPlugin } from './policy/index';
@@ -67,8 +68,10 @@ import { isValidPolicyObject } from './policy/utils';
 import { PoliticsPlugin } from './politics';
 import { PromptExtractionPlugin } from './promptExtraction';
 import { RbacPlugin } from './rbac';
+import { ShellCmdOutputPlugin } from './shellCmdOutput';
 import { ShellInjectionPlugin } from './shellInjection';
 import { SqlInjectionPlugin } from './sqlInjection';
+import { SqliOutputPlugin } from './sqliOutput';
 import { TeenSafetyAgeRestrictedGoodsAndServicesPlugin } from './teenSafety/ageRestrictedGoodsAndServices';
 import { TeenSafetyDangerousContentPlugin } from './teenSafety/dangerousContent';
 import { TeenSafetyDangerousRoleplayPlugin } from './teenSafety/dangerousRoleplay';
@@ -80,6 +83,7 @@ import { UnsafeBenchPlugin } from './unsafebench';
 import { UnverifiableClaimsPlugin } from './unverifiableClaims';
 import { VLGuardPlugin } from './vlguard';
 import { VLSUPlugin } from './vlsu';
+import { XssOutputPlugin } from './xssOutput';
 import { XSTestPlugin } from './xstest';
 
 import type {
@@ -558,7 +562,11 @@ const pluginFactories: PluginFactory[] = [
   createPluginFactory<{ systemPrompt?: string }>(PromptExtractionPlugin, 'prompt-extraction'),
   createPluginFactory(RbacPlugin, 'rbac'),
   createPluginFactory(ShellInjectionPlugin, 'shell-injection'),
+  createPluginFactory(ShellCmdOutputPlugin, 'shell-cmd-output'),
   createPluginFactory(SqlInjectionPlugin, 'sql-injection'),
+  createPluginFactory(SqliOutputPlugin, 'sqli-output'),
+  createPluginFactory(PathTraversalOutputPlugin, 'path-traversal-output'),
+  createPluginFactory(XssOutputPlugin, 'xss-output'),
   createPluginFactory(
     TeenSafetyAgeRestrictedGoodsAndServicesPlugin,
     'teen-safety:age-restricted-goods-and-services',
