@@ -75,6 +75,7 @@ const STRATEGY_PROBE_MULTIPLIER: Record<Strategy, number> = {
   goat: 5,
   hex: 1,
   homoglyph: 1,
+  'unicode-normalization': 1,
   image: 1,
   'indirect-web-pwn': 3,
   jailbreak: 10,
