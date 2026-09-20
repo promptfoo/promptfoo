@@ -1,9 +1,15 @@
-import { describe, expect, it } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { fetchWithCache } from '../../src/cache';
 import {
   calculateDeepSeekCost,
   createDeepSeekProvider,
   DEEPSEEK_CHAT_MODELS,
 } from '../../src/providers/deepseek';
+
+vi.mock('../../src/cache', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../../src/cache')>()),
+  fetchWithCache: vi.fn(),
+}));
 
 describe('DeepSeek usage boundaries', () => {
   it('bills input-only and output-only responses and preserves valid zero usage', () => {
@@ -139,5 +145,59 @@ describe('DEEPSEEK_CHAT_MODELS', () => {
 describe('createDeepSeekProvider', () => {
   it('should preserve the historical non-thinking default', () => {
     expect(createDeepSeekProvider('deepseek').id()).toBe('deepseek:deepseek-chat');
+  });
+});
+
+describe('DeepSeekProvider cost reporting', () => {
+  beforeEach(() => {
+    vi.mocked(fetchWithCache).mockReset();
+  });
+
+  it.each([0, 40, 100])('bills %s cached prompt tokens at the cache-read rate', async (cached) => {
+    vi.mocked(fetchWithCache).mockResolvedValueOnce({
+      data: {
+        choices: [{ message: { content: 'DeepSeek response' }, finish_reason: 'stop' }],
+        usage: {
+          prompt_tokens: 100,
+          completion_tokens: 50,
+          total_tokens: 150,
+          // DeepSeek's wire format: cache hits are reported at the top level of
+          // usage, not inside prompt_tokens_details.
+          prompt_cache_hit_tokens: cached,
+          prompt_cache_miss_tokens: 100 - cached,
+        },
+      },
+      cached: false,
+      status: 200,
+      statusText: 'OK',
+    });
+
+    const provider = createDeepSeekProvider('deepseek:deepseek-chat', {
+      config: { config: { apiKey: 'fixture-key' } },
+    });
+    const result = await provider.callApi('Test prompt');
+
+    expect(result.cost).toBe(calculateDeepSeekCost('deepseek-chat', {}, 100, 50, cached));
+    expect(result.tokenUsage?.completionDetails?.cacheReadInputTokens).toBe(
+      cached === 0 ? undefined : cached,
+    );
+  });
+
+  it('reports zero incremental cost for promptfoo cache hits', async () => {
+    vi.mocked(fetchWithCache).mockResolvedValueOnce({
+      data: {
+        choices: [{ message: { content: 'Cached DeepSeek response' }, finish_reason: 'stop' }],
+        usage: { prompt_tokens: 100, completion_tokens: 50, total_tokens: 150 },
+      },
+      cached: true,
+      status: 200,
+      statusText: 'OK',
+    });
+
+    const provider = createDeepSeekProvider('deepseek:deepseek-chat', {
+      config: { config: { apiKey: 'fixture-key' } },
+    });
+
+    await expect(provider.callApi('Test prompt')).resolves.toMatchObject({ cached: true, cost: 0 });
   });
 });

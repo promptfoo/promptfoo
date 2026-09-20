@@ -1,8 +1,10 @@
 import logger from '../logger';
 import { OpenAiChatCompletionProvider } from './openai/chat';
+import { getOpenAICompletionTokenDetails } from './openai/util';
 import { calculateCost, clampCachedTokens } from './shared';
 
 import type { ApiProvider, ProviderOptions } from '../types/index';
+import type { OpenAiChatCompletionCostData } from './openai/chat';
 import type { OpenAiCompletionOptions } from './openai/types';
 
 type DeepSeekConfig = OpenAiCompletionOptions;
@@ -97,8 +99,6 @@ export function calculateDeepSeekCost(
 }
 
 class DeepSeekProvider extends OpenAiChatCompletionProvider {
-  private originalConfig?: DeepSeekConfig;
-
   protected get apiKey(): string | undefined {
     return this.config?.apiKey;
   }
@@ -116,8 +116,6 @@ class DeepSeekProvider extends OpenAiChatCompletionProvider {
         apiBaseUrl: 'https://api.deepseek.com/v1',
       },
     });
-
-    this.originalConfig = deepseekConfig;
   }
 
   id(): string {
@@ -139,43 +137,21 @@ class DeepSeekProvider extends OpenAiChatCompletionProvider {
     };
   }
 
-  async callApi(prompt: string, context?: any, callApiOptions?: any): Promise<any> {
-    const response = await super.callApi(prompt, context, callApiOptions);
-
-    if (!response || response.error) {
-      return response;
+  protected override calculateResponseCost(
+    data: OpenAiChatCompletionCostData,
+    config: OpenAiCompletionOptions,
+    cached: boolean,
+  ): number | undefined {
+    if (cached) {
+      return 0;
     }
-
-    // Extract cache hit information if available
-    let cachedTokens = 0;
-    if (typeof response.raw === 'string') {
-      try {
-        const rawData = JSON.parse(response.raw);
-        if (rawData?.usage?.prompt_tokens_details?.cached_tokens) {
-          cachedTokens = rawData.usage.prompt_tokens_details.cached_tokens;
-        }
-      } catch (err) {
-        logger.debug(`Failed to parse raw response for cache info: ${err}`);
-      }
-    } else if (typeof response.raw === 'object' && response.raw !== null) {
-      const rawData = response.raw;
-      if (rawData?.usage?.prompt_tokens_details?.cached_tokens) {
-        cachedTokens = rawData.usage.prompt_tokens_details.cached_tokens;
-      }
-    }
-
-    // Calculate cost with cache information
-    if (response.tokenUsage && !response.cached) {
-      response.cost = calculateDeepSeekCost(
-        this.modelName,
-        this.config || {},
-        response.tokenUsage.prompt,
-        response.tokenUsage.completion,
-        cachedTokens,
-      );
-    }
-
-    return response;
+    return calculateDeepSeekCost(
+      this.modelName,
+      config,
+      data.usage?.prompt_tokens,
+      data.usage?.completion_tokens,
+      getOpenAICompletionTokenDetails(data.usage ?? {})?.cacheReadInputTokens,
+    );
   }
 }
 
