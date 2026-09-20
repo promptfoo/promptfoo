@@ -360,7 +360,7 @@ prompts:
 providers:
   - id: openai:gpt-5.6
     prompts: [gpt_prompt]
-  - id: anthropic:claude-sonnet-4-6
+  - id: anthropic:claude-sonnet-5
     prompts: [claude_prompt]
 ```
 

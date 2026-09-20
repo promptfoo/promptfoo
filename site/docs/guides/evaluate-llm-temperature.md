@@ -34,6 +34,10 @@ Before setting up an evaluation, create a new directory and a `promptfooconfig.y
 
 Here's an example configuration that compares the outputs of Claude Sonnet 4.6 at a low temperature (0.2) and a high temperature (0.9):
 
+:::note
+Claude Sonnet 5, Opus 5, and Fable 5 reject `temperature`, `top_p`, and `top_k` — requests that set them fail with a 400. Use `output_config.effort` (`effort:` in your promptfoo config) as the equivalent control on those models. The examples below stay on Claude Sonnet 4.6, which still accepts sampling parameters.
+:::
+
 ```yaml title="promptfooconfig.yaml"
 prompts:
   - 'Respond to the following instruction: {{message}}'

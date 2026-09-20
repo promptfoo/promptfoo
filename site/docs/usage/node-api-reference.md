@@ -48,7 +48,7 @@ import { evaluate } from 'promptfoo';
 
 const evalRecord = await evaluate({
   prompts: ['What is 2+2?'],
-  providers: ['openai:chat:gpt-5.5', 'anthropic:messages:claude-opus-4-7'],
+  providers: ['openai:chat:gpt-5.5', 'anthropic:messages:claude-opus-5'],
   tests: [
     {
       vars: { query: 'math question' },
@@ -109,7 +109,7 @@ async function loadApiProvider(
 
 **Parameters:**
 
-- `providerPath`: Provider identifier (e.g., `'openai:chat:gpt-5.5'`, `'anthropic:messages:claude-opus-4-7'`, or `'file://./custom-provider.js'`)
+- `providerPath`: Provider identifier (e.g., `'openai:chat:gpt-5.5'`, `'anthropic:messages:claude-opus-5'`, or `'file://./custom-provider.js'`)
 - `context`: Optional context with environment overrides
 
 **Returns:** Configured `ApiProvider` instance ready to call
@@ -168,7 +168,7 @@ import { loadApiProviders } from 'promptfoo';
 
 const providers = await loadApiProviders([
   'openai:chat:gpt-5.5',
-  'anthropic:messages:claude-opus-4-7',
+  'anthropic:messages:claude-opus-5',
   {
     id: 'custom-provider',
     config: {
@@ -923,7 +923,7 @@ import { assertions, loadApiProviders } from 'promptfoo';
 
 const providers = await loadApiProviders([
   'openai:chat:gpt-5.5',
-  'anthropic:messages:claude-opus-4-7',
+  'anthropic:messages:claude-opus-5',
 ]);
 
 const testCases = ['2+2=?', 'What is AI?'];
