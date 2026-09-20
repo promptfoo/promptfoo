@@ -93,7 +93,17 @@ function splitDockerShellCommands(input: string): DockerShellWord[][] {
     if (/^[;&|()`\n]$/.test(token)) {
       segments.push([]);
     } else if (token !== '$' || tokens?.[index + 1] !== '(') {
-      segments[segments.length - 1].push(readDockerShellWord(token));
+      const word = readDockerShellWord(token);
+      if (
+        /^[A-Za-z_][A-Za-z0-9_]*$/.test(word.value) &&
+        tokens?.[index + 1] === '(' &&
+        tokens?.[index + 2] === ')'
+      ) {
+        throw new Error(
+          `Docker RUN shell functions are not supported by the npm audit: ${word.raw}`,
+        );
+      }
+      segments[segments.length - 1].push(word);
     }
   }
   return segments.filter((segment) => segment.length > 0);
@@ -117,6 +127,40 @@ function extractRunBodies(dockerfile: string): string[] {
 }
 
 const DOCKER_SHELLS = new Set(['sh', 'ash', 'bash', 'csh', 'dash', 'fish', 'ksh', 'tcsh', 'zsh']);
+const DOCKER_SHELL_CONTROL_WORDS = new Set([
+  'if',
+  'then',
+  'elif',
+  'else',
+  'fi',
+  'for',
+  'while',
+  'until',
+  'do',
+  'done',
+  'case',
+  'esac',
+  'select',
+  'function',
+  'coproc',
+  'trap',
+  'alias',
+  'builtin',
+  'begin',
+  'end',
+  'switch',
+  'foreach',
+  'endif',
+  'endsw',
+  'and',
+  'or',
+  'not',
+  '!',
+  '{',
+  '}',
+  '[[',
+  ']]',
+]);
 const DOCKER_LAUNCHERS = new Set([
   'chroot',
   'find',
@@ -205,6 +249,11 @@ function findDockerNpmCommands(words: DockerShellWord[], assignments: string[] =
   }
   assignments = [...assignments, ...words.slice(0, firstCommand).map(({ value }) => value)];
   const [executable, ...args] = words.slice(firstCommand);
+  // The audit understands simple command lists, not branches, loops, or shell functions.
+  expect(
+    DOCKER_SHELL_CONTROL_WORDS.has(executable.raw),
+    `Unsupported Docker RUN shell control syntax: ${executable.raw}`,
+  ).toBe(false);
   expect(executable.dynamic, `Dynamic Docker RUN executable: ${executable.raw}`).toBe(false);
   const name = path.posix.basename(executable.value);
   if (name === 'npm') {
@@ -999,6 +1048,49 @@ describe('package manifests', () => {
       String.raw`RUN printf '%s' 'import os; os.system("npm ci")'`,
       String.raw`RUN printf '%s' 'sh -c "npm ci"'`,
       'RUN node --version && python3 --version && node --check index.js && timeout 5 node --version',
+    ];
+    expect(() => validateDockerInstallCommands(commands.join('\n'))).not.toThrow();
+  });
+
+  it.each([
+    'NPM_ARGS=ci; if true; then npm $NPM_ARGS; fi',
+    'for n in npm; do "$n" ci; done',
+    'NPM_ARGS=ci; if false; then :; elif true; then npm $NPM_ARGS; else :; fi',
+    'NPM_ARGS=ci; while true; do npm $NPM_ARGS; break; done',
+    'NPM_ARGS=ci; until false; do npm $NPM_ARGS; break; done',
+    'NPM_ARGS=ci; case x in x) npm $NPM_ARGS;; esac',
+    String.raw`sh -c 'NPM_ARGS=ci; if true; then npm $NPM_ARGS; fi'`,
+    String.raw`bash -c 'for n in npm; do "$n" ci; done'`,
+    'install() { "$1" ci; }; install npm',
+    'install() ( "$1" ci ); install npm',
+    'function install { "$1" ci; }; install npm',
+    'NPM_ARGS=ci; ! npm "$NPM_ARGS"',
+    'NPM_ARGS=ci; { true; npm "$NPM_ARGS"; }',
+    'if true; then echo npm; fi',
+    'for item in safe; do echo "$item"; done',
+    'noop() { echo fine; }; noop',
+    'noop() ( echo fine ); noop',
+    'coproc worker echo fine',
+    String.raw`trap 'npm ci' EXIT`,
+    String.raw`alias install='npm ci'`,
+    String.raw`bash -c 'builtin eval "npm ci"'`,
+    '{ echo fine; }',
+    '[[ -n x ]] && echo fine',
+  ])('rejects unsupported Docker shell control syntax: %s', (command) => {
+    const safe =
+      'RUN npm ci --ignore-scripts && npm rebuild ./node_modules/esbuild ./node_modules/@swc/core';
+    expect(() => validateDockerInstallCommands(`${safe}\nRUN ${command}`)).toThrow();
+    expect(() => validateDockerInstallCommands(`${safe} && ${command}`)).toThrow();
+  });
+
+  it('allows Docker control keywords and function-shaped text as ordinary arguments', () => {
+    const commands = [
+      'RUN npm ci --ignore-scripts && npm rebuild ./node_modules/esbuild ./node_modules/@swc/core',
+      'RUN echo if then elif else fi for while until do done case esac function trap alias builtin',
+      String.raw`RUN printf %s 'if true; then npm ci; fi'`,
+      String.raw`RUN echo 'noop() { npm ci; }'`,
+      String.raw`RUN sh -c 'printf %s "for n in npm; do true; done"'`,
+      'RUN [ -f /tmp/file ] || echo none',
     ];
     expect(() => validateDockerInstallCommands(commands.join('\n'))).not.toThrow();
   });
