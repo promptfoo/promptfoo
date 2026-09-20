@@ -5,6 +5,74 @@ import logger from '../../src/logger';
 import { providerRegistry } from '../../src/providers/providerRegistry';
 import { createDeferred } from '../util/utils';
 
+async function runSignalChild(body: string, signal: 'SIGINT' | 'SIGTERM' = 'SIGTERM') {
+  const script = `
+    import { providerRegistry } from './src/providers/providerRegistry.ts';
+    import { OpenCodeSDKProvider } from './src/providers/opencode-sdk.ts';
+    process.on('message', (message) => {
+      if (message === 'signal' && !process.emit('${signal}')) {
+        process.exit(${signal === 'SIGINT' ? 130 : 143});
+      }
+    });
+    const idle = setInterval(() => {}, 1_000);
+    ${body}
+    console.log('child-ready');
+  `;
+  const child = spawn(process.execPath, ['--import', 'tsx', '--input-type=module', '-e', script], {
+    cwd: process.cwd(),
+    env: process.env,
+    stdio: ['ignore', 'pipe', 'pipe', 'ipc'],
+  });
+  let stdout = '';
+  let stderr = '';
+  let watchdog = false;
+  let timeout: ReturnType<typeof setTimeout> | undefined;
+  child.stderr?.on('data', (chunk) => {
+    stderr += String(chunk);
+  });
+  const ready = new Promise<void>((resolve, reject) => {
+    child.stdout?.on('data', (chunk) => {
+      stdout += String(chunk);
+      if (stdout.includes('child-ready')) {
+        resolve();
+      }
+    });
+    child.once('error', reject);
+    child.once('exit', (code) => {
+      if (!stdout.includes('child-ready')) {
+        reject(new Error(`Signal child exited before startup (${code}): ${stderr}`));
+      }
+    });
+  });
+  const exited = new Promise<{ code: number | null; signal: NodeJS.Signals | null }>(
+    (resolve, reject) => {
+      child.once('error', reject);
+      child.once('close', (code, receivedSignal) => resolve({ code, signal: receivedSignal }));
+    },
+  );
+  void exited.catch(() => undefined);
+  try {
+    await ready;
+    timeout = setTimeout(() => {
+      watchdog = true;
+      child.kill('SIGKILL');
+    }, 2_500);
+    if (process.platform === 'win32') {
+      child.send('signal');
+    } else {
+      child.kill(signal);
+    }
+    return { ...(await exited), stdout, stderr, watchdog };
+  } finally {
+    if (timeout) {
+      clearTimeout(timeout);
+    }
+    if (child.exitCode === null && child.signalCode === null) {
+      child.kill('SIGKILL');
+    }
+  }
+}
+
 describe('provider lifecycle registry', () => {
   afterEach(async () => {
     await providerRegistry.shutdownAll();
@@ -66,6 +134,207 @@ describe('provider lifecycle registry', () => {
 
     expect(current.shutdown).toHaveBeenCalledOnce();
     expect(removed.shutdown).not.toHaveBeenCalled();
+  });
+
+  it('escalates a draining manual shutdown once when process cleanup begins', async () => {
+    const draining = createDeferred<void>();
+    const provider = {
+      shutdown: vi.fn(async (reason?: string) => {
+        if (reason === 'manual') {
+          await draining.promise;
+        }
+      }),
+    };
+    providerRegistry.register(provider);
+    const manual = providerRegistry.shutdownAll();
+
+    try {
+      expect(provider.shutdown).toHaveBeenCalledExactlyOnceWith('manual');
+      await providerRegistry.shutdownForProcess();
+      await providerRegistry.shutdownForProcess();
+      expect(provider.shutdown.mock.calls).toEqual([['manual'], ['process']]);
+    } finally {
+      draining.resolve();
+      await manual;
+    }
+  });
+
+  it('removes its signal handlers after the last provider unregisters', async () => {
+    const result = await runSignalChild(`
+      const before = process.listenerCount('SIGTERM');
+      const beforeAdded = process.listenerCount('newListener');
+      const beforeRemoved = process.listenerCount('removeListener');
+      const provider = { shutdown: async () => {} };
+      providerRegistry.register(provider);
+      providerRegistry.unregister(provider);
+      console.log('listeners:' + before + ':' + process.listenerCount('SIGTERM'));
+      console.log('observers:' +
+        (beforeAdded === process.listenerCount('newListener')) + ':' +
+        (beforeRemoved === process.listenerCount('removeListener')));
+    `);
+
+    expect(result.stdout).toContain('listeners:0:0');
+    expect(result.stdout).toContain('observers:true:true');
+    expect(result.watchdog, result.stderr).toBe(false);
+    if (process.platform !== 'win32') {
+      expect(result.signal).toBe('SIGTERM');
+    }
+  });
+
+  it('does not consume default SIGTERM after an invalid direct OpenCode call', async () => {
+    const result = await runSignalChild(`
+      const provider = new OpenCodeSDKProvider({
+        config: { working_dir: process.cwd(), permission: { bash: 'invalid' } },
+      });
+      const response = await provider.callApi('invalid policy');
+      console.log('invalid:' + Boolean(response.error));
+    `);
+
+    expect(result.stdout).toContain('invalid:true');
+    expect(result.watchdog, result.stderr).toBe(false);
+    if (process.platform !== 'win32') {
+      expect(result.signal).toBe('SIGTERM');
+    }
+  });
+
+  it.each(['SIGINT', 'SIGTERM'] as const)(
+    'restores default %s termination after cleaning an active provider when the host has no handler',
+    async (signal) => {
+      const result = await runSignalChild(
+        `providerRegistry.register({ shutdown: async (reason) => console.log('cleaned:' + reason) });`,
+        signal,
+      );
+
+      expect(result.watchdog, result.stderr).toBe(false);
+      expect(result.stdout.match(/cleaned:process/g)).toHaveLength(1);
+      if (process.platform !== 'win32') {
+        expect(result.signal).toBe(signal);
+      }
+    },
+  );
+
+  it('forces a normally draining provider on real SIGTERM and bounds a stuck forced cleanup', async () => {
+    const result = await runSignalChild(`
+      providerRegistry.register({
+        shutdown: (reason) => {
+          console.log('requested:' + reason);
+          return new Promise(() => {});
+        },
+      });
+      void providerRegistry.shutdownAll();
+    `);
+
+    expect(result.watchdog, result.stderr).toBe(false);
+    expect(result.stdout.match(/requested:manual/g)).toHaveLength(1);
+    expect(result.stdout.match(/requested:process/g)).toHaveLength(1);
+    if (process.platform !== 'win32') {
+      expect(result.signal).toBe('SIGTERM');
+    }
+  });
+
+  it('uses the conventional signal status if restoring the OS default fails without a host handler', async () => {
+    const result = await runSignalChild(`
+      process.kill = () => { throw new Error('self-redelivery unavailable'); };
+      providerRegistry.register({ shutdown: async () => {} });
+    `);
+
+    expect(result.watchdog, result.stderr).toBe(false);
+    expect(result.code).toBe(143);
+    expect(result.signal).toBeNull();
+  });
+
+  it('does not re-raise or override a host once-listener registered before the provider', async () => {
+    const result = await runSignalChild(`
+      process.once('SIGTERM', () => {
+        console.log('host-signal');
+        setTimeout(() => {
+          console.log('host-finished');
+          clearInterval(idle);
+          process.disconnect?.();
+        }, 30);
+      });
+      providerRegistry.register({
+        shutdown: (reason) => {
+          console.log('requested:' + reason);
+          return new Promise(() => {});
+        },
+      });
+    `);
+
+    expect(result.watchdog, result.stderr).toBe(false);
+    expect(result.code).toBe(0);
+    expect(result.signal).toBeNull();
+    expect(result.stdout.match(/host-signal/g)).toHaveLength(1);
+    expect(result.stdout).toContain('host-finished');
+    expect(result.stdout.match(/requested:process/g)).toHaveLength(1);
+  });
+
+  it('does not override a host once-listener prepended after the provider registers', async () => {
+    const result = await runSignalChild(`
+      providerRegistry.register({
+        shutdown: async (reason) => console.log('requested:' + reason),
+      });
+      process.prependOnceListener('SIGTERM', () => {
+        console.log('host-signal');
+        setTimeout(() => {
+          console.log('host-finished');
+          clearInterval(idle);
+          process.disconnect?.();
+        }, 30);
+      });
+    `);
+
+    expect(result.watchdog, result.stderr).toBe(false);
+    expect(result.code).toBe(0);
+    expect(result.signal).toBeNull();
+    expect(result.stdout.match(/host-signal/g)).toHaveLength(1);
+    expect(result.stdout).toContain('host-finished');
+    expect(result.stdout.match(/requested:process/g)).toHaveLength(1);
+  });
+
+  it('restores the default after removing a later prepended host listener before the signal', async () => {
+    const result = await runSignalChild(`
+      providerRegistry.register({
+        shutdown: async (reason) => console.log('requested:' + reason),
+      });
+      const host = () => console.log('host-signal');
+      process.prependOnceListener('SIGTERM', host);
+      process.removeListener('SIGTERM', host);
+      await new Promise((resolve) => setImmediate(resolve));
+    `);
+
+    expect(result.watchdog, result.stderr).toBe(false);
+    expect(result.stdout).not.toContain('host-signal');
+    expect(result.stdout.match(/requested:process/g)).toHaveLength(1);
+    if (process.platform !== 'win32') {
+      expect(result.signal).toBe('SIGTERM');
+    }
+  });
+
+  it('escalates a draining scoped evaluation separately from its original cleanup', async () => {
+    const entered = createDeferred<void>();
+    const release = createDeferred<void>();
+    const provider = {
+      shutdown: vi.fn(async (reason?: string) => {
+        if (reason === 'evaluation') {
+          entered.resolve();
+          await release.promise;
+        }
+      }),
+    };
+    const evaluation = providerRegistry.withEvaluationScope(async () => {
+      providerRegistry.registerScoped(provider);
+    });
+    await entered.promise;
+
+    try {
+      await providerRegistry.shutdownForProcess();
+      await providerRegistry.shutdownForProcess();
+      expect(provider.shutdown.mock.calls).toEqual([['evaluation'], ['process']]);
+    } finally {
+      release.resolve();
+      await evaluation;
+    }
   });
 
   it('keeps an asynchronous evaluation owner alive while unrelated scopes still close legacy providers', async () => {
@@ -178,7 +447,7 @@ describe('provider lifecycle registry', () => {
     expect(providerRegistry.isProcessTerminating()).toBe(false);
   });
 
-  it('refuses a fresh OpenCode provider after a native process signal begins termination', async () => {
+  it('refuses fresh OpenCode work while a host signal handler owns the remaining process lifetime', async () => {
     const script = `
       import { providerRegistry } from './src/providers/providerRegistry.ts';
       import { OpenCodeSDKProvider } from './src/providers/opencode-sdk.ts';
@@ -191,6 +460,7 @@ describe('provider lifecycle registry', () => {
         if (message === 'terminate') process.emit('SIGTERM');
       });
       process.on('SIGTERM', () => {
+        console.log('host-signal');
         setImmediate(async () => {
           try {
             console.log('terminating:' + providerRegistry.isProcessTerminating());
@@ -257,6 +527,7 @@ describe('provider lifecycle registry', () => {
       expect(stdout).toContain('terminating:true');
       expect(stdout).toContain('fresh:OpenCode SDK call aborted before it started');
       expect(stdout).not.toContain('fresh-threw:');
+      expect(stdout.match(/host-signal/g)).toHaveLength(1);
     } finally {
       if (child.exitCode === null && child.signalCode === null) {
         child.kill('SIGKILL');

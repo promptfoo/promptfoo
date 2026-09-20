@@ -3,6 +3,15 @@ import { AsyncLocalStorage } from 'node:async_hooks';
 import logger from '../logger';
 
 export type ProviderShutdownReason = 'evaluation' | 'manual' | 'process';
+const PROCESS_SHUTDOWN_TIMEOUT_MS = 1_000;
+type TerminationSignal = 'SIGINT' | 'SIGTERM';
+type SignalListener = (signal: NodeJS.Signals) => void;
+
+interface HostSignalObservation {
+  listeners: Record<TerminationSignal, Set<SignalListener>>;
+  added: (event: string | symbol, listener: SignalListener) => void;
+  removed: (event: string | symbol, listener: SignalListener) => void;
+}
 
 /**
  * Interface for providers that need cleanup on process exit.
@@ -22,24 +31,37 @@ interface ProviderEvaluationScope {
  */
 class ProviderRegistry {
   private providers: Set<CleanupProvider> = new Set();
-  private shutdownRegistered: boolean = false;
   private processTerminating = false;
+  private nativeSignal?: TerminationSignal;
+  private beforeExitAttempted = false;
+  private signalHandlers?: Record<TerminationSignal | 'beforeExit', () => void>;
+  private hostSignalObservation?: HostSignalObservation;
+  private readonly normalShutdowns = new Map<CleanupProvider, Promise<void>>();
+  private readonly processShutdowns = new Map<CleanupProvider, Promise<void>>();
+  private readonly escalatedProviders = new WeakSet<CleanupProvider>();
   private readonly evaluationScope = new AsyncLocalStorage<ProviderEvaluationScope>();
   private readonly evaluationOwners = new WeakMap<CleanupProvider, Set<ProviderEvaluationScope>>();
   private readonly directlyOwnedProviders = new WeakSet<CleanupProvider>();
 
   register(provider: CleanupProvider): void {
+    if (
+      !this.providers.has(provider) &&
+      !this.normalShutdowns.has(provider) &&
+      !this.processShutdowns.has(provider)
+    ) {
+      this.escalatedProviders.delete(provider);
+    }
     this.providers.add(provider);
 
-    if (!this.shutdownRegistered) {
+    if (!this.signalHandlers && !this.nativeSignal) {
       this.registerShutdownHandlers();
-      this.shutdownRegistered = true;
     }
   }
 
   unregister(provider: CleanupProvider): void {
     this.providers.delete(provider);
     this.directlyOwnedProviders.delete(provider);
+    this.removeShutdownHandlersWhenIdle();
   }
 
   isProcessTerminating(): boolean {
@@ -106,30 +128,130 @@ class ProviderRegistry {
   }
 
   private registerShutdownHandlers(): void {
-    let shuttingDown = false;
-
-    const shutdown = async (signal: string) => {
-      if (signal === 'SIGINT' || signal === 'SIGTERM') {
-        this.processTerminating = true;
-      }
-      if (shuttingDown) {
-        return; // Prevent duplicate shutdown
-      }
-      shuttingDown = true;
-
-      logger.debug(`Received ${signal}, shutting down ${this.providers.size} providers...`);
-      await this.shutdownForProcess();
-      logger.debug('Provider shutdown complete');
+    this.beforeExitAttempted = false;
+    const handlers = {
+      SIGINT: () => this.handleSignal('SIGINT'),
+      SIGTERM: () => this.handleSignal('SIGTERM'),
+      beforeExit: () => this.handleBeforeExit(),
     };
+    this.signalHandlers = handlers;
+    const observation: HostSignalObservation = {
+      listeners: {
+        SIGINT: new Set(process.listeners('SIGINT')),
+        SIGTERM: new Set(process.listeners('SIGTERM')),
+      },
+      added: (event, listener) => {
+        if ((event === 'SIGINT' || event === 'SIGTERM') && listener !== handlers[event]) {
+          observation.listeners[event].add(listener);
+        }
+      },
+      removed: (event, listener) => {
+        if ((event !== 'SIGINT' && event !== 'SIGTERM') || listener === handlers[event]) {
+          return;
+        }
+        // Node removes a once-listener before invoking it. Keep it through this dispatch in
+        // case the host prepended it ahead of us after we registered our signal handlers.
+        queueMicrotask(() => {
+          if (
+            this.hostSignalObservation === observation &&
+            !process.listeners(event).includes(listener)
+          ) {
+            observation.listeners[event].delete(listener);
+          }
+        });
+      },
+    };
+    this.hostSignalObservation = observation;
+    process.on('newListener', observation.added);
+    process.on('removeListener', observation.removed);
+    process.prependListener('SIGINT', handlers.SIGINT);
+    process.prependListener('SIGTERM', handlers.SIGTERM);
+    process.once('beforeExit', handlers.beforeExit);
+  }
 
-    process.once('SIGINT', function providerRegistryOnSigint() {
-      void shutdown('SIGINT');
+  private removeShutdownHandlersWhenIdle(): void {
+    if (
+      this.providers.size === 0 &&
+      this.normalShutdowns.size === 0 &&
+      this.processShutdowns.size === 0
+    ) {
+      this.removeShutdownHandlers();
+    }
+  }
+
+  private removeShutdownHandlers(): void {
+    const handlers = this.signalHandlers;
+    if (!handlers) {
+      return;
+    }
+    const observation = this.hostSignalObservation;
+    this.hostSignalObservation = undefined;
+    if (observation) {
+      process.removeListener('newListener', observation.added);
+      process.removeListener('removeListener', observation.removed);
+    }
+    process.removeListener('SIGINT', handlers.SIGINT);
+    process.removeListener('SIGTERM', handlers.SIGTERM);
+    process.removeListener('beforeExit', handlers.beforeExit);
+    this.signalHandlers = undefined;
+  }
+
+  private handleSignal(signal: TerminationSignal): void {
+    if (this.nativeSignal) {
+      return;
+    }
+    this.nativeSignal = signal;
+    this.processTerminating = true;
+    const ownHandler = this.signalHandlers?.[signal];
+    const hostHandlesSignal =
+      Boolean(this.hostSignalObservation?.listeners[signal].size) ||
+      process.rawListeners(signal).some((listener) => listener !== ownHandler);
+    // A second real signal should follow host/default behavior, not run our cleanup twice.
+    this.removeShutdownHandlers();
+
+    logger.debug(`Received ${signal}, shutting down providers...`);
+    const finish = () => {
+      logger.debug('Provider shutdown complete');
+      if (!hostHandlesSignal && process.listenerCount(signal) === 0) {
+        try {
+          // Installing a Node signal listener suppresses its default. Restore that behavior
+          // only when the embedding application had no handler of its own.
+          process.kill(process.pid, signal);
+        } catch (error) {
+          logger.warn(`Failed to restore default ${signal} handling: ${error}`);
+          process.exit(signal === 'SIGINT' ? 130 : 143);
+        }
+      }
+    };
+    void this.waitForProcessCleanup(this.shutdownForProcess(), hostHandlesSignal).then(
+      finish,
+      finish,
+    );
+  }
+
+  private handleBeforeExit(): void {
+    if (this.beforeExitAttempted || this.nativeSignal) {
+      return;
+    }
+    this.beforeExitAttempted = true;
+    void this.waitForProcessCleanup(this.shutdownForProcess(), true);
+  }
+
+  private async waitForProcessCleanup(cleanup: Promise<void>, unref: boolean): Promise<void> {
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const deadline = new Promise<void>((resolve) => {
+      timer = setTimeout(resolve, PROCESS_SHUTDOWN_TIMEOUT_MS);
+      if (unref) {
+        timer.unref();
+      }
     });
-    process.once('SIGTERM', function providerRegistryOnSigterm() {
-      void shutdown('SIGTERM');
-    });
-    // Use beforeExit for async cleanup (exit event cannot await)
-    process.once('beforeExit', () => void shutdown('beforeExit'));
+    try {
+      await Promise.race([cleanup, deadline]);
+    } finally {
+      if (timer) {
+        clearTimeout(timer);
+      }
+    }
   }
 
   shutdownAll(): Promise<void> {
@@ -137,34 +259,84 @@ class ProviderRegistry {
   }
 
   shutdownForProcess(): Promise<void> {
-    return this.shutdownProviders([...this.providers], 'process');
+    return this.shutdownProviders(
+      [
+        ...new Set([
+          ...this.providers,
+          ...this.normalShutdowns.keys(),
+          ...this.processShutdowns.keys(),
+        ]),
+      ],
+      'process',
+    );
   }
 
   private async shutdownProviders(
     providers: CleanupProvider[],
     reason: ProviderShutdownReason,
   ): Promise<void> {
-    // Take the current registrations before invoking shutdown. Providers can register again
-    // while this batch drains, and a later evaluation must still be able to find them.
+    // Remove the whole old batch before invoking any provider: one provider can register
+    // itself or another provider during shutdown, and those registrations must survive.
     for (const provider of providers) {
-      this.providers.delete(provider);
-    }
-    const results = await Promise.allSettled(
-      providers.map((provider) => {
-        try {
-          return provider.shutdown(reason);
-        } catch (error) {
-          return Promise.reject(error);
-        }
-      }),
-    );
-
-    // Log any failures but don't throw - cleanup should be defensive
-    for (const result of results) {
-      if (result.status === 'rejected') {
-        logger.warn(`Error shutting down provider: ${result.reason}`);
+      const alreadyStarted =
+        reason === 'process'
+          ? this.processShutdowns.has(provider) || this.escalatedProviders.has(provider)
+          : this.normalShutdowns.has(provider);
+      if (!alreadyStarted) {
+        this.providers.delete(provider);
       }
     }
+    const pending = providers.flatMap((provider) => {
+      const shutdown = this.startProviderShutdown(provider, reason);
+      return shutdown ? [shutdown] : [];
+    });
+    await Promise.all(pending);
+  }
+
+  private startProviderShutdown(
+    provider: CleanupProvider,
+    reason: ProviderShutdownReason,
+  ): Promise<void> | undefined {
+    const shutdowns = reason === 'process' ? this.processShutdowns : this.normalShutdowns;
+    const existing = shutdowns.get(provider);
+    if (reason === 'process') {
+      if (existing || this.escalatedProviders.has(provider)) {
+        return existing;
+      }
+      this.escalatedProviders.add(provider);
+    } else if (existing) {
+      // A re-registration during an older shutdown belongs to a later cleanup batch.
+      return;
+    }
+
+    let resolve!: () => void;
+    let reject!: (error: unknown) => void;
+    const completed = new Promise<void>((accept, fail) => {
+      resolve = accept;
+      reject = fail;
+    });
+    const finish = () => {
+      if (shutdowns.get(provider) === shutdown) {
+        shutdowns.delete(provider);
+        this.removeShutdownHandlersWhenIdle();
+      }
+    };
+    const shutdown = completed.then(
+      () => finish(),
+      (error: unknown) => {
+        logger.warn(`Error shutting down provider: ${error}`);
+        finish();
+      },
+    );
+    // Register before invoking user code so synchronous unregister/re-registration and process
+    // escalation can still see this resource while its normal asynchronous shutdown drains.
+    shutdowns.set(provider, shutdown);
+    try {
+      Promise.resolve(provider.shutdown(reason)).then(resolve, reject);
+    } catch (error) {
+      reject(error);
+    }
+    return shutdown;
   }
 }
 

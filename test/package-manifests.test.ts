@@ -21,7 +21,15 @@ function readPackageJson<T>(relativePath: string): T {
   return JSON.parse(fs.readFileSync(packageJsonPath, 'utf8')) as T;
 }
 
-type DockerShellWord = { raw: string; value: string; dynamic: boolean; substitution: boolean };
+type DockerShellWord = {
+  raw: string;
+  value: string;
+  dynamic: boolean;
+  substitution: boolean;
+  shellSyntax: boolean;
+};
+type DockerAuditContext = { hasStages: boolean; workdir: string | null | undefined };
+const DEFAULT_DOCKER_AUDIT_CONTEXT: DockerAuditContext = { hasStages: false, workdir: undefined };
 
 function readDockerShellWord(raw: string): DockerShellWord {
   let quote = '';
@@ -49,7 +57,7 @@ function readDockerShellWord(raw: string): DockerShellWord {
     value += char;
   }
   expect(quote, `Unbalanced Docker RUN word: ${raw}`).toBe('');
-  return { raw, value, dynamic, substitution };
+  return { raw, value, dynamic, substitution, shellSyntax: true };
 }
 
 function dockerShellEscapesNext(input: string, index: number, quote: string): boolean {
@@ -80,7 +88,7 @@ function findDockerQuotedSubstitutionEnd(input: string, start: number): number {
   throw new Error(`Unbalanced Docker RUN command substitution: ${input}`);
 }
 
-function assertDockerShellSubstitutions(input: string): void {
+function assertDockerShellSubstitutions(input: string, context: DockerAuditContext): void {
   let quote = '';
   for (let i = 0; i < input.length; i++) {
     const char = input[i];
@@ -110,7 +118,9 @@ function assertDockerShellSubstitutions(input: string): void {
       const end = findDockerQuotedSubstitutionEnd(input, i + 2);
       const body = input.slice(i + 2, end);
       expect(
-        splitDockerShellCommands(body).flatMap((segment) => findDockerNpmCommands(segment)),
+        splitDockerShellCommands(body, context).flatMap((segment) =>
+          findDockerNpmCommands(segment, [], context),
+        ),
         `Use a separately auditable npm command instead of ${input}`,
       ).toEqual([]);
       i = end;
@@ -118,8 +128,11 @@ function assertDockerShellSubstitutions(input: string): void {
   }
 }
 
-function splitDockerShellCommands(input: string): DockerShellWord[][] {
-  assertDockerShellSubstitutions(input);
+function splitDockerShellCommands(
+  input: string,
+  context = DEFAULT_DOCKER_AUDIT_CONTEXT,
+): DockerShellWord[][] {
+  assertDockerShellSubstitutions(input, context);
   const segments: DockerShellWord[][] = [[]];
   // Preserve quoted words while separating lists, pipes, and groups.
   const tokens = input.match(
@@ -148,7 +161,119 @@ function splitDockerShellCommands(input: string): DockerShellWord[][] {
   return segments.filter((segment) => segment.length > 0);
 }
 
-function extractRunBodies(dockerfile: string): string[] {
+function isDockerExecutionEnvironment(name: string): boolean {
+  // PATH can replace an audited binary; the other settings load code before the audited
+  // interpreter or native program starts, even for some syntax-check or version commands.
+  return (
+    /^(?:PATH|ENV|BASH_ENV|ZDOTDIR|NODE_OPTIONS|NODE_PATH|NODE_REPL_EXTERNAL_MODULE|PYTHONPATH|PYTHONHOME|PYTHONSTARTUP|PYTHONUSERBASE|RUBYOPT|RUBYLIB|PERL5OPT|PERL5LIB|PERLLIB|PHPRC|PHP_INI_SCAN_DIR|LUA_(?:INIT|PATH|CPATH)(?:_\d+_\d+)?|LD_PRELOAD|LD_LIBRARY_PATH|LD_AUDIT|DYLD_INSERT_LIBRARIES|DYLD_LIBRARY_PATH)$/.test(
+      name,
+    ) ||
+    /^npm_config_(?:node_options|script_shell|prefix|local_prefix|workspace|workspaces|include_workspace_root|global|location|userconfig|globalconfig)$/i.test(
+      name,
+    )
+  );
+}
+
+function dockerAssignmentName(value: string): string | undefined {
+  return /^([A-Za-z_][A-Za-z0-9_]*)=/.exec(value)?.[1];
+}
+
+function assertDockerExecutionAssignments(values: string[]): void {
+  for (const value of values) {
+    const name = dockerAssignmentName(value);
+    expect(
+      name && isDockerExecutionEnvironment(name),
+      `Unaudited Docker execution environment: ${value}`,
+    ).not.toBe(true);
+  }
+}
+
+function readDockerDirectiveWords(input: string): DockerShellWord[] {
+  const tokens = input.match(/(?:\\[\s\S]|"(?:\\[\s\S]|[^"\\])*"|'[^']*'|[^\s'"\\])+/g) ?? [];
+  return tokens.map(readDockerShellWord);
+}
+
+function assertDockerEnvironmentDirective(line: string): void {
+  const directive = /^\s*(ARG|ENV)\s+(.*)$/i.exec(line);
+  if (!directive) {
+    return;
+  }
+  const values = readDockerDirectiveWords(directive[2]).map(({ value }) => value);
+  const first = values[0];
+  if (first && !first.includes('=')) {
+    expect(isDockerExecutionEnvironment(first), `Unaudited Docker ${directive[1]} ${first}`).toBe(
+      false,
+    );
+  }
+  assertDockerExecutionAssignments(
+    directive[1].toUpperCase() === 'ARG' ? values.slice(0, 1) : values,
+  );
+}
+
+function nextDockerWorkdir(raw: string, previous: DockerAuditContext['workdir']): string | null {
+  const directory = readDockerShellWord(raw.trim());
+  if (directory.dynamic) {
+    return null;
+  }
+  if (path.posix.isAbsolute(directory.value)) {
+    return path.posix.normalize(directory.value);
+  }
+  return previous ? path.posix.resolve(previous, directory.value) : null;
+}
+
+function assertDockerCopyInstruction(line: string, context: DockerAuditContext): void {
+  const instruction = /^(COPY|ADD)\s+(.+)$/i.exec(line);
+  if (!instruction) {
+    return;
+  }
+  const [, verb, raw] = instruction;
+  expect(verb.toUpperCase(), 'Docker ADD needs an explicit npm control-file audit').not.toBe('ADD');
+  const canonical = `COPY ${raw.trim().replace(/\s+/g, ' ')}`;
+  if (
+    DOCKER_AUDITED_BUILD_COPIES.has(canonical) &&
+    (context.workdir === '/app' || (!context.hasStages && context.workdir === undefined))
+  ) {
+    return;
+  }
+  const operands = raw.replace(/^(?:--[^\s]+\s+)*/, '');
+  let destination: { value: string; dynamic: boolean } | undefined;
+  if (operands.startsWith('[')) {
+    const paths: unknown = JSON.parse(operands);
+    expect(
+      Array.isArray(paths) &&
+        paths.length >= 2 &&
+        paths.every((value) => typeof value === 'string'),
+    ).toBe(true);
+    const value = (paths as string[]).at(-1)!;
+    destination = { value, dynamic: /[$`]/.test(value) };
+  } else {
+    const paths = readDockerDirectiveWords(operands);
+    expect(paths.length).toBeGreaterThanOrEqual(2);
+    destination = paths.at(-1);
+  }
+  expect(
+    !destination || destination.dynamic || isDockerProtectedWritePath(destination.value, context),
+    `Unaudited Docker COPY can replace npm control files: ${line}`,
+  ).toBe(false);
+}
+
+function extractDockerRunBody(line: string): string {
+  let body = line.replace(/^RUN\b/i, '').trim();
+  let cacheMount = false;
+  while (body.startsWith('--')) {
+    const option = /^--\S+/.exec(body)?.[0];
+    expect(
+      !cacheMount && option === '--mount=type=cache,target=/root/.npm',
+      `Unaudited Docker RUN option can replace trusted execution inputs: ${option}`,
+    ).toBe(true);
+    cacheMount = true;
+    body = body.slice(option!.length).trimStart();
+  }
+  expect(body.length, 'Docker RUN needs an auditable command').toBeGreaterThan(0);
+  return body;
+}
+
+function extractRunBodies(dockerfile: string): { body: string; context: DockerAuditContext }[] {
   expect(
     dockerfile,
     'The Docker npm policy requires the default shell and escape directive',
@@ -158,11 +283,32 @@ function extractRunBodies(dockerfile: string): string[] {
     .filter((line) => !line.trimStart().startsWith('#'))
     .join('\n')
     .replace(/\\\n/g, '');
-  return normalized
-    .split('\n')
-    .map((line) => line.trim())
-    .filter((line) => /^RUN\b/i.test(line))
-    .map((line) => line.replace(/^RUN\s+(?:--[^\s]+\s+)*/i, '').trim());
+  const lines = normalized.split('\n');
+  const hasStages = lines.some((line) => /^\s*FROM\b/i.test(line));
+  const runs: { body: string; context: DockerAuditContext }[] = [];
+  let workdir: DockerAuditContext['workdir'];
+  for (const raw of lines) {
+    const line = raw.trim();
+    assertDockerEnvironmentDirective(line);
+    expect(line, 'Docker ONBUILD triggers need an explicit npm policy audit').not.toMatch(
+      /^ONBUILD\b/i,
+    );
+    if (/^FROM\b/i.test(line)) {
+      workdir = undefined;
+      continue;
+    }
+    const directory = /^WORKDIR\s+(.+)$/i.exec(line);
+    if (directory) {
+      workdir = nextDockerWorkdir(directory[1], workdir);
+      continue;
+    }
+    const context = { hasStages, workdir };
+    assertDockerCopyInstruction(line, context);
+    if (/^RUN\b/i.test(line)) {
+      runs.push({ body: extractDockerRunBody(line), context });
+    }
+  }
+  return runs;
 }
 
 const DOCKER_SHELLS = new Set(['sh', 'ash', 'bash', 'csh', 'dash', 'fish', 'ksh', 'tcsh', 'zsh']);
@@ -212,7 +358,36 @@ const DOCKER_LAUNCHERS = new Set([
   'time',
   'timeout',
 ]);
-// Only these absolute paths dispatch to shells or interpreters that this audit inspects.
+// Bare names may resolve to Docker-generated programs on the normal PATH. New commands need
+// an explicit audit; dispatchers in this set have their arguments checked separately below.
+const DOCKER_AUDITED_BARE_EXECUTABLES = new Set([
+  '[',
+  ':',
+  'addgroup',
+  'adduser',
+  'apk',
+  'busybox',
+  'chmod',
+  'chown',
+  'command',
+  'date',
+  'echo',
+  'env',
+  'exec',
+  'false',
+  'find',
+  'git',
+  'ln',
+  'mkdir',
+  'npm',
+  'npx',
+  'printf',
+  'tee',
+  'test',
+  'timeout',
+  'true',
+]);
+// Only these absolute paths dispatch to commands or interpreters that this audit inspects.
 // Arbitrary absolute or relative command paths can point at a script generated by an earlier RUN.
 const DOCKER_AUDITED_EXECUTABLE_PATHS = new Set([
   '/bin/ash',
@@ -223,6 +398,7 @@ const DOCKER_AUDITED_EXECUTABLE_PATHS = new Set([
   '/usr/bin/bash',
   '/usr/bin/dash',
   '/usr/bin/env',
+  '/usr/bin/git',
   '/usr/bin/node',
   '/usr/bin/nodejs',
   '/usr/bin/npx',
@@ -234,6 +410,24 @@ const DOCKER_AUDITED_EXECUTABLE_PATHS = new Set([
   '/usr/local/bin/python',
   '/usr/local/bin/python3',
 ]);
+const DOCKER_AUDITED_PATH_SYMLINKS = new Set([
+  '-sf\npython3\n/usr/bin/python',
+  '-s\n/app/dist/src/entrypoint.js\n/usr/local/bin/promptfoo',
+  '-s\n/app/dist/src/entrypoint.js\n/usr/local/bin/pf',
+]);
+const DOCKER_AUDITED_BUILD_WRITES = new Set([
+  'ln\n-s\n/app\n/app/node_modules/promptfoo',
+  'chown\n-h\npromptfoo:promptfoo\n/app/node_modules/promptfoo',
+]);
+const DOCKER_AUDITED_BUILD_COPIES = new Set([
+  'COPY package.json package-lock.json ./',
+  'COPY src/app/package.json ./src/app/package.json',
+  'COPY site/package.json ./site/package.json',
+  'COPY . .',
+  'COPY --from=builder --chown=promptfoo:promptfoo /app/node_modules ./node_modules',
+  'COPY --from=builder --chown=promptfoo:promptfoo /app/package.json ./package.json',
+  'COPY --from=builder --chown=promptfoo:promptfoo /app/dist ./dist',
+]);
 const DOCKER_CODE_INTERPRETERS =
   /^(?:node(?:js)?|bun|deno|(?:python|pypy|ruby|perl|php|lua)(?:\d+(?:\.\d+)*)?|[gmn]?awk)$/;
 const DOCKER_NODE_SYNTAX_CHECK_FILE = /^(?!-)(?!\/(?:dev|proc|sys)\/)[\w@./+-]+\.[cm]?[jt]sx?$/;
@@ -242,12 +436,167 @@ function isUnauditedDockerExecutablePath(value: string): boolean {
   return value.includes('/') && !DOCKER_AUDITED_EXECUTABLE_PATHS.has(value);
 }
 
+function isAuditedDockerExecutable(value: string): boolean {
+  return value.includes('/')
+    ? !isUnauditedDockerExecutablePath(value)
+    : DOCKER_AUDITED_BARE_EXECUTABLES.has(value) ||
+        DOCKER_SHELLS.has(value) ||
+        DOCKER_CODE_INTERPRETERS.test(value);
+}
+
 function isDockerNpxInformational(args: DockerShellWord[]): boolean {
   return (
     args.length === 1 &&
     !args[0].dynamic &&
     ['--version', '-v', '--help', '-h'].includes(args[0].value)
   );
+}
+
+function isDockerGitInformational(args: DockerShellWord[]): boolean {
+  if (args.some(({ dynamic }) => dynamic)) {
+    return false;
+  }
+  const values = args.map(({ value }) => value);
+  if (values[0] === '--no-pager') {
+    values.shift();
+  }
+  return values.length === 1 && ['--version', '-v', 'version'].includes(values[0]);
+}
+
+function containsDockerExecutionPayload(value: string): boolean {
+  const shellText = value.replace(/\\(.)/gs, '$1').replace(/['"]/g, '');
+  return (
+    /(?:^|[=:])\s*!(?!=)/.test(shellText) ||
+    /(?:^|[=:;|&(!{\n])\s*(?:[.\w/-]*\/)?(?:npm|npx)(?=\s+\S)/i.test(shellText)
+  );
+}
+
+function isDockerSystemExecutablePath(value: string): boolean {
+  return (
+    value.startsWith('/') &&
+    /^\/(?:usr\/local\/(?:sbin|bin)|usr\/(?:sbin|bin)|sbin|bin)(?:\/|$)/.test(
+      path.posix.normalize(value),
+    )
+  );
+}
+
+function isDockerProtectedWritePath(value: string, context: DockerAuditContext): boolean {
+  let absolute: string;
+  if (path.posix.isAbsolute(value)) {
+    absolute = path.posix.normalize(value);
+  } else {
+    if (context.workdir === null || (context.hasStages && context.workdir === undefined)) {
+      return true;
+    }
+    absolute = path.posix.resolve(context.workdir ?? '/app', value);
+  }
+  return (
+    isDockerSystemExecutablePath(absolute) ||
+    /^\/app(?:\/|$)/.test(absolute) ||
+    /^(?:\/(?:root|home\/[^/]+)\/\.npmrc|\/\.npmrc|\/(?:usr\/local\/etc|etc)\/npmrc)$/.test(
+      absolute,
+    )
+  );
+}
+
+function dockerOutputRedirects(raw: string): { before: number; after: number }[] {
+  const positions: { before: number; after: number }[] = [];
+  let quote = '';
+  for (let i = 0; i < raw.length; i++) {
+    const char = raw[i];
+    if (dockerShellEscapesNext(raw, i, quote)) {
+      i++;
+    } else if ((char === '"' || char === "'") && (!quote || quote === char)) {
+      quote = quote ? '' : char;
+    } else if (!quote && char === '>') {
+      const before = i;
+      if (raw[i + 1] === '>') {
+        i++;
+      }
+      positions.push({ before, after: i + 1 });
+    }
+  }
+  return positions;
+}
+
+function dockerWriterTargetsProtectedPath(
+  word: DockerShellWord,
+  context: DockerAuditContext,
+): boolean {
+  let value = word.value;
+  if (value.startsWith('-')) {
+    const equals = value.indexOf('=');
+    const slash = value.indexOf('/');
+    value = equals >= 0 ? value.slice(equals + 1) : slash >= 0 ? value.slice(slash) : value;
+  }
+  return word.dynamic || isDockerProtectedWritePath(value, context);
+}
+
+function assertDockerRedirections(words: DockerShellWord[], context: DockerAuditContext): void {
+  for (const [index, word] of words.entries()) {
+    if (!word.shellSyntax) {
+      continue;
+    }
+    const redirects = dockerOutputRedirects(word.raw);
+    for (const [position, redirect] of redirects.entries()) {
+      const targetRaw = word.raw.slice(redirect.after, redirects[position + 1]?.before);
+      const target = targetRaw ? readDockerShellWord(targetRaw) : words[index + 1];
+      expect(
+        !target || target.dynamic || isDockerProtectedWritePath(target.value, context),
+        `Unaudited Docker output redirection that can replace a command or npm control file: ${target?.raw}`,
+      ).toBe(false);
+    }
+  }
+}
+
+function dockerDataWriterTargets(name: string, args: DockerShellWord[]): DockerShellWord[] {
+  if (name === 'find') {
+    return args.filter((_, index) =>
+      ['-fprint', '-fprint0', '-fprintf', '-fls'].includes(args[index - 1]?.value),
+    );
+  }
+  if (!['tee', 'chmod', 'chown', 'mkdir', 'ln'].includes(name)) {
+    return [];
+  }
+  let skipDescriptor =
+    ['chmod', 'chown'].includes(name) &&
+    !args.some(({ value }) => value === '--reference' || value.startsWith('--reference='));
+  return args.filter((word, index) => {
+    if (word.value.startsWith('-')) {
+      return word.value.includes('/') || word.value.includes('=') || word.dynamic;
+    }
+    if (name === 'mkdir' && ['-m', '--mode'].includes(args[index - 1]?.value)) {
+      return false;
+    }
+    if (skipDescriptor) {
+      skipDescriptor = false;
+      return false;
+    }
+    return true;
+  });
+}
+
+function assertDockerSystemPathWrites(
+  name: string,
+  args: DockerShellWord[],
+  context: DockerAuditContext,
+): void {
+  const literal = !args.some(({ dynamic }) => dynamic);
+  const signature = args.map(({ value }) => value).join('\n');
+  if (
+    literal &&
+    ((name === 'ln' && DOCKER_AUDITED_PATH_SYMLINKS.has(signature)) ||
+      DOCKER_AUDITED_BUILD_WRITES.has(`${name}\n${signature}`))
+  ) {
+    return;
+  }
+  const writesProtectedPath = dockerDataWriterTargets(name, args).some((word) =>
+    dockerWriterTargetsProtectedPath(word, context),
+  );
+  expect(
+    writesProtectedPath,
+    `Unaudited Docker ${name} write that can replace a command or npm control file`,
+  ).toBe(false);
 }
 
 function hasAuditableDockerInterpreterInput(name: string, args: DockerShellWord[]): boolean {
@@ -328,17 +677,19 @@ function dockerWrapperCanHideNpm(name: string, args: DockerShellWord[]): boolean
     const remaining = args.slice(index + 1);
     const next = remaining[0]?.value ?? '';
     const canRunNpx = argName === 'npx' && !isDockerNpxInformational(remaining);
+    const canRunGit = argName === 'git' && !isDockerGitInformational(remaining);
     return (
       (DOCKER_LAUNCHERS.has(name) &&
         (word.dynamic ||
           argName === 'npm' ||
           canRunNpx ||
+          canRunGit ||
           DOCKER_SHELLS.has(argName) ||
           dockerInterpreterCanHideNpm(argName, remaining) ||
           (!word.value.startsWith('-') &&
             isUnauditedDockerExecutablePath(word.value) &&
             dockerLauncherExecutesPath(name, args, index)))) ||
-      (canRunNpx && remaining.length > 0) ||
+      ((canRunNpx || canRunGit) && remaining.length > 0) ||
       (argName === 'npm' &&
         /^(?:-|ci$|clean-install$|i(?:nstall)?$|add$|rebuild$|rb$|run(?:-script)?$|exec$|x$|update$|prune$|pack$|publish$)/.test(
           next,
@@ -352,6 +703,7 @@ function findDockerShellNpmCommands(
   name: string,
   args: DockerShellWord[],
   assignments: string[],
+  context: DockerAuditContext,
 ): string[][] {
   for (let i = 0; i < args.length; i++) {
     const option = args[i];
@@ -360,8 +712,8 @@ function findDockerShellNpmCommands(
       const script = args[i + 1];
       expect(script, `Missing Docker ${name} -c script`).toBeDefined();
       expect(script.dynamic, `Dynamic Docker ${name} -c script`).toBe(false);
-      return splitDockerShellCommands(script.value).flatMap((segment) =>
-        findDockerNpmCommands(segment, assignments),
+      return splitDockerShellCommands(script.value, context).flatMap((segment) =>
+        findDockerNpmCommands(segment, assignments, context),
       );
     }
     if (option.value === '-o' || option.value === '+o') {
@@ -376,24 +728,67 @@ function findDockerShellNpmCommands(
   throw new Error(`Docker ${name} must use a literal -c script for the npm policy audit`);
 }
 
-function findDockerNpmCommands(words: DockerShellWord[], assignments: string[] = []): string[][] {
+function findDockerTimeoutNpmCommands(
+  args: DockerShellWord[],
+  assignments: string[],
+  context: DockerAuditContext,
+): string[][] {
+  const [duration, ...command] = args;
+  expect(
+    duration && !duration.dynamic && /^(?:\d+(?:\.\d+)?|\.\d+)[smhd]?$/.test(duration.value),
+    'Docker timeout must use a literal duration followed by an audited command',
+  ).toBe(true);
+  expect(command.length, 'Docker timeout must name an audited command').toBeGreaterThan(0);
+  return findDockerNpmCommands(command, assignments, context);
+}
+
+function assertDockerFindCommands(
+  args: DockerShellWord[],
+  assignments: string[],
+  context: DockerAuditContext,
+): void {
+  for (let i = 0; i < args.length; i++) {
+    if (!['-exec', '-execdir', '-ok', '-okdir'].includes(args[i].value)) {
+      continue;
+    }
+    const end = args.findIndex((word, index) => index > i && [';', '+'].includes(word.value));
+    expect(end, 'Docker find needs an explicit terminator for an audited command').toBeGreaterThan(
+      i + 1,
+    );
+    // find can match no files; it cannot provide either mandatory npm command.
+    expect(findDockerNpmCommands(args.slice(i + 1, end), assignments, context)).toEqual([]);
+    i = end;
+  }
+}
+
+function findDockerNpmCommands(
+  words: DockerShellWord[],
+  assignments: string[] = [],
+  context = DEFAULT_DOCKER_AUDIT_CONTEXT,
+): string[][] {
   const firstCommand = words.findIndex(({ raw }) => !/^[A-Za-z_][A-Za-z0-9_]*=/.test(raw));
+  const localAssignments = words
+    .slice(0, firstCommand === -1 ? words.length : firstCommand)
+    .map(({ value }) => value);
+  assertDockerExecutionAssignments(localAssignments);
   if (firstCommand === -1) {
     return [];
   }
-  assignments = [...assignments, ...words.slice(0, firstCommand).map(({ value }) => value)];
+  assignments = [...assignments, ...localAssignments];
   const [executable, ...args] = words.slice(firstCommand);
   // The audit understands simple command lists, not branches, loops, or shell functions.
   expect(
-    DOCKER_SHELL_CONTROL_WORDS.has(executable.raw),
+    DOCKER_SHELL_CONTROL_WORDS.has(executable.value),
     `Unsupported Docker RUN shell control syntax: ${executable.raw}`,
   ).toBe(false);
   expect(executable.dynamic, `Dynamic Docker RUN executable: ${executable.raw}`).toBe(false);
   expect(
-    /^(?:\d+)?[<>]/.test(executable.raw) || isUnauditedDockerExecutablePath(executable.value),
+    /^(?:\d+)?[<>]/.test(executable.raw) || !isAuditedDockerExecutable(executable.value),
     `Unaudited Docker RUN executable or leading redirection: ${executable.raw}`,
   ).toBe(false);
   const name = path.posix.basename(executable.value);
+  assertDockerRedirections(words, context);
+  assertDockerSystemPathWrites(name, args, context);
   if (name === 'npm') {
     expect(executable.raw).toBe('npm');
     expect(assignments.some((assignment) => /^npm_config_ignore_scripts=/i.test(assignment))).toBe(
@@ -413,8 +808,16 @@ function findDockerNpmCommands(words: DockerShellWord[], assignments: string[] =
     );
     return [];
   }
+  if (name === 'git') {
+    // Git can dispatch shell aliases or configured helpers even if the payload is in a prior RUN.
+    expect(isDockerGitInformational(args), 'Docker git may only print its version').toBe(true);
+    return [];
+  }
   if (DOCKER_SHELLS.has(name)) {
-    return findDockerShellNpmCommands(name, args, assignments);
+    return findDockerShellNpmCommands(name, args, assignments, context);
+  }
+  if (name === 'timeout') {
+    return findDockerTimeoutNpmCommands(args, assignments, context);
   }
   if (['env', 'command', 'exec', 'busybox'].includes(name)) {
     if (name === 'command' && ['-v', '-V'].includes(args[0]?.value)) {
@@ -426,7 +829,7 @@ function findDockerNpmCommands(words: DockerShellWord[], assignments: string[] =
     expect(args[0]?.value.startsWith('-') ?? false, `Unsupported Docker ${name} option`).toBe(
       false,
     );
-    return findDockerNpmCommands(args, assignments);
+    return findDockerNpmCommands(args, assignments, context);
   }
   if (['.', 'source', 'eval', 'xargs'].includes(name)) {
     throw new Error(`Docker ${name} can hide npm commands from the policy audit`);
@@ -435,11 +838,18 @@ function findDockerNpmCommands(words: DockerShellWord[], assignments: string[] =
     dockerInterpreterCanHideNpm(name, args),
     `Inline Docker ${name} can hide npm commands`,
   ).toBe(false);
+  if (name === 'find') {
+    assertDockerFindCommands(args, assignments, context);
+  }
   if (!['echo', 'printf'].includes(name)) {
     // For other commands the argument could be an executable delegated to an unknown wrapper.
     expect(
       args.some(({ substitution }) => substitution),
       `Docker ${name} consumes command substitution`,
+    ).toBe(false);
+    expect(
+      [...assignments, ...args.map(({ value }) => value)].some(containsDockerExecutionPayload),
+      `Docker ${name} consumes an embedded shell execution payload`,
     ).toBe(false);
     expect(
       dockerWrapperCanHideNpm(name, args),
@@ -450,20 +860,33 @@ function findDockerNpmCommands(words: DockerShellWord[], assignments: string[] =
 }
 
 function validateDockerInstallCommands(dockerfile: string): void {
-  const commands = extractRunBodies(dockerfile).flatMap((runBody) => {
+  const commands = extractRunBodies(dockerfile).flatMap(({ body: runBody, context }) => {
+    let runCommands: string[][];
     if (/^\[\s*"/.test(runBody)) {
       const args: unknown = JSON.parse(runBody);
       expect(Array.isArray(args) && args.every((arg) => typeof arg === 'string')).toBe(true);
-      return findDockerNpmCommands(
+      runCommands = findDockerNpmCommands(
         (args as string[]).map((arg) => ({
           raw: arg,
           value: arg,
           dynamic: false,
           substitution: false,
+          shellSyntax: false,
         })),
+        [],
+        context,
+      );
+    } else {
+      runCommands = splitDockerShellCommands(runBody, context).flatMap((segment) =>
+        findDockerNpmCommands(segment, [], context),
       );
     }
-    return splitDockerShellCommands(runBody).flatMap((segment) => findDockerNpmCommands(segment));
+    if (runCommands.length > 0 && (context.hasStages || context.workdir !== undefined)) {
+      expect(context.workdir, 'Docker npm commands must use the explicitly audited /app root').toBe(
+        '/app',
+      );
+    }
+    return runCommands;
   });
   expect(commands.some(([command]) => command === 'ci')).toBe(true);
   expect(commands.some(([command]) => command === 'rebuild')).toBe(true);
@@ -483,6 +906,11 @@ function validateDockerInstallCommands(dockerfile: string): void {
     } else if (command === 'rebuild') {
       // Package names and globs can rebuild untrusted nested dependencies.
       expect(args).toEqual(['./node_modules/esbuild', './node_modules/@swc/core']);
+    } else if (command === 'run') {
+      // Other scripts and even build with --prefix/-w can execute third-party lifecycle hooks.
+      expect(args, 'Only the exact npm run build for the Docker root is audited').toEqual([
+        'build',
+      ]);
     }
   }
 }
@@ -1155,6 +1583,582 @@ describe('package manifests', () => {
       'RUN apk add npx',
       `RUN ${JSON.stringify(['npx', '--version'])}`,
       `RUN ${JSON.stringify(['echo', 'npx', '--call', 'npm ci'])}`,
+    ];
+    expect(() => validateDockerInstallCommands(commands.join('\n'))).not.toThrow();
+  });
+
+  it.each([
+    'npm run postinstall --prefix ./node_modules/unapproved',
+    'npm run install --prefix ./node_modules/unapproved',
+    'npm run build --prefix ./node_modules/unapproved',
+    'npm run build --prefix=./node_modules/unapproved',
+    'npm run --prefix ./node_modules/unapproved build',
+    'npm --prefix ./node_modules/unapproved run build',
+    'npm run build -C ./node_modules/unapproved',
+    'npm run build --workspace src/app',
+    'npm run build --workspace=src/app',
+    'npm run build -w src/app',
+    'npm run build --workspaces',
+    'npm run build --include-workspace-root',
+    'npm run build -- --prefix ./node_modules/unapproved',
+    'npm run build --if-present',
+    'npm run build --silent',
+    'npm run prebuild',
+    'npm run postbuild',
+    'npm run prepare',
+    'npm run test',
+    'npm run build:app',
+    'npm run',
+    'npm run-script build',
+    'env NODE_ENV=production npm run postinstall --prefix ./node_modules/unapproved',
+    'command npm run build --workspace src/app',
+    'timeout 5 npm run install --prefix ./node_modules/unapproved',
+    `sh -c 'npm run build --prefix ./node_modules/unapproved'`,
+  ])('rejects Docker npm run scripts and flags outside the exact root build: %s', (command) => {
+    const safe =
+      'RUN npm ci --ignore-scripts && npm rebuild ./node_modules/esbuild ./node_modules/@swc/core';
+    expect(() => validateDockerInstallCommands(`${safe}\nRUN ${command}`)).toThrow();
+    expect(() => validateDockerInstallCommands(`${safe} && ${command}`)).toThrow();
+    expect(() =>
+      validateDockerInstallCommands(`${safe}\nRUN ${JSON.stringify(['sh', '-c', command])}`),
+    ).toThrow();
+  });
+
+  it.each([
+    { command: ['npm', 'run', 'postinstall', '--prefix', './node_modules/unapproved'] },
+    { command: ['npm', 'run', 'install', '--prefix', './node_modules/unapproved'] },
+    { command: ['npm', 'run', 'build', '--prefix=./node_modules/unapproved'] },
+    { command: ['npm', 'run', 'build', '--workspace', 'src/app'] },
+    { command: ['npm', 'run', 'prebuild'] },
+    { command: ['timeout', '5', 'npm', 'run', 'build', '--workspaces'] },
+    { command: ['env', 'npm_config_prefix=/tmp/unapproved', 'npm', 'run', 'build'] },
+    { command: ['env', 'NPM_CONFIG_WORKSPACE=src/app', 'npm', 'run', 'build'] },
+  ])('rejects Docker npm run package selection in exec form: $command', ({ command }) => {
+    const safe =
+      'RUN npm ci --ignore-scripts && npm rebuild ./node_modules/esbuild ./node_modules/@swc/core';
+    expect(() =>
+      validateDockerInstallCommands(`${safe}\nRUN ${JSON.stringify(command)}`),
+    ).toThrow();
+  });
+
+  it.each([
+    'RUN npm_config_prefix=./node_modules/unapproved npm run build',
+    'RUN NPM_CONFIG_PREFIX=/tmp/unapproved npm run build',
+    'RUN npm_config_workspace=src/app npm run build',
+    'RUN NPM_CONFIG_WORKSPACE=src/app npm run build',
+    'RUN npm_config_workspaces=true npm run build',
+    'RUN npm_config_include_workspace_root=true npm run build',
+    'RUN npm_config_global=true npm run build',
+    'RUN npm_config_location=global npm run build',
+    'RUN npm_config_userconfig=/tmp/unsafe.npmrc npm run build',
+    'RUN NPM_CONFIG_GLOBALCONFIG=/tmp/unsafe.npmrc npm run build',
+    'RUN env npm_config_prefix=/tmp/unapproved npm run build',
+    'ENV npm_config_prefix=/tmp/unapproved\nRUN npm run build',
+    'ENV NPM_CONFIG_WORKSPACES=true\nRUN npm run build',
+    'ARG npm_config_prefix\nRUN npm run build',
+  ])('rejects Docker npm environment that redirects the root package build: %s', (override) => {
+    const safe =
+      'RUN npm ci --ignore-scripts && npm rebuild ./node_modules/esbuild ./node_modules/@swc/core';
+    expect(() => validateDockerInstallCommands(`${safe}\n${override}`)).toThrow();
+  });
+
+  it.each([
+    'WORKDIR /app/node_modules/unapproved\nRUN npm run build',
+    'WORKDIR /tmp/unapproved\nRUN npm run build',
+    'WORKDIR node_modules/unapproved\nRUN npm run build',
+    'WORKDIR $UNAPPROVED_DIRECTORY\nRUN npm run build',
+    `WORKDIR /app/node_modules/unapproved\nRUN ${JSON.stringify(['npm', 'run', 'build'])}`,
+    'FROM node:24-alpine AS other\nRUN npm run build',
+  ])('rejects Docker npm builds run outside the declared root directory: %s', (override) => {
+    const safe =
+      'RUN npm ci --ignore-scripts && npm rebuild ./node_modules/esbuild ./node_modules/@swc/core';
+    expect(() =>
+      validateDockerInstallCommands(`FROM node:24-alpine\nWORKDIR /app\n${safe}\n${override}`),
+    ).toThrow();
+  });
+
+  it('allows only the exact Docker npm root build with benign environments and wrappers', () => {
+    const commands = [
+      'FROM node:24-alpine',
+      'WORKDIR /app',
+      'RUN npm ci --ignore-scripts && npm rebuild ./node_modules/esbuild ./node_modules/@swc/core',
+      'RUN npm run build',
+      'RUN NODE_ENV=production npm run build',
+      'RUN env NPM_CONFIG_LOGLEVEL=silent npm run build',
+      `RUN sh -c 'npm run build'`,
+      `RUN ${JSON.stringify(['npm', 'run', 'build'])}`,
+      'WORKDIR /tmp',
+      'RUN echo ready',
+      'WORKDIR /app',
+      'RUN timeout 5 npm run build',
+      `RUN echo 'npm run postinstall --prefix ./node_modules/unapproved'`,
+    ];
+    expect(() => validateDockerInstallCommands(commands.join('\n'))).not.toThrow();
+  });
+
+  it.each([
+    `printf '%s' '{"scripts":{"build":"npm ci"}}' > package.json`,
+    `printf '%s' '{"scripts":{"build":"npm ci"}}' > ./package.json`,
+    `printf '%s' '{"scripts":{"build":"npm ci"}}'>/app/package.json`,
+    `printf '%s' '{"scripts":{"build":"npm ci"}}' >> /tmp/../app/package.json`,
+    `echo '{"scripts":{"build":"npm ci"}}' | tee package.json`,
+    `ln -sf /tmp/evil.json /app/package.json`,
+    `chmod +x package.json`,
+    `find /tmp -fprintf /app/package.json replacement`,
+    `printf '%s' replacement > package-lock.json`,
+    `printf '%s' replacement > npm-shrinkwrap.json`,
+    `printf '%s' replacement > .npmrc`,
+    `printf '%s' replacement > /root/.npmrc`,
+    `printf '%s' replacement > /usr/local/etc/npmrc`,
+    `printf '%s' replacement > ./scripts/postbuild.ts`,
+    `printf '%s' replacement > tsdown.config.ts`,
+    `printf '%s' replacement > src/app/package.json`,
+    `printf '%s' replacement > src/app/vite.config.ts`,
+    `printf '%s' replacement > ./node_modules/esbuild/install.js`,
+    `printf '%s' replacement > ./node_modules/@swc/core/postinstall.js`,
+    `printf '%s' replacement > ./node_modules/.bin/concurrently`,
+  ])('rejects unaudited Docker writers that can replace npm build control files: %s', (write) => {
+    const safe =
+      'RUN npm ci --ignore-scripts && npm rebuild ./node_modules/esbuild ./node_modules/@swc/core';
+    expect(() =>
+      validateDockerInstallCommands(`${safe}\nRUN ${write}\nRUN npm run build`),
+    ).toThrow();
+  });
+
+  it.each([
+    './node_modules/esbuild/package.json',
+    './node_modules/@swc/core/package.json',
+    '/app/node_modules/esbuild/package.json',
+  ])('rejects a rewritten allowlisted Docker rebuild package: %s', (manifest) => {
+    const ci = 'RUN npm ci --ignore-scripts';
+    const rewrite = `RUN printf '%s' '{"name":"esbuild","version":"1.0.0","scripts":{"postinstall":"npm ci --prefix /app"}}' > ${manifest}`;
+    const rebuild = 'RUN npm rebuild ./node_modules/esbuild ./node_modules/@swc/core';
+    expect(() => validateDockerInstallCommands(`${ci}\n${rewrite}\n${rebuild}`)).toThrow();
+  });
+
+  it.each([
+    'COPY generated.json ./package.json',
+    'COPY --from=unapproved /app/package.json /app/package.json',
+    'COPY ./generated/ .',
+    `COPY ${JSON.stringify(['generated.json', '/app/package.json'])}`,
+    'COPY generated $DESTINATION',
+    'ADD https://example.invalid/package.json /app/package.json',
+  ])('rejects unaudited Docker copy sources for npm build control files: %s', (copy) => {
+    const dockerfile = [
+      'FROM node:24-alpine',
+      'WORKDIR /app',
+      'RUN npm ci --ignore-scripts && npm rebuild ./node_modules/esbuild ./node_modules/@swc/core',
+      copy,
+      'RUN npm run build',
+    ].join('\n');
+    expect(() => validateDockerInstallCommands(dockerfile)).toThrow();
+  });
+
+  it('rejects exec-form writers and relative writes outside /app that resolve into npm controls', () => {
+    const safe =
+      'RUN npm ci --ignore-scripts && npm rebuild ./node_modules/esbuild ./node_modules/@swc/core';
+    const write = `RUN ${JSON.stringify(['tee', 'package.json'])}`;
+    expect(() => validateDockerInstallCommands(`${safe}\n${write}\nRUN npm run build`)).toThrow();
+    expect(() =>
+      validateDockerInstallCommands(
+        `FROM node:24-alpine\nWORKDIR /app\n${safe}\nWORKDIR /tmp\nRUN printf %s replacement > ../app/package.json\nWORKDIR /app\nRUN npm run build`,
+      ),
+    ).toThrow();
+    expect(() =>
+      validateDockerInstallCommands(
+        `FROM node:24-alpine\nWORKDIR /app\n${safe}\nWORKDIR /app/node_modules/esbuild\nCOPY package.json package-lock.json ./\nWORKDIR /app\nRUN npm run build`,
+      ),
+    ).toThrow();
+  });
+
+  it('allows audited Docker source copies, runtime symlink maintenance, and scratch data writes', () => {
+    const commands = [
+      'FROM node:24-alpine AS builder',
+      'WORKDIR /app',
+      'COPY package.json package-lock.json ./',
+      'COPY src/app/package.json ./src/app/package.json',
+      'COPY site/package.json ./site/package.json',
+      'RUN npm ci --ignore-scripts && npm rebuild ./node_modules/esbuild ./node_modules/@swc/core',
+      'COPY . .',
+      'RUN npm run build',
+      'FROM node:24-alpine AS server',
+      'WORKDIR /app',
+      'COPY --from=builder --chown=promptfoo:promptfoo /app/node_modules ./node_modules',
+      'COPY --from=builder --chown=promptfoo:promptfoo /app/package.json ./package.json',
+      'COPY --from=builder --chown=promptfoo:promptfoo /app/dist ./dist',
+      'COPY scratch.txt /tmp/scratch.txt',
+      'RUN ln -s /app /app/node_modules/promptfoo && chown -h promptfoo:promptfoo /app/node_modules/promptfoo',
+      `RUN echo package.json && printf %s ./node_modules/esbuild/package.json`,
+      'WORKDIR /tmp',
+      'RUN printf %s harmless > scratch.txt && chmod +x scratch.txt',
+    ];
+    expect(() => validateDockerInstallCommands(commands.join('\n'))).not.toThrow();
+  });
+
+  it.each([
+    'ONBUILD RUN npm ci',
+    `ONBUILD RUN ${JSON.stringify(['npm', 'ci'])}`,
+    'ONBUILD RUN npm run build --prefix ./node_modules/unapproved',
+    'ONBUILD ENV NODE_OPTIONS=--require=/tmp/preload.cjs',
+    'ONBUILD COPY generated.json /app/package.json',
+  ])('rejects unaudited Docker ONBUILD triggers: %s', (trigger) => {
+    const dockerfile = [
+      'FROM node:24-alpine AS base',
+      'WORKDIR /app',
+      'COPY . .',
+      trigger,
+      'FROM base AS child',
+      'WORKDIR /app',
+      'RUN npm ci --ignore-scripts && npm rebuild ./node_modules/esbuild ./node_modules/@swc/core',
+    ].join('\n');
+    expect(() => validateDockerInstallCommands(dockerfile)).toThrow();
+  });
+
+  it.each([
+    '--mount=type=bind,source=script,target=/usr/local/bin/node node --version',
+    '--mount=type=bind,from=payload,source=/tmp/launcher,target=/usr/local/bin/npx /usr/local/bin/npx --version',
+    '--mount=type=bind,from=payload,source=/tmp/manifest.json,target=/app/package.json npm run build',
+    '--mount=type=bind,source=.,target=/app npm run build',
+    '--mount=type=tmpfs,target=/app npm run build',
+    '--mount=type=secret,id=manifest,target=/app/package.json npm run build',
+    '--mount=type=cache,target=/app/node_modules npm run build',
+    '--mount=type=cache,target=/root/.npm,from=payload npm ci --ignore-scripts',
+    '--mount=target=/root/.npm,type=cache npm ci --ignore-scripts',
+    '--mount=type=cache,target=/root/.npm --mount=type=bind,source=.,target=/app npm run build',
+    '--mount=type=bind,source=.,target=/app --mount=type=cache,target=/root/.npm npm run build',
+    '--mount=type=cache,target=/root/.npm --mount=type=cache,target=/root/.npm npm ci --ignore-scripts',
+    '--network=host npm run build',
+    '--security=insecure npm run build',
+    `--mount=type=bind,source=script,target=/usr/local/bin/node ${JSON.stringify(['node', '--version'])}`,
+  ])(
+    'rejects Docker RUN options and mounts that can replace trusted execution inputs: %s',
+    (body) => {
+      const safe =
+        'RUN npm ci --ignore-scripts && npm rebuild ./node_modules/esbuild ./node_modules/@swc/core';
+      expect(() =>
+        validateDockerInstallCommands(`FROM node:24-alpine\nWORKDIR /app\n${safe}\nRUN ${body}`),
+      ).toThrow();
+    },
+  );
+
+  it('allows only the existing Docker npm cache mount in shell and exec form', () => {
+    const commands = [
+      'FROM node:24-alpine',
+      'WORKDIR /app',
+      'RUN --mount=type=cache,target=/root/.npm npm ci --ignore-scripts',
+      `RUN --mount=type=cache,target=/root/.npm ${JSON.stringify(['npm', 'ci', '--ignore-scripts'])}`,
+      'RUN npm rebuild ./node_modules/esbuild ./node_modules/@swc/core',
+      'RUN npm run build',
+    ];
+    expect(() => validateDockerInstallCommands(commands.join('\n'))).not.toThrow();
+  });
+
+  it.each([
+    `git -c alias.install='!npm ci' install`,
+    `git -c 'alias.install=!npm ci' install`,
+    `git -calias.install='!npm ci' install`,
+    `git -c alias.install='!n'p'm ci' install`,
+    `git -c alias.install='!f() { npm ci; }; f' install`,
+    `git -c alias.install='!date' install`,
+    `git -c alias.first=second -c alias.second='!npm ci' first`,
+    `ALIAS_BODY='!npm ci' git --config-env=alias.install=ALIAS_BODY install`,
+    `git --config-env=alias.install=ALIAS_FROM_IMAGE install`,
+    `GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0=alias.install GIT_CONFIG_VALUE_0='!npm ci' git install`,
+    `env GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0=alias.install GIT_CONFIG_VALUE_0='!npm ci' git install`,
+    `GIT_CONFIG_PARAMETERS="'alias.install=!npm ci'" git install`,
+    'GIT_CONFIG_GLOBAL=/tmp/unsafe-gitconfig git install',
+    'GIT_CONFIG_SYSTEM=/tmp/unsafe-gitconfig git install',
+    'git -c include.path=/tmp/unsafe-gitconfig install',
+    'git install',
+    `git config --global alias.install '!npm ci'`,
+    `git config --file /tmp/unsafe-gitconfig alias.install '!npm ci'`,
+    `command git -c alias.install='!npm ci' install`,
+    `timeout 5 git -c alias.install='!npm ci' install`,
+    `custom-wrapper git -c alias.install='!npm ci' install`,
+    'custom-wrapper git install',
+    `sh -c "git -c alias.install='!npm ci' install"`,
+    `echo "$(git -c alias.install='!npm ci' install)"`,
+  ])('rejects executable Docker Git aliases and sourced configuration: %s', (command) => {
+    const safe =
+      'RUN npm ci --ignore-scripts && npm rebuild ./node_modules/esbuild ./node_modules/@swc/core';
+    expect(() => validateDockerInstallCommands(`${safe}\nRUN ${command}`)).toThrow();
+    expect(() => validateDockerInstallCommands(`${safe} && ${command}`)).toThrow();
+    expect(() =>
+      validateDockerInstallCommands(`${safe}\nRUN ${JSON.stringify(['sh', '-c', command])}`),
+    ).toThrow();
+  });
+
+  it('rejects Docker Git aliases sourced from an earlier RUN or Docker environment', () => {
+    const safe =
+      'RUN npm ci --ignore-scripts && npm rebuild ./node_modules/esbuild ./node_modules/@swc/core';
+    const config = String.raw`RUN printf '%s\n' '[alias]' 'install = !npm ci' > /tmp/unsafe-gitconfig`;
+    for (const source of [
+      'RUN git -c include.path=/tmp/unsafe-gitconfig install',
+      'RUN GIT_CONFIG_GLOBAL=/tmp/unsafe-gitconfig git install',
+      'ENV GIT_CONFIG_GLOBAL=/tmp/unsafe-gitconfig\nRUN git install',
+    ]) {
+      expect(() => validateDockerInstallCommands(`${safe}\n${config}\n${source}`)).toThrow();
+    }
+  });
+
+  it.each([
+    { command: ['git', '-c', 'alias.install=!npm ci', 'install'] },
+    { command: ['git', '--config-env=alias.install=ALIAS_FROM_IMAGE', 'install'] },
+    { command: ['git', 'install'] },
+    { command: ['git', 'config', '--global', 'alias.install', '!npm ci'] },
+    {
+      command: [
+        'env',
+        'GIT_CONFIG_COUNT=1',
+        'GIT_CONFIG_KEY_0=alias.install',
+        'GIT_CONFIG_VALUE_0=!npm ci',
+        'git',
+        'install',
+      ],
+    },
+    { command: ['timeout', '5', 'git', '-c', 'alias.install=!npm ci', 'install'] },
+    { command: ['custom-wrapper', 'git', 'install'] },
+    { command: ['custom-wrapper', '--config', 'handler=!npm ci'] },
+    { command: ['custom-wrapper', '--payload', 'echo ready && npm ci'] },
+  ])('rejects embedded Docker execution payloads in exec form: $command', ({ command }) => {
+    const safe =
+      'RUN npm ci --ignore-scripts && npm rebuild ./node_modules/esbuild ./node_modules/@swc/core';
+    expect(() =>
+      validateDockerInstallCommands(`${safe}\nRUN ${JSON.stringify(command)}`),
+    ).toThrow();
+  });
+
+  it.each([
+    `custom-wrapper --config='handler=!npm ci'`,
+    `custom-wrapper --handler '!npm ci'`,
+    `custom-wrapper --handler '!date'`,
+    `custom-wrapper --payload 'npm ci'`,
+    `custom-wrapper --payload 'npm --silent ci'`,
+    `custom-wrapper --payload 'echo ready && npm ci'`,
+    `custom-wrapper --payload 'echo ready; /usr/bin/npm ci'`,
+    `custom-wrapper --payload 'handler=!n'p'm ci'`,
+    `custom-wrapper --payload 'handler=!npx -c npm'`,
+    `custom-wrapper --exec='npm rebuild esbuild'`,
+  ])('rejects recognized Docker shell payloads under an arbitrary consumer: %s', (command) => {
+    const safe =
+      'RUN npm ci --ignore-scripts && npm rebuild ./node_modules/esbuild ./node_modules/@swc/core';
+    expect(() => validateDockerInstallCommands(`${safe}\nRUN ${command}`)).toThrow();
+  });
+
+  it.each([
+    `test 'handler=!npm ci'`,
+    `date --date='npm ci'`,
+    `apk --command='echo ready && npm ci'`,
+  ])('checks embedded Docker execution payloads in audited non-data consumers: %s', (command) => {
+    const safe =
+      'RUN npm ci --ignore-scripts && npm rebuild ./node_modules/esbuild ./node_modules/@swc/core';
+    expect(() => validateDockerInstallCommands(`${safe}\nRUN ${command}`)).toThrow(
+      /embedded shell execution payload/,
+    );
+  });
+
+  it('allows Docker Git version controls and direct shell-payload data', () => {
+    const commands = [
+      'RUN npm ci --ignore-scripts && npm rebuild ./node_modules/esbuild ./node_modules/@swc/core',
+      'RUN git --version && git -v && git version && git --no-pager --version',
+      'RUN env git --version && timeout 5 git --version && command -v git',
+      'RUN apk add git',
+      `RUN echo 'alias.install=!npm ci' '!npm ci' 'npm ci'`,
+      `RUN printf '%s' '!date' 'npm --silent ci' 'echo ready && npm ci'`,
+      `RUN ${JSON.stringify(['git', '--version'])}`,
+      `RUN ${JSON.stringify(['echo', 'handler=!npm ci'])}`,
+    ];
+    expect(() => validateDockerInstallCommands(commands.join('\n'))).not.toThrow();
+  });
+
+  it.each([
+    'builddeps',
+    'BUILD_FLAG=1 builddeps',
+    'env BUILD_FLAG=1 builddeps',
+    'command builddeps',
+    'exec builddeps',
+    'timeout 5 builddeps',
+    String.raw`find /tmp -exec builddeps \;`,
+    "sh -c 'builddeps'",
+  ])('rejects an unaudited generated Docker executable found through PATH: %s', (execute) => {
+    const safe =
+      'RUN npm ci --ignore-scripts && npm rebuild ./node_modules/esbuild ./node_modules/@swc/core';
+    const write = String.raw`printf '%s\n' '#!/bin/sh' 'npm ci' > /usr/local/bin/builddeps && chmod +x /usr/local/bin/builddeps`;
+    expect(() => validateDockerInstallCommands(`${safe}\nRUN ${write} && ${execute}`)).toThrow();
+    expect(() => validateDockerInstallCommands(`${safe}\nRUN ${write}\nRUN ${execute}`)).toThrow();
+  });
+
+  it.each([
+    { command: ['builddeps'] },
+    { command: ['env', 'BUILD_FLAG=1', 'builddeps'] },
+    { command: ['timeout', '5', 'builddeps'] },
+    { command: ['find', '/tmp', '-exec', 'builddeps', ';'] },
+    { command: ['sh', '-c', 'builddeps'] },
+    { command: ['env', 'PATH=/tmp:/usr/bin', 'npm', 'ci', '--ignore-scripts'] },
+  ])('rejects unaudited Docker PATH dispatch in exec form: $command', ({ command }) => {
+    const safe =
+      'RUN npm ci --ignore-scripts && npm rebuild ./node_modules/esbuild ./node_modules/@swc/core';
+    expect(() =>
+      validateDockerInstallCommands(`${safe}\nRUN ${JSON.stringify(command)}`),
+    ).toThrow();
+  });
+
+  it.each([
+    'RUN PATH=/tmp:$PATH npm ci --ignore-scripts',
+    'RUN PATH=/tmp:$PATH; npm ci --ignore-scripts',
+    'RUN env PATH=/tmp:/usr/bin npm ci --ignore-scripts',
+    `RUN env 'PATH=/tmp:/usr/bin' npm ci --ignore-scripts`,
+    'RUN export PATH=/tmp:$PATH; npm ci --ignore-scripts',
+    'RUN readonly PATH=/tmp:$PATH; npm ci --ignore-scripts',
+    `RUN sh -c 'PATH=/tmp:$PATH; npm ci --ignore-scripts'`,
+    'ENV PATH=/tmp:$PATH\nRUN npm ci --ignore-scripts',
+    'ENV PATH /tmp:/usr/bin\nRUN npm ci --ignore-scripts',
+    'ENV OTHER=1 PATH=/tmp:/usr/bin\nRUN npm ci --ignore-scripts',
+    'ENV OTHER=1 \\\n    PATH=/tmp:/usr/bin\nRUN npm ci --ignore-scripts',
+    'ARG PATH=/tmp:/usr/bin\nRUN npm ci --ignore-scripts',
+  ])('rejects Docker PATH overrides that can shadow audited commands: %s', (override) => {
+    const safe =
+      'RUN npm ci --ignore-scripts && npm rebuild ./node_modules/esbuild ./node_modules/@swc/core';
+    expect(() => validateDockerInstallCommands(`${safe}\n${override}`)).toThrow();
+  });
+
+  it('allows audited Docker utilities, terminal dispatch, and textual PATH values', () => {
+    const commands = [
+      'ENV MESSAGE="note PATH=/tmp" OTHER=1',
+      'ARG MESSAGE=PATH=/tmp',
+      'RUN npm ci --ignore-scripts && npm rebuild ./node_modules/esbuild ./node_modules/@swc/core',
+      'RUN apk add npm && addgroup -S app && adduser -S app -G app',
+      'RUN ln -s /tmp/a /tmp/b && chmod +x /tmp/b && chown app /tmp/b && mkdir -p /tmp/c',
+      'RUN date | tee /tmp/date && [ -f /tmp/date ] && true || false',
+      'RUN timeout 5 node --version && find /tmp -name builddeps',
+      'RUN command -v builddeps',
+      `RUN echo 'PATH=/tmp' builddeps && printf '%s' 'PATH=/tmp:$PATH'`,
+    ];
+    expect(() => validateDockerInstallCommands(commands.join('\n'))).not.toThrow();
+  });
+
+  it.each([
+    `printf '%s' 'npm ci' > /usr/local/bin/date && date`,
+    `printf '%s' 'npm ci' >/usr/local/bin/date && date`,
+    `printf '%s' 'npm ci'>/usr/local/bin/date && date`,
+    `printf '%s' 'npm ci' >> /usr/local/bin/date && date`,
+    `printf '%s' 'npm ci' > /tmp/../usr/local/bin/date && date`,
+    `printf '%s' 'npm ci' > "$UNKNOWN_DESTINATION" && date`,
+    `echo 'npm ci' | tee /usr/local/bin/date && date`,
+    `ln -sf /tmp/payload /usr/local/bin/date && date`,
+    `ln -t /usr/local/bin /tmp/date && date`,
+    `chmod +x /usr/local/bin/date && date`,
+    `chown app /usr/local/bin/date && date`,
+    `mkdir -p /usr/local/bin/date && date`,
+    `find /tmp -fprintf /usr/local/bin/date 'npm ci' && date`,
+  ])(
+    'rejects Docker writes that can shadow an audited binary on the default PATH: %s',
+    (command) => {
+      const safe =
+        'RUN npm ci --ignore-scripts && npm rebuild ./node_modules/esbuild ./node_modules/@swc/core';
+      expect(() => validateDockerInstallCommands(`${safe}\nRUN ${command}`)).toThrow();
+    },
+  );
+
+  it('rejects Docker exec-form filesystem writers aimed at the system PATH', () => {
+    const safe =
+      'RUN npm ci --ignore-scripts && npm rebuild ./node_modules/esbuild ./node_modules/@swc/core';
+    const command = ['tee', '/usr/local/bin/date'];
+    expect(() =>
+      validateDockerInstallCommands(`${safe}\nRUN ${JSON.stringify(command)}`),
+    ).toThrow();
+  });
+
+  it('allows the Dockerfile symlinks and system executable path text used as data', () => {
+    const commands = [
+      'RUN npm ci --ignore-scripts && npm rebuild ./node_modules/esbuild ./node_modules/@swc/core',
+      'RUN ln -sf python3 /usr/bin/python',
+      'RUN ln -s /app/dist/src/entrypoint.js /usr/local/bin/promptfoo',
+      'RUN ln -s /app/dist/src/entrypoint.js /usr/local/bin/pf',
+      `RUN echo '>/usr/local/bin/date' && printf '%s' /usr/local/bin/date`,
+      `RUN ${JSON.stringify(['echo', '>/usr/local/bin/date'])}`,
+      `RUN printf '%s' harmless > /tmp/date && chmod +x /tmp/date`,
+    ];
+    expect(() => validateDockerInstallCommands(commands.join('\n'))).not.toThrow();
+  });
+
+  it.each([
+    `'trap' 'npm ci' EXIT`,
+    `"trap" 'npm ci' EXIT`,
+    String.raw`tr\ap 'npm ci' EXIT`,
+    `t'r'ap 'npm ci' EXIT`,
+    `'trap' 'date' EXIT`,
+    `sh -c "'trap' 'npm ci' EXIT"`,
+    `'alias' 'install=npm ci'`,
+    `'builtin' eval 'npm ci'`,
+  ])(
+    'rejects quoted and escaped Docker shell builtins capable of delayed execution: %s',
+    (command) => {
+      const safe =
+        'RUN npm ci --ignore-scripts && npm rebuild ./node_modules/esbuild ./node_modules/@swc/core';
+      expect(() => validateDockerInstallCommands(`${safe}\nRUN ${command}`)).toThrow();
+      expect(() => validateDockerInstallCommands(`${safe} && ${command}`)).toThrow();
+      expect(() =>
+        validateDockerInstallCommands(`${safe}\nRUN ${JSON.stringify(['sh', '-c', command])}`),
+      ).toThrow();
+    },
+  );
+
+  it.each([
+    'RUN NODE_OPTIONS=--require=/tmp/preload.cjs node --check scripts/update-changelog-version.cjs',
+    'RUN env NODE_OPTIONS=--require=/tmp/preload.cjs node --check scripts/update-changelog-version.cjs',
+    'RUN export NODE_OPTIONS=--require=/tmp/preload.cjs; node --check scripts/update-changelog-version.cjs',
+    'ENV NODE_OPTIONS=--require=/tmp/preload.cjs\nRUN node --check scripts/update-changelog-version.cjs',
+    'ENV NODE_ENV=production NODE_OPTIONS=--import=/tmp/preload.mjs\nRUN node --version',
+    'ARG NODE_OPTIONS\nRUN node --check scripts/update-changelog-version.cjs',
+    'RUN BASH_ENV=/tmp/bash-hook bash -c true',
+    'ENV BASH_ENV=/tmp/bash-hook\nRUN bash -c true',
+    'RUN ENV=/tmp/shell-hook sh -c true',
+    'ENV ENV=/tmp/shell-hook\nRUN sh -c true',
+    'RUN ZDOTDIR=/tmp/zsh-config zsh -c true',
+    'RUN PYTHONPATH=/tmp/python-hook python3 --help',
+    'ENV PYTHONSTARTUP=/tmp/python-hook\nRUN python3 --help',
+    'RUN RUBYOPT=-r/tmp/ruby-hook ruby --version',
+    'ENV PERL5OPT=-MInjected\nRUN perl --version',
+    'RUN PHPRC=/tmp/php.ini php --version',
+    'ENV LUA_INIT_5_4=@/tmp/lua-hook\nRUN lua --version',
+    'RUN LD_PRELOAD=/tmp/hook.so node --version',
+    'ENV LD_LIBRARY_PATH=/tmp\nRUN node --version',
+    'RUN npm_config_script_shell=/tmp/hook npm run build',
+  ])(
+    'rejects Docker environment variables that can execute interpreter startup code: %s',
+    (override) => {
+      const safe =
+        'RUN npm ci --ignore-scripts && npm rebuild ./node_modules/esbuild ./node_modules/@swc/core';
+      const preload = `RUN printf '%s' 'require("node:child_process").execSync("npm ci")' > /tmp/preload.cjs`;
+      expect(() => validateDockerInstallCommands(`${safe}\n${preload}\n${override}`)).toThrow();
+    },
+  );
+
+  it('rejects Docker exec-form interpreter preload environments', () => {
+    const safe =
+      'RUN npm ci --ignore-scripts && npm rebuild ./node_modules/esbuild ./node_modules/@swc/core';
+    const command = [
+      'env',
+      'NODE_OPTIONS=--require=/tmp/preload.cjs',
+      'node',
+      '--check',
+      'index.js',
+    ];
+    expect(() =>
+      validateDockerInstallCommands(`${safe}\nRUN ${JSON.stringify(command)}`),
+    ).toThrow();
+  });
+
+  it('allows benign Docker interpreter environments and direct builtin or preload text', () => {
+    const commands = [
+      'ENV NODE_ENV=production MESSAGE="example NODE_OPTIONS=--require=/tmp/example"',
+      'ARG PYTHON_VERSION=3',
+      'RUN npm ci --ignore-scripts && npm rebuild ./node_modules/esbuild ./node_modules/@swc/core',
+      'RUN NODE_ENV=production node --check scripts/update-changelog-version.cjs',
+      'RUN env NODE_ENV=production node --version',
+      `RUN echo 'trap npm ci EXIT' 'NODE_OPTIONS=--require=/tmp/example'`,
+      `RUN printf '%s' 'BASH_ENV=/tmp/example' 'PYTHONPATH=/tmp/example'`,
     ];
     expect(() => validateDockerInstallCommands(commands.join('\n'))).not.toThrow();
   });

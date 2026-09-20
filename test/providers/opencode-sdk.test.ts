@@ -2,6 +2,7 @@ import fs from 'fs';
 import fsPromises from 'fs/promises';
 import path from 'path';
 
+import { createOpencodeClient as createInstalledOpencodeClient } from '@opencode-ai/sdk/v2/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { clearCache, disableCache, enableCache } from '../../src/cache';
 import { evaluate, runEval } from '../../src/evaluator';
@@ -213,7 +214,7 @@ describe('OpenCodeSDKProvider', () => {
       ),
     );
     mockSessionDelete.mockResolvedValue(undefined);
-    mockSessionAbort.mockResolvedValue(undefined);
+    mockSessionAbort.mockResolvedValue({ data: true });
     mockSessionMessages.mockResolvedValue([]);
 
     // File system mocks
@@ -2639,10 +2640,9 @@ describe('OpenCodeSDKProvider', () => {
         expect(JSON.stringify({ result, logs: debugSpy.mock.calls })).not.toContain(previous);
       });
 
-      it('redacts a previous prompt credential when detached session eviction rejects after cleanup', async () => {
+      it('does not start credential-bearing detached deletion when a persistent session leaves the LRU', async () => {
         const previous = 'synthetic-secondary-eviction-credential-0919';
         const debugSpy = vi.spyOn(logger, 'debug').mockImplementation(() => {});
-        const eviction = createDeferred<unknown>();
         let sessionIndex = 0;
         mockSessionCreate.mockImplementation(async () =>
           createMockSessionResponse(`secondary-session-${sessionIndex++}`),
@@ -2660,26 +2660,17 @@ describe('OpenCodeSDKProvider', () => {
             createPromptContext({ model: `test-model-${index}` }),
           );
         }
-        mockSessionDelete.mockImplementationOnce(() => eviction.promise);
         const result = await provider.callApi(
           'evict first session',
           createPromptContext({ model: 'test-model-100' }),
         );
         expect(result.output).toBe('Test response');
-        expect(mockSessionDelete).toHaveBeenCalledOnce();
-        expect(mockSessionDelete).toHaveBeenCalledWith({
-          sessionID: 'secondary-session-0',
-          directory: '/test/work',
-        });
+        expect(mockSessionDelete).not.toHaveBeenCalled();
         await provider.cleanup();
         expect(mockServerClose).toHaveBeenCalledOnce();
-        eviction.reject(new Error(`Eviction temporarily failed for ${previous}`));
-
-        await vi.waitFor(() =>
-          expect(debugSpy).toHaveBeenCalledWith('Failed to delete evicted OpenCode session', {
-            sessionId: 'secondary-session-0',
-            error: 'Eviction temporarily failed for [REDACTED]',
-          }),
+        expect(mockSessionDelete).toHaveBeenCalledTimes(100);
+        expect(mockSessionDelete).not.toHaveBeenCalledWith(
+          expect.objectContaining({ sessionID: 'secondary-session-0' }),
         );
         expect(JSON.stringify({ result, logs: debugSpy.mock.calls })).not.toContain(previous);
       });
@@ -3531,9 +3522,10 @@ describe('OpenCodeSDKProvider', () => {
 
         await provider.callApi('Test prompt');
 
-        expect(mockSessionDelete).toHaveBeenCalledWith({
-          sessionID: 'test-session-123',
-        });
+        expect(mockSessionDelete).toHaveBeenCalledWith(
+          { sessionID: 'test-session-123' },
+          { signal: expect.any(AbortSignal) },
+        );
       });
 
       it('should swallow delete errors for non-persistent sessions', async () => {
@@ -4195,6 +4187,45 @@ describe('OpenCodeSDKProvider', () => {
       );
     };
 
+    const registerDiskBackedLocalServers = () => {
+      const history = new Map<string, string[]>();
+      const closes: Array<ReturnType<typeof vi.fn>> = [];
+      let nextId = 0;
+      mockSessionCreate.mockImplementation(async () => {
+        const id = `owned-local-${++nextId}`;
+        history.set(id, []);
+        return createMockSessionResponse(id);
+      });
+      mockSessionPrompt.mockImplementation(async ({ sessionID, parts }) => {
+        const messages = history.get(sessionID);
+        if (!messages) {
+          return { error: { name: 'NotFoundError', data: { message: '404: session not found' } } };
+        }
+        messages.push(parts[0].text);
+        return createMockPromptResponse([{ type: 'text', text: messages.join(' | ') }]);
+      });
+      mockSessionDelete.mockImplementation(async ({ sessionID }) => {
+        history.delete(sessionID);
+      });
+      mockCreateOpencode.mockReset().mockImplementation(async () => {
+        const close = vi.fn();
+        closes.push(close);
+        return {
+          client: {
+            session: {
+              create: mockSessionCreate,
+              prompt: mockSessionPrompt,
+              messages: mockSessionMessages,
+              delete: mockSessionDelete,
+              abort: mockSessionAbort,
+            },
+          },
+          server: { url: `http://127.0.0.1:${4200 + closes.length}`, close },
+        };
+      });
+      return { history, closes };
+    };
+
     it('should close server on cleanup', async () => {
       const provider = new OpenCodeSDKProvider({
         env: { ANTHROPIC_API_KEY: 'test-api-key' },
@@ -4270,6 +4301,435 @@ describe('OpenCodeSDKProvider', () => {
         sessionID: 'remote-persistent-1',
         directory: '/test/work',
       });
+    });
+
+    it('preserves owned local persistent sessions across evaluation server restarts and explicit resumption', async () => {
+      const { history, closes } = registerDiskBackedLocalServers();
+      const provider = new OpenCodeSDKProvider({
+        config: { working_dir: '/test/work', persist_sessions: true },
+      });
+
+      const first = await runEvaluation('owned-local-first', provider);
+      expect(first.results[0]).toMatchObject({
+        success: true,
+        response: { output: 'owned-local-first', sessionId: 'owned-local-1' },
+      });
+      expect(closes).toHaveLength(1);
+      expect(closes[0]).toHaveBeenCalledOnce();
+      expect(history.has('owned-local-1')).toBe(true);
+      expect(mockSessionDelete).not.toHaveBeenCalled();
+
+      const second = await runEvaluation('owned-local-second', provider);
+      const resumed = await runEvaluation(
+        'owned-local-resumed',
+        new OpenCodeSDKProvider({
+          config: { working_dir: '/test/work', session_id: 'owned-local-1' },
+        }),
+      );
+      expect(second.results[0]).toMatchObject({
+        success: true,
+        response: { output: 'owned-local-first | owned-local-second', sessionId: 'owned-local-1' },
+      });
+      expect(resumed.results[0]).toMatchObject({
+        success: true,
+        response: {
+          output: 'owned-local-first | owned-local-second | owned-local-resumed',
+          sessionId: 'owned-local-1',
+        },
+      });
+      expect(closes).toHaveLength(3);
+      for (const close of closes) {
+        expect(close).toHaveBeenCalledOnce();
+      }
+      expect(mockSessionCreate).toHaveBeenCalledOnce();
+      expect(mockSessionDelete).not.toHaveBeenCalled();
+
+      await provider.cleanup();
+      expect(mockSessionDelete).toHaveBeenCalledExactlyOnceWith({
+        sessionID: 'owned-local-1',
+        directory: '/test/work',
+      });
+      expect(history.has('owned-local-1')).toBe(false);
+      expect(closes).toHaveLength(4);
+      expect(closes[3]).toHaveBeenCalledOnce();
+
+      const restarted = await runEvaluation('owned-local-new', provider);
+      expect(restarted.results[0]).toMatchObject({
+        success: true,
+        response: { output: 'owned-local-new', sessionId: 'owned-local-2' },
+      });
+      await provider.cleanup();
+    });
+
+    it('preserves owned local prompt-configured persistent sessions but deletes ephemeral sessions', async () => {
+      const { history, closes } = registerDiskBackedLocalServers();
+      const provider = new OpenCodeSDKProvider({ config: { working_dir: '/test/work' } });
+      await providerRegistry.withEvaluationScope(() =>
+        provider.callApi('prompt-persistent-one', createPromptContext({ persist_sessions: true })),
+      );
+      expect(history.has('owned-local-1')).toBe(true);
+      expect(closes[0]).toHaveBeenCalledOnce();
+      await providerRegistry.withEvaluationScope(() =>
+        provider.callApi('prompt-persistent-two', createPromptContext({ persist_sessions: true })),
+      );
+      expect(history.get('owned-local-1')).toEqual([
+        'prompt-persistent-one',
+        'prompt-persistent-two',
+      ]);
+
+      await runEvaluation('owned-local-ephemeral', provider);
+      expect(history.has('owned-local-2')).toBe(false);
+      expect(history.has('owned-local-1')).toBe(true);
+      expect(mockSessionDelete).toHaveBeenCalledExactlyOnceWith(
+        { sessionID: 'owned-local-2', directory: '/test/work' },
+        { signal: expect.any(AbortSignal) },
+      );
+      await provider.cleanup();
+      expect(history.size).toBe(0);
+    });
+
+    it('closes the owned local server at process shutdown without deleting persistent sessions', async () => {
+      const { history, closes } = registerDiskBackedLocalServers();
+      const provider = new OpenCodeSDKProvider({
+        config: { working_dir: '/test/work', persist_sessions: true },
+      });
+      const first = await provider.callApi('before local process shutdown');
+      expect(first.sessionId).toBe('owned-local-1');
+
+      await provider.shutdown('process');
+      expect(closes[0]).toHaveBeenCalledOnce();
+      expect(history.has('owned-local-1')).toBe(true);
+      expect(mockSessionDelete).not.toHaveBeenCalled();
+      await provider.cleanup();
+      expect(closes).toHaveLength(1);
+      expect(history.has('owned-local-1')).toBe(true);
+
+      const resumed = new OpenCodeSDKProvider({
+        config: { working_dir: '/test/work', session_id: 'owned-local-1' },
+      });
+      const result = await resumed.callApi('after local process shutdown');
+      expect(result).toMatchObject({
+        output: 'before local process shutdown | after local process shutdown',
+        sessionId: 'owned-local-1',
+      });
+      await resumed.cleanup();
+      expect(closes[1]).toHaveBeenCalledOnce();
+      expect(history.has('owned-local-1')).toBe(true);
+      expect(mockSessionCreate).toHaveBeenCalledOnce();
+      expect(mockSessionDelete).not.toHaveBeenCalled();
+    });
+
+    it.each(['active prompt', 'late accepted create'] as const)(
+      'reclaims an owned local ephemeral session before closing its process during %s',
+      async (stage) => {
+        const entered = createDeferred<void>();
+        const accepted = createDeferred<unknown>();
+        const sessions = new Set<string>();
+        const events: string[] = [];
+        let alive = true;
+        let serverSignal: AbortSignal | undefined;
+        const close = vi.fn(() => {
+          events.push('server closed');
+          alive = false;
+        });
+        mockSessionCreate.mockImplementation(() => {
+          sessions.add('owned-local-ephemeral');
+          if (stage === 'late accepted create') {
+            entered.resolve();
+            return accepted.promise;
+          }
+          return Promise.resolve({ data: createMockSessionResponse('owned-local-ephemeral') });
+        });
+        mockSessionPrompt.mockImplementation(() => {
+          entered.resolve();
+          return new Promise<never>(() => {});
+        });
+        mockSessionDelete.mockImplementation(async ({ sessionID }) => {
+          events.push(`delete while alive=${alive}`);
+          if (!alive) {
+            throw new Error('the owned OpenCode server no longer accepts requests');
+          }
+          sessions.delete(sessionID);
+          return { data: true, response: { ok: true, status: 200 } };
+        });
+        mockCreateOpencode.mockReset().mockImplementation(async (options) => {
+          serverSignal = options.signal;
+          serverSignal?.addEventListener(
+            'abort',
+            () => {
+              events.push('server lifetime aborted');
+              alive = false;
+            },
+            { once: true },
+          );
+          return {
+            client: {
+              session: {
+                create: mockSessionCreate,
+                prompt: mockSessionPrompt,
+                messages: mockSessionMessages,
+                delete: mockSessionDelete,
+                abort: mockSessionAbort,
+              },
+            },
+            server: { url: 'http://127.0.0.1:4250', close },
+          };
+        });
+        const provider = new OpenCodeSDKProvider({ config: { working_dir: '/test/work' } });
+        const call = provider.callApi('ephemeral local shutdown');
+        await entered.promise;
+        vi.useFakeTimers();
+        try {
+          const shutdown = provider.shutdown('process');
+          if (stage === 'late accepted create') {
+            await vi.advanceTimersByTimeAsync(100);
+            expect(serverSignal?.aborted).toBe(false);
+            accepted.resolve({ data: createMockSessionResponse('owned-local-ephemeral') });
+          }
+          await shutdown;
+          await expect(call).resolves.toMatchObject({ error: 'OpenCode SDK call aborted' });
+          expect(mockSessionDelete).toHaveBeenCalledOnce();
+          expect(sessions.size).toBe(0);
+          expect(events[0]).toBe('delete while alive=true');
+          expect(close).toHaveBeenCalledOnce();
+          expect(serverSignal?.aborted).toBe(true);
+          await vi.advanceTimersByTimeAsync(0);
+          expect(vi.getTimerCount()).toBe(0);
+        } finally {
+          accepted.resolve({ data: createMockSessionResponse('owned-local-ephemeral') });
+          await vi.runAllTimersAsync();
+          vi.useRealTimers();
+        }
+      },
+    );
+
+    it.each(['local', 'remote'] as const)(
+      'lets the actual SDK receive an accepted %s ephemeral ID during process-shutdown grace',
+      async (transport) => {
+        const actualSdk = await import('@opencode-ai/sdk/v2/client');
+        const entered = createDeferred<void>();
+        const accepted = createDeferred<void>();
+        const sessions = new Set<string>();
+        const events: string[] = [];
+        let createSignal: AbortSignal | undefined;
+        let alive = true;
+        const fetchMock: typeof fetch = async (input, init) => {
+          const request = input instanceof Request ? input : new Request(input, init);
+          if (!alive) {
+            throw new Error('the owned OpenCode server has closed');
+          }
+          if (request.method === 'POST' && new URL(request.url).pathname === '/session') {
+            sessions.add('real-sdk-late-id');
+            events.push('create accepted');
+            createSignal = request.signal;
+            entered.resolve();
+            const abort = createDeferred<never>();
+            const onAbort = () => abort.reject(new DOMException('Aborted', 'AbortError'));
+            if (request.signal.aborted) {
+              onAbort();
+            } else {
+              request.signal.addEventListener('abort', onAbort, { once: true });
+            }
+            try {
+              await Promise.race([accepted.promise, abort.promise]);
+            } finally {
+              request.signal.removeEventListener('abort', onAbort);
+            }
+            events.push('create id received');
+            return Response.json(createMockSessionResponse('real-sdk-late-id'));
+          }
+          if (request.method === 'DELETE') {
+            events.push('delete received');
+            sessions.delete('real-sdk-late-id');
+            return Response.json(true);
+          }
+          throw new Error(`unexpected SDK request ${request.method} ${request.url}`);
+        };
+        const realClient = actualSdk.createOpencodeClient({
+          baseUrl: 'http://opencode.test',
+          fetch: fetchMock,
+        });
+        const close = vi.fn(() => {
+          events.push('server closed');
+          alive = false;
+        });
+        if (transport === 'remote') {
+          mockCreateOpencodeClient.mockReturnValue(realClient);
+        } else {
+          mockCreateOpencode.mockReset().mockImplementation(async (options) => {
+            options.signal.addEventListener('abort', () => {
+              alive = false;
+            });
+            return { client: realClient, server: { url: 'http://opencode.test', close } };
+          });
+        }
+        const provider = new OpenCodeSDKProvider({
+          config: {
+            working_dir: '/test/work',
+            ...(transport === 'remote' ? { baseUrl: 'http://opencode.test' } : {}),
+          },
+        });
+        const call = provider.callApi('actual accepted SDK session');
+        await entered.promise;
+        const shutdown = provider.shutdown('process');
+        await expect(call).resolves.toMatchObject({ error: 'OpenCode SDK call aborted' });
+        expect(createSignal?.aborted).toBe(false);
+        accepted.resolve();
+        await shutdown;
+        expect(sessions.size).toBe(0);
+        expect(events).toEqual(
+          transport === 'local'
+            ? ['create accepted', 'create id received', 'delete received', 'server closed']
+            : ['create accepted', 'create id received', 'delete received'],
+        );
+      },
+    );
+
+    it.each(['local', 'remote'] as const)(
+      'cancels an unresponsive %s ephemeral create at the shared process deadline',
+      async (transport) => {
+        const entered = createDeferred<void>();
+        let createSignal: AbortSignal | undefined;
+        mockSessionCreate.mockImplementation((_parameters, options) => {
+          createSignal = options.signal;
+          entered.resolve();
+          return new Promise((_resolve, reject) => {
+            createSignal?.addEventListener(
+              'abort',
+              () => reject(new DOMException('Aborted', 'AbortError')),
+              { once: true },
+            );
+          });
+        });
+        const provider = new OpenCodeSDKProvider({
+          config: {
+            working_dir: '/test/work',
+            ...(transport === 'remote' ? { baseUrl: 'http://127.0.0.1:4096' } : {}),
+          },
+        });
+        const call = provider.callApi('unknown ephemeral create ID');
+        await entered.promise;
+        vi.useFakeTimers();
+        try {
+          let completed = false;
+          const shutdown = provider.shutdown('process').then(() => {
+            completed = true;
+          });
+          await expect(call).resolves.toMatchObject({ error: 'OpenCode SDK call aborted' });
+          await vi.advanceTimersByTimeAsync(999);
+          expect(completed).toBe(false);
+          expect(createSignal?.aborted).toBe(false);
+          expect(mockServerClose).not.toHaveBeenCalled();
+          await vi.advanceTimersByTimeAsync(1);
+          await shutdown;
+          expect(createSignal?.aborted).toBe(true);
+          expect(mockSessionDelete).not.toHaveBeenCalled();
+          expect(mockServerClose).toHaveBeenCalledTimes(transport === 'local' ? 1 : 0);
+          expect(vi.getTimerCount()).toBe(0);
+        } finally {
+          await vi.runAllTimersAsync();
+          vi.useRealTimers();
+        }
+      },
+    );
+
+    it('closes an owned local process at the shared deadline when ephemeral deletion never settles', async () => {
+      const prompting = createDeferred<void>();
+      const deleting = createDeferred<void>();
+      let deleteSignal: AbortSignal | undefined;
+      mockSessionPrompt.mockImplementation(() => {
+        prompting.resolve();
+        return new Promise<never>(() => {});
+      });
+      mockSessionDelete.mockImplementation((_parameters, options) => {
+        deleteSignal = options.signal;
+        deleting.resolve();
+        return new Promise<never>(() => {});
+      });
+      const provider = new OpenCodeSDKProvider({ config: { working_dir: '/test/work' } });
+      const call = provider.callApi('unresponsive local deletion');
+      await prompting.promise;
+      const serverSignal = mockCreateOpencode.mock.calls[0][0].signal as AbortSignal;
+      vi.useFakeTimers();
+      try {
+        let completed = false;
+        const shutdown = provider.shutdown('process').then(() => {
+          completed = true;
+        });
+        await deleting.promise;
+        expect(deleteSignal?.aborted).toBe(false);
+        expect(serverSignal.aborted).toBe(false);
+        await vi.advanceTimersByTimeAsync(999);
+        expect(completed).toBe(false);
+        expect(mockServerClose).not.toHaveBeenCalled();
+        await vi.advanceTimersByTimeAsync(1);
+        await shutdown;
+        await expect(call).resolves.toMatchObject({ error: 'OpenCode SDK call aborted' });
+        expect(mockServerClose).toHaveBeenCalledOnce();
+        expect(deleteSignal?.aborted).toBe(true);
+        expect(serverSignal.aborted).toBe(true);
+        expect(vi.getTimerCount()).toBe(0);
+      } finally {
+        await vi.runAllTimersAsync();
+        vi.useRealTimers();
+      }
+    });
+
+    it('retains local prompt credentials for a delayed server-close diagnostic after the caller finishes', async () => {
+      const credential = 'synthetic-delayed-local-close-credential-2026';
+      const entered = createDeferred<void>();
+      const accepted = createDeferred<unknown>();
+      const debug = vi.spyOn(logger, 'debug').mockImplementation(() => {});
+      mockSessionCreate.mockImplementation(() => {
+        entered.resolve();
+        return accepted.promise;
+      });
+      mockServerClose.mockImplementationOnce(() => {
+        throw new Error(`server close echoed ${credential}`);
+      });
+      const provider = new OpenCodeSDKProvider({ config: { working_dir: '/test/work' } });
+      const call = provider.callApi(
+        'retained redaction during shutdown',
+        createPromptContext({ mcp: remoteMcpWithBearer(credential) }),
+      );
+      await entered.promise;
+      const shutdown = provider.shutdown('process');
+      await expect(call).resolves.toMatchObject({ error: 'OpenCode SDK call aborted' });
+      expect(mockServerClose).not.toHaveBeenCalled();
+      accepted.resolve({ data: createMockSessionResponse('delayed-close-session') });
+      await shutdown;
+      expect(debug).toHaveBeenCalledWith('Failed to close OpenCode server', {
+        error: 'server close echoed [REDACTED]',
+      });
+      const closeDiagnostics = debug.mock.calls.filter(
+        ([message]) => message === 'Failed to close OpenCode server',
+      );
+      expect(JSON.stringify(closeDiagnostics)).not.toContain(credential);
+    });
+
+    it('detaches a resource-free local validation failure without unregistering live ownership', async () => {
+      const unregister = vi.spyOn(providerRegistry, 'unregister');
+      const invalid = new OpenCodeSDKProvider({
+        config: {
+          working_dir: '/test/work',
+          permission: { bash: 'invalid' },
+        } as unknown as OpenCodeSDKConfig,
+      });
+      const invalidResult = await invalid.callApi('invalid local policy');
+      expect(invalidResult.error).toContain('permission');
+      expect(mockCreateOpencode).not.toHaveBeenCalled();
+      expect(unregister).toHaveBeenCalledExactlyOnceWith(invalid);
+
+      unregister.mockClear();
+      const valid = new OpenCodeSDKProvider({ config: { working_dir: '/test/work' } });
+      await valid.callApi('active server');
+      await valid.callApi(
+        'invalid second call',
+        createPromptContext({ permission: { bash: 'invalid' } } as unknown as OpenCodeSDKConfig),
+      );
+      expect(unregister).not.toHaveBeenCalled();
+      await valid.cleanup();
+      expect(unregister).toHaveBeenCalledExactlyOnceWith(valid);
     });
 
     it('forces an active local call to abort and closes its server on process shutdown', async () => {
@@ -4373,10 +4833,10 @@ describe('OpenCodeSDKProvider', () => {
       const evaluation = await runEvaluation('remote-ephemeral-evaluation', provider);
 
       expect(evaluation.results[0]).toMatchObject({ success: true });
-      expect(mockSessionDelete).toHaveBeenCalledExactlyOnceWith({
-        sessionID: 'test-session-123',
-        directory: '/test/work',
-      });
+      expect(mockSessionDelete).toHaveBeenCalledExactlyOnceWith(
+        { sessionID: 'test-session-123', directory: '/test/work' },
+        { signal: expect.any(AbortSignal) },
+      );
       expect(mockServerClose).not.toHaveBeenCalled();
     });
 
@@ -4488,11 +4948,12 @@ describe('OpenCodeSDKProvider', () => {
 
       vi.useFakeTimers();
       try {
-        await providerRegistry.shutdownForProcess();
+        const shutdown = providerRegistry.shutdownForProcess();
         await deleting.promise;
         expect(deleteSignal?.aborted).toBe(false);
         await vi.advanceTimersByTimeAsync(1_000);
 
+        await shutdown;
         await expect(call).resolves.toMatchObject({ error: 'OpenCode SDK call aborted' });
         expect(deleteSignal?.aborted).toBe(true);
         expect(mockSessionDelete).toHaveBeenCalledExactlyOnceWith(
@@ -4504,6 +4965,312 @@ describe('OpenCodeSDKProvider', () => {
         await vi.runAllTimersAsync();
         vi.useRealTimers();
       }
+    });
+
+    it.each(['v2', 'v1'] as const)(
+      'reclaims an accepted remote ephemeral %s session whose ID arrives after process shutdown',
+      async (apiVersion) => {
+        if (apiVersion === 'v1') {
+          const { importModule } = await import('../../src/esm');
+          vi.mocked(importModule).mockImplementation(async (modulePath: string) => {
+            if (/[/\\]dist[/\\]v2[/\\]/.test(modulePath)) {
+              throw new Error('v2 unavailable');
+            }
+            return {
+              createOpencode: mockCreateOpencode,
+              createOpencodeClient: mockCreateOpencodeClient,
+            };
+          });
+        }
+        const entered = createDeferred<void>();
+        const accepted = createDeferred<unknown>();
+        const deletionEntered = createDeferred<void>();
+        let createSignal: AbortSignal | undefined;
+        let deleteSignal: AbortSignal | undefined;
+        mockSessionCreate.mockImplementation((parameters, options) => {
+          createSignal = apiVersion === 'v2' ? options.signal : parameters.signal;
+          entered.resolve();
+          return accepted.promise;
+        });
+        mockSessionDelete.mockImplementation((parameters, options) => {
+          deleteSignal = apiVersion === 'v2' ? options.signal : parameters.signal;
+          deletionEntered.resolve();
+          return new Promise<never>(() => {});
+        });
+        const provider = new OpenCodeSDKProvider({
+          config: { baseUrl: 'http://127.0.0.1:4096', working_dir: '/test/work' },
+        });
+        const call = provider.callApi('process shutdown during remote session creation');
+        await entered.promise;
+
+        vi.useFakeTimers();
+        try {
+          let completed = false;
+          const shutdown = provider.shutdown('process').then(() => {
+            completed = true;
+          });
+          await expect(call).resolves.toMatchObject({ error: 'OpenCode SDK call aborted' });
+          expect(createSignal?.aborted).toBe(false);
+          expect(mockSessionPrompt).not.toHaveBeenCalled();
+          expect(mockSessionDelete).not.toHaveBeenCalled();
+          await vi.advanceTimersByTimeAsync(300);
+          expect(completed).toBe(false);
+          accepted.resolve({ data: createMockSessionResponse('late-accepted-ephemeral') });
+          await vi.advanceTimersByTimeAsync(0);
+          expect(mockSessionDelete).toHaveBeenCalledOnce();
+          await deletionEntered.promise;
+          expect(deleteSignal?.aborted).toBe(false);
+          if (apiVersion === 'v2') {
+            expect(mockSessionDelete).toHaveBeenCalledExactlyOnceWith(
+              { sessionID: 'late-accepted-ephemeral', directory: '/test/work' },
+              { signal: expect.any(AbortSignal) },
+            );
+          } else {
+            expect(mockSessionDelete).toHaveBeenCalledExactlyOnceWith({
+              path: { id: 'late-accepted-ephemeral', sessionID: 'late-accepted-ephemeral' },
+              query: { directory: '/test/work' },
+              signal: expect.any(AbortSignal),
+            });
+          }
+          await vi.advanceTimersByTimeAsync(700);
+          expect(deleteSignal?.aborted).toBe(true);
+          await shutdown;
+          await vi.advanceTimersByTimeAsync(300);
+          expect(vi.getTimerCount()).toBe(0);
+        } finally {
+          await vi.runAllTimersAsync();
+          vi.useRealTimers();
+        }
+      },
+    );
+
+    it.each(['v2', 'v1'] as const)(
+      'bounds an already-started remote ephemeral %s deletion after process shutdown',
+      async (apiVersion) => {
+        if (apiVersion === 'v1') {
+          const { importModule } = await import('../../src/esm');
+          vi.mocked(importModule).mockImplementation(async (modulePath: string) => {
+            if (/[/\\]dist[/\\]v2[/\\]/.test(modulePath)) {
+              throw new Error('v2 unavailable');
+            }
+            return {
+              createOpencode: mockCreateOpencode,
+              createOpencodeClient: mockCreateOpencodeClient,
+            };
+          });
+        }
+        const deletionEntered = createDeferred<void>();
+        let deleteSignal: AbortSignal | undefined;
+        mockSessionDelete.mockImplementation((parameters, options) => {
+          deleteSignal = apiVersion === 'v2' ? options?.signal : parameters.signal;
+          deletionEntered.resolve();
+          return new Promise<never>(() => {});
+        });
+        const provider = new OpenCodeSDKProvider({
+          config: { baseUrl: 'http://127.0.0.1:4096' },
+        });
+        const call = provider.callApi('process shutdown during normal remote deletion');
+        await deletionEntered.promise;
+        expect(mockSessionDelete).toHaveBeenCalledOnce();
+        expect(deleteSignal?.aborted).toBe(false);
+        expect(rmSpy).not.toHaveBeenCalled();
+
+        vi.useFakeTimers();
+        try {
+          let completed = false;
+          const shutdown = provider.shutdown('process').then(() => {
+            completed = true;
+          });
+          await vi.advanceTimersByTimeAsync(500);
+          expect(completed).toBe(false);
+          expect(deleteSignal?.aborted).toBe(false);
+          expect(rmSpy).not.toHaveBeenCalled();
+          await vi.advanceTimersByTimeAsync(500);
+          expect(deleteSignal?.aborted).toBe(true);
+          await shutdown;
+          await expect(call).resolves.toMatchObject({ output: 'Test response' });
+          expect(mockSessionDelete).toHaveBeenCalledOnce();
+          expect(rmSpy).toHaveBeenCalledExactlyOnceWith('/tmp/test-temp-dir', {
+            recursive: true,
+            force: true,
+          });
+          expect(vi.getTimerCount()).toBe(0);
+        } finally {
+          await vi.runAllTimersAsync();
+          vi.useRealTimers();
+        }
+      },
+    );
+
+    it.each(['late create', 'in-flight delete'] as const)(
+      'keeps process shutdown pending until cooperative remote ephemeral %s cleanup completes',
+      async (stage) => {
+        const entered = createDeferred<void>();
+        const accepted = createDeferred<unknown>();
+        const deletion = createDeferred<unknown>();
+        if (stage === 'late create') {
+          mockSessionCreate.mockImplementation(() => {
+            entered.resolve();
+            return accepted.promise;
+          });
+        }
+        mockSessionDelete.mockImplementation(() => {
+          if (stage === 'in-flight delete') {
+            entered.resolve();
+          }
+          return deletion.promise;
+        });
+        const provider = new OpenCodeSDKProvider({
+          config: { baseUrl: 'http://127.0.0.1:4096', working_dir: '/test/work' },
+        });
+        const call = provider.callApi('cooperative shutdown');
+        await entered.promise;
+        vi.useFakeTimers();
+        try {
+          let shutdownCompleted = false;
+          const shutdown = provider.shutdown('process').then(() => {
+            shutdownCompleted = true;
+          });
+          await vi.advanceTimersByTimeAsync(300);
+          expect(shutdownCompleted).toBe(false);
+          if (stage === 'late create') {
+            accepted.resolve({ data: createMockSessionResponse('cooperative-remote-session') });
+            await vi.advanceTimersByTimeAsync(0);
+          }
+          expect(mockSessionDelete).toHaveBeenCalledOnce();
+          expect(shutdownCompleted).toBe(false);
+          deletion.resolve({ data: true, response: { ok: true, status: 200 } });
+          await shutdown;
+          expect(shutdownCompleted).toBe(true);
+          await expect(call).resolves.toMatchObject(
+            stage === 'late create'
+              ? { error: 'OpenCode SDK call aborted' }
+              : { output: 'Test response' },
+          );
+          expect(vi.getTimerCount()).toBe(0);
+        } finally {
+          await vi.runAllTimersAsync();
+          vi.useRealTimers();
+        }
+      },
+    );
+
+    it.each([
+      { status: 503, attempts: 2, logged: false },
+      { status: 404, attempts: 1, logged: false },
+      { status: 403, attempts: 1, logged: true },
+    ])(
+      'handles SDK-resolved HTTP $status when reclaiming a late remote ephemeral session',
+      async ({ status, attempts, logged }) => {
+        const credential = 'synthetic-resolved-ephemeral-credential-2026';
+        const entered = createDeferred<void>();
+        const accepted = createDeferred<unknown>();
+        const debug = vi.spyOn(logger, 'debug').mockImplementation(() => {});
+        mockSessionCreate.mockImplementation(() => {
+          entered.resolve();
+          return accepted.promise;
+        });
+        mockSessionDelete
+          .mockResolvedValueOnce({
+            error: { name: 'APIError', data: { message: `cleanup echoed ${credential}` } },
+            response: { ok: false, status },
+          })
+          .mockResolvedValue({ data: true, response: { ok: true, status: 200 } });
+        const provider = new OpenCodeSDKProvider({
+          config: {
+            baseUrl: 'http://127.0.0.1:4096',
+            working_dir: '/test/work',
+            mcp: remoteMcpWithBearer(credential),
+          },
+        });
+        const call = provider.callApi('resolved cleanup');
+        await entered.promise;
+        const shutdown = provider.shutdown('process');
+        await call;
+        accepted.resolve({ data: createMockSessionResponse('late-http-result') });
+        await shutdown;
+        expect(mockSessionDelete).toHaveBeenCalledTimes(attempts);
+        const failures = debug.mock.calls.filter(
+          ([message]) => message === 'Failed to delete non-persistent OpenCode session',
+        );
+        if (logged) {
+          expect(failures).toEqual([
+            [
+              'Failed to delete non-persistent OpenCode session',
+              {
+                sessionId: 'late-http-result',
+                error: expect.stringContaining('[REDACTED]'),
+              },
+            ],
+          ]);
+          expect(JSON.stringify(failures)).not.toContain(credential);
+        } else {
+          expect(failures).toEqual([]);
+        }
+      },
+    );
+
+    it('preserves a remote persistent session whose ID arrives after process shutdown', async () => {
+      const entered = createDeferred<void>();
+      const accepted = createDeferred<unknown>();
+      mockSessionCreate.mockImplementation(() => {
+        entered.resolve();
+        return accepted.promise;
+      });
+      const provider = new OpenCodeSDKProvider({
+        config: {
+          baseUrl: 'http://127.0.0.1:4096',
+          working_dir: '/test/work',
+          persist_sessions: true,
+        },
+      });
+      const call = provider.callApi('persistent remote creation');
+      await entered.promise;
+      await provider.shutdown('process');
+      await expect(call).resolves.toMatchObject({ error: 'OpenCode SDK call aborted' });
+      accepted.resolve({ data: createMockSessionResponse('late-accepted-persistent') });
+      await accepted.promise;
+      await new Promise<void>((resolve) => setImmediate(resolve));
+      expect(mockSessionPrompt).not.toHaveBeenCalled();
+      expect(mockSessionDelete).not.toHaveBeenCalled();
+    });
+
+    it('redacts captured credentials when detached late ephemeral deletion rejects', async () => {
+      const credential = 'synthetic-late-ephemeral-credential-2026';
+      const entered = createDeferred<void>();
+      const accepted = createDeferred<unknown>();
+      const deletion = createDeferred<unknown>();
+      const debug = vi.spyOn(logger, 'debug').mockImplementation(() => {});
+      mockSessionCreate.mockImplementation(() => {
+        entered.resolve();
+        return accepted.promise;
+      });
+      mockSessionDelete.mockImplementation(() => deletion.promise);
+      const provider = new OpenCodeSDKProvider({
+        config: {
+          baseUrl: 'http://127.0.0.1:4096',
+          working_dir: '/test/work',
+          mcp: remoteMcpWithBearer(credential),
+        },
+      });
+      const call = provider.callApi('redacted late cleanup');
+      await entered.promise;
+      const shutdown = provider.shutdown('process');
+      await call;
+      accepted.resolve({ data: createMockSessionResponse(`late-${credential}`) });
+      await vi.waitFor(() => expect(mockSessionDelete).toHaveBeenCalledOnce());
+      deletion.reject(new Error(`late cleanup echoed ${credential}`));
+      await vi.waitFor(() =>
+        expect(debug).toHaveBeenCalledWith('Failed to delete non-persistent OpenCode session', {
+          sessionId: 'late-[REDACTED]',
+          error: 'late cleanup echoed [REDACTED]',
+        }),
+      );
+      const failures = debug.mock.calls.filter(([message]) =>
+        String(message).includes('Failed to delete'),
+      );
+      expect(JSON.stringify(failures)).not.toContain(credential);
+      await shutdown;
     });
 
     it('returns on process termination during startup and closes a local server that starts late', async () => {
@@ -4632,10 +5399,7 @@ describe('OpenCodeSDKProvider', () => {
         success: true,
         response: { output: 'active completed' },
       });
-      expect(mockSessionDelete).toHaveBeenCalledExactlyOnceWith(
-        { sessionID: 'test-session-123', directory: '/test/work' },
-        { signal: expect.any(AbortSignal) },
-      );
+      expect(mockSessionDelete).not.toHaveBeenCalled();
       expect(mockServerClose).toHaveBeenCalledOnce();
     });
 
@@ -4687,10 +5451,7 @@ describe('OpenCodeSDKProvider', () => {
         'ongoing-evaluation-session',
         'ongoing-evaluation-session',
       ]);
-      expect(mockSessionDelete).toHaveBeenCalledExactlyOnceWith(
-        { sessionID: 'ongoing-evaluation-session', directory: '/test/work' },
-        { signal: expect.any(AbortSignal) },
-      );
+      expect(mockSessionDelete).not.toHaveBeenCalled();
       expect(mockServerClose).toHaveBeenCalledOnce();
     });
 
@@ -5066,11 +5827,8 @@ describe('OpenCodeSDKProvider', () => {
       expect(rmSpy).toHaveBeenCalledTimes(2);
     });
 
-    it('keeps a reused persistent session and evicts the actual least recently used one', async () => {
-      let created = 0;
-      mockSessionCreate.mockImplementation(async () =>
-        createMockSessionResponse('lru-session-' + created++),
-      );
+    it('keeps a reused local persistent session and evicts only the least recently used lookup', async () => {
+      const { history } = registerDiskBackedLocalServers();
       const provider = new OpenCodeSDKProvider({
         config: { working_dir: '/test/work', persist_sessions: true },
         env: { ANTHROPIC_API_KEY: 'test-api-key' },
@@ -5087,13 +5845,27 @@ describe('OpenCodeSDKProvider', () => {
       await provider.callApi('lru', withModel(100));
 
       expect(mockSessionCreate).toHaveBeenCalledTimes(101);
-      expect(mockSessionDelete).toHaveBeenCalledExactlyOnceWith(
-        expect.objectContaining({ sessionID: 'lru-session-1' }),
+      expect(mockSessionDelete).not.toHaveBeenCalled();
+      const explicitlyResumed = await provider.callApi(
+        'explicit oldest',
+        createPromptContext({ session_id: 'owned-local-2' }),
       );
-      expect(mockSessionDelete).not.toHaveBeenCalledWith(
-        expect.objectContaining({ sessionID: 'lru-session-0' }),
-      );
+      expect(explicitlyResumed).toMatchObject({
+        output: 'lru | explicit oldest',
+        sessionId: 'owned-local-2',
+      });
+      await provider.callApi('implicit retained', withModel(0));
+      const newLookup = await provider.callApi('implicit recreated', withModel(1));
+      expect(newLookup.sessionId).toBe('owned-local-102');
+      expect(mockSessionCreate).toHaveBeenCalledTimes(102);
+      expect(mockSessionDelete).not.toHaveBeenCalled();
+
       await provider.cleanup();
+      expect(mockSessionDelete).toHaveBeenCalledTimes(100);
+      expect(mockSessionDelete).not.toHaveBeenCalledWith(
+        expect.objectContaining({ sessionID: 'owned-local-2' }),
+      );
+      expect(history.has('owned-local-2')).toBe(true);
     });
   });
 
@@ -5945,6 +6717,443 @@ describe('OpenCodeSDKProvider', () => {
       expect(result.error).toBe('OpenCode SDK call aborted');
     });
 
+    it.each([
+      ['explicit v2', { session_id: 'shared-explicit' }, 'v2'],
+      ['persistent v2', { persist_sessions: true }, 'v2'],
+      ['explicit v1', { session_id: 'shared-explicit' }, 'v1'],
+      ['persistent v1', { persist_sessions: true }, 'v1'],
+    ] as const)(
+      'waits for a %s session cancellation acknowledgement before releasing its next prompt',
+      async (_kind, config, version) => {
+        if (version === 'v1') {
+          const { importModule } = await import('../../src/esm');
+          vi.mocked(importModule).mockImplementation(async (modulePath: string) => {
+            if (/[/\\]dist[/\\]v2[/\\]/.test(modulePath)) {
+              throw new Error('v2 unavailable');
+            }
+            return {
+              createOpencode: mockCreateOpencode,
+              createOpencodeClient: mockCreateOpencodeClient,
+            };
+          });
+        }
+        const started = createDeferred<void>();
+        const acknowledgement = createDeferred<void>();
+        const controller = new AbortController();
+        const events: string[] = [];
+        mockSessionPrompt
+          .mockImplementationOnce(
+            (parameters, options) =>
+              new Promise((_resolve, reject) => {
+                events.push('first');
+                started.resolve();
+                const signal = options?.signal ?? parameters.signal;
+                signal.addEventListener(
+                  'abort',
+                  () => reject(new DOMException('Aborted', 'AbortError')),
+                  { once: true },
+                );
+              }),
+          )
+          .mockImplementationOnce(async () => {
+            events.push('second');
+            return createMockPromptResponse([{ type: 'text', text: 'second survived' }]);
+          });
+        mockSessionAbort.mockImplementationOnce(async () => {
+          events.push('abort sent');
+          await acknowledgement.promise;
+          events.push('abort acknowledged');
+          return { data: true };
+        });
+        const provider = new OpenCodeSDKProvider({ config });
+        const first = provider.callApi('first', undefined, { abortSignal: controller.signal });
+        await started.promise;
+        const second = provider.callApi('second');
+
+        try {
+          controller.abort();
+          await vi.waitFor(() => expect(mockSessionAbort).toHaveBeenCalledOnce());
+          await new Promise<void>((resolve) => setImmediate(resolve));
+          expect(mockSessionPrompt).toHaveBeenCalledTimes(1);
+          acknowledgement.resolve();
+          await expect(first).resolves.toMatchObject({ error: 'OpenCode SDK call aborted' });
+          await expect(second).resolves.toMatchObject({ output: 'second survived' });
+          expect(events).toEqual(['first', 'abort sent', 'abort acknowledged', 'second']);
+        } finally {
+          acknowledgement.resolve();
+          await Promise.allSettled([first, second]);
+        }
+      },
+    );
+
+    it('quarantines a shared session if cancellation is still unacknowledged after its bounded wait', async () => {
+      const started = createDeferred<void>();
+      const acknowledgement = createDeferred<void>();
+      const controller = new AbortController();
+      let cancellationSignal: AbortSignal | undefined;
+      mockSessionPrompt.mockImplementationOnce(
+        (_parameters, options) =>
+          new Promise((_resolve, reject) => {
+            started.resolve();
+            options.signal.addEventListener(
+              'abort',
+              () => reject(new DOMException('Aborted', 'AbortError')),
+              { once: true },
+            );
+          }),
+      );
+      mockSessionAbort.mockImplementationOnce(async (_parameters, options) => {
+        cancellationSignal = options?.signal;
+        await acknowledgement.promise;
+        return { data: true };
+      });
+      const provider = new OpenCodeSDKProvider({ config: { session_id: 'shared-explicit' } });
+      const first = provider.callApi('first', undefined, { abortSignal: controller.signal });
+      await started.promise;
+      const second = provider.callApi('second');
+
+      try {
+        controller.abort();
+        await expect(first).resolves.toMatchObject({ error: 'OpenCode SDK call aborted' });
+        await expect(second).resolves.toMatchObject({
+          error: expect.stringContaining('previous cancellation could not be confirmed'),
+        });
+        expect(mockSessionPrompt).toHaveBeenCalledTimes(1);
+        expect(cancellationSignal?.aborted).toBe(true);
+        await expect(provider.callApi('while unsafe')).resolves.toMatchObject({
+          error: expect.stringContaining('previous cancellation could not be confirmed'),
+        });
+        expect(mockSessionPrompt).toHaveBeenCalledTimes(1);
+
+        acknowledgement.resolve();
+        await new Promise<void>((resolve) => setImmediate(resolve));
+        await expect(provider.callApi('after acknowledgement')).resolves.toMatchObject({
+          output: 'Test response',
+        });
+        expect(mockSessionPrompt).toHaveBeenCalledTimes(2);
+      } finally {
+        acknowledgement.resolve();
+        await Promise.allSettled([first, second]);
+      }
+    });
+
+    it('does not resume a shared session when its abort request returns a structured error', async () => {
+      const started = createDeferred<void>();
+      const controller = new AbortController();
+      mockSessionPrompt.mockImplementationOnce(
+        (_parameters, options) =>
+          new Promise((_resolve, reject) => {
+            started.resolve();
+            options.signal.addEventListener(
+              'abort',
+              () => reject(new DOMException('Aborted', 'AbortError')),
+              { once: true },
+            );
+          }),
+      );
+      mockSessionAbort.mockResolvedValueOnce({
+        error: { name: 'APIError', data: { message: 'no acknowledgement' } },
+      });
+      const provider = new OpenCodeSDKProvider({ config: { session_id: 'shared-explicit' } });
+      const first = provider.callApi('first', undefined, { abortSignal: controller.signal });
+      await started.promise;
+      const second = provider.callApi('second');
+      controller.abort();
+
+      await expect(first).resolves.toMatchObject({ error: 'OpenCode SDK call aborted' });
+      await expect(second).resolves.toMatchObject({
+        error: expect.stringContaining('previous cancellation could not be confirmed'),
+      });
+      expect(mockSessionPrompt).toHaveBeenCalledTimes(1);
+      await expect(
+        provider.callApi(
+          'different session',
+          createPromptContext({ session_id: 'unrelated-explicit' }),
+        ),
+      ).resolves.toMatchObject({ output: 'Test response' });
+      expect(mockSessionPrompt).toHaveBeenCalledTimes(2);
+    });
+
+    it.each([
+      ['persistent', 'explicit'],
+      ['explicit', 'persistent'],
+    ] as const)(
+      'keeps a cancelled session locked across %s to %s addressing until affirmative acknowledgement',
+      async (firstMode, secondMode) => {
+        const sessionId = 'same-server-session';
+        const contextFor = (mode: string) =>
+          mode === 'explicit' ? createPromptContext({ session_id: sessionId }) : undefined;
+        const started = createDeferred<void>();
+        const acknowledgement = createDeferred<void>();
+        const controller = new AbortController();
+        const events: string[] = [];
+        mockSessionCreate.mockResolvedValue(createMockSessionResponse(sessionId));
+        const provider = new OpenCodeSDKProvider({ config: { persist_sessions: true } });
+        await expect(provider.callApi('warm automatic session')).resolves.toMatchObject({
+          sessionId,
+        });
+        mockSessionPrompt
+          .mockImplementationOnce(
+            (_parameters, options) =>
+              new Promise((_resolve, reject) => {
+                events.push('first');
+                started.resolve();
+                options.signal.addEventListener(
+                  'abort',
+                  () => reject(new DOMException('Aborted', 'AbortError')),
+                  { once: true },
+                );
+              }),
+          )
+          .mockImplementationOnce(async () => {
+            events.push('second');
+            return createMockPromptResponse([{ type: 'text', text: 'second survived' }]);
+          });
+        mockSessionAbort.mockImplementationOnce(async () => {
+          events.push('abort sent');
+          await acknowledgement.promise;
+          events.push('abort acknowledged');
+          return { data: true };
+        });
+        const first = provider.callApi('first', contextFor(firstMode), {
+          abortSignal: controller.signal,
+        });
+        await started.promise;
+        const second = provider.callApi('second', contextFor(secondMode));
+
+        try {
+          controller.abort();
+          await vi.waitFor(() => expect(mockSessionAbort).toHaveBeenCalledOnce());
+          await new Promise<void>((resolve) => setImmediate(resolve));
+          expect(mockSessionPrompt).toHaveBeenCalledTimes(2);
+          acknowledgement.resolve();
+          await expect(first).resolves.toMatchObject({ error: 'OpenCode SDK call aborted' });
+          await expect(second).resolves.toMatchObject({ output: 'second survived', sessionId });
+          expect(events).toEqual(['first', 'abort sent', 'abort acknowledged', 'second']);
+        } finally {
+          acknowledgement.resolve();
+          await Promise.allSettled([first, second]);
+        }
+      },
+    );
+
+    it.each([
+      ['persistent', 'explicit'],
+      ['explicit', 'persistent'],
+    ] as const)(
+      'does not bypass session quarantine by changing %s to %s addressing',
+      async (firstMode, secondMode) => {
+        const sessionId = 'same-server-session';
+        const contextFor = (mode: string) =>
+          mode === 'explicit' ? createPromptContext({ session_id: sessionId }) : undefined;
+        const started = createDeferred<void>();
+        const controller = new AbortController();
+        mockSessionCreate.mockResolvedValue(createMockSessionResponse(sessionId));
+        const provider = new OpenCodeSDKProvider({ config: { persist_sessions: true } });
+        await expect(provider.callApi('warm automatic session')).resolves.toMatchObject({
+          sessionId,
+        });
+        mockSessionPrompt.mockImplementationOnce(
+          (_parameters, options) =>
+            new Promise((_resolve, reject) => {
+              started.resolve();
+              options.signal.addEventListener(
+                'abort',
+                () => reject(new DOMException('Aborted', 'AbortError')),
+                { once: true },
+              );
+            }),
+        );
+        mockSessionAbort.mockRejectedValueOnce(new Error('no acknowledgement'));
+        const first = provider.callApi('first', contextFor(firstMode), {
+          abortSignal: controller.signal,
+        });
+        await started.promise;
+        controller.abort();
+
+        await expect(first).resolves.toMatchObject({ error: 'OpenCode SDK call aborted' });
+        await expect(
+          provider.callApi('same id through alias', contextFor(secondMode)),
+        ).resolves.toMatchObject({
+          error: expect.stringContaining('previous cancellation could not be confirmed'),
+        });
+        expect(mockSessionPrompt).toHaveBeenCalledTimes(2);
+      },
+    );
+
+    it.each([
+      ['undefined', () => undefined],
+      ['null', () => null],
+      ['empty payload', () => ({})],
+      ['null data', () => ({ data: null, response: new Response('null', { status: 200 }) })],
+      [
+        'empty HTTP 200',
+        () => ({
+          data: {},
+          response: new Response(null, { status: 200, headers: { 'Content-Length': '0' } }),
+        }),
+      ],
+      ['HTTP 204', () => ({ data: {}, response: new Response(null, { status: 204 }) })],
+      ['false data', () => ({ data: false, response: new Response('false', { status: 200 }) })],
+      [
+        'affirmative data with a non-contract status',
+        () => ({ data: true, response: new Response('true', { status: 201 }) }),
+      ],
+    ] as Array<[string, () => unknown]>)(
+      'requires affirmative successful confirmation, not %s',
+      async (_label, makeResponse) => {
+        const started = createDeferred<void>();
+        const controller = new AbortController();
+        mockSessionPrompt.mockImplementationOnce(
+          (_parameters, options) =>
+            new Promise((_resolve, reject) => {
+              started.resolve();
+              options.signal.addEventListener(
+                'abort',
+                () => reject(new DOMException('Aborted', 'AbortError')),
+                { once: true },
+              );
+            }),
+        );
+        mockSessionAbort.mockResolvedValueOnce(makeResponse());
+        const provider = new OpenCodeSDKProvider({ config: { session_id: 'shared-explicit' } });
+        const first = provider.callApi('first', undefined, { abortSignal: controller.signal });
+        await started.promise;
+        const second = provider.callApi('second');
+        controller.abort();
+
+        await expect(first).resolves.toMatchObject({ error: 'OpenCode SDK call aborted' });
+        await expect(second).resolves.toMatchObject({
+          error: expect.stringContaining('previous cancellation could not be confirmed'),
+        });
+        expect(mockSessionPrompt).toHaveBeenCalledTimes(1);
+      },
+    );
+
+    it('quarantines a shared session if the server does not expose a cancellation endpoint', async () => {
+      const started = createDeferred<void>();
+      const controller = new AbortController();
+      mockCreateOpencodeClient.mockReturnValue({
+        session: {
+          create: mockSessionCreate,
+          prompt: mockSessionPrompt,
+          messages: mockSessionMessages,
+          delete: mockSessionDelete,
+          list: mockSessionList,
+        },
+      });
+      mockSessionPrompt.mockImplementationOnce(
+        (_parameters, options) =>
+          new Promise((_resolve, reject) => {
+            started.resolve();
+            options.signal.addEventListener(
+              'abort',
+              () => reject(new DOMException('Aborted', 'AbortError')),
+              { once: true },
+            );
+          }),
+      );
+      const provider = new OpenCodeSDKProvider({
+        config: { baseUrl: 'http://127.0.0.1:4096', session_id: 'shared-explicit' },
+      });
+      const first = provider.callApi('first', undefined, { abortSignal: controller.signal });
+      await started.promise;
+      const second = provider.callApi('second');
+      controller.abort();
+
+      await expect(first).resolves.toMatchObject({ error: 'OpenCode SDK call aborted' });
+      await expect(second).resolves.toMatchObject({
+        error: expect.stringContaining('previous cancellation could not be confirmed'),
+      });
+      expect(mockSessionAbort).not.toHaveBeenCalled();
+      expect(mockSessionPrompt).toHaveBeenCalledTimes(1);
+    });
+
+    it('allows a new persistent session after explicit cleanup of an unconfirmed old session', async () => {
+      const started = createDeferred<void>();
+      const controller = new AbortController();
+      mockSessionCreate
+        .mockResolvedValueOnce(createMockSessionResponse('old-session'))
+        .mockResolvedValueOnce(createMockSessionResponse('fresh-session'));
+      mockSessionPrompt.mockImplementationOnce(
+        (_parameters, options) =>
+          new Promise((_resolve, reject) => {
+            started.resolve();
+            options.signal.addEventListener(
+              'abort',
+              () => reject(new DOMException('Aborted', 'AbortError')),
+              { once: true },
+            );
+          }),
+      );
+      mockSessionAbort.mockRejectedValueOnce(new Error('server abort failed'));
+      const provider = new OpenCodeSDKProvider({ config: { persist_sessions: true } });
+      const first = provider.callApi('first', undefined, { abortSignal: controller.signal });
+      await started.promise;
+      controller.abort();
+
+      await expect(first).resolves.toMatchObject({ error: 'OpenCode SDK call aborted' });
+      await expect(provider.callApi('old session')).resolves.toMatchObject({
+        error: expect.stringContaining('previous cancellation could not be confirmed'),
+      });
+      await provider.cleanup();
+      await expect(provider.callApi('fresh session')).resolves.toMatchObject({
+        output: 'Test response',
+        sessionId: 'fresh-session',
+      });
+      expect(mockSessionPrompt).toHaveBeenCalledTimes(2);
+    });
+
+    it.each([
+      ['shared', 'existing-v1'],
+      ['ephemeral', undefined],
+    ])('sends an ordinary caller cancellation to a v1 %s session', async (_kind, sessionId) => {
+      const { importModule } = await import('../../src/esm');
+      vi.mocked(importModule).mockImplementation(async (modulePath: string) => {
+        if (/[/\\]dist[/\\]v2[/\\]/.test(modulePath)) {
+          throw new Error('v2 unavailable');
+        }
+        return {
+          createOpencode: mockCreateOpencode,
+          createOpencodeClient: mockCreateOpencodeClient,
+        };
+      });
+      const started = createDeferred<void>();
+      const controller = new AbortController();
+      mockSessionPrompt.mockImplementationOnce(
+        (parameters) =>
+          new Promise((_resolve, reject) => {
+            started.resolve();
+            parameters.signal.addEventListener(
+              'abort',
+              () => reject(new DOMException('Aborted', 'AbortError')),
+              { once: true },
+            );
+          }),
+      );
+      mockSessionAbort.mockResolvedValueOnce({ data: true });
+      const provider = new OpenCodeSDKProvider({
+        config: {
+          baseUrl: 'http://127.0.0.1:4096',
+          working_dir: '/test/work',
+          session_id: sessionId,
+        },
+      });
+      const first = provider.callApi('first', undefined, { abortSignal: controller.signal });
+      await started.promise;
+      controller.abort();
+
+      await expect(first).resolves.toMatchObject({ error: 'OpenCode SDK call aborted' });
+      expect(mockSessionAbort).toHaveBeenCalledOnce();
+      expect(mockSessionAbort.mock.calls[0]).toEqual([
+        expect.objectContaining({
+          path: { id: sessionId ?? 'test-session-123', sessionID: sessionId ?? 'test-session-123' },
+          query: { directory: '/test/work' },
+          ...(sessionId ? { signal: expect.any(AbortSignal) } : {}),
+        }),
+      ]);
+    });
+
     it('does not call session.abort when no signal is provided', async () => {
       const provider = new OpenCodeSDKProvider({
         env: { ANTHROPIC_API_KEY: 'test-api-key' },
@@ -6652,6 +7861,142 @@ describe('OpenCodeSDKProvider', () => {
         expect(scheduler.getHeaders?.(result)).toEqual({ 'x-ratelimit-reset-requests': '30s' });
       }
       expect(JSON.stringify(result)).not.toContain('synthetic-private-rate-body');
+    });
+
+    it.each([
+      {
+        label: 'nested definitive credit balance',
+        body: { error: { code: 'credit_balance_exhausted' } },
+        status: 429,
+        expected: 'quota',
+      },
+      {
+        label: 'nested definitive billing with a gateway retry header',
+        body: {
+          error: { code: 'billing_hard_limit_reached', message: 'synthetic-private-gateway-body' },
+        },
+        status: 429,
+        retryAfter: '2',
+        expected: 'quota',
+      },
+      {
+        label: 'top-level billing code with a misleading raw status',
+        body: { code: 'credit_balance_exhausted', statusCode: 400 },
+        status: 429,
+        expected: 'quota',
+      },
+      {
+        label: 'definitive type alongside an otherwise transient code',
+        body: { error: { code: 'rate_limit_exceeded', type: 'billing_not_active' } },
+        status: 429,
+        retryAfter: '2',
+        expected: 'quota',
+      },
+      {
+        label: 'ambiguous quota with no recovery header',
+        body: { error: { code: 'insufficient_quota' } },
+        status: 429,
+        expected: 'quota',
+      },
+      {
+        label: 'ambiguous quota with a short recovery header',
+        body: { error: { code: 'insufficient_quota' } },
+        status: 429,
+        retryAfter: '2',
+        expected: 'rate_limit',
+      },
+      {
+        label: 'ordinary throttle with an ambiguous type',
+        body: { error: { code: 'rate_limit_exceeded', type: 'insufficient_quota' } },
+        status: 429,
+        retryAfter: '2',
+        expected: 'rate_limit',
+      },
+      {
+        label: 'unrelated request details containing a billing code',
+        body: { request: { code: 'credit_balance_exhausted' } },
+        status: 429,
+        retryAfter: '2',
+        expected: 'rate_limit',
+      },
+      {
+        label: 'ordinary plaintext gateway throttling',
+        body: 'Too many requests',
+        status: 429,
+        retryAfter: '2',
+        expected: 'rate_limit',
+      },
+      {
+        label: 'an untagged body cannot replace a non-429 HTTP status',
+        body: { error: { code: 'credit_balance_exhausted' }, statusCode: 429 },
+        status: 400,
+        retryAfter: '2',
+        expected: undefined,
+      },
+    ])('classifies untagged gateway errors from the installed SDK: $label', async (entry) => {
+      const { createProviderRateLimitOptions } = await import(
+        '../../src/scheduler/providerWrapper'
+      );
+      const errorSpy = vi.spyOn(logger, 'error').mockImplementation(() => {});
+      const gatewayFetch = vi.fn<typeof fetch>().mockImplementation(async () => {
+        const headers = {
+          authorization: 'synthetic-private-gateway-header',
+          ...(entry.retryAfter ? { 'retry-after': entry.retryAfter } : {}),
+        };
+        return typeof entry.body === 'string'
+          ? new Response(entry.body, { status: entry.status, headers })
+          : Response.json(entry.body, { status: entry.status, headers });
+      });
+      const baseUrl = 'http://127.0.0.1:4086';
+      const actualClient = createInstalledOpencodeClient({ baseUrl, fetch: gatewayFetch });
+      const sdkPrompt = vi.spyOn(actualClient.session, 'prompt');
+      mockCreateOpencodeClient.mockReturnValueOnce(actualClient);
+      const provider = new OpenCodeSDKProvider({
+        config: { baseUrl, session_id: 'gateway-session' },
+      });
+
+      const result = await provider.callApi(`gateway error ${entry.label}`);
+
+      expect(gatewayFetch).toHaveBeenCalledTimes(1);
+      expect(gatewayFetch.mock.calls[0][0]).toMatchObject({
+        method: 'POST',
+        url: `${baseUrl}/session/gateway-session/message`,
+      });
+      const sdkResult = await sdkPrompt.mock.results[0].value;
+      expect(sdkResult.error).toEqual(entry.body);
+      expect(sdkResult.response.status).toBe(entry.status);
+      expect(result.error).toContain(`HTTP ${entry.status}`);
+      if (entry.status !== 429) {
+        expect(result.error).not.toContain('429');
+      }
+      expect(result.metadata?.rateLimitKind).toBe(entry.expected);
+      const scheduler = createProviderRateLimitOptions();
+      expect(scheduler.isRateLimited?.(result, undefined)).toBe(entry.expected === 'rate_limit');
+      if (entry.expected === 'rate_limit' && entry.retryAfter) {
+        expect(scheduler.getHeaders?.(result)).toEqual({ 'retry-after': entry.retryAfter });
+        expect(scheduler.getRetryAfter?.(result, undefined)).toBe(2000);
+      } else {
+        expect(scheduler.getHeaders?.(result)).toBeUndefined();
+        expect(scheduler.getRetryAfter?.(result, undefined)).toBeUndefined();
+      }
+      expect(result).not.toHaveProperty('raw');
+      expect(JSON.stringify({ result, logs: errorSpy.mock.calls })).not.toContain(
+        'synthetic-private-gateway',
+      );
+    });
+
+    it('does not classify untagged billing details without a trusted HTTP 429', async () => {
+      const { isProviderResponseRateLimited } = await import('../../src/scheduler/types');
+      const body = { error: { code: 'credit_balance_exhausted' } };
+      mockSessionPrompt.mockResolvedValueOnce({ error: body });
+      const provider = new OpenCodeSDKProvider({
+        config: { session_id: 'gateway-session' },
+      });
+
+      const result = await provider.callApi('untagged billing without HTTP status');
+
+      expect(result.metadata?.rateLimitKind).toBeUndefined();
+      expect(isProviderResponseRateLimited(result, undefined)).toBe(false);
     });
 
     it.each(['assistant', 'transport', 'throw'])(
