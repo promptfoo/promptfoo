@@ -22,6 +22,7 @@ vi.mock('../src/globalConfig/cloud', () => ({
     getAuthHeaderName: vi.fn(),
     getCurrentOrganizationId: vi.fn(),
     getCurrentTeamId: vi.fn(),
+    clearCurrentTeamId: vi.fn(),
   },
 }));
 
@@ -230,6 +231,21 @@ describe('monkeyPatchFetch', () => {
 
     const requestInit = mockOriginalFetch.mock.calls[0][1] as RequestInit;
     expect(new Headers(requestInit.headers).has('x-promptfoo-team-id')).toBe(false);
+  });
+
+  it('does not disclose the current team to Cloud task requests without a saved token', async () => {
+    const mockResponse = createMockResponse({ ok: true, status: 200 });
+    mockOriginalFetch.mockResolvedValue(mockResponse);
+    vi.mocked(cloudConfig.getApiKey).mockReturnValue(undefined);
+    vi.mocked(cloudConfig.getCurrentOrganizationId).mockReturnValue('org-1');
+    vi.mocked(cloudConfig.getCurrentTeamId).mockReturnValue('team-current');
+
+    const url = CLOUD_API_HOST + '/api/v1/task';
+    await monkeyPatchFetch(url);
+
+    const requestInit = mockOriginalFetch.mock.calls[0][1] as RequestInit;
+    expect(new Headers(requestInit.headers).has('x-promptfoo-team-id')).toBe(false);
+    expect(cloudConfig.getCurrentTeamId).not.toHaveBeenCalled();
   });
 
   it.each([
