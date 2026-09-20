@@ -70,6 +70,9 @@ export class OpenAiGenericProvider implements ApiProvider {
   }
 
   getOrganization(config: OpenAiSharedOptions = this.config): string | undefined {
+    if (config.organization === '') {
+      return undefined;
+    }
     return (
       config.organization || this.env?.OPENAI_ORGANIZATION || getEnvString('OPENAI_ORGANIZATION')
     );
