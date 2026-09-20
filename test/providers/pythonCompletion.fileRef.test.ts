@@ -126,6 +126,7 @@ describe('PythonProvider with file references', () => {
     vi.mocked(fsSync.readFileSync).mockImplementation(function () {
       return 'mock file content';
     });
+    vi.mocked(fsSync.existsSync).mockReturnValue(true);
     vi.mocked(fs.readFile).mockResolvedValue('mock file content');
   });
 

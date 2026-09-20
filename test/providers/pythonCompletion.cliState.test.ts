@@ -56,6 +56,7 @@ vi.mock('../../src/providers/providerRegistry', () => ({
 
 vi.mock('fs', () => ({
   default: {
+    existsSync: vi.fn().mockReturnValue(true),
     readFileSync: vi.fn().mockReturnValue('mock content'),
   },
 }));
