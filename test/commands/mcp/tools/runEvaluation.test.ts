@@ -18,6 +18,14 @@ vi.mock('../../../../src/logger', () => ({
     info: vi.fn(),
     warn: vi.fn(),
     error: vi.fn(),
+    // The evaluator creates a per-test scoped logger; mirror ChildLogger's shape.
+    child: vi.fn(() => ({
+      debug: vi.fn(),
+      info: vi.fn(),
+      warn: vi.fn(),
+      error: vi.fn(),
+      getLogs: vi.fn(() => []),
+    })),
   },
 }));
 

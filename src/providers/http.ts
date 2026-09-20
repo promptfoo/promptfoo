@@ -1412,13 +1412,14 @@ function logTransformedPrompt(
   transformedPrompt: unknown,
   prompt: unknown,
   headers?: Record<string, string>,
+  log: NonNullable<CallApiContextParams['logger']> = logger,
 ): void {
   const sanitizedTransformedPrompt = sanitizeTransformedRequestForMetadata(
     transformedPrompt,
     headers,
   );
   const sanitizedOriginalPrompt = sanitizeTransformedRequestForMetadata(prompt, headers);
-  logger.debug(
+  log.debug(
     `[HTTP Provider]: Transformed prompt: ${safeJsonStringify(sanitizedTransformedPrompt)}. Original prompt: ${safeJsonStringify(sanitizedOriginalPrompt)}`,
   );
 }
@@ -2452,6 +2453,9 @@ export class HttpProvider implements ApiProvider {
     context?: CallApiContextParams,
     options?: CallApiOptionsParams,
   ): Promise<ProviderResponse> {
+    // Use test-scoped logger if available, fallback to global logger
+    const log = context?.logger ?? logger;
+
     // Transform tools and tool_choice if transformToolsFormat is specified
     // Merge prompt.config with this.config (prompt.config takes precedence)
     const rawTools = context?.prompt?.config?.tools ?? this.config.tools;
@@ -2468,7 +2472,7 @@ export class HttpProvider implements ApiProvider {
       transformedToolChoice &&
       (!transformedTools || (Array.isArray(transformedTools) && transformedTools.length === 0))
     ) {
-      logger.warn(
+      log.warn(
         '[HTTP Provider]: tool_choice is set but tools is empty or undefined. This may cause API errors.',
       );
     }
@@ -2495,7 +2499,7 @@ export class HttpProvider implements ApiProvider {
       const authToken = await this.refreshOAuthTokenIfNeeded(vars);
 
       if (hasOwnProperty(vars, 'token')) {
-        logger.warn(
+        log.warn(
           '[HTTP Provider Auth]: `token` is already defined in vars and will be overwritten',
         );
       }
@@ -2505,12 +2509,12 @@ export class HttpProvider implements ApiProvider {
       const authToken = await this.refreshFileTokenIfNeeded(prompt, vars, context);
 
       if (hasOwnProperty(vars, 'token')) {
-        logger.warn(
+        log.warn(
           '[HTTP Provider Auth]: `token` is already defined in vars and will be overwritten',
         );
       }
       if (hasOwnProperty(vars, 'expiration')) {
-        logger.warn(
+        log.warn(
           '[HTTP Provider Auth]: `expiration` is already defined in vars and will be overwritten',
         );
       }
@@ -2526,12 +2530,12 @@ export class HttpProvider implements ApiProvider {
       invariant(this.lastSignatureTimestamp, 'Timestamp should be defined at this point');
 
       if (vars.signature) {
-        logger.warn(
+        log.warn(
           '[HTTP Provider Auth]: `signature` is already defined in vars and will be overwritten',
         );
       }
       if (vars.signatureTimestamp) {
-        logger.warn(
+        log.warn(
           '[HTTP Provider Auth]: `signatureTimestamp` is already defined in vars and will be overwritten',
         );
       }
@@ -2558,7 +2562,7 @@ export class HttpProvider implements ApiProvider {
     // Add W3C Trace Context headers if provided
     if (context?.traceparent) {
       headers.traceparent = context.traceparent;
-      logger.debug(`[HTTP Provider]: Adding traceparent header: ${context.traceparent}`);
+      log.debug(`[HTTP Provider]: Adding traceparent header: ${context.traceparent}`);
     }
     if (context?.tracestate) {
       headers.tracestate = context.tracestate;
@@ -2572,7 +2576,7 @@ export class HttpProvider implements ApiProvider {
 
     // Transform prompt using request transform
     const transformedPrompt = await (await this.transformRequest)(prompt, vars, context);
-    logTransformedPrompt(transformedPrompt, prompt, headers);
+    logTransformedPrompt(transformedPrompt, prompt, headers, log);
 
     const renderedConfig: Partial<HttpProviderConfig> = {
       url: getNunjucksEngine().renderString(this.url, vars),
@@ -2631,7 +2635,7 @@ export class HttpProvider implements ApiProvider {
         url = urlObj.toString();
       } catch (err) {
         // Fallback for potentially malformed URLs
-        logger.warn(`[HTTP Provider]: Failed to construct URL object: ${String(err)}`);
+        log.warn(`[HTTP Provider]: Failed to construct URL object: ${String(err)}`);
         const queryString = new URLSearchParams(renderedConfig.queryParams).toString();
         url = `${url}${url.includes('?') ? '&' : '?'}${queryString}`;
       }
@@ -2643,7 +2647,7 @@ export class HttpProvider implements ApiProvider {
     sanitizedRenderedConfig.body = sanitizeRequestBodyForMetadata(renderedConfig.body, headers) as
       | HttpProviderConfig['body']
       | undefined;
-    logger.debug(`[HTTP Provider]: Calling ${sanitizeUrl(url)} with config.`, {
+    log.debug(`[HTTP Provider]: Calling ${sanitizeUrl(url)} with config.`, {
       config: sanitizedRenderedConfig,
     });
 
@@ -2684,7 +2688,7 @@ export class HttpProvider implements ApiProvider {
     // Add HTTPS agent as dispatcher if configured
     if (httpsAgent) {
       fetchOptions.dispatcher = httpsAgent;
-      logger.debug('[HTTP Provider]: Using custom HTTPS agent for TLS connection');
+      log.debug('[HTTP Provider]: Using custom HTTPS agent for TLS connection');
     }
 
     let data,
@@ -2716,7 +2720,7 @@ export class HttpProvider implements ApiProvider {
     if (!(await this.validateStatus)(status)) {
       throw new Error(`HTTP call failed with status ${status} ${statusText}: ${data}`);
     }
-    logger.debug(`[HTTP Provider]: Response (HTTP ${status}) received`, {
+    log.debug(`[HTTP Provider]: Response (HTTP ${status}) received`, {
       length: typeof data === 'string' ? data.length : undefined,
       cached,
     });
@@ -2776,7 +2780,7 @@ export class HttpProvider implements ApiProvider {
         ret.sessionId = sessionId;
       }
     } catch (err) {
-      logger.error(
+      log.error(
         `Error parsing session ID: ${String(err)}. Got headers: ${safeJsonStringify(sanitizeObject(responseHeaders, { context: 'response headers' }))} and parsed body: ${safeJsonStringify(sanitizeObject(parsedData, { context: 'response body' }))}`,
       );
       throw err;
@@ -2800,6 +2804,9 @@ export class HttpProvider implements ApiProvider {
     context?: CallApiContextParams,
     options?: CallApiOptionsParams,
   ): Promise<ProviderResponse> {
+    // Use test-scoped logger if available, fallback to global logger
+    const log = context?.logger ?? logger;
+
     invariant(this.config.request, 'Expected request to be set in http provider config');
 
     // Transform prompt using request transform
@@ -2816,7 +2823,7 @@ export class HttpProvider implements ApiProvider {
 
     const renderedRequest = renderRawRequestWithNunjucks(this.config.request, escapedVars);
     const parsedRequest = parseRawRequest(renderedRequest.trim());
-    logTransformedPrompt(transformedPrompt, prompt, parsedRequest.headers);
+    logTransformedPrompt(transformedPrompt, prompt, parsedRequest.headers, log);
 
     const protocol = this.url.startsWith('https') || this.config.useHttps ? 'https' : 'http';
     let url = new URL(
@@ -2830,7 +2837,7 @@ export class HttpProvider implements ApiProvider {
     // Add W3C Trace Context headers if provided
     if (context?.traceparent) {
       parsedRequest.headers.traceparent = context.traceparent;
-      logger.debug(`[HTTP Provider]: Adding traceparent header: ${context.traceparent}`);
+      log.debug(`[HTTP Provider]: Adding traceparent header: ${context.traceparent}`);
     }
     if (context?.tracestate) {
       parsedRequest.headers.tracestate = context.tracestate;
@@ -2883,7 +2890,7 @@ export class HttpProvider implements ApiProvider {
         const reParsed = parseRawRequest(updatedRequest.trim());
         Object.assign(parsedRequest, reParsed);
       } catch (err) {
-        logger.warn(
+        log.warn(
           `[HTTP Provider]: Failed to add API key to query params in raw request: ${String(err)}`,
         );
       }
@@ -2900,7 +2907,7 @@ export class HttpProvider implements ApiProvider {
       bodyContent = extractBodyFromRawRequest(renderedRequest);
     }
 
-    logger.debug(
+    log.debug(
       `[HTTP Provider]: Calling ${sanitizeUrl(url)} with raw request: ${parsedRequest.method}`,
       {
         request: {
@@ -2926,7 +2933,7 @@ export class HttpProvider implements ApiProvider {
     // Add HTTPS agent as dispatcher if configured
     if (httpsAgent) {
       fetchOptions.dispatcher = httpsAgent;
-      logger.debug('[HTTP Provider]: Using custom HTTPS agent for TLS connection');
+      log.debug('[HTTP Provider]: Using custom HTTPS agent for TLS connection');
     }
 
     let data,
@@ -2955,7 +2962,7 @@ export class HttpProvider implements ApiProvider {
       throw err;
     }
 
-    logger.debug('[HTTP Provider]: Response received', {
+    log.debug('[HTTP Provider]: Response received', {
       length: typeof data === 'string' ? data.length : undefined,
       cached,
     });
