@@ -481,6 +481,10 @@ function isDockerSystemExecutablePath(value: string): boolean {
 }
 
 function isDockerProtectedWritePath(value: string, context: DockerAuditContext): boolean {
+  // Normalizing away `..` can conceal traversal through a symlink created in an earlier RUN.
+  if (value.split('/').includes('..')) {
+    return true;
+  }
   let absolute: string;
   if (path.posix.isAbsolute(value)) {
     absolute = path.posix.normalize(value);
@@ -493,9 +497,16 @@ function isDockerProtectedWritePath(value: string, context: DockerAuditContext):
   return (
     isDockerSystemExecutablePath(absolute) ||
     /^\/app(?:\/|$)/.test(absolute) ||
-    /^(?:\/(?:root|home\/[^/]+)\/\.npmrc|\/\.npmrc|\/(?:usr\/local\/etc|etc)\/npmrc)$/.test(
+    /^\/proc\/(?:self|thread-self|\d+)(?:\/task\/(?:self|thread-self|\d+))?\/(?:root|cwd|fd)(?:\/|$)/.test(
       absolute,
-    )
+    ) ||
+    /^\/dev\/(?:fd|stdin|stdout|stderr)(?:\/|$)/.test(absolute) ||
+    // npm can climb from /app to the filesystem root, and Node can resolve its node_modules.
+    // Protect the directory itself too: a COPY to / can populate any of these paths.
+    absolute === '/' ||
+    /^\/(?:package\.json|package-lock\.json|npm-shrinkwrap\.json|\.npmrc)$/.test(absolute) ||
+    /^\/node_modules(?:\/|$)/.test(absolute) ||
+    /^(?:\/(?:root|home\/[^/]+)\/\.npmrc|\/(?:usr\/local\/etc|etc)\/npmrc)$/.test(absolute)
   );
 }
 
@@ -589,6 +600,16 @@ function assertDockerSystemPathWrites(
       DOCKER_AUDITED_BUILD_WRITES.has(`${name}\n${signature}`))
   ) {
     return;
+  }
+  if (name === 'ln') {
+    // Relative symlink targets resolve from the link's directory, not the Docker WORKDIR.
+    // Only audited links above may use relative operands; scratch links can use absolute paths.
+    expect(
+      args.some(
+        ({ value, dynamic }) => dynamic || (!value.startsWith('-') && !value.startsWith('/')),
+      ),
+      'Unaudited Docker ln needs absolute operands',
+    ).toBe(false);
   }
   const writesProtectedPath = dockerDataWriterTargets(name, args).some((word) =>
     dockerWriterTargetsProtectedPath(word, context),
@@ -742,21 +763,112 @@ function findDockerTimeoutNpmCommands(
   return findDockerNpmCommands(command, assignments, context);
 }
 
+const DOCKER_FIND_DATA_OPTIONS = new Set([
+  '-name',
+  '-iname',
+  '-path',
+  '-ipath',
+  '-wholename',
+  '-iwholename',
+  '-regex',
+  '-iregex',
+  '-lname',
+  '-ilname',
+  '-type',
+  '-xtype',
+  '-maxdepth',
+  '-mindepth',
+  '-amin',
+  '-atime',
+  '-cmin',
+  '-ctime',
+  '-mmin',
+  '-mtime',
+  '-size',
+  '-user',
+  '-group',
+  '-uid',
+  '-gid',
+  '-perm',
+  '-newer',
+  '-anewer',
+  '-cnewer',
+  '-samefile',
+  '-inum',
+  '-links',
+  '-fstype',
+  '-printf',
+  '-fprint',
+  '-fprint0',
+  '-fls',
+]);
+const DOCKER_FIND_NO_DATA_OPTIONS = new Set([
+  '--',
+  '-H',
+  '-L',
+  '-P',
+  '-a',
+  '-and',
+  '-o',
+  '-or',
+  '-not',
+  '-follow',
+  '-xdev',
+  '-mount',
+  '-depth',
+  '-daystart',
+  '-ignore_readdir_race',
+  '-noignore_readdir_race',
+  '-print',
+  '-print0',
+  '-ls',
+  '-empty',
+  '-executable',
+  '-readable',
+  '-writable',
+  '-nouser',
+  '-nogroup',
+  '-prune',
+  '-quit',
+  '-false',
+  '-true',
+]);
+
 function assertDockerFindCommands(
   args: DockerShellWord[],
   assignments: string[],
   context: DockerAuditContext,
 ): void {
   for (let i = 0; i < args.length; i++) {
-    if (!['-exec', '-execdir', '-ok', '-okdir'].includes(args[i].value)) {
+    const { value } = args[i];
+    expect(value, 'Destructive Docker find actions need an explicit audit').not.toBe('-delete');
+    if (DOCKER_FIND_DATA_OPTIONS.has(value) || value === '-fprintf') {
+      // These operands are data: a literal `-delete` used as a filename pattern is harmless.
+      i += value === '-fprintf' ? 2 : 1;
+      expect(i, `Docker find ${value} needs its literal operands`).toBeLessThan(args.length);
+      continue;
+    }
+    if (!['-exec', '-execdir', '-ok', '-okdir'].includes(value)) {
+      // Unknown options can change operand interpretation and hide a later destructive action.
+      expect(
+        !value.startsWith('-') || DOCKER_FIND_NO_DATA_OPTIONS.has(value),
+        `Unaudited Docker find option: ${value}`,
+      ).toBe(true);
       continue;
     }
     const end = args.findIndex((word, index) => index > i && [';', '+'].includes(word.value));
     expect(end, 'Docker find needs an explicit terminator for an audited command').toBeGreaterThan(
       i + 1,
     );
+    const command = args.slice(i + 1, end).map((word) => ({
+      ...word,
+      // find replaces `{}` with a matched path, possibly outside the Docker WORKDIR.
+      dynamic: word.dynamic || word.value.includes('{}'),
+    }));
+    // -execdir/-okdir also change the child's working directory without needing `{}`.
+    const commandContext = value.endsWith('dir') ? { ...context, workdir: null } : context;
     // find can match no files; it cannot provide either mandatory npm command.
-    expect(findDockerNpmCommands(args.slice(i + 1, end), assignments, context)).toEqual([]);
+    expect(findDockerNpmCommands(command, assignments, commandContext)).toEqual([]);
     i = end;
   }
 }
@@ -1793,6 +1905,227 @@ describe('package manifests', () => {
       'RUN printf %s harmless > scratch.txt && chmod +x scratch.txt',
     ];
     expect(() => validateDockerInstallCommands(commands.join('\n'))).not.toThrow();
+  });
+
+  it('rejects Docker npm ancestor fallback after find removes the local project boundary', () => {
+    const dockerfile = [
+      'FROM node:24-alpine',
+      'WORKDIR /app',
+      'RUN npm ci --ignore-scripts && npm rebuild ./node_modules/esbuild ./node_modules/@swc/core',
+      `RUN printf '%s' '{"scripts":{"build":"npm run postinstall --prefix /tmp/unapproved"}}' > /package.json`,
+      'RUN find /app/node_modules -delete',
+      'RUN find /app -maxdepth 1 -name package.json -delete',
+      'RUN npm run build',
+    ];
+    expect(() => validateDockerInstallCommands(dockerfile.join('\n'))).toThrow();
+  });
+
+  it.each([
+    '/package.json',
+    '/package-lock.json',
+    '/npm-shrinkwrap.json',
+    '/.npmrc',
+    '/node_modules',
+    '/node_modules/.package-lock.json',
+    '/node_modules/npm/package.json',
+    '/tmp/../package.json',
+    '../package.json',
+    '../node_modules/npm/package.json',
+  ])('rejects Docker writes to npm control paths above the audited project: %s', (target) => {
+    const dockerfile = [
+      'FROM node:24-alpine',
+      'WORKDIR /app',
+      'RUN npm ci --ignore-scripts && npm rebuild ./node_modules/esbuild ./node_modules/@swc/core',
+      `RUN printf '%s' replacement > ${target}`,
+      'RUN npm run build',
+    ];
+    expect(() => validateDockerInstallCommands(dockerfile.join('\n'))).toThrow();
+  });
+
+  it.each([
+    'RUN echo replacement | tee /package.json',
+    'RUN ln -sf /tmp/replacement /package-lock.json',
+    'RUN chmod +w /npm-shrinkwrap.json',
+    'RUN chown root /node_modules',
+    'RUN mkdir -p /node_modules/npm',
+    'RUN find /tmp -fprintf /package.json replacement',
+    'COPY replacement.json /package.json',
+    'COPY dependencies /node_modules',
+    'COPY ancestor-controls/ /',
+    `RUN ${JSON.stringify(['tee', '/package.json'])}`,
+  ])('rejects other Docker writers targeting npm ancestor controls: %s', (instruction) => {
+    const safe =
+      'RUN npm ci --ignore-scripts && npm rebuild ./node_modules/esbuild ./node_modules/@swc/core';
+    const dockerfile = `FROM node:24-alpine\nWORKDIR /app\n${safe}\n${instruction}\nRUN npm run build`;
+    expect(() => validateDockerInstallCommands(dockerfile)).toThrow();
+  });
+
+  it.each([
+    'find /app/node_modules -delete',
+    'find /app -maxdepth 1 -name package.json -delete',
+    `find /app '-delete'`,
+    String.raw`find /app -de\lete`,
+    'find /tmp -name package.json -delete',
+    `find /tmp -name '-delete' -o -delete`,
+    'busybox find /app -delete',
+    'command find /app -delete',
+    'timeout 5 find /app -delete',
+    String.raw`find /app -exec rm -rf {} \;`,
+  ])('rejects destructive Docker find actions independently of ancestor writes: %s', (command) => {
+    const safe =
+      'RUN npm ci --ignore-scripts && npm rebuild ./node_modules/esbuild ./node_modules/@swc/core';
+    const dockerfile = `FROM node:24-alpine\nWORKDIR /app\n${safe}\nRUN ${command}\nRUN npm run build`;
+    expect(() => validateDockerInstallCommands(dockerfile)).toThrow();
+  });
+
+  it('rejects destructive Docker find in exec form', () => {
+    const safe =
+      'RUN npm ci --ignore-scripts && npm rebuild ./node_modules/esbuild ./node_modules/@swc/core';
+    const command = ['find', '/app', '-maxdepth', '1', '-name', 'package.json', '-delete'];
+    expect(() =>
+      validateDockerInstallCommands(
+        `FROM node:24-alpine\nWORKDIR /app\n${safe}\nRUN ${JSON.stringify(command)}`,
+      ),
+    ).toThrow();
+  });
+
+  it('keeps read-only Docker find operations and unrelated root or scratch files auditable', () => {
+    const commands = [
+      'FROM node:24-alpine',
+      'WORKDIR /app',
+      'RUN npm ci --ignore-scripts && npm rebuild ./node_modules/esbuild ./node_modules/@swc/core',
+      'RUN find /app -maxdepth 1 -name package.json -print',
+      `RUN find /tmp -name '-delete' -print`,
+      'RUN find /tmp -depth -name scratch -print',
+      'RUN printf %s harmless > /scratch-control && chmod +x /scratch-control',
+      'RUN printf %s harmless > /tmp/scratch-control',
+      `RUN echo '/package.json' '/node_modules' '-delete'`,
+      'RUN npm run build',
+    ];
+    expect(() => validateDockerInstallCommands(commands.join('\n'))).not.toThrow();
+  });
+
+  it.each([
+    '/proc/self/root/package.json',
+    '/proc/self/root/app/package.json',
+    '/proc/self/cwd/package.json',
+    '/proc/self/cwd/../package.json',
+    '/proc/thread-self/root/package-lock.json',
+    '/proc/1/root/npm-shrinkwrap.json',
+    '/proc/self/task/1/root/node_modules/npm/package.json',
+    '/dev/fd/3',
+    '/dev/fd/../root/package.json',
+  ])('rejects Docker writes through process-root and descriptor aliases: %s', (target) => {
+    const safe =
+      'RUN npm ci --ignore-scripts && npm rebuild ./node_modules/esbuild ./node_modules/@swc/core';
+    expect(() =>
+      validateDockerInstallCommands(
+        `FROM node:24-alpine\nWORKDIR /app\n${safe}\nRUN printf %s replacement > ${target}\nRUN npm run build`,
+      ),
+    ).toThrow();
+  });
+
+  it.each([
+    ['ln -s .. /tmp/ancestor', '/tmp/ancestor/package.json'],
+    ['ln -s app /scratch-alias', '/scratch-alias/package.json'],
+    ['ln -s /tmp /tmp/scratch/alias', '/tmp/scratch/alias/../package.json'],
+  ])('rejects Docker scratch symlink escapes via %s', (link, destination) => {
+    const dockerfile = [
+      'FROM node:24-alpine',
+      'WORKDIR /app',
+      'RUN npm ci --ignore-scripts && npm rebuild ./node_modules/esbuild ./node_modules/@swc/core',
+      'RUN mkdir -p /tmp/scratch',
+      'WORKDIR /tmp/scratch',
+      `RUN ${link}`,
+      'WORKDIR /app',
+      `RUN printf %s replacement > ${destination}`,
+      'RUN npm run build',
+    ];
+    expect(() => validateDockerInstallCommands(dockerfile.join('\n'))).toThrow();
+  });
+
+  it.each([
+    String.raw`find /app -maxdepth 1 -name package.json -exec ln -sf /tmp/unsafe.json '{}' \;`,
+    String.raw`find /app -maxdepth 1 -name package.json -exec tee '{}' \;`,
+    String.raw`find /app -maxdepth 1 -name package.json -execdir chmod +w '{}' \;`,
+    String.raw`find /app -maxdepth 1 -name package.json -ok chown root '{}' \;`,
+    String.raw`find /app -maxdepth 1 -name package.json -okdir command tee '{}' \;`,
+    String.raw`find / -maxdepth 1 -name app -exec tee '{}/package.json' \;`,
+    String.raw`find /app -exec printf %s harmless \; -delete`,
+    'find /app -unsupported-with-unknown-arity -name -delete',
+  ])(
+    'rejects Docker find commands with dynamic writer targets or disguised actions: %s',
+    (command) => {
+      const dockerfile = [
+        'FROM node:24-alpine',
+        'WORKDIR /app',
+        'RUN npm ci --ignore-scripts && npm rebuild ./node_modules/esbuild ./node_modules/@swc/core',
+        'WORKDIR /tmp',
+        `RUN ${command}`,
+        'WORKDIR /app',
+        'RUN npm run build',
+      ];
+      expect(() => validateDockerInstallCommands(dockerfile.join('\n'))).toThrow();
+    },
+  );
+
+  it('allows Docker find placeholders and action-looking operands only as harmless data', () => {
+    const dockerfile = [
+      'FROM node:24-alpine',
+      'WORKDIR /app',
+      'RUN npm ci --ignore-scripts && npm rebuild ./node_modules/esbuild ./node_modules/@swc/core',
+      String.raw`RUN find /tmp -exec echo '{}' \;`,
+      String.raw`RUN find /tmp -exec printf %s '-delete' \;`,
+      `RUN find /tmp -iname '-delete' -print`,
+      `RUN find /tmp -path '-delete' -print`,
+      `RUN find /tmp -printf '-delete'`,
+      'WORKDIR /tmp',
+      'RUN printf %s scratch > ./scratch-data && printf %s discarded > /dev/null',
+      'RUN ln -s /tmp/scratch-data /tmp/scratch-alias',
+      'WORKDIR /app',
+      'RUN npm run build',
+    ];
+    expect(() => validateDockerInstallCommands(dockerfile.join('\n'))).not.toThrow();
+  });
+
+  it.each([
+    String.raw`find /app -maxdepth 1 -name package.json -execdir tee package.json \;`,
+    String.raw`find /app -maxdepth 1 -name package.json -execdir chmod +w package.json \;`,
+    String.raw`find /app -maxdepth 1 -name package.json -okdir command tee package.json \;`,
+    String.raw`find /app -maxdepth 1 -name package.json -execdir sh -c 'printf %s replacement > package.json' \;`,
+    JSON.stringify([
+      'find',
+      '/app',
+      '-name',
+      'package.json',
+      '-execdir',
+      'tee',
+      'package.json',
+      ';',
+    ]),
+  ])('rejects Docker find working-directory changes for relative writers: %s', (command) => {
+    const dockerfile = [
+      'FROM node:24-alpine',
+      'WORKDIR /app',
+      'RUN npm ci --ignore-scripts && npm rebuild ./node_modules/esbuild ./node_modules/@swc/core',
+      'WORKDIR /tmp',
+      `RUN ${command}`,
+      'WORKDIR /app',
+      'RUN npm run build',
+    ];
+    expect(() => validateDockerInstallCommands(dockerfile.join('\n'))).toThrow();
+  });
+
+  it('allows Docker find directory delegation for read-only or absolute scratch operations', () => {
+    const dockerfile = [
+      'FROM node:24-alpine',
+      'WORKDIR /app',
+      'RUN npm ci --ignore-scripts && npm rebuild ./node_modules/esbuild ./node_modules/@swc/core',
+      String.raw`RUN find /app -maxdepth 1 -name package.json -execdir echo package.json \;`,
+      String.raw`RUN find /app -maxdepth 1 -name package.json -execdir tee /tmp/scratch-output \;`,
+      'RUN npm run build',
+    ];
+    expect(() => validateDockerInstallCommands(dockerfile.join('\n'))).not.toThrow();
   });
 
   it.each([
