@@ -28,7 +28,7 @@ The `bedrock` provider lets you use Amazon Bedrock in your evals. It supports Be
    - `~/.aws/credentials`
    - `AWS_ACCESS_KEY_ID` and `AWS_SECRET_ACCESS_KEY` environment variables
 
-   See [setting node.js credentials (AWS)](https://docs.aws.amazon.com/sdk-for-javascript/v2/developer-guide/setting-credentials-node.html) for more details.
+   See the [AWS SDK for JavaScript v3 credential provider chain](https://docs.aws.amazon.com/sdk-for-javascript/v3/developer-guide/setting-credentials-node.html) for details.
 
 4. Edit your configuration file to point to the AWS Bedrock provider. Here's an example:
 
