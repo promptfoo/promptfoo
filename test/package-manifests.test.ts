@@ -21,19 +21,74 @@ function readPackageJson<T>(relativePath: string): T {
   return JSON.parse(fs.readFileSync(packageJsonPath, 'utf8')) as T;
 }
 
-// Match individual shell commands, including continued Docker RUN instructions.
-function validateDockerInstallCommands(dockerfile: string): void {
-  const instructions = dockerfile
+function splitShellSegments(input: string): string[] {
+  const segments: string[] = [];
+  let current = '';
+  let inSingle = false;
+  let inDouble = false;
+
+  for (let i = 0; i < input.length; i++) {
+    const ch = input[i];
+    if (ch === "'" && !inDouble) {
+      inSingle = !inSingle;
+    } else if (ch === '"' && !inSingle) {
+      inDouble = !inDouble;
+    }
+    if (
+      !inSingle &&
+      !inDouble &&
+      (ch === ';' || ((ch === '&' || ch === '|') && input[i + 1] === ch))
+    ) {
+      if (current.trim()) {
+        segments.push(current.trim());
+      }
+      current = '';
+      if (ch !== ';') {
+        i++;
+      }
+      continue;
+    }
+    current += ch;
+  }
+  if (current.trim()) {
+    segments.push(current.trim());
+  }
+  return segments;
+}
+
+function extractRunBodies(dockerfile: string): string[] {
+  const normalized = dockerfile.replace(/\\\r?\n/g, ' ');
+  return normalized
     .split('\n')
-    .filter((line) => !line.trimStart().startsWith('#'))
-    .join('\n')
-    .replace(/\\\r?\n/g, ' ')
-    // Normalize literal shell spelling so n\\pm and n'p'm cannot hide npm.
-    // This intentionally errs toward rejecting quoted command-like text.
-    .replace(/\\(.)/g, '$1')
-    .replace(/["']/g, '');
-  const commands = [...instructions.matchAll(/(?<![\w.-])npm\b([^;&|()\n]*)/g)].map(([, text]) =>
-    text.trim().split(/\s+/),
+    .map((line) => line.trim())
+    .filter((line) => line.length > 0 && !line.startsWith('#'))
+    .filter((line) => /^RUN\b/i.test(line))
+    .map((line) => line.replace(/^RUN\s+(?:--[^\s]+\s+)*/i, '').trim());
+}
+
+function isNpmLikeToken(token: string): boolean {
+  const normalized = token.replace(/\\(.)/g, '$1').replace(/["']/g, '');
+  return normalized === 'npm' || /(?:^|[^A-Za-z0-9_])npm$/.test(normalized);
+}
+
+// Match npm subcommands only when npm is the unquoted executable in a RUN segment.
+function validateDockerInstallCommands(dockerfile: string): void {
+  const commands = extractRunBodies(dockerfile).flatMap((runBody) =>
+    splitShellSegments(runBody).flatMap((segment) => {
+      const tokens = segment.split(/\s+/).filter(Boolean);
+      const npmIndex = tokens.findIndex(isNpmLikeToken);
+      if (npmIndex === -1) {
+        return [];
+      }
+      const environmentAssignments = tokens.findIndex(
+        (token) => !/^[A-Za-z_][A-Za-z0-9_]*=[^\s]+$/.test(token),
+      );
+      // Reject quoted, escaped, or path-qualified executables, and reject textual npm
+      // mentions that are not the command being run.
+      expect(npmIndex).toBe(environmentAssignments);
+      expect(tokens[npmIndex]).toBe('npm');
+      return [tokens.slice(npmIndex + 1)];
+    }),
   );
   expect(commands.some(([command]) => command === 'ci')).toBe(true);
   expect(commands.some(([command]) => command === 'rebuild')).toBe(true);

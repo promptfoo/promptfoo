@@ -656,7 +656,7 @@ describe('OllamaChatProvider', () => {
   });
 
   it('should handle think configuration when it is not provided', async () => {
-    const provider = new OllamaCompletionProvider('llama3.3');
+    const provider = new OllamaChatProvider('llama3.3');
     const mockResponse = {
       data: '',
       cached: false,
@@ -675,7 +675,7 @@ describe('OllamaChatProvider', () => {
   });
 
   it('should handle think configuration when it is false', async () => {
-    const provider = new OllamaCompletionProvider('llama3.3', {
+    const provider = new OllamaChatProvider('llama3.3', {
       config: {
         think: false,
       },
@@ -698,7 +698,7 @@ describe('OllamaChatProvider', () => {
   });
 
   it('should handle think configuration when it is true', async () => {
-    const provider = new OllamaCompletionProvider('llama3.3', {
+    const provider = new OllamaChatProvider('llama3.3', {
       config: {
         think: true,
       },

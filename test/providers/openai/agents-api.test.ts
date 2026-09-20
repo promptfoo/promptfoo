@@ -2266,6 +2266,22 @@ describe('OpenAiAgentsApiProvider', () => {
     expect(result.cost).toBeUndefined();
   });
 
+  it('rejects non-finite session usage and falls back to the root turn', async () => {
+    mockApi((pathname, method) => {
+      if (method === 'POST' && pathname.endsWith('/sessions')) {
+        return new Response(
+          '{"id":"sess_test","status":"idle","agent":{"model":"gpt-6-astra"},"usage":{"input_tokens":1e999,"output_tokens":20,"total_tokens":120}}',
+        );
+      }
+      return undefined;
+    });
+
+    const result = await provider({ usageTimeoutMs: 0 }).callApi('hi');
+
+    expect(result.tokenUsage).toMatchObject({ prompt: 100, completion: 20, total: 120 });
+    expect(result.metadata).not.toHaveProperty('usageUnavailable');
+  });
+
   it.each([false, true])(
     'uses valid root usage when session usage is malformed (subagents=%s)',
     async (hasSubagents) => {
