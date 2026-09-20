@@ -68,13 +68,9 @@ function normalizeContentPart(part: unknown, role: unknown): unknown {
  *
  * Only role-bearing message objects are touched. Explicit `type: 'message'` input items are
  * messages too; other typed items (function calls, tool outputs, reasoning items) must keep
- * their shape verbatim. A non-array input (a plain string prompt) is returned unchanged.
+ * their shape verbatim.
  */
-export function normalizeResponsesInput<T>(input: T): T {
-  if (!Array.isArray(input)) {
-    return input;
-  }
-
+function normalizeResponsesInput(input: unknown[]): unknown[] {
   return input.map((item) => {
     if (!item || typeof item !== 'object' || Array.isArray(item)) {
       return item;
@@ -91,5 +87,21 @@ export function normalizeResponsesInput<T>(input: T): T {
       ...message,
       content: message.content.map((part) => normalizeContentPart(part, message.role)),
     };
-  }) as T;
+  });
+}
+
+/**
+ * Turn a prompt into the Responses API `input` field.
+ *
+ * A prompt that parses as a JSON array is a message list, so it is normalized; anything else (a
+ * plain string, or JSON that isn't an array) is sent verbatim. Every `*:responses:*` provider
+ * builds `input` through here so none of them can miss the chat-format translation.
+ */
+export function parseResponsesInput(prompt: string): unknown {
+  try {
+    const parsed = JSON.parse(prompt);
+    return Array.isArray(parsed) ? normalizeResponsesInput(parsed) : prompt;
+  } catch {
+    return prompt;
+  }
 }
