@@ -2778,8 +2778,11 @@ describe('OpenCodeSDKProvider', () => {
             type: 'json_schema',
             schema: {
               type: 'object',
+              $defs: {
+                Answer: { type: 'string' },
+              },
               properties: {
-                answer: { type: 'string' },
+                answer: { $ref: '#/$defs/Answer' },
               },
               required: ['answer'],
             },
@@ -2798,8 +2801,11 @@ describe('OpenCodeSDKProvider', () => {
             type: 'json_schema',
             schema: {
               type: 'object',
+              $defs: {
+                Answer: { type: 'string' },
+              },
               properties: {
-                answer: { type: 'string' },
+                answer: { $ref: '#/$defs/Answer' },
               },
               required: ['answer'],
             },

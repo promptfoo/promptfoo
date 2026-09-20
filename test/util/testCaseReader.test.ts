@@ -1,4 +1,5 @@
 import * as fs from 'fs';
+import * as os from 'os';
 import * as path from 'path';
 
 import dedent from 'dedent';
@@ -853,6 +854,172 @@ not valid json`,
       },
     ]);
   });
+
+  it('dereferences single-object JSON refs against the file root while preserving schemas', async () => {
+    const schema = {
+      $defs: { Status: { type: 'string' } },
+      properties: { status: { $ref: '#/$defs/Status' } },
+      type: 'object',
+    };
+    vi.mocked(fs.readFileSync).mockReturnValue(
+      JSON.stringify({
+        $defs: { Status: { const: 'CONFIG' } },
+        definitions: { payload: { status: 'ready' } },
+        options: { response_format: { schema, type: 'json_schema' } },
+        vars: { payload: { $ref: '#/definitions/payload' } },
+      }),
+    );
+
+    const result = await readStandaloneTestsFile('test.json');
+
+    expect(result).toHaveLength(1);
+    expect(result[0].description).toBe('Row #1');
+    expect(result[0].vars?.payload).toEqual({ status: 'ready' });
+    expect(result[0].options?.response_format).toEqual({ schema, type: 'json_schema' });
+  });
+
+  it('dereferences JSONL refs against each row root', async () => {
+    vi.mocked(fs.readFileSync).mockReturnValue(
+      JSON.stringify({
+        definitions: { payload: { status: 'ready' } },
+        vars: { payload: { $ref: '#/definitions/payload' } },
+      }),
+    );
+
+    const result = await readStandaloneTestsFile('test.jsonl');
+
+    expect(result).toHaveLength(1);
+    expect(result[0].description).toBe('Row #1');
+    expect(result[0].vars?.payload).toEqual({ status: 'ready' });
+  });
+
+  it.each(['json', 'jsonl'])(
+    'makes generated descriptions available to refs in %s rows',
+    async (format) => {
+      vi.mocked(fs.readFileSync).mockReturnValue(
+        JSON.stringify({ vars: { description: { $ref: '#/description' } } }),
+      );
+
+      const result = await readStandaloneTestsFile(`test.${format}`);
+
+      expect(result[0].description).toBe('Row #1');
+      expect(result[0].vars?.description).toBe('Row #1');
+    },
+  );
+
+  it('rejects prototype targets without mutating Object.prototype', async () => {
+    vi.mocked(fs.readFileSync).mockReturnValue(JSON.stringify({ $ref: '#/constructor/prototype' }));
+    delete (Object.prototype as { description?: string }).description;
+
+    try {
+      // RefParser resolves pointer tokens with `Object.hasOwn`, so `constructor` is no longer
+      // reachable through the prototype chain and the ref is rejected before anything resolves to
+      // `Object.prototype`. `assertPlainTestRow` stays as defense in depth -- see the test below.
+      await expect(readStandaloneTestsFile('test.json')).rejects.toThrow(
+        'Missing $ref pointer "#/constructor/prototype"',
+      );
+      expect(Object.prototype).not.toHaveProperty('description');
+      expect({}).not.toHaveProperty('description');
+    } finally {
+      delete (Object.prototype as { description?: string }).description;
+    }
+  });
+
+  it('rejects a resolved test row that is not a plain object', async () => {
+    vi.mocked(fs.readFileSync).mockReturnValue(JSON.stringify([[{ vars: { a: 1 } }]]));
+
+    await expect(readStandaloneTestsFile('test.json')).rejects.toThrow(
+      'Resolved test row 1 is not a plain object',
+    );
+  });
+
+  it.each(['json', 'jsonl'])(
+    'preserves root ref identity when describing %s rows',
+    async (format) => {
+      vi.mocked(fs.readFileSync).mockReturnValue(
+        JSON.stringify({ vars: { whole: { $ref: '#' } } }),
+      );
+
+      const result = await readStandaloneTestsFile(`test.${format}`);
+
+      expect(result[0].description).toBe('Row #1');
+      expect(result[0].vars?.whole).toBe(result[0]);
+      expect((result[0].vars?.whole as TestCase).description).toBe('Row #1');
+    },
+  );
+
+  it.each(['json', 'jsonl'])(
+    'keeps descriptions selected by whole-test refs in %s',
+    async (format) => {
+      vi.mocked(fs.readFileSync).mockReturnValue(
+        JSON.stringify({
+          $ref: '#/definitions/test',
+          definitions: {
+            test: {
+              description: 'Selected description',
+              vars: { payload: 'ready' },
+            },
+          },
+        }),
+      );
+
+      const result = await readStandaloneTestsFile(`test.${format}`);
+
+      expect(result[0].description).toBe('Selected description');
+      expect(result[0].vars?.payload).toBe('ready');
+    },
+  );
+
+  it.each(['json', 'jsonl'])(
+    'does not inject a default past a selected extended ref in %s',
+    async (format) => {
+      vi.mocked(fs.readFileSync).mockReturnValue(
+        JSON.stringify({
+          $ref: '#/definitions/middle',
+          definitions: {
+            final: { vars: { ready: true } },
+            middle: {
+              $ref: '#/definitions/final',
+              description: 'Selected description',
+            },
+          },
+        }),
+      );
+
+      const result = (await readStandaloneTestsFile(`test.${format}`)) as any[];
+
+      expect(result[0].description).toBe('Selected description');
+      expect(result[0].vars.ready).toBe(true);
+      expect(result[0].definitions.final).not.toHaveProperty('description');
+    },
+  );
+
+  it.each(['file://definitions.json#/vars/payload', './definitions.json#/vars/payload'])(
+    'does not treat an external root fragment as a local description target: %s',
+    async (ref) => {
+      const realFs = await vi.importActual<typeof import('fs/promises')>('fs/promises');
+      const directory = await realFs.mkdtemp(path.join(os.tmpdir(), 'promptfoo-test-description-'));
+      await realFs.writeFile(
+        path.join(directory, 'definitions.json'),
+        JSON.stringify({ vars: { payload: { vars: { external: true } } } }),
+      );
+      vi.mocked(fs.readFileSync).mockReturnValue(
+        JSON.stringify({
+          $ref: ref,
+          vars: { payload: { local: true } },
+        }),
+      );
+
+      try {
+        const result = await readStandaloneTestsFile('test.json', directory);
+
+        expect(result[0].description).toBe('Row #1');
+        expect(result[0].vars?.payload).toEqual({ local: true });
+      } finally {
+        await realFs.rm(directory, { force: true, recursive: true });
+      }
+    },
+  );
 });
 
 describe('readTest', () => {
@@ -866,6 +1033,21 @@ describe('readTest', () => {
 
   afterEach(() => {
     clearAllMocks();
+  });
+
+  it('dereferences a file-backed test against the document root', async () => {
+    vi.mocked(fs.readFileSync).mockReturnValue(
+      yaml.dump({
+        definitions: { payload: { status: 'ready' } },
+        vars: { payload: { $ref: '#/definitions/payload' } },
+      }),
+    );
+
+    const result = (await readTest('test.yaml')) as TestCase & {
+      definitions: { payload: { status: string } };
+    };
+
+    expect(result.vars?.payload).toBe(result.definitions.payload);
   });
 
   it('readTest with string input (path to test config)', async () => {
@@ -1079,6 +1261,27 @@ describe('readTest', () => {
     expect(fs.readFileSync).toHaveBeenCalledTimes(1);
     expect(result).toEqual(testContent);
   });
+
+  it('should keep refs inert in a file-backed test when the ref parser is disabled', async () => {
+    const testContent = {
+      description: 'Disabled ref parser',
+      vars: {
+        missing: { $ref: '#/missing' },
+        remote: { $ref: 'https://example.com/missing.json' },
+      },
+    };
+    vi.mocked(getEnvBool).mockImplementation(
+      (key, defaultValue = false) => key === 'PROMPTFOO_DISABLE_REF_PARSER' || defaultValue,
+    );
+    vi.mocked(fs.readFileSync).mockReturnValueOnce(yaml.dump(testContent));
+
+    const result = await readTest('disabled.yaml');
+
+    expect(result).toEqual(testContent);
+    expect(maybeLoadConfigFromExternalFile).toHaveBeenCalledWith(testContent, undefined, {
+      preserveRefs: true,
+    });
+  });
 });
 
 describe('readTests', () => {
@@ -1207,6 +1410,25 @@ describe('readTests', () => {
         vars: 'vars1.yaml',
       },
     ]);
+    expect(globSync).not.toHaveBeenCalled();
+    expect(loadApiProvider).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ['json', (testCase: object) => JSON.stringify([testCase])],
+    ['jsonl', (testCase: object) => JSON.stringify(testCase)],
+    ['yaml', (testCase: object) => yaml.dump([testCase])],
+  ])('readTests keeps Azure %s refs as inert remote data', async (extension, serialize) => {
+    const blobUri = `az://account/container/tests.${extension}`;
+    const testCase = {
+      description: `Azure ${extension} remote ref`,
+      vars: { payload: { $ref: 'file:///definitely/missing/promptfoo-pr-5256.json' } },
+    };
+    vi.mocked(readAzureBlobText).mockResolvedValue(serialize(testCase));
+
+    const result = await readTests(blobUri);
+
+    expect(result).toEqual([testCase]);
     expect(globSync).not.toHaveBeenCalled();
     expect(loadApiProvider).not.toHaveBeenCalled();
   });
@@ -1573,6 +1795,454 @@ describe('readTests', () => {
       expect.any(Object),
     );
   });
+
+  it.each([
+    ['yaml', (testCase: object) => yaml.dump([testCase])],
+    ['json', (testCase: object) => JSON.stringify([testCase])],
+    ['jsonl', (testCase: object) => JSON.stringify(testCase)],
+  ])('should preserve schema refs in external %s test files', async (extension, serialize) => {
+    const mockProvider = createMockProvider({ id: 'openai:chat:gpt-4o' });
+    vi.mocked(loadApiProvider).mockResolvedValue(mockProvider);
+    const schema = {
+      type: 'object',
+      $defs: { Status: { type: 'string' } },
+      properties: {
+        status: { $ref: '#/$defs/Status' },
+        relative: { $ref: './missing-schema.json#/$defs/Relative' },
+      },
+    };
+    const testCase = {
+      description: 'External structured output schema',
+      provider: {
+        id: 'openai:chat:gpt-4o',
+        config: {
+          response_format: {
+            type: 'json_schema',
+            json_schema: { name: 'status', schema },
+          },
+        },
+      },
+      options: {
+        response_format: { type: 'json_schema', schema },
+      },
+      assert: [{ type: 'contains', value: 'ready' }],
+    };
+    vi.mocked(fs.readFileSync).mockReturnValue(serialize(testCase));
+    vi.mocked(globSync).mockReturnValue([`test.${extension}`]);
+
+    const result = await readTests([`test.${extension}`]);
+
+    expect(result[0].provider).toBe(mockProvider);
+    expect(result[0].options?.response_format).toEqual({ type: 'json_schema', schema });
+    expect(maybeLoadConfigFromExternalFile).toHaveBeenCalledWith(expect.any(Array), undefined, {
+      preserveRefs: true,
+    });
+    expect(loadApiProvider).toHaveBeenCalledWith('openai:chat:gpt-4o', {
+      basePath: '.',
+      options: expect.objectContaining({
+        config: {
+          response_format: {
+            type: 'json_schema',
+            json_schema: {
+              name: 'status',
+              schema,
+            },
+          },
+        },
+      }),
+    });
+  });
+
+  it('dereferences globbed JSONL refs against each row root', async () => {
+    vi.mocked(fs.readFileSync).mockReturnValue(
+      JSON.stringify({
+        definitions: { payload: { status: 'ready' } },
+        vars: { payload: { $ref: '#/definitions/payload' } },
+      }),
+    );
+    vi.mocked(globSync).mockReturnValue(['test.jsonl']);
+
+    const result = (await readTests(['test.jsonl'])) as Array<
+      TestCase & { definitions: { payload: { status: string } } }
+    >;
+
+    expect(result[0].vars?.payload).toBe(result[0].definitions.payload);
+  });
+
+  it.each([
+    '#/0/definitions/payload',
+    '#/%30/definitions/payload',
+    '#/0%2Fdefinitions%2Fpayload',
+    '#/%2530/definitions/payload',
+    '#/0%252Fdefinitions%252Fpayload',
+  ])('preserves cross-row ref %s in globbed JSONL files', async (ref) => {
+    vi.mocked(fs.readFileSync).mockReturnValue(
+      [
+        JSON.stringify({ definitions: { payload: { status: 'ready' } }, vars: { seed: true } }),
+        JSON.stringify({ vars: { payload: { $ref: ref } } }),
+      ].join('\n'),
+    );
+    vi.mocked(globSync).mockReturnValue(['test.jsonl']);
+
+    const result = (await readTests(['test.jsonl'])) as Array<
+      TestCase & { definitions?: { payload: { status: string } } }
+    >;
+
+    expect(result[1].vars?.payload).toBe(result[0].definitions?.payload);
+  });
+
+  it('preserves row-local and cross-row JSONL refs together', async () => {
+    vi.mocked(fs.readFileSync).mockReturnValue(
+      [
+        JSON.stringify({
+          definitions: { payload: { status: 'ready' } },
+          vars: {
+            local: { $ref: '#/definitions/payload' },
+            whole: { $ref: '#' },
+          },
+        }),
+        JSON.stringify({ vars: { cross: { $ref: '#/0/definitions/payload' } } }),
+      ].join('\n'),
+    );
+    const result = (await readStandaloneTestsFile('test.jsonl')) as Array<
+      TestCase & { definitions?: { payload: { status: string } } }
+    >;
+
+    expect(result[0].vars?.whole).toBe(result[0]);
+    expect(result[0].vars?.local).toBe(result[0].definitions?.payload);
+    expect(result[1].vars?.cross).toBe(result[0].definitions?.payload);
+  });
+
+  it('discovers schemas owned through cross-row JSONL refs', async () => {
+    const schema = {
+      properties: { status: { $ref: '#/$defs/Status' } },
+      type: 'object',
+    };
+    vi.mocked(fs.readFileSync).mockReturnValue(
+      [
+        JSON.stringify({
+          $defs: { Status: { const: 'CONFIG' } },
+          definitions: {
+            provider: {
+              id: 'openai:chat:gpt-4o',
+              config: { response_format: { schema, type: 'json_schema' } },
+            },
+            schema,
+          },
+          vars: { ordinary: { $ref: '#/definitions/schema' } },
+        }),
+        JSON.stringify({
+          options: {
+            response_format: {
+              schema: { $ref: '#/0/definitions/schema' },
+              type: 'json_schema',
+            },
+          },
+          provider: { $ref: '#/0/definitions/provider' },
+        }),
+      ].join('\n'),
+    );
+
+    const result = (await readStandaloneTestsFile('test.jsonl')) as any[];
+
+    expect(result[0].vars.ordinary.properties.status).toEqual({ const: 'CONFIG' });
+    expect(result[1].provider.config.response_format.schema).toEqual(schema);
+    expect(result[1].options.response_format.schema).toEqual(schema);
+  });
+
+  it('uses the full pointer to disambiguate numeric JSONL row keys', async () => {
+    vi.mocked(fs.readFileSync).mockReturnValue(
+      [
+        JSON.stringify({ definitions: { payload: { status: 'ready' } } }),
+        JSON.stringify({
+          0: { unrelated: true },
+          vars: { picked: { $ref: '#/0/definitions/payload' } },
+        }),
+      ].join('\n'),
+    );
+
+    const result = (await readStandaloneTestsFile('test.jsonl')) as any[];
+
+    expect(result[1].vars.picked).toBe(result[0].definitions.payload);
+  });
+
+  it('makes generated descriptions available across JSONL rows', async () => {
+    vi.mocked(fs.readFileSync).mockReturnValue(
+      [
+        JSON.stringify({ vars: { seed: true } }),
+        JSON.stringify({ vars: { description: { $ref: '#/0/description' } } }),
+      ].join('\n'),
+    );
+
+    const result = await readStandaloneTestsFile('test.jsonl');
+
+    expect(result[0].description).toBe('Row #1');
+    expect(result[1].vars?.description).toBe('Row #1');
+  });
+
+  it('makes selected descriptions visible to local and cross-row refs', async () => {
+    vi.mocked(fs.readFileSync).mockReturnValue(
+      [
+        JSON.stringify({
+          $ref: '#/definitions/test',
+          definitions: {
+            test: {
+              description: 'Selected description',
+              vars: { description: { $ref: '#/description' } },
+            },
+          },
+        }),
+        JSON.stringify({ vars: { description: { $ref: '#/0/description' } } }),
+      ].join('\n'),
+    );
+
+    const result = await readStandaloneTestsFile('test.jsonl');
+
+    expect(result[0].description).toBe('Selected description');
+    expect(result[0].vars?.description).toBe('Selected description');
+    expect(result[1].vars?.description).toBe('Selected description');
+  });
+
+  it('does not inject defaults into targets selected by explicitly described rows', async () => {
+    vi.mocked(fs.readFileSync).mockReturnValue(
+      [
+        JSON.stringify({
+          $ref: '#/definitions/test',
+          definitions: { test: { vars: { ready: true } } },
+          description: 'Explicit description',
+        }),
+        JSON.stringify({ vars: { selected: { $ref: '#/0/definitions/test' } } }),
+      ].join('\n'),
+    );
+
+    const result = (await readStandaloneTestsFile('test.jsonl')) as any[];
+
+    expect(result[0].description).toBe('Explicit description');
+    expect(result[0].definitions.test).not.toHaveProperty('description');
+    expect(result[1].vars.selected).toBe(result[0].definitions.test);
+  });
+
+  it.each(['json', 'jsonl'])(
+    'keeps defaults on extended %s ref rows instead of their targets',
+    async (format) => {
+      const rows = [
+        { $ref: '#/2', vars: { own: 'first' } },
+        { $ref: '#/2', description: 'Explicit second', vars: { own: 'second' } },
+        { vars: { base: true } },
+      ];
+      vi.mocked(fs.readFileSync).mockReturnValue(
+        format === 'json'
+          ? JSON.stringify(rows)
+          : rows.map((row) => JSON.stringify(row)).join('\n'),
+      );
+
+      const result = await readStandaloneTestsFile(`test.${format}`);
+
+      expect(result[0].description).toBe('Row #1');
+      expect(result[1].description).toBe('Explicit second');
+      expect(result[2].description).toBe('Row #3');
+    },
+  );
+
+  it('preserves identity for pure cross-row aliases and cycles', async () => {
+    vi.mocked(fs.readFileSync).mockReturnValue(
+      [JSON.stringify({ vars: { ready: true } }), JSON.stringify({ $ref: '#/0' })].join('\n'),
+    );
+    const aliases = await readStandaloneTestsFile('test.jsonl');
+
+    expect(aliases[1]).toBe(aliases[0]);
+    expect(aliases[1].description).toBe('Row #1');
+
+    vi.mocked(fs.readFileSync).mockReturnValue(
+      [JSON.stringify({ $ref: '#/1' }), JSON.stringify({ $ref: '#/0' })].join('\n'),
+    );
+    const cycle = await readStandaloneTestsFile('test.jsonl');
+
+    expect(cycle[1]).toBe(cycle[0]);
+    expect(cycle[0].description).toBe('Row #1');
+  });
+
+  it.each(['json', 'jsonl'])(
+    'makes generated descriptions visible inside a selected %s root',
+    async (format) => {
+      vi.mocked(fs.readFileSync).mockReturnValue(
+        JSON.stringify({
+          $ref: '#/definitions/test',
+          definitions: {
+            test: { vars: { description: { $ref: '#/description' } } },
+          },
+        }),
+      );
+
+      const result = await readStandaloneTestsFile(`test.${format}`);
+
+      expect(result[0].description).toBe('Row #1');
+      expect(result[0].vars?.description).toBe('Row #1');
+    },
+  );
+
+  it('prefers a row-local numeric key over JSONL array-root interpretation', async () => {
+    vi.mocked(fs.readFileSync).mockReturnValue(
+      JSON.stringify({
+        0: { payload: 'ROW_LOCAL' },
+        payload: 'ARRAY_INTERPRETATION',
+        vars: { picked: { $ref: '#/0/payload' } },
+      }),
+    );
+    vi.mocked(globSync).mockReturnValue(['test.jsonl']);
+
+    const result = await readTests(['test.jsonl']);
+
+    expect(result[0].vars?.picked).toBe('ROW_LOCAL');
+  });
+
+  it('preserves parser-safe encoding for percent-bearing row-local JSONL keys', async () => {
+    const values = {
+      '%': { value: 'percent' },
+      '%2F': { value: 'encoded-slash' },
+      'name%20literal': { value: 'literal-percent-sequence' },
+    };
+    const refFor = (key: string) => `#/definitions/${encodeURIComponent(encodeURIComponent(key))}`;
+    vi.mocked(fs.readFileSync).mockReturnValue(
+      JSON.stringify({
+        definitions: values,
+        vars: Object.fromEntries(Object.keys(values).map((key) => [key, { $ref: refFor(key) }])),
+      }),
+    );
+
+    const result = (await readStandaloneTestsFile('test.jsonl')) as any[];
+
+    expect(result[0].vars).toEqual(values);
+  });
+
+  it('does not let schema-local numeric refs change JSONL row roots', async () => {
+    const schema = {
+      0: { const: 'SCHEMA_ZERO' },
+      properties: { value: { $ref: '#/0' } },
+      type: 'object',
+    };
+    vi.mocked(fs.readFileSync).mockReturnValue(
+      JSON.stringify({
+        definitions: { payload: { status: 'ready' } },
+        options: { response_format: { schema, type: 'json_schema' } },
+        vars: { payload: { $ref: '#/definitions/payload' } },
+      }),
+    );
+    vi.mocked(globSync).mockReturnValue(['test.jsonl']);
+
+    const result = (await readTests(['test.jsonl'])) as Array<
+      TestCase & { definitions?: { payload: { status: string } } }
+    >;
+
+    expect(result[0].vars?.payload).toEqual(result[0].definitions?.payload);
+    expect(result[0].options?.response_format).toEqual({ schema, type: 'json_schema' });
+  });
+
+  it.each([
+    ['yaml', (testCase: object) => yaml.dump([testCase])],
+    ['json', (testCase: object) => JSON.stringify([testCase])],
+    ['jsonl', (testCase: object) => JSON.stringify(testCase)],
+  ])(
+    'should keep refs inert in external %s tests when the ref parser is disabled',
+    async (extension, serialize) => {
+      const refs = {
+        cyclic: { $ref: '#/0/vars/refs' },
+        file: { $ref: 'file:///definitely/missing/promptfoo-pr-5256.json' },
+        malformed: { $ref: '#/%ZZ' },
+        missing: { $ref: '#/missing' },
+        relative: { $ref: './missing.json' },
+        remote: { $ref: 'https://example.com/missing.json' },
+      };
+      const testCase = {
+        description: 'Disabled ref parser',
+        vars: { refs },
+      };
+      vi.mocked(getEnvBool).mockImplementation(
+        (key, defaultValue = false) => key === 'PROMPTFOO_DISABLE_REF_PARSER' || defaultValue,
+      );
+      vi.mocked(fs.readFileSync).mockReturnValue(serialize(testCase));
+      vi.mocked(globSync).mockReturnValue([`test.${extension}`]);
+
+      const result = await readTests([`test.${extension}`]);
+
+      expect(result[0].vars?.refs).toEqual(refs);
+      expect(maybeLoadConfigFromExternalFile).toHaveBeenCalledWith(expect.any(Array), undefined, {
+        preserveRefs: true,
+      });
+    },
+  );
+
+  it('skips JSONL schema discovery when the ref parser is disabled', async () => {
+    const definitions: Record<string, unknown> = { node0: { type: 'equals', value: 'x' } };
+    for (let depth = 1; depth <= 13; depth++) {
+      definitions[`node${depth}`] = {
+        assert: [
+          { $ref: `#/definitions/node${depth - 1}` },
+          { $ref: `#/definitions/node${depth - 1}` },
+        ],
+        type: 'assert-set',
+      };
+    }
+    const row = {
+      definitions,
+      assert: [{ $ref: '#/definitions/node13' }],
+    };
+    vi.mocked(getEnvBool).mockImplementation(
+      (key, defaultValue = false) => key === 'PROMPTFOO_DISABLE_REF_PARSER' || defaultValue,
+    );
+    vi.mocked(fs.readFileSync).mockReturnValue(JSON.stringify(row));
+
+    const result = (await readStandaloneTestsFile('test.jsonl')) as any[];
+
+    expect(result[0].assert[0]).toEqual({ $ref: '#/definitions/node13' });
+  });
+
+  it.each(['json', 'jsonl'])(
+    'does not follow root refs for descriptions when %s ref parsing is disabled',
+    async (format) => {
+      const row = {
+        $ref: '#/definitions/test',
+        definitions: { test: { vars: { original: true } } },
+      };
+      vi.mocked(getEnvBool).mockImplementation(
+        (key, defaultValue = false) => key === 'PROMPTFOO_DISABLE_REF_PARSER' || defaultValue,
+      );
+      vi.mocked(fs.readFileSync).mockReturnValue(JSON.stringify(row));
+
+      const result = (await readStandaloneTestsFile(`test.${format}`)) as any[];
+
+      expect(result[0].$ref).toBe('#/definitions/test');
+      expect(result[0].description).toBe('Row #1');
+      expect(result[0].definitions.test).not.toHaveProperty('description');
+    },
+  );
+
+  it.each(['json', 'jsonl'])(
+    'should preserve schema refs through the scalar external %s route',
+    async (extension) => {
+      const schema = {
+        type: 'object',
+        $defs: { Status: { type: 'string' } },
+        properties: {
+          remote: { $ref: 'https://example.com/status.json' },
+          status: { $ref: '#/$defs/Status' },
+        },
+      };
+      const testCase = {
+        description: 'Scalar external structured output schema',
+        options: { response_format: { type: 'json_schema', schema } },
+        assert: [{ type: 'is-json', value: schema }],
+      };
+      vi.mocked(fs.readFileSync).mockReturnValue(
+        extension === 'json' ? JSON.stringify([testCase]) : JSON.stringify(testCase),
+      );
+
+      const result = await readTests(`test.${extension}`);
+
+      expect(result[0].options?.response_format).toEqual({ type: 'json_schema', schema });
+      expect((result[0].assert?.[0] as any)?.value).toEqual(schema);
+    },
+  );
 
   it('should warn when assert is found in vars', async () => {
     const testWithAssertInVars = [
