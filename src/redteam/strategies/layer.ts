@@ -91,7 +91,6 @@ export async function addLayerTestCases(
       ].includes(providerId);
       const metricSuffix = getMetricSuffix(stepObj.id);
       const label = typeof config?.label === 'string' ? config.label : undefined;
-      const strategyId = getStrategyId(stepObj.id, perTurnLayers, label);
       const scanId = crypto.randomUUID();
 
       logger.debug(`layer strategy: configuring attack provider`, {
@@ -102,8 +101,30 @@ export async function addLayerTestCases(
 
       // Transform current test cases to use the attack provider
       // with per-turn layers configured
-      return current.map((testCase) => {
+      const attackProviderTargets =
+        (stepObj.config as Record<string, unknown>)?.plugins ?? (config?.plugins as unknown);
+      const applicable = current.filter((testCase) =>
+        pluginMatchesStrategyTargets(
+          testCase,
+          stepObj.id,
+          attackProviderTargets as string[] | undefined,
+        ),
+      );
+
+      return applicable.map((testCase) => {
         const originalText = String(testCase.vars?.[injectVar] ?? '');
+        // Per-turn transforms execute later under a synthetic
+        // `runtime-transform` test case, where the originating plugin's
+        // exclusions are no longer available. Enforce them here, while each
+        // original test case and its pluginConfig are still in scope.
+        const applicablePerTurnLayers = perTurnLayers.filter((layer) => {
+          const id = typeof layer === 'string' ? layer : layer.id;
+          const layerTargets =
+            (typeof layer === 'string' ? undefined : layer.config?.plugins) ??
+            (config?.plugins as unknown);
+          return pluginMatchesStrategyTargets(testCase, id, layerTargets as string[] | undefined);
+        });
+        const strategyId = getStrategyId(stepObj.id, applicablePerTurnLayers, label);
         return {
           ...testCase,
           provider: {
@@ -118,7 +139,9 @@ export async function addLayerTestCases(
                 typeof config?.targetId === 'string' ? config.targetId : undefined,
               ),
               // Pass per-turn layers for runtime application
-              ...(perTurnLayers.length > 0 && { _perTurnLayers: perTurnLayers }),
+              ...(applicablePerTurnLayers.length > 0 && {
+                _perTurnLayers: applicablePerTurnLayers,
+              }),
             },
           },
           assert: testCase.assert?.map((assertion) => ({

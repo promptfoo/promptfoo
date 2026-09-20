@@ -92,6 +92,7 @@ describe('Plugin Documentation', () => {
     'index.ts',
     'base.ts',
     'dataExfil.ts', // Grader class, not a user-facing plugin
+    'dataStructureInjectionCases.ts', // Deterministic corpus data, not a plugin
     'imageDatasetPluginBase.ts',
     'imageDatasetUtils.ts',
     'multiInputFormat.ts',
@@ -119,6 +120,21 @@ describe('Plugin Documentation', () => {
   });
 
   describe('Plugin data synchronization', () => {
+    it('marks data-structure-injection as agent-only', async () => {
+      const docsModule = await import(
+        path.join(__dirname, '../../../site/docs/_shared/data/plugins.ts')
+      );
+      const dsi = (
+        docsModule.PLUGINS as Array<{ pluginId?: unknown; applicationTypes?: unknown }>
+      ).find((plugin) => plugin.pluginId === 'data-structure-injection');
+
+      expect(dsi?.applicationTypes).toEqual({
+        rag: false,
+        agent: true,
+        chat: false,
+      });
+    });
+
     it('should have all plugins from constants in documentation data', async () => {
       const constantsPlugins = await loadPluginsFromConstants();
       const docsPlugins = await loadPluginsFromDocs();
