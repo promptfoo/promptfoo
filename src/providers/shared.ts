@@ -46,6 +46,10 @@ export interface ProviderConfig {
   passthrough?: object;
 }
 
+/** A finite, non-negative number: the shape every token count and per-token rate must have. */
+const isNonNegativeFinite = (value: unknown): value is number =>
+  typeof value === 'number' && Number.isFinite(value) && value >= 0;
+
 /**
  * Calculates the cost of an API call based on the model and token usage.
  *
@@ -63,28 +67,32 @@ export function calculateCost(
   completionTokens: number | undefined,
   models: ProviderModel[],
 ): number | undefined {
+  if (!isNonNegativeFinite(promptTokens) || !isNonNegativeFinite(completionTokens)) {
+    return undefined;
+  }
+
+  const modelCost = models.find((m) => m.id === modelName)?.cost;
+
+  const longContextCost =
+    modelCost?.longContext && promptTokens > modelCost.longContext.threshold
+      ? modelCost.longContext
+      : undefined;
+  const inputCost = config.inputCost ?? config.cost ?? longContextCost?.input ?? modelCost?.input;
+  const outputCost =
+    config.outputCost ?? config.cost ?? longContextCost?.output ?? modelCost?.output;
+
   if (
-    !Number.isFinite(promptTokens) ||
-    !Number.isFinite(completionTokens) ||
-    typeof promptTokens === 'undefined' ||
-    typeof completionTokens === 'undefined'
+    (inputCost !== undefined && !isNonNegativeFinite(inputCost)) ||
+    (outputCost !== undefined && !isNonNegativeFinite(outputCost)) ||
+    (promptTokens !== 0 && inputCost === undefined) ||
+    (completionTokens !== 0 && outputCost === undefined)
   ) {
     return undefined;
   }
 
-  const model = models.find((m) => m.id === modelName);
-  if (!model || !model.cost) {
-    return undefined;
-  }
-
-  const longContextCost =
-    model.cost.longContext && promptTokens > model.cost.longContext.threshold
-      ? model.cost.longContext
-      : undefined;
-  const inputCost = config.inputCost ?? config.cost ?? longContextCost?.input ?? model.cost.input;
-  const outputCost =
-    config.outputCost ?? config.cost ?? longContextCost?.output ?? model.cost.output;
-  return inputCost * promptTokens + outputCost * completionTokens;
+  // Guard above proves a cost is only undefined when its token count is 0, so `?? 0` is safe.
+  const total = (inputCost ?? 0) * promptTokens + (outputCost ?? 0) * completionTokens;
+  return Number.isFinite(total) ? total : undefined;
 }
 
 /**

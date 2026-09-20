@@ -8,6 +8,7 @@ import {
 } from '../../src/providers/fireworks/chat';
 import { FireworksEmbeddingProvider } from '../../src/providers/fireworks/embedding';
 import { OpenAiChatCompletionProvider } from '../../src/providers/openai/chat';
+import { OPENAI_ORGANIZATION_HEADER } from '../../src/providers/openai/index';
 import { mockProcessEnv } from '../util/utils';
 
 const FIREWORKS_API_BASE = 'https://api.fireworks.ai/inference/v1';
@@ -89,6 +90,7 @@ describe('Fireworks AI', () => {
       try {
         const provider = new FireworksProvider(FIREWORKS_MODEL, {});
         expect(provider.config.apiBaseUrl).toBe('https://self-hosted.example.com/v1');
+        expect(provider.getApiUrl()).toBe('https://self-hosted.example.com/v1');
       } finally {
         restoreEnv();
       }
@@ -103,6 +105,21 @@ describe('Fireworks AI', () => {
           config: { apiBaseUrl: 'https://explicit.example.com/v1' },
         });
         expect(provider.config.apiBaseUrl).toBe('https://explicit.example.com/v1');
+        expect(provider.getApiUrl()).toBe('https://explicit.example.com/v1');
+      } finally {
+        restoreEnv();
+      }
+    });
+
+    it('prefers provider-level FIREWORKS_API_BASE_URL over process env', () => {
+      const restoreEnv = mockProcessEnv({
+        FIREWORKS_API_BASE_URL: 'https://process.example.com/v1',
+      });
+      try {
+        const provider = new FireworksProvider(FIREWORKS_MODEL, {
+          env: { FIREWORKS_API_BASE_URL: 'https://provider.example.com/v1' },
+        });
+        expect(provider.getApiUrl()).toBe('https://provider.example.com/v1');
       } finally {
         restoreEnv();
       }
@@ -128,6 +145,7 @@ describe('Fireworks AI', () => {
           config: { organization: 'org-from-config' },
         });
         expect(provider.getOrganization()).toBeUndefined();
+        expect(provider.getOpenAiRequestHeaders()).not.toHaveProperty(OPENAI_ORGANIZATION_HEADER);
       } finally {
         restoreEnv();
       }
@@ -209,6 +227,20 @@ describe('Fireworks AI', () => {
       expect(provider.getApiUrl()).toBe(FIREWORKS_API_BASE);
     });
 
+    it('prefers provider-level FIREWORKS_API_BASE_URL over process env', () => {
+      const restoreEnv = mockProcessEnv({
+        FIREWORKS_API_BASE_URL: 'https://process.example.com/v1',
+      });
+      try {
+        const provider = new FireworksEmbeddingProvider(EMBEDDING_MODEL, {
+          env: { FIREWORKS_API_BASE_URL: 'https://provider.example.com/v1' },
+        });
+        expect(provider.getApiUrl()).toBe('https://provider.example.com/v1');
+      } finally {
+        restoreEnv();
+      }
+    });
+
     it('does not fall back to OPENAI_API_KEY when FIREWORKS_API_KEY is missing', () => {
       const restoreEnv = mockProcessEnv({
         FIREWORKS_API_KEY: undefined,
@@ -239,6 +271,7 @@ describe('Fireworks AI', () => {
           config: { organization: 'org-from-config' } as any,
         });
         expect(provider.getOrganization()).toBeUndefined();
+        expect(provider.getOpenAiRequestHeaders()).not.toHaveProperty(OPENAI_ORGANIZATION_HEADER);
       } finally {
         restoreEnv();
       }
