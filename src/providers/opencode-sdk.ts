@@ -9,7 +9,14 @@ import cliState from '../cliState';
 import { getEnvString } from '../envars';
 import { importModule } from '../esm';
 import logger, { getLogLevel } from '../logger';
-import { DEFINITIVE_BILLING_ERROR_CODES, HARD_QUOTA_ERROR_CODES } from '../util/fetch/errors';
+import { rateLimitTimingFromHeaders } from '../util/fetch';
+import {
+  extractRateLimitErrorType,
+  HttpRateLimitError,
+  isDefinitiveBillingCode,
+  isHardQuotaCode,
+  isTransientRateLimitCode,
+} from '../util/fetch/errors';
 import { REDACTED } from '../util/sanitizer';
 import { escapeRegExp } from '../util/text';
 import {
@@ -29,6 +36,7 @@ import type {
   ProviderResponse,
   SkillCallEntry,
 } from '../types/index';
+import type { ProviderShutdownReason } from './providerRegistry';
 
 /**
  * OpenCode SDK Provider
@@ -416,9 +424,11 @@ interface OpenCodeClient {
   session: {
     create: (
       parameters: Record<string, unknown>,
+      options?: Record<string, unknown>,
     ) => Promise<OpenCodeSdkResult<Record<string, unknown>>>;
     prompt: (
       parameters: Record<string, unknown>,
+      options?: Record<string, unknown>,
     ) => Promise<OpenCodeSdkResult<OpenCodePromptResponse>>;
     messages: (
       parameters: Record<string, unknown>,
@@ -428,7 +438,10 @@ interface OpenCodeClient {
       parameters: Record<string, unknown>,
       options?: Record<string, unknown>,
     ) => Promise<unknown>;
-    abort?: (parameters: Record<string, unknown>) => Promise<unknown>;
+    abort?: (
+      parameters: Record<string, unknown>,
+      options?: Record<string, unknown>,
+    ) => Promise<unknown>;
   };
 }
 
@@ -911,7 +924,11 @@ function addOpenCodeConfigCredentials(
   }
 }
 
-function addStrongOpenCodeUrlCredentials(url: unknown, remember: (value: unknown) => void): void {
+function addStrongOpenCodeUrlCredentials(
+  url: unknown,
+  remember: (value: unknown) => void,
+  includePrivatePath = true,
+): void {
   if (typeof url !== 'string' || !url) {
     return;
   }
@@ -923,12 +940,25 @@ function addStrongOpenCodeUrlCredentials(url: unknown, remember: (value: unknown
       // Raw values are still covered when the URL is malformed.
     }
   };
+  const oraclePassword = url.match(
+    /^jdbc:oracle:(?:thin|oci(?:8)?):[^/@]+\/(?:(?:"((?:""|[^"])*)")|([^@]*))@/i,
+  );
+  if (oraclePassword) {
+    const password = oraclePassword[1] ?? oraclePassword[2];
+    rememberEncoded(password);
+    if (oraclePassword[1] !== undefined) {
+      rememberEncoded(password.replace(/""/g, '"'));
+    }
+  }
+  const connectionUrl = url.replace(/^jdbc:/i, '');
   try {
-    const parsed = new URL(url);
+    const parsed = new URL(connectionUrl);
     rememberEncoded(parsed.password);
-    addOpenCodeUrlPathCredentials(parsed.pathname, rememberEncoded);
+    if (includePrivatePath) {
+      addOpenCodeUrlPathCredentials(parsed.pathname, rememberEncoded);
+    }
   } catch {
-    const password = url.match(/^[a-z][\w+.-]*:\/\/[^/?#@:]*:([^/?#@]*)@/i)?.[1];
+    const password = connectionUrl.match(/^[a-z][\w+.-]*:\/\/[^/?#@:]*:([^/?#@]*)@/i)?.[1];
     if (password) {
       rememberEncoded(password);
     }
@@ -947,6 +977,44 @@ function addStrongOpenCodeUrlCredentials(url: unknown, remember: (value: unknown
       }
       if (OPEN_CODE_CREDENTIAL_NAME.test(key) || /^(?:opaque|session(?:id)?|code)$/i.test(key)) {
         rememberEncoded(parameter.slice(equals + 1), true);
+      }
+    }
+  }
+}
+
+function addStrongOpenCodeEnvironmentCredentials(
+  key: string,
+  value: unknown,
+  remember: (value: unknown) => void,
+  includePrivateUrlPath = false,
+): void {
+  if (OPEN_CODE_CREDENTIAL_NAME.test(key)) {
+    addOpenCodeEnvironmentValue(key, value, remember, true);
+  }
+  if (typeof value !== 'string') {
+    return;
+  }
+  if (/url|uri|dsn|proxy|connection/i.test(key) || /^(?:jdbc:|[a-z][\w+.-]*:\/\/)/i.test(value)) {
+    addStrongOpenCodeUrlCredentials(value, remember, includePrivateUrlPath);
+  }
+  const authorization = value.match(/^\s*(?:proxy-)?authorization\s*:\s*(.+)$/i)?.[1];
+  if (authorization) {
+    addOpenCodeHeaderCredentials(authorization, remember);
+  }
+  if (/dsn|connection/i.test(key) || /(?:^|[;,\s])[\w.-]+\s*=/.test(value)) {
+    for (const field of value.matchAll(
+      /(?:^|[;,\s])([\w.-]+)\s*=\s*(?:"((?:""|[^"])*)"|'((?:''|[^'])*)'|\{((?:}}|[^}])*)\}|([^;,\s]+))/g,
+    )) {
+      if (OPEN_CODE_CREDENTIAL_NAME.test(field[1])) {
+        const credential = field[2] ?? field[3] ?? field[4] ?? field[5];
+        remember(credential);
+        if (field[2] !== undefined) {
+          remember(credential.replace(/""/g, '"'));
+        } else if (field[3] !== undefined) {
+          remember(credential.replace(/''/g, "'"));
+        } else if (field[4] !== undefined) {
+          remember(credential.replace(/}}/g, '}'));
+        }
       }
     }
   }
@@ -987,9 +1055,7 @@ function addStrongOpenCodeServerCredentials(
     }
   } else if (server?.type === 'local') {
     for (const [key, value] of Object.entries(server.environment ?? {})) {
-      if (OPEN_CODE_CREDENTIAL_NAME.test(key)) {
-        addOpenCodeEnvironmentValue(key, value, remember, true);
-      }
+      addStrongOpenCodeEnvironmentCredentials(key, value, remember, true);
     }
     addStrongOpenCodeCommandCredentials(server.command, remember);
   }
@@ -1007,9 +1073,13 @@ function addStrongOpenCodeCommandCredentials(
     if (credentialFollows) {
       addOpenCodeEnvironmentValue('', argument, remember, true);
     }
+    addStrongOpenCodeEnvironmentCredentials('', argument, remember, true);
     credentialFollows = false;
     const equals = argument.indexOf('=');
     const key = (equals === -1 ? argument : argument.slice(0, equals)).replace(/^-+/, '');
+    if (equals !== -1) {
+      addStrongOpenCodeEnvironmentCredentials(key, argument.slice(equals + 1), remember, true);
+    }
     if (!OPEN_CODE_CREDENTIAL_NAME.test(key)) {
       continue;
     }
@@ -1048,8 +1118,21 @@ function openCodeConfigHasCompoundMcpCommand(config: OpenCodeSDKConfig): boolean
     }
     return words.some((word, index) => {
       const pathSegments = word.split(/[/\\]/);
-      const executable = pathSegments[pathSegments.length - 1]?.toLowerCase().replace(/\.exe$/, '');
+      const executable = pathSegments[pathSegments.length - 1]
+        ?.toLowerCase()
+        .replace(/\.(?:exe|cmd|bat)$/, '');
       if (!executable) {
+        return false;
+      }
+      if (
+        index > 0 &&
+        /^(?:-p|--package)$/.test(words[index - 1]) &&
+        words
+          .slice(0, index - 1)
+          .some((earlier) =>
+            /(?:^|[/\\])(?:npx|npm|pnpm|yarn)(?:\.(?:exe|cmd|bat))?$/i.test(earlier),
+          )
+      ) {
         return false;
       }
       const options = words.slice(index + 1);
@@ -1069,8 +1152,17 @@ function openCodeConfigHasCompoundMcpCommand(config: OpenCodeSDKConfig): boolean
           /^-(?:c|command|e|enc|encodedcommand)(?:$|[=:])/i.test(option),
         );
       }
+      if (/^(?:npx|npm|pnpm|yarn)$/.test(executable)) {
+        // For package runners -p selects a package (or an npm output mode), not inline code.
+        // Actual shells and interpreters nested after a runner are classified independently.
+        return options.some((option) =>
+          /^(?:--(?:eval|execute|command|call|shell(?:-mode)?|script-shell)(?:$|=)|-[yqn]*c(?:$|[^-]))/i.test(
+            option,
+          ),
+        );
+      }
       if (
-        /^(?:node(?:js)?|tsx|ts-node|jiti|babel-node|esno|coffee|deno|bun|python(?:\d+(?:\.\d+)*)?|pypy(?:\d+)?|ruby|perl|php|lua(?:\d+(?:\.\d+)*)?|npx|npm|pnpm|yarn)$/.test(
+        /^(?:node(?:js)?|tsx|ts-node|jiti|babel-node|esno|coffee|deno|bun|python(?:\d+(?:\.\d+)*)?|pypy(?:\d+)?|ruby|perl|php|lua(?:\d+(?:\.\d+)*)?)$/.test(
           executable,
         )
       ) {
@@ -1258,6 +1350,34 @@ function getSessionPath(sessionId: string): OpenCodeSessionPath {
   };
 }
 
+// Only code-authored, public diagnostic text may use this class. In particular,
+// arbitrary configuration keys and SDK error messages must never be interpolated.
+class OpenCodeLocalDiagnosticError extends Error {}
+
+const OPEN_CODE_PUBLIC_POLICY_NAMES = new Set([
+  '*',
+  'apply_patch',
+  'bash',
+  'codesearch',
+  'doom_loop',
+  'edit',
+  'external_directory',
+  'glob',
+  'grep',
+  'list',
+  'lsp',
+  'patch',
+  'question',
+  'read',
+  'skill',
+  'task',
+  'todoread',
+  'todowrite',
+  'webfetch',
+  'websearch',
+  'write',
+]);
+
 /**
  * Convert the user-facing object-shaped permission config into the
  * rule-array shape required by the v2 `session.create.permission` API.
@@ -1281,7 +1401,9 @@ export function convertPermissionConfigToRuleset(
     Array.isArray(config) ||
     ![Object.prototype, null].includes(Object.getPrototypeOf(config))
   ) {
-    throw new Error('OpenCode permission must be an object mapping tools to permission rules');
+    throw new OpenCodeLocalDiagnosticError(
+      'OpenCode permission must be an object mapping tools to permission rules',
+    );
   }
 
   const rules: OpenCodePermissionRule[] = [];
@@ -1300,12 +1422,20 @@ export function convertPermissionConfigToRuleset(
       Array.isArray(value) ||
       ![Object.prototype, null].includes(Object.getPrototypeOf(value))
     ) {
-      throw new Error(`OpenCode permission.${tool} must be ask, allow, deny, or a pattern mapping`);
+      const field = OPEN_CODE_PUBLIC_POLICY_NAMES.has(tool)
+        ? `OpenCode permission.${tool}`
+        : 'OpenCode permission entries';
+      throw new OpenCodeLocalDiagnosticError(
+        `${field} must be ask, allow, deny, or a pattern mapping`,
+      );
     }
 
     for (const [pattern, action] of Object.entries(value)) {
       if (!isOpenCodePermissionAction(action)) {
-        throw new Error(`OpenCode permission.${tool}.${pattern} must be ask, allow, or deny`);
+        const field = OPEN_CODE_PUBLIC_POLICY_NAMES.has(tool)
+          ? `OpenCode permission.${tool}${pattern === '*' ? '.*' : ' patterns'}`
+          : 'OpenCode permission patterns';
+        throw new OpenCodeLocalDiagnosticError(`${field} must be ask, allow, or deny`);
       }
       rules.push({ permission: tool, pattern, action });
     }
@@ -1438,7 +1568,7 @@ async function loadOpenCodeSDK(): Promise<LoadedOpenCodeSDKModule> {
 
   const err = new Error('Failed to resolve @opencode-ai/sdk');
   logger.error(`Failed to load OpenCode SDK: ${err}`);
-  throw new Error(
+  throw new OpenCodeLocalDiagnosticError(
     dedent`The @opencode-ai/sdk package is required but not installed.
 
     To use the OpenCode SDK provider, install it with:
@@ -1463,10 +1593,13 @@ export class OpenCodeSDKProvider implements ApiProvider {
   private hasUnclosedCredentialSource = false;
   private activeCallCount = 0;
   private clearClientCredentialsAfterCalls = false;
-  private shutdownRequested = false;
+  private shutdownRequested?: Exclude<ProviderShutdownReason, 'process'>;
   private deferredShutdown?: NodeJS.Immediate;
   private automaticCleanup?: Promise<void>;
+  private automaticCleanupReason?: Exclude<ProviderShutdownReason, 'process'>;
   private explicitCleanup?: Promise<void>;
+  private readonly processTermination = new AbortController();
+  private terminationCleanup?: Promise<void>;
   private sessions: Map<string, OpenCodeSessionHandle> = new Map(); // cacheKey -> session info
   private sessionOrder: string[] = []; // Track insertion order for LRU eviction
   private sessionQueues = new Map<string, Promise<void>>();
@@ -1536,7 +1669,7 @@ export class OpenCodeSDKProvider implements ApiProvider {
     }
     const cleanup = Promise.resolve(this.automaticCleanup)
       .catch(() => undefined)
-      .then(() => this.cleanupResources(false))
+      .then(() => this.cleanupResources('explicit'))
       .finally(() => {
         if (this.explicitCleanup === cleanup) {
           this.explicitCleanup = undefined;
@@ -1546,28 +1679,26 @@ export class OpenCodeSDKProvider implements ApiProvider {
     return cleanup;
   }
 
-  private async cleanupResources(automatic: boolean): Promise<void> {
-    await this.clientInitialization?.catch(() => undefined);
+  private async cleanupResources(reason: ProviderShutdownReason | 'explicit'): Promise<void> {
+    if (reason !== 'process') {
+      await this.clientInitialization?.catch(() => undefined);
+    }
     this.clientInitialization = undefined;
-    await this.deletePersistentSessions(automatic);
-    this.sessions.clear();
-    this.sessionOrder = [];
+    // An existing server owns its persistent sessions; callers can resume their IDs after
+    // normal evaluation/process teardown. Only explicit manual cleanup deletes them.
+    const preserveRemoteSessions =
+      Boolean(this.config.baseUrl) && (reason === 'evaluation' || reason === 'process');
+    if (!preserveRemoteSessions) {
+      if (this.config.baseUrl && this.sessions.size > 0 && !this.client) {
+        await this.ensureClient(this.config);
+      }
+      await this.deletePersistentSessions(reason !== 'explicit');
+      this.sessions.clear();
+      this.sessionOrder = [];
+    }
     this.sessionQueues.clear();
 
-    // Close server if we started one
-    if (this.server) {
-      try {
-        this.server.close();
-      } catch (err) {
-        // If closing could not be verified, do not forget values that the old server may
-        // still return, even if another client is later initialized on this instance.
-        this.hasUnclosedCredentialSource = true;
-        logger.debug('Failed to close OpenCode server', {
-          error: this.formatCallError(err, this.config),
-        });
-      }
-      this.server = undefined;
-    }
+    this.closeServer();
     this.client = undefined;
     if (!this.hasUnclosedCredentialSource) {
       if (this.activeCallCount === 0) {
@@ -1582,39 +1713,88 @@ export class OpenCodeSDKProvider implements ApiProvider {
     await Promise.all(
       [...this.pendingTempDirectories].map((workingDir) => this.removeTempDirectory(workingDir)),
     );
-    if (this.pendingTempDirectories.size === 0 && this.activeCallCount === 0) {
+    if (
+      reason === 'process' ||
+      (this.pendingTempDirectories.size === 0 && this.activeCallCount === 0)
+    ) {
       providerRegistry.unregister(this);
     } else {
       providerRegistry.register(this);
     }
   }
 
-  async shutdown(): Promise<void> {
+  private closeServer(): void {
+    if (this.server) {
+      try {
+        this.server.close();
+      } catch (err) {
+        // If closing could not be verified, do not forget values that the old server may
+        // still return, even if another client is later initialized on this instance.
+        this.hasUnclosedCredentialSource = true;
+        logger.debug('Failed to close OpenCode server', {
+          error: this.formatCallError(err, this.config),
+        });
+      }
+      this.server = undefined;
+    }
+  }
+
+  async shutdown(reason: ProviderShutdownReason = 'manual'): Promise<void> {
+    if (reason === 'process') {
+      return this.terminate();
+    }
+    if (this.processTermination.signal.aborted) {
+      return this.terminationCleanup;
+    }
     if (this.activeCallCount > 0) {
-      // Any evaluator can shut down the global registry; it must not interrupt another
-      // evaluation's OpenCode calls or make that evaluator wait for them.
-      this.shutdownRequested = true;
+      // Normal cleanup must not interrupt another active consumer or wait for its call.
+      if (!this.shutdownRequested || reason === 'manual') {
+        this.shutdownRequested = reason;
+      }
       providerRegistry.register(this);
       return;
     }
-    return this.startAutomaticCleanup();
+    return this.startAutomaticCleanup(reason);
   }
 
-  private startAutomaticCleanup(): Promise<void> {
+  private terminate(): Promise<void> {
+    if (this.terminationCleanup) {
+      return this.terminationCleanup;
+    }
+    if (this.deferredShutdown) {
+      clearImmediate(this.deferredShutdown);
+      this.deferredShutdown = undefined;
+    }
+    this.shutdownRequested = undefined;
+    this.processTermination.abort();
+    // Start best-effort reclamation while the client is present, but close the owned process
+    // immediately even when a request, startup or explicit cleanup does not settle.
+    const cleanup = this.cleanupResources('process');
+    this.closeServer();
+    this.terminationCleanup = cleanup;
+    return cleanup;
+  }
+
+  private startAutomaticCleanup(reason: Exclude<ProviderShutdownReason, 'process'>): Promise<void> {
     if (this.automaticCleanup) {
+      if (reason === 'manual' && this.automaticCleanupReason === 'evaluation') {
+        return this.automaticCleanup.then(() => this.startAutomaticCleanup(reason));
+      }
       return this.automaticCleanup;
     }
     if (this.deferredShutdown) {
       clearImmediate(this.deferredShutdown);
       this.deferredShutdown = undefined;
     }
-    this.shutdownRequested = false;
+    this.shutdownRequested = undefined;
+    this.automaticCleanupReason = reason;
     const cleanup = Promise.resolve(this.explicitCleanup)
       .catch(() => undefined)
-      .then(() => this.cleanupResources(true))
+      .then(() => this.cleanupResources(reason))
       .finally(() => {
         if (this.automaticCleanup === cleanup) {
           this.automaticCleanup = undefined;
+          this.automaticCleanupReason = undefined;
           this.scheduleShutdownAfterCalls();
         }
       });
@@ -1638,10 +1818,30 @@ export class OpenCodeSDKProvider implements ApiProvider {
         return;
       }
       const formatError = this.getErrorFormatter(this.config);
-      void this.startAutomaticCleanup().catch((error) => {
+      void this.startAutomaticCleanup(this.shutdownRequested).catch((error) => {
         logger.debug('Failed to clean up idle OpenCode provider', { error: formatError(error) });
       });
     });
+  }
+
+  private async waitForProcessTermination<T>(operation: Promise<T>): Promise<T> {
+    const signal = this.processTermination.signal;
+    let onAbort: (() => void) | undefined;
+    const terminated = new Promise<never>((_, reject) => {
+      onAbort = () => reject(new DOMException('OpenCode SDK call aborted', 'AbortError'));
+      if (signal.aborted) {
+        onAbort();
+      } else {
+        signal.addEventListener('abort', onAbort, { once: true });
+      }
+    });
+    try {
+      return await Promise.race([operation, terminated]);
+    } finally {
+      if (onAbort) {
+        signal.removeEventListener('abort', onAbort);
+      }
+    }
   }
 
   private async deletePersistentSessions(automatic: boolean): Promise<void> {
@@ -1666,6 +1866,13 @@ export class OpenCodeSDKProvider implements ApiProvider {
       return;
     }
 
+    // Try every session within one deadline, including when an SDK transport ignores abort.
+    await this.runBoundedCleanup((signal) =>
+      Promise.all([...this.sessions.values()].map((session) => remove(session, signal))),
+    );
+  }
+
+  private async runBoundedCleanup(run: (signal: AbortSignal) => Promise<unknown>): Promise<void> {
     const controller = new AbortController();
     let timeout: ReturnType<typeof setTimeout> | undefined;
     const deadline = new Promise<void>((resolve) => {
@@ -1675,13 +1882,7 @@ export class OpenCodeSDKProvider implements ApiProvider {
       }, SESSION_SHUTDOWN_TIMEOUT_MS);
     });
     try {
-      // Try every session within one deadline, including when an SDK transport ignores abort.
-      await Promise.race([
-        Promise.all(
-          [...this.sessions.values()].map((session) => remove(session, controller.signal)),
-        ),
-        deadline,
-      ]);
+      await Promise.race([run(controller.signal), deadline]);
     } finally {
       if (timeout) {
         clearTimeout(timeout);
@@ -1742,11 +1943,12 @@ export class OpenCodeSDKProvider implements ApiProvider {
       addStrongOpenCodeConfigCredentials(config, remember);
     }
     remember(this.getApiKey(config));
-    for (const environment of [process.env, this.env ?? {}]) {
+    for (const [environment, includePrivateUrlPath] of [
+      [process.env, false],
+      [this.env ?? {}, true],
+    ] as const) {
       for (const [key, value] of Object.entries(environment)) {
-        if (OPEN_CODE_CREDENTIAL_NAME.test(key)) {
-          addOpenCodeEnvironmentValue(key, value, remember, true);
-        }
+        addStrongOpenCodeEnvironmentCredentials(key, value, remember, includePrivateUrlPath);
       }
     }
   }
@@ -1894,7 +2096,9 @@ export class OpenCodeSDKProvider implements ApiProvider {
         Array.isArray(configuredTools) ||
         ![Object.prototype, null].includes(Object.getPrototypeOf(configuredTools)))
     ) {
-      throw new Error('OpenCode tools must be an object mapping tool names to booleans');
+      throw new OpenCodeLocalDiagnosticError(
+        'OpenCode tools must be an object mapping tool names to booleans',
+      );
     }
 
     const entries = new Map<string, boolean>();
@@ -1915,14 +2119,18 @@ export class OpenCodeSDKProvider implements ApiProvider {
         continue;
       }
       if (typeof enabled !== 'boolean') {
-        throw new Error(`OpenCode tools.${tool} must be a boolean`);
+        throw new OpenCodeLocalDiagnosticError(
+          OPEN_CODE_PUBLIC_POLICY_NAMES.has(tool)
+            ? `OpenCode tools.${tool} must be a boolean`
+            : 'OpenCode tools entries must be boolean',
+        );
       }
       if (!tool.trim()) {
-        throw new Error('OpenCode tool names must not be empty');
+        throw new OpenCodeLocalDiagnosticError('OpenCode tool names must not be empty');
       }
       if (EDIT_TOOL_ALIASES.has(tool)) {
         if (editPermission !== undefined && editPermission !== enabled) {
-          throw new Error(
+          throw new OpenCodeLocalDiagnosticError(
             'OpenCode tools edit, write, patch, and apply_patch share one permission and cannot conflict',
           );
         }
@@ -2147,17 +2355,18 @@ export class OpenCodeSDKProvider implements ApiProvider {
   private async deleteSession(
     session: OpenCodeSessionHandle | undefined,
     signal?: AbortSignal,
+    client = this.client,
   ): Promise<void> {
     if (!session) {
       return;
     }
     const parameters = this.buildDeleteSessionParameters(session);
     if (!signal) {
-      await this.client?.session?.delete?.(parameters);
+      await client?.session?.delete?.(parameters);
     } else if (this.opencodeModule?.apiVersion === 'v2') {
-      await this.client?.session?.delete?.(parameters, { signal });
+      await client?.session?.delete?.(parameters, { signal });
     } else {
-      await this.client?.session?.delete?.({ ...parameters, signal });
+      await client?.session?.delete?.({ ...parameters, signal });
     }
   }
 
@@ -2165,7 +2374,7 @@ export class OpenCodeSDKProvider implements ApiProvider {
     sessionId: string,
     sessionQuery: OpenCodeSessionQuery | undefined,
   ): Record<string, unknown> {
-    // session.abort is v2-only. v1 has no equivalent endpoint.
+    // The v2 abort endpoint uses flattened parameters; forced v1 cleanup uses nested options.
     return {
       sessionID: sessionId,
       ...sessionQuery,
@@ -2186,8 +2395,9 @@ export class OpenCodeSDKProvider implements ApiProvider {
       if (oldestKey) {
         const oldSession = this.sessions.get(oldestKey);
         this.sessions.delete(oldestKey);
-        // Best-effort cleanup of old session
-        if (oldSession) {
+        // Release owned local sessions. An evicted remote persistent session can still be
+        // resumed by its returned ID, so eviction only forgets our local lookup for it.
+        if (oldSession && !config.baseUrl) {
           const formatError = this.getErrorFormatter(config);
           this.deleteSession(oldSession).catch((err) => {
             logger.debug('Failed to delete evicted OpenCode session', {
@@ -2317,6 +2527,11 @@ export class OpenCodeSDKProvider implements ApiProvider {
       const opencode = await createOpencode(serverOptions);
       this.client = opencode.client;
       this.server = opencode.server;
+      if (this.processTermination.signal.aborted) {
+        this.closeServer();
+        this.client = undefined;
+        return;
+      }
       logger.debug(`OpenCode server started at ${opencode.server.url}`);
     })();
     this.clientInitialization = initialization;
@@ -2336,7 +2551,7 @@ export class OpenCodeSDKProvider implements ApiProvider {
 
     const hasPermissionRules = this.buildConfiguredPermissionRules(config).length > 0;
     if (this.opencodeModule.apiVersion === 'v2' && config.session_id && hasPermissionRules) {
-      throw new Error(
+      throw new OpenCodeLocalDiagnosticError(
         'OpenCode SDK v2 explicit session_id resumes cannot safely rebind permission rules; create a new session to change permission.',
       );
     }
@@ -2348,7 +2563,7 @@ export class OpenCodeSDKProvider implements ApiProvider {
       JSON.stringify(this.buildEffectivePermissionRules(config)) ===
       JSON.stringify(this.buildEffectivePermissionRules(this.config));
     if (config.baseUrl || config.session_id || !staticPolicyMatches) {
-      throw new Error(
+      throw new OpenCodeLocalDiagnosticError(
         'OpenCode SDK v1 supports permission rules only for provider-level configuration on sessions started by Promptfoo; use tools for remote, resumed, or per-prompt policies.',
       );
     }
@@ -2384,8 +2599,12 @@ export class OpenCodeSDKProvider implements ApiProvider {
       };
     }
 
-    const createResult = await this.client.session.create(
-      this.buildCreateSessionParameters(config, sessionQuery),
+    const parameters = this.buildCreateSessionParameters(config, sessionQuery);
+    const signal = this.processTermination.signal;
+    const createResult = await this.waitForProcessTermination(
+      this.opencodeModule.apiVersion === 'v2'
+        ? this.client.session.create(parameters, { signal })
+        : this.client.session.create({ ...parameters, signal }),
     );
     const createData = unwrapOpenCodeResult(createResult);
     const sessionId =
@@ -2821,6 +3040,7 @@ export class OpenCodeSDKProvider implements ApiProvider {
   private getErrorRateLimitKind(
     error: unknown,
     fallbackStatus?: number,
+    headers?: Record<string, string>,
   ): 'quota' | 'rate_limit' | undefined {
     if (!error || typeof error !== 'object') {
       return undefined;
@@ -2842,63 +3062,87 @@ export class OpenCodeSDKProvider implements ApiProvider {
     }
     const isRetryable =
       typeof data?.isRetryable === 'boolean' ? data.isRetryable : item.isRetryable;
+    const asRecord = (value: unknown): Record<string, unknown> | undefined =>
+      value && typeof value === 'object' ? (value as Record<string, unknown>) : undefined;
+    const normalized = (value: unknown): string | undefined =>
+      typeof value === 'string' && value.length <= 256 && value.trim()
+        ? value.trim().toLowerCase()
+        : undefined;
 
-    // A definitive billing code outranks the SDK's retry flag. Ambiguous quota
-    // codes and natural-language descriptions can also describe per-window
-    // throttles, so only treat those as hard quotas when the SDK agrees.
-    const quotaCodes =
-      isRetryable === false ? HARD_QUOTA_ERROR_CODES : DEFINITIVE_BILLING_ERROR_CODES;
-    const hasQuotaCode = (value: unknown) =>
-      typeof value === 'string' && quotaCodes.has(value.trim().toLowerCase());
-    const hasQuotaMessage = (value: unknown) => {
-      if (typeof value !== 'string') {
-        return false;
-      }
-      const message = value.slice(0, 32_768).toLowerCase();
-      return (
-        (message.match(/\b[a-z]+(?:_[a-z]+)+\b/g) ?? []).some(hasQuotaCode) ||
-        (isRetryable === false &&
-          /\b(?:credit balance (?:is (?:(?:too )?low|exhausted|depleted|insufficient)|(?:has been )?(?:exhausted|depleted))|(?:billing (?:hard )?limit|(?:current |account |daily )?quota) (?:has been |was |is )?(?:exceeded|exhausted|reached)|exceeded (?:your |the )?(?:current |account |daily )?quota|billing (?:is )?(?:not active|inactive)|access (?:has been |was |is )?terminated)\b/.test(
-            message,
-          ))
-      );
-    };
-    const hasQuotaFields = (value: unknown) => {
-      if (!value || typeof value !== 'object') {
-        return false;
-      }
-      const fields = value as Record<string, unknown>;
-      const nested =
-        fields.error && typeof fields.error === 'object'
-          ? (fields.error as Record<string, unknown>)
-          : undefined;
-      return (
-        [fields.code, fields.type, nested?.code, nested?.type].some(hasQuotaCode) ||
-        [fields.message, nested?.message].some(hasQuotaMessage)
-      );
-    };
-    const hasQuotaBody = (body: unknown) => {
-      if (typeof body !== 'string') {
-        return hasQuotaFields(body);
-      }
+    let body: unknown = data?.responseBody ?? item.responseBody;
+    let textBody: string | undefined;
+    if (typeof body === 'string') {
       if (body.length > 32_768) {
-        return false;
+        body = undefined;
+      } else if (body.trimStart().startsWith('{')) {
+        try {
+          body = JSON.parse(body);
+        } catch {
+          body = undefined;
+        }
+      } else {
+        textBody = body;
+        body = undefined;
       }
-      if (!body.trimStart().startsWith('{')) {
-        return hasQuotaMessage(body);
-      }
-      try {
-        return hasQuotaFields(JSON.parse(body));
-      } catch {
-        return false;
-      }
-    };
-
-    return hasQuotaFields(item) ||
-      hasQuotaFields(data) ||
-      hasQuotaBody(data?.responseBody ?? item.responseBody)
-      ? 'quota'
-      : 'rate_limit';
+    }
+    const records = [asRecord(body), data, item].filter(
+      (record): record is Record<string, unknown> => Boolean(record),
+    );
+    // Preserve code and type as separate signals. The actual upstream code wins
+    // over wrapper codes and type aliases; HttpRateLimitError resolves the latter
+    // against transient codes and near-term recovery hints consistently with fetch.
+    const codes = records.flatMap((record) => {
+      const code = normalized(asRecord(record.error)?.code) ?? normalized(record.code);
+      return code ? [code] : [];
+    });
+    const types = records.flatMap((record) => {
+      const type = normalized(extractRateLimitErrorType(record));
+      return type ? [type] : [];
+    });
+    const messages = [
+      ...records.flatMap((record) => [asRecord(record.error)?.message, record.message]),
+      textBody,
+    ].filter((message): message is string => typeof message === 'string');
+    const known = (code: string) => isHardQuotaCode(code) || isTransientRateLimitCode(code);
+    const messageCodes = messages.flatMap((message) =>
+      (
+        message
+          .slice(0, 32_768)
+          .toLowerCase()
+          .match(/\b[a-z]+(?:_[a-z]+)+\b/g) ?? []
+      ).filter(known),
+    );
+    const definiteCode = [...codes, ...types, ...messageCodes].find(isDefinitiveBillingCode);
+    let inferredType: string | undefined;
+    if (isRetryable === false && ![...codes, ...types, ...messageCodes].some(known)) {
+      const patterns = [
+        [
+          'credit_balance_exhausted',
+          /\bcredit balance (?:is (?:(?:too )?low|exhausted|depleted|insufficient)|(?:has been )?(?:exhausted|depleted))\b/,
+        ],
+        [
+          'billing_hard_limit_reached',
+          /\bbilling (?:hard )?limit (?:has been |was |is )?(?:exceeded|exhausted|reached)\b/,
+        ],
+        ['billing_not_active', /\bbilling (?:is )?(?:not active|inactive)\b/],
+        ['access_terminated', /\baccess (?:has been |was |is )?terminated\b/],
+        [
+          'quota_exceeded',
+          /\b(?:(?:current |account |daily )?quota (?:has been |was |is )?(?:exceeded|exhausted|reached)|exceeded (?:your |the )?(?:current |account |daily )?quota)\b/,
+        ],
+      ] as const;
+      inferredType = patterns.find(([, pattern]) =>
+        messages.some((message) => pattern.test(message.slice(0, 32_768).toLowerCase())),
+      )?.[0];
+    }
+    const timing = headers ? rateLimitTimingFromHeaders(headers) : undefined;
+    return new HttpRateLimitError({
+      status,
+      code: codes[0] ?? messageCodes[0],
+      type: definiteCode ?? types[0] ?? inferredType,
+      retryAfterMs: timing?.retryAfterMs,
+      resetAt: timing?.resetAt,
+    }).kind;
   }
 
   private getErrorRateLimitHeaders(
@@ -2913,7 +3157,7 @@ export class OpenCodeSDKProvider implements ApiProvider {
         ? (item.data as Record<string, unknown>)
         : undefined;
     const headers: Record<string, string> = {};
-    const formatHeader = this.getErrorFormatter(config, true);
+    let formatHeader: ((error: unknown) => string) | undefined;
     const isHttpDate = (value: string) =>
       /^(?:(?:Mon|Tue|Wed|Thu|Fri|Sat|Sun), \d{2} [A-Za-z]{3} \d{4} \d{2}:\d{2}:\d{2} GMT|(?:Monday|Tuesday|Wednesday|Thursday|Friday|Saturday|Sunday), \d{2}-[A-Za-z]{3}-\d{2} \d{2}:\d{2}:\d{2} GMT|(?:Mon|Tue|Wed|Thu|Fri|Sat|Sun) [A-Za-z]{3} {1,2}\d{1,2} \d{2}:\d{2}:\d{2} \d{4})$/i.test(
         value,
@@ -2961,7 +3205,10 @@ export class OpenCodeSDKProvider implements ApiProvider {
         }
         const key = name.toLowerCase();
         const value = rawValue.trim();
-        if (isSafeTimingHeader(key, value) && formatHeader(value) === value) {
+        if (
+          isSafeTimingHeader(key, value) &&
+          (formatHeader ??= this.getErrorFormatter(config, true))(value) === value
+        ) {
           headers[key] = value;
         }
       }
@@ -3040,14 +3287,18 @@ export class OpenCodeSDKProvider implements ApiProvider {
       return { error: cliError };
     }
 
-    const formattedError = this.formatCallError(error, config, promptError?.status);
+    const formattedError =
+      !promptError && error instanceof OpenCodeLocalDiagnosticError
+        ? error.message.replace(/[\r\n]+/g, ' ').slice(0, 500)
+        : this.formatCallError(error, config, promptError?.status);
     const errorMessage = promptError
       ? 'OpenCode SDK prompt error: ' + formattedError
       : formattedError;
-    const rateLimitKind = this.getErrorRateLimitKind(error, promptError?.status);
+    const timingHeaders = this.getErrorRateLimitHeaders(error, config, promptError?.headers);
+    const rateLimitKind = this.getErrorRateLimitKind(error, promptError?.status, timingHeaders);
     const headers =
       rateLimitKind === 'rate_limit' || (!rateLimitKind && promptError?.status === 429)
-        ? this.getErrorRateLimitHeaders(error, config, promptError?.headers)
+        ? timingHeaders
         : undefined;
     logger.error('Error calling OpenCode SDK', { error: errorMessage });
     return {
@@ -3068,19 +3319,30 @@ export class OpenCodeSDKProvider implements ApiProvider {
     context?: CallApiContextParams,
     callOptions?: CallApiOptionsParams,
   ): Promise<ProviderResponse> {
+    if (this.processTermination.signal.aborted || providerRegistry.isProcessTerminating()) {
+      return { error: 'OpenCode SDK call aborted before it started' };
+    }
     const { config, isTempDir, workingDir } = this.prepareCall(context);
     providerRegistry.registerScoped(this);
     this.activeCallCount++;
+    const processSignal = this.processTermination.signal;
+    const abortSignal = callOptions?.abortSignal
+      ? AbortSignal.any([callOptions.abortSignal, processSignal])
+      : processSignal;
+    let callClient: OpenCodeClient | undefined;
     let ephemeralSession: OpenCodeSessionHandle | undefined;
     let abortListener: (() => void) | undefined;
 
     try {
+      if (processSignal.aborted) {
+        return { error: 'OpenCode SDK call aborted before it started' };
+      }
       const cleanup = this.automaticCleanup ?? this.explicitCleanup;
       if (cleanup) {
-        await cleanup.catch(() => undefined);
+        await this.waitForProcessTermination(cleanup.catch(() => undefined));
       }
       this.buildEffectivePermissionRules(config);
-      await this.ensureOpenCodeModule();
+      await this.waitForProcessTermination(this.ensureOpenCodeModule());
       this.validateSessionPolicyConfiguration(config);
 
       if (config.enable_streaming && !this.streamingWarningEmitted) {
@@ -3100,7 +3362,8 @@ export class OpenCodeSDKProvider implements ApiProvider {
           ? { shouldCache: false, shouldReadCache: false, shouldWriteCache: false }
           : await initializeAgenticCache(
               {
-                cacheKeyPrefix: 'opencode:sdk',
+                // The unversioned cache can contain assistant errors or filtered text as successes.
+                cacheKeyPrefix: 'opencode:sdk:response:v2',
                 workingDir: config.working_dir ? workingDir : undefined,
                 bustCache: context?.bustCache,
                 mcp: mcpConfig,
@@ -3117,136 +3380,150 @@ export class OpenCodeSDKProvider implements ApiProvider {
         return cachedResponse;
       }
 
-      if (callOptions?.abortSignal?.aborted) {
+      if (abortSignal.aborted) {
         return { error: 'OpenCode SDK call aborted before it started' };
       }
 
-      await this.ensureClient(config);
+      await this.waitForProcessTermination(this.ensureClient(config));
+      callClient = this.client;
       const sessionQueueKey = this.getSessionQueueKey(config, workingDir);
-      return await this.runSerializedSessionCall(
-        sessionQueueKey,
-        callOptions?.abortSignal,
-        async () => {
-          const session = await this.getOrCreateSession(config, workingDir);
-          ephemeralSession = session.ephemeralSession;
-          if (callOptions?.abortSignal?.aborted) {
-            return { error: 'OpenCode SDK call aborted before it started' };
-          }
+      return await this.runSerializedSessionCall(sessionQueueKey, abortSignal, async () => {
+        const session = await this.getOrCreateSession(config, workingDir);
+        ephemeralSession = session.ephemeralSession;
+        if (abortSignal.aborted) {
+          return { error: 'OpenCode SDK call aborted before it started' };
+        }
 
-          const promptOptions = this.buildPromptParameters(
-            config,
-            prompt,
-            session.sessionId,
-            session.sessionQuery,
-          );
-          logger.debug(`OpenCode SDK prompt options:`, promptOptions);
+        const promptOptions = this.buildPromptParameters(
+          config,
+          prompt,
+          session.sessionId,
+          session.sessionQuery,
+        );
+        logger.debug(`OpenCode SDK prompt options:`, promptOptions);
 
-          const client = this.client;
-          if (!client) {
-            throw new Error('OpenCode SDK client is not initialized');
-          }
+        const client = this.client;
+        if (!client) {
+          throw new Error('OpenCode SDK client is not initialized');
+        }
 
-          // If the caller's abortSignal fires mid-prompt, ask the server to stop
-          // rather than letting it run to completion while we discard the result.
-          // session.abort is only on v2; v1 has no abort primitive, so we still
-          // honor cancellation locally via the response check below.
-          const abortSignal = callOptions?.abortSignal;
-          if (abortSignal && client.session.abort && this.opencodeModule?.apiVersion === 'v2') {
-            const formatError = this.getErrorFormatter(config);
-            const abortParams = this.buildAbortSessionParameters(
-              session.sessionId,
-              session.sessionQuery,
-            );
-            const logAbortError = (error: unknown) => {
-              logger.debug('[OpenCode SDK] Failed to abort session', {
-                sessionId: formatError(session.sessionId),
-                error: formatError(error),
-              });
-            };
-            abortListener = () => {
-              try {
-                client.session.abort?.(abortParams).catch(logAbortError);
-              } catch (error) {
-                logAbortError(error);
-              }
-            };
-            abortSignal.addEventListener('abort', abortListener, { once: true });
-          }
-
-          const response = await client.session.prompt(promptOptions);
-          // The prompt has returned, so an abort from here on must not ask the
-          // server to kill the session it already answered.
-          if (abortListener && abortSignal) {
-            abortSignal.removeEventListener('abort', abortListener);
-            abortListener = undefined;
-          }
-
-          if (abortSignal?.aborted) {
-            return { error: 'OpenCode SDK call aborted' };
-          }
-          const promptError = getOpenCodePromptError(response);
-          const isContentFilterRefusal = isOpenCodeContentFilterRefusal(promptError);
-          if (promptError && !isContentFilterRefusal) {
-            return this.buildPromptErrorResponse(config, response, promptError, session.sessionId);
-          }
-          logger.debug('OpenCode SDK response received');
-
-          // Fetch only the parts that belong to the current prompt from the session
-          // history so that deriveSkillCalls captures skill calls from intermediate
-          // turns. Gated on the effective tool policy, so the extra round trip is
-          // skipped whenever the skill tool is denied and no skill parts can exist.
-          let allSessionParts: OpenCodePromptPart[] = [];
-          if (this.isSkillToolEnabled(config)) {
-            const formatError = this.getErrorFormatter(config);
+        // Ask the server to stop on cancellation. A process signal also cancels the SDK
+        // transport and bounds this separate best-effort abort request.
+        const v2 = this.opencodeModule?.apiVersion === 'v2';
+        if (client.session.abort) {
+          const formatError = this.getErrorFormatter(config);
+          const abortParams = v2
+            ? this.buildAbortSessionParameters(session.sessionId, session.sessionQuery)
+            : { path: getSessionPath(session.sessionId), query: session.sessionQuery };
+          const logAbortError = (error: unknown) => {
+            logger.debug('[OpenCode SDK] Failed to abort session', {
+              sessionId: formatError(session.sessionId),
+              error: formatError(error),
+            });
+          };
+          abortListener = () => {
             try {
-              allSessionParts = await this.fetchCurrentPromptParts(
+              if (processSignal.aborted) {
+                void this.runBoundedCleanup((signal) =>
+                  v2
+                    ? client.session.abort!(abortParams, { signal })
+                    : client.session.abort!({ ...abortParams, signal }),
+                ).catch(logAbortError);
+              } else if (v2) {
+                client.session.abort?.(abortParams).catch(logAbortError);
+              }
+            } catch (error) {
+              logAbortError(error);
+            }
+          };
+          abortSignal.addEventListener('abort', abortListener, { once: true });
+        }
+
+        const response = await this.waitForProcessTermination(
+          v2
+            ? client.session.prompt(promptOptions, { signal: abortSignal })
+            : client.session.prompt({ ...promptOptions, signal: abortSignal }),
+        );
+        // The prompt has returned, so an abort from here on must not ask the
+        // server to kill the session it already answered.
+        if (abortListener) {
+          abortSignal.removeEventListener('abort', abortListener);
+          abortListener = undefined;
+        }
+
+        if (abortSignal.aborted) {
+          return { error: 'OpenCode SDK call aborted' };
+        }
+        const promptError = getOpenCodePromptError(response);
+        const isContentFilterRefusal = isOpenCodeContentFilterRefusal(promptError);
+        if (promptError && !isContentFilterRefusal) {
+          return this.buildPromptErrorResponse(config, response, promptError, session.sessionId);
+        }
+        logger.debug('OpenCode SDK response received');
+
+        // Fetch only the parts that belong to the current prompt from the session
+        // history so that deriveSkillCalls captures skill calls from intermediate
+        // turns. Gated on the effective tool policy, so the extra round trip is
+        // skipped whenever the skill tool is denied and no skill parts can exist.
+        let allSessionParts: OpenCodePromptPart[] = [];
+        if (this.isSkillToolEnabled(config)) {
+          const formatError = this.getErrorFormatter(config);
+          try {
+            allSessionParts = await this.waitForProcessTermination(
+              this.fetchCurrentPromptParts(
                 client,
                 session,
                 response,
                 formatError,
                 abortSignal,
                 !isContentFilterRefusal,
-              );
-            } catch (error) {
-              logger.debug('[OpenCode SDK] Could not fetch session history for skill tracking', {
-                error: formatError(error),
-              });
-            }
-            if (abortSignal?.aborted) {
-              return { error: 'OpenCode SDK call aborted' };
-            }
-          }
-
-          if (promptError) {
-            return this.buildPromptErrorResponse(
-              config,
-              response,
-              promptError,
-              session.sessionId,
-              allSessionParts,
+              ),
             );
+          } catch (error) {
+            logger.debug('[OpenCode SDK] Could not fetch session history for skill tracking', {
+              error: formatError(error),
+            });
           }
-          const providerResponse = this.buildProviderResponse(
+          if (abortSignal.aborted) {
+            return { error: 'OpenCode SDK call aborted' };
+          }
+        }
+
+        if (promptError) {
+          return this.buildPromptErrorResponse(
             config,
             response,
+            promptError,
             session.sessionId,
             allSessionParts,
           );
-          await cacheResponse(cacheResult, providerResponse, 'OpenCode SDK');
-          logger.debug(`OpenCode SDK response: ${providerResponse.output.slice(0, 100)}...`);
-          return providerResponse;
-        },
-      );
+        }
+        const providerResponse = this.buildProviderResponse(
+          config,
+          response,
+          session.sessionId,
+          allSessionParts,
+        );
+        await cacheResponse(cacheResult, providerResponse, 'OpenCode SDK');
+        logger.debug(`OpenCode SDK response: ${providerResponse.output.slice(0, 100)}...`);
+        return providerResponse;
+      });
     } catch (error) {
       return this.handleCallError(error, config, callOptions);
     } finally {
       try {
-        if (abortListener && callOptions?.abortSignal) {
-          callOptions.abortSignal.removeEventListener('abort', abortListener);
+        if (abortListener) {
+          abortSignal.removeEventListener('abort', abortListener);
         }
         if (ephemeralSession) {
           try {
-            await this.deleteSession(ephemeralSession);
+            if (processSignal.aborted) {
+              await this.runBoundedCleanup((signal) =>
+                this.deleteSession(ephemeralSession, signal, callClient),
+              );
+            } else {
+              await this.deleteSession(ephemeralSession);
+            }
           } catch (err) {
             logger.debug('Failed to delete non-persistent OpenCode session', {
               sessionId: this.formatCallError(ephemeralSession.id, config),

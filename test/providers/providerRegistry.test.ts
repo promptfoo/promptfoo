@@ -1,3 +1,5 @@
+import { spawn } from 'node:child_process';
+
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import logger from '../../src/logger';
 import { providerRegistry } from '../../src/providers/providerRegistry';
@@ -138,6 +140,140 @@ describe('provider lifecycle registry', () => {
     });
 
     expect(provider.shutdown).toHaveBeenCalledTimes(2);
+  });
+
+  it('keeps direct opted-in providers for manual cleanup even after scoped reuse', async () => {
+    const direct = { shutdown: vi.fn(async () => {}) };
+    const scoped = { shutdown: vi.fn(async () => {}) };
+    const legacy = { shutdown: vi.fn(async () => {}) };
+    providerRegistry.registerScoped(direct);
+
+    await providerRegistry.withEvaluationScope(async () => {
+      providerRegistry.registerScoped(direct);
+      providerRegistry.registerScoped(scoped);
+      providerRegistry.register(legacy);
+    });
+
+    expect(direct.shutdown).not.toHaveBeenCalled();
+    expect(scoped.shutdown).toHaveBeenCalledExactlyOnceWith('evaluation');
+    expect(legacy.shutdown).toHaveBeenCalledExactlyOnceWith('evaluation');
+    await providerRegistry.shutdownAll();
+    expect(direct.shutdown).toHaveBeenCalledExactlyOnceWith('manual');
+  });
+
+  it('passes forced process cleanup to both direct and scoped providers', async () => {
+    const direct = { shutdown: vi.fn(async () => {}) };
+    const scoped = { shutdown: vi.fn(async () => {}) };
+    providerRegistry.registerScoped(direct);
+
+    await providerRegistry.withEvaluationScope(async () => {
+      providerRegistry.registerScoped(scoped);
+      await providerRegistry.shutdownForProcess();
+      expect(direct.shutdown).toHaveBeenCalledExactlyOnceWith('process');
+      expect(scoped.shutdown).toHaveBeenCalledExactlyOnceWith('process');
+    });
+
+    expect(direct.shutdown).toHaveBeenCalledOnce();
+    expect(scoped.shutdown).toHaveBeenCalledOnce();
+    expect(providerRegistry.isProcessTerminating()).toBe(false);
+  });
+
+  it('refuses a fresh OpenCode provider after a native process signal begins termination', async () => {
+    const script = `
+      import { providerRegistry } from './src/providers/providerRegistry.ts';
+      import { OpenCodeSDKProvider } from './src/providers/opencode-sdk.ts';
+
+      providerRegistry.registerScoped({
+        shutdown: async (reason) => console.log('shutdown:' + reason),
+      });
+      const keepAlive = setInterval(() => {}, 1_000);
+      process.on('message', (message) => {
+        if (message === 'terminate') process.emit('SIGTERM');
+      });
+      process.on('SIGTERM', () => {
+        setImmediate(async () => {
+          try {
+            console.log('terminating:' + providerRegistry.isProcessTerminating());
+            const fresh = new OpenCodeSDKProvider({
+              config: { working_dir: '/definitely-not-a-real-opencode-signal-test-directory' },
+            });
+            const result = await fresh.callApi('must not begin work');
+            console.log('fresh:' + result.error);
+          } catch (error) {
+            console.log('fresh-threw:' + String(error));
+          } finally {
+            clearInterval(keepAlive);
+            process.disconnect?.();
+          }
+        });
+      });
+      console.log('ready');
+    `;
+    const child = spawn(
+      process.execPath,
+      ['--import', 'tsx', '--input-type=module', '-e', script],
+      {
+        cwd: process.cwd(),
+        env: process.env,
+        stdio: ['ignore', 'pipe', 'pipe', 'ipc'],
+      },
+    );
+    let stdout = '';
+    let stderr = '';
+    child.stderr?.on('data', (chunk) => {
+      stderr += String(chunk);
+    });
+    const ready = new Promise<void>((resolve, reject) => {
+      child.stdout?.on('data', (chunk) => {
+        stdout += String(chunk);
+        if (stdout.includes('ready')) {
+          resolve();
+        }
+      });
+      child.once('error', reject);
+      child.once('exit', (code) => {
+        if (!stdout.includes('ready')) {
+          reject(new Error(`Signal child exited before startup (${code}): ${stderr}`));
+        }
+      });
+    });
+    const exited = new Promise<number | null>((resolve, reject) => {
+      child.once('error', reject);
+      child.once('close', resolve);
+    });
+    void exited.catch(() => undefined);
+
+    try {
+      await ready;
+      // Windows cannot deliver a catchable POSIX signal; the isolated child invokes the same
+      // native event callback there. Unix sends SIGTERM to the actual child process.
+      if (process.platform === 'win32') {
+        child.send('terminate');
+      } else {
+        child.kill('SIGTERM');
+      }
+      expect(await exited, stderr).toBe(0);
+      expect(stdout).toContain('shutdown:process');
+      expect(stdout).toContain('terminating:true');
+      expect(stdout).toContain('fresh:OpenCode SDK call aborted before it started');
+      expect(stdout).not.toContain('fresh-threw:');
+    } finally {
+      if (child.exitCode === null && child.signalCode === null) {
+        child.kill('SIGKILL');
+      }
+    }
+  });
+
+  it('drops direct ownership when an instance explicitly unregisters before scoped reuse', async () => {
+    const provider = { shutdown: vi.fn(async () => {}) };
+    providerRegistry.registerScoped(provider);
+    providerRegistry.unregister(provider);
+
+    await providerRegistry.withEvaluationScope(async () => {
+      providerRegistry.registerScoped(provider);
+    });
+
+    expect(provider.shutdown).toHaveBeenCalledExactlyOnceWith('evaluation');
   });
 
   it('releases scoped ownership when the evaluation exits early with an exception', async () => {
