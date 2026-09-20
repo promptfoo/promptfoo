@@ -136,6 +136,19 @@ const createMockPromptResponseWithAnchors = (
   return { data: { ...base.data, info: { ...base.data.info, ...anchors } } };
 };
 
+const createPromptContext = (config: OpenCodeSDKConfig): CallApiContextParams => ({
+  vars: {},
+  prompt: { raw: 'configured', label: 'configured', config },
+});
+
+const remoteMcpWithBearer = (token: string): OpenCodeSDKConfig['mcp'] => ({
+  gateway: {
+    type: 'remote',
+    url: 'https://example.test/mcp',
+    headers: { Authorization: `Bearer ${token}` },
+  },
+});
+
 describe('OpenCodeSDKProvider', () => {
   let tempDirSpy: MockInstance;
   let statSyncSpy: MockInstance;
@@ -1756,6 +1769,180 @@ describe('OpenCodeSDKProvider', () => {
         expect(JSON.stringify({ result, logs: errorSpy.mock.calls })).not.toContain(previous);
       });
 
+      it('redacts a previous prompt credential from history diagnostics while preserving a successful result', async () => {
+        const previous = 'synthetic-secondary-history-credential-0919';
+        const debugSpy = vi.spyOn(logger, 'debug').mockImplementation(() => {});
+        const provider = new OpenCodeSDKProvider({ config: { tools: { skill: true } } });
+        mockSessionMessages
+          .mockResolvedValueOnce([])
+          .mockRejectedValueOnce(new Error(`History temporarily failed for ${previous}`));
+
+        await provider.callApi(
+          'initialize server for history',
+          createPromptContext({ mcp: remoteMcpWithBearer(previous) }),
+        );
+        const result = await provider.callApi('next prompt without MCP configuration');
+
+        expect(result.error).toBeUndefined();
+        expect(result.output).toBe('Test response');
+        expect(mockSessionMessages).toHaveBeenCalledTimes(2);
+        expect(debugSpy).toHaveBeenCalledWith(
+          '[OpenCode SDK] Could not fetch session history for skill tracking',
+          { error: 'History temporarily failed for [REDACTED]' },
+        );
+        expect(JSON.stringify({ result, logs: debugSpy.mock.calls })).not.toContain(previous);
+      });
+
+      it('redacts echoed credentials in missing history-anchor diagnostics', async () => {
+        const previous = 'synthetic-secondary-anchor-credential-0919';
+        const debugSpy = vi.spyOn(logger, 'debug').mockImplementation(() => {});
+        const provider = new OpenCodeSDKProvider({ config: { tools: { skill: true } } });
+        await provider.callApi(
+          'initialize server for history anchors',
+          createPromptContext({ mcp: remoteMcpWithBearer(previous) }),
+        );
+        mockSessionPrompt
+          .mockResolvedValueOnce(
+            createMockPromptResponseWithAnchors('missing parent fallback', {
+              id: 'assistant-safe',
+              parentID: previous,
+            }),
+          )
+          .mockResolvedValueOnce(
+            createMockPromptResponseWithAnchors('missing assistant fallback', {
+              id: previous,
+              parentID: 'parent-safe',
+            }),
+          );
+        mockSessionMessages
+          .mockResolvedValueOnce([])
+          .mockResolvedValueOnce([{ info: { id: 'parent-safe', role: 'user' }, parts: [] }]);
+
+        const parentResult = await provider.callApi('prompt with missing parent');
+        const assistantResult = await provider.callApi('prompt with missing assistant');
+
+        expect(parentResult.output).toBe('missing parent fallback');
+        expect(assistantResult.output).toBe('missing assistant fallback');
+        expect(debugSpy).toHaveBeenCalledWith(
+          '[OpenCode SDK] Parent message not found in fetched messages; falling back to final-message parts for skill tracking',
+          { parentId: '[REDACTED]', messageCount: 0 },
+        );
+        expect(debugSpy).toHaveBeenCalledWith(
+          '[OpenCode SDK] Assistant message not found after its parent in fetched messages; falling back to final-message parts for skill tracking',
+          { assistantId: '[REDACTED]', messageCount: 1 },
+        );
+        expect(JSON.stringify(debugSpy.mock.calls)).not.toContain(previous);
+      });
+
+      it('redacts a previous prompt credential when a detached abort rejects after cleanup', async () => {
+        const previous = 'synthetic-secondary-abort-credential-0919';
+        const debugSpy = vi.spyOn(logger, 'debug').mockImplementation(() => {});
+        const abortResult = createDeferred<unknown>();
+        const promptResult = createDeferred<ReturnType<typeof createMockPromptResponse>>();
+        const controller = new AbortController();
+        const provider = new OpenCodeSDKProvider();
+        await provider.callApi(
+          'initialize server for abort',
+          createPromptContext({ mcp: remoteMcpWithBearer(previous) }),
+        );
+        mockSessionPrompt.mockImplementationOnce(() => promptResult.promise);
+        mockSessionAbort.mockImplementationOnce(() => abortResult.promise);
+
+        const pendingCall = provider.callApi('next prompt without MCP configuration', undefined, {
+          abortSignal: controller.signal,
+        });
+        await vi.waitFor(() => expect(mockSessionPrompt).toHaveBeenCalledTimes(2));
+        controller.abort();
+        expect(mockSessionAbort).toHaveBeenCalledOnce();
+        promptResult.resolve(createMockPromptResponse([{ type: 'text', text: 'late response' }]));
+        await expect(pendingCall).resolves.toMatchObject({ error: 'OpenCode SDK call aborted' });
+        await provider.cleanup();
+        expect(mockServerClose).toHaveBeenCalledOnce();
+        abortResult.reject(new Error(`Abort temporarily failed for ${previous}`));
+
+        await vi.waitFor(() =>
+          expect(debugSpy).toHaveBeenCalledWith('[OpenCode SDK] Failed to abort session', {
+            sessionId: 'test-session-123',
+            error: 'Abort temporarily failed for [REDACTED]',
+          }),
+        );
+        expect(JSON.stringify(debugSpy.mock.calls)).not.toContain(previous);
+      });
+
+      it('redacts synchronous SDK abort failures without interrupting local cancellation', async () => {
+        const previous = 'synthetic-secondary-sync-abort-credential-0919';
+        const debugSpy = vi.spyOn(logger, 'debug').mockImplementation(() => {});
+        const controller = new AbortController();
+        const provider = new OpenCodeSDKProvider();
+        await provider.callApi(
+          'initialize server for sync abort',
+          createPromptContext({ mcp: remoteMcpWithBearer(previous) }),
+        );
+        mockSessionAbort.mockImplementationOnce(() => {
+          throw new Error(`Abort immediately failed for ${previous}`);
+        });
+        mockSessionPrompt.mockImplementationOnce(async () => {
+          controller.abort();
+          return createMockPromptResponse([{ type: 'text', text: 'late response' }]);
+        });
+
+        const result = await provider.callApi('next prompt', undefined, {
+          abortSignal: controller.signal,
+        });
+
+        expect(result.error).toBe('OpenCode SDK call aborted');
+        expect(debugSpy).toHaveBeenCalledWith('[OpenCode SDK] Failed to abort session', {
+          sessionId: 'test-session-123',
+          error: 'Abort immediately failed for [REDACTED]',
+        });
+        expect(JSON.stringify({ result, logs: debugSpy.mock.calls })).not.toContain(previous);
+      });
+
+      it('redacts a previous prompt credential when detached session eviction rejects after cleanup', async () => {
+        const previous = 'synthetic-secondary-eviction-credential-0919';
+        const debugSpy = vi.spyOn(logger, 'debug').mockImplementation(() => {});
+        const eviction = createDeferred<unknown>();
+        let sessionIndex = 0;
+        mockSessionCreate.mockImplementation(async () =>
+          createMockSessionResponse(`secondary-session-${sessionIndex++}`),
+        );
+        const provider = new OpenCodeSDKProvider({
+          config: { working_dir: '/test/work', persist_sessions: true },
+        });
+        await provider.callApi(
+          'initialize server for eviction',
+          createPromptContext({ model: 'test-model-0', mcp: remoteMcpWithBearer(previous) }),
+        );
+        for (let index = 1; index < 100; index++) {
+          await provider.callApi(
+            'next model',
+            createPromptContext({ model: `test-model-${index}` }),
+          );
+        }
+        mockSessionDelete.mockImplementationOnce(() => eviction.promise);
+        const result = await provider.callApi(
+          'evict first session',
+          createPromptContext({ model: 'test-model-100' }),
+        );
+        expect(result.output).toBe('Test response');
+        expect(mockSessionDelete).toHaveBeenCalledOnce();
+        expect(mockSessionDelete).toHaveBeenCalledWith({
+          sessionID: 'secondary-session-0',
+          directory: '/test/work',
+        });
+        await provider.cleanup();
+        expect(mockServerClose).toHaveBeenCalledOnce();
+        eviction.reject(new Error(`Eviction temporarily failed for ${previous}`));
+
+        await vi.waitFor(() =>
+          expect(debugSpy).toHaveBeenCalledWith('Failed to delete evicted OpenCode session', {
+            sessionId: 'secondary-session-0',
+            error: 'Eviction temporarily failed for [REDACTED]',
+          }),
+        );
+        expect(JSON.stringify({ result, logs: debugSpy.mock.calls })).not.toContain(previous);
+      });
+
       it('keeps prior credentials redacted if the SDK cannot confirm the server closed', async () => {
         const previous = 'synthetic-unclosed-server-0919';
         const next = 'synthetic-next-server-0919';
@@ -2619,10 +2806,10 @@ describe('OpenCodeSDKProvider', () => {
         const result = await provider.callApi('Test prompt');
 
         expect(result.output).toBe('Test response');
-        expect(debugSpy).toHaveBeenCalledWith(
-          expect.stringContaining('Failed to delete non-persistent session test-session-123'),
-          { error: 'delete failed' },
-        );
+        expect(debugSpy).toHaveBeenCalledWith('Failed to delete non-persistent OpenCode session', {
+          sessionId: 'test-session-123',
+          error: 'delete failed',
+        });
 
         debugSpy.mockRestore();
       });

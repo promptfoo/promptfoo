@@ -1218,7 +1218,7 @@ export class OpenCodeSDKProvider implements ApiProvider {
         await this.deleteSession(session);
       } catch (err) {
         logger.debug('Failed to delete persistent OpenCode session', {
-          sessionId: session.id,
+          sessionId: this.formatCallError(session.id, this.config),
           error: this.formatCallError(err, this.config),
         });
       }
@@ -1291,7 +1291,31 @@ export class OpenCodeSDKProvider implements ApiProvider {
     return removal;
   }
 
-  private formatCallError(error: unknown, config: OpenCodeSDKConfig, status?: number): string {
+  private collectCurrentCredentials(
+    config: OpenCodeSDKConfig,
+    remember: (value: unknown) => void,
+  ): void {
+    addOpenCodeConfigCredentials(this.config, remember);
+    if (config !== this.config) {
+      addOpenCodeConfigCredentials(config, remember);
+    }
+    remember(this.getApiKey(config));
+    for (const key of ['ANTHROPIC_API_KEY', 'OPENAI_API_KEY', 'GOOGLE_API_KEY'] as const) {
+      remember(getEnvString(key));
+    }
+    for (const environment of [process.env, this.env ?? {}]) {
+      for (const [key, value] of Object.entries(environment)) {
+        addOpenCodeEnvironmentValue(key, value, remember);
+      }
+    }
+  }
+
+  private formatCallError(
+    error: unknown,
+    config: OpenCodeSDKConfig,
+    status?: number,
+    retainedCredentials?: ReadonlySet<string>,
+  ): string {
     const credentials = new Set<string>();
     const remember = (value: unknown) => {
       if (typeof value === 'string' && value) {
@@ -1308,41 +1332,36 @@ export class OpenCodeSDKProvider implements ApiProvider {
     for (const value of this.activeClientCredentials) {
       remember(value);
     }
-    addOpenCodeConfigCredentials(this.config, remember);
-    if (config !== this.config) {
-      addOpenCodeConfigCredentials(config, remember);
+    for (const value of retainedCredentials ?? []) {
+      remember(value);
     }
-    remember(this.getApiKey(config));
-    for (const key of ['ANTHROPIC_API_KEY', 'OPENAI_API_KEY', 'GOOGLE_API_KEY'] as const) {
-      remember(getEnvString(key));
-    }
-    for (const environment of [process.env, this.env ?? {}]) {
-      for (const [key, value] of Object.entries(environment)) {
-        addOpenCodeEnvironmentValue(key, value, remember);
-      }
-    }
+    this.collectCurrentCredentials(config, remember);
     return redactOpenCodeError(
       describeOpenCodeError(error, status),
       [...credentials].sort((left, right) => right.length - left.length),
     );
   }
 
+  private getErrorFormatter(config: OpenCodeSDKConfig): (error: unknown) => string {
+    // Detached SDK operations can reject after cleanup clears the active client's credentials.
+    const retainedCredentials = new Set(this.activeClientCredentials);
+    this.collectCurrentCredentials(config, (value) => {
+      if (typeof value === 'string' && value) {
+        retainedCredentials.add(value);
+      }
+    });
+    return (error) => this.formatCallError(error, config, undefined, retainedCredentials);
+  }
+
   private captureClientCredentials(config: OpenCodeSDKConfig): void {
     // A new client now owns this credential set. If old requests are still finishing,
     // their credentials can remain until this new client is also closed safely.
     this.clearClientCredentialsAfterCalls = false;
-    const remember = (value: unknown) => {
+    this.collectCurrentCredentials(config, (value) => {
       if (typeof value === 'string' && value) {
         this.activeClientCredentials.add(value);
       }
-    };
-    addOpenCodeConfigCredentials(config, remember);
-    remember(this.getApiKey(config));
-    for (const environment of [process.env, this.env ?? {}]) {
-      for (const [key, value] of Object.entries(environment)) {
-        addOpenCodeEnvironmentValue(key, value, remember);
-      }
-    }
+    });
   }
 
   private completeCall(): void {
@@ -1641,7 +1660,11 @@ export class OpenCodeSDKProvider implements ApiProvider {
   /**
    * Add a session to the cache with LRU eviction
    */
-  private addSession(cacheKey: string, session: OpenCodeSessionHandle): void {
+  private addSession(
+    cacheKey: string,
+    session: OpenCodeSessionHandle,
+    config: OpenCodeSDKConfig,
+  ): void {
     // Remove oldest sessions if we've hit the limit
     while (this.sessions.size >= MAX_SESSIONS && this.sessionOrder.length > 0) {
       const oldestKey = this.sessionOrder.shift();
@@ -1650,8 +1673,12 @@ export class OpenCodeSDKProvider implements ApiProvider {
         this.sessions.delete(oldestKey);
         // Best-effort cleanup of old session
         if (oldSession) {
+          const formatError = this.getErrorFormatter(config);
           this.deleteSession(oldSession).catch((err) => {
-            logger.debug(`Failed to delete evicted session ${oldSession.id}: ${err}`);
+            logger.debug('Failed to delete evicted OpenCode session', {
+              sessionId: formatError(oldSession.id),
+              error: formatError(err),
+            });
           });
         }
       }
@@ -1860,7 +1887,7 @@ export class OpenCodeSDKProvider implements ApiProvider {
     };
 
     if (config.persist_sessions) {
-      this.addSession(sessionCacheKey, session);
+      this.addSession(sessionCacheKey, session, config);
       return {
         sessionId,
         sessionQuery,
@@ -2030,6 +2057,7 @@ export class OpenCodeSDKProvider implements ApiProvider {
     client: OpenCodeClient,
     session: OpenCodeSessionContext,
     response: OpenCodeSdkResult<OpenCodePromptResponse>,
+    formatError: (error: unknown) => string,
     abortSignal?: AbortSignal,
   ): Promise<OpenCodePromptPart[]> {
     const assistantMessage = unwrapOpenCodeResult(response)?.info;
@@ -2061,14 +2089,16 @@ export class OpenCodeSDKProvider implements ApiProvider {
     const startIndex = messages.findIndex((m) => m.info?.id === parentId);
     if (startIndex === -1) {
       logger.debug(
-        `[OpenCode SDK] Parent message ${parentId} not found in ${messages.length} fetched messages; falling back to final-message parts for skill tracking`,
+        '[OpenCode SDK] Parent message not found in fetched messages; falling back to final-message parts for skill tracking',
+        { parentId: formatError(parentId), messageCount: messages.length },
       );
       return [];
     }
     const endIndex = messages.findIndex((m) => m.info?.id === assistantId);
     if (endIndex < startIndex) {
       logger.debug(
-        `[OpenCode SDK] Assistant message ${assistantId} not found after its parent in ${messages.length} fetched messages; falling back to final-message parts for skill tracking`,
+        '[OpenCode SDK] Assistant message not found after its parent in fetched messages; falling back to final-message parts for skill tracking',
+        { assistantId: formatError(assistantId), messageCount: messages.length },
       );
       return [];
     }
@@ -2504,14 +2534,23 @@ export class OpenCodeSDKProvider implements ApiProvider {
           // honor cancellation locally via the response check below.
           const abortSignal = callOptions?.abortSignal;
           if (abortSignal && client.session.abort && this.opencodeModule?.apiVersion === 'v2') {
+            const formatError = this.getErrorFormatter(config);
             const abortParams = this.buildAbortSessionParameters(
               session.sessionId,
               session.sessionQuery,
             );
-            abortListener = () => {
-              client.session.abort?.(abortParams).catch((err) => {
-                logger.debug(`[OpenCode SDK] Failed to abort session ${session.sessionId}: ${err}`);
+            const logAbortError = (error: unknown) => {
+              logger.debug('[OpenCode SDK] Failed to abort session', {
+                sessionId: formatError(session.sessionId),
+                error: formatError(error),
               });
+            };
+            abortListener = () => {
+              try {
+                client.session.abort?.(abortParams).catch(logAbortError);
+              } catch (error) {
+                logAbortError(error);
+              }
             };
             abortSignal.addEventListener('abort', abortListener, { once: true });
           }
@@ -2539,17 +2578,19 @@ export class OpenCodeSDKProvider implements ApiProvider {
           // skipped whenever the skill tool is denied and no skill parts can exist.
           let allSessionParts: OpenCodePromptPart[] = [];
           if (this.isSkillToolEnabled(config)) {
+            const formatError = this.getErrorFormatter(config);
             try {
               allSessionParts = await this.fetchCurrentPromptParts(
                 client,
                 session,
                 response,
+                formatError,
                 abortSignal,
               );
-            } catch (e) {
-              logger.debug(
-                `[OpenCode SDK] Could not fetch session history for skill tracking: ${e}`,
-              );
+            } catch (error) {
+              logger.debug('[OpenCode SDK] Could not fetch session history for skill tracking', {
+                error: formatError(error),
+              });
             }
             if (abortSignal?.aborted) {
               return { error: 'OpenCode SDK call aborted' };
@@ -2578,7 +2619,8 @@ export class OpenCodeSDKProvider implements ApiProvider {
           try {
             await this.deleteSession(ephemeralSession);
           } catch (err) {
-            logger.debug(`Failed to delete non-persistent session ${ephemeralSession.id}`, {
+            logger.debug('Failed to delete non-persistent OpenCode session', {
+              sessionId: this.formatCallError(ephemeralSession.id, config),
               error: this.formatCallError(err, config),
             });
           }
