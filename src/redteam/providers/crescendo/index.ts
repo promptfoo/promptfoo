@@ -594,6 +594,7 @@ export class CrescendoProvider implements ApiProvider {
           lastResponse.output,
           totalTokenUsage,
           options,
+          context,
         );
         logger.debug(
           `[Crescendo] Refusal check result: isRefusal=${isRefusal}, rationale=${refusalRationale}`,
@@ -781,7 +782,12 @@ export class CrescendoProvider implements ApiProvider {
           }
         }
 
-        const evalScore = await this.getEvalScore(lastResponse.output, totalTokenUsage, options);
+        const evalScore = await this.getEvalScore(
+          lastResponse.output,
+          totalTokenUsage,
+          options,
+          context,
+        );
         evalFlag = evalScore.value;
         evalPercentage = evalScore.metadata;
         objectiveScore = {
@@ -925,6 +931,7 @@ export class CrescendoProvider implements ApiProvider {
     const response = await redTeamingChat.callApi(
       JSON.stringify(redTeamingHistory),
       {
+        ...context,
         prompt: {
           raw: JSON.stringify(redTeamingHistory),
           label: 'history',
@@ -1329,6 +1336,7 @@ export class CrescendoProvider implements ApiProvider {
     lastResponse: string,
     tokenUsage: TokenUsage,
     options?: CallApiOptionsParams,
+    context?: CallApiContextParams,
   ): Promise<[boolean, string]> {
     logger.debug(`[Crescendo] Getting refusal score for prompt: ${attackPrompt}`);
     // Short-circuit refusal grading for standard refusal prefixes
@@ -1359,6 +1367,7 @@ export class CrescendoProvider implements ApiProvider {
       scoringProvider,
       refusalBody,
       {
+        ...context,
         prompt: {
           raw: refusalBody,
           label: 'refusal',
@@ -1402,6 +1411,7 @@ export class CrescendoProvider implements ApiProvider {
     lastResponse: string,
     tokenUsage: TokenUsage,
     options?: CallApiOptionsParams,
+    context?: CallApiContextParams,
   ): Promise<any> {
     logger.debug(
       `[Crescendo] Getting eval score for response: ${lastResponse.substring(0, 100)}...`,
@@ -1425,6 +1435,7 @@ export class CrescendoProvider implements ApiProvider {
       scoringProvider,
       evalBody,
       {
+        ...context,
         prompt: {
           raw: evalBody,
           label: 'eval',

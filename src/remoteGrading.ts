@@ -1,4 +1,5 @@
 import { fetchWithCache } from './cache';
+import cliState from './cliState';
 import { getUserEmail } from './globalConfig/accounts';
 import logger from './logger';
 import { getRequestTimeoutMs } from './providers/shared';
@@ -48,9 +49,15 @@ function redactImagePayloads(value: unknown): unknown {
 
 export async function doRemoteGrading(
   payload: RemoteGradingPayload,
+  options?: { evaluationId?: string },
 ): Promise<Omit<GradingResult, 'assertion'>> {
   try {
     payload.email = getUserEmail();
+    // Use explicitly passed evaluationId, or fall back to global cliState
+    const evaluationId = options?.evaluationId || cliState.evaluationId;
+    if (evaluationId) {
+      payload.evaluationId = evaluationId;
+    }
     const body = JSON.stringify(payload);
     const traceparent = getActiveTraceparent();
     logger.debug('Performing remote grading', { body: redactImagePayloads(payload) });

@@ -884,6 +884,7 @@ async function callProviderForRunEval({
   evalId,
   filters,
   promptForRender,
+  promptIndex,
   provider,
   rateLimitRegistry,
   renderedPrompt,
@@ -906,6 +907,7 @@ async function callProviderForRunEval({
 > & {
   filters: RunEvalOptions['nunjucksFilters'];
   promptForRender: Prompt;
+  promptIndex: number;
   renderedPrompt: string;
   testIndex: number;
   traceContext: Awaited<ReturnType<typeof generateTraceContextIfNeeded>>;
@@ -939,6 +941,7 @@ async function callProviderForRunEval({
         repeatIndex,
         test,
         testIndex,
+        promptIndex,
         testSuite,
         traceContext,
         vars,
@@ -1049,6 +1052,7 @@ async function callActiveProvider({
   repeatIndex,
   test,
   testIndex,
+  promptIndex,
   testSuite,
   traceContext,
   vars,
@@ -1059,6 +1063,7 @@ async function callActiveProvider({
   filters: RunEvalOptions['nunjucksFilters'];
   onProviderInvoked: () => void;
   promptForRender: Prompt;
+  promptIndex: number;
   renderedPrompt: string;
   testIndex: number;
   traceContext: Awaited<ReturnType<typeof generateTraceContextIfNeeded>>;
@@ -1079,6 +1084,7 @@ async function callActiveProvider({
     repeatIndex,
     test,
     testIndex,
+    promptIndex,
     traceContext,
     vars,
   });
@@ -1120,6 +1126,7 @@ function buildCallApiContext({
   repeatIndex,
   test,
   testIndex,
+  promptIndex,
   traceContext,
   vars,
 }: {
@@ -1130,6 +1137,7 @@ function buildCallApiContext({
   repeatIndex: number;
   test: AtomicTestCase;
   testIndex: number;
+  promptIndex: number;
   traceContext: Awaited<ReturnType<typeof generateTraceContextIfNeeded>>;
   vars: Vars;
 }): CallApiContextParams {
@@ -1145,6 +1153,12 @@ function buildCallApiContext({
     testIdx: testIndex,
   };
 
+  // Mirrors the test-case identity that `generateTraceContextIfNeeded` derives, so
+  // untraced runs still carry a stable per-cell id for remote task correlation.
+  callApiContext.testCaseId =
+    test.metadata?.testCaseId ||
+    (test as AtomicTestCase & { id?: string }).id ||
+    `${testIndex}-${promptIndex}`;
   if (evalId) {
     callApiContext.evaluationId = evalId;
   }
@@ -1461,6 +1475,7 @@ async function gradeRunEvalResponse({
           latencyMs: response.latencyMs ?? latencyMs,
           assertScoringFunction: test.assertScoringFunction as ScoringFunction,
           traceId,
+          evaluationId: evalId,
         }).then((checkResult) => applyGradingResult(ret, checkResult)),
     ).catch((error) => {
       applyGradingError(ret, error, abortSignal);
@@ -1481,6 +1496,7 @@ async function gradeRunEvalResponse({
         latencyMs: response.latencyMs ?? latencyMs,
         assertScoringFunction: test.assertScoringFunction as ScoringFunction,
         traceId,
+        evaluationId: evalId,
       }),
   );
   applyGradingResult(ret, checkResult);
@@ -1696,6 +1712,7 @@ async function runEvalInternal({
               ...state.promptForRender,
               config: rendered.setup.prompt.config,
             },
+            promptIndex,
             provider,
             rateLimitRegistry,
             renderedPrompt: rendered.renderedPrompt,
@@ -5040,107 +5057,109 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
     let otelInitialized = false;
     let otlpReceiverAcquired = false;
 
-    let evaluationError: unknown;
-    try {
-      otlpReceiverAcquired = await startOtlpReceiverIfNeeded(this.testSuite, this.store.id);
-      if (tracingEnabled) {
-        logger.debug('[Evaluator] Initializing OTEL SDK for tracing');
-        const otelConfig = getDefaultOtelConfig();
-        initializeOtel(otelConfig);
-        otelInitialized = true;
-      }
-
-      return await this._runEvaluation();
-    } catch (error) {
-      evaluationError = error;
-      throw error;
-    } finally {
-      // Close the JSONL writers first, before the (possibly multi-second) OTEL / provider
-      // teardown below, so the streamed file is fully flushed before the post-run rewrite
-      // reads it back and the file handle is released promptly. allSettled so one writer's
-      // close failure neither blocks cleanup nor masks another writer's error.
-      const writerCloseResults = await Promise.allSettled(
-        this.fileWriters.map((writer) => writer.close()),
-      );
-      const writerCloseErrors = writerCloseResults.flatMap((result) =>
-        result.status === 'rejected' ? [result.reason] : [],
-      );
-
-      let cleanupError: unknown;
+    return cliState.withEvaluationId(this.store.id, async () => {
+      let evaluationError: unknown;
       try {
-        // Flush and shutdown OTEL SDK
-        if (otelInitialized) {
-          logger.debug('[Evaluator] Flushing OTEL spans...');
-          await flushOtel();
-          await shutdownOtel();
+        otlpReceiverAcquired = await startOtlpReceiverIfNeeded(this.testSuite, this.store.id);
+        if (tracingEnabled) {
+          logger.debug('[Evaluator] Initializing OTEL SDK for tracing');
+          const otelConfig = getDefaultOtelConfig();
+          initializeOtel(otelConfig);
+          otelInitialized = true;
         }
 
-        if (otlpReceiverAcquired && isOtlpReceiverStarted()) {
-          // Add a delay to allow providers to finish exporting spans
-          logger.debug('[Evaluator] Waiting for span exports to complete...');
-          await sleep(3000);
-        }
-        await stopOtlpReceiverIfNeeded(otlpReceiverAcquired, this.store.id);
-
-        // Clean up Python worker pools to prevent resource leaks
-        await providerRegistry.shutdownAll();
-
-        // Log rate limit metrics for debugging before cleanup
-        if (this.rateLimitRegistry) {
-          const metrics = this.rateLimitRegistry.getMetrics();
-          for (const [key, m] of Object.entries(metrics)) {
-            if (m.totalRequests > 0) {
-              logger.debug(`[Scheduler] Final metrics for ${sanitizeProviderIdForLog(key)}`, {
-                totalRequests: m.totalRequests,
-                completedRequests: m.completedRequests,
-                failedRequests: m.failedRequests,
-                rateLimitHits: m.rateLimitHits,
-                retriedRequests: m.retriedRequests,
-                avgLatencyMs: Math.round(m.avgLatencyMs),
-                p50LatencyMs: Math.round(m.p50LatencyMs),
-                p99LatencyMs: Math.round(m.p99LatencyMs),
-              });
-            }
-          }
-        }
-
-        // Clean up rate limit registry resources
-        this.rateLimitRegistry?.dispose();
-
-        // Clear registry from redteam provider manager
-        redteamProviderManager.setRateLimitRegistry(undefined);
-
-        // Reset cliState.maxConcurrency to prevent stale state between evaluations
-        cliState.maxConcurrency = undefined;
+        return await this._runEvaluation();
       } catch (error) {
-        cleanupError = error;
+        evaluationError = error;
         throw error;
       } finally {
-        if (writerCloseErrors.length > 0) {
-          logger.error('[Evaluator] Error closing JSONL output', { errors: writerCloseErrors });
-          // Only surface a writer-close failure when nothing else failed, so the original
-          // evaluation/cleanup error is never masked by a secondary I/O error.
-          if (evaluationError === undefined && cleanupError === undefined) {
-            // When results persisted to the database, that copy is authoritative and the
-            // post-run rewrite (writeMultipleOutputs) regenerates the JSONL artifact from
-            // it, so a close error (e.g. a delayed fd-close writeback failure) is recoverable
-            // — log it rather than failing an otherwise-successful run. Only when persistence
-            // failed is the streamed JSONL the sole copy whose truncation must be surfaced.
-            if (this.store.resultPersistenceFailed) {
-              throw writerCloseErrors.length === 1
-                ? writerCloseErrors[0]
-                : new AggregateError(
-                    writerCloseErrors,
-                    'Multiple JSONL output writers failed to close',
-                  );
+        // Close the JSONL writers first, before the (possibly multi-second) OTEL / provider
+        // teardown below, so the streamed file is fully flushed before the post-run rewrite
+        // reads it back and the file handle is released promptly. allSettled so one writer's
+        // close failure neither blocks cleanup nor masks another writer's error.
+        const writerCloseResults = await Promise.allSettled(
+          this.fileWriters.map((writer) => writer.close()),
+        );
+        const writerCloseErrors = writerCloseResults.flatMap((result) =>
+          result.status === 'rejected' ? [result.reason] : [],
+        );
+
+        let cleanupError: unknown;
+        try {
+          // Flush and shutdown OTEL SDK
+          if (otelInitialized) {
+            logger.debug('[Evaluator] Flushing OTEL spans...');
+            await flushOtel();
+            await shutdownOtel();
+          }
+
+          if (otlpReceiverAcquired && isOtlpReceiverStarted()) {
+            // Add a delay to allow providers to finish exporting spans
+            logger.debug('[Evaluator] Waiting for span exports to complete...');
+            await sleep(3000);
+          }
+          await stopOtlpReceiverIfNeeded(otlpReceiverAcquired, this.store.id);
+
+          // Clean up Python worker pools to prevent resource leaks
+          await providerRegistry.shutdownAll();
+
+          // Log rate limit metrics for debugging before cleanup
+          if (this.rateLimitRegistry) {
+            const metrics = this.rateLimitRegistry.getMetrics();
+            for (const [key, m] of Object.entries(metrics)) {
+              if (m.totalRequests > 0) {
+                logger.debug(`[Scheduler] Final metrics for ${sanitizeProviderIdForLog(key)}`, {
+                  totalRequests: m.totalRequests,
+                  completedRequests: m.completedRequests,
+                  failedRequests: m.failedRequests,
+                  rateLimitHits: m.rateLimitHits,
+                  retriedRequests: m.retriedRequests,
+                  avgLatencyMs: Math.round(m.avgLatencyMs),
+                  p50LatencyMs: Math.round(m.p50LatencyMs),
+                  p99LatencyMs: Math.round(m.p99LatencyMs),
+                });
+              }
             }
-            logger.warn(
-              `JSONL output writer reported a close error after results persisted; the output file will be regenerated from the database. ${writerCloseErrors.map((error) => (error instanceof Error ? error.message : String(error))).join('; ')}`,
-            );
+          }
+
+          // Clean up rate limit registry resources
+          this.rateLimitRegistry?.dispose();
+
+          // Clear registry from redteam provider manager
+          redteamProviderManager.setRateLimitRegistry(undefined);
+
+          // Reset cliState.maxConcurrency to prevent stale state between evaluations
+          cliState.maxConcurrency = undefined;
+        } catch (error) {
+          cleanupError = error;
+          throw error;
+        } finally {
+          if (writerCloseErrors.length > 0) {
+            logger.error('[Evaluator] Error closing JSONL output', { errors: writerCloseErrors });
+            // Only surface a writer-close failure when nothing else failed, so the original
+            // evaluation/cleanup error is never masked by a secondary I/O error.
+            if (evaluationError === undefined && cleanupError === undefined) {
+              // When results persisted to the database, that copy is authoritative and the
+              // post-run rewrite (writeMultipleOutputs) regenerates the JSONL artifact from
+              // it, so a close error (e.g. a delayed fd-close writeback failure) is recoverable
+              // — log it rather than failing an otherwise-successful run. Only when persistence
+              // failed is the streamed JSONL the sole copy whose truncation must be surfaced.
+              if (this.store.resultPersistenceFailed) {
+                throw writerCloseErrors.length === 1
+                  ? writerCloseErrors[0]
+                  : new AggregateError(
+                      writerCloseErrors,
+                      'Multiple JSONL output writers failed to close',
+                    );
+              }
+              logger.warn(
+                `JSONL output writer reported a close error after results persisted; the output file will be regenerated from the database. ${writerCloseErrors.map((error) => (error instanceof Error ? error.message : String(error))).join('; ')}`,
+              );
+            }
           }
         }
       }
-    }
+    });
   }
 }
 

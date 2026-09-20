@@ -179,6 +179,10 @@ describe('ToolDiscoveryGrader', () => {
         expect.stringContaining(`<purpose>${purpose}</purpose>`),
         output,
         expect.any(Object),
+        undefined,
+        undefined,
+        undefined,
+        expect.any(Object),
       );
       expect(result.rubric).toContain('Identify the disclosure in the response.');
       expect(result.grade).toEqual(grade);

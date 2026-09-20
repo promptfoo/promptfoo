@@ -218,14 +218,19 @@ export async function matchesLlmRubric(
   ) {
     try {
       return {
-        ...(await doRemoteGrading({
-          task: 'llm-rubric',
-          rubric,
-          output: gradingOutput,
-          vars: vars || {},
-          ...(imageOutputs.length ? { images: imageOutputs } : {}),
-          ...getRemoteGradingContext(),
-        })),
+        ...(await doRemoteGrading(
+          {
+            task: 'llm-rubric',
+            rubric,
+            output: gradingOutput,
+            vars: vars || {},
+            pluginId: providerCallContext?.test?.metadata?.pluginId,
+            strategyId: providerCallContext?.test?.metadata?.strategyId,
+            ...(imageOutputs.length ? { images: imageOutputs } : {}),
+            ...getRemoteGradingContext(),
+          },
+          { evaluationId: providerCallContext?.evaluationId },
+        )),
         assertion,
       };
     } catch (error) {
