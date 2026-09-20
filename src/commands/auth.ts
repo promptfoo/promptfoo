@@ -495,21 +495,32 @@ export function authCommand(program: Command) {
           return;
         }
 
-        logger.warn('Stored team is no longer accessible, falling back to default');
+        logger.warn('Stored team is no longer accessible, looking for another team');
         cloudConfig.clearCurrentTeamId(currentOrganizationId);
         if (teams.length === 0) {
           throw new Error('No teams found for user');
         }
 
-        const organizationTeams = currentOrganizationId
-          ? getOrganizationTeams(teams, undefined, currentOrganizationId).teams
-          : teams;
-        const defaultTeam = getOldestTeam(organizationTeams);
-        if (defaultTeam.organizationId !== currentOrganizationId) {
-          cloudConfig.setCurrentOrganization(defaultTeam.organizationId);
+        const { organizationId: fallbackOrganizationId, teams: organizationTeams } =
+          getOrganizationTeams(
+            teams,
+            undefined,
+            currentOrganizationId ?? getOldestTeam(teams).organizationId,
+          );
+        const savedFallbackTeamId =
+          fallbackOrganizationId === currentOrganizationId
+            ? undefined
+            : cloudConfig.getCurrentTeamId(fallbackOrganizationId);
+        const savedFallbackTeam = organizationTeams.find((team) => team.id === savedFallbackTeamId);
+        const fallbackTeam = savedFallbackTeam ?? getOldestTeam(organizationTeams);
+        if (fallbackOrganizationId !== currentOrganizationId) {
+          cloudConfig.setCurrentOrganization(fallbackOrganizationId);
         }
-        cloudConfig.setCurrentTeamId(defaultTeam.id, defaultTeam.organizationId);
-        logger.info(`Current team: ${chalk.green(defaultTeam.name)} ${chalk.dim('(default)')}`);
+        if (!savedFallbackTeam) {
+          cloudConfig.setCurrentTeamId(fallbackTeam.id, fallbackOrganizationId);
+        }
+        const teamLabelSuffix = savedFallbackTeam ? '' : ` ${chalk.dim('(default)')}`;
+        logger.info(`Current team: ${chalk.green(fallbackTeam.name)}${teamLabelSuffix}`);
       } catch (error) {
         const errorMessage = error instanceof Error ? error.message : String(error);
         logger.error(`Failed to get current team: ${errorMessage}`);

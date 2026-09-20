@@ -1623,6 +1623,208 @@ describe('OpenCodeSDKProvider', () => {
         expect(result.error).toContain('The mcp endpoint at /mcp returned an unexpected status');
       });
 
+      it('redacts the credential that initialized the reused server when later prompts omit or replace it', async () => {
+        const firstToken = 'synthetic-first-server-credential-0919';
+        const nextToken = 'synthetic-current-prompt-credential-0919';
+        const errorSpy = vi.spyOn(logger, 'error').mockImplementation(() => {});
+        const withMcp = (token: string): CallApiContextParams => ({
+          vars: {},
+          prompt: {
+            raw: 'configured prompt',
+            label: 'configured prompt',
+            config: {
+              mcp: {
+                gateway: {
+                  type: 'remote',
+                  url: 'https://example.test/mcp',
+                  headers: { Authorization: `Bearer ${token}` },
+                },
+              },
+            },
+          },
+        });
+        const assistant = createMockPromptResponse([]);
+        const error = {
+          name: 'APIError',
+          data: { message: `Rejected supplied values ${firstToken} | ${nextToken}` },
+        };
+        mockSessionPrompt
+          .mockResolvedValueOnce(
+            createMockPromptResponse([{ type: 'text', text: 'server initialized' }]),
+          )
+          .mockResolvedValueOnce({
+            error: { name: 'APIError', data: { message: `Rejected supplied value ${firstToken}` } },
+          })
+          .mockResolvedValueOnce({
+            data: { ...assistant.data, info: { ...assistant.data.info, error } },
+          });
+        const provider = new OpenCodeSDKProvider({ env: { ANTHROPIC_API_KEY: 'test-api-key' } });
+
+        await provider.callApi('initial prompt', withMcp(firstToken));
+        const omitted = await provider.callApi('omitted configuration');
+        const replaced = await provider.callApi('replaced configuration', withMcp(nextToken));
+
+        expect(mockCreateOpencode).toHaveBeenCalledTimes(1);
+        expect(mockCreateOpencode).toHaveBeenCalledWith(
+          expect.objectContaining({
+            config: expect.objectContaining({
+              mcp: expect.objectContaining({
+                gateway: expect.objectContaining({
+                  headers: { Authorization: `Bearer ${firstToken}` },
+                }),
+              }),
+            }),
+          }),
+        );
+        for (const result of [omitted, replaced]) {
+          expect(result.error).toContain('Rejected supplied value');
+          expect(result.error).toContain('[REDACTED]');
+        }
+        const observable = JSON.stringify({ omitted, replaced, logs: errorSpy.mock.calls });
+        expect(observable).not.toContain(firstToken);
+        expect(observable).not.toContain(nextToken);
+      });
+
+      it('retains forwarded environment credentials until the server has closed', async () => {
+        const previous = 'synthetic-initial-forwarded-0919';
+        const next = 'synthetic-replacement-forwarded-0919';
+        vi.stubEnv('SYNTHETIC_GATEWAY_TOKEN', previous);
+        try {
+          const errorSpy = vi.spyOn(logger, 'error').mockImplementation(() => {});
+          const provider = new OpenCodeSDKProvider();
+          mockSessionPrompt
+            .mockResolvedValueOnce(
+              createMockPromptResponse([{ type: 'text', text: 'initialized' }]),
+            )
+            .mockResolvedValue({
+              error: { name: 'APIError', data: { message: `Rejected previous value ${previous}` } },
+            });
+
+          await provider.callApi('initial process environment');
+          vi.stubEnv('SYNTHETIC_GATEWAY_TOKEN', next);
+          const reused = await provider.callApi('changed process environment');
+
+          expect(reused.error).toContain('[REDACTED]');
+          expect(JSON.stringify(errorSpy.mock.calls)).not.toContain(previous);
+          await provider.cleanup();
+          expect(mockServerClose).toHaveBeenCalledOnce();
+          errorSpy.mockClear();
+          const restarted = await provider.callApi('fresh server environment');
+
+          expect(mockCreateOpencode).toHaveBeenCalledTimes(2);
+          expect(restarted.error).toContain(previous);
+        } finally {
+          vi.unstubAllEnvs();
+        }
+      });
+
+      it('retains previous credentials for a request still returning when cleanup closes the server', async () => {
+        const previous = 'synthetic-inflight-server-credential-0919';
+        const pending = createDeferred<unknown>();
+        const errorSpy = vi.spyOn(logger, 'error').mockImplementation(() => {});
+        mockSessionPrompt
+          .mockResolvedValueOnce(createMockPromptResponse([{ type: 'text', text: 'initialized' }]))
+          .mockImplementationOnce(() => pending.promise);
+        const provider = new OpenCodeSDKProvider();
+        await provider.callApi('initial prompt credential', {
+          vars: {},
+          prompt: {
+            raw: 'initial',
+            label: 'initial',
+            config: {
+              mcp: {
+                gateway: {
+                  type: 'remote',
+                  url: 'https://example.test/mcp',
+                  headers: { Authorization: `Bearer ${previous}` },
+                },
+              },
+            },
+          },
+        });
+
+        const inFlight = provider.callApi('later prompt without configuration');
+        await vi.waitFor(() => expect(mockSessionPrompt).toHaveBeenCalledTimes(2));
+        await provider.cleanup();
+        expect(mockServerClose).toHaveBeenCalledOnce();
+        pending.resolve({
+          error: { name: 'APIError', data: { message: `Rejected previous value ${previous}` } },
+        });
+        const result = await inFlight;
+
+        expect(result.error).toContain('[REDACTED]');
+        expect(JSON.stringify({ result, logs: errorSpy.mock.calls })).not.toContain(previous);
+      });
+
+      it('keeps prior credentials redacted if the SDK cannot confirm the server closed', async () => {
+        const previous = 'synthetic-unclosed-server-0919';
+        const next = 'synthetic-next-server-0919';
+        vi.stubEnv('SYNTHETIC_GATEWAY_TOKEN', previous);
+        try {
+          const debugSpy = vi.spyOn(logger, 'debug').mockImplementation(() => {});
+          const errorSpy = vi.spyOn(logger, 'error').mockImplementation(() => {});
+          mockSessionPrompt
+            .mockResolvedValueOnce(
+              createMockPromptResponse([{ type: 'text', text: 'initialized' }]),
+            )
+            .mockResolvedValueOnce({
+              error: { name: 'APIError', data: { message: `Previous value ${previous}` } },
+            });
+          mockServerClose.mockImplementationOnce(() => {
+            throw new Error(`Close failed for ${previous}`);
+          });
+          const provider = new OpenCodeSDKProvider();
+
+          await provider.callApi('initial unclosed server');
+          vi.stubEnv('SYNTHETIC_GATEWAY_TOKEN', next);
+          await provider.cleanup();
+          const failure = await provider.callApi('after unverified closure');
+
+          expect(failure.error).toContain('[REDACTED]');
+          expect(debugSpy).toHaveBeenCalledWith('Failed to close OpenCode server', {
+            error: expect.stringContaining('[REDACTED]'),
+          });
+          expect(
+            JSON.stringify({ debug: debugSpy.mock.calls, errors: errorSpy.mock.calls }),
+          ).not.toContain(previous);
+        } finally {
+          vi.unstubAllEnvs();
+        }
+      });
+
+      it('sanitizes persistent-session cleanup failures with the running server credentials', async () => {
+        const previous = 'synthetic-persistent-session-credential-0919';
+        vi.stubEnv('SYNTHETIC_GATEWAY_TOKEN', previous);
+        try {
+          const debugSpy = vi.spyOn(logger, 'debug').mockImplementation(() => {});
+          const provider = new OpenCodeSDKProvider({ config: { persist_sessions: true } });
+          await provider.callApi('persistent credential');
+          vi.stubEnv('SYNTHETIC_GATEWAY_TOKEN', 'synthetic-next-session-credential-0919');
+          mockSessionDelete.mockRejectedValueOnce(new Error(`Deleting with ${previous}`));
+
+          await provider.cleanup();
+
+          expect(debugSpy).toHaveBeenCalledWith('Failed to delete persistent OpenCode session', {
+            sessionId: 'test-session-123',
+            error: expect.stringContaining('[REDACTED]'),
+          });
+          expect(JSON.stringify(debugSpy.mock.calls)).not.toContain(previous);
+        } finally {
+          vi.unstubAllEnvs();
+        }
+      });
+
+      it('does not replace the SDK diagnostic when a provider ID has an invalid runtime type', async () => {
+        mockSessionPrompt.mockRejectedValueOnce(new Error('original SDK failure'));
+        const provider = new OpenCodeSDKProvider({
+          config: { provider_id: 42 } as unknown as OpenCodeSDKConfig,
+        });
+
+        await expect(provider.callApi('invalid provider ID')).resolves.toMatchObject({
+          error: expect.stringContaining('original SDK failure'),
+        });
+      });
+
       it('redacts credentials inherited by the OpenCode server for additional providers', async () => {
         const groq = 'gsk_synthetic-groq-value-0919';
         const applicationKey = 'synthetic-private-key-0919';
@@ -2419,6 +2621,7 @@ describe('OpenCodeSDKProvider', () => {
         expect(result.output).toBe('Test response');
         expect(debugSpy).toHaveBeenCalledWith(
           expect.stringContaining('Failed to delete non-persistent session test-session-123'),
+          { error: 'delete failed' },
         );
 
         debugSpy.mockRestore();

@@ -1143,6 +1143,10 @@ export class OpenCodeSDKProvider implements ApiProvider {
   private client?: OpenCodeClient;
   private clientInitialization?: Promise<void>;
   private server?: OpenCodeServer;
+  private activeClientCredentials = new Set<string>();
+  private hasUnclosedCredentialSource = false;
+  private activeCallCount = 0;
+  private clearClientCredentialsAfterCalls = false;
   private sessions: Map<string, OpenCodeSessionHandle> = new Map(); // cacheKey -> session info
   private sessionOrder: string[] = []; // Track insertion order for LRU eviction
   private sessionQueues = new Map<string, Promise<void>>();
@@ -1177,7 +1181,8 @@ export class OpenCodeSDKProvider implements ApiProvider {
     }
 
     // Check provider-specific env vars based on provider_id
-    const providerId = config?.provider_id?.toLowerCase();
+    const providerId =
+      typeof config?.provider_id === 'string' ? config.provider_id.toLowerCase() : undefined;
     if (providerId === 'anthropic') {
       return this.env?.ANTHROPIC_API_KEY || getEnvString('ANTHROPIC_API_KEY');
     }
@@ -1212,7 +1217,10 @@ export class OpenCodeSDKProvider implements ApiProvider {
       try {
         await this.deleteSession(session);
       } catch (err) {
-        logger.debug(`Failed to delete persistent session ${session.id}: ${err}`);
+        logger.debug('Failed to delete persistent OpenCode session', {
+          sessionId: session.id,
+          error: this.formatCallError(err, this.config),
+        });
       }
     }
     this.sessions.clear();
@@ -1224,11 +1232,24 @@ export class OpenCodeSDKProvider implements ApiProvider {
       try {
         this.server.close();
       } catch (err) {
-        logger.debug(`Failed to close OpenCode server: ${err}`);
+        // If closing could not be verified, do not forget values that the old server may
+        // still return, even if another client is later initialized on this instance.
+        this.hasUnclosedCredentialSource = true;
+        logger.debug('Failed to close OpenCode server', {
+          error: this.formatCallError(err, this.config),
+        });
       }
       this.server = undefined;
     }
     this.client = undefined;
+    if (!this.hasUnclosedCredentialSource) {
+      if (this.activeCallCount === 0) {
+        this.activeClientCredentials.clear();
+        this.clearClientCredentialsAfterCalls = false;
+      } else {
+        this.clearClientCredentialsAfterCalls = true;
+      }
+    }
     await Promise.all(
       [...this.pendingTempDirectories].map((workingDir) => this.removeTempDirectory(workingDir)),
     );
@@ -1284,6 +1305,9 @@ export class OpenCodeSDKProvider implements ApiProvider {
         }
       }
     };
+    for (const value of this.activeClientCredentials) {
+      remember(value);
+    }
     addOpenCodeConfigCredentials(this.config, remember);
     if (config !== this.config) {
       addOpenCodeConfigCredentials(config, remember);
@@ -1301,6 +1325,37 @@ export class OpenCodeSDKProvider implements ApiProvider {
       describeOpenCodeError(error, status),
       [...credentials].sort((left, right) => right.length - left.length),
     );
+  }
+
+  private captureClientCredentials(config: OpenCodeSDKConfig): void {
+    // A new client now owns this credential set. If old requests are still finishing,
+    // their credentials can remain until this new client is also closed safely.
+    this.clearClientCredentialsAfterCalls = false;
+    const remember = (value: unknown) => {
+      if (typeof value === 'string' && value) {
+        this.activeClientCredentials.add(value);
+      }
+    };
+    addOpenCodeConfigCredentials(config, remember);
+    remember(this.getApiKey(config));
+    for (const environment of [process.env, this.env ?? {}]) {
+      for (const [key, value] of Object.entries(environment)) {
+        addOpenCodeEnvironmentValue(key, value, remember);
+      }
+    }
+  }
+
+  private completeCall(): void {
+    this.activeCallCount--;
+    if (
+      this.activeCallCount === 0 &&
+      this.clearClientCredentialsAfterCalls &&
+      !this.client &&
+      !this.hasUnclosedCredentialSource
+    ) {
+      this.activeClientCredentials.clear();
+      this.clearClientCredentialsAfterCalls = false;
+    }
   }
 
   /**
@@ -1686,6 +1741,9 @@ export class OpenCodeSDKProvider implements ApiProvider {
       return this.clientInitialization;
     }
 
+    // The first prompt chooses the configuration for the reused client/server. Later
+    // prompts may omit or replace it, but errors can still echo its original values.
+    this.captureClientCredentials(config);
     const { createOpencode, createOpencodeClient } = opencodeModule;
     let initialization: Promise<void>;
     initialization = (async () => {
@@ -2368,6 +2426,7 @@ export class OpenCodeSDKProvider implements ApiProvider {
   ): Promise<ProviderResponse> {
     const { config, isTempDir, workingDir } = this.prepareCall(context);
     providerRegistry.register(this);
+    this.activeCallCount++;
     let ephemeralSession: OpenCodeSessionHandle | undefined;
     let abortListener: (() => void) | undefined;
 
@@ -2511,20 +2570,26 @@ export class OpenCodeSDKProvider implements ApiProvider {
     } catch (error) {
       return this.handleCallError(error, config, callOptions);
     } finally {
-      if (abortListener && callOptions?.abortSignal) {
-        callOptions.abortSignal.removeEventListener('abort', abortListener);
-      }
-      if (ephemeralSession) {
-        try {
-          await this.deleteSession(ephemeralSession);
-        } catch (err) {
-          logger.debug(`Failed to delete non-persistent session ${ephemeralSession.id}: ${err}`);
+      try {
+        if (abortListener && callOptions?.abortSignal) {
+          callOptions.abortSignal.removeEventListener('abort', abortListener);
         }
-      }
+        if (ephemeralSession) {
+          try {
+            await this.deleteSession(ephemeralSession);
+          } catch (err) {
+            logger.debug(`Failed to delete non-persistent session ${ephemeralSession.id}`, {
+              error: this.formatCallError(err, config),
+            });
+          }
+        }
 
-      // Clean up temp directory without masking the call result on cleanup failure.
-      if (isTempDir && workingDir) {
-        await this.removeTempDirectory(workingDir);
+        // Clean up temp directory without masking the call result on cleanup failure.
+        if (isTempDir && workingDir) {
+          await this.removeTempDirectory(workingDir);
+        }
+      } finally {
+        this.completeCall();
       }
     }
   }
