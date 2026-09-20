@@ -122,6 +122,8 @@ export const subCategoryDescriptions: Record<Plugin | Strategy, string> = {
   multilingual:
     '[DEPRECATED] Tests handling of attacks across multiple languages. Use top-level language config instead.',
   mcp: 'Tests for vulnerabilities to Model Context Protocol (MCP) attacks',
+  'mcp:tool-response-poisoning':
+    'Tests whether an MCP server returns poisoned tool responses (prompt-injection content embedded in benign tool output)',
   'medical:anchoring-bias':
     'Tests for medical anchoring bias where AI fixates on irrelevant information',
   'medical:fda:ai-disclosure':
@@ -302,6 +304,7 @@ export const displayNameOverrides: Record<Plugin | Strategy, string> = {
   'indirect-web-pwn': 'Indirect Web Prompt Injection',
   layer: 'Strategy Layer',
   mcp: 'Model Context Protocol',
+  'mcp:tool-response-poisoning': 'MCP Tool Response Poisoning',
   'medical:anchoring-bias': 'Medical Anchoring Bias',
   'medical:fda:ai-disclosure': 'FDA AI Disclosure',
   'medical:fda:cyber-access-control': 'FDA Cyber Access Control',
@@ -536,6 +539,7 @@ export const riskCategorySeverityMap: Record<Plugin, Severity> = {
   'debug-access': Severity.High,
   default: Severity.Low,
   mcp: Severity.High,
+  'mcp:tool-response-poisoning': Severity.Critical,
   'medical:anchoring-bias': Severity.High,
   'medical:fda:ai-disclosure': Severity.High,
   'medical:fda:cyber-access-control': Severity.Critical,
@@ -684,6 +688,7 @@ export const riskCategories: Record<string, Plugin[]> = {
     'system-prompt-override',
     'tool-discovery',
     'mcp',
+    'mcp:tool-response-poisoning',
 
     // Data protection
     'cross-session-leak',
@@ -879,6 +884,7 @@ export const categoryAliases: Record<Plugin, string> = {
   default: 'Default',
   ferpa: 'FERPACompliance',
   mcp: 'MCP',
+  'mcp:tool-response-poisoning': 'MCPToolPoisoning',
   'medical:anchoring-bias': 'MedicalAnchoringBias',
   'medical:fda:ai-disclosure': 'MedicalFdaAiDisclosure',
   'medical:fda:cyber-access-control': 'MedicalFdaCyberAccessControl',
@@ -1178,6 +1184,8 @@ export const pluginDescriptions: Record<Plugin, string> = {
   'ecommerce:price-manipulation':
     'Tests for price manipulation through discount code abuse, inventory exploits, cart manipulation, unauthorized price modifications, or coupon stacking vulnerabilities',
   mcp: 'Tests for vulnerabilities to Model Context Protocol (MCP) attacks',
+  'mcp:tool-response-poisoning':
+    'Tests whether an MCP server returns poisoned tool responses — prompt-injection content (system overrides, hidden instruction fields, exfiltration directives) embedded in the output of benign tool calls',
   'medical:anchoring-bias':
     'Tests for medical anchoring bias where AI fixates on irrelevant information in medical contexts',
   'medical:fda:ai-disclosure':
