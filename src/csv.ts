@@ -208,7 +208,9 @@ export function assertionFromString(expected: string): Assertion {
       type === 'levenshtein' ||
       type === 'perplexity-score' ||
       type === 'perplexity' ||
+      type === 'rouge-l' ||
       type === 'rouge-n' ||
+      type === 'rouge-s' ||
       type === 'similar' ||
       type === 'starts-with'
     ) {

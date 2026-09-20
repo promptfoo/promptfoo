@@ -57,6 +57,27 @@ function rougeNScore(candidate: string, reference: string, n = 1, beta = 1): num
   return rouge.fMeasure(precision, recall, beta);
 }
 
+/**
+ * Computes ROUGE-L or ROUGE-S with js-rouge.
+ *
+ * js-rouge counts repeated matches from 3.2.1 on (3.2.0 deduplicated them, so
+ * identical text with a repeated token scored below 1.0). Its ROUGE-L is the
+ * summary-level variant, ROUGE-Lsum: both texts are split into sentences and each
+ * reference sentence is matched against every candidate sentence, so reordering whole
+ * sentences does not lower the score. ROUGE-S counts skip-bigrams over the whole text.
+ *
+ * js-rouge throws on blank input. Blank text has no tokens to match, so it scores 0
+ * here, as it does in `rougeNScore`.
+ *
+ * @internal
+ */
+function jsRougeScore(fnName: 'l' | 's', candidate: string, reference: string): number {
+  if (candidate.trim() === '' || reference.trim() === '') {
+    return 0;
+  }
+  return rouge[fnName](candidate, reference, {});
+}
+
 export function handleRougeScore({
   baseType,
   assertion,
@@ -73,11 +94,10 @@ export function handleRougeScore({
   const candidate = outputString.toLowerCase();
   const reference = renderedValue.toLowerCase();
 
-  // ROUGE-N (the only registered rouge assertion type) is computed in-house with
-  // clipped counts so repeated tokens score correctly. ROUGE-L/S remain delegated
-  // to js-rouge on the lowercased inputs.
+  // ROUGE-N is computed in-house with clipped counts so repeated tokens score
+  // correctly. ROUGE-L/S are delegated to js-rouge on the lowercased inputs.
   const score =
-    fnName === 'n' ? rougeNScore(candidate, reference) : rouge[fnName](candidate, reference, {});
+    fnName === 'n' ? rougeNScore(candidate, reference) : jsRougeScore(fnName, candidate, reference);
 
   const threshold = assertion.threshold ?? 0.75;
   const pass = score >= threshold !== inverse;
