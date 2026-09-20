@@ -28,6 +28,7 @@ Context-based:
 - [`context-recall`](/docs/configuration/expected-outputs/model-graded/context-recall) - ensure that ground truth appears in context. Defaults to threshold `0.5`.
 - [`context-relevance`](/docs/configuration/expected-outputs/model-graded/context-relevance) - ensure that context is relevant to original query. Defaults to threshold `0.5`.
 - [`context-faithfulness`](/docs/configuration/expected-outputs/model-graded/context-faithfulness) - ensure that LLM output is supported by context. Defaults to threshold `0.5`.
+- [`citation-faithfulness`](/docs/configuration/expected-outputs/model-graded/citation-faithfulness) - ensure that each citation marker points to a passage that supports its claim. Defaults to threshold `1`.
 
 Conversational:
 
@@ -475,6 +476,7 @@ Context-based assertions are a special class of model-graded assertions that eva
 - [`context-recall`](/docs/configuration/expected-outputs/model-graded/context-recall) - ensure that ground truth appears in context
 - [`context-relevance`](/docs/configuration/expected-outputs/model-graded/context-relevance) - ensure that context is relevant to original query
 - [`context-faithfulness`](/docs/configuration/expected-outputs/model-graded/context-faithfulness) - ensure that LLM output is supported by context
+- [`citation-faithfulness`](/docs/configuration/expected-outputs/model-graded/citation-faithfulness) - ensure that each citation marker points to a passage that supports its claim
 
 ### Defining context
 
