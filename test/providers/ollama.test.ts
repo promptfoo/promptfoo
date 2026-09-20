@@ -336,6 +336,42 @@ describe('OllamaCompletionProvider', () => {
     expect(body.options[key]).toBeUndefined();
   });
 
+  // The completion endpoint has its own parsing/accumulation branch, so the same
+  // malformed-response contract needs coverage on both sides.
+  it.each([
+    ['non-string thinking', '"thinking":{"a":1}', 'hi'],
+    ['non-string thinking with empty response', '"thinking":[1,2],"response":""', ''],
+  ])('should degrade gracefully on completion %s', async (_label, fragment, expected) => {
+    vi.mocked(fetchWithCache).mockResolvedValue({
+      data: `{"response":"hi",${fragment},"done":true}\n`,
+      cached: false,
+      status: 200,
+      statusText: 'OK',
+      headers: {},
+    });
+
+    const result = await new OllamaCompletionProvider('llama3.3').callApi('test prompt');
+
+    expect(result.error).toBeUndefined();
+    expect(result.output).toBe(expected);
+    expect(String(result.output)).not.toContain('[object Object]');
+  });
+
+  it('should render a non-string completion response as empty', async () => {
+    vi.mocked(fetchWithCache).mockResolvedValue({
+      data: '{"response":{"a":1},"done":true}\n',
+      cached: false,
+      status: 200,
+      statusText: 'OK',
+      headers: {},
+    });
+
+    const result = await new OllamaCompletionProvider('llama3.3').callApi('test prompt');
+
+    expect(result.output).toBe('');
+    expect(String(result.output)).not.toContain('[object Object]');
+  });
+
   it.each([
     [{ bustCache: true }, true],
     [{ debug: true }, true],
@@ -1419,6 +1455,61 @@ describe('OllamaChatProvider', () => {
       { function: { name: 'get_weather', arguments: '{"city":"Paris"}' } },
     ]);
     expect(result.finishReason).toBe('stop');
+  });
+
+  // Contract for malformed/proxied responses: never surface a raw TypeError, never
+  // render a non-string into the output, and never discard readable data alongside
+  // unreadable data.
+  it.each([
+    ['tool_calls not an array', '"tool_calls":{"a":1}', 'hi'],
+    ['null tool call', '"tool_calls":[null]', 'hi'],
+    ['tool call without function', '"tool_calls":[{}]', 'hi'],
+    ['null function', '"tool_calls":[{"function":null}]', 'hi'],
+    ['function without a name', '"tool_calls":[{"function":{"arguments":{"a":1}}}]', 'hi'],
+    ['non-string thinking', '"thinking":{"a":1}', 'hi'],
+  ])('should degrade gracefully on %s', async (_label, fragment, expected) => {
+    vi.mocked(fetchWithCache).mockResolvedValue({
+      data: `{"message":{"role":"assistant","content":"hi",${fragment}},"done":true}\n`,
+      cached: false,
+      status: 200,
+      statusText: 'OK',
+      headers: {},
+    });
+
+    const result = await new OllamaChatProvider('llama3.3').callApi('test prompt');
+
+    expect(result.error).toBeUndefined();
+    expect(result.output).toBe(expected);
+  });
+
+  it('should render a non-string content as empty rather than [object Object]', async () => {
+    vi.mocked(fetchWithCache).mockResolvedValue({
+      data: '{"message":{"role":"assistant","content":{"a":1}},"done":true}\n',
+      cached: false,
+      status: 200,
+      statusText: 'OK',
+      headers: {},
+    });
+
+    const result = await new OllamaChatProvider('llama3.3').callApi('test prompt');
+
+    expect(result.output).toBe('');
+    expect(String(result.output)).not.toContain('[object Object]');
+  });
+
+  it('should keep readable tool calls alongside unreadable ones', async () => {
+    vi.mocked(fetchWithCache).mockResolvedValue({
+      data: '{"message":{"role":"assistant","content":"","tool_calls":[null,{"function":{"name":"f","arguments":{"a":1}}}]},"done":true}\n',
+      cached: false,
+      status: 200,
+      statusText: 'OK',
+      headers: {},
+    });
+
+    const result = await new OllamaChatProvider('llama3.3').callApi('test prompt');
+
+    // Dropping the whole response because one entry is malformed would lose real data.
+    expect(result.output).toEqual([{ function: { name: 'f', arguments: '{"a":1}' } }]);
   });
 
   it('should handle multiple tool calls in response', async () => {

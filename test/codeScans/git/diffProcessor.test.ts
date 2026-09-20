@@ -48,5 +48,23 @@ describe('processDiff', () => {
       ),
     );
     expect(mockExeca).toHaveBeenCalledTimes(3);
+    expect(mockExeca).toHaveBeenNthCalledWith(
+      1,
+      'git',
+      ['diff', '--raw', '-z', '--no-color', '--no-ext-diff', '--no-abbrev', 'base...head'],
+      { cwd: '/repo' },
+    );
+    expect(mockExeca).toHaveBeenNthCalledWith(2, 'git', ['diff', '--numstat', 'base...head'], {
+      cwd: '/repo',
+    });
+    expect(mockExeca).toHaveBeenNthCalledWith(
+      3,
+      'git',
+      ['cat-file', '--batch-check=%(objectname) %(objecttype) %(objectsize)'],
+      {
+        cwd: '/repo',
+        input: files.map(({ sha }) => sha).join('\n'),
+      },
+    );
   });
 });
