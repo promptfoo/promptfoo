@@ -461,6 +461,7 @@ interface OpenCodeSDKModule {
     hostname?: string;
     port?: number;
     timeout?: number;
+    signal?: AbortSignal;
     config?: Record<string, unknown>;
     env?: Record<string, string>;
   }) => Promise<{ client: OpenCodeClient; server: OpenCodeServer }>;
@@ -2510,12 +2511,14 @@ export class OpenCodeSDKProvider implements ApiProvider {
         hostname: string;
         port: number;
         timeout: number;
+        signal: AbortSignal;
         config?: Record<string, unknown>;
         env?: Record<string, string>;
       } = {
         hostname: config.hostname ?? '127.0.0.1',
         port: config.port ?? 0,
         timeout: config.timeout ?? 30000,
+        signal: this.processTermination.signal,
         env: this.buildServerEnv(config),
       };
 

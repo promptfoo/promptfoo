@@ -4516,9 +4516,12 @@ describe('OpenCodeSDKProvider', () => {
       const provider = new OpenCodeSDKProvider({ config: { working_dir: '/test/work' } });
       const call = provider.callApi('prompt while process is starting');
       await starting.promise;
+      const startupSignal = mockCreateOpencode.mock.calls[0][0].signal as AbortSignal;
+      expect(startupSignal.aborted).toBe(false);
 
       await providerRegistry.shutdownForProcess();
       await expect(call).resolves.toMatchObject({ error: 'OpenCode SDK call aborted' });
+      expect(startupSignal.aborted).toBe(true);
       expect(mockServerClose).not.toHaveBeenCalled();
       expect(mockSessionPrompt).not.toHaveBeenCalled();
 
