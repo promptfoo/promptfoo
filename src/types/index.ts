@@ -920,6 +920,8 @@ export const TestCaseSchema = z.object({
       disableDefaultAsserts: z.boolean().optional(),
       // If true, run this without concurrency no matter what
       runSerially: z.boolean().optional(),
+      // Preserve selected variable values as literal input instead of rendering nested templates.
+      skipRenderVars: z.array(z.string()).optional(),
 
       // Number of times to repeat this specific test case.
       repeat: z.number().int().positive().safe().optional(),
