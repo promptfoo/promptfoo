@@ -354,6 +354,7 @@ export const ADDITIONAL_PLUGINS = [
   ...INSURANCE_PLUGINS,
   'off-topic',
   'overreliance',
+  'path-traversal-output',
   ...PHARMACY_PLUGINS,
   ...TELECOM_PLUGINS,
   ...TEEN_SAFETY_PLUGINS,
