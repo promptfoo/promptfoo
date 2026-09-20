@@ -339,18 +339,16 @@ function redactCredentials(text: string, credentials: readonly string[]): string
     .replace(/\b(Bearer|Basic)\s+[\w.~+/=-]{8,}/gi, `$1 ${REDACTED}`);
 }
 
-function isFiniteNonNegativeInteger(value: unknown): value is number {
-  return (
-    typeof value === 'number' && Number.isFinite(value) && Number.isInteger(value) && value >= 0
-  );
+function isNonNegativeSafeInteger(value: unknown): value is number {
+  return typeof value === 'number' && Number.isSafeInteger(value) && value >= 0;
 }
 
 function isUsage(value: unknown): value is Usage {
   const usage = value as Usage | null | undefined;
   return (
-    isFiniteNonNegativeInteger(usage?.input_tokens) &&
-    isFiniteNonNegativeInteger(usage.output_tokens) &&
-    isFiniteNonNegativeInteger(usage.total_tokens)
+    isNonNegativeSafeInteger(usage?.input_tokens) &&
+    isNonNegativeSafeInteger(usage.output_tokens) &&
+    isNonNegativeSafeInteger(usage.total_tokens)
   );
 }
 
@@ -364,8 +362,8 @@ function toTokenUsage(usage: Usage) {
   };
 }
 
-function addUsage(left: Usage, right: Usage): Usage {
-  return {
+function addUsage(left: Usage, right: Usage): Usage | undefined {
+  const sum = {
     input_tokens: left.input_tokens + right.input_tokens,
     output_tokens: left.output_tokens + right.output_tokens,
     total_tokens: left.total_tokens + right.total_tokens,
@@ -380,6 +378,7 @@ function addUsage(left: Usage, right: Usage): Usage {
         (right.output_tokens_details?.reasoning_tokens ?? 0),
     },
   };
+  return isUsage(sum) ? sum : undefined;
 }
 
 function referencesVariable(template: string, names: string[]): boolean {
@@ -642,6 +641,9 @@ export class OpenAiAgentsApiProvider extends OpenAiGenericProvider {
         for (const turn of turns) {
           if (isUsage(turn.usage)) {
             sum = sum ? addUsage(sum, turn.usage) : turn.usage;
+            if (!sum) {
+              complete = false;
+            }
           } else {
             complete = false;
           }

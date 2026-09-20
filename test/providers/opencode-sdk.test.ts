@@ -13,6 +13,7 @@ import {
 import { createDeferred } from '../util/utils';
 import type { MockInstance } from 'vitest';
 
+import type { OpenCodeSDKConfig } from '../../src/providers/opencode-sdk';
 import type { CallApiContextParams } from '../../src/types/index';
 
 vi.mock('../../src/cliState', () => ({
@@ -1299,6 +1300,335 @@ describe('OpenCodeSDKProvider', () => {
         errorSpy.mockRestore();
       });
 
+      it('redacts structured SDK errors without exposing arbitrary headers, bodies, or credentials', async () => {
+        const errorSpy = vi.spyOn(logger, 'error').mockImplementation(() => {});
+        const configured = 'synthetic-config-secret-0919';
+        const environment = 'synthetic-env-secret-0919';
+        const bearer = 'synthetic-bearer-0919';
+        const queryKey = 'synthetic-query-secret-0919';
+        const body = 'synthetic-raw-body-0919';
+        const upstream: Record<string, unknown> = {
+          name: 'APIError',
+          data: {
+            statusCode: 502,
+            message: `Failed: ${configured} ${environment} Bearer ${bearer} https://example.test/?api_key=${queryKey}`,
+            responseHeaders: { authorization: `Bearer ${body}` },
+            responseBody: body,
+            opaque: 123n,
+          },
+        };
+        upstream.loop = upstream;
+        mockSessionPrompt.mockResolvedValue({ error: upstream });
+        const provider = new OpenCodeSDKProvider({
+          config: { provider_id: 'anthropic', apiKey: configured },
+          env: { ANTHROPIC_API_KEY: environment },
+        });
+
+        const result = await provider.callApi('Test prompt');
+
+        expect(result.error).toContain('OpenCode SDK prompt error: APIError: HTTP 502: Failed:');
+        expect(result.error).toContain('[REDACTED]');
+        expect(result.output).toBeUndefined();
+        const observable = JSON.stringify({ result, errors: errorSpy.mock.calls });
+        for (const value of [configured, environment, bearer, queryKey, body]) {
+          expect(observable).not.toContain(value);
+        }
+        expect(observable).not.toContain('responseHeaders');
+        expect(observable).not.toContain('responseBody');
+      });
+
+      it.each([
+        {
+          name: 'custom MCP headers and OAuth',
+          config: {
+            mcp: {
+              gateway: {
+                type: 'remote',
+                url: 'https://example.test/mcp',
+                headers: { 'X-Gateway-Key': 'synthetic-custom-gateway-0919' },
+                oauth: {
+                  clientId: 'synthetic-client-id-0919',
+                  clientSecret: 'synthetic-oauth-secret-0919',
+                },
+              },
+            },
+          },
+          secrets: [
+            'synthetic-custom-gateway-0919',
+            'synthetic-client-id-0919',
+            'synthetic-oauth-secret-0919',
+          ],
+        },
+        {
+          name: 'MCP Authorization and Cookie header components echoed without their schemes',
+          config: {
+            mcp: {
+              gateway: {
+                type: 'remote',
+                url: 'https://example.test/mcp',
+                headers: {
+                  Authorization: 'Bearer synthetic-bare-bearer-0919',
+                  'Proxy-Authorization': `Basic ${Buffer.from('synthetic-basic-user-0919:synthetic-basic-pass-0919').toString('base64')}`,
+                  Cookie: 'session_id=synthetic-cookie-0919; custom=synthetic-cookie-extra-0919',
+                },
+              },
+            },
+          },
+          secrets: [
+            'synthetic-bare-bearer-0919',
+            Buffer.from('synthetic-basic-user-0919:synthetic-basic-pass-0919').toString('base64'),
+            'synthetic-basic-user-0919',
+            'synthetic-basic-pass-0919',
+            'synthetic-cookie-0919',
+            'synthetic-cookie-extra-0919',
+          ],
+        },
+        {
+          name: 'MCP subprocess environment and command arguments',
+          config: {
+            mcp: {
+              gateway: {
+                type: 'local',
+                command: ['example-server', '--credential=synthetic-command-0919'],
+                environment: { CUSTOM_GATEWAY: 'synthetic-local-env-0919' },
+              },
+            },
+          },
+          secrets: ['synthetic-command-0919', 'synthetic-local-env-0919'],
+        },
+        {
+          name: 'MCP remote URL credentials and arbitrary query parameters',
+          config: {
+            mcp: {
+              gateway: {
+                type: 'remote',
+                url: 'https://synthetic-user-0919:synthetic-pass-0919@example.test/mcp?opaque=synthetic%2Bquery-0919',
+              },
+            },
+          },
+          secrets: [
+            'synthetic-user-0919',
+            'synthetic-pass-0919',
+            'synthetic+query-0919',
+            'synthetic%2Bquery-0919',
+          ],
+        },
+        {
+          name: 'the OpenCode base URL',
+          config: {
+            baseUrl:
+              'https://synthetic-base-user-0919:synthetic-base-pass-0919@example.test/?opaque=synthetic-base-value-0919',
+          },
+          secrets: [
+            'synthetic-base-user-0919',
+            'synthetic-base-pass-0919',
+            'synthetic-base-value-0919',
+          ],
+        },
+      ] satisfies Array<{ name: string; config: OpenCodeSDKConfig; secrets: string[] }>)(
+        'redacts credentials from $name in SDK and assistant errors and logs',
+        async ({ config, secrets }) => {
+          const errorSpy = vi.spyOn(logger, 'error').mockImplementation(() => {});
+          const details = {
+            name: 'APIError',
+            data: { message: `upstream rejected supplied values: ${secrets.join(' | ')}` },
+          };
+          const response = createMockPromptResponse([]);
+          mockSessionPrompt.mockResolvedValueOnce({ error: details }).mockResolvedValueOnce({
+            data: { ...response.data, info: { ...response.data.info, error: details } },
+          });
+          const provider = new OpenCodeSDKProvider({
+            config: config as OpenCodeSDKConfig,
+            env: { ANTHROPIC_API_KEY: 'test-api-key' },
+          });
+
+          const sdkFailure = await provider.callApi('top-level failure');
+          const assistantFailure = await provider.callApi('assistant failure');
+
+          for (const result of [sdkFailure, assistantFailure]) {
+            expect(result.error).toContain('APIError: upstream rejected supplied values:');
+            expect(result.error).toContain('[REDACTED]');
+          }
+          const observable = JSON.stringify({
+            sdkFailure,
+            assistantFailure,
+            errors: errorSpy.mock.calls,
+          });
+          for (const secret of secrets) {
+            expect(observable).not.toContain(secret);
+          }
+        },
+      );
+
+      it('redacts credentials inherited by the OpenCode server for additional providers', async () => {
+        const groq = 'gsk_synthetic-groq-value-0919';
+        const applicationKey = 'synthetic-private-key-0919';
+        const proxyPassword = 'synthetic-proxy-pass-0919';
+        vi.stubEnv('GROQ_API_KEY', groq);
+        vi.stubEnv('CUSTOM_PRIVATE_KEY', applicationKey);
+        vi.stubEnv('CUSTOM_PROXY_URL', `https://proxy-user:${proxyPassword}@proxy.test`);
+        try {
+          const errorSpy = vi.spyOn(logger, 'error').mockImplementation(() => {});
+          const values = [groq, applicationKey, proxyPassword];
+          const details = {
+            name: 'APIError',
+            data: { message: `upstream rejected supplied values: ${values.join(' | ')}` },
+          };
+          const response = createMockPromptResponse([]);
+          mockSessionPrompt.mockResolvedValueOnce({ error: details }).mockResolvedValueOnce({
+            data: { ...response.data, info: { ...response.data.info, error: details } },
+          });
+          const provider = new OpenCodeSDKProvider({ config: { provider_id: 'groq' } });
+
+          const sdkFailure = await provider.callApi('top-level inherited credential failure');
+          const assistantFailure = await provider.callApi('assistant inherited credential failure');
+
+          expect(mockCreateOpencode).toHaveBeenCalledWith(
+            expect.objectContaining({ env: expect.objectContaining({ GROQ_API_KEY: groq }) }),
+          );
+          for (const result of [sdkFailure, assistantFailure]) {
+            expect(result.error).toContain('APIError: upstream rejected supplied values:');
+            expect(result.error).toContain('[REDACTED]');
+          }
+          const observable = JSON.stringify({
+            sdkFailure,
+            assistantFailure,
+            errors: errorSpy.mock.calls,
+          });
+          for (const value of values) {
+            expect(observable).not.toContain(value);
+          }
+        } finally {
+          vi.unstubAllEnvs();
+        }
+      });
+
+      it.each([
+        ['null server', null],
+        ['local server with no command', { type: 'local' }],
+      ])(
+        'returns rather than masking the original error for a malformed MCP %s',
+        async (_name, server) => {
+          const errorSpy = vi.spyOn(logger, 'error').mockImplementation(() => {});
+          const provider = new OpenCodeSDKProvider({
+            config: { mcp: { malformed: server } } as unknown as OpenCodeSDKConfig,
+            env: { ANTHROPIC_API_KEY: 'test-api-key' },
+          });
+
+          const result = await provider.callApi('malformed MCP config');
+
+          expect(result.error).toMatch(/^Error calling OpenCode SDK: .+/);
+          expect(result.output).toBeUndefined();
+          expect(errorSpy).toHaveBeenCalledWith('Error calling OpenCode SDK', {
+            error: result.error?.replace('Error calling OpenCode SDK: ', ''),
+          });
+        },
+      );
+
+      it('preserves an SDK failure when unused MCP header or environment config has malformed values', async () => {
+        mockSessionPrompt.mockRejectedValueOnce(new Error('original provider failure'));
+        const provider = new OpenCodeSDKProvider({
+          config: {
+            mcp: {
+              remote: { type: 'remote', url: 'https://example.test/mcp', headers: { sample: 123 } },
+              local: { type: 'local', command: ['example-server', null], environment: 'malformed' },
+            },
+          } as unknown as OpenCodeSDKConfig,
+          env: { ANTHROPIC_API_KEY: 'test-api-key' },
+        });
+
+        await expect(provider.callApi('malformed credential metadata')).resolves.toMatchObject({
+          error: 'Error calling OpenCode SDK: original provider failure',
+        });
+      });
+
+      it('surfaces assistant-message errors and does not cache them as successful empty answers', async () => {
+        enableCache();
+        const first = createMockPromptResponse([]);
+        mockSessionPrompt
+          .mockResolvedValueOnce({
+            data: {
+              ...first.data,
+              info: {
+                ...first.data.info,
+                error: {
+                  name: 'ProviderAuthError',
+                  data: { message: 'Provider rejected authentication' },
+                },
+              },
+            },
+          })
+          .mockResolvedValueOnce(createMockPromptResponse([{ type: 'text', text: 'recovered' }]));
+        const provider = new OpenCodeSDKProvider({
+          env: { ANTHROPIC_API_KEY: 'test-api-key' },
+        });
+
+        const failure = await provider.callApi('same error-envelope prompt');
+        const success = await provider.callApi('same error-envelope prompt');
+
+        expect(failure.error).toContain('ProviderAuthError: Provider rejected authentication');
+        expect(failure.output).toBeUndefined();
+        expect(failure.cached).not.toBe(true);
+        expect(success.output).toBe('recovered');
+        expect(mockSessionPrompt).toHaveBeenCalledTimes(2);
+      });
+
+      it.each([
+        ['false', false],
+        ['zero', 0],
+        ['empty', ''],
+        ['opaque object', { name: 'synthetic-secret-name-0919', detail: 2n }],
+      ])(
+        'handles a malformed but present SDK error without stringifying arbitrary data (%s)',
+        async (_name, error) => {
+          const errorSpy = vi.spyOn(logger, 'error').mockImplementation(() => {});
+          mockSessionPrompt.mockResolvedValue({ error });
+          const provider = new OpenCodeSDKProvider({ env: { ANTHROPIC_API_KEY: 'test-api-key' } });
+
+          const result = await provider.callApi('Test prompt');
+
+          expect(result.error).toBe(
+            'Error calling OpenCode SDK: OpenCode SDK prompt error: Unknown OpenCode error',
+          );
+          expect(result.output).toBeUndefined();
+          expect(JSON.stringify(errorSpy.mock.calls)).not.toContain('synthetic-secret-name-0919');
+        },
+      );
+
+      it('accepts an explicitly empty SDK error next to successful data and bounds thrown diagnostics', async () => {
+        const errorSpy = vi.spyOn(logger, 'error').mockImplementation(() => {});
+        mockSessionPrompt.mockResolvedValueOnce({
+          ...createMockPromptResponse([{ type: 'text', text: 'successful' }]),
+          error: null,
+        });
+        const provider = new OpenCodeSDKProvider({ env: { ANTHROPIC_API_KEY: 'test-api-key' } });
+        expect((await provider.callApi('valid SDK response')).output).toBe('successful');
+
+        mockSessionPrompt.mockRejectedValueOnce(new Error(`before\n${'x'.repeat(800)}`));
+        const result = await provider.callApi('uncached thrown response');
+
+        expect(result.error).toContain('before ');
+        expect(result.error).not.toContain('\n');
+        expect(result.error!.length).toBeLessThanOrEqual(
+          'Error calling OpenCode SDK: '.length + 500,
+        );
+        expect(JSON.stringify(errorSpy.mock.calls)).not.toContain('x'.repeat(550));
+      });
+
+      it('does not abort a server session that already returned an SDK error envelope', async () => {
+        const controller = new AbortController();
+        mockSessionPrompt.mockResolvedValue({ error: 'upstream unavailable' });
+        mockSessionDelete.mockImplementationOnce(async () => controller.abort());
+        const provider = new OpenCodeSDKProvider({ env: { ANTHROPIC_API_KEY: 'test-api-key' } });
+
+        const result = await provider.callApi('Test prompt', undefined, {
+          abortSignal: controller.signal,
+        });
+
+        expect(result.error).toContain('upstream unavailable');
+        expect(mockSessionAbort).not.toHaveBeenCalled();
+      });
+
       it('preserves a successful response when temporary-directory cleanup fails', async () => {
         const debugSpy = vi.spyOn(logger, 'debug').mockImplementation(() => {});
         rmSpy.mockRejectedValueOnce(new Error('cleanup failed'));
@@ -1311,8 +1641,28 @@ describe('OpenCodeSDKProvider', () => {
         expect(result.output).toBe('Test response');
         expect(debugSpy).toHaveBeenCalledWith(
           expect.stringContaining('Failed to remove temp directory'),
+          expect.objectContaining({ workingDir: '/tmp/test-temp-dir', error: expect.any(Error) }),
         );
         debugSpy.mockRestore();
+      });
+
+      it('preserves a provider failure when cleanup fails and retries the temporary directory', async () => {
+        mockSessionPrompt.mockRejectedValueOnce(new Error('original provider failure'));
+        rmSpy.mockRejectedValueOnce(new Error('initial directory cleanup failure'));
+        const provider = new OpenCodeSDKProvider({
+          env: { ANTHROPIC_API_KEY: 'test-api-key' },
+        });
+
+        const result = await provider.callApi('uncached failed request');
+
+        expect(result.error).toContain('original provider failure');
+        expect(result.error).not.toContain('directory cleanup');
+        await provider.cleanup();
+        expect(rmSpy).toHaveBeenCalledTimes(2);
+        expect(rmSpy).toHaveBeenLastCalledWith('/tmp/test-temp-dir', {
+          recursive: true,
+          force: true,
+        });
       });
 
       it('should handle empty parts in response', async () => {
@@ -2419,6 +2769,112 @@ describe('OpenCodeSDKProvider', () => {
       expect(mockSessionDelete).toHaveBeenCalledWith({
         sessionID: 'test-session-123',
       });
+    });
+
+    it('retries a failed owned temporary directory and forgets it only after a successful removal', async () => {
+      rmSpy
+        .mockRejectedValueOnce(new Error('initial cleanup failed'))
+        .mockRejectedValueOnce(new Error('first explicit cleanup failed'))
+        .mockResolvedValue(undefined);
+      const provider = new OpenCodeSDKProvider({ env: { ANTHROPIC_API_KEY: 'test-api-key' } });
+
+      const result = await provider.callApi('cleanup does not mask success');
+      expect(result.output).toBe('Test response');
+      await expect(provider.cleanup()).resolves.toBeUndefined();
+      await expect(provider.cleanup()).resolves.toBeUndefined();
+      await expect(provider.cleanup()).resolves.toBeUndefined();
+
+      expect(rmSpy).toHaveBeenCalledTimes(3);
+      for (let index = 1; index <= 3; index++) {
+        expect(rmSpy).toHaveBeenNthCalledWith(index, '/tmp/test-temp-dir', {
+          recursive: true,
+          force: true,
+        });
+      }
+    });
+
+    it('retries each failed temporary path but never removes a user-provided working directory', async () => {
+      tempDirSpy
+        .mockReturnValueOnce('/tmp/promptfoo-owned-first')
+        .mockReturnValueOnce('/tmp/promptfoo-owned-second');
+      const attempts = new Map<string, number>();
+      rmSpy.mockImplementation(async (value) => {
+        const key = String(value);
+        const count = (attempts.get(key) ?? 0) + 1;
+        attempts.set(key, count);
+        if (count === 1) {
+          throw new Error('retry requested');
+        }
+      });
+      const provider = new OpenCodeSDKProvider({ env: { ANTHROPIC_API_KEY: 'test-api-key' } });
+      await provider.callApi('first uncached prompt');
+      await provider.callApi('second uncached prompt');
+      await provider.callApi('user directory', {
+        vars: {},
+        prompt: {
+          raw: 'user directory',
+          label: 'user directory',
+          config: { working_dir: '/test/user-dir' },
+        },
+      });
+      await provider.cleanup();
+
+      expect([...attempts]).toEqual([
+        ['/tmp/promptfoo-owned-first', 2],
+        ['/tmp/promptfoo-owned-second', 2],
+      ]);
+      expect(rmSpy).not.toHaveBeenCalledWith('/test/user-dir', expect.anything());
+    });
+
+    it('shares an in-flight retry when explicit cleanup is called concurrently', async () => {
+      const entered = createDeferred<void>();
+      const released = createDeferred<void>();
+      rmSpy
+        .mockRejectedValueOnce(new Error('initial cleanup failed'))
+        .mockImplementationOnce(async () => {
+          entered.resolve();
+          await released.promise;
+        });
+      const provider = new OpenCodeSDKProvider({ env: { ANTHROPIC_API_KEY: 'test-api-key' } });
+      await provider.callApi('uncached cleanup concurrency');
+      const first = provider.cleanup();
+      const second = provider.cleanup();
+      await entered.promise;
+      expect(rmSpy).toHaveBeenCalledTimes(2);
+      released.resolve();
+      await Promise.all([first, second]);
+      await provider.cleanup();
+      expect(rmSpy).toHaveBeenCalledTimes(2);
+    });
+
+    it('keeps a reused persistent session and evicts the actual least recently used one', async () => {
+      let created = 0;
+      mockSessionCreate.mockImplementation(async () =>
+        createMockSessionResponse('lru-session-' + created++),
+      );
+      const provider = new OpenCodeSDKProvider({
+        config: { working_dir: '/test/work', persist_sessions: true },
+        env: { ANTHROPIC_API_KEY: 'test-api-key' },
+      });
+      const withModel = (index: number): CallApiContextParams => ({
+        vars: {},
+        prompt: { raw: 'lru', label: 'lru', config: { model: 'test-model-' + index } },
+      });
+
+      for (let index = 0; index < 100; index++) {
+        await provider.callApi('lru', withModel(index));
+      }
+      await provider.callApi('lru', withModel(0));
+      await provider.callApi('lru', withModel(100));
+
+      expect(mockSessionCreate).toHaveBeenCalledTimes(101);
+      expect(mockSessionDelete).toHaveBeenCalledExactlyOnceWith(
+        expect.objectContaining({ sessionID: 'lru-session-1' }),
+      );
+      expect(mockSessionDelete).not.toHaveBeenCalledWith(
+        expect.objectContaining({ sessionID: 'lru-session-0' }),
+      );
+      await provider.cleanup();
     });
   });
 

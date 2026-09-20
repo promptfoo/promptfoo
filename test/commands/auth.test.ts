@@ -6,7 +6,7 @@ import { isNonInteractive } from '../../src/envars';
 import { getUserEmail, setUserEmail } from '../../src/globalConfig/accounts';
 import { cloudConfig } from '../../src/globalConfig/cloud';
 import logger from '../../src/logger';
-import { getDefaultTeam, getUserTeams, resolveTeamId } from '../../src/util/cloud';
+import { getDefaultTeam, getUserTeams } from '../../src/util/cloud';
 import { fetchWithProxy } from '../../src/util/fetch/index';
 import { openAuthBrowser } from '../../src/util/server';
 import { createMockResponse, mockGlobal, stripAnsi } from '../util/utils';
@@ -724,25 +724,125 @@ describe('auth command', () => {
   });
 
   describe('teams current', () => {
-    it('clears an inaccessible stored team before resolving the default', async () => {
-      vi.mocked(cloudConfig.isEnabled).mockReturnValue(true);
-      vi.mocked(cloudConfig.getCurrentOrganizationId).mockReturnValue('org-1');
-      vi.mocked(cloudConfig.getCurrentTeamId).mockReturnValue('stale-team');
-      vi.mocked(resolveTeamId)
-        .mockRejectedValueOnce(new Error('team not found'))
-        .mockResolvedValueOnce({
-          id: 'default-team',
-          name: 'Default',
-        });
+    const makeTeam = (id: string, name: string, organizationId: string, createdAt: string) => ({
+      id,
+      name,
+      slug: id,
+      organizationId,
+      createdAt,
+      updatedAt: createdAt,
+    });
 
+    const runCurrentCommand = async () => {
       const currentCommand = program.commands
         .find((cmd) => cmd.name() === 'auth')
         ?.commands.find((cmd) => cmd.name() === 'teams')
         ?.commands.find((cmd) => cmd.name() === 'current');
       await currentCommand?.parseAsync(['node', 'test']);
+    };
 
+    beforeEach(() => {
+      vi.mocked(cloudConfig.isEnabled).mockReturnValue(true);
+      vi.mocked(cloudConfig.getCurrentOrganizationId).mockReturnValue('org-1');
+      vi.mocked(cloudConfig.getCurrentTeamId).mockReturnValue('stale-team');
+    });
+
+    it('shows an accessible stored team without changing the selection', async () => {
+      vi.mocked(getUserTeams).mockResolvedValue([
+        makeTeam('older-team', 'Older', 'org-1', '2023-01-01'),
+        makeTeam('stale-team', 'Selected', 'org-1', '2024-01-01'),
+      ]);
+
+      await runCurrentCommand();
+
+      expect(getUserTeams).toHaveBeenCalledTimes(1);
+      expect(cloudConfig.clearCurrentTeamId).not.toHaveBeenCalled();
+      expect(cloudConfig.setCurrentTeamId).not.toHaveBeenCalled();
+      expect(cloudConfig.setCurrentOrganization).not.toHaveBeenCalled();
+      expect(logger.info).toHaveBeenCalledWith(expect.stringContaining('Selected'));
+      expect(logger.warn).not.toHaveBeenCalled();
+    });
+
+    it('clears a confirmed inaccessible team and selects the oldest team in the same organization', async () => {
+      vi.mocked(getUserTeams).mockResolvedValue([
+        makeTeam('other-org-team', 'Other organization', 'org-2', '2022-01-01'),
+        makeTeam('newer-team', 'Newer', 'org-1', '2024-01-01'),
+        makeTeam('default-team', 'Default', 'org-1', '2023-01-01'),
+      ]);
+
+      await runCurrentCommand();
+
+      expect(getUserTeams).toHaveBeenCalledTimes(1);
+      expect(cloudConfig.clearCurrentTeamId).toHaveBeenCalledOnce();
       expect(cloudConfig.clearCurrentTeamId).toHaveBeenCalledWith('org-1');
+      expect(cloudConfig.setCurrentTeamId).toHaveBeenCalledWith('default-team', 'org-1');
+      expect(vi.mocked(cloudConfig.clearCurrentTeamId).mock.invocationCallOrder[0]).toBeLessThan(
+        vi.mocked(cloudConfig.setCurrentTeamId).mock.invocationCallOrder[0],
+      );
+      expect(cloudConfig.setCurrentOrganization).not.toHaveBeenCalled();
+      expect(stripAnsi(String(vi.mocked(logger.info).mock.lastCall?.[0]))).toBe(
+        'Current team: Default (default)',
+      );
+    });
+
+    it('switches organizations when the confirmed fallback belongs to another organization', async () => {
+      vi.mocked(getUserTeams).mockResolvedValue([
+        makeTeam('newer-team', 'Newer', 'org-3', '2024-01-01'),
+        makeTeam('default-team', 'Default', 'org-2', '2023-01-01'),
+      ]);
+
+      await runCurrentCommand();
+
+      expect(getUserTeams).toHaveBeenCalledTimes(1);
+      expect(cloudConfig.clearCurrentTeamId).toHaveBeenCalledWith('org-1');
+      expect(cloudConfig.setCurrentOrganization).toHaveBeenCalledWith('org-2');
+      expect(cloudConfig.setCurrentTeamId).toHaveBeenCalledWith('default-team', 'org-2');
       expect(logger.info).toHaveBeenCalledWith(expect.stringContaining('Default'));
+    });
+
+    it.each([
+      'network timeout',
+      'Failed to get user teams: Unauthorized',
+      'Failed to get user teams: Service Unavailable',
+    ])('preserves the stored selection and reports a failed lookup: %s', async (message) => {
+      vi.mocked(getUserTeams).mockRejectedValue(new Error(message));
+
+      await runCurrentCommand();
+
+      expect(getUserTeams).toHaveBeenCalledTimes(1);
+      expect(cloudConfig.clearCurrentTeamId).not.toHaveBeenCalled();
+      expect(cloudConfig.setCurrentTeamId).not.toHaveBeenCalled();
+      expect(cloudConfig.setCurrentOrganization).not.toHaveBeenCalled();
+      expect(logger.warn).not.toHaveBeenCalled();
+      expect(logger.error).toHaveBeenCalledWith(`Failed to get current team: ${message}`);
+      expect(process.exitCode).toBe(1);
+      process.exitCode = 0;
+    });
+
+    it('clears a confirmed inaccessible team when no fallback is available', async () => {
+      vi.mocked(getUserTeams).mockResolvedValue([]);
+
+      await runCurrentCommand();
+
+      expect(getUserTeams).toHaveBeenCalledTimes(1);
+      expect(cloudConfig.clearCurrentTeamId).toHaveBeenCalledWith('org-1');
+      expect(cloudConfig.setCurrentTeamId).not.toHaveBeenCalled();
+      expect(cloudConfig.setCurrentOrganization).not.toHaveBeenCalled();
+      expect(logger.error).toHaveBeenCalledWith(
+        'Failed to get current team: No teams found for user',
+      );
+      expect(process.exitCode).toBe(1);
+      process.exitCode = 0;
+    });
+
+    it('does not query teams when no team is currently selected', async () => {
+      vi.mocked(cloudConfig.getCurrentTeamId).mockReturnValue(undefined);
+
+      await runCurrentCommand();
+
+      expect(getUserTeams).not.toHaveBeenCalled();
+      expect(cloudConfig.clearCurrentTeamId).not.toHaveBeenCalled();
+      expect(logger.info).toHaveBeenCalledWith('No team currently selected');
     });
   });
 

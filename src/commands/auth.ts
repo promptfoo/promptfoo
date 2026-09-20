@@ -484,15 +484,32 @@ export function authCommand(program: Command) {
           return;
         }
 
-        try {
-          const team = await resolveTeamId();
-          logger.info(`Current team: ${chalk.green(team.name)}`);
-        } catch (_error) {
-          logger.warn('Stored team is no longer accessible, falling back to default');
-          cloudConfig.clearCurrentTeamId(currentOrganizationId);
-          const team = await resolveTeamId();
-          logger.info(`Current team: ${chalk.green(team.name)} ${chalk.dim('(default)')}`);
+        const teams = await getUserTeams();
+        const currentTeam = teams.find(
+          (team) =>
+            team.id === currentTeamId &&
+            (!currentOrganizationId || team.organizationId === currentOrganizationId),
+        );
+        if (currentTeam) {
+          logger.info(`Current team: ${chalk.green(currentTeam.name)}`);
+          return;
         }
+
+        logger.warn('Stored team is no longer accessible, falling back to default');
+        cloudConfig.clearCurrentTeamId(currentOrganizationId);
+        if (teams.length === 0) {
+          throw new Error('No teams found for user');
+        }
+
+        const organizationTeams = currentOrganizationId
+          ? getOrganizationTeams(teams, undefined, currentOrganizationId).teams
+          : teams;
+        const defaultTeam = getOldestTeam(organizationTeams);
+        if (defaultTeam.organizationId !== currentOrganizationId) {
+          cloudConfig.setCurrentOrganization(defaultTeam.organizationId);
+        }
+        cloudConfig.setCurrentTeamId(defaultTeam.id, defaultTeam.organizationId);
+        logger.info(`Current team: ${chalk.green(defaultTeam.name)} ${chalk.dim('(default)')}`);
       } catch (error) {
         const errorMessage = error instanceof Error ? error.message : String(error);
         logger.error(`Failed to get current team: ${errorMessage}`);

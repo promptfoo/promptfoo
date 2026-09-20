@@ -23,6 +23,27 @@ const usage = {
   input_tokens_details: { cached_tokens: 40 },
   output_tokens_details: { reasoning_tokens: 5 },
 };
+const zeroUsage = {
+  input_tokens: 0,
+  output_tokens: 0,
+  total_tokens: 0,
+  input_tokens_details: { cached_tokens: 0 },
+  output_tokens_details: { reasoning_tokens: 0 },
+};
+const usageCountFields = ['input_tokens', 'output_tokens', 'total_tokens'] as const;
+const tokenCountPlaceholder = '__agents_api_test_token_count__';
+const nanTokenCount = '__agents_api_test_nan__';
+const invalidUsageCases = usageCountFields.flatMap((field) =>
+  [
+    { description: 'NaN', wireValue: `"${nanTokenCount}"` },
+    { description: 'positive infinity', wireValue: '1e999' },
+    { description: 'negative infinity', wireValue: '-1e999' },
+    { description: 'a negative integer', wireValue: '-1' },
+    { description: 'a fractional number', wireValue: '0.5' },
+    { description: 'an unsafe integer', wireValue: String(Number.MAX_SAFE_INTEGER + 1) },
+    { description: 'the maximum finite number', wireValue: String(Number.MAX_VALUE) },
+  ].map((testCase) => ({ field, ...testCase })),
+);
 const session = { id: 'sess_test', status: 'idle', agent: { model: 'gpt-6-astra' }, usage };
 const turn = { id: 'turn_test', status: 'completed', subagent_id: null, usage };
 const message = {
@@ -42,6 +63,22 @@ const page = (data: unknown[], more = false, lastId: string | null = null) => ({
 const json = (data: unknown) => new Response(JSON.stringify(data));
 const apiError = (status: number, message: string) =>
   new Response(JSON.stringify({ error: { message } }), { status });
+
+function jsonWithTokenCount(data: unknown, wireValue: string) {
+  return new Response(JSON.stringify(data).replaceAll(`"${tokenCountPlaceholder}"`, wireValue));
+}
+
+function mockNaNTokenCount() {
+  const parse = JSON.parse;
+  const decodeNaN = vi.fn(() => Number.NaN);
+  // JSON numeric overflows produce infinities, but NaN itself has no JSON spelling.
+  vi.spyOn(JSON, 'parse').mockImplementation((text, reviver) =>
+    text.includes(`"${nanTokenCount}"`)
+      ? parse(text, (_key, value: unknown) => (value === nanTokenCount ? decodeNaN() : value))
+      : parse(text, reviver),
+  );
+  return decodeNaN;
+}
 
 function defaultResponse(pathname: string, method?: string) {
   if (method === 'DELETE') {
@@ -2266,19 +2303,102 @@ describe('OpenAiAgentsApiProvider', () => {
     expect(result.cost).toBeUndefined();
   });
 
-  it('rejects non-finite session usage and falls back to the root turn', async () => {
+  it.each(invalidUsageCases)(
+    'falls back to valid root usage when session $field is $description',
+    async ({ field, description, wireValue }) => {
+      const decodedNaN = description === 'NaN' ? mockNaNTokenCount() : undefined;
+      mockApi((pathname, method) => {
+        if (
+          method !== 'DELETE' &&
+          (pathname.endsWith('/sessions') || pathname.endsWith('/sess_test'))
+        ) {
+          return jsonWithTokenCount(
+            { ...session, usage: { ...usage, [field]: tokenCountPlaceholder } },
+            wireValue,
+          );
+        }
+        return undefined;
+      });
+
+      const result = await provider({ usageTimeoutMs: 0 }).callApi('hi');
+
+      expect(result.output).toBe('42');
+      expect(result.error).toBeUndefined();
+      expect(result.tokenUsage).toMatchObject({ prompt: 100, completion: 20, total: 120 });
+      expect(result.cost).toBeGreaterThan(0);
+      expect(result.metadata).not.toHaveProperty('usageUnavailable');
+      if (decodedNaN) {
+        expect(decodedNaN).toHaveReturnedWith(Number.NaN);
+      }
+    },
+  );
+
+  it.each(invalidUsageCases)(
+    'keeps the answer without usage or cost when root $field is $description and session usage is missing',
+    async ({ field, description, wireValue }) => {
+      const decodedNaN = description === 'NaN' ? mockNaNTokenCount() : undefined;
+      const invalidTurn = { ...turn, usage: { ...usage, [field]: tokenCountPlaceholder } };
+      mockApi((pathname, method) => {
+        if (pathname.endsWith('/turns/turn_test')) {
+          return jsonWithTokenCount(invalidTurn, wireValue);
+        }
+        if (pathname.endsWith('/turns')) {
+          return jsonWithTokenCount(page([invalidTurn]), wireValue);
+        }
+        return withoutUsage(pathname, method);
+      });
+
+      const result = await provider({ usageTimeoutMs: 0 }).callApi('hi');
+
+      expect(result.output).toBe('42');
+      expect(result.error).toBeUndefined();
+      expect(result.tokenUsage).toBeUndefined();
+      expect(result.cost).toBeUndefined();
+      expect(result.metadata).toMatchObject({ usageUnavailable: true, sessionDeleted: true });
+      if (decodedNaN) {
+        expect(decodedNaN).toHaveReturnedWith(Number.NaN);
+      }
+    },
+  );
+
+  it.each([
+    { source: 'session', description: 'zero', count: 0 },
+    { source: 'root turn', description: 'zero', count: 0 },
+    { source: 'session', description: 'the maximum safe integer', count: Number.MAX_SAFE_INTEGER },
+  ])('accepts $description counts from the $source', async ({ source, count }) => {
+    const validUsage = { ...zeroUsage, input_tokens: count, total_tokens: count };
+    const validTurn = { ...turn, usage: validUsage };
     mockApi((pathname, method) => {
-      if (method === 'POST' && pathname.endsWith('/sessions')) {
-        return new Response(
-          '{"id":"sess_test","status":"idle","agent":{"model":"gpt-6-astra"},"usage":{"input_tokens":1e999,"output_tokens":20,"total_tokens":120}}',
-        );
+      if (
+        method !== 'DELETE' &&
+        (pathname.endsWith('/sessions') || pathname.endsWith('/sess_test'))
+      ) {
+        return json({ ...session, usage: source === 'session' ? validUsage : null });
+      }
+      if (source === 'root turn' && pathname.endsWith('/turns/turn_test')) {
+        return json(validTurn);
+      }
+      if (source === 'root turn' && pathname.endsWith('/turns')) {
+        return json(page([validTurn]));
       }
       return undefined;
     });
 
     const result = await provider({ usageTimeoutMs: 0 }).callApi('hi');
 
-    expect(result.tokenUsage).toMatchObject({ prompt: 100, completion: 20, total: 120 });
+    expect(result.tokenUsage).toEqual({
+      prompt: count,
+      completion: 0,
+      total: count,
+      cached: 0,
+      completionDetails: { reasoning: 0 },
+    });
+    if (count === 0) {
+      expect(result.cost).toBe(0);
+    } else {
+      expect(result.cost).toBeGreaterThan(0);
+      expect(Number.isFinite(result.cost)).toBe(true);
+    }
     expect(result.metadata).not.toHaveProperty('usageUnavailable');
   });
 
@@ -2456,6 +2576,99 @@ describe('OpenAiAgentsApiProvider', () => {
         sessionDeleted: true,
       });
       expect(result.metadata).not.toHaveProperty('usageFromRootTurn');
+    });
+
+    it.each(invalidUsageCases)(
+      'omits subagent usage if a turn between valid turns reports $description for $field',
+      async ({ field, description, wireValue }) => {
+        const decodedNaN = description === 'NaN' ? mockNaNTokenCount() : undefined;
+        mockSubagentTurns((subagentId) => {
+          if (subagentId === 'subagent_b') {
+            return json(page([subagentTurn('turn_b1', 30, 3)]));
+          }
+          const invalidTurn = subagentTurn('turn_a2', 20, 2);
+          return jsonWithTokenCount(
+            page([
+              subagentTurn('turn_a1', 10, 1),
+              { ...invalidTurn, usage: { ...invalidTurn.usage, [field]: tokenCountPlaceholder } },
+            ]),
+            wireValue,
+          );
+        });
+
+        const result = await provider({ usageTimeoutMs: 0 }).callApi('hi');
+
+        expect(result.output).toBe('42');
+        expect(result.error).toBeUndefined();
+        expect(result.tokenUsage).toMatchObject({ prompt: 100, completion: 20, total: 120 });
+        expect(result.metadata).toMatchObject({
+          usageMayExcludeSubagents: true,
+          sessionDeleted: true,
+        });
+        expect(result.metadata).not.toHaveProperty('subagentUsage');
+        if (decodedNaN) {
+          expect(decodedNaN).toHaveReturnedWith(Number.NaN);
+        }
+      },
+    );
+
+    it.each(usageCountFields)(
+      'omits a subagent sum that exceeds the safe %s range',
+      async (field) => {
+        const withCount = (id: string, count: number) => ({
+          ...subagentTurn(id, 0, 0),
+          usage: { ...zeroUsage, [field]: count },
+        });
+        mockSubagentTurns((subagentId) =>
+          json(
+            page(
+              subagentId === 'subagent_a'
+                ? [withCount('turn_a1', Number.MAX_SAFE_INTEGER), withCount('turn_a2', 1)]
+                : [withCount('turn_b1', 0)],
+            ),
+          ),
+        );
+
+        const result = await provider({ usageTimeoutMs: 0 }).callApi('hi');
+
+        expect(result.output).toBe('42');
+        expect(result.tokenUsage).toMatchObject({ prompt: 100, completion: 20, total: 120 });
+        expect(result.metadata).toMatchObject({ usageMayExcludeSubagents: true });
+        expect(result.metadata).not.toHaveProperty('subagentUsage');
+      },
+    );
+
+    it.each([
+      { description: 'zero', left: 0, right: 0, total: 0 },
+      {
+        description: 'the maximum safe integer',
+        left: Number.MAX_SAFE_INTEGER - 1,
+        right: 1,
+        total: Number.MAX_SAFE_INTEGER,
+      },
+    ])('accepts a subagent sum of $description', async ({ left, right, total }) => {
+      mockSubagentTurns((subagentId) => {
+        const count = subagentId === 'subagent_a' ? left : right;
+        return json(
+          page([
+            {
+              ...subagentTurn(`turn_${subagentId}`, count, 0),
+              usage: { ...zeroUsage, input_tokens: count, total_tokens: count },
+            },
+          ]),
+        );
+      });
+
+      const result = await provider({ usageTimeoutMs: 0 }).callApi('hi');
+
+      expect(result.tokenUsage).toMatchObject({ prompt: 100, completion: 20, total: 120 });
+      expect(result.metadata?.subagentUsage).toEqual({
+        prompt: total,
+        completion: 0,
+        total,
+        cached: 0,
+        completionDetails: { reasoning: 0 },
+      });
     });
 
     it.each([
