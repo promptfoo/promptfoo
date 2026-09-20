@@ -36,6 +36,11 @@ interface TempoSpan {
   endTimeUnixNano?: string;
   attributes?: Array<{ key: string; value: TempoAttributeValue }>;
   status?: { code?: number | string; message?: string };
+  events?: Array<{
+    timeUnixNano: string;
+    name: string;
+    attributes?: Array<{ key: string; value: TempoAttributeValue }>;
+  }>;
 }
 
 interface TempoTraceResponse {
@@ -49,6 +54,8 @@ interface TempoTraceResponse {
 }
 
 const MAX_SPANS = 10_000;
+/** Cap events retained per span so a pathological trace cannot exhaust memory. */
+const MAX_EVENTS_PER_SPAN = 128;
 const SPAN_KIND_NAMES = ['unspecified', 'internal', 'server', 'client', 'producer', 'consumer'];
 const TRACE_ID_PATTERN = /^[0-9a-f]{32}$/i;
 const BASE64_TRACE_ID_PATTERN = /^[A-Za-z0-9+/]{22}(?:==)?$/;
@@ -172,6 +179,39 @@ function normalizeStatusCode(code: number | string | undefined): number | undefi
   }
 }
 
+/**
+ * Normalize OTLP span events. Malformed individual events are dropped rather than
+ * failing the whole span, so one bad event does not lose an otherwise valid span.
+ */
+function transformSpanEvents(span: TempoSpan): SpanData['events'] {
+  if (!Array.isArray(span.events)) {
+    return undefined;
+  }
+
+  const events: NonNullable<SpanData['events']> = [];
+  for (const event of span.events) {
+    if (events.length >= MAX_EVENTS_PER_SPAN) {
+      break;
+    }
+    if (!event || typeof event.name !== 'string' || event.name.length === 0) {
+      continue;
+    }
+    let timestamp: number;
+    try {
+      timestamp = nanoToMs(event.timeUnixNano);
+    } catch {
+      continue;
+    }
+    events.push({
+      name: event.name,
+      timestamp,
+      attributes: attributesToRecord(event.attributes),
+    });
+  }
+
+  return events.length > 0 ? events : undefined;
+}
+
 function transformSpan(
   span: TempoSpan,
   traceId: string,
@@ -198,6 +238,8 @@ function transformSpan(
   if (span.status?.message !== undefined && typeof span.status.message !== 'string') {
     throw new Error('Span status message must be a string');
   }
+
+  const events = transformSpanEvents(span);
 
   const startTime = nanoToMs(span.startTimeUnixNano);
   const endTimeUnixNano = span.endTimeUnixNano;
@@ -226,6 +268,7 @@ function transformSpan(
     },
     statusCode: normalizeStatusCode(span.status?.code),
     statusMessage: span.status?.message,
+    ...(events && { events }),
   };
 }
 

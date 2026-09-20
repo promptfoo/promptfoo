@@ -95,6 +95,7 @@ Instrumented model and agent calls can include these attributes on their GenAI s
 - `promptfoo.provider.id` - Provider identifier
 - `promptfoo.test.index` - Test case index
 - `promptfoo.prompt.label` - Prompt label
+- `promptfoo.iteration` - Turn number (1-indexed) for multi-turn red team strategies
 - `promptfoo.cache_hit` - Whether the response was served from cache
 - `promptfoo.usage.total_tokens` - Total token count reported by the provider
 - `promptfoo.usage.cached_response_tokens` - Tokens associated with a cached Promptfoo response
@@ -107,6 +108,22 @@ Grading spans describe each assertion with `gen_ai.evaluation.name`,
 `gen_ai.evaluation.score.value`, and `gen_ai.evaluation.score.label`. When a grader supplies a
 reason, `gen_ai.evaluation.explanation` records a sanitized, shortened version. Any model call used
 by the grader appears in a child span.
+
+**OAuth Spans:**
+
+When a target authenticates with OAuth, the token request is recorded as a client span named
+`POST /token` (or `GET /...` for authorization-server discovery) with the standard HTTP attributes
+plus:
+
+- `oauth.operation` - `token_fetch`, `token_refresh`, or `discovery`
+- `oauth.grant_type` - The configured grant type
+- `oauth.client_id` - Partially redacted client ID (fully redacted when 12 characters or fewer)
+- `oauth.scopes` - Requested scopes
+- `oauth.provider_type` - `http` or `mcp`
+- `oauth.expires_in` - Token lifetime in seconds
+- `oauth.cache_hit` - Whether the token was served from the local token cache
+
+Client secrets, passwords, access tokens, and URL query strings are never recorded.
 
 ### Example Trace Output
 

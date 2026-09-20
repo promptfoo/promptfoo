@@ -273,6 +273,33 @@ describe('TraceStore', () => {
 
       await expect(traceStore.addSpans('test-trace-id', spans)).rejects.toThrow('Insert failed');
     });
+
+    it('persists external span events together with their parent span', async () => {
+      mockDb
+        .select()
+        .from()
+        .where()
+        .limit.mockResolvedValueOnce([{ traceId: 'test-trace-id' }]);
+
+      await traceStore.addSpans('test-trace-id', [
+        {
+          spanId: 'event-span',
+          name: 'target.call',
+          startTime: 1,
+          attributes: { component: 'target' },
+          events: [{ name: 'tool.called', timestamp: 2 }],
+        },
+      ]);
+
+      expect(mockDb.insert().values).toHaveBeenCalledWith([
+        expect.objectContaining({
+          attributes: {
+            component: 'target',
+            'otel.span.events': [{ name: 'tool.called', timestamp: 2 }],
+          },
+        }),
+      ]);
+    });
   });
 
   describe('getTracesByEvaluation', () => {

@@ -23,6 +23,11 @@ export interface SpanData {
   attributes?: Record<string, any>;
   statusCode?: number;
   statusMessage?: string;
+  events?: Array<{
+    name: string;
+    timestamp: number;
+    attributes?: Record<string, unknown>;
+  }>;
 }
 
 export interface ParsedTrace {
@@ -47,11 +52,25 @@ export interface AddSpansOptions {
   warnIfMissingTrace?: boolean;
 }
 
+/**
+ * Span events are persisted inside the span's JSON attributes under this key, since the
+ * spans table has no dedicated events column.
+ */
+const SPAN_EVENTS_ATTRIBUTE = 'otel.span.events';
+
 function serializeSpan(
   span: typeof spansTable.$inferSelect,
   shouldSanitizeAttributes = true,
 ): SpanData {
   const rawAttributes = span.attributes ?? undefined;
+  const attributes = rawAttributes
+    ? shouldSanitizeAttributes
+      ? sanitizeTraceAttributes(rawAttributes)
+      : rawAttributes
+    : undefined;
+  // Read events back from the sanitized attributes so event payloads inherit the same
+  // credential masking as the rest of the span.
+  const events = attributes?.[SPAN_EVENTS_ATTRIBUTE] as SpanData['events'] | undefined;
 
   return {
     spanId: span.spanId,
@@ -59,13 +78,10 @@ function serializeSpan(
     name: span.name,
     startTime: span.startTime,
     endTime: span.endTime ?? undefined,
-    attributes: rawAttributes
-      ? shouldSanitizeAttributes
-        ? sanitizeTraceAttributes(rawAttributes)
-        : rawAttributes
-      : undefined,
+    attributes,
     statusCode: span.statusCode ?? undefined,
     statusMessage: span.statusMessage ?? undefined,
+    ...(Array.isArray(events) && events.length > 0 && { events }),
   };
 }
 
@@ -225,7 +241,9 @@ export class TraceStore {
           name: span.name,
           startTime: span.startTime,
           endTime: span.endTime,
-          attributes: span.attributes,
+          attributes: span.events?.length
+            ? { ...span.attributes, [SPAN_EVENTS_ATTRIBUTE]: span.events }
+            : span.attributes,
           statusCode: span.statusCode,
           statusMessage: span.statusMessage,
         };
@@ -417,15 +435,22 @@ export class TraceStore {
           continue;
         }
 
+        // Sanitize once so span events, which are stored inside the attributes blob,
+        // inherit the same redaction as every other attribute value.
+        const attributes = shouldSanitize ? sanitizeTraceAttributes(rawAttributes) : rawAttributes;
+
         const spanData: SpanData = {
           spanId: row.spanId,
           parentSpanId: row.parentSpanId ?? undefined,
           name: row.name,
           startTime: row.startTime,
           endTime: row.endTime ?? undefined,
-          attributes: shouldSanitize ? sanitizeTraceAttributes(rawAttributes) : rawAttributes,
+          attributes,
           statusCode: row.statusCode ?? undefined,
           statusMessage: row.statusMessage ?? undefined,
+          ...(Array.isArray(attributes[SPAN_EVENTS_ATTRIBUTE]) && {
+            events: attributes[SPAN_EVENTS_ATTRIBUTE] as unknown as SpanData['events'],
+          }),
         };
 
         const hasExplicitFilter = Boolean(spanFilter?.length);

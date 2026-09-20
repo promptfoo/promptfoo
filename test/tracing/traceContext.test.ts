@@ -108,6 +108,30 @@ describe('fetchTraceContext', () => {
     expect(result?.spans.map((span) => span.name)).toEqual(['target.call']);
   });
 
+  it('surfaces span events fetched from an external provider', async () => {
+    mockExternalTrace([
+      {
+        spanId: 'target',
+        name: 'target.call',
+        startTime: 1,
+        attributes: { 'otel.span.kind': 'client' },
+        events: [{ name: 'tool.called', timestamp: 2, attributes: { 'tool.name': 'search' } }],
+      },
+      { spanId: 'plain', name: 'plain.call', startTime: 3 },
+    ]);
+
+    const result = await fetchTraceContext('trace-1', {
+      providerConfig,
+      queryDelay: 0,
+      maxRetries: 0,
+    });
+
+    expect(result?.spans[0].events).toEqual([
+      { name: 'tool.called', timestamp: 2, attributes: { 'tool.name': 'search' } },
+    ]);
+    expect(result?.spans[1].events).toEqual([]);
+  });
+
   it('keeps meaningful internal external spans before applying the span limit', async () => {
     const spans = [
       {
@@ -330,6 +354,39 @@ describe('fetchTraceContext', () => {
           'account.pin': '[REDACTED]',
         },
       }),
+    ]);
+  });
+
+  it('redacts configured attribute values inside span events before persistence', async () => {
+    mockExternalTrace([
+      {
+        spanId: 'target',
+        name: 'target.call',
+        startTime: 1,
+        attributes: {},
+        events: [
+          {
+            name: 'tool.called',
+            timestamp: 2,
+            attributes: { authorization: 'secret-token', 'tool.name': 'search' },
+          },
+        ],
+      },
+    ]);
+
+    await fetchTraceContext('trace-1', {
+      providerConfig,
+      queryDelay: 0,
+      maxRetries: 0,
+      redactAttributes: ['authorization'],
+    });
+
+    expect(storedSpans[0].events).toEqual([
+      {
+        name: 'tool.called',
+        timestamp: 2,
+        attributes: { authorization: '[REDACTED]', 'tool.name': 'search' },
+      },
     ]);
   });
 
