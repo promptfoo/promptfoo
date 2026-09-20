@@ -37,22 +37,27 @@ export const handlePython = async ({
   inverse,
   output,
 }: AssertionParams): Promise<GradingResult> => {
-  invariant(typeof renderedValue === 'string', 'python assertion must have a string value');
   try {
-    const result: ScriptAssertionResult =
-      typeof valueFromScript === 'undefined'
-        ? await runPythonCode(buildPythonScript(renderedValue), 'main', [
-            output,
-            assertionValueContext,
-          ])
-        : valueFromScript;
+    let result: ScriptAssertionResult;
+    if (assertion.script) {
+      result = valueFromScript;
+    } else {
+      invariant(typeof renderedValue === 'string', 'python assertion must have a string value');
+      result =
+        typeof valueFromScript === 'undefined'
+          ? await runPythonCode(buildPythonScript(renderedValue), 'main', [
+              output,
+              assertionValueContext,
+            ])
+          : valueFromScript;
+    }
 
     return normalizeScriptResult(
       assertion,
       result,
       inverse,
       { code: 'Python code', language: 'Python' },
-      assertion.value,
+      assertion.script ? undefined : assertion.value,
     );
   } catch (err) {
     return {

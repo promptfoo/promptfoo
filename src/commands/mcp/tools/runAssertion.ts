@@ -37,6 +37,13 @@ export function registerRunAssertionTool(server: McpServer) {
         .object({
           type: z.string().describe('Assertion type (e.g., "contains", "llm-rubric", "equals")'),
           value: z.any().optional().describe('Expected value or criteria for the assertion'),
+          script: z
+            .string()
+            .refine((value) => value.startsWith('file://'), {
+              error: 'script must start with file://',
+            })
+            .optional()
+            .describe('JavaScript, Python, or Ruby assertion file'),
           threshold: z.number().optional().describe('Score threshold for pass/fail (0-1)'),
           weight: z.number().optional().describe('Weight of this assertion (default: 1)'),
           metric: z.string().optional().describe('Name this assertion as a metric'),
