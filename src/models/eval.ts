@@ -41,6 +41,7 @@ import { randomSequence, sha256 } from '../util/createHash';
 import { convertTestResultsToTableRow } from '../util/exportToFile/index';
 import { isNonTransientHttpStatus, NON_TRANSIENT_HTTP_STATUSES } from '../util/fetch/errors';
 import invariant from '../util/invariant';
+import { calculatePassPowerOfNFromResults } from '../util/passPowerOfN';
 import { sanitizeRuntimeOptions, sanitizeTracingConfigForPersistence } from '../util/sanitizer';
 import { getCurrentTimestamp } from '../util/time';
 import {
@@ -89,6 +90,41 @@ interface MetadataKeyResult {
 
 export function createEvalId(createdAt: Date = new Date()) {
   return `eval-${randomSequence(3)}-${createdAt.toISOString().slice(0, 19)}`;
+}
+
+function parseEvalResultsMetadata(results: unknown): {
+  durationMs?: number;
+  generationDurationMs?: number;
+  evaluationDurationMs?: number;
+  passPowerOfN?: EvaluateStats['passPowerOfN'];
+} {
+  const resultsObj =
+    results != null && typeof results === 'object' && !Array.isArray(results)
+      ? (results as Record<string, unknown>)
+      : undefined;
+
+  const validateDuration = (raw: unknown): number | undefined =>
+    typeof raw === 'number' && Number.isFinite(raw) && raw >= 0 ? raw : undefined;
+
+  const rawDurationMs = validateDuration(resultsObj?.['durationMs']);
+  const generationDurationMs = validateDuration(resultsObj?.['generationDurationMs']);
+  const evaluationDurationMs = validateDuration(resultsObj?.['evaluationDurationMs']);
+  const durationMs =
+    rawDurationMs ??
+    (generationDurationMs != null || evaluationDurationMs != null
+      ? (generationDurationMs ?? 0) + (evaluationDurationMs ?? 0)
+      : undefined);
+
+  const rawPassPowerOfN = resultsObj?.['passPowerOfN'];
+  const passPowerOfN =
+    rawPassPowerOfN != null &&
+    typeof rawPassPowerOfN === 'object' &&
+    'n' in rawPassPowerOfN &&
+    'overallScore' in rawPassPowerOfN
+      ? (rawPassPowerOfN as EvaluateStats['passPowerOfN'])
+      : undefined;
+
+  return { durationMs, generationDurationMs, evaluationDurationMs, passPowerOfN };
 }
 
 /** Result from queries extracting variable keys with eval IDs */
@@ -324,6 +360,7 @@ export default class Eval {
   _resultsLoaded: boolean = false;
   runtimeOptions?: EvalRuntimeOptions;
   _shared: boolean = false;
+  passPowerOfN?: EvaluateStats['passPowerOfN'];
   resultPersistenceFailed: boolean = false;
   private failedResults = new Map<string, EvaluateResult>();
   // Reconstructed EvalResults for rows that failed to persist, cached so comparison
@@ -385,22 +422,8 @@ export default class Eval {
     const eval_ = evalData[0];
     const datasetId = datasetResults[0]?.datasetId;
 
-    // Extract duration fields from results column (for V4 evals)
-    // Validate that values are finite non-negative numbers to guard against corrupted data
-    const resultsObj = eval_.results as Record<string, unknown> | undefined;
-
-    const validateDuration = (raw: unknown): number | undefined =>
-      typeof raw === 'number' && Number.isFinite(raw) && raw >= 0 ? raw : undefined;
-
-    const rawDurationMs = validateDuration(resultsObj?.['durationMs']);
-    const generationDurationMs = validateDuration(resultsObj?.['generationDurationMs']);
-    const evaluationDurationMs = validateDuration(resultsObj?.['evaluationDurationMs']);
-    // Recompute total if only split fields exist (defensive against partial writes)
-    const durationMs =
-      rawDurationMs ??
-      (generationDurationMs != null || evaluationDurationMs != null
-        ? (generationDurationMs ?? 0) + (evaluationDurationMs ?? 0)
-        : undefined);
+    const { durationMs, generationDurationMs, evaluationDurationMs, passPowerOfN } =
+      parseEvalResultsMetadata(eval_.results);
 
     const evalInstance = new Eval(eval_.config, {
       id: eval_.id,
@@ -412,6 +435,7 @@ export default class Eval {
       persisted: true,
       vars: eval_.vars || [],
       runtimeOptions: eval_.runtimeOptions ?? undefined,
+      passPowerOfN,
       durationMs,
       generationDurationMs,
       evaluationDurationMs,
@@ -626,6 +650,7 @@ export default class Eval {
       persisted?: boolean;
       vars?: string[];
       runtimeOptions?: EvalRuntimeOptions;
+      passPowerOfN?: EvaluateStats['passPowerOfN'];
       durationMs?: number;
       generationDurationMs?: number;
       evaluationDurationMs?: number;
@@ -643,6 +668,7 @@ export default class Eval {
     this._resultsLoaded = false;
     this.vars = opts?.vars || [];
     this.runtimeOptions = opts?.runtimeOptions;
+    this.passPowerOfN = opts?.passPowerOfN;
     this.durationMs = opts?.durationMs;
     this.generationDurationMs = opts?.generationDurationMs;
     this.evaluationDurationMs = opts?.evaluationDurationMs;
@@ -685,7 +711,8 @@ export default class Eval {
     } else if (
       this.durationMs !== undefined ||
       this.generationDurationMs !== undefined ||
-      this.evaluationDurationMs !== undefined
+      this.evaluationDurationMs !== undefined ||
+      this.passPowerOfN !== undefined
     ) {
       // For V4 evals, atomically merge duration fields into the results column
       // using json_set so concurrent save() calls don't clobber each other's keys.
@@ -699,6 +726,9 @@ export default class Eval {
       }
       if (this.evaluationDurationMs !== undefined) {
         expr = sql`json_set(${expr}, '$.evaluationDurationMs', ${this.evaluationDurationMs})`;
+      }
+      if (this.passPowerOfN !== undefined) {
+        expr = sql`json_set(${expr}, '$.passPowerOfN', json(${JSON.stringify(this.passPowerOfN)}))`;
       }
       updateObj.results = expr;
     }
@@ -1424,6 +1454,15 @@ export default class Eval {
       stats.tokenUsage,
       this.config.metadata?.generationAccounting?.tokenUsage,
     );
+
+    if (this.passPowerOfN) {
+      stats.passPowerOfN = this.passPowerOfN;
+    } else {
+      const passPower = this.runtimeOptions?.passPower;
+      if (passPower != null && this.results.length > 0) {
+        stats.passPowerOfN = calculatePassPowerOfNFromResults(this.results, passPower);
+      }
+    }
 
     return stats;
   }

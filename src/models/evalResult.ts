@@ -609,6 +609,15 @@ export function sanitizeResultForJsonlArtifact<T extends object>(result: T): T {
   } as T;
 }
 
+// Fold the repetition index (from `--repeat`) into metadata so pass^N scoring can group a
+// test's repetitions after a database round-trip without a Drizzle schema migration.
+function withRepeatIndex(
+  metadata: EvaluateResult['metadata'],
+  repeatIndex: EvaluateResult['repeatIndex'],
+): EvaluateResult['metadata'] {
+  return repeatIndex == null ? metadata : { ...(metadata || {}), repeatIndex };
+}
+
 export default class EvalResult {
   static async createFromEvaluateResult(
     evalId: string,
@@ -631,11 +640,16 @@ export default class EvalResult {
       testCase,
       traceId,
       evaluationId,
+      repeatIndex,
     } = result;
 
     // Persist trace linkage inside a private metadata namespace so it survives
     // EvalResult round-trips without a Drizzle schema migration.
-    const persistedMetadata = persistTraceMetadata(metadata, traceId, evaluationId);
+    const persistedMetadata = persistTraceMetadata(
+      withRepeatIndex(metadata, repeatIndex),
+      traceId,
+      evaluationId,
+    );
 
     // Normalize provider for storage and extract blobs from responses.
     const preSanitizeTestCase = {
@@ -718,7 +732,12 @@ export default class EvalResult {
         // stay on the lighter `sanitizeForDb`. Trace IDs travel inside metadata
         // via `persistTraceMetadata`; strip the top-level fields so the DB write
         // only carries known-schema columns.
-        const { traceId: _traceId, evaluationId: _evaluationId, ...rest } = result;
+        const {
+          traceId: _traceId,
+          evaluationId: _evaluationId,
+          repeatIndex: _repeatIndex,
+          ...rest
+        } = result;
         const sanitizedResult = {
           ...rest,
           testCase: sanitizeForDbWithSecrets(result.testCase),
@@ -727,7 +746,11 @@ export default class EvalResult {
             response: sanitizeForDb(result.response),
             gradingResult: sanitizeForDb(result.gradingResult),
             metadata: sanitizeForDb(
-              persistTraceMetadata(result.metadata, result.traceId, result.evaluationId),
+              persistTraceMetadata(
+                withRepeatIndex(result.metadata, result.repeatIndex),
+                result.traceId,
+                result.evaluationId,
+              ),
             ),
           }),
           namedScores: sanitizeForDb(result.namedScores),
@@ -1022,6 +1045,9 @@ export default class EvalResult {
       vars: shouldStripTestVars ? {} : this.testCase.vars || {},
       metadata: shouldStripMetadata ? {} : this.metadata,
       failureReason: this.failureReason,
+      ...(typeof this.metadata?.repeatIndex === 'number'
+        ? { repeatIndex: this.metadata.repeatIndex }
+        : {}),
     };
   }
 }

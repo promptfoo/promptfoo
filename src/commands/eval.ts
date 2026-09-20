@@ -90,6 +90,14 @@ export function evalCommand(
       `Maximum number of concurrent API calls (default: ${DEFAULT_MAX_CONCURRENCY})`,
     )
     .option('--repeat <number>', 'Number of times to run each test (default: 1)')
+    .option(
+      '--pass-power-threshold <number>',
+      'Minimum pass^N score (0-100) for CI gating. Requires --repeat > 1',
+    )
+    .option(
+      '--pass-power <number>',
+      'The N exponent in pass^N consistency metric (default: repeat count)',
+    )
     .option('--delay <number>', 'Delay between each test (in milliseconds) (default: 0)')
     .option(
       '--no-cache',
