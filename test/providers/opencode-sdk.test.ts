@@ -4,7 +4,11 @@ import path from 'path';
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { clearCache, disableCache, enableCache } from '../../src/cache';
-import { runEval } from '../../src/evaluator';
+import { evaluate, runEval } from '../../src/evaluator';
+import {
+  type InMemoryEvaluation,
+  InMemoryEvaluationStore,
+} from '../../src/evaluator/inMemoryStore';
 import logger from '../../src/logger';
 import {
   convertPermissionConfigToRuleset,
@@ -16,7 +20,7 @@ import { createDeferred } from '../util/utils';
 import type { MockInstance } from 'vitest';
 
 import type { OpenCodeSDKConfig } from '../../src/providers/opencode-sdk';
-import type { CallApiContextParams } from '../../src/types/index';
+import type { ApiProvider, CallApiContextParams, TestSuite } from '../../src/types/index';
 
 vi.mock('../../src/cliState', () => ({
   default: { basePath: '/test/basePath' },
@@ -1561,6 +1565,35 @@ describe('OpenCodeSDKProvider', () => {
           ],
         },
         {
+          name: 'individual semicolon-delimited URL query and fragment values',
+          config: {
+            mcp: {
+              gateway: {
+                type: 'remote',
+                url: 'https://example.test/mcp?route=public;opaque=synthetic-semicolon-query-0919;second=synthetic%2Bsemicolon-0919#route=public;opaque=synthetic-semicolon-fragment-0919',
+              },
+            },
+          },
+          secrets: [
+            'synthetic-semicolon-query-0919',
+            'synthetic+semicolon-0919',
+            'synthetic%2Bsemicolon-0919',
+            'synthetic-semicolon-fragment-0919',
+          ],
+        },
+        {
+          name: 'individual semicolon-delimited values even when the configured URL is malformed',
+          config: {
+            mcp: {
+              gateway: {
+                type: 'remote',
+                url: 'https://[invalid]/mcp?route=public;opaque=synthetic-invalid-semicolon-0919#route=public;opaque=synthetic-invalid-fragment-0919',
+              },
+            },
+          },
+          secrets: ['synthetic-invalid-semicolon-0919', 'synthetic-invalid-fragment-0919'],
+        },
+        {
           name: 'literal plus signs in encoded URL userinfo separately from form query encoding',
           config: {
             mcp: {
@@ -1618,6 +1651,461 @@ describe('OpenCodeSDKProvider', () => {
           }
         },
       );
+
+      it('redacts JSON-escaped and nested representations of configured header credentials', async () => {
+        const credential = 'synthetic-"quoted"\\gateway/value-0919';
+        const escapeJson = (value: string) => JSON.stringify(value).slice(1, -1);
+        const jsonEscaped = escapeJson(credential);
+        const nestedJson = escapeJson(jsonEscaped);
+        const jsonEscapedSlash = jsonEscaped.replaceAll('/', '\\/');
+        const unicodeEscaped = credential.replace(
+          /["\\]/g,
+          (character) => '\\u' + character.charCodeAt(0).toString(16).padStart(4, '0'),
+        );
+        const unicodeEscapedUppercase = unicodeEscaped.replace(
+          /\\u([0-9a-f]{4})/g,
+          (_, hex) => '\\u' + String(hex).toUpperCase(),
+        );
+        const variants = [jsonEscaped, nestedJson, jsonEscapedSlash, unicodeEscapedUppercase];
+        const diagnostics = [
+          JSON.stringify({ 'X-Gateway': credential }),
+          JSON.stringify(JSON.stringify({ 'X-Gateway': credential })),
+          `{ "X-Gateway": "${jsonEscapedSlash}" }`,
+          `{ "X-Gateway": "${unicodeEscapedUppercase}" }`,
+        ];
+        const errorSpy = vi.spyOn(logger, 'error').mockImplementation(() => {});
+        const provider = new OpenCodeSDKProvider({
+          config: {
+            mcp: {
+              gateway: {
+                type: 'remote',
+                url: 'https://example.test/mcp',
+                headers: { 'X-Gateway': credential },
+              },
+            },
+          },
+        });
+        const original = createMockPromptResponse([]);
+        for (const [index, diagnostic] of diagnostics.entries()) {
+          const error = {
+            name: 'APIError',
+            data: { message: `Upstream diagnostic ${diagnostic}; ordinary context` },
+          };
+          if (index % 2 === 0) {
+            mockSessionPrompt.mockResolvedValueOnce({ error });
+          } else {
+            mockSessionPrompt.mockResolvedValueOnce({
+              data: { ...original.data, info: { ...original.data.info, error } },
+            });
+          }
+          const result = await provider.callApi(`JSON credential case ${index}`);
+          const logged = errorSpy.mock.lastCall?.[1] as { error?: string } | undefined;
+          for (const diagnosticResult of [result.error, logged?.error]) {
+            expect(diagnosticResult).toContain('[REDACTED]');
+            expect(diagnosticResult).toContain('ordinary context');
+            for (const variant of [credential, ...variants]) {
+              expect(diagnosticResult).not.toContain(variant);
+            }
+          }
+        }
+      });
+
+      it('redacts Unicode-escaped credentials while preserving unrecognized diagnostic text', async () => {
+        const credential = 'synthetic-snowman-☃-and-emoji-🔐';
+        const errorSpy = vi.spyOn(logger, 'error').mockImplementation(() => {});
+        const escaped = 'synthetic-snowman-\\u2603-and-emoji-\\uD83D\\uDD10';
+        const provider = new OpenCodeSDKProvider({ config: { apiKey: credential } });
+        mockSessionPrompt.mockResolvedValueOnce({
+          error: { name: 'APIError', data: { message: `Upstream ${escaped}; useful context` } },
+        });
+
+        const result = await provider.callApi('Unicode credential diagnostic');
+        const logged = errorSpy.mock.lastCall?.[1] as { error?: string } | undefined;
+
+        for (const diagnostic of [result.error, logged?.error]) {
+          expect(diagnostic).toContain('[REDACTED]; useful context');
+          expect(diagnostic).not.toContain(escaped);
+          expect(diagnostic).not.toContain(credential);
+        }
+      });
+
+      it.each([
+        {
+          name: 'Go-style HTML-safe JSON characters',
+          credential: 'synthetic-gateway-<&>-value-991',
+          rendered: 'synthetic-gateway-\\u003c\\u0026\\u003e-value-991',
+        },
+        {
+          name: 'selective script-close solidus escaping',
+          credential: 'synthetic/path</script/end-991',
+          rendered: 'synthetic/path<\\/script/end-991',
+        },
+        {
+          name: 'HTML-safe line separators with otherwise unescaped Unicode',
+          credential: 'synthetic-é-and-\u2028-and-\u2029-value-991',
+          rendered: 'synthetic-é-and-\\u2028-and-\\u2029-value-991',
+        },
+        {
+          name: 'HTML-escaped diagnostic values',
+          credential: 'synthetic-gateway-<&>-value-991',
+          rendered: 'synthetic-gateway-&lt;&amp;&gt;-value-991',
+        },
+        {
+          name: 'plain Python-style HTML double quotes and ampersands',
+          credential: 'synthetic-"quoted"&-991',
+          rendered: 'synthetic-&quot;quoted&quot;&amp;-991',
+        },
+        {
+          name: 'Python-style HTML hexadecimal apostrophes',
+          credential: "synthetic-'single'-991",
+          rendered: 'synthetic-&#x27;single&#x27;-991',
+        },
+        {
+          name: 'XML-style named apostrophes and uppercase entity names',
+          credential: "synthetic-'single'&-991",
+          rendered: 'synthetic-&APOS;single&APOS;&AMP;-991',
+        },
+        {
+          name: 'zero-padded hexadecimal HTML entities',
+          credential: 'synthetic-"quoted"&-991',
+          rendered: 'synthetic-&#x0022;quoted&#X0022;&#x0026;-991',
+        },
+      ])(
+        'redacts configured custom headers echoed with $name',
+        async ({ credential, rendered }) => {
+          const errorSpy = vi.spyOn(logger, 'error').mockImplementation(() => {});
+          const provider = new OpenCodeSDKProvider({
+            config: {
+              mcp: {
+                gateway: {
+                  type: 'remote',
+                  url: 'https://example.test/mcp',
+                  headers: { 'X-Trace': credential },
+                },
+              },
+            },
+          });
+          const original = createMockPromptResponse([]);
+          const error = {
+            name: 'APIError',
+            data: { message: `Upstream ${rendered}; valid context` },
+          };
+          mockSessionPrompt.mockResolvedValueOnce({ error }).mockResolvedValueOnce({
+            data: { ...original.data, info: { ...original.data.info, error } },
+          });
+
+          for (const label of ['SDK response', 'assistant response']) {
+            const result = await provider.callApi(label);
+            const logged = errorSpy.mock.lastCall?.[1] as { error?: string } | undefined;
+            for (const diagnostic of [result.error, logged?.error]) {
+              expect(diagnostic).toContain('[REDACTED]; valid context');
+              expect(diagnostic).not.toContain(rendered);
+              expect(diagnostic).not.toContain(credential);
+            }
+          }
+        },
+      );
+
+      it.each(['OAuth client secret', 'semicolon URL value'])(
+        'redacts canonical form encoding of a configured %s from SDK and assistant errors',
+        async (source) => {
+          const credential = 'synthetic pass!~(value)-991';
+          const formEncoded = new URLSearchParams({ credential })
+            .toString()
+            .slice('credential='.length);
+          const twiceEncoded = new URLSearchParams({ credential: formEncoded })
+            .toString()
+            .slice('credential='.length);
+          expect(formEncoded).toBe('synthetic+pass%21%7E%28value%29-991');
+          const errorSpy = vi.spyOn(logger, 'error').mockImplementation(() => {});
+          const provider = new OpenCodeSDKProvider({
+            config: {
+              mcp: {
+                gateway: {
+                  type: 'remote',
+                  url:
+                    source === 'semicolon URL value'
+                      ? `https://example.test/mcp?route=public;opaque=${encodeURIComponent(credential)}`
+                      : 'https://example.test/mcp',
+                  ...(source === 'OAuth client secret'
+                    ? { oauth: { clientId: 'synthetic-form-client-id', clientSecret: credential } }
+                    : {}),
+                },
+              },
+            },
+          });
+          const original = createMockPromptResponse([]);
+          const error = {
+            name: 'APIError',
+            data: { message: `Upstream ${formEncoded} or ${twiceEncoded}; valid context` },
+          };
+          mockSessionPrompt.mockResolvedValueOnce({ error }).mockResolvedValueOnce({
+            data: { ...original.data, info: { ...original.data.info, error } },
+          });
+
+          for (const label of ['SDK form', 'assistant form']) {
+            const result = await provider.callApi(label);
+            const logged = errorSpy.mock.lastCall?.[1] as { error?: string } | undefined;
+            for (const diagnostic of [result.error, logged?.error]) {
+              expect(diagnostic).toContain('[REDACTED] or [REDACTED]; valid context');
+              for (const variant of [credential, formEncoded, twiceEncoded]) {
+                expect(diagnostic).not.toContain(variant);
+              }
+            }
+          }
+        },
+      );
+
+      it.each([
+        ['shell command', ['sh', '-c', 'exec my-mcp --token synthetic-shell-private-991']],
+        [
+          'wrapped shell command',
+          [
+            'env',
+            'SAFE_CONTEXT=true',
+            '/bin/bash',
+            '-lc',
+            'exec my-mcp --token synthetic-shell-private-991',
+          ],
+        ],
+        [
+          'computed shell command',
+          ['bash', '-c', 'exec my-mcp --token "$(printf synthetic-shell-%s private-991)"'],
+        ],
+        [
+          'inline Python',
+          ['python3', '-c', 'value = "synthetic-shell-" + "private-991"; start(value)'],
+        ],
+        ['inline JavaScript', ['node', '--eval', 'start("synthetic-shell-" + "private-991")']],
+        ['inline Deno', ['deno', 'eval', 'start("synthetic-shell-" + "private-991")']],
+        ['inline tsx', ['tsx', '-e', 'start(["synthetic-shell","private-991"].join("-"))']],
+        ['inline ts-node', ['ts-node', '-e', 'start(["synthetic-shell","private-991"].join("-"))']],
+        [
+          'env split-string shell',
+          [
+            '/usr/bin/env',
+            '-S',
+            'sh -c "exec my-mcp --token $(printf synthetic-shell-%s private-991)"',
+          ],
+        ],
+        [
+          'long env split-string shell',
+          [
+            '/usr/bin/env',
+            '--split-string=sh -c "exec my-mcp --token synthetic-shell-private-991"',
+          ],
+        ],
+        [
+          'unknown evaluation wrapper',
+          ['other-mcp-wrapper', '--eval', 'start(["synthetic-shell","private-991"].join("-"))'],
+        ],
+        [
+          'bare programming expression for a wrapper',
+          ['other-mcp-wrapper', 'start(["synthetic-shell","private-991"].join("-"))'],
+        ],
+        ['PowerShell', ['pwsh', '-Command', 'Start-Mcp -Token synthetic-shell-private-991']],
+        ['Windows command', ['cmd.exe', '/c', 'my-mcp --token synthetic-shell-private-991']],
+        [
+          'custom compound argument',
+          ['custom-launcher', 'exec my-mcp --token synthetic-shell-private-991'],
+        ],
+      ])('withholds untrusted diagnostic text for a configured %s', async (_label, command) => {
+        const secret = 'synthetic-shell-private-991';
+        const errorSpy = vi.spyOn(logger, 'error').mockImplementation(() => {});
+        const provider = new OpenCodeSDKProvider({
+          config: { mcp: { gateway: { type: 'local', command } } },
+        });
+        const original = createMockPromptResponse([]);
+        const error = {
+          name: 'APIError',
+          data: { statusCode: 502, message: `Gateway rejected supplied value ${secret}` },
+        };
+        mockSessionPrompt.mockResolvedValueOnce({ error }).mockResolvedValueOnce({
+          data: { ...original.data, info: { ...original.data.info, error } },
+        });
+
+        for (const prompt of ['SDK failure', 'assistant failure']) {
+          const result = await provider.callApi(prompt);
+          const logged = errorSpy.mock.lastCall?.[1] as { error?: string } | undefined;
+          for (const diagnostic of [result.error, logged?.error]) {
+            expect(diagnostic).toContain('APIError: HTTP 502: Upstream diagnostic withheld');
+            expect(diagnostic).not.toContain(secret);
+            expect(diagnostic).not.toContain('Gateway rejected supplied value');
+          }
+        }
+      });
+
+      it('retains compound-command protection for a reused server and releases it only on successful cleanup', async () => {
+        const secret = 'synthetic-shell-private-991';
+        const debugSpy = vi.spyOn(logger, 'debug').mockImplementation(() => {});
+        const errorSpy = vi.spyOn(logger, 'error').mockImplementation(() => {});
+        const provider = new OpenCodeSDKProvider({ config: { tools: { skill: true } } });
+        await provider.callApi(
+          'initialize shell server',
+          createPromptContext({
+            mcp: {
+              gateway: {
+                type: 'local',
+                command: ['sh', '-c', 'exec my-mcp --token synthetic-shell-private-991'],
+              },
+            },
+          }),
+        );
+        mockSessionMessages.mockRejectedValueOnce(new Error(`history echoed ${secret}`));
+        const ordinary = await provider.callApi('successful next call without configuration');
+        expect(ordinary.output).toBe('Test response');
+        expect(debugSpy).toHaveBeenCalledWith(
+          '[OpenCode SDK] Could not fetch session history for skill tracking',
+          { error: expect.stringContaining('Upstream diagnostic withheld') },
+        );
+        const failure = {
+          error: {
+            name: 'APIError',
+            data: { statusCode: 503, message: `Previously used value ${secret}` },
+          },
+        };
+        mockSessionPrompt.mockResolvedValueOnce(failure).mockResolvedValueOnce(failure);
+        const reused = await provider.callApi('reused server without config');
+        expect(reused.error).toContain('APIError: HTTP 503: Upstream diagnostic withheld');
+        expect(
+          JSON.stringify({ reused, logs: errorSpy.mock.calls, debug: debugSpy.mock.calls }),
+        ).not.toContain(secret);
+
+        await provider.cleanup();
+        const fresh = await provider.callApi('new server without compound config');
+        expect(mockCreateOpencode).toHaveBeenCalledTimes(2);
+        expect(fresh.error).toContain(`APIError: HTTP 503: Previously used value ${secret}`);
+      });
+
+      it('preserves safe scheduler timing and typed errors even when compound command messages are withheld', async () => {
+        const provider = new OpenCodeSDKProvider({
+          config: {
+            mcp: {
+              gateway: {
+                type: 'local',
+                command: ['sh', '-c', 'exec my-mcp --token synthetic-shell-private-991'],
+              },
+            },
+          },
+        });
+        mockSessionPrompt.mockResolvedValueOnce({
+          error: {
+            name: 'APIError',
+            data: {
+              statusCode: 429,
+              isRetryable: true,
+              message: 'Temporary limit synthetic-shell-private-991',
+              responseHeaders: { 'Retry-After': '30', 'Set-Cookie': 'synthetic-shell-private-991' },
+            },
+          },
+        });
+
+        const result = await provider.callApi('compound throttling');
+
+        expect(result.error).toContain('APIError: HTTP 429: Upstream diagnostic withheld');
+        expect(result.metadata).toEqual({
+          rateLimitKind: 'rate_limit',
+          headers: { 'retry-after': '30' },
+        });
+        expect(JSON.stringify(result)).not.toContain('synthetic-shell-private-991');
+      });
+
+      it.each([
+        ['provider API key', { apiKey: 'q7x9' }],
+        [
+          'custom MCP header',
+          {
+            mcp: {
+              gateway: {
+                type: 'remote',
+                url: 'https://example.test/mcp',
+                headers: { 'X-Gateway': 'q7x9' },
+              },
+            },
+          },
+        ],
+        [
+          'OAuth client secret',
+          {
+            mcp: {
+              gateway: {
+                type: 'remote',
+                url: 'https://example.test/mcp',
+                oauth: { clientId: 'ordinary-client', clientSecret: 'q7x9' },
+              },
+            },
+          },
+        ],
+        [
+          'opaque query value',
+          {
+            mcp: {
+              gateway: { type: 'remote', url: 'https://example.test/mcp?route=3;opaque=q7x9' },
+            },
+          },
+        ],
+        [
+          'local subprocess credential flag',
+          { mcp: { gateway: { type: 'local', command: ['test-server', '--token', 'q7x9'] } } },
+        ],
+      ] satisfies Array<[string, OpenCodeSDKConfig]>)(
+        'redacts short %s even when embedded within an upstream identifier',
+        async (_source, config) => {
+          const errorSpy = vi.spyOn(logger, 'error').mockImplementation(() => {});
+          const provider = new OpenCodeSDKProvider({ config });
+          mockSessionPrompt.mockResolvedValueOnce({
+            error: {
+              name: 'APIError',
+              data: { statusCode: 502, message: 'Context prefix-q7x9-suffix and readable text' },
+            },
+          });
+
+          const result = await provider.callApi('short synthetic credential');
+          const logged = errorSpy.mock.lastCall?.[1] as { error?: string } | undefined;
+
+          for (const diagnostic of [result.error, logged?.error]) {
+            expect(diagnostic).toContain(
+              'HTTP 502: Context prefix-[REDACTED]-suffix and readable text',
+            );
+            expect(diagnostic).not.toContain('q7x9');
+          }
+        },
+      );
+
+      it('retains short custom credentials from a previous prompt without filtering innocent numeric retry headers', async () => {
+        const provider = new OpenCodeSDKProvider();
+        await provider.callApi(
+          'initialize short credential',
+          createPromptContext({
+            mcp: {
+              gateway: {
+                type: 'remote',
+                url: 'https://example.test/mcp?route=3',
+                headers: { 'X-Gateway': 'q7x9' },
+              },
+            },
+          }),
+        );
+        mockSessionPrompt.mockResolvedValueOnce({
+          error: {
+            name: 'APIError',
+            data: {
+              statusCode: 429,
+              isRetryable: true,
+              message: 'Context prefix-q7x9-suffix',
+              responseHeaders: { 'Retry-After': '30' },
+            },
+          },
+        });
+
+        const result = await provider.callApi('later short credential error');
+
+        expect(result.error).toContain('Context prefix-[REDACTED]-suffix');
+        expect(result.metadata).toEqual({
+          rateLimitKind: 'rate_limit',
+          headers: { 'retry-after': '30' },
+        });
+      });
 
       it('preserves a useful diagnostic for an ordinary configured MCP endpoint', async () => {
         mockSessionPrompt.mockResolvedValueOnce({
@@ -3300,6 +3788,33 @@ describe('OpenCodeSDKProvider', () => {
   });
 
   describe('cleanup', () => {
+    const runEvaluation = (
+      id: string,
+      apiProvider: ApiProvider,
+      tests: TestSuite['tests'] = [{}],
+    ) => {
+      const evaluation: InMemoryEvaluation = {
+        id,
+        config: {},
+        persisted: false,
+        prompts: [],
+        results: [],
+        vars: [],
+        resultPersistenceFailed: false,
+        finalResults: [],
+        failedResults: [],
+      };
+      return evaluate(
+        { providers: [apiProvider], prompts: [{ raw: id, label: id }], tests },
+        evaluation,
+        { maxConcurrency: 1 },
+        {
+          createEvaluationStore: (record) => new InMemoryEvaluationStore(record),
+          createResultWriters: () => [],
+        },
+      );
+    };
+
     it('should close server on cleanup', async () => {
       const provider = new OpenCodeSDKProvider({
         env: { ANTHROPIC_API_KEY: 'test-api-key' },
@@ -3381,6 +3896,374 @@ describe('OpenCodeSDKProvider', () => {
       expect(mockServerClose).toHaveBeenCalledTimes(1);
     });
 
+    it('lets an unrelated evaluation finish without closing an in-flight evaluation', async () => {
+      const entered = createDeferred<void>();
+      const pending = createDeferred<ReturnType<typeof createMockPromptResponse>>();
+      mockSessionPrompt.mockImplementationOnce(() => {
+        entered.resolve();
+        return pending.promise;
+      });
+      const provider = new OpenCodeSDKProvider({
+        config: { working_dir: '/test/work', persist_sessions: true },
+        env: { ANTHROPIC_API_KEY: 'test-api-key' },
+      });
+
+      const activeEvaluation = runEvaluation('active-opencode-evaluation', provider);
+      await entered.promise;
+      try {
+        const unrelated = await runEvaluation('unrelated-evaluation', {
+          id: () => 'echo',
+          callApi: async () => ({ output: 'unrelated completed' }),
+        });
+
+        expect(unrelated.results[0]).toMatchObject({ success: true });
+        expect(mockSessionDelete).not.toHaveBeenCalled();
+        expect(mockServerClose).not.toHaveBeenCalled();
+      } finally {
+        pending.resolve(createMockPromptResponse([{ type: 'text', text: 'active completed' }]));
+        await activeEvaluation;
+      }
+
+      const completed = await activeEvaluation;
+      expect(completed.results[0]).toMatchObject({
+        success: true,
+        response: { output: 'active completed' },
+      });
+      expect(mockSessionDelete).toHaveBeenCalledExactlyOnceWith(
+        { sessionID: 'test-session-123', directory: '/test/work' },
+        { signal: expect.any(AbortSignal) },
+      );
+      expect(mockServerClose).toHaveBeenCalledOnce();
+    });
+
+    it('preserves a persistent session while its evaluation grades between serial calls', async () => {
+      const grading = createDeferred<void>();
+      const continueGrading = createDeferred<void>();
+      mockSessionCreate
+        .mockResolvedValueOnce(createMockSessionResponse('ongoing-evaluation-session'))
+        .mockResolvedValue(createMockSessionResponse('unexpected-recreated-session'));
+      const provider = new OpenCodeSDKProvider({
+        config: { working_dir: '/test/work', persist_sessions: true },
+        env: { ANTHROPIC_API_KEY: 'test-api-key' },
+      });
+      const ongoing = runEvaluation('serial-opencode-evaluation', provider, [
+        {
+          assert: [
+            {
+              type: 'javascript',
+              value: async () => {
+                grading.resolve();
+                await continueGrading.promise;
+                return true;
+              },
+            },
+          ],
+        },
+        {},
+      ]);
+      await grading.promise;
+
+      try {
+        const unrelated = await runEvaluation('unrelated-while-grading', {
+          id: () => 'echo',
+          callApi: async () => ({ output: 'unrelated completed' }),
+        });
+        expect(unrelated.results[0]).toMatchObject({ success: true });
+        expect(mockSessionPrompt).toHaveBeenCalledOnce();
+        expect(mockSessionDelete).not.toHaveBeenCalled();
+        expect(mockServerClose).not.toHaveBeenCalled();
+      } finally {
+        continueGrading.resolve();
+        await ongoing;
+      }
+
+      const finished = await ongoing;
+      expect(finished.results.map((result) => result.success)).toEqual([true, true]);
+      expect(mockSessionCreate).toHaveBeenCalledOnce();
+      expect(mockSessionPrompt.mock.calls.map(([parameters]) => parameters.sessionID)).toEqual([
+        'ongoing-evaluation-session',
+        'ongoing-evaluation-session',
+      ]);
+      expect(mockSessionDelete).toHaveBeenCalledExactlyOnceWith(
+        { sessionID: 'ongoing-evaluation-session', directory: '/test/work' },
+        { signal: expect.any(AbortSignal) },
+      );
+      expect(mockServerClose).toHaveBeenCalledOnce();
+    });
+
+    it('defers automatic shutdown when another call is still starting the server', async () => {
+      const starting = createDeferred<void>();
+      const ready = createDeferred<unknown>();
+      mockCreateOpencode.mockImplementationOnce(() => {
+        starting.resolve();
+        return ready.promise;
+      });
+      const provider = new OpenCodeSDKProvider({
+        config: { working_dir: '/test/work', persist_sessions: true },
+        env: { ANTHROPIC_API_KEY: 'test-api-key' },
+      });
+      const call = provider.callApi('prompt while starting');
+      await starting.promise;
+      try {
+        await providerRegistry.shutdownAll();
+        expect(mockSessionPrompt).not.toHaveBeenCalled();
+        expect(mockServerClose).not.toHaveBeenCalled();
+      } finally {
+        ready.resolve({
+          client: {
+            session: {
+              create: mockSessionCreate,
+              prompt: mockSessionPrompt,
+              messages: mockSessionMessages,
+              delete: mockSessionDelete,
+            },
+          },
+          server: { url: 'http://127.0.0.1:4096', close: mockServerClose },
+        });
+        await call;
+      }
+
+      await expect(call).resolves.toMatchObject({ output: 'Test response' });
+      await vi.waitFor(() => expect(mockServerClose).toHaveBeenCalledOnce());
+      expect(mockSessionDelete).toHaveBeenCalledOnce();
+    });
+
+    it('waits for active and queued calls to drain before automatically deleting a shared session', async () => {
+      const firstEntered = createDeferred<void>();
+      const secondEntered = createDeferred<void>();
+      const firstPending = createDeferred<ReturnType<typeof createMockPromptResponse>>();
+      const secondPending = createDeferred<ReturnType<typeof createMockPromptResponse>>();
+      mockSessionPrompt
+        .mockImplementationOnce(() => {
+          firstEntered.resolve();
+          return firstPending.promise;
+        })
+        .mockImplementationOnce(() => {
+          secondEntered.resolve();
+          return secondPending.promise;
+        });
+      const provider = new OpenCodeSDKProvider({
+        config: { working_dir: '/test/work', persist_sessions: true },
+        env: { ANTHROPIC_API_KEY: 'test-api-key' },
+      });
+
+      const first = provider.callApi('first active call');
+      await firstEntered.promise;
+      const second = provider.callApi('second queued call');
+      try {
+        await providerRegistry.shutdownAll();
+        await providerRegistry.shutdownAll();
+        expect(mockSessionDelete).not.toHaveBeenCalled();
+        expect(mockServerClose).not.toHaveBeenCalled();
+        expect(mockSessionPrompt).toHaveBeenCalledOnce();
+
+        firstPending.resolve(createMockPromptResponse([{ type: 'text', text: 'first completed' }]));
+        await expect(first).resolves.toMatchObject({ output: 'first completed' });
+        await secondEntered.promise;
+        await providerRegistry.shutdownAll();
+        expect(mockSessionCreate).toHaveBeenCalledOnce();
+        expect(mockSessionDelete).not.toHaveBeenCalled();
+        expect(mockServerClose).not.toHaveBeenCalled();
+
+        secondPending.resolve(
+          createMockPromptResponse([{ type: 'text', text: 'second completed' }]),
+        );
+        await expect(second).resolves.toMatchObject({ output: 'second completed' });
+        await expect(provider.callApi('next sequential row')).resolves.toMatchObject({
+          output: 'Test response',
+        });
+        expect(mockSessionCreate).toHaveBeenCalledOnce();
+        expect(mockSessionDelete).not.toHaveBeenCalled();
+        await vi.waitFor(() => expect(mockServerClose).toHaveBeenCalledOnce());
+        expect(mockSessionDelete).toHaveBeenCalledOnce();
+        await providerRegistry.shutdownAll();
+        expect(mockServerClose).toHaveBeenCalledOnce();
+      } finally {
+        firstPending.resolve(createMockPromptResponse([{ type: 'text', text: 'first completed' }]));
+        secondPending.resolve(
+          createMockPromptResponse([{ type: 'text', text: 'second completed' }]),
+        );
+        await Promise.allSettled([first, second]);
+      }
+    });
+
+    it('holds a new call behind cleanup already in progress and registers its new server', async () => {
+      const deleting = createDeferred<void>();
+      const pendingDelete = createDeferred<unknown>();
+      const provider = new OpenCodeSDKProvider({
+        config: { working_dir: '/test/work', persist_sessions: true },
+        env: { ANTHROPIC_API_KEY: 'test-api-key' },
+      });
+      await provider.callApi('first evaluation');
+      mockSessionDelete.mockImplementationOnce(() => {
+        deleting.resolve();
+        return pendingDelete.promise;
+      });
+
+      const automatic = providerRegistry.shutdownAll();
+      await deleting.promise;
+      const nextCall = provider.callApi('second evaluation');
+      try {
+        await new Promise<void>((resolve) => setImmediate(resolve));
+        expect(mockSessionPrompt).toHaveBeenCalledOnce();
+        expect(mockServerClose).not.toHaveBeenCalled();
+      } finally {
+        pendingDelete.resolve(undefined);
+        await automatic;
+      }
+
+      await expect(nextCall).resolves.toMatchObject({ output: 'Test response' });
+      expect(mockCreateOpencode).toHaveBeenCalledTimes(2);
+      expect(mockServerClose).toHaveBeenCalledOnce();
+      await providerRegistry.shutdownAll();
+      expect(mockServerClose).toHaveBeenCalledTimes(2);
+    });
+
+    it.each([
+      { server: 'local', baseUrl: undefined },
+      { server: 'remote', baseUrl: 'http://127.0.0.1:4096' },
+    ])('bounds $server session deletion when the transport ignores abort', async ({ baseUrl }) => {
+      const never = new Promise<never>(() => {});
+      const bothDeletesStarted = createDeferred<void>();
+      let deleteCount = 0;
+      let stalledSignal: AbortSignal | undefined;
+      const settled = vi.fn();
+      mockSessionCreate
+        .mockResolvedValueOnce(createMockSessionResponse('stalled-session'))
+        .mockResolvedValueOnce(createMockSessionResponse('reachable-session'));
+      mockSessionDelete.mockImplementation((parameters, options) => {
+        if (++deleteCount === 2) {
+          bothDeletesStarted.resolve();
+        }
+        if (parameters.sessionID === 'stalled-session') {
+          stalledSignal = options.signal;
+          return never;
+        }
+        return Promise.resolve();
+      });
+      rmSpy
+        .mockRejectedValueOnce(new Error('first per-call temp removal failed'))
+        .mockRejectedValueOnce(new Error('second per-call temp removal failed'));
+      const provider = new OpenCodeSDKProvider({
+        config: { baseUrl, persist_sessions: true },
+        env: { ANTHROPIC_API_KEY: 'test-api-key' },
+      });
+      await provider.callApi('first model', createPromptContext({ model: 'model-one' }));
+      await provider.callApi('second model', createPromptContext({ model: 'model-two' }));
+      expect(rmSpy).toHaveBeenCalledTimes(2);
+
+      vi.useFakeTimers();
+      try {
+        const initialTimers = vi.getTimerCount();
+        const shutdown = providerRegistry.shutdownAll().then(settled);
+        await bothDeletesStarted.promise;
+
+        expect(mockSessionDelete).toHaveBeenCalledTimes(2);
+        expect(stalledSignal).toBeInstanceOf(AbortSignal);
+        expect(stalledSignal?.aborted).toBe(false);
+        await vi.advanceTimersByTimeAsync(999);
+        expect(settled).not.toHaveBeenCalled();
+        expect(rmSpy).toHaveBeenCalledTimes(2);
+
+        await vi.advanceTimersByTimeAsync(1);
+        await shutdown;
+        expect(stalledSignal?.aborted).toBe(true);
+        expect(settled).toHaveBeenCalledOnce();
+        expect(rmSpy).toHaveBeenCalledTimes(3);
+        expect(mockServerClose).toHaveBeenCalledTimes(baseUrl ? 0 : 1);
+        expect(vi.getTimerCount()).toBe(initialTimers);
+        await providerRegistry.shutdownAll();
+        expect(mockSessionDelete).toHaveBeenCalledTimes(2);
+      } finally {
+        await vi.runAllTimersAsync();
+        vi.useRealTimers();
+      }
+    });
+
+    it('clears the shutdown timer when session deletion succeeds promptly', async () => {
+      const provider = new OpenCodeSDKProvider({
+        config: { working_dir: '/test/work', persist_sessions: true },
+        env: { ANTHROPIC_API_KEY: 'test-api-key' },
+      });
+      await provider.callApi('prompt');
+
+      vi.useFakeTimers();
+      try {
+        const initialTimers = vi.getTimerCount();
+        await providerRegistry.shutdownAll();
+
+        expect(mockServerClose).toHaveBeenCalledOnce();
+        expect(vi.getTimerCount()).toBe(initialTimers);
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
+    it('handles and sanitizes a session deletion that rejects after automatic shutdown finishes', async () => {
+      const previous = 'synthetic-late-shutdown-credential-0919';
+      const debug = vi.spyOn(logger, 'debug').mockImplementation(() => {});
+      const deleting = createDeferred<void>();
+      const lateDelete = createDeferred<unknown>();
+      const provider = new OpenCodeSDKProvider({
+        config: { working_dir: '/test/work', persist_sessions: true },
+      });
+      await provider.callApi(
+        'persistent prompt with previous credential',
+        createPromptContext({ mcp: remoteMcpWithBearer(previous) }),
+      );
+      mockSessionDelete.mockImplementationOnce(() => {
+        deleting.resolve();
+        return lateDelete.promise;
+      });
+
+      vi.useFakeTimers();
+      try {
+        const shutdown = providerRegistry.shutdownAll();
+        await deleting.promise;
+        await vi.advanceTimersByTimeAsync(1_000);
+        await shutdown;
+        expect(mockServerClose).toHaveBeenCalledOnce();
+
+        lateDelete.reject(new Error(`Deletion failed for ${previous}`));
+        await vi.advanceTimersByTimeAsync(0);
+        expect(debug).toHaveBeenCalledWith('Failed to delete persistent OpenCode session', {
+          sessionId: 'test-session-123',
+          error: 'Deletion failed for [REDACTED]',
+        });
+        expect(JSON.stringify(debug.mock.calls)).not.toContain(previous);
+      } finally {
+        lateDelete.resolve(undefined);
+        await vi.runAllTimersAsync();
+        vi.useRealTimers();
+      }
+    });
+
+    it('passes automatic deletion cancellation in the v1 request options', async () => {
+      const { importModule } = await import('../../src/esm');
+      vi.mocked(importModule).mockImplementation(async (modulePath: string) => {
+        if (/[/\\]dist[/\\]v2[/\\]/.test(modulePath)) {
+          throw new Error('v2 unavailable');
+        }
+        return {
+          createOpencode: mockCreateOpencode,
+          createOpencodeClient: mockCreateOpencodeClient,
+        };
+      });
+      const provider = new OpenCodeSDKProvider({
+        config: { working_dir: '/test/work', persist_sessions: true },
+        env: { ANTHROPIC_API_KEY: 'test-api-key' },
+      });
+      await provider.callApi('legacy persistent call');
+      await providerRegistry.shutdownAll();
+
+      expect(mockSessionDelete).toHaveBeenCalledExactlyOnceWith({
+        path: { id: 'test-session-123', sessionID: 'test-session-123' },
+        query: { directory: '/test/work' },
+        signal: expect.any(AbortSignal),
+      });
+      expect(mockServerClose).toHaveBeenCalledOnce();
+    });
+
     it('registers the same instance again when a subsequent evaluation reuses it', async () => {
       const provider = new OpenCodeSDKProvider({ env: { ANTHROPIC_API_KEY: 'test-api-key' } });
 
@@ -3406,6 +4289,24 @@ describe('OpenCodeSDKProvider', () => {
       expect(rmSpy).toHaveBeenCalledTimes(3);
       await providerRegistry.shutdownAll();
       expect(rmSpy).toHaveBeenCalledTimes(3);
+    });
+
+    it('keeps an automatic temp-directory failure registered for a later lifecycle retry', async () => {
+      rmSpy
+        .mockRejectedValueOnce(new Error('per-call removal failed'))
+        .mockRejectedValueOnce(new Error('automatic removal failed'));
+      const provider = new OpenCodeSDKProvider({ env: { ANTHROPIC_API_KEY: 'test-api-key' } });
+
+      await provider.callApi('automatic temp cleanup');
+      await providerRegistry.shutdownAll();
+      expect(rmSpy).toHaveBeenCalledTimes(2);
+      expect(mockServerClose).toHaveBeenCalledOnce();
+
+      await providerRegistry.shutdownAll();
+      expect(rmSpy).toHaveBeenCalledTimes(3);
+      await providerRegistry.shutdownAll();
+      expect(rmSpy).toHaveBeenCalledTimes(3);
+      expect(mockServerClose).toHaveBeenCalledOnce();
     });
 
     it('retries each failed temporary path but never removes a user-provided working directory', async () => {
@@ -4531,6 +5432,130 @@ describe('OpenCodeSDKProvider', () => {
     });
 
     it.each([
+      { label: 'final parts with history denied', useHistory: false },
+      { label: 'final and intermediate parts with history enabled', useHistory: true },
+    ])('grades completed skill evidence on a refusal from $label', async ({ useHistory }) => {
+      const makeSkill = (name: string, status = 'completed') => ({
+        type: 'tool',
+        tool: 'skill',
+        state: {
+          status,
+          input: { name, extra: 'synthetic-private-filtered-skill-input' },
+          metadata: { dir: '/synthetic-private-filtered-skill-dir' },
+          output: 'synthetic-private-filtered-skill-output',
+        },
+      });
+      const finalParts = [
+        makeSkill('final-skill'),
+        makeSkill('unfinished-skill', 'running'),
+        makeSkill('failed-skill', 'error'),
+        { type: 'text', text: 'synthetic-private-filtered-response' },
+      ];
+      const response = createMockPromptResponse(finalParts, { input: 2, output: 1 }, 0.01, {
+        text: 'synthetic-private-filtered-structured',
+      });
+      mockSessionPrompt.mockResolvedValue({
+        data: {
+          ...response.data,
+          info: {
+            ...response.data.info,
+            error: {
+              name: 'ContentFilterError',
+              data: { message: 'synthetic-private-filtered-upstream-message' },
+            },
+          },
+        },
+      });
+      mockSessionMessages.mockResolvedValue([
+        { info: { id: 'previous-assistant' }, parts: [makeSkill('previous-skill')] },
+        { info: { id: 'user-msg-123' }, parts: [] },
+        { info: { id: 'intermediate' }, parts: [makeSkill('history-skill')] },
+        { info: { id: 'msg-123' }, parts: finalParts },
+        { info: { id: 'later-assistant' }, parts: [makeSkill('later-skill')] },
+      ]);
+      const provider = new OpenCodeSDKProvider({
+        config: { tools: { skill: useHistory } },
+        env: { ANTHROPIC_API_KEY: 'test-api-key' },
+      });
+
+      const direct = await provider.callApi(`refusal with skill ${useHistory}`);
+      const [graded] = await runEval({
+        delay: 0,
+        testIdx: 0,
+        promptIdx: 0,
+        repeatIndex: 0,
+        isRedteam: false,
+        provider,
+        prompt: { raw: `grade refusal with skill ${useHistory}`, label: 'test' },
+        test: {
+          assert: [
+            { type: 'is-refusal' },
+            { type: 'skill-used', value: { name: 'final-skill', min: 1, max: 1 } },
+            { type: 'not-skill-used', value: 'final-skill' },
+            { type: useHistory ? 'skill-used' : 'not-skill-used', value: 'history-skill' },
+            { type: 'not-skill-used', value: 'unfinished-skill' },
+            { type: 'not-skill-used', value: 'failed-skill' },
+            { type: 'not-skill-used', value: 'previous-skill' },
+            { type: 'not-skill-used', value: 'later-skill' },
+          ],
+        },
+        conversations: {},
+        registers: {},
+      });
+
+      expect(mockSessionMessages).toHaveBeenCalledTimes(useHistory ? 2 : 0);
+      expect(direct).toMatchObject({ isRefusal: true, guardrails: { flagged: true } });
+      expect(direct.metadata?.skillCalls).toEqual(
+        (useHistory ? ['history-skill', 'final-skill'] : ['final-skill']).map((name) => ({
+          name,
+          input: { name },
+          source: 'tool',
+        })),
+      );
+      expect(graded.success).toBe(false);
+      expect(graded.gradingResult?.componentResults?.map(({ pass }) => pass)).toEqual([
+        true,
+        true,
+        false,
+        true,
+        true,
+        true,
+        true,
+        true,
+      ]);
+      expect(direct).not.toHaveProperty('error');
+      expect(direct).not.toHaveProperty('raw');
+      expect(JSON.stringify({ direct, graded })).not.toContain('synthetic-private-filtered');
+    });
+
+    it('retains final refusal skill evidence when the allowed history fetch fails', async () => {
+      const response = createMockPromptResponse([
+        { type: 'tool', tool: 'skill', state: { status: 'completed', input: { name: 'review' } } },
+        { type: 'text', text: 'synthetic-private-filtered-response' },
+      ]);
+      mockSessionPrompt.mockResolvedValueOnce({
+        data: {
+          ...response.data,
+          info: { ...response.data.info, error: { _tag: 'ContentFilterError' } },
+        },
+      });
+      mockSessionMessages.mockRejectedValueOnce(new Error('History unavailable'));
+      const provider = new OpenCodeSDKProvider({
+        config: { tools: { skill: true } },
+        env: { ANTHROPIC_API_KEY: 'test-api-key' },
+      });
+
+      const result = await provider.callApi('refusal with unavailable history');
+
+      expect(mockSessionMessages).toHaveBeenCalledTimes(1);
+      expect(result.metadata?.skillCalls).toEqual([
+        { name: 'review', input: { name: 'review' }, source: 'tool' },
+      ]);
+      expect(result).toMatchObject({ isRefusal: true, guardrails: { flagged: true } });
+      expect(JSON.stringify(result)).not.toContain('synthetic-private-filtered-response');
+    });
+
+    it.each([
       {
         label: 'assistant credit code in message',
         delivery: 'assistant',
@@ -4590,6 +5615,31 @@ describe('OpenCodeSDKProvider', () => {
           message: 'The account cannot be charged',
         },
         diagnostic: 'The account cannot be charged',
+      },
+      ...['credit_balance_exhausted', 'billing_hard_limit_reached'].map((code) => ({
+        label: `assistant explicit body code ${code} overrides the SDK retry flag`,
+        delivery: 'assistant',
+        details: {
+          statusCode: 429,
+          isRetryable: true,
+          message: 'Upstream rejected the request',
+          responseBody: JSON.stringify({
+            error: { code, message: 'synthetic-private-quota-body' },
+          }),
+          responseHeaders: { 'retry-after': '31', authorization: 'synthetic-private-quota-header' },
+        },
+        diagnostic: 'Upstream rejected the request',
+      })),
+      {
+        label: 'transport definitive type without a retry flag',
+        delivery: 'transport',
+        details: {
+          message: 'Upstream rejected the request',
+          responseBody: JSON.stringify({
+            error: { code: 'rate_limit_exceeded', type: 'billing_not_active' },
+          }),
+        },
+        diagnostic: 'Upstream rejected the request',
       },
     ])('stops scheduler retries for $label without exposing the raw SDK error', async (entry) => {
       const { isProviderResponseRateLimited } = await import('../../src/scheduler/types');
@@ -4658,6 +5708,212 @@ describe('OpenCodeSDKProvider', () => {
       expect(result.metadata).toEqual({ rateLimitKind: 'rate_limit' });
       expect(isProviderResponseRateLimited(result, undefined)).toBe(true);
       expect(result).not.toHaveProperty('raw');
+    });
+
+    it('keeps an ambiguous quota code retryable when the SDK marks a throttle as retryable', async () => {
+      const { isProviderResponseRateLimited } = await import('../../src/scheduler/types');
+      const response = createMockPromptResponse([]);
+      mockSessionPrompt.mockResolvedValueOnce({
+        data: {
+          ...response.data,
+          info: {
+            ...response.data.info,
+            error: {
+              name: 'APIError',
+              data: {
+                statusCode: 429,
+                isRetryable: true,
+                message: 'The requests per minute quota is temporarily saturated',
+                responseBody: JSON.stringify({ error: { code: 'insufficient_quota' } }),
+                responseHeaders: { 'Retry-After': '2' },
+              },
+            },
+          },
+        },
+      });
+      const provider = new OpenCodeSDKProvider({ env: { ANTHROPIC_API_KEY: 'test-api-key' } });
+
+      const result = await provider.callApi('ambiguous quota window');
+
+      expect(result.metadata).toMatchObject({ rateLimitKind: 'rate_limit' });
+      expect(isProviderResponseRateLimited(result, undefined)).toBe(true);
+    });
+
+    it.each(['assistant', 'transport', 'throw'])(
+      'forwards only scheduler timing headers from %s rate limits',
+      async (delivery) => {
+        const { parseRateLimitHeaders } = await import('../../src/scheduler/headerParser');
+        const { createProviderRateLimitOptions } = await import(
+          '../../src/scheduler/providerWrapper'
+        );
+        const { getProviderResponseHeaders } = await import('../../src/scheduler/types');
+        const retryDate = new Date(Date.now() + 60_000).toUTCString();
+        const resetTimestamp = new Date(Date.now() + 120_000).toISOString();
+        const trusted = {
+          'Retry-After': retryDate,
+          'Retry-After-Ms': '1200',
+          'X-RateLimit-Remaining-Requests': '0',
+          'X-RateLimit-Limit-Requests': '100',
+          'X-RateLimit-Reset-Requests': '1m30s',
+          'X-RateLimit-Remaining-Tokens': '15',
+          'X-RateLimit-Limit-Tokens': '2000',
+          'X-RateLimit-Reset-Tokens': '2m',
+          'Anthropic-RateLimit-Requests-Remaining': '20',
+          'Anthropic-RateLimit-Requests-Limit': '300',
+          'Anthropic-RateLimit-Requests-Reset': resetTimestamp,
+          'Anthropic-RateLimit-Tokens-Remaining': '400',
+          'Anthropic-RateLimit-Tokens-Limit': '5000',
+          'Anthropic-RateLimit-Tokens-Reset': resetTimestamp,
+          'RateLimit-Remaining': '2',
+          'RateLimit-Limit': '10',
+          'RateLimit-Reset': '60',
+          'X-RateLimit-Remaining': '3',
+          'X-RateLimit-Limit': '11',
+          'X-RateLimit-Reset': '60.5',
+        };
+        const unsafe = {
+          Authorization: 'Bearer synthetic-private-rate-authorization',
+          'Set-Cookie': 'session=synthetic-private-rate-cookie',
+          'X-Request-Id': 'synthetic-private-rate-id',
+          'X-RateLimit-Custom': 'synthetic-private-rate-custom',
+        };
+        const error = {
+          name: 'APIError',
+          data: {
+            statusCode: 429,
+            isRetryable: true,
+            message: 'Too many requests',
+            ...(delivery === 'transport' ? {} : { responseHeaders: { ...trusted, ...unsafe } }),
+          },
+        };
+        if (delivery === 'assistant') {
+          const response = createMockPromptResponse([]);
+          mockSessionPrompt.mockResolvedValueOnce({
+            data: { ...response.data, info: { ...response.data.info, error } },
+          });
+        } else if (delivery === 'transport') {
+          mockSessionPrompt.mockResolvedValueOnce({
+            error,
+            response: new Response(null, { status: 429, headers: { ...trusted, ...unsafe } }),
+          });
+        } else {
+          mockSessionPrompt.mockRejectedValueOnce(error);
+        }
+        const provider = new OpenCodeSDKProvider({ env: { ANTHROPIC_API_KEY: 'test-api-key' } });
+
+        const result = await provider.callApi(`scheduler headers from ${delivery}`);
+
+        const expected = Object.fromEntries(
+          Object.entries(trusted).map(([key, value]) => [key.toLowerCase(), value]),
+        );
+        expect(result.metadata).toEqual({ rateLimitKind: 'rate_limit', headers: expected });
+        expect(getProviderResponseHeaders(result)).toEqual(expected);
+        const scheduler = createProviderRateLimitOptions();
+        expect(scheduler.isRateLimited?.(result, undefined)).toBe(true);
+        expect(scheduler.getRetryAfter?.(result, undefined)).toBe(1200);
+        expect(parseRateLimitHeaders(scheduler.getHeaders?.(result) ?? {})).toMatchObject({
+          retryAfterMs: 1200,
+          remainingRequests: 0,
+          limitRequests: 100,
+          remainingTokens: 15,
+          limitTokens: 2000,
+          resetAt: expect.any(Number),
+        });
+        expect(JSON.stringify(result)).not.toContain('synthetic-private-rate');
+        expect(result).not.toHaveProperty('raw');
+      },
+    );
+
+    it('prefers upstream timing and only forwards gateway timing on retryable transport failures', async () => {
+      const { createProviderRateLimitOptions } = await import(
+        '../../src/scheduler/providerWrapper'
+      );
+      mockSessionPrompt
+        .mockResolvedValueOnce({
+          error: {
+            name: 'APIError',
+            data: {
+              statusCode: 429,
+              isRetryable: true,
+              message: 'Too many requests',
+              responseHeaders: { 'Retry-After': '7' },
+            },
+          },
+          response: new Response(null, {
+            status: 429,
+            headers: { 'Retry-After': '2', 'RateLimit-Remaining': '0' },
+          }),
+        })
+        .mockResolvedValueOnce({
+          error: { name: 'UnknownError', data: { message: 'Gateway throttle' } },
+          response: new Response(null, { status: 429, headers: { 'Retry-After': '3' } }),
+        })
+        .mockResolvedValueOnce({
+          error: { name: 'UnknownError', data: { message: 'Gateway unavailable' } },
+          response: new Response(null, { status: 500, headers: { 'Retry-After': '4' } }),
+        });
+      const provider = new OpenCodeSDKProvider({ env: { ANTHROPIC_API_KEY: 'test-api-key' } });
+      const scheduler = createProviderRateLimitOptions();
+
+      const upstream = await provider.callApi('upstream timing');
+      const gatewayThrottle = await provider.callApi('gateway timing');
+      const gatewayFailure = await provider.callApi('gateway non-rate failure');
+
+      expect(upstream.metadata?.headers).toEqual({
+        'retry-after': '7',
+        'ratelimit-remaining': '0',
+      });
+      expect(scheduler.getRetryAfter?.(upstream, undefined)).toBe(7000);
+      expect(scheduler.isRateLimited?.(gatewayThrottle, undefined)).toBe(true);
+      expect(scheduler.getRetryAfter?.(gatewayThrottle, undefined)).toBe(3000);
+      expect(gatewayFailure).not.toHaveProperty('metadata');
+      expect(scheduler.getRetryAfter?.(gatewayFailure, undefined)).toBeUndefined();
+    });
+
+    it('rejects secrets and malformed values even under scheduler timing header names', async () => {
+      const { createProviderRateLimitOptions } = await import(
+        '../../src/scheduler/providerWrapper'
+      );
+      const response = createMockPromptResponse([]);
+      mockSessionPrompt.mockResolvedValueOnce({
+        data: {
+          ...response.data,
+          info: {
+            ...response.data.info,
+            error: {
+              name: 'APIError',
+              data: {
+                statusCode: 429,
+                isRetryable: true,
+                message: 'Too many requests',
+                responseHeaders: {
+                  'Retry-After': 'Bearer synthetic-private-header',
+                  'Retry-After-Ms': '1200 synthetic-private-header',
+                  'X-RateLimit-Remaining-Requests': '10synthetic-private-header',
+                  'X-RateLimit-Limit-Tokens': '812345679012345',
+                  'X-RateLimit-Reset-Tokens': 'synthetic-private-header',
+                  'Anthropic-RateLimit-Tokens-Reset': '1s; synthetic-private-header',
+                  'RateLimit-Reset': ['120', 'synthetic-private-header'],
+                  'RateLimit-Limit': '40',
+                },
+              },
+            },
+          },
+        },
+      });
+      const provider = new OpenCodeSDKProvider({
+        env: { ANTHROPIC_API_KEY: '812345679012345' },
+      });
+
+      const result = await provider.callApi('unsafe timing headers');
+
+      expect(result.metadata).toEqual({
+        rateLimitKind: 'rate_limit',
+        headers: { 'ratelimit-limit': '40' },
+      });
+      expect(createProviderRateLimitOptions().getRetryAfter?.(result, undefined)).toBeUndefined();
+      expect(JSON.stringify(result)).not.toContain('synthetic-private-header');
+      expect(JSON.stringify(result)).not.toContain('812345679012345');
     });
   });
 });

@@ -9,7 +9,7 @@ import cliState from '../cliState';
 import { getEnvString } from '../envars';
 import { importModule } from '../esm';
 import logger, { getLogLevel } from '../logger';
-import { HARD_QUOTA_ERROR_CODES } from '../util/fetch/errors';
+import { DEFINITIVE_BILLING_ERROR_CODES, HARD_QUOTA_ERROR_CODES } from '../util/fetch/errors';
 import { REDACTED } from '../util/sanitizer';
 import { escapeRegExp } from '../util/text';
 import {
@@ -407,6 +407,7 @@ function isDebugMode(): boolean {
  * Maximum number of sessions to keep in memory to prevent unbounded growth
  */
 const MAX_SESSIONS = 100;
+const SESSION_SHUTDOWN_TIMEOUT_MS = 1_000;
 
 /**
  * OpenCode SDK client interface
@@ -423,7 +424,10 @@ interface OpenCodeClient {
       parameters: Record<string, unknown>,
       options?: Record<string, unknown>,
     ) => Promise<OpenCodeSdkResult<OpenCodeSessionMessage[]>>;
-    delete: (parameters: Record<string, unknown>) => Promise<unknown>;
+    delete: (
+      parameters: Record<string, unknown>,
+      options?: Record<string, unknown>,
+    ) => Promise<unknown>;
     abort?: (parameters: Record<string, unknown>) => Promise<unknown>;
   };
 }
@@ -529,26 +533,53 @@ type OpenCodeSdkResult<T> =
   | {
       data?: T;
       error?: unknown;
-      response?: { status?: number };
+      response?: { status?: number; headers?: unknown };
     };
+
+interface OpenCodePromptError {
+  error: unknown;
+  status?: number;
+  headers?: unknown;
+  assistant?: boolean;
+}
 
 function getOpenCodePromptError(
   response: OpenCodeSdkResult<OpenCodePromptResponse>,
-): { error: unknown; status?: number; assistant?: boolean } | undefined {
+): OpenCodePromptError | undefined {
   if (response && typeof response === 'object' && 'error' in response && response.error != null) {
-    return { error: response.error, status: response.response?.status };
+    return {
+      error: response.error,
+      status: response.response?.status,
+      headers: response.response?.headers,
+    };
   }
   const error = unwrapOpenCodeResult(response)?.info?.error;
   return error == null ? undefined : { error, assistant: true };
 }
 
-function describeOpenCodeError(error: unknown, fallbackStatus?: number): string {
+function isOpenCodeContentFilterRefusal(promptError: OpenCodePromptError | undefined): boolean {
+  if (!promptError?.assistant || !promptError.error || typeof promptError.error !== 'object') {
+    return false;
+  }
+  const item = promptError.error as Record<string, unknown>;
+  return (typeof item.name === 'string' ? item.name : item._tag) === 'ContentFilterError';
+}
+
+function describeOpenCodeError(
+  error: unknown,
+  fallbackStatus?: number,
+  withholdUntrustedMessage = false,
+): string {
+  const withheld =
+    'Upstream diagnostic withheld because a local MCP command may contain credentials';
   const formatStatus = (status: unknown) =>
     typeof status === 'number' && Number.isInteger(status) && status >= 100 && status <= 599
       ? 'HTTP ' + status
       : undefined;
   if (typeof error === 'string' && error.trim()) {
-    return [formatStatus(fallbackStatus), error].filter(Boolean).join(': ');
+    return [formatStatus(fallbackStatus), withholdUntrustedMessage ? withheld : error]
+      .filter(Boolean)
+      .join(': ');
   }
   if (!error || typeof error !== 'object') {
     return formatStatus(fallbackStatus) || 'Unknown OpenCode error';
@@ -579,36 +610,136 @@ function describeOpenCodeError(error: unknown, fallbackStatus?: number): string 
   const safeStatus =
     formatStatus(item.statusCode) || formatStatus(data?.statusCode) || formatStatus(fallbackStatus);
   return (
-    [name, safeStatus, typeof message === 'string' && message.trim() ? message : undefined]
+    [
+      name,
+      safeStatus,
+      typeof message === 'string' && message.trim()
+        ? withholdUntrustedMessage
+          ? withheld
+          : message
+        : undefined,
+    ]
       .filter(Boolean)
       .join(': ') || 'Unknown OpenCode error'
   );
 }
 
 function openCodeCredentialPattern(credential: string): string {
+  const caseInsensitiveHex = (hex: string) =>
+    hex.replace(/[a-f]/gi, (letter) => `[${letter.toLowerCase()}${letter.toUpperCase()}]`);
+  const caseInsensitiveWord = (word: string) =>
+    word.replace(/[a-z]/gi, (letter) => `[${letter.toLowerCase()}${letter.toUpperCase()}]`);
   return credential
-    .split(/(%(?:25)*[0-9a-f]{2})/i)
-    .map((part) =>
-      /^%(?:25)*[0-9a-f]{2}$/i.test(part)
-        ? part.replace(/[a-f]/gi, (letter) => `[${letter.toLowerCase()}${letter.toUpperCase()}]`)
-        : escapeRegExp(part),
-    )
+    .split(/(%(?:25)*[0-9a-f]{2}|\\u[0-9a-f]{4}|&(?:#(?:x[0-9a-f]+|\d+)|amp|lt|gt|quot|apos);)/i)
+    .map((part) => {
+      if (/^%(?:25)*[0-9a-f]{2}$/i.test(part)) {
+        return caseInsensitiveHex(part);
+      }
+      if (/^\\u[0-9a-f]{4}$/i.test(part)) {
+        return '\\\\[uU]' + caseInsensitiveHex(part.slice(2));
+      }
+      if (/^&#x[0-9a-f]+;$/i.test(part)) {
+        const digits = part.slice(3, -1).replace(/^0+(?=.)/, '');
+        return '&#[xX]0*' + caseInsensitiveHex(digits) + ';';
+      }
+      if (/^&#\d+;$/.test(part)) {
+        const digits = part.slice(2, -1).replace(/^0+(?=.)/, '');
+        return '&#0*' + digits + ';';
+      }
+      if (/^&(?:amp|lt|gt|quot|apos);$/i.test(part)) {
+        return '&' + caseInsensitiveWord(part.slice(1, -1)) + ';';
+      }
+      return escapeRegExp(part);
+    })
     .join('');
 }
 
-function redactOpenCodeError(message: string, credentials: readonly string[]): string {
+function addOpenCodeCredentialEncodings(value: string, credentials: Set<string>): void {
+  const representations = new Set([value]);
+  const formEncode = (part: string) => new URLSearchParams([['', part]]).toString().slice(1);
+  try {
+    const encoded = encodeURIComponent(value);
+    representations.add(encoded);
+    representations.add(encodeURIComponent(encoded));
+  } catch {
+    // JSON can represent lone surrogates that URI encoding rejects; raw values stay covered too.
+  }
+  const formEncoded = formEncode(value);
+  representations.add(formEncoded);
+  representations.add(formEncode(formEncoded));
+  const asUnicodeEscape = (character: string) =>
+    '\\u' + character.charCodeAt(0).toString(16).padStart(4, '0');
+  const htmlNamed: Record<string, string> = {
+    '&': '&amp;',
+    '<': '&lt;',
+    '>': '&gt;',
+    '"': '&quot;',
+    "'": '&#39;',
+  };
+  const addHtmlEncodings = (representation: string) => {
+    const htmlCharacters = /[&<>"']/g;
+    for (const apostrophe of ['&#39;', '&#x27;', '&apos;']) {
+      representations.add(
+        representation.replace(htmlCharacters, (character) =>
+          character === "'" ? apostrophe : htmlNamed[character],
+        ),
+      );
+    }
+    representations.add(
+      representation.replace(htmlCharacters, (character) => '&#' + character.charCodeAt(0) + ';'),
+    );
+    representations.add(
+      representation.replace(
+        htmlCharacters,
+        (character) => '&#x' + character.charCodeAt(0).toString(16) + ';',
+      ),
+    );
+  };
+  for (let depth = 0; depth < 2; depth++) {
+    for (const representation of [...representations]) {
+      const json = JSON.stringify(representation).slice(1, -1);
+      representations.add(json);
+      representations.add(json.replace(/\//g, '\\/'));
+      const scriptSafe = json.replace(/<\//g, '<\\/');
+      representations.add(scriptSafe);
+      representations.add(scriptSafe.replace(/[\u2028\u2029]/g, asUnicodeEscape));
+      representations.add(json.replace(/[\u2028\u2029]/g, asUnicodeEscape));
+      // HTML-safe JSON encoders such as Go's escape only these characters, leaving normal
+      // accented characters and unrelated slashes untouched.
+      representations.add(json.replace(/[<>&\u2028\u2029]/g, asUnicodeEscape));
+      addHtmlEncodings(representation);
+      addHtmlEncodings(json);
+      representations.add(
+        representation.replace(/["\\\u0000-\u001f\u007f-\uffff]/g, asUnicodeEscape),
+      );
+      representations.add(
+        representation.replace(/["\\/\u0000-\u001f\u007f-\uffff]/g, asUnicodeEscape),
+      );
+    }
+  }
+  for (const representation of representations) {
+    credentials.add(representation);
+  }
+}
+
+function redactOpenCodeError(
+  message: string,
+  credentials: readonly string[],
+  unboundedCredentials: ReadonlySet<string>,
+): string {
   let result = message;
   for (const credential of credentials) {
-    if (credential.length >= 8 && !credential.includes('%')) {
+    const unbounded = credential.length >= 8 || unboundedCredentials.has(credential);
+    if (
+      unbounded &&
+      !/%|\\u[0-9a-f]{4}|&(?:#(?:x[0-9a-f]+|\d+)|amp|lt|gt|quot|apos);/i.test(credential)
+    ) {
       result = result.split(credential).join(REDACTED);
       continue;
     }
     const pattern = openCodeCredentialPattern(credential);
     result = result.replace(
-      new RegExp(
-        credential.length < 8 ? '(?<![\\w.~+-])' + pattern + '(?![\\w.~+=-])' : pattern,
-        'g',
-      ),
+      new RegExp(unbounded ? pattern : '(?<![\\w.~+-])' + pattern + '(?![\\w.~+=-])', 'g'),
       REDACTED,
     );
   }
@@ -666,6 +797,16 @@ function addOpenCodeUrlCredentials(url: unknown, remember: (value: unknown) => v
       // The raw value is still covered when the URL contains malformed encoding.
     }
   };
+  const rememberParameters = (value: string) => {
+    for (const parameter of value.split(/[&;]/)) {
+      const equals = parameter.indexOf('=');
+      if (equals !== -1) {
+        rememberEncoded(parameter.slice(equals + 1), true);
+      }
+    }
+  };
+  const fragmentStart = url.indexOf('#');
+  const fragment = fragmentStart === -1 ? '' : url.slice(fragmentStart + 1);
   try {
     const parsed = new URL(url);
     rememberEncoded(parsed.username);
@@ -687,17 +828,16 @@ function addOpenCodeUrlCredentials(url: unknown, remember: (value: unknown) => v
     }
     const path = url.match(/^[a-z][\w+.-]*:\/\/[^/?#]*(\/[^?#]*)/i)?.[1];
     const privatePath = path && addOpenCodeUrlPathCredentials(path, rememberEncoded);
-    if (userInfo || url.includes('?') || privatePath) {
+    if (userInfo || url.includes('?') || privatePath || fragment.includes('=')) {
       remember(url);
     }
   }
   const queryStart = url.indexOf('?');
-  const query = queryStart === -1 ? undefined : url.slice(queryStart + 1).split('#')[0];
-  for (const parameter of query?.split('&') ?? []) {
-    const equals = parameter.indexOf('=');
-    if (equals !== -1) {
-      rememberEncoded(parameter.slice(equals + 1), true);
-    }
+  if (queryStart !== -1 && (fragmentStart === -1 || queryStart < fragmentStart)) {
+    rememberParameters(url.slice(queryStart + 1, fragmentStart === -1 ? undefined : fragmentStart));
+  }
+  if (fragment.includes('=')) {
+    rememberParameters(fragment);
   }
 }
 
@@ -727,18 +867,16 @@ function addOpenCodeHeaderCredentials(value: unknown, remember: (value: unknown)
   }
 }
 
+const OPEN_CODE_CREDENTIAL_NAME =
+  /api.?key|access.?key|private.?key|client.?key|token|secret|pass(?:word|wd|phrase)|(?:^|[_-])pwd(?:$|[_-])|sign(?:ature|ing.?key)|(?:^|[_-])sig(?:$|[_-])|authorization|credential|cookie/i;
+
 function addOpenCodeEnvironmentValue(
   key: string,
   value: unknown,
   remember: (value: unknown) => void,
   includeRaw = false,
 ) {
-  if (
-    includeRaw ||
-    /api.?key|access.?key|private.?key|client.?key|token|secret|pass(?:word|wd|phrase)|(?:^|[_-])pwd(?:$|[_-])|sign(?:ature|ing.?key)|(?:^|[_-])sig(?:$|[_-])|authorization|credential|cookie/i.test(
-      key,
-    )
-  ) {
+  if (includeRaw || OPEN_CODE_CREDENTIAL_NAME.test(key)) {
     remember(value);
   }
   if (typeof value !== 'string') {
@@ -771,6 +909,182 @@ function addOpenCodeConfigCredentials(
   for (const server of Object.values(servers)) {
     addOpenCodeServerCredentials(server, remember);
   }
+}
+
+function addStrongOpenCodeUrlCredentials(url: unknown, remember: (value: unknown) => void): void {
+  if (typeof url !== 'string' || !url) {
+    return;
+  }
+  const rememberEncoded = (value: string, form = false) => {
+    remember(value);
+    try {
+      remember(decodeURIComponent(form ? value.replace(/\+/g, ' ') : value));
+    } catch {
+      // Raw values are still covered when the URL is malformed.
+    }
+  };
+  try {
+    const parsed = new URL(url);
+    rememberEncoded(parsed.password);
+    addOpenCodeUrlPathCredentials(parsed.pathname, rememberEncoded);
+  } catch {
+    const password = url.match(/^[a-z][\w+.-]*:\/\/[^/?#@:]*:([^/?#@]*)@/i)?.[1];
+    if (password) {
+      rememberEncoded(password);
+    }
+  }
+  for (const section of url.split(/[?#]/).slice(1)) {
+    for (const parameter of section.split(/[&;]/)) {
+      const equals = parameter.indexOf('=');
+      if (equals === -1) {
+        continue;
+      }
+      let key = parameter.slice(0, equals);
+      try {
+        key = decodeURIComponent(key);
+      } catch {
+        // Checking the raw parameter name is still useful for malformed URLs.
+      }
+      if (OPEN_CODE_CREDENTIAL_NAME.test(key) || /^(?:opaque|session(?:id)?|code)$/i.test(key)) {
+        rememberEncoded(parameter.slice(equals + 1), true);
+      }
+    }
+  }
+}
+
+function addStrongOpenCodeConfigCredentials(
+  config: OpenCodeSDKConfig,
+  remember: (value: unknown) => void,
+): void {
+  if (!config || typeof config !== 'object') {
+    return;
+  }
+  remember(config.apiKey);
+  addStrongOpenCodeUrlCredentials(config.baseUrl, remember);
+  if (!config.mcp || typeof config.mcp !== 'object' || Array.isArray(config.mcp)) {
+    return;
+  }
+  for (const server of Object.values(config.mcp)) {
+    addStrongOpenCodeServerCredentials(server, remember);
+  }
+}
+
+function addStrongOpenCodeServerCredentials(
+  server: OpenCodeMCPServerConfig,
+  remember: (value: unknown) => void,
+): void {
+  if (server?.type === 'remote') {
+    addStrongOpenCodeUrlCredentials(server.url, remember);
+    remember(server.oauth?.clientSecret);
+    for (const [key, value] of Object.entries(server.headers ?? {})) {
+      if (
+        !/^(?:accept(?:-.+)?|content-(?:type|length|encoding)|user-agent|host|connection|cache-control|pragma|origin|referer|referrer|x-request-id|traceparent|tracestate)$/i.test(
+          key,
+        )
+      ) {
+        addOpenCodeHeaderCredentials(value, remember);
+      }
+    }
+  } else if (server?.type === 'local') {
+    for (const [key, value] of Object.entries(server.environment ?? {})) {
+      if (OPEN_CODE_CREDENTIAL_NAME.test(key)) {
+        addOpenCodeEnvironmentValue(key, value, remember, true);
+      }
+    }
+    addStrongOpenCodeCommandCredentials(server.command, remember);
+  }
+}
+
+function addStrongOpenCodeCommandCredentials(
+  command: string[],
+  remember: (value: unknown) => void,
+): void {
+  let credentialFollows = false;
+  for (const argument of Array.isArray(command) ? command.slice(1) : []) {
+    if (typeof argument !== 'string') {
+      continue;
+    }
+    if (credentialFollows) {
+      addOpenCodeEnvironmentValue('', argument, remember, true);
+    }
+    credentialFollows = false;
+    const equals = argument.indexOf('=');
+    const key = (equals === -1 ? argument : argument.slice(0, equals)).replace(/^-+/, '');
+    if (!OPEN_CODE_CREDENTIAL_NAME.test(key)) {
+      continue;
+    }
+    if (equals === -1) {
+      credentialFollows = argument.startsWith('-');
+    } else {
+      addOpenCodeEnvironmentValue(key, argument.slice(equals + 1), remember, true);
+    }
+  }
+}
+
+function openCodeConfigHasCompoundMcpCommand(config: OpenCodeSDKConfig): boolean {
+  if (!config?.mcp || typeof config.mcp !== 'object' || Array.isArray(config.mcp)) {
+    return false;
+  }
+  return Object.values(config.mcp).some((server) => {
+    if (server?.type !== 'local' || !Array.isArray(server.command)) {
+      return false;
+    }
+    const words = server.command.filter((word): word is string => typeof word === 'string');
+    if (
+      words
+        .slice(1)
+        .some(
+          (word) =>
+            /^(?:--(?:eval|execute|exec|command|script|code|expression)(?:$|=)|-e(?:$|[^-]))/i.test(
+              word,
+            ) ||
+            /(?:[([{][\s\S]*[)\]}]|=>|\$\(|`)/.test(word) ||
+            /\s(?:--?[\w.-]*(?:token|secret|pass(?:word|wd|phrase)|credential|api.?key|authorization|cookie)[\w.-]*|(?:authorization|cookie)\s*:)\s*(?:=|\s)\s*\S/i.test(
+              word,
+            ),
+        )
+    ) {
+      return true;
+    }
+    return words.some((word, index) => {
+      const pathSegments = word.split(/[/\\]/);
+      const executable = pathSegments[pathSegments.length - 1]?.toLowerCase().replace(/\.exe$/, '');
+      if (!executable) {
+        return false;
+      }
+      const options = words.slice(index + 1);
+      if (executable === 'env') {
+        return options.some((option) => /^--split-string(?:$|=)|^-[^-\s]*S/.test(option));
+      }
+      if (/^(?:ba|da|z|k|mk|a|fi|c|tc)?sh$/.test(executable) || executable === 'nu') {
+        return options.some(
+          (option) => /^--command(?:$|=)/i.test(option) || /^-[^-\s]*c[^-\s]*$/i.test(option),
+        );
+      }
+      if (executable === 'cmd') {
+        return options.some((option) => /^\/[ck](?:$|\s)/i.test(option));
+      }
+      if (/^(?:pwsh|powershell)$/.test(executable)) {
+        return options.some((option) =>
+          /^-(?:c|command|e|enc|encodedcommand)(?:$|[=:])/i.test(option),
+        );
+      }
+      if (
+        /^(?:node(?:js)?|tsx|ts-node|jiti|babel-node|esno|coffee|deno|bun|python(?:\d+(?:\.\d+)*)?|pypy(?:\d+)?|ruby|perl|php|lua(?:\d+(?:\.\d+)*)?|npx|npm|pnpm|yarn)$/.test(
+          executable,
+        )
+      ) {
+        return options.some(
+          (option) =>
+            /^(?:--(?:eval|print|execute|command|call)(?:$|=)|-[^-\s]*[cep][^-\s]*)/i.test(
+              option,
+            ) ||
+            (executable === 'deno' && option === 'eval'),
+        );
+      }
+      return false;
+    });
+  });
 }
 
 function addOpenCodeServerCredentials(
@@ -1144,9 +1458,15 @@ export class OpenCodeSDKProvider implements ApiProvider {
   private clientInitialization?: Promise<void>;
   private server?: OpenCodeServer;
   private activeClientCredentials = new Set<string>();
+  private activeStrongClientCredentials = new Set<string>();
+  private activeClientHasCompoundMcpCommand = false;
   private hasUnclosedCredentialSource = false;
   private activeCallCount = 0;
   private clearClientCredentialsAfterCalls = false;
+  private shutdownRequested = false;
+  private deferredShutdown?: NodeJS.Immediate;
+  private automaticCleanup?: Promise<void>;
+  private explicitCleanup?: Promise<void>;
   private sessions: Map<string, OpenCodeSessionHandle> = new Map(); // cacheKey -> session info
   private sessionOrder: string[] = []; // Track insertion order for LRU eviction
   private sessionQueues = new Map<string, Promise<void>>();
@@ -1210,19 +1530,26 @@ export class OpenCodeSDKProvider implements ApiProvider {
     return '[OpenCode SDK Provider]';
   }
 
-  async cleanup(): Promise<void> {
+  cleanup(): Promise<void> {
+    if (this.explicitCleanup) {
+      return this.explicitCleanup;
+    }
+    const cleanup = Promise.resolve(this.automaticCleanup)
+      .catch(() => undefined)
+      .then(() => this.cleanupResources(false))
+      .finally(() => {
+        if (this.explicitCleanup === cleanup) {
+          this.explicitCleanup = undefined;
+        }
+      });
+    this.explicitCleanup = cleanup;
+    return cleanup;
+  }
+
+  private async cleanupResources(automatic: boolean): Promise<void> {
     await this.clientInitialization?.catch(() => undefined);
     this.clientInitialization = undefined;
-    for (const session of this.sessions.values()) {
-      try {
-        await this.deleteSession(session);
-      } catch (err) {
-        logger.debug('Failed to delete persistent OpenCode session', {
-          sessionId: this.formatCallError(session.id, this.config),
-          error: this.formatCallError(err, this.config),
-        });
-      }
-    }
+    await this.deletePersistentSessions(automatic);
     this.sessions.clear();
     this.sessionOrder = [];
     this.sessionQueues.clear();
@@ -1245,6 +1572,8 @@ export class OpenCodeSDKProvider implements ApiProvider {
     if (!this.hasUnclosedCredentialSource) {
       if (this.activeCallCount === 0) {
         this.activeClientCredentials.clear();
+        this.activeStrongClientCredentials.clear();
+        this.activeClientHasCompoundMcpCommand = false;
         this.clearClientCredentialsAfterCalls = false;
       } else {
         this.clearClientCredentialsAfterCalls = true;
@@ -1253,16 +1582,110 @@ export class OpenCodeSDKProvider implements ApiProvider {
     await Promise.all(
       [...this.pendingTempDirectories].map((workingDir) => this.removeTempDirectory(workingDir)),
     );
-    if (this.pendingTempDirectories.size === 0) {
+    if (this.pendingTempDirectories.size === 0 && this.activeCallCount === 0) {
       providerRegistry.unregister(this);
+    } else {
+      providerRegistry.register(this);
     }
   }
 
   async shutdown(): Promise<void> {
+    if (this.activeCallCount > 0) {
+      // Any evaluator can shut down the global registry; it must not interrupt another
+      // evaluation's OpenCode calls or make that evaluator wait for them.
+      this.shutdownRequested = true;
+      providerRegistry.register(this);
+      return;
+    }
+    return this.startAutomaticCleanup();
+  }
+
+  private startAutomaticCleanup(): Promise<void> {
+    if (this.automaticCleanup) {
+      return this.automaticCleanup;
+    }
+    if (this.deferredShutdown) {
+      clearImmediate(this.deferredShutdown);
+      this.deferredShutdown = undefined;
+    }
+    this.shutdownRequested = false;
+    const cleanup = Promise.resolve(this.explicitCleanup)
+      .catch(() => undefined)
+      .then(() => this.cleanupResources(true))
+      .finally(() => {
+        if (this.automaticCleanup === cleanup) {
+          this.automaticCleanup = undefined;
+          this.scheduleShutdownAfterCalls();
+        }
+      });
+    this.automaticCleanup = cleanup;
+    return cleanup;
+  }
+
+  private scheduleShutdownAfterCalls(): void {
+    if (
+      !this.shutdownRequested ||
+      this.activeCallCount > 0 ||
+      this.automaticCleanup ||
+      this.deferredShutdown
+    ) {
+      return;
+    }
+    // Let callers start the next queued row before deciding whether the provider is idle.
+    this.deferredShutdown = setImmediate(() => {
+      this.deferredShutdown = undefined;
+      if (!this.shutdownRequested || this.activeCallCount > 0) {
+        return;
+      }
+      const formatError = this.getErrorFormatter(this.config);
+      void this.startAutomaticCleanup().catch((error) => {
+        logger.debug('Failed to clean up idle OpenCode provider', { error: formatError(error) });
+      });
+    });
+  }
+
+  private async deletePersistentSessions(automatic: boolean): Promise<void> {
+    if (this.sessions.size === 0) {
+      return;
+    }
+    const formatError = this.getErrorFormatter(this.config);
+    const remove = async (session: OpenCodeSessionHandle, signal?: AbortSignal) => {
+      try {
+        await this.deleteSession(session, signal);
+      } catch (err) {
+        logger.debug('Failed to delete persistent OpenCode session', {
+          sessionId: formatError(session.id),
+          error: formatError(err),
+        });
+      }
+    };
+    if (!automatic) {
+      for (const session of this.sessions.values()) {
+        await remove(session);
+      }
+      return;
+    }
+
+    const controller = new AbortController();
+    let timeout: ReturnType<typeof setTimeout> | undefined;
+    const deadline = new Promise<void>((resolve) => {
+      timeout = setTimeout(() => {
+        controller.abort();
+        resolve();
+      }, SESSION_SHUTDOWN_TIMEOUT_MS);
+    });
     try {
-      await this.cleanup();
+      // Try every session within one deadline, including when an SDK transport ignores abort.
+      await Promise.race([
+        Promise.all(
+          [...this.sessions.values()].map((session) => remove(session, controller.signal)),
+        ),
+        deadline,
+      ]);
     } finally {
-      providerRegistry.unregister(this);
+      if (timeout) {
+        clearTimeout(timeout);
+      }
     }
   }
 
@@ -1310,22 +1733,49 @@ export class OpenCodeSDKProvider implements ApiProvider {
     }
   }
 
+  private collectStrongCredentials(
+    config: OpenCodeSDKConfig,
+    remember: (value: unknown) => void,
+  ): void {
+    addStrongOpenCodeConfigCredentials(this.config, remember);
+    if (config !== this.config) {
+      addStrongOpenCodeConfigCredentials(config, remember);
+    }
+    remember(this.getApiKey(config));
+    for (const environment of [process.env, this.env ?? {}]) {
+      for (const [key, value] of Object.entries(environment)) {
+        if (OPEN_CODE_CREDENTIAL_NAME.test(key)) {
+          addOpenCodeEnvironmentValue(key, value, remember, true);
+        }
+      }
+    }
+  }
+
   private formatCallError(
     error: unknown,
     config: OpenCodeSDKConfig,
     status?: number,
     retainedCredentials?: ReadonlySet<string>,
+    retainedHasCompoundMcpCommand = false,
+    redactOnly = false,
+    retainedStrongCredentials?: ReadonlySet<string>,
   ): string {
     const credentials = new Set<string>();
+    const unboundedCredentials = new Set<string>();
+    const encodings = new Map<string, Set<string>>();
+    const encodingsFor = (value: string) => {
+      let known = encodings.get(value);
+      if (!known) {
+        known = new Set<string>();
+        addOpenCodeCredentialEncodings(value, known);
+        encodings.set(value, known);
+      }
+      return known;
+    };
     const remember = (value: unknown) => {
       if (typeof value === 'string' && value) {
-        credentials.add(value);
-        try {
-          const encoded = encodeURIComponent(value);
-          credentials.add(encoded);
-          credentials.add(encodeURIComponent(encoded));
-        } catch {
-          // Strings with lone surrogates cannot be URI-encoded; the raw value is covered.
+        for (const encoding of encodingsFor(value)) {
+          credentials.add(encoding);
         }
       }
     };
@@ -1336,30 +1786,82 @@ export class OpenCodeSDKProvider implements ApiProvider {
       remember(value);
     }
     this.collectCurrentCredentials(config, remember);
+    const rememberStrong = (value: unknown) => {
+      if (typeof value === 'string' && value) {
+        for (const encoding of encodingsFor(value)) {
+          unboundedCredentials.add(encoding);
+        }
+      }
+    };
+    for (const value of this.activeStrongClientCredentials) {
+      rememberStrong(value);
+    }
+    for (const value of retainedStrongCredentials ?? []) {
+      rememberStrong(value);
+    }
+    this.collectStrongCredentials(config, rememberStrong);
+    for (const value of unboundedCredentials) {
+      credentials.add(value);
+    }
+    const withholdUntrustedMessage =
+      !redactOnly &&
+      (retainedHasCompoundMcpCommand ||
+        this.activeClientHasCompoundMcpCommand ||
+        openCodeConfigHasCompoundMcpCommand(this.config) ||
+        (config !== this.config && openCodeConfigHasCompoundMcpCommand(config)));
     return redactOpenCodeError(
-      describeOpenCodeError(error, status),
+      describeOpenCodeError(error, status, withholdUntrustedMessage),
       [...credentials].sort((left, right) => right.length - left.length),
+      unboundedCredentials,
     );
   }
 
-  private getErrorFormatter(config: OpenCodeSDKConfig): (error: unknown) => string {
+  private getErrorFormatter(
+    config: OpenCodeSDKConfig,
+    redactOnly = false,
+  ): (error: unknown) => string {
     // Detached SDK operations can reject after cleanup clears the active client's credentials.
     const retainedCredentials = new Set(this.activeClientCredentials);
+    const retainedStrongCredentials = new Set(this.activeStrongClientCredentials);
+    const retainedHasCompoundMcpCommand =
+      this.activeClientHasCompoundMcpCommand ||
+      openCodeConfigHasCompoundMcpCommand(this.config) ||
+      (config !== this.config && openCodeConfigHasCompoundMcpCommand(config));
     this.collectCurrentCredentials(config, (value) => {
       if (typeof value === 'string' && value) {
         retainedCredentials.add(value);
       }
     });
-    return (error) => this.formatCallError(error, config, undefined, retainedCredentials);
+    this.collectStrongCredentials(config, (value) => {
+      if (typeof value === 'string' && value) {
+        retainedStrongCredentials.add(value);
+      }
+    });
+    return (error) =>
+      this.formatCallError(
+        error,
+        config,
+        undefined,
+        retainedCredentials,
+        retainedHasCompoundMcpCommand,
+        redactOnly,
+        retainedStrongCredentials,
+      );
   }
 
   private captureClientCredentials(config: OpenCodeSDKConfig): void {
     // A new client now owns this credential set. If old requests are still finishing,
     // their credentials can remain until this new client is also closed safely.
     this.clearClientCredentialsAfterCalls = false;
+    this.activeClientHasCompoundMcpCommand ||= openCodeConfigHasCompoundMcpCommand(config);
     this.collectCurrentCredentials(config, (value) => {
       if (typeof value === 'string' && value) {
         this.activeClientCredentials.add(value);
+      }
+    });
+    this.collectStrongCredentials(config, (value) => {
+      if (typeof value === 'string' && value) {
+        this.activeStrongClientCredentials.add(value);
       }
     });
   }
@@ -1373,8 +1875,11 @@ export class OpenCodeSDKProvider implements ApiProvider {
       !this.hasUnclosedCredentialSource
     ) {
       this.activeClientCredentials.clear();
+      this.activeStrongClientCredentials.clear();
+      this.activeClientHasCompoundMcpCommand = false;
       this.clearClientCredentialsAfterCalls = false;
     }
+    this.scheduleShutdownAfterCalls();
   }
 
   /**
@@ -1639,11 +2144,21 @@ export class OpenCodeSDKProvider implements ApiProvider {
     };
   }
 
-  private async deleteSession(session: OpenCodeSessionHandle | undefined): Promise<void> {
+  private async deleteSession(
+    session: OpenCodeSessionHandle | undefined,
+    signal?: AbortSignal,
+  ): Promise<void> {
     if (!session) {
       return;
     }
-    await this.client?.session?.delete?.(this.buildDeleteSessionParameters(session));
+    const parameters = this.buildDeleteSessionParameters(session);
+    if (!signal) {
+      await this.client?.session?.delete?.(parameters);
+    } else if (this.opencodeModule?.apiVersion === 'v2') {
+      await this.client?.session?.delete?.(parameters, { signal });
+    } else {
+      await this.client?.session?.delete?.({ ...parameters, signal });
+    }
   }
 
   private buildAbortSessionParameters(
@@ -2059,6 +2574,7 @@ export class OpenCodeSDKProvider implements ApiProvider {
     response: OpenCodeSdkResult<OpenCodePromptResponse>,
     formatError: (error: unknown) => string,
     abortSignal?: AbortSignal,
+    includeFinalMessage = true,
   ): Promise<OpenCodePromptPart[]> {
     const assistantMessage = unwrapOpenCodeResult(response)?.info;
     const parentId = assistantMessage?.parentID;
@@ -2102,7 +2618,10 @@ export class OpenCodeSDKProvider implements ApiProvider {
       );
       return [];
     }
-    const relevantMessages = messages.slice(startIndex, endIndex + 1);
+    const relevantMessages = messages.slice(
+      startIndex,
+      includeFinalMessage ? endIndex + 1 : endIndex,
+    );
     logger.debug(
       `[OpenCode SDK] Fetched ${messages.length} messages, using ${relevantMessages.length} (start=${startIndex} end=${endIndex}) for skill tracking`,
     );
@@ -2223,9 +2742,16 @@ export class OpenCodeSDKProvider implements ApiProvider {
     };
   }
 
-  private deriveSkillCalls(parts: OpenCodePromptPart[]): SkillCallEntry[] {
+  private deriveSkillCalls(
+    parts: OpenCodePromptPart[],
+    completedNamesOnly = false,
+  ): SkillCallEntry[] {
     return parts.flatMap((part) => {
-      if (part.type !== 'tool' || part.tool !== 'skill') {
+      if (
+        part.type !== 'tool' ||
+        part.tool !== 'skill' ||
+        (completedNamesOnly && part.state?.status !== 'completed')
+      ) {
         return [];
       }
 
@@ -2233,6 +2759,9 @@ export class OpenCodeSDKProvider implements ApiProvider {
         typeof part.state?.input?.name === 'string' ? part.state.input.name.trim() : '';
       if (!skillName) {
         return [];
+      }
+      if (completedNamesOnly) {
+        return [{ name: skillName, input: { name: skillName }, source: 'tool' }];
       }
 
       const skillDir =
@@ -2313,14 +2842,14 @@ export class OpenCodeSDKProvider implements ApiProvider {
     }
     const isRetryable =
       typeof data?.isRetryable === 'boolean' ? data.isRetryable : item.isRetryable;
-    if (isRetryable !== false) {
-      return 'rate_limit';
-    }
 
-    // A nonretryable account/quota failure must not become retryable in the
-    // scheduler just because its safe diagnostic contains HTTP 429.
+    // A definitive billing code outranks the SDK's retry flag. Ambiguous quota
+    // codes and natural-language descriptions can also describe per-window
+    // throttles, so only treat those as hard quotas when the SDK agrees.
+    const quotaCodes =
+      isRetryable === false ? HARD_QUOTA_ERROR_CODES : DEFINITIVE_BILLING_ERROR_CODES;
     const hasQuotaCode = (value: unknown) =>
-      typeof value === 'string' && HARD_QUOTA_ERROR_CODES.has(value.trim().toLowerCase());
+      typeof value === 'string' && quotaCodes.has(value.trim().toLowerCase());
     const hasQuotaMessage = (value: unknown) => {
       if (typeof value !== 'string') {
         return false;
@@ -2328,9 +2857,10 @@ export class OpenCodeSDKProvider implements ApiProvider {
       const message = value.slice(0, 32_768).toLowerCase();
       return (
         (message.match(/\b[a-z]+(?:_[a-z]+)+\b/g) ?? []).some(hasQuotaCode) ||
-        /\b(?:credit balance (?:is (?:(?:too )?low|exhausted|depleted|insufficient)|(?:has been )?(?:exhausted|depleted))|(?:billing (?:hard )?limit|(?:current |account |daily )?quota) (?:has been |was |is )?(?:exceeded|exhausted|reached)|exceeded (?:your |the )?(?:current |account |daily )?quota|billing (?:is )?(?:not active|inactive)|access (?:has been |was |is )?terminated)\b/.test(
-          message,
-        )
+        (isRetryable === false &&
+          /\b(?:credit balance (?:is (?:(?:too )?low|exhausted|depleted|insufficient)|(?:has been )?(?:exhausted|depleted))|(?:billing (?:hard )?limit|(?:current |account |daily )?quota) (?:has been |was |is )?(?:exceeded|exhausted|reached)|exceeded (?:your |the )?(?:current |account |daily )?quota|billing (?:is )?(?:not active|inactive)|access (?:has been |was |is )?terminated)\b/.test(
+            message,
+          ))
       );
     };
     const hasQuotaFields = (value: unknown) => {
@@ -2371,35 +2901,112 @@ export class OpenCodeSDKProvider implements ApiProvider {
       : 'rate_limit';
   }
 
+  private getErrorRateLimitHeaders(
+    error: unknown,
+    config: OpenCodeSDKConfig,
+    fallbackHeaders: unknown,
+  ): Record<string, string> | undefined {
+    const item =
+      error && typeof error === 'object' ? (error as Record<string, unknown>) : undefined;
+    const data =
+      item?.data && typeof item.data === 'object'
+        ? (item.data as Record<string, unknown>)
+        : undefined;
+    const headers: Record<string, string> = {};
+    const formatHeader = this.getErrorFormatter(config, true);
+    const isHttpDate = (value: string) =>
+      /^(?:(?:Mon|Tue|Wed|Thu|Fri|Sat|Sun), \d{2} [A-Za-z]{3} \d{4} \d{2}:\d{2}:\d{2} GMT|(?:Monday|Tuesday|Wednesday|Thursday|Friday|Saturday|Sunday), \d{2}-[A-Za-z]{3}-\d{2} \d{2}:\d{2}:\d{2} GMT|(?:Mon|Tue|Wed|Thu|Fri|Sat|Sun) [A-Za-z]{3} {1,2}\d{1,2} \d{2}:\d{2}:\d{2} \d{4})$/i.test(
+        value,
+      ) && Number.isFinite(Date.parse(value));
+    const isIsoDate = (value: string) =>
+      /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{1,9})?(?:Z|[+-]\d{2}:\d{2})$/i.test(value) &&
+      Number.isFinite(Date.parse(value));
+    const isInteger = (value: string) => /^\d{1,15}$/.test(value);
+    const isReset = (value: string) =>
+      /^\d{1,15}(?:\.\d{1,9})?$/.test(value) ||
+      /^(?=\d)(?:(?:\d{1,10})h)?(?:(?:\d{1,10})m(?!s))?(?:\d{1,10}(?:\.\d{1,9})?(?:ms|s))?$/.test(
+        value,
+      ) ||
+      isHttpDate(value) ||
+      isIsoDate(value);
+    const isSafeTimingHeader = (name: string, value: string) => {
+      if (name === 'retry-after') {
+        return isInteger(value) || isHttpDate(value);
+      }
+      if (
+        /^(?:retry-after-ms|x-ratelimit-(?:remaining|limit)(?:-(?:requests|tokens))?|anthropic-ratelimit-(?:requests|tokens)-(?:remaining|limit)|ratelimit-(?:remaining|limit))$/.test(
+          name,
+        )
+      ) {
+        return isInteger(value);
+      }
+      return (
+        /^(?:x-ratelimit-reset(?:-(?:requests|tokens))?|anthropic-ratelimit-(?:requests|tokens)-reset|ratelimit-reset)$/.test(
+          name,
+        ) && isReset(value)
+      );
+    };
+
+    // Outer headers may be from the OpenCode gateway. Prefer the nested upstream
+    // values when the SDK provides both; arbitrary headers and invalid values
+    // never enter the provider result or the scheduler.
+    for (const source of [fallbackHeaders, item?.responseHeaders, data?.responseHeaders]) {
+      if (!source || typeof source !== 'object' || Array.isArray(source)) {
+        continue;
+      }
+      const entries = source instanceof Headers ? source.entries() : Object.entries(source);
+      for (const [name, rawValue] of entries) {
+        if (typeof rawValue !== 'string' || rawValue.length > 128) {
+          continue;
+        }
+        const key = name.toLowerCase();
+        const value = rawValue.trim();
+        if (isSafeTimingHeader(key, value) && formatHeader(value) === value) {
+          headers[key] = value;
+        }
+      }
+    }
+    return Object.keys(headers).length > 0 ? headers : undefined;
+  }
+
   private buildPromptErrorResponse(
     config: OpenCodeSDKConfig,
     response: OpenCodeSdkResult<OpenCodePromptResponse>,
-    promptError: { error: unknown; status?: number; assistant?: boolean },
+    promptError: OpenCodePromptError,
     sessionId: string,
+    intermediateParts: OpenCodePromptPart[] = [],
   ): ProviderResponse {
-    const { error, status, assistant } = promptError;
+    const { error, status, headers, assistant } = promptError;
+    const responseData = unwrapOpenCodeResult(response);
     const assistantDetails = assistant
-      ? { ...this.getAssistantErrorAccounting(unwrapOpenCodeResult(response)?.info), sessionId }
+      ? { ...this.getAssistantErrorAccounting(responseData?.info), sessionId }
       : {};
-    if (assistant && error && typeof error === 'object') {
-      const item = error as Record<string, unknown>;
-      if ((typeof item.name === 'string' ? item.name : item._tag) === 'ContentFilterError') {
-        return {
-          ...assistantDetails,
-          output: 'I cannot assist with this request because it was blocked by a content filter.',
-          isRefusal: true,
-          guardrails: { flagged: true, flaggedOutput: true },
-        };
-      }
+    if (isOpenCodeContentFilterRefusal(promptError)) {
+      // Retain only the names of skills that completed before filtering. Full
+      // tool inputs, metadata, text and structured output may contain filtered content.
+      const skillCalls = this.deriveSkillCalls(
+        [...intermediateParts, ...(responseData?.parts ?? [])],
+        true,
+      );
+      return {
+        ...assistantDetails,
+        output: 'I cannot assist with this request because it was blocked by a content filter.',
+        isRefusal: true,
+        guardrails: { flagged: true, flaggedOutput: true },
+        ...(skillCalls.length === 0 ? {} : { metadata: { skillCalls } }),
+      };
     }
-    return { ...this.handleCallError(error, config, undefined, { status }), ...assistantDetails };
+    return {
+      ...this.handleCallError(error, config, undefined, { status, headers }),
+      ...assistantDetails,
+    };
   }
 
   private handleCallError(
     error: unknown,
     config: OpenCodeSDKConfig,
     callOptions?: CallApiOptionsParams,
-    promptError?: { status?: number },
+    promptError?: { status?: number; headers?: unknown },
   ): ProviderResponse {
     const isAbort =
       !promptError &&
@@ -2433,19 +3040,26 @@ export class OpenCodeSDKProvider implements ApiProvider {
       return { error: cliError };
     }
 
+    const formattedError = this.formatCallError(error, config, promptError?.status);
     const errorMessage = promptError
-      ? this.formatCallError(
-          new Error(
-            'OpenCode SDK prompt error: ' + this.formatCallError(error, config, promptError.status),
-          ),
-          config,
-        )
-      : this.formatCallError(error, config);
+      ? 'OpenCode SDK prompt error: ' + formattedError
+      : formattedError;
     const rateLimitKind = this.getErrorRateLimitKind(error, promptError?.status);
+    const headers =
+      rateLimitKind === 'rate_limit' || (!rateLimitKind && promptError?.status === 429)
+        ? this.getErrorRateLimitHeaders(error, config, promptError?.headers)
+        : undefined;
     logger.error('Error calling OpenCode SDK', { error: errorMessage });
     return {
       error: `Error calling OpenCode SDK: ${errorMessage}`,
-      ...(rateLimitKind ? { metadata: { rateLimitKind } } : {}),
+      ...(rateLimitKind || headers
+        ? {
+            metadata: {
+              ...(rateLimitKind ? { rateLimitKind } : {}),
+              ...(headers ? { headers } : {}),
+            },
+          }
+        : {}),
     };
   }
 
@@ -2455,12 +3069,16 @@ export class OpenCodeSDKProvider implements ApiProvider {
     callOptions?: CallApiOptionsParams,
   ): Promise<ProviderResponse> {
     const { config, isTempDir, workingDir } = this.prepareCall(context);
-    providerRegistry.register(this);
+    providerRegistry.registerScoped(this);
     this.activeCallCount++;
     let ephemeralSession: OpenCodeSessionHandle | undefined;
     let abortListener: (() => void) | undefined;
 
     try {
+      const cleanup = this.automaticCleanup ?? this.explicitCleanup;
+      if (cleanup) {
+        await cleanup.catch(() => undefined);
+      }
       this.buildEffectivePermissionRules(config);
       await this.ensureOpenCodeModule();
       this.validateSessionPolicyConfiguration(config);
@@ -2567,7 +3185,8 @@ export class OpenCodeSDKProvider implements ApiProvider {
             return { error: 'OpenCode SDK call aborted' };
           }
           const promptError = getOpenCodePromptError(response);
-          if (promptError) {
+          const isContentFilterRefusal = isOpenCodeContentFilterRefusal(promptError);
+          if (promptError && !isContentFilterRefusal) {
             return this.buildPromptErrorResponse(config, response, promptError, session.sessionId);
           }
           logger.debug('OpenCode SDK response received');
@@ -2586,6 +3205,7 @@ export class OpenCodeSDKProvider implements ApiProvider {
                 response,
                 formatError,
                 abortSignal,
+                !isContentFilterRefusal,
               );
             } catch (error) {
               logger.debug('[OpenCode SDK] Could not fetch session history for skill tracking', {
@@ -2597,6 +3217,15 @@ export class OpenCodeSDKProvider implements ApiProvider {
             }
           }
 
+          if (promptError) {
+            return this.buildPromptErrorResponse(
+              config,
+              response,
+              promptError,
+              session.sessionId,
+              allSessionParts,
+            );
+          }
           const providerResponse = this.buildProviderResponse(
             config,
             response,
