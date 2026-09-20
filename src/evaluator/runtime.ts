@@ -26,6 +26,8 @@ export interface EvaluationRecord {
   readonly prompts: CompletedPrompt[];
   readonly results: EvaluationStoreResult[];
   resultPersistenceFailed: boolean;
+  /** Runtime-only materialized-test identities used by CLI repeat pass-rate enforcement. */
+  repeatPassRateGroupByTestIdx?: Map<number, number>;
 }
 
 export interface EvaluationStore<
