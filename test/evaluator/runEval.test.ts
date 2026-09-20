@@ -148,6 +148,35 @@ describe('runEval', () => {
     expect(results[0].success).toBe(true);
   });
 
+  it('applies provider-scoped xfail rules to a test-level target provider override', async () => {
+    const overrideProvider: ApiProvider = {
+      id: vi.fn().mockReturnValue('override-provider'),
+      callApi: vi.fn().mockResolvedValue({ output: 'Override output' }),
+    };
+
+    const [result] = await runEval({
+      ...defaultOptions,
+      provider: mockProvider,
+      prompt: { raw: 'Test prompt', label: 'test-label' },
+      test: {
+        provider: overrideProvider,
+        assert: [{ type: 'equals', value: 'Different output', xfail: 'override-provider' }],
+      },
+      conversations: {},
+      registers: {},
+    });
+
+    expect(overrideProvider.callApi).toHaveBeenCalledTimes(1);
+    expect(mockProvider.callApi).not.toHaveBeenCalled();
+    expect(result.success).toBe(true);
+    expect(result.gradingResult?.componentResults?.[0]?.metadata?.xfail).toMatchObject({
+      expected: true,
+      provider: 'override-provider',
+      pattern: 'override-provider',
+      originalPass: false,
+    });
+  });
+
   it('should pass dynamic prompt config from prompt functions to the provider', async () => {
     const dynamicConfig = { temperature: 0.5, tools: [{ name: 'test_tool' }] };
     const promptWithFunction: Prompt = {

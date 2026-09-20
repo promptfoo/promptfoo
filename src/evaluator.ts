@@ -1445,6 +1445,8 @@ async function gradeRunEvalResponse({
     ...(response.audio?.data ? { audio: response.audio } : {}),
     providerTransformedOutput,
   };
+  // Provider-scoped assertion behavior applies to the target selected for this test.
+  const assertionProvider = isApiProvider(test.provider) ? test.provider : provider;
 
   if (deferGrading) {
     invariant(providerCallQueue, 'providerCallQueue is required when deferGrading is enabled');
@@ -1454,7 +1456,7 @@ async function gradeRunEvalResponse({
       () =>
         runAssertions({
           prompt: renderedPrompt,
-          provider,
+          provider: assertionProvider,
           providerResponse: assertionProviderResponse,
           test,
           vars,
@@ -1474,7 +1476,7 @@ async function gradeRunEvalResponse({
     () =>
       runAssertions({
         prompt: renderedPrompt,
-        provider,
+        provider: assertionProvider,
         providerResponse: assertionProviderResponse,
         test,
         vars,
@@ -3340,6 +3342,25 @@ function usesExampleProvider(testSuite: TestSuite) {
   });
 }
 
+function usesAssertionXFail(tests: AtomicTestCase[]): boolean {
+  return tests.some((test) =>
+    (test.assert ?? []).some((assertion) => {
+      if (!assertion) {
+        return false;
+      }
+      if ('xfail' in assertion && assertion.xfail !== undefined) {
+        return true;
+      }
+      // Walk into assert-set entries
+      if ('assert' in assertion && Array.isArray((assertion as { assert?: unknown }).assert)) {
+        const nested = (assertion as { assert?: Array<{ xfail?: unknown }> }).assert ?? [];
+        return nested.some((child) => child && child.xfail !== undefined);
+      }
+      return false;
+    }),
+  );
+}
+
 class Evaluator<TEvaluation extends EvaluationRecord, TResult extends EvaluationStoreResult> {
   store: EvaluationStore<TEvaluation, TResult>;
   testSuite: TestSuite;
@@ -4829,6 +4850,10 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
     let tests = buildTestsFromSuite(testSuite);
     tests = filterByRange(tests, options.filterRange, warnEmptyFilterRange);
     maybeEmitAzureOpenAiWarning(testSuite, tests);
+
+    if (usesAssertionXFail(tests)) {
+      telemetry.record('feature_used', { feature: 'assertion_xfail' });
+    }
 
     const varNames = await prepareTestVariables(tests, testSuite);
     // Preserve configured/transformed variable order before concurrent rows finish.

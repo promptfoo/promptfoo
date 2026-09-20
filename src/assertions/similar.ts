@@ -91,7 +91,9 @@ export const handleSimilar = async ({
         test.options,
         metric,
       );
-      if (result.pass) {
+      // A similarity-provider outage is not evidence about any remaining value,
+      // so surface it instead of folding it into the "closest score" tally.
+      if (result.pass || result.metadata?.similarityProviderError === true) {
         return {
           assertion,
           ...result,
