@@ -1,17 +1,17 @@
 import { SELECT_BEST_PROMPT } from '../prompts/index';
 import { getDefaultProviders } from '../providers/defaults';
+import {
+  type Assertion,
+  type CallApiContextParams,
+  type GradingConfig,
+  type GradingResult,
+  isRubricBatchAggregate,
+  type VarValue,
+} from '../types/index';
 import invariant from '../util/invariant';
 import { callProviderWithContext, getAndCheckProvider } from './providers';
 import { loadRubricPrompt, renderLlmRubricPrompt } from './rubric';
 import { fail, normalizeMatcherTokenUsage, tryParse } from './shared';
-
-import type {
-  Assertion,
-  CallApiContextParams,
-  GradingConfig,
-  GradingResult,
-  VarValue,
-} from '../types/index';
 
 export async function matchesSelectBest(
   criteria: string,
@@ -130,11 +130,23 @@ export async function selectMaxScore(
     // Get component results from gradingResult if available
     const componentResults = result.gradingResult?.componentResults || [];
 
-    // Filter out max-score and select-best assertions
-    const relevantResults = componentResults.filter(
-      (r: GradingResult) =>
-        r.assertion && r.assertion.type !== 'max-score' && r.assertion.type !== 'select-best',
-    );
+    // AssertionsResult places each batch's dimension copies immediately after its
+    // parent. Keep the parent's configured weights and inversion, without scoring
+    // those diagnostic copies again. Legacy assert-set handling is unchanged.
+    const relevantResults: GradingResult[] = [];
+    for (let componentIndex = 0; componentIndex < componentResults.length; componentIndex++) {
+      const componentResult = componentResults[componentIndex];
+      if (
+        componentResult.assertion &&
+        componentResult.assertion.type !== 'max-score' &&
+        componentResult.assertion.type !== 'select-best'
+      ) {
+        relevantResults.push(componentResult);
+        if (isRubricBatchAggregate(componentResult)) {
+          componentIndex += componentResult.componentResults!.length;
+        }
+      }
+    }
 
     if (relevantResults.length === 0) {
       throw new Error(
