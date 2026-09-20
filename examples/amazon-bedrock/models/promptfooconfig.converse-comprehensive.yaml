@@ -11,7 +11,7 @@ description: 'Bedrock Converse API - Comprehensive Test Suite'
 # - Performance configuration
 #
 # Model families covered:
-# - Anthropic Claude (4.x, 4.5, 4.6)
+# - Anthropic Claude (4.x, 4.5, 4.6, 5)
 # - Amazon Nova (Micro, Lite, Pro, Premier)
 # - Meta Llama (3.x, 4.x)
 # - Mistral AI (Small, Large, Pixtral)
@@ -30,17 +30,31 @@ providers:
   # Claude Models (Anthropic) - Full featured
   # ============================================================================
 
-  # Claude Sonnet 4.6 with Extended Thinking
-  # Note: temperature MUST be 1 when thinking is enabled
-  - id: bedrock:converse:us.anthropic.claude-sonnet-4-6
-    label: Claude Sonnet 4.6 (Thinking)
+  # Claude Opus 5 (flagship). Rejects temperature/top_p/top_k, and thinks adaptively
+  # even when `thinking` is omitted.
+  - id: bedrock:converse:us.anthropic.claude-opus-5
+    label: Claude Opus 5
+    config:
+      region: us-west-2
+      maxTokens: 8192
+      # Converse has no typed `effort` option; it is passed through as a raw field.
+      additionalModelRequestFields:
+        output_config:
+          effort: high
+
+  # Claude Sonnet 5 with adaptive thinking.
+  # Note: Claude 4.7+ and the Claude 5 family reject temperature/top_p/top_k and the
+  # manual `budget_tokens` budget — use `thinking: { type: adaptive }` plus `effort`.
+  - id: bedrock:converse:us.anthropic.claude-sonnet-5
+    label: Claude Sonnet 5 (Thinking)
     config:
       region: us-west-2
       maxTokens: 16000
-      temperature: 1
       thinking:
-        type: enabled
-        budget_tokens: 10000
+        type: adaptive
+      additionalModelRequestFields:
+        output_config:
+          effort: high
       showThinking: true
 
   # Claude Opus 4.1

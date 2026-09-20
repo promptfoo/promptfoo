@@ -21,11 +21,11 @@ export AZURE_API_HOST=your-deployment.services.ai.azure.com
 
 ## Available Claude Models
 
-| Model                       | Description                    |
-| --------------------------- | ------------------------------ |
-| `claude-opus-4-6-20260205`  | Claude Opus 4.6 - Most capable |
-| `claude-sonnet-4-6`         | Claude Sonnet 4.6 - Balanced   |
-| `claude-haiku-4-5-20251001` | Claude Haiku 4.5 - Fast        |
+| Model                       | Description                  |
+| --------------------------- | ---------------------------- |
+| `claude-opus-5`             | Claude Opus 5 - Most capable |
+| `claude-sonnet-5`           | Claude Sonnet 5 - Balanced   |
+| `claude-haiku-4-5-20251001` | Claude Haiku 4.5 - Fast      |
 
 ## Running the Example
 
@@ -36,10 +36,10 @@ npx promptfoo@latest view
 
 ## Configuration
 
-The example compares Claude Opus 4.6, Claude Sonnet 4.6, and Claude Haiku 4.5 on explanation tasks. Modify `promptfooconfig.yaml` to:
+The example compares Claude Opus 5, Claude Sonnet 5, and Claude Haiku 4.5 on explanation tasks. Modify `promptfooconfig.yaml` to:
 
 - Change models by updating the provider IDs
-- Adjust temperature and max_tokens
+- Adjust `max_tokens` (Opus 5 and Sonnet 5 reject `temperature`/`top_p`/`top_k`; use `effort` instead)
 - Add more test cases
 
 ## Documentation

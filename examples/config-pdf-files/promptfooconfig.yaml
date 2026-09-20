@@ -6,7 +6,7 @@ prompts:
 
 providers:
   - id: google:gemini-2.5-flash
-  - id: anthropic:messages:claude-sonnet-4-6
+  - id: anthropic:messages:claude-sonnet-5
   - id: openai:responses:gpt-5.4
 
 defaultTest:
