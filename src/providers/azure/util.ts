@@ -120,6 +120,27 @@ export function throwConfigurationError(message: string): never {
 }
 
 /**
+ * Resolve the model an Azure deployment actually serves.
+ *
+ * Azure separates the connection (the deployment name that goes in the URL) from the
+ * model behind it, so capability heuristics and cost lookups must not read the
+ * deployment name directly: an explicit `passthrough.model` — what is sent on the wire —
+ * wins, then `modelName`, and only then the deployment name.
+ *
+ * Case is preserved so the id stays what the user configured; every consumer that matches
+ * on it (the capability heuristics, `calculateAzureCost`) lower-cases for itself.
+ */
+export function resolveAzureModelName(
+  config: { modelName?: string; passthrough?: object } | undefined,
+  deploymentName: string,
+): string {
+  const passthroughModel = (config?.passthrough as { model?: unknown } | undefined)?.model;
+  return typeof passthroughModel === 'string'
+    ? passthroughModel
+    : (config?.modelName ?? deploymentName);
+}
+
+/**
  * Calculate Azure cost based on model name and token usage
  */
 export function calculateAzureCost(
@@ -144,7 +165,12 @@ export function calculateAzureCost(
     return undefined;
   }
 
-  const model = AZURE_MODELS.find((entry) => entry.id === modelName);
+  // Matched case-insensitively: the table is keyed on the vendor's own casing
+  // (`DeepSeek-R1`, `Meta-Llama-3-8B-Instruct`), which users rarely reproduce exactly, and
+  // every other Azure model heuristic already lower-cases before matching. The rate lookups
+  // below key off `model.id` so they stay aligned with the entry that matched.
+  const lowerModelName = modelName.toLowerCase();
+  const model = AZURE_MODELS.find((entry) => entry.id.toLowerCase() === lowerModelName);
   if (!model) {
     return undefined;
   }
@@ -157,9 +183,9 @@ export function calculateAzureCost(
   const outputCost = longContext?.output ?? model.cost.output;
   const cacheReadCost =
     longContext?.cacheRead ??
-    (longContext ? AZURE_LONG_CONTEXT_CACHE_READ_RATES.get(modelName) : undefined) ??
+    (longContext ? AZURE_LONG_CONTEXT_CACHE_READ_RATES.get(model.id) : undefined) ??
     model.cost.cacheRead ??
-    AZURE_CACHE_READ_RATES.get(modelName) ??
+    AZURE_CACHE_READ_RATES.get(model.id) ??
     inputCost;
   const cachedTokens = clampCachedTokens(cachedPromptTokens, promptTokens);
   const audioInputTokens = clampCachedTokens(audioPromptTokens, promptTokens);
@@ -199,7 +225,7 @@ export function calculateAzureCost(
   const serviceTier = (config.passthrough as { service_tier?: unknown } | undefined)?.service_tier;
   const priorityMultiplier =
     serviceTier === 'priority'
-      ? (model.cost.priorityMultiplier ?? AZURE_PRIORITY_MULTIPLIERS.get(modelName) ?? 1)
+      ? (model.cost.priorityMultiplier ?? AZURE_PRIORITY_MULTIPLIERS.get(model.id) ?? 1)
       : 1;
 
   return (

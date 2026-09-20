@@ -795,6 +795,36 @@ describe('FunctionCallbackHandler', () => {
       });
     });
 
+    it('records concurrent MCP tool calls in the order the model requested them', async () => {
+      mockMCPClient.getAllTools.mockReturnValue([
+        { name: 'slow_tool', description: 'Resolves last' },
+        { name: 'fast_tool', description: 'Resolves first' },
+      ]);
+      const pending = new Map<string, (value: unknown) => void>();
+      mockMCPClient.callTool.mockImplementation(
+        (name: string) => new Promise((resolve) => pending.set(name, resolve)),
+      );
+      const toolCalls: any[] = [];
+
+      const processed = handler.processCalls(
+        [
+          { id: 'call_slow', type: 'function', function: { name: 'slow_tool', arguments: '{}' } },
+          { id: 'call_fast', type: 'function', function: { name: 'fast_tool', arguments: '{}' } },
+        ],
+        undefined,
+        undefined,
+        { toolCalls },
+      );
+
+      // Both tools were started before either resolved; finish them in reverse order.
+      expect([...pending.keys()]).toEqual(['slow_tool', 'fast_tool']);
+      pending.get('fast_tool')!({ content: 'fast' });
+      pending.get('slow_tool')!({ content: 'slow' });
+      await processed;
+
+      expect(toolCalls.map((entry) => entry.name)).toEqual(['slow_tool', 'fast_tool']);
+    });
+
     it('should handle invalid JSON arguments in MCP tools', async () => {
       mockMCPClient.getAllTools.mockReturnValue([
         { name: 'json_tool', description: 'A tool requiring JSON args' },
