@@ -6,9 +6,9 @@ import { mockProcessEnv } from '../../util/utils';
 
 vi.mock('@azure/identity', () => {
   class FakeCredential {
-    getToken = vi
-      .fn()
-      .mockResolvedValue({ token: 't', expiresOnTimestamp: Date.now() + 3_600_000 });
+    async getToken() {
+      return { token: 't', expiresOnTimestamp: Date.now() + 3_600_000 };
+    }
   }
   return {
     ClientSecretCredential: vi.fn(function () {
