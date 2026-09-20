@@ -2,10 +2,15 @@ import fs from 'fs';
 import path from 'path';
 
 import { maybeLoadConfigFromExternalFile } from './file';
+import { isJavascriptFile } from './fileExtensions';
 import invariant from './invariant';
 import { loadYaml } from './yamlLoad';
 
 import type { ProviderOptions, ProviderOptionsMap } from '../types/providers';
+
+export function isJavascriptProviderFile(providerPath: string): boolean {
+  return isJavascriptFile(providerPath);
+}
 
 // Keys belonging to the ProviderOptions interface (src/types/providers.ts).
 // When an object's first key matches one of these, it is NOT treated as a
@@ -172,7 +177,15 @@ export function loadProviderConfigsFromFile(
   providerPath: string,
   basePath?: string,
 ): ProviderOptions[] {
-  return readProviderConfigFile(providerPath, basePath).configs;
+  const { configs, relativePath } = readProviderConfigFile(providerPath, basePath);
+  for (const config of configs) {
+    const descriptor = normalizeProviderRef(config);
+    invariant(
+      descriptor.kind === 'options' || descriptor.kind === 'map',
+      `Provider config in ${relativePath} must have an id`,
+    );
+  }
+  return configs;
 }
 
 /**

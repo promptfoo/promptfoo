@@ -18,7 +18,11 @@ import {
 } from '../../globalConfig/accounts';
 import { cloudConfig } from '../../globalConfig/cloud';
 import logger from '../../logger';
-import { getProviderIds } from '../../providers/index';
+import {
+  getConfiguredProviderInputs,
+  getProviderIds,
+  isProviderInputMetadataUnresolved,
+} from '../../providers/index';
 import { isPromptfooSampleTarget } from '../../providers/shared';
 import telemetry from '../../telemetry';
 import { EMAIL_OK_STATUS } from '../../types/email';
@@ -33,7 +37,9 @@ import {
 import {
   ConfigResolutionError,
   logConfigResolutionError,
+  type ResolveConfigsHooks,
   resolveConfigs,
+  withResolveConfigsHooks,
 } from '../../util/config/load';
 import { writePromptfooConfig } from '../../util/config/writer';
 import { pathExists } from '../../util/file';
@@ -57,8 +63,13 @@ import {
 } from '../constants';
 import { extractA2AAgentCardInfo } from '../extraction/a2aAgentCard';
 import { extractMcpToolsInfo } from '../extraction/mcpTools';
-import { MAX_MAX_CONCURRENCY, synthesize } from '../index';
+import {
+  getStrategyCompatibilityError,
+  MAX_MAX_CONCURRENCY,
+  synthesize as synthesizeWithoutCleanup,
+} from '../index';
 import { determinePolicyTypeFromId, isValidPolicyObject } from '../plugins/policy/utils';
+import { resolveRedteamTargetProviderInputMetadata } from '../providers/shared';
 import { neverGenerateRemote, shouldGenerateRemote } from '../remoteGeneration';
 import { getRedteamGenerationContextFromProviders } from '../remoteGenerationContextFromProviders';
 import { PartialGenerationError, ProbeLimitExceededError } from '../types';
@@ -75,6 +86,12 @@ import type {
   RedteamStrategyObject,
   SynthesizeOptions,
 } from '../types';
+
+class CachedRedteamConfig extends Error {
+  constructor(readonly config: Partial<UnifiedConfig>) {
+    super('Redteam configuration is unchanged');
+  }
+}
 
 /**
  * Handles failed plugins based on strict mode.
@@ -270,6 +287,87 @@ async function withGenerationConcurrency<T>(
   return cliState.withMaxConcurrency(effectiveMaxConcurrency, fn);
 }
 
+function getEffectiveStrategyObjects(
+  redteamConfig: RedteamFileConfig | undefined,
+  strategyOverride: RedteamCliGenerateOptions['strategies'] | undefined,
+): RedteamStrategyObject[] {
+  const strategies =
+    strategyOverride ??
+    redteamConfig?.strategies ??
+    DEFAULT_STRATEGIES.map((strategy) => ({ id: strategy }));
+  return strategies.map((strategy) => (typeof strategy === 'string' ? { id: strategy } : strategy));
+}
+
+function findTargetCompatibilityError(
+  strategies: readonly RedteamStrategyObject[],
+  plugins: readonly unknown[],
+  inputs: readonly unknown[],
+): string | undefined {
+  const firstInput = inputs[0];
+  const pluginsUseTargetInputs =
+    isProviderInputMetadataUnresolved(firstInput) ||
+    (firstInput !== null &&
+      typeof firstInput === 'object' &&
+      !Array.isArray(firstInput) &&
+      Object.keys(firstInput).length > 0);
+  return inputs
+    .filter((input) => !isProviderInputMetadataUnresolved(input))
+    .map((input) =>
+      getStrategyCompatibilityError(strategies, input, { plugins, pluginsUseTargetInputs }),
+    )
+    .find((error) => error !== undefined);
+}
+
+function getCompatibilityPlugins(
+  optionPlugins: RedteamCliGenerateOptions['plugins'],
+  configuredPlugins: RedteamFileConfig['plugins'] | undefined,
+): readonly unknown[] {
+  if (Array.isArray(optionPlugins) && optionPlugins.length > 0) {
+    return optionPlugins;
+  }
+  if (configuredPlugins && configuredPlugins.length > 0) {
+    return configuredPlugins;
+  }
+  return Array.from(REDTEAM_DEFAULT_PLUGINS);
+}
+
+async function cleanupRedteamProviders(testSuite: TestSuite): Promise<void> {
+  for (const provider of testSuite.providers as ApiProvider[]) {
+    try {
+      logger.debug('Cleaning up provider');
+      if (typeof provider.cleanup === 'function') {
+        const cleanupResult = provider.cleanup();
+        if (cleanupResult instanceof Promise) {
+          await cleanupResult;
+        }
+      }
+    } catch (cleanupErr) {
+      logger.warn(`Error during provider cleanup: ${cleanupErr}`);
+    }
+  }
+}
+
+function hasExplicitEmptyProviderFilter(
+  options: Pick<RedteamCliGenerateOptions, 'filterProviders' | 'filterTargets'>,
+): boolean {
+  return options.filterProviders === '' || options.filterTargets === '';
+}
+
+function persistProviderFilters(
+  config: Partial<UnifiedConfig>,
+  options: Pick<RedteamCliGenerateOptions, 'filterProviders' | 'filterTargets'>,
+): void {
+  const filterProviders = options.filterProviders ?? options.filterTargets;
+  if (filterProviders === undefined) {
+    return;
+  }
+  const { filterTargets: _filterTargets, ...commandLineOptions } = config.commandLineOptions ?? {};
+  config.commandLineOptions = {
+    ...commandLineOptions,
+    filterProviders,
+  };
+}
+
 export async function doGenerateRedteam(
   options: Partial<RedteamCliGenerateOptions>,
 ): Promise<Partial<UnifiedConfig> | null> {
@@ -278,8 +376,17 @@ export async function doGenerateRedteam(
   if (cacheOverride === false) {
     logger.info('Cache is disabled');
   }
-
-  return withCacheEnabled(cacheOverride, () => doGenerateRedteamInternal(options));
+  try {
+    return await withCacheEnabled(cacheOverride, () => doGenerateRedteamInternal(options));
+  } catch (error) {
+    if (error instanceof CachedRedteamConfig) {
+      logger.warn(
+        'No changes detected in redteam configuration. Skipping generation (use --force to generate anyway)',
+      );
+      return error.config;
+    }
+    throw error;
+  }
 }
 
 async function doGenerateRedteamInternal(
@@ -321,13 +428,19 @@ async function doGenerateRedteamInternal(
     logger.debug(`Using Promptfoo Cloud-originated config at ${tmpFile}`);
   }
 
-  // Skip generation when a YAML output already matches the current config hash.
+  let cachedRedteamConfig: Partial<UnifiedConfig> | undefined;
+
+  // Read a matching cached artifact now, but do not return it until resolveConfigs has run the
+  // compatibility hook. This keeps cache hits ahead of provider construction without bypassing
+  // validation of the current target metadata.
   if (
     !options.force &&
     !options.configFromCloud &&
+    !options.strategies &&
     !outputPath.endsWith('.burp') &&
     (await pathExists(outputPath)) &&
     configPath &&
+    /\.(?:json|ya?ml)$/i.test(configPath) &&
     (await pathExists(configPath))
   ) {
     const redteamContent = loadYaml(
@@ -336,11 +449,8 @@ async function doGenerateRedteamInternal(
     const storedHash = redteamContent.metadata?.configHash;
     const currentHash = await getConfigHash(configPath, options);
 
-    if (storedHash === currentHash) {
-      logger.warn(
-        'No changes detected in redteam configuration. Skipping generation (use --force to generate anyway)',
-      );
-      return redteamContent;
+    if (storedHash === currentHash && !hasExplicitEmptyProviderFilter(options)) {
+      cachedRedteamConfig = redteamContent;
     }
   }
 
@@ -348,14 +458,85 @@ async function doGenerateRedteamInternal(
   let pluginSeverityOverridesId: string | undefined;
 
   if (configPath) {
+    const beforeProviderLoad = async ({
+      providers,
+      redteam,
+      env,
+      basePath,
+    }: Parameters<NonNullable<ResolveConfigsHooks['beforeProviderLoad']>>[0]) => {
+      const strategies = getEffectiveStrategyObjects(redteam, options.strategies);
+      const compatibilityPlugins = getCompatibilityPlugins(options.plugins, redteam?.plugins);
+      const strategyConfigError = getStrategyCompatibilityError(strategies, undefined);
+      if (strategyConfigError) {
+        throw new Error(strategyConfigError);
+      }
+
+      const requiresResolvedInputs =
+        getStrategyCompatibilityError(
+          strategies,
+          { compatibilityProbe: true },
+          { plugins: compatibilityPlugins, pluginsUseTargetInputs: false },
+        ) !== undefined ||
+        getStrategyCompatibilityError(strategies, undefined, {
+          plugins: compatibilityPlugins,
+          pluginsUseTargetInputs: false,
+        }) !== undefined;
+      if (requiresResolvedInputs) {
+        let resolvedInputs = await resolveRedteamTargetProviderInputMetadata(
+          providers,
+          basePath,
+          env,
+        );
+        let compatibilityError = findTargetCompatibilityError(
+          strategies,
+          compatibilityPlugins,
+          resolvedInputs.inputs,
+        );
+        if (compatibilityError) {
+          throw new Error(compatibilityError);
+        }
+        if (cachedRedteamConfig && resolvedInputs.hasUnresolved) {
+          resolvedInputs = await resolveRedteamTargetProviderInputMetadata(
+            providers,
+            basePath,
+            env,
+            undefined,
+            { loadDynamicProviders: true },
+          );
+          compatibilityError = findTargetCompatibilityError(
+            strategies,
+            compatibilityPlugins,
+            resolvedInputs.inputs,
+          );
+        }
+        if (compatibilityError) {
+          throw new Error(compatibilityError);
+        }
+      }
+
+      if (cachedRedteamConfig) {
+        throw new CachedRedteamConfig(cachedRedteamConfig);
+      }
+    };
     const resolved = await resolveConfigs(
       {
         config: [configPath],
         filterProviders: options.filterProviders,
         filterTargets: options.filterTargets,
       },
-      options.defaultConfig || {},
+      withResolveConfigsHooks(
+        { ...((options.defaultConfig as Partial<UnifiedConfig> | undefined) || {}) },
+        { beforeProviderLoad },
+      ),
     );
+    // Test doubles and alternate embedders may not implement the optional hook. The built-in
+    // resolver always throws the sentinel before provider construction; this is only a fallback.
+    if (cachedRedteamConfig) {
+      logger.warn(
+        'No changes detected in redteam configuration. Skipping generation (use --force to generate anyway)',
+      );
+      return cachedRedteamConfig;
+    }
     testSuite = resolved.testSuite;
     redteamConfig = resolved.config.redteam;
     commandLineOptions = resolved.commandLineOptions;
@@ -562,14 +743,7 @@ async function doGenerateRedteamInternal(
     }
   }
 
-  let strategies: (string | { id: string })[] =
-    redteamConfig?.strategies ?? DEFAULT_STRATEGIES.map((s) => ({ id: s }));
-  if (options.strategies) {
-    strategies = options.strategies;
-  }
-  const strategyObjs: RedteamStrategyObject[] = strategies.map((s) =>
-    typeof s === 'string' ? { id: s } : s,
-  );
+  const strategyObjs = getEffectiveStrategyObjects(redteamConfig, options.strategies);
 
   try {
     logger.debug(`plugins: ${plugins.map((p) => p.id).join(', ')}`);
@@ -580,7 +754,23 @@ async function doGenerateRedteamInternal(
   }
 
   // Read inputs from the first target/provider
-  const targetInputs = testSuite.providers[0]?.inputs;
+  const targetInputs = testSuite.providers[0]
+    ? getConfiguredProviderInputs(testSuite.providers[0])
+    : undefined;
+  const pluginsUseTargetInputs = Boolean(targetInputs && Object.keys(targetInputs).length > 0);
+
+  const compatibilityError = testSuite.providers
+    .map((provider) =>
+      getStrategyCompatibilityError(strategyObjs, getConfiguredProviderInputs(provider), {
+        plugins,
+        pluginsUseTargetInputs,
+      }),
+    )
+    .find((error) => error !== undefined);
+  if (compatibilityError) {
+    await cleanupRedteamProviders(testSuite);
+    throw new Error(compatibilityError);
+  }
 
   const explicitMaxConcurrency =
     options.maxConcurrency ??
@@ -669,6 +859,15 @@ async function doGenerateRedteamInternal(
   let entities: string[] = [];
   let finalInjectVar: string = '';
   let failedPlugins: { pluginId: string; requested: number }[] = [];
+  const cleanupProvider = () => cleanupRedteamProviders(testSuite);
+  const synthesize = async (...args: Parameters<typeof synthesizeWithoutCleanup>) => {
+    try {
+      return await synthesizeWithoutCleanup(...args);
+    } catch (error) {
+      await cleanupProvider();
+      throw error;
+    }
+  };
   const generationTokenUsage: TokenUsage = {
     cached: 0,
     completion: 0,
@@ -792,27 +991,6 @@ async function doGenerateRedteamInternal(
     accumulateTokenUsage(generationTokenUsage, result.generationTokenUsage);
   }
 
-  /**
-   * Cleans up the provider after redteam generation completes.
-   * This should always be called before returning, since providers are
-   * re-initialized when running the red team. Cleanup is particularly
-   * important for MCP servers to release resources and prevent memory leaks.
-   */
-  const cleanupProvider = async (): Promise<void> => {
-    try {
-      logger.debug('Cleaning up provider');
-      const provider = testSuite.providers[0] as ApiProvider;
-      if (provider && typeof provider.cleanup === 'function') {
-        const cleanupResult = provider.cleanup();
-        if (cleanupResult instanceof Promise) {
-          await cleanupResult;
-        }
-      }
-    } catch (cleanupErr) {
-      logger.warn(`Error during provider cleanup: ${cleanupErr}`);
-    }
-  };
-
   // Use try/finally to ensure cleanup runs even if an exception is thrown
   // (e.g., --strict mode failures, write errors)
   try {
@@ -883,6 +1061,7 @@ async function doGenerateRedteamInternal(
       const existingYaml = configPath
         ? (loadYaml(await fs.readFile(configPath, 'utf8')) as Partial<UnifiedConfig>)
         : {};
+      persistProviderFilters(existingYaml, options);
       const existingDefaultTest =
         typeof existingYaml.defaultTest === 'object' ? existingYaml.defaultTest : {};
       const existingMetadata = { ...(existingYaml.metadata || {}) };
@@ -912,6 +1091,9 @@ async function doGenerateRedteamInternal(
           ...(pluginSeverityOverridesId ? { pluginSeverityOverridesId } : {}),
         },
       };
+      if ((options.strategies || hasExplicitEmptyProviderFilter(options)) && updatedYaml.metadata) {
+        updatedYaml.metadata.configHash = 'force-regenerate';
+      }
       const author = getAuthor();
       const userEmail = getUserEmail();
       const cloudHost = userEmail ? cloudConfig.getApiHost() : null;
@@ -947,6 +1129,7 @@ async function doGenerateRedteamInternal(
       const existingConfig = loadYaml(
         await fs.readFile(configPath, 'utf8'),
       ) as Partial<UnifiedConfig>;
+      persistProviderFilters(existingConfig, options);
       const existingTests = existingConfig.tests;
       let testsArray: any[] = [];
       if (Array.isArray(existingTests)) {
@@ -980,6 +1163,12 @@ async function doGenerateRedteamInternal(
         ...((generationTokenUsage.numRequests ?? 0) > 0 && { generationTokenUsage }),
         generation,
       };
+      if (hasExplicitEmptyProviderFilter(options)) {
+        existingConfig.metadata.configHash = 'force-regenerate';
+      }
+      if (options.strategies) {
+        existingConfig.metadata.configHash = 'force-regenerate';
+      }
       const author = getAuthor();
       const userEmail = getUserEmail();
       const cloudHost = userEmail ? cloudConfig.getApiHost() : null;
@@ -1037,7 +1226,7 @@ async function doGenerateRedteamInternal(
       numTestsExisting: (testSuite.tests || []).length,
       numTestsGenerated: redteamTests.length,
       plugins: plugins.map((p) => p.id),
-      strategies: strategies.map((s) => (typeof s === 'string' ? s : s.id)),
+      strategies: strategyObjs.map((strategy) => strategy.id),
       isPromptfooSampleTarget: testSuite.providers.some(isPromptfooSampleTarget),
     });
     telemetry.record('redteam generate', {
@@ -1047,7 +1236,7 @@ async function doGenerateRedteamInternal(
       numTestsExisting: (testSuite.tests || []).length,
       numTestsGenerated: redteamTests.length,
       plugins: plugins.map((p) => p.id),
-      strategies: strategies.map((s) => (typeof s === 'string' ? s : s.id)),
+      strategies: strategyObjs.map((strategy) => strategy.id),
       isPromptfooSampleTarget: testSuite.providers.some(isPromptfooSampleTarget),
     });
 
