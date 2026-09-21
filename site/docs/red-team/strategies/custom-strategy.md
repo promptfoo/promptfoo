@@ -195,6 +195,8 @@ There's also a global red team configuration option `excludeTargetOutputFromAgen
 
 ## Stateful vs Stateless Mode
 
+In both modes, the target receives the current message in the configured prompt variable. Other test variables, including a session ID if provided, are preserved.
+
 ### Stateless (Default)
 
 - Each test starts fresh
@@ -251,6 +253,10 @@ When you run a custom strategy:
 3. **Response Analysis**: The target's response is evaluated for both success and refusal
 4. **Adaptation**: Based on the response, the AI adjusts its next approach
 5. **Completion**: The test ends when the objective is met, max turns are reached, or the target consistently refuses
+
+By default (`continueAfterSuccess: false`), a vulnerability verdict from the plugin grader ends the test before the internal evaluator runs for that turn. The failing turn stays in `redteamHistory` and `successfulAttacks`, so an evaluator failure cannot erase the detected vulnerability. With `continueAfterSuccess: true`, successful turns are recorded and testing continues.
+
+On this early exit, `customConfidence` keeps the last internal evaluator score, or `null` if no round was scored. Use `storedGraderResult` for the plugin grader's verdict.
 
 ### Backtracking (Stateless Mode Only)
 

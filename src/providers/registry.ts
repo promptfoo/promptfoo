@@ -136,7 +136,10 @@ export function mergeProviderEnv(
       delete merged.OPENAI_API_KEY;
       delete merged.CODEX_API_KEY;
     }
-    Object.assign(merged, layer);
+    Object.assign(
+      merged,
+      Object.fromEntries(Object.entries(layer).filter(([, value]) => value !== undefined)),
+    );
   }
   return merged;
 }
@@ -419,6 +422,11 @@ export const providerMap: ProviderFactory[] = [
       if (modelType === 'responses') {
         return new AzureResponsesProvider(deploymentName || 'gpt-4.1-2025-04-14', providerOptions);
       }
+      if (modelType === 'live') {
+        throw new Error(
+          'GPT-Live is available through openai:live:<model name>, not the Azure provider.',
+        );
+      }
       if (modelType === 'realtime') {
         requirePathSegment('realtime', 'a deployment name', 'deployment');
         if (NON_CONVERSATIONAL_REALTIME_MODELS.has(deploymentName)) {
@@ -661,17 +669,23 @@ export const providerMap: ProviderFactory[] = [
       providerOptions: ProviderOptions,
       _context: LoadApiProviderContext,
     ) => {
-      const splits = providerPath.split(':');
-      let endpoint = splits.slice(1).join(':');
-      if (endpoint.startsWith('/')) {
-        endpoint = endpoint.slice(1);
+      const endpoint = providerPath.slice('f5:'.length).replace(/^\/+/, '');
+      const configuredBaseUrl =
+        providerOptions.config?.apiBaseUrl ??
+        providerOptions.env?.F5_API_BASE_URL ??
+        getEnvString('F5_API_BASE_URL');
+      if (!configuredBaseUrl) {
+        throw new Error(
+          'F5 provider requires a gateway URL. Set `apiBaseUrl` in the provider config or the F5_API_BASE_URL environment variable.',
+        );
       }
+      const baseUrl = configuredBaseUrl.replace(/\/+$/, '');
       return new OpenAiChatCompletionProvider(endpoint, {
         ...providerOptions,
         config: {
           ...providerOptions.config,
-          apiBaseUrl: providerOptions.config?.apiBaseUrl + '/' + endpoint,
-          apiKeyEnvar: 'F5_API_KEY',
+          apiBaseUrl: `${baseUrl}/${endpoint}`,
+          apiKeyEnvar: providerOptions.config?.apiKeyEnvar ?? 'F5_API_KEY',
         },
       });
     },
@@ -983,6 +997,14 @@ export const providerMap: ProviderFactory[] = [
       const modelName = splits.slice(2).join(':');
       const configuredModel = getConfiguredOpenAiModel(providerOptions);
 
+      if (modelType === 'agents-api') {
+        const { OpenAiAgentsApiProvider } = await import('./openai/agents-api');
+        return new OpenAiAgentsApiProvider(modelName, {
+          ...providerOptions,
+          env: { ...context.env, ...providerOptions.env },
+        });
+      }
+
       // Codex app-server providers (openai:codex-app-server or openai:codex-desktop)
       if (modelType === 'codex-app-server' || modelType === 'codex-desktop') {
         const { OpenAICodexAppServerProvider } = await import('./openai/codex-app-server');
@@ -1022,8 +1044,21 @@ export const providerMap: ProviderFactory[] = [
         });
       }
       const requestedApiModel = modelName || configuredModel || modelType;
-      if (!['agents', 'chatkit', 'assistant'].includes(modelType)) {
-        const passthrough = providerOptions.config?.passthrough as { model?: unknown } | undefined;
+      const passthrough = providerOptions.config?.passthrough as { model?: unknown } | undefined;
+      if (
+        [modelType, requestedApiModel, passthrough?.model].some(
+          (model) =>
+            typeof model === 'string' &&
+            (model === 'gpt-live-transcribe' || model.startsWith('gpt-live-transcribe-')),
+        )
+      ) {
+        throw new Error(
+          'gpt-live-transcribe requires a dedicated Realtime transcription session, which this provider does not support.',
+        );
+      }
+      const isLiveProvider =
+        modelType === 'live' || /^gpt-live-1(?:-\d{4}-\d{2}-\d{2})?$/.test(modelType);
+      if (!isLiveProvider && !['agents', 'chatkit', 'assistant'].includes(modelType)) {
         const apiHost =
           providerOptions.config?.apiHost ||
           providerOptions.env?.OPENAI_API_HOST ||
@@ -1089,6 +1124,14 @@ export const providerMap: ProviderFactory[] = [
           providerOptions,
         );
       }
+      // Conversational GPT-Live snapshots use the Live endpoint.
+      if (isLiveProvider) {
+        const { OpenAiLiveProvider } = await import('./openai/live');
+        return new OpenAiLiveProvider(
+          modelType === 'live' ? modelName || configuredModel || 'gpt-live-1' : modelType,
+          providerOptions,
+        );
+      }
       if (shouldDefaultToOpenAiResponses(modelType)) {
         return new OpenAiResponsesProvider(modelType, providerOptions);
       }
@@ -1135,7 +1178,7 @@ export const providerMap: ProviderFactory[] = [
       }
       // Assume user did not provide model type, and it's a chat model
       logger.warn(
-        `Unknown OpenAI model type: ${modelType}. Treating it as a chat model. Use one of the following providers: openai:chat:<model name>, openai:completion:<model name>, openai:embeddings:<model name>, openai:image:<model name>, openai:video:<model name>, openai:tts:<model name>, openai:transcription:<model name>, openai:realtime:<model name>, openai:agents:<agent name>, openai:chatkit:<workflow_id>, openai:codex-sdk`,
+        `Unknown OpenAI model type: ${modelType}. Treating it as a chat model. Use one of the following providers: openai:chat:<model name>, openai:completion:<model name>, openai:embeddings:<model name>, openai:image:<model name>, openai:video:<model name>, openai:tts:<model name>, openai:transcription:<model name>, openai:realtime:<model name>, openai:live:<model name>, openai:agents:<agent name>, openai:chatkit:<workflow_id>, openai:codex-sdk`,
       );
       return new OpenAiChatCompletionProvider(modelType, providerOptions);
     },
@@ -1525,7 +1568,7 @@ export const providerMap: ProviderFactory[] = [
       providerOptions: ProviderOptions,
       _context: LoadApiProviderContext,
     ) => {
-      const modelName = providerPath.split(':')[1];
+      const modelName = providerPath.slice('llama:'.length);
       return new LlamaProvider(modelName, providerOptions);
     },
   },

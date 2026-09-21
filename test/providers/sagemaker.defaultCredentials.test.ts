@@ -1440,6 +1440,68 @@ ec2_metadata_v1_disabled = false
     expect(ssoCalls).toHaveLength(0);
   });
 
+  it.each([
+    ['default', 'before the process starts'],
+    ['default', 'while the process resolves'],
+    ['explicit', 'before the process starts'],
+    ['explicit', 'while the process resolves'],
+  ] as const)(
+    'rejects changed custom environment for a %s credential process %s',
+    async (source, phase) => {
+      await configure('[profile named]\ncredential_process = offline-process\n');
+      vi.stubEnv('PROMPTFOO_TEST_CREDENTIAL_ACCOUNT', 'FIRST');
+      const started = deferred<void>();
+      const release = deferred<void>();
+      let firstProcess = true;
+      const processOutput = vi.fn(async (command: string) => {
+        expect(command).toBe('offline-process');
+        if (phase === 'while the process resolves' && firstProcess) {
+          firstProcess = false;
+          started.resolve();
+          await release.promise;
+        }
+        return {
+          stdout: JSON.stringify({
+            Version: 1,
+            AccessKeyId: `PROCESS_${process.env.PROMPTFOO_TEST_CREDENTIAL_ACCOUNT}`,
+            SecretAccessKey: 'offline-process-secret',
+          }),
+          stderr: '',
+        };
+      });
+      externalDataInterceptor.interceptToken(
+        'exec',
+        Object.assign(() => {}, { [promisify.custom]: processOutput }),
+      );
+      const provider = createProvider(source === 'explicit' ? { profile: 'named' } : {});
+      if (phase === 'before the process starts') {
+        const getCredentials = provider.getCredentials.bind(provider);
+        vi.spyOn(provider, 'getCredentials').mockImplementationOnce(async (...args) => {
+          started.resolve();
+          await release.promise;
+          return getCredentials(...args);
+        });
+      }
+
+      const request = provider.callApi('changed environment');
+      try {
+        await started.promise;
+        vi.stubEnv('PROMPTFOO_TEST_CREDENTIAL_ACCOUNT', 'SECOND');
+        release.resolve();
+        expect(await request).toMatchObject({
+          error: expect.stringContaining('credential inputs changed during initialization'),
+        });
+        expect(sageCalls).toHaveLength(0);
+        expect(processOutput).toHaveBeenCalledTimes(phase === 'before the process starts' ? 0 : 1);
+        await expectSignedRow(provider, 'PROCESS_SECOND');
+        expect(processOutput).toHaveBeenCalledTimes(phase === 'before the process starts' ? 1 : 2);
+      } finally {
+        release.resolve();
+        await request;
+      }
+    },
+  );
+
   it('preserves web identity precedence and keeps its STS handler separate', async () => {
     const tokenFile = path.join(directory, 'web-identity-token');
     await writeFile(tokenFile, 'offline-web-identity-token');

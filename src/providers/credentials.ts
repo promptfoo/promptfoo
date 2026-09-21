@@ -1,6 +1,4 @@
-import { getEnvString } from '../envars';
-
-import type { EnvVarKey } from '../envars';
+import { type EnvVarKey, getEnvString } from '../envars';
 
 interface CredentialOptions {
   apiKey?: string;
@@ -24,6 +22,9 @@ export function resolveProviderApiKey(
     }
   }
   for (const envar of envars) {
+    if (env?.[envar] === '') {
+      continue;
+    }
     const value = getEnvString(envar as EnvVarKey);
     if (value) {
       return value;

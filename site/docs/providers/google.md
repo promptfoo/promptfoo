@@ -5,7 +5,7 @@ description: Configure Google's Gemini models with support for text, image, audi
 
 # Google AI / Gemini
 
-The `google` provider enables integration with Google AI Studio and the Gemini API. It provides access to Google's Gemini and hosted Gemma models with support for text, image, audio, video, and PDF inputs.
+The `google` provider calls Gemini and hosted Gemma models through Google AI Studio. Depending on the model, inputs can include text, images, audio, video, and PDFs.
 
 If you are using Vertex AI instead of Google AI Studio, see the [`vertex` provider](/docs/providers/vertex).
 
@@ -265,10 +265,12 @@ Example migration:
 # Before (Google AI Studio)
 providers:
   - google:gemini-2.5-pro
+```
 
+```yaml
 # After (Vertex AI)
 providers:
-  - vertex:gemini-2.5-pro
+  - id: vertex:gemini-2.5-pro
     config:
       projectId: my-project-id
       region: us-central1
@@ -292,6 +294,8 @@ See the [Vertex AI provider documentation](/docs/providers/vertex) for detailed 
 - `google:gemini-3.1-pro-preview-customtools` - Gemini 3.1 Pro preview variant for custom tools with the same pricing as Gemini 3.1 Pro
 - `google:gemini-3.1-flash-lite` - Gemini 3.1 Flash-Lite GA model optimized for high-volume, low-latency tasks ($0.25/1M text/image/video input, $1.50/1M output)
 - `google:live:gemini-3.1-flash-live-preview` - Gemini 3.1 Flash Live preview for real-time multimodal interactions ($0.75/1M text input, $1/1M image input, $0.002/minute video input, $4.50/1M text output, $3/1M audio input, $12/1M audio output)
+- `google:live:gemini-3.8-live` - Gemini 3.8 Live for low-latency voice dialogue, with the same Live API pricing as 3.1 Flash Live
+- `google:live:gemini-3.8-live-extended-thinking` - Gemini 3.8 Live with background reasoning and asynchronous tools, with the same Live API pricing as 3.1 Flash Live
 - `google:gemini-3-flash-preview` - Gemini 3.0 Flash preview with frontier intelligence, Pro-grade reasoning at Flash-level speed, thinking, and grounding ($0.50/1M input, $3/1M output)
 - `google:gemini-2.5-pro` - Gemini 2.5 Pro model with enhanced reasoning, coding, and multimodal understanding
 - `google:gemini-2.5-flash` - Gemini 2.5 Flash model with enhanced reasoning and thinking capabilities
@@ -411,13 +415,13 @@ Configuration options:
 
 ```yaml
 providers:
-  - google:image:imagen-3.0-generate-002
+  - id: google:image:imagen-3.0-generate-002
     config:
-      projectId: 'your-project-id'  # Or set GOOGLE_PROJECT_ID
-      region: 'us-central1'          # Optional, defaults to us-central1
+      projectId: 'your-project-id' # Or set GOOGLE_PROJECT_ID
+      region: 'us-central1' # Optional, defaults to us-central1
       aspectRatio: '16:9'
       seed: 42
-      addWatermark: false            # Must be false when using seed
+      addWatermark: false # Must be false when using seed
 ```
 
 See the [Google Imagen example](https://github.com/promptfoo/promptfoo/tree/main/examples/google-imagen).
@@ -776,14 +780,12 @@ Configure system-level instructions for the model:
 providers:
   - id: google:gemini-2.5-pro
     config:
-      # Direct text
       systemInstruction: 'You are a helpful assistant'
-
-      # Or load from file
-      systemInstruction: file://system-instruction.txt
+      # To load from a file instead, use:
+      # systemInstruction: file://system-instruction.txt
 ```
 
-System instructions support Nunjucks templating and can be loaded from external files for better organization and reusability.
+System instructions support Nunjucks templates and can be loaded from a file.
 
 ### Role Mapping Configuration
 
@@ -1303,6 +1305,14 @@ For complete working examples of the search grounding, code execution, and url c
 
 Promptfoo now supports Google's WebSocket-based Live API, which enables low-latency bidirectional voice and video interactions with Gemini models. This API provides real-time interactive capabilities beyond what's available in the standard REST API.
 
+`google:live:` connects to the Gemini API, even when authenticating with OAuth. For Google Cloud project/location routing, use the separate [`vertex:live:` provider](/docs/providers/vertex#live-api).
+
+Live authentication prefers `config.apiKey`, then explicit `config.credentials`, then `GOOGLE_API_KEY` / `GEMINI_API_KEY`, and finally ADC. A Cloud-only ADC login does not override a Gemini API key; ADC used without a key must have the required Gemini API scopes.
+
+Use `google:live:gemini-3.8-live` for low-latency dialogue or `google:live:gemini-3.8-live-extended-thinking` for background reasoning. Both default to the `v1alpha` endpoint, audio output, and output transcription (`output.text`), and accept `GOOGLE_API_KEY` or `GEMINI_API_KEY`. Text response modality requests are converted to audio with transcription and billed at audio rates.
+
+Extended Thinking accepts `generationConfig.thinkingConfig.thinkingLevel: LOW` (default), `MEDIUM`, or `HIGH`. Promptfoo sets function declarations to `behavior: NON_BLOCKING` and waits for `interactionStatus: IDLE` before advancing the conversation or returning a result; intermediate spoken updates are included in the transcript. Blocking tools are rejected. The standard 3.8 Live model does not accept `thinkingConfig`; neither model accepts `enableAffectiveDialog` or disabled proactive audio. Finite PCM audio inputs use explicit activity boundaries instead of automatic voice activity detection. See [Google's migration guide](https://ai.google.dev/gemini-api/docs/live-api/thinking) and the [Gemini 3.8 example](https://github.com/promptfoo/promptfoo/blob/main/examples/google-live/promptfooconfig.yaml).
+
 ### Using the Live Provider
 
 Access the Google Live API by specifying the model with the 'live' service type:
@@ -1370,6 +1380,8 @@ Where `tools.json` contains function declarations and built-in tools:
 ]
 ```
 
+Tools accept both `functionDeclarations` and `function_declarations`. If both aliases define the same function name anywhere in the tools list, `functionDeclarations` takes precedence. For repeated names using the same spelling, the first declaration wins. Distinct functions and built-in tools are retained; entries containing only discarded duplicates are omitted.
+
 ### Built-in Tools
 
 The current Google Live API model supports built-in Google Search:
@@ -1420,15 +1432,12 @@ Other configuration options are available, such as setting proactive audio, sett
 Try the examples:
 
 ```sh
-# Initialize the basic text-only and function calling/tools examples
+# Initialize the Gemini 3.8 Live comparison
 promptfoo init --example google-live
 cd google-live
 
-# Basic text-only example
-promptfoo eval -c promptfooconfig.yaml -j 3
-
-# Function calling and tools example
-promptfoo eval -c promptfooconfig.tools.yaml -j 3
+# Grade both models' spoken-response transcripts
+promptfoo eval -c promptfooconfig.yaml --no-cache -j 1
 
 # Audio generation example
 cd ..

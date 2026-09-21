@@ -54,6 +54,57 @@ describe('SageMaker effective runtime endpoint reuse', () => {
     await rm(directory, { recursive: true, force: true });
   });
 
+  it('keeps adaptive retry quota and throttling separate across runtime endpoints', async () => {
+    vi.stubEnv('AWS_SAGEMAKER_MAX_RETRIES', '3');
+    const provider = new SageMakerCompletionProvider('endpoint', {
+      config: {
+        region: 'us-east-1',
+        modelType: 'custom',
+        accessKeyId: 'OFFLINE_KEY',
+        secretAccessKey: 'offline-secret',
+      },
+    });
+    providers.add(provider);
+
+    vi.stubEnv('AWS_ENDPOINT_URL_SAGEMAKER_RUNTIME', 'https://retry-a.invalid');
+    const first: SageMakerRuntimeClient = await provider.getSageMakerRuntimeInstance();
+    const strategyA = await first.config.retryStrategy();
+    if (!('acquireInitialRetryToken' in strategyA)) {
+      throw new Error('Expected the SDK adaptive retry strategy');
+    }
+    const adaptiveA = strategyA as typeof strategyA & {
+      standardRetryStrategy: { getCapacity(): number };
+      rateLimiter: { getSendToken(): Promise<void> };
+    };
+    vi.spyOn(Math, 'random').mockReturnValue(0);
+    const initial = await strategyA.acquireInitialRetryToken('');
+    await strategyA.refreshRetryTokenForRetry(initial, { errorType: 'THROTTLING' });
+    const remainingA = adaptiveA.standardRetryStrategy.getCapacity();
+    expect(remainingA).toBeLessThan(500);
+    const throttleA = vi.spyOn(adaptiveA.rateLimiter, 'getSendToken').mockResolvedValue(undefined);
+
+    vi.stubEnv('AWS_ENDPOINT_URL_SAGEMAKER_RUNTIME', 'https://retry-b.invalid');
+    const second: SageMakerRuntimeClient = await provider.getSageMakerRuntimeInstance();
+    const strategyB = await second.config.retryStrategy();
+    expect(strategyB).not.toBe(strategyA);
+    if (!('acquireInitialRetryToken' in strategyB)) {
+      throw new Error('Expected the SDK adaptive retry strategy');
+    }
+    const adaptiveB = strategyB as typeof strategyB & {
+      standardRetryStrategy: { getCapacity(): number };
+    };
+    await strategyB.acquireInitialRetryToken('');
+    expect(throttleA).not.toHaveBeenCalled();
+    expect(adaptiveB.standardRetryStrategy.getCapacity()).toBe(500);
+
+    vi.stubEnv('AWS_ENDPOINT_URL_SAGEMAKER_RUNTIME', 'https://retry-a.invalid');
+    const resumed = await provider.getSageMakerRuntimeInstance();
+    expect(await resumed.config.retryStrategy()).toBe(strategyA);
+    await strategyA.acquireInitialRetryToken('');
+    expect(throttleA).toHaveBeenCalledOnce();
+    expect(adaptiveA.standardRetryStrategy.getCapacity()).toBe(remainingA);
+  });
+
   it.each([
     'service',
     'unchanged',

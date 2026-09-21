@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import cliState from '../../../src/cliState';
 import {
   applyQueryParams,
   discoverTokenEndpoint,
@@ -8,6 +9,7 @@ import {
   getOAuthTokenWithExpiry,
   isMcpErrorResult,
   isMcpToolNameFilter,
+  renderAuthVars,
 } from '../../../src/providers/mcp/util';
 
 import type {
@@ -17,6 +19,17 @@ import type {
 
 // Mock fetchWithProxy for discovery tests
 const mockFetch = vi.fn();
+
+it('resolves MCP auth from file defaults unless explicit vars replace them', () => {
+  const server: MCPServerConfig = { auth: { type: 'bearer', token: '{{MCP_TOKEN}}' } };
+  cliState.withEnvFileOverrides({ MCP_TOKEN: 'file-token' }, () => {
+    expect(renderAuthVars(server).auth).toEqual({ type: 'bearer', token: 'file-token' });
+    expect(renderAuthVars(server, { MCP_TOKEN: 'explicit-token' }).auth).toEqual({
+      type: 'bearer',
+      token: 'explicit-token',
+    });
+  });
+});
 vi.mock('../../../src/util/fetch/index', () => ({
   fetchWithProxy: (...args: unknown[]) => mockFetch(...args),
 }));
@@ -363,6 +376,30 @@ describe('discoverTokenEndpoint', () => {
 });
 
 describe('getOAuthTokenWithExpiry', () => {
+  it('normalizes string scopes for the request and cache key', async () => {
+    mockFetch.mockResolvedValue({
+      ok: true,
+      json: async () => ({ access_token: 'scope-token', expires_in: 3600 }),
+    });
+    const auth: MCPOAuthClientCredentialsAuth = {
+      type: 'oauth',
+      grantType: 'client_credentials',
+      clientId: 'scope-client',
+      clientSecret: 'secret',
+      tokenUrl: 'https://scope-auth.example.com/token',
+      scopes: ' read  write ',
+    };
+
+    const token = await getOAuthTokenWithExpiry(auth);
+    const cached = await getOAuthTokenWithExpiry({ ...auth, scopes: ['read', 'write'] });
+
+    expect(token.accessToken).toBe('scope-token');
+    expect(cached).toEqual(token);
+    expect(mockFetch).toHaveBeenCalledTimes(1);
+    const request = mockFetch.mock.calls[0][1];
+    expect(new URLSearchParams(request.body).get('scope')).toBe('read write');
+  });
+
   beforeEach(() => {
     mockFetch.mockReset();
   });

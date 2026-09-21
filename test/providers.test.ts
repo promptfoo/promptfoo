@@ -1279,15 +1279,18 @@ describe('loadApiProvider', () => {
     vi.mocked(fs.readFileSync).mockReturnValue('provider config');
     vi.mocked(loadYaml).mockReturnValue({
       id: 'openai:codex-sdk',
-      env: { OPENAI_API_KEY: 'file-key' },
+      env: { OPENAI_API_KEY: 'file-key', OPENAI_API_BASE_URL: 'https://file.example/v1' },
     });
     const provider = await loadApiProvider('file://provider.yaml', {
-      env: { CODEX_API_KEY: 'suite-key' },
+      env: { CODEX_API_KEY: 'suite-key', OPENAI_API_BASE_URL: 'https://suite.example/v1' },
     });
     expect((provider as OpenAICodexSDKProvider).getApiKey()).toBe('suite-key');
+    expect((provider as OpenAICodexSDKProvider).env?.OPENAI_API_BASE_URL).toBe(
+      'https://file.example/v1',
+    );
   });
 
-  it('should handle file provider with environment variables', async () => {
+  it('prefers the provider-file environment over the suite environment', async () => {
     mockProcessEnv({ OPENAI_API_KEY: 'test-key-from-env' });
     const yamlContent: ProviderOptions = {
       id: 'openai:chat:gpt-4',
@@ -1303,7 +1306,7 @@ describe('loadApiProvider', () => {
 
     const provider = await loadApiProvider('file://test.yaml', {
       basePath: '/test',
-      env: { OPENAI_API_KEY: 'final-override-key' },
+      env: { OPENAI_API_KEY: 'suite-key' },
     });
 
     expect(provider).toBeDefined();
@@ -1311,10 +1314,10 @@ describe('loadApiProvider', () => {
       'gpt-4',
       expect.objectContaining({
         config: expect.objectContaining({
-          apiKey: expect.any(String),
+          apiKey: 'override-key',
         }),
         env: expect.objectContaining({
-          OPENAI_API_KEY: 'final-override-key',
+          OPENAI_API_KEY: 'override-key',
         }),
       }),
     );

@@ -159,7 +159,7 @@ function profileCredentialInputs(
   name: string,
   defaultChainEnvironment?: CredentialScope['environment'],
   visited = new Set<string>(),
-): string[] | undefined {
+): string[] | 'process' | undefined {
   const data = profiles[name];
   if (!data || visited.has(name)) {
     return undefined;
@@ -177,7 +177,7 @@ function profileCredentialInputs(
       defaultChainEnvironment,
       visited,
     );
-    return source && [...credentialHelperInputs('STS'), ...source];
+    return source === 'process' ? source : source && [...credentialHelperInputs('STS'), ...source];
   }
   if ((data.role_arn || recursive) && data.credential_source && data.source_profile === undefined) {
     // Metadata errors and missing Environment credentials can continue through the
@@ -226,9 +226,8 @@ function profileCredentialInputs(
       ...(data.role_session_name === undefined ? ['AWS_ROLE_SESSION_NAME'] : []),
     ];
   }
-  // Processes inherit arbitrary environment inputs; retain the existing bounded input set.
   if (data.credential_process) {
-    return undefined;
+    return 'process';
   }
   if (
     ['sso_start_url', 'sso_account_id', 'sso_session', 'sso_region', 'sso_role_name'].some(
@@ -251,12 +250,20 @@ type CredentialScope = Pick<
   region: string;
   environment: Record<string, string | undefined>;
   helperEndpointPolicy?: string;
+  processEnvironment?: string;
   files?: SharedFileInputs;
 };
 
 interface SharedFileInputs {
   filepath: string;
   configFilepath: string;
+}
+
+function hashCredentialProcessEnvironment(): string {
+  const entries = Object.keys(process.env)
+    .sort()
+    .map((name) => [name, process.env[name]]);
+  return crypto.createHash('sha256').update(JSON.stringify(entries)).digest('hex');
 }
 
 function captureSharedFiles(environment: Record<string, string | undefined>): SharedFileInputs {
@@ -290,6 +297,7 @@ function sameCredentialScope(left: CredentialScope, right: CredentialScope): boo
     left.secretAccessKey === right.secretAccessKey &&
     left.sessionToken === right.sessionToken &&
     left.helperEndpointPolicy === right.helperEndpointPolicy &&
+    left.processEnvironment === right.processEnvironment &&
     left.files?.filepath === right.files?.filepath &&
     left.files?.configFilepath === right.files?.configFilepath &&
     Object.keys(left.environment).length === Object.keys(right.environment).length &&
@@ -357,8 +365,8 @@ interface SageMakerOptions extends ProviderOptions {
 abstract class SageMakerGenericProvider {
   env?: EnvOverrides;
   #sagemakerRuntime?: any; // SageMaker runtime client
-  #initializedRuntime?: { client: SageMakerRuntimeClient; region: string };
-  private readonly runtimeClients = new Map<SageMakerRuntimeClient, string>();
+  #initializedRuntime?: SageMakerRuntimeClient;
+  private readonly runtimeClients = new Set<SageMakerRuntimeClient>();
   private readonly runtimeClockOffsets = new Map<string, number>();
   readonly #runtimeInitializations: RuntimeInitialization[] = [];
   private readonly runtimeRetryStates = new Map<string, RuntimeRetryState>();
@@ -486,6 +494,7 @@ abstract class SageMakerGenericProvider {
     > = this.config,
     capturedEnvironment: CredentialScope['environment'] = process.env,
     files: SharedFileInputs = captureSharedFiles(capturedEnvironment),
+    capturedProcessEnvironment = hashCredentialProcessEnvironment(),
   ): Promise<CredentialScope> {
     const { profile, accessKeyId, secretAccessKey, sessionToken } = credentialConfig;
     if (accessKeyId && secretAccessKey) {
@@ -495,6 +504,7 @@ abstract class SageMakerGenericProvider {
       CREDENTIAL_ENV_VARS.map((name) => [name, capturedEnvironment[name]]),
     );
     let helperEndpointPolicy: string | undefined;
+    let processEnvironment: string | undefined;
     const selectedProfile = profile || environment.AWS_PROFILE;
     if (selectedProfile || !(environment.AWS_ACCESS_KEY_ID && environment.AWS_SECRET_ACCESS_KEY)) {
       const { booleanSelector, loadConfig, parseKnownFiles, SelectorType } = smithyConfig;
@@ -504,7 +514,17 @@ abstract class SageMakerGenericProvider {
         selectedProfile || 'default',
         profile ? undefined : environment,
       );
-      if (inputs) {
+      // The default chain can fall through to fromProcess after another source fails.
+      // Complete static credentials return immediately and cannot reach that fallback.
+      if (
+        inputs === 'process' ||
+        (!profile &&
+          profiles[selectedProfile || 'default']?.credential_process &&
+          inputs?.length !== 0)
+      ) {
+        processEnvironment = capturedProcessEnvironment;
+      }
+      if (Array.isArray(inputs)) {
         const used = new Set([
           ...inputs,
           'AWS_CONFIG_FILE',
@@ -571,7 +591,7 @@ abstract class SageMakerGenericProvider {
         }
       }
     }
-    return { region, profile, environment, helperEndpointPolicy, files };
+    return { region, profile, environment, helperEndpointPolicy, processEnvironment, files };
   }
 
   private async getEndpointPolicy(
@@ -677,6 +697,7 @@ abstract class SageMakerGenericProvider {
       environment,
       files: captureSharedFiles(environment),
       maxAttempts: getEnvInt('AWS_SAGEMAKER_MAX_RETRIES', 3),
+      processEnvironment: hashCredentialProcessEnvironment(),
     };
   }
 
@@ -690,7 +711,7 @@ abstract class SageMakerGenericProvider {
   ) {
     this.assertRuntimeGeneration(generation);
     // A caller-supplied client is borrowed, not part of the provider's region pool.
-    if (this.sagemakerRuntime && this.sagemakerRuntime !== this.#initializedRuntime?.client) {
+    if (this.sagemakerRuntime && this.sagemakerRuntime !== this.#initializedRuntime) {
       return this.sagemakerRuntime;
     }
 
@@ -704,7 +725,7 @@ abstract class SageMakerGenericProvider {
       );
     };
     const runtimeRegion = region ?? this.getRegion();
-    const { credentialConfig, environment, files, maxAttempts } =
+    const { credentialConfig, environment, files, maxAttempts, processEnvironment } =
       inputs ?? this.captureRuntimeInputs();
     const smithyConfig = await import('@smithy/core/config').catch(importError);
     const scope = await this.getCredentialScope(
@@ -713,6 +734,7 @@ abstract class SageMakerGenericProvider {
       credentialConfig,
       environment,
       files,
+      processEnvironment,
     );
     const endpoint = await this.getEndpointPolicy(
       smithyConfig,
@@ -721,10 +743,16 @@ abstract class SageMakerGenericProvider {
       files,
     );
     this.assertRuntimeGeneration(generation);
-    let retry = this.runtimeRetryStates.get(runtimeRegion);
+    const runtimeStateKey = JSON.stringify([
+      runtimeRegion,
+      endpoint.url,
+      endpoint.useFipsEndpoint,
+      endpoint.useDualstackEndpoint,
+    ]);
+    let retry = this.runtimeRetryStates.get(runtimeStateKey);
     if (!retry || retry.maxAttempts !== maxAttempts) {
       retry = { maxAttempts };
-      this.runtimeRetryStates.set(runtimeRegion, retry);
+      this.runtimeRetryStates.set(runtimeStateKey, retry);
     }
     const retryState = retry;
     const defaultsInputs = [
@@ -839,13 +867,19 @@ abstract class SageMakerGenericProvider {
             ? (retainedState ?? { scope, provider: credentialProvider, reusable: true })
             : undefined;
           initialization.credentials = credentialState;
-          if (credentialProvider && credentialState && !(scope.profile && retainedState)) {
+          if (
+            credentialProvider &&
+            credentialState &&
+            (!scope.profile || !retainedState || scope.processEnvironment !== undefined)
+          ) {
             credentials = async (options) => {
               const inputsMatch = async () => {
                 if (
                   Object.entries(scope.environment).some(
                     ([name, value]) => process.env[name] !== value,
-                  )
+                  ) ||
+                  (scope.processEnvironment !== undefined &&
+                    scope.processEnvironment !== hashCredentialProcessEnvironment())
                 ) {
                   return false;
                 }
@@ -905,7 +939,7 @@ abstract class SageMakerGenericProvider {
             region: runtimeRegion,
             endpoint: endpoint.url,
             ignoreConfiguredEndpointUrls: true,
-            systemClockOffset: this.runtimeClockOffsets.get(runtimeRegion),
+            systemClockOffset: this.runtimeClockOffsets.get(runtimeStateKey),
             useFipsEndpoint: endpoint.useFipsEndpoint,
             useDualstackEndpoint: endpoint.useDualstackEndpoint,
             defaultsMode,
@@ -920,18 +954,18 @@ abstract class SageMakerGenericProvider {
             credentials,
           });
           if (client.config) {
-            if (!this.runtimeClockOffsets.has(runtimeRegion)) {
-              this.runtimeClockOffsets.set(runtimeRegion, client.config.systemClockOffset ?? 0);
+            if (!this.runtimeClockOffsets.has(runtimeStateKey)) {
+              this.runtimeClockOffsets.set(runtimeStateKey, client.config.systemClockOffset ?? 0);
             }
-            // Every owned transport shares the SDK's latest correction for this region.
+            // Owned transports for the same endpoint share the SDK's latest correction.
             // A client created before another learns must not restore its stale seed.
             Object.defineProperty(client.config, 'systemClockOffset', {
               enumerable: true,
               configurable: true,
-              get: () => this.runtimeClockOffsets.get(runtimeRegion) ?? 0,
+              get: () => this.runtimeClockOffsets.get(runtimeStateKey) ?? 0,
               set: (offset: number) => {
                 if (Number.isFinite(offset)) {
-                  this.runtimeClockOffsets.set(runtimeRegion, offset);
+                  this.runtimeClockOffsets.set(runtimeStateKey, offset);
                 }
               },
             });
@@ -943,7 +977,7 @@ abstract class SageMakerGenericProvider {
             // Explicit profiles need the SDK memoizer; default chains retain their own refresh.
             credentialState.provider = retainedCredentials ?? client.config.credentials;
           }
-          this.runtimeClients.set(client, runtimeRegion);
+          this.runtimeClients.add(client);
           logger.debug(`SageMaker client initialized for region ${runtimeRegion}`);
           return client;
         }),
@@ -965,9 +999,9 @@ abstract class SageMakerGenericProvider {
     if (entry.credentials?.reusable) {
       this.#retainedCredentials = entry.credentials;
     }
-    if (!this.sagemakerRuntime || this.sagemakerRuntime === this.#initializedRuntime?.client) {
+    if (!this.sagemakerRuntime || this.sagemakerRuntime === this.#initializedRuntime) {
       this.sagemakerRuntime = runtime;
-      this.#initializedRuntime = { client: runtime, region: runtimeRegion };
+      this.#initializedRuntime = runtime;
     }
     return runtime;
   }
@@ -992,7 +1026,7 @@ abstract class SageMakerGenericProvider {
     } finally {
       signal.removeEventListener('abort', onAbort);
       this.activeRequests.delete(controller);
-      // Share region clients only while requests overlap; no global evaluation owns them.
+      // Share clients only while requests overlap; no global evaluation owns them.
       if (this.activeRequests.size === 0) {
         this.cleanup();
       }
@@ -1013,7 +1047,7 @@ abstract class SageMakerGenericProvider {
     for (const controller of this.activeRequests) {
       controller.abort(new Error('SageMaker provider was shut down during the request'));
     }
-    const clients = [...this.runtimeClients.keys()];
+    const clients = [...this.runtimeClients];
     this.runtimeClients.clear();
     this.#runtimeInitializations.length = 0;
     if (clients.includes(this.sagemakerRuntime)) {

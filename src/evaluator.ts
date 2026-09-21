@@ -63,7 +63,6 @@ import {
   type AssertionType,
   type AtomicTestCase,
   type CompletedPrompt,
-  type EnvOverrides,
   type EvaluateResult,
   type EvaluateStats,
   type EvaluateTestSuite,
@@ -75,6 +74,7 @@ import {
   type RunEvalOptions,
   type TestCase,
   type TestSuite,
+  TestSuiteConfigSchema,
 } from './types/index';
 import { type ApiProvider, isApiProvider } from './types/providers';
 import { isAbortError, isNonTransientHttpStatus } from './util/fetch/errors';
@@ -1205,7 +1205,7 @@ function getConversationLastInput(renderedJson: unknown) {
 }
 
 async function applyProviderDelayIfNeeded(provider: ApiProvider, response: ProviderResponse) {
-  if (!response.cached && provider.delay && provider.delay > 0) {
+  if (!response.cached && !provider.handlesOwnDelay && provider.delay && provider.delay > 0) {
     logger.debug(`Sleeping for ${provider.delay}ms`);
     await sleep(provider.delay);
   } else if (response.cached) {
@@ -2354,11 +2354,10 @@ function buildCompletedPrompts(
 function resolveAssertionProviderReferences(
   assertion: AssertionOrSet,
   providerMap: Record<string, ApiProvider>,
-  env?: EnvOverrides,
 ): AssertionOrSet {
   if (assertion.type === 'assert-set') {
     const resolvedAssertions = assertion.assert.map(
-      (child) => resolveAssertionProviderReferences(child, providerMap, env) as Assertion,
+      (child) => resolveAssertionProviderReferences(child, providerMap) as Assertion,
     );
     if (resolvedAssertions.every((child, index) => child === assertion.assert[index])) {
       return assertion;
@@ -2366,21 +2365,16 @@ function resolveAssertionProviderReferences(
     return { ...assertion, assert: resolvedAssertions };
   }
 
-  const provider = resolveConfiguredProviderReference(assertion.provider, providerMap, env);
+  const provider = resolveConfiguredProviderReference(assertion.provider, providerMap);
   return provider === assertion.provider ? assertion : { ...assertion, provider };
 }
 
 function resolveRuntimeGradingProviderReferences(
   testCase: AtomicTestCase,
   providerMap: Record<string, ApiProvider>,
-  env?: EnvOverrides,
 ): void {
   if (testCase.options?.provider) {
-    const provider = resolveConfiguredProviderReference(
-      testCase.options.provider,
-      providerMap,
-      env,
-    );
+    const provider = resolveConfiguredProviderReference(testCase.options.provider, providerMap);
     if (provider !== testCase.options.provider) {
       testCase.options = { ...testCase.options, provider };
     }
@@ -2388,7 +2382,7 @@ function resolveRuntimeGradingProviderReferences(
 
   if (testCase.assert) {
     const assertions = testCase.assert.map((assertion) =>
-      resolveAssertionProviderReferences(assertion, providerMap, env),
+      resolveAssertionProviderReferences(assertion, providerMap),
     );
     if (assertions.some((assertion, index) => assertion !== testCase.assert?.[index])) {
       testCase.assert = assertions;
@@ -2548,7 +2542,7 @@ async function buildRunEvalOptions({
   for (let index = 0; index < tests.length; index++) {
     const testCase = tests[index];
     await prepareTestCaseForEval(testSuite, testCase, index);
-    resolveRuntimeGradingProviderReferences(testCase, configuredProviderMap, testSuite.env);
+    resolveRuntimeGradingProviderReferences(testCase, configuredProviderMap);
     testIdx = appendRunEvalOptionsForTestCase({
       concurrency,
       conversations,
@@ -3405,25 +3399,38 @@ function collectRunProviders(testSuite: TestSuite | EvaluateTestSuite): Set<ApiP
   return providers;
 }
 
+type EvaluationResourceContext = {
+  testSuite?: TestSuite | EvaluateTestSuite;
+  ownedProviders?: readonly ApiProvider[];
+};
+
+export type EvaluationResourceRetainer = (context: EvaluationResourceContext) => Promise<void>;
+
 /** Keep setup and borrowed providers alive without taking ownership of supplied graders. */
 export async function withEvaluationResources<T>(
-  run: () => Promise<T>,
-  context: {
-    testSuite?: TestSuite | EvaluateTestSuite;
-    ownedProviders?: readonly ApiProvider[];
-  } = {},
+  run: (retainProviders: EvaluationResourceRetainer) => Promise<T>,
+  context: EvaluationResourceContext = {},
 ): Promise<T> {
-  const ownedProviders = new Set(context.ownedProviders);
-  const providers = context.testSuite
-    ? collectRunProviders(context.testSuite)
-    : new Set<ApiProvider>();
-  for (const provider of ownedProviders) {
-    providers.add(provider);
-  }
-  // Reserve before waiting for an earlier cleanup, including nested evaluation entry points.
-  for (const provider of providers) {
-    activeProviderUses.set(provider, (activeProviderUses.get(provider) ?? 0) + 1);
-  }
+  const ownedProviders = new Set<ApiProvider>();
+  const providers = new Set<ApiProvider>();
+  const retainProviders: EvaluationResourceRetainer = async ({
+    testSuite,
+    ownedProviders: owned,
+  }) => {
+    const candidates = testSuite ? collectRunProviders(testSuite) : new Set<ApiProvider>();
+    for (const provider of owned ?? []) {
+      ownedProviders.add(provider);
+      candidates.add(provider);
+    }
+    const added = [...candidates].filter((provider) => !providers.has(provider));
+    // Reserve before waiting for an earlier cleanup, including nested evaluation entry points.
+    for (const provider of added) {
+      providers.add(provider);
+      activeProviderUses.set(provider, (activeProviderUses.get(provider) ?? 0) + 1);
+    }
+    await Promise.all(added.map((provider) => pendingProviderCleanups.get(provider)));
+  };
+  const initialProviders = retainProviders(context);
 
   let released = false;
   const release = async () => {
@@ -3471,8 +3478,8 @@ export async function withEvaluationResources<T>(
   try {
     return await providerRegistry.withEvaluation(async () => {
       try {
-        await Promise.all([...providers].map((provider) => pendingProviderCleanups.get(provider)));
-        return await run();
+        await initialProviders;
+        return await run(retainProviders);
       } finally {
         // The last borrower awaits queued cleanup; an owner with other users can return.
         await release();
@@ -5293,6 +5300,24 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
 
 type DefaultEvaluation = Parameters<typeof nodeEvaluatorRuntime.createEvaluationStore>[0];
 
+function withTracingInputDefaults(testSuite: TestSuite): TestSuite {
+  const tracing = testSuite.tracing;
+  if (!tracing) {
+    return testSuite;
+  }
+  const parsed = TestSuiteConfigSchema.shape.tracing.safeParse(tracing);
+  if (!parsed.success || !parsed.data) {
+    return testSuite;
+  }
+  const normalized = {
+    ...tracing,
+    ...parsed.data,
+    // Keep runtime provider identity and its private credential-reference metadata.
+    ...(tracing.provider && { provider: tracing.provider }),
+  };
+  return isDeepStrictEqual(tracing, normalized) ? testSuite : { ...testSuite, tracing: normalized };
+}
+
 export function evaluate<TEvaluation extends DefaultEvaluation>(
   testSuite: TestSuite,
   evalRecord: TEvaluation,
@@ -5316,13 +5341,32 @@ export function evaluate<
   options: InternalEvaluateOptions,
   runtime?: EvaluatorRuntime<TEvaluation, TResult>,
 ): Promise<TEvaluation> {
-  const resolvedRuntime =
-    runtime ?? (nodeEvaluatorRuntime as unknown as EvaluatorRuntime<TEvaluation, TResult>);
-  const runtimeTestSuite =
-    resolvedRuntime.resolveRuntimeTestSuite?.(testSuite) ??
-    nodeEvaluatorRuntime.resolveRuntimeTestSuite?.(testSuite) ??
-    testSuite;
-  const store = resolvedRuntime.createEvaluationStore(evalRecord);
-  const ev = new Evaluator(runtimeTestSuite, store, options, resolvedRuntime);
-  return ev.evaluate();
+  return cliState.withBasePath(testSuite.basePath ?? cliState.basePath, () =>
+    cliState.withEnv(testSuite.env ?? cliState.env, () =>
+      cliState.withConfig(
+        {
+          ...evalRecord.config,
+          defaultTest: testSuite.defaultTest ?? evalRecord.config.defaultTest,
+          redteam: testSuite.redteam ?? evalRecord.config.redteam,
+        },
+        () => {
+          const resolvedRuntime =
+            runtime ?? (nodeEvaluatorRuntime as unknown as EvaluatorRuntime<TEvaluation, TResult>);
+          const runtimeTestSuite =
+            resolvedRuntime.resolveRuntimeTestSuite?.(testSuite) ??
+            nodeEvaluatorRuntime.resolveRuntimeTestSuite?.(testSuite) ??
+            testSuite;
+          const store = resolvedRuntime.createEvaluationStore(evalRecord);
+          const ev = new Evaluator(
+            withTracingInputDefaults(runtimeTestSuite),
+            store,
+            options,
+            resolvedRuntime,
+          );
+          return ev.evaluate();
+        },
+        testSuite.providers.map((provider) => ({ id: provider.id(), config: provider.config })),
+      ),
+    ),
+  );
 }

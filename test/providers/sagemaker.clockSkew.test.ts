@@ -99,6 +99,7 @@ describe('SageMaker clock correction across idle cleanup', () => {
       AWS_DEFAULTS_MODE: 'legacy',
       AWS_DISABLE_CLOCK_SKEW_CORRECTION: 'false',
       AWS_EC2_METADATA_DISABLED: 'true',
+      AWS_ENDPOINT_URL_SAGEMAKER_RUNTIME: undefined,
       AWS_SAGEMAKER_MAX_RETRIES: '1',
     });
     for (const transport of [http, https]) {
@@ -114,6 +115,7 @@ describe('SageMaker clock correction across idle cleanup', () => {
     }
     providers.clear();
     vi.restoreAllMocks();
+    vi.unstubAllEnvs();
     restoreEnv();
     vi.useRealTimers();
     await rm(configDirectory, { recursive: true, force: true });
@@ -143,6 +145,56 @@ describe('SageMaker clock correction across idle cleanup', () => {
       expect(requests[1].headers['x-amz-date']).toBe(signingDate(startTime.getTime() + offset));
     },
   );
+
+  it('keeps clock corrections separate for overlapping custom endpoints in one region', async () => {
+    let start!: () => void;
+    let release!: () => void;
+    const started = new Promise<void>((resolve) => {
+      start = resolve;
+    });
+    const held = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const { provider, clients, requests } = createProvider(
+      (request) => (request.hostname === 'clock-a.invalid' ? clockSkew : -clockSkew),
+      async (request) => {
+        if (JSON.parse(String(request.body)).prompt === 'held A') {
+          start();
+          await held;
+        }
+      },
+    );
+    vi.stubEnv('AWS_ENDPOINT_URL_SAGEMAKER_RUNTIME', 'https://clock-a.invalid');
+    expect(await provider.callApi('learn A')).toMatchObject({
+      error: expect.stringContaining('Clock skew fixture'),
+    });
+    const pending = provider.callApi('held A');
+    try {
+      await started;
+      const activeA = [...clients].at(-1)!;
+      vi.stubEnv('AWS_ENDPOINT_URL_SAGEMAKER_RUNTIME', 'https://clock-b.invalid');
+      expect(await provider.callApi('learn B')).toMatchObject({
+        error: expect.stringContaining('Clock skew fixture'),
+      });
+      const activeB = [...clients].at(-1)!;
+      expect(requests.at(-1)?.headers['x-amz-date']).toBe(signingDate(startTime.getTime()));
+      expect(activeA.config.systemClockOffset).toBe(clockSkew);
+      expect(activeB.config.systemClockOffset).toBe(-clockSkew);
+      expect(await provider.callApi('reuse B')).toMatchObject({ output: 'offline response' });
+      expect(requests.at(-1)?.headers['x-amz-date']).toBe(
+        signingDate(startTime.getTime() - clockSkew),
+      );
+    } finally {
+      release();
+      await pending;
+    }
+    await expect(pending).resolves.toMatchObject({ output: 'offline response' });
+    vi.stubEnv('AWS_ENDPOINT_URL_SAGEMAKER_RUNTIME', 'https://clock-a.invalid');
+    expect(await provider.callApi('reuse A')).toMatchObject({ output: 'offline response' });
+    expect(requests.at(-1)?.headers['x-amz-date']).toBe(
+      signingDate(startTime.getTime() + clockSkew),
+    );
+  });
 
   it.each([
     ['defaults', clockSkew],
