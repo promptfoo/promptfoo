@@ -1786,6 +1786,43 @@ describe('AIStudioChatProvider', () => {
       );
     });
 
+    it.each([true, false])(
+      'deduplicates declarations across REST tools (canonical first: %s)',
+      async (canonicalFirst) => {
+        const canonical = {
+          name: 'lookup',
+          parameters: {
+            type: 'OBJECT' as const,
+            properties: { code: { type: 'STRING' as const } },
+            required: ['code'],
+          },
+        };
+        const camelTool = { functionDeclarations: [canonical] };
+        const snakeTool = { function_declarations: [{ name: 'lookup' }] };
+        provider = new AIStudioChatProvider('gemini-3.6-flash', {
+          config: {
+            apiKey: 'test-key',
+            tools: canonicalFirst ? [camelTool, snakeTool] : [snakeTool, camelTool],
+          },
+        });
+        vi.mocked(util.maybeCoerceToGeminiFormat).mockReturnValueOnce({
+          contents: [{ role: 'user', parts: [{ text: 'Look up the code' }] }],
+          coerced: false,
+          systemInstruction: undefined,
+        });
+        vi.mocked(cache.fetchWithCache).mockResolvedValueOnce({
+          data: { candidates: [{ content: { parts: [{ text: 'Done' }] } }] },
+          cached: false,
+          status: 200,
+          statusText: 'OK',
+        });
+
+        expect((await provider.callGemini('Look up the code')).error).toBeUndefined();
+        const body = JSON.parse(vi.mocked(cache.fetchWithCache).mock.calls[0][1]?.body as string);
+        expect(body.tools).toEqual([{ functionDeclarations: [canonical] }]);
+      },
+    );
+
     it('should handle function calling configuration', async () => {
       vi.mocked(templates.getNunjucksEngine).mockImplementation(function () {
         return {

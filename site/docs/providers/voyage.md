@@ -40,4 +40,8 @@ provider:
     apiKey: XXX
     apiKeyEnvar: VOYAGE_API_KEY # if set, will fetch API key from this environment variable
     apiBaseUrl: https://api.voyageai.com/v1
+    headers: # optional extra HTTP headers
+      X-Custom-Header: value
 ```
+
+`apiBaseUrl` can also be set with the `VOYAGE_API_BASE_URL` environment variable.

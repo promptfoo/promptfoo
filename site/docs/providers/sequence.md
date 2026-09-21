@@ -9,11 +9,14 @@ The Sequence Provider allows you to send a series of prompts to another provider
 
 ## Configuration
 
-To use the Sequence Provider, set the provider `id` to `sequence` and provide a configuration object with an array of inputs:
+The Sequence Provider wraps whichever provider is under test — it replays your inputs against
+that provider rather than calling a model itself. Set it as a **test-level** provider (on
+`tests[].provider` or `defaultTest.provider`), not in the top-level `providers:` array:
 
 ```yaml
-providers:
-  - id: sequence
+defaultTest:
+  provider:
+    id: sequence
     config:
       inputs:
         - 'First question: {{prompt}}'
@@ -22,13 +25,20 @@ providers:
       separator: "\n---\n" # Optional, defaults to "\n---\n"
 ```
 
+:::caution
+Listing `sequence` in the top-level `providers:` array does not work. The provider replays its
+inputs against `originalProvider`, which for a top-level entry is the sequence provider itself —
+the eval fails with `RangeError: Maximum call stack size exceeded`. Put it on `tests[].provider`
+or `defaultTest.provider` so the provider under test is the one being replayed against.
+:::
+
 ## How It Works
 
 The Sequence Provider:
 
 1. Takes each input string from the `inputs` array
 2. Renders it using Nunjucks templating (with access to the original prompt and test variables)
-3. Sends it to the original provider
+3. Sends it to the provider under test (`originalProvider`)
 4. Collects all responses
 5. Joins them together using the specified separator
 
@@ -38,17 +48,20 @@ Here's a complete example showing how to use the Sequence Provider to create a m
 
 ```yaml
 providers:
-  - openai:chat:gpt-4
-  - id: sequence
+  - openai:chat:gpt-5.6-luna
+
+prompts:
+  - '{{prompt}}'
+
+defaultTest:
+  provider:
+    id: sequence
     config:
       inputs:
         - 'What is {{prompt}}?'
         - 'What are the potential drawbacks of {{prompt}}?'
         - 'Can you summarize the pros and cons of {{prompt}}?'
       separator: "\n\n=== Next Response ===\n\n"
-
-prompts:
-  - 'artificial intelligence'
 
 tests:
   - vars:
@@ -59,6 +72,9 @@ tests:
       - type: contains
         value: pros and cons
 ```
+
+Each of the three inputs is sent to `openai:chat:gpt-5.6-luna`, and the three responses are
+joined with the separator into a single output that the assertions run against.
 
 ## Variables and Templating
 
@@ -71,17 +87,17 @@ Each input string supports Nunjucks templating and has access to:
 For example:
 
 ```yaml
-providers:
-  - id: sequence
-    config:
-      inputs:
-        - 'Question about {{topic}}: {{prompt}}'
-        - 'Follow up: How does {{topic}} relate to {{industry}}?'
 tests:
   - vars:
       topic: AI
       industry: healthcare
       prompt: What are the main applications?
+    provider:
+      id: sequence
+      config:
+        inputs:
+          - 'Question about {{topic}}: {{prompt}}'
+          - 'Follow up: How does {{topic}} relate to {{industry}}?'
 ```
 
 ## Configuration Options
