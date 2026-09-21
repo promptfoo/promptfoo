@@ -658,12 +658,15 @@ Manage authentication for cloud features.
 
 Login to the promptfoo cloud.
 
-| Option                | Description                                                                |
-| --------------------- | -------------------------------------------------------------------------- |
-| `-o, --org <orgId>`   | The organization ID to log in to                                           |
-| `-h, --host <host>`   | The host of the promptfoo instance (API URL if different from the app URL) |
-| `-k, --api-key <key>` | Log in using an API key                                                    |
-| `-t, --team <team>`   | Team name, slug, or ID to use after login                                  |
+| Option                      | Description                                                                |
+| --------------------------- | -------------------------------------------------------------------------- |
+| `-o, --org <orgId>`         | The organization ID to log in to                                           |
+| `-h, --host <host>`         | The host of the promptfoo instance (API URL if different from the app URL) |
+| `-k, --api-key <key>`       | Log in using an API key                                                    |
+| `-t, --team <team>`         | Team name, slug, or ID to use after login                                  |
+| `--auth-header-name <name>` | Header carrying the Cloud API token when logging in with `--api-key`       |
+
+For gateways that reserve `Authorization`, use `--auth-header-name X-Promptfoo-Api-Key` or `PROMPTFOO_CLOUD_AUTH_HEADER`. The value remains `Bearer <token>`. Precedence is the login flag, saved setting, environment variable, then `Authorization`. A successful login saves the header name; changing `--host` does not reset it. Pass `--auth-header-name Authorization` to reset it. See [gateway configuration](/docs/usage/sharing.md#enterprise-sharing).
 
 After login, if you have multiple teams, you can switch between them using the `teams` subcommand.
 
@@ -680,6 +683,7 @@ Display current authentication status including user, organization, and active t
 - User email
 - Organization name
 - Current team (if logged in to a multi-team organization)
+- API URL and effective auth header name (shown even without a saved login or if the account lookup fails)
 - App URL
 
 Example:
@@ -691,6 +695,8 @@ promptfoo auth whoami
 Output:
 
 ```
+API URL: https://api.promptfoo.app
+Auth header: Authorization
 Currently logged in as:
 User: user@company.com
 Organization: Acme Corp
@@ -1087,8 +1093,8 @@ These general-purpose environment variables are supported:
 | `PROMPTFOO_DISABLE_REF_PARSER`                | Prevents JSON schema dereferencing                                                                                                                                                                                                                                                                                                                                                                                                                                                                               |                               |
 | `PROMPTFOO_DISABLE_REMOTE_GENERATION`         | Disables supported Promptfoo-hosted generation fallbacks within its documented scope, including red team target/provider setup helpers that rely on remote generation. This is not a network egress firewall and does not disable explicitly configured providers, graders, telemetry, account/license checks, sharing, Cloud sync, red team target/provider test requests, or red team target/provider setup helpers that do not rely on remote generation. Example: `PROMPTFOO_DISABLE_REMOTE_GENERATION=true` | `false`                       |
 | `PROMPTFOO_DISABLE_REDTEAM_REMOTE_GENERATION` | Disables supported Promptfoo-hosted red team generation paths, including red team target/provider setup helpers that rely on remote generation, while leaving non-red-team hosted generation, red team target/provider test requests, red team target/provider setup helpers that do not rely on remote generation, sharing, telemetry, account, and Cloud-backed controls unchanged. Example: `PROMPTFOO_DISABLE_REDTEAM_REMOTE_GENERATION=true`                                                                | `false`                       |
-| `PROMPTFOO_DISABLE_TEMPLATE_ENV_VARS`         | Disables OS environment variables in templates. When true, only config `env:` variables are available in templates.                                                                                                                                                                                                                                                                                                                                                                                              | `false` (true in self-hosted) |
-| `PROMPTFOO_DISABLE_TEMPLATING`                | Disables Nunjucks template processing                                                                                                                                                                                                                                                                                                                                                                                                                                                                            | `false`                       |
+| `PROMPTFOO_DISABLE_TEMPLATE_ENV_VARS`         | Disables OS environment variables in templates. When true, only config `env:` variables are available in templates, file paths, and tracing settings. Suite settings cannot re-enable access disabled by the process.                                                                                                                                                                                                                                                                                            | `false` (true in self-hosted) |
+| `PROMPTFOO_DISABLE_TEMPLATING`                | Disables Nunjucks processing for config values and prompts, including when set in config `env:`. Grader templates remain enabled.                                                                                                                                                                                                                                                                                                                                                                                | `false`                       |
 | `PROMPTFOO_DISABLE_UPDATE`                    | Disables automatic update availability checks.                                                                                                                                                                                                                                                                                                                                                                                                                                                                   | `false`                       |
 | `PROMPTFOO_DISABLE_VAR_EXPANSION`             | Prevents Array-type vars from being expanded into multiple test cases                                                                                                                                                                                                                                                                                                                                                                                                                                            |                               |
 | `PROMPTFOO_FAILED_TEST_EXIT_CODE`             | Override the exit code when there is at least 1 test case failure or when the pass rate is below PROMPTFOO_PASS_RATE_THRESHOLD                                                                                                                                                                                                                                                                                                                                                                                   | 100                           |

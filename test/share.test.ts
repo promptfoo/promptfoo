@@ -104,7 +104,8 @@ vi.mock('../src/util/cloud', () => ({
   getOrgContext: vi.fn().mockResolvedValue(null),
 }));
 
-vi.mock('../src/envars', () => ({
+vi.mock('../src/envars', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../src/envars')>()),
   getEnvBool: vi.fn(),
   getEnvInt: vi.fn(),
   getEnvString: vi.fn().mockReturnValue(''),
@@ -820,6 +821,376 @@ describe('createShareableUrl', () => {
         mockEval.id,
       );
       expect(uploadBlobRefsForShare).not.toHaveBeenCalled();
+    });
+
+    it.each([false, true])(
+      'strips response media before blob handling (cloud: %s)',
+      async (cloud) => {
+        vi.mocked(cloudConfig.isEnabled).mockReturnValue(cloud);
+        vi.mocked(envars.getEnvBool).mockImplementation((_key, defaultValue) =>
+          Boolean(defaultValue),
+        );
+        const outputUri = `promptfoo://blob/${'b'.repeat(64)}`;
+        const inputUri = `promptfoo://blob/${'c'.repeat(64)}`;
+        const dataUrl = 'data:image/png;base64,cHJpdmF0ZSBvdXRwdXQ=';
+        const svgUrl = 'data:image/svg+xml,%3Csvg%3Eprivate%20output%3C%2Fsvg%3E';
+        const preview = { samples: [outputUri, dataUrl, svgUrl], caption: 'data:ready' };
+        const row = {
+          id: 'media-row',
+          testCase: { vars: { input: inputUri } },
+          metadata: {
+            audio: { data: outputUri },
+            blobUris: [outputUri],
+            preview,
+            note: 'keep metadata',
+          },
+          response: {
+            output: outputUri,
+            providerTransformedOutput: outputUri,
+            audio: { data: outputUri },
+            video: { url: outputUri },
+            images: [{ url: outputUri }],
+            metadata: {
+              blobUris: [outputUri],
+              audio: { data: outputUri },
+              preview,
+              note: 'keep metadata',
+            },
+          },
+        };
+        mockEval.config = { env: { PROMPTFOO_STRIP_RESPONSE_OUTPUT: 'true' } };
+        mockEval.fetchResultsBatched = vi.fn().mockImplementation(async function* () {
+          yield [row];
+        });
+        mockFetch
+          .mockResolvedValueOnce({ ok: true, json: async () => ({ id: mockEval.id }) })
+          .mockResolvedValueOnce({ ok: true, json: async () => ({}) });
+
+        await createShareableUrl(mockEval as Eval);
+
+        const scans = cloud
+          ? vi.mocked(uploadBlobRefsForShare).mock.calls
+          : vi.mocked(inlineBlobRefsForShare).mock.calls;
+        expect(scans.length).toBeGreaterThan(0);
+        for (const [value] of scans) {
+          expect(JSON.stringify(value)).not.toContain(outputUri);
+          expect(JSON.stringify(value)).not.toContain(dataUrl);
+          expect(JSON.stringify(value)).not.toContain(svgUrl);
+          expect(JSON.stringify(value)).toContain(inputUri);
+        }
+        const [uploaded] = JSON.parse(mockFetch.mock.calls[1][1].body);
+        expect(uploaded.response).toEqual({
+          output: '[output stripped]',
+          metadata: {
+            note: 'keep metadata',
+            preview: {
+              samples: ['[output stripped]', '[output stripped]', '[output stripped]'],
+              caption: 'data:ready',
+            },
+          },
+        });
+        expect(uploaded.metadata).toEqual(uploaded.response.metadata);
+        expect(row.response.metadata.blobUris).toEqual([outputUri]);
+      },
+    );
+
+    it.each([false, true])(
+      'preserves test metadata when stripping response output (override: %s)',
+      async (override) => {
+        const testMetadata = {
+          audio: { language: 'English' },
+          blobUris: ['ordinary user value'],
+          preview: 'data:image/png;base64,dXNlciBpbnB1dA==',
+        };
+        const responseMetadata = override ? { audio: { data: 'private audio bytes' } } : undefined;
+        const row = {
+          id: 'metadata-row',
+          testCase: { metadata: testMetadata },
+          metadata: { ...testMetadata, ...responseMetadata },
+          response: { output: 'private-output', metadata: responseMetadata },
+        };
+        mockEval.config = { env: { PROMPTFOO_STRIP_RESPONSE_OUTPUT: 'true' } };
+        mockEval.fetchResultsBatched = vi.fn().mockImplementation(async function* () {
+          yield [row];
+        });
+        mockFetch
+          .mockResolvedValueOnce({ ok: true, json: async () => ({ id: mockEval.id }) })
+          .mockResolvedValueOnce({ ok: true, json: async () => ({}) });
+
+        await createShareableUrl(mockEval as Eval);
+
+        const [uploaded] = JSON.parse(mockFetch.mock.calls[1][1].body);
+        expect(uploaded.testCase.metadata).toEqual(testMetadata);
+        expect(uploaded.metadata).toEqual({
+          ...testMetadata,
+          ...(override && { audio: undefined }),
+        });
+        expect(uploaded.response.output).toBe('[output stripped]');
+        expect(row.metadata.audio).toEqual(responseMetadata?.audio ?? testMetadata.audio);
+      },
+    );
+
+    it('omits the duplicate legacy results from the initial share payload', async () => {
+      const oldResults = { results: [{ response: { output: 'private-legacy-output' } }] };
+      Object.assign(mockEval, { oldResults });
+      mockFetch
+        .mockResolvedValueOnce({ ok: true, json: async () => ({ id: mockEval.id }) })
+        .mockResolvedValueOnce({ ok: true, json: async () => ({}) });
+
+      await createShareableUrl(mockEval as Eval);
+
+      expect(JSON.parse(mockFetch.mock.calls[0][1].body)).not.toHaveProperty('oldResults');
+      expect(mockEval.oldResults).toBe(oldResults);
+    });
+
+    it.each([false, true])(
+      'omits runtime provider paths from uploads (strip data: %s)',
+      async (stripData) => {
+        vi.mocked(cloudConfig.isEnabled).mockReturnValue(false);
+        vi.mocked(envars.getEnvBool).mockImplementation(
+          (key) =>
+            stripData &&
+            [
+              'PROMPTFOO_STRIP_TEST_VARS',
+              'PROMPTFOO_STRIP_METADATA',
+              'PROMPTFOO_STRIP_RESPONSE_OUTPUT',
+            ].includes(key),
+        );
+        const row = {
+          id: 'source-row',
+          provider: {
+            id: 'file:///home/alice/project/target.js',
+            config: {
+              basePath: '/home/alice/project',
+              temperature: 0,
+              tools: 'file:///home/alice/project/tools.json',
+              nested: [{ schema: 'file://C:\\Users\\alice\\project\\schema.json' }],
+            },
+          },
+          prompt: {
+            raw: 'public',
+            label: 'public',
+            config: { provider: { id: 'echo', config: { basePath: '/home/alice/project' } } },
+          },
+          testCase: {
+            provider: 'file:///home/alice/project/target.js',
+            options: {
+              provider: {
+                text: {
+                  id: 'openai:chat:test',
+                  config: { basePath: '/home/alice/project', temperature: 0 },
+                },
+                embedding: 'file:///home/alice/project/embedding.js',
+                classification: 'file://C:\\Users\\alice\\project\\classifier.js',
+              },
+            },
+            assert: [
+              {
+                type: 'assert-set' as const,
+                assert: [
+                  {
+                    type: 'llm-rubric' as const,
+                    provider: {
+                      id: 'file:///home/alice/project/grader.js',
+                      config: { basePath: '/home/alice/project' },
+                    },
+                  },
+                ],
+              },
+            ],
+            vars: {
+              basePath: 'user-variable',
+              nested: {
+                files: [
+                  'file:///home/alice/project/input.txt',
+                  'file://C:\\Users\\alice\\project\\image.png',
+                ],
+              },
+              literal: '/ordinary/user/data',
+            },
+            metadata: { note: 'private-note' },
+            providerOutput: 'private-output',
+          },
+        };
+        mockEval.config = {
+          basePath: '/home/alice/project',
+          providers: [row.provider],
+          tests: [row.testCase],
+          defaultTest: row.testCase,
+          scenarios: [{ config: [row.testCase], tests: [row.testCase] }],
+        };
+        mockEval.fetchResultsBatched = vi.fn().mockImplementation(async function* () {
+          yield [row];
+        });
+        mockFetch
+          .mockResolvedValueOnce({ ok: true, json: async () => ({ id: mockEval.id }) })
+          .mockResolvedValueOnce({ ok: true, json: async () => ({}) });
+
+        await createShareableUrl(mockEval as Eval);
+
+        const [uploaded] = JSON.parse(mockFetch.mock.calls[1][1].body);
+        for (const [, options] of mockFetch.mock.calls) {
+          expect(options.body).not.toContain('/home/alice');
+          expect(options.body).not.toContain('Users');
+        }
+        expect(uploaded.provider.id).toBe('file://target.js');
+        expect(uploaded.provider.config).toEqual({
+          temperature: 0,
+          tools: 'file://tools.json',
+          nested: [{ schema: 'file://schema.json' }],
+        });
+        expect(uploaded.testCase.options.provider.text.config).toEqual({ temperature: 0 });
+        expect(uploaded.testCase.options.provider.classification).toBe('file://classifier.js');
+        expect(row.provider.config.basePath).toBe('/home/alice/project');
+        if (stripData) {
+          expect(JSON.stringify(uploaded)).not.toContain('private-');
+          expect(uploaded.testCase.vars).toBeUndefined();
+        } else {
+          expect(uploaded.testCase.vars.basePath).toBe('user-variable');
+          expect(uploaded.testCase.vars.nested.files).toEqual([
+            'file://input.txt',
+            'file://image.png',
+          ]);
+          expect(uploaded.testCase.vars.literal).toBe('/ordinary/user/data');
+          expect(row.testCase.vars.nested.files[0]).toBe('file:///home/alice/project/input.txt');
+        }
+      },
+    );
+
+    it('removes prompt file roots without losing map entries with matching filenames', async () => {
+      const prompts = {
+        'file:///home/alice/project/first/prompt.txt': 'first',
+        'file:///home/alice/project/second/prompt.txt': 'second',
+        'literal prompt': 'literal',
+      };
+      mockEval.config = { prompts };
+      const prompt = {
+        id: 'file:///home/alice/project/first/prompt.txt',
+        raw: 'content',
+        label: 'first',
+        provider: 'echo',
+      };
+      mockEval.prompts = [prompt];
+      mockFetch
+        .mockResolvedValueOnce({ ok: true, json: async () => ({ id: mockEval.id }) })
+        .mockResolvedValueOnce({ ok: true, json: async () => ({}) });
+
+      await createShareableUrl(mockEval as Eval);
+
+      const uploaded = JSON.parse(mockFetch.mock.calls[0][1].body);
+      expect(uploaded.config.prompts).toEqual([
+        { raw: 'file://prompt.txt', label: 'first' },
+        { raw: 'file://prompt.txt', label: 'second' },
+        { raw: 'literal prompt', label: 'literal' },
+      ]);
+      expect(uploaded.prompts[0]).toEqual({ ...prompt, id: 'file://prompt.txt' });
+      expect(mockFetch.mock.calls[0][1].body).not.toContain('/home/alice');
+      expect(mockEval.config.prompts).toEqual(prompts);
+      expect(prompt.id).toBe('file:///home/alice/project/first/prompt.txt');
+    });
+
+    it('preserves literal file URLs in processed prompt content and labels', async () => {
+      const prompt = {
+        id: 'file:///home/alice/project/prompt.txt',
+        raw: 'file:///literal/prompt.txt',
+        label: 'file:///literal/label.txt',
+        provider: 'echo',
+      };
+      mockEval.config = { prompts: [prompt] };
+      mockEval.prompts = [prompt];
+      mockEval.fetchResultsBatched = vi.fn().mockImplementation(async function* () {
+        yield [{ id: 'row', prompt }];
+      });
+      mockFetch
+        .mockResolvedValueOnce({ ok: true, json: async () => ({ id: mockEval.id }) })
+        .mockResolvedValueOnce({ ok: true, json: async () => ({}) });
+
+      await createShareableUrl(mockEval as Eval);
+
+      const config = JSON.parse(mockFetch.mock.calls[0][1].body);
+      const [row] = JSON.parse(mockFetch.mock.calls[1][1].body);
+      for (const projected of [config.config.prompts[0], config.prompts[0], row.prompt]) {
+        expect(projected).toMatchObject({ ...prompt, id: 'file://prompt.txt' });
+      }
+      expect(prompt.id).toBe('file:///home/alice/project/prompt.txt');
+    });
+
+    it('honors saved strip flags when sharing outside the evaluation scope', async () => {
+      const { getEnvBool } = await vi.importActual<typeof import('../src/envars')>('../src/envars');
+      vi.mocked(envars.getEnvBool).mockImplementation(getEnvBool);
+      vi.stubEnv('PROMPTFOO_STRIP_TEST_VARS', 'false');
+      vi.stubEnv('PROMPTFOO_STRIP_METADATA', 'false');
+      vi.stubEnv('PROMPTFOO_STRIP_RESPONSE_OUTPUT', 'false');
+      const testCase = {
+        vars: { input: 'private-input' },
+        metadata: { note: 'private-note' },
+        providerOutput: 'private-output',
+      };
+      mockEval.config = {
+        env: {
+          PROMPTFOO_STRIP_PROMPT_TEXT: 'true',
+          PROMPTFOO_STRIP_TEST_VARS: 'true',
+          PROMPTFOO_STRIP_METADATA: 'true',
+          PROMPTFOO_STRIP_RESPONSE_OUTPUT: 'true',
+        },
+        tests: [testCase],
+      };
+      mockEval.getTraces = vi.fn().mockResolvedValue([
+        {
+          metadata: { note: 'private-trace-note' },
+          spans: [
+            {
+              attributes: {
+                'promptfoo.request.body': 'private-trace-request',
+                'promptfoo.response.body': 'private-trace-response',
+                operation: 'provider-call',
+              },
+            },
+          ],
+        },
+      ]);
+      mockEval.prompts = [{ raw: 'private-prompt', label: 'public', provider: 'echo' }];
+      mockEval.fetchResultsBatched = vi.fn().mockImplementation(async function* () {
+        yield [{ id: 'row', testCase }];
+      });
+      mockFetch
+        .mockResolvedValueOnce({ ok: true, json: async () => ({ id: mockEval.id }) })
+        .mockResolvedValueOnce({ ok: true, json: async () => ({}) });
+      try {
+        await createShareableUrl(mockEval as Eval);
+        expect(mockFetch).toHaveBeenCalledTimes(2);
+        for (const [, options] of mockFetch.mock.calls) {
+          expect(options.body).not.toContain('private-');
+        }
+        expect(JSON.parse(mockFetch.mock.calls[0][1].body).traces).toEqual([
+          { spans: [{ attributes: { operation: 'provider-call' } }] },
+        ]);
+        expect(testCase.vars.input).toBe('private-input');
+        expect(getEnvBool('PROMPTFOO_STRIP_TEST_VARS')).toBe(false);
+      } finally {
+        vi.unstubAllEnvs();
+      }
+    });
+
+    it('redacts gateway URL credentials from shared config without changing the live provider', async () => {
+      vi.mocked(cloudConfig.isEnabled).mockReturnValue(false);
+      const gateway = 'https://gateway.example/v1?tenantClientSecret=short-private-value';
+      mockEval.config = {
+        basePath: '/home/alice/private-project',
+        providers: [{ id: 'openai:chat:test', config: { apiBaseUrl: gateway } }],
+        metadata: { documentationUrl: 'HTTPS://Docs.Example?version=2' },
+      };
+      mockFetch
+        .mockResolvedValueOnce({ ok: true, json: async () => ({ id: mockEval.id }) })
+        .mockResolvedValueOnce({ ok: true, json: async () => ({}) });
+      await createShareableUrl(mockEval as Eval);
+      const request = JSON.parse(mockFetch.mock.calls[0][1].body);
+      expect(JSON.stringify(request.config)).not.toContain('short-private-value');
+      expect(request.config.providers[0].config.apiBaseUrl).toContain('%5BREDACTED%5D');
+      expect(request.config.metadata.documentationUrl).toBe('HTTPS://Docs.Example?version=2');
+      expect(request.config).not.toHaveProperty('basePath');
+      expect(mockEval.config.basePath).toBe('/home/alice/private-project');
+      expect(JSON.stringify(mockEval.config)).toContain(gateway);
     });
 
     it('redacts Azure Blob SAS tokens from the shared eval config', async () => {
