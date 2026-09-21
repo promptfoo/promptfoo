@@ -599,5 +599,85 @@ describe('LiteLLM Provider', () => {
       });
       expect((await headerAuth.callApi('test')).error).not.toContain('Set LITELLM_API_KEY');
     });
+
+    it.each([
+      ['chat', 'x-api-key'],
+      ['completion', 'X-Gateway-Identity'],
+      ['embedding', 'Cookie'],
+    ])('does not append the key hint for %s with an explicit %s header', async (type, header) => {
+      mockFetchWithCache.mockResolvedValue(unauthorized);
+      const provider = createLiteLLMProvider(`litellm:${type}:test-model`, {
+        config: { config: { headers: { [header]: 'explicit-credential' } } },
+      });
+
+      const result =
+        type === 'embedding'
+          ? await provider.callEmbeddingApi!('test')
+          : await provider.callApi('test');
+
+      expect(result.error).toContain('Authentication Error');
+      expect(result.error).not.toContain('Set LITELLM_API_KEY');
+      expect(mockFetchWithCache.mock.calls[0]?.[1]?.headers).toHaveProperty(
+        header,
+        'explicit-credential',
+      );
+    });
+
+    it.each([
+      ['https://user:pass@proxy.example/v1', 'https://user:pass@proxy.example/v1/chat/completions'],
+      [
+        'https://proxy.example/v1?api_key=explicit-value',
+        'https://proxy.example/v1/chat/completions?api_key=explicit-value',
+      ],
+    ])(
+      'does not append the key hint when the endpoint provides a credential',
+      async (apiBaseUrl, requestUrl) => {
+        mockFetchWithCache.mockResolvedValue(unauthorized);
+        const provider = createLiteLLMProvider('litellm:chat:test-model', {
+          config: { config: { apiBaseUrl } },
+        });
+
+        expect((await provider.callApi('test')).error).not.toContain('Set LITELLM_API_KEY');
+        expect(mockFetchWithCache.mock.calls[0]?.[0]).toBe(requestUrl);
+      },
+    );
+
+    it('still helps for ordinary metadata headers and a URL with a noncredential query', async () => {
+      mockFetchWithCache.mockResolvedValue(unauthorized);
+      const provider = createLiteLLMProvider('litellm:chat:test-model', {
+        config: {
+          config: {
+            apiBaseUrl: 'https://proxy.example/v1?organization=example',
+            headers: {
+              Accept: 'application/json',
+              'X-Request-ID': 'request-1',
+              traceparent: 'trace-1',
+              Authorization: '',
+            },
+          },
+        },
+      });
+
+      expect((await provider.callApi('test')).error).toContain('Set LITELLM_API_KEY');
+    });
+
+    it('uses the chat prompt headers actually sent when explaining an auth failure', async () => {
+      mockFetchWithCache.mockResolvedValue(unauthorized);
+      const provider = createLiteLLMProvider('litellm:chat:test-model');
+      const result = await provider.callApi('test', {
+        vars: {},
+        prompt: {
+          raw: 'test',
+          label: 'test',
+          config: { headers: { 'x-api-key': 'prompt-credential' } },
+        },
+      });
+
+      expect(result.error).not.toContain('Set LITELLM_API_KEY');
+      expect(mockFetchWithCache.mock.calls[0]?.[1]?.headers).toHaveProperty(
+        'x-api-key',
+        'prompt-credential',
+      );
+    });
   });
 });

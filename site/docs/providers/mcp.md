@@ -299,6 +299,8 @@ providers:
         user_role: 'customer'
 ```
 
+Tools and response transforms receive the full arguments. Debug logs list argument names only. Promptfoo redacts credential fields such as `session_id` and `apiKey` in saved result metadata and tool traces.
+
 ### Response Transforms
 
 Use `transformResponse` when the MCP tool result needs to be reshaped before Promptfoo evaluates it.

@@ -131,7 +131,7 @@ The LiteLLM-specific environment variables are:
 - `LITELLM_API_KEY` - API key sent to the LiteLLM proxy server as a bearer token
 - `LITELLM_API_BASE` - Base URL for the LiteLLM proxy server (default: `http://0.0.0.0:4000`)
 
-Set upstream credentials such as `OPENAI_API_KEY`, `ANTHROPIC_API_KEY`, or `AZURE_API_KEY` on the proxy. Promptfoo does not use them to authenticate with the proxy by default. If the proxy requires a key, set `LITELLM_API_KEY`, `config.apiKey`, or `config.apiKeyEnvar`. If a keyless request is rejected for authentication, Promptfoo includes this guidance in the error.
+Set upstream credentials such as `OPENAI_API_KEY`, `ANTHROPIC_API_KEY`, or `AZURE_API_KEY` on the proxy. Promptfoo does not use them to authenticate with the proxy by default. For bearer authentication, set `LITELLM_API_KEY`, `config.apiKey`, or `config.apiKeyEnvar`. If your gateway uses a custom credential header, set it under `config.headers`. When a request without credentials is rejected for authentication, Promptfoo includes the bearer-key guidance in the error.
 
 ## Embedding Configuration
 

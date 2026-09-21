@@ -1,7 +1,7 @@
 import OpenAI from 'openai';
 import { maybeLoadFromExternalFileWithVars } from '../../util/index';
 import { getAjv, safeJsonStringify } from '../../util/json';
-import { looksLikeSecret, sanitizeUrl } from '../../util/sanitizer';
+import { isNonCredentialHeader, looksLikeSecret, sanitizeUrl } from '../../util/sanitizer';
 import { calculateCost } from '../shared';
 
 import type { TokenUsage, VarValue } from '../../types/index';
@@ -42,6 +42,19 @@ export function hasSensitiveOpenAiCacheString(value: string): boolean {
 
 export function hasSensitiveOpenAiCachePath(value: string): boolean {
   return hasInlineSecret(value) || OPAQUE_CREDENTIAL_PATH_SEGMENT.test(value);
+}
+
+export function hasOpenAiGatewayCredentials(
+  headers: Record<string, string> | undefined,
+  apiUrl: string,
+): boolean {
+  const hasCredentialHeader = Object.entries(headers ?? {}).some(
+    ([name, value]) =>
+      Boolean(value?.trim()) &&
+      !isNonCredentialHeader(name) &&
+      !/^(?:x-(?:request|correlation)-id|traceparent|tracestate|baggage)$/i.test(name),
+  );
+  return hasCredentialHeader || hasSensitiveOpenAiCacheString(apiUrl);
 }
 
 const DEFAULT_MAX_TOOL_ITERATIONS = 8;

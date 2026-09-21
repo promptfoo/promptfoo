@@ -1,6 +1,6 @@
 ---
 sidebar_label: Echo
-description: Configure Echo Provider for testing and debugging LLM integrations with zero-cost pass-through responses, perfect for validating pre-generated outputs locally
+description: Use the Echo provider to test prompt rendering or run assertions on previously generated output.
 ---
 
 # Echo Provider
@@ -35,13 +35,12 @@ The Echo Provider returns a complete `ProviderResponse` object with the followin
 
 The Echo Provider requires no configuration. Promptfoo renders prompt variables before calling it.
 
-Set `delay` (in milliseconds) to test how your eval handles slow responses:
+Set `delay` on the provider (in milliseconds) to test how your eval handles slow responses:
 
 ```yaml
 providers:
   - id: echo
-    config:
-      delay: 500
+    delay: 500
 ```
 
 ### Example
@@ -81,7 +80,7 @@ The Echo Provider is useful for:
 
 ### Evaluating Logged Production Outputs
 
-A common pattern is evaluating LLM outputs that were already generated in production. This allows you to run assertions against real production data without making new API calls.
+Use Echo to run assertions against outputs already generated in production. Echo makes no API calls; model-graded assertions such as `llm-rubric` and `similar` can still call their grading or embedding provider.
 
 Use your logged output directly as the prompt:
 
@@ -102,7 +101,7 @@ tests:
         value: 'Paris'
 ```
 
-The echo provider returns the prompt as-is, so your logged output flows directly to assertions without any API calls.
+The echo provider returns the prompt as-is, so the assertions receive the logged output directly.
 
 For JSON-formatted production logs, use a default transform to extract specific fields:
 
@@ -137,6 +136,6 @@ This pattern is particularly useful for:
 - Post-deployment evaluation of production prompts
 - Regression testing against known outputs
 - A/B testing assertion strategies on historical data
-- Validating system behavior without API costs
+- Validating system behavior without calling the original model again
 
 For loading large volumes of logged outputs, test cases can be generated dynamically from [CSV files, Python scripts, JavaScript functions, or JSON](/docs/configuration/test-cases).

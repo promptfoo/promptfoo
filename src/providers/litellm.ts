@@ -2,6 +2,7 @@ import { getEnvString } from '../envars';
 import { OpenAiChatCompletionProvider } from './openai/chat';
 import { OpenAiCompletionProvider } from './openai/completion';
 import { OpenAiEmbeddingProvider } from './openai/embedding';
+import { hasOpenAiGatewayCredentials } from './openai/util';
 
 import type { EnvOverrides } from '../types/env';
 import type {
@@ -27,20 +28,23 @@ interface LiteLLMProviderOptions {
  * Base class for LiteLLM providers that maintains LiteLLM identity
  */
 abstract class LiteLLMProviderWrapper implements ApiProvider {
-  protected provider: ApiProvider;
+  protected provider:
+    | OpenAiChatCompletionProvider
+    | OpenAiCompletionProvider
+    | OpenAiEmbeddingProvider;
   protected providerType: string;
 
-  constructor(provider: ApiProvider, providerType: string) {
+  constructor(provider: LiteLLMProviderWrapper['provider'], providerType: string) {
     this.provider = provider;
     this.providerType = providerType;
   }
 
   get modelName(): string {
-    return (this.provider as any).modelName;
+    return this.provider.modelName;
   }
 
   get config(): any {
-    return (this.provider as any).config;
+    return this.provider.config;
   }
 
   id(): string {
@@ -71,17 +75,21 @@ abstract class LiteLLMProviderWrapper implements ApiProvider {
     context?: CallApiContextParams,
     options?: CallApiOptionsParams,
   ): Promise<ProviderResponse> {
-    return this.withAuthHint(await this.provider.callApi(prompt, context, options));
+    const headers =
+      this.providerType === 'chat'
+        ? (context?.prompt?.config?.headers ?? this.config.headers)
+        : this.config.headers;
+    return this.withAuthHint(await this.provider.callApi(prompt, context, options), headers);
   }
 
-  protected withAuthHint<T extends { error?: string }>(response: T): T {
-    const hasAuthHeader = Object.keys(this.config.headers ?? {}).some(
-      (header) => header.toLowerCase() === 'authorization',
-    );
+  protected withAuthHint<T extends { error?: string }>(
+    response: T,
+    headers: Record<string, string> | undefined = this.config.headers,
+  ): T {
     if (
       !response.error ||
       this.getApiKey?.() ||
-      hasAuthHeader ||
+      hasOpenAiGatewayCredentials(headers, this.provider.getApiUrl()) ||
       !/\b(?:401|unauthorized|authentication error|auth_error|invalid_api_key)\b/i.test(
         response.error.split('\n', 1)[0],
       )
