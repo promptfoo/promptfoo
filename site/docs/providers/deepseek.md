@@ -54,7 +54,7 @@ Use `deepseek:deepseek-flash` for V4.1 Flash, which supports text and image inpu
 
 V4 Pro supports text input, thinking and non-thinking modes, a 1M-token context window, and up to 384K output tokens.
 
-DeepSeek charges different peak and off-peak rates. Promptfoo has no built-in estimate for `deepseek-flash`, and its stored rates for older IDs do not track that schedule. Set `inputCost`, `outputCost`, and optionally `cacheReadCost` for an estimate using the [current rates](https://api-docs.deepseek.com/quick_start/pricing/).
+DeepSeek charges different peak and off-peak rates. Promptfoo has no built-in estimate for `deepseek-flash`, and its stored rates for older IDs do not track that schedule. Set `inputCost`, `outputCost`, and optionally `cacheReadCost` for an estimate using the [current rates](https://api-docs.deepseek.com/quick_start/pricing/). If a response uses tokens for which no rate is known, Promptfoo leaves the estimate unset.
 
 :::warning
 
