@@ -139,6 +139,31 @@ function findExtensionUnsafeRelativeSpecifiers(sourceText: string, filePath: str
 }
 
 describe('package manifests', () => {
+  it.each([
+    ['src/app/package.json', ['@vitest/browser', 'dedent', 'fast-deep-equal', 'zod']],
+    [
+      'site/package.json',
+      [
+        '@docusaurus/plugin-content-blog',
+        '@docusaurus/theme-common',
+        '@docusaurus/types',
+        '@swc/core',
+        'ajv',
+      ],
+    ],
+  ] as const)('declares direct imports in their owning workspace: %s', (manifest, dependencies) => {
+    const workspace = readPackageJson<PackageManifest>(manifest);
+    const declaredDependencies = {
+      ...workspace.dependencies,
+      ...workspace.devDependencies,
+      ...workspace.optionalDependencies,
+    };
+
+    for (const dependency of dependencies) {
+      expect(declaredDependencies, manifest).toHaveProperty(dependency);
+    }
+  });
+
   it('publishes the lightweight contracts subpath', () => {
     const packageJson = readPackageJson<{
       exports?: Record<string, unknown>;
@@ -371,24 +396,47 @@ describe('package manifests', () => {
     }
   });
 
-  it('lets consumers omit separately installed provider SDKs', () => {
+  it('lets consumers omit separately installed features and platform binaries', () => {
     const packageJson = readPackageJson<PackageManifest>('package.json');
+    const sitePackageJson = readPackageJson<PackageManifest>('site/package.json');
     const packageLock =
       readPackageJson<PackageLockManifest<{ optional?: boolean }>>('package-lock.json');
+    const platformBindings = Object.keys({
+      ...packageJson.dependencies,
+      ...packageJson.optionalDependencies,
+    }).filter((dependency) =>
+      ['@rollup/rollup-', '@swc/core-'].some((prefix) => dependency.startsWith(prefix)),
+    );
 
     for (const dependency of [
+      '@anthropic-ai/claude-agent-sdk',
       '@langfuse/client',
       '@modelcontextprotocol/sdk',
       '@openai/codex-security',
       '@opencode-ai/sdk',
       '@slack/web-api',
+      '@swc/core',
+      'hono',
       'ibm-cloud-sdk-core',
+      'read-excel-file',
+      'sharp',
+      ...platformBindings,
     ]) {
       expect(packageJson.optionalDependencies, dependency).toHaveProperty(dependency);
       expect(packageJson.dependencies, dependency).not.toHaveProperty(dependency);
     }
 
-    for (const dependency of ['@openai/codex-security', '@opencode-ai/sdk', '@slack/web-api']) {
+    expect(packageJson.devDependencies).not.toHaveProperty('sharp');
+    expect(sitePackageJson.optionalDependencies).toHaveProperty('sharp');
+    expect(sitePackageJson.dependencies).not.toHaveProperty('sharp');
+    expect(sitePackageJson.devDependencies).not.toHaveProperty('sharp');
+
+    for (const dependency of [
+      '@openai/codex-security',
+      '@opencode-ai/sdk',
+      '@rollup/rollup-linux-x64-gnu',
+      '@slack/web-api',
+    ]) {
       expect(packageLock.packages[`node_modules/${dependency}`]?.optional, dependency).toBe(true);
     }
   });

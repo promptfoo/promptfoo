@@ -91,10 +91,9 @@ describe('release-please automation', () => {
     expect(Number(driftStep.env?.MAX_DRIFT)).toBe(searchDepth - MIN_RELEASE_HISTORY_HEADROOM);
   });
 
-  it('pins the release-please job action to an immutable commit SHA', () => {
-    const workflow = yaml.load(
-      readRepoFile('.github/workflows/release-please.yml'),
-    ) as ReleasePleaseWorkflow;
+  it('pins the release-please job action to an immutable commit that Renovate can track', () => {
+    const workflowYaml = readRepoFile('.github/workflows/release-please.yml');
+    const workflow = yaml.load(workflowYaml) as ReleasePleaseWorkflow;
 
     // Scope to the actual step in the release-please job so the assertion can't
     // be satisfied by a stray match elsewhere (other job, commented-out line).
@@ -107,5 +106,9 @@ describe('release-please automation', () => {
     );
 
     expect(releaseStep.uses).toMatch(new RegExp(`^${RELEASE_PLEASE_ACTION}@[0-9a-f]{40}$`));
+    const usesLine = workflowYaml
+      .split('\n')
+      .find((line) => line.includes(`uses: ${releaseStep.uses}`));
+    expect(usesLine).toMatch(/#\s+[\w./-]+\s*$/);
   });
 });
