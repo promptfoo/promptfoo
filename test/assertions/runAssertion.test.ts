@@ -1897,6 +1897,19 @@ describe('runAssertion', () => {
   });
 
   describe.each(['webhook', 'not-webhook'] as const)('%s response validation', (type) => {
+    const checkResponse = (json: string) => {
+      vi.mocked(fetchWithRetries).mockResolvedValueOnce(
+        new Response(json, { headers: { 'Content-Type': 'application/json' } }),
+      );
+      return runAssertion({
+        prompt: 'Some prompt',
+        assertion: { ...webhookAssertion, type },
+        test: {} as AtomicTestCase,
+        providerResponse: { output: 'Expected output' },
+        provider: createMockProvider(),
+      });
+    };
+
     it.each([
       {},
       { error: 'Grader unavailable' },
@@ -1912,22 +1925,7 @@ describe('runAssertion', () => {
       true,
       'false',
     ])('rejects a response without a boolean pass: %j', async (response) => {
-      vi.mocked(fetchWithRetries).mockResolvedValueOnce(
-        new Response(JSON.stringify(response), {
-          status: 200,
-          headers: { 'Content-Type': 'application/json' },
-        }),
-      );
-
-      const result = await runAssertion({
-        prompt: 'Some prompt',
-        assertion: { ...webhookAssertion, type },
-        test: {} as AtomicTestCase,
-        providerResponse: { output: 'Expected output' },
-        provider: createMockProvider(),
-      });
-
-      expect(result).toMatchObject({
+      await expect(checkResponse(JSON.stringify(response))).resolves.toMatchObject({
         pass: false,
         score: 0,
         reason:
@@ -1935,71 +1933,26 @@ describe('runAssertion', () => {
       });
     });
 
-    it.each([true, false])('preserves a valid pass value of %s', async (pass) => {
-      vi.mocked(fetchWithRetries).mockResolvedValueOnce(
-        new Response(JSON.stringify({ pass, score: 0.25, reason: 'Custom grade' }), {
-          status: 200,
-          headers: { 'Content-Type': 'application/json' },
-        }),
-      );
-
-      const result = await runAssertion({
-        prompt: 'Some prompt',
-        assertion: { ...webhookAssertion, type },
-        test: {} as AtomicTestCase,
-        providerResponse: { output: 'Expected output' },
-        provider: createMockProvider(),
-      });
-
+    it.each([
+      [true, undefined, 1],
+      [false, undefined, 0],
+      [true, 0, 0],
+      [true, 0.25, 0.25],
+      [false, 0.25, 0.25],
+      [true, 1, 1],
+    ] as const)('preserves pass %s and score %s', async (pass, score, expectedScore) => {
+      const result = await checkResponse(JSON.stringify({ pass, score, reason: 'Custom grade' }));
       expect(result).toMatchObject({
         pass: type === 'webhook' ? pass : !pass,
-        score: type === 'webhook' ? 0.25 : 0.75,
-        reason: 'Custom grade',
-      });
-    });
-
-    it.each([undefined, 0, 1])('accepts an omitted or boundary score: %s', async (score) => {
-      vi.mocked(fetchWithRetries).mockResolvedValueOnce(
-        new Response(JSON.stringify({ pass: true, score }), {
-          status: 200,
-          headers: { 'Content-Type': 'application/json' },
-        }),
-      );
-
-      const result = await runAssertion({
-        prompt: 'Some prompt',
-        assertion: { ...webhookAssertion, type },
-        test: {} as AtomicTestCase,
-        providerResponse: { output: 'Expected output' },
-        provider: createMockProvider(),
-      });
-
-      const expectedScore = score ?? 1;
-      expect(result).toMatchObject({
-        pass: type === 'webhook',
         score: type === 'webhook' ? expectedScore : 1 - expectedScore,
+        reason: 'Custom grade',
       });
     });
 
     it.each(['null', '"0.5"', 'false', '-0.1', '1.1', '1e400', '-1e400'])(
       'rejects an invalid JSON score: %s',
       async (score) => {
-        vi.mocked(fetchWithRetries).mockResolvedValueOnce(
-          new Response(`{"pass":true,"score":${score}}`, {
-            status: 200,
-            headers: { 'Content-Type': 'application/json' },
-          }),
-        );
-
-        const result = await runAssertion({
-          prompt: 'Some prompt',
-          assertion: { ...webhookAssertion, type },
-          test: {} as AtomicTestCase,
-          providerResponse: { output: 'Expected output' },
-          provider: createMockProvider(),
-        });
-
-        expect(result).toMatchObject({
+        await expect(checkResponse(`{"pass":true,"score":${score}}`)).resolves.toMatchObject({
           pass: false,
           score: 0,
           reason:

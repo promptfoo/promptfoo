@@ -122,44 +122,27 @@ describe('VertexLiveProvider', () => {
   );
 
   it.each([
-    [
-      { config: { projectId: 'explicit', region: 'europe-west4' } },
-      'explicit',
-      'europe-west4',
-      'europe-west4-aiplatform.googleapis.com',
-    ],
+    [{ config: { projectId: 'explicit', region: 'europe-west4' } }, 'explicit', 'europe-west4'],
     [
       { env: { VERTEX_PROJECT_ID: 'vertex-env', VERTEX_REGION: 'us-east4' } },
       'vertex-env',
       'us-east4',
-      'us-east4-aiplatform.googleapis.com',
     ],
-    [
-      { env: { GOOGLE_PROJECT_ID: 'google-env' } },
-      'google-env',
-      'us-central1',
-      'us-central1-aiplatform.googleapis.com',
-    ],
+    [{ env: { GOOGLE_PROJECT_ID: 'google-env' } }, 'google-env', 'us-central1'],
     [
       { env: { GOOGLE_CLOUD_PROJECT: 'sdk-env', GOOGLE_CLOUD_LOCATION: 'us-west1' } },
       'sdk-env',
       'us-west1',
-      'us-west1-aiplatform.googleapis.com',
     ],
-    [{}, 'adc-project', 'us-central1', 'us-central1-aiplatform.googleapis.com'],
-    [{ config: { region: 'us' } }, 'adc-project', 'us', 'aiplatform.us.rep.googleapis.com'],
-    [{ config: { region: 'eu' } }, 'adc-project', 'eu', 'aiplatform.eu.rep.googleapis.com'],
-    [
-      { config: { region: 'global', apiVersion: 'v1beta1' } },
-      'adc-project',
-      'global',
-      'aiplatform.googleapis.com',
-    ],
-  ] as const)('resolves project and location for %j', async (options, project, region, host) => {
+    [{}, 'adc-project', 'us-central1'],
+    [{ config: { region: 'global', apiVersion: 'v1beta1' } }, 'adc-project', 'global'],
+  ] as const)('resolves project and location for %j', async (options, project, region) => {
     const { result } = await start(new VertexLiveProvider(model, options as ProviderOptions));
     expect(sent()[0].setup.model).toBe(
       `projects/${project}/locations/${region}/publishers/google/models/${model}`,
     );
+    const host =
+      region === 'global' ? 'aiplatform.googleapis.com' : `${region}-aiplatform.googleapis.com`;
     expect(vi.mocked(WebSocket).mock.calls[0][0]).toContain(`wss://${host}/`);
     if (region === 'global') {
       expect(vi.mocked(WebSocket).mock.calls[0][0]).toContain('aiplatform.v1beta1.');

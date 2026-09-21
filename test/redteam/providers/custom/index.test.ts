@@ -289,21 +289,14 @@ describe('CustomProvider', () => {
   });
 
   it('passes the rendered turn variables and session context to the target', async () => {
-    const provider = new CustomProvider({
-      injectVar: 'objective',
-      strategyText: 'Custom strategy',
-      maxTurns: 1,
-      redteamProvider: mockRedTeamProvider,
-      stateful: true,
-    });
     const context = {
       originalProvider: mockTargetProvider,
-      vars: { objective: 'original objective', sessionId: 'existing-session' },
+      vars: { objective: 'original objective', sessionId: 'existing-session', literal: 'value\n' },
       prompt: { raw: '{{objective}}', label: 'test' },
     };
     mockTargetProvider.callApi.mockResolvedValue({ output: 'target response' });
 
-    await (provider as any).sendPrompt(
+    await (customProvider as any).sendPrompt(
       'rendered attack',
       context.prompt,
       context.vars,
@@ -316,10 +309,12 @@ describe('CustomProvider', () => {
     expect(mockTargetProvider.callApi).toHaveBeenCalledWith(
       'rendered attack',
       expect.objectContaining({
-        vars: { objective: 'rendered attack', sessionId: 'existing-session' },
+        ...context,
+        vars: { ...context.vars, objective: 'rendered attack' },
       }),
       undefined,
     );
+    expect(context.vars.objective).toBe('original objective');
   });
 
   it('should include sessionId from target response when stateful is true', async () => {

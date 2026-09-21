@@ -894,9 +894,10 @@ export class CustomProvider implements ApiProvider {
   ): Promise<{ response: TargetResponse; transformResult?: TransformResult }> {
     let lastTransformResult: TransformResult | undefined;
 
+    const targetVars = { ...vars, [this.config.injectVar]: attackPrompt };
     const renderedPrompt = await renderPrompt(
       originalPrompt,
-      { ...vars, [this.config.injectVar]: attackPrompt },
+      { ...targetVars },
       filters,
       provider,
       [this.config.injectVar], // Skip template rendering for injection variable to prevent double-evaluation
@@ -1007,14 +1008,10 @@ export class CustomProvider implements ApiProvider {
     );
     logger.debug(finalTargetPrompt);
 
-    // Target providers may resolve templates, sessions, or cache keys from context.vars.
-    // Preserve that context while giving them the exact variables used to render this turn.
-    const targetVars = { ...vars, [this.config.injectVar]: attackPrompt };
-    const targetContext = context ? { ...context, vars: targetVars } : context;
     let targetResponse = await getTargetResponse(
       provider,
       finalTargetPrompt,
-      targetContext,
+      context && { ...context, vars: targetVars },
       options,
     );
     for (const message of pendingMessages) {
