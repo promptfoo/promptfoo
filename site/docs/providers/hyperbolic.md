@@ -6,7 +6,7 @@ description: Configure Hyperbolic's OpenAI-compatible API to access DeepSeek, Qw
 
 # Hyperbolic
 
-The `hyperbolic` provider supports [Hyperbolic's API](https://docs.hyperbolic.xyz), which provides access to various LLM, image generation, audio generation, and vision-language models through an [OpenAI-compatible API format](/docs/providers/openai). This makes it easy to integrate into existing applications that use the OpenAI SDK.
+The `hyperbolic` provider calls [Hyperbolic](https://docs.hyperbolic.xyz) text and vision models through its [OpenAI-compatible chat API](/docs/providers/openai). It uses Hyperbolic's native endpoints for image and audio generation.
 
 ## Setup
 
@@ -263,20 +263,14 @@ Example prompt template (`prompts/coding_assistant.json`):
 
 ## Cost Information
 
-promptfoo ships a built-in price table for Hyperbolic models and uses it to report per-result
-cost, so evals show spend without extra configuration. Text models are priced per input and
-output token, image models per generated image, and the Melo TTS endpoint per character.
-
-That built-in table is a point-in-time snapshot. Treat
-[Hyperbolic's pricing page](https://docs.hyperbolic.xyz/docs/hyperbolic-pricing) as the source
-of truth and override any model whose rate has moved:
+Promptfoo estimates costs from token usage for text, per request for images, and per input character for Melo TTS. Confirm current inference rates with [Hyperbolic](https://docs.hyperbolic.ai/docs/general/support). You can override the text rates:
 
 ```yaml
 providers:
   - id: hyperbolic:deepseek-ai/DeepSeek-R1
     config:
-      inputCost: 0.0000005 # $0.50 per 1M tokens divided by 1,000,000
-      outputCost: 0.00000218 # $2.18 per 1M tokens divided by 1,000,000
+      inputCost: 0.0000005 # Example: $0.50 per million input tokens
+      outputCost: 0.00000218 # Example: $2.18 per million output tokens
 ```
 
 `inputCost` and `outputCost` are in USD per token and take precedence over the shared `cost`
@@ -284,18 +278,15 @@ fallback.
 
 ### Text Models
 
-Billed per input and output token at separate rates. Override with `inputCost` and `outputCost`.
+Text estimates use separate input and output token rates.
 
 ### Image Models
 
-Billed per generated image, and the price scales with resolution and step count. Override with
-`cost`.
+Promptfoo uses a fixed estimate for each image model. It does not adjust for resolution or step count, and `config.cost` does not override it.
 
 ### Audio Models
 
-Billed per character of input text. promptfoo follows Hyperbolic's
-[audio pricing documentation](https://www.hyperbolic.ai/docs/inference/audio-apis#pricing) for the
-native Melo TTS endpoint.
+Promptfoo estimates costs per character of input text for the native Melo TTS endpoint. Hyperbolic's [audio documentation](https://www.hyperbolic.ai/docs/inference/audio-apis#pricing) lists pricing and says that Melo TTS will be discontinued.
 
 ## Getting Started
 
@@ -309,9 +300,6 @@ This includes tested configurations for text generation, image creation, audio s
 
 ## Notes
 
-- **Model availability and rate limits depend on your account tier.** Both are set by
-  Hyperbolic, not promptfoo; see [Hyperbolic's documentation](https://docs.hyperbolic.xyz) for
-  the current tiers, deposit thresholds, and per-minute limits. If a model 404s or you see
-  429s, check your tier before changing the promptfoo config.
-- All endpoints use OpenAI-compatible format for easy integration
-- VLM models support multimodal inputs (text + images)
+- Check [Hyperbolic's documentation](https://docs.hyperbolic.xyz) for model availability and rate limits for your account tier.
+- Chat uses the OpenAI format; image and audio use Hyperbolic's native endpoints.
+- Vision models accept text and images.
