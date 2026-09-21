@@ -7,7 +7,7 @@ description: Configure Amazon Bedrock for LLM evals with Claude, Llama, Nova, an
 
 # Bedrock
 
-The `bedrock` provider lets you use Amazon Bedrock in your evals. It supports Bedrock model IDs directly, including regional IDs and inference profile IDs. Because AWS changes the Bedrock catalog over time, use the [AWS supported models documentation](https://docs.aws.amazon.com/bedrock/latest/userguide/models-supported.html), [model IDs documentation](https://docs.aws.amazon.com/bedrock/latest/userguide/model-ids.html#model-ids-arns), or `aws bedrock list-foundation-models` as the source of truth for current model IDs and regional availability.
+The `bedrock` provider accepts Amazon Bedrock model IDs, including regional IDs and inference profile IDs. Check [AWS's supported models](https://docs.aws.amazon.com/bedrock/latest/userguide/models-supported.html), [model IDs](https://docs.aws.amazon.com/bedrock/latest/userguide/model-ids.html#model-ids-arns), or `aws bedrock list-foundation-models` for current IDs and regional availability.
 
 ## Setup
 

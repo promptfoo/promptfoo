@@ -5,7 +5,7 @@ description: Configure multiple LLM providers including Claude, GPT, and Gemini 
 
 # LLM Providers
 
-Providers in promptfoo are the interfaces to various language models and AI services. They can also be specified as `targets` in your config — the two keys are interchangeable. This guide will help you understand how to configure and use providers in your promptfoo evaluations.
+Providers connect Promptfoo to language models and AI services. In your config, `providers` and `targets` are interchangeable.
 
 ## Quick Start
 
@@ -50,7 +50,7 @@ providers:
 | [Atlas Cloud](./atlascloud.md)                          | OpenAI-compatible AI model aggregation platform                  | `atlascloud:deepseek-v3`                                                                                              |
 | [AWS Bedrock](./aws-bedrock.md)                         | AWS-hosted models from various providers                         | `bedrock:us.anthropic.claude-opus-4-6-v1`                                                                             |
 | [AWS Bedrock Agents](./bedrock-agents.md)               | Amazon Bedrock Agents for orchestrating AI workflows             | `bedrock-agent:YOUR_AGENT_ID`                                                                                         |
-| [Amazon SageMaker](./sagemaker.md)                      | Models deployed on SageMaker endpoints                           | `sagemaker:my-endpoint-name`                                                                                          |
+| [Amazon SageMaker](./sagemaker.md)                      | Models deployed on SageMaker endpoints                           | `sagemaker:custom:my-endpoint-name`                                                                                   |
 | [Azure OpenAI](./azure.md)                              | Azure-hosted OpenAI models                                       | `azure:chat:my-deployment-name`                                                                                       |
 | [Cerebras](./cerebras.md)                               | High-performance inference API for Llama models                  | `cerebras:llama-4-scout-17b-16e-instruct`                                                                             |
 | [Cloudflare AI](./cloudflare-ai.md)                     | Cloudflare's OpenAI-compatible AI platform                       | `cloudflare-ai:@cf/deepseek-ai/deepseek-r1-distill-qwen-32b`                                                          |
