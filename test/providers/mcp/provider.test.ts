@@ -62,7 +62,7 @@ describe('MCPProvider', () => {
       config: {
         enabled: true,
         defaultArgs: { session_id: 'sess-1', user_role: 'customer' },
-      } as any,
+      },
     });
     await provider.callApi(
       '',
@@ -89,6 +89,21 @@ describe('MCPProvider', () => {
       session_id: 'from-options',
       id: '123',
     });
+  });
+
+  it('applies defaults to direct tool calls and reports the arguments actually sent', async () => {
+    mcpClientMock.callTool.mockResolvedValue({ content: 'ok', raw: {} });
+    const provider = new MCPProvider({
+      config: { enabled: true, defaultArgs: { session: 'default', role: 'customer' } },
+    });
+
+    const result = await provider.callTool('lookup_user', { role: 'admin' });
+
+    expect(mcpClientMock.callTool).toHaveBeenCalledWith('lookup_user', {
+      session: 'default',
+      role: 'admin',
+    });
+    expect(result.metadata?.toolArgs).toEqual({ session: 'default', role: 'admin' });
   });
 
   it('should preserve MCP tool error results as direct provider output', async () => {

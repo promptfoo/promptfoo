@@ -5,7 +5,7 @@ description: Configure Echo Provider for testing and debugging LLM integrations 
 
 # Echo Provider
 
-The Echo Provider is a simple utility provider that returns the input prompt as the output. It's particularly useful for testing, debugging, and validating pre-generated outputs without making any external API calls.
+The Echo Provider returns the input prompt as its output. Use it to test configurations or validate existing outputs without an external API call.
 
 ## Configuration
 
@@ -33,10 +33,9 @@ The Echo Provider returns a complete `ProviderResponse` object with the followin
 
 ## Usage
 
-The Echo Provider requires no additional configuration and returns the input after performing any variable substitutions.
+The Echo Provider requires no configuration. Promptfoo renders prompt variables before calling it.
 
-It accepts one option, `delay` (milliseconds), which sleeps before responding — useful for
-exercising timeout and concurrency behavior:
+Set `delay` (in milliseconds) to test how your eval handles slow responses:
 
 ```yaml
 providers:

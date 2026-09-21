@@ -34,9 +34,6 @@ export class MCPProvider implements ApiProvider {
 
   constructor(options: MCPProviderOptions = {}) {
     this.config = McpConfigSchema.parse(options.config ?? {});
-    // `defaultArgs` is documented as a `config` key, but the registry constructs this provider
-    // with only `{ config, id }`. Read it from config so YAML configs work, keeping the
-    // constructor option for programmatic callers.
     this.defaultArgs = options.defaultArgs ?? this.config.defaultArgs ?? {};
 
     this.mcpClient = new MCPClient(this.config);
@@ -169,7 +166,8 @@ export class MCPProvider implements ApiProvider {
     try {
       await this.initializationPromise;
 
-      const result = await this.mcpClient.callTool(toolName, args);
+      const toolArgs = { ...this.defaultArgs, ...args };
+      const result = await this.mcpClient.callTool(toolName, toolArgs);
 
       if (result.error) {
         return {
@@ -179,7 +177,7 @@ export class MCPProvider implements ApiProvider {
 
       return this.transformToolResult(result, {
         toolName,
-        toolArgs: args,
+        toolArgs,
       });
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : String(error);

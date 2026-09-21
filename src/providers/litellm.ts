@@ -1,6 +1,4 @@
 import { getEnvString } from '../envars';
-import logger from '../logger';
-import { resolveProviderApiKey } from './credentials';
 import { OpenAiChatCompletionProvider } from './openai/chat';
 import { OpenAiCompletionProvider } from './openai/completion';
 import { OpenAiEmbeddingProvider } from './openai/embedding';
@@ -73,7 +71,28 @@ abstract class LiteLLMProviderWrapper implements ApiProvider {
     context?: CallApiContextParams,
     options?: CallApiOptionsParams,
   ): Promise<ProviderResponse> {
-    return this.provider.callApi(prompt, context, options);
+    return this.withAuthHint(await this.provider.callApi(prompt, context, options));
+  }
+
+  protected withAuthHint<T extends { error?: string }>(response: T): T {
+    const hasAuthHeader = Object.keys(this.config.headers ?? {}).some(
+      (header) => header.toLowerCase() === 'authorization',
+    );
+    if (
+      !response.error ||
+      this.getApiKey?.() ||
+      hasAuthHeader ||
+      !/\b(?:401|unauthorized|authentication error|auth_error|invalid_api_key)\b/i.test(
+        response.error.split('\n', 1)[0],
+      )
+    ) {
+      return response;
+    }
+
+    return {
+      ...response,
+      error: `${response.error}\nNo LiteLLM API key was configured. Set LITELLM_API_KEY or the provider's apiKey or apiKeyEnvar. OPENAI_API_KEY is not used by default.`,
+    };
   }
 
   getApiKey?: () => string | undefined;
@@ -122,7 +141,7 @@ class LiteLLMEmbeddingProvider extends LiteLLMProviderWrapper implements ApiEmbe
   }
 
   async callEmbeddingApi(text: string): Promise<ProviderEmbeddingResponse> {
-    return this.embeddingProvider.callEmbeddingApi(text);
+    return this.withAuthHint(await this.embeddingProvider.callEmbeddingApi(text));
   }
 }
 
@@ -191,19 +210,6 @@ export function createLiteLLMProvider(
     }
   });
 
-  // `apiKeyRequired: false` means a missing key produces no Authorization header and no error,
-  // so an authenticated proxy just returns 401. Surface it here instead of failing silently.
-  if (
-    !resolveProviderApiKey(mergedConfig, options.config?.env ?? options.env, ['LITELLM_API_KEY'])
-  ) {
-    logger.warn(
-      '[LiteLLM] No API key resolved; requests will be sent without an Authorization header. ' +
-        'Set LITELLM_API_KEY (or `apiKey` in the provider config) if your proxy requires auth. ' +
-        'OPENAI_API_KEY is not used for LiteLLM: credentials are not shared across providers.',
-      { apiKeyEnvar: mergedConfig.apiKeyEnvar, apiBaseUrl: resolvedApiBaseUrl },
-    );
-  }
-
   // Construct the provider options
   const litellmConfig: ProviderOptions = {
     id: options.config?.id,
@@ -211,7 +217,7 @@ export function createLiteLLMProvider(
     prompts: options.config?.prompts,
     transform: options.config?.transform,
     delay: options.config?.delay,
-    env: options.config?.env,
+    env: options.config?.env ?? options.env,
     config: mergedConfig,
   };
 

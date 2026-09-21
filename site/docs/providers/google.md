@@ -265,7 +265,9 @@ Example migration:
 # Before (Google AI Studio)
 providers:
   - google:gemini-2.5-pro
+```
 
+```yaml
 # After (Vertex AI)
 providers:
   - id: vertex:gemini-2.5-pro
@@ -778,14 +780,12 @@ Configure system-level instructions for the model:
 providers:
   - id: google:gemini-2.5-pro
     config:
-      # Direct text
       systemInstruction: 'You are a helpful assistant'
-
-      # Or load from file
-      systemInstruction: file://system-instruction.txt
+      # To load from a file instead, use:
+      # systemInstruction: file://system-instruction.txt
 ```
 
-System instructions support Nunjucks templating and can be loaded from external files for better organization and reusability.
+System instructions support Nunjucks templates and can be loaded from a file.
 
 ### Role Mapping Configuration
 

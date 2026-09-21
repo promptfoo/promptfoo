@@ -5,7 +5,7 @@ description: Configure DeepSeek's OpenAI-compatible API with V4 chat and reasoni
 
 # DeepSeek
 
-[DeepSeek](https://platform.deepseek.com/) provides an OpenAI-compatible API for their language models, with specialized models for both general chat and advanced reasoning tasks. The DeepSeek provider is compatible with all the options provided by the [OpenAI provider](/docs/providers/openai/).
+[DeepSeek](https://platform.deepseek.com/) provides an OpenAI-compatible chat API. The provider accepts [OpenAI chat options](/docs/providers/openai/); DeepSeek determines which options each model supports.
 
 ## Setup
 
@@ -18,11 +18,12 @@ Basic configuration example:
 
 ```yaml
 providers:
-  - id: deepseek:deepseek-v4-flash
+  - id: deepseek:deepseek-flash
     config:
       temperature: 0.7
       max_tokens: 4000
-      apiKey: YOUR_DEEPSEEK_API_KEY
+      passthrough:
+        thinking: { type: disabled }
 
   - id: deepseek:deepseek-v4-pro
     config:
@@ -33,41 +34,26 @@ providers:
 
 - `temperature`
 - `max_tokens`
-- `cost`, `inputCost`, `outputCost` - Override promptfoo's pricing estimates (`inputCost` and `outputCost` take precedence over `cost`)
+- `cost`, `inputCost`, `outputCost`, `cacheReadCost` - Set cost estimates in USD per token. `inputCost` and `outputCost` take precedence over `cost`; `cacheReadCost` sets a separate cached-input rate.
 - `top_p`, `presence_penalty`, `frequency_penalty`
 - `stream`
 - `showThinking` - Control whether reasoning content is included in the output (default: `true`, applies to thinking-capable models)
 
 ## Available Models
 
-:::note
+DeepSeek lists `deepseek-flash` and `deepseek-v4-pro` in its [model catalog](https://api-docs.deepseek.com/quick_start/pricing/). The older `deepseek-chat` and `deepseek-reasoner` IDs are retired. The shorthand `deepseek:` uses `deepseek-flash` with thinking disabled; use the full ID for DeepSeek's default thinking mode.
 
-Use `deepseek-v4-flash` and `deepseek-v4-pro`. The older `deepseek-chat` and `deepseek-reasoner`
-names are retired aliases; a bare `deepseek:` provider id still resolves to `deepseek-chat` for
-backward compatibility, so name a model explicitly.
-
-:::
+<span id="deepseek-flash" />
 
 ### deepseek-v4-flash
 
-- General purpose V4 model for conversations and reasoning
-- 1M context window, up to 384K output tokens
-- Input: $0.0028/1M (cache hit), $0.14/1M (cache miss)
-- Output: $0.28/1M
+Use `deepseek:deepseek-flash` for V4.1 Flash, which supports text and image inputs. The older `deepseek-v4-flash` ID temporarily routes to the same model. It supports a 1M-token context window and up to 384K output tokens.
 
 ### deepseek-v4-pro
 
-- Higher-capability V4 model with thinking and non-thinking modes
-- 1M context window, up to 384K output tokens
-- Input: $0.003625/1M (cache hit), $0.435/1M (cache miss)
-- Output: $0.87/1M
+V4 Pro supports text input, thinking and non-thinking modes, a 1M-token context window, and up to 384K output tokens.
 
-The rates above are the ones promptfoo uses to report per-result cost. They are a point-in-time
-snapshot — check [DeepSeek's pricing page](https://api-docs.deepseek.com/quick_start/pricing) for
-current rates, and override a moved rate with `inputCost`/`outputCost` (USD per token).
-
-Thinking-capable models support showing or hiding reasoning content through the `showThinking`
-parameter.
+DeepSeek charges different peak and off-peak rates. Promptfoo has no built-in estimate for `deepseek-flash`, and its stored rates for older IDs do not track that schedule. Set `inputCost`, `outputCost`, and optionally `cacheReadCost` for an estimate using the [current rates](https://api-docs.deepseek.com/quick_start/pricing/).
 
 :::warning
 
@@ -77,7 +63,7 @@ Thinking mode does not support `temperature`, `top_p`, `presence_penalty`, `freq
 
 ## Example Usage
 
-Here's an example comparing DeepSeek with OpenAI on reasoning tasks:
+Compare DeepSeek with OpenAI on a reasoning task:
 
 ```yaml
 providers:
@@ -86,8 +72,6 @@ providers:
       max_tokens: 8000
       showThinking: true # Include reasoning content in output (default)
   - id: openai:o1
-    config:
-      temperature: 0.0
 
 prompts:
   - 'Solve this step by step: {{math_problem}}'
@@ -99,8 +83,7 @@ tests:
 
 ### Controlling Reasoning Output
 
-Thinking mode includes detailed reasoning steps in the output. Control whether that reasoning
-content is shown with the `showThinking` parameter:
+Set `showThinking: false` to exclude reasoning content from the output:
 
 ```yaml
 providers:
@@ -109,7 +92,7 @@ providers:
       showThinking: false # Hide reasoning content from output
 ```
 
-When `showThinking` is set to `true` (default), the output includes both reasoning and the final answer in a standardized format:
+With `showThinking: true` (the default), the output includes reasoning when DeepSeek returns it:
 
 ```
 Thinking: <reasoning content>
@@ -117,7 +100,7 @@ Thinking: <reasoning content>
 <final answer>
 ```
 
-When set to `false`, only the final answer is included in the output. This is useful when you want better reasoning quality but don't want to expose the reasoning process to end users or in your assertions.
+With `showThinking: false`, assertions see only the final answer. This option does not turn off thinking at the API; use `config.passthrough.thinking: { type: disabled }` for that.
 
 See our [complete example](https://github.com/promptfoo/promptfoo/tree/main/examples/compare-deepseek-r1-vs-openai-o1) that benchmarks it against OpenAI's o1 model on the MMLU reasoning tasks.
 
@@ -125,7 +108,7 @@ See our [complete example](https://github.com/promptfoo/promptfoo/tree/main/exam
 
 - Base URL: `https://api.deepseek.com/v1`
 - OpenAI-compatible API format
-- Full [API documentation](https://platform.deepseek.com/docs)
+- [DeepSeek API documentation](https://api-docs.deepseek.com/)
 
 ## See Also
 

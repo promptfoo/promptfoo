@@ -6,9 +6,9 @@ description: Use Model Context Protocol (MCP) servers as providers in promptfoo 
 
 # MCP (Model Context Protocol) Provider
 
-The `mcp` provider allows you to use Model Context Protocol (MCP) servers directly as providers in promptfoo. This is particularly useful for red teaming and testing agentic systems that rely on MCP tools for function calling, data access, and external integrations.
+The `mcp` provider calls Model Context Protocol (MCP) tools directly, so you can test or red team the server itself.
 
-Unlike the [MCP integration for other providers](../integrations/mcp.md), the MCP provider treats the MCP server itself as the target system under test, allowing you to evaluate security vulnerabilities and robustness of MCP-based applications.
+To give MCP tools to a model you're testing, use the [MCP integration for other providers](../integrations/mcp.md).
 
 ## Setup
 
@@ -75,7 +75,7 @@ providers:
     config:
       enabled: true
       server:
-        path: ./mcp_server/index.js # .js runs under Node, .py under python3
+        path: ./mcp_server/index.js # .js runs with Node; .py runs with Python
         name: local-server
 ```
 
@@ -294,7 +294,7 @@ providers:
       timeout: 900000 # Request timeout in milliseconds (15 minutes)
       debug: true # Enable debug logging
       verbose: true # Enable verbose output
-      defaultArgs: # Merged into every tool call; per-call arguments win
+      defaultArgs: # Tool call arguments override these defaults
         session_id: 'test-session'
         user_role: 'customer'
 ```

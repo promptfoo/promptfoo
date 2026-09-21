@@ -144,7 +144,7 @@ Microsoft's [model lifecycle table](https://learn.microsoft.com/azure/foundry/op
 
 Azure does not document the bare `gpt-5.6` alias. Deploy a concrete tier, then use your customer-defined deployment name with `azure:chat:` or `azure:responses:`. Promptfoo accepts arbitrary deployment names and auto-detects GPT-5 reasoning behavior when the name includes a recognizable GPT-5 model ID. Built-in standard and long-context cost estimates are available when the deployment name exactly matches `gpt-5.6`, `gpt-5.6-sol`, `gpt-5.6-terra`, or `gpt-5.6-luna`; an opaque alias cannot be matched automatically, so no cost is reported for it. Separately, set `isReasoningModel: true` on an opaque alias to keep GPT-5 reasoning request behavior (this does not affect cost matching).
 
-The Azure pricing table also recognizes `gpt-5.5-pro`, `gpt-5.2-pro`, their dated snapshots, and current `gpt-audio`/`gpt-realtime` aliases and dated snapshots (each family's mini and 1.5 variants included). For the models Azure publishes priority rates for (the GPT-5.6 family and several GPT-5.1–5.5 snapshots), cost estimates apply the priority multiplier when the request carries `service_tier: priority`. Set it under `passthrough` — that is the only form sent on the wire for `azure:chat`, `azure:completion`, and `azure:responses`. Audio-capable models report separate text and audio-token costs, and cached input tokens are billed at the catalog's discounted cache-read rates across the supported model families.
+The Azure pricing table also recognizes `gpt-5.5-pro`, `gpt-5.2-pro`, their dated snapshots, and `gpt-audio` and `gpt-realtime` aliases (including mini and 1.5 variants). For models with published priority rates, including GPT-5.6 and several GPT-5.1 to GPT-5.5 snapshots, set `passthrough.service_tier: priority` on `azure:chat`, `azure:completion`, or `azure:responses`. Promptfoo then applies the priority rate to its estimate. It also tracks text and audio tokens separately and uses discounted cached-input rates where available.
 
 ### Azure Realtime API
 
@@ -183,10 +183,9 @@ providers:
       apiVersion: 'preview'
 ```
 
-Use `azure:responses`, not `openai:responses`, for Azure deployments. The `openai:responses`
-provider posts to `https://<apiHost>/v1/responses` with an `Authorization: Bearer` header,
-while Azure serves Responses at `/openai/v1/responses?api-version=preview` and authenticates
-with an `api-key` header, so pointing `openai:responses` at an Azure host returns 404.
+Use `azure:responses` for Azure deployments. It builds the Azure `/openai/v1/responses` URL and
+supports Azure API keys and Microsoft Entra ID. Setting only `apiHost` on `openai:responses`
+does not select the Azure URL or its API-key authentication.
 
 ### Supported Responses Models
 
@@ -491,11 +490,11 @@ The Azure OpenAI provider supports the following environment variables:
 | `AZURE_AUTHORITY_HOST`         | `azureAuthorityHost` | Azure AD authority host                                                                 | No       |
 | `AZURE_TOKEN_SCOPE`            | `azureTokenScope`    | Azure AD token scope                                                                    | No       |
 
-\* Either `AZURE_API_KEY` OR the combination of `AZURE_CLIENT_ID`, `AZURE_CLIENT_SECRET`, and `AZURE_TENANT_ID` must be provided.
+\* Set `AZURE_API_KEY`, provide all three client credentials, or sign in with `az login`.
 
 † Not needed when you name the deployment in the provider ID (e.g. `azure:chat:my-deployment`). Both are required only to make Azure the default provider (see [Default Deployment](#default-deployment)).
 
-Note: For API URLs, you only need to set one of `AZURE_API_HOST` or `AZURE_API_BASE_URL`. `apiHost` also falls back to `AZURE_OPENAI_API_HOST`, and `apiBaseUrl` falls back to `AZURE_OPENAI_API_BASE_URL` and then `AZURE_OPENAI_BASE_URL`. If multiple are set, the provider uses them in that order of preference.
+Set either `AZURE_API_HOST` or `AZURE_API_BASE_URL`; if both are set, the base URL wins. `apiHost` also accepts `AZURE_OPENAI_API_HOST`. `apiBaseUrl` also accepts `AZURE_OPENAI_API_BASE_URL`, then `AZURE_OPENAI_BASE_URL`.
 
 ### Default Deployment
 
@@ -1239,11 +1238,9 @@ providers:
       apiHost: your-resource-name.openai.azure.com
       # Load function tool definition
       tools: file://tools/weather-function.json
-      # Define function callback inline
       functionToolCallbacks:
-        # Use an external file
-        get_weather: file://callbacks/weather.js:getWeather
-        # Or use an inline function
+        # To use a file instead, replace the inline function with:
+        # get_weather: file://callbacks/weather.js:getWeather
         get_weather: |
           async function(args) {
             try {

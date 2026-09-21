@@ -13,8 +13,6 @@ type JfrogMlProviderOptions = ProviderOptions & {
 
 export class JfrogMlChatCompletionProvider extends OpenAiChatCompletionProvider {
   constructor(modelName: string, providerOptions: JfrogMlProviderOptions) {
-    // `baseUrl` is a host prefix; the model name is appended to it. Trim trailing slashes so a
-    // user-supplied `baseUrl` ending in `/` does not produce `host//model`.
     const baseUrl = (
       providerOptions.config?.baseUrl || 'https://models.qwak-prod.qwak.ai/v1'
     ).replace(/\/+$/, '');

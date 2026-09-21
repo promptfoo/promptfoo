@@ -4,6 +4,9 @@ import {
   createDeepSeekProvider,
   DEEPSEEK_CHAT_MODELS,
 } from '../../src/providers/deepseek';
+import { ProviderOptionsSchema } from '../../src/validators/providers';
+
+import type { OpenAiChatCompletionProvider } from '../../src/providers/openai/chat';
 
 describe('DeepSeek usage boundaries', () => {
   it('bills input-only and output-only responses and preserves valid zero usage', () => {
@@ -137,7 +140,53 @@ describe('DEEPSEEK_CHAT_MODELS', () => {
 });
 
 describe('createDeepSeekProvider', () => {
-  it('should preserve the historical non-thinking default', () => {
-    expect(createDeepSeekProvider('deepseek').id()).toBe('deepseek:deepseek-chat');
+  it.each(['deepseek', 'deepseek:'])(
+    'uses the current Flash model without changing the shorthand thinking mode for %s',
+    async (path) => {
+      const provider = createDeepSeekProvider(path) as OpenAiChatCompletionProvider;
+      const { body } = await provider.getOpenAiBody('Hello');
+      expect(provider.id()).toBe('deepseek:deepseek-flash');
+      expect(body).toMatchObject({ model: 'deepseek-flash', thinking: { type: 'disabled' } });
+    },
+  );
+
+  it('allows explicit thinking and leaves named model defaults to DeepSeek', async () => {
+    const shorthand = createDeepSeekProvider('deepseek:', {
+      config: { config: { passthrough: { thinking: { type: 'enabled' } } } },
+    }) as OpenAiChatCompletionProvider;
+    expect((await shorthand.getOpenAiBody('Hello')).body.thinking).toEqual({ type: 'enabled' });
+
+    const named = createDeepSeekProvider(
+      'deepseek:deepseek-v4-pro',
+    ) as OpenAiChatCompletionProvider;
+    const { body } = await named.getOpenAiBody('Hello');
+    expect(body.model).toBe('deepseek-v4-pro');
+    expect(body.thinking).toBeUndefined();
+  });
+
+  it('reads a provider-scoped API key after config validation', () => {
+    const options = ProviderOptionsSchema.parse({ env: { DEEPSEEK_API_KEY: 'provider-key' } });
+    const provider = createDeepSeekProvider('deepseek:', {
+      config: options,
+      env: { DEEPSEEK_API_KEY: 'suite-key' },
+    }) as OpenAiChatCompletionProvider;
+    expect(provider.getApiKey()).toBe('provider-key');
+  });
+
+  it('needs explicit rates to estimate costs for the canonical Flash ID', () => {
+    expect(calculateDeepSeekCost('deepseek-flash', {}, 100, 100)).toBeUndefined();
+    expect(
+      calculateDeepSeekCost('deepseek-flash', { inputCost: 0.01, outputCost: 0.02 }, 100, 100),
+    ).toBeCloseTo(3);
+    expect(
+      calculateDeepSeekCost(
+        'deepseek-flash',
+        { inputCost: 0.01, outputCost: 0.02, cacheReadCost: 0.001 },
+        100,
+        100,
+        50,
+      ),
+    ).toBeCloseTo(2.55);
+    expect(calculateDeepSeekCost('deepseek-flash', { cost: 0 }, 100, 100, 50)).toBe(0);
   });
 });

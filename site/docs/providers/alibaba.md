@@ -7,7 +7,7 @@ keywords: [alibaba, qwen, qwen3, dashscope, deepseek, qwq, reasoning, vision, mu
 
 # Alibaba Cloud (Qwen)
 
-[Alibaba Cloud's DashScope API](https://www.alibabacloud.com/help/en/model-studio/getting-started/models) provides OpenAI-compatible access to Qwen language models. Compatible with all [OpenAI provider](/docs/providers/openai/) options in promptfoo.
+[Alibaba Cloud's DashScope API](https://www.alibabacloud.com/help/en/model-studio/getting-started/models) provides OpenAI-compatible access to Qwen language models. Use [OpenAI provider options](/docs/providers/openai/) supported by your chosen model.
 
 ## Setup
 
@@ -157,8 +157,7 @@ Latest open-source Qwen3 models with thinking mode support:
 
 ### Embeddings
 
-Embedding models require the explicit `alibaba:embedding:<model>` form. `alibaba:<model>` routes to
-the chat provider and posts to `/chat/completions`, which fails for an embedding model.
+Use `alibaba:embedding:<model>` for embeddings. The `alibaba:<model>` shorthand sends chat requests.
 
 - `text-embedding-v3` - 1,024d vectors, 8,192 token limit, 50+ languages
 - `text-embedding-v4` - Latest Qwen3-Embedding with flexible dimensions (64-2048d), 100+ languages
@@ -173,15 +172,13 @@ defaultTest:
 
 ### Image Generation
 
-- `qwen-image-plus` - Text-to-image with complex text rendering (Chinese/English)
+The `alibaba` provider does not call image-generation endpoints. To use models such as `qwen-image-plus`, configure the [HTTP provider](/docs/providers/http/) for [Alibaba's image API](https://www.alibabacloud.com/help/en/model-studio/qwen-image-api).
 
-For the latest availability, see the [official DashScope model catalog](https://www.alibabacloud.com/help/en/model-studio/getting-started/models), which is updated frequently.
+See the [DashScope model catalog](https://www.alibabacloud.com/help/en/model-studio/getting-started/models) for availability.
 
 ## Additional Configuration
 
-DashScope-only request fields go under `config.passthrough`. Unrecognized top-level keys are dropped
-before the request is sent. For example, `vl_high_resolution_images` (bool) raises the image token
-limit from 1,280 to 16,384 on `qwen-vl-max`:
+Put DashScope-specific request fields under `config.passthrough`. For example, `vl_high_resolution_images` enables higher-resolution image input on `qwen-vl-max`:
 
 ```yaml
 providers:

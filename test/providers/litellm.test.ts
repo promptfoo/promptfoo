@@ -521,43 +521,83 @@ describe('LiteLLM Provider', () => {
   });
 
   describe('missing API key', () => {
-    it('warns when no API key resolves, since apiKeyRequired is false and the request would silently omit auth', async () => {
-      mockProcessEnv({ LITELLM_API_KEY: undefined, OPENAI_API_KEY: undefined });
-      const logger = (await import('../../src/logger')).default;
-      vi.mocked(logger.warn).mockClear();
+    let restoreEnv: () => void;
 
-      createLiteLLMProvider('litellm:chat:gpt-4', { config: { config: {} } } as any);
-
-      expect(logger.warn).toHaveBeenCalledWith(
-        expect.stringContaining('No API key resolved'),
-        expect.anything(),
-      );
+    beforeEach(() => {
+      restoreEnv = mockProcessEnv({ LITELLM_API_KEY: undefined, OPENAI_API_KEY: undefined });
     });
 
-    it('does not warn when LITELLM_API_KEY is set', async () => {
-      mockProcessEnv({ LITELLM_API_KEY: 'sk-litellm' });
-      const logger = (await import('../../src/logger')).default;
-      vi.mocked(logger.warn).mockClear();
+    afterEach(() => restoreEnv());
 
-      createLiteLLMProvider('litellm:chat:gpt-4', { config: { config: {} } } as any);
+    const unauthorized = {
+      data: {
+        error: {
+          message: 'Authentication Error, No api key passed in.',
+          type: 'auth_error',
+          code: '401',
+        },
+      },
+      cached: false,
+      status: 401,
+      statusText: 'Unauthorized',
+    };
 
-      expect(logger.warn).not.toHaveBeenCalledWith(
-        expect.stringContaining('No API key resolved'),
-        expect.anything(),
-      );
+    it.each(['chat', 'completion', 'embedding'])(
+      'explains a keyless %s authentication failure',
+      async (type) => {
+        mockFetchWithCache.mockResolvedValue(unauthorized);
+        const provider = createLiteLLMProvider(`litellm:${type}:test-model`);
+
+        const result =
+          type === 'embedding'
+            ? await provider.callEmbeddingApi!('test')
+            : await provider.callApi('test');
+
+        expect(result.error).toContain('Authentication Error');
+        expect(result.error).toContain('Set LITELLM_API_KEY');
+      },
+    );
+
+    it('does not send an OpenAI key to a keyless proxy that accepts the request', async () => {
+      mockProcessEnv({ OPENAI_API_KEY: 'openai-only-key' });
+      mockFetchWithCache.mockResolvedValue({
+        data: { choices: [{ message: { content: 'ok' } }] },
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+      });
+      const provider = createLiteLLMProvider('litellm:chat:test-model');
+      const result = await provider.callApi('test');
+
+      expect(result.output).toBe('ok');
+      expect(result.error).toBeUndefined();
+      const headers = mockFetchWithCache.mock.calls[0]?.[1]?.headers;
+      expect(headers).not.toHaveProperty('Authorization');
     });
 
-    it('does not fall back to OPENAI_API_KEY, which would leak a credential across vendors', async () => {
-      mockProcessEnv({ LITELLM_API_KEY: undefined, OPENAI_API_KEY: 'sk-openai-secret' });
-      const logger = (await import('../../src/logger')).default;
-      vi.mocked(logger.warn).mockClear();
+    it('does not alter unrelated errors or errors with an explicitly configured credential', async () => {
+      mockFetchWithCache.mockResolvedValueOnce({
+        data: { error: { message: 'Unavailable' } },
+        cached: false,
+        status: 503,
+        statusText: 'Service Unavailable',
+      });
+      const keyless = createLiteLLMProvider('litellm:chat:test-model');
+      const unavailable = await keyless.callApi('test');
+      expect(unavailable.error).toContain('503');
+      expect(unavailable.error).not.toContain('Set LITELLM_API_KEY');
 
-      createLiteLLMProvider('litellm:chat:gpt-4', { config: { config: {} } } as any);
+      mockFetchWithCache.mockResolvedValue(unauthorized);
+      const keyed = createLiteLLMProvider('litellm:chat:test-model', {
+        env: { LITELLM_API_KEY: 'scoped-key' },
+      }) as LiteLLMProvider;
+      expect(keyed.getApiKey?.()).toBe('scoped-key');
+      expect((await keyed.callApi('test')).error).not.toContain('Set LITELLM_API_KEY');
 
-      expect(logger.warn).toHaveBeenCalledWith(
-        expect.stringContaining('No API key resolved'),
-        expect.anything(),
-      );
+      const headerAuth = createLiteLLMProvider('litellm:chat:test-model', {
+        config: { config: { headers: { Authorization: 'Bearer custom-key' } } },
+      });
+      expect((await headerAuth.callApi('test')).error).not.toContain('Set LITELLM_API_KEY');
     });
   });
 });

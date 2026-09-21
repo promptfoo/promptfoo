@@ -21,7 +21,7 @@ keywords:
 
 # LiteLLM
 
-[LiteLLM](https://docs.litellm.ai/docs/) provides access to 400+ LLMs through a unified OpenAI-compatible interface.
+[LiteLLM](https://docs.litellm.ai/docs/) is an OpenAI-compatible proxy for models from multiple providers.
 
 ## Usage
 
@@ -109,7 +109,7 @@ providers:
 
 ### Advanced configuration
 
-All LiteLLM parameters are supported:
+Set standard OpenAI options directly under `config`. Put proxy-specific request fields under `passthrough`:
 
 ```yaml
 providers:
@@ -119,26 +119,19 @@ providers:
       temperature: 0.7
       max_tokens: 4096
       top_p: 0.9
-      # Any other LiteLLM-supported parameters
+      passthrough:
+        metadata:
+          tags: [evals]
 ```
 
 ## Environment Variables
 
-The LiteLLM provider reads exactly two environment variables:
+The LiteLLM-specific environment variables are:
 
 - `LITELLM_API_KEY` - API key sent to the LiteLLM proxy server as a bearer token
 - `LITELLM_API_BASE` - Base URL for the LiteLLM proxy server (default: `http://0.0.0.0:4000`)
 
-`OPENAI_API_KEY`, `ANTHROPIC_API_KEY`, `AZURE_API_KEY`, and other upstream credentials are read by
-the LiteLLM proxy, not by promptfoo. Set them in the environment that starts the proxy.
-
-:::warning
-
-The provider does not fall back to `OPENAI_API_KEY`, and it does not require a key. If your proxy
-needs a key and you set only `OPENAI_API_KEY`, promptfoo sends no `Authorization` header and raises
-no error. Set `LITELLM_API_KEY`, or `apiKey`/`apiKeyEnvar` on the provider config.
-
-:::
+Set upstream credentials such as `OPENAI_API_KEY`, `ANTHROPIC_API_KEY`, or `AZURE_API_KEY` on the proxy. Promptfoo does not use them to authenticate with the proxy by default. If the proxy requires a key, set `LITELLM_API_KEY`, `config.apiKey`, or `config.apiKeyEnvar`. If a keyless request is rejected for authentication, Promptfoo includes this guidance in the error.
 
 ## Embedding Configuration
 
