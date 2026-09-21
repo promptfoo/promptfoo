@@ -2,6 +2,7 @@ import * as fsPromises from 'fs/promises';
 
 import { XMLBuilder } from 'fast-xml-parser';
 import { ResultFailureReason } from '../types';
+import { sha256 } from './createHash';
 
 import type Eval from '../models/eval';
 import type EvalResult from '../models/evalResult';
@@ -12,8 +13,7 @@ const MAX_JUNIT_MESSAGE_LENGTH = 1024;
 const MAX_JUNIT_DETAIL_LENGTH = 8192;
 const JUNIT_ASSERTION_FAILURE_MESSAGE = 'Assertion failed';
 const JUNIT_EVALUATION_ERROR_MESSAGE = 'Evaluation error';
-const SUITE_PROVIDER_SEPARATOR = '\u0001';
-const SUITE_KEY_SEPARATOR = '\u0000';
+const INVALID_XML_CHARACTERS = /[^\t\n\r\u0020-\ud7ff\ue000-\ufffd\u{10000}-\u{10ffff}]/gu;
 
 type JunitProjectedResult = Pick<
   EvaluateResult,
@@ -69,20 +69,6 @@ function formatDurationSeconds(durationMs: number | undefined): string {
 function getEvaluationTimestamp(evalRecord: Eval): string | undefined {
   const date = new Date(evalRecord.createdAt);
   return Number.isNaN(date.getTime()) ? undefined : date.toISOString();
-}
-
-// Prefer the human-friendly label and fall back to the canonical id so
-// providers that share an `id` but use distinct `label`s remain distinguishable.
-function getProviderName(result: JunitProjectedResult): string {
-  return normalizeInlineText(result.provider.label || result.provider.id, 'unknown provider');
-}
-
-function getSuiteKey(result: JunitProjectedResult): string {
-  // Distinguish providers that share an id but differ by label (and vice versa)
-  // so multi-target redteam runs do not collapse into a single suite.
-  const providerKey = `${result.provider.id ?? ''}${SUITE_PROVIDER_SEPARATOR}${result.provider.label ?? ''}`;
-  const promptKey = result.promptId || `prompt-index:${result.promptIdx}`;
-  return `${providerKey}${SUITE_KEY_SEPARATOR}${promptKey}`;
 }
 
 function getTestCaseName(result: JunitProjectedResult): string {
@@ -205,15 +191,28 @@ async function buildJunitSuites(evalRecord: Eval): Promise<JunitSuite[]> {
   const promptOrdinalsByProvider = new Map<string, Map<string, number>>();
 
   for await (const result of iterateJunitProjectedResults(evalRecord)) {
-    const key = getSuiteKey(result);
+    const { provider } = result;
+    const providerKey = JSON.stringify([provider.id ?? '', provider.label ?? '']);
+    const promptKey = result.promptId || `prompt-index:${result.promptIdx}`;
+    const key = JSON.stringify([providerKey, promptKey]);
     let suite = suites.get(key);
     if (!suite) {
-      const providerName = getProviderName(result);
-      const promptKey = result.promptId || `prompt-index:${result.promptIdx}`;
-      let promptOrdinals = promptOrdinalsByProvider.get(providerName);
+      const rawName = provider.label || provider.id || '';
+      // Keep names that lose XML characters distinct from each other and unchanged names.
+      const suffix =
+        rawName === rawName.replace(INVALID_XML_CHARACTERS, '')
+          ? ''
+          : ` (${sha256(providerKey).slice(0, 16)})`;
+      const providerName = normalizeInlineText(
+        rawName,
+        'unknown provider',
+        MAX_JUNIT_NAME_LENGTH - suffix.length,
+      );
+      const ordinalKey = suffix ? providerKey : JSON.stringify([providerName]);
+      let promptOrdinals = promptOrdinalsByProvider.get(ordinalKey);
       if (!promptOrdinals) {
         promptOrdinals = new Map();
-        promptOrdinalsByProvider.set(providerName, promptOrdinals);
+        promptOrdinalsByProvider.set(ordinalKey, promptOrdinals);
       }
       let ordinal = promptOrdinals.get(promptKey);
       if (ordinal === undefined) {
@@ -221,7 +220,7 @@ async function buildJunitSuites(evalRecord: Eval): Promise<JunitSuite[]> {
         promptOrdinals.set(promptKey, ordinal);
       }
       suite = {
-        displayName: `[${providerName}] prompt ${ordinal}`,
+        displayName: `[${providerName}] prompt ${ordinal}${suffix}`,
         errors: 0,
         failures: 0,
         skipped: 0,
@@ -318,8 +317,7 @@ export async function createJunitXml(evalRecord: Eval): Promise<string> {
     },
   });
 
-  // XML 1.0 excludes control characters and unpaired UTF-16 surrogates.
-  return xml.replace(/[^\t\n\r\u0020-\ud7ff\ue000-\ufffd\u{10000}-\u{10ffff}]/gu, '');
+  return xml.replace(INVALID_XML_CHARACTERS, '');
 }
 
 export async function writeJunitXmlOutput(outputPath: string, evalRecord: Eval): Promise<void> {

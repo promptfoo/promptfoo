@@ -1110,46 +1110,22 @@ describe('writeOutput', () => {
     });
   });
 
-  it.each([
-    '\u0000',
-    '\u0001',
-    '\u0008',
-    '\u000e',
-    '\u001b',
-    '\u001f',
-    '\ud800',
-    '\udfff',
-    '\ufffe',
-    '\uffff',
-  ])('exports well-formed JUnit XML when names contain %j', async (invalidCharacter) => {
+  it('exports well-formed JUnit XML when names contain forbidden characters', async () => {
+    const invalid = '\u0000\u0001\u0008\u000e\u001b\u001f\ud800\ufffe\udfff\uffff';
     const eval_ = new Eval({});
-    await eval_.addResult({
-      success: true,
-      failureReason: ResultFailureReason.NONE,
-      score: 1,
-      namedScores: {},
-      latencyMs: 100,
-      provider: { id: 'echo', label: `target${invalidCharacter} & <model>` },
-      prompt: { raw: 'Hello', label: 'Hello' },
-      response: { output: 'Hello' },
-      vars: {},
-      promptIdx: 0,
-      testIdx: 0,
-      testCase: { description: `case${invalidCharacter} \u{1f680} \u4e2d\u6587` },
-      promptId: 'xml-characters',
-    });
+    await eval_.addResult(
+      createEvaluateResult({
+        provider: { id: 'echo', label: `target${invalid} & <model>` },
+        testCase: { description: `case${invalid} \u{1f680} \u4e2d\u6587` },
+      }),
+    );
 
     const xml = await createJunitXml(eval_);
-
-    // CI report consumers require well-formed XML 1.0.
     expect(() => new SaxesParser().write(xml).close()).not.toThrow();
-    const parsed = new XMLParser({ ignoreAttributes: false }).parse(xml);
-    expect(parsed.testsuites.testsuite['@_name']).toBe('[target & <model>] prompt 1');
-    expect(parsed.testsuites.testsuite.testcase['@_name']).toBe(
-      'test 1: case \u{1f680} \u4e2d\u6587',
-    );
-    expect(parsed.testsuites.testsuite.testcase['@_classname']).toBe('[target & <model>] prompt 1');
-    expect(parsed.testsuites['@_tests']).toBe('1');
+    const { testsuite: suite } = new XMLParser({ ignoreAttributes: false }).parse(xml).testsuites;
+    expect(suite['@_name']).toMatch(/^\[target & <model>\] prompt 1 \([a-f0-9]{16}\)$/);
+    expect(suite.testcase['@_classname']).toBe(suite['@_name']);
+    expect(suite.testcase['@_name']).toBe('test 1: case \u{1f680} \u4e2d\u6587');
   });
 
   it('keeps JUnit failure messages compact when raw assertion reasons are long', async () => {
@@ -1183,50 +1159,62 @@ describe('writeOutput', () => {
     expect(xml).not.toContain(longReason);
   });
 
-  it('separates JUnit suites for providers that share an id but differ by label', async () => {
+  it.each([
+    ['target-A', 'target-B'],
+    ['model', 'mo\u0000del'],
+    ['mo\u0000del', 'mo\u0001del'],
+    ['mo del', 'mo\u000bdel'],
+  ])('keeps JUnit identities distinct and stable for %j and %j', async (first, second) => {
+    const names: string[][] = [];
+    for (const labels of [
+      [first, second],
+      [second, first],
+    ]) {
+      const eval_ = new Eval({});
+      for (const [promptIdx, label] of labels.entries()) {
+        const success = label === first;
+        await eval_.addResult(
+          createEvaluateResult({
+            provider: { id: 'echo', label },
+            promptIdx,
+            success,
+            score: Number(success),
+            failureReason: success ? ResultFailureReason.NONE : ResultFailureReason.ASSERT,
+            gradingResult: { pass: success, score: Number(success), reason: 'fixture' },
+          }),
+        );
+      }
+      const xml = await createJunitXml(eval_);
+      expect(() => new SaxesParser().write(xml).close()).not.toThrow();
+      const report = new XMLParser({ ignoreAttributes: false }).parse(xml).testsuites;
+      expect(report).toMatchObject({ '@_tests': '2', '@_failures': '1' });
+      expect(report.testsuite[labels.indexOf(second)].testcase.failure).toBeDefined();
+      const current: string[] = [];
+      for (const suite of report.testsuite) {
+        expect(suite.testcase['@_classname']).toBe(suite['@_name']);
+        current.push(suite['@_name']);
+      }
+      expect(new Set(current).size).toBe(2);
+      names.push(current);
+    }
+    expect(names[1]).toEqual([...names[0]].reverse());
+    if (first === 'target-A') {
+      expect(names[0]).toEqual(['[target-A] prompt 1', '[target-B] prompt 1']);
+    }
+  });
+
+  it('keeps different clean prompts numbered under a shared display name', async () => {
     const eval_ = new Eval({});
-    await eval_.addResult({
-      success: true,
-      failureReason: ResultFailureReason.NONE,
-      score: 1,
-      namedScores: {},
-      latencyMs: 100,
-      provider: { id: 'echo', label: 'target-A' },
-      prompt: { raw: 'Greet {{name}}', label: 'Greet prompt' },
-      response: { output: '' },
-      vars: { name: 'Alice' },
-      promptIdx: 0,
-      testIdx: 0,
-      testCase: {},
-      promptId: 'prompt-shared',
-    });
-    await eval_.addResult({
-      success: false,
-      failureReason: ResultFailureReason.ASSERT,
-      score: 0,
-      namedScores: {},
-      latencyMs: 200,
-      provider: { id: 'echo', label: 'target-B' },
-      prompt: { raw: 'Greet {{name}}', label: 'Greet prompt' },
-      response: { output: '' },
-      vars: { name: 'Alice' },
-      promptIdx: 1,
-      testIdx: 0,
-      testCase: {},
-      gradingResult: { pass: false, score: 0, reason: 'B failed' },
-      promptId: 'prompt-shared',
-    });
-
-    const xml = await createJunitXml(eval_);
-    const parsed = new XMLParser({ ignoreAttributes: false }).parse(xml);
-
-    expect(parsed.testsuites.testsuite).toEqual([
-      expect.objectContaining({ '@_name': '[target-A] prompt 1', '@_tests': '1' }),
-      expect.objectContaining({
-        '@_name': '[target-B] prompt 1',
-        '@_tests': '1',
-        '@_failures': '1',
-      }),
+    for (const id of ['first', 'second']) {
+      await eval_.addResult(
+        createEvaluateResult({ provider: { id, label: 'shared' }, prompt: { raw: id, label: id } }),
+      );
+    }
+    const suites = new XMLParser({ ignoreAttributes: false }).parse(await createJunitXml(eval_))
+      .testsuites.testsuite;
+    expect(suites).toMatchObject([
+      { '@_name': '[shared] prompt 1' },
+      { '@_name': '[shared] prompt 2' },
     ]);
   });
 
