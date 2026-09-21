@@ -375,9 +375,7 @@ For demo/example apps used to show red teaming, do not harden away all interesti
 
 ## Review Guidelines
 
-For Claude Code, use `/review` for read-only repository reviews. From a Claude session started at the Git root, it runs the bundled `/code-review` and adds a conventions pass against the root and applicable nested `AGENTS.md` files. The default includes committed changes relative to the usual review base and staged, unstaged, and untracked files. If a project or user skill overrides the bundled reviewer, `/review` does the ordinary review itself and discloses that fallback.
-
-Invoke `/code-review ultra` directly from a Claude session started at the Git root for a hosted review when available. Use `/code-review --fix` or `/code-review --comment` there for explicitly requested edits or posting. Those direct commands do not add the repository conventions pass; run the read-only `/review` separately when you need it.
+Keep using Claude Code's built-in `/review` for general code reviews. The pinned version's conventions check only searches for `CLAUDE.md`; run `/agents-review 123`, `/agents-review origin/main...HEAD`, or `/agents-review worktree` separately to check changes against the root and applicable nested `AGENTS.md` files. This companion is read-only and requires an explicit target.
 
 - Prioritize security regressions first, especially injection risks, unsafe handling of user-controlled or adversarial content, credential exposure, SSRF, path traversal, unsafe deserialization, and authorization mistakes.
 - Then prioritize correctness issues that can break behavior, public APIs, data integrity, concurrency, or error handling.
