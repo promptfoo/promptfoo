@@ -9,7 +9,6 @@ import type EvalResult from '../models/evalResult';
 import type { EvaluateResult, GradingResult } from '../types';
 
 const MAX_JUNIT_NAME_LENGTH = 512;
-const MAX_JUNIT_MESSAGE_LENGTH = 1024;
 const MAX_JUNIT_DETAIL_LENGTH = 8192;
 const JUNIT_ASSERTION_FAILURE_MESSAGE = 'Assertion failed';
 const JUNIT_EVALUATION_ERROR_MESSAGE = 'Evaluation error';
@@ -46,7 +45,14 @@ function truncateText(value: string, maxLength: number): string {
   if (value.length <= maxLength) {
     return value;
   }
-  return `${value.slice(0, maxLength - 3)}...`;
+  const characters = [];
+  for (const character of value) {
+    if (characters.length === maxLength) {
+      return `${characters.slice(0, maxLength - 3).join('')}...`;
+    }
+    characters.push(character);
+  }
+  return value;
 }
 
 function normalizeInlineText(
@@ -54,7 +60,7 @@ function normalizeInlineText(
   fallback: string,
   maxLength = MAX_JUNIT_NAME_LENGTH,
 ): string {
-  const normalized = value?.replace(/\s+/g, ' ').trim();
+  const normalized = value?.replace(INVALID_XML_CHARACTERS, '').replace(/\s+/g, ' ').trim();
   return truncateText(normalized || fallback, maxLength);
 }
 
@@ -87,14 +93,6 @@ function getAssertionLabel(gradingResult: GradingResult): string {
   return gradingResult.assertion?.type ?? 'assertion';
 }
 
-function getFailureMessage(): string {
-  return normalizeInlineText(undefined, JUNIT_ASSERTION_FAILURE_MESSAGE, MAX_JUNIT_MESSAGE_LENGTH);
-}
-
-function getErrorMessage(): string {
-  return normalizeInlineText(undefined, JUNIT_EVALUATION_ERROR_MESSAGE, MAX_JUNIT_MESSAGE_LENGTH);
-}
-
 function getFailedAssertionLabels(gradingResult: GradingResult | null | undefined): string[] {
   const failedComponents = getFailedComponentResults(gradingResult);
   if (failedComponents.length > 0) {
@@ -104,7 +102,7 @@ function getFailedAssertionLabels(gradingResult: GradingResult | null | undefine
 }
 
 function getFailureDetails(result: JunitProjectedResult): string {
-  const lines = [`Score: ${result.score}`, `Reason: ${getFailureMessage()}`];
+  const lines = [`Score: ${result.score}`, `Reason: ${JUNIT_ASSERTION_FAILURE_MESSAGE}`];
   const failedAssertionLabels = getFailedAssertionLabels(result.gradingResult);
 
   if (failedAssertionLabels.length > 0) {
@@ -114,11 +112,10 @@ function getFailureDetails(result: JunitProjectedResult): string {
     }
   }
 
-  return truncateText(lines.join('\n'), MAX_JUNIT_DETAIL_LENGTH);
-}
-
-function getErrorDetails(): string {
-  return truncateText(`Reason: ${getErrorMessage()}`, MAX_JUNIT_DETAIL_LENGTH);
+  return truncateText(
+    lines.join('\n').replace(INVALID_XML_CHARACTERS, ''),
+    MAX_JUNIT_DETAIL_LENGTH,
+  );
 }
 
 function projectEvalResult(result: EvalResult | EvaluateResult): JunitProjectedResult {
@@ -260,13 +257,13 @@ function buildJunitTestCase(result: JunitProjectedResult, classname: string) {
     if (result.failureReason === ResultFailureReason.ASSERT) {
       testcase.failure = {
         '#text': getFailureDetails(result),
-        '@_message': getFailureMessage(),
+        '@_message': JUNIT_ASSERTION_FAILURE_MESSAGE,
         '@_type': 'assertion',
       };
     } else {
       testcase.error = {
-        '#text': getErrorDetails(),
-        '@_message': getErrorMessage(),
+        '#text': `Reason: ${JUNIT_EVALUATION_ERROR_MESSAGE}`,
+        '@_message': JUNIT_EVALUATION_ERROR_MESSAGE,
         '@_type': 'error',
       };
     }

@@ -1131,26 +1131,14 @@ describe('writeOutput', () => {
   it('keeps JUnit failure messages compact when raw assertion reasons are long', async () => {
     const longReason = 'x'.repeat(600);
     const eval_ = new Eval({});
-    await eval_.addResult({
-      success: false,
-      failureReason: ResultFailureReason.ASSERT,
-      score: 0,
-      namedScores: {},
-      latencyMs: 0,
-      provider: { id: 'echo' },
-      prompt: { raw: 'Prompt', label: 'Prompt' },
-      response: { output: '' },
-      vars: {},
-      promptIdx: 0,
-      testIdx: 0,
-      testCase: {},
-      gradingResult: {
-        pass: false,
+    await eval_.addResult(
+      createEvaluateResult({
+        success: false,
+        failureReason: ResultFailureReason.ASSERT,
         score: 0,
-        reason: longReason,
-      },
-      promptId: 'long-message',
-    });
+        gradingResult: { pass: false, score: 0, reason: longReason },
+      }),
+    );
 
     const xml = await createJunitXml(eval_);
     const parsed = new XMLParser({ ignoreAttributes: false }).parse(xml);
@@ -1164,6 +1152,7 @@ describe('writeOutput', () => {
     ['model', 'mo\u0000del'],
     ['mo\u0000del', 'mo\u0001del'],
     ['mo del', 'mo\u000bdel'],
+    ['x'.repeat(508) + '🚀tailmore', 'x'.repeat(508) + '...'],
   ])('keeps JUnit identities distinct and stable for %j and %j', async (first, second) => {
     const names: string[][] = [];
     for (const labels of [
@@ -1200,6 +1189,43 @@ describe('writeOutput', () => {
     expect(names[1]).toEqual([...names[0]].reverse());
     if (first === 'target-A') {
       expect(names[0]).toEqual(['[target-A] prompt 1', '[target-B] prompt 1']);
+    } else if (first.includes('🚀')) {
+      expect(names[0][0]).toContain('🚀...');
+    }
+  });
+
+  it('removes forbidden name characters before fallback and length limits', async () => {
+    const eval_ = new Eval({});
+    const cases = [
+      ['\u0000', '\u0000', 'unknown provider', 'test 1'],
+      [
+        '\ud800'.repeat(510) + 'VISIBLE_PROVIDER',
+        '\u0000'.repeat(510) + 'VISIBLE_TEST',
+        'VISIBLE_PROVIDER',
+        'test 2: VISIBLE_TEST',
+      ],
+      [
+        'y'.repeat(508) + '🚀tailmore',
+        'y'.repeat(508) + '🚀tailmore',
+        'y'.repeat(508) + '🚀...',
+        'test 3: ' + 'y'.repeat(508) + '🚀...',
+      ],
+    ];
+    for (const [testIdx, [label, description]] of cases.entries()) {
+      await eval_.addResult(
+        createEvaluateResult({
+          provider: { id: 'echo', label },
+          testCase: { description },
+          testIdx,
+        }),
+      );
+    }
+    const xml = await createJunitXml(eval_);
+    expect(() => new SaxesParser().write(xml).close()).not.toThrow();
+    const suites = new XMLParser({ ignoreAttributes: false }).parse(xml).testsuites.testsuite;
+    for (const [index, [, , provider, testcase]] of cases.entries()) {
+      expect(suites[index]['@_name']).toContain('[' + provider + '] prompt 1');
+      expect(suites[index].testcase['@_name']).toBe(testcase);
     }
   });
 
@@ -1259,25 +1285,14 @@ describe('writeOutput', () => {
     }
   });
 
-  it('omits raw JUnit error text when it matches the inline reason', async () => {
+  it.each([
+    ['request failed: 500', 'request failed: 500'],
+    ['API error: 401\n{"code":"invalid_api_key"}', 'invalid_api_key'],
+  ])('omits raw JUnit error text: %s', async (error, secret) => {
     const eval_ = new Eval({});
-    await eval_.addResult({
-      success: false,
-      failureReason: ResultFailureReason.ERROR,
-      score: 0,
-      namedScores: {},
-      latencyMs: 100,
-      provider: { id: 'echo' },
-      prompt: { raw: 'p', label: '' },
-      response: { output: '' },
-      error: 'request failed: 500',
-      vars: {},
-      promptIdx: 0,
-      testIdx: 0,
-      testCase: {},
-      promptId: 'collapsed-error',
-    });
-
+    await eval_.addResult(
+      createEvaluateResult({ success: false, failureReason: ResultFailureReason.ERROR, error }),
+    );
     const xml = await createJunitXml(eval_);
     const parsed = new XMLParser({ ignoreAttributes: false }).parse(xml);
 
@@ -1285,36 +1300,7 @@ describe('writeOutput', () => {
       '#text': 'Reason: Evaluation error',
       '@_message': 'Evaluation error',
     });
-    expect(xml).not.toContain('request failed: 500');
-  });
-
-  it('omits multiline raw JUnit error payloads', async () => {
-    const eval_ = new Eval({});
-    await eval_.addResult({
-      success: false,
-      failureReason: ResultFailureReason.ERROR,
-      score: 0,
-      namedScores: {},
-      latencyMs: 100,
-      provider: { id: 'echo' },
-      prompt: { raw: 'p', label: '' },
-      response: { output: '' },
-      error: 'API error: 401\n{"code":"invalid_api_key"}',
-      vars: {},
-      promptIdx: 0,
-      testIdx: 0,
-      testCase: {},
-      promptId: 'multiline-error',
-    });
-
-    const xml = await createJunitXml(eval_);
-    const parsed = new XMLParser({ ignoreAttributes: false }).parse(xml);
-
-    expect(parsed.testsuites.testsuite.testcase.error).toMatchObject({
-      '#text': 'Reason: Evaluation error',
-      '@_message': 'Evaluation error',
-    });
-    expect(xml).not.toContain('invalid_api_key');
+    expect(xml).not.toContain(secret);
   });
 
   it('omits raw model outputs from JUnit assertion details', async () => {
