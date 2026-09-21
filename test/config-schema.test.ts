@@ -5,6 +5,7 @@ import Ajv from 'ajv';
 import addFormats from 'ajv-formats';
 import { beforeAll, describe, expect, it } from 'vitest';
 import { UnifiedConfigSchema } from '../src/types';
+import { normalizeConfigDraft, UnifiedConfigDraftSchema } from '../src/types/configDraft';
 
 describe('config-schema.json', () => {
   let schema: any;
@@ -354,6 +355,69 @@ describe('config-schema.json', () => {
 
       expect(UnifiedConfigSchema.safeParse(config).success).toBe(true);
       expect(validate(config), JSON.stringify(validate.errors)).toBe(true);
+    });
+  });
+
+  describe('runtime field contract for incomplete drafts', () => {
+    it('allows missing top-level evaluation inputs while preserving nested field validation', () => {
+      const draft = { description: 'Unfinished evaluation' };
+      expect(UnifiedConfigDraftSchema.safeParse(draft).success).toBe(true);
+      expect(UnifiedConfigDraftSchema.safeParse({}).success).toBe(true);
+      expect(UnifiedConfigSchema.safeParse(draft).success).toBe(false);
+      expect(UnifiedConfigDraftSchema.safeParse({ tracing: { otlp: { http: {} } } }).success).toBe(
+        true,
+      );
+
+      const invalid = UnifiedConfigDraftSchema.safeParse({ tracing: { enabled: 'yes' } });
+      expect(invalid.success).toBe(false);
+      if (!invalid.success) {
+        expect(invalid.error.issues[0].path).toEqual(['tracing', 'enabled']);
+      }
+    });
+
+    it('accepts either provider input but identifies conflicting aliases in a draft', () => {
+      for (const selection of [{ providers: ['echo'] }, { targets: ['echo'] }]) {
+        expect(UnifiedConfigDraftSchema.safeParse(selection).success).toBe(true);
+        expect(UnifiedConfigSchema.safeParse({ prompts: ['hello'], ...selection }).success).toBe(
+          true,
+        );
+      }
+
+      const invalid = UnifiedConfigDraftSchema.safeParse({
+        providers: ['echo'],
+        targets: ['echo'],
+      });
+      expect(invalid.success).toBe(false);
+      if (!invalid.success) {
+        expect(invalid.error.issues).toEqual([
+          expect.objectContaining({
+            path: ['providers'],
+            message: expect.stringContaining('both'),
+          }),
+        ]);
+      }
+    });
+
+    it('normalizes targets for consumers without mutating the authored draft or adding defaults', () => {
+      const draft = {
+        description: 'Authoring draft',
+        targets: ['echo'],
+        customEditorSetting: { retained: true },
+      };
+      const normalized = normalizeConfigDraft(draft);
+
+      expect(normalized).toEqual({
+        description: 'Authoring draft',
+        providers: ['echo'],
+        customEditorSetting: { retained: true },
+      });
+      expect(draft).toHaveProperty('targets', ['echo']);
+      expect(draft).not.toHaveProperty('providers');
+
+      const canonical = { providers: ['echo'] };
+      expect(normalizeConfigDraft(canonical)).toBe(canonical);
+      const partial = { description: 'No provider yet' };
+      expect(normalizeConfigDraft(partial)).toBe(partial);
     });
   });
 
