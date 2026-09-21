@@ -38,6 +38,8 @@ import {
   type RateLimitRegistry,
 } from './scheduler';
 import {
+  retainEvaluationProvider,
+  withEvaluationProviderRetainer,
   withProviderCallExecutionContext,
   withProviderCallTracingContext,
 } from './scheduler/providerCallExecutionContext';
@@ -2221,6 +2223,7 @@ async function maybeAddGeneratedPrompts(testSuite: TestSuite, options: InternalE
   const { prompts: newPrompts, error } = await generatePrompts(
     testSuite.prompts[0].raw,
     requestedCount,
+    retainEvaluationProvider,
   );
   if (error || !newPrompts) {
     throw new Error(`Failed to generate prompts: ${error}`);
@@ -3402,6 +3405,7 @@ function collectRunProviders(testSuite: TestSuite | EvaluateTestSuite): Set<ApiP
 type EvaluationResourceContext = {
   testSuite?: TestSuite | EvaluateTestSuite;
   ownedProviders?: readonly ApiProvider[];
+  borrowedProviders?: readonly ApiProvider[];
 };
 
 export type EvaluationResourceRetainer = (context: EvaluationResourceContext) => Promise<void>;
@@ -3413,13 +3417,21 @@ export async function withEvaluationResources<T>(
 ): Promise<T> {
   const ownedProviders = new Set<ApiProvider>();
   const providers = new Set<ApiProvider>();
+  let released = false;
   const retainProviders: EvaluationResourceRetainer = async ({
     testSuite,
     ownedProviders: owned,
+    borrowedProviders,
   }) => {
+    if (released) {
+      return;
+    }
     const candidates = testSuite ? collectRunProviders(testSuite) : new Set<ApiProvider>();
     for (const provider of owned ?? []) {
       ownedProviders.add(provider);
+      candidates.add(provider);
+    }
+    for (const provider of borrowedProviders ?? []) {
       candidates.add(provider);
     }
     const added = [...candidates].filter((provider) => !providers.has(provider));
@@ -3432,7 +3444,6 @@ export async function withEvaluationResources<T>(
   };
   const initialProviders = retainProviders(context);
 
-  let released = false;
   const release = async () => {
     if (released) {
       return;
@@ -3476,15 +3487,20 @@ export async function withEvaluationResources<T>(
   };
 
   try {
-    return await providerRegistry.withEvaluation(async () => {
-      try {
-        await initialProviders;
-        return await run(retainProviders);
-      } finally {
-        // The last borrower awaits queued cleanup; an owner with other users can return.
-        await release();
-      }
-    });
+    return await providerRegistry.withEvaluation(() =>
+      withEvaluationProviderRetainer(
+        (provider) => retainProviders({ borrowedProviders: [provider] }),
+        async () => {
+          try {
+            await initialProviders;
+            return await run(retainProviders);
+          } finally {
+            // The last borrower awaits queued cleanup; an owner with other users can return.
+            await release();
+          }
+        },
+      ),
+    );
   } finally {
     // Balance uses even if the registry's pending shutdown fails before invoking the callback.
     await release();

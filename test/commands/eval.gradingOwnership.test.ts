@@ -2,10 +2,15 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { fetchWithCache } from '../../src/cache';
 import cliState from '../../src/cliState';
 import { evaluateWithSource } from '../../src/evaluate';
-import { evaluate } from '../../src/evaluator';
+import { evaluate, withEvaluationResources } from '../../src/evaluator';
+import { matchesLlmRubric } from '../../src/matchers/llmGrading';
 import Eval from '../../src/models/eval';
 import { doEval } from '../../src/node/doEval';
-import { getDefaultProviders } from '../../src/providers/defaults';
+import {
+  getDefaultProviders,
+  setDefaultCompletionProviders,
+  setDefaultEmbeddingProviders,
+} from '../../src/providers/defaults';
 import { loadApiProvider, loadApiProviders } from '../../src/providers/index';
 import { OpenAiChatCompletionProvider } from '../../src/providers/openai/chat';
 import { providerRegistry } from '../../src/providers/providerRegistry';
@@ -70,7 +75,10 @@ vi.mock('../../src/share', async (importOriginal) => ({
   isSharingEnabled: vi.fn(() => false),
 }));
 vi.mock('../../src/telemetry', () => ({ default: { record: vi.fn() } }));
-vi.mock('../../src/providers/defaults', () => ({ getDefaultProviders: vi.fn() }));
+vi.mock('../../src/providers/defaults', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../../src/providers/defaults')>()),
+  getDefaultProviders: vi.fn(),
+}));
 vi.mock('../../src/providers/index', async (importOriginal) => ({
   ...(await importOriginal<typeof import('../../src/providers/index')>()),
   loadApiProvider: vi.fn(),
@@ -99,13 +107,20 @@ function deferred() {
   return { promise, resolve };
 }
 
+async function useActualDefaultProviders() {
+  const actual = await vi.importActual<typeof import('../../src/providers/defaults')>(
+    '../../src/providers/defaults',
+  );
+  vi.mocked(getDefaultProviders).mockImplementation(actual.getDefaultProviders);
+}
+
 const rubric: Assertion = { type: 'llm-rubric', value: 'GRADER_B: the answer is target-B.' };
 
 // Each fixture is public configuration consumed by the real evaluator and matchers.
 // The test never calls or inspects the ownership collector.
 const positions: {
   name: string;
-  configure: (suite: TestSuite, shared: ApiProvider) => void;
+  configure: (suite: TestSuite, shared: ApiProvider) => void | Promise<void>;
   entry?: 'public' | 'direct';
   outcome?: 'error' | 'abort';
 }[] = [
@@ -244,6 +259,24 @@ const positions: {
     },
   },
   {
+    name: 'globally overridden default completion grader',
+    entry: 'public',
+    configure: async (suite, shared) => {
+      await useActualDefaultProviders();
+      await setDefaultCompletionProviders(shared);
+      suite.tests = [{ assert: [rubric] }];
+    },
+  },
+  {
+    name: 'globally overridden default embedding grader',
+    entry: 'direct',
+    configure: async (suite, shared) => {
+      await useActualDefaultProviders();
+      await setDefaultEmbeddingProviders(shared);
+      suite.tests = [{ assert: [{ type: 'similar', value: 'target-B', threshold: 0.9 }] }];
+    },
+  },
+  {
     name: 'test provider target override',
     configure: (suite, shared) => {
       suite.tests = [{ provider: shared }];
@@ -331,10 +364,66 @@ describe('evaluation ownership of supplied grading providers', () => {
     });
   });
 
-  afterEach(() => {
+  afterEach(async () => {
     Object.assign(cliState, priorCliState);
     watcher.handlers.clear();
+    await setDefaultCompletionProviders(undefined as unknown as ApiProvider);
+    await setDefaultEmbeddingProviders(undefined as unknown as ApiProvider);
     vi.resetAllMocks();
+  });
+
+  it('does not hold an unused global default while an explicit grader is active', async () => {
+    const ownerStarted = deferred();
+    const releaseOwner = deferred();
+    const graderStarted = deferred();
+    const releaseGrader = deferred();
+    const unused = {
+      id: () => 'unused-global-grader',
+      callApi: vi.fn(async () => ({ output: 'unused' })),
+      cleanup: vi.fn(),
+    } satisfies ApiProvider;
+    const explicit = {
+      id: () => 'explicit-grader',
+      callApi: vi.fn(async () => {
+        graderStarted.resolve();
+        await releaseGrader.promise;
+        return { output: '{"pass":true,"score":1,"reason":"explicit grader completed"}' };
+      }),
+      cleanup: vi.fn(),
+    } satisfies ApiProvider;
+    await useActualDefaultProviders();
+    await setDefaultCompletionProviders(unused);
+    const owner = withEvaluationResources(
+      async () => {
+        ownerStarted.resolve();
+        await releaseOwner.promise;
+      },
+      { ownedProviders: [unused] },
+    );
+    await ownerStarted.promise;
+    const borrower = withEvaluationResources(() =>
+      matchesLlmRubric('The output is correct.', 'answer', { provider: explicit }),
+    );
+
+    try {
+      await Promise.race([
+        graderStarted.promise,
+        borrower.then(() => {
+          throw new Error('Evaluation completed without invoking the explicit grader');
+        }),
+      ]);
+      releaseOwner.resolve();
+      await owner;
+      expect(unused.cleanup).toHaveBeenCalledExactlyOnceWith({ reason: 'evaluation-complete' });
+      expect(unused.callApi).not.toHaveBeenCalled();
+      expect(explicit.cleanup).not.toHaveBeenCalled();
+      releaseGrader.resolve();
+      await expect(borrower).resolves.toMatchObject({ pass: true });
+    } finally {
+      releaseOwner.resolve();
+      releaseGrader.resolve();
+      await Promise.allSettled([owner, borrower]);
+    }
   });
 
   it.each(['success', 'error', 'abort'] as const)(
@@ -707,7 +796,7 @@ describe('evaluation ownership of supplied grading providers', () => {
         tests: [{ vars: {} }],
       });
       const suiteB = suite(other, 'TARGET_B');
-      configure(suiteB, shared);
+      await configure(suiteB, shared);
       const suites = [suite(idle, 'INITIAL'), suite(shared, 'TARGET_A'), suiteB];
       vi.mocked(resolveConfigs).mockImplementation(async () => {
         const testSuite = suites.shift();

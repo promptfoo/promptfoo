@@ -6,6 +6,7 @@ import { getCloudTargetIdFromProviders } from '../redteam/remoteGenerationContex
 import {
   getProviderCallExecutionContext,
   getProviderCallTracingContext,
+  retainEvaluationProvider,
 } from '../scheduler/providerCallExecutionContext';
 import { createProviderRateLimitOptions, isRateLimitWrapped } from '../scheduler/providerWrapper';
 import invariant from '../util/invariant';
@@ -67,13 +68,15 @@ export function callGradingProvider<T extends ProviderResponse>(
   const { callContext, operationName } = options;
   const executionContext = getProviderCallExecutionContext();
   const tracingContext = getProviderCallTracingContext();
-  const callProvider = (): Promise<T> =>
+  const ready = retainEvaluationProvider(provider);
+  const invokeProvider = (): Promise<T> =>
     tracingContext
       ? (tracingContext.withProviderSpan(
           { provider, callContext, operationName, role: 'grader', promptLabel: label },
           invoke,
         ) as Promise<T>)
       : invoke(callContext);
+  const callProvider = (): Promise<T> => (ready ? ready.then(invokeProvider) : invokeProvider());
 
   const executeCall = () => {
     if (executionContext?.rateLimitRegistry && !isRateLimitWrapped(provider)) {
