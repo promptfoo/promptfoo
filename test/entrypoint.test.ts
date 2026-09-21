@@ -14,6 +14,16 @@ const manifest = JSON.parse(readFileSync(path.join(rootDirectory, 'package.json'
 };
 const minimumSupportedVersion = minVersion(manifest.engines.node)!;
 const unsupportedVersion = `v${minimumSupportedVersion.major - 1}.0.0`;
+const unsupportedVersions = [unsupportedVersion];
+if (minimumSupportedVersion.patch > 0) {
+  unsupportedVersions.push(
+    `v${minimumSupportedVersion.major}.${minimumSupportedVersion.minor}.${minimumSupportedVersion.patch - 1}`,
+  );
+} else if (minimumSupportedVersion.minor > 0) {
+  unsupportedVersions.push(
+    `v${minimumSupportedVersion.major}.${minimumSupportedVersion.minor - 1}.0`,
+  );
+}
 
 function runEntrypoint(version: string, alternativeRuntime?: 'Bun' | 'Deno') {
   const entrypointUrl = pathToFileURL(entrypoint).href;
@@ -42,15 +52,18 @@ function runEntrypoint(version: string, alternativeRuntime?: 'Bun' | 'Deno') {
 }
 
 describe('production entrypoint runtime guard', () => {
-  it('rejects unsupported Node.js before importing the CLI', () => {
-    const result = runEntrypoint(unsupportedVersion);
+  it.each(unsupportedVersions)(
+    'rejects unsupported Node.js %s before importing the CLI',
+    (version) => {
+      const result = runEntrypoint(version);
 
-    expect(result.status, result.error?.message || result.stderr).toBe(1);
-    expect(result.stdout).toBe('');
-    expect(result.stderr).toContain(`Detected: ${unsupportedVersion}`);
-    expect(result.stderr).toContain(`Required: ${manifest.engines.node}`);
-    expect(result.stderr).toContain('Install a supported Node.js version and try again.');
-  });
+      expect(result.status, result.error?.message || result.stderr).toBe(1);
+      expect(result.stdout).toBe('');
+      expect(result.stderr).toContain(`Detected: ${version}`);
+      expect(result.stderr).toContain(`Required: ${manifest.engines.node}`);
+      expect(result.stderr).toContain('Install a supported Node.js version and try again.');
+    },
+  );
 
   it.each(['node-invalid', `v${minimumSupportedVersion.version}-rc.1`])(
     'reports malformed or prerelease Node.js %s before importing the CLI',

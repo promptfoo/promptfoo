@@ -376,9 +376,19 @@ describe('package manifests', () => {
     const packageLock =
       readPackageJson<PackageLockManifest<{ optional?: boolean }>>('package-lock.json');
 
-    for (const dependency of ['@slack/web-api', '@openai/codex-security', '@opencode-ai/sdk']) {
+    for (const dependency of [
+      '@langfuse/client',
+      '@modelcontextprotocol/sdk',
+      '@openai/codex-security',
+      '@opencode-ai/sdk',
+      '@slack/web-api',
+      'ibm-cloud-sdk-core',
+    ]) {
       expect(packageJson.optionalDependencies, dependency).toHaveProperty(dependency);
       expect(packageJson.dependencies, dependency).not.toHaveProperty(dependency);
+    }
+
+    for (const dependency of ['@openai/codex-security', '@opencode-ai/sdk', '@slack/web-api']) {
       expect(packageLock.packages[`node_modules/${dependency}`]?.optional, dependency).toBe(true);
     }
   });
