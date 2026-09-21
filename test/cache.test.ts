@@ -1212,6 +1212,7 @@ describe('fetchWithCache', () => {
     });
 
     it('should isolate Cloud task responses by the current CLI team', async () => {
+      const restoreEnv = mockProcessEnv({ PROMPTFOO_API_KEY: 'saved-cloud-token' });
       mockFetchWithRetries
         .mockResolvedValueOnce(mockFetchWithRetriesResponse(true, { data: 'team one data' }))
         .mockResolvedValueOnce(mockFetchWithRetriesResponse(true, { data: 'team two data' }));
@@ -1222,22 +1223,26 @@ describe('fetchWithCache', () => {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ task: 'extract-intent' }),
       };
-      const teamOneResult = await fetchWithCache(
-        'https://api.promptfoo.app/api/v1/task',
-        requestOptions,
-        1000,
-      );
+      try {
+        const teamOneResult = await fetchWithCache(
+          'https://api.promptfoo.app/api/v1/task',
+          requestOptions,
+          1000,
+        );
 
-      vi.mocked(cloudConfig.getCurrentTeamId).mockReturnValue('team-two');
-      const teamTwoResult = await fetchWithCache(
-        'https://api.promptfoo.app/api/v1/task',
-        requestOptions,
-        1000,
-      );
+        vi.mocked(cloudConfig.getCurrentTeamId).mockReturnValue('team-two');
+        const teamTwoResult = await fetchWithCache(
+          'https://api.promptfoo.app/api/v1/task',
+          requestOptions,
+          1000,
+        );
 
-      expect(mockFetchWithRetries).toHaveBeenCalledTimes(2);
-      expect(teamOneResult.data).toEqual({ data: 'team one data' });
-      expect(teamTwoResult.data).toEqual({ data: 'team two data' });
+        expect(mockFetchWithRetries).toHaveBeenCalledTimes(2);
+        expect(teamOneResult.data).toEqual({ data: 'team one data' });
+        expect(teamTwoResult.data).toEqual({ data: 'team two data' });
+      } finally {
+        restoreEnv();
+      }
     });
 
     it('should prefer an explicit team header when computing the cache key', async () => {

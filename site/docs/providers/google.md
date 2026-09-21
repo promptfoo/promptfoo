@@ -5,7 +5,7 @@ description: Configure Google's Gemini models with support for text, image, audi
 
 # Google AI / Gemini
 
-The `google` provider enables integration with Google AI Studio and the Gemini API. It provides access to Google's Gemini and hosted Gemma models with support for text, image, audio, video, and PDF inputs.
+The `google` provider calls Gemini and hosted Gemma models through Google AI Studio. Depending on the model, inputs can include text, images, audio, video, and PDFs.
 
 If you are using Vertex AI instead of Google AI Studio, see the [`vertex` provider](/docs/providers/vertex).
 
@@ -1380,7 +1380,7 @@ Where `tools.json` contains function declarations and built-in tools:
 ]
 ```
 
-Tools accept both `functionDeclarations` and `function_declarations`. If both aliases define the same function name within a tool, `functionDeclarations` takes precedence. Distinct functions from both aliases are retained.
+Tools accept both `functionDeclarations` and `function_declarations`. If both aliases define the same function name anywhere in the tools list, `functionDeclarations` takes precedence. For repeated names using the same spelling, the first declaration wins. Distinct functions and built-in tools are retained; entries containing only discarded duplicates are omitted.
 
 ### Built-in Tools
 

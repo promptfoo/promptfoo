@@ -137,6 +137,10 @@ export const awsProviderFactories: ProviderFactory[] = [
 
       // Handle Converse API
       if (modelType === 'converse') {
+        // This route builds the provider directly, so it never reaches getHandlerForModel —
+        // check retirement here too, or a withdrawn model only fails at the remote API.
+        const { assertBedrockModelIsAvailable } = await import('../bedrock/index');
+        assertBedrockModelIsAvailable(modelName);
         return new AwsBedrockConverseProvider(modelName, providerOptions);
       }
 
@@ -223,8 +227,6 @@ export const awsProviderFactories: ProviderFactory[] = [
         return new SageMakerCompletionProvider(modelType, providerOptions);
       }
 
-      // Handle 'sagemaker:<model-type>:<endpoint>'. The model type is explicit here, so it wins:
-      // an endpoint name containing 'jumpstart' must not silently override it.
       return new SageMakerCompletionProvider(endpointName, {
         ...providerOptions,
         config: {

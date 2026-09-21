@@ -136,7 +136,10 @@ export function mergeProviderEnv(
       delete merged.OPENAI_API_KEY;
       delete merged.CODEX_API_KEY;
     }
-    Object.assign(merged, layer);
+    Object.assign(
+      merged,
+      Object.fromEntries(Object.entries(layer).filter(([, value]) => value !== undefined)),
+    );
   }
   return merged;
 }
@@ -666,20 +669,16 @@ export const providerMap: ProviderFactory[] = [
       providerOptions: ProviderOptions,
       _context: LoadApiProviderContext,
     ) => {
-      const splits = providerPath.split(':');
-      let endpoint = splits.slice(1).join(':');
-      if (endpoint.startsWith('/')) {
-        endpoint = endpoint.slice(1);
-      }
+      const endpoint = providerPath.slice('f5:'.length).replace(/^\/+/, '');
       const configuredBaseUrl =
-        providerOptions.config?.apiBaseUrl ?? getEnvString('F5_API_BASE_URL');
+        providerOptions.config?.apiBaseUrl ??
+        providerOptions.env?.F5_API_BASE_URL ??
+        getEnvString('F5_API_BASE_URL');
       if (!configuredBaseUrl) {
         throw new Error(
           'F5 provider requires a gateway URL. Set `apiBaseUrl` in the provider config or the F5_API_BASE_URL environment variable.',
         );
       }
-      // The gateway path comes from the provider ID, so the base URL is an origin. Trim
-      // trailing slashes rather than concatenating blindly, which produced `host//path`.
       const baseUrl = configuredBaseUrl.replace(/\/+$/, '');
       return new OpenAiChatCompletionProvider(endpoint, {
         ...providerOptions,
@@ -1569,9 +1568,7 @@ export const providerMap: ProviderFactory[] = [
       providerOptions: ProviderOptions,
       _context: LoadApiProviderContext,
     ) => {
-      // Model names can contain colons (e.g. `llama:llama3:8b`), so keep everything after the
-      // first segment rather than truncating at the second.
-      const modelName = providerPath.split(':').slice(1).join(':');
+      const modelName = providerPath.slice('llama:'.length);
       return new LlamaProvider(modelName, providerOptions);
     },
   },

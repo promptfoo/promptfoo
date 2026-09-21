@@ -2,7 +2,7 @@ import path from 'path';
 
 import cliState from '../../cliState';
 import { type McpConfigParsed, McpConfigSchema } from '../../contracts/providerConfig/mcp';
-import { getEnvBool, getEnvInt } from '../../envars';
+import { getEnvBool, getEnvInt, getProcessEnv } from '../../envars';
 import logger from '../../logger';
 import { TOKEN_REFRESH_BUFFER_MS, type TokenRefreshLock } from '../../util/oauth';
 import { isMissingPackageImportError } from '../../util/packageImportErrors';
@@ -43,7 +43,7 @@ interface OAuthServerConfig {
  * override an inherited variable (e.g. a scoped token) without unsetting the rest.
  */
 function getStdioEnv(server: MCPServerConfig): Record<string, string> {
-  const parentEnv = process.env as Record<string, string>;
+  const parentEnv = getProcessEnv() as Record<string, string>;
   return server.env ? { ...parentEnv, ...server.env } : parentEnv;
 }
 
