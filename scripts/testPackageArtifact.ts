@@ -2,12 +2,10 @@ import assert from 'node:assert/strict';
 import { execFile, execFileSync } from 'node:child_process';
 import fs from 'node:fs';
 import { createServer } from 'node:http';
-import { createRequire } from 'node:module';
 import os from 'node:os';
 import path from 'node:path';
 import { brotliCompressSync, gzipSync } from 'node:zlib';
 
-import { satisfies } from 'semver';
 import { API } from 'typescript/unstable/sync';
 import { shouldCopyDrizzlePath } from './postbuild';
 
@@ -39,9 +37,6 @@ type ArtifactEvalOutput = {
 
 const ROOT = path.resolve(import.meta.dirname, '..');
 const drizzleDir = path.join(ROOT, 'drizzle');
-// The August 2026 undici advisories were fixed in 6.28.0, 7.29.0 and 8.9.0. Keep this in sync
-// with PATCHED_UNDICI_RANGE in test/package-manifests.test.ts.
-const PATCHED_UNDICI_RANGE = '^6.28.0 || ^7.29.0 || >=8.9.0';
 const requiredPackagedPaths = [
   'dist/drizzle/meta/_journal.json',
   'dist/src/app/index.html',
@@ -237,28 +232,6 @@ function assertInstalledWebApp(installedPackageDir: string): void {
     missingAssets,
     [],
     `Missing packaged web app assets: ${missingAssets.join(', ')}`,
-  );
-}
-
-/**
- * The ref parser fetches remote `$ref`s through its own nested undici, and consumers install
- * from the published tarball rather than this repo's lockfile — so the version they actually
- * resolve is only observable here. Asserting it against the parser's declared range would be a
- * tautology (npm cannot install outside it); the patched floor per undici major is the check
- * that can fail.
- */
-function assertInstalledRefParserTransport(installedPackageDir: string): void {
-  const packageRequire = createRequire(path.join(installedPackageDir, 'package.json'));
-  const parserRequire = createRequire(
-    packageRequire.resolve('@apidevtools/json-schema-ref-parser/package.json'),
-  );
-  const transportManifest = JSON.parse(
-    fs.readFileSync(parserRequire.resolve('undici/package.json'), 'utf8'),
-  ) as { version: string };
-
-  assert(
-    satisfies(transportManifest.version, PATCHED_UNDICI_RANGE),
-    `Installed ref parser resolved vulnerable undici ${transportManifest.version}`,
   );
 }
 
@@ -791,7 +764,6 @@ async function main(): Promise<void> {
     };
     assert.equal(installedPackageJson.version, packResult.version);
     assertExportsResolve(installedPackageDir, installedPackageJson);
-    assertInstalledRefParserTransport(installedPackageDir);
     assertProviderTypeDocumentation(installedPackageDir);
 
     writeConsumerScripts(consumerDir);

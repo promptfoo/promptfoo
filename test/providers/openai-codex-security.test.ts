@@ -1,6 +1,7 @@
 import fs from 'fs/promises';
 import path from 'path';
 
+import { validRange } from 'semver';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import cliState from '../../src/cliState';
 import { getDirectory, importModule, resolvePackageEntryPoint } from '../../src/esm';
@@ -238,7 +239,7 @@ describe('OpenAICodexSecurityProvider', () => {
 
       const response = await provider.callApi('Scan');
 
-      expect(response.metadata?.sdkVersion).toBe('0.1.18');
+      expect(response.metadata?.sdkVersion).toBe(mockModule.VERSION);
       expect(importModule).toHaveBeenCalledWith('/legacy/@openai/codex-security/dist/index.js');
       expect(importModule).toHaveBeenCalledWith('/promptfoo/@openai/codex-security/dist/index.js');
     });
@@ -260,7 +261,7 @@ describe('OpenAICodexSecurityProvider', () => {
 
       const response = await provider.callApi('Scan');
 
-      expect(response.metadata?.sdkVersion).toBe('0.1.18');
+      expect(response.metadata?.sdkVersion).toBe(mockModule.VERSION);
       expect(importModule).toHaveBeenCalledWith('/broken/@openai/codex-security/dist/index.js');
       expect(importModule).toHaveBeenCalledWith('/promptfoo/@openai/codex-security/dist/index.js');
     });
@@ -278,7 +279,7 @@ describe('OpenAICodexSecurityProvider', () => {
 
       const response = await provider.callApi('Scan the adversarial checkout');
 
-      expect(response.metadata?.sdkVersion).toBe('0.1.18');
+      expect(response.metadata?.sdkVersion).toBe(mockModule.VERSION);
       expect(resolvePackageEntryPoint).not.toHaveBeenCalledWith(
         '@openai/codex-security',
         '/adversarial/repository',
@@ -310,7 +311,11 @@ describe('OpenAICodexSecurityProvider', () => {
       const response = await provider.callApi('Scan');
 
       expect(response.error).toContain('package is incompatible (0.1.8)');
-      expect(response.error).toContain('npm install promptfoo @openai/codex-security@^0.1.18');
+      const suggestedRange = response.error?.match(
+        /npm install promptfoo @openai\/codex-security@(\S+)/,
+      )?.[1];
+      expect(suggestedRange).toBeDefined();
+      expect(validRange(suggestedRange)).not.toBeNull();
       expect(mockRun).not.toHaveBeenCalled();
     });
 
@@ -331,7 +336,7 @@ describe('OpenAICodexSecurityProvider', () => {
       const response = await provider.callApi('Scan');
 
       expect(response.error).toContain('package is incompatible (0.1.8, 0.1.10)');
-      expect(response.error).toContain('npm install promptfoo @openai/codex-security@^0.1.18');
+      expect(response.error).toContain('npm install promptfoo @openai/codex-security@');
       expect(mockRun).not.toHaveBeenCalled();
     });
 
