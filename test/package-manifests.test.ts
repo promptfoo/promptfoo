@@ -1296,6 +1296,19 @@ describe('package manifests', () => {
     expect(lockfile.packages?.['']?.dependencies?.ws).toBe(rootPackageJson.dependencies?.ws);
   });
 
+  it('requires compression middleware with response-stream cleanup', () => {
+    const rootPackageJson = readPackageJson<PackageManifest>('package.json');
+    const lockfile = readPackageJson<PackageLockManifest>('package-lock.json');
+    const compressionRange = rootPackageJson.dependencies?.compression;
+    const lockedCompressionVersion = lockfile.packages['node_modules/compression']?.version;
+
+    expect(compressionRange).toBeDefined();
+    expect(minVersion(compressionRange as string)?.compare('1.8.2')).toBeGreaterThanOrEqual(0);
+    expect(lockfile.packages['']?.dependencies?.compression).toBe(compressionRange);
+    expect(lockedCompressionVersion).toBeDefined();
+    expect(satisfies(lockedCompressionVersion as string, compressionRange as string)).toBe(true);
+  });
+
   it('keeps every direct and transitive js-yaml installation patched', () => {
     const packageLock = readPackageJson<PackageLockManifest>('package-lock.json');
     const workspaceManifests = [
