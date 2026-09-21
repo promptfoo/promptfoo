@@ -391,6 +391,22 @@ describe('EvaluateTestSuiteCreator', () => {
     expect(useStore.getState().config).toBe(previousConfig);
   });
 
+  it('does not replace the form with an uploaded configuration that supplies basePath', async () => {
+    const user = userEvent.setup();
+    render(<EvaluateTestSuiteCreator />);
+    const previous = useStore.getState().config;
+    const file = new File(['basePath: /work/config\nprompts: [file://prompt.txt]'], 'config.yaml', {
+      type: 'application/yaml',
+    });
+
+    await user.upload(screen.getByLabelText('Upload YAML configuration'), file);
+
+    await waitFor(() => {
+      expect(showToastMock).toHaveBeenCalledWith(expect.stringMatching(/basePath.*CLI/), 'error');
+    });
+    expect(useStore.getState().config).toBe(previous);
+  });
+
   it('should handle invalid YAML with error toast', async () => {
     const user = userEvent.setup();
     render(<EvaluateTestSuiteCreator />);

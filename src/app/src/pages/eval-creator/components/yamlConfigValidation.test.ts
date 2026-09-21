@@ -35,6 +35,19 @@ describe('validateYamlConfigDraft', () => {
     }
   });
 
+  it('rejects a caller-supplied base directory and explains how to run local references', () => {
+    const result = validateYamlConfigDraft({
+      basePath: '/work/private-directory',
+      prompts: ['file://prompt.txt'],
+    });
+
+    expect(result).toEqual({ success: false, error: expect.stringContaining('basePath') });
+    if (!result.success) {
+      expect(result.error).toContain('CLI');
+      expect(result.error).not.toContain('/work/private-directory');
+    }
+  });
+
   it('allows either provider spelling or neither, but rejects both', () => {
     expect(validateYamlConfigDraft({}).success).toBe(true);
     expect(validateYamlConfigDraft({ providers: ['echo'] })).toEqual({

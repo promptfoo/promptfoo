@@ -1019,6 +1019,18 @@ async function resolveLoadedConfig(
     processedDefaultTest = defaultTestRaw as Partial<TestCase>;
   }
 
+  const authoredTracing = fileConfig.tracing || defaultConfig.tracing;
+  const parsedTracing = TestSuiteConfigSchema.shape.tracing.safeParse(authoredTracing);
+  const tracing =
+    authoredTracing && parsedTracing.success && parsedTracing.data
+      ? {
+          ...authoredTracing,
+          ...parsedTracing.data,
+          // The original provider carries private metadata needed for safe persistence.
+          ...(authoredTracing.provider && { provider: authoredTracing.provider }),
+        }
+      : authoredTracing;
+
   const config: Omit<UnifiedConfig, 'commandLineOptions'> = {
     basePath,
     tags: fileConfig.tags || defaultConfig.tags,
@@ -1039,7 +1051,7 @@ async function resolveLoadedConfig(
     ],
     metadata: fileConfig.metadata || defaultConfig.metadata,
     redteam: fileConfig.redteam || defaultConfig.redteam,
-    tracing: fileConfig.tracing || defaultConfig.tracing,
+    tracing,
     evaluateOptions: fileConfig.evaluateOptions || defaultConfig.evaluateOptions,
   };
 

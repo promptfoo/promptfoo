@@ -123,6 +123,39 @@ describe('suite environment loading', () => {
     return configPath;
   }
 
+  it('applies published tracing defaults to executable and saved file configurations', async () => {
+    const input = { enabled: true, otlp: { http: {}, grpc: {} }, storage: {} };
+    const configPath = writeConfig('tracing-defaults', {
+      tracing: input as UnifiedConfig['tracing'],
+    });
+    const resolved = await resolveConfigs({ config: [configPath] }, {});
+    const expected = {
+      enabled: true,
+      otlp: {
+        http: {
+          enabled: true,
+          port: 4318,
+          host: '127.0.0.1',
+          acceptFormats: ['json', 'protobuf'],
+        },
+        grpc: { enabled: false, port: 4317 },
+      },
+      storage: { type: 'sqlite', retentionDays: 30 },
+    };
+
+    expect(resolved.testSuite.tracing).toEqual(expected);
+    expect(resolved.config.tracing).toEqual(expected);
+
+    const disabledPath = writeConfig('tracing-disabled', {
+      tracing: { enabled: true, otlp: { http: { enabled: false } } } as UnifiedConfig['tracing'],
+    });
+    const disabled = await resolveConfigs({ config: [disabledPath] }, {});
+    expect(disabled.testSuite.tracing?.otlp?.http?.enabled).toBe(false);
+
+    const omitted = await resolveConfigs({ config: [writeConfig('tracing-omitted', {})] }, {});
+    expect(omitted.testSuite.tracing).toBeUndefined();
+  });
+
   function externalConfig(name: string) {
     const configPath = writeConfig(name, {
       env: { OPENAI_API_BASE_URL: `https://${name}.example/v1`, OPENAI_API_KEY: `${name}-key` },

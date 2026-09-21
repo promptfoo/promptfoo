@@ -153,6 +153,20 @@ describe('YamlEditor', () => {
     expect(screen.getByRole('button', { name: /Save/ })).toBeEnabled();
   });
 
+  it('does not save a web draft whose local references depend on basePath', async () => {
+    const user = userEvent.setup();
+    render(<YamlEditorComponent />);
+    const editor = screen.getByTestId('yaml-editor');
+    await user.click(editor);
+    await user.keyboard('{Control>}a{/Control}');
+    await user.paste('basePath: /work/config\nprompts:\n  - file://prompt.txt');
+    await user.click(screen.getByRole('button', { name: /Save/ }));
+
+    expect(mockUpdateConfig).not.toHaveBeenCalled();
+    expect(screen.getByText(/basePath.*CLI/)).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /Save/ })).toBeEnabled();
+  });
+
   it('saves an incomplete configuration as entered without adding runtime defaults', async () => {
     const user = userEvent.setup();
     render(<YamlEditorComponent />);

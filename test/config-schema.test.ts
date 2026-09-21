@@ -375,6 +375,20 @@ describe('config-schema.json', () => {
       }
     });
 
+    it('rejects basePath only in web drafts while retaining it in the file and runtime contracts', () => {
+      const config = { prompts: ['hello'], providers: ['echo'], basePath: '/work/config' };
+      expect(UnifiedConfigSchema.safeParse(config).success).toBe(true);
+      expect(ajv.compile(schema)(config)).toBe(true);
+
+      const webDraft = UnifiedConfigDraftSchema.safeParse(config);
+      expect(webDraft.success).toBe(false);
+      if (!webDraft.success) {
+        expect(webDraft.error.issues).toEqual([
+          expect.objectContaining({ path: ['basePath'], message: expect.stringContaining('CLI') }),
+        ]);
+      }
+    });
+
     it('accepts either provider input but identifies conflicting aliases in a draft', () => {
       for (const selection of [{ providers: ['echo'] }, { targets: ['echo'] }]) {
         expect(UnifiedConfigDraftSchema.safeParse(selection).success).toBe(true);
