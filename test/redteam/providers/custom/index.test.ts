@@ -288,6 +288,35 @@ describe('CustomProvider', () => {
     expect(result.metadata?.sessionId).toBe('context-session-id');
   });
 
+  it('passes the rendered turn variables and session context to the target', async () => {
+    const context = {
+      originalProvider: mockTargetProvider,
+      vars: { objective: 'original objective', sessionId: 'existing-session', literal: 'value\n' },
+      prompt: { raw: '{{objective}}', label: 'test' },
+    };
+    mockTargetProvider.callApi.mockResolvedValue({ output: 'target response' });
+
+    await (customProvider as any).sendPrompt(
+      'rendered attack',
+      context.prompt,
+      context.vars,
+      undefined,
+      mockTargetProvider,
+      1,
+      context,
+    );
+
+    expect(mockTargetProvider.callApi).toHaveBeenCalledWith(
+      'rendered attack',
+      expect.objectContaining({
+        ...context,
+        vars: { ...context.vars, objective: 'rendered attack' },
+      }),
+      undefined,
+    );
+    expect(context.vars.objective).toBe('original objective');
+  });
+
   it('should include sessionId from target response when stateful is true', async () => {
     vi.mocked(tryUnblocking).mockResolvedValue({ success: false });
 
