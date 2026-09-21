@@ -171,6 +171,12 @@ providers:
             action: block
 ````
 
+:::note
+
+Mistral's `config.guardrails` field enables upstream inline input guardrails, but it does not enable Promptfoo's [`guardrails` assertion](/docs/configuration/expected-outputs/guardrails). Promptfoo sends the configuration without normalizing successful or HTTP 403 guardrail results into the required top-level response. Use a custom target or transform to assert on the native result. If `block_on_error` is enabled, distinguish a moderation-service failure from a policy violation instead of counting both as a match. Call a moderation endpoint separately for output filtering.
+
+:::
+
 ### Environment Variables Reference
 
 | Variable               | Description                     | Example                      |
@@ -226,22 +232,13 @@ The `magistral-small-latest` alias now resolves to Mistral Small 4 (a hybrid mod
 standalone Magistral Small reasoning snapshot. Enable Small 4's reasoning with
 `reasoning_effort: high`.
 
-#### Legacy Models (Deprecated or Retired)
+#### Legacy models
 
-promptfoo keeps these IDs so it can cost-score cached results. **Retired** IDs return an error if you call them today; **deprecated** IDs still work until their retirement date.
-
-1. `open-mistral-7b`, `mistral-tiny`, `mistral-tiny-2312` (retired)
-2. `mistral-small-2402` (retired)
-3. `mistral-medium-2312` (retired; bare `mistral-medium` now resolves to Mistral Medium 3.5)
-4. `mistral-medium-2505`, `mistral-medium-2508` (Mistral Medium 3 / 3.1, deprecated — succeeded by Mistral Medium 3.5)
-5. `mistral-small-2506` (Mistral Small 3.2, deprecated — succeeded by Mistral Small 4)
-6. `mistral-large-2402`, `mistral-large-2407` (retired)
-7. `codestral-2405`, `codestral-mamba-2407`, `open-codestral-mamba`, `codestral-mamba-latest` (retired)
-8. `open-mixtral-8x7b`, `open-mixtral-8x22b`, `open-mixtral-8x22b-2404`, `mistral-small`, `mistral-small-2312` (retired)
-9. `pixtral-12b` (retired — use a current vision model such as `mistral-large-latest`)
-10. `magistral-small-2506`, `magistral-small-2507` (retired); `magistral-small-2509` — standalone reasoning snapshot, deprecated 2026-04-30, retiring 2026-07-31 (`magistral-small-latest` now resolves to Mistral Small 4)
-
-> `mistral-tiny-2407` / `mistral-tiny-latest` are **not** legacy — they are current aliases of `open-mistral-nemo` (see the aliases table above).
+promptfoo retains pricing for a number of retired and deprecated Mistral snapshot IDs so it can
+cost-score cached results from older evals. Those IDs are not listed here because the set changes;
+retired IDs return an error if you call them today. Use a current model from the table above, and
+check [Mistral's model deprecations](https://docs.mistral.ai/getting-started/models/) for the
+status of any snapshot you still reference.
 
 ### Embedding Models
 
@@ -610,12 +607,12 @@ Error: 429 Too Many Requests
 - Use smaller batch sizes
 - Consider upgrading your plan
 
-```yaml
-# Reduce concurrent requests
-providers:
-  - id: mistral:mistral-large-latest
-    config:
-      timeout: 30000 # Increase timeout
+The Mistral provider has no `timeout` config option. Request timeouts come from the
+`REQUEST_TIMEOUT_MS` environment variable (default 300000), and concurrency is controlled by the
+`--max-concurrency` flag:
+
+```bash
+REQUEST_TIMEOUT_MS=600000 promptfoo eval --max-concurrency 1
 ```
 
 #### Context Length Exceeded

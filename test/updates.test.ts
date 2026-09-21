@@ -23,31 +23,9 @@ vi.mock('../src/util/fetch/index.ts', () => ({
   fetchWithTimeout: vi.fn(),
 }));
 
-vi.mock('../src/envars', () => ({
-  getEnvBool: (key: string) => {
-    const value = process.env[key]?.toLowerCase();
-    return value === '1' || value === 'true';
-  },
-  getEnvInt: (key: string, defaultValue?: number) => {
-    const value = process.env[key];
-    return value === undefined ? defaultValue : Number.parseInt(value, 10);
-  },
-  getEnvString: (key: string, defaultValue?: string) => process.env[key] ?? defaultValue,
-}));
-
-vi.mock('../src/logger', () => ({
-  default: {
-    debug: vi.fn(),
-    error: vi.fn(),
-    info: vi.fn(),
-    warn: vi.fn(),
-  },
-}));
-
 vi.mock('../src/version', () => ({
   VERSION: '0.11.0',
   POSTHOG_KEY: '',
-  ENGINES: { node: '>=20.0.0' },
 }));
 
 import logger from '../src/logger';
@@ -68,6 +46,28 @@ beforeEach(() => {
   mockExecAsync.mockResolvedValue({
     stdout: 'modelaudit, version 0.0.0',
     stderr: '',
+  });
+});
+
+describe('getLatestVersion', () => {
+  it('should return the latest version of the package', async () => {
+    vi.mocked(fetchWithTimeout).mockResolvedValueOnce({
+      ok: true,
+      json: async () => ({ latestVersion: '1.1.0' }),
+    } as never);
+
+    const latestVersion = await getLatestVersion();
+    expect(latestVersion).toBe('1.1.0');
+  });
+
+  it('should throw an error if the response is not ok', async () => {
+    vi.mocked(fetchWithTimeout).mockResolvedValueOnce({
+      ok: false,
+    } as never);
+
+    await expect(getLatestVersion()).rejects.toThrow(
+      'Failed to fetch package information for promptfoo',
+    );
   });
 });
 
@@ -105,32 +105,8 @@ describe('getUpdateCommands', () => {
   });
 });
 
-describe('getLatestVersion', () => {
-  it('should return the latest version of the package', async () => {
-    vi.mocked(fetchWithTimeout).mockResolvedValueOnce({
-      ok: true,
-      json: async () => ({ latestVersion: '1.1.0' }),
-    } as never);
-
-    const latestVersion = await getLatestVersion();
-    expect(latestVersion).toBe('1.1.0');
-  });
-
-  it('should throw an error if the response is not ok', async () => {
-    vi.mocked(fetchWithTimeout).mockResolvedValueOnce({
-      ok: false,
-    } as never);
-
-    await expect(getLatestVersion()).rejects.toThrow(
-      'Failed to fetch package information for promptfoo',
-    );
-  });
-});
-
 describe('checkForUpdates', () => {
   let loggerInfoSpy: ReturnType<typeof vi.spyOn>;
-  let loggerWarnSpy: ReturnType<typeof vi.spyOn>;
-  let consoleWarnSpy: ReturnType<typeof vi.spyOn>;
   let restoreEnv: () => void;
 
   beforeEach(() => {
@@ -138,27 +114,64 @@ describe('checkForUpdates', () => {
     vi.mocked(fetchWithTimeout).mockReset();
     restoreEnv = mockProcessEnv({ PROMPTFOO_DISABLE_UPDATE: undefined });
     loggerInfoSpy = vi.spyOn(logger, 'info').mockImplementation(() => logger);
-    loggerWarnSpy = vi.spyOn(logger, 'warn').mockImplementation(() => logger);
-    consoleWarnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
   });
 
   afterEach(() => {
     loggerInfoSpy.mockRestore();
-    loggerWarnSpy.mockRestore();
-    consoleWarnSpy.mockRestore();
     restoreEnv();
   });
 
-  it('should skip the CLI update check when PROMPTFOO_DISABLE_UPDATE is set', async () => {
+  it('should skip the update check when PROMPTFOO_DISABLE_UPDATE is set', async () => {
     const restoreDisableUpdate = mockProcessEnv({ PROMPTFOO_DISABLE_UPDATE: 'true' });
     try {
       expect(await checkForUpdates()).toBe(false);
       expect(fetchWithTimeout).not.toHaveBeenCalled();
       expect(loggerInfoSpy).not.toHaveBeenCalled();
-      expect(loggerWarnSpy).not.toHaveBeenCalled();
     } finally {
       restoreDisableUpdate();
     }
+  });
+
+  it('should tell official-image users to pull a new image', async () => {
+    const restoreDocker = mockProcessEnv({
+      PROMPTFOO_OFFICIAL_DOCKER_IMAGE: 'true',
+      PROMPTFOO_RUNNING_IN_DOCKER: 'true',
+    });
+    vi.mocked(fetchWithTimeout).mockResolvedValueOnce({
+      ok: true,
+      json: async () => ({ latestVersion: '1.1.0' }),
+    } as never);
+
+    try {
+      await expect(checkForUpdates()).resolves.toBe(true);
+    } finally {
+      restoreDocker();
+    }
+
+    expect(loggerInfoSpy).toHaveBeenCalledWith(
+      expect.stringContaining('docker pull ghcr.io/promptfoo/promptfoo:latest'),
+    );
+  });
+
+  it('should require a source update before rebuilding a custom container', async () => {
+    const restoreContainer = mockProcessEnv({
+      PROMPTFOO_OFFICIAL_DOCKER_IMAGE: undefined,
+      PROMPTFOO_RUNNING_IN_DOCKER: 'true',
+    });
+    vi.mocked(fetchWithTimeout).mockResolvedValueOnce({
+      ok: true,
+      json: async () => ({ latestVersion: '1.1.0' }),
+    } as never);
+
+    try {
+      await expect(checkForUpdates()).resolves.toBe(true);
+    } finally {
+      restoreContainer();
+    }
+
+    expect(loggerInfoSpy).toHaveBeenCalledWith(
+      expect.stringContaining('Update the Promptfoo source, dependency, or parent image'),
+    );
   });
 
   it('should log an update message if a newer version is available - minor ver', async () => {
@@ -189,198 +202,6 @@ describe('checkForUpdates', () => {
 
     const result = await checkForUpdates();
     expect(result).toBeFalsy();
-  });
-
-  it('should tell Node.js 20 users to upgrade Node before installing latest after cutoff', async () => {
-    vi.mocked(fetchWithTimeout).mockResolvedValueOnce({
-      ok: true,
-      json: async () => ({ latestVersion: '1.1.0' }),
-    } as never);
-
-    const result = await checkForUpdates({
-      currentNodeVersion: 'v20.20.2',
-      now: new Date('2026-07-30T00:00:00.000Z'),
-    });
-
-    expect(result).toBe(true);
-    expect(loggerWarnSpy).toHaveBeenCalledWith(
-      expect.stringContaining('Upgrade to Node.js 22.22.0 or newer'),
-    );
-    expect(loggerInfoSpy).not.toHaveBeenCalled();
-    expect(consoleWarnSpy).not.toHaveBeenCalled();
-  });
-
-  it('should keep normal update guidance for Node.js 20 before cutoff', async () => {
-    vi.mocked(fetchWithTimeout).mockResolvedValueOnce({
-      ok: true,
-      json: async () => ({ latestVersion: '1.1.0' }),
-    } as never);
-
-    const result = await checkForUpdates({
-      currentNodeVersion: 'v20.20.2',
-      now: new Date('2026-07-29T23:59:59.999Z'),
-    });
-
-    expect(result).toBe(true);
-    expect(loggerInfoSpy).toHaveBeenCalledWith(expect.stringContaining('npx promptfoo@latest'));
-    expect(loggerWarnSpy).not.toHaveBeenCalled();
-    expect(consoleWarnSpy).not.toHaveBeenCalled();
-  });
-
-  it('should preserve official-image pull guidance before and after the cutoff', async () => {
-    const restoreDocker = mockProcessEnv({
-      PROMPTFOO_OFFICIAL_DOCKER_IMAGE: 'true',
-      PROMPTFOO_RUNNING_IN_DOCKER: 'true',
-    });
-    vi.mocked(fetchWithTimeout)
-      .mockResolvedValueOnce({
-        ok: true,
-        json: async () => ({ latestVersion: '1.1.0' }),
-      } as never)
-      .mockResolvedValueOnce({
-        ok: true,
-        json: async () => ({ latestVersion: '1.1.0' }),
-      } as never);
-
-    try {
-      await checkForUpdates({
-        currentNodeVersion: 'v20.20.2',
-        now: new Date('2026-07-29T23:59:59.999Z'),
-      });
-      await checkForUpdates({
-        currentNodeVersion: 'v20.20.2',
-        now: new Date('2026-07-30T00:00:00.000Z'),
-      });
-    } finally {
-      restoreDocker();
-    }
-
-    expect(loggerInfoSpy).toHaveBeenCalledTimes(2);
-    expect(loggerInfoSpy).toHaveBeenNthCalledWith(
-      1,
-      expect.stringContaining('docker pull ghcr.io/promptfoo/promptfoo:latest'),
-    );
-    expect(loggerInfoSpy).toHaveBeenNthCalledWith(
-      2,
-      expect.stringContaining('docker pull ghcr.io/promptfoo/promptfoo:latest'),
-    );
-    expect(loggerInfoSpy).toHaveBeenNthCalledWith(
-      2,
-      expect.stringContaining(
-        'If this is a derived image, update its Promptfoo base and rebuild it',
-      ),
-    );
-    expect(loggerWarnSpy).not.toHaveBeenCalled();
-  });
-
-  it('should keep package update safeguards in generic self-hosted mode', async () => {
-    const restoreSelfHosted = mockProcessEnv({
-      PROMPTFOO_OFFICIAL_DOCKER_IMAGE: undefined,
-      PROMPTFOO_RUNNING_IN_DOCKER: undefined,
-      PROMPTFOO_SELF_HOSTED: 'true',
-    });
-    vi.mocked(fetchWithTimeout).mockResolvedValueOnce({
-      ok: true,
-      json: async () => ({ latestVersion: '1.1.0' }),
-    } as never);
-
-    try {
-      await checkForUpdates({
-        currentNodeVersion: 'v20.20.2',
-        now: new Date('2026-07-30T00:00:00.000Z'),
-      });
-    } finally {
-      restoreSelfHosted();
-    }
-
-    expect(loggerWarnSpy).toHaveBeenCalledWith(
-      expect.stringContaining('Upgrade to Node.js 22.22.0 or newer'),
-    );
-    expect(loggerInfoSpy).not.toHaveBeenCalled();
-  });
-
-  it('should require a source update before rebuilding a custom container', async () => {
-    const restoreContainer = mockProcessEnv({
-      PROMPTFOO_OFFICIAL_DOCKER_IMAGE: undefined,
-      PROMPTFOO_RUNNING_IN_DOCKER: 'true',
-    });
-    vi.mocked(fetchWithTimeout)
-      .mockResolvedValueOnce({
-        ok: true,
-        json: async () => ({ latestVersion: '1.1.0' }),
-      } as never)
-      .mockResolvedValueOnce({
-        ok: true,
-        json: async () => ({ latestVersion: '1.1.0' }),
-      } as never);
-
-    try {
-      await checkForUpdates({
-        currentNodeVersion: 'v20.20.2',
-        now: new Date('2026-07-29T23:59:59.999Z'),
-      });
-      await checkForUpdates({
-        currentNodeVersion: 'v20.20.2',
-        now: new Date('2026-07-30T00:00:00.000Z'),
-      });
-    } finally {
-      restoreContainer();
-    }
-
-    expect(loggerInfoSpy).toHaveBeenCalledOnce();
-    expect(loggerInfoSpy).toHaveBeenCalledWith(
-      expect.stringContaining('Update the Promptfoo source, dependency, or parent image'),
-    );
-    expect(loggerInfoSpy).not.toHaveBeenCalledWith(expect.stringContaining('npx promptfoo'));
-    expect(loggerInfoSpy).not.toHaveBeenCalledWith(expect.stringContaining('ghcr.io/promptfoo'));
-    expect(loggerWarnSpy).toHaveBeenCalledOnce();
-    expect(loggerWarnSpy).toHaveBeenCalledWith(
-      expect.stringContaining('and use Node.js 22.22.0 or newer (24 LTS recommended)'),
-    );
-  });
-
-  it('should let cadence suppress duplicate custom-container cutoff guidance', async () => {
-    const restoreContainer = mockProcessEnv({
-      PROMPTFOO_OFFICIAL_DOCKER_IMAGE: undefined,
-      PROMPTFOO_RUNNING_IN_DOCKER: 'true',
-    });
-    vi.mocked(fetchWithTimeout).mockResolvedValueOnce({
-      ok: true,
-      json: async () => ({ latestVersion: '1.1.0' }),
-    } as never);
-
-    try {
-      expect(
-        await checkForUpdates({
-          currentNodeVersion: 'v20.20.2',
-          now: new Date('2026-07-30T00:00:00.000Z'),
-          suppressRuntimeBlockedWarning: true,
-        }),
-      ).toBe(true);
-    } finally {
-      restoreContainer();
-    }
-
-    expect(loggerInfoSpy).not.toHaveBeenCalled();
-    expect(loggerWarnSpy).not.toHaveBeenCalled();
-  });
-
-  it('should let the runtime campaign suppress duplicate post-cutoff guidance', async () => {
-    vi.mocked(fetchWithTimeout).mockResolvedValueOnce({
-      ok: true,
-      json: async () => ({ latestVersion: '1.1.0' }),
-    } as never);
-
-    const result = await checkForUpdates({
-      currentNodeVersion: 'v20.20.2',
-      now: new Date('2026-07-30T00:00:00.000Z'),
-      suppressRuntimeBlockedWarning: true,
-    });
-
-    expect(result).toBe(true);
-    expect(consoleWarnSpy).not.toHaveBeenCalled();
-    expect(loggerInfoSpy).not.toHaveBeenCalled();
-    expect(loggerWarnSpy).not.toHaveBeenCalled();
   });
 });
 

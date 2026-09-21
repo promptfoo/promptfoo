@@ -711,6 +711,39 @@ describe('AzureResponsesProvider', () => {
       expect(result.cost).toBeCloseTo((1_500 * 5 + 500 * 0.5 + 1_000 * 30) / 1e6, 12);
     });
 
+    it('prices the served tier using the passthrough model sent for an aliased deployment', async () => {
+      mockFetchWithCache.mockResolvedValue({
+        data: {
+          service_tier: 'priority',
+          output: [
+            { type: 'message', role: 'assistant', content: [{ type: 'output_text', text: '4' }] },
+          ],
+          usage: {
+            input_tokens: 2_000,
+            input_tokens_details: { cached_tokens: 500 },
+            output_tokens: 1_000,
+          },
+        },
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+      });
+      const provider = new AzureResponsesProvider('my-custom-deployment', {
+        config: {
+          service_tier: 'default',
+          passthrough: { model: 'gpt-5.6-sol' },
+        },
+      });
+
+      const result = await provider.callApi('What is 2+2?');
+      const requestBody = JSON.parse(
+        mockFetchWithCache.mock.calls[0]![1]!.body as string,
+      ) as Record<string, unknown>;
+
+      expect(requestBody).toMatchObject({ model: 'gpt-5.6-sol', service_tier: 'default' });
+      expect(result.cost).toBeCloseTo((2 * (1_500 * 5 + 500 * 0.5 + 1_000 * 30)) / 1e6, 12);
+    });
+
     it('prices the priority tier Azure served instead of requested auto', async () => {
       mockFetchWithCache.mockResolvedValue({
         data: {

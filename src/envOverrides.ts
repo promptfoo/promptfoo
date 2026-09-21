@@ -1,6 +1,6 @@
 import type { EnvOverrides } from './types/env';
 
-export type EnvOverridesProvider = () => EnvOverrides | undefined;
+export type EnvOverridesProvider = (layer: 'suite' | 'file') => EnvOverrides | undefined;
 
 /**
  * Module-level singleton; last-writer-wins. Scoped to the current process —
@@ -17,19 +17,6 @@ export function setEnvOverridesProvider(provider: EnvOverridesProvider | undefin
   envOverridesProvider = provider;
 }
 
-/**
- * Returns the current env overrides snapshot, or `undefined` if no provider is
- * registered. Swallows provider exceptions to preserve the invariant that
- * `getEnvString` (and its delegates `getEnvBool` / `getEnvInt` / etc.) never
- * throw on environment access — relied on by ~148 call sites.
- */
-export function getEnvOverrides(): EnvOverrides | undefined {
-  if (!envOverridesProvider) {
-    return undefined;
-  }
-  try {
-    return envOverridesProvider();
-  } catch {
-    return undefined;
-  }
+export function getEnvOverridesProvider(): EnvOverridesProvider | undefined {
+  return envOverridesProvider;
 }

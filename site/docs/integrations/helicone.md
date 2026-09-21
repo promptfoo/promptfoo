@@ -11,7 +11,7 @@ To reference prompts in Helicone:
 
 1. Log into [Helicone](https://www.helicone.ai) or create an account. Once you have an account, you can generate an [API key](https://helicone.ai/developer).
 
-2. Set the `HELICONE_API_KEY` and environment variables as desired.
+2. Set `HELICONE_API_KEY` in your shell, in a file passed with `--env-file`, or in your config's top-level `env` block.
 
 3. Use the `helicone://` prefix for your prompts, followed by the Helicone prompt id and version. For example:
 

@@ -1,4 +1,5 @@
 ---
+title: Helicone AI Gateway
 description: Monitor and optimize LLM usage through Helicone's AI gateway with unified access, caching, and comprehensive observability
 ---
 
@@ -102,7 +103,7 @@ The Helicone AI Gateway supports 100+ models from various providers. Some popula
 
 | Provider  | Example Models                                                    |
 | --------- | ----------------------------------------------------------------- |
-| OpenAI    | `openai/gpt-4o`, `openai/gpt-5-mini`, `openai/o1-preview`         |
+| OpenAI    | `openai/gpt-4o`, `openai/gpt-5-mini`                              |
 | Anthropic | `anthropic/claude-3-5-sonnet`, `anthropic/claude-3-haiku`         |
 | Groq      | `groq/llama-3.1-8b-instant`, `groq/llama-3.1-70b-versatile`       |
 | Meta      | `meta-llama/Llama-3-8b-chat-hf`, `meta-llama/Llama-3-70b-chat-hf` |

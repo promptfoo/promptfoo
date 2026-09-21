@@ -237,6 +237,21 @@ export async function decodeExportTraceServiceRequest(
   }
 }
 
+/** Encode an OTLP JSON-shaped trace payload for a protobuf-only HTTP receiver. */
+export async function encodeExportTraceServiceRequest(
+  request: Record<string, unknown>,
+): Promise<Buffer> {
+  const messageType = await getExportTraceServiceRequestType();
+
+  try {
+    const message = messageType.fromObject(request);
+    return Buffer.from(messageType.encode(message).finish());
+  } catch (error) {
+    logger.error(`[Protobuf] Failed to encode ExportTraceServiceRequest: ${error}`);
+    throw new Error(`Invalid trace data: ${error instanceof Error ? error.message : error}`);
+  }
+}
+
 /**
  * Initialize the protobuf loader (preload proto definitions)
  * Call this at startup for faster first request handling

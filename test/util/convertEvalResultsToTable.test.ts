@@ -1375,43 +1375,46 @@ describe('convertResultsToTable', () => {
     ['empty string', '', ''],
     ['zero', 0, '0'],
     ['false', false, 'false'],
-  ])('does not overwrite a falsy result.vars value (%s) with transformDisplayVars', (_label, falsyValue, expectedRendered) => {
-    const resultsFile: ResultsFile = {
-      version: 4,
-      prompts: [createCompletedPrompt('test prompt', { display: 'test prompt', id: 'prompt1' })],
-      vars: ['prompt'],
-      results: {
-        results: [
-          {
-            id: 'test1',
-            testIdx: 0,
-            promptIdx: 0,
-            // Falsy value for `prompt` must be preserved, not silently
-            // replaced by transformDisplayVars.prompt.
-            vars: { prompt: falsyValue } as unknown as Record<string, string>,
-            prompt: { raw: 'test prompt', label: 'Test Prompt' },
-            response: {
-              output: 'test output',
-              metadata: { transformDisplayVars: { prompt: 'from-transform' } },
+  ])(
+    'does not overwrite a falsy result.vars value (%s) with transformDisplayVars',
+    (_label, falsyValue, expectedRendered) => {
+      const resultsFile: ResultsFile = {
+        version: 4,
+        prompts: [createCompletedPrompt('test prompt', { display: 'test prompt', id: 'prompt1' })],
+        vars: ['prompt'],
+        results: {
+          results: [
+            {
+              id: 'test1',
+              testIdx: 0,
+              promptIdx: 0,
+              // Falsy value for `prompt` must be preserved, not silently
+              // replaced by transformDisplayVars.prompt.
+              vars: { prompt: falsyValue } as unknown as Record<string, string>,
+              prompt: { raw: 'test prompt', label: 'Test Prompt' },
+              response: {
+                output: 'test output',
+                metadata: { transformDisplayVars: { prompt: 'from-transform' } },
+              },
+              provider: { id: 'test-provider' },
+              success: true,
+              promptId: 'prompt1',
+              testCase: {},
+              // @ts-ignore
+              failureReason: 'none',
+              score: 1,
+              latencyMs: 100,
+              namedScores: {},
             },
-            provider: { id: 'test-provider' },
-            success: true,
-            promptId: 'prompt1',
-            testCase: {},
-            // @ts-ignore
-            failureReason: 'none',
-            score: 1,
-            latencyMs: 100,
-            namedScores: {},
-          },
-        ],
-      },
-    };
+          ],
+        },
+      };
 
-    const result = convertResultsToTable(resultsFile);
-    expect(result.head.vars).toEqual(['prompt']);
-    expect(result.body[0].vars).toEqual([expectedRendered]);
-  });
+      const result = convertResultsToTable(resultsFile);
+      expect(result.head.vars).toEqual(['prompt']);
+      expect(result.body[0].vars).toEqual([expectedRendered]);
+    },
+  );
 
   it('treats a malformed non-array vars field as if no order were persisted', () => {
     // Bogus payload from a corrupt store / older writer. Cast via unknown

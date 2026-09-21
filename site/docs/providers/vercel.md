@@ -9,7 +9,7 @@ description: Access OpenAI, Anthropic, Google, and 20+ AI providers through Verc
 
 [Vercel AI Gateway](https://vercel.com/docs/ai-gateway) provides a unified interface to access AI models from 20+ providers through a single API. This provider uses the official [Vercel AI SDK](https://ai-sdk.dev/).
 
-If you call the Vercel AI SDK directly from a [`file://` custom provider](/docs/providers/custom-api/) and enable `experimental_telemetry`, Promptfoo's [trajectory assertions](/docs/configuration/expected-outputs/deterministic/#trajectorytool-used) can normalize the SDK's tool-call spans from `ai.toolCall.name` plus the matching `ai.toolCall.args`, `ai.toolCall.arguments`, or `ai.toolCall.input` attributes.
+When [tracing](/docs/tracing/) is enabled, Promptfoo automatically turns on the AI SDK's built-in tracing for text generation, streaming, structured output, and embeddings. SDK spans inherit the current evaluation trace, including direct provider calls that supply a `traceparent`. Prompt and response content are not recorded. If you call the SDK directly from a [`file://` custom provider](/docs/providers/custom-api/), enable `experimental_telemetry` yourself; Promptfoo's [trajectory assertions](/docs/configuration/expected-outputs/deterministic/#trajectorytool-used) can normalize its tool-call spans from `ai.toolCall.name` plus the matching `ai.toolCall.args`, `ai.toolCall.arguments`, or `ai.toolCall.input` attributes.
 
 ## Setup
 
@@ -92,6 +92,7 @@ providers:
 | `apiKeyEnvar`      | string   | Custom environment variable name for API key |
 | `temperature`      | number   | Controls randomness (0.0 to 1.0)             |
 | `maxTokens`        | number   | Maximum number of tokens to generate         |
+| `maxRetries`       | number   | Retry attempts for a failed request          |
 | `topP`             | number   | Nucleus sampling parameter                   |
 | `topK`             | number   | Top-k sampling parameter                     |
 | `frequencyPenalty` | number   | Penalizes frequent tokens                    |
@@ -171,18 +172,29 @@ For a complete list, see the [Vercel AI Gateway documentation](https://vercel.co
 
 Generate embeddings for text similarity, search, and RAG applications:
 
+Embedding providers are not eval providers — they back the `similar` assertion rather than
+producing outputs of their own. Set one on `defaultTest.options.provider.embedding`:
+
 ```yaml title="promptfooconfig.yaml"
 providers:
-  - vercel:embedding:openai/text-embedding-3-small
+  - vercel:openai/gpt-5.6-luna
 
 prompts:
-  - 'Generate embedding for: {{text}}'
+  - 'Answer concisely: {{question}}'
+
+defaultTest:
+  options:
+    provider:
+      embedding:
+        id: vercel:embedding:openai/text-embedding-3-small
 
 tests:
   - vars:
-      text: 'Hello world'
+      question: 'What is the capital of France?'
     assert:
-      - type: is-valid-embedding
+      - type: similar
+        value: Paris
+        threshold: 0.8
 ```
 
 Supported embedding models:
@@ -255,10 +267,11 @@ tests:
 
 ## Environment Variables
 
-| Variable                     | Description                 |
-| ---------------------------- | --------------------------- |
-| `VERCEL_AI_GATEWAY_API_KEY`  | API key for AI Gateway      |
-| `VERCEL_AI_GATEWAY_BASE_URL` | Override the AI Gateway URL |
+| Variable                     | Description                                                      |
+| ---------------------------- | ---------------------------------------------------------------- |
+| `VERCEL_AI_GATEWAY_API_KEY`  | API key for AI Gateway                                           |
+| `AI_GATEWAY_API_KEY`         | Fallback API key, used when `VERCEL_AI_GATEWAY_API_KEY` is unset |
+| `VERCEL_AI_GATEWAY_BASE_URL` | Override the AI Gateway URL                                      |
 
 ## Troubleshooting
 
