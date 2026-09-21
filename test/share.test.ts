@@ -918,7 +918,7 @@ describe('createShareableUrl', () => {
         response: { output: outputUri },
         testCase: { vars: { input: inputUri } },
         testIdx: 1,
-      } as EvalResult;
+      } as unknown as EvalResult;
       mockEval.config = { env: { PROMPTFOO_STRIP_RESPONSE_OUTPUT: 'true' } };
       mockEval.fetchResultsBatched = vi.fn().mockImplementation(async function* () {
         yield [result];
