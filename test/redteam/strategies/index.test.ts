@@ -8,7 +8,6 @@ import { loadStrategy, validateStrategies } from '../../../src/redteam/strategie
 
 import type { RedteamStrategyObject, TestCaseWithPlugin } from '../../../src/types/index';
 
-vi.mock('../../../src/cliState');
 vi.mock('../../../src/esm', async (importOriginal) => {
   return {
     ...(await importOriginal()),
@@ -210,9 +209,7 @@ describe('loadStrategy', () => {
       action: vi.fn(),
     };
     vi.mocked(importModule).mockResolvedValue(customStrategy);
-    (cliState as any).basePath = '/base/path';
-
-    await loadStrategy('file://relative/custom.js');
+    await cliState.withBasePath('/base/path', () => loadStrategy('file://relative/custom.js'));
     expect(importModule).toHaveBeenCalledWith(path.join('/base/path', 'relative/custom.js'));
   });
 });

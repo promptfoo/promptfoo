@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import logger from '../../../src/logger';
 
 const mcpClientMock = vi.hoisted(() => ({
   initialize: vi.fn().mockResolvedValue(undefined),
@@ -53,6 +54,118 @@ describe('MCPProvider', () => {
         originalPayload: payload,
       },
     });
+  });
+
+  it('merges config.defaultArgs into tool calls, with per-call args winning', async () => {
+    mcpClientMock.callTool.mockResolvedValue({ content: 'ok', raw: {} });
+
+    const provider = new MCPProvider({
+      config: {
+        enabled: true,
+        defaultArgs: { session_id: 'sess-1', user_role: 'customer' },
+      },
+    });
+    await provider.callApi(
+      '',
+      createContext({ tool: 'lookup_user', args: { id: '123', user_role: 'admin' } }),
+    );
+
+    expect(mcpClientMock.callTool).toHaveBeenCalledWith('lookup_user', {
+      session_id: 'sess-1',
+      user_role: 'admin',
+      id: '123',
+    });
+  });
+
+  it('keeps tool argument values out of debug logs and credentials out of saved metadata', async () => {
+    const debug = vi.spyOn(logger, 'debug').mockImplementation(() => undefined);
+    const configuredToken = 'configured-value';
+    const configuredPassword = 'nested-value';
+    const customValue = 'opaque-custom-value';
+    const promptKey = 'prompt-value';
+    const transform = vi.fn((_result, _content, context) => {
+      expect(context.toolArgs.sessionToken).toBe(configuredToken);
+      return { output: 'ok' };
+    });
+    mcpClientMock.callTool.mockResolvedValue({ content: 'ok', raw: {} });
+
+    try {
+      const provider = new MCPProvider({
+        config: {
+          enabled: true,
+          defaultArgs: {
+            sessionToken: configuredToken,
+            custom: customValue,
+            nested: { password: configuredPassword },
+          },
+          transformResponse: transform,
+        },
+      });
+      const result = await provider.callApi(
+        '',
+        createContext({ tool: 'lookup_user', args: { apiKey: promptKey, id: '123' } }),
+      );
+
+      expect(mcpClientMock.callTool).toHaveBeenCalledWith('lookup_user', {
+        sessionToken: configuredToken,
+        custom: customValue,
+        nested: { password: configuredPassword },
+        apiKey: promptKey,
+        id: '123',
+      });
+      expect(transform).toHaveBeenCalledOnce();
+      expect(result.metadata).toEqual({
+        toolName: 'lookup_user',
+        toolArgs: {
+          sessionToken: '[REDACTED]',
+          custom: customValue,
+          nested: { password: '[REDACTED]' },
+          apiKey: '[REDACTED]',
+          id: '123',
+        },
+        originalPayload: { tool: 'lookup_user', args: { apiKey: '[REDACTED]', id: '123' } },
+      });
+      expect(debug).toHaveBeenCalledWith('MCP Provider calling tool', {
+        toolName: 'lookup_user',
+        argumentNames: ['sessionToken', 'custom', 'nested', 'apiKey', 'id'],
+      });
+      const debugCalls = JSON.stringify(debug.mock.calls);
+      for (const value of [configuredToken, configuredPassword, customValue, promptKey]) {
+        expect(debugCalls).not.toContain(value);
+      }
+    } finally {
+      debug.mockRestore();
+    }
+  });
+
+  it('still accepts defaultArgs passed as a constructor option', async () => {
+    mcpClientMock.callTool.mockResolvedValue({ content: 'ok', raw: {} });
+
+    const provider = new MCPProvider({
+      config: { enabled: true },
+      defaultArgs: { session_id: 'from-options' },
+    });
+    await provider.callApi('', createContext({ tool: 'lookup_user', args: { id: '123' } }));
+
+    expect(mcpClientMock.callTool).toHaveBeenCalledWith('lookup_user', {
+      session_id: 'from-options',
+      id: '123',
+    });
+  });
+
+  it('applies defaults to direct tool calls and reports the arguments actually sent', async () => {
+    mcpClientMock.callTool.mockResolvedValue({ content: 'ok', raw: {} });
+    const provider = new MCPProvider({
+      config: { enabled: true, defaultArgs: { session: 'default', role: 'customer' } },
+    });
+
+    const result = await provider.callTool('lookup_user', { role: 'admin' });
+
+    expect(mcpClientMock.callTool).toHaveBeenCalledWith('lookup_user', {
+      session: 'default',
+      role: 'admin',
+    });
+    expect(result.metadata?.toolArgs).toEqual({ session: '[REDACTED]', role: 'admin' });
   });
 
   it('should preserve MCP tool error results as direct provider output', async () => {

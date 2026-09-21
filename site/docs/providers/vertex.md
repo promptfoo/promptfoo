@@ -6,7 +6,7 @@ description: Use Google Vertex AI models including Gemini, Claude, Llama, and sp
 
 # Google Vertex
 
-The `vertex` provider enables integration with Google's [Vertex AI](https://cloud.google.com/vertex-ai) platform, which provides access to foundation models including Gemini, Llama, Claude, and specialized models for text, code, and embeddings.
+The `vertex` provider connects to Google's [Vertex AI](https://cloud.google.com/vertex-ai). It supports Gemini, Llama, Claude, and other models for text, code, and embeddings.
 
 :::info Provider Selection
 Use `vertex:` for all Vertex AI models (Gemini, Claude, Llama, etc.). Use `google:` for Google AI Studio (API key authentication).
@@ -509,7 +509,7 @@ The following environment variables can be used to configure the Vertex AI provi
 | Variable                         | Description                         | Default        | Required |
 | -------------------------------- | ----------------------------------- | -------------- | -------- |
 | `GOOGLE_CLOUD_PROJECT`           | Google Cloud project ID             | None           | Yes\*    |
-| `GOOGLE_CLOUD_LOCATION`          | Region for Vertex AI                | `us-central1`  | No       |
+| `GOOGLE_CLOUD_LOCATION`          | Region for Vertex AI                | `global`†      | No       |
 | `GOOGLE_API_KEY`                 | API key for express mode            | None           | No\*     |
 | `GOOGLE_APPLICATION_CREDENTIALS` | Path to service account credentials | None           | No\*     |
 | `VERTEX_PUBLISHER`               | Model publisher                     | `google`       | No       |
@@ -518,13 +518,16 @@ The following environment variables can be used to configure the Vertex AI provi
 
 \*At least one authentication method is required (ADC, service account, or API key)
 
+†The default region is `global` when authenticating with ADC or a service account, and
+`us-central1` in express mode (API key).
+
 ### Region Selection
 
 Different models are available in different regions. Common regions include:
 
-- `global` - Supported by Gemini 3.8 Flash, 3.7 Flash, 3.6 Flash, and 3.5 Flash-Lite
+- `global` - Default with ADC or service account credentials. Supported by Gemini 3.8 Flash, 3.7 Flash, 3.6 Flash, and 3.5 Flash-Lite
 - `us`, `eu` - Multi-region endpoints supported by Gemini 3.8 Flash, 3.7 Flash, 3.6 Flash, and 3.5 Flash-Lite (10% pricing premium)
-- `us-central1` - Default, most models available
+- `us-central1` - Default in express mode (API key), most models available
 - `us-east4` - Additional capacity
 - `us-east5` - Claude models available
 - `europe-west1` - EU region, Claude models available
@@ -762,32 +765,34 @@ defaultTest:
 
 ### Configuration Reference
 
-| Option                             | Description                                                        | Default                              |
-| ---------------------------------- | ------------------------------------------------------------------ | ------------------------------------ |
-| `apiKey`                           | GCloud API token                                                   | None                                 |
-| `apiHost`                          | API host override                                                  | `{region}-aiplatform.googleapis.com` |
-| `apiVersion`                       | API version                                                        | `v1`                                 |
-| `credentials`                      | Service account credentials (JSON or file path)                    | None                                 |
-| `projectId`                        | GCloud project ID                                                  | `GOOGLE_CLOUD_PROJECT` env var       |
-| `region`                           | GCloud region                                                      | `us-central1`                        |
-| `publisher`                        | Model publisher                                                    | `google`                             |
-| `context`                          | Model context                                                      | None                                 |
-| `cost`                             | Legacy per-token override applied to both input and output pricing | None                                 |
-| `inputCost`                        | Override input token pricing in promptfoo cost estimates           | None                                 |
-| `outputCost`                       | Override output token pricing in promptfoo cost estimates          | None                                 |
-| `service_tier`                     | Gemini inference tier: `standard`, `flex`, or `priority`           | `standard`                           |
-| `examples`                         | Few-shot examples                                                  | None                                 |
-| `safetySettings`                   | Content filtering                                                  | None                                 |
-| `generationConfig.temperature`     | Randomness control                                                 | None                                 |
-| `generationConfig.maxOutputTokens` | Max tokens to generate                                             | None                                 |
-| `generationConfig.topP`            | Nucleus sampling                                                   | None                                 |
-| `generationConfig.topK`            | Sampling diversity                                                 | None                                 |
-| `generationConfig.stopSequences`   | Generation stop triggers                                           | `[]`                                 |
-| `responseSchema`                   | JSON schema for structured output (supports `file://`)             | None                                 |
-| `toolConfig`                       | Tool/function calling config                                       | None                                 |
-| `systemInstruction`                | System prompt (supports `{{var}}` and `file://`)                   | None                                 |
-| `expressMode`                      | Set to `false` to force OAuth/ADC even with API key                | auto (API key → `true`)              |
-| `streaming`                        | Use streaming API (`streamGenerateContent`)                        | `false`                              |
+| Option                             | Description                                                        | Default                        |
+| ---------------------------------- | ------------------------------------------------------------------ | ------------------------------ |
+| `apiKey`                           | GCloud API token                                                   | None                           |
+| `apiHost`                          | API host override                                                  | Derived from `region`‡         |
+| `apiVersion`                       | API version                                                        | `v1`                           |
+| `credentials`                      | Service account credentials (JSON or file path)                    | None                           |
+| `projectId`                        | GCloud project ID                                                  | `GOOGLE_CLOUD_PROJECT` env var |
+| `region`                           | GCloud region                                                      | `global`‡                      |
+| `publisher`                        | Model publisher                                                    | `google`                       |
+| `context`                          | Model context                                                      | None                           |
+| `cost`                             | Legacy per-token override applied to both input and output pricing | None                           |
+| `inputCost`                        | Override input token pricing in promptfoo cost estimates           | None                           |
+| `outputCost`                       | Override output token pricing in promptfoo cost estimates          | None                           |
+| `service_tier`                     | Gemini inference tier: `standard`, `flex`, or `priority`           | `standard`                     |
+| `examples`                         | Few-shot examples                                                  | None                           |
+| `safetySettings`                   | Content filtering                                                  | None                           |
+| `generationConfig.temperature`     | Randomness control                                                 | None                           |
+| `generationConfig.maxOutputTokens` | Max tokens to generate                                             | None                           |
+| `generationConfig.topP`            | Nucleus sampling                                                   | None                           |
+| `generationConfig.topK`            | Sampling diversity                                                 | None                           |
+| `generationConfig.stopSequences`   | Generation stop triggers                                           | `[]`                           |
+| `responseSchema`                   | JSON schema for structured output (supports `file://`)             | None                           |
+| `toolConfig`                       | Tool/function calling config                                       | None                           |
+| `systemInstruction`                | System prompt (supports `{{var}}` and `file://`)                   | None                           |
+| `expressMode`                      | Set to `false` to force OAuth/ADC even with API key                | auto (API key → `true`)        |
+| `streaming`                        | Use streaming API (`streamGenerateContent`)                        | `false`                        |
+
+‡With ADC or service account credentials the default region is `global` and the host is `aiplatform.googleapis.com`. In express mode (API key) the default region is `us-central1` and the host is `{region}-aiplatform.googleapis.com`.
 
 :::note
 Not all models support all parameters. See [Google's documentation](https://cloud.google.com/vertex-ai/generative-ai/docs/multimodal/overview) for model-specific details.
