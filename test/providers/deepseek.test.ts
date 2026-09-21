@@ -84,6 +84,44 @@ describe('calculateDeepSeekCost', () => {
     expect(cost).toBeUndefined();
   });
 
+  it.each(['unknown-model', 'deepseek-flash'])(
+    'does not guess a rate for billable %s usage',
+    (model) => {
+      expect(calculateDeepSeekCost(model, { inputCost: 0.01 }, 100, 100)).toBeUndefined();
+      expect(calculateDeepSeekCost(model, { outputCost: 0.02 }, 100, 100)).toBeUndefined();
+      expect(calculateDeepSeekCost(model, { cacheReadCost: 0.001 }, 100, 100, 50)).toBeUndefined();
+      expect(
+        calculateDeepSeekCost(model, { cacheReadCost: 0.001, outputCost: 0.02 }, 100, 100, 50),
+      ).toBeUndefined();
+      expect(calculateDeepSeekCost(model, {}, 0, 0)).toBeUndefined();
+    },
+  );
+
+  it('only needs a rate for token categories that were actually used', () => {
+    expect(calculateDeepSeekCost('deepseek-flash', { inputCost: 0.01 }, 100, 0, 50)).toBeCloseTo(1);
+    expect(calculateDeepSeekCost('deepseek-flash', { outputCost: 0.02 }, 0, 100)).toBeCloseTo(2);
+    expect(
+      calculateDeepSeekCost('deepseek-flash', { cacheReadCost: 0.001 }, 100, 0, 100),
+    ).toBeCloseTo(0.1);
+    expect(
+      calculateDeepSeekCost(
+        'deepseek-flash',
+        { cacheReadCost: 0.001, outputCost: 0.02 },
+        100,
+        100,
+        100,
+      ),
+    ).toBeCloseTo(2.1);
+    expect(calculateDeepSeekCost('deepseek-flash', { cost: 0 }, 100, 100, 50)).toBe(0);
+  });
+
+  it('keeps built-in rates for unspecified directions on known models', () => {
+    expect(calculateDeepSeekCost('deepseek-v4-pro', { inputCost: 0.01 }, 100, 100)).toBeCloseTo(
+      1.000087,
+      8,
+    );
+  });
+
   it('should calculate cost with 100% cache hits', () => {
     const cost = calculateDeepSeekCost('deepseek-chat', {}, 1000000, 1000000, 1000000);
     expect(cost).toBeCloseTo(0.2828); // (0.0028 + 0.28) - all input tokens are cached

@@ -84,13 +84,20 @@ export function calculateDeepSeekCost(
 
   const billableCachedTokens = clampCachedTokens(cachedTokens, promptTokens);
   const uncachedPromptTokens = promptTokens - billableCachedTokens;
-  const inputCost = config.inputCost ?? config.cost ?? model?.cost.input ?? 0;
-  const outputCost = config.outputCost ?? config.cost ?? model?.cost.output ?? 0;
+  const inputCost = config.inputCost ?? config.cost ?? model?.cost.input;
+  const outputCost = config.outputCost ?? config.cost ?? model?.cost.output;
   const cacheReadCost = config.cacheReadCost ?? model?.cost.cache_read ?? inputCost;
+  if (
+    (uncachedPromptTokens > 0 && inputCost === undefined) ||
+    (billableCachedTokens > 0 && cacheReadCost === undefined) ||
+    (completionTokens > 0 && outputCost === undefined)
+  ) {
+    return undefined;
+  }
 
-  const inputCostTotal = inputCost * uncachedPromptTokens;
-  const cacheReadCostTotal = cacheReadCost * billableCachedTokens;
-  const outputCostTotal = outputCost * completionTokens;
+  const inputCostTotal = (inputCost ?? 0) * uncachedPromptTokens;
+  const cacheReadCostTotal = (cacheReadCost ?? 0) * billableCachedTokens;
+  const outputCostTotal = (outputCost ?? 0) * completionTokens;
 
   logger.debug(
     `DeepSeek cost calculation for ${modelName}: ` +
