@@ -93,8 +93,8 @@ AI/ML API offers models from multiple providers. Here are some of the most popul
 
 ### Advanced Language Models
 
-- **GPT-4.1**: `openai/gpt-5` - Latest GPT with 1M token context
-- **GPT-4.1 Mini**: `gpt-5-mini` - 83% cheaper than GPT-4o with comparable performance
+- **GPT-5**: `openai/gpt-5` - OpenAI's flagship model
+- **GPT-5 Mini**: `openai/gpt-5-mini` - Cost-efficient GPT-5 variant
 - **Claude 4 Sonnet**: `anthropic/claude-4-sonnet` - Balanced speed and capability
 - **Claude 4 Opus**: `anthropic/claude-4-opus` - Claude 4 Opus model
 - **Gemini 2.5 Pro**: `google/gemini-2.5-pro-preview` - Google's versatile multimodal model
@@ -124,8 +124,8 @@ For a complete list of all 300+ available models, visit the [AI/ML API Models pa
 # yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
 providers:
   - aimlapi:chat:deepseek-r1
-  - aimlapi:chat:gpt-5-mini
-  - aimlapi:chat:claude-4-sonnet
+  - aimlapi:chat:openai/gpt-5-mini
+  - aimlapi:chat:anthropic/claude-4-sonnet
 
 prompts:
   - 'Explain {{concept}} in simple terms'
@@ -152,13 +152,13 @@ providers:
 
   # General purpose model
   - id: aimlapi:chat:openai/gpt-5
-    label: 'GPT-4.1'
+    label: 'GPT-5'
     config:
       temperature: 0.7
       max_tokens: 2000
 
   # Fast, cost-effective model
-  - id: aimlapi:chat:gemini-2.5-flash
+  - id: aimlapi:chat:google/gemini-2.5-flash
     label: 'Gemini 2.5 Flash'
     config:
       temperature: 0.5
@@ -186,23 +186,32 @@ tests:
 
 ### Embedding Example
 
+Embedding models back the [`similar` assertion](/docs/configuration/expected-outputs/similar/). Set them under `defaultTest.options.provider.embedding`; an embedding model cannot be used as a top-level eval provider. Extra request fields such as `dimensions` go under `config.passthrough`.
+
 ```yaml title="promptfooconfig.yaml"
 # yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
 providers:
-  - id: aimlapi:embedding:text-embedding-3-large
-    config:
-      dimensions: 3072 # Optional: reduce embedding dimensions
+  - aimlapi:chat:openai/gpt-5-mini
+
+defaultTest:
+  options:
+    provider:
+      embedding:
+        id: aimlapi:embedding:text-embedding-3-large
+        config:
+          passthrough:
+            dimensions: 1024 # Optional: reduce embedding dimensions
 
 prompts:
-  - '{{text}}'
+  - 'Describe {{topic}} in one sentence.'
 
 tests:
   - vars:
-      text: 'The quick brown fox jumps over the lazy dog'
+      topic: 'a fox jumping over a dog'
     assert:
-      - type: is-valid-embedding
-      - type: embedding-dimension
-        value: 3072
+      - type: similar
+        value: 'The quick brown fox jumps over the lazy dog'
+        threshold: 0.7
 ```
 
 ### JSON Mode Example
@@ -210,7 +219,7 @@ tests:
 ```yaml title="promptfooconfig.yaml"
 # yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
 providers:
-  - id: aimlapi:chat:gpt-5
+  - id: aimlapi:chat:openai/gpt-5
     config:
       response_format: { type: 'json_object' }
       temperature: 0.0
@@ -255,4 +264,4 @@ This includes tested configurations for comparing multiple models, evaluating re
 - **Model Updates**: New models are added regularly - check the [models page](https://aimlapi.com/models) for the latest additions
 - **Unified Billing**: Pay for all models through a single account
 
-For detailed pricing information, visit [aimlapi.com/pricing](https://aimlapi.com/pricing).
+For detailed pricing information, visit [AI/ML API pricing](https://aimlapi.com/ai-ml-api-pricing).

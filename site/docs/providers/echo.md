@@ -24,15 +24,26 @@ providers:
 The Echo Provider returns a complete `ProviderResponse` object with the following fields:
 
 - `output`: The original input string
+- `raw`: The original input string
 - `cost`: Always 0
 - `cached`: Always false
-- `tokenUsage`: Set to `{ total: 0, prompt: 0, completion: 0 }`
+- `tokenUsage`: Set to `{ total: 0, prompt: 0, completion: 0, numRequests: 1 }`
 - `isRefusal`: Always false
 - `metadata`: Any additional metadata provided in the context
 
 ## Usage
 
 The Echo Provider requires no additional configuration and returns the input after performing any variable substitutions.
+
+It accepts one option, `delay` (milliseconds), which sleeps before responding — useful for
+exercising timeout and concurrency behavior:
+
+```yaml
+providers:
+  - id: echo
+    config:
+      delay: 500
+```
 
 ### Example
 
