@@ -13,6 +13,11 @@ import { NunjucksFilterMapSchema, StringOrFunctionSchema } from '../contracts/va
 import { isJavascriptFile, JAVASCRIPT_EXTENSIONS } from '../util/fileExtensions';
 import { parseFilterRange } from '../util/filterRange';
 import { ApiProviderSchema, ProviderOptionsSchema, ProvidersSchema } from '../validators/providers';
+import {
+  CONFIG_PROVIDER_INPUT_ERROR,
+  hasValidConfigProviders,
+  normalizeConfigProviderAlias,
+} from './configAliases';
 
 export { ProvidersSchema };
 
@@ -1401,39 +1406,31 @@ export const TestSuiteConfigSchema = z.object({
 
 export type TestSuiteConfig = z.infer<typeof TestSuiteConfigSchema>;
 
-export const UnifiedConfigSchema = TestSuiteConfigSchema.extend({
+/** Input fields shared by complete runtime configs and incomplete editor drafts. */
+const UnifiedConfigInputSchema = TestSuiteConfigSchema.extend({
   evaluateOptions: EvaluateOptionsSchema.optional(),
   commandLineOptions: CommandLineOptionsSchema.partial().optional(),
   providers: ProvidersSchema.optional(),
   targets: ProvidersSchema.optional(),
-})
-  .refine(
-    (data) => {
-      const hasTargets = data.targets !== undefined;
-      const hasProviders = data.providers !== undefined;
-      return (hasTargets && !hasProviders) || (!hasTargets && hasProviders);
-    },
-    {
-      message: "Exactly one of 'targets' or 'providers' must be provided, but not both",
-    },
-  )
-  .transform((data) => {
-    if (data.targets && !data.providers) {
-      data.providers = data.targets;
-      delete data.targets;
-    }
+});
 
-    // Handle null extensions, undefined extensions, or empty arrays by deleting the field
-    if (
-      data.extensions === null ||
-      data.extensions === undefined ||
-      (Array.isArray(data.extensions) && data.extensions.length === 0)
-    ) {
-      delete data.extensions;
-    }
+export const UnifiedConfigSchema = UnifiedConfigInputSchema.refine(
+  (data) => hasValidConfigProviders(data),
+  { message: CONFIG_PROVIDER_INPUT_ERROR },
+).transform((data) => {
+  const config = normalizeConfigProviderAlias(data);
 
-    return data;
-  });
+  // Handle null extensions, undefined extensions, or empty arrays by deleting the field
+  if (
+    config.extensions === null ||
+    config.extensions === undefined ||
+    (Array.isArray(config.extensions) && config.extensions.length === 0)
+  ) {
+    delete config.extensions;
+  }
+
+  return config;
+});
 
 export type UnifiedConfig = z.infer<typeof UnifiedConfigSchema>;
 

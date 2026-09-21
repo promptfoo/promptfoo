@@ -1175,6 +1175,63 @@ describe('suite environment loading', () => {
     });
   });
 
+  it('evaluates normalized file-backed defaults and merges non-overlapping command options', async () => {
+    const configPath = writeConfig('default-runtime-file', {
+      prompts: ['value={{value}}'],
+      defaultTest: 'file://defaults.json',
+      tests: [{ description: 'echo' }],
+    });
+    const dir = path.dirname(configPath);
+    fs.writeFileSync(
+      path.join(dir, 'defaults.json'),
+      JSON.stringify({ vars: 'vars.json', options: { suffix: ':CONFIG' } }),
+    );
+    fs.writeFileSync(path.join(dir, 'vars.json'), JSON.stringify({ value: 'from-file' }));
+
+    const { config, testSuite } = await resolveConfigs(
+      { config: [configPath], promptPrefix: 'CLI:', promptSuffix: ':CLI' },
+      {},
+    );
+    expect(testSuite.defaultTest).toMatchObject({
+      vars: { value: 'from-file' },
+      options: { prefix: 'CLI:', suffix: ':CONFIG' },
+    });
+    const result = await evaluateResolved(testSuite, new Eval(config), { cache: false });
+    expect((await result.getResults())[0]).toMatchObject({
+      success: true,
+      response: { output: 'CLI:value=from-file:CONFIG' },
+    });
+  });
+
+  it.each([
+    ['no configured default', undefined, '[value=inline]'],
+    ['metadata-only default', { metadata: { purpose: 'control' } }, '[value=inline]'],
+    [
+      'configured prefix and command suffix',
+      { vars: { inherited: true }, options: { prefix: 'CONFIG:' } },
+      'CONFIG:value=inline]',
+    ],
+  ] as const)(
+    'evaluates %s without losing independent command affixes',
+    async (_, defaults, output) => {
+      const configPath = writeConfig('default-runtime-inline', {
+        prompts: ['value={{value}}'],
+        ...(defaults && { defaultTest: defaults }),
+        tests: [{ vars: { value: 'inline' } }],
+      });
+      const { config, testSuite } = await resolveConfigs(
+        { config: [configPath], promptPrefix: '[', promptSuffix: ']' },
+        {},
+      );
+
+      const result = await evaluateResolved(testSuite, new Eval(config), { cache: false });
+      expect((await result.getResults())[0]).toMatchObject({
+        success: true,
+        response: { output },
+      });
+    },
+  );
+
   it('retains each suite directory for deferred graders after another config loads', async () => {
     const suites = [];
     for (const name of ['fixture-first-unique', 'fixture-second-unique']) {
@@ -1305,8 +1362,9 @@ describe('suite environment loading', () => {
     });
   });
 
-  it('resolves prompts and external tests relative to every expanded config path', async () => {
-    for (const name of ['first', 'second']) {
+  it('resolves prompts and external tests relative to every expanded and explicit config path', async () => {
+    const names = ['group-first', 'group-second', 'literal'];
+    for (const name of names) {
       const configPath = writeConfig(name, { tests: 'tests.yaml' });
       fs.writeFileSync(
         path.join(path.dirname(configPath), 'tests.yaml'),
@@ -1317,24 +1375,27 @@ describe('suite environment loading', () => {
       fs.writeFileSync(configPath, JSON.stringify(config));
       fs.writeFileSync(path.join(path.dirname(configPath), 'prompt.txt'), name);
     }
-    const config = await combineConfigs([path.join(tempDir, '*', 'config.json')]);
+    const pattern = path.join(tempDir, 'group-*', 'config.json');
+    const literal = path.join(tempDir, 'literal', 'config.json');
+    const config = await combineConfigs([pattern, literal]);
     expect(config.prompts).toEqual(
       expect.arrayContaining(
-        ['first', 'second'].map((name) => `file://${path.join(tempDir, name, 'prompt.txt')}`),
+        names.map((name) => `file://${path.join(tempDir, name, 'prompt.txt')}`),
       ),
     );
-    expect((config.tests as TestCase[]).map((test) => test.vars?.source).sort()).toEqual([
-      'first',
-      'second',
-    ]);
-    const { testSources } = await resolveConfigs(
-      { config: [path.join(tempDir, '*', 'config.json')] },
-      {},
-    );
+    const testNames = (config.tests as TestCase[]).map((test) => test.vars?.source);
+    expect([...testNames].sort()).toEqual(names);
+    expect(testNames.at(-1)).toBe('literal');
+    const { testSources } = await resolveConfigs({ config: [pattern, literal] }, {});
     expect(testSources?.map((source) => source.basePath).sort()).toEqual(
-      ['first', 'second'].map((name) => path.join(tempDir, name)),
+      names.map((name) => path.join(tempDir, name)),
     );
-    expect(testSources?.map((source) => source.tests)).toEqual(['tests.yaml', 'tests.yaml']);
+    expect(testSources?.at(-1)?.basePath).toBe(path.join(tempDir, 'literal'));
+    expect(testSources?.map((source) => source.tests)).toEqual([
+      'tests.yaml',
+      'tests.yaml',
+      'tests.yaml',
+    ]);
   });
 
   it.each([{}, { OPENAI_API_KEY: 'replacement-key' }])(

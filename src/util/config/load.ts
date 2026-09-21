@@ -570,8 +570,7 @@ async function readTestSources(
 async function prepareCombinedConfig(
   configPaths: string[],
 ): Promise<{ config: UnifiedConfig; testSources: TestSource[] }> {
-  const configs: UnifiedConfig[] = [];
-  const resolvedConfigPaths: string[] = [];
+  const configSources: { config: UnifiedConfig; basePath: string }[] = [];
   for (const configPath of configPaths) {
     const resolvedPath = path.resolve(process.cwd(), configPath);
 
@@ -586,14 +585,11 @@ async function prepareCombinedConfig(
     }
     for (const globPath of globPaths) {
       const config = await readConfig(globPath);
-      configs.push(config);
-      resolvedConfigPaths.push(globPath);
+      configSources.push({ config, basePath: config.basePath ?? path.dirname(globPath) });
     }
   }
 
-  const configBasePaths = configs.map(
-    (config, index) => config.basePath ?? path.dirname(resolvedConfigPaths[index]),
-  );
+  const configs = configSources.map(({ config }) => config);
   const combinedEnv = configs.reduce((env, config) => ({ ...env, ...config.env }), {});
   const providers: UnifiedConfig['providers'] = [];
   const seenProviders = new Set<unknown>();
@@ -760,10 +756,10 @@ async function prepareCombinedConfig(
       throw new Error('Invalid prompt object');
     }
   };
-  configs.forEach((config, idx) => {
+  configSources.forEach(({ config, basePath }) => {
     if (typeof config.prompts === 'string') {
       invariant(Array.isArray(prompts), 'Cannot mix string and map-type prompts');
-      const absolutePrompt = makeAbsolute(configBasePaths[idx], config.prompts);
+      const absolutePrompt = makeAbsolute(basePath, config.prompts);
       addSeenPrompt(absolutePrompt);
     } else if (Array.isArray(config.prompts)) {
       invariant(Array.isArray(prompts), 'Cannot mix configs with map and array-type prompts');
@@ -774,7 +770,7 @@ async function prepareCombinedConfig(
               (typeof prompt.raw === 'string' || typeof prompt.label === 'string')),
           `Invalid prompt: ${JSON.stringify(prompt)}. Prompts must be either a string or an object with a 'raw' or 'label' string property.`,
         );
-        addSeenPrompt(makeAbsolute(configBasePaths[idx], prompt as string | Prompt));
+        addSeenPrompt(makeAbsolute(basePath, prompt as string | Prompt));
       });
     } else {
       // Object format such as { 'prompts/prompt1.txt': 'foo', 'prompts/prompt2.txt': 'bar' }
@@ -786,7 +782,7 @@ async function prepareCombinedConfig(
         ...prompts,
         ...Object.fromEntries(
           Object.entries(config.prompts).map(([prompt, label]) => [
-            prompt.startsWith('file://') ? resolveConfigPath(configBasePaths[idx], prompt) : prompt,
+            prompt.startsWith('file://') ? resolveConfigPath(basePath, prompt) : prompt,
             label,
           ]),
         ),
@@ -798,12 +794,11 @@ async function prepareCombinedConfig(
   }
 
   let scenarios: UnifiedConfig['scenarios'];
-  for (const [index, config] of configs.entries()) {
+  for (const { config, basePath } of configSources) {
     if (config.scenarios === undefined) {
       continue;
     }
     scenarios ??= [];
-    const basePath = configBasePaths[index];
     for (const source of [config.scenarios].flat()) {
       const loaded =
         typeof source === 'string' && source.startsWith('file://')
@@ -830,16 +825,17 @@ async function prepareCombinedConfig(
   // Combine all configs into a single UnifiedConfig
   const combinedConfig: UnifiedConfig = {
     tags: configs.reduce((prev, curr) => ({ ...prev, ...curr.tags }), {}),
-    basePath: configBasePaths[0],
+    basePath: configSources[0]?.basePath,
     description: configs.map((config) => config.description).join(', '),
     providers,
     prompts,
     tests: [],
     scenarios,
-    defaultTest: configs.reduce((prev: Partial<TestCase> | string | undefined, curr, index) => {
+    defaultTest: configSources.reduce((prev: Partial<TestCase> | string | undefined, source) => {
+      const { config: curr, basePath } = source;
       // The last file default wins; inline defaults only merge when no file was selected.
       if (typeof curr.defaultTest === 'string') {
-        return makeTestAbsolute(configBasePaths[index], curr.defaultTest) as string;
+        return makeTestAbsolute(basePath, curr.defaultTest) as string;
       }
       // If prev is already a string (file reference), keep it
       if (typeof prev === 'string') {
@@ -897,9 +893,9 @@ async function prepareCombinedConfig(
 
   return {
     config: combinedConfig,
-    testSources: configs.map((config, index) => ({
+    testSources: configSources.map(({ config, basePath }) => ({
       tests: config.tests,
-      basePath: configBasePaths[index],
+      basePath,
     })),
   };
 }
@@ -1234,14 +1230,13 @@ async function resolveLoadedConfig(
 
   const defaultTest: TestCase = {
     metadata: config.metadata,
+    ...parsedDefaultTest,
     options: {
       prefix: cmdObj.promptPrefix,
       suffix: cmdObj.promptSuffix,
       provider: cmdObj.grader,
-      // rubricPrompt
-      ...(parsedDefaultTest?.options || {}),
+      ...parsedDefaultTest?.options,
     },
-    ...(parsedDefaultTest || {}),
   };
 
   const testSuite: TestSuite = {

@@ -4,6 +4,7 @@ import * as path from 'path';
 import Ajv from 'ajv';
 import addFormats from 'ajv-formats';
 import { beforeAll, describe, expect, it } from 'vitest';
+import { UnifiedConfigSchema } from '../src/types';
 
 describe('config-schema.json', () => {
   let schema: any;
@@ -277,6 +278,82 @@ describe('config-schema.json', () => {
       expect(properties).toHaveProperty('redteam');
       expect(properties).toHaveProperty('scenarios');
       expect(properties).toHaveProperty('defaultTest');
+    });
+  });
+
+  describe('runtime input parity', () => {
+    const baseConfig = { prompts: ['hello'], providers: ['echo'] };
+
+    it.each([
+      ['providers', { providers: ['echo'] }, true],
+      ['targets', { targets: ['echo'] }, true],
+      ['both spellings', { providers: ['echo'], targets: ['echo'] }, false],
+    ] as const)('agrees on %s for provider selection', (_name, selection, expected) => {
+      const config = { prompts: ['hello'], ...selection };
+      const validate = ajv.compile(schema);
+
+      expect(UnifiedConfigSchema.safeParse(config).success).toBe(expected);
+      expect(validate(config), JSON.stringify(validate.errors)).toBe(expected);
+    });
+
+    it('leaves provider selection optional for authoring but required for a complete evaluation', () => {
+      const config = { prompts: ['hello'] };
+      const validate = ajv.compile(schema);
+
+      expect(validate(config), JSON.stringify(validate.errors)).toBe(true);
+      expect(UnifiedConfigSchema.safeParse(config).success).toBe(false);
+    });
+
+    it.each([
+      ['defaulted nested lists may be omitted', {}, true],
+      ['boolean tracing settings', { tracing: { enabled: true, maxDepth: 2 } }, true],
+      [
+        'recursive tracing settings',
+        {
+          tracing: {
+            enabled: false,
+            strategies: {
+              fixture: { enabled: true, strategies: { nested: { enabled: false, maxDepth: 2 } } },
+            },
+          },
+        },
+        true,
+      ],
+      ['string tracing settings', { tracing: { enabled: 'yes' } }, false],
+      [
+        'string tracing settings in a recursive override',
+        { tracing: { strategies: { fixture: { enabled: 'yes' } } } },
+        false,
+      ],
+      [
+        'invalid constraints in a recursive override',
+        { tracing: { strategies: { fixture: { maxDepth: 0 } } } },
+        false,
+      ],
+    ] as const)('agrees on %s', (name, redteam, expected) => {
+      const config = {
+        ...baseConfig,
+        redteam:
+          name === 'defaulted nested lists may be omitted'
+            ? redteam
+            : { plugins: [], strategies: [], ...redteam },
+      };
+      const validate = ajv.compile(schema);
+
+      expect(UnifiedConfigSchema.safeParse(config).success).toBe(expected);
+      expect(validate(config), JSON.stringify(validate.errors)).toBe(expected);
+    });
+
+    it.each([
+      ['defaulted top-level tracing settings', { tracing: { otlp: { http: {} } } }],
+      ['scalar environment inputs before normalization', { env: { CUSTOM_RETRIES: 2 } }],
+      ['nullable extensions before normalization', { extensions: null }],
+    ] as const)('accepts %s in both validators', (_name, partialConfig) => {
+      const config = { ...baseConfig, ...partialConfig };
+      const validate = ajv.compile(schema);
+
+      expect(UnifiedConfigSchema.safeParse(config).success).toBe(true);
+      expect(validate(config), JSON.stringify(validate.errors)).toBe(true);
     });
   });
 
