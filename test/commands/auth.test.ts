@@ -6,7 +6,7 @@ import { isNonInteractive } from '../../src/envars';
 import { getUserEmail, setUserEmail } from '../../src/globalConfig/accounts';
 import { cloudConfig } from '../../src/globalConfig/cloud';
 import logger from '../../src/logger';
-import { getDefaultTeam, getUserTeams } from '../../src/util/cloud';
+import { getDefaultTeam, getUserTeams, resolveTeamId } from '../../src/util/cloud';
 import { fetchWithProxy } from '../../src/util/fetch/index';
 import { openAuthBrowser } from '../../src/util/server';
 import { createMockResponse, mockGlobal, stripAnsi } from '../util/utils';
@@ -720,6 +720,29 @@ describe('auth command', () => {
 
       expect(cloudConfig.setCurrentTeamId).toHaveBeenCalledWith('team-2', '1');
       expect(logger.info).toHaveBeenCalledWith(expect.stringContaining('(default)'));
+    });
+  });
+
+  describe('teams current', () => {
+    it('clears an inaccessible stored team before resolving the default', async () => {
+      vi.mocked(cloudConfig.isEnabled).mockReturnValue(true);
+      vi.mocked(cloudConfig.getCurrentOrganizationId).mockReturnValue('org-1');
+      vi.mocked(cloudConfig.getCurrentTeamId).mockReturnValue('stale-team');
+      vi.mocked(resolveTeamId)
+        .mockRejectedValueOnce(new Error('team not found'))
+        .mockResolvedValueOnce({
+          id: 'default-team',
+          name: 'Default',
+        });
+
+      const currentCommand = program.commands
+        .find((cmd) => cmd.name() === 'auth')
+        ?.commands.find((cmd) => cmd.name() === 'teams')
+        ?.commands.find((cmd) => cmd.name() === 'current');
+      await currentCommand?.parseAsync(['node', 'test']);
+
+      expect(cloudConfig.clearCurrentTeamId).toHaveBeenCalledWith('org-1');
+      expect(logger.info).toHaveBeenCalledWith(expect.stringContaining('Default'));
     });
   });
 

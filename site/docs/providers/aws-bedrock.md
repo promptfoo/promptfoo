@@ -28,7 +28,7 @@ The `bedrock` provider lets you use Amazon Bedrock in your evals. It supports Be
    - `~/.aws/credentials`
    - `AWS_ACCESS_KEY_ID` and `AWS_SECRET_ACCESS_KEY` environment variables
 
-   See [setting node.js credentials (AWS)](https://docs.aws.amazon.com/sdk-for-javascript/v2/developer-guide/setting-credentials-node.html) for more details.
+   See [setting node.js credentials (AWS)](https://docs.aws.amazon.com/sdk-for-javascript/v3/developer-guide/setting-credentials-node.html) for more details.
 
 4. Edit your configuration file to point to the AWS Bedrock provider. Here's an example:
 
@@ -514,7 +514,7 @@ providers:
       region: 'us-east-1'
       temperature: 0.7
       max_tokens: 256
-  - id: bedrock:us.anthropic.claude-3-5-haiku-20241022-v1:0
+  - id: bedrock:us.anthropic.claude-haiku-4-5-20251001-v1:0
     config:
       region: 'us-east-1'
       temperature: 0.7
