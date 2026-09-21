@@ -21,6 +21,10 @@ Assertions are used to compare the LLM output against expected values or conditi
 
 Different types of assertions can be used to validate the output in various ways, such as checking for equality, JSON structure, similarity, or custom functions.
 
+Red team strategies can grade responses during an attack. The final assertion check reuses a strategy grade only when the configured strategy, plugin, assertion, and recorded input/output match the returned result. Stale grades and older results without this binding receive fresh grading. When a new grade is needed, red team assertions use the final transformed attack input, then the provider-reported prompt (a nonempty string or the last user message in a chat array), then the last saved user message, falling back to the original test prompt when none is available. Prior user/assistant conversation is included as grading context, except for Hydra and Goblin, which grade the current turn without adding history. System and tool messages are not treated as user input.
+
+When no final strategy prompt is available, a provider-reported chat array without a usable user message uses the original prompt fallback instead of unrelated saved messages. Historical strategy grading usage is counted once across matching assertions, including assertion sets. Replayed grading responses count their full token usage as cached.
+
 In machine learning, "Accuracy" is a metric that measures the proportion of correct predictions made by a model out of the total number of predictions. With `promptfoo`, accuracy is defined as the proportion of prompts that produce the expected or desired output.
 
 ## Using assertions
@@ -136,10 +140,10 @@ These metrics are programmatic tests that are run on LLM output. [See all detail
 | [javascript](/docs/configuration/expected-outputs/javascript)                                                      | provided Javascript function validates the output                  |
 | [python](/docs/configuration/expected-outputs/python)                                                              | provided Python function validates the output                      |
 | [ruby](/docs/configuration/expected-outputs/ruby)                                                                  | provided Ruby function validates the output                        |
-| [webhook](/docs/configuration/expected-outputs/deterministic/#webhook)                                             | provided webhook returns \{pass: true\}                            |
+| [webhook](/docs/configuration/expected-outputs/deterministic/#webhook)                                             | webhook returns a JSON object with boolean `pass: true`            |
 | [rouge-n](/docs/configuration/expected-outputs/deterministic/#rouge-n)                                             | Rouge-N score is above a given threshold (default 0.75)            |
 | [bleu](/docs/configuration/expected-outputs/deterministic/#bleu)                                                   | BLEU score is above a given threshold (default 0.5)                |
-| [gleu](/docs/configuration/expected-outputs/deterministic/#gleu)                                                   | GLEU score is above a given threshold (default 0.5)                |
+| [gleu](/docs/configuration/expected-outputs/deterministic/#gleu)                                                   | GLEU >= threshold (default 0.5); empty output scores 0             |
 | [levenshtein](/docs/configuration/expected-outputs/deterministic/#levenshtein-distance)                            | Levenshtein distance is below a threshold                          |
 | [latency](/docs/configuration/expected-outputs/deterministic/#latency)                                             | Latency is below a threshold (milliseconds)                        |
 | [meteor](/docs/configuration/expected-outputs/deterministic/#meteor)                                               | METEOR score is above a given threshold (default 0.5)              |
@@ -149,6 +153,7 @@ These metrics are programmatic tests that are run on LLM output. [See all detail
 | [is-valid-function-call](/docs/configuration/expected-outputs/deterministic/#is-valid-function-call)               | Ensure that the function call matches the function's JSON schema   |
 | [is-valid-openai-function-call](/docs/configuration/expected-outputs/deterministic/#is-valid-openai-function-call) | Ensure that the function call matches the function's JSON schema   |
 | [is-valid-openai-tools-call](/docs/configuration/expected-outputs/deterministic/#is-valid-openai-tools-call)       | Ensure all tool calls match the tools JSON schema                  |
+| [tool-call-f1](/docs/configuration/expected-outputs/deterministic/#tool-call-f1)                                   | Tool names meet the F1 threshold; parser limit exhaustion fails    |
 | [trace-span-count](/docs/configuration/expected-outputs/deterministic/#trace-span-count)                           | Count spans matching patterns with min/max thresholds              |
 | [trace-span-duration](/docs/configuration/expected-outputs/deterministic/#trace-span-duration)                     | Check span durations with percentile support                       |
 | [trace-error-spans](/docs/configuration/expected-outputs/deterministic/#trace-error-spans)                         | Detect errors in traces by status codes, attributes, and messages  |
@@ -157,10 +162,14 @@ These metrics are programmatic tests that are run on LLM output. [See all detail
 | [trajectory:tool-args-match](/docs/configuration/expected-outputs/deterministic/#trajectorytool-args-match)        | Ensure traced tool calls used the expected arguments               |
 | [trajectory:tool-sequence](/docs/configuration/expected-outputs/deterministic/#trajectorytool-sequence)            | Ensure traced tool usage happened in the expected order            |
 | [trajectory:step-count](/docs/configuration/expected-outputs/deterministic/#trajectorystep-count)                  | Count normalized trajectory steps by type or name pattern          |
-| [guardrails](/docs/configuration/expected-outputs/guardrails)                                                      | Ensure that the output does not contain harmful content            |
+| [guardrails](/docs/configuration/expected-outputs/guardrails)                                                      | Evaluate the target's normalized input or output guardrail signal  |
 
 :::tip
 Every test type can be negated by prepending `not-`. For example, `not-equals` or `not-regex`.
+
+The `search-rubric` and `not-search-rubric` assertions require a rubric value that renders to a string.
+
+For `not-classifier` and `not-search-rubric`, a grader error or missing verdict remains a failure with score `0`. Negation only inverts a valid grading result.
 :::
 
 ### Model-assisted eval metrics
@@ -174,12 +183,12 @@ See [Model-graded evals](/docs/configuration/expected-outputs/model-graded), [cl
 | [similar](/docs/configuration/expected-outputs/similar)                                              | Embeddings and cosine similarity are above a threshold                           |
 | [classifier](/docs/configuration/expected-outputs/classifier)                                        | Run LLM output through a classifier                                              |
 | [moderation](/docs/configuration/expected-outputs/moderation)                                        | Check output against safety policies and include provider-reported usage metrics |
-| [llm-rubric](/docs/configuration/expected-outputs/model-graded)                                      | LLM output matches a given rubric, using a Language Model to grade output        |
+| [llm-rubric](/docs/configuration/expected-outputs/model-graded)                                      | Grade text, images, or audio against a rubric with a compatible model            |
 | [g-eval](/docs/configuration/expected-outputs/model-graded/g-eval)                                   | Chain-of-thought evaluation based on custom criteria using the G-Eval framework  |
-| [answer-relevance](/docs/configuration/expected-outputs/model-graded)                                | Ensure that LLM output is related to original query                              |
-| [context-faithfulness](/docs/configuration/expected-outputs/model-graded)                            | Ensure that LLM output uses the context                                          |
-| [context-recall](/docs/configuration/expected-outputs/model-graded)                                  | Ensure that ground truth appears in context                                      |
-| [context-relevance](/docs/configuration/expected-outputs/model-graded)                               | Ensure that context is relevant to original query                                |
+| [answer-relevance](/docs/configuration/expected-outputs/model-graded)                                | Ensure that LLM output is related to original query (default threshold 0.5)      |
+| [context-faithfulness](/docs/configuration/expected-outputs/model-graded)                            | Ensure that LLM output uses the context (default threshold 0.5)                  |
+| [context-recall](/docs/configuration/expected-outputs/model-graded)                                  | Ensure that ground truth appears in context (default threshold 0.5)              |
+| [context-relevance](/docs/configuration/expected-outputs/model-graded)                               | Ensure that context is relevant to original query (default threshold 0.5)        |
 | [conversation-relevance](/docs/configuration/expected-outputs/model-graded)                          | Ensure that responses remain relevant throughout a conversation                  |
 | [trajectory:goal-success](/docs/configuration/expected-outputs/model-graded/#trajectorygoal-success) | Use an LLM judge to decide whether the traced agent run achieved its goal        |
 | [factuality](/docs/configuration/expected-outputs/model-graded)                                      | LLM output adheres to the given facts, using Factuality method from OpenAI eval  |
@@ -438,12 +447,12 @@ For more advanced test cases, we recommend using a testing framework like [Jest 
 If you have a set of common assertions that you want to apply to multiple test cases, you can create assertion templates and reuse them across your configuration.
 
 ```yaml
-// highlight-start
+# highlight-start
 assertionTemplates:
   containsMentalHealth:
     type: javascript
     value: output.toLowerCase().includes('mental health')
-// highlight-end
+# highlight-end
 
 prompts:
   - file://prompt1.txt
@@ -455,13 +464,13 @@ tests:
   - vars:
       input: Tell me about the benefits of exercise.
     assert:
-      // highlight-next-line
-      - $ref: "#/assertionTemplates/containsMentalHealth"
+      # highlight-next-line
+      - $ref: '#/assertionTemplates/containsMentalHealth'
   - vars:
       input: How can I improve my well-being?
     assert:
-      // highlight-next-line
-      - $ref: "#/assertionTemplates/containsMentalHealth"
+      # highlight-next-line
+      - $ref: '#/assertionTemplates/containsMentalHealth'
 ```
 
 In this example, the `containsMentalHealth` assertion template is defined at the top of the configuration file and then reused in two test cases. This approach helps maintain consistency and reduces duplication in your configuration.

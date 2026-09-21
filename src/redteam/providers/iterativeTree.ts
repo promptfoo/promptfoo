@@ -23,7 +23,13 @@ import { extractFirstJsonObject } from '../../util/json';
 import { getNunjucksEngine } from '../../util/templates';
 import { sleep } from '../../util/time';
 import { TokenUsageTracker } from '../../util/tokenUsage';
-import { accumulateResponseTokenUsage, createEmptyTokenUsage } from '../../util/tokenUsageUtils';
+import {
+  accumulateAttackerTokenUsage,
+  accumulateGradingResponseTokenUsage,
+  accumulateResponseTokenUsage,
+  createEmptyTokenUsage,
+} from '../../util/tokenUsageUtils';
+import { withGradingUsage } from '../grading/storedResult';
 import { shouldGenerateRemote } from '../remoteGeneration';
 import { remoteGenerationContextPayload } from '../remoteGenerationContext';
 import {
@@ -50,13 +56,16 @@ import {
   JUDGE_SYSTEM_PROMPT,
 } from './prompts';
 import {
+  accumulateGraderResult,
   buildGraderResultAssertion,
+  callGradingProvider,
   checkPenalizedPhrases,
   createIterationContext,
   externalizeResponseForRedteamHistory,
   getGraderAssertionValue,
   getTargetResponse,
   redteamProviderManager,
+  runRedteamGrader,
 } from './shared';
 import type { Environment } from 'nunjucks';
 
@@ -174,6 +183,7 @@ export function renderSystemPrompts(
  * @param targetResponse - The response to be evaluated.
  * @param previousBestResponse - The previous best response for comparison.
  * @param containsPenalizedPhrase - Whether the response contains a penalized phrase.
+ * @param tokenUsage - Optional scan-local accumulator for the internal judge call.
  * @returns A promise that resolves to the evaluation score.
  */
 export async function evaluateResponse(
@@ -182,6 +192,7 @@ export async function evaluateResponse(
   targetResponse: string,
   previousBestResponse: string,
   containsPenalizedPhrase: boolean,
+  tokenUsage?: TokenUsage,
 ): Promise<{ score: number; explanation: string }> {
   const judgeBody = JSON.stringify([
     {
@@ -199,14 +210,17 @@ export async function evaluateResponse(
       `,
     },
   ]);
-  const judgeResp = await provider.callApi(judgeBody, {
+  const judgeResp = await callGradingProvider(provider, judgeBody, {
     prompt: {
       raw: judgeBody,
       label: 'judge',
     },
     vars: {},
   });
-  TokenUsageTracker.getInstance().trackUsage(provider.id(), judgeResp.tokenUsage);
+  TokenUsageTracker.getInstance().trackResponseUsage(provider.id(), judgeResp);
+  if (tokenUsage) {
+    accumulateGradingResponseTokenUsage(tokenUsage, judgeResp);
+  }
   if (provider.delay) {
     logger.debug(`[IterativeTree] Sleeping for ${provider.delay}ms`);
     await sleep(provider.delay);
@@ -265,6 +279,7 @@ export async function getNewPrompt(
     pluginId?: string;
     purpose?: string;
   },
+  totalTokenUsage?: TokenUsage,
 ): Promise<{
   improvement: string;
   inputMaterialization?: Record<string, unknown>;
@@ -289,16 +304,20 @@ export async function getNewPrompt(
         })
       : {},
   });
+  if (totalTokenUsage) {
+    accumulateAttackerTokenUsage(totalTokenUsage, redteamResp);
+  }
+  TokenUsageTracker.getInstance().trackResponseUsage(redteamProvider.id(), redteamResp);
   if (redteamProvider.delay) {
     logger.debug(`[IterativeTree] Sleeping for ${redteamProvider.delay}ms`);
     await sleep(redteamProvider.delay);
   }
   logger.debug('[IterativeTree] Redteam response', { response: redteamResp });
   if (redteamResp.error) {
-    throw new Error(`Error from redteam provider: ${redteamResp.error}`);
+    throw Object.assign(new Error(`Error from redteam provider: ${redteamResp.error}`), {
+      tokenUsage: totalTokenUsage ?? redteamResp.tokenUsage,
+    });
   }
-  TokenUsageTracker.getInstance().trackUsage(redteamProvider.id(), redteamResp.tokenUsage);
-
   let retObj: { improvement: string; prompt: string };
   if (typeof redteamResp.output === 'string') {
     try {
@@ -478,7 +497,12 @@ export interface TreeSearchOutput {
   sessionId?: string; // Session ID for this specific attempt
 }
 
-type StopReason = 'MAX_ATTEMPTS' | 'MAX_DEPTH' | 'NO_IMPROVEMENT' | 'GRADER_FAILED';
+type StopReason =
+  | 'MAX_ATTEMPTS'
+  | 'MAX_DEPTH'
+  | 'NO_IMPROVEMENT'
+  | 'GRADER_FAILED'
+  | 'ATTACKER_ERROR';
 
 /**
  * Represents metadata for the iterative tree search process.
@@ -589,6 +613,11 @@ async function runRedteamConversation({
   let bestScore = 0;
   let noImprovementCount = 0;
   let storedGraderResult: GradingResult | undefined = undefined;
+  let bestGraderResult: GradingResult | undefined;
+  const getBestGraderResult = () =>
+    bestGraderResult
+      ? withGradingUsage(bestGraderResult, storedGraderResult?.tokensUsed)
+      : storedGraderResult;
 
   const totalTokenUsage: TokenUsage = createEmptyTokenUsage();
 
@@ -631,24 +660,56 @@ async function runRedteamConversation({
         });
         const iterationVars = iterationContext?.vars || {};
 
+        let attackPromptResult: Awaited<ReturnType<typeof getNewPrompt>>;
+        try {
+          attackPromptResult = await getNewPrompt(
+            redteamProvider,
+            [...redteamHistory, { role: 'assistant', content: node.prompt }],
+            shouldGenerateRemote()
+              ? {
+                  inputs,
+                  materializationIndex: attempts,
+                  pluginId: String(test?.metadata?.pluginId || 'unknown-plugin'),
+                  purpose: test?.metadata?.purpose as string | undefined,
+                }
+              : undefined,
+            totalTokenUsage,
+          );
+        } catch (error) {
+          if (
+            !(error instanceof Error) ||
+            error.name === 'AbortError' ||
+            !('tokenUsage' in error)
+          ) {
+            throw error;
+          }
+
+          logger.error('[IterativeTree] Attacker request failed', { error });
+          return {
+            output: bestResponse,
+            prompt: bestNode.prompt,
+            error: error.message,
+            metadata: {
+              highestScore: maxScore,
+              redteamFinalPrompt: bestFinalAttackPrompt || lastFinalAttackPrompt || bestNode.prompt,
+              messages: treeOutputs as Record<string, any>[],
+              attempts,
+              redteamTreeHistory: treeOutputs,
+              stopReason: 'ATTACKER_ERROR',
+              storedGraderResult: getBestGraderResult(),
+              sessionIds: extractSessionIds(treeOutputs),
+            },
+            tokenUsage: totalTokenUsage,
+          };
+        }
+
         let {
           improvement,
           inputMaterialization,
           materializationHandled,
           materializedVars,
           prompt: newInjectVar,
-        } = await getNewPrompt(
-          redteamProvider,
-          [...redteamHistory, { role: 'assistant', content: node.prompt }],
-          shouldGenerateRemote()
-            ? {
-                inputs,
-                materializationIndex: attempts,
-                pluginId: String(test?.metadata?.pluginId || 'unknown-plugin'),
-                purpose: test?.metadata?.purpose as string | undefined,
-              }
-            : undefined,
-        );
+        } = attackPromptResult;
         if (inputs && shouldGenerateRemote()) {
           assertRemoteMaterializationHandled(
             { inputMaterialization, materializationHandled, materializedVars },
@@ -694,6 +755,9 @@ async function runRedteamConversation({
               goal: test?.metadata?.goal as string | undefined,
             },
           );
+          if (lastTransformResult.tokenUsage) {
+            accumulateAttackerTokenUsage(totalTokenUsage, lastTransformResult);
+          }
 
           if (lastTransformResult.error) {
             logger.warn('[IterativeTree] Transform failed, skipping attempt', {
@@ -825,6 +889,7 @@ async function runRedteamConversation({
           targetResponse.output,
           bestResponse,
           containsPenalizedPhrase,
+          totalTokenUsage,
         );
 
         logger.debug(
@@ -840,7 +905,8 @@ async function runRedteamConversation({
           }),
         );
 
-        if (score > maxScore) {
+        const isNewBest = score > maxScore;
+        if (isNewBest) {
           maxScore = score;
           bestResponse = targetResponse.output;
           bestNode.prompt = newInjectVar;
@@ -943,8 +1009,9 @@ async function runRedteamConversation({
               };
             }
 
-            const { grade, rubric } = await grader.getResult(
-              newInjectVar,
+            const { grade, rubric } = await runRedteamGrader(
+              grader,
+              finalInjectVar,
               targetResponse.output,
               iterationTest,
               gradingProvider,
@@ -953,10 +1020,22 @@ async function runRedteamConversation({
               undefined, // skipRefusalCheck
               gradingContext,
             );
-            storedGraderResult = {
-              ...grade,
-              assertion: buildGraderResultAssertion(grade.assertion, assertToUse, rubric),
-            };
+            storedGraderResult = accumulateGraderResult(
+              storedGraderResult,
+              {
+                ...grade,
+                assertion: buildGraderResultAssertion(grade.assertion, assertToUse, rubric),
+              },
+              {
+                prompt: finalInjectVar,
+                output: targetResponse.output,
+                pluginId: test.metadata?.pluginId,
+                assertion: assertToUse,
+              },
+            );
+            if (isNewBest) {
+              bestGraderResult = storedGraderResult;
+            }
             graderPassed = grade.pass;
           }
         }
@@ -984,10 +1063,10 @@ async function runRedteamConversation({
           });
           return {
             output: targetResponse.output,
-            prompt: bestNode.prompt,
+            prompt: newInjectVar,
             metadata: {
               highestScore: maxScore,
-              redteamFinalPrompt: bestFinalAttackPrompt || lastFinalAttackPrompt || bestNode.prompt,
+              redteamFinalPrompt: finalInjectVar,
               messages: treeOutputs as Record<string, any>[],
               attempts,
               redteamTreeHistory: treeOutputs,
@@ -1035,7 +1114,7 @@ async function runRedteamConversation({
               attempts,
               redteamTreeHistory: treeOutputs,
               stopReason: stoppingReason,
-              storedGraderResult,
+              storedGraderResult: getBestGraderResult(),
               sessionIds: extractSessionIds(treeOutputs),
               ...((bestTransformDisplayVars || lastTransformDisplayVars) && {
                 transformDisplayVars: bestTransformDisplayVars || lastTransformDisplayVars,
@@ -1079,7 +1158,7 @@ async function runRedteamConversation({
               attempts,
               redteamTreeHistory: treeOutputs,
               stopReason: stoppingReason,
-              storedGraderResult,
+              storedGraderResult: getBestGraderResult(),
               sessionIds: extractSessionIds(treeOutputs),
               ...((bestTransformDisplayVars || lastTransformDisplayVars) && {
                 transformDisplayVars: bestTransformDisplayVars || lastTransformDisplayVars,
@@ -1191,9 +1270,7 @@ async function runRedteamConversation({
     context,
     options,
   );
-  if (finalTargetResponse.tokenUsage) {
-    accumulateResponseTokenUsage(totalTokenUsage, finalTargetResponse);
-  }
+  accumulateResponseTokenUsage(totalTokenUsage, finalTargetResponse);
 
   logger.debug(
     `Red team conversation complete. Final best score: ${bestScore}, Max score: ${maxScore}, Total attempts: ${attempts}`,
@@ -1228,7 +1305,7 @@ async function runRedteamConversation({
       attempts,
       redteamTreeHistory: treeOutputs,
       stopReason: stoppingReason,
-      storedGraderResult,
+      storedGraderResult: getBestGraderResult(),
       sessionIds: extractSessionIds(treeOutputs),
       ...((bestTransformDisplayVars || lastTransformDisplayVars) && {
         transformDisplayVars: bestTransformDisplayVars || lastTransformDisplayVars,

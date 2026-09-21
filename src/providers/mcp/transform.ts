@@ -1,3 +1,4 @@
+import { type McpConfigParsed, McpConfigSchema } from '../../contracts/providerConfig/mcp';
 import { sanitizeSchemaForGemini } from '../google/util';
 import {
   applyQueryParams,
@@ -17,7 +18,6 @@ import type {
 } from '../google/types';
 import type { OpenAiTool } from '../openai/util';
 import type {
-  MCPConfig,
   MCPOAuthClientCredentialsAuth,
   MCPOAuthPasswordAuth,
   MCPServerConfig,
@@ -116,9 +116,15 @@ export function transformMCPToolsToGoogle(tools: MCPTool[]): GoogleTool[] {
 }
 
 export async function transformMCPConfigToClaudeCode(
-  config: MCPConfig,
+  input: unknown,
 ): Promise<Record<string, ClaudeCodeMcpServerConfig>> {
-  const serverConfigs = config.servers ?? [];
+  const config = validateMCPConfigForClaudeCode(input);
+
+  if (config.enabled === false) {
+    return {};
+  }
+
+  const serverConfigs = [...(config.servers ?? [])];
   if (config.server) {
     serverConfigs.push(config.server);
   }
@@ -127,11 +133,28 @@ export async function transformMCPConfigToClaudeCode(
     serverConfigs.map((server) => transformMCPServerConfigToClaudeCode(server)),
   );
 
-  return servers.reduce<Record<string, ClaudeCodeMcpServerConfig>>((acc, transformed) => {
-    const [key, out] = transformed;
-    acc[key] = out;
-    return acc;
-  }, {});
+  return Object.fromEntries(servers);
+}
+
+export function validateMCPConfigForClaudeCode(input: unknown): McpConfigParsed {
+  const result = McpConfigSchema.safeParse(input);
+  if (!result.success) {
+    throw new Error(`Claude Agent SDK MCP configuration is malformed: ${result.error.message}`);
+  }
+  const config = result.data;
+  if (!config.enabled) {
+    return config;
+  }
+
+  const hasUnsupportedExclusions =
+    config.exclude_tools !== undefined &&
+    (!Array.isArray(config.exclude_tools) || config.exclude_tools.length > 0);
+  if (config.tools !== undefined || hasUnsupportedExclusions) {
+    throw new Error(
+      'Claude Agent SDK MCP integration does not support MCP tool allowlists or non-empty exclusions; remove `tools`/`exclude_tools` or disable MCP for this provider.',
+    );
+  }
+  return config;
 }
 
 async function transformMCPServerConfigToClaudeCode(
@@ -161,12 +184,22 @@ async function transformMCPServerConfigToClaudeCode(
       url: serverUrl,
       headers: { ...(config.headers ?? {}), ...getAuthHeaders(renderedConfig, oauthToken) },
     };
-  } else if (config.command && config.args) {
-    out = { type: 'stdio', command: config.command, args: config.args };
+  } else if (config.command) {
+    out = {
+      type: 'stdio',
+      command: config.command,
+      args: config.args ?? [],
+      ...(config.env && { env: config.env }),
+    };
   } else if (config.path) {
     const isPy = config.path.endsWith('.py');
     const command = isPy ? (process.platform === 'win32' ? 'python' : 'python3') : process.execPath;
-    out = { type: 'stdio', command, args: [config.path] };
+    out = {
+      type: 'stdio',
+      command,
+      args: [config.path],
+      ...(config.env && { env: config.env }),
+    };
   } else {
     throw new Error('MCP configuration cannot be converted to Claude Agent SDK MCP server config');
   }
