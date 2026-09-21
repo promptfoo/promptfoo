@@ -6,7 +6,7 @@ description: Evaluate Amazon SageMaker AI endpoints with promptfoo, including Ju
 
 # Amazon SageMaker AI
 
-The `sagemaker` provider allows you to use Amazon SageMaker AI endpoints in your evals. This enables testing and evaluation of any model deployed on SageMaker AI, including models from Hugging Face, custom-trained models, foundation models from Amazon SageMaker JumpStart, and more. For AWS-managed foundation models without custom endpoints, you might also consider the [AWS Bedrock provider](./aws-bedrock.md).
+Use the `sagemaker` provider to test models on your Amazon SageMaker AI endpoints, including Hugging Face, custom, and JumpStart models. For AWS-managed foundation models without a custom endpoint, use the [AWS Bedrock provider](./aws-bedrock.md).
 
 ## Setup
 
@@ -37,7 +37,7 @@ The `sagemaker` provider allows you to use Amazon SageMaker AI endpoints in your
    ```
 
    The provider ID is `sagemaker:`, the model type, then the name of your SageMaker
-   endpoint. Except for embeddings, the model type is required — see
+   endpoint. Completion endpoints require a model type; see
    [Provider Syntax](#provider-syntax) for the available types.
 
 5. Additional config parameters are passed like so:
@@ -126,14 +126,9 @@ The SageMaker provider supports several syntax patterns:
    ```
    For AWS JumpStart foundation models that require specific input/output formats.
 
-:::caution
-An endpoint name containing `jumpstart` is coerced to the `jumpstart` model type, and that
-coercion **overrides** an explicit model type in the ID: `sagemaker:huggingface:my-jumpstart-endpoint`
-resolves to `jumpstart`, not `huggingface`. It applies only to the three-segment form — a bare
-`sagemaker:my-jumpstart-endpoint` still fails, because the model type is missing. If your endpoint
-name contains `jumpstart` but is not a JumpStart container, set `config.modelType` explicitly and
-use the two-segment ID.
-:::
+The endpoint name does not determine the model type. For example,
+`sagemaker:huggingface:my-jumpstart-endpoint` uses the `huggingface` format. If you use the
+two-segment form, set `config.modelType`.
 
 ## Examples
 
@@ -350,7 +345,9 @@ The SageMaker provider supports various model types to properly format requests 
 # In provider ID
 providers:
   - id: sagemaker:huggingface:my-endpoint
+```
 
+```yaml
 # Or in config
 providers:
   - id: sagemaker:my-endpoint

@@ -8,6 +8,7 @@ export class EchoProvider implements ApiProvider {
   public label?: string;
   public config?: any;
   public delay?: number;
+  readonly handlesOwnDelay = true;
 
   constructor(options: ProviderOptions = {}) {
     this.options = options;

@@ -5,11 +5,7 @@ description: 'Simulate realistic user interactions and behaviors for comprehensi
 
 # Simulated User
 
-The Simulated User Provider enables testing of multi-turn conversations between an AI agent and a simulated user. This is particularly useful for testing chatbots, virtual assistants, and other conversational AI applications in realistic scenarios.
-
-It works with both simple text-based agents and advanced function-calling agents, making it ideal for testing modern AI systems that use structured APIs.
-
-It is inspired by [Tau-bench](https://github.com/sierra-research/tau-bench), a benchmark for evaluating tool-assisted agents.
+The Simulated User Provider tests conversations between your agent and a simulated user. It works with text and function-calling agents and is inspired by [Tau-bench](https://github.com/sierra-research/tau-bench), a benchmark for tool-assisted agents.
 
 ## Configuration
 
@@ -40,7 +36,7 @@ tests:
 
 ## How it works
 
-The Simulated User Provider facilitates a back-and-forth conversation between:
+The conversation has two participants:
 
 1. A simulated user (controlled by promptfoo)
 2. Your AI agent (the provider being tested)
@@ -52,7 +48,7 @@ For each turn:
 3. The simulated user generates the next message based on their instructions
 4. This continues until either:
    - The maximum number of turns is reached
-   - The simulated user emits `###STOP###`, signalling its instructions are satisfied
+   - The simulated user emits `###STOP###`
 
 ## Configuration Options
 
@@ -242,29 +238,27 @@ def call_api(prompt, options, context):
     return {"output": response}
 ```
 
-This enables sophisticated testing scenarios where your custom provider can:
-
-- Route requests based on context variables
-- Maintain conversation state using session IDs
-- Access user-specific data for personalized responses
-- Implement complex business logic while testing multi-turn conversations
+Your custom provider can use these variables for routing or to maintain a conversation by session ID.
 
 ## Using as a Library
 
 When using promptfoo as a Node library, provide the equivalent configuration:
 
 ```js
-{
-  providers: [
-    {
+const config = {
+  providers: ['openai:chat:gpt-5.6-luna'],
+  prompts: ['You are a customer support assistant.'],
+  defaultTest: {
+    provider: {
       id: 'promptfoo:simulated-user',
       config: {
         instructions: 'You are a customer with the following problem: {{problem}}',
         maxTurns: 5,
       },
     },
-  ];
-}
+  },
+  tests: [{ vars: { problem: 'My order has not arrived.' } }],
+};
 ```
 
 ## Stop Conditions
@@ -272,13 +266,10 @@ When using promptfoo as a Node library, provide the equivalent configuration:
 The conversation will automatically stop when:
 
 - The `maxTurns` limit is reached
-- The **simulated user** includes `###STOP###` anywhere in its message
+- The simulated user includes `###STOP###` anywhere in its message
 - An error occurs during the conversation
 
-The `###STOP###` marker is emitted by the simulated user, not by the agent under test, and it is
-checked before the message is sent on — so the agent never sees the turn that ends the
-conversation. Instruct the simulated user to emit it when its goal is met (e.g. "say `###STOP###`
-once the booking is confirmed"). A `###STOP###` in the agent's own response has no effect.
+Promptfoo checks for `###STOP###` before sending the simulated user's message to the target. You can include instructions such as "say `###STOP###` once the booking is confirmed." The marker has no effect in the target's own response.
 
 ## Remote Generation
 
