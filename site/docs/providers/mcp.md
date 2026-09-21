@@ -299,7 +299,7 @@ providers:
         user_role: 'customer'
 ```
 
-Tools and response transforms receive the full arguments. Debug logs list argument names only. Promptfoo redacts credential fields such as `session_id` and `apiKey` in saved result metadata and tool traces.
+Tools and response transforms receive the full arguments. Debug logs list argument names only. Promptfoo redacts credential fields such as `session_id` and `apiKey` in saved result metadata and tool traces. Use the separate [server authentication](#authentication) settings for credentials that authenticate the connection itself.
 
 ### Response Transforms
 

@@ -133,6 +133,16 @@ The LiteLLM-specific environment variables are:
 
 Set upstream credentials such as `OPENAI_API_KEY`, `ANTHROPIC_API_KEY`, or `AZURE_API_KEY` on the proxy. Promptfoo does not use them to authenticate with the proxy by default. For bearer authentication, set `LITELLM_API_KEY`, `config.apiKey`, or `config.apiKeyEnvar`. If your gateway uses a custom credential header, set it under `config.headers`. When a request without credentials is rejected for authentication, Promptfoo includes the bearer-key guidance in the error.
 
+For a gateway that expects `x-api-key`:
+
+```yaml
+providers:
+  - id: litellm:chat:my-model
+    config:
+      headers:
+        x-api-key: '{{ env.GATEWAY_API_KEY }}'
+```
+
 ## Embedding Configuration
 
 LiteLLM supports embedding models that can be used for similarity metrics and other tasks. You can specify an embedding provider globally or for individual assertions.
