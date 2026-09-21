@@ -375,7 +375,7 @@ For demo/example apps used to show red teaming, do not harden away all interesti
 
 ## Review Guidelines
 
-Keep using Claude Code's built-in `/review` for general code reviews. The pinned version's conventions check only searches for `CLAUDE.md`; run `/agents-review 123`, `/agents-review origin/main...HEAD`, or `/agents-review worktree` separately to check changes against the root and applicable nested `AGENTS.md` files. This companion is read-only and requires an explicit target.
+Claude Code 2.1.268, bundled with the pinned Claude Agent SDK, looks for `CLAUDE.md` in its built-in `/review max` conventions pass. General review remains available. For an `AGENTS.md` conventions check, make a separate plain-chat request: `Review this change against the root and every applicable nested AGENTS.md; report only violations introduced by the diff and cite the instruction file.` For a PR, use its checked-out head or provide its diff and matching instruction files.
 
 - Prioritize security regressions first, especially injection risks, unsafe handling of user-controlled or adversarial content, credential exposure, SSRF, path traversal, unsafe deserialization, and authorization mistakes.
 - Then prioritize correctness issues that can break behavior, public APIs, data integrity, concurrency, or error handling.

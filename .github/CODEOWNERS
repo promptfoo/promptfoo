@@ -126,4 +126,3 @@
 AGENTS.md  @alandelong-oai @mldangelo-oai                 # AI agent instructions
 CLAUDE.md  @alandelong-oai @mldangelo-oai                 # Claude Code instructions
 **/.claude/rules/  @alandelong-oai @mldangelo-oai         # Claude compatibility instruction rules
-/.claude/skills/agents-review/  @alandelong-oai @mldangelo-oai  # Claude AGENTS conventions review
