@@ -55,8 +55,11 @@ function normalizeInlineText(
   fallback: string,
   maxLength = MAX_JUNIT_NAME_LENGTH,
 ): string {
-  const normalized = value?.replace(/\s+/g, ' ').replace(INVALID_XML_CHARACTERS, '').trim();
-  return truncateText(normalized || fallback, maxLength);
+  const normalized = value?.replace(/\s+/g, ' ').trim() || fallback;
+  const bounded = truncateText(normalized, maxLength);
+  return bounded.search(INVALID_XML_CHARACTERS) === -1
+    ? bounded
+    : truncateText(normalized.replace(INVALID_XML_CHARACTERS, '').trim() || fallback, maxLength);
 }
 
 function formatDurationSeconds(durationMs: number | undefined): string {
@@ -190,10 +193,10 @@ async function buildJunitSuites(evalRecord: Eval): Promise<JunitSuite[]> {
     let suite = suites.get(key);
     if (!suite) {
       const rawName = provider.label || provider.id || '';
-      const inlineName = rawName.replace(/\s+/g, ' ');
+      const inlineName = truncateText(rawName.replace(/\s+/g, ' ').trim(), MAX_JUNIT_NAME_LENGTH);
       // Keep names that lose XML characters distinct from each other and unchanged names.
       const suffix =
-        inlineName === inlineName.replace(INVALID_XML_CHARACTERS, '')
+        inlineName.search(INVALID_XML_CHARACTERS) === -1
           ? ''
           : ` (${sha256(providerKey).slice(0, 16)})`;
       const providerName = normalizeInlineText(

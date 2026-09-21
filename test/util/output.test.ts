@@ -1198,6 +1198,9 @@ describe('writeOutput', () => {
     ['hello\u000bworld', 'hello world'],
     ['hello\u000cworld', 'hello world'],
     ['a' + '🚀'.repeat(300), 'a' + '🚀'.repeat(254) + '...'],
+    ['x'.repeat(520) + '\u0000', 'x'.repeat(509) + '...'],
+    ['x'.repeat(512) + '\u0001', 'x'.repeat(509) + '...'],
+    ['y'.repeat(509) + 'ABC' + '\u0000'.repeat(20), 'y'.repeat(509) + '...'],
   ])('preserves already-valid JUnit identities for %j', async (raw, expected) => {
     const eval_ = new Eval({});
     await eval_.addResult(
