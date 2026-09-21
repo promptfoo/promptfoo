@@ -101,16 +101,22 @@ export class BedrockMantleChatProvider extends OpenAiChatCompletionProvider {
     return 'bedrock';
   }
 
-  protected getCapabilityModelName(): string {
-    return this.modelName.replace(/^(openai|xai)\./, '');
+  protected getCapabilityModelName(modelName = this.modelName): string {
+    return modelName.replace(/^(openai|xai)\./, '');
   }
 
-  protected isReasoningModel(): boolean {
-    return isBedrockGrokModel(this.modelName) || super.isReasoningModel();
+  protected isReasoningModel(modelName = this.modelName): boolean {
+    return (
+      isBedrockGrokModel(modelName) ||
+      super.isReasoningModel(this.getCapabilityModelName(modelName))
+    );
   }
 
-  protected supportsTemperature(): boolean {
-    return isBedrockGrokModel(this.modelName) || super.supportsTemperature();
+  protected supportsTemperature(modelName = this.modelName): boolean {
+    return (
+      isBedrockGrokModel(modelName) ||
+      super.supportsTemperature(this.getCapabilityModelName(modelName))
+    );
   }
 
   async getOpenAiBody(

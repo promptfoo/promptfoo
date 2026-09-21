@@ -155,8 +155,8 @@ export class OpenAiGenericProvider implements ApiProvider {
    * Model id used for OpenAI capability and billing lookups. Subclasses can strip a vendor
    * prefix while retaining the real request model in {@link modelName}.
    */
-  protected getCapabilityModelName(): string {
-    return this.modelName;
+  protected getCapabilityModelName(modelName = this.modelName): string {
+    return modelName;
   }
 
   protected isGPT5Model(modelName = this.getCapabilityModelName()): boolean {

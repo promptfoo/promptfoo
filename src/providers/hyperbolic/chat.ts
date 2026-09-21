@@ -240,11 +240,11 @@ export class HyperbolicProvider extends OpenAiChatCompletionProvider {
     return this.config?.apiKey;
   }
 
-  protected isReasoningModel(): boolean {
-    return HYPERBOLIC_REASONING_MODELS.includes(this.modelName);
+  protected isReasoningModel(modelName = this.modelName): boolean {
+    return HYPERBOLIC_REASONING_MODELS.includes(modelName);
   }
 
-  protected supportsTemperature(): boolean {
+  protected supportsTemperature(_modelName?: string): boolean {
     // Reasoning models may have limited temperature support
     return true;
   }

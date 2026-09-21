@@ -183,7 +183,7 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
 
     const passthroughModel =
       typeof config.passthrough?.model === 'string' ? config.passthrough.model : undefined;
-    const capabilityModelName = (passthroughModel ?? this.getCapabilityModelName()).replace(
+    const capabilityModelName = this.getCapabilityModelName(passthroughModel).replace(
       /(^|\/)ft:/,
       '$1',
     );
@@ -196,10 +196,8 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
       capabilityModelName.includes('/o3') ||
       capabilityModelName.includes('/o4');
     const isGpt6Astra = isGpt6AstraModel(capabilityModelName);
-    const isReasoningModel =
-      passthroughModel === undefined
-        ? this.isReasoningModel()
-        : super.isReasoningModel(capabilityModelName);
+    const isOpenAiReasoningModel = super.isReasoningModel(capabilityModelName);
+    const isReasoningModel = this.isReasoningModel(passthroughModel) || isOpenAiReasoningModel;
     const maxCompletionTokens = isReasoningModel
       ? (config.max_completion_tokens ?? getEnvInt('OPENAI_MAX_COMPLETION_TOKENS'))
       : undefined;
@@ -217,7 +215,7 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
         : getEnvFloat('OPENAI_TEMPERATURE')
       : getEnvFloat('OPENAI_TEMPERATURE', 0);
     const supportsTemperature =
-      passthroughModel === undefined ? this.supportsTemperature() : !isReasoningModel;
+      this.supportsTemperature(passthroughModel) && !isOpenAiReasoningModel;
     const temperature = supportsTemperature
       ? (config.temperature ?? temperatureDefault)
       : undefined;

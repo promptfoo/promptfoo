@@ -122,6 +122,30 @@ describe('bedrock mantle Chat Completions provider', () => {
       expect(body.temperature).toBeUndefined();
     });
 
+    it('preserves Grok reasoning and temperature when passthrough repeats the Bedrock model', async () => {
+      const model = 'xai.grok-4.3';
+      const provider = createBedrockMantleChatProvider(model, {
+        config: {
+          apiKey: 'bedrock-key',
+          temperature: 0.4,
+          max_tokens: 123,
+          max_completion_tokens: 456,
+          reasoning_effort: 'high',
+          passthrough: { model },
+        },
+      }) as BedrockMantleChatProvider;
+
+      const { body } = await provider.getOpenAiBody('hello');
+
+      expect(body).toMatchObject({
+        model,
+        temperature: 0.4,
+        max_completion_tokens: 456,
+        reasoning_effort: 'high',
+      });
+      expect(body).not.toHaveProperty('max_tokens');
+    });
+
     it('treats an unresolved {{env.*}} apiKey template as missing', () => {
       restoreEnv = mockProcessEnv({ AWS_BEARER_TOKEN_BEDROCK: undefined });
       expect(() =>

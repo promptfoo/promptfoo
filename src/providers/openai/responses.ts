@@ -398,7 +398,9 @@ async function createBackgroundResponseWithCancellation(
 ): Promise<FetchWithCacheResult<OpenAIResponsesResponse>> {
   const signal = request.signal;
   const cacheIdentity = getBackgroundCacheIdentity(url, request);
-  const canCoalesce = isCacheEnabled() && !bustCache && cacheIdentity.coalescable;
+  const cacheEnabled = isCacheEnabled() && !bustCache;
+  const canCoalesce = cacheEnabled && cacheIdentity.coalescable;
+  const canResume = cacheEnabled && cacheIdentity.cacheable;
   const effectiveCacheOptions = cacheIdentity.cacheable
     ? { bust: bustCache, cacheKey: cacheIdentity.key }
     : true;
@@ -449,7 +451,7 @@ async function createBackgroundResponseWithCancellation(
           return;
         }
         if (
-          !canCoalesce &&
+          !canResume &&
           created.data.id &&
           (created.data.status === 'queued' || created.data.status === 'in_progress')
         ) {
