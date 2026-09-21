@@ -45,14 +45,9 @@ function truncateText(value: string, maxLength: number): string {
   if (value.length <= maxLength) {
     return value;
   }
-  const characters = [];
-  for (const character of value) {
-    if (characters.length === maxLength) {
-      return `${characters.slice(0, maxLength - 3).join('')}...`;
-    }
-    characters.push(character);
-  }
-  return value;
+  const cutoff = maxLength - 3;
+  const end = (value.codePointAt(cutoff - 1) ?? 0) > 0xffff ? cutoff + 1 : cutoff;
+  return `${value.slice(0, end)}...`;
 }
 
 function normalizeInlineText(
@@ -60,7 +55,7 @@ function normalizeInlineText(
   fallback: string,
   maxLength = MAX_JUNIT_NAME_LENGTH,
 ): string {
-  const normalized = value?.replace(INVALID_XML_CHARACTERS, '').replace(/\s+/g, ' ').trim();
+  const normalized = value?.replace(/\s+/g, ' ').replace(INVALID_XML_CHARACTERS, '').trim();
   return truncateText(normalized || fallback, maxLength);
 }
 
@@ -195,9 +190,10 @@ async function buildJunitSuites(evalRecord: Eval): Promise<JunitSuite[]> {
     let suite = suites.get(key);
     if (!suite) {
       const rawName = provider.label || provider.id || '';
+      const inlineName = rawName.replace(/\s+/g, ' ');
       // Keep names that lose XML characters distinct from each other and unchanged names.
       const suffix =
-        rawName === rawName.replace(INVALID_XML_CHARACTERS, '')
+        inlineName === inlineName.replace(INVALID_XML_CHARACTERS, '')
           ? ''
           : ` (${sha256(providerKey).slice(0, 16)})`;
       const providerName = normalizeInlineText(

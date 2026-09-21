@@ -1151,7 +1151,7 @@ describe('writeOutput', () => {
     ['target-A', 'target-B'],
     ['model', 'mo\u0000del'],
     ['mo\u0000del', 'mo\u0001del'],
-    ['mo del', 'mo\u000bdel'],
+    ['mo del', 'mo \u0000del'],
     ['x'.repeat(508) + '🚀tailmore', 'x'.repeat(508) + '...'],
   ])('keeps JUnit identities distinct and stable for %j and %j', async (first, second) => {
     const names: string[][] = [];
@@ -1192,6 +1192,25 @@ describe('writeOutput', () => {
     } else if (first.includes('🚀')) {
       expect(names[0][0]).toContain('🚀...');
     }
+  });
+
+  it.each([
+    ['hello\u000bworld', 'hello world'],
+    ['hello\u000cworld', 'hello world'],
+    ['a' + '🚀'.repeat(300), 'a' + '🚀'.repeat(254) + '...'],
+  ])('preserves already-valid JUnit identities for %j', async (raw, expected) => {
+    const eval_ = new Eval({});
+    await eval_.addResult(
+      createEvaluateResult({
+        provider: { id: 'echo', label: raw },
+        testCase: { description: raw },
+      }),
+    );
+    const xml = await createJunitXml(eval_);
+    expect(() => new SaxesParser().write(xml).close()).not.toThrow();
+    const suite = new XMLParser({ ignoreAttributes: false }).parse(xml).testsuites.testsuite;
+    expect(suite['@_name']).toBe('[' + expected + '] prompt 1');
+    expect(suite.testcase['@_name']).toBe('test 1: ' + expected);
   });
 
   it('removes forbidden name characters before fallback and length limits', async () => {
