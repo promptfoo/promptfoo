@@ -41,6 +41,10 @@ providers:
   - nvidia:nvidia/nemotron-3-super-120b-a12b
 ```
 
+There is no subtype segment. Unlike some other providers, `nvidia:chat:<model>` is rejected, as are
+`completion`, `embedding`, `embeddings`, `image`, `moderation`, `realtime`, and `responses`. Each
+fails with `Unsupported NVIDIA NIM provider subtype`.
+
 Standard OpenAI-compatible parameters are passed through:
 
 ```yaml
@@ -61,6 +65,14 @@ providers:
     config:
       apiBaseUrl: https://your-proxy.example.com/nvidia/v1
       apiKeyEnvar: CUSTOM_NVIDIA_KEY
+```
+
+`NVIDIA_API_BASE_URL` applies the same override to every NVIDIA provider without editing each
+config. A `config.apiBaseUrl` takes precedence over it, and both take precedence over the default
+`https://integrate.api.nvidia.com/v1`.
+
+```bash
+export NVIDIA_API_BASE_URL=https://your-proxy.example.com/nvidia/v1
 ```
 
 ## A few common models

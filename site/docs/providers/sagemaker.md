@@ -33,10 +33,12 @@ The `sagemaker` provider allows you to use Amazon SageMaker AI endpoints in your
 
    ```yaml
    providers:
-     - id: sagemaker:my-sagemaker-endpoint
+     - id: sagemaker:custom:my-sagemaker-endpoint
    ```
 
-   Note that the provider is `sagemaker:` followed by the name of your SageMaker endpoint.
+   The provider ID is `sagemaker:`, the model type, then the name of your SageMaker
+   endpoint. Except for embeddings, the model type is required — see
+   [Provider Syntax](#provider-syntax) for the available types.
 
 5. Additional config parameters are passed like so:
 
@@ -60,7 +62,7 @@ Configure Amazon SageMaker authentication in your provider's `config` section us
 
 ```yaml
 providers:
-  - id: sagemaker:my-sagemaker-endpoint
+  - id: sagemaker:custom:my-sagemaker-endpoint
     config:
       accessKeyId: 'YOUR_ACCESS_KEY_ID'
       secretAccessKey: 'YOUR_SECRET_ACCESS_KEY'
@@ -72,7 +74,7 @@ providers:
 
 ```yaml
 providers:
-  - id: sagemaker:my-sagemaker-endpoint
+  - id: sagemaker:custom:my-sagemaker-endpoint
     config:
       profile: 'YOUR_PROFILE_NAME'
       region: 'us-east-1' # Optional, defaults to us-east-1
@@ -86,23 +88,29 @@ The AWS SDK uses the standard credential chain ([Setting Credentials in Node.js 
 
 The SageMaker provider supports several syntax patterns:
 
-1. Basic endpoint specification:
-
-   ```yaml
-   sagemaker:my-endpoint-name
-   ```
-
-2. Model type specification (for common model formats):
+1. Model type specification (the usual form):
 
    ```yaml
    sagemaker:model-type:my-endpoint-name
    ```
 
-   This specifies a format handler to properly structure requests and parse responses for the model container type deployed on your endpoint.
+   The model type selects a format handler that structures requests and parses responses for
+   the model container deployed on your endpoint.
 
    :::tip
-   For non-embedding models, the type of model must be specified using the `sagemaker:model-type:endpoint-name` format or provided in the `config.modelType` field.
+   For non-embedding models the model type is **required**, either as the middle segment of the
+   provider ID or as `config.modelType`. `sagemaker:my-endpoint-name` on its own fails with
+   `Model type must be set either in config.modelType or as part of the Provider ID`.
    :::
+
+2. Model type in `config` instead of the ID:
+
+   ```yaml
+   providers:
+     - id: sagemaker:my-endpoint-name
+       config:
+         modelType: 'jumpstart'
+   ```
 
 3. Embedding endpoint specification:
 
@@ -118,7 +126,14 @@ The SageMaker provider supports several syntax patterns:
    ```
    For AWS JumpStart foundation models that require specific input/output formats.
 
-The provider will auto-detect JumpStart endpoints if `'jumpstart'` is in the name, but manual `modelType` specification is recommended for clarity.
+:::caution
+An endpoint name containing `jumpstart` is coerced to the `jumpstart` model type, and that
+coercion **overrides** an explicit model type in the ID: `sagemaker:huggingface:my-jumpstart-endpoint`
+resolves to `jumpstart`, not `huggingface`. It applies only to the three-segment form — a bare
+`sagemaker:my-jumpstart-endpoint` still fails, because the model type is missing. If your endpoint
+name contains `jumpstart` but is not a JumpStart container, set `config.modelType` explicitly and
+use the two-segment ID.
+:::
 
 ## Examples
 
@@ -347,10 +362,11 @@ Supported model types:
 
 | Model Type    | Description                        | JavaScript Expression for Results |
 | ------------- | ---------------------------------- | --------------------------------- |
+| `openai`      | OpenAI-compatible chat containers  | `json.choices[0].message.content` |
 | `llama`       | Llama-compatible interface models  | Standard format                   |
 | `huggingface` | Hugging Face models (like Mistral) | `json[0].generated_text`          |
 | `jumpstart`   | AWS JumpStart foundation models    | `json.generated_text`             |
-| `custom`      | Custom model formats (default)     | Depends on model                  |
+| `custom`      | Custom model formats               | Depends on model                  |
 
 :::info Important clarification about model types
 
@@ -383,7 +399,7 @@ Common configuration options for SageMaker endpoints:
 | --------------- | -------------------------------------------- | ------------------ |
 | `endpoint`      | SageMaker endpoint name                      | (from provider ID) |
 | `region`        | AWS region                                   | `us-east-1`        |
-| `modelType`     | Model type for request/response formatting   | `custom`           |
+| `modelType`     | Model type for request/response formatting   | **required**       |
 | `maxTokens`     | Maximum number of tokens to generate         | `1024`             |
 | `temperature`   | Controls randomness (0.0 to 1.0)             | `0.7`              |
 | `topP`          | Nucleus sampling parameter                   | `1.0`              |
@@ -392,6 +408,7 @@ Common configuration options for SageMaker endpoints:
 | `acceptType`    | Accept type for SageMaker response           | `application/json` |
 | `delay`         | Delay between API calls in milliseconds      | `0`                |
 | `transform`     | Function to transform prompts before sending | N/A                |
+| `basePath`      | Base directory for `file://` references      | (config file dir)  |
 
 ### Stop Sequences Example
 
@@ -421,7 +438,7 @@ For endpoints with unique response formats, you can use JavaScript expressions t
 
 ```yaml
 providers:
-  - id: sagemaker:my-custom-endpoint
+  - id: sagemaker:custom:my-custom-endpoint
     config:
       responseFormat:
         path: 'json.custom.nested.responseField'
@@ -433,7 +450,7 @@ For more complex parsing needs, you can use a file-based transformer:
 
 ```yaml
 providers:
-  - id: sagemaker:my-custom-endpoint
+  - id: sagemaker:custom:my-custom-endpoint
     config:
       responseFormat:
         path: 'file://transforms/custom-parser.js'
@@ -512,7 +529,7 @@ evaluateOptions:
   cache: true
 
 providers:
-  - id: sagemaker:my-endpoint
+  - id: sagemaker:custom:my-endpoint
     config:
       region: us-east-1
 ```
@@ -537,7 +554,7 @@ For example, `delay: 1000` waits 1 second between each request to the endpoint. 
 
 ```yaml
 providers:
-  - id: sagemaker:my-endpoint
+  - id: sagemaker:custom:my-endpoint
     config:
       region: us-east-1
       delay: 1000 # Add a 1000ms (1 second) delay between API calls
@@ -547,7 +564,7 @@ You can also specify the delay directly at the provider level:
 
 ```yaml
 providers:
-  - id: sagemaker:my-endpoint
+  - id: sagemaker:custom:my-endpoint
     delay: 1000 # 1 second delay
     config:
       region: us-east-1
@@ -570,7 +587,7 @@ You can specify a transform function in your configuration:
 
 ```yaml
 providers:
-  - id: sagemaker:my-endpoint
+  - id: sagemaker:custom:my-endpoint
     config:
       region: us-east-1
       transform: |
@@ -610,7 +627,7 @@ You can specify the transform at the provider's top level or within the `config`
 
 ```yaml
 providers:
-  - id: sagemaker:my-endpoint
+  - id: sagemaker:custom:my-endpoint
     transform: file://transforms/format-prompt.js
     config:
       region: us-east-1
