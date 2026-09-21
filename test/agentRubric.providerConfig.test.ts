@@ -3,6 +3,8 @@ import os from 'os';
 import path from 'path';
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import cliState from '../src/cliState';
+import { getEnvString } from '../src/envars';
 import { matchesAgentRubric } from '../src/matchers/agent';
 import { evaluate } from '../src/node/evaluate';
 import * as cloudUtils from '../src/util/cloud';
@@ -10,8 +12,9 @@ import { mockProcessEnv } from './util/utils';
 
 import type { EvaluateTestSuite, ProviderOptions } from '../src/types/index';
 
-const { configs, graderId } = vi.hoisted(() => ({
+const { configs, factoryEnvValues, graderId } = vi.hoisted(() => ({
   configs: [] as ProviderOptions[],
+  factoryEnvValues: [] as Array<string | undefined>,
   graderId: 'anthropic:claude-agent-sdk:config-test',
 }));
 
@@ -29,7 +32,9 @@ vi.mock('../src/providers/registry', async (importOriginal) => {
         {
           test: () => true,
           create: async (_path: string, options: ProviderOptions) => {
+            await Promise.resolve();
             configs.push(options);
+            factoryEnvValues.push(getEnvString('OPENAI_API_KEY'));
             return {
               id: () => options.id || graderId,
               config: options.config,
@@ -54,6 +59,7 @@ let restoreEnv: () => void;
 beforeEach(() => {
   vi.resetAllMocks();
   configs.length = 0;
+  factoryEnvValues.length = 0;
   restoreEnv = mockProcessEnv();
 });
 
@@ -64,6 +70,7 @@ afterEach(() => {
   restoreEnv();
   vi.restoreAllMocks();
   configs.length = 0;
+  factoryEnvValues.length = 0;
 });
 
 function makeSuite(location: string): EvaluateTestSuite {
@@ -125,6 +132,52 @@ function makeSuite(location: string): EvaluateTestSuite {
 }
 
 describe('agent-rubric per-case provider config', () => {
+  it('preserves scoped env and custom IDs when constructing concurrent per-case graders', async () => {
+    mockProcessEnv({ OPENAI_API_KEY: 'ambient-value' });
+
+    await cliState.withEnv({ OPENAI_API_KEY: 'suite-value' }, async () => {
+      const results = await Promise.all(
+        ['abc', 'def'].map((traceId) =>
+          matchesAgentRubric(
+            'Inspect',
+            'done',
+            {
+              provider: {
+                [graderId]: {
+                  id: `grader-${traceId}`,
+                  env: { OPENAI_API_KEY: `provider-${traceId}` },
+                  config: {
+                    working_dir: './evidence/{{trace_id}}',
+                    custom: '{{env.OPENAI_API_KEY}}',
+                  },
+                },
+              },
+            },
+            { trace_id: traceId },
+          ),
+        ),
+      );
+
+      expect(results.map((result) => result.pass)).toEqual([true, true]);
+      expect(results.map((result) => result.metadata?.agentProvider)).toEqual([
+        'grader-abc',
+        'grader-def',
+      ]);
+      expect([...factoryEnvValues].sort()).toEqual(['provider-abc', 'provider-def']);
+      expect(configs.map(({ config }) => config?.working_dir).sort()).toEqual([
+        './evidence/abc',
+        './evidence/def',
+      ]);
+      expect(configs.map(({ config }) => config?.custom).sort()).toEqual([
+        'provider-abc',
+        'provider-def',
+      ]);
+      expect(getEnvString('OPENAI_API_KEY')).toBe('suite-value');
+    });
+
+    expect(getEnvString('OPENAI_API_KEY')).toBe('ambient-value');
+  });
+
   it('loads a cloud-only grader definition after per-case vars are available', async () => {
     const cloudProvider = vi.spyOn(cloudUtils, 'getProviderFromCloud').mockResolvedValue({
       id: graderId,

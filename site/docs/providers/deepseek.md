@@ -18,13 +18,13 @@ Basic configuration example:
 
 ```yaml
 providers:
-  - id: deepseek:deepseek-chat
+  - id: deepseek:deepseek-v4-flash
     config:
       temperature: 0.7
       max_tokens: 4000
       apiKey: YOUR_DEEPSEEK_API_KEY
 
-  - id: deepseek:deepseek-reasoner # Legacy alias for V4 Flash thinking mode
+  - id: deepseek:deepseek-v4-pro
     config:
       max_tokens: 8000
 ```
@@ -36,13 +36,15 @@ providers:
 - `cost`, `inputCost`, `outputCost` - Override promptfoo's pricing estimates (`inputCost` and `outputCost` take precedence over `cost`)
 - `top_p`, `presence_penalty`, `frequency_penalty`
 - `stream`
-- `showThinking` - Control whether reasoning content is included in the output (default: `true`, applies to deepseek-reasoner model)
+- `showThinking` - Control whether reasoning content is included in the output (default: `true`, applies to thinking-capable models)
 
 ## Available Models
 
 :::note
 
-The current primary API model names are `deepseek-v4-flash` and `deepseek-v4-pro`. The legacy aliases `deepseek-chat` and `deepseek-reasoner` remain available until July 24, 2026 and currently map to the non-thinking and thinking modes of `deepseek-v4-flash`, respectively.
+Use `deepseek-v4-flash` and `deepseek-v4-pro`. The older `deepseek-chat` and `deepseek-reasoner`
+names are retired aliases; a bare `deepseek:` provider id still resolves to `deepseek-chat` for
+backward compatibility, so name a model explicitly.
 
 :::
 
@@ -59,20 +61,13 @@ The current primary API model names are `deepseek-v4-flash` and `deepseek-v4-pro
 - 1M context window, up to 384K output tokens
 - Input: $0.003625/1M (cache hit), $0.435/1M (cache miss)
 - Output: $0.87/1M
-- Promotional pricing is documented through May 31, 2026
 
-### Legacy aliases
+The rates above are the ones promptfoo uses to report per-result cost. They are a point-in-time
+snapshot — check [DeepSeek's pricing page](https://api-docs.deepseek.com/quick_start/pricing) for
+current rates, and override a moved rate with `inputCost`/`outputCost` (USD per token).
 
-### deepseek-chat
-
-- Legacy alias that currently maps to non-thinking `deepseek-v4-flash`
-- Scheduled for retirement on July 24, 2026
-
-### deepseek-reasoner
-
-- Legacy alias that currently maps to thinking `deepseek-v4-flash`
-- Scheduled for retirement on July 24, 2026
-- Supports showing or hiding reasoning content through the `showThinking` parameter
+Thinking-capable models support showing or hiding reasoning content through the `showThinking`
+parameter.
 
 :::warning
 
@@ -86,11 +81,11 @@ Here's an example comparing DeepSeek with OpenAI on reasoning tasks:
 
 ```yaml
 providers:
-  - id: deepseek:deepseek-reasoner
+  - id: deepseek:deepseek-v4-pro
     config:
       max_tokens: 8000
       showThinking: true # Include reasoning content in output (default)
-  - id: openai:o-1
+  - id: openai:o1
     config:
       temperature: 0.0
 
@@ -104,13 +99,12 @@ tests:
 
 ### Controlling Reasoning Output
 
-The legacy `deepseek-reasoner` alias uses V4 Flash thinking mode and includes detailed
-reasoning steps in its output. You can control whether this reasoning content is shown
-using the `showThinking` parameter:
+Thinking mode includes detailed reasoning steps in the output. Control whether that reasoning
+content is shown with the `showThinking` parameter:
 
 ```yaml
 providers:
-  - id: deepseek:deepseek-reasoner
+  - id: deepseek:deepseek-v4-pro
     config:
       showThinking: false # Hide reasoning content from output
 ```

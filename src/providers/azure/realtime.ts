@@ -1,4 +1,4 @@
-import { getEnvString } from '../../envars';
+import { type EnvVarKey, getEnvString } from '../../envars';
 import logger from '../../logger';
 import { generateIdFromPrompt } from '../../models/prompt';
 import { OpenAiRealtimeProvider } from '../openai/realtime';
@@ -6,7 +6,6 @@ import { providerRegistry } from '../providerRegistry';
 import { AzureGenericProvider } from './generic';
 import { calculateAzureCost, throwConfigurationError } from './util';
 
-import type { EnvVarKey } from '../../envars';
 import type { EnvOverrides } from '../../types/env';
 import type {
   CallApiContextParams,

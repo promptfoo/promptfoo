@@ -667,9 +667,9 @@ providers:
 
 - [Playwright Documentation](https://playwright.dev/docs/intro) - Official Playwright docs
 - [Playwright Browsers Guide](https://playwright.dev/docs/browsers) - Detailed information about supported browsers
-- [Playwright Selectors Guide](https://playwright.dev/docs/selectors) - Learn about CSS, text, and other selector strategies
+- [Playwright Locators Guide](https://playwright.dev/docs/locators) - Learn about CSS, text, and other selector strategies
 - [Playwright Best Practices](https://playwright.dev/docs/best-practices) - Tips for reliable automation
-- [Playwright Inspector](https://playwright.dev/docs/inspector) - Interactive tool for authoring and debugging tests
+- [Playwright Debugging Guide](https://playwright.dev/docs/debug) - Playwright Inspector and other tools for authoring and debugging tests
 - [Chrome DevTools Guide](https://developer.chrome.com/docs/devtools/) - For inspecting elements and finding selectors
 
 ---

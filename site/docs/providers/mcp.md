@@ -65,6 +65,20 @@ environment when the provider loads, so the config stays committable while the c
 from your shell or `--env-file`. A placeholder for an unset variable is preserved verbatim
 rather than collapsing to an empty string, so a missing credential fails visibly.
 
+A stdio server can also be started from a script with `path`, which accepts `.js` and `.py` files
+and is resolved relative to the config file. Use it in place of `command`/`args`: `args` is not
+applied to a `path` server, and `command` takes precedence when both are set.
+
+```yaml
+providers:
+  - id: mcp
+    config:
+      enabled: true
+      server:
+        path: ./mcp_server/index.js # .js runs under Node, .py under python3
+        name: local-server
+```
+
 #### Remote Server (URL-based)
 
 ```yaml
@@ -232,21 +246,21 @@ When using OAuth authentication:
 
 #### Authentication Options Reference
 
-| Option       | Type     | Auth Type               | Required | Description                                           |
-| ------------ | -------- | ----------------------- | -------- | ----------------------------------------------------- |
-| type         | string   | All                     | Yes      | `'bearer'`, `'basic'`, `'api_key'`, or `'oauth'`      |
-| token        | string   | bearer                  | Yes      | The bearer token                                      |
-| username     | string   | basic, oauth (password) | Yes      | Username                                              |
-| password     | string   | basic, oauth (password) | Yes      | Password                                              |
-| value        | string   | api_key                 | Yes\*    | The API key value                                     |
-| api_key      | string   | api_key                 | Yes\*    | Legacy field, use `value` instead                     |
-| keyName      | string   | api_key                 | No       | Header or query parameter name (default: `X-API-Key`) |
-| placement    | string   | api_key                 | No       | `'header'` (default) or `'query'`                     |
-| grantType    | string   | oauth                   | Yes      | `'client_credentials'` or `'password'`                |
-| tokenUrl     | string   | oauth                   | No       | OAuth token endpoint URL (auto-discovered if omitted) |
-| clientId     | string   | oauth                   | Varies   | Required for client_credentials                       |
-| clientSecret | string   | oauth                   | Varies   | Required for client_credentials                       |
-| scopes       | string[] | oauth                   | No       | OAuth scopes to request                               |
+| Option       | Type     | Auth Type               | Required | Description                                                                                                                        |
+| ------------ | -------- | ----------------------- | -------- | ---------------------------------------------------------------------------------------------------------------------------------- |
+| type         | string   | All                     | Yes      | `'bearer'`, `'basic'`, `'api_key'`, `'oauth'`, or `'none'` (`''` and `'no_auth'` are accepted aliases that disable generated auth) |
+| token        | string   | bearer                  | Yes      | The bearer token                                                                                                                   |
+| username     | string   | basic, oauth (password) | Yes      | Username                                                                                                                           |
+| password     | string   | basic, oauth (password) | Yes      | Password                                                                                                                           |
+| value        | string   | api_key                 | Yes\*    | The API key value                                                                                                                  |
+| api_key      | string   | api_key                 | Yes\*    | Legacy field, use `value` instead                                                                                                  |
+| keyName      | string   | api_key                 | No       | Header or query parameter name (default: `X-API-Key`)                                                                              |
+| placement    | string   | api_key                 | No       | `'header'` (default) or `'query'`                                                                                                  |
+| grantType    | string   | oauth                   | Varies   | `'client_credentials'` (the default when omitted) or `'password'`, which must be set explicitly                                    |
+| tokenUrl     | string   | oauth                   | No       | OAuth token endpoint URL (auto-discovered if omitted)                                                                              |
+| clientId     | string   | oauth                   | Varies   | Required for client_credentials                                                                                                    |
+| clientSecret | string   | oauth                   | Varies   | Required for client_credentials                                                                                                    |
+| scopes       | string[] | oauth                   | No       | OAuth scopes to request                                                                                                            |
 
 \* Either `value` or `api_key` is required for api_key auth type.
 
@@ -280,9 +294,6 @@ providers:
       timeout: 900000 # Request timeout in milliseconds (15 minutes)
       debug: true # Enable debug logging
       verbose: true # Enable verbose output
-      defaultArgs: # Default arguments for all tool calls
-        session_id: 'test-session'
-        user_role: 'customer'
 ```
 
 ### Response Transforms

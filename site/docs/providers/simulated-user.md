@@ -52,15 +52,16 @@ For each turn:
 3. The simulated user generates the next message based on their instructions
 4. This continues until either:
    - The maximum number of turns is reached
-   - The agent determines that the conversation has reached a natural conclusion
+   - The simulated user emits `###STOP###`, signalling its instructions are satisfied
 
 ## Configuration Options
 
-| Option            | Type                | Description                                                                                                                    |
-| ----------------- | ------------------- | ------------------------------------------------------------------------------------------------------------------------------ |
-| `instructions`    | string              | Template for user instructions. Supports Nunjucks templating with access to test variables.                                    |
-| `maxTurns`        | number              | Maximum number of conversation turns. Defaults to 10.                                                                          |
-| `initialMessages` | Message[] or string | Optional. Pre-defined conversation history to start from. Can be an array of messages or a `file://` path (JSON/YAML formats). |
+| Option            | Type                | Description                                                                                                                                                               |
+| ----------------- | ------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `instructions`    | string              | Template for user instructions. Supports Nunjucks templating with access to test variables.                                                                               |
+| `maxTurns`        | number              | Maximum number of conversation turns. Defaults to 10.                                                                                                                     |
+| `initialMessages` | Message[] or string | Optional. Pre-defined conversation history to start from. Can be an array of messages or a `file://` path (JSON/YAML formats).                                            |
+| `stateful`        | boolean             | When true, sends only the latest user message once a session exists, letting the target maintain history. Defaults to false, which resends the full transcript each turn. |
 
 ## Initial Messages
 
@@ -271,10 +272,13 @@ When using promptfoo as a Node library, provide the equivalent configuration:
 The conversation will automatically stop when:
 
 - The `maxTurns` limit is reached
-- The agent includes `###STOP###` anywhere in its response
+- The **simulated user** includes `###STOP###` anywhere in its message
 - An error occurs during the conversation
 
-The `###STOP###` marker is useful for agents that can determine when a conversation has reached a natural conclusion (e.g., task completed, user satisfied).
+The `###STOP###` marker is emitted by the simulated user, not by the agent under test, and it is
+checked before the message is sent on — so the agent never sees the turn that ends the
+conversation. Instruct the simulated user to emit it when its goal is met (e.g. "say `###STOP###`
+once the booking is confirmed"). A `###STOP###` in the agent's own response has no effect.
 
 ## Remote Generation
 

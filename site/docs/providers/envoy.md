@@ -29,7 +29,13 @@ providers:
   - id: envoy:my-model
     config:
       apiBaseUrl: 'https://your-envoy-gateway.com/v1'
+      apiKeyEnvar: ENVOY_API_KEY
 ```
+
+The provider is built on the OpenAI chat provider, so it requires a credential before it will
+send a request. Supply one with `apiKey`, point `apiKeyEnvar` at your own variable, or set
+`OPENAI_API_KEY`. Gateways that authenticate with a custom header instead need
+`apiKeyRequired: false` — see [Authenticating via header](#authenticating-via-header).
 
 ### With Environment Variable
 
@@ -44,19 +50,24 @@ Then use the provider without specifying the URL:
 ```yaml
 providers:
   - id: envoy:my-model
+    config:
+      apiKeyEnvar: ENVOY_API_KEY
 ```
 
 ### Authenticating via header
 
-Envoy authentication is usually done with an `x-api-key` header. Here's an example of how to configure that:
+Envoy authentication is usually done with an `x-api-key` header. Set `apiKeyRequired: false` so
+the provider does not also demand an OpenAI-style key — a `headers` entry alone does not satisfy
+that check, and the request fails with `API key is not set` before it is sent:
 
 ```yaml
 providers:
   - id: envoy:my-model
     config:
       apiBaseUrl: 'https://your-envoy-gateway.com/v1'
+      apiKeyRequired: false
       headers:
-        x-api-key: 'foobar'
+        x-api-key: '{{ env.ENVOY_API_KEY }}'
 ```
 
 ## See Also
