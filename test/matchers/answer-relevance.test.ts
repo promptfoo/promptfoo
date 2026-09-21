@@ -5,8 +5,10 @@ import {
   DefaultEmbeddingProvider,
   DefaultGradingProvider,
 } from '../../src/providers/openai/defaults';
+import { withProviderCallTracingContext } from '../../src/scheduler/providerCallExecutionContext';
 
 import type { OpenAiEmbeddingProvider } from '../../src/providers/openai/embedding';
+import type { ProviderCallTracingContext } from '../../src/scheduler/providerCallExecutionContext';
 
 describe('matchesAnswerRelevance', () => {
   beforeEach(() => {
@@ -81,6 +83,37 @@ describe('matchesAnswerRelevance', () => {
     expect(mockCallEmbeddingApi).toHaveBeenCalledWith('Input text');
   });
 
+  it('records both text and embedding providers beneath the grading trace', async () => {
+    const providerSpan = vi.fn<ProviderCallTracingContext['withProviderSpan']>(
+      async ({ callContext }, invoke) => invoke(callContext),
+    );
+
+    await withProviderCallTracingContext(
+      {
+        getActiveTraceparent: () => undefined,
+        withGraderSpan: async (_options, invoke) => invoke(),
+        withProviderSpan: providerSpan,
+      },
+      () => matchesAnswerRelevance('input', 'output', 0.5),
+    );
+
+    expect(providerSpan.mock.calls.map(([options]) => options.promptLabel)).toEqual([
+      'answer-relevance',
+      'answer-relevance',
+      'answer-relevance',
+      'answer-relevance.embedding',
+      'answer-relevance.embedding',
+      'answer-relevance.embedding',
+      'answer-relevance.embedding',
+    ]);
+    expect(providerSpan.mock.calls.every(([options]) => options.role === 'grader')).toBe(true);
+    expect(
+      providerSpan.mock.calls
+        .filter(([options]) => options.promptLabel === 'answer-relevance.embedding')
+        .every(([options]) => options.operationName === 'embeddings'),
+    ).toBe(true);
+  });
+
   it('should fail when the relevance score is below the threshold', async () => {
     const input = 'Input text';
     const output = 'Different output';
@@ -140,6 +173,36 @@ describe('matchesAnswerRelevance', () => {
     expect(mockCallEmbeddingApi).toHaveBeenCalledWith(
       expect.stringContaining(ANSWER_RELEVANCY_GENERATE.slice(0, 50)),
     );
+  });
+
+  it('tags a grading provider error as a grader error so inverse assertions cannot pass it', async () => {
+    // Without the graderError tag, applyRagInverse() cannot tell an infrastructure
+    // failure apart from a genuine low score, and `not-answer-relevance` would flip
+    // a grading outage into a silent pass.
+    vi.spyOn(DefaultGradingProvider, 'callApi').mockResolvedValue({
+      error: 'grading provider exploded',
+      tokenUsage: { total: 0, prompt: 0, completion: 0 },
+    });
+
+    const result = await matchesAnswerRelevance('q', 'a', 0.5);
+
+    expect(result.pass).toBe(false);
+    expect(result.score).toBe(0);
+    expect(result.reason).toContain('grading provider exploded');
+    expect(result.metadata).toMatchObject({ graderError: true });
+  });
+
+  it('tags an embedding provider error as a grader error', async () => {
+    vi.spyOn(DefaultEmbeddingProvider, 'callEmbeddingApi').mockResolvedValue({
+      error: 'embedding provider exploded',
+      tokenUsage: { total: 0, prompt: 0, completion: 0 },
+    });
+
+    const result = await matchesAnswerRelevance('q', 'a', 0.5);
+
+    expect(result.pass).toBe(false);
+    expect(result.score).toBe(0);
+    expect(result.metadata).toMatchObject({ graderError: true });
   });
 
   it('tracks token usage for successful calls', async () => {

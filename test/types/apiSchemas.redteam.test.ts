@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, expectTypeOf, it } from 'vitest';
 import { ALL_PLUGINS, ALL_STRATEGIES } from '../../src/redteam/constants';
 import { BlobsSchemas } from '../../src/types/api/blobs';
 import {
@@ -278,6 +278,11 @@ describe('API schema red-team coverage', () => {
       expect(parsed.history).toEqual([]);
       expect(parsed.turn).toBe(0);
       expect(parsed.count).toBe(1);
+      expectTypeOf(parsed.plugin.config).toMatchTypeOf<Record<string, unknown>>();
+      expectTypeOf(parsed.strategy.config).toMatchTypeOf<Record<string, unknown>>();
+      expectTypeOf(parsed.history).toMatchTypeOf<unknown[]>();
+      expectTypeOf(parsed.turn).toEqualTypeOf<number>();
+      expectTypeOf(parsed.count).toEqualTypeOf<number>();
       expect(
         RedteamSchemas.GenerateTest.Request.parse({
           plugin: { id: VALID_PLUGIN_ID },
@@ -388,8 +393,9 @@ describe('API schema red-team coverage', () => {
         RedteamSchemas.GenerateTest.Response.parse({
           testCases: [{ prompt: 'one', context: 'ctx', metadata: { index: 1 } }],
           count: 1,
+          tokenUsage: { total: 3, prompt: 2, completion: 1, numRequests: 1 },
         }),
-      ).toMatchObject({ count: 1 });
+      ).toMatchObject({ count: 1, tokenUsage: { total: 3, numRequests: 1 } });
       expect(
         RedteamSchemas.GenerateTest.Response.safeParse({
           testCases: [{ prompt: 'one', context: 'ctx' }],

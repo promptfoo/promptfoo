@@ -1,5 +1,6 @@
 import path from 'path';
 
+import { SpanStatusCode, trace } from '@opentelemetry/api';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const mockGetEnvInt = vi.hoisted(() => vi.fn().mockReturnValue(undefined));
@@ -85,7 +86,7 @@ const mcpMocks = vi.hoisted(() => {
   };
 });
 
-const { mockClient, mockStdioTransport, mockStreamableHTTPTransport } = mcpMocks;
+const { mockClient, mockSSETransport, mockStdioTransport, mockStreamableHTTPTransport } = mcpMocks;
 
 // Mock the modules before importing them
 vi.mock('@modelcontextprotocol/sdk/client/index.js', async (importOriginal) => {
@@ -146,6 +147,27 @@ describe('MCPClient', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
+    mockClient.registerCapabilities.mockReset();
+    mockClient.assertCapability.mockReset();
+    mockClient.connect.mockReset();
+    mockClient.ping.mockReset().mockResolvedValue({});
+    mockClient.listTools.mockReset().mockResolvedValue({
+      tools: [{ name: 'tool1', description: 'desc1', inputSchema: {} }],
+    });
+    mockClient.callTool.mockReset();
+    mockClient.close.mockReset().mockResolvedValue(undefined);
+    mockStdioTransport.close.mockReset().mockResolvedValue(undefined);
+    mockStdioTransport.connect.mockReset();
+    mockStdioTransport.start.mockReset();
+    mockStdioTransport.send.mockReset();
+    mockStreamableHTTPTransport.close.mockReset().mockResolvedValue(undefined);
+    mockStreamableHTTPTransport.connect.mockReset();
+    mockStreamableHTTPTransport.start.mockReset();
+    mockStreamableHTTPTransport.send.mockReset();
+    mockSSETransport.close.mockReset().mockResolvedValue(undefined);
+    mockSSETransport.connect.mockReset();
+    mockSSETransport.start.mockReset();
+    mockSSETransport.send.mockReset();
     mockGetEnvInt.mockReset();
     mockGetEnvInt.mockReturnValue(undefined);
     // Reset the OAuth token mock to return a valid token by default
@@ -158,6 +180,96 @@ describe('MCPClient', () => {
   });
 
   describe('initialize', () => {
+    it('passes file defaults below explicit MCP server environment values', async () => {
+      mockClient.listTools.mockResolvedValueOnce({ tools: [] });
+      mcpClient = new MCPClient({
+        enabled: true,
+        server: {
+          command: 'mcp-server',
+          env: { PROMPTFOO_REVIEW_ENV_OVERRIDE: 'explicit' },
+        },
+      });
+      await cliState.withEnvFileOverrides(
+        {
+          PROMPTFOO_REVIEW_ENV_PROBE: 'file',
+          PROMPTFOO_REVIEW_ENV_OVERRIDE: 'file',
+        },
+        () => mcpClient.initialize(),
+      );
+      expect(StdioClientTransport).toHaveBeenCalledWith(
+        expect.objectContaining({
+          env: expect.objectContaining({
+            PROMPTFOO_REVIEW_ENV_PROBE: 'file',
+            PROMPTFOO_REVIEW_ENV_OVERRIDE: 'explicit',
+          }),
+        }),
+      );
+      await mcpClient.cleanup();
+    });
+
+    it.each([
+      { server: {} },
+      { server: { url: 'https://mcp.example.test', auth: { type: 'api_key' } } },
+      {
+        servers: [
+          { command: 'node' },
+          { url: 'https://mcp.example.test', auth: { type: 'bearer', token: 123 } },
+        ],
+      },
+      { server: { command: 'node', env: { TOKEN: 123 } } },
+      { timeout: -1 },
+    ])('rejects malformed configuration before initializing any SDK client: %j', (config) => {
+      expect(() => new MCPClient({ enabled: true, ...config })).toThrow();
+      expect(Client).not.toHaveBeenCalled();
+      expect(StdioClientTransport).not.toHaveBeenCalled();
+      expect(StreamableHTTPClientTransport).not.toHaveBeenCalled();
+      expect(mockGetOAuthTokenWithExpiry).not.toHaveBeenCalled();
+    });
+
+    it('defaults enabled and OAuth grant without changing the input', async () => {
+      const auth = {
+        type: 'oauth',
+        clientId: 'client',
+        clientSecret: 'secret',
+        scopes: 'read write',
+      };
+      const input = { server: { url: 'https://mcp.example.test', auth } };
+      mcpClient = new MCPClient(input);
+      await mcpClient.initialize();
+      expect(mockGetOAuthTokenWithExpiry).toHaveBeenCalledWith(
+        { ...auth, grantType: 'client_credentials' },
+        'https://mcp.example.test',
+      );
+      expect(input).not.toHaveProperty('enabled');
+      expect(auth).not.toHaveProperty('grantType');
+      await mcpClient.cleanup();
+    });
+
+    it('retains servers precedence and command transport precedence', async () => {
+      mcpClient = new MCPClient({
+        enabled: true,
+        server: { command: 'ignored' },
+        servers: [{ command: 'selected', path: 'ignored.js', url: 'https://ignored.example.test' }],
+      });
+      await mcpClient.initialize();
+      expect(StdioClientTransport).toHaveBeenCalledTimes(1);
+      expect(StdioClientTransport).toHaveBeenCalledWith(
+        expect.objectContaining({ command: 'selected' }),
+      );
+      expect(StreamableHTTPClientTransport).not.toHaveBeenCalled();
+      await mcpClient.cleanup();
+    });
+
+    it('normalizes no-auth and keeps disabled configuration inert', async () => {
+      mcpClient = new MCPClient({
+        enabled: false,
+        server: { url: 'https://mcp.example.test', auth: { type: 'none' } },
+      });
+      await mcpClient.initialize();
+      expect(Client).not.toHaveBeenCalled();
+      expect(mockGetOAuthTokenWithExpiry).not.toHaveBeenCalled();
+    });
+
     it('should not initialize if disabled', async () => {
       mcpClient = new MCPClient({ enabled: false });
       await mcpClient.initialize();
@@ -189,6 +301,145 @@ describe('MCPClient', () => {
       expect(mockClient.connect).toHaveBeenCalledWith(mockStdioTransport, undefined);
       await mcpClient.cleanup();
       expect(mcpClient.hasInitialized).toBe(false);
+    });
+
+    it('should initialize a zero-argument command server with its configured env', async () => {
+      mcpClient = new MCPClient({
+        enabled: true,
+        server: { command: 'mcp-server', env: { MCP_MODE: 'test' } },
+      });
+
+      await mcpClient.initialize();
+
+      expect(StdioClientTransport).toHaveBeenCalledWith({
+        command: 'mcp-server',
+        args: [],
+        env: { ...process.env, MCP_MODE: 'test' },
+      });
+      expect(mcpClient.hasInitialized).toBe(true);
+      await mcpClient.cleanup();
+    });
+
+    it('keeps unnamed zero-argument command servers distinct', async () => {
+      mockClient.listTools
+        .mockResolvedValueOnce({
+          tools: [{ name: 'first_tool', description: '', inputSchema: {} }],
+        })
+        .mockResolvedValueOnce({
+          tools: [{ name: 'second_tool', description: '', inputSchema: {} }],
+        });
+
+      mcpClient = new MCPClient({
+        enabled: true,
+        servers: [
+          { command: 'mcp-server', env: { MCP_MODE: 'first' } },
+          { command: 'mcp-server', env: { MCP_MODE: 'second' } },
+        ],
+      });
+
+      await mcpClient.initialize();
+
+      expect(mcpClient.connectedServers).toHaveLength(2);
+      expect(mcpClient.getAllTools().map((tool) => tool.name)).toEqual([
+        'first_tool',
+        'second_tool',
+      ]);
+      await mcpClient.cleanup();
+      expect(mockClient.close).toHaveBeenCalledTimes(2);
+    });
+
+    it('does not overwrite an explicitly named server with a generated command key', async () => {
+      mcpClient = new MCPClient({
+        enabled: true,
+        servers: [{ name: 'mcp-server:1', command: 'mcp-server' }, { command: 'mcp-server' }],
+      });
+
+      await mcpClient.initialize();
+
+      expect(mcpClient.connectedServers).toHaveLength(2);
+      await mcpClient.cleanup();
+      expect(mockClient.close).toHaveBeenCalledTimes(2);
+    });
+
+    it('should initialize with per-server env merged into process.env', async () => {
+      mockClient.connect.mockResolvedValueOnce(undefined);
+      mockClient.listTools.mockResolvedValueOnce({
+        tools: [{ name: 'tool1', description: 'desc1', inputSchema: {} }],
+      });
+
+      mcpClient = new MCPClient({
+        enabled: true,
+        server: {
+          name: 'server-with-env',
+          command: 'npm',
+          args: ['start'],
+          env: { CUSTOM_MCP_VAR: 'custom_value' },
+        },
+      });
+
+      await mcpClient.initialize();
+
+      expect(StdioClientTransport).toHaveBeenCalledWith({
+        command: 'npm',
+        args: ['start'],
+        env: {
+          ...(process.env as Record<string, string>),
+          CUSTOM_MCP_VAR: 'custom_value',
+        },
+      });
+      expect(mockClient.connect).toHaveBeenCalledWith(mockStdioTransport, undefined);
+      await mcpClient.cleanup();
+    });
+
+    it('should merge per-server env for path-based stdio servers', async () => {
+      mockClient.connect.mockResolvedValueOnce(undefined);
+      mockClient.listTools.mockResolvedValueOnce({
+        tools: [{ name: 'tool1', description: 'desc1', inputSchema: {} }],
+      });
+
+      mcpClient = new MCPClient({
+        enabled: true,
+        server: { name: 'scripted', path: 'script.js', env: { CUSTOM_MCP_VAR: 'custom_value' } },
+      });
+
+      await mcpClient.initialize();
+
+      expect(StdioClientTransport).toHaveBeenCalledWith({
+        command: process.execPath,
+        args: ['script.js'],
+        env: { ...(process.env as Record<string, string>), CUSTOM_MCP_VAR: 'custom_value' },
+      });
+      await mcpClient.cleanup();
+    });
+
+    it('should let per-server env override an inherited process.env value', async () => {
+      mockClient.connect.mockResolvedValueOnce(undefined);
+      mockClient.listTools.mockResolvedValueOnce({
+        tools: [{ name: 'tool1', description: 'desc1', inputSchema: {} }],
+      });
+      vi.stubEnv('PROMPTFOO_MCP_ENV_FIXTURE', 'inherited');
+
+      mcpClient = new MCPClient({
+        enabled: true,
+        server: {
+          name: 'override',
+          command: 'npm',
+          args: ['start'],
+          env: { PROMPTFOO_MCP_ENV_FIXTURE: 'per-server' },
+        },
+      });
+
+      await mcpClient.initialize();
+
+      const passedEnv = vi.mocked(StdioClientTransport).mock.calls[0][0].env as Record<
+        string,
+        string
+      >;
+      expect(passedEnv.PROMPTFOO_MCP_ENV_FIXTURE).toBe('per-server');
+      // The rest of the parent environment is still inherited.
+      expect(passedEnv.PATH).toBe(process.env.PATH);
+      await mcpClient.cleanup();
+      vi.unstubAllEnvs();
     });
 
     it('should initialize with multiple servers', async () => {
@@ -625,6 +876,94 @@ describe('MCPClient', () => {
   });
 
   describe('callTool', () => {
+    it('records one tool execution span around an MCP request', async () => {
+      mockClient.connect.mockResolvedValueOnce(undefined);
+      mockClient.listTools.mockResolvedValueOnce({
+        tools: [{ name: 'tool1', description: 'desc1', inputSchema: {} }],
+      });
+      mockClient.callTool.mockResolvedValueOnce({ content: 'result' });
+
+      mcpClient = new MCPClient({
+        enabled: true,
+        server: { command: 'npm', args: ['start'] },
+      });
+      await mcpClient.initialize();
+
+      const span = {
+        setAttribute: vi.fn(),
+        setStatus: vi.fn(),
+        end: vi.fn(),
+        recordException: vi.fn(),
+      };
+      const startActiveSpan = vi.fn((_name, _options, callback) => callback(span));
+      const activeSpanSpy = vi.spyOn(trace, 'getActiveSpan').mockReturnValue(span as any);
+      const tracerSpy = vi.spyOn(trace, 'getTracer').mockReturnValue({ startActiveSpan } as any);
+
+      try {
+        expect(await mcpClient.callTool('tool1', { query: 'inventory' })).toEqual({
+          content: 'result',
+          raw: { content: 'result' },
+        });
+
+        expect(startActiveSpan).toHaveBeenCalledExactlyOnceWith(
+          'execute_tool tool1',
+          expect.objectContaining({
+            attributes: expect.objectContaining({
+              'gen_ai.operation.name': 'execute_tool',
+              'gen_ai.tool.name': 'tool1',
+              'tool.arguments': '{"query":"inventory"}',
+            }),
+          }),
+          expect.any(Function),
+        );
+        expect(span.setAttribute).toHaveBeenCalledWith('tool.output', 'result');
+      } finally {
+        activeSpanSpy.mockRestore();
+        tracerSpy.mockRestore();
+      }
+    });
+
+    it('marks caught MCP transport failures as tool execution errors', async () => {
+      mockClient.connect.mockResolvedValueOnce(undefined);
+      mockClient.listTools.mockResolvedValueOnce({
+        tools: [{ name: 'tool1', description: 'desc1', inputSchema: {} }],
+      });
+      mockClient.callTool.mockRejectedValueOnce(new Error('MCP transport disconnected'));
+
+      mcpClient = new MCPClient({
+        enabled: true,
+        server: { command: 'npm', args: ['start'] },
+      });
+      await mcpClient.initialize();
+
+      const span = {
+        setAttribute: vi.fn(),
+        setStatus: vi.fn(),
+        end: vi.fn(),
+        recordException: vi.fn(),
+      };
+      const startActiveSpan = vi.fn((_name, _options, callback) => callback(span));
+      const activeSpanSpy = vi.spyOn(trace, 'getActiveSpan').mockReturnValue(span as any);
+      const tracerSpy = vi.spyOn(trace, 'getTracer').mockReturnValue({ startActiveSpan } as any);
+
+      try {
+        expect(await mcpClient.callTool('tool1', {})).toEqual({
+          content: '',
+          error: 'MCP transport disconnected',
+        });
+        expect(span.setAttribute).toHaveBeenCalledWith('tool.is_error', true);
+        expect(span.setAttribute).toHaveBeenCalledWith('error.type', 'tool_error');
+        expect(span.setStatus).toHaveBeenCalledWith({
+          code: SpanStatusCode.ERROR,
+          message: 'MCP transport disconnected',
+        });
+        expect(span.end).toHaveBeenCalledOnce();
+      } finally {
+        activeSpanSpy.mockRestore();
+        tracerSpy.mockRestore();
+      }
+    });
+
     it('should call tool successfully', async () => {
       // Reset mocks for this test
       mockClient.connect.mockResolvedValueOnce(undefined);

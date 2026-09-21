@@ -149,5 +149,5 @@ tests:
 - [OpenAI Provider](/docs/providers/openai) - Compatible API format used by Cerebras
 - [Configuration Reference](/docs/configuration/reference.md) - Full configuration options for providers
 - [Cerebras API Documentation](https://docs.cerebras.ai) - Official API reference
-- [Cerebras Structured Outputs Guide](https://docs.cerebras.ai/capabilities/structured-outputs/) - Learn more about JSON schema enforcement
-- [Cerebras Tool Use Guide](https://docs.cerebras.ai/capabilities/tool-use/) - Learn more about tool calling capabilities
+- [Cerebras Structured Outputs Guide](https://inference-docs.cerebras.ai/capabilities/structured-outputs) - Learn more about JSON schema enforcement
+- [Cerebras Tool Use Guide](https://inference-docs.cerebras.ai/capabilities/tool-use) - Learn more about tool calling capabilities

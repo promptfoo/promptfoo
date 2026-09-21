@@ -42,6 +42,8 @@ The browser provider requires Playwright and the stealth plugin. Install these p
 npm install playwright @playwright/browser-chromium playwright-extra puppeteer-extra-plugin-stealth
 ```
 
+Playwright 1.63 and later no longer support Ubuntu 20.04. Check [Playwright's system requirements](https://playwright.dev/docs/intro#system-requirements) before installing the browser on Linux.
+
 Note: Currently, promptfoo's browser provider only supports Chromium-based browsers (Chrome, Edge). The provider uses `playwright-extra` with the Chromium engine for enhanced stealth capabilities.
 
 ## Configuration
@@ -270,7 +272,7 @@ Take a screenshot of the current page state.
 
 ## Response Parsing
 
-Use the `transformResponse` config option to extract specific data from the results. The parser receives an object with two properties:
+Use the `transformResponse` config option to extract specific data from the results. Function parsers receive two positional arguments; string expressions can access the same variables:
 
 - `extracted`: An object containing named results from `extract` actions
 - `finalHtml`: The final HTML content of the page after all actions are completed
@@ -324,15 +326,15 @@ If you are using promptfoo as a [node library](/docs/usage/node-package/), you c
 
 Supported config options:
 
-| Option            | Type                                                                             | Description                                                                                                                                                                  |
-| ----------------- | -------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| headless          | `boolean`                                                                        | Whether to run the browser in headless mode. Defaults to `true`.                                                                                                             |
-| cookies           | `string` \| `{ name: string; value: string; domain?: string; path?: string; }[]` | A string or array of cookies to set on the browser                                                                                                                           |
-| transformResponse | `string` \| `Function`                                                           | A function or string representation of a function to parse the response. Receives an object with `extracted` and `finalHtml` parameters and should return a ProviderResponse |
-| steps             | `BrowserAction[]`                                                                | An array of actions to perform in the browser                                                                                                                                |
-| timeoutMs         | `number`                                                                         | The maximum time in milliseconds to wait for the browser operations to complete                                                                                              |
-| persistSession    | `boolean`                                                                        | Keep the browser page open across multiple `callApi()` invocations. Required for multi-turn strategies. Defaults to `false`.                                                 |
-| connectOptions    | `object`                                                                         | Options for connecting to an existing browser (`debuggingPort`, `mode`, `wsEndpoint`)                                                                                        |
+| Option            | Type                                                                             | Description                                                                                                                  |
+| ----------------- | -------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------- |
+| headless          | `boolean`                                                                        | Whether to run the browser in headless mode. Defaults to `true`.                                                             |
+| cookies           | `string` \| `{ name: string; value: string; domain?: string; path?: string; }[]` | A string or array of cookies to set on the browser                                                                           |
+| transformResponse | `string` \| `Function`                                                           | A function receiving `(extracted, finalHtml)`, or a string expression using those variables, to parse the response.          |
+| steps             | `BrowserAction[]`                                                                | An array of actions to perform in the browser                                                                                |
+| timeoutMs         | `number`                                                                         | The maximum time in milliseconds to wait for the browser operations to complete                                              |
+| persistSession    | `boolean`                                                                        | Keep the browser page open across multiple `callApi()` invocations. Required for multi-turn strategies. Defaults to `false`. |
+| connectOptions    | `object`                                                                         | Options for connecting to an existing browser (`debuggingPort`, `mode`, `wsEndpoint`)                                        |
 
 Note: All string values in the config support Nunjucks templating. This means you can use the `{{prompt}}` variable or any other variables passed in the test context.
 
@@ -665,9 +667,9 @@ providers:
 
 - [Playwright Documentation](https://playwright.dev/docs/intro) - Official Playwright docs
 - [Playwright Browsers Guide](https://playwright.dev/docs/browsers) - Detailed information about supported browsers
-- [Playwright Selectors Guide](https://playwright.dev/docs/selectors) - Learn about CSS, text, and other selector strategies
+- [Playwright Locators Guide](https://playwright.dev/docs/locators) - Learn about CSS, text, and other selector strategies
 - [Playwright Best Practices](https://playwright.dev/docs/best-practices) - Tips for reliable automation
-- [Playwright Inspector](https://playwright.dev/docs/inspector) - Interactive tool for authoring and debugging tests
+- [Playwright Debugging Guide](https://playwright.dev/docs/debug) - Playwright Inspector and other tools for authoring and debugging tests
 - [Chrome DevTools Guide](https://developer.chrome.com/docs/devtools/) - For inspecting elements and finding selectors
 
 ---

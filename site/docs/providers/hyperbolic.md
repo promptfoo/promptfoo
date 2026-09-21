@@ -1,4 +1,5 @@
 ---
+title: Hyperbolic
 sidebar_position: 42
 description: Configure Hyperbolic's OpenAI-compatible API to access DeepSeek, Qwen, and other specialized LLMs for text, image, and audio generation through a unified endpoint
 ---
@@ -34,8 +35,10 @@ hyperbolic:image:<model_name>
 ### Audio Generation (TTS)
 
 ```
-hyperbolic:audio:<model_name>
+hyperbolic:audio
 ```
+
+This calls Hyperbolic's fixed Melo TTS endpoint. The local provider identity defaults to `hyperbolic:audio:Melo-TTS`. An optional suffix is retained for compatibility and does not select a different remote model.
 
 ## Available Models
 
@@ -88,7 +91,9 @@ hyperbolic:audio:<model_name>
 
 ### Audio Generation Models
 
-- `hyperbolic:audio:Melo-TTS` - Natural narrator for high-quality speech
+- `hyperbolic:audio` - Melo TTS text-to-speech endpoint
+
+Hyperbolic has announced an [upcoming Melo TTS sunset](https://www.hyperbolic.ai/docs/inference/audio-apis) without a removal date. The existing `hyperbolic:audio:Melo-TTS` route remains compatible.
 
 ## Configuration
 
@@ -141,11 +146,18 @@ providers:
 
 #### Audio Generation Options
 
-| Parameter  | Description             |
-| ---------- | ----------------------- |
-| `voice`    | Voice selection for TTS |
-| `speed`    | Speech speed multiplier |
-| `language` | Language for TTS        |
+| Parameter       | Description                                                              |
+| --------------- | ------------------------------------------------------------------------ |
+| `language`      | Language code (default: `EN`)                                            |
+| `speaker`       | Language-specific speaker, such as `EN-US`, `EN-BR`, `EN-INDIA`, `EN-AU` |
+| `speed`         | Speech speed multiplier (0.1–5, default: 1)                              |
+| `sdp_ratio`     | Prosody variation (0–1)                                                  |
+| `noise_scale`   | Speech variation (0–1)                                                   |
+| `noise_scale_w` | Timing variation (0–1)                                                   |
+
+The prompt supplies the required `text` field. Prompt-level configuration overrides these provider options. The [native audio API](https://www.hyperbolic.ai/docs/inference/audio-apis) returns base64-encoded MP3 audio and does not document `model` or `voice` parameters. The provider omits `config.model` and `config.voice` for the native endpoint and forwards them only to custom endpoints. Use `speaker` for native voice selection; changing the route suffix never adds a `model` field.
+
+For a custom audio endpoint, set `apiBaseUrl` to its base URL, including any version prefix and omitting the trailing slash. The provider appends `/audio/generation`. Custom endpoints retain the legacy WAV output metadata and $0.001 per 1,000-character estimate; these defaults do not establish the custom service's format or pricing.
 
 ## Example Usage
 
@@ -199,14 +211,16 @@ tests:
 prompts:
   - 'Welcome to Hyperbolic AI. We are excited to help you build amazing applications.'
 providers:
-  - id: hyperbolic:audio:Melo-TTS
+  - id: hyperbolic:audio
     config:
-      voice: 'alloy'
+      language: 'EN'
+      speaker: 'EN-US'
       speed: 1.0
 
 tests:
   - assert:
-      - type: is-valid-audio
+      - type: javascript
+        value: "typeof output === 'string' && output.length > 0"
 ```
 
 ### Vision-Language Model Example
@@ -249,26 +263,39 @@ Example prompt template (`prompts/coding_assistant.json`):
 
 ## Cost Information
 
-Hyperbolic offers competitive pricing across all model types (rates as of January 2025):
+promptfoo ships a built-in price table for Hyperbolic models and uses it to report per-result
+cost, so evals show spend without extra configuration. Text models are priced per input and
+output token, image models per generated image, and the Melo TTS endpoint per character.
+
+That built-in table is a point-in-time snapshot. Treat
+[Hyperbolic's pricing page](https://docs.hyperbolic.xyz/docs/hyperbolic-pricing) as the source
+of truth and override any model whose rate has moved:
+
+```yaml
+providers:
+  - id: hyperbolic:deepseek-ai/DeepSeek-R1
+    config:
+      inputCost: 0.0000005 # $0.50 per 1M tokens divided by 1,000,000
+      outputCost: 0.00000218 # $2.18 per 1M tokens divided by 1,000,000
+```
+
+`inputCost` and `outputCost` are in USD per token and take precedence over the shared `cost`
+fallback.
 
 ### Text Models
 
-- **DeepSeek-R1**: $2.00/M tokens
-- **DeepSeek-V3**: $0.25/M tokens
-- **Qwen3-235B**: $0.40/M tokens
-- **Llama-3.1-405B**: $4.00/M tokens (BF16)
-- **Llama-3.1-70B**: $0.40/M tokens
-- **Llama-3.1-8B**: $0.10/M tokens
+Billed per input and output token at separate rates. Override with `inputCost` and `outputCost`.
 
 ### Image Models
 
-- **Flux.1-dev**: $0.01 per 1024x1024 image with 25 steps (scales with size/steps)
-- **SDXL models**: Similar pricing formula
-- **SD1.5/SD2**: Lower cost options
+Billed per generated image, and the price scales with resolution and step count. Override with
+`cost`.
 
 ### Audio Models
 
-- **Melo-TTS**: $5.00 per 1M characters
+Billed per character of input text. promptfoo follows Hyperbolic's
+[audio pricing documentation](https://www.hyperbolic.ai/docs/inference/audio-apis#pricing) for the
+native Melo TTS endpoint.
 
 ## Getting Started
 
@@ -282,8 +309,9 @@ This includes tested configurations for text generation, image creation, audio s
 
 ## Notes
 
-- **Model availability varies** - Some models require Pro tier access ($5+ deposit)
-- **Rate limits**: Basic tier: 60 requests/minute (free), Pro tier: 600 requests/minute
-- **Recommended models**: Use `meta-llama/Llama-3.3-70B-Instruct` for text, `SDXL1.0-base` for images
+- **Model availability and rate limits depend on your account tier.** Both are set by
+  Hyperbolic, not promptfoo; see [Hyperbolic's documentation](https://docs.hyperbolic.xyz) for
+  the current tiers, deposit thresholds, and per-minute limits. If a model 404s or you see
+  429s, check your tier before changing the promptfoo config.
 - All endpoints use OpenAI-compatible format for easy integration
 - VLM models support multimodal inputs (text + images)

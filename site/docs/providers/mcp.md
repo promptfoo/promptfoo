@@ -51,6 +51,32 @@ providers:
         command: node # Command to run the server
         args: ['server.js'] # Arguments for the command
         name: local-server # Optional name for the server
+        env: # Optional environment variables for the server process
+          MY_SERVER_TOKEN: '{{ env.MY_SERVER_TOKEN }}'
+          LOG_LEVEL: debug
+```
+
+`env` applies to stdio servers only (`command` or `path`). Values are layered on top of
+Promptfoo's own environment, so the server process inherits everything Promptfoo was started
+with and a per-server entry wins on conflict.
+
+Keep secrets out of the config file. `{{ env.VAR }}` placeholders are resolved from the
+environment when the provider loads, so the config stays committable while the credential comes
+from your shell or `--env-file`. A placeholder for an unset variable is preserved verbatim
+rather than collapsing to an empty string, so a missing credential fails visibly.
+
+A stdio server can also be started from a script with `path`, which accepts `.js` and `.py` files
+and is resolved relative to the config file. Use it in place of `command`/`args`: `args` is not
+applied to a `path` server, and `command` takes precedence when both are set.
+
+```yaml
+providers:
+  - id: mcp
+    config:
+      enabled: true
+      server:
+        path: ./mcp_server/index.js # .js runs under Node, .py under python3
+        name: local-server
 ```
 
 #### Remote Server (URL-based)
@@ -220,21 +246,21 @@ When using OAuth authentication:
 
 #### Authentication Options Reference
 
-| Option       | Type     | Auth Type               | Required | Description                                           |
-| ------------ | -------- | ----------------------- | -------- | ----------------------------------------------------- |
-| type         | string   | All                     | Yes      | `'bearer'`, `'basic'`, `'api_key'`, or `'oauth'`      |
-| token        | string   | bearer                  | Yes      | The bearer token                                      |
-| username     | string   | basic, oauth (password) | Yes      | Username                                              |
-| password     | string   | basic, oauth (password) | Yes      | Password                                              |
-| value        | string   | api_key                 | Yes\*    | The API key value                                     |
-| api_key      | string   | api_key                 | Yes\*    | Legacy field, use `value` instead                     |
-| keyName      | string   | api_key                 | No       | Header or query parameter name (default: `X-API-Key`) |
-| placement    | string   | api_key                 | No       | `'header'` (default) or `'query'`                     |
-| grantType    | string   | oauth                   | Yes      | `'client_credentials'` or `'password'`                |
-| tokenUrl     | string   | oauth                   | No       | OAuth token endpoint URL (auto-discovered if omitted) |
-| clientId     | string   | oauth                   | Varies   | Required for client_credentials                       |
-| clientSecret | string   | oauth                   | Varies   | Required for client_credentials                       |
-| scopes       | string[] | oauth                   | No       | OAuth scopes to request                               |
+| Option       | Type     | Auth Type               | Required | Description                                                                                                                        |
+| ------------ | -------- | ----------------------- | -------- | ---------------------------------------------------------------------------------------------------------------------------------- |
+| type         | string   | All                     | Yes      | `'bearer'`, `'basic'`, `'api_key'`, `'oauth'`, or `'none'` (`''` and `'no_auth'` are accepted aliases that disable generated auth) |
+| token        | string   | bearer                  | Yes      | The bearer token                                                                                                                   |
+| username     | string   | basic, oauth (password) | Yes      | Username                                                                                                                           |
+| password     | string   | basic, oauth (password) | Yes      | Password                                                                                                                           |
+| value        | string   | api_key                 | Yes\*    | The API key value                                                                                                                  |
+| api_key      | string   | api_key                 | Yes\*    | Legacy field, use `value` instead                                                                                                  |
+| keyName      | string   | api_key                 | No       | Header or query parameter name (default: `X-API-Key`)                                                                              |
+| placement    | string   | api_key                 | No       | `'header'` (default) or `'query'`                                                                                                  |
+| grantType    | string   | oauth                   | Varies   | `'client_credentials'` (the default when omitted) or `'password'`, which must be set explicitly                                    |
+| tokenUrl     | string   | oauth                   | No       | OAuth token endpoint URL (auto-discovered if omitted)                                                                              |
+| clientId     | string   | oauth                   | Varies   | Required for client_credentials                                                                                                    |
+| clientSecret | string   | oauth                   | Varies   | Required for client_credentials                                                                                                    |
+| scopes       | string[] | oauth                   | No       | OAuth scopes to request                                                                                                            |
 
 \* Either `value` or `api_key` is required for api_key auth type.
 
@@ -268,9 +294,6 @@ providers:
       timeout: 900000 # Request timeout in milliseconds (15 minutes)
       debug: true # Enable debug logging
       verbose: true # Enable verbose output
-      defaultArgs: # Default arguments for all tool calls
-        session_id: 'test-session'
-        user_role: 'customer'
 ```
 
 ### Response Transforms
@@ -410,6 +433,43 @@ tests:
     assert:
       - type: is-json
 ```
+
+## Asserting on Executed Tool Calls
+
+When a chat provider runs MCP tools on the model's behalf (`mcp.enabled: true` on
+`anthropic:messages` or `openai:chat`), each executed call is published on
+`metadata.toolCalls`, so you can test tool _routing_ rather than only the final answer —
+useful when several tools have overlapping domains and a wrong-but-plausible call still
+produces a plausible-looking answer.
+
+Each entry is `{ id, name, input, output, is_error }`, in call order, and spans every
+continuation round. The key is absent when no MCP tool ran, so guard with `?.`:
+
+```yaml title="promptfooconfig.yaml"
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+providers:
+  - id: anthropic:messages:claude-sonnet-5
+    config:
+      mcp:
+        enabled: true
+        server:
+          command: node
+          args: ['company_server.js']
+
+tests:
+  - vars:
+      prompt: How many people work at Acme Solar?
+    assert:
+      - type: javascript
+        value: |
+          const calls = context.metadata?.toolCalls ?? [];
+          return calls.some((c) => c.name === 'get_headcount' && !c.is_error);
+```
+
+The list is also populated on the failure paths — a run that trips `max_tool_calls`, or
+one where the model mixed MCP and non-MCP tool blocks, still reports the calls that did
+execute before the bail-out. `metadata.toolCalls` uses the same field names as the
+[Claude Agent SDK provider](/docs/providers/claude-agent-sdk), so one assertion reads both.
 
 ## Red Team Testing with MCP
 
