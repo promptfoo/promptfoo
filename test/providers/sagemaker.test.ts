@@ -558,6 +558,33 @@ module.exports = transform;
       expect(mockCacheSet).not.toHaveBeenCalled();
     });
 
+    it.each(['configuration', 'environment'] as const)(
+      'does not fingerprint the credential-process environment for static %s credentials',
+      async (source) => {
+        if (source === 'environment') {
+          vi.stubEnv('AWS_PROFILE', undefined);
+          vi.stubEnv('AWS_ACCESS_KEY_ID', 'STATIC_KEY');
+          vi.stubEnv('AWS_SECRET_ACCESS_KEY', 'static-secret');
+        }
+        mockIsCacheEnabled.mockReturnValue(false);
+        mockSend.mockResolvedValue({ Body: new TextEncoder().encode('{"output":"A garden"}') });
+        const provider = new SageMakerCompletionProvider('test-endpoint', {
+          config: {
+            region: 'us-east-1',
+            modelType: 'custom',
+            ...(source === 'configuration' && {
+              accessKeyId: 'STATIC_KEY',
+              secretAccessKey: 'static-secret',
+            }),
+          },
+        });
+        const fingerprint = vi.spyOn(crypto, 'hash');
+
+        expect(await provider.callApi('A quiet garden')).toMatchObject({ output: 'A garden' });
+        expect(fingerprint).not.toHaveBeenCalled();
+      },
+    );
+
     it('uses the original request when caching is enabled during the endpoint response', async () => {
       mockIsCacheEnabled.mockReturnValue(false);
       const provider = new SageMakerCompletionProvider('test-endpoint', {

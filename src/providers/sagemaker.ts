@@ -263,7 +263,7 @@ function hashCredentialProcessEnvironment(): string {
   const entries = Object.keys(process.env)
     .sort()
     .map((name) => [name, process.env[name]]);
-  return crypto.createHash('sha256').update(JSON.stringify(entries)).digest('hex');
+  return crypto.hash('sha256', JSON.stringify(entries), 'hex');
 }
 
 function captureSharedFiles(environment: Record<string, string | undefined>): SharedFileInputs {
@@ -494,7 +494,7 @@ abstract class SageMakerGenericProvider {
     > = this.config,
     capturedEnvironment: CredentialScope['environment'] = process.env,
     files: SharedFileInputs = captureSharedFiles(capturedEnvironment),
-    capturedProcessEnvironment = hashCredentialProcessEnvironment(),
+    capturedProcessEnvironment?: string,
   ): Promise<CredentialScope> {
     const { profile, accessKeyId, secretAccessKey, sessionToken } = credentialConfig;
     if (accessKeyId && secretAccessKey) {
@@ -522,7 +522,7 @@ abstract class SageMakerGenericProvider {
           profiles[selectedProfile || 'default']?.credential_process &&
           inputs?.length !== 0)
       ) {
-        processEnvironment = capturedProcessEnvironment;
+        processEnvironment = capturedProcessEnvironment ?? hashCredentialProcessEnvironment();
       }
       if (Array.isArray(inputs)) {
         const used = new Set([
@@ -692,12 +692,19 @@ abstract class SageMakerGenericProvider {
         (name) => [name, process.env[name]],
       ),
     );
+    const hasStaticCredentials = Boolean(
+      (credentialConfig.accessKeyId && credentialConfig.secretAccessKey) ||
+        (!credentialConfig.profile &&
+          !environment.AWS_PROFILE &&
+          environment.AWS_ACCESS_KEY_ID &&
+          environment.AWS_SECRET_ACCESS_KEY),
+    );
     return {
       credentialConfig,
       environment,
       files: captureSharedFiles(environment),
       maxAttempts: getEnvInt('AWS_SAGEMAKER_MAX_RETRIES', 3),
-      processEnvironment: hashCredentialProcessEnvironment(),
+      processEnvironment: hasStaticCredentials ? undefined : hashCredentialProcessEnvironment(),
     };
   }
 
