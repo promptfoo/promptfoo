@@ -1,6 +1,7 @@
 import type { RedteamUITarget } from '../types';
 
 export const DEFAULT_OPENAI_TARGET_ID = 'openai:gpt-5.6-terra';
+export const DEFAULT_BEDROCK_TARGET_ID = 'bedrock:responses:openai.gpt-5.6-sol';
 export const OPENAI_TARGET_PLACEHOLDER =
   'openai:gpt-5.6-luna, openai:gpt-5.6-terra, openai:gpt-5.6-sol, openai:gpt-6-astra';
 export const DEFAULT_GOOGLE_TARGET_ID = 'google:gemini-3.8-flash';

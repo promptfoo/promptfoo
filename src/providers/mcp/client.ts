@@ -2,7 +2,7 @@ import path from 'path';
 
 import cliState from '../../cliState';
 import { type McpConfigParsed, McpConfigSchema } from '../../contracts/providerConfig/mcp';
-import { getEnvBool, getEnvInt } from '../../envars';
+import { getEnvBool, getEnvInt, getProcessEnv } from '../../envars';
 import logger from '../../logger';
 import { TOKEN_REFRESH_BUFFER_MS, type TokenRefreshLock } from '../../util/oauth';
 import { isMissingPackageImportError } from '../../util/packageImportErrors';
@@ -13,6 +13,7 @@ import {
   getAuthQueryParams,
   getOAuthTokenWithExpiry,
   renderAuthVars,
+  sanitizeMcpToolData,
 } from './util';
 import type { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import type { SSEClientTransport } from '@modelcontextprotocol/sdk/client/sse.js';
@@ -43,7 +44,7 @@ interface OAuthServerConfig {
  * override an inherited variable (e.g. a scoped token) without unsetting the rest.
  */
 function getStdioEnv(server: MCPServerConfig): Record<string, string> {
-  const parentEnv = process.env as Record<string, string>;
+  const parentEnv = getProcessEnv() as Record<string, string>;
   return server.env ? { ...parentEnv, ...server.env } : parentEnv;
 }
 
@@ -442,8 +443,9 @@ export class MCPClient {
   }
 
   async callTool(name: string, args: Record<string, unknown>): Promise<MCPToolResult> {
-    return await withGenAIToolSpan({ name, arguments: args, resultFormat: 'mcp' }, () =>
-      this.callToolInternal(name, args),
+    return await withGenAIToolSpan(
+      { name, arguments: sanitizeMcpToolData(args), resultFormat: 'mcp' },
+      () => this.callToolInternal(name, args),
     );
   }
 
