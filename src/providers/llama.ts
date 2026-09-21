@@ -16,12 +16,12 @@ interface LlamaCompletionOptions {
   penalize_nl?: boolean;
   presence_penalty?: number;
   frequency_penalty?: number;
-  mirostat?: boolean;
+  mirostat?: 0 | 1 | 2 | boolean;
   mirostat_tau?: number;
   mirostat_eta?: number;
   seed?: number;
   ignore_eos?: boolean;
-  logit_bias?: Record<string, number>;
+  logit_bias?: Record<string, number> | [string | number, number | false][];
 }
 
 export class LlamaProvider implements ApiProvider {

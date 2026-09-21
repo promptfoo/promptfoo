@@ -109,6 +109,35 @@ describe('LlamaProvider', () => {
       },
     );
 
+    it('forwards native Mirostat modes and token-bias pairs', async () => {
+      vi.mocked(fetchWithCache).mockResolvedValue({
+        data: { content: 'ok' },
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+      });
+      const provider = new LlamaProvider(modelName, {
+        config: {
+          mirostat: 2,
+          logit_bias: [
+            [15043, false],
+            ['hello', -0.5],
+          ],
+        },
+      });
+
+      await provider.callApi(prompt);
+
+      const request = vi.mocked(fetchWithCache).mock.calls[0][1];
+      expect(JSON.parse(request?.body as string)).toMatchObject({
+        mirostat: 2,
+        logit_bias: [
+          [15043, false],
+          ['hello', -0.5],
+        ],
+      });
+    });
+
     it('should return the correct response on success', async () => {
       vi.mocked(fetchWithCache).mockResolvedValue({
         data: { content: 'test response' },

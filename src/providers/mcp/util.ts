@@ -3,6 +3,7 @@ import logger from '../../logger';
 import { fetchWithProxy } from '../../util/fetch/index';
 import { renderVarsInObject } from '../../util/index';
 import { fetchOAuthToken, type OAuthTokenResult, TOKEN_REFRESH_BUFFER_MS } from '../../util/oauth';
+import { sanitizeObject } from '../../util/sanitizer';
 import { normalizeRenderedOAuthScopes } from './auth';
 
 import type { VarValue } from '../../types/shared';
@@ -15,6 +16,10 @@ import type {
 } from './types';
 
 export type { OAuthTokenResult };
+
+export function sanitizeMcpToolData<T>(value: T): T {
+  return sanitizeObject(value, { context: 'MCP tool data', sanitizeUrls: true });
+}
 
 export function isMcpToolNameFilter(tools: unknown): tools is string | string[] {
   const isPlainToolName = (tool: unknown): tool is string =>

@@ -71,8 +71,7 @@ providers:
 | `safety_checker`      | string | `no`    | Enable safety filter (`yes` or `no`)                                                                          |
 | `enhance_prompt`      | string | `no`    | Auto-enhance the prompt (`yes` or `no`)                                                                       |
 
-The provider returns a Markdown image reference — `![prompt](url)` — not a bare URL, so
-assertions should match that shape (for example `contains: '!['`).
+The provider returns a Markdown image reference, `![prompt](url)`. To check that shape, use an assertion with `type: contains` and `value: '!['`.
 
 ### Full Example
 
