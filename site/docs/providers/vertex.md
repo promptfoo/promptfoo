@@ -6,7 +6,7 @@ description: Use Google Vertex AI models including Gemini, Claude, Llama, and sp
 
 # Google Vertex
 
-The `vertex` provider enables integration with Google's [Vertex AI](https://cloud.google.com/vertex-ai) platform, which provides access to foundation models including Gemini, Llama, Claude, and specialized models for text, code, and embeddings.
+The `vertex` provider connects to Google's [Vertex AI](https://cloud.google.com/vertex-ai). It supports Gemini, Llama, Claude, and other models for text, code, and embeddings.
 
 :::info Provider Selection
 Use `vertex:` for all Vertex AI models (Gemini, Claude, Llama, etc.). Use `google:` for Google AI Studio (API key authentication).

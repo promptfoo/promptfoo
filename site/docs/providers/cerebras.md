@@ -5,9 +5,7 @@ description: Configure Cerebras' Llama 4 Scout and Llama 3 models through their 
 
 # Cerebras
 
-This provider enables you to use Cerebras models through their [Inference API](https://docs.cerebras.ai).
-
-Cerebras offers an OpenAI-compatible API for various large language models including Llama models, DeepSeek, and more. You can use it as a drop-in replacement for applications currently using the [OpenAI API](/docs/providers/openai/) chat endpoints.
+The Cerebras provider calls its [Inference API](https://docs.cerebras.ai) using the [OpenAI chat format](/docs/providers/openai/). Available models include Llama and DeepSeek.
 
 ## Setup
 
