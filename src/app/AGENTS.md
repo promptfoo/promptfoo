@@ -117,7 +117,11 @@ import { EVAL_ROUTES, ROUTES } from '@app/constants/routes';
 
 ## UI Guidelines
 
-See `UI_GUIDELINES.md` for the 9 rules on writing React components:
+Read the full [UI guidelines](./UI_GUIDELINES.md) before writing React components:
+
+@UI_GUIDELINES.md
+
+The guidelines cover:
 
 1. Typography with semantic HTML
 2. Small, composable components

@@ -12,14 +12,12 @@ sidebar_label: GitHub Models
 
 [GitHub retired GitHub Models on July 30, 2026](https://docs.github.com/en/github-models), including the inference API. The `github:` provider now reports a retirement error, and `GITHUB_TOKEN` no longer selects a default grader. GitHub Copilot is a separate service.
 
-Choose another [provider](./index.md) and configure its endpoint, model or deployment, and credentials. Provider IDs and credentials are not interchangeable. GitHub recommends Azure AI Foundry; see the [Azure provider](./azure.md) for configuration.
-
 :::
 
 ## Migrating an existing config
 
-Replace the `github:` provider with one that has its own endpoint and credentials. Model names and
-API keys are not portable between providers, so set both.
+Replace `github:` with a [provider](./index.md) that hosts the model you need. GitHub recommends
+[Microsoft Foundry](./azure.md). For Azure, create a deployment and set `AZURE_API_KEY` (or configure [Entra ID authentication](./azure.md#setup)).
 
 ```yaml
 providers:
@@ -28,9 +26,6 @@ providers:
     config:
       apiHost: my-resource.openai.azure.com
 ```
-
-GitHub recommends Microsoft Foundry; see the [Azure provider](./azure.md). Any provider in the
-[provider list](./index.md) works — pick whichever hosts the model you were using.
 
 ## See also
 

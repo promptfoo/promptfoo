@@ -1201,7 +1201,7 @@ function getConversationLastInput(renderedJson: unknown) {
 }
 
 async function applyProviderDelayIfNeeded(provider: ApiProvider, response: ProviderResponse) {
-  if (!response.cached && provider.delay && provider.delay > 0) {
+  if (!response.cached && !provider.handlesOwnDelay && provider.delay && provider.delay > 0) {
     logger.debug(`Sleeping for ${provider.delay}ms`);
     await sleep(provider.delay);
   } else if (response.cached) {
