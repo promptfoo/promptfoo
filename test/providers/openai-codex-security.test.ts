@@ -1,7 +1,7 @@
 import fs from 'fs/promises';
 import path from 'path';
 
-import { validRange } from 'semver';
+import { satisfies, validRange } from 'semver';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import cliState from '../../src/cliState';
 import { getDirectory, importModule, resolvePackageEntryPoint } from '../../src/esm';
@@ -39,6 +39,7 @@ const mockModule = {
   VERSION: '0.1.18',
   BUNDLED_PLUGIN_VERSION: '0.1.22',
 };
+const incompatibleSdkVersions = ['0.1.8', '0.1.10'] as const;
 
 function createScanResult(overrides: Record<string, unknown> = {}) {
   const findings = {
@@ -232,7 +233,7 @@ describe('OpenAICodexSecurityProvider', () => {
       );
       vi.mocked(importModule).mockImplementation(async (entryPoint) =>
         String(entryPoint).startsWith('/legacy/')
-          ? { ...mockModule, VERSION: '0.1.8' }
+          ? { ...mockModule, VERSION: incompatibleSdkVersions[0] }
           : mockModule,
       );
       const provider = new OpenAICodexSecurityProvider();
@@ -305,17 +306,24 @@ describe('OpenAICodexSecurityProvider', () => {
     });
 
     it('rejects outdated security SDKs that omit validation and deep-worker usage', async () => {
-      vi.mocked(importModule).mockResolvedValue({ ...mockModule, VERSION: '0.1.8' });
+      vi.mocked(importModule).mockResolvedValue({
+        ...mockModule,
+        VERSION: incompatibleSdkVersions[0],
+      });
       const provider = new OpenAICodexSecurityProvider();
 
       const response = await provider.callApi('Scan');
 
-      expect(response.error).toContain('package is incompatible (0.1.8)');
+      expect(response.error).toContain(`package is incompatible (${incompatibleSdkVersions[0]})`);
       const suggestedRange = response.error?.match(
         /npm install promptfoo @openai\/codex-security@(\S+)/,
       )?.[1];
       expect(suggestedRange).toBeDefined();
       expect(validRange(suggestedRange)).not.toBeNull();
+      expect(satisfies(mockModule.VERSION, suggestedRange!)).toBe(true);
+      for (const incompatibleVersion of incompatibleSdkVersions) {
+        expect(satisfies(incompatibleVersion, suggestedRange!)).toBe(false);
+      }
       expect(mockRun).not.toHaveBeenCalled();
     });
 
@@ -328,14 +336,16 @@ describe('OpenAICodexSecurityProvider', () => {
       );
       vi.mocked(importModule).mockImplementation(async (entryPoint) =>
         String(entryPoint).startsWith('/legacy/')
-          ? { ...mockModule, VERSION: '0.1.8' }
-          : { ...mockModule, VERSION: '0.1.10' },
+          ? { ...mockModule, VERSION: incompatibleSdkVersions[0] }
+          : { ...mockModule, VERSION: incompatibleSdkVersions[1] },
       );
       const provider = new OpenAICodexSecurityProvider();
 
       const response = await provider.callApi('Scan');
 
-      expect(response.error).toContain('package is incompatible (0.1.8, 0.1.10)');
+      expect(response.error).toContain(
+        `package is incompatible (${incompatibleSdkVersions.join(', ')})`,
+      );
       expect(response.error).toContain('npm install promptfoo @openai/codex-security@');
       expect(mockRun).not.toHaveBeenCalled();
     });

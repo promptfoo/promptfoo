@@ -356,7 +356,8 @@ describe('package manifests', () => {
       .filter((name): name is string => name !== undefined);
 
     expect(browserPackages).toContain('puppeteer-extra-plugin-stealth');
-    for (const dependency of new Set(browserPackages)) {
+    // Chromium supplies the executable via its install script, not a source import.
+    for (const dependency of new Set([...browserPackages, '@playwright/browser-chromium'])) {
       expect(
         packageJson.optionalDependencies?.[dependency],
         `${dependency} must be available to production browser consumers`,
@@ -367,6 +368,18 @@ describe('package manifests', () => {
       const installed = packageLock.packages[`node_modules/${dependency}`];
       expect(installed, `${dependency} must be installed`).toBeDefined();
       expect(installed?.dev, `${dependency} must survive --omit=dev`).not.toBe(true);
+    }
+  });
+
+  it('lets consumers omit separately installed provider SDKs', () => {
+    const packageJson = readPackageJson<PackageManifest>('package.json');
+    const packageLock =
+      readPackageJson<PackageLockManifest<{ optional?: boolean }>>('package-lock.json');
+
+    for (const dependency of ['@slack/web-api', '@openai/codex-security', '@opencode-ai/sdk']) {
+      expect(packageJson.optionalDependencies, dependency).toHaveProperty(dependency);
+      expect(packageJson.dependencies, dependency).not.toHaveProperty(dependency);
+      expect(packageLock.packages[`node_modules/${dependency}`]?.optional, dependency).toBe(true);
     }
   });
 
