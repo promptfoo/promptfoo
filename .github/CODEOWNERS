@@ -121,8 +121,7 @@
 # ============================================================================
 # AI AGENT INSTRUCTIONS (override all other patterns)
 # ============================================================================
-# Keep these patterns last so instruction ownership overrides other rules
+# These patterns match files anywhere in the repo and must come last
 
 AGENTS.md  @alandelong-oai @mldangelo-oai                 # AI agent instructions
 CLAUDE.md  @alandelong-oai @mldangelo-oai                 # Claude Code instructions
-**/.claude/rules/  @alandelong-oai @mldangelo-oai         # Claude compatibility instruction rules
