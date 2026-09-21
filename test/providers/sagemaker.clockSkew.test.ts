@@ -146,6 +146,26 @@ describe('SageMaker clock correction across idle cleanup', () => {
     },
   );
 
+  it('relearns a clock correction after explicit shutdown', async () => {
+    const { provider, requests } = createProvider(() => clockSkew);
+    const skewError = { error: expect.stringContaining('Clock skew fixture') };
+    expect(await provider.callApi('learn correction')).toMatchObject(skewError);
+    expect(await provider.callApi('use correction')).toMatchObject({ output: 'offline response' });
+
+    provider.cleanup();
+
+    expect(await provider.callApi('relearn correction')).toMatchObject(skewError);
+    expect(await provider.callApi('use relearned correction')).toMatchObject({
+      output: 'offline response',
+    });
+    expect(requests.map((request) => request.headers['x-amz-date'])).toEqual([
+      signingDate(Date.now()),
+      signingDate(Date.now() + clockSkew),
+      signingDate(Date.now()),
+      signingDate(Date.now() + clockSkew),
+    ]);
+  });
+
   it('keeps clock corrections separate for overlapping custom endpoints in one region', async () => {
     let start!: () => void;
     let release!: () => void;
@@ -396,7 +416,7 @@ describe('SageMaker clock correction across idle cleanup', () => {
     }
   });
 
-  it('retains corrections per region and provider across cleanup and credential changes', async () => {
+  it('retains corrections per region and provider across automatic cleanup and credential changes', async () => {
     const serverOffset = (request: HttpRequest) =>
       request.headers.authorization.includes('/us-east-1/sagemaker/') ? clockSkew : -clockSkew;
     const { provider, clients, requests } = createProvider(serverOffset);
@@ -404,7 +424,7 @@ describe('SageMaker clock correction across idle cleanup', () => {
       error: expect.stringContaining('Clock skew fixture'),
     });
 
-    provider.cleanup();
+    provider.cleanup({ reason: 'evaluation-complete' });
     provider.config.accessKeyId = 'ROTATED_KEY';
     expect(await provider.callApi('east after cleanup')).toMatchObject({
       output: 'offline response',

@@ -1343,7 +1343,7 @@ ec2_metadata_v1_disabled = false
             };
       expect((await resolve()).accessKeyId).toBe('SSO_1');
       if (mode === 'SageMaker') {
-        provider.cleanup();
+        provider.cleanup({ reason: 'evaluation-complete' });
         client = undefined;
       }
       vi.setSystemTime(startTime.getTime() + 56 * 60_000);

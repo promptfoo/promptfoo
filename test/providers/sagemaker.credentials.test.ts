@@ -88,6 +88,33 @@ describe('SageMaker profile credentials across idle cleanup', () => {
     vi.useRealTimers();
   });
 
+  it('drops cached role credentials only on an explicit shutdown', async () => {
+    const first = vi.fn(async () => credentials('ROLE_1'));
+    const second = vi.fn(async () => credentials('ROLE_2'));
+    fromIni.mockReturnValueOnce(first).mockReturnValueOnce(second);
+    const { provider, requests } = createProvider();
+
+    expect(await provider.callApi('first')).toMatchObject({ output: 'offline response' });
+    provider.cleanup({ reason: 'evaluation-complete' });
+    expect(await provider.callApi('after automatic cleanup')).toMatchObject({
+      output: 'offline response',
+    });
+    expect(fromIni).toHaveBeenCalledOnce();
+    expect(first).toHaveBeenCalledOnce();
+
+    provider.cleanup();
+    expect(await provider.callApi('after explicit shutdown')).toMatchObject({
+      output: 'offline response',
+    });
+    expect(fromIni).toHaveBeenCalledTimes(2);
+    expect(second).toHaveBeenCalledOnce();
+    expect(requests.map((request) => request.headers.authorization.split('/')[0])).toEqual([
+      expect.stringContaining('Credential=ROLE_1'),
+      expect.stringContaining('Credential=ROLE_1'),
+      expect.stringContaining('Credential=ROLE_2'),
+    ]);
+  });
+
   it.each([
     ['AWS_SAGEMAKER_TEMPERATURE', '0.2'],
     ['AWS_SAGEMAKER_MAX_TOKENS', '64'],

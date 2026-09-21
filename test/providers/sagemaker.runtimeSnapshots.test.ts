@@ -6,7 +6,10 @@ import path from 'node:path';
 
 import { HttpResponse } from '@smithy/core/transport';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { SageMakerCompletionProvider } from '../../src/providers/sagemaker';
+import {
+  SageMakerCompletionProvider,
+  SageMakerEmbeddingProvider,
+} from '../../src/providers/sagemaker';
 import { mockProcessEnv } from '../util/utils';
 import type { SageMakerRuntimeClient } from '@aws-sdk/client-sagemaker-runtime';
 import type { HttpRequest } from '@smithy/core/transport';
@@ -39,7 +42,7 @@ function deferred() {
 describe('SageMaker initialization policy snapshot', () => {
   let directory: string;
   let restoreEnv: () => void;
-  const providers = new Set<SageMakerCompletionProvider>();
+  const providers = new Set<SageMakerCompletionProvider | SageMakerEmbeddingProvider>();
   beforeEach(async () => {
     directory = await mkdtemp(path.join(tmpdir(), 'promptfoo-sage-snapshot-'));
     const config = path.join(directory, 'config');
@@ -84,6 +87,98 @@ describe('SageMaker initialization policy snapshot', () => {
     restoreEnv();
     await rm(directory, { recursive: true, force: true });
   });
+
+  it.each(['completion', 'embedding'] as const)(
+    'captures %s settings before an asynchronous user transform',
+    async (kind) => {
+      vi.stubEnv('AWS_PROFILE', undefined);
+      vi.stubEnv('AWS_ACCESS_KEY_ID', 'BEFORE_KEY');
+      vi.stubEnv('AWS_SECRET_ACCESS_KEY', 'before-secret');
+      vi.stubEnv('AWS_SESSION_TOKEN', 'before-token');
+      vi.stubEnv('AWS_ENDPOINT_URL_SAGEMAKER_RUNTIME', 'https://service-before.invalid');
+      vi.stubEnv('AWS_SAGEMAKER_MAX_TOKENS', '32');
+      const entered = deferred();
+      const release = deferred();
+      const Provider =
+        kind === 'completion' ? SageMakerCompletionProvider : SageMakerEmbeddingProvider;
+      const provider = new Provider('deployment-before', {
+        config: { modelType: 'openai', stopSequences: ['before'] },
+        transform: async (input) => {
+          if (input === 'first') {
+            entered.resolve();
+            await release.promise;
+          }
+          return input;
+        },
+      });
+      providers.add(provider);
+      const invoke = (input: string) =>
+        provider instanceof SageMakerEmbeddingProvider
+          ? provider.callEmbeddingApi(input)
+          : provider.callApi(input);
+      const expected =
+        kind === 'embedding' ? { embedding: [1, 0] } : { output: 'offline response' };
+      const requests: HttpRequest[] = [];
+      const initialize = provider.getSageMakerRuntimeInstance.bind(provider);
+      vi.spyOn(provider, 'getSageMakerRuntimeInstance').mockImplementation(async (...args) => {
+        const client: SageMakerRuntimeClient = await initialize(...args);
+        vi.spyOn(client.config.requestHandler, 'handle').mockImplementation(async (request) => {
+          requests.push(request);
+          return {
+            response: new HttpResponse({
+              statusCode: 200,
+              headers: { 'content-type': 'application/json' },
+              body: Buffer.from(
+                JSON.stringify({ choices: [{ text: 'offline response' }], embedding: [1, 0] }),
+              ),
+            }),
+          };
+        });
+        return client;
+      });
+      const pending = invoke('first');
+      try {
+        await entered.promise;
+        vi.stubEnv('AWS_ACCESS_KEY_ID', 'AFTER_KEY');
+        vi.stubEnv('AWS_SECRET_ACCESS_KEY', 'after-secret');
+        vi.stubEnv('AWS_SESSION_TOKEN', 'after-token');
+        vi.stubEnv('AWS_ENDPOINT_URL_SAGEMAKER_RUNTIME', 'https://service-after.invalid');
+        vi.stubEnv('AWS_REGION', 'us-west-2');
+        vi.stubEnv('AWS_SAGEMAKER_MAX_TOKENS', '64');
+        provider.config.endpoint = 'deployment-after';
+        provider.config.stopSequences!.push('after');
+        release.resolve();
+
+        expect(await pending).toMatchObject(expected);
+        expect(await invoke('later')).toMatchObject(expected);
+        expect(requests).toHaveLength(2);
+        for (const [index, stage, region] of [
+          [0, 'before', 'us-east-1'],
+          [1, 'after', 'us-west-2'],
+        ] as const) {
+          const request = requests[index];
+          expect(request.hostname).toBe(`service-${stage}.invalid`);
+          expect(request.path).toContain(`/endpoints/deployment-${stage}/invocations`);
+          expect(request.headers.authorization).toContain(`Credential=${stage.toUpperCase()}_KEY/`);
+          expect(request.headers.authorization).toContain(`/${region}/sagemaker/aws4_request`);
+          expect(request.headers['x-amz-security-token']).toBe(`${stage}-token`);
+        }
+        if (kind === 'completion') {
+          expect(JSON.parse(String(requests[0].body))).toMatchObject({
+            max_tokens: 32,
+            stop: ['before'],
+          });
+          expect(JSON.parse(String(requests[1].body))).toMatchObject({
+            max_tokens: 64,
+            stop: ['before', 'after'],
+          });
+        }
+      } finally {
+        release.resolve();
+        await pending;
+      }
+    },
+  );
 
   it.each(['service', 'profile'] as const)(
     'keeps the initial %s policy across delayed credential scope resolution',

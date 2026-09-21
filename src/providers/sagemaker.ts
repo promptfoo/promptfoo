@@ -735,6 +735,16 @@ abstract class SageMakerGenericProvider {
     const { credentialConfig, environment, files, maxAttempts, processEnvironment } =
       inputs ?? this.captureRuntimeInputs();
     const smithyConfig = await import('@smithy/core/config').catch(importError);
+    // Re-read the selected profile; retain the SDK's expensive auto discovery separately.
+    const configuredDefaultsMode = await smithyConfig.loadConfig<DefaultsMode>(
+      {
+        environmentVariableSelector: () =>
+          environment.AWS_DEFAULTS_MODE as DefaultsMode | undefined,
+        configFileSelector: (profile) => profile.defaults_mode as DefaultsMode | undefined,
+        default: 'legacy',
+      },
+      { profile: environment.AWS_PROFILE || 'default', ...files, ignoreCache: true },
+    )();
     const scope = await this.getCredentialScope(
       runtimeRegion,
       smithyConfig,
@@ -766,6 +776,7 @@ abstract class SageMakerGenericProvider {
       ...DEFAULTS_ENV_VARS.map((name) => environment[name]),
       files.filepath,
       files.configFilepath,
+      configuredDefaultsMode,
     ];
     let defaults = this.runtimeDefaultsStates.get(runtimeRegion);
     if (!defaults || defaults.inputs.some((value, index) => value !== defaultsInputs[index])) {
@@ -778,15 +789,7 @@ abstract class SageMakerGenericProvider {
       region: runtimeRegion,
       // The SDK validates the selected mode. Its `auto` performance discovery
       // remains SDK-owned; it cannot change our explicit serving region or endpoint.
-      defaultsMode: smithyConfig.loadConfig<DefaultsMode>(
-        {
-          environmentVariableSelector: () =>
-            environment.AWS_DEFAULTS_MODE as DefaultsMode | undefined,
-          configFileSelector: (profile) => profile.defaults_mode as DefaultsMode | undefined,
-          default: 'legacy',
-        },
-        { profile: environment.AWS_PROFILE || 'default', ...files },
-      ),
+      defaultsMode: configuredDefaultsMode,
     });
     const defaultsMode = await defaultsState.provider();
     if (
@@ -1035,7 +1038,7 @@ abstract class SageMakerGenericProvider {
       this.activeRequests.delete(controller);
       // Share clients only while requests overlap; no global evaluation owns them.
       if (this.activeRequests.size === 0) {
-        this.cleanup();
+        this.cleanup({ reason: 'evaluation-complete' });
       }
     }
   }
@@ -1051,6 +1054,12 @@ abstract class SageMakerGenericProvider {
       return;
     }
     this.runtimeGeneration++;
+    if (!context) {
+      this.#retainedCredentials = undefined;
+      this.runtimeDefaultsStates.clear();
+      this.runtimeRetryStates.clear();
+      this.runtimeClockOffsets.clear();
+    }
     for (const controller of this.activeRequests) {
       controller.abort(new Error('SageMaker provider was shut down during the request'));
     }
@@ -1319,10 +1328,7 @@ export class SageMakerCompletionProvider extends SageMakerGenericProvider implem
     );
   }
 
-  /**
-   * Format the request payload based on model type
-   */
-  formatPayload(prompt: string): string {
+  private getPayloadParameters() {
     const maxTokens = this.config.maxTokens ?? getEnvInt('AWS_SAGEMAKER_MAX_TOKENS') ?? 1024;
     const temperature =
       typeof this.config.temperature === 'number'
@@ -1332,7 +1338,15 @@ export class SageMakerCompletionProvider extends SageMakerGenericProvider implem
       typeof this.config.topP === 'number'
         ? this.config.topP
         : (getEnvFloat('AWS_SAGEMAKER_TOP_P') ?? 1.0);
-    const stopSequences = this.config.stopSequences || [];
+    const stopSequences = [...(this.config.stopSequences ?? [])];
+    return { maxTokens, temperature, topP, stopSequences };
+  }
+
+  /**
+   * Format the request payload based on model type
+   */
+  formatPayload(prompt: string, parameters = this.getPayloadParameters()): string {
+    const { maxTokens, temperature, topP, stopSequences } = parameters;
 
     let payload: any;
 
@@ -1540,11 +1554,21 @@ export class SageMakerCompletionProvider extends SageMakerGenericProvider implem
     generation: number,
     abortSignal: AbortSignal,
   ): Promise<ProviderResponse> {
+    // Capture request and authentication settings before a user transform can yield.
+    const runtimeInputs = this.captureRuntimeInputs();
+    const requestConfig = {
+      endpoint: this.getEndpointName(),
+      modelType: this.modelType,
+      contentType: this.getContentType(),
+      acceptType: this.getAcceptType(),
+      responsePath: this.config.responseFormat?.path ?? null,
+      region: this.getRegion(),
+    };
+    const payloadParameters = this.getPayloadParameters();
+    const delayMs = context?.originalProvider?.delay || this.delay;
+
     // Import cache functions dynamically to avoid circular dependencies
     const { isCacheEnabled, getCache } = await import('../cache');
-
-    // Get the delay value - the context delay takes precedence over the provider's delay
-    const delayMs = context?.originalProvider?.delay || this.delay;
 
     const transformResult = await this.runTransformSafely(
       prompt,
@@ -1558,26 +1582,15 @@ export class SageMakerCompletionProvider extends SageMakerGenericProvider implem
     const isTransformed = transformedPrompt !== prompt;
 
     if (isTransformed) {
-      logger.debug(`Prompt transformed for SageMaker endpoint ${this.getEndpointName()}`);
+      logger.debug(`Prompt transformed for SageMaker endpoint ${requestConfig.endpoint}`);
       logger.debug(`Original: ${prompt.substring(0, 100)}${prompt.length > 100 ? '...' : ''}`);
       logger.debug(
         `Transformed: ${transformedPrompt.substring(0, 100)}${transformedPrompt.length > 100 ? '...' : ''}`,
       );
     }
 
-    // Keep request and parsing settings together across cache and network awaits.
-    const payload = this.formatPayload(transformedPrompt);
-    const request = {
-      payload,
-      endpoint: this.getEndpointName(),
-      modelType: this.modelType,
-      contentType: this.getContentType(),
-      acceptType: this.getAcceptType(),
-      responsePath: this.config.responseFormat?.path ?? null,
-      region: this.getRegion(),
-    };
-    // Capture authentication separately from the secret-free cache identity.
-    const runtimeInputs = this.captureRuntimeInputs();
+    const payload = this.formatPayload(transformedPrompt, payloadParameters);
+    const request = { payload, ...requestConfig };
     let cacheKey: string | undefined;
     const getCacheKey = () => {
       if (cacheKey === undefined) {
@@ -1789,11 +1802,20 @@ export class SageMakerEmbeddingProvider
     generation: number,
     abortSignal: AbortSignal,
   ): Promise<ProviderEmbeddingResponse> {
+    // Keep lookup, invocation and parsing on the settings present before the transform.
+    const runtimeInputs = this.captureRuntimeInputs();
+    const request = {
+      endpoint: this.getEndpointName(),
+      modelType: this.config.modelType,
+      contentType: this.getContentType(),
+      acceptType: this.getAcceptType(),
+      region: this.getRegion(),
+      responseFormat: this.config.responseFormat ? { ...this.config.responseFormat } : undefined,
+    };
+    const delayMs = context?.originalProvider?.delay || this.delay;
+
     // Import cache functions dynamically to avoid circular dependencies
     const { isCacheEnabled, getCache } = await import('../cache');
-
-    // Get the delay value - the context delay takes precedence over the provider's delay
-    const delayMs = context?.originalProvider?.delay || this.delay;
 
     const transformResult = await this.runTransformSafely(
       text,
@@ -1807,23 +1829,13 @@ export class SageMakerEmbeddingProvider
     const isTransformed = transformedText !== text;
 
     if (isTransformed) {
-      logger.debug(`Text transformed for SageMaker embedding endpoint ${this.getEndpointName()}`);
+      logger.debug(`Text transformed for SageMaker embedding endpoint ${request.endpoint}`);
       logger.debug(`Original: ${text.substring(0, 100)}${text.length > 100 ? '...' : ''}`);
       logger.debug(
         `Transformed: ${transformedText.substring(0, 100)}${transformedText.length > 100 ? '...' : ''}`,
       );
     }
 
-    // Keep lookup, invocation, parsing and storage on the same request identity.
-    const request = {
-      endpoint: this.getEndpointName(),
-      modelType: this.config.modelType,
-      contentType: this.getContentType(),
-      acceptType: this.getAcceptType(),
-      region: this.getRegion(),
-      responseFormat: this.config.responseFormat ? { ...this.config.responseFormat } : undefined,
-    };
-    const runtimeInputs = this.captureRuntimeInputs();
     let cacheKey: string | undefined;
     const getCacheKey = () => (cacheKey ??= this.getCacheKey(transformedText, request));
 

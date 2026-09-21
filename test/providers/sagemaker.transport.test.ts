@@ -35,7 +35,7 @@ describe('SageMaker SDK transport configuration', () => {
     ['completion', 'profile'],
     ['embedding', 'profile'],
   ] as const)(
-    'retains successful auto discovery across idle %s rows from %s',
+    'retains successful auto discovery across idle %s rows from %s until explicit shutdown',
     async (kind, source) => {
       const directory = await mkdtemp(path.join(tmpdir(), 'promptfoo-sagemaker-auto-'));
       const configFile = path.join(directory, 'config');
@@ -136,6 +136,23 @@ describe('SageMaker SDK transport configuration', () => {
           'PUT /latest/api/token',
           'GET /latest/meta-data/placement/region',
         ]);
+
+        provider.cleanup();
+        if (provider instanceof SageMakerEmbeddingProvider) {
+          expect(await provider.callEmbeddingApi('after shutdown')).toMatchObject({
+            embedding: [0.1, 0.2],
+          });
+        } else {
+          expect(await provider.callApi('after shutdown')).toMatchObject({
+            output: 'offline response',
+          });
+        }
+        expect(metadataRequests).toEqual([
+          'PUT /latest/api/token',
+          'GET /latest/meta-data/placement/region',
+          'PUT /latest/api/token',
+          'GET /latest/meta-data/placement/region',
+        ]);
       } finally {
         provider.cleanup();
         restoreEnv();
@@ -194,6 +211,77 @@ describe('SageMaker SDK transport configuration', () => {
         await (await provider.getSageMakerRuntimeInstance('us-west-2')).config.defaultsMode(),
       ).toBe('in-region');
       expect(await first.config.defaultsMode()).toBe('standard');
+    } finally {
+      provider.cleanup();
+      restoreEnv();
+      await rm(directory, { recursive: true });
+    }
+  });
+
+  it('reloads same-path profile defaults while retaining retry state until explicit shutdown', async () => {
+    const directory = await mkdtemp(path.join(tmpdir(), 'promptfoo-sagemaker-defaults-'));
+    const configFile = path.join(directory, 'config');
+    const credentialsFile = path.join(directory, 'credentials');
+    await writeFile(configFile, '[default]\ndefaults_mode = standard\n');
+    await writeFile(credentialsFile, '');
+    const restoreEnv = mockProcessEnv({
+      AWS_CONFIG_FILE: configFile,
+      AWS_SHARED_CREDENTIALS_FILE: credentialsFile,
+      AWS_PROFILE: undefined,
+      AWS_DEFAULTS_MODE: undefined,
+      AWS_RETRY_MODE: 'adaptive',
+      AWS_EC2_METADATA_DISABLED: 'true',
+    });
+    const provider = new SageMakerCompletionProvider('endpoint', {
+      config: {
+        modelType: 'custom',
+        region: 'us-east-1',
+        accessKeyId: 'OFFLINE',
+        secretAccessKey: 'offline-secret',
+      },
+    });
+    const intercepted = new Error('HTTP intercepted before connecting');
+    vi.spyOn(http, 'request').mockImplementation(() => {
+      throw intercepted;
+    });
+    const timeout = async (client: SageMakerRuntimeClient) => {
+      const handler = client.config.requestHandler as NodeHttpHandler;
+      await expect(
+        handler.handle(new HttpRequest({ protocol: 'http:', hostname: '127.0.0.1' }), {}),
+      ).rejects.toBe(intercepted);
+      return handler.httpHandlerConfigs().connectionTimeout;
+    };
+    const defaultsMode = ({ config: { defaultsMode } }: SageMakerRuntimeClient) =>
+      typeof defaultsMode === 'function' ? defaultsMode() : defaultsMode;
+    try {
+      const standard: SageMakerRuntimeClient = await provider.getSageMakerRuntimeInstance();
+      expect(await defaultsMode(standard)).toBe('standard');
+      expect(await timeout(standard)).toBe(3100);
+      const retry = await standard.config.retryStrategy();
+      expect('mode' in retry && retry.mode).toBe('adaptive');
+
+      await writeFile(configFile, '[default]\ndefaults_mode = mobile\n');
+      const mobile: SageMakerRuntimeClient = await provider.getSageMakerRuntimeInstance();
+      expect(mobile).not.toBe(standard);
+      expect(await defaultsMode(mobile)).toBe('mobile');
+      expect(await timeout(mobile)).toBe(30000);
+      expect(await defaultsMode(standard)).toBe('standard');
+      expect(await mobile.config.retryStrategy()).toBe(retry);
+
+      await writeFile(configFile, '[default]\ndefaults_mode = mobile\noutput = json\n');
+      expect(await provider.getSageMakerRuntimeInstance()).toBe(mobile);
+      vi.stubEnv('AWS_DEFAULTS_MODE', 'standard');
+      const explicit: SageMakerRuntimeClient = await provider.getSageMakerRuntimeInstance();
+      expect(await defaultsMode(explicit)).toBe('standard');
+      await writeFile(configFile, '[default]\ndefaults_mode = cross-region\n');
+      expect(await provider.getSageMakerRuntimeInstance()).toBe(explicit);
+
+      provider.cleanup({ reason: 'evaluation-complete' });
+      const afterIdle: SageMakerRuntimeClient = await provider.getSageMakerRuntimeInstance();
+      expect(await afterIdle.config.retryStrategy()).toBe(retry);
+      provider.cleanup();
+      const afterShutdown: SageMakerRuntimeClient = await provider.getSageMakerRuntimeInstance();
+      expect(await afterShutdown.config.retryStrategy()).not.toBe(retry);
     } finally {
       provider.cleanup();
       restoreEnv();
