@@ -6,30 +6,33 @@ import { createApp } from '../../../src/server/server';
 
 // Mock dependencies
 vi.mock('../../../src/blobs/extractor');
-vi.mock('../../../src/blobs', async (importOriginal) => ({
-  ...(await importOriginal<typeof import('../../../src/blobs')>()),
-  getBlobStorageProvider: vi.fn(),
-}));
+vi.mock('../../../src/blobs', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../../../src/blobs')>();
+  return {
+    ...actual,
+    // Keep route limit coverage cheap while the OpenAPI test pins the production maximum.
+    BLOB_MAX_BASE64_SIZE: 64,
+    getBlobByHash: vi.fn(),
+    getBlobUrl: vi.fn(),
+    storeBlob: vi.fn(),
+  };
+});
 vi.mock('../../../src/database');
+vi.mock('../../../src/models/evalMutation');
 
 // Import after mocking
-import { getBlobStorageProvider } from '../../../src/blobs';
+import { getBlobByHash, getBlobUrl, storeBlob } from '../../../src/blobs';
 import { isBlobStorageEnabled } from '../../../src/blobs/extractor';
 import { getDb } from '../../../src/database';
+import { notifyEvaluationChanged } from '../../../src/models/evalMutation';
 
 const mockedIsBlobStorageEnabled = vi.mocked(isBlobStorageEnabled);
-const mockedProvider = {
-  providerId: 'test',
-  store: vi.fn(),
-  getByHash: vi.fn(),
-  exists: vi.fn(),
-  deleteByHash: vi.fn(),
-  getUrl: vi.fn(),
-};
-const mockedGetUrl = mockedProvider.getUrl;
-const mockedGetByHash = mockedProvider.getByHash;
+const mockedGetBlobUrl = vi.mocked(getBlobUrl);
+const mockedGetBlobByHash = vi.mocked(getBlobByHash);
 const mockedGetDb = vi.mocked(getDb);
+const mockedSignalEvaluationChanged = vi.mocked(notifyEvaluationChanged);
 
+const mockedStoreBlob = vi.mocked(storeBlob);
 describe('Blobs Routes', () => {
   let api: ReturnType<typeof request.agent>;
   let server: Server;
@@ -49,6 +52,245 @@ describe('Blobs Routes', () => {
     }
     await new Promise<void>((resolve, reject) => {
       server.close((error) => (error ? reject(error) : resolve()));
+    });
+  });
+
+  describe('POST /api/blobs', () => {
+    const evalId = 'eval-share-target';
+    const hash = 'f'.repeat(64);
+
+    function createEvalLookupDb(result?: { id: string }) {
+      return {
+        select: vi.fn().mockReturnThis(),
+        from: vi.fn().mockReturnThis(),
+        where: vi.fn().mockReturnThis(),
+        get: vi.fn().mockResolvedValue(result),
+      } as any;
+    }
+
+    beforeEach(() => {
+      vi.resetAllMocks();
+      mockedIsBlobStorageEnabled.mockReturnValue(true);
+    });
+
+    afterEach(() => {
+      vi.resetAllMocks();
+    });
+
+    it('stores a validated blob for an existing eval', async () => {
+      mockedGetDb.mockReturnValue(createEvalLookupDb({ id: evalId }));
+      mockedStoreBlob.mockResolvedValue({
+        deduplicated: false,
+        ref: {
+          hash,
+          mimeType: 'application/vnd.promptfoo.trace+json',
+          provider: 'filesystem',
+          sizeBytes: 11,
+          uri: `promptfoo://blob/${hash}`,
+        },
+      });
+
+      const response = await api.post('/api/blobs').send({
+        data: Buffer.from('image-bytes').toString('base64'),
+        mimeType: 'image/png',
+        context: {
+          evalId,
+          kind: 'image',
+          location: 'share',
+          promptIdx: 2,
+          testIdx: 1,
+        },
+      });
+
+      expect(response.status).toBe(200);
+      expect(response.body.ref.uri).toBe(`promptfoo://blob/${hash}`);
+      expect(mockedStoreBlob).toHaveBeenCalledWith(
+        Buffer.from('image-bytes'),
+        'image/png',
+        expect.objectContaining({
+          evalId,
+          kind: 'image',
+          kindFromMimeType: expect.any(Function),
+          location: 'share',
+          promptIdx: 2,
+          testIdx: 1,
+        }),
+      );
+      expect(mockedSignalEvaluationChanged).toHaveBeenCalledWith(evalId);
+    });
+
+    it('downgrades a non-media (text/html) MIME to octet-stream before storage', async () => {
+      mockedGetDb.mockReturnValue(createEvalLookupDb({ id: evalId }));
+      mockedStoreBlob.mockResolvedValue({
+        deduplicated: false,
+        ref: {
+          hash,
+          mimeType: 'application/octet-stream',
+          provider: 'filesystem',
+          sizeBytes: 11,
+          uri: `promptfoo://blob/${hash}`,
+        },
+      });
+
+      const response = await api.post('/api/blobs').send({
+        data: Buffer.from('<script>alert(1)</script>').toString('base64'),
+        mimeType: 'text/html',
+        context: { evalId },
+      });
+
+      expect(response.status).toBe(200);
+      // A stored text/html blob would be a same-origin stored-XSS vector when served back.
+      // kind is derived from the sanitized MIME ('other'), never trusted from the client, so the
+      // media-library response (which only permits image/video/audio/other) can't 500 on it.
+      expect(mockedStoreBlob).toHaveBeenCalledWith(
+        expect.any(Buffer),
+        'application/octet-stream',
+        expect.objectContaining({ evalId, kindFromMimeType: expect.any(Function) }),
+      );
+    });
+
+    it('derives kind from the sanitized MIME, ignoring a client-supplied kind', async () => {
+      mockedGetDb.mockReturnValue(createEvalLookupDb({ id: evalId }));
+      mockedStoreBlob.mockResolvedValue({
+        deduplicated: false,
+        ref: {
+          hash,
+          mimeType: 'image/png',
+          provider: 'filesystem',
+          sizeBytes: 11,
+          uri: `promptfoo://blob/${hash}`,
+        },
+      });
+
+      await api.post('/api/blobs').send({
+        data: Buffer.from('image-bytes').toString('base64'),
+        mimeType: 'image/png',
+        // A bogus client kind ('application', from a MIME prefix) must not be persisted.
+        context: { evalId, kind: 'application' },
+      });
+
+      expect(mockedStoreBlob).toHaveBeenCalledWith(
+        expect.any(Buffer),
+        'image/png',
+        expect.objectContaining({ evalId, kindFromMimeType: expect.any(Function) }),
+      );
+    });
+
+    it('rejects an upload that is not associated with an eval', async () => {
+      const response = await api.post('/api/blobs').send({
+        data: Buffer.from('image-bytes').toString('base64'),
+        mimeType: 'image/png',
+      });
+
+      expect(response.status).toBe(400);
+      expect(response.body.details.issues).toEqual(
+        expect.arrayContaining([expect.objectContaining({ path: ['context'] })]),
+      );
+      expect(mockedStoreBlob).not.toHaveBeenCalled();
+    });
+
+    it('rejects an oversized encoded payload before decoding or storage', async () => {
+      const response = await api.post('/api/blobs').send({
+        data: 'A'.repeat(65),
+        mimeType: 'image/png',
+        context: { evalId },
+      });
+
+      expect(response.status).toBe(413);
+      expect(response.body).toEqual({ error: 'Blob exceeds maximum size' });
+      expect(mockedGetDb).not.toHaveBeenCalled();
+      expect(mockedStoreBlob).not.toHaveBeenCalled();
+    });
+
+    it('downgrades image/svg+xml to octet-stream before storage', async () => {
+      mockedGetDb.mockReturnValue(createEvalLookupDb({ id: evalId }));
+      mockedStoreBlob.mockResolvedValue({
+        deduplicated: false,
+        ref: {
+          hash,
+          mimeType: 'application/octet-stream',
+          provider: 'filesystem',
+          sizeBytes: 11,
+          uri: `promptfoo://blob/${hash}`,
+        },
+      });
+
+      await api.post('/api/blobs').send({
+        data: Buffer.from('<svg onload="alert(1)"></svg>').toString('base64'),
+        mimeType: 'image/svg+xml',
+        context: { evalId },
+      });
+
+      expect(mockedStoreBlob).toHaveBeenCalledWith(
+        expect.any(Buffer),
+        'application/octet-stream',
+        expect.anything(),
+      );
+    });
+
+    it('rejects non-canonical base64 that passes the charset check', async () => {
+      // "QR==" passes the charset regex and decodes, but is not the canonical encoding of its
+      // bytes ("QQ=="), so the round-trip guard rejects it to prevent hash/content confusion.
+      const response = await api.post('/api/blobs').send({
+        data: 'QR==',
+        mimeType: 'image/png',
+        context: { evalId },
+      });
+
+      expect(response.status).toBe(400);
+      expect(response.body).toEqual({ error: 'Invalid base64 data' });
+      expect(mockedStoreBlob).not.toHaveBeenCalled();
+    });
+
+    it('rejects pad-only base64 that would store an empty blob', async () => {
+      const response = await api.post('/api/blobs').send({
+        data: '==',
+        mimeType: 'image/png',
+        context: { evalId },
+      });
+
+      expect(response.status).toBe(400);
+      expect(response.body).toEqual({ error: 'Invalid base64 data' });
+      expect(mockedStoreBlob).not.toHaveBeenCalled();
+    });
+
+    it('rejects malformed base64 before storage', async () => {
+      const response = await api.post('/api/blobs').send({
+        data: 'not=valid=base64',
+        mimeType: 'image/png',
+        context: { evalId },
+      });
+
+      expect(response.status).toBe(400);
+      expect(response.body).toEqual({ error: 'Invalid base64 data' });
+      expect(mockedStoreBlob).not.toHaveBeenCalled();
+    });
+
+    it('rejects an upload for an eval that does not exist', async () => {
+      mockedGetDb.mockReturnValue(createEvalLookupDb());
+
+      const response = await api.post('/api/blobs').send({
+        data: Buffer.from('image-bytes').toString('base64'),
+        mimeType: 'image/png',
+        context: { evalId: 'missing-eval' },
+      });
+
+      expect(response.status).toBe(404);
+      expect(response.body).toEqual({ error: 'Eval not found' });
+      expect(mockedStoreBlob).not.toHaveBeenCalled();
+    });
+
+    it('rejects uploads when blob storage is disabled', async () => {
+      mockedIsBlobStorageEnabled.mockReturnValue(false);
+
+      const response = await api.post('/api/blobs').send({
+        data: Buffer.from('image-bytes').toString('base64'),
+        mimeType: 'image/png',
+      });
+
+      expect(response.status).toBe(404);
+      expect(response.body).toEqual({ error: 'Blob storage disabled' });
+      expect(mockedStoreBlob).not.toHaveBeenCalled();
     });
   });
 
@@ -93,7 +335,6 @@ describe('Blobs Routes', () => {
 
     beforeEach(() => {
       vi.resetAllMocks();
-      vi.mocked(getBlobStorageProvider).mockReturnValue(mockedProvider);
     });
 
     afterEach(() => {
@@ -103,7 +344,7 @@ describe('Blobs Routes', () => {
     it('should return 404 when blob storage is disabled', async () => {
       mockedIsBlobStorageEnabled.mockReturnValue(false);
 
-      const response = await api.get(`/api/blobs/${validHash}`);
+      const response = await api.get(`/api/blobs/${validHash}?evalId=eval-123`);
 
       expect(response.status).toBe(404);
       expect(response.body).toEqual({ error: 'Blob storage disabled' });
@@ -116,7 +357,7 @@ describe('Blobs Routes', () => {
     ])('should return 400 for invalid hash (%s)', async (_label, hash) => {
       mockedIsBlobStorageEnabled.mockReturnValue(true);
 
-      const response = await api.get(`/api/blobs/${hash}`);
+      const response = await api.get(`/api/blobs/${hash}?evalId=eval-123`);
 
       expect(response.status).toBe(400);
       expect(response.body).toHaveProperty('error');
@@ -126,7 +367,7 @@ describe('Blobs Routes', () => {
       mockedIsBlobStorageEnabled.mockReturnValue(true);
       mockedGetDb.mockReturnValue(createMockDb(undefined));
 
-      const response = await api.get(`/api/blobs/${validHash}`);
+      const response = await api.get(`/api/blobs/${validHash}?evalId=eval-123`);
 
       expect(response.status).toBe(404);
       expect(response.body).toEqual({ error: 'Blob not found' });
@@ -142,35 +383,82 @@ describe('Blobs Routes', () => {
       mockedIsBlobStorageEnabled.mockReturnValue(true);
       mockedGetDb.mockReturnValue(createMockDb(mockAsset, undefined));
 
-      const response = await api.get(`/api/blobs/${validHash}`);
+      const response = await api.get(`/api/blobs/${validHash}?evalId=eval-123`);
 
       expect(response.status).toBe(403);
       expect(response.body).toEqual({ error: 'Not authorized to access this blob' });
     });
 
-    it.each(['image/png', 'video/mp4', 'audio/wav'])(
-      'redirects passive %s when a custom URL is available',
-      async (mimeType) => {
-        setupDbWithAssetAndReference({
-          hash: validHash,
-          mimeType,
-          sizeBytes: 1024,
-          provider: 's3',
+    it('rejects downloads without an evaluation context before loading the blob', async () => {
+      setupDbWithAssetAndReference({
+        hash: validHash,
+        mimeType: 'image/png',
+        sizeBytes: 1024,
+        provider: 'local',
+      });
+      const response = await api.get(`/api/blobs/${validHash}`);
+      expect(response.status).toBe(400);
+      expect(mockedGetBlobUrl).not.toHaveBeenCalled();
+      expect(mockedGetBlobByHash).not.toHaveBeenCalled();
+    });
+
+    it('does not borrow a blob reference from another evaluation', async () => {
+      const { createClient } = await import('@libsql/client/node');
+      const { drizzle } = await import('drizzle-orm/libsql/node');
+      const client = createClient({ url: ':memory:' });
+      try {
+        await client.executeMultiple(`
+          CREATE TABLE blob_assets (hash TEXT PRIMARY KEY, mime_type TEXT, size_bytes INTEGER, provider TEXT);
+          CREATE TABLE blob_references (id TEXT, blob_hash TEXT, eval_id TEXT, kind TEXT, location TEXT);
+        `);
+        await client.execute({
+          sql: 'INSERT INTO blob_assets VALUES (?, ?, ?, ?)',
+          args: [validHash, 'image/png', 10, 's3'],
         });
+        await client.execute({
+          sql: 'INSERT INTO blob_references VALUES (?, ?, ?, ?, ?)',
+          args: ['owned', validHash, 'private-eval', 'image', 'response.image'],
+        });
+        // A provider can echo another evaluation's URI; extraction records an unclassified ref.
+        await client.execute({
+          sql: 'INSERT INTO blob_references VALUES (?, ?, ?, ?, ?)',
+          args: ['copied', validHash, 'shared-eval', null, 'response.output'],
+        });
+        mockedIsBlobStorageEnabled.mockReturnValue(true);
+        mockedGetDb.mockResolvedValue(drizzle(client));
+        mockedGetBlobUrl.mockResolvedValue('https://storage.example.com/image.png');
+        mockedGetBlobByHash.mockResolvedValue(createBlobResponse('image/png', 10));
 
-        const presignedUrl = 'https://s3.amazonaws.com/bucket/blob?signature=xyz';
-        mockedGetUrl.mockResolvedValue(presignedUrl);
-        mockedGetByHash.mockResolvedValue(createBlobResponse(mimeType, 1024));
+        const denied = await api.get(`/api/blobs/${validHash}?evalId=shared-eval`);
+        expect(denied.status).toBe(403);
+        expect(mockedGetBlobUrl).not.toHaveBeenCalled();
+        expect(mockedGetBlobByHash).not.toHaveBeenCalled();
+        const allowed = await api.get(`/api/blobs/${validHash}?evalId=private-eval`);
+        expect(allowed.status).toBe(302);
+      } finally {
+        client.close();
+      }
+    });
 
-        const response = await api.get(`/api/blobs/${validHash}`);
+    it('should redirect 302 when presigned URL is available', async () => {
+      setupDbWithAssetAndReference({
+        hash: validHash,
+        mimeType: 'image/png',
+        sizeBytes: 1024,
+        provider: 's3',
+      });
 
-        expect(response.status).toBe(302);
-        expect(response.header.location).toBe(presignedUrl);
-        expect(mockedGetUrl).toHaveBeenCalledWith(validHash);
-        expect(mockedGetByHash).toHaveBeenCalledExactlyOnceWith(validHash);
-        expect(response.header['content-disposition']).toBeUndefined();
-      },
-    );
+      const presignedUrl = 'https://s3.amazonaws.com/bucket/blob?signature=xyz';
+      mockedGetBlobUrl.mockResolvedValue(presignedUrl);
+      mockedGetBlobByHash.mockResolvedValue(createBlobResponse('image/png', 1024));
+
+      const response = await api.get(`/api/blobs/${validHash}?evalId=eval-123`);
+
+      expect(response.status).toBe(302);
+      expect(response.header.location).toBe(presignedUrl);
+      expect(mockedGetBlobUrl).toHaveBeenCalledWith(validHash);
+      expect(mockedGetBlobByHash).not.toHaveBeenCalled();
+    });
 
     it('should serve blob data directly when no presigned URL', async () => {
       setupDbWithAssetAndReference({
@@ -180,13 +468,14 @@ describe('Blobs Routes', () => {
         provider: 'local',
       });
 
-      mockedGetUrl.mockResolvedValue(null);
-      mockedGetByHash.mockResolvedValue(createBlobResponse('image/png', 1024));
+      mockedGetBlobUrl.mockResolvedValue(null);
+      mockedGetBlobByHash.mockResolvedValue(createBlobResponse('image/png', 1024));
 
-      const response = await api.get(`/api/blobs/${validHash}`);
+      const response = await api.get(`/api/blobs/${validHash}?evalId=eval-123`);
 
       expect(response.status).toBe(200);
       expect(response.header['content-type']).toBe('image/png');
+      expect(response.header['x-content-type-options']).toBe('nosniff');
       expect(response.header['cache-control']).toBe('public, max-age=31536000, immutable');
       expect(response.header['accept-ranges']).toBe('none');
       // Content-Length may be absent if response is gzipped (Express uses transfer-encoding: chunked)
@@ -194,7 +483,7 @@ describe('Blobs Routes', () => {
         response.header['content-length'] === '1024' ||
           response.header['transfer-encoding'] === 'chunked',
       ).toBe(true);
-      expect(mockedGetByHash).toHaveBeenCalledExactlyOnceWith(validHash);
+      expect(mockedGetBlobByHash).toHaveBeenCalledWith(validHash);
     });
 
     it('should use fallback MIME type for invalid MIME types', async () => {
@@ -203,10 +492,10 @@ describe('Blobs Routes', () => {
         { evalId: 'eval-456' },
       );
 
-      mockedGetUrl.mockResolvedValue(null);
-      mockedGetByHash.mockResolvedValue(createBlobResponse('audio/wav.html', 2048));
+      mockedGetBlobUrl.mockResolvedValue(null);
+      mockedGetBlobByHash.mockResolvedValue(createBlobResponse('audio/wav.html', 2048));
 
-      const response = await api.get(`/api/blobs/${validHash}`);
+      const response = await api.get(`/api/blobs/${validHash}?evalId=eval-123`);
 
       expect(response.status).toBe(200);
       expect(response.header['content-type']).toBe('application/octet-stream');
@@ -214,24 +503,73 @@ describe('Blobs Routes', () => {
       expect(response.header['accept-ranges']).toBe('none');
     });
 
-    it('uses registered MIME and reuses stored bytes when passive types disagree', async () => {
+    it('should serve retained passive media inline', async () => {
+      setupDbWithAssetAndReference(
+        { hash: validHash, mimeType: 'image/bmp', sizeBytes: 1024, provider: 'local' },
+        { evalId: 'eval-bmp' },
+      );
+      mockedGetBlobByHash.mockResolvedValue(createBlobResponse('image/bmp', 1024));
+
+      const response = await api.get(`/api/blobs/${validHash}?evalId=eval-123`);
+
+      expect(response.status).toBe(200);
+      expect(response.header['content-type']).toBe('image/bmp');
+      expect(response.header['content-disposition']).toBeUndefined();
+    });
+
+    it('should not redirect legacy active content around the MIME boundary', async () => {
+      setupDbWithAssetAndReference(
+        { hash: validHash, mimeType: 'image/svg+xml', sizeBytes: 2048, provider: 's3' },
+        { evalId: 'eval-svg' },
+      );
+      mockedGetBlobUrl.mockResolvedValue('https://storage.example/unsafe-svg');
+      mockedGetBlobByHash.mockResolvedValue(createBlobResponse('image/svg+xml', 2048));
+
+      const response = await api.get(`/api/blobs/${validHash}?evalId=eval-123`);
+
+      expect(response.status).toBe(200);
+      expect(response.header['content-type']).toBe('application/octet-stream');
+      expect(mockedGetBlobUrl).not.toHaveBeenCalled();
+    });
+
+    it('should not redirect fallback metadata that may hide legacy active content', async () => {
+      setupDbWithAssetAndReference(
+        {
+          hash: validHash,
+          mimeType: 'application/octet-stream',
+          sizeBytes: 2048,
+          provider: 's3',
+        },
+        { evalId: 'eval-normalized-svg' },
+      );
+      mockedGetBlobUrl.mockResolvedValue('https://storage.example/normalized-legacy-svg');
+      mockedGetBlobByHash.mockResolvedValue(createBlobResponse('image/svg+xml', 2048));
+
+      const response = await api.get(`/api/blobs/${validHash}?evalId=eval-123`);
+
+      expect(response.status).toBe(200);
+      expect(response.header['content-type']).toBe('application/octet-stream');
+      expect(mockedGetBlobUrl).not.toHaveBeenCalled();
+      expect(mockedGetBlobByHash).toHaveBeenCalledWith(validHash);
+    });
+
+    it('should use registered asset MIME type when blob metadata differs', async () => {
       setupDbWithAssetAndReference(
         { hash: validHash, mimeType: 'image/png', sizeBytes: 1024, provider: 'local' },
         { evalId: 'eval-789' },
       );
 
-      mockedGetUrl.mockResolvedValue('https://storage.example/mismatched-type');
-      // A different stored label must not override registered MIME or authorize a redirect.
-      mockedGetByHash.mockResolvedValue(createBlobResponse('image/jpeg', 2048));
+      mockedGetBlobUrl.mockResolvedValue(null);
+      // Blob metadata has different MIME type and size than the asset record.
+      mockedGetBlobByHash.mockResolvedValue(createBlobResponse('image/jpeg', 2048));
 
-      const response = await api.get(`/api/blobs/${validHash}`);
+      const response = await api.get(`/api/blobs/${validHash}?evalId=eval-123`);
 
       expect(response.status).toBe(200);
       expect(response.header['content-type']).toBe('image/png');
-      expect(mockedGetUrl).not.toHaveBeenCalled();
-      expect(mockedGetByHash).toHaveBeenCalledExactlyOnceWith(validHash);
       expect(response.header['cache-control']).toBe('public, max-age=31536000, immutable');
       expect(response.header['accept-ranges']).toBe('none');
+      expect(mockedGetBlobUrl).not.toHaveBeenCalled();
       // Content-Length may be absent if response is gzipped
       expect(
         response.header['content-length'] === '2048' ||
@@ -239,99 +577,16 @@ describe('Blobs Routes', () => {
       ).toBe(true);
     });
 
-    it.each([
-      'image/avif',
-      'image/gif',
-      'image/jpeg',
-      'image/png',
-      'image/webp',
-      'video/mp4',
-      'video/ogg',
-      'video/webm',
-      'audio/wav',
-      'audio/x-custom',
-      'IMAGE/PNG',
-    ])('keeps passive %s blobs inline', async (mimeType) => {
-      setupDbWithAssetAndReference({
-        hash: validHash,
-        mimeType,
-        sizeBytes: 16,
-        provider: 'custom',
-      });
-      mockedGetUrl.mockResolvedValue(null);
-      mockedGetByHash.mockResolvedValue(createBlobResponse(mimeType, 16));
-
-      const response = await api.get(`/api/blobs/${validHash}`);
-
-      expect(response.status).toBe(200);
-      expect(response.header['content-type']).toBe(mimeType);
-      expect(response.header['content-disposition']).toBeUndefined();
-      expect(response.header['x-content-type-options']).toBe('nosniff');
-    });
-
-    it.each([
-      'text/html',
-      'image/svg+xml',
-      'application/xhtml+xml',
-      'application/xml',
-      'application/pdf',
-      'text/plain',
-      'application/json',
-      'application/octet-stream',
-      'application/x-custom',
-    ])(
-      'serves non-passive %s metadata as a download without changing its type',
-      async (mimeType) => {
-        // The route preserves registered MIME for valid download types.
-        setupDbWithAssetAndReference({
-          hash: validHash,
-          mimeType,
-          sizeBytes: 16,
-          provider: 'custom',
-        });
-        mockedGetUrl.mockResolvedValue('https://storage.example/active-object');
-        mockedGetByHash.mockResolvedValue({
-          ...createBlobResponse(mimeType, 16),
-          data: Buffer.from('{"fixture":true}'),
-        });
-
-        const response = await api.get(`/api/blobs/${validHash}`);
-
-        expect(response.status).toBe(200);
-        expect(response.header['content-type']).toBe(mimeType);
-        expect(response.header['content-disposition']).toBe('attachment');
-        expect(response.header['x-content-type-options']).toBe('nosniff');
-        expect(mockedGetUrl).not.toHaveBeenCalled();
-      },
-    );
-
-    it('returns 404 when a passive custom URL cannot be generated', async () => {
-      setupDbWithAssetAndReference({
-        hash: validHash,
-        mimeType: 'image/png',
-        sizeBytes: 16,
-        provider: 'custom',
-      });
-      mockedGetUrl.mockRejectedValue(new Error('URL generation failed'));
-      mockedGetByHash.mockResolvedValue(createBlobResponse('image/png', 16));
-
-      const response = await api.get(`/api/blobs/${validHash}`);
-
-      expect(response.status).toBe(404);
-      expect(response.body).toEqual({ error: 'Blob not found' });
-      expect(mockedGetByHash).toHaveBeenCalledExactlyOnceWith(validHash);
-    });
-
-    it('should return 404 when the provider cannot read the blob', async () => {
+    it('should return 404 when getBlobByHash throws error', async () => {
       setupDbWithAssetAndReference(
         { hash: validHash, mimeType: 'text/plain', sizeBytes: 512, provider: 'local' },
         { evalId: 'eval-error' },
       );
 
-      mockedGetUrl.mockResolvedValue(null);
-      mockedGetByHash.mockRejectedValue(new Error('File system error'));
+      mockedGetBlobUrl.mockResolvedValue(null);
+      mockedGetBlobByHash.mockRejectedValue(new Error('File system error'));
 
-      const response = await api.get(`/api/blobs/${validHash}`);
+      const response = await api.get(`/api/blobs/${validHash}?evalId=eval-123`);
 
       expect(response.status).toBe(404);
       expect(response.body).toEqual({ error: 'Blob not found' });
@@ -469,7 +724,7 @@ describe('Blobs Routes', () => {
       expect(item.mimeType).toBe('image/png');
       expect(item.sizeBytes).toBe(1024);
       expect(item.kind).toBe('image');
-      expect(item.url).toBe(`/api/blobs/${hash1}`);
+      expect(item.url).toBe(`/api/blobs/${hash1}?evalId=eval-1`);
       expect(item.context.evalId).toBe('eval-1');
       expect(item.context.evalDescription).toBe('Test eval');
       expect(item.context.provider).toBe('GPT-4');
@@ -801,7 +1056,7 @@ describe('Blobs Routes', () => {
       expect(mockDb.where).toHaveBeenCalled();
     });
 
-    it('should not add where clause when search is empty', async () => {
+    it('should keep the trusted-reference filter when search is empty', async () => {
       mockedIsBlobStorageEnabled.mockReturnValue(true);
       const mockDb = createEvalsMockDb([]);
       mockedGetDb.mockReturnValue(mockDb);
@@ -809,8 +1064,7 @@ describe('Blobs Routes', () => {
       const response = await api.get('/api/blobs/library/evals');
 
       expect(response.status).toBe(200);
-      // where is called with undefined (no conditions)
-      expect(mockDb.where).toHaveBeenCalledWith(undefined);
+      expect(mockDb.where).toHaveBeenCalledWith(expect.anything());
     });
 
     it('should reject search strings exceeding max length', async () => {

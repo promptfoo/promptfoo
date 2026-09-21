@@ -1124,3 +1124,40 @@ describe('getKindLabel', () => {
     expect(getKindLabel('other')).toBe('File');
   });
 });
+
+describe('evaluation-scoped media URLs', () => {
+  const hash = 'a'.repeat(64);
+  const evalId = 'shared-eval';
+  const expected = `/api/blobs/${hash}?evalId=${evalId}`;
+
+  beforeEach(() => {
+    vi.mocked(useApiConfig.getState).mockReturnValue(mockState(''));
+  });
+
+  it('uses the displayed evaluation for blob references and embedded API URLs', () => {
+    expect(resolveBlobUri(`promptfoo://blob/${hash}`, evalId)).toBe(expected);
+    expect(resolveBlobUri(`/api/blobs/${hash}?evalId=private-eval`, evalId)).toBe(expected);
+    expect(normalizeMediaText(`![x](promptfoo://blob/${hash})`, evalId)).toBe(`![x](${expected})`);
+    expect(normalizeMediaText(`![x](/api/blobs/${hash}?evalId=private-eval)`, evalId)).toBe(
+      `![x](${expected})`,
+    );
+  });
+
+  it('carries evaluation context through each media kind', () => {
+    const blobRef = { hash };
+    expect(resolveAudioSource({ blobRef }, undefined, evalId)?.src).toBe(expected);
+    expect(resolveImageSource({ blobRef }, evalId)).toBe(expected);
+    expect(
+      resolveVideoSource({ blobRef, thumbnail: `/api/blobs/${hash}?evalId=other` }, evalId),
+    ).toMatchObject({ src: expected, poster: expected });
+  });
+
+  it('scopes absolute blob URLs on the configured API server', () => {
+    vi.mocked(useApiConfig.getState).mockReturnValue(mockState('https://api.example.com'));
+    const url = `https://api.example.com/api/blobs/${hash}?evalId=private-eval`;
+    expect(resolveVideoSource({ url }, evalId)?.src).toBe(`https://api.example.com${expected}`);
+    expect(normalizeMediaText(`![x](${url})`, evalId)).toBe(
+      `![x](https://api.example.com${expected})`,
+    );
+  });
+});

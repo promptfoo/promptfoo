@@ -1,4 +1,5 @@
-import { render, screen } from '@testing-library/react';
+import { restoreTestTimers, useTestTimers } from '@app/tests/timers';
+import { act, render, screen } from '@testing-library/react';
 import { describe, expect, it } from 'vitest';
 import ChatMessages, { type Message } from './ChatMessages';
 
@@ -174,8 +175,8 @@ describe('ChatMessages', () => {
     expect(imageElement).toHaveClass(
       'w-[min(500px,70vw)]',
       'max-w-full',
-      'min-h-[180px]',
-      'sm:min-h-[300px]',
+      'h-[180px]',
+      'sm:h-[300px]',
     );
     expect(imageElement).not.toHaveClass('min-w-[500px]');
   });
@@ -196,4 +197,191 @@ describe('ChatMessages', () => {
     expect(videoElement).toHaveClass('max-w-full');
     expect(videoElement.parentElement).toHaveClass('w-full', 'max-w-[500px]');
   });
+
+  it('resolves contentType video blob references without allowing external URLs', () => {
+    const blobHash = '1'.repeat(64);
+    const { rerender } = render(
+      <ChatMessages
+        messages={[
+          {
+            role: 'assistant',
+            content: `promptfoo://blob/${blobHash}`,
+            contentType: 'video',
+          },
+        ]}
+      />,
+    );
+    expect(screen.getByTestId('video').querySelector('source')).toHaveAttribute(
+      'src',
+      `/api/blobs/${blobHash}`,
+    );
+
+    rerender(
+      <ChatMessages
+        messages={[
+          {
+            role: 'assistant',
+            content: 'http://127.0.0.1/private-endpoint',
+            contentType: 'video',
+          },
+        ]}
+      />,
+    );
+    const externalSource = screen.getByTestId('video').querySelector('source');
+    expect(externalSource?.getAttribute('src')).toBe(
+      'data:video/mp4;base64,http://127.0.0.1/private-endpoint',
+    );
+    expect(externalSource?.getAttribute('src')).not.toMatch(/^https?:/);
+  });
+
+  it('remounts a failed blob image when the eval row refreshes', () => {
+    const blobHash = 'b'.repeat(64);
+    const messages: Message[] = [
+      {
+        role: 'user',
+        content: 'Blob image',
+        image: { blobRef: { uri: `promptfoo://blob/${blobHash}` } },
+      },
+    ];
+    const initialRefresh = {};
+    const { rerender } = render(
+      <ChatMessages messages={messages} mediaRefreshToken={initialRefresh} />,
+    );
+    const firstImage = screen.getByAltText('Input');
+    act(() => {
+      firstImage.dispatchEvent(new Event('error'));
+    });
+
+    rerender(<ChatMessages messages={messages} mediaRefreshToken={{}} />);
+
+    const refreshedImage = screen.getByAltText('Input');
+    expect(refreshedImage).not.toBe(firstImage);
+    expect(refreshedImage).toHaveAttribute('src', `/api/blobs/${blobHash}`);
+  });
+
+  it('retries when a blob failure arrives after the eval row refresh', () => {
+    const timers = useTestTimers();
+    try {
+      const blobHash = 'c'.repeat(64);
+      const messages: Message[] = [
+        {
+          role: 'user',
+          content: 'Late blob failure',
+          image: { blobRef: { uri: `promptfoo://blob/${blobHash}` } },
+        },
+      ];
+      const { rerender } = render(<ChatMessages messages={messages} mediaRefreshToken={{}} />);
+      const image = screen.getByAltText('Input');
+
+      rerender(<ChatMessages messages={messages} mediaRefreshToken={{}} />);
+      act(() => {
+        image.dispatchEvent(new Event('error'));
+      });
+      act(() => {
+        timers.advanceBy(250);
+      });
+
+      expect(image.getAttribute('src')).toContain('promptfoo_media_retry=');
+    } finally {
+      restoreTestTimers();
+    }
+  });
+
+  it('keeps recovered blob media mounted after the next refresh', () => {
+    const timers = useTestTimers();
+    try {
+      const blobHash = 'd'.repeat(64);
+      const messages: Message[] = [
+        {
+          role: 'user',
+          content: 'Recovered blob',
+          image: { blobRef: { uri: `promptfoo://blob/${blobHash}` } },
+        },
+      ];
+      const { rerender } = render(<ChatMessages messages={messages} mediaRefreshToken={{}} />);
+      const image = screen.getByAltText('Input');
+      act(() => {
+        image.dispatchEvent(new Event('error'));
+      });
+      act(() => {
+        timers.advanceBy(250);
+      });
+      act(() => {
+        image.dispatchEvent(new Event('load'));
+      });
+
+      rerender(<ChatMessages messages={messages} mediaRefreshToken={{}} />);
+      expect(screen.getByAltText('Input')).toBe(image);
+    } finally {
+      restoreTestTimers();
+    }
+  });
+
+  it('does not let a pending retry overwrite a newly rendered blob source', () => {
+    const timers = useTestTimers();
+    try {
+      const firstHash = 'e'.repeat(64);
+      const secondHash = 'f'.repeat(64);
+      const createMessages = (hash: string): Message[] => [
+        {
+          role: 'user',
+          content: 'Changing blob image',
+          image: { blobRef: { uri: `promptfoo://blob/${hash}` } },
+        },
+      ];
+      const { rerender } = render(
+        <ChatMessages messages={createMessages(firstHash)} mediaRefreshToken={{}} />,
+      );
+      const firstImage = screen.getByAltText('Input');
+      act(() => {
+        firstImage.dispatchEvent(new Event('error'));
+      });
+
+      rerender(<ChatMessages messages={createMessages(secondHash)} mediaRefreshToken={{}} />);
+      const secondImage = screen.getByAltText('Input');
+      expect(secondImage).not.toBe(firstImage);
+      act(() => {
+        timers.advanceBy(250);
+      });
+
+      expect(secondImage).toHaveAttribute('src', `/api/blobs/${secondHash}`);
+      expect(secondImage.getAttribute('src')).not.toContain(firstHash);
+    } finally {
+      restoreTestTimers();
+    }
+  });
+
+  it('keeps successfully resolved media mounted when the eval row refreshes', () => {
+    const messages: Message[] = [
+      {
+        role: 'user',
+        content: 'Inline image',
+        image: { data: FAKE_IMAGE_DATA_URL },
+      },
+    ];
+    const { rerender } = render(<ChatMessages messages={messages} mediaRefreshToken={{}} />);
+    const firstImage = screen.getByAltText('Input');
+
+    rerender(<ChatMessages messages={messages} mediaRefreshToken={{}} />);
+
+    expect(screen.getByAltText('Input')).toBe(firstImage);
+  });
+});
+
+it('scopes chat media to the displayed evaluation', () => {
+  const hash = 'a'.repeat(64);
+  const { container } = render(
+    <ChatMessages
+      evaluationId="chat-eval"
+      messages={[
+        { role: 'user', contentType: 'image', content: `promptfoo://blob/${hash}` },
+        { role: 'assistant', contentType: 'audio', content: `/api/blobs/${hash}?evalId=other` },
+        { role: 'assistant', contentType: 'video', content: `promptfoo://blob/${hash}` },
+      ]}
+    />,
+  );
+  for (const element of container.querySelectorAll('img, source')) {
+    expect(element).toHaveAttribute('src', `/api/blobs/${hash}?evalId=chat-eval`);
+  }
+  expect(container.querySelectorAll('img, source')).toHaveLength(3);
 });
