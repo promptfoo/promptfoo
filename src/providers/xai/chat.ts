@@ -410,25 +410,6 @@ export const GROK_3_MINI_MODELS = [
   'grok-3-mini-fast-latest',
 ];
 
-// Models that support reasoning_effort on the chat-completions-compatible API.
-// grok-4.6 and grok-4.5 accept `low`, `medium`, and `high` but reject `none`
-// (verified live 2026-08-31 and 2026-07-09); grok-4.3 additionally accepts `none`.
-export const GROK_REASONING_EFFORT_MODELS = [
-  'grok-4.6',
-  'grok-4.5',
-  'grok-4.5-latest',
-  'grok-build-latest',
-  'grok-4.3',
-  'grok-4.3-latest',
-  'grok-latest',
-  'grok-3-mini-beta',
-  'grok-3-mini',
-  'grok-3-mini-latest',
-  'grok-3-mini-fast-beta',
-  'grok-3-mini-fast',
-  'grok-3-mini-fast-latest',
-];
-
 // Grok 4.5 *and newer* models, which accept reasoning_effort `low`/`medium`/`high`
 // but reject `none`. Kept under the original export name because it is part of the
 // package's import surface; membership is "4.5 or later", not "exactly 4.5".
@@ -438,6 +419,33 @@ export const GROK_45_MODELS: ReadonlySet<string> = new Set([
   'grok-4.5-latest',
   'grok-build-latest',
 ]);
+
+// Chat-completions effort varies by family; unlisted models reject the field entirely.
+const GROK_REASONING_EFFORT_POLICIES = new Map<
+  string,
+  { values: readonly string[]; guidance: string }
+>(
+  [
+    {
+      models: [...GROK_45_MODELS],
+      values: ['low', 'medium', 'high'],
+      guidance:
+        'Use "low", "medium", or "high", or omit reasoning_effort to use the default "high".',
+    },
+    {
+      models: ['grok-4.3', 'grok-4.3-latest', 'grok-latest'],
+      values: ['none', 'low', 'medium', 'high'],
+      guidance: 'Use "none", "low", "medium", or "high", or omit reasoning_effort.',
+    },
+    {
+      models: GROK_3_MINI_MODELS,
+      values: ['low', 'high'],
+      guidance: 'Use "low" or "high", or omit reasoning_effort.',
+    },
+  ].flatMap(({ models, ...policy }) => models.map((model) => [model, policy] as const)),
+);
+
+export const GROK_REASONING_EFFORT_MODELS = [...GROK_REASONING_EFFORT_POLICIES.keys()];
 
 // All reasoning models, including older families that reason without a tunable effort knob.
 export const GROK_REASONING_MODELS = [
@@ -679,7 +687,7 @@ class XAIProvider extends OpenAiChatCompletionProvider {
     // Redirected legacy aliases still reject reasoning_effort under their old
     // request contract. Strip it for those aliases; users who want to tune
     // effort should target grok-4.3 directly.
-    return GROK_REASONING_EFFORT_MODELS.includes(modelName);
+    return GROK_REASONING_EFFORT_POLICIES.has(modelName);
   }
 
   protected supportsTemperature(_modelName?: string): boolean {
@@ -702,27 +710,18 @@ class XAIProvider extends OpenAiChatCompletionProvider {
     }
 
     const effectiveModel = result.body.model;
+    const effortPolicy = GROK_REASONING_EFFORT_POLICIES.get(effectiveModel);
     const reasoningEffort = result.body.reasoning_effort;
-    const allowsNoReasoning = ['grok-4.3', 'grok-4.3-latest', 'grok-latest'].includes(
-      effectiveModel,
-    );
     if (
-      (allowsNoReasoning || GROK_45_MODELS.has(effectiveModel)) &&
-      reasoningEffort !== undefined &&
-      !['low', 'medium', 'high'].includes(reasoningEffort) &&
-      (reasoningEffort !== 'none' || !allowsNoReasoning)
+      !effortPolicy ||
+      reasoningEffort == null ||
+      (typeof reasoningEffort === 'string' && !reasoningEffort.trim())
     ) {
-      throw new Error(
-        `xAI model ${effectiveModel} does not support reasoning_effort ${JSON.stringify(reasoningEffort)}. ` +
-          (allowsNoReasoning
-            ? 'Use "none", "low", "medium", or "high", or omit reasoning_effort.'
-            : 'Use "low", "medium", or "high", or omit reasoning_effort to use the default "high".'),
-      );
-    }
-
-    // Filter reasoning_effort for models that don't support it
-    if (!this.supportsReasoningEffort(effectiveModel) && result.body.reasoning_effort) {
       delete result.body.reasoning_effort;
+    } else if (!effortPolicy.values.includes(reasoningEffort)) {
+      throw new Error(
+        `xAI model ${effectiveModel} does not support reasoning_effort ${JSON.stringify(reasoningEffort)}. ${effortPolicy.guidance}`,
+      );
     }
 
     // Handle search parameters (Live Search)

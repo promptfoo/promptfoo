@@ -462,6 +462,130 @@ describe('xAI Chat Provider', () => {
       }
     });
 
+    describe('effective reasoning effort contract', () => {
+      const families = [
+        {
+          models: [
+            'grok-3-mini-beta',
+            'grok-3-mini',
+            'grok-3-mini-latest',
+            'grok-3-mini-fast-beta',
+            'grok-3-mini-fast',
+            'grok-3-mini-fast-latest',
+          ],
+          efforts: ['low', 'high'],
+        },
+        {
+          models: ['grok-4.3', 'grok-4.3-latest', 'grok-latest'],
+          efforts: ['none', 'low', 'medium', 'high'],
+        },
+        {
+          models: ['grok-4.6', 'grok-4.5', 'grok-4.5-latest', 'grok-build-latest'],
+          efforts: ['low', 'medium', 'high'],
+        },
+      ];
+
+      function callRouted(
+        configuredModel: string,
+        targetModel: string,
+        effort: unknown,
+        source: 'prompt' | 'passthrough' = 'passthrough',
+      ) {
+        const provider = createXAIProvider(`xai:${configuredModel}`, {
+          config: { config: { apiKey: 'synthetic-test-key' } },
+        });
+        return provider.callApi('test', {
+          prompt: {
+            raw: 'test',
+            label: 'test',
+            config:
+              source === 'prompt'
+                ? { reasoning_effort: effort, passthrough: { model: targetModel } }
+                : { passthrough: { model: targetModel, reasoning_effort: effort } },
+          },
+          vars: {},
+        });
+      }
+
+      function sentBody() {
+        expect(mockFetchWithCache).toHaveBeenCalledOnce();
+        return JSON.parse(mockFetchWithCache.mock.calls[0][1].body);
+      }
+
+      it('covers every registered effort-capable model and alias', () => {
+        expect(new Set(families.flatMap(({ models }) => models))).toEqual(
+          new Set(GROK_REASONING_EFFORT_MODELS),
+        );
+      });
+
+      it.each(
+        families.flatMap(({ models, efforts }) => models.map((model) => ({ model, efforts }))),
+      )('checks the wire effort contract for $model', async ({ model, efforts }) => {
+        for (const [configuredModel, source] of [
+          ['grok-4', 'prompt'],
+          ['grok-4.5', 'passthrough'],
+        ] as const) {
+          for (const effort of ['none', 'low', 'medium', 'high', 'minimal', 'xhigh']) {
+            mockFetchWithCache.mockClear();
+            const result = await callRouted(configuredModel, model, effort, source);
+
+            if (efforts.includes(effort)) {
+              expect(result.error).toBeUndefined();
+              expect(sentBody()).toMatchObject({ model, reasoning_effort: effort });
+            } else {
+              expect(result.error).toContain(
+                `xAI model ${model} does not support reasoning_effort "${effort}"`,
+              );
+              if (model.startsWith('grok-3-mini')) {
+                expect(result.error).toContain('Use "low" or "high", or omit reasoning_effort.');
+              }
+              expect(mockFetchWithCache).not.toHaveBeenCalled();
+            }
+          }
+        }
+      });
+
+      it.each(['grok-3-mini', 'grok-4.3', 'grok-4.5', 'grok-4.6'])(
+        'omits unset effort and rejects invalid falsy types on %s',
+        async (model) => {
+          for (const effort of [undefined, null, '', ' ']) {
+            mockFetchWithCache.mockClear();
+            const result = await callRouted('grok-4.5', model, effort);
+            expect(result.error).toBeUndefined();
+            expect(sentBody()).not.toHaveProperty('reasoning_effort');
+          }
+
+          for (const effort of [false, 0]) {
+            mockFetchWithCache.mockClear();
+            const result = await callRouted('grok-4.5', model, effort);
+            expect(result.error).toContain(
+              `xAI model ${model} does not support reasoning_effort ${JSON.stringify(effort)}`,
+            );
+            expect(mockFetchWithCache).not.toHaveBeenCalled();
+          }
+        },
+      );
+
+      it.each([
+        'grok-4',
+        'grok-4-1-fast-reasoning',
+        'grok-4.20-reasoning',
+        'grok-code-fast-1',
+        'grok-3',
+        'grok-2-1212',
+        'unrecognized-model',
+      ])('never sends reasoning_effort to unsupported %s', async (model) => {
+        for (const effort of [undefined, null, false, 0, '', ' ', 'none', 'low', 'high', 'xhigh']) {
+          mockFetchWithCache.mockClear();
+          const result = await callRouted('grok-4.5', model, effort);
+          expect(result.error).toBeUndefined();
+          const body = sentBody();
+          expect(body.model).toBe(model);
+          expect(body).not.toHaveProperty('reasoning_effort');
+        }
+      });
+    });
+
     it.each(['grok-4.3', 'grok-4.3-latest', 'grok-latest'])(
       'validates reasoning efforts routed to %s before HTTP',
       async (targetModel) => {
