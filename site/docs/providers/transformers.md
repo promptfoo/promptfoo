@@ -5,7 +5,7 @@ description: Run local LLM inference with Transformers.js for embeddings and tex
 
 # Transformers.js
 
-The Transformers.js provider enables fully local inference using [Transformers.js v4](https://huggingface.co/docs/transformers.js), running ONNX-optimized models directly in Node.js without external APIs or GPU setup. v4 features a new WebGPU backend, broader model support (8B+ parameter models), and improved performance.
+The Transformers.js provider runs ONNX models locally in Node.js using [Transformers.js v4](https://huggingface.co/docs/transformers.js). It supports CPU inference and a WebGPU backend; no external inference API is required.
 
 ## Installation
 

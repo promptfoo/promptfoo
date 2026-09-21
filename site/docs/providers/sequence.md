@@ -1,17 +1,15 @@
 ---
 sidebar_label: Sequence
-description: 'Chain multiple AI providers sequentially to create sophisticated evaluation workflows with data transformation and routing'
+description: 'Send several independent prompts to the provider under test, combine the responses, and run assertions on the combined output.'
 ---
 
 # Sequence Provider
 
-The Sequence Provider allows you to send a series of prompts to another provider in sequence, collecting and combining all responses. This is useful for multi-step interactions, conversation flows, or breaking down complex prompts into smaller pieces.
+The Sequence Provider sends several prompts to the provider under test and combines the responses. Each prompt is sent independently; later prompts do not receive earlier responses or conversation history.
 
 ## Configuration
 
-The Sequence Provider wraps whichever provider is under test — it replays your inputs against
-that provider rather than calling a model itself. Set it as a **test-level** provider (on
-`tests[].provider` or `defaultTest.provider`), not in the top-level `providers:` array:
+Set `sequence` on `tests[].provider` or `defaultTest.provider`. Keep the model you want to test in the top-level `providers` array:
 
 ```yaml
 defaultTest:
@@ -20,17 +18,10 @@ defaultTest:
     config:
       inputs:
         - 'First question: {{prompt}}'
-        - 'Follow up: Can you elaborate on that?'
-        - 'Finally: Can you summarize your thoughts?'
+        - 'Give an example of {{prompt}}.'
+        - 'Summarize {{prompt}} in one sentence.'
       separator: "\n---\n" # Optional, defaults to "\n---\n"
 ```
-
-:::caution
-Listing `sequence` in the top-level `providers:` array does not work. The provider replays its
-inputs against `originalProvider`, which for a top-level entry is the sequence provider itself —
-the eval fails with `RangeError: Maximum call stack size exceeded`. Put it on `tests[].provider`
-or `defaultTest.provider` so the provider under test is the one being replayed against.
-:::
 
 ## How It Works
 
@@ -38,13 +29,13 @@ The Sequence Provider:
 
 1. Takes each input string from the `inputs` array
 2. Renders it using Nunjucks templating (with access to the original prompt and test variables)
-3. Sends it to the provider under test (`originalProvider`)
+3. Sends it to the provider under test
 4. Collects all responses
 5. Joins them together using the specified separator
 
 ## Usage Example
 
-Here's a complete example showing how to use the Sequence Provider to create a multi-turn conversation:
+This example sends three related prompts and runs assertions on their combined output:
 
 ```yaml
 providers:
@@ -72,9 +63,6 @@ tests:
       - type: contains
         value: pros and cons
 ```
-
-Each of the three inputs is sent to `openai:chat:gpt-5.6-luna`, and the three responses are
-joined with the separator into a single output that the assertions run against.
 
 ## Variables and Templating
 

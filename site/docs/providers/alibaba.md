@@ -1,13 +1,13 @@
 ---
 title: Alibaba Cloud (Qwen) Provider
 sidebar_label: Alibaba Cloud (Qwen)
-description: Deploy Alibaba Cloud's Qwen models including Qwen3, QwQ reasoning, and specialized coding/math/vision models for enterprise applications
+description: Configure Alibaba Cloud's DashScope API for Qwen chat, reasoning, vision, and embedding models in Promptfoo.
 keywords: [alibaba, qwen, qwen3, dashscope, deepseek, qwq, reasoning, vision, multimodal, llm]
 ---
 
 # Alibaba Cloud (Qwen)
 
-[Alibaba Cloud's DashScope API](https://www.alibabacloud.com/help/en/model-studio/getting-started/models) provides OpenAI-compatible access to Qwen language models. Compatible with all [OpenAI provider](/docs/providers/openai/) options in promptfoo.
+[Alibaba Cloud's DashScope API](https://www.alibabacloud.com/help/en/model-studio/getting-started/models) provides OpenAI-compatible access to Qwen language models. Use [OpenAI provider options](/docs/providers/openai/) supported by your chosen model.
 
 ## Setup
 
@@ -19,7 +19,7 @@ export DASHSCOPE_API_KEY=your_api_key_here
 
 ## Configuration
 
-The provider supports all [OpenAI provider](/docs/providers/openai) configuration options. Example usage:
+The provider uses [OpenAI provider options](/docs/providers/openai); support varies by model. Example:
 
 ```yaml title="promptfooconfig.yaml"
 # yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
@@ -44,7 +44,7 @@ The built-in Alibaba provider implements OpenAI-compatible Chat Completions and 
 
 ### Qwen 3 Flagship
 
-- `qwen3-max` - Next-generation flagship with reasoning and tool integration
+- `qwen3-max` - Supports reasoning and tool calling
 - `qwen3-max-preview` - Preview version with thinking mode support
 - `qwen3-max-2025-09-23` - September 2025 snapshot
 - `qwen-max` - 32K context (30,720 in, 8,192 out)
@@ -53,12 +53,12 @@ The built-in Alibaba provider implements OpenAI-compatible Chat Completions and 
 - `qwen-plus` / `qwen-plus-latest` - 128K-1M context (thinking & non-thinking modes)
 - `qwen-plus-2025-09-11`, `qwen-plus-2025-07-28`, `qwen-plus-2025-07-14`, `qwen-plus-2025-04-28`, `qwen-plus-2025-01-25` - Dated snapshots
 - `qwen-flash` / `qwen-flash-2025-07-28` - Latency-optimized general model
-- `qwen-turbo` / `qwen-turbo-latest` / `qwen-turbo-2025-04-28` / `qwen-turbo-2024-11-01` - Fast, cost-effective (being replaced by qwen-flash)
-- `qwen-long-latest` / `qwen-long-2025-01-25` - **10M context** for long-text analysis, summarization, and extraction
+- `qwen-turbo` / `qwen-turbo-latest` / `qwen-turbo-2025-04-28` / `qwen-turbo-2024-11-01` - Earlier low-latency model; see `qwen-flash`
+- `qwen-long-latest` / `qwen-long-2025-01-25` - 10M context for long-text analysis, summarization, and extraction
 
 ### Qwen 3 Omni & Realtime
 
-- `qwen3-omni-flash` / `qwen3-omni-flash-2025-09-15` - Multimodal flagship with speech + vision support (thinking & non-thinking modes)
+- `qwen3-omni-flash` / `qwen3-omni-flash-2025-09-15` - Supports speech and vision in thinking and non-thinking modes
 - `qwen3-omni-flash-realtime` / `qwen3-omni-flash-realtime-2025-09-15` - Streaming realtime with audio stream input and VAD
 - `qwen3-omni-30b-a3b-captioner` - Dedicated audio captioning model (speech, ambient sounds, music)
 - `qwen2.5-omni-7b` - Qwen2.5-based multimodal model with text, image, speech, and video inputs
@@ -72,7 +72,7 @@ The built-in Alibaba provider implements OpenAI-compatible Chat Completions and 
 - `qvq-max` / `qvq-max-latest` / `qvq-max-2025-03-25` - Visual reasoning models (commercial)
 - `qvq-72b-preview` - Experimental visual reasoning research model
 - **DeepSeek models** (hosted by Alibaba Cloud):
-  - `deepseek-v3.2-exp` / `deepseek-v3.1` / `deepseek-v3` - Latest DeepSeek models (671-685B)
+  - `deepseek-v3.2-exp` / `deepseek-v3.1` / `deepseek-v3` - DeepSeek V3 models
   - `deepseek-r1` / `deepseek-r1-0528` - DeepSeek reasoning models
   - `deepseek-r1-distill-qwen-{1.5b,7b,14b,32b}` - Distilled on Qwen2.5
   - `deepseek-r1-distill-llama-{8b,70b}` - Distilled on Llama
@@ -157,8 +157,7 @@ Latest open-source Qwen3 models with thinking mode support:
 
 ### Embeddings
 
-Embedding models require the explicit `alibaba:embedding:<model>` form. `alibaba:<model>` routes to
-the chat provider and posts to `/chat/completions`, which fails for an embedding model.
+Use `alibaba:embedding:<model>` for embeddings. The `alibaba:<model>` shorthand sends chat requests.
 
 - `text-embedding-v3` - 1,024d vectors, 8,192 token limit, 50+ languages
 - `text-embedding-v4` - Latest Qwen3-Embedding with flexible dimensions (64-2048d), 100+ languages
@@ -173,15 +172,13 @@ defaultTest:
 
 ### Image Generation
 
-- `qwen-image-plus` - Text-to-image with complex text rendering (Chinese/English)
+The `alibaba` provider does not call image-generation endpoints. To use models such as `qwen-image-plus`, configure the [HTTP provider](/docs/providers/http/) for [Alibaba's image API](https://www.alibabacloud.com/help/en/model-studio/qwen-image-api).
 
-For the latest availability, see the [official DashScope model catalog](https://www.alibabacloud.com/help/en/model-studio/getting-started/models), which is updated frequently.
+See the [DashScope model catalog](https://www.alibabacloud.com/help/en/model-studio/getting-started/models) for availability.
 
 ## Additional Configuration
 
-DashScope-only request fields go under `config.passthrough`. Unrecognized top-level keys are dropped
-before the request is sent. For example, `vl_high_resolution_images` (bool) raises the image token
-limit from 1,280 to 16,384 on `qwen-vl-max`:
+Put DashScope-specific request fields under `config.passthrough`. For example, `vl_high_resolution_images` enables higher-resolution image input on `qwen-vl-max`:
 
 ```yaml
 providers:

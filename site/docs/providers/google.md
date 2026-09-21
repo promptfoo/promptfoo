@@ -5,7 +5,7 @@ description: Configure Google's Gemini models with support for text, image, audi
 
 # Google AI / Gemini
 
-The `google` provider enables integration with Google AI Studio and the Gemini API. It provides access to Google's Gemini and hosted Gemma models with support for text, image, audio, video, and PDF inputs.
+The `google` provider calls Gemini and hosted Gemma models through Google AI Studio. Depending on the model, inputs can include text, images, audio, video, and PDFs.
 
 If you are using Vertex AI instead of Google AI Studio, see the [`vertex` provider](/docs/providers/vertex).
 
@@ -265,7 +265,9 @@ Example migration:
 # Before (Google AI Studio)
 providers:
   - google:gemini-2.5-pro
+```
 
+```yaml
 # After (Vertex AI)
 providers:
   - id: vertex:gemini-2.5-pro
@@ -778,14 +780,12 @@ Configure system-level instructions for the model:
 providers:
   - id: google:gemini-2.5-pro
     config:
-      # Direct text
       systemInstruction: 'You are a helpful assistant'
-
-      # Or load from file
-      systemInstruction: file://system-instruction.txt
+      # To load from a file instead, use:
+      # systemInstruction: file://system-instruction.txt
 ```
 
-System instructions support Nunjucks templating and can be loaded from external files for better organization and reusability.
+System instructions support Nunjucks templates and can be loaded from a file.
 
 ### Role Mapping Configuration
 
