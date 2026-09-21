@@ -1,6 +1,7 @@
 ---
 title: The Grid
 sidebar_label: The Grid
+sidebar_position: 42
 description: "Evaluate The Grid's capability-tier instruments with promptfoo through the OpenAI-compatible provider, including token budgets, credentials, and cost caveats."
 ---
 

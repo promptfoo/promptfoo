@@ -29,20 +29,46 @@ providers:
       max_tokens: 1024
 
 tests:
+  # The point of this example is comparing capability tiers, so each case is a
+  # task where a weaker tier plausibly differs from a stronger one, with an
+  # assertion that stays deterministic. Trivia would grade the same on both and
+  # demonstrate nothing.
+
+  # Multi-step arithmetic with a distractor: the cheap failure is anchoring on
+  # a number in the prompt instead of carrying the subtraction through.
   - vars:
-      question: What is the capital of France?
+      question: >-
+        A warehouse holds 1,248 units. Monday ships 3 pallets of 96 units each,
+        Tuesday receives a return of 45 units, and Wednesday ships 2 pallets of
+        96. How many units remain? Reply with the number only.
     assert:
       - type: contains
-        value: Paris
+        value: '813'
 
+  # Instruction following under a constraint that is easy to state and easy to
+  # violate. Graded structurally rather than by a judge model.
   - vars:
-      question: Name the largest planet in the solar system.
+      question: >-
+        Summarise why HTTP 429 differs from HTTP 503, in exactly two sentences.
+        Do not use the words "rate" or "limit".
     assert:
-      - type: icontains
-        value: Jupiter
+      - type: javascript
+        value: |
+          const text = output.trim();
+          const sentences = text.split(/(?<=[.!?])\s+/).filter(Boolean);
+          const banned = /\b(rate|limit)/i.test(text);
+          return sentences.length === 2 && !banned;
 
+  # Structured output: the tiers differ most visibly on whether the shape holds
+  # without commentary wrapped around it.
   - vars:
-      question: What is 17 multiplied by 23?
+      question: >-
+        Extract the order id, the total in USD, and the status from this line as
+        JSON with keys id, total_usd, status, and nothing else:
+        "Order A-4471 settled for $128.40 on 2026-03-02."
     assert:
-      - type: contains
-        value: '391'
+      - type: is-json
+      - type: javascript
+        value: |
+          const parsed = JSON.parse(output);
+          return parsed.id === 'A-4471' && Number(parsed.total_usd) === 128.4;
