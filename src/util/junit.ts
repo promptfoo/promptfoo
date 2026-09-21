@@ -54,12 +54,16 @@ function normalizeInlineText(
   value: string | undefined,
   fallback: string,
   maxLength = MAX_JUNIT_NAME_LENGTH,
+  sanitize = false,
 ): string {
   const normalized = value?.replace(/\s+/g, ' ').trim() || fallback;
   const bounded = truncateText(normalized, maxLength);
-  return bounded.search(INVALID_XML_CHARACTERS) === -1
+  return !sanitize && bounded.search(INVALID_XML_CHARACTERS) === -1
     ? bounded
-    : truncateText(normalized.replace(INVALID_XML_CHARACTERS, '').trim() || fallback, maxLength);
+    : truncateText(
+        normalized.replace(INVALID_XML_CHARACTERS, '').replace(/\s+/g, ' ').trim() || fallback,
+        maxLength,
+      );
 }
 
 function formatDurationSeconds(durationMs: number | undefined): string {
@@ -203,6 +207,7 @@ async function buildJunitSuites(evalRecord: Eval): Promise<JunitSuite[]> {
         rawName,
         'unknown provider',
         MAX_JUNIT_NAME_LENGTH - suffix.length,
+        Boolean(suffix),
       );
       const ordinalKey = suffix ? providerKey : JSON.stringify([providerName]);
       let promptOrdinals = promptOrdinalsByProvider.get(ordinalKey);

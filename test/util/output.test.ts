@@ -1110,21 +1110,22 @@ describe('writeOutput', () => {
     });
   });
 
-  it('exports well-formed JUnit XML when names contain forbidden characters', async () => {
-    const invalid = '\u0000\u0001\u0008\u000e\u001b\u001f\ud800\ufffe\udfff\uffff';
+  async function junitSuiteWithNames(label: string, description = label) {
     const eval_ = new Eval({});
-    await eval_.addResult(
-      createEvaluateResult({
-        provider: { id: 'echo', label: `target${invalid} & <model>` },
-        testCase: { description: `case${invalid} \u{1f680} \u4e2d\u6587` },
-      }),
-    );
-
+    const provider = { id: 'echo', label };
+    await eval_.addResult(createEvaluateResult({ provider, testCase: { description } }));
     const xml = await createJunitXml(eval_);
     expect(() => new SaxesParser().write(xml).close()).not.toThrow();
-    const { testsuite: suite } = new XMLParser({ ignoreAttributes: false }).parse(xml).testsuites;
+    return new XMLParser({ ignoreAttributes: false }).parse(xml).testsuites.testsuite;
+  }
+
+  it('exports well-formed JUnit XML when names contain forbidden characters', async () => {
+    const invalid = '\u0000\u0001\u0008\u000e\u001b\u001f\ud800\ufffe\udfff\uffff';
+    const suite = await junitSuiteWithNames(
+      `target${invalid} & <model>`,
+      `case${invalid} \u{1f680} \u4e2d\u6587`,
+    );
     expect(suite['@_name']).toMatch(/^\[target & <model>\] prompt 1 \([a-f0-9]{16}\)$/);
-    expect(suite.testcase['@_classname']).toBe(suite['@_name']);
     expect(suite.testcase['@_name']).toBe('test 1: case \u{1f680} \u4e2d\u6587');
   });
 
@@ -1202,17 +1203,21 @@ describe('writeOutput', () => {
     ['x'.repeat(512) + '\u0001', 'x'.repeat(509) + '...'],
     ['y'.repeat(509) + 'ABC' + '\u0000'.repeat(20), 'y'.repeat(509) + '...'],
   ])('preserves already-valid JUnit identities for %j', async (raw, expected) => {
-    const eval_ = new Eval({});
-    await eval_.addResult(
-      createEvaluateResult({
-        provider: { id: 'echo', label: raw },
-        testCase: { description: raw },
-      }),
-    );
-    const xml = await createJunitXml(eval_);
-    expect(() => new SaxesParser().write(xml).close()).not.toThrow();
-    const suite = new XMLParser({ ignoreAttributes: false }).parse(xml).testsuites.testsuite;
+    const suite = await junitSuiteWithNames(raw);
     expect(suite['@_name']).toBe('[' + expected + '] prompt 1');
+    expect(suite.testcase['@_name']).toBe('test 1: ' + expected);
+  });
+
+  it.each([
+    ['case \u0000 name', 'case name'],
+    [' \u0001 case \u0000  name \u001f ', 'case name'],
+    ['x'.repeat(490) + '\u0000-v2', 'x'.repeat(490) + '-v2'],
+    ['x'.repeat(490) + '\u0000'.repeat(14) + 'XY', 'x'.repeat(490) + 'XY'],
+  ])('keeps visible JUnit text after removing controls from %j', async (raw, expected) => {
+    const suite = await junitSuiteWithNames(raw);
+    const nameWithoutHash = suite['@_name'].replace(/ \([a-f0-9]{16}\)$/, '');
+    expect(nameWithoutHash).toBe('[' + expected + '] prompt 1');
+    expect(suite.testcase['@_classname']).toBe(suite['@_name']);
     expect(suite.testcase['@_name']).toBe('test 1: ' + expected);
   });
 
