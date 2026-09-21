@@ -711,6 +711,29 @@ describe('OpenAiAgentsApiProvider', () => {
     ).toEqual(new Set([null]));
   });
 
+  it.each([false, true])(
+    'does not authenticate with fragment-only endpoint credentials: %s',
+    async (ambient) => {
+      mockProcessEnv({ OPENAI_API_KEY: ambient ? 'offline-ambient-key' : undefined });
+      const result = await new OpenAiAgentsApiProvider('', {
+        config: { apiBaseUrl: 'https://gateway.example/v1#access_token=offline-fragment' },
+      }).callApi('hi');
+
+      if (!ambient) {
+        expect(result.error).toContain('API key');
+        expect(fetchWithRetries).not.toHaveBeenCalled();
+        return;
+      }
+      expect(result.output).toBe('42');
+      expect(result.metadata?.sessionDeleted).toBe(true);
+      for (const [, request] of vi.mocked(fetchWithRetries).mock.calls) {
+        expect(new Headers(request!.headers).get('Authorization')).toBe(
+          'Bearer offline-ambient-key',
+        );
+      }
+    },
+  );
+
   describe('prompt setting groups', () => {
     const promptContext = (config: Record<string, unknown>) => ({
       vars: {},
@@ -773,6 +796,535 @@ describe('OpenAiAgentsApiProvider', () => {
         expect(requestAuthorizations()).toEqual(new Set([authorization]));
       },
     );
+
+    describe.each([{ apiBaseUrl: 'https://prompt.example/v1' }, { apiHost: 'prompt.example' }])(
+      'endpoint header isolation with %j',
+      (endpointConfig) => {
+        const fakeJwt = 'eyJhbGciOiJub25lIn0.eyJzdWIiOiJvZmZsaW5lIn0.offline';
+        const inheritedHeaders = {
+          'X-Goog-Iap-Jwt-Assertion': fakeJwt,
+          'X-Custom-Gateway': 'opaque-offline-credential',
+          'X-Tenant-Id': 'tenant-a',
+          'Content-Type': 'application/json',
+          'User-Agent': 'promptfoo-test',
+        };
+
+        describe.each([undefined, { Authorization: 'Bearer offline-replacement-key' }])(
+          'discarded templates with replacement headers %j',
+          (headers) => {
+            it.each([
+              'Bearer {{ auth.token.trim() }}',
+              'Bearer {{ auth.token | trim }}',
+              'Bearer {{ (auth.token | load).access_token }}',
+            ])('does not require discarded credential inputs: %s', async (authorization) => {
+              const result = await provider({
+                apiBaseUrl: 'https://gateway.example/v1',
+                apiKey: 'offline-replacement-key',
+                headers: { Authorization: authorization },
+              }).callApi('hi', {
+                ...promptContext({ ...endpointConfig, headers }),
+                vars: { auth: {} },
+              });
+
+              expect(result.output).toBe('42');
+              expect(result.metadata?.sessionDeleted).toBe(true);
+              expect(requestAuthorizations()).toEqual(new Set(['Bearer offline-replacement-key']));
+            });
+          },
+        );
+
+        describe.each([undefined, {}])('blank inherited headers replaced by %j', (headers) => {
+          it.each(['', '   ', '{{ optional }}'])(
+            'retains ambient authentication when the old header is absent: %j',
+            async (value) => {
+              mockProcessEnv({ OPENAI_API_KEY: 'offline-ambient-key' });
+              const result = await new OpenAiAgentsApiProvider('', {
+                config: {
+                  apiBaseUrl: 'https://gateway.example/v1',
+                  headers: { 'X-Gateway-Auth': value },
+                },
+              }).callApi('hi', {
+                ...promptContext({ ...endpointConfig, headers }),
+                vars: { optional: '' },
+              });
+
+              expect(result.output).toBe('42');
+              expect(result.metadata?.sessionDeleted).toBe(true);
+              expect(requestAuthorizations()).toEqual(new Set(['Bearer offline-ambient-key']));
+            },
+          );
+        });
+
+        it.each([123, false])('normalizes inherited scalar header values: %j', async (value) => {
+          const result = await provider({
+            apiBaseUrl: 'https://gateway.example/v1',
+            headers: {
+              'X-Tenant-Id': value,
+              'X-Goog-Iap-Jwt-Assertion': value,
+            } as unknown as Record<string, string>,
+          }).callApi('hi', promptContext(endpointConfig));
+
+          expect(result.output).toBe('42');
+          expect(result.metadata?.sessionDeleted).toBe(true);
+          for (const [, request] of vi.mocked(fetchWithRetries).mock.calls) {
+            const headers = new Headers(request!.headers);
+            expect(headers.get('X-Tenant-Id')).toBe(String(value));
+            expect(headers.get('X-Goog-Iap-Jwt-Assertion')).toBeNull();
+          }
+        });
+
+        it('redacts filtered rendered credentials echoed in a validation error', async () => {
+          const credential = 'offline-opaque-gateway-credential';
+          vi.mocked(fetchWithRetries).mockResolvedValueOnce(
+            apiError(400, `Invalid instructions: ${credential}`),
+          );
+          const result = await provider({
+            apiBaseUrl: 'https://gateway.example/v1',
+            headers: { 'X-Custom-Gateway': '{{ credential }}' },
+            agent: { model: 'gpt-6-astra', instructions: '{{ credential }}' },
+          }).callApi('hi', {
+            ...promptContext(endpointConfig),
+            vars: { credential },
+          });
+
+          expect(result.error).toContain('HTTP 400');
+          expect(result.error).toContain('Invalid instructions: [REDACTED]');
+          expect(result.error).not.toContain(credential);
+          const request = vi.mocked(fetchWithRetries).mock.calls[0][1]!;
+          expect(new Headers(request.headers).get('X-Custom-Gateway')).toBeNull();
+          expect(JSON.parse(request.body as string).agent.instructions).toBe(credential);
+        });
+
+        describe.each([
+          { name: 'retained key', apiKey: 'test-key', headers: {} },
+          {
+            name: 'replacement Authorization',
+            apiKey: undefined,
+            headers: { Authorization: 'Bearer offline-replacement-key' },
+          },
+          {
+            name: 'replacement gateway header',
+            apiKey: undefined,
+            headers: { 'X-Goog-Iap-Jwt-Assertion': 'offline-replacement-key' },
+          },
+          {
+            name: 'replacement key variable',
+            apiKey: undefined,
+            apiKeyEnvar: 'REPLACEMENT_KEY',
+            headers: {},
+          },
+        ])('discarded credential redaction with $name', ({ apiKey, apiKeyEnvar, headers }) => {
+          it.each(['creation', 'turn'])('redacts %s and cleanup errors', async (phase) => {
+            const credential = 'offline-discarded-opaque-credential';
+            mockProcessEnv({ REPLACEMENT_KEY: 'offline-replacement-key' });
+            mockApi((pathname, method) => {
+              if (method === 'DELETE') {
+                return apiError(400, `Cleanup failed: ${credential}`);
+              }
+              if (phase === 'creation' && method === 'POST') {
+                return apiError(400, `Invalid instructions: ${credential}`);
+              }
+              if (pathname.endsWith('/turns')) {
+                return json(
+                  page([
+                    {
+                      ...turn,
+                      status: 'failed',
+                      error: { message: `Invalid instructions: ${credential}` },
+                    },
+                  ]),
+                );
+              }
+              return undefined;
+            });
+            const result = await provider({
+              apiBaseUrl: 'https://gateway.example/v1',
+              apiKey,
+              headers: { Authorization: 'Bearer {{ credential }}' },
+              agent: { model: 'gpt-6-astra', instructions: '{{ credential }}' },
+            }).callApi('hi', {
+              ...promptContext({ ...endpointConfig, apiKeyEnvar, headers, apiKeyRequired: false }),
+              vars: { credential },
+            });
+
+            expect(result.error).toContain('Invalid instructions: [REDACTED]');
+            expect(result.error).not.toContain(credential);
+            if (phase === 'turn') {
+              expect(result.metadata?.cleanupError).toContain('Cleanup failed: [REDACTED]');
+              expect(result.metadata?.cleanupError).not.toContain(credential);
+            }
+            for (const [url, request] of vi.mocked(fetchWithRetries).mock.calls) {
+              expect(new URL(String(url)).hostname).toBe('prompt.example');
+              const requestHeaders = new Headers(request!.headers);
+              expect(requestHeaders.get('Authorization') ?? '').not.toContain(credential);
+              expect(requestHeaders.get('Authorization')).toBe(
+                'X-Goog-Iap-Jwt-Assertion' in headers
+                  ? null
+                  : `Bearer ${apiKey ?? 'offline-replacement-key'}`,
+              );
+            }
+          });
+        });
+
+        describe.each([
+          'https://gateway.example/v1?api-key=offline-url-credential',
+          'https://offline-user:offline-url-credential@gateway.example/v1',
+          'https://gateway.example/v1?api-key=offline%2Durl%2Dcredential',
+          'https://gateway.example/v1#access_token=offline-url-credential',
+          'https://gateway.example/v1#access_token=offline%2Durl%2Dcredential',
+        ])('discarded rendered URL header %s', (gatewayUrl) => {
+          it.each(['creation', 'turn'])(
+            'redacts credential components from %s and cleanup errors',
+            async (phase) => {
+              const credential = 'offline-url-credential';
+              mockApi((pathname, method) => {
+                if (method === 'DELETE') {
+                  return apiError(400, `Cleanup failed: ${credential}`);
+                }
+                if (phase === 'creation' && method === 'POST') {
+                  return apiError(400, `Invalid instructions: ${credential}`);
+                }
+                if (pathname.endsWith('/turns')) {
+                  return json(
+                    page([
+                      {
+                        ...turn,
+                        status: 'failed',
+                        error: { message: `Invalid instructions: ${credential}` },
+                      },
+                    ]),
+                  );
+                }
+                return undefined;
+              });
+              const result = await provider({
+                apiBaseUrl: 'https://gateway.example/v1',
+                headers: { 'X-Gateway-Url': '{{ gatewayUrl }}' },
+                agent: { model: 'gpt-6-astra', instructions: '{{ credential }}' },
+              }).callApi('hi', {
+                ...promptContext(endpointConfig),
+                vars: { gatewayUrl, credential },
+              });
+
+              expect(result.error).toContain('Invalid instructions: [REDACTED]');
+              expect(result.error).not.toContain(credential);
+              if (phase === 'turn') {
+                expect(result.metadata?.cleanupError).toContain('Cleanup failed: [REDACTED]');
+                expect(result.metadata?.cleanupError).not.toContain(credential);
+              }
+              for (const [url, request] of vi.mocked(fetchWithRetries).mock.calls) {
+                expect(new URL(String(url)).hostname).toBe('prompt.example');
+                expect(new Headers(request!.headers).get('X-Gateway-Url')).toBeNull();
+              }
+            },
+          );
+        });
+
+        it('still validates templates in retained non-credential headers', async () => {
+          const result = await provider({
+            apiBaseUrl: 'https://gateway.example/v1',
+            headers: { 'Content-Type': '{{ auth.token | trim }}' },
+          }).callApi('hi', { ...promptContext(endpointConfig), vars: { auth: {} } });
+
+          expect(result.error).toContain('TypeError');
+          expect(fetchWithRetries).not.toHaveBeenCalled();
+        });
+
+        it('does not replace an unrenderable discarded credential with the ambient key', async () => {
+          mockProcessEnv({ OPENAI_API_KEY: 'offline-ambient-key' });
+          const result = await new OpenAiAgentsApiProvider('', {
+            config: {
+              apiBaseUrl: 'https://gateway.example/v1',
+              apiKeyRequired: false,
+              headers: { Authorization: 'Bearer {{ auth.token | trim }}' },
+            },
+          }).callApi('hi', { ...promptContext(endpointConfig), vars: { auth: {} } });
+
+          expect(result.output).toBe('42');
+          expect(result.metadata?.sessionDeleted).toBe(true);
+          expect(requestAuthorizations()).toEqual(new Set([null]));
+        });
+
+        it.each([false, true])(
+          'filters credential values after rendering: %s',
+          async (templated) => {
+            const agentProvider = provider({
+              apiBaseUrl: 'https://gateway.example/v1',
+              headers: {
+                ...inheritedHeaders,
+                'X-Organization-Id': templated ? '{{credential}}' : 'Bearer offline-gateway-key',
+              },
+            });
+            const result = await agentProvider.callApi('hi', {
+              ...promptContext(endpointConfig),
+              vars: { credential: 'Bearer offline-gateway-key' },
+            });
+
+            expect(result.output).toBe('42');
+            expect(result.metadata?.sessionDeleted).toBe(true);
+            expect(calls().length).toBeGreaterThan(1);
+            for (const [url, request] of vi.mocked(fetchWithRetries).mock.calls) {
+              expect(new URL(String(url)).hostname).toBe('prompt.example');
+              const headers = new Headers(request!.headers);
+              expect(headers.get('X-Goog-Iap-Jwt-Assertion')).toBeNull();
+              expect(headers.get('X-Custom-Gateway')).toBeNull();
+              expect(headers.get('X-Organization-Id')).toBeNull();
+              expect(headers.get('X-Tenant-Id')).toBe('tenant-a');
+              expect(headers.get('Content-Type')).toBe('application/json');
+              expect(headers.get('User-Agent')).toBe('promptfoo-test');
+            }
+
+            vi.mocked(fetchWithRetries).mockClear();
+            expect((await agentProvider.callApi('hi')).output).toBe('42');
+            for (const [url, request] of vi.mocked(fetchWithRetries).mock.calls) {
+              expect(new URL(String(url)).hostname).toBe('gateway.example');
+              expect(new Headers(request!.headers).get('X-Goog-Iap-Jwt-Assertion')).toBe(fakeJwt);
+            }
+          },
+        );
+
+        describe.each([
+          'https://gateway.example/v1?access_token=offline-url-credential',
+          ' https://gateway.example/v1?access_token=offline-url-credential ',
+          'https://offline-user:offline-url-credential@gateway.example/v1',
+          'https://gateway.example/v1#access_token=offline-url-credential',
+        ])('credential URL in an allowlisted header %s', (gatewayUrl) => {
+          it.each([false, true])(
+            'filters inherited values after rendering: %s',
+            async (templated) => {
+              mockProcessEnv({ OPENAI_API_KEY: 'offline-ambient-key' });
+              const agentProvider = new OpenAiAgentsApiProvider('', {
+                config: {
+                  apiBaseUrl: 'https://gateway.example/v1',
+                  apiKeyRequired: false,
+                  headers: {
+                    'X-Tenant-Id': templated ? '{{ gatewayUrl }}' : gatewayUrl,
+                    'X-Organization-Id': 'https://gateway.example/organizations/tenant-a',
+                    Accept: 'application/json',
+                  },
+                },
+              });
+              const result = await agentProvider.callApi('hi', {
+                ...promptContext(endpointConfig),
+                vars: { gatewayUrl },
+              });
+
+              expect(result.output).toBe('42');
+              expect(result.metadata?.sessionDeleted).toBe(true);
+              expect(calls().length).toBeGreaterThan(1);
+              for (const [url, request] of vi.mocked(fetchWithRetries).mock.calls) {
+                expect(new URL(String(url)).hostname).toBe('prompt.example');
+                const headers = new Headers(request!.headers);
+                expect(headers.get('X-Tenant-Id')).toBeNull();
+                expect(headers.get('Authorization')).toBeNull();
+                expect(headers.get('X-Organization-Id')).toBe(
+                  'https://gateway.example/organizations/tenant-a',
+                );
+                expect(headers.get('Accept')).toBe('application/json');
+              }
+            },
+          );
+
+          it('preserves explicitly supplied replacement values', async () => {
+            const result = await provider({
+              apiBaseUrl: 'https://gateway.example/v1',
+              headers: { 'X-Tenant-Id': 'https://gateway.example/?token=offline-old-key' },
+            }).callApi(
+              'hi',
+              promptContext({ ...endpointConfig, headers: { 'X-Tenant-Id': gatewayUrl } }),
+            );
+
+            expect(result.output).toBe('42');
+            expect(result.metadata?.sessionDeleted).toBe(true);
+            for (const [, request] of vi.mocked(fetchWithRetries).mock.calls) {
+              expect(new Headers(request!.headers).get('X-Tenant-Id')).toBe(gatewayUrl.trim());
+            }
+          });
+        });
+
+        it.each([{}, { 'X-Goog-Iap-Jwt-Assertion': 'explicit-replacement-credential' }])(
+          'respects explicitly supplied replacement headers %j',
+          async (headers) => {
+            const result = await provider({
+              apiBaseUrl: 'https://gateway.example/v1',
+              headers: inheritedHeaders,
+            }).callApi('hi', promptContext({ ...endpointConfig, headers }));
+
+            expect(result.output).toBe('42');
+            for (const [, request] of vi.mocked(fetchWithRetries).mock.calls) {
+              const requestHeaders = new Headers(request!.headers);
+              expect(requestHeaders.get('X-Goog-Iap-Jwt-Assertion')).toBe(
+                headers['X-Goog-Iap-Jwt-Assertion'] ?? null,
+              );
+              expect(requestHeaders.get('X-Custom-Gateway')).toBeNull();
+              expect(requestHeaders.get('X-Tenant-Id')).toBeNull();
+            }
+          },
+        );
+
+        it.each([false, true])(
+          'isolates headers without an explicit API key: %s',
+          async (ambient) => {
+            if (ambient) {
+              mockProcessEnv({ OPENAI_API_KEY: 'offline-ambient-key' });
+            }
+            const result = await new OpenAiAgentsApiProvider('', {
+              config: {
+                apiBaseUrl: 'https://gateway.example/v1',
+                apiKeyRequired: false,
+                headers: { 'X-Goog-Iap-Jwt-Assertion': fakeJwt },
+              },
+            }).callApi('hi', promptContext(endpointConfig));
+
+            expect(result.output).toBe('42');
+            for (const [, request] of vi.mocked(fetchWithRetries).mock.calls) {
+              expect(new Headers(request!.headers).get('X-Goog-Iap-Jwt-Assertion')).toBeNull();
+              expect(new Headers(request!.headers).get('Authorization')).toBeNull();
+            }
+          },
+        );
+
+        it.each([{}, { 'Content-Type': 'application/json' }, { Accept: 'application/json' }])(
+          'does not substitute ambient credentials for explicit non-credential headers %j',
+          async (headers) => {
+            mockProcessEnv({ OPENAI_API_KEY: 'offline-ambient-key' });
+            const result = await new OpenAiAgentsApiProvider('', {
+              config: {
+                apiBaseUrl: 'https://gateway.example/v1',
+                apiKeyRequired: false,
+                headers: { 'X-Goog-Iap-Jwt-Assertion': fakeJwt },
+              },
+            }).callApi('hi', promptContext({ ...endpointConfig, headers }));
+
+            expect(result.output).toBe('42');
+            expect(result.metadata?.sessionDeleted).toBe(true);
+            for (const [, request] of vi.mocked(fetchWithRetries).mock.calls) {
+              expect(new Headers(request!.headers).get('Authorization')).toBeNull();
+              expect(new Headers(request!.headers).get('X-Goog-Iap-Jwt-Assertion')).toBeNull();
+            }
+          },
+        );
+
+        it.each([undefined, {}, { Accept: 'application/json' }])(
+          'requires replacement credentials instead of falling back to an ambient key: %j',
+          async (headers) => {
+            mockProcessEnv({ OPENAI_API_KEY: 'offline-ambient-key' });
+            const result = await new OpenAiAgentsApiProvider('', {
+              config: {
+                apiBaseUrl: 'https://gateway.example/v1',
+                headers: { 'X-Goog-Iap-Jwt-Assertion': fakeJwt },
+              },
+            }).callApi('hi', promptContext({ ...endpointConfig, headers }));
+
+            expect(result.error).toContain('API key');
+            expect(fetchWithRetries).not.toHaveBeenCalled();
+          },
+        );
+
+        it.each([
+          { 'X-Goog-Iap-Jwt-Assertion': 'offline-replacement-credential' },
+          { 'api-key': 'offline-replacement-credential' },
+          { Authorization: 'Bearer offline-replacement-credential' },
+        ])('preserves explicitly supplied gateway credentials %j', async (headers) => {
+          mockProcessEnv({ OPENAI_API_KEY: 'offline-ambient-key' });
+          const result = await new OpenAiAgentsApiProvider('', {
+            config: {
+              apiBaseUrl: 'https://gateway.example/v1',
+              headers: { 'X-Goog-Iap-Jwt-Assertion': fakeJwt },
+            },
+          }).callApi('hi', promptContext({ ...endpointConfig, headers }));
+
+          expect(result.output).toBe('42');
+          for (const [, request] of vi.mocked(fetchWithRetries).mock.calls) {
+            const requestHeaders = new Headers(request!.headers);
+            for (const [name, value] of Object.entries(headers)) {
+              expect(requestHeaders.get(name)).toBe(value);
+            }
+            expect(requestHeaders.get('Authorization')).toBe(headers.Authorization ?? null);
+          }
+        });
+
+        it('preserves ambient authentication when only standard headers were inherited', async () => {
+          mockProcessEnv({ OPENAI_API_KEY: 'offline-ambient-key' });
+          const result = await new OpenAiAgentsApiProvider('', {
+            config: {
+              apiBaseUrl: 'https://gateway.example/v1',
+              headers: { Accept: 'application/json' },
+            },
+          }).callApi('hi', promptContext({ ...endpointConfig, headers: {} }));
+
+          expect(result.output).toBe('42');
+          expect(requestAuthorizations()).toEqual(new Set(['Bearer offline-ambient-key']));
+        });
+
+        it.each([{ apiKey: 'offline-replacement-key' }, { apiKeyEnvar: 'REPLACEMENT_KEY' }])(
+          'honors an explicitly selected replacement key %j',
+          async (credentialConfig) => {
+            mockProcessEnv({
+              OPENAI_API_KEY: 'offline-ambient-key',
+              REPLACEMENT_KEY: 'offline-replacement-key',
+            });
+            const result = await new OpenAiAgentsApiProvider('', {
+              config: {
+                apiBaseUrl: 'https://gateway.example/v1',
+                headers: { 'X-Goog-Iap-Jwt-Assertion': fakeJwt },
+              },
+            }).callApi(
+              'hi',
+              promptContext({ ...endpointConfig, ...credentialConfig, headers: {} }),
+            );
+
+            expect(result.output).toBe('42');
+            for (const [, request] of vi.mocked(fetchWithRetries).mock.calls) {
+              const headers = new Headers(request!.headers);
+              expect(headers.get('X-Goog-Iap-Jwt-Assertion')).toBeNull();
+              expect(headers.get('Authorization')).toBe('Bearer offline-replacement-key');
+            }
+          },
+        );
+
+        it('keeps inherited credentials out of failure and cleanup requests', async () => {
+          mockApi((pathname) =>
+            pathname.endsWith('/turns')
+              ? json(page([{ ...turn, status: 'failed', error: { message: 'stopped' } }]))
+              : undefined,
+          );
+          const result = await provider({
+            apiBaseUrl: 'https://gateway.example/v1',
+            headers: inheritedHeaders,
+          }).callApi('hi', promptContext(endpointConfig));
+
+          expect(result.error).toContain('turn failed: stopped');
+          expect(result.metadata?.sessionDeleted).toBe(true);
+          expect(calls().at(-1)?.method).toBe('DELETE');
+          for (const [, request] of vi.mocked(fetchWithRetries).mock.calls) {
+            expect(new Headers(request!.headers).get('X-Goog-Iap-Jwt-Assertion')).toBeNull();
+          }
+        });
+      },
+    );
+
+    it.each([
+      { apiBaseUrl: 'https://gateway.example/v1', expectedKey: null },
+      { apiHost: 'gateway.example', expectedKey: null },
+      { apiBaseUrl: 'https://api.openai.com/v1', expectedKey: 'Bearer offline-ambient-key' },
+      { apiHost: 'api.openai.com', expectedKey: 'Bearer offline-ambient-key' },
+    ])('preserves ambient-key routing for %j', async ({ expectedKey, ...endpointConfig }) => {
+      mockProcessEnv({ OPENAI_API_KEY: 'offline-ambient-key' });
+      const result = await new OpenAiAgentsApiProvider('', {
+        config: {
+          apiBaseUrl: 'https://gateway.example/v1',
+          apiKeyRequired: false,
+          headers: { 'X-Goog-Iap-Jwt-Assertion': 'fake-gateway-credential' },
+        },
+      }).callApi('hi', promptContext(endpointConfig));
+
+      expect(result.output).toBe('42');
+      for (const [, request] of vi.mocked(fetchWithRetries).mock.calls) {
+        expect(new Headers(request!.headers).get('Authorization')).toBe(expectedKey);
+        expect(new Headers(request!.headers).get('X-Goog-Iap-Jwt-Assertion')).toBeNull();
+      }
+    });
 
     it('redacts both provider and prompt credentials after group overrides', async () => {
       mockProcessEnv({ PROMPT_OPENAI_KEY: 'prompt-envar-key' });
@@ -1714,6 +2266,22 @@ describe('OpenAiAgentsApiProvider', () => {
     expect(result.cost).toBeUndefined();
   });
 
+  it('rejects non-finite session usage and falls back to the root turn', async () => {
+    mockApi((pathname, method) => {
+      if (method === 'POST' && pathname.endsWith('/sessions')) {
+        return new Response(
+          '{"id":"sess_test","status":"idle","agent":{"model":"gpt-6-astra"},"usage":{"input_tokens":1e999,"output_tokens":20,"total_tokens":120}}',
+        );
+      }
+      return undefined;
+    });
+
+    const result = await provider({ usageTimeoutMs: 0 }).callApi('hi');
+
+    expect(result.tokenUsage).toMatchObject({ prompt: 100, completion: 20, total: 120 });
+    expect(result.metadata).not.toHaveProperty('usageUnavailable');
+  });
+
   it.each([false, true])(
     'uses valid root usage when session usage is malformed (subagents=%s)',
     async (hasSubagents) => {
@@ -1917,7 +2485,7 @@ describe('OpenAiAgentsApiProvider', () => {
     it('drops inherited credential headers when a prompt changes endpoints', async () => {
       await provider({
         apiBaseUrl: 'https://gateway.example/v1',
-        headers: { 'X-Gateway-Auth': 'gateway-secret', 'X-Tenant': 'tenant-a' },
+        headers: { 'X-Gateway-Auth': 'gateway-secret', 'X-Tenant-Id': 'tenant-a' },
       }).callApi('hi', {
         vars: {},
         prompt: {
@@ -1928,7 +2496,7 @@ describe('OpenAiAgentsApiProvider', () => {
       });
       const headers = new Headers(vi.mocked(fetchWithRetries).mock.calls[0][1]?.headers);
       expect(headers.get('X-Gateway-Auth')).toBeNull();
-      expect(headers.get('X-Tenant')).toBe('tenant-a');
+      expect(headers.get('X-Tenant-Id')).toBe('tenant-a');
     });
 
     it('propagates eval cancellation while reading subagent turns', async () => {

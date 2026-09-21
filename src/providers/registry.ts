@@ -136,7 +136,10 @@ export function mergeProviderEnv(
       delete merged.OPENAI_API_KEY;
       delete merged.CODEX_API_KEY;
     }
-    Object.assign(merged, layer);
+    Object.assign(
+      merged,
+      Object.fromEntries(Object.entries(layer).filter(([, value]) => value !== undefined)),
+    );
   }
   return merged;
 }

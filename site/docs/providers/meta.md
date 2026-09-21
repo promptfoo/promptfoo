@@ -186,5 +186,5 @@ npx promptfoo@latest init --example provider-meta
 ## See Also
 
 - [OpenAI Provider](/docs/providers/openai/) — compatible configuration options
-- [Llama API Provider](/docs/providers/llamaApi.md) — Meta's hosted Llama models
+- [Llama API Provider](/docs/providers/llamaApi.md) — retired; migration guidance
 - [Meta Model API docs](https://dev.meta.ai/docs/overview) and [pricing](https://dev.meta.ai/docs/pricing-rate-limits)

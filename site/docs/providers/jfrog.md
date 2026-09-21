@@ -46,11 +46,15 @@ providers:
 
 ## Configuration Options
 
-The JFrog ML provider supports all the standard [OpenAI configuration options](/docs/providers/openai#configuring-parameters) plus these additional JFrog ML-specific options:
+The JFrog ML provider supports the standard [OpenAI configuration options](/docs/providers/openai#configuring-parameters) plus these additional JFrog ML-specific options.
 
-| Parameter | Description                                                                                                                                        |
-| --------- | -------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `baseUrl` | Optional. The full URL to your model endpoint. If not provided, it will be constructed using the model name: `https://models.qwak-prod.qwak.ai/v1` |
+`apiBaseUrl` and `apiKeyEnvar` are exceptions: the provider sets both itself (from `baseUrl` and
+the `QWAK_TOKEN` environment variable) and overrides anything you put in `config`. Use `baseUrl`
+to change the host.
+
+| Parameter | Description                                                                                                                                                                                                                   |
+| --------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `baseUrl` | Optional. Host prefix for the request. The model name is appended to it, so the final URL is `<baseUrl>/<model>`. Defaults to `https://models.qwak-prod.qwak.ai/v1`. Do not include the model name here, or it is sent twice. |
 
 Example with full configuration:
 

@@ -45,13 +45,14 @@ Text generation runs on CPU and is best for testing. For production, consider [O
 
 These options apply to both embedding and text generation providers:
 
-| Option           | Description                                                                                | Default        |
-| ---------------- | ------------------------------------------------------------------------------------------ | -------------- |
-| `device`         | `'auto'`, `'cpu'`, `'gpu'`, `'wasm'`, `'webgpu'`, `'cuda'`, `'dml'`, `'coreml'`, `'webnn'` | `'auto'`       |
-| `dtype`          | Quantization: `'fp32'`, `'fp16'`, `'q8'`, `'q4'`, `'q4f16'`                                | `'auto'`       |
-| `cacheDir`       | Override model cache directory                                                             | System default |
-| `localFilesOnly` | Skip downloads, use cached models only                                                     | `false`        |
-| `revision`       | Model version/branch                                                                       | `'main'`       |
+| Option           | Description                                                                                                                             | Default        |
+| ---------------- | --------------------------------------------------------------------------------------------------------------------------------------- | -------------- |
+| `device`         | `'auto'`, `'cpu'`, `'gpu'`, `'wasm'`, `'webgpu'`, `'cuda'`, `'dml'`, `'coreml'`, `'webnn'`, `'webnn-npu'`, `'webnn-gpu'`, `'webnn-cpu'` | `'auto'`       |
+| `dtype`          | Quantization: `'fp32'`, `'fp16'`, `'q8'`, `'int8'`, `'uint8'`, `'q4'`, `'bnb4'`, `'q4f16'`                                              | `'auto'`       |
+| `cacheDir`       | Override model cache directory                                                                                                          | System default |
+| `localFilesOnly` | Skip downloads, use cached models only                                                                                                  | `false`        |
+| `revision`       | Model version/branch                                                                                                                    | `'main'`       |
+| `sessionOptions` | ONNX runtime session options, passed through as `session_options`                                                                       | -              |
 
 ### Embedding Options
 
