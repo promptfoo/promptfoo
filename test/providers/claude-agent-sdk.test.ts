@@ -332,8 +332,55 @@ describe('ClaudeCodeSDKProvider', () => {
         expect.objectContaining({
           options: expect.objectContaining({
             systemPrompt:
-              systemPrompt === null ? expect.objectContaining({ preset: 'claude_code' }) : '',
+              systemPrompt === null
+                ? expect.objectContaining({ preset: 'claude_code', snapshot: false })
+                : { type: 'custom', prompt: '', snapshot: false },
           }),
+        }),
+      );
+    },
+  );
+
+  it.each([
+    {
+      sessionConfig: { resume: 'session-to-resume' },
+      promptConfig: { custom_system_prompt: 'Updated custom prompt' },
+      expected: {
+        type: 'custom',
+        prompt: 'Updated custom prompt',
+        snapshot: false,
+      },
+    },
+    {
+      sessionConfig: { continue: true },
+      promptConfig: { append_system_prompt: 'Updated appended prompt' },
+      expected: {
+        type: 'preset',
+        preset: 'claude_code',
+        append: 'Updated appended prompt',
+        snapshot: false,
+      },
+    },
+  ])(
+    'renders changed system prompts for resumed sessions instead of reusing snapshots',
+    async ({ sessionConfig, promptConfig, expected }) => {
+      mockQuery.mockReturnValue(createMockResponse('Response'));
+      const provider = new ClaudeCodeSDKProvider({
+        config: { apiKey: 'test-key', ...sessionConfig },
+      });
+
+      await provider.callApi('Resume with updated instructions', {
+        vars: {},
+        prompt: {
+          raw: 'Resume with updated instructions',
+          label: 'test',
+          config: promptConfig,
+        },
+      });
+
+      expect(mockQuery).toHaveBeenCalledWith(
+        expect.objectContaining({
+          options: expect.objectContaining({ systemPrompt: expected }),
         }),
       );
     },
@@ -3099,7 +3146,11 @@ describe('ClaudeCodeSDKProvider', () => {
             prompt: 'Test prompt',
             options: expect.objectContaining({
               permissionMode: 'acceptEdits',
-              systemPrompt: 'Custom prompt',
+              systemPrompt: {
+                type: 'custom',
+                prompt: 'Custom prompt',
+                snapshot: false,
+              },
               model: 'claude-3-5-sonnet-20241022',
               fallbackModel: 'claude-3-5-haiku-20241022',
               maxTurns: 10,
@@ -5064,6 +5115,7 @@ describe('ClaudeCodeSDKProvider', () => {
                 type: 'preset',
                 preset: 'claude_code',
                 append: 'Append this',
+                snapshot: false,
               },
               model: 'claude-3-5-sonnet-20241022',
               fallbackModel: 'claude-3-5-haiku-20241022',
@@ -5090,6 +5142,7 @@ describe('ClaudeCodeSDKProvider', () => {
                 preset: 'claude_code',
                 append: 'Extras',
                 excludeDynamicSections: true,
+                snapshot: false,
               },
             }),
           });
@@ -5111,6 +5164,7 @@ describe('ClaudeCodeSDKProvider', () => {
                 type: 'preset',
                 preset: 'claude_code',
                 append: undefined,
+                snapshot: false,
               },
             }),
           });
