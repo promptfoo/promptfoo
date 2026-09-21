@@ -2,7 +2,6 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import WebSocket from 'ws';
 import logger from '../../../src/logger';
 import { GoogleAuthManager } from '../../../src/providers/google/auth';
-import { getVertexApiHostForRegion } from '../../../src/providers/google/shared';
 import { VertexLiveProvider } from '../../../src/providers/google/vertexLive';
 import { loadApiProvider } from '../../../src/providers/index';
 import { TestProviderRequestSchema } from '../../../src/types/api/providers';
@@ -123,28 +122,44 @@ describe('VertexLiveProvider', () => {
   );
 
   it.each([
-    [{ config: { projectId: 'explicit', region: 'europe-west4' } }, 'explicit', 'europe-west4'],
+    [
+      { config: { projectId: 'explicit', region: 'europe-west4' } },
+      'explicit',
+      'europe-west4',
+      'europe-west4-aiplatform.googleapis.com',
+    ],
     [
       { env: { VERTEX_PROJECT_ID: 'vertex-env', VERTEX_REGION: 'us-east4' } },
       'vertex-env',
       'us-east4',
+      'us-east4-aiplatform.googleapis.com',
     ],
-    [{ env: { GOOGLE_PROJECT_ID: 'google-env' } }, 'google-env', 'us-central1'],
+    [
+      { env: { GOOGLE_PROJECT_ID: 'google-env' } },
+      'google-env',
+      'us-central1',
+      'us-central1-aiplatform.googleapis.com',
+    ],
     [
       { env: { GOOGLE_CLOUD_PROJECT: 'sdk-env', GOOGLE_CLOUD_LOCATION: 'us-west1' } },
       'sdk-env',
       'us-west1',
+      'us-west1-aiplatform.googleapis.com',
     ],
-    [{}, 'adc-project', 'us-central1'],
-    [{ config: { region: 'us' } }, 'adc-project', 'us'],
-    [{ config: { region: 'eu' } }, 'adc-project', 'eu'],
-    [{ config: { region: 'global', apiVersion: 'v1beta1' } }, 'adc-project', 'global'],
-  ] as const)('resolves project and location for %j', async (options, project, region) => {
+    [{}, 'adc-project', 'us-central1', 'us-central1-aiplatform.googleapis.com'],
+    [{ config: { region: 'us' } }, 'adc-project', 'us', 'aiplatform.us.rep.googleapis.com'],
+    [{ config: { region: 'eu' } }, 'adc-project', 'eu', 'aiplatform.eu.rep.googleapis.com'],
+    [
+      { config: { region: 'global', apiVersion: 'v1beta1' } },
+      'adc-project',
+      'global',
+      'aiplatform.googleapis.com',
+    ],
+  ] as const)('resolves project and location for %j', async (options, project, region, host) => {
     const { result } = await start(new VertexLiveProvider(model, options as ProviderOptions));
     expect(sent()[0].setup.model).toBe(
       `projects/${project}/locations/${region}/publishers/google/models/${model}`,
     );
-    const host = getVertexApiHostForRegion(region);
     expect(vi.mocked(WebSocket).mock.calls[0][0]).toContain(`wss://${host}/`);
     if (region === 'global') {
       expect(vi.mocked(WebSocket).mock.calls[0][0]).toContain('aiplatform.v1beta1.');

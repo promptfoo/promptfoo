@@ -127,7 +127,7 @@ describe('RSA signature authentication', () => {
     expect(crypto.createSign).toHaveBeenCalledTimes(1); // Should not be called again
   });
 
-  it('regenerates a signature when a templated private key changes', async () => {
+  it('caches signatures separately for each templated private key', async () => {
     const provider = new HttpProvider('http://example.com', {
       config: {
         method: 'POST',
@@ -153,6 +153,10 @@ describe('RSA signature authentication', () => {
       prompt: { raw: 'test', label: 'test' },
       vars: { key: 'second-key' },
     });
+    await provider.callApi('test', {
+      prompt: { raw: 'test', label: 'test' },
+      vars: { key: 'first-key' },
+    });
 
     expect(crypto.createSign).toHaveBeenCalledTimes(2);
     expect(mockSign).toHaveBeenNthCalledWith(
@@ -163,6 +167,99 @@ describe('RSA signature authentication', () => {
       2,
       '-----BEGIN PRIVATE KEY-----\\nsecond-key\\n-----END PRIVATE KEY-----',
     );
+  });
+
+  it('sends the matching signature and timestamp for concurrent requests with different keys', async () => {
+    vi.mocked(crypto.createSign).mockRestore();
+    const firstKeys = crypto.generateKeyPairSync('rsa', { modulusLength: 2048 });
+    const secondKeys = crypto.generateKeyPairSync('rsa', { modulusLength: 2048 });
+    const provider = new HttpProvider('http://example.com', {
+      config: {
+        method: 'POST',
+        headers: {
+          'x-request': '{{prompt}}',
+          'x-signature': '{{signature}}',
+          'x-signature-timestamp': '{{signatureTimestamp}}',
+        },
+        body: { prompt: '{{prompt}}' },
+        signatureAuth: { privateKey: '{{key}}' },
+      },
+    });
+    vi.mocked(fetchWithCache).mockResolvedValue({
+      data: '{}',
+      status: 200,
+      statusText: 'OK',
+      cached: false,
+    });
+    const call = (prompt: string, privateKey: crypto.KeyObject) =>
+      provider.callApi(prompt, {
+        prompt: { raw: prompt, label: prompt },
+        vars: { key: privateKey.export({ format: 'pem', type: 'pkcs8' }) },
+      });
+
+    vi.mocked(Date.now).mockReturnValue(1000);
+    const first = call('first', firstKeys.privateKey);
+    vi.mocked(Date.now).mockReturnValue(2000);
+    const second = call('second', secondKeys.privateKey);
+    const responses = await Promise.all([first, second]);
+    expect(responses.every((response) => !response.error)).toBe(true);
+
+    const requests = new Map(
+      vi.mocked(fetchWithCache).mock.calls.map(([, options]) => {
+        const headers = new Headers(options?.headers);
+        return [headers.get('x-request'), headers];
+      }),
+    );
+    expect([...requests.keys()].sort()).toEqual(['first', 'second']);
+    for (const [name, timestamp, publicKey, otherPublicKey] of [
+      ['first', '1000', firstKeys.publicKey, secondKeys.publicKey],
+      ['second', '2000', secondKeys.publicKey, firstKeys.publicKey],
+    ] as const) {
+      const headers = requests.get(name)!;
+      const sentTimestamp = headers.get('x-signature-timestamp')!;
+      const signature = Buffer.from(headers.get('x-signature')!, 'base64');
+      const signedData = Buffer.from(sentTimestamp);
+      expect.soft(sentTimestamp).toBe(timestamp);
+      expect.soft(crypto.verify('SHA256', signedData, publicKey, signature)).toBe(true);
+      expect.soft(crypto.verify('SHA256', signedData, otherPublicKey, signature)).toBe(false);
+    }
+  });
+
+  it('shares in-flight signature generation for the same key', async () => {
+    const provider = new HttpProvider('http://example.com', {
+      config: { body: { prompt: '{{prompt}}' }, signatureAuth: { privateKey: mockPrivateKey } },
+    });
+    vi.mocked(fetchWithCache).mockResolvedValue({
+      data: '{}',
+      status: 200,
+      statusText: 'OK',
+      cached: false,
+    });
+
+    await Promise.all([provider.callApi('first'), provider.callApi('second')]);
+
+    expect(mockSign).toHaveBeenCalledTimes(1);
+    expect(fetchWithCache).toHaveBeenCalledTimes(2);
+  });
+
+  it('retries after signature generation fails', async () => {
+    const provider = new HttpProvider('http://example.com', {
+      config: { body: { prompt: '{{prompt}}' }, signatureAuth: { privateKey: mockPrivateKey } },
+    });
+    mockSign.mockImplementationOnce(() => {
+      throw new Error('temporary signing failure');
+    });
+    vi.mocked(fetchWithCache).mockResolvedValue({
+      data: '{}',
+      status: 200,
+      statusText: 'OK',
+      cached: false,
+    });
+
+    await expect(provider.callApi('first')).rejects.toThrow('temporary signing failure');
+    await expect(provider.callApi('retry')).resolves.toMatchObject({ output: {} });
+    expect(mockSign).toHaveBeenCalledTimes(2);
+    expect(fetchWithCache).toHaveBeenCalledTimes(1);
   });
 
   it('should regenerate signature at the default refresh buffer boundary', async () => {

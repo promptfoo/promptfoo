@@ -41,16 +41,15 @@ export async function handleWebhook({
       'Webhook response must be a JSON object with a boolean "pass" property',
     );
     invariant(
-      typeof jsonResponse.score === 'undefined' ||
+      jsonResponse.score === undefined ||
         (typeof jsonResponse.score === 'number' &&
-          Number.isFinite(jsonResponse.score) &&
           jsonResponse.score >= 0 &&
           jsonResponse.score <= 1),
       'Webhook response "score" must be a finite number between 0 and 1',
     );
     const pass = jsonResponse.pass !== inverse;
     const score =
-      typeof jsonResponse.score === 'undefined'
+      jsonResponse.score === undefined
         ? pass
           ? 1
           : 0
