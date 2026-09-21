@@ -703,14 +703,20 @@ class XAIProvider extends OpenAiChatCompletionProvider {
 
     const effectiveModel = result.body.model;
     const reasoningEffort = result.body.reasoning_effort;
+    const allowsNoReasoning = ['grok-4.3', 'grok-4.3-latest', 'grok-latest'].includes(
+      effectiveModel,
+    );
     if (
-      GROK_45_MODELS.has(effectiveModel) &&
+      (allowsNoReasoning || GROK_45_MODELS.has(effectiveModel)) &&
       reasoningEffort !== undefined &&
-      !['low', 'medium', 'high'].includes(reasoningEffort)
+      !['low', 'medium', 'high'].includes(reasoningEffort) &&
+      (reasoningEffort !== 'none' || !allowsNoReasoning)
     ) {
       throw new Error(
         `xAI model ${effectiveModel} does not support reasoning_effort ${JSON.stringify(reasoningEffort)}. ` +
-          'Use "low", "medium", or "high", or omit reasoning_effort to use the default "high".',
+          (allowsNoReasoning
+            ? 'Use "none", "low", "medium", or "high", or omit reasoning_effort.'
+            : 'Use "low", "medium", or "high", or omit reasoning_effort to use the default "high".'),
       );
     }
 

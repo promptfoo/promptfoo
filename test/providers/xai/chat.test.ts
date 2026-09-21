@@ -462,6 +462,38 @@ describe('xAI Chat Provider', () => {
       }
     });
 
+    it.each(['grok-4.3', 'grok-4.3-latest', 'grok-latest'])(
+      'validates reasoning efforts routed to %s before HTTP',
+      async (targetModel) => {
+        for (const configuredModel of ['grok-4', 'grok-4.5']) {
+          const provider = createXAIProvider(`xai:${configuredModel}`) as any;
+          const options = (reasoningEffort: string) => ({
+            prompt: {
+              config:
+                configuredModel === 'grok-4'
+                  ? { reasoning_effort: reasoningEffort, passthrough: { model: targetModel } }
+                  : { passthrough: { model: targetModel, reasoning_effort: reasoningEffort } },
+            },
+          });
+
+          for (const effort of ['xhigh', 'minimal']) {
+            await expect(provider.getOpenAiBody('test', options(effort))).rejects.toThrow(
+              `xAI model ${targetModel} does not support reasoning_effort "${effort}". ` +
+                'Use "none", "low", "medium", or "high", or omit reasoning_effort.',
+            );
+          }
+
+          for (const effort of ['none', 'low', 'medium', 'high']) {
+            await expect(provider.getOpenAiBody('test', options(effort))).resolves.toMatchObject({
+              body: { model: targetModel, reasoning_effort: effort },
+            });
+          }
+        }
+
+        expect(mockFetchWithCache).not.toHaveBeenCalled();
+      },
+    );
+
     it('preserves reasoning_effort none for Grok 4.3 and its aliases', async () => {
       for (const modelName of ['grok-4.3', 'grok-4.3-latest', 'grok-latest']) {
         const provider = createXAIProvider(`xai:${modelName}`) as any;
