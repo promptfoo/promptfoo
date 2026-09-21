@@ -207,6 +207,69 @@ describe('MCPClient', () => {
       await mcpClient.cleanup();
     });
 
+    it.each([
+      { server: {} },
+      { server: { url: 'https://mcp.example.test', auth: { type: 'api_key' } } },
+      {
+        servers: [
+          { command: 'node' },
+          { url: 'https://mcp.example.test', auth: { type: 'bearer', token: 123 } },
+        ],
+      },
+      { server: { command: 'node', env: { TOKEN: 123 } } },
+      { timeout: -1 },
+    ])('rejects malformed configuration before initializing any SDK client: %j', (config) => {
+      expect(() => new MCPClient({ enabled: true, ...config })).toThrow();
+      expect(Client).not.toHaveBeenCalled();
+      expect(StdioClientTransport).not.toHaveBeenCalled();
+      expect(StreamableHTTPClientTransport).not.toHaveBeenCalled();
+      expect(mockGetOAuthTokenWithExpiry).not.toHaveBeenCalled();
+    });
+
+    it('defaults enabled and OAuth grant without changing the input', async () => {
+      const auth = {
+        type: 'oauth',
+        clientId: 'client',
+        clientSecret: 'secret',
+        scopes: 'read write',
+      };
+      const input = { server: { url: 'https://mcp.example.test', auth } };
+      mcpClient = new MCPClient(input);
+      await mcpClient.initialize();
+      expect(mockGetOAuthTokenWithExpiry).toHaveBeenCalledWith(
+        { ...auth, grantType: 'client_credentials' },
+        'https://mcp.example.test',
+      );
+      expect(input).not.toHaveProperty('enabled');
+      expect(auth).not.toHaveProperty('grantType');
+      await mcpClient.cleanup();
+    });
+
+    it('retains servers precedence and command transport precedence', async () => {
+      mcpClient = new MCPClient({
+        enabled: true,
+        server: { command: 'ignored' },
+        servers: [{ command: 'selected', path: 'ignored.js', url: 'https://ignored.example.test' }],
+      });
+      await mcpClient.initialize();
+      expect(StdioClientTransport).toHaveBeenCalledTimes(1);
+      expect(StdioClientTransport).toHaveBeenCalledWith(
+        expect.objectContaining({ command: 'selected' }),
+      );
+      expect(StreamableHTTPClientTransport).not.toHaveBeenCalled();
+      await mcpClient.cleanup();
+    });
+
+    it('normalizes no-auth and keeps disabled configuration inert', async () => {
+      mcpClient = new MCPClient({
+        enabled: false,
+        server: { url: 'https://mcp.example.test', auth: { type: 'none' } },
+      });
+      await mcpClient.initialize();
+      expect(Client).not.toHaveBeenCalled();
+      expect(mockGetOAuthTokenWithExpiry).not.toHaveBeenCalled();
+    });
+
     it('should not initialize if disabled', async () => {
       mcpClient = new MCPClient({ enabled: false });
       await mcpClient.initialize();

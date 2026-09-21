@@ -222,6 +222,14 @@ describe('Anthropic utilities', () => {
       expect(cost).toBe(1.2); // (3/1e6 * 300,000) + (15/1e6 * 20,000) = 0.9 + 0.3 = 1.2
     });
 
+    it('keeps pricing for claude-sonnet-4-5-latest because Vertex recognises it', () => {
+      // Regression: the Anthropic Models API 404s on this alias, but
+      // VERTEX_CLAUDE_SONNET_4_5_MODELS in google/vertex.ts matches it and passes the name
+      // straight to calculateAnthropicCost. Dropping the row blanks Vertex costs silently.
+      const cost = calculateAnthropicCost('claude-sonnet-4-5-latest', {}, 100, 200);
+      expect(cost).toBe(0.0033); // $3/MTok input, $15/MTok output
+    });
+
     it('returns undefined for the Claude Sonnet 4.6 latest alias (it does not exist)', () => {
       const cost = calculateAnthropicCost('claude-sonnet-4-6-latest', {}, 250_000, 10_000);
       expect(cost).toBeUndefined();

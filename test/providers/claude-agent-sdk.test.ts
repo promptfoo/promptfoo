@@ -307,8 +307,122 @@ describe('ClaudeCodeSDKProvider', () => {
 
   afterEach(async () => {
     vi.restoreAllMocks();
+    vi.unstubAllEnvs();
     cliState.setActiveOtlpReceiver();
     await clearCache();
+  });
+
+  it('reports installation guidance for an asynchronously rejected SDK import', async () => {
+    vi.mocked(importModule).mockRejectedValueOnce(new Error('module initialization failed'));
+    const provider = new ClaudeCodeSDKProvider({ config: { apiKey: 'test-key' } });
+    const result = await provider.callApi('Import failure');
+    expect(result.error).toContain('Failed to load @anthropic-ai/claude-agent-sdk');
+    expect(result.error).toContain('npm install @anthropic-ai/claude-agent-sdk');
+  });
+
+  it.each(['', null])(
+    'honors empty system prompts while defaulting null (%j)',
+    async (systemPrompt) => {
+      mockQuery.mockReturnValue(createMockResponse('Response'));
+      const provider = new ClaudeCodeSDKProvider({
+        config: { apiKey: 'test-key', custom_system_prompt: systemPrompt as unknown as string },
+      });
+      await provider.callApi('Empty system prompt');
+      expect(mockQuery).toHaveBeenCalledWith(
+        expect.objectContaining({
+          options: expect.objectContaining({
+            systemPrompt:
+              systemPrompt === null
+                ? expect.objectContaining({ preset: 'claude_code', snapshot: false })
+                : { type: 'custom', prompt: '', snapshot: false },
+          }),
+        }),
+      );
+    },
+  );
+
+  it.each([
+    {
+      sessionConfig: { resume: 'session-to-resume' },
+      promptConfig: { custom_system_prompt: 'Updated custom prompt' },
+      expected: {
+        type: 'custom',
+        prompt: 'Updated custom prompt',
+        snapshot: false,
+      },
+    },
+    {
+      sessionConfig: { continue: true },
+      promptConfig: { append_system_prompt: 'Updated appended prompt' },
+      expected: {
+        type: 'preset',
+        preset: 'claude_code',
+        append: 'Updated appended prompt',
+        snapshot: false,
+      },
+    },
+  ])(
+    'renders changed system prompts for resumed sessions instead of reusing snapshots',
+    async ({ sessionConfig, promptConfig, expected }) => {
+      mockQuery.mockReturnValue(createMockResponse('Response'));
+      const provider = new ClaudeCodeSDKProvider({
+        config: { apiKey: 'test-key', ...sessionConfig },
+      });
+
+      await provider.callApi('Resume with updated instructions', {
+        vars: {},
+        prompt: {
+          raw: 'Resume with updated instructions',
+          label: 'test',
+          config: promptConfig,
+        },
+      });
+
+      expect(mockQuery).toHaveBeenCalledWith(
+        expect.objectContaining({
+          options: expect.objectContaining({ systemPrompt: expected }),
+        }),
+      );
+    },
+  );
+
+  it('uses prompt API keys without reusing responses across credentials', async () => {
+    vi.stubEnv('ANTHROPIC_API_KEY', undefined);
+    enableCache();
+    const provider = new ClaudeCodeSDKProvider();
+    for (const key of ['prompt-key-one', 'prompt-key-two']) {
+      mockQuery.mockReturnValue(createMockResponse(key));
+      const result = await provider.callApi('Same prompt', {
+        vars: {},
+        prompt: { raw: 'Same prompt', label: 'test', config: { apiKey: key } },
+      });
+      expect(result.error).toBeUndefined();
+      expect(result.output).toBe(key);
+      expect(mockQuery).toHaveBeenLastCalledWith(
+        expect.objectContaining({
+          options: expect.objectContaining({
+            env: expect.objectContaining({ ANTHROPIC_API_KEY: key }),
+          }),
+        }),
+      );
+    }
+    expect(mockQuery).toHaveBeenCalledTimes(2);
+  });
+
+  it('gives the merged prompt API key precedence over the provider key', async () => {
+    mockQuery.mockReturnValue(createMockResponse('Response'));
+    const provider = new ClaudeCodeSDKProvider({ config: { apiKey: 'provider-key' } });
+    await provider.callApi('Override', {
+      vars: {},
+      prompt: { raw: 'Override', label: 'test', config: { apiKey: 'prompt-key' } },
+    });
+    expect(mockQuery).toHaveBeenCalledWith(
+      expect.objectContaining({
+        options: expect.objectContaining({
+          env: expect.objectContaining({ ANTHROPIC_API_KEY: 'prompt-key' }),
+        }),
+      }),
+    );
   });
 
   describe('constructor', () => {
@@ -1654,15 +1768,18 @@ describe('ClaudeCodeSDKProvider', () => {
         mockProcessEnv({ CLAUDE_CODE_USE_BEDROCK: undefined });
       });
 
-      it('should report missing key when no Vertex/Bedrock env is set', () => {
+      it('defers missing-key validation until prompt config is available', async () => {
         mockProcessEnv({ ANTHROPIC_API_KEY: undefined });
         mockProcessEnv({ CLAUDE_CODE_USE_VERTEX: undefined });
         mockProcessEnv({ CLAUDE_CODE_USE_BEDROCK: undefined });
 
         const provider = new ClaudeCodeSDKProvider();
         const result = checkProviderApiKeys([provider]);
-        expect(result.size).toBe(1);
-        expect(result.get('ANTHROPIC_API_KEY')).toEqual(['anthropic:claude-agent-sdk']);
+        expect(result.size).toBe(0);
+        await expect(provider.callApi('Missing credentials')).rejects.toThrow(
+          'Anthropic API key is not set',
+        );
+        expect(mockQuery).not.toHaveBeenCalled();
       });
 
       it('should not report missing key when apiKeyRequired is false', () => {
@@ -3048,7 +3165,11 @@ describe('ClaudeCodeSDKProvider', () => {
             prompt: 'Test prompt',
             options: expect.objectContaining({
               permissionMode: 'acceptEdits',
-              systemPrompt: 'Custom prompt',
+              systemPrompt: {
+                type: 'custom',
+                prompt: 'Custom prompt',
+                snapshot: false,
+              },
               model: 'claude-3-5-sonnet-20241022',
               fallbackModel: 'claude-3-5-haiku-20241022',
               maxTurns: 10,
@@ -5013,6 +5134,7 @@ describe('ClaudeCodeSDKProvider', () => {
                 type: 'preset',
                 preset: 'claude_code',
                 append: 'Append this',
+                snapshot: false,
               },
               model: 'claude-3-5-sonnet-20241022',
               fallbackModel: 'claude-3-5-haiku-20241022',
@@ -5039,6 +5161,7 @@ describe('ClaudeCodeSDKProvider', () => {
                 preset: 'claude_code',
                 append: 'Extras',
                 excludeDynamicSections: true,
+                snapshot: false,
               },
             }),
           });
@@ -5060,6 +5183,7 @@ describe('ClaudeCodeSDKProvider', () => {
                 type: 'preset',
                 preset: 'claude_code',
                 append: undefined,
+                snapshot: false,
               },
             }),
           });

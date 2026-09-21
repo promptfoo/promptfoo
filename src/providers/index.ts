@@ -19,7 +19,7 @@ import {
 } from '../util/providerRef';
 import { renderEnvOnlyInObject } from '../util/render';
 import { sanitizeObject } from '../util/sanitizer';
-import { getProviderFactories } from './registry';
+import { getProviderFactories, mergeProviderEnv } from './registry';
 
 import type { EnvOverrides } from '../types/env';
 import type { LoadApiProviderContext, TestSuiteConfig } from '../types/index';
@@ -41,20 +41,6 @@ const FORWARDED_PROVIDER_METADATA_KEYS = [
   'inputs',
   'config',
 ] as const satisfies ReadonlyArray<keyof ProviderFunctionWithMetadata>;
-
-// Preserve explicit empty values while merging provider-loading environments.
-function mergeProviderEnv(...sources: (EnvOverrides | undefined)[]): EnvOverrides | undefined {
-  const provided = sources.filter((source) => source !== undefined);
-  if (provided.length === 0) {
-    return undefined;
-  }
-  return Object.assign(
-    {},
-    ...provided.map((source) =>
-      Object.fromEntries(Object.entries(source).filter(([, value]) => value !== undefined)),
-    ),
-  );
-}
 
 function createProviderFromFunction(
   provider: ProviderFunctionWithMetadata,
@@ -116,7 +102,11 @@ async function createApiProvider(
 
   // Merge environment overrides: context.env (test suite level) is base,
   // options.env (provider-specific) takes precedence for per-provider customization
-  const mergedEnv = mergeProviderEnv(env, options.env);
+  const renderedProviderPath = renderEnvOnlyInObject(
+    providerPath,
+    mergeProviderEnv('', env, options.env),
+  );
+  const mergedEnv = mergeProviderEnv(renderedProviderPath, env, options.env);
 
   // Render ONLY environment variable templates at load time (e.g., {{ env.AZURE_ENDPOINT }})
   // This allows constructors to access real env values while preserving runtime templates
@@ -140,10 +130,6 @@ async function createApiProvider(
     await validateLinkedTargetId(providerOptions.config.linkedTargetId);
   }
 
-  // Render only env templates in provider path to avoid blanking unresolved placeholders.
-  // This keeps behavior consistent with provider id/config rendering and file:// provider refs.
-  const renderedProviderPath = renderEnvOnlyInObject(providerPath, mergedEnv);
-
   if (isCloudProvider(renderedProviderPath)) {
     const cloudDatabaseId = getCloudDatabaseId(renderedProviderPath);
 
@@ -153,6 +139,11 @@ async function createApiProvider(
         `This cloud provider ${cloudDatabaseId} points to another cloud provider: ${cloudProvider.id}. This is not allowed. A cloud provider should point to a specific provider, not another cloud provider.`,
       );
     }
+
+    const resolvedCloudPath = renderEnvOnlyInObject(
+      cloudProvider.id,
+      mergeProviderEnv('', env, cloudProvider.env, options.env),
+    );
 
     // Merge local config overrides with cloud provider config
     // Local config takes precedence to allow per-eval customization
@@ -169,7 +160,7 @@ async function createApiProvider(
       prompts: options.prompts ?? cloudProvider.prompts,
       inputs: options.inputs ?? cloudProvider.inputs,
       // Merge all three env sources: context (base) -> cloud -> local (highest priority)
-      env: mergeProviderEnv(env, cloudProvider.env, options.env),
+      env: mergeProviderEnv(resolvedCloudPath, env, cloudProvider.env, options.env),
     };
 
     logger.debug(
@@ -182,7 +173,7 @@ async function createApiProvider(
       env: mergedOptions.env,
     };
 
-    const provider = await loadApiProvider(cloudProvider.id, mergedContext);
+    const provider = await loadApiProvider(resolvedCloudPath, mergedContext);
     // Preserve the target already fetched above for per-evaluation grading context.
     provider.config ??= {};
     provider.config.linkedTargetId ??= renderedProviderPath;
@@ -210,10 +201,23 @@ async function createApiProvider(
       providerId: fileContent.id,
     });
 
-    // A provider file owns its credentials; only per-provider overrides beat them.
-    const mergedFileEnv = mergeProviderEnv(env, fileContent.env, options.env);
+    const resolvedFilePath = renderEnvOnlyInObject(
+      fileContent.id,
+      mergeProviderEnv('', env, fileContent.env, options.env),
+    );
+    // Provider files own their defaults; Codex SDK explicitly gives suite key aliases precedence.
+    const mergedFileEnv = mergeProviderEnv(resolvedFilePath, env, fileContent.env, options.env);
+    if (mergedFileEnv && /^openai:(?:codex-sdk|codex)(?::|$)/.test(resolvedFilePath)) {
+      const aliases = [fileContent.env, env, options.env].map(
+        (scope) =>
+          scope && { OPENAI_API_KEY: scope.OPENAI_API_KEY, CODEX_API_KEY: scope.CODEX_API_KEY },
+      );
+      delete mergedFileEnv.OPENAI_API_KEY;
+      delete mergedFileEnv.CODEX_API_KEY;
+      Object.assign(mergedFileEnv, mergeProviderEnv(resolvedFilePath, ...aliases));
+    }
 
-    return loadApiProvider(fileContent.id, {
+    return loadApiProvider(resolvedFilePath, {
       basePath,
       options: {
         ...fileContent,

@@ -3,6 +3,7 @@ import logger from '../../logger';
 import { fetchWithProxy } from '../../util/fetch/index';
 import { renderVarsInObject } from '../../util/index';
 import { fetchOAuthToken, type OAuthTokenResult, TOKEN_REFRESH_BUFFER_MS } from '../../util/oauth';
+import { normalizeRenderedOAuthScopes } from './auth';
 
 import type { VarValue } from '../../types/shared';
 import type {
@@ -80,7 +81,7 @@ function getOAuthCacheKey(
   auth: MCPOAuthClientCredentialsAuth | MCPOAuthPasswordAuth,
   tokenUrl: string,
 ): string {
-  return `${tokenUrl}:${auth.grantType}:${'clientId' in auth ? auth.clientId : ''}:${'username' in auth ? auth.username : ''}:${auth.scopes?.join(' ') ?? ''}`;
+  return `${tokenUrl}:${auth.grantType}:${'clientId' in auth ? auth.clientId : ''}:${'username' in auth ? auth.username : ''}:${normalizeRenderedOAuthScopes(auth.scopes)?.join(' ') ?? ''}`;
 }
 
 // Cache for discovered token endpoints
@@ -190,7 +191,7 @@ export async function getOAuthTokenWithExpiry(
     clientSecret: auth.clientSecret,
     username: 'username' in auth ? auth.username : undefined,
     password: 'password' in auth ? auth.password : undefined,
-    scopes: auth.scopes,
+    scopes: normalizeRenderedOAuthScopes(auth.scopes),
   });
 
   // Cache the token

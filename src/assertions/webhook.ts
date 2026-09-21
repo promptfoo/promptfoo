@@ -36,6 +36,10 @@ export async function handleWebhook({
     }
 
     const jsonResponse = await response.json();
+    invariant(
+      typeof jsonResponse?.pass === 'boolean',
+      'Webhook response must be a JSON object with a boolean "pass" property',
+    );
     const pass = jsonResponse.pass !== inverse;
     const score =
       typeof jsonResponse.score === 'undefined'

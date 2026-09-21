@@ -41,6 +41,9 @@ function hasUrlUserinfo(url: string): boolean {
 
 function isSecretParameterName(name: string): boolean {
   const normalized = normalizeFieldName(name);
+  if (normalized === 'key') {
+    return true;
+  }
   if (
     /^(?:eos|bos|pad|unk|mask|sep|cls|stop|start|end|next|prev|page|nextpage|continuation|resume|cursor|max|min)tokens?$/.test(
       normalized,
@@ -405,6 +408,21 @@ export function looksLikeSecret(value: string): boolean {
   }
 
   return false;
+}
+
+// Headers with standard non-credential meanings; other custom headers may authenticate a gateway.
+const NON_CREDENTIAL_HEADERS = new Set([
+  'accept',
+  'content-type',
+  'openai-beta',
+  'openai-organization',
+  'openai-project',
+  'user-agent',
+  'x-openai-originator',
+]);
+
+export function isNonCredentialHeader(name: string): boolean {
+  return NON_CREDENTIAL_HEADERS.has(name.toLowerCase());
 }
 
 const SAFE_TRACING_CREDENTIAL_TEMPLATE =
@@ -1171,6 +1189,40 @@ function sanitizePlainObject(
     }
     if (isSecretKey(key)) {
       sanitized[key] = REDACTED;
+    } else if (key.toLowerCase() === 'headers' && value && typeof value === 'object') {
+      sanitized[key] = Object.fromEntries(
+        Object.entries(value).map(([name, item]) => [
+          name,
+          isSafeTracingCredentialTemplate(item) ||
+          (typeof item === 'string' &&
+            !isTracingCredentialHeader(name, item) &&
+            (isNonCredentialHeader(name) || SAFE_TRACING_PROVIDER_HEADERS.has(name.toLowerCase())))
+            ? item
+            : REDACTED,
+        ]),
+      );
+    } else if (
+      typeof value === 'string' &&
+      (key === 'apiHost' || (isEnvMap && key.toUpperCase().endsWith('_HOST')))
+    ) {
+      const scheme = /^[a-z][a-z\d+.-]*:\/\//i;
+      const hasScheme = scheme.test(value);
+      const endpoint = sanitizeUrlForLogging(hasScheme ? value : `https://${value}`);
+      const host = hasScheme ? endpoint : endpoint.replace(/^https:\/\//, '');
+      const hasPath = value.replace(scheme, '').split(/[?#]/, 1)[0].includes('/');
+      sanitized[key] = hasPath ? host : host.replace(/\/(?=[?#]|$)/, '');
+    } else if (
+      typeof value === 'string' &&
+      (key === 'url' ||
+        key === 'apiBaseUrl' ||
+        key === 'server_url' ||
+        (isEnvMap && key.toUpperCase().endsWith('_URL')))
+    ) {
+      sanitized[key] =
+        key === 'url' ||
+        (isEnvMap && key.toUpperCase().endsWith('_URL') && !/^OPENAI_(?:API_)?BASE_URL$/i.test(key))
+          ? sanitizeUrl(value)
+          : sanitizeUrlForLogging(value);
     } else if (typeof value === 'string' && looksLikeSecret(value)) {
       // Redact opaque credential values before trying URL-specific handling.
       sanitized[key] = REDACTED;
@@ -1380,6 +1432,11 @@ export function sanitizeUrl(url: string): string {
       return sanitizeTemplatedUrl(url);
     }
 
+    const nestedJson = redactNestedJsonValue(url);
+    if (nestedJson !== null) {
+      return nestedJson;
+    }
+
     // Handle path-only URLs (e.g., /api/openai/completion from raw HTTP request mode).
     // new URL() requires a fully qualified URL, so prepend a dummy base for parsing.
     const isPathOnly = url.startsWith('/') && !url.startsWith('//');
@@ -1460,21 +1517,39 @@ export function sanitizeUrlForLogging(url: string): string {
   try {
     const isPathOnly = sanitized.startsWith('/') && !sanitized.startsWith('//');
     const parsed = isPathOnly ? new URL(sanitized, DUMMY_BASE) : new URL(sanitized);
-    parsed.pathname = parsed.pathname
+    const sanitizedPathname = parsed.pathname
       .split('/')
-      .map((segment) => {
+      .map((segment, index, segments) => {
+        const previous = decodeFormComponent(segments[index - 1] ?? '') ?? '';
         try {
           const decoded = decodeURIComponent(segment);
-          return OPAQUE_CREDENTIAL_PATH_SEGMENT.test(decoded) || looksLikeSecret(decoded)
+          // Credential routes can also contain ordinary words such as /auth/proxy.
+          const opaqueValue =
+            isSecretField(previous) &&
+            /^[a-z0-9._~+-]{12,}$/i.test(decoded) &&
+            /[a-z]/i.test(decoded) &&
+            /[0-9]/.test(decoded);
+          return opaqueValue ||
+            OPAQUE_CREDENTIAL_PATH_SEGMENT.test(decoded) ||
+            looksLikeSecret(decoded)
             ? '%5BREDACTED%5D'
             : segment;
         } catch {
-          return segment;
+          return isSecretField(previous) ? '%5BREDACTED%5D' : segment;
         }
       })
       .join('/');
+    if (sanitizedPathname === parsed.pathname) {
+      return sanitized;
+    }
+    parsed.pathname = sanitizedPathname;
     return isPathOnly ? parsed.pathname + parsed.search + parsed.hash : parsed.toString();
   } catch {
-    return sanitized;
+    const hasOpaquePath = url
+      .split(/[/?#]/)
+      .some((segment) =>
+        OPAQUE_CREDENTIAL_PATH_SEGMENT.test(decodeFormComponent(segment) ?? segment),
+      );
+    return unparseableUrlMightLeakSecret(url) || hasOpaquePath ? REDACTED : sanitized;
   }
 }

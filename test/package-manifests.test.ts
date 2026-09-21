@@ -21,10 +21,95 @@ function readPackageJson<T>(relativePath: string): T {
   return JSON.parse(fs.readFileSync(packageJsonPath, 'utf8')) as T;
 }
 
+function splitShellSegments(input: string): string[] {
+  const segments: string[] = [];
+  let current = '';
+  let inSingle = false;
+  let inDouble = false;
+
+  for (let i = 0; i < input.length; i++) {
+    const ch = input[i];
+    if (ch === "'" && !inDouble) {
+      inSingle = !inSingle;
+    } else if (ch === '"' && !inSingle) {
+      inDouble = !inDouble;
+    }
+    if (
+      !inSingle &&
+      !inDouble &&
+      (ch === ';' || ((ch === '&' || ch === '|') && input[i + 1] === ch))
+    ) {
+      if (current.trim()) {
+        segments.push(current.trim());
+      }
+      current = '';
+      if (ch !== ';') {
+        i++;
+      }
+      continue;
+    }
+    current += ch;
+  }
+  if (current.trim()) {
+    segments.push(current.trim());
+  }
+  return segments;
+}
+
+function extractRunBodies(dockerfile: string): string[] {
+  const normalized = dockerfile.replace(/\\\r?\n/g, ' ');
+  return normalized
+    .split('\n')
+    .map((line) => line.trim())
+    .filter((line) => line.length > 0 && !line.startsWith('#'))
+    .filter((line) => /^RUN\b/i.test(line))
+    .map((line) => line.replace(/^RUN\s+(?:--[^\s]+\s+)*/i, '').trim());
+}
+
+function isNpmLikeToken(token: string): boolean {
+  const normalized = token.replace(/\\(.)/g, '$1').replace(/["']/g, '');
+  return normalized === 'npm' || /(?:^|[^A-Za-z0-9_])npm$/.test(normalized);
+}
+
+// Match npm subcommands only when npm is the unquoted executable in a RUN segment.
+function validateDockerInstallCommands(dockerfile: string): void {
+  const commands = extractRunBodies(dockerfile).flatMap((runBody) =>
+    splitShellSegments(runBody).flatMap((segment) => {
+      const tokens = segment.split(/\s+/).filter(Boolean);
+      const npmIndex = tokens.findIndex(isNpmLikeToken);
+      if (npmIndex === -1) {
+        return [];
+      }
+      const environmentAssignments = tokens.findIndex(
+        (token) => !/^[A-Za-z_][A-Za-z0-9_]*=[^\s]+$/.test(token),
+      );
+      // Reject quoted, escaped, or path-qualified executables, and reject textual npm
+      // mentions that are not the command being run.
+      expect(npmIndex).toBe(environmentAssignments);
+      expect(tokens[npmIndex]).toBe('npm');
+      return [tokens.slice(npmIndex + 1)];
+    }),
+  );
+  expect(commands.some(([command]) => command === 'ci')).toBe(true);
+  expect(commands.some(([command]) => command === 'rebuild')).toBe(true);
+  for (const [command, ...args] of commands) {
+    // Keep Docker npm commands auditable: global options must follow the subcommand.
+    // Reject unsupported shapes instead of silently skipping a hidden install.
+    expect(['ci', 'rebuild', 'run']).toContain(command);
+    if (command === 'ci') {
+      expect(args).toContain('--ignore-scripts');
+      expect(args.some((arg) => arg.startsWith('--ignore-scripts='))).toBe(false);
+    } else if (command === 'rebuild') {
+      // Package names and globs can rebuild untrusted nested dependencies.
+      expect(args).toEqual(['./node_modules/esbuild', './node_modules/@swc/core']);
+    }
+  }
+}
+
 const SOURCE_FILE_EXTENSIONS = /\.(ts|tsx|mts|cts|js|mjs|cjs)$/;
 const EXPECTED_SHARP_VERSION = '^0.35.4';
 const PATCHED_JS_YAML_RANGE = '^3.15.1 || ^4.3.1 || >=5.2.3';
-const PATCHED_UNDICI_RANGE = '^6.28.0 || ^7.29.0 || >=8.9.0';
+const PATCHED_UNDICI_RANGE = '^7.29.1 || >=8.10.2';
 const OPENAI_PACKAGE_NAMES = ['@openai/agents', '@openai/codex-sdk', 'openai'] as const;
 const SWC_PACKAGE_NAMES = [
   '@swc/core',
@@ -514,27 +599,32 @@ describe('package manifests', () => {
   it('blocks dependency install scripts in the Docker build', () => {
     const dockerfile = fs.readFileSync(path.join(process.cwd(), 'Dockerfile'), 'utf8');
 
-    expect(dockerfile).toMatch(/npm ci[^\n]*--ignore-scripts/);
+    expect(() => validateDockerInstallCommands(dockerfile)).not.toThrow();
+  });
 
-    // `npm rebuild <name>` matches every folder of that name anywhere in the tree, so a
-    // nested dependency aliased to `esbuild` would run its install script and defeat
-    // --ignore-scripts. Only exact directory specs for the trusted packages are allowed.
-    // Comments are stripped first so the Dockerfile can explain the rule using the very
-    // command shape this asserts against.
-    const instructions = dockerfile
-      .split('\n')
-      .filter((line) => !line.trimStart().startsWith('#'))
-      .join('\n');
-    const rebuildArgs = instructions.match(/npm rebuild ([^\n]*)/)?.[1];
-
-    expect(rebuildArgs, 'the Docker build must rebuild its native packages').toBeDefined();
-    expect(
-      rebuildArgs!
-        .replace(/\\$/, '')
-        .trim()
-        .split(/\s+/)
-        .filter((arg) => arg !== '&&' && !arg.startsWith('-')),
-    ).toEqual(['./node_modules/esbuild', './node_modules/@swc/core']);
+  it.each([
+    'RUN npm ci',
+    String.raw`RUN n\pm ci`,
+    `RUN n'p'm ci`,
+    'RUN n""pm rebuild esbuild',
+    'RUN (npm ci)',
+    'RUN (npm rebuild esbuild)',
+    'RUN /usr/bin/npm ci',
+    'RUN "npm" ci',
+    'RUN npm --silent ci',
+    'RUN npm "ci"',
+    'RUN npm --prefix /app ci',
+    'RUN npm --silent rebuild esbuild',
+    'RUN npm ci --ignore-scripts=false',
+    'RUN npm rebuild esbuild',
+    'RUN npm rebuild ./node_modules/*',
+  ])('rejects an additional unsafe Docker command: %s', (unsafeCommand) => {
+    const safeCommands =
+      'RUN npm ci --ignore-scripts && npm rebuild ./node_modules/esbuild ./node_modules/@swc/core';
+    expect(() => validateDockerInstallCommands(`${safeCommands}\n${unsafeCommand}`)).toThrow();
+    expect(() =>
+      validateDockerInstallCommands(`${safeCommands} && ${unsafeCommand.replace('RUN ', '')}`),
+    ).toThrow();
   });
 
   it('keeps sharp out of the root install path', () => {
@@ -564,6 +654,29 @@ describe('package manifests', () => {
     expect(satisfies(packageLock.packages[`node_modules/${sdkName}`].version!, sdkRange!)).toBe(
       true,
     );
+  });
+
+  it('publishes the release-age-safe ANSI tokenizer pin for optional Codex Security installs', () => {
+    const packageJson = readPackageJson<
+      PackageManifest & { overrides?: Record<string, string | Record<string, string>> }
+    >('package.json');
+    const packageLock =
+      readPackageJson<
+        PackageLockManifest<PackageManifest & { version?: string; optional?: boolean }>
+      >('package-lock.json');
+    const dependencyName = '@alcalzone/ansi-tokenize';
+    const pinnedVersion = packageJson.optionalDependencies?.[dependencyName];
+    const tokenizerPackage = packageLock.packages[`node_modules/${dependencyName}`];
+    const inkPackage = packageLock.packages['node_modules/ink'];
+
+    expect(pinnedVersion).toBe('0.3.0');
+    expect(packageJson.dependencies?.[dependencyName]).toBeUndefined();
+    expect(packageJson.overrides?.[dependencyName]).toBeUndefined();
+    expect(packageLock.packages[''].optionalDependencies?.[dependencyName]).toBe(pinnedVersion);
+    expect(tokenizerPackage.version).toBe(pinnedVersion);
+    expect(tokenizerPackage.optional).toBe(true);
+    expect(inkPackage.dependencies?.[dependencyName]).toBeDefined();
+    expect(satisfies(pinnedVersion!, inkPackage.dependencies![dependencyName])).toBe(true);
   });
 
   it('includes every browser loader in the optional production profile', () => {
@@ -666,7 +779,7 @@ describe('package manifests', () => {
     expect(developmentRange).toBeDefined();
     expect(optionalRange).toBe(developmentRange);
     expect(packageJson.dependencies?.[dependencyName]).toBeUndefined();
-    expect(minVersion(developmentRange!)?.compare('5.11.0')).toBeGreaterThanOrEqual(0);
+    expect(minVersion(developmentRange!)?.compare('5.11.1')).toBeGreaterThanOrEqual(0);
     expect(packageLock.packages[''].devDependencies?.[dependencyName]).toBe(developmentRange);
     expect(packageLock.packages[''].optionalDependencies?.[dependencyName]).toBe(optionalRange);
     expect(clientVersion).toBeDefined();
@@ -686,12 +799,12 @@ describe('package manifests', () => {
 
     expect(developmentRange).toBeDefined();
     expect(optionalRange).toBe(developmentRange);
-    expect(minVersion(developmentRange!)?.compare('5.6.0')).toBeGreaterThanOrEqual(0);
+    expect(minVersion(developmentRange!)?.compare('5.6.1')).toBeGreaterThanOrEqual(0);
     expect(packageLock.packages[''].devDependencies?.[dependencyName]).toBe(developmentRange);
     expect(packageLock.packages[''].optionalDependencies?.[dependencyName]).toBe(optionalRange);
     expect(packageLock.packages[`node_modules/${dependencyName}`].version).toBeDefined();
     expect(
-      minVersion(packageLock.packages[`node_modules/${dependencyName}`].version!)?.compare('5.6.0'),
+      minVersion(packageLock.packages[`node_modules/${dependencyName}`].version!)?.compare('5.6.1'),
     ).toBeGreaterThanOrEqual(0);
   });
 
@@ -786,6 +899,17 @@ describe('package manifests', () => {
     expect(packageLock.packages.site.devDependencies?.['@swc/core']).toBe(
       sitePackageJson.devDependencies?.['@swc/core'],
     );
+
+    const swcCore = packageLock.packages['node_modules/@swc/core'];
+    const nativeBindings = Object.entries(swcCore.optionalDependencies ?? {});
+    expect(nativeBindings.length).toBeGreaterThan(0);
+    for (const [dependencyName, version] of nativeBindings) {
+      expect(version, `${dependencyName} must match SWC core`).toBe(swcCore.version);
+      expect(
+        packageLock.packages[`node_modules/${dependencyName}`]?.version,
+        `${dependencyName} must be present at the required version`,
+      ).toBe(version);
+    }
   });
 
   it('keeps the patched Hono request parser optional and aligned across manifests', () => {
@@ -802,14 +926,14 @@ describe('package manifests', () => {
     const optionalRange = packageJson.optionalDependencies?.[dependencyName];
 
     expect(optionalRange).toBeDefined();
-    expect(minVersion(optionalRange!)?.compare('4.13.5')).toBeGreaterThanOrEqual(0);
+    expect(minVersion(optionalRange!)?.compare('4.13.7')).toBeGreaterThanOrEqual(0);
     expect(packageJson.dependencies?.[dependencyName]).toBeUndefined();
     expect(packageLock.packages[''].optionalDependencies?.[dependencyName]).toBe(optionalRange);
     expect(packageLock.packages[''].dependencies?.[dependencyName]).toBeUndefined();
     expect(packageLock.packages[`node_modules/${dependencyName}`].version).toBeDefined();
     expect(
       minVersion(packageLock.packages[`node_modules/${dependencyName}`].version!)?.compare(
-        '4.13.5',
+        '4.13.7',
       ),
     ).toBeGreaterThanOrEqual(0);
   });
@@ -852,14 +976,31 @@ describe('package manifests', () => {
     const installedVersion = packageLock.packages[`node_modules/${dependencyName}`].version;
 
     expect(optionalRange).toBeDefined();
-    expect(minVersion(optionalRange!)?.compare('1.18.23')).toBeGreaterThanOrEqual(0);
+    expect(minVersion(optionalRange!)?.compare('1.18.30')).toBeGreaterThanOrEqual(0);
     expect(packageJson.dependencies?.[dependencyName]).toBeUndefined();
     expect(packageLock.packages[''].dependencies?.[dependencyName]).toBeUndefined();
     expect(packageLock.packages[''].optionalDependencies?.[dependencyName]).toBe(optionalRange);
     expect(installedVersion).toBeDefined();
-    expect(minVersion(installedVersion!)?.compare('1.18.23')).toBeGreaterThanOrEqual(0);
+    expect(minVersion(installedVersion!)?.compare('1.18.30')).toBeGreaterThanOrEqual(0);
     expect(satisfies(installedVersion!, optionalRange!)).toBe(true);
     expect(packageLock.packages[`node_modules/${dependencyName}`].optional).toBe(true);
+  });
+
+  it('keeps Codex Security optional at the locked release', () => {
+    const packageJson = readPackageJson<PackageManifest>('package.json');
+    const packageLock = readPackageJson<PackageLockManifest>('package-lock.json');
+    const dependencyName = '@openai/codex-security';
+    const optionalRange = packageJson.optionalDependencies?.[dependencyName];
+    const lockedPackage = packageLock.packages[`node_modules/${dependencyName}`];
+
+    expect(optionalRange).toBeDefined();
+    expect(minVersion(optionalRange!)?.compare('0.1.28')).toBeGreaterThanOrEqual(0);
+    expect(packageJson.dependencies?.[dependencyName]).toBeUndefined();
+    expect(packageLock.packages[''].dependencies?.[dependencyName]).toBeUndefined();
+    expect(packageLock.packages[''].optionalDependencies?.[dependencyName]).toBe(optionalRange);
+    expect(lockedPackage.version).toBeDefined();
+    expect(satisfies(lockedPackage.version!, optionalRange!)).toBe(true);
+    expect(lockedPackage.optional).toBe(true);
   });
 
   it('keeps MCP optional while locking its Node adapter to a patched release', () => {
@@ -921,28 +1062,51 @@ describe('package manifests', () => {
     }>('package-lock.json');
     const parserOverride = packageJson.overrides?.[dependencyName];
     const langiumOverride = packageJson.overrides?.langium;
+    const chevrotainOverride = packageJson.overrides?.chevrotain as
+      | Record<string, string>
+      | undefined;
+    const parserVersion = chevrotainOverride?.['.'];
+
+    expect(parserVersion, 'Chevrotain must have a pinned parser version').toBeDefined();
 
     expect(parserOverride).toEqual(
       expect.objectContaining({
         '.': expect.any(String),
-        chevrotain: '11.2.0',
+        chevrotain: parserVersion,
       }),
     );
-    const parserVersion = (parserOverride as Record<string, string>)['.'];
+    const allstarVersion = (parserOverride as Record<string, string>)['.'];
 
-    expect(minVersion(parserVersion)?.compare('0.4.4')).toBeGreaterThanOrEqual(0);
+    expect(minVersion(allstarVersion)?.compare('0.5.0')).toBeGreaterThanOrEqual(0);
     expect(langiumOverride).toEqual(
       expect.objectContaining({
-        [dependencyName]: parserVersion,
-        chevrotain: '11.2.0',
+        [dependencyName]: allstarVersion,
+        '@chevrotain/regexp-to-ast': parserVersion,
+        chevrotain: parserVersion,
       }),
     );
     expect(packageLock.packages[`node_modules/${dependencyName}`]).toEqual(
       expect.objectContaining({
         integrity: expect.stringMatching(/^sha512-/),
-        resolved: `https://registry.npmjs.org/${dependencyName}/-/${dependencyName}-${parserVersion}.tgz`,
-        version: parserVersion,
+        resolved: `https://registry.npmjs.org/${dependencyName}/-/${dependencyName}-${allstarVersion}.tgz`,
+        version: allstarVersion,
       }),
+    );
+    expect(
+      satisfies(
+        parserVersion!,
+        packageLock.packages[`node_modules/${dependencyName}`].peerDependencies?.chevrotain ?? '',
+      ),
+      `${dependencyName} must accept the pinned Chevrotain version`,
+    ).toBe(true);
+
+    const langiumPackage = packageLock.packages['node_modules/langium'];
+    expect(satisfies(parserVersion!, langiumPackage.dependencies?.chevrotain ?? '')).toBe(true);
+    expect(
+      satisfies(parserVersion!, langiumPackage.dependencies?.['@chevrotain/regexp-to-ast'] ?? ''),
+    ).toBe(true);
+    expect(satisfies(allstarVersion, langiumPackage.dependencies?.[dependencyName] ?? '')).toBe(
+      true,
     );
   });
 
@@ -1047,16 +1211,19 @@ describe('package manifests', () => {
     }
   });
 
-  it('keeps Playwright Chromium optional and its locked browser versions aligned', () => {
+  it('keeps Playwright packages optional and their declared and locked versions aligned', () => {
     const packageJson = readPackageJson<PackageManifest>('package.json');
     const packageLock = readPackageJson<PackageLockManifest>('package-lock.json');
     const browserName = '@playwright/browser-chromium';
     const optionalRange = packageJson.optionalDependencies?.[browserName];
 
     expect(optionalRange).toBeDefined();
-    expect(packageJson.dependencies?.[browserName]).toBeUndefined();
-    expect(packageLock.packages[''].dependencies?.[browserName]).toBeUndefined();
-    expect(packageLock.packages[''].optionalDependencies?.[browserName]).toBe(optionalRange);
+    for (const name of ['playwright', browserName]) {
+      expect(packageJson.optionalDependencies?.[name]).toBe(optionalRange);
+      expect(packageJson.dependencies?.[name]).toBeUndefined();
+      expect(packageLock.packages[''].dependencies?.[name]).toBeUndefined();
+      expect(packageLock.packages[''].optionalDependencies?.[name]).toBe(optionalRange);
+    }
 
     const versions = ['playwright', 'playwright-core', browserName].map((name) => {
       const version = packageLock.packages[`node_modules/${name}`]?.version;
@@ -1177,15 +1344,18 @@ describe('package manifests', () => {
   });
 
   it('keeps the JSON Schema ref parser and its HTTP transport on patched versions', () => {
-    const packageJson = readPackageJson<PackageManifest & { engines?: { node?: string } }>(
-      'package.json',
-    );
+    const packageJson = readPackageJson<
+      PackageManifest & {
+        engines?: { node?: string };
+      }
+    >('package.json');
     const packageLock =
       readPackageJson<
         PackageLockManifest<PackageManifest & { engines?: { node?: string }; version?: string }>
       >('package-lock.json');
     const parserRange = packageJson.dependencies?.['@apidevtools/json-schema-ref-parser'];
     const parser = packageLock.packages['node_modules/@apidevtools/json-schema-ref-parser'];
+    // Published dependencies do not inherit this repository's npm overrides.
     const parserTransportRange = parser?.dependencies?.undici;
     const parserTransport =
       packageLock.packages['node_modules/@apidevtools/json-schema-ref-parser/node_modules/undici'];
@@ -1194,7 +1364,7 @@ describe('package manifests', () => {
       parserRange,
       'the JSON Schema ref parser must remain a runtime dependency',
     ).toBeDefined();
-    expect(minVersion(parserRange as string)?.compare('16.0.0')).toBeGreaterThanOrEqual(0);
+    expect(minVersion(parserRange as string)?.compare('16.0.2')).toBeGreaterThanOrEqual(0);
     expect(packageLock.packages[''].dependencies?.['@apidevtools/json-schema-ref-parser']).toBe(
       parserRange,
     );
@@ -1211,7 +1381,7 @@ describe('package manifests', () => {
       validRange(parserTransportRange as string),
       'the parser transport dependency must declare a valid semver range',
     ).not.toBeNull();
-    expect(minVersion(parserTransportRange as string)?.compare('8.10.0')).toBeGreaterThanOrEqual(0);
+    expect(minVersion(parserTransportRange as string)?.compare('8.10.2')).toBeGreaterThanOrEqual(0);
     expect(
       parserTransport?.version,
       'the parser must resolve its private HTTP transport',
@@ -1231,12 +1401,8 @@ describe('package manifests', () => {
   });
 
   it('keeps undici patched and aligned across the root and code-scan-action manifests', () => {
-    // The August 2026 undici advisories were fixed in 6.28.0, 7.29.0, and 8.9.0.
-    // GHSA-4cwx-7wf7-3272 affects only 7.x and 8.x, not the patched 6.x line.
-    // The root fix landed in #10269 but code-scan-action/ carries its own lockfile,
-    // so it kept resolving 7.28.0 and stayed on five open Dependabot alerts. Both
-    // projects override undici; assert the floors and the resolved copies together.
-    const PATCHED_UNDICI_FLOOR = '7.29.0';
+    // Keep the September 2026 transport fixes in both independent install graphs.
+    const PATCHED_UNDICI_FLOOR = '7.29.1';
     const rootPackageJson = readPackageJson<{
       overrides?: Record<string, string | Record<string, string>>;
     }>('package.json');
@@ -1324,7 +1490,7 @@ describe('package manifests', () => {
     // No installation anywhere in the tree — including nested copies — may sit on a
     // compromised version.
     for (const [packagePath, installation] of Object.entries(packageLock.packages)) {
-      const name = packagePath.replace(/^.*node_modules\//, '');
+      const name = packagePath.split(/(?:^|\/)node_modules\//).at(-1) ?? packagePath;
       const bad = COMPROMISED[name as keyof typeof COMPROMISED];
       if (!bad || !installation.version) {
         continue;

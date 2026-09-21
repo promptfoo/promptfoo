@@ -342,6 +342,22 @@ const outputToHtmlReportCell = (output: EvaluateTableOutput) => {
   };
 };
 
+async function createOutputSummary(
+  evalRecord: Eval,
+  stripFlags: ReturnType<typeof getStripFlags>,
+): Promise<OutputFile['results']> {
+  const summary = await evalRecord.toEvaluateSummary();
+  const prompts = ('prompts' in summary ? summary.prompts : summary.table.head.prompts).map(
+    (prompt) =>
+      prompt.config
+        ? { ...prompt, config: sanitizeConfigForOutput(prompt.config, stripFlags) }
+        : prompt,
+  );
+  return 'prompts' in summary
+    ? { ...summary, prompts }
+    : { ...summary, table: { ...summary.table, head: { ...summary.table.head, prompts } } };
+}
+
 function resultsForMediaExportScan(
   results: OutputFile['results'],
   shouldStripResponseOutput: boolean,
@@ -399,7 +415,7 @@ export async function createOutputData(
   options: OutputOptions = {},
 ): Promise<OutputFile> {
   const stripFlags = getStripFlags(evalRecord.config.env);
-  const summary = await evalRecord.toEvaluateSummary();
+  const summary = await createOutputSummary(evalRecord, stripFlags);
   const redactedConfig = sanitizeConfigForOutput(evalRecord.config, stripFlags);
   let traces;
   try {
@@ -576,11 +592,9 @@ export async function writeOutput(
   } else if (outputExtension === 'html') {
     const table = await evalRecord.getTable();
     invariant(table, 'Table is required');
-    const summary = await evalRecord.toEvaluateSummary();
-    const redactedConfig = sanitizeConfigForOutput(
-      evalRecord.config,
-      getStripFlags(evalRecord.config.env),
-    );
+    const stripFlags = getStripFlags(evalRecord.config.env);
+    const summary = await createOutputSummary(evalRecord, stripFlags);
+    const redactedConfig = sanitizeConfigForOutput(evalRecord.config, stripFlags);
     const metadata = createOutputMetadata(evalRecord);
     const template = await fsPromises.readFile(
       path.join(getDirectory(), 'tableOutput.html'),
@@ -693,11 +707,9 @@ export async function writeOutput(
       throw error;
     }
   } else if (outputExtension === 'xml') {
-    const summary = await evalRecord.toEvaluateSummary();
-    const redactedConfig = sanitizeConfigForOutput(
-      evalRecord.config,
-      getStripFlags(evalRecord.config.env),
-    );
+    const stripFlags = getStripFlags(evalRecord.config.env);
+    const summary = await createOutputSummary(evalRecord, stripFlags);
+    const redactedConfig = sanitizeConfigForOutput(evalRecord.config, stripFlags);
 
     // Sanitize data for XML builder to prevent textValue.replace errors
     const sanitizeForXml = (obj: any): any => {

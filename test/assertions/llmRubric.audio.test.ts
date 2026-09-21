@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { handleLlmRubric } from '../../src/assertions/llmRubric';
 import { fetchWithCache } from '../../src/cache';
 import { OpenAiChatCompletionProvider } from '../../src/providers/openai/chat';
+import { OpenAiLiveProvider } from '../../src/providers/openai/live';
 import { OpenAiResponsesProvider } from '../../src/providers/openai/responses';
 
 import type { ApiProvider, AssertionParams, ProviderResponse } from '../../src/types/index';
@@ -184,6 +185,19 @@ describe('llm-rubric audio grading', () => {
     });
     const body = JSON.parse(vi.mocked(fetchWithCache).mock.calls[0][1]!.body as string);
     expect(body.messages[1].content).toBe('Grade Hello. for The speaker sounds calm.');
+    expect(result.metadata).not.toHaveProperty('renderedGradingPromptAudio');
+  });
+
+  it.each(['mp3', 'wav'])('uses transcript grading for Live with %s output', async (format) => {
+    const provider = new OpenAiLiveProvider('gpt-live-1');
+    const call = vi
+      .spyOn(provider, 'callApi')
+      .mockResolvedValue({ output: '{"pass":true,"score":1}' });
+    const result = await grade(provider, { ...audio, format });
+    expect(JSON.parse(call.mock.calls[0][0])[1].content).toBe(
+      'Grade Hello. for The speaker sounds calm.',
+    );
+    expect(result).toMatchObject({ pass: true, score: 1 });
     expect(result.metadata).not.toHaveProperty('renderedGradingPromptAudio');
   });
 

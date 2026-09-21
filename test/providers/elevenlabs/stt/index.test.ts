@@ -22,7 +22,7 @@ describe('ElevenLabsSTTProvider', () => {
       const provider = new ElevenLabsSTTProvider('elevenlabs:stt');
 
       expect(provider).toBeDefined();
-      expect(provider.id()).toBe('elevenlabs:stt:scribe_v1');
+      expect(provider.id()).toBe('elevenlabs:stt:scribe_v2');
     });
 
     it('should throw error when API key is missing', () => {
@@ -72,7 +72,7 @@ describe('ElevenLabsSTTProvider', () => {
     it('should return correct provider ID with model', () => {
       const provider = new ElevenLabsSTTProvider('elevenlabs:stt');
 
-      expect(provider.id()).toBe('elevenlabs:stt:scribe_v1');
+      expect(provider.id()).toBe('elevenlabs:stt:scribe_v2');
     });
 
     it('should include custom model ID if configured', () => {
@@ -187,7 +187,7 @@ describe('ElevenLabsSTTProvider', () => {
     it('should use default model if not specified', () => {
       const provider = new ElevenLabsSTTProvider('elevenlabs:stt');
 
-      expect(provider.config.modelId).toBe('scribe_v1');
+      expect(provider.config.modelId).toBe('scribe_v2');
     });
 
     it('should use custom model if specified', () => {

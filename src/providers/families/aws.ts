@@ -1,6 +1,12 @@
 import { AwsBedrockConverseProvider } from '../bedrock/converse';
 import { AwsBedrockCompletionProvider, AwsBedrockEmbeddingProvider } from '../bedrock/index';
-import { isBedrockMantleResponsesModel, isRejectedPrefixedGrokId } from '../bedrock/mantle';
+import {
+  getBedrockTextRoute,
+  isBedrockAnthropicMessagesModel,
+  isRejectedPrefixedGrokId,
+  isRejectedPrefixedMythosId,
+  requiresBedrockAnthropicMessagesModel,
+} from '../bedrock/routing';
 
 import type { ProviderFactory } from '../registryTypes';
 
@@ -11,6 +17,7 @@ export const awsProviderFactories: ProviderFactory[] = [
       const splits = providerPath.split(':');
       const modelType = splits[1];
       const modelName = splits.slice(2).join(':');
+      const textRoute = getBedrockTextRoute(providerPath);
 
       // Mythos 5 requires Mantle's Messages endpoint. Both 5.1 models support
       // Runtime, including an explicit Messages route with US/global profiles.
@@ -23,19 +30,16 @@ export const awsProviderFactories: ProviderFactory[] = [
             : isLegacyType
               ? modelName
               : undefined;
-      const prefixedMythosModel = anthropicModel?.match(/^[^.]+\.(anthropic\.claude-mythos-5)$/);
-      if (prefixedMythosModel) {
+      if (anthropicModel && isRejectedPrefixedMythosId(anthropicModel)) {
         throw new Error(
           `Amazon Bedrock model "${anthropicModel}" is not a valid Mythos model ID. ` +
-            `Use "bedrock:${prefixedMythosModel[1]}"; Mythos does not support geo or global inference IDs.`,
+            `Use "bedrock:anthropic.claude-mythos-5"; Mythos does not support geo or global inference IDs.`,
         );
       }
       if (anthropicModel && /^(?:(?:us|global)\.)?anthropic\.claude-/.test(anthropicModel)) {
-        const {
-          createBedrockAnthropicMessagesProvider,
-          isBedrockAnthropicMessagesModel,
-          requiresBedrockAnthropicMessagesModel,
-        } = await import('../bedrock/anthropicMessages');
+        const { createBedrockAnthropicMessagesProvider } = await import(
+          '../bedrock/anthropicMessages'
+        );
         if (requiresBedrockAnthropicMessagesModel(anthropicModel) && isLegacyType) {
           throw new Error(
             `Amazon Bedrock model "${anthropicModel}" uses the Anthropic Messages API, not ` +
@@ -43,10 +47,7 @@ export const awsProviderFactories: ProviderFactory[] = [
               `"bedrock:${anthropicModel}" or "bedrock:messages:${anthropicModel}".`,
           );
         }
-        if (
-          isBedrockAnthropicMessagesModel(anthropicModel) &&
-          (modelType === 'messages' || requiresBedrockAnthropicMessagesModel(anthropicModel))
-        ) {
+        if (isBedrockAnthropicMessagesModel(anthropicModel) && textRoute?.apiMode === 'messages') {
           return createBedrockAnthropicMessagesProvider(anthropicModel, {
             ...providerOptions,
             id: providerOptions.id ?? providerPath,
@@ -60,6 +61,25 @@ export const awsProviderFactories: ProviderFactory[] = [
             `Mantle supports anthropic.claude-fable-5, anthropic.claude-mythos-5, and ` +
             `anthropic.claude-fable-5-1 (GovCloud West).`,
         );
+      }
+
+      // Explicit OpenAI-compatible Responses API route for Bedrock mantle models. Keep this
+      // separate from the legacy bare bedrock:<id> route so existing InvokeModel ids such as
+      // bedrock:openai.gpt-oss-120b-1:0 retain their current behavior, while the mantle id
+      // bedrock:responses:openai.gpt-oss-120b targets /v1/responses.
+      if (modelType === 'responses') {
+        if (!modelName) {
+          throw new Error(
+            'Amazon Bedrock Responses providers require a model id. Use ' +
+              'bedrock:responses:<model-id>, for example ' +
+              'bedrock:responses:openai.gpt-oss-120b.',
+          );
+        }
+        const { createBedrockOpenAiResponsesProvider } = await import('../bedrock/openaiResponses');
+        return createBedrockOpenAiResponsesProvider(modelName, {
+          ...providerOptions,
+          id: providerOptions.id ?? providerPath,
+        });
       }
 
       // Preserve the established Mantle Responses route for bare frontier model IDs and
@@ -97,9 +117,9 @@ export const awsProviderFactories: ProviderFactory[] = [
       // Gate the (heavy) openaiResponses import behind the lightweight routing predicate so
       // ordinary bedrock: models do not load the Responses stack at construction. The predicate
       // also excludes gpt-oss ids, which must fall through to InvokeModel below.
-      if (candidateResponsesModel && isBedrockMantleResponsesModel(candidateResponsesModel)) {
+      if (textRoute?.apiMode === 'responses') {
         const { createBedrockOpenAiResponsesProvider } = await import('../bedrock/openaiResponses');
-        return createBedrockOpenAiResponsesProvider(candidateResponsesModel, {
+        return createBedrockOpenAiResponsesProvider(textRoute.modelId, {
           ...providerOptions,
           id: providerOptions.id ?? providerPath,
         });
@@ -117,6 +137,10 @@ export const awsProviderFactories: ProviderFactory[] = [
 
       // Handle Converse API
       if (modelType === 'converse') {
+        // This route builds the provider directly, so it never reaches getHandlerForModel —
+        // check retirement here too, or a withdrawn model only fails at the remote API.
+        const { assertBedrockModelIsAvailable } = await import('../bedrock/index');
+        assertBedrockModelIsAvailable(modelName);
         return new AwsBedrockConverseProvider(modelName, providerOptions);
       }
 
