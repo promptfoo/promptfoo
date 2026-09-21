@@ -37,7 +37,11 @@ providers:
 
 ## Configuration Options
 
-The Cloudera provider supports all the standard [OpenAI configuration options](/docs/providers/openai#configuring-parameters) plus these additional Cloudera-specific options:
+The Cloudera provider supports the standard [OpenAI configuration options](/docs/providers/openai#configuring-parameters) plus these additional Cloudera-specific options.
+
+`apiBaseUrl` and `apiKeyEnvar` are exceptions: the provider sets both itself (from `domain`,
+`namespace`, `endpoint`, and the `CDP_TOKEN` environment variable) and overrides anything you put
+in `config`. Use `domain`/`namespace`/`endpoint` to change the URL.
 
 | Parameter   | Description                                                                        |
 | ----------- | ---------------------------------------------------------------------------------- |

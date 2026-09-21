@@ -92,6 +92,7 @@ providers:
 | `apiKeyEnvar`      | string   | Custom environment variable name for API key |
 | `temperature`      | number   | Controls randomness (0.0 to 1.0)             |
 | `maxTokens`        | number   | Maximum number of tokens to generate         |
+| `maxRetries`       | number   | Retry attempts for a failed request          |
 | `topP`             | number   | Nucleus sampling parameter                   |
 | `topK`             | number   | Top-k sampling parameter                     |
 | `frequencyPenalty` | number   | Penalizes frequent tokens                    |
@@ -171,18 +172,29 @@ For a complete list, see the [Vercel AI Gateway documentation](https://vercel.co
 
 Generate embeddings for text similarity, search, and RAG applications:
 
+Embedding providers are not eval providers — they back the `similar` assertion rather than
+producing outputs of their own. Set one on `defaultTest.options.provider.embedding`:
+
 ```yaml title="promptfooconfig.yaml"
 providers:
-  - vercel:embedding:openai/text-embedding-3-small
+  - vercel:openai/gpt-5.6-luna
 
 prompts:
-  - 'Generate embedding for: {{text}}'
+  - 'Answer concisely: {{question}}'
+
+defaultTest:
+  options:
+    provider:
+      embedding:
+        id: vercel:embedding:openai/text-embedding-3-small
 
 tests:
   - vars:
-      text: 'Hello world'
+      question: 'What is the capital of France?'
     assert:
-      - type: is-valid-embedding
+      - type: similar
+        value: Paris
+        threshold: 0.8
 ```
 
 Supported embedding models:
@@ -255,10 +267,11 @@ tests:
 
 ## Environment Variables
 
-| Variable                     | Description                 |
-| ---------------------------- | --------------------------- |
-| `VERCEL_AI_GATEWAY_API_KEY`  | API key for AI Gateway      |
-| `VERCEL_AI_GATEWAY_BASE_URL` | Override the AI Gateway URL |
+| Variable                     | Description                                                      |
+| ---------------------------- | ---------------------------------------------------------------- |
+| `VERCEL_AI_GATEWAY_API_KEY`  | API key for AI Gateway                                           |
+| `AI_GATEWAY_API_KEY`         | Fallback API key, used when `VERCEL_AI_GATEWAY_API_KEY` is unset |
+| `VERCEL_AI_GATEWAY_BASE_URL` | Override the AI Gateway URL                                      |
 
 ## Troubleshooting
 

@@ -28,7 +28,8 @@ You can set this in a `.env` file or directly in your environment.
 
 ## Requirements
 
-- Python with the OpenAI package installed (`pip install openai`)
+- Python 3.9 or later
+- The example dependencies installed with `pip install -r requirements.txt`
 
 ## Files
 
