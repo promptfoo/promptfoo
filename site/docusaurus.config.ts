@@ -3,6 +3,7 @@ import { join } from 'path';
 
 import { themes } from 'prism-react-renderer';
 import webpack from 'webpack';
+import { collectPublicDocMarkdown } from './src/utils/llmsTxt';
 import type * as Preset from '@docusaurus/preset-classic';
 import type { Config, Plugin } from '@docusaurus/types';
 
@@ -606,24 +607,7 @@ const config: Config = {
         loadContent: async () => {
           const { siteDir } = context;
           const docsDir = join(siteDir, 'docs');
-          const allMdx: string[] = [];
-
-          // Recursive function to get all mdx/md files
-          const getMdFiles = async (dir: string): Promise<void> => {
-            const entries = await fsPromises.readdir(dir, { withFileTypes: true });
-
-            for (const entry of entries) {
-              const fullPath = join(dir, entry.name);
-              if (entry.isDirectory()) {
-                await getMdFiles(fullPath);
-              } else if (entry.name.endsWith('.md') || entry.name.endsWith('.mdx')) {
-                const content = await fsPromises.readFile(fullPath, 'utf8');
-                allMdx.push(content);
-              }
-            }
-          };
-
-          await getMdFiles(docsDir);
+          const allMdx = await collectPublicDocMarkdown(docsDir);
           return { allMdx };
         },
         postBuild: async ({ content, routesPaths, outDir }) => {

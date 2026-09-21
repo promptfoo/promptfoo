@@ -375,6 +375,8 @@ For demo/example apps used to show red teaming, do not harden away all interesti
 
 ## Review Guidelines
 
+For Claude Code, use `/review` for repository reviews. It runs the bundled `/code-review` and adds a conventions pass against the root and applicable nested `AGENTS.md` files. Calling `/code-review` directly runs only the bundled reviewer.
+
 - Prioritize security regressions first, especially injection risks, unsafe handling of user-controlled or adversarial content, credential exposure, SSRF, path traversal, unsafe deserialization, and authorization mistakes.
 - Then prioritize correctness issues that can break behavior, public APIs, data integrity, concurrency, or error handling.
 - Treat missing or ineffective tests as a P1 issue when a change adds security-sensitive behavior, changes public behavior, or fixes a bug without meaningful coverage.
