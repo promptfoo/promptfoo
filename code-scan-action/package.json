@@ -30,6 +30,6 @@
     "typescript": "^7.0.0"
   },
   "overrides": {
-    "undici": ">=7.29.0 <8"
+    "undici": ">=7.29.1 <8"
   }
 }

@@ -5,7 +5,7 @@ import path from 'path';
 import { type Attributes, type Span, SpanKind, SpanStatusCode, trace } from '@opentelemetry/api';
 import dedent from 'dedent';
 import { z } from 'zod';
-import { getEnvString } from '../../envars';
+import { getEnvString, getProcessEnv } from '../../envars';
 import {
   addActiveSpanRoleAttribute,
   closeTurnSpan,
@@ -18,7 +18,13 @@ import {
   PROMPTFOO_RESOURCE_ATTR_TRACE_ID,
   withGenAISpan,
 } from '../../tracing/genaiTracer';
-import { formatRateLimitErrorMessage, HttpRateLimitError } from '../../util/fetch/errors';
+import {
+  formatRateLimitErrorMessage,
+  HARD_QUOTA_ERROR_CODES,
+  HttpRateLimitError,
+  isDefinitiveBillingCode,
+  isHardQuotaCode,
+} from '../../util/fetch/errors';
 import { normalizeFieldName, REDACTED, sanitizeObject } from '../../util/sanitizer';
 import { resolveAgenticWorkingDir } from '../agentic-utils';
 import { providerRegistry } from '../providerRegistry';
@@ -471,8 +477,9 @@ function parseCodexConfig(
 
 function getMinimalProcessEnv(): Record<string, string> {
   const env: Record<string, string> = {};
+  const processEnv = getProcessEnv();
   for (const key of MINIMAL_CLI_ENV_KEYS) {
-    const value = process.env[key];
+    const value = processEnv[key];
     if (typeof value === 'string' && value.length > 0) {
       env[key] = value;
     }
@@ -480,14 +487,13 @@ function getMinimalProcessEnv(): Record<string, string> {
   return env;
 }
 
-const CODEX_RATE_LIMIT_CODES = [
+// The transient throttle code plus the shared hard-quota set, so a billing code
+// added to HARD_QUOTA_ERROR_CODES (e.g. credit_balance_exhausted) is recognized
+// on the SDK path too instead of falling back to the 60s retry cycle.
+const CODEX_RATE_LIMIT_CODES: readonly string[] = [
   'rate_limit_exceeded',
-  'insufficient_quota',
-  'billing_hard_limit_reached',
-  'billing_not_active',
-  'access_terminated',
-  'quota_exceeded',
-] as const;
+  ...HARD_QUOTA_ERROR_CODES,
+];
 
 // Mirrors the HTTP retry path's fallback when the upstream error carries no reset hint.
 const CODEX_DEFAULT_RATE_LIMIT_WAIT_MS = 60_000;
@@ -503,6 +509,19 @@ const CODEX_RATE_LIMIT_PATTERNS = [
 
 function extractCodexRateLimitCode(message: string): string | undefined {
   const lowerMessage = message.toLowerCase();
+  // Flattened SDK messages can contain both a broad quota type and a specific
+  // billing code. Preserve the definitive billing classification.
+  const billingCode = CODEX_RATE_LIMIT_CODES.find(
+    (code) => isDefinitiveBillingCode(code) && lowerMessage.includes(code),
+  );
+  if (billingCode) {
+    return billingCode;
+  }
+
+  if (/\bno credits remaining\b/i.test(message)) {
+    return 'credit_balance_exhausted';
+  }
+
   const explicitCode = CODEX_RATE_LIMIT_CODES.find((code) => lowerMessage.includes(code));
   if (explicitCode) {
     return explicitCode;
@@ -555,6 +574,11 @@ function buildCodexRateLimitResponse(
         : undefined;
   const rawCode =
     typeof errorRecord?.code === 'string' ? errorRecord.code.toLowerCase() : undefined;
+  // The SDK error's broad class (e.g. `type: "insufficient_quota"` next to a
+  // provider-specific billing code) carries the quota classification when the
+  // code itself is not recognized, exactly as on the fetch and Foundry paths.
+  const rawType =
+    typeof errorRecord?.type === 'string' ? errorRecord.type.toLowerCase() : undefined;
   const code =
     rawCode && CODEX_RATE_LIMIT_CODES.some((knownCode) => knownCode === rawCode)
       ? rawCode
@@ -563,6 +587,7 @@ function buildCodexRateLimitResponse(
   if (
     status !== 429 &&
     code === undefined &&
+    !isHardQuotaCode(rawType) &&
     !CODEX_RATE_LIMIT_PATTERNS.some((pattern) => pattern.test(message))
   ) {
     return undefined;
@@ -572,7 +597,10 @@ function buildCodexRateLimitResponse(
   const rateLimitError = new HttpRateLimitError({
     status: status ?? 429,
     retryAfterMs,
-    code,
+    // Keep the provider's own code for reporting when it is not one we
+    // recognize; `type` decides the quota classification in that case.
+    code: code ?? rawCode,
+    type: rawType,
   });
   const schedulerRetryAfterMs =
     rateLimitError.kind === 'rate_limit'
@@ -780,7 +808,7 @@ export class OpenAICodexSDKProvider implements ApiProvider {
       Object.entries(config.cli_env ?? {}).map(([key, value]) => [key, String(value)]),
     );
     const env: Record<string, string> = {
-      ...(inheritProcessEnv ? (process.env as Record<string, string>) : getMinimalProcessEnv()),
+      ...(inheritProcessEnv ? (getProcessEnv() as Record<string, string>) : getMinimalProcessEnv()),
       ...cliEnv,
     };
 

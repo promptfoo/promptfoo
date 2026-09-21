@@ -90,6 +90,11 @@ npm run test:app   # From project root
 npm run test:app -- src/pages/path/to/test.test.tsx --run   # Single frontend test from repo root
 ```
 
+Vitest 5 browser matcher types differ from the jest-dom matchers used by jsdom tests.
+Keep `*.browser.ts` and `*.browser.tsx` in `tsconfig.browser.json`; `tsconfig.app.json`
+checks app code and jsdom tests. `tsc -b` checks both projects. Run real browser tests
+with `npm run test:browser --workspace=src/app` from the repository root.
+
 See `src/app/src/hooks/usePageMeta.test.ts` for patterns. Use `vi.fn()` for mocks, `vi.mock()` for modules.
 
 For frontend tests that need environment variables, use `vi.stubEnv()` and clean up with `vi.unstubAllEnvs()` in `afterEach`. Avoid direct `process.env.FOO = ...`, `delete process.env.FOO`, or `process.env = ...` mutations; Biome blocks those in new frontend tests.
@@ -112,7 +117,11 @@ import { EVAL_ROUTES, ROUTES } from '@app/constants/routes';
 
 ## UI Guidelines
 
-See `UI_GUIDELINES.md` for the 9 rules on writing React components:
+Read the full [UI guidelines](./UI_GUIDELINES.md) before writing React components:
+
+@UI_GUIDELINES.md
+
+The guidelines cover:
 
 1. Typography with semantic HTML
 2. Small, composable components

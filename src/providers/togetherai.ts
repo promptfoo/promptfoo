@@ -1,39 +1,40 @@
 import { OpenAiChatCompletionProvider } from './openai/chat';
 import { OpenAiCompletionProvider } from './openai/completion';
 import { OpenAiEmbeddingProvider } from './openai/embedding';
+import { splitLocalOptions } from './openai/localOptions';
 
 import type { EnvOverrides } from '../types/env';
 import type { ApiProvider, ProviderOptions } from '../types/index';
-import type { OpenAiCompletionOptions, OpenAiSharedOptions } from './openai/types';
+import type { OpenAiCompletionOptions } from './openai/types';
 
-// These are consumed by promptfoo or its transport, not TogetherAI's model endpoint.
-// Requiring every shared option here keeps future connection settings out of passthrough.
-const localOptions = {
-  apiKey: true,
-  apiKeyEnvar: true,
-  apiKeyRequired: true,
-  useDefaultApiKey: true,
-  apiHost: true,
-  apiBaseUrl: true,
-  organization: true,
-  headers: true,
-  maxRetries: true,
-  cost: true,
-  inputCost: true,
-  outputCost: true,
-  audioCost: true,
-  audioInputCost: true,
-  audioOutputCost: true,
-  passthrough: true,
-  mcp: true,
-  functionToolCallbacks: true,
-  showThinking: true,
-  omitDefaults: true,
-  basePath: true,
-  linkedTargetId: true,
-} satisfies Record<keyof OpenAiSharedOptions, boolean> &
-  Partial<Record<keyof OpenAiCompletionOptions | 'basePath' | 'linkedTargetId', boolean>>;
-const localOptionNames = new Set(Object.keys(localOptions));
+// The chat provider resolves these itself: it loads `file://` references, renders Nunjucks
+// vars, merges in MCP tools and normalizes tool shapes. `passthrough` is spread into the
+// body last, so a raw copy of one of them would clobber the resolved value. It emits each
+// of these whenever it is configured, so dropping the raw copy cannot lose a parameter.
+// `reasoning_effort` is deliberately absent: the chat provider only renders and emits it
+// for recognized reasoning model patterns or names containing `gpt-oss`, so passthrough
+// has to keep carrying it for other models. The completion and embedding providers do not
+// resolve these four options, so the filter applies to chat alone.
+const chatResolvedOptionNames = [
+  'functions',
+  'response_format',
+  'tool_choice',
+  'tools',
+] satisfies (keyof OpenAiCompletionOptions)[];
+
+// A Map, not an object literal, so a route segment naming an Object prototype member
+// (`constructor`, `toString`) does not resolve to that member.
+const providersByType = new Map<
+  string,
+  | typeof OpenAiChatCompletionProvider
+  | typeof OpenAiCompletionProvider
+  | typeof OpenAiEmbeddingProvider
+>([
+  ['chat', OpenAiChatCompletionProvider],
+  ['completion', OpenAiCompletionProvider],
+  ['embedding', OpenAiEmbeddingProvider],
+  ['embeddings', OpenAiEmbeddingProvider],
+]);
 
 /**
  * Creates a TogetherAI provider using OpenAI-compatible endpoints
@@ -51,10 +52,14 @@ export function createTogetherAiProvider(
 ): ApiProvider {
   const splits = providerPath.split(':');
 
+  // Without an explicit type the whole remainder is the model name and we default to chat.
+  const routed = providersByType.get(splits[1]);
+  const Provider = routed ?? OpenAiChatCompletionProvider;
+  const modelName = splits.slice(routed ? 2 : 1).join(':');
+
   const config = options.config?.config || {};
-  const modelParameters = Object.fromEntries(
-    Object.entries(config).filter(([key]) => !localOptionNames.has(key)),
-  );
+  const isChat = Provider === OpenAiChatCompletionProvider;
+  const { modelParameters } = splitLocalOptions(config, isChat ? chatResolvedOptionNames : []);
   const togetherAiConfig = {
     ...options.config,
     id: options.id ?? options.config?.id,
@@ -67,18 +72,5 @@ export function createTogetherAiProvider(
     },
   };
 
-  if (splits[1] === 'chat') {
-    const modelName = splits.slice(2).join(':');
-    return new OpenAiChatCompletionProvider(modelName, togetherAiConfig);
-  } else if (splits[1] === 'completion') {
-    const modelName = splits.slice(2).join(':');
-    return new OpenAiCompletionProvider(modelName, togetherAiConfig);
-  } else if (splits[1] === 'embedding' || splits[1] === 'embeddings') {
-    const modelName = splits.slice(2).join(':');
-    return new OpenAiEmbeddingProvider(modelName, togetherAiConfig);
-  } else {
-    // If no specific type is provided, default to chat
-    const modelName = splits.slice(1).join(':');
-    return new OpenAiChatCompletionProvider(modelName, togetherAiConfig);
-  }
+  return new Provider(modelName, togetherAiConfig);
 }

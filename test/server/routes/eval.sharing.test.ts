@@ -79,6 +79,33 @@ describe('Eval Routes - Sharing behavior', () => {
     tests: [{ vars: { input: 'test' } }],
   };
 
+  it('does not let a job request change the server file-resolution directory', async () => {
+    await postJob({ ...minimalTestSuite, basePath: '/' }).expect(200);
+    expect(mockedEvaluateWithSource).toHaveBeenCalledOnce();
+    expect(mockedEvaluateWithSource.mock.calls[0][0]).not.toHaveProperty('basePath');
+  });
+
+  it.each([undefined, '/untrusted/request/path'])(
+    'restores the saved base path for rerun jobs (request path: %s)',
+    async (basePath) => {
+      mockedEvalFindById.mockResolvedValueOnce({ config: { basePath: '/saved/config' } } as Eval);
+      await postJob({ ...minimalTestSuite, sourceEvalId: 'saved-eval', basePath }).expect(200);
+      expect(mockedEvaluateWithSource.mock.calls[0][0]).toMatchObject({
+        basePath: '/saved/config',
+      });
+    },
+  );
+
+  it('does not accept a request path when the source eval is missing', async () => {
+    mockedEvalFindById.mockResolvedValueOnce(undefined);
+    await postJob({
+      ...minimalTestSuite,
+      sourceEvalId: 'missing-eval',
+      basePath: '/untrusted',
+    }).expect(200);
+    expect(mockedEvaluateWithSource.mock.calls[0][0]).not.toHaveProperty('basePath');
+  });
+
   it('should use testSuite.sharing when explicitly set to true', async () => {
     await postJob({ ...minimalTestSuite, sharing: true });
 

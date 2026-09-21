@@ -1,11 +1,16 @@
 import path from 'path';
 
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { loadApiProvider } from '../../src/providers';
 import { isFoundationModelProvider } from '../../src/providers/constants';
+import { GolangProvider } from '../../src/providers/golangCompletion';
 import { LlamaApiProvider } from '../../src/providers/llamaApi';
+import { MCPProvider } from '../../src/providers/mcp';
 import { OpenAiChatCompletionProvider } from '../../src/providers/openai/chat';
 import { OpenAiResponsesProvider } from '../../src/providers/openai/responses';
+import { PythonProvider } from '../../src/providers/pythonCompletion';
 import { getProviderFactories, providerMap } from '../../src/providers/registry';
+import { ScriptCompletionProvider } from '../../src/providers/scriptCompletion';
 
 import type { CometApiImageProvider } from '../../src/providers/cometapi';
 import type { LoadApiProviderContext } from '../../src/types/index';
@@ -59,6 +64,67 @@ vi.mock('../../src/redteam/remoteGeneration', async (importOriginal) => {
 });
 
 describe('Provider Registry', () => {
+  it.each(['openai:agents-api', 'openai:agents-api:gpt-6-astra'])(
+    'routes %s to the hosted Agents API with scoped credentials',
+    async (providerPath) => {
+      const factories = await getProviderFactories(providerPath);
+      const factory = factories.find((entry) => entry.test(providerPath))!;
+      const provider = await factory.create(
+        providerPath,
+        { id: 'hosted-agent', config: { agent_id: 'agent_saved' } },
+        { basePath: '.', options: {}, env: { OPENAI_API_KEY: 'scoped-key' } },
+      );
+      expect(provider.constructor.name).toBe('OpenAiAgentsApiProvider');
+      expect(provider.id()).toBe('hosted-agent');
+      expect(provider).toHaveProperty('env.OPENAI_API_KEY', 'scoped-key');
+      expect(provider).toHaveProperty('config.agent_id', 'agent_saved');
+      expect(provider).toHaveProperty(
+        'modelName',
+        providerPath.endsWith('gpt-6-astra') ? 'gpt-6-astra' : '',
+      );
+    },
+  );
+
+  it.each([undefined, 'configured-opencode'])('preserves OpenCode provider ID %s', async (id) => {
+    const providerPath = 'opencode:sdk';
+    const factory = providerMap.find((entry) => entry.test(providerPath))!;
+    const provider = await factory.create(providerPath, { id }, { options: {} });
+    expect(provider.id()).toBe(id ?? providerPath);
+  });
+
+  it.each(['openai:codex-sdk', 'openai:codex-sdk:gpt-5.5'])(
+    'merges scoped Codex SDK environment for %s',
+    async (providerPath) => {
+      const factory = providerMap.find((entry) => entry.test(providerPath))!;
+      const provider = await factory.create(
+        providerPath,
+        { env: { CODEX_API_KEY: 'provider-key' } },
+        {
+          options: {},
+          env: { CODEX_API_KEY: 'suite-key', OPENAI_API_BASE_URL: 'https://suite.example/v1' },
+        },
+      );
+      expect(provider).toHaveProperty('env', {
+        CODEX_API_KEY: 'provider-key',
+        OPENAI_API_BASE_URL: 'https://suite.example/v1',
+      });
+    },
+  );
+
+  it.each([
+    { suite: { OPENAI_API_KEY: 'suite-key' }, scoped: { CODEX_API_KEY: 'provider-key' } },
+    { suite: { CODEX_API_KEY: 'suite-key' }, scoped: { OPENAI_API_KEY: 'provider-key' } },
+  ])(
+    'preserves scoped credentials across Codex API-key aliases: $scoped',
+    async ({ suite, scoped }) => {
+      const provider = await loadApiProvider('openai:codex-sdk', {
+        env: suite,
+        options: { env: scoped },
+      });
+      expect(provider).toHaveProperty('apiKey', 'provider-key');
+    },
+  );
+
   it.each([
     'openai:gpt-4o-mini-realtime-preview-2024-12-17',
     'openai:realtime:gpt-4o-mini-realtime-preview-2024-12-17',
@@ -77,6 +143,99 @@ describe('Provider Registry', () => {
     expect(provider).toHaveProperty('modelName', 'gpt-4o-mini-realtime-preview-2024-12-17');
     expect(provider.id()).toBe('realtime-fixture');
     expect(provider).toHaveProperty('config.apiBaseUrl', 'http://localhost:1234/v1');
+  });
+
+  it.each([
+    ['openai:live:gpt-live-1', 'gpt-live-1'],
+    ['openai:live', 'gpt-live-1'],
+    ['openai:gpt-live-1', 'gpt-live-1'],
+    ['openai:gpt-live-1-2026-09-01', 'gpt-live-1-2026-09-01'],
+  ])(
+    'routes %s to the Live endpoint with scoped configuration',
+    async (providerPath, modelName) => {
+      const factories = await getProviderFactories(providerPath);
+      const factory = factories.find((entry) => entry.test(providerPath));
+      const provider = await factory!.create(
+        providerPath,
+        {
+          id: 'live-fixture',
+          config: { audio: { output: { voice: 'quartz' } } },
+          env: { OPENAI_API_KEY: 'provider-key' },
+        },
+        { basePath: '.', options: {}, env: { OPENAI_API_KEY: 'suite-key' } },
+      );
+      expect(provider.constructor.name).toBe('OpenAiLiveProvider');
+      expect(provider.id()).toBe('live-fixture');
+      expect(provider).toHaveProperty('modelName', modelName);
+      expect(provider).toHaveProperty('config.audio.output.voice', 'quartz');
+      expect(provider).toHaveProperty('env.OPENAI_API_KEY', 'provider-key');
+    },
+  );
+
+  it.each([
+    'openai:gpt-live-transcribe',
+    'openai:gpt-live-transcribe-2026-09-01',
+    'openai:live:gpt-live-transcribe',
+    'openai:live:gpt-live-transcribe-2026-09-01',
+    'openai:transcription:gpt-live-transcribe',
+    'openai:transcription:gpt-live-transcribe-2026-09-01',
+    'openai:realtime:gpt-live-transcribe',
+    'openai:chat:gpt-live-transcribe',
+    'openai:responses:gpt-live-transcribe',
+  ])('rejects unsupported Live transcription on route %s', async (providerPath) => {
+    const factories = await getProviderFactories(providerPath);
+    const factory = factories.find((entry) => entry.test(providerPath));
+    await expect(factory!.create(providerPath, {}, { basePath: '.', options: {} })).rejects.toThrow(
+      'transcription session',
+    );
+  });
+
+  it.each(['openai:gpt-live-transcribe', 'openai:gpt-live-transcribe-2026-09-01'])(
+    'rejects transcription shorthand despite a model override for %s',
+    async (providerPath) => {
+      const factories = await getProviderFactories(providerPath);
+      const factory = factories.find((entry) => entry.test(providerPath));
+      await expect(
+        factory!.create(
+          providerPath,
+          { config: { model: 'gpt-live-1' } },
+          { basePath: '.', options: {} },
+        ),
+      ).rejects.toThrow('transcription session');
+    },
+  );
+
+  it('rejects transcription in a passthrough model override', async () => {
+    const factories = await getProviderFactories('openai:chat:gpt-4o');
+    const factory = factories.find((entry) => entry.test('openai:chat:gpt-4o'));
+    await expect(
+      factory!.create(
+        'openai:chat:gpt-4o',
+        { config: { passthrough: { model: 'gpt-live-transcribe' } } },
+        { basePath: '.', options: {} },
+      ),
+    ).rejects.toThrow('transcription session');
+  });
+
+  it.each([
+    'azure:live:gpt-live-1',
+    'azureopenai:live:gpt-live-1',
+    'openai:realtime:gpt-live-1',
+    'openai:realtime:gpt-live-1-2026-09-01',
+    'openai:chat:gpt-live-1',
+    'openai:chat:gpt-live-1-2026-09-01',
+    'openai:responses:gpt-live-1',
+    'openai:responses:gpt-live-1-2026-09-01',
+    'openai:completion:gpt-live-1',
+    'openai:embedding:gpt-live-1',
+    'openai:tts:gpt-live-1',
+    'openai:image:gpt-live-1',
+  ])('rejects the incompatible Live route %s', async (providerPath) => {
+    const factories = await getProviderFactories(providerPath);
+    const factory = factories.find((entry) => entry.test(providerPath));
+    await expect(factory!.create(providerPath, {}, { basePath: '.', options: {} })).rejects.toThrow(
+      'openai:live:',
+    );
   });
 
   it.each([
@@ -163,6 +322,29 @@ describe('Provider Registry', () => {
         options: { env: { COMETAPI_KEY: 'provider-key' } },
       });
       expect((provider as CometApiImageProvider).getApiKey()).toBe('provider-key');
+    });
+
+    it('enables MCP when optional configuration omits enabled', async () => {
+      const factory = providerMap.find((entry) => entry.test('mcp'));
+      expect(factory).toBeDefined();
+
+      const configured = await factory!.create(
+        'mcp:docs',
+        { config: { verbose: false } },
+        mockContext,
+      );
+      expect(configured).toBeInstanceOf(MCPProvider);
+      expect((configured as MCPProvider).config).toMatchObject({
+        enabled: true,
+        verbose: false,
+        serverName: 'docs',
+      });
+
+      const disabled = await factory!.create('mcp', { config: { enabled: false } }, mockContext);
+      expect((disabled as MCPProvider).config).toMatchObject({ enabled: false });
+
+      const nullish = await factory!.create('mcp', { config: { enabled: null } }, mockContext);
+      expect((nullish as MCPProvider).config).toMatchObject({ enabled: true });
     });
 
     describe('getProviderFactories boundary contract', () => {
@@ -298,6 +480,16 @@ describe('Provider Registry', () => {
     });
 
     describe('OpenAI endpoint defaults', () => {
+      it.each([
+        ['chat', OpenAiChatCompletionProvider],
+        ['responses', OpenAiResponsesProvider],
+      ])('uses Terra when openai:%s omits a model', async (endpoint, Provider) => {
+        const provider = await registry.create(`openai:${endpoint}`);
+
+        expect(provider).toBeInstanceOf(Provider);
+        expect(provider).toHaveProperty('modelName', 'gpt-5.6-terra');
+      });
+
       it.each([
         'gpt-5.6',
         'gpt-5.6-sol',
@@ -957,15 +1149,14 @@ describe('Provider Registry', () => {
     });
 
     it('should handle bedrock converse providers correctly', async () => {
-      const factories = await getProviderFactories('bedrock:converse:anthropic.claude-v2');
-      const factory = factories.find((f) => f.test('bedrock:converse:anthropic.claude-v2'));
+      // Uses a model AWS still serves: the converse route now rejects retired ids, and the
+      // previous fixture (`anthropic.claude-v2`) is one of them.
+      const path = 'bedrock:converse:anthropic.claude-sonnet-4-6';
+      const factories = await getProviderFactories(path);
+      const factory = factories.find((f) => f.test(path));
       expect(factory).toBeDefined();
 
-      const provider = await factory!.create(
-        'bedrock:converse:anthropic.claude-v2',
-        mockProviderOptions,
-        mockContext,
-      );
+      const provider = await factory!.create(path, mockProviderOptions, mockContext);
       expect(provider.constructor.name).toBe('AwsBedrockConverseProvider');
     });
 
@@ -981,6 +1172,25 @@ describe('Provider Registry', () => {
         mockContext,
       );
       expect(provider.constructor.name).toBe('BedrockMantleChatProvider');
+    });
+
+    it('should handle explicit bedrock Responses providers correctly', async () => {
+      const path = 'bedrock:responses:openai.gpt-oss-120b';
+      const factories = await getProviderFactories(path);
+      const factory = factories.find((f) => f.test(path));
+      expect(factory).toBeDefined();
+
+      const provider = await factory!.create(
+        path,
+        {
+          ...mockProviderOptions,
+          id: undefined,
+          config: { apiKey: 'bedrock-key', region: 'us-east-1' },
+        },
+        mockContext,
+      );
+      expect(provider.constructor.name).toBe('BedrockGptOssResponsesProvider');
+      expect(provider.id()).toBe(path);
     });
 
     it('should handle bedrock-agent providers correctly', async () => {
@@ -1036,7 +1246,16 @@ describe('Provider Registry', () => {
       ['sagemaker:endpoint-name', 'SageMakerCompletionProvider', { modelType: 'custom' }, 'custom'],
       ['sagemaker:jumpstart:endpoint-name', 'SageMakerCompletionProvider', {}, 'jumpstart'],
       ['sagemaker:openai:endpoint-name', 'SageMakerCompletionProvider', {}, 'openai'],
-      ['sagemaker:custom:my-jumpstart-endpoint', 'SageMakerCompletionProvider', {}, 'jumpstart'],
+      // An explicit model type wins over an endpoint name containing 'jumpstart'. This
+      // previously resolved to 'jumpstart', silently discarding what the user asked for.
+      ['sagemaker:custom:my-jumpstart-endpoint', 'SageMakerCompletionProvider', {}, 'custom'],
+      [
+        'sagemaker:huggingface:my-jumpstart-endpoint',
+        'SageMakerCompletionProvider',
+        {},
+        'huggingface',
+      ],
+      ['sagemaker:jumpstart:my-jumpstart-endpoint', 'SageMakerCompletionProvider', {}, 'jumpstart'],
     ])(
       'should handle %s providers correctly',
       async (path, expectedProviderName, config, expectedModelType) => {
@@ -1242,68 +1461,56 @@ describe('Provider Registry', () => {
     });
 
     it('should resolve relative paths correctly for file-based providers', async () => {
-      // We'll test the path resolution by looking at the provider IDs, which contain the path
-
-      // Test Golang provider
-      const golangFactory = providerMap.find((f) => f.test('golang:script.go'));
-      expect(golangFactory).toBeDefined();
-
-      // These variables would be used in actual implementation tests
-      // Adding underscore prefix to mark as intentionally unused
-      const _customContext = {
-        basePath: '/custom/path',
-      };
-
-      // For relative paths, they should be joined with basePath
-      const _relativePath = 'script.go';
-      const _expectedRelativePath = path.join('/custom/path', _relativePath);
-
-      // For absolute paths, they should remain unchanged
-      const _absolutePath = path.resolve('/absolute/path/script.go');
-
-      // Test Python provider with file:// URL
       const pythonFactory = providerMap.find((f) => f.test('file://script.py'));
       expect(pythonFactory).toBeDefined();
+      const customContext = { ...mockContext, basePath: '/custom/path' };
 
-      // Test exec provider
-      const execFactory = providerMap.find((f) => f.test('exec:script.sh'));
-      expect(execFactory).toBeDefined();
+      // Local script paths remain relative; the config loader has already resolved its base path.
+      await pythonFactory!.create('file://script.py', mockProviderOptions, customContext);
+      expect(PythonProvider).toHaveBeenLastCalledWith('script.py', mockProviderOptions);
 
-      // Instead of testing the exact path resolution logic (which involves mocking),
-      // we'll verify that the registry factories exist and are configured correctly.
-      // The actual path resolution logic is now identical in all three providers,
-      // so testing one provider's implementation would effectively test all of them.
+      // Cloud configs resolve script paths from the process working directory.
+      const cloudOptions = { ...mockProviderOptions, config: { isCloudConfig: true } };
+      await pythonFactory!.create('file://script.py', cloudOptions, customContext);
+      expect(PythonProvider).toHaveBeenLastCalledWith(
+        path.join(process.cwd(), 'script.py'),
+        cloudOptions,
+      );
 
-      // For actual end-to-end tests of the path resolution, integration tests would be more
-      // appropriate than these unit tests, especially if we need to mock or spy on
-      // the provider constructors.
+      const absolutePath = path.resolve('/absolute/path/script.py');
+      await pythonFactory!.create(`file://${absolutePath}`, cloudOptions, customContext);
+      expect(PythonProvider).toHaveBeenLastCalledWith(absolutePath, cloudOptions);
     });
 
     it('should preserve absolute paths in file-based providers', async () => {
-      // Create a simple integration test that verifies the factory functionality
-      // exists but doesn't attempt detailed mocking of the provider internals
-
-      // Create an absolute path that would pass path.isAbsolute() check
       const absoluteGolangPath = path.resolve('/absolute/path/golang-script.go');
       const absolutePythonPath = path.resolve('/absolute/path/python-script.py');
       const absoluteExecPath = path.resolve('/absolute/path/exec-script.sh');
 
-      // Find the correct factories
       const golangFactory = providerMap.find((f) => f.test(`golang:${absoluteGolangPath}`));
       const pythonFactory = providerMap.find((f) => f.test(`python:${absolutePythonPath}`));
       const fileFactory = providerMap.find((f) => f.test(`file://${absolutePythonPath}`));
       const execFactory = providerMap.find((f) => f.test(`exec:${absoluteExecPath}`));
 
-      // Verify factories exist
       expect(golangFactory).toBeDefined();
       expect(pythonFactory).toBeDefined();
       expect(fileFactory).toBeDefined();
       expect(execFactory).toBeDefined();
 
-      // Note: We're not testing the actual mocked implementations here,
-      // just verifying that the factories exist and can be found for absolute paths.
-      // The actual path resolution logic (path.isAbsolute check) is identical in all providers
-      // and is already covered by the implementation in registry.ts.
+      await golangFactory!.create(`golang:${absoluteGolangPath}`, mockProviderOptions, mockContext);
+      expect(GolangProvider).toHaveBeenLastCalledWith(absoluteGolangPath, mockProviderOptions);
+
+      await pythonFactory!.create(`python:${absolutePythonPath}`, mockProviderOptions, mockContext);
+      expect(PythonProvider).toHaveBeenLastCalledWith(absolutePythonPath, mockProviderOptions);
+
+      await fileFactory!.create(`file://${absolutePythonPath}`, mockProviderOptions, mockContext);
+      expect(PythonProvider).toHaveBeenLastCalledWith(absolutePythonPath, mockProviderOptions);
+
+      await execFactory!.create(`exec:${absoluteExecPath}`, mockProviderOptions, mockContext);
+      expect(ScriptCompletionProvider).toHaveBeenLastCalledWith(
+        absoluteExecPath,
+        mockProviderOptions,
+      );
     });
 
     it('should handle helicone provider correctly', async () => {
@@ -1503,49 +1710,6 @@ describe('Provider Registry', () => {
     });
   });
 
-  // Kept at the very end of the file because it uses vi.doMock + resetModules
-  // to simulate a broken redteam family dynamic import. Running last avoids
-  // polluting earlier tests that share the original module graph.
-  describe('getProviderFactories family load error wrapping', () => {
-    afterEach(() => {
-      vi.doUnmock('../../src/redteam/providers/registry');
-      vi.resetModules();
-    });
-
-    it('wraps family factories() rejections with the requested provider path and preserves cause', async () => {
-      // vi.doMock factory throws are caught by vitest and rewrapped with its
-      // own diagnostic message, which would lose the cause identity the
-      // wrapper is trying to preserve. Defining `redteamProviderFactories`
-      // as a throwing getter lets the import succeed while the destructure
-      // inside `family.factories()` triggers the throw — which is the
-      // realistic failure shape (module loads, export access fails) and
-      // round-trips cleanly through the async rejection.
-      const cause = new Error('simulated registry load failure');
-      vi.doMock('../../src/redteam/providers/registry', () => ({
-        get redteamProviderFactories() {
-          throw cause;
-        },
-      }));
-      vi.resetModules();
-      const { getProviderFactories: reloadedGetProviderFactories } = await import(
-        '../../src/providers/registry'
-      );
-
-      let caught: unknown;
-      try {
-        await reloadedGetProviderFactories('promptfoo:redteam:crescendo');
-      } catch (err) {
-        caught = err;
-      }
-      expect(caught).toBeInstanceOf(Error);
-      expect((caught as Error).message).toContain(
-        "Failed to load provider family for 'promptfoo:redteam:crescendo'",
-      );
-      expect((caught as Error).message).toContain('simulated registry load failure');
-      expect((caught as Error).cause).toBe(cause);
-    });
-  });
-
   describe('google: prefix routing', () => {
     // Empty options so the provider computes its own id() rather than using
     // a caller-supplied override.
@@ -1555,9 +1719,42 @@ describe('Provider Registry', () => {
       options: bareOptions,
     };
 
+    it('rejects a Vertex Live route without a model', async () => {
+      const factory = (await getProviderFactories('vertex:live:')).find((f) =>
+        f.test('vertex:live:'),
+      );
+      await expect(factory!.create('vertex:live:', bareOptions, bareContext)).rejects.toThrow(
+        'Missing model name',
+      );
+    });
+
     it.each([
       [
+        'vertex:live:gemini-live-2.5-flash-native-audio',
+        async () => (await import('../../src/providers/google/vertexLive')).VertexLiveProvider,
+      ],
+      [
+        'vertex:live:gemini-3.8-live',
+        async () => (await import('../../src/providers/google/vertexLive')).VertexLiveProvider,
+      ],
+      [
+        'vertex:live:gemini-3.8-live-extended-thinking',
+        async () => (await import('../../src/providers/google/vertexLive')).VertexLiveProvider,
+      ],
+      [
         'google:live:gemini-live-2.5-flash-preview',
+        async () => (await import('../../src/providers/google/live')).GoogleLiveProvider,
+      ],
+      [
+        'palm:live:gemini-3.8-live',
+        async () => (await import('../../src/providers/google/live')).GoogleLiveProvider,
+      ],
+      [
+        'google:live:gemini-3.8-live',
+        async () => (await import('../../src/providers/google/live')).GoogleLiveProvider,
+      ],
+      [
+        'google:live:gemini-3.8-live-extended-thinking',
         async () => (await import('../../src/providers/google/live')).GoogleLiveProvider,
       ],
       [
@@ -1635,6 +1832,14 @@ describe('Provider Registry', () => {
         async () => (await import('../../src/providers/google/ai.studio')).AIStudioChatProvider,
       ],
       [
+        'google:gemini-3.6-flash',
+        async () => (await import('../../src/providers/google/ai.studio')).AIStudioChatProvider,
+      ],
+      [
+        'google:gemini-3.5-flash-lite',
+        async () => (await import('../../src/providers/google/ai.studio')).AIStudioChatProvider,
+      ],
+      [
         'palm:chat-bison',
         async () => (await import('../../src/providers/google/ai.studio')).AIStudioChatProvider,
       ],
@@ -1656,6 +1861,14 @@ describe('Provider Registry', () => {
       ],
       [
         'vertex:chat:gemini-2.5-flash',
+        async () => (await import('../../src/providers/google/vertex')).VertexChatProvider,
+      ],
+      [
+        'vertex:gemini-3.6-flash',
+        async () => (await import('../../src/providers/google/vertex')).VertexChatProvider,
+      ],
+      [
+        'vertex:gemini-3.5-flash-lite',
         async () => (await import('../../src/providers/google/vertex')).VertexChatProvider,
       ],
       [
@@ -1694,7 +1907,7 @@ describe('Provider Registry', () => {
         async () => (await import('../../src/providers/google/vertex')).VertexEmbeddingProvider,
       ],
       [
-        'vertex:video:veo-3.1-generate-preview',
+        'vertex:video:veo-3.1-generate-001',
         async () => (await import('../../src/providers/google/video')).GoogleVideoProvider,
       ],
     ] as const)(
@@ -1711,7 +1924,7 @@ describe('Provider Registry', () => {
     );
 
     it('applies vertexai config and provider id for vertex:video routes', async () => {
-      const providerPath = 'vertex:video:veo-3.1-generate-preview';
+      const providerPath = 'vertex:video:veo-3.1-generate-001';
       const factory = (await getProviderFactories(providerPath)).find((f) => f.test(providerPath));
       expect(factory).toBeDefined();
       const provider = await factory!.create(providerPath, bareOptions, bareContext);

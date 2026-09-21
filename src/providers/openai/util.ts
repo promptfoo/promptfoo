@@ -1,7 +1,7 @@
 import OpenAI from 'openai';
 import { maybeLoadFromExternalFileWithVars } from '../../util/index';
 import { getAjv, safeJsonStringify } from '../../util/json';
-import { looksLikeSecret, sanitizeUrl } from '../../util/sanitizer';
+import { isNonCredentialHeader, looksLikeSecret, sanitizeUrl } from '../../util/sanitizer';
 import { calculateCost } from '../shared';
 
 import type { TokenUsage, VarValue } from '../../types/index';
@@ -42,6 +42,28 @@ export function hasSensitiveOpenAiCacheString(value: string): boolean {
 
 export function hasSensitiveOpenAiCachePath(value: string): boolean {
   return hasInlineSecret(value) || OPAQUE_CREDENTIAL_PATH_SEGMENT.test(value);
+}
+
+export function hasOpenAiGatewayCredentials(
+  headers: Record<string, string> | undefined,
+  apiUrl: string,
+): boolean {
+  const hasCredentialHeader = Object.entries(headers ?? {}).some(
+    ([name, value]) =>
+      Boolean(value?.trim()) &&
+      !isNonCredentialHeader(name) &&
+      !/^(?:x-(?:request|correlation)-id|traceparent|tracestate|baggage)$/i.test(name),
+  );
+  return hasCredentialHeader || hasSensitiveOpenAiCacheString(apiUrl);
+}
+
+const DEFAULT_MAX_TOOL_ITERATIONS = 8;
+
+/** Resolve a tool-call cap from 1 to 64, falling back to 8 for missing or out-of-range values. */
+export function resolveMaxToolIterations(value: unknown): number {
+  return typeof value === 'number' && Number.isFinite(value) && value >= 1 && value <= 64
+    ? Math.floor(value)
+    : DEFAULT_MAX_TOOL_ITERATIONS;
 }
 
 export function appendOpenAiApiPath(apiUrl: string, endpoint: string, query?: string): string {
@@ -375,6 +397,15 @@ export function assertOpenAiApiModel(model: unknown, apiUrl?: string): void {
     return;
   }
 
+  if (model === 'gpt-live-transcribe' || model.startsWith('gpt-live-transcribe-')) {
+    throw new Error(
+      'gpt-live-transcribe requires a dedicated Realtime transcription session, which this provider does not support.',
+    );
+  }
+  if (model.startsWith('gpt-live-')) {
+    throw new Error(`Use openai:live:${model} for GPT-Live sessions.`);
+  }
+
   if (apiUrl) {
     try {
       if (new URL(apiUrl).hostname.toLowerCase() !== 'api.openai.com') {
@@ -653,8 +684,8 @@ export const OPENAI_COMPLETION_MODELS: OpenAIModelInfo[] = [
   {
     id: 'gpt-3.5-turbo-instruct',
     cost: {
-      input: 1.5 / 1000000,
-      output: 2 / 1000000,
+      input: 1.5 / 1e6,
+      output: 2 / 1e6,
     },
   },
   {

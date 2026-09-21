@@ -20,6 +20,22 @@ vi.mock('@app/hooks/useTelemetry', () => ({
 }));
 
 describe('ProviderTypeSelector', () => {
+  it('defaults newly selected Bedrock targets to the OpenAI Responses API', async () => {
+    const user = userEvent.setup();
+    const setProvider = vi.fn();
+    renderWithTooltipProvider(
+      <ProviderTypeSelector
+        provider={{ id: '', config: {}, label: 'Bedrock target' }}
+        setProvider={setProvider}
+      />,
+    );
+    await user.click(screen.getByText('AWS Bedrock').closest('[role="button"]')!);
+    expect(setProvider).toHaveBeenCalledWith(
+      { id: 'bedrock:responses:openai.gpt-5.6-sol', config: {}, label: 'Bedrock target' },
+      'bedrock',
+    );
+  });
+
   it('should update selectedProviderType and call setProvider with the correct provider configuration when a provider type card is selected', async () => {
     const user = userEvent.setup();
     const mockSetProvider = vi.fn();
@@ -455,7 +471,7 @@ describe('ProviderTypeSelector', () => {
     );
 
     expect(screen.getByText('OpenAI')).toBeVisible();
-    expect(screen.getByText('GPT-5.5, GPT-5.4, GPT-5.4 Mini and older models')).toBeVisible();
+    expect(screen.getByText('GPT-5.6 Luna, Terra, Sol and GPT-6 Astra')).toBeVisible();
   });
 
   it('should correctly update provider configuration when switching from Go provider to HTTP provider', async () => {
