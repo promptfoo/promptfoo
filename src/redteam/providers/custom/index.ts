@@ -894,9 +894,10 @@ export class CustomProvider implements ApiProvider {
   ): Promise<{ response: TargetResponse; transformResult?: TransformResult }> {
     let lastTransformResult: TransformResult | undefined;
 
+    const targetVars = { ...vars, [this.config.injectVar]: attackPrompt };
     const renderedPrompt = await renderPrompt(
       originalPrompt,
-      { ...vars, [this.config.injectVar]: attackPrompt },
+      { ...targetVars },
       filters,
       provider,
       [this.config.injectVar], // Skip template rendering for injection variable to prevent double-evaluation
@@ -1007,7 +1008,12 @@ export class CustomProvider implements ApiProvider {
     );
     logger.debug(finalTargetPrompt);
 
-    let targetResponse = await getTargetResponse(provider, finalTargetPrompt, context, options);
+    let targetResponse = await getTargetResponse(
+      provider,
+      finalTargetPrompt,
+      context && { ...context, vars: targetVars },
+      options,
+    );
     for (const message of pendingMessages) {
       this.memory.addMessage(this.targetConversationId, message);
     }

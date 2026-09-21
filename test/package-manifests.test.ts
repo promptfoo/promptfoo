@@ -21,19 +21,74 @@ function readPackageJson<T>(relativePath: string): T {
   return JSON.parse(fs.readFileSync(packageJsonPath, 'utf8')) as T;
 }
 
-// Match individual shell commands, including continued Docker RUN instructions.
-function validateDockerInstallCommands(dockerfile: string): void {
-  const instructions = dockerfile
+function splitShellSegments(input: string): string[] {
+  const segments: string[] = [];
+  let current = '';
+  let inSingle = false;
+  let inDouble = false;
+
+  for (let i = 0; i < input.length; i++) {
+    const ch = input[i];
+    if (ch === "'" && !inDouble) {
+      inSingle = !inSingle;
+    } else if (ch === '"' && !inSingle) {
+      inDouble = !inDouble;
+    }
+    if (
+      !inSingle &&
+      !inDouble &&
+      (ch === ';' || ((ch === '&' || ch === '|') && input[i + 1] === ch))
+    ) {
+      if (current.trim()) {
+        segments.push(current.trim());
+      }
+      current = '';
+      if (ch !== ';') {
+        i++;
+      }
+      continue;
+    }
+    current += ch;
+  }
+  if (current.trim()) {
+    segments.push(current.trim());
+  }
+  return segments;
+}
+
+function extractRunBodies(dockerfile: string): string[] {
+  const normalized = dockerfile.replace(/\\\r?\n/g, ' ');
+  return normalized
     .split('\n')
-    .filter((line) => !line.trimStart().startsWith('#'))
-    .join('\n')
-    .replace(/\\\r?\n/g, ' ')
-    // Normalize literal shell spelling so n\\pm and n'p'm cannot hide npm.
-    // This intentionally errs toward rejecting quoted command-like text.
-    .replace(/\\(.)/g, '$1')
-    .replace(/["']/g, '');
-  const commands = [...instructions.matchAll(/(?<![\w.-])npm\b([^;&|()\n]*)/g)].map(([, text]) =>
-    text.trim().split(/\s+/),
+    .map((line) => line.trim())
+    .filter((line) => line.length > 0 && !line.startsWith('#'))
+    .filter((line) => /^RUN\b/i.test(line))
+    .map((line) => line.replace(/^RUN\s+(?:--[^\s]+\s+)*/i, '').trim());
+}
+
+function isNpmLikeToken(token: string): boolean {
+  const normalized = token.replace(/\\(.)/g, '$1').replace(/["']/g, '');
+  return normalized === 'npm' || /(?:^|[^A-Za-z0-9_])npm$/.test(normalized);
+}
+
+// Match npm subcommands only when npm is the unquoted executable in a RUN segment.
+function validateDockerInstallCommands(dockerfile: string): void {
+  const commands = extractRunBodies(dockerfile).flatMap((runBody) =>
+    splitShellSegments(runBody).flatMap((segment) => {
+      const tokens = segment.split(/\s+/).filter(Boolean);
+      const npmIndex = tokens.findIndex(isNpmLikeToken);
+      if (npmIndex === -1) {
+        return [];
+      }
+      const environmentAssignments = tokens.findIndex(
+        (token) => !/^[A-Za-z_][A-Za-z0-9_]*=[^\s]+$/.test(token),
+      );
+      // Reject quoted, escaped, or path-qualified executables, and reject textual npm
+      // mentions that are not the command being run.
+      expect(npmIndex).toBe(environmentAssignments);
+      expect(tokens[npmIndex]).toBe('npm');
+      return [tokens.slice(npmIndex + 1)];
+    }),
   );
   expect(commands.some(([command]) => command === 'ci')).toBe(true);
   expect(commands.some(([command]) => command === 'rebuild')).toBe(true);
@@ -601,6 +656,29 @@ describe('package manifests', () => {
     );
   });
 
+  it('publishes the release-age-safe ANSI tokenizer pin for optional Codex Security installs', () => {
+    const packageJson = readPackageJson<
+      PackageManifest & { overrides?: Record<string, string | Record<string, string>> }
+    >('package.json');
+    const packageLock =
+      readPackageJson<
+        PackageLockManifest<PackageManifest & { version?: string; optional?: boolean }>
+      >('package-lock.json');
+    const dependencyName = '@alcalzone/ansi-tokenize';
+    const pinnedVersion = packageJson.optionalDependencies?.[dependencyName];
+    const tokenizerPackage = packageLock.packages[`node_modules/${dependencyName}`];
+    const inkPackage = packageLock.packages['node_modules/ink'];
+
+    expect(pinnedVersion).toBe('0.3.0');
+    expect(packageJson.dependencies?.[dependencyName]).toBeUndefined();
+    expect(packageJson.overrides?.[dependencyName]).toBeUndefined();
+    expect(packageLock.packages[''].optionalDependencies?.[dependencyName]).toBe(pinnedVersion);
+    expect(tokenizerPackage.version).toBe(pinnedVersion);
+    expect(tokenizerPackage.optional).toBe(true);
+    expect(inkPackage.dependencies?.[dependencyName]).toBeDefined();
+    expect(satisfies(pinnedVersion!, inkPackage.dependencies![dependencyName])).toBe(true);
+  });
+
   it('includes every browser loader in the optional production profile', () => {
     const packageJson = readPackageJson<PackageManifest>('package.json');
     const packageLock =
@@ -701,7 +779,7 @@ describe('package manifests', () => {
     expect(developmentRange).toBeDefined();
     expect(optionalRange).toBe(developmentRange);
     expect(packageJson.dependencies?.[dependencyName]).toBeUndefined();
-    expect(minVersion(developmentRange!)?.compare('5.11.0')).toBeGreaterThanOrEqual(0);
+    expect(minVersion(developmentRange!)?.compare('5.11.1')).toBeGreaterThanOrEqual(0);
     expect(packageLock.packages[''].devDependencies?.[dependencyName]).toBe(developmentRange);
     expect(packageLock.packages[''].optionalDependencies?.[dependencyName]).toBe(optionalRange);
     expect(clientVersion).toBeDefined();
@@ -721,12 +799,12 @@ describe('package manifests', () => {
 
     expect(developmentRange).toBeDefined();
     expect(optionalRange).toBe(developmentRange);
-    expect(minVersion(developmentRange!)?.compare('5.6.0')).toBeGreaterThanOrEqual(0);
+    expect(minVersion(developmentRange!)?.compare('5.6.1')).toBeGreaterThanOrEqual(0);
     expect(packageLock.packages[''].devDependencies?.[dependencyName]).toBe(developmentRange);
     expect(packageLock.packages[''].optionalDependencies?.[dependencyName]).toBe(optionalRange);
     expect(packageLock.packages[`node_modules/${dependencyName}`].version).toBeDefined();
     expect(
-      minVersion(packageLock.packages[`node_modules/${dependencyName}`].version!)?.compare('5.6.0'),
+      minVersion(packageLock.packages[`node_modules/${dependencyName}`].version!)?.compare('5.6.1'),
     ).toBeGreaterThanOrEqual(0);
   });
 
@@ -898,14 +976,31 @@ describe('package manifests', () => {
     const installedVersion = packageLock.packages[`node_modules/${dependencyName}`].version;
 
     expect(optionalRange).toBeDefined();
-    expect(minVersion(optionalRange!)?.compare('1.18.23')).toBeGreaterThanOrEqual(0);
+    expect(minVersion(optionalRange!)?.compare('1.18.30')).toBeGreaterThanOrEqual(0);
     expect(packageJson.dependencies?.[dependencyName]).toBeUndefined();
     expect(packageLock.packages[''].dependencies?.[dependencyName]).toBeUndefined();
     expect(packageLock.packages[''].optionalDependencies?.[dependencyName]).toBe(optionalRange);
     expect(installedVersion).toBeDefined();
-    expect(minVersion(installedVersion!)?.compare('1.18.23')).toBeGreaterThanOrEqual(0);
+    expect(minVersion(installedVersion!)?.compare('1.18.30')).toBeGreaterThanOrEqual(0);
     expect(satisfies(installedVersion!, optionalRange!)).toBe(true);
     expect(packageLock.packages[`node_modules/${dependencyName}`].optional).toBe(true);
+  });
+
+  it('keeps Codex Security optional at the locked release', () => {
+    const packageJson = readPackageJson<PackageManifest>('package.json');
+    const packageLock = readPackageJson<PackageLockManifest>('package-lock.json');
+    const dependencyName = '@openai/codex-security';
+    const optionalRange = packageJson.optionalDependencies?.[dependencyName];
+    const lockedPackage = packageLock.packages[`node_modules/${dependencyName}`];
+
+    expect(optionalRange).toBeDefined();
+    expect(minVersion(optionalRange!)?.compare('0.1.28')).toBeGreaterThanOrEqual(0);
+    expect(packageJson.dependencies?.[dependencyName]).toBeUndefined();
+    expect(packageLock.packages[''].dependencies?.[dependencyName]).toBeUndefined();
+    expect(packageLock.packages[''].optionalDependencies?.[dependencyName]).toBe(optionalRange);
+    expect(lockedPackage.version).toBeDefined();
+    expect(satisfies(lockedPackage.version!, optionalRange!)).toBe(true);
+    expect(lockedPackage.optional).toBe(true);
   });
 
   it('keeps MCP optional while locking its Node adapter to a patched release', () => {
@@ -967,28 +1062,51 @@ describe('package manifests', () => {
     }>('package-lock.json');
     const parserOverride = packageJson.overrides?.[dependencyName];
     const langiumOverride = packageJson.overrides?.langium;
+    const chevrotainOverride = packageJson.overrides?.chevrotain as
+      | Record<string, string>
+      | undefined;
+    const parserVersion = chevrotainOverride?.['.'];
+
+    expect(parserVersion, 'Chevrotain must have a pinned parser version').toBeDefined();
 
     expect(parserOverride).toEqual(
       expect.objectContaining({
         '.': expect.any(String),
-        chevrotain: '11.2.0',
+        chevrotain: parserVersion,
       }),
     );
-    const parserVersion = (parserOverride as Record<string, string>)['.'];
+    const allstarVersion = (parserOverride as Record<string, string>)['.'];
 
-    expect(minVersion(parserVersion)?.compare('0.4.4')).toBeGreaterThanOrEqual(0);
+    expect(minVersion(allstarVersion)?.compare('0.5.0')).toBeGreaterThanOrEqual(0);
     expect(langiumOverride).toEqual(
       expect.objectContaining({
-        [dependencyName]: parserVersion,
-        chevrotain: '11.2.0',
+        [dependencyName]: allstarVersion,
+        '@chevrotain/regexp-to-ast': parserVersion,
+        chevrotain: parserVersion,
       }),
     );
     expect(packageLock.packages[`node_modules/${dependencyName}`]).toEqual(
       expect.objectContaining({
         integrity: expect.stringMatching(/^sha512-/),
-        resolved: `https://registry.npmjs.org/${dependencyName}/-/${dependencyName}-${parserVersion}.tgz`,
-        version: parserVersion,
+        resolved: `https://registry.npmjs.org/${dependencyName}/-/${dependencyName}-${allstarVersion}.tgz`,
+        version: allstarVersion,
       }),
+    );
+    expect(
+      satisfies(
+        parserVersion!,
+        packageLock.packages[`node_modules/${dependencyName}`].peerDependencies?.chevrotain ?? '',
+      ),
+      `${dependencyName} must accept the pinned Chevrotain version`,
+    ).toBe(true);
+
+    const langiumPackage = packageLock.packages['node_modules/langium'];
+    expect(satisfies(parserVersion!, langiumPackage.dependencies?.chevrotain ?? '')).toBe(true);
+    expect(
+      satisfies(parserVersion!, langiumPackage.dependencies?.['@chevrotain/regexp-to-ast'] ?? ''),
+    ).toBe(true);
+    expect(satisfies(allstarVersion, langiumPackage.dependencies?.[dependencyName] ?? '')).toBe(
+      true,
     );
   });
 
@@ -1176,6 +1294,19 @@ describe('package manifests', () => {
     }
 
     expect(lockfile.packages?.['']?.dependencies?.ws).toBe(rootPackageJson.dependencies?.ws);
+  });
+
+  it('requires compression middleware with response-stream cleanup', () => {
+    const rootPackageJson = readPackageJson<PackageManifest>('package.json');
+    const lockfile = readPackageJson<PackageLockManifest>('package-lock.json');
+    const compressionRange = rootPackageJson.dependencies?.compression;
+    const lockedCompressionVersion = lockfile.packages['node_modules/compression']?.version;
+
+    expect(compressionRange).toBeDefined();
+    expect(minVersion(compressionRange as string)?.compare('1.8.2')).toBeGreaterThanOrEqual(0);
+    expect(lockfile.packages['']?.dependencies?.compression).toBe(compressionRange);
+    expect(lockedCompressionVersion).toBeDefined();
+    expect(satisfies(lockedCompressionVersion as string, compressionRange as string)).toBe(true);
   });
 
   it('keeps every direct and transitive js-yaml installation patched', () => {

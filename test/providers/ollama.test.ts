@@ -336,6 +336,70 @@ describe('OllamaCompletionProvider', () => {
     expect(body.options[key]).toBeUndefined();
   });
 
+  // The completion endpoint has its own parsing/accumulation branch, so the same
+  // malformed-response contract needs coverage on both sides.
+  it.each([
+    ['non-string thinking', '"thinking":{"a":1}', 'hi'],
+    ['non-string thinking with empty response', '"thinking":[1,2],"response":""', ''],
+  ])('should degrade gracefully on completion %s', async (_label, fragment, expected) => {
+    vi.mocked(fetchWithCache).mockResolvedValue({
+      data: `{"response":"hi",${fragment},"done":true}\n`,
+      cached: false,
+      status: 200,
+      statusText: 'OK',
+      headers: {},
+    });
+
+    const result = await new OllamaCompletionProvider('llama3.3').callApi('test prompt');
+
+    expect(result.error).toBeUndefined();
+    expect(result.output).toBe(expected);
+    expect(String(result.output)).not.toContain('[object Object]');
+  });
+
+  it('should render a non-string completion response as empty', async () => {
+    vi.mocked(fetchWithCache).mockResolvedValue({
+      data: '{"response":{"a":1},"done":true}\n',
+      cached: false,
+      status: 200,
+      statusText: 'OK',
+      headers: {},
+    });
+
+    const result = await new OllamaCompletionProvider('llama3.3').callApi('test prompt');
+
+    expect(result.output).toBe('');
+    expect(String(result.output)).not.toContain('[object Object]');
+  });
+
+  it.each([
+    [{ bustCache: true }, true],
+    [{ debug: true }, true],
+    [{}, undefined],
+  ])('should forward bustCache %j to fetchWithCache', async (extra, expected) => {
+    vi.mocked(fetchWithCache).mockResolvedValue({
+      data: '{"response":"hi","done":true}\n',
+      cached: false,
+      status: 200,
+      statusText: 'OK',
+      headers: {},
+    });
+
+    const context = {
+      prompt: { raw: 'test prompt', label: 'test' },
+      vars: {},
+      ...extra,
+    } as CallApiContextParams;
+
+    await new OllamaCompletionProvider('llama3.3').callApi('test prompt', context);
+
+    // redteam discover and the gcg strategy pass bustCache: true directly into
+    // callApi, and a bare `ollama:<model>` id routes here -- without this the
+    // completion provider replayed cached target answers.
+    const call = vi.mocked(fetchWithCache).mock.calls[0] as any;
+    expect(call[4]).toBe(expected);
+  });
+
   it('should omit finishReason when done_reason is absent', async () => {
     vi.mocked(fetchWithCache).mockResolvedValue({
       data: '{"response":"Hi!","done":true}\n',
@@ -628,7 +692,7 @@ describe('OllamaChatProvider', () => {
   });
 
   it('should handle think configuration when it is not provided', async () => {
-    const provider = new OllamaCompletionProvider('llama3.3');
+    const provider = new OllamaChatProvider('llama3.3');
     const mockResponse = {
       data: '',
       cached: false,
@@ -647,7 +711,7 @@ describe('OllamaChatProvider', () => {
   });
 
   it('should handle think configuration when it is false', async () => {
-    const provider = new OllamaCompletionProvider('llama3.3', {
+    const provider = new OllamaChatProvider('llama3.3', {
       config: {
         think: false,
       },
@@ -670,7 +734,7 @@ describe('OllamaChatProvider', () => {
   });
 
   it('should handle think configuration when it is true', async () => {
-    const provider = new OllamaCompletionProvider('llama3.3', {
+    const provider = new OllamaChatProvider('llama3.3', {
       config: {
         think: true,
       },
@@ -957,6 +1021,55 @@ describe('OllamaChatProvider', () => {
     expect(body.options).toEqual({ temperature: 0.5 });
     expect(body.think).toBe(true);
     expect(body.format).toBe('json');
+  });
+
+  // Contract for outgoing message normalization, stated as one table so the whole input
+  // space is visible. The helper must change EXACTLY one thing -- a tool call whose
+  // `arguments` is a JSON *object* string becomes an object, because Ollama rejects the
+  // stringified form that responses are normalized to -- and must pass everything else
+  // through byte-identical without throwing.
+  const TOOL_CALL = (args: any) => [
+    { role: 'assistant', tool_calls: [{ function: { name: 'f', arguments: args } }] },
+  ];
+  it.each([
+    ['empty array', [], null],
+    ['plain message', [{ role: 'user', content: 'hi' }], null],
+    ['tool_calls null', [{ role: 'assistant', tool_calls: null }], null],
+    ['tool_calls not an array', [{ role: 'assistant', tool_calls: 'nope' }], null],
+    ['tool_calls empty', [{ role: 'assistant', tool_calls: [] }], null],
+    ['null tool call', [{ role: 'assistant', tool_calls: [null] }], null],
+    ['tool call without function', [{ role: 'assistant', tool_calls: [{}] }], null],
+    ['null function', [{ role: 'assistant', tool_calls: [{ function: null }] }], null],
+    ['arguments missing', [{ role: 'assistant', tool_calls: [{ function: { name: 'f' } }] }], null],
+    ['arguments already an object', TOOL_CALL({ a: 1 }), null],
+    ['arguments JSON array string', TOOL_CALL('[1,2]'), null],
+    ['arguments JSON null string', TOOL_CALL('null'), null],
+    ['arguments JSON number string', TOOL_CALL('42'), null],
+    ['arguments unparseable string', TOOL_CALL('{oops'), null],
+    ['arguments empty string', TOOL_CALL(''), null],
+    ['null message', [null], null],
+    ['string message', ['hello'], null],
+    ['number message', [7], null],
+    // parseChatPrompt returns whatever parsed, not necessarily an array. Non-arrays must
+    // reach Ollama so its validation reports the problem instead of us throwing first.
+    ['non-array object prompt', { role: 'user', content: 'hi' }, null],
+    ['non-array string prompt', 'plain', null],
+    ['non-array number prompt', 5, null],
+    // The single case that is transformed.
+    ['arguments JSON object string', TOOL_CALL('{"city":"Paris"}'), TOOL_CALL({ city: 'Paris' })],
+  ])('normalizes %s correctly on the way to Ollama', async (_label, input, expected) => {
+    vi.mocked(fetchWithCache).mockResolvedValue({
+      data: '{"message":{"role":"assistant","content":"ok"},"done":true}\n',
+      cached: false,
+      status: 200,
+      statusText: 'OK',
+      headers: {},
+    });
+
+    await new OllamaChatProvider('llama3.3').callApi(JSON.stringify(input));
+
+    const body = JSON.parse(vi.mocked(fetchWithCache).mock.calls[0][1]?.body as string);
+    expect(body.messages).toEqual(expected ?? input);
   });
 
   it('should handle tools configuration', async () => {
@@ -1342,6 +1455,75 @@ describe('OllamaChatProvider', () => {
       { function: { name: 'get_weather', arguments: '{"city":"Paris"}' } },
     ]);
     expect(result.finishReason).toBe('stop');
+  });
+
+  // Contract for malformed/proxied responses: never surface a raw TypeError, never
+  // render a non-string into the output, and never discard readable data alongside
+  // unreadable data.
+  it.each([
+    ['tool_calls not an array', '"tool_calls":{"a":1}', 'hi'],
+    ['null tool call', '"tool_calls":[null]', 'hi'],
+    ['tool call without function', '"tool_calls":[{}]', 'hi'],
+    ['null function', '"tool_calls":[{"function":null}]', 'hi'],
+    ['function without a name', '"tool_calls":[{"function":{"arguments":{"a":1}}}]', 'hi'],
+    ['non-string thinking', '"thinking":{"a":1}', 'hi'],
+  ])('should degrade gracefully on %s', async (_label, fragment, expected) => {
+    vi.mocked(fetchWithCache).mockResolvedValue({
+      data: `{"message":{"role":"assistant","content":"hi",${fragment}},"done":true}\n`,
+      cached: false,
+      status: 200,
+      statusText: 'OK',
+      headers: {},
+    });
+
+    const result = await new OllamaChatProvider('llama3.3').callApi('test prompt');
+
+    expect(result.error).toBeUndefined();
+    expect(result.output).toBe(expected);
+  });
+
+  it('should render a non-string content as empty rather than [object Object]', async () => {
+    vi.mocked(fetchWithCache).mockResolvedValue({
+      data: '{"message":{"role":"assistant","content":{"a":1}},"done":true}\n',
+      cached: false,
+      status: 200,
+      statusText: 'OK',
+      headers: {},
+    });
+
+    const result = await new OllamaChatProvider('llama3.3').callApi('test prompt');
+
+    expect(result.output).toBe('');
+    expect(String(result.output)).not.toContain('[object Object]');
+  });
+
+  it('should keep readable tool calls alongside unreadable ones', async () => {
+    vi.mocked(fetchWithCache).mockResolvedValue({
+      data: '{"message":{"role":"assistant","content":"","tool_calls":[null,{"function":{"name":"f","arguments":{"a":1}}}]},"done":true}\n',
+      cached: false,
+      status: 200,
+      statusText: 'OK',
+      headers: {},
+    });
+
+    const result = await new OllamaChatProvider('llama3.3').callApi('test prompt');
+
+    // Dropping the whole response because one entry is malformed would lose real data.
+    expect(result.output).toEqual([{ function: { name: 'f', arguments: '{"a":1}' } }]);
+  });
+
+  it('should normalize a missing tool-call arguments field to an empty JSON object', async () => {
+    vi.mocked(fetchWithCache).mockResolvedValue({
+      data: '{"message":{"role":"assistant","content":"","tool_calls":[{"function":{"name":"f"}}]},"done":true}\n',
+      cached: false,
+      status: 200,
+      statusText: 'OK',
+      headers: {},
+    });
+
+    const result = await new OllamaChatProvider('llama3.3').callApi('test prompt');
+
+    expect(result.output).toEqual([{ function: { name: 'f', arguments: '{}' } }]);
   });
 
   it('should handle multiple tool calls in response', async () => {
