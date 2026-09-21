@@ -675,11 +675,11 @@ class XAIProvider extends OpenAiChatCompletionProvider {
     return GROK_REASONING_MODELS.includes(modelName);
   }
 
-  protected supportsReasoningEffort(): boolean {
+  protected supportsReasoningEffort(modelName = this.modelName): boolean {
     // Redirected legacy aliases still reject reasoning_effort under their old
     // request contract. Strip it for those aliases; users who want to tune
     // effort should target grok-4.3 directly.
-    return GROK_REASONING_EFFORT_MODELS.includes(this.modelName);
+    return GROK_REASONING_EFFORT_MODELS.includes(modelName);
   }
 
   protected supportsTemperature(_modelName?: string): boolean {
@@ -701,20 +701,21 @@ class XAIProvider extends OpenAiChatCompletionProvider {
       delete result.body.stop;
     }
 
+    const effectiveModel = result.body.model;
     const reasoningEffort = result.body.reasoning_effort;
     if (
-      GROK_45_MODELS.has(this.modelName) &&
+      GROK_45_MODELS.has(effectiveModel) &&
       reasoningEffort !== undefined &&
       !['low', 'medium', 'high'].includes(reasoningEffort)
     ) {
       throw new Error(
-        `xAI model ${this.modelName} does not support reasoning_effort ${JSON.stringify(reasoningEffort)}. ` +
+        `xAI model ${effectiveModel} does not support reasoning_effort ${JSON.stringify(reasoningEffort)}. ` +
           'Use "low", "medium", or "high", or omit reasoning_effort to use the default "high".',
       );
     }
 
     // Filter reasoning_effort for models that don't support it
-    if (!this.supportsReasoningEffort() && result.body.reasoning_effort) {
+    if (!this.supportsReasoningEffort(effectiveModel) && result.body.reasoning_effort) {
       delete result.body.reasoning_effort;
     }
 

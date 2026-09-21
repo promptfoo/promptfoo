@@ -377,6 +377,26 @@ describe('xAI Chat Provider', () => {
       expect(result.body.temperature).toBe(0.8);
     });
 
+    it('validates and strips reasoning effort for the effective passthrough model', async () => {
+      const grok43 = createXAIProvider('xai:grok-4.3') as any;
+      const grok46 = createXAIProvider('xai:grok-4.6') as any;
+      const config = (model: string, reasoning_effort: string) => ({
+        prompt: { config: { reasoning_effort, passthrough: { model } } },
+      });
+
+      await expect(grok43.getOpenAiBody('test', config('grok-4.6', 'none'))).rejects.toThrow(
+        'xAI model grok-4.6 does not support reasoning_effort "none"',
+      );
+      await expect(grok46.getOpenAiBody('test', config('grok-4.3', 'none'))).resolves.toMatchObject(
+        {
+          body: { model: 'grok-4.3', reasoning_effort: 'none' },
+        },
+      );
+      const legacy = await grok43.getOpenAiBody('test', config('grok-4', 'high'));
+      expect(legacy.body.model).toBe('grok-4');
+      expect(legacy.body).not.toHaveProperty('reasoning_effort');
+    });
+
     it('rejects unsupported reasoning_effort values for Grok 4.6', async () => {
       // Verified live 2026-08-31: the API returns
       // "This model does not support `reasoning_effort` value `none`."
