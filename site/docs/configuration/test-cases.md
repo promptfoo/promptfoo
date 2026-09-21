@@ -573,7 +573,7 @@ tests:
 
 ### Path Resolution
 
-`file://` paths resolve from your **config file's directory** by default. Set `basePath` to use another directory; a relative `basePath` resolves from the config file's directory. For example:
+`file://` paths resolve from your **config file's directory** by default. Set `basePath` to use another directory; a relative `basePath` resolves from the config file's directory. The web editor does not accept `basePath`; use inline content there or run the config with the CLI. For example:
 
 ```yaml title="src/tests/promptfooconfig.yaml"
 tests:
