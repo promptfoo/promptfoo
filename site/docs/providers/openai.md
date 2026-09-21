@@ -221,10 +221,33 @@ For non-reasoning requests, Promptfoo defaults to `temperature: 0` and an output
 | `prompt_cache_key`, `prompt_cache_options` | Configure [OpenAI prompt caching](#prompt-caching-and-included-tool-results).                                                                                         |
 | `service_tier`                             | Request a service tier supported by your model and account.                                                                                                           |
 | `maxRetries`                               | Retry count for HTTP requests; defaults to 4. Set to 0 to disable retries. Hard quota failures are not retried.                                                       |
+| `isReasoningModel`                         | Override reasoning request shaping for a custom or compatible deployment. See [reasoning detection overrides](#reasoning-detection-overrides).                        |
 
 For endpoint-specific fields, see the [Chat Completions reference](https://developers.openai.com/api/reference/resources/chat/subresources/completions/methods/create) and [Responses reference](https://developers.openai.com/api/reference/resources/responses/methods/create). Promptfoo's [configuration types](https://github.com/promptfoo/promptfoo/blob/main/src/providers/openai/types.ts) describe the named provider options. An API field without a named option may need `passthrough`.
 
 </details>
+
+### Reasoning detection overrides
+
+Promptfoo infers reasoning support from the model name. With `openai:chat` or `openai:responses` pointed at a custom deployment or compatible API whose model name does not match the standard naming patterns, set `isReasoningModel` to shape the request explicitly. Prompt-level config takes precedence over provider config, and an omitted flag preserves built-in detection.
+
+```yaml title="promptfooconfig.yaml"
+providers:
+  - id: openai:chat:my-custom-reasoning-model
+    config:
+      isReasoningModel: true
+      reasoning_effort: medium
+      max_completion_tokens: 25000 # Can also be set via OPENAI_MAX_COMPLETION_TOKENS env var
+
+  - id: openai:responses:my-custom-reasoning-model
+    config:
+      isReasoningModel: true
+      reasoning:
+        effort: medium
+      max_output_tokens: 25000
+```
+
+Set `isReasoningModel: false` only for OpenAI-compatible deployments whose names look like o-series or GPT-5 models but actually accept standard `temperature` and token parameters. It does not make an upstream reasoning model support fields that its API rejects. For an actual OpenAI reasoning model that supports disabling reasoning, configure the documented reasoning effort (for example, `none`) instead of overriding its capability.
 
 ### Connection settings
 

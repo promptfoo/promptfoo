@@ -851,10 +851,12 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
     // Verbosity is separate from reasoning; only reasoning config
     // should promote a custom deployment to "reasoning model" status, otherwise
     // max_output_tokens defaults change unexpectedly.
-    const isReasoningModel =
+    const isReasoningModel = this.resolveReasoningModel(
+      config,
       this.isReasoningModel(capabilityModelName) ||
-      isGpt6Astra ||
-      isAzureResponsesDeploymentWithReasoningConfig;
+        isGpt6Astra ||
+        isAzureResponsesDeploymentWithReasoningConfig,
+    );
     const supportsVerbosity =
       this.isGPT5Model(capabilityModelName) ||
       isGpt6Astra ||
@@ -864,7 +866,7 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
       isAzureResponsesDeploymentWithReasoningConfig,
       isReasoningModel,
       supportsVerbosity,
-      supportsTemperature: this.supportsTemperature(capabilityModelName),
+      supportsTemperature: this.supportsTemperature(config, capabilityModelName),
     };
   }
 
@@ -919,6 +921,7 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
       : undefined;
     const effectiveReasoningEffort = renderedReasoning?.effort ?? renderedReasoningEffort;
     const hasAzureReasoningEffort =
+      isReasoningModel &&
       isAzureResponsesDeploymentWithReasoningConfig &&
       effectiveReasoningEffort !== undefined &&
       effectiveReasoningEffort !== 'none';
