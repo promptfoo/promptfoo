@@ -7,6 +7,7 @@ import type {
   EnvOverrides,
   EvalResultsFilterMode,
   EvalTableDTO,
+  EvaluateTableOutput,
   EvaluateTableRow,
   Prompt,
 } from '../../types/index';
@@ -389,38 +390,42 @@ export function tableRowToCsvValues(
     namedScoreNamesByPrompt?: string[][];
   } = {},
 ): (string | number | boolean)[] {
+  const promptCount = Math.max(row.outputs.length, options.namedScoreNamesByPrompt?.length ?? 0);
+  const outputValues = Array.from({ length: promptCount }, (_, outputIndex) => {
+    const output = row.outputs[outputIndex];
+    const namedScoreNames = options.namedScoreNamesByPrompt?.[outputIndex] || [];
+    if (!output) {
+      return ['', '', '', '', ...namedScoreNames.map(() => ''), '', ''];
+    }
+
+    const status = getOutputStatus(output);
+    const score = output.score?.toFixed(2) ?? '';
+    const namedScores = formatNamedScores(output.namedScores);
+    const namedScoreValues = namedScoreNames.map((name) =>
+      formatNamedScoreValue(output.namedScores?.[name]),
+    );
+
+    return [
+      output.text || '',
+      status,
+      score,
+      namedScores,
+      ...namedScoreValues,
+      output.gradingResult?.reason || '',
+      output.gradingResult?.comment || '',
+    ];
+  }).flat();
+
   const rowValues: (string | number | boolean)[] = [
     ...(options.hasDescriptions ? [row.test.description || ''] : []),
     ...row.vars,
-    ...row.outputs.flatMap((output, outputIndex) => {
-      const namedScoreNames = options.namedScoreNamesByPrompt?.[outputIndex] || [];
-      if (!output) {
-        return ['', '', '', '', ...namedScoreNames.map(() => ''), '', ''];
-      }
-
-      const status = getOutputStatus(output);
-      const score = output.score?.toFixed(2) ?? '';
-      const namedScores = formatNamedScores(output.namedScores);
-      const namedScoreValues = namedScoreNames.map((name) =>
-        formatNamedScoreValue(output.namedScores?.[name]),
-      );
-
-      return [
-        output.text || '',
-        status,
-        score,
-        namedScores,
-        ...namedScoreValues,
-        output.gradingResult?.reason || '',
-        output.gradingResult?.comment || '',
-      ];
-    }),
+    ...outputValues,
   ];
 
-  // Add redteam metadata once per row (using first output's metadata)
+  // Add redteam metadata once per row (using first surviving output's metadata)
   if (options.isRedteam) {
     const redteamKeys = Object.keys(REDTEAM_METADATA_KEYS_TO_CSV_COLUMN_NAMES);
-    const firstOutputMetadata = row.outputs[0]?.metadata;
+    const firstOutputMetadata = row.outputs.find((output) => output?.metadata)?.metadata;
     for (const key of redteamKeys) {
       let value = firstOutputMetadata?.[key];
       if (key === 'strategyId' && (value === null || value === undefined)) {
@@ -652,13 +657,25 @@ export function mergeComparisonTables(
     body: mainTable.body.map((row) => {
       const testIdx = row.testIdx;
       // Find matching rows in comparison tables by test index
-      const matchingRows = comparisonData
-        .map(({ table }) => table.body.find((compRow) => compRow.testIdx === testIdx))
-        .filter((r): r is EvaluateTableRow => r !== undefined);
+      const comparisonOutputs = comparisonData
+        .map(({ table }) => {
+          const matchingRow = table.body.find((compRow) => compRow.testIdx === testIdx);
+          return Array.from(
+            { length: table.head.prompts.length },
+            (_, outputIndex) => matchingRow?.outputs[outputIndex],
+          ) as EvaluateTableOutput[];
+        })
+        .flat();
 
       return {
         ...row,
-        outputs: [...row.outputs, ...matchingRows.flatMap((r) => r.outputs)],
+        outputs: [
+          ...Array.from(
+            { length: mainTable.head.prompts.length },
+            (_, outputIndex) => row.outputs[outputIndex],
+          ),
+          ...comparisonOutputs,
+        ],
       };
     }),
   };
