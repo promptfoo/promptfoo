@@ -241,6 +241,7 @@ export async function readPrompts(
 
 export async function processPrompts(
   prompts: EvaluateTestSuite['prompts'],
+  basePath?: string,
 ): Promise<TestSuite['prompts']> {
   return (
     await Promise.all(
@@ -252,7 +253,7 @@ export async function processPrompts(
             function: promptInput as PromptFunction,
           };
         } else if (typeof promptInput === 'string') {
-          return readPrompts(promptInput);
+          return readPrompts(promptInput, basePath);
         }
         try {
           return PromptSchema.parse(promptInput);
