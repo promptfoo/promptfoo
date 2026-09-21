@@ -1,5 +1,4 @@
-import { isTemplateProcessEnvDisabled } from '../envars';
-import { getProcessEnv } from '../envOverrides';
+import { getProcessEnv, isTemplateProcessEnvDisabled } from '../envars';
 import { JsonlFileWriter } from '../util/exportToFile/writeToFile';
 import { getOutputFileFormat } from '../util/outputFormats';
 import { renderEnvOnlyInObject } from '../util/render';

@@ -3,7 +3,7 @@ import crypto from 'crypto';
 import fs from 'fs';
 
 import { getCache, isCacheEnabled } from '../cache';
-import { getProcessEnv } from '../envOverrides';
+import { getProcessEnv } from '../envars';
 import logger from '../logger';
 import invariant from '../util/invariant';
 import { safeJsonStringify } from '../util/json';

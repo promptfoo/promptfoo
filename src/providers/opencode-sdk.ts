@@ -6,8 +6,7 @@ import path from 'path';
 
 import dedent from 'dedent';
 import cliState from '../cliState';
-import { getEnvString } from '../envars';
-import { getProcessEnv } from '../envOverrides';
+import { getEnvString, getProcessEnv } from '../envars';
 import { importModule } from '../esm';
 import logger, { getLogLevel } from '../logger';
 import {

@@ -1,6 +1,5 @@
 import nunjucks from 'nunjucks';
-import { getEnvBool, isTemplateProcessEnvDisabled } from '../envars';
-import { getEnvOverrides } from '../envOverrides';
+import { getEnvBool, getEnvOverrides, isTemplateProcessEnvDisabled } from '../envars';
 import logger from '../logger';
 
 import type { NunjucksFilterMap } from '../types/index';

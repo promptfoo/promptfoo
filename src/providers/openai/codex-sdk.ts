@@ -5,8 +5,7 @@ import path from 'path';
 import { type Attributes, type Span, SpanKind, SpanStatusCode, trace } from '@opentelemetry/api';
 import dedent from 'dedent';
 import { z } from 'zod';
-import { getEnvString } from '../../envars';
-import { getProcessEnv } from '../../envOverrides';
+import { getEnvString, getProcessEnv } from '../../envars';
 import {
   addActiveSpanRoleAttribute,
   closeTurnSpan,

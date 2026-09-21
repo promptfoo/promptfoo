@@ -1,5 +1,5 @@
 import dotenv from 'dotenv';
-import { getEnvOverrides } from './envOverrides';
+import { getEnvOverridesProvider } from './envOverrides';
 
 import type { EnvOverrides } from './types/env';
 
@@ -481,6 +481,27 @@ type EnvVars = {
 
 // Allow string access to any key for environment variables not explicitly listed
 export type EnvVarKey = keyof EnvVars;
+
+/** Reads one config layer without mixing in process.env; a missing or failed provider is unset. */
+export function getEnvOverrides(layer: 'suite' | 'file' = 'suite'): EnvOverrides | undefined {
+  try {
+    return getEnvOverridesProvider()?.(layer);
+  } catch {
+    // All environment reads must still fall back normally when registration fails.
+    return undefined;
+  }
+}
+
+/** Environment inherited by child processes, including invocation-local file values. */
+export function getProcessEnv(): NodeJS.ProcessEnv {
+  const fileEnv = getEnvOverrides('file');
+  return fileEnv
+    ? {
+        ...process.env,
+        ...Object.fromEntries(Object.entries(fileEnv).filter(([, value]) => value !== undefined)),
+      }
+    : process.env;
+}
 
 /**
  * Get an environment variable.

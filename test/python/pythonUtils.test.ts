@@ -55,7 +55,8 @@ vi.mock('fs/promises', () => ({
   unlink: fsMock.unlinkSync,
 }));
 
-vi.mock('../../src/envars', () => ({
+vi.mock(import('../../src/envars'), async (importOriginal) => ({
+  ...(await importOriginal()),
   getEnvString: vi.fn(),
   getEnvBool: vi.fn(),
 }));

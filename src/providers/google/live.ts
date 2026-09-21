@@ -1,7 +1,6 @@
 import { type ChildProcess, spawn } from 'child_process';
 
-import { getEnvString } from '../../envars';
-import { getProcessEnv } from '../../envOverrides';
+import { getEnvString, getProcessEnv } from '../../envars';
 import logger from '../../logger';
 import { validatePythonPath } from '../../python/pythonUtils';
 import { fetchWithProxy } from '../../util/fetch/index';

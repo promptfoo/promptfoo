@@ -2,7 +2,7 @@ import fs from 'fs/promises';
 import path from 'path';
 
 import { PythonShell } from 'python-shell';
-import { getProcessEnv } from '../envOverrides';
+import { getProcessEnv } from '../envars';
 import { getWrapperDir } from '../esm';
 import logger from '../logger';
 import { getRequestTimeoutMs } from '../providers/shared';

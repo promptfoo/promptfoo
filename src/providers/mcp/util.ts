@@ -1,4 +1,4 @@
-import { getProcessEnv } from '../../envOverrides';
+import { getProcessEnv } from '../../envars';
 import logger from '../../logger';
 import { fetchWithProxy } from '../../util/fetch/index';
 import { renderVarsInObject } from '../../util/index';

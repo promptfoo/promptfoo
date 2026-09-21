@@ -6,8 +6,7 @@ import type { Stats } from 'node:fs';
 import { trace as otelTrace, SpanStatusCode } from '@opentelemetry/api';
 import dedent from 'dedent';
 import cliState from '../cliState';
-import { getEnvString } from '../envars';
-import { getProcessEnv } from '../envOverrides';
+import { getEnvString, getProcessEnv } from '../envars';
 import { importModule, resolvePackageEntryPoint } from '../esm';
 import logger from '../logger';
 import {

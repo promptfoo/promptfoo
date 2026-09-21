@@ -5,7 +5,7 @@ import path from 'path';
 import util from 'util';
 
 import { getCache, isCacheEnabled } from '../cache';
-import { getProcessEnv } from '../envOverrides';
+import { getProcessEnv } from '../envars';
 import { getWrapperDir } from '../esm';
 import logger from '../logger';
 import { sha256 } from '../util/createHash';

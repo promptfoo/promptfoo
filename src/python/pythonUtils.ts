@@ -4,8 +4,7 @@ import path from 'path';
 import { promisify } from 'util';
 
 import { PythonShell } from 'python-shell';
-import { getEnvBool, getEnvString } from '../envars';
-import { getProcessEnv } from '../envOverrides';
+import { getEnvBool, getEnvString, getProcessEnv } from '../envars';
 import { getWrapperDir } from '../esm';
 import logger from '../logger';
 import { safeJsonStringify } from '../util/json';

@@ -17,30 +17,6 @@ export function setEnvOverridesProvider(provider: EnvOverridesProvider | undefin
   envOverridesProvider = provider;
 }
 
-/**
- * Returns suite overrides or env-file defaults, or `undefined` if no provider is
- * registered. Swallows provider exceptions to preserve the invariant that
- * `getEnvString` (and its delegates `getEnvBool` / `getEnvInt` / etc.) never
- * throw on environment access — relied on by ~148 call sites.
- */
-export function getEnvOverrides(layer: 'suite' | 'file' = 'suite'): EnvOverrides | undefined {
-  if (!envOverridesProvider) {
-    return undefined;
-  }
-  try {
-    return envOverridesProvider(layer);
-  } catch {
-    return undefined;
-  }
-}
-
-/** Environment inherited by child processes, including invocation-local file values. */
-export function getProcessEnv(): NodeJS.ProcessEnv {
-  const fileEnv = getEnvOverrides('file');
-  return fileEnv
-    ? {
-        ...process.env,
-        ...Object.fromEntries(Object.entries(fileEnv).filter(([, value]) => value !== undefined)),
-      }
-    : process.env;
+export function getEnvOverridesProvider(): EnvOverridesProvider | undefined {
+  return envOverridesProvider;
 }

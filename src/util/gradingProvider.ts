@@ -1,6 +1,4 @@
-import { isApiProvider } from '../types/providers';
-
-import type { ApiProvider, ProviderTypeMap } from '../types/providers';
+import { type ApiProvider, isApiProvider, type ProviderTypeMap } from '../types/providers';
 
 type ProviderTypeValue = NonNullable<ProviderTypeMap[keyof ProviderTypeMap]>;
 

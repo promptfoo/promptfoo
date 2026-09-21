@@ -6,8 +6,12 @@ import { type Options as CsvOptions, parse as csvParse } from 'csv-parse/sync';
 import { escape as escapeGlob, globSync, hasMagic } from 'glob';
 import nunjucks from 'nunjucks';
 import cliState from '../cliState';
-import { getEnvBool, isTemplateProcessEnvDisabled } from '../envars';
-import { getEnvOverrides, getProcessEnv } from '../envOverrides';
+import {
+  getEnvBool,
+  getEnvOverrides,
+  getProcessEnv,
+  isTemplateProcessEnvDisabled,
+} from '../envars';
 import { importModule } from '../esm';
 import logger from '../logger';
 import { runPython } from '../python/pythonUtils';

@@ -2,7 +2,7 @@ import { execFile } from 'child_process';
 import { stat as fsStat, readFile } from 'fs/promises';
 
 import { getCache, isCacheEnabled } from '../../cache';
-import { getProcessEnv } from '../../envOverrides';
+import { getProcessEnv } from '../../envars';
 import { getFileHashes, parseScriptParts } from '../../providers/scriptCompletion';
 import invariant from '../../util/invariant';
 import { safeJsonStringify } from '../../util/json';
