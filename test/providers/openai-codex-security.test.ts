@@ -221,7 +221,7 @@ describe('OpenAICodexSecurityProvider', () => {
 
       expect(response.error).toContain('Failed to load @openai/codex-security');
       expect(response.error).toContain('even-numbered Node.js');
-      expect(response.error).toContain('^22.22.0');
+      expect(response.error).toContain('npm install promptfoo @openai/codex-security');
     });
 
     it('ignores an outdated trusted SDK and loads a compatible Promptfoo installation', async () => {
@@ -413,8 +413,8 @@ describe('OpenAICodexSecurityProvider', () => {
           model: 'gpt-5.6-sol',
           reasoningEffort: 'high',
           findingsCount: 1,
-          pluginVersion: '0.1.22',
-          sdkVersion: '0.1.18',
+          pluginVersion: result.pluginVersion,
+          sdkVersion: mockModule.VERSION,
           skillCalls: [{ name: 'security-scan' }],
         },
       });
@@ -542,6 +542,7 @@ describe('OpenAICodexSecurityProvider', () => {
 
     it('resolves repository, output, plugin, and knowledge-base paths from the config directory', async () => {
       const configDirectory = path.resolve('/workspace/evals');
+      const expectedPluginVersion = '9.8.7';
       cliState.basePath = configDirectory;
       const provider = new OpenAICodexSecurityProvider({
         config: {
@@ -554,7 +555,7 @@ describe('OpenAICodexSecurityProvider', () => {
           scan_prompt: 'Security policy: protect payment data.',
           validation_prompt: 'Reject speculative issues.',
           post_scan_prompt: 'Summarize remaining risk.',
-          expected_plugin_version: '0.1.22',
+          expected_plugin_version: expectedPluginVersion,
           failure_severity: 'high',
           auth: 'api-key',
         },
@@ -576,7 +577,7 @@ describe('OpenAICodexSecurityProvider', () => {
           scanPrompt: 'Security policy: protect payment data.\n\nCheck checkout handlers',
           validationPrompt: 'Reject speculative issues.',
           postScanPrompt: 'Summarize remaining risk.',
-          expectedPluginVersion: '0.1.22',
+          expectedPluginVersion,
           failureSeverity: 'high',
         }),
       );
