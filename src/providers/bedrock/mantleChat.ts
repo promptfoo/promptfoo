@@ -1,17 +1,18 @@
 import { OpenAiChatCompletionProvider } from '../openai/chat';
 import {
   getBedrockMantleOrigin,
-  isBedrockGrokModel,
-  isBedrockOpenAiResponsesModel,
   resolveBedrockMantleApiKey,
   resolveBedrockMantleRegion,
 } from './mantle';
+import { isBedrockGrokModel, isBedrockOpenAiResponsesModel } from './routing';
+import { BedrockTokenProvider, type BedrockTokenProviderConfig } from './tokenProvider';
 
 type OpenAiChatProviderOptions = NonNullable<
   ConstructorParameters<typeof OpenAiChatCompletionProvider>[1]
 >;
 type BedrockMantleChatProviderOptions = Omit<OpenAiChatProviderOptions, 'config'> & {
-  config?: NonNullable<OpenAiChatProviderOptions['config']> & { region?: string };
+  config?: NonNullable<OpenAiChatProviderOptions['config']> &
+    BedrockTokenProviderConfig & { region?: string };
 };
 type BedrockMantleChatBodyContext = Parameters<OpenAiChatCompletionProvider['getOpenAiBody']>[1];
 type BedrockMantleChatCallApiOptions = Parameters<OpenAiChatCompletionProvider['getOpenAiBody']>[2];
@@ -21,10 +22,8 @@ type BedrockMantleChatCallApiOptions = Parameters<OpenAiChatCompletionProvider['
  *
  *   https://bedrock-mantle.<region>.api.aws/<route>/chat/completions
  *
- * AWS recommends the mantle endpoint "whenever possible", and it is the *only* way to reach
- * some models that are not served by the native `InvokeModel`/`Converse` APIs and therefore do
- * not appear in `list-foundation-models` — e.g. `zai.glm-4.6`, `deepseek.v3.1`,
- * `google.gemma-4-*`, and the mantle-namespaced Qwen `*-instruct` ids. `bedrock:mantle:<id>`
+ * Mantle has its own regional model catalog, including models and IDs that differ from
+ * the native `InvokeModel`/`Converse` APIs. `bedrock:mantle:<id>`
  * routes here so any mantle Chat Completions model is reachable. Most models use `/v1`; xAI
  * and Gemma 4 use `/openai/v1` (see {@link getBedrockMantleChatBaseUrl}).
  *
@@ -58,16 +57,66 @@ export function getBedrockMantleChatBaseUrl(region: string, modelName?: string):
  * configured mantle `apiBaseUrl`.
  */
 export class BedrockMantleChatProvider extends OpenAiChatCompletionProvider {
+  private readonly bedrockTokenProvider: BedrockTokenProvider;
+
+  constructor(modelName: string, options: BedrockMantleChatProviderOptions = {}) {
+    super(modelName, options);
+    const region = resolveBedrockMantleRegion(
+      options.config ?? {},
+      options.env,
+      isBedrockGrokModel(modelName)
+        ? DEFAULT_BEDROCK_MANTLE_GROK_CHAT_REGION
+        : DEFAULT_BEDROCK_MANTLE_CHAT_REGION,
+    );
+    // Pin direct construction too, before any AWS credential can be resolved.
+    this.config = {
+      ...this.config,
+      apiBaseUrl: this.config.apiBaseUrl || getBedrockMantleChatBaseUrl(region, modelName),
+    };
+    this.bedrockTokenProvider = new BedrockTokenProvider(this.config, options.env, region);
+  }
+
+  requiresApiKey(): boolean {
+    return false;
+  }
+
+  getApiKey(): string | undefined {
+    return resolveBedrockMantleApiKey(this.config, this.env);
+  }
+
+  protected override getRequestAuthentication() {
+    return async (signal?: AbortSignal): Promise<Record<string, string>> => {
+      const token = await this.bedrockTokenProvider.getToken(signal);
+      return token ? { Authorization: `Bearer ${token}` } : {};
+    };
+  }
+
+  getOpenAiRequestHeaders(
+    customHeaders: Record<string, string> | undefined = this.config.headers,
+  ): Record<string, string> {
+    return customHeaders ?? {};
+  }
+
+  protected override getGenAISystem(): string {
+    return 'bedrock';
+  }
+
   protected getCapabilityModelName(modelName = this.modelName): string {
     return modelName.replace(/^(openai|xai)\./, '');
   }
 
   protected isReasoningModel(modelName = this.modelName): boolean {
-    return isBedrockGrokModel(modelName) || super.isReasoningModel(modelName);
+    return (
+      isBedrockGrokModel(modelName) ||
+      super.isReasoningModel(this.getCapabilityModelName(modelName))
+    );
   }
 
   protected supportsTemperature(modelName = this.modelName): boolean {
-    return isBedrockGrokModel(modelName) || super.supportsTemperature(modelName);
+    return (
+      isBedrockGrokModel(modelName) ||
+      super.supportsTemperature(this.getCapabilityModelName(modelName))
+    );
   }
 
   async getOpenAiBody(
@@ -112,9 +161,9 @@ export class BedrockMantleChatProvider extends OpenAiChatCompletionProvider {
 
 /**
  * Construct a Chat Completions provider configured for the Bedrock mantle endpoint. Resolves the
- * region (config → AWS_BEDROCK_REGION → AWS_REGION → default) and the Amazon Bedrock API key
- * (config.apiKey → AWS_BEARER_TOKEN_BEDROCK), and targets the mantle endpoint unless the caller
- * supplies an explicit `apiBaseUrl`.
+ * region (config → AWS_BEDROCK_REGION → AWS_REGION → default), targets the mantle endpoint
+ * unless the caller supplies an explicit `apiBaseUrl`, and authenticates with either a
+ * configured Bedrock bearer token or a request-scoped token generated from AWS credentials.
  */
 export function createBedrockMantleChatProvider(
   modelName: string,
@@ -135,22 +184,11 @@ export function createBedrockMantleChatProvider(
       ? DEFAULT_BEDROCK_MANTLE_GROK_CHAT_REGION
       : DEFAULT_BEDROCK_MANTLE_CHAT_REGION,
   );
-  const apiKey = resolveBedrockMantleApiKey(config, providerOptions.env);
-
-  if (!apiKey) {
-    throw new Error(
-      `Amazon Bedrock model "bedrock:mantle:${modelName}" uses the OpenAI-compatible Chat ` +
-        `Completions API on the mantle endpoint, which authenticates with an Amazon Bedrock API ` +
-        `key. Set the AWS_BEARER_TOKEN_BEDROCK environment variable (or config.apiKey). See ` +
-        `https://www.promptfoo.dev/docs/providers/aws-bedrock/#mantle-chat-completions`,
-    );
-  }
-
   const apiBaseUrl = config.apiBaseUrl || getBedrockMantleChatBaseUrl(region, modelName);
   const isGrok = isBedrockGrokModel(modelName);
 
   return new BedrockMantleChatProvider(modelName, {
     ...providerOptions,
-    config: { ...config, apiBaseUrl, apiKey, ...(isGrok ? { omitDefaults: true } : {}) },
+    config: { ...config, apiBaseUrl, ...(isGrok ? { omitDefaults: true } : {}) },
   });
 }

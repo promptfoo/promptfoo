@@ -42,7 +42,6 @@ import { discoverCommand as redteamDiscoverCommand } from './redteam/commands/di
 import { redteamGenerateCommand } from './redteam/commands/generate';
 import { pluginsCommand as redteamPluginsCommand } from './redteam/commands/plugins';
 import { redteamRunCommand } from './redteam/commands/run';
-import { runStartupRuntimeAndUpdateChecks } from './runtimeCompatibilityNotice';
 import { ServerError } from './server/errors';
 import { checkForUpdates } from './updates';
 import { loadDefaultConfig } from './util/config/default';
@@ -61,8 +60,7 @@ async function main() {
     Object.assign(process.env, { PROMPTFOO_DISABLE_UPDATE: 'true' });
   }
 
-  // Avoid duplicating post-cutoff runtime guidance in the ordinary update check.
-  await runStartupRuntimeAndUpdateChecks({ checkForUpdates });
+  await checkForUpdates();
   await runDbMigrations({ suppressBindingErrorLogging: true });
 
   const skipDefaultConfigLoading = shouldSkipDefaultConfigLoading(argv);

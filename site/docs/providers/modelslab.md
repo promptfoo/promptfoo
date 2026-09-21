@@ -1,17 +1,17 @@
 ---
 title: ModelsLab Provider
-description: Generate images with ModelsLab's text-to-image API including Flux, SDXL, and 200+ community models
+description: Generate images with ModelsLab's v6 text-to-image API using exact IDs for Flux, SDXL, and Seedream, with API key configuration and automatic async polling.
 sidebar_position: 63
 keywords: [modelslab, image generation, flux, sdxl, text-to-image, promptfoo provider]
 ---
 
 # ModelsLab
 
-The `modelslab` provider supports text-to-image generation via the [ModelsLab API](https://docs.modelslab.com), with access to first-party and community models.
+The `modelslab` provider supports text-to-image generation through ModelsLab's [v6 image API](https://docs.modelslab.com/quickstart), using `/api/v6/images/text2img`. The model name is sent unchanged as `model_id`, so use an exact ModelsLab ID supported by that endpoint.
 
 ## Setup
 
-1. **Create an API key** at [ModelsLab](https://modelslab.com/dashboard/apikeys)
+1. **Create an API key** at [ModelsLab](https://modelslab.com/dashboard/api-keys)
 
 2. **Set the environment variable**:
    ```bash
@@ -28,14 +28,13 @@ modelslab:image:<model_name>
 
 **Text to Image:**
 
-- `modelslab:image:nano-banana-2` - Google Nano Banana 2, fast 1024x1024 generation with natural language editing
-- `modelslab:image:seedream-5.0-lite` - Bytedance Seedream 5.0 Lite, fast and lightweight
+- `modelslab:image:seedream-5-lite-t2i` - ByteDance Seedream 5 Lite, documented in ModelsLab's [v6 integration guide](https://modelslab.com/blog/image-generation/seedream-5-0-api-bytedance-image-model-modelslab-2026)
 - `modelslab:image:flux` - Flux, high-quality image generation
 - `modelslab:image:sdxl` - Stable Diffusion XL
 
 :::info
 
-Browse the full [model catalog](https://modelslab.com/models) for community fine-tunes and additional models.
+Browse the [model catalog](https://modelslab.com/models) and check each model's API version. For example, [Nano Banana 2](https://modelslab.com/models/google/gemini-3.1-t2i) uses `gemini-3.1-t2i` in a v7 example; that does not establish support through this v6 provider.
 
 :::
 
@@ -59,18 +58,21 @@ providers:
 
 ### Configuration Options
 
-| Parameter             | Type   | Default | Description                              |
-| --------------------- | ------ | ------- | ---------------------------------------- |
-| `apiKey`              | string | -       | API key (or use `MODELSLAB_API_KEY` env) |
-| `width`               | number | 512     | Image width in pixels                    |
-| `height`              | number | 512     | Image height in pixels                   |
-| `num_inference_steps` | number | 30      | Number of denoising steps                |
-| `guidance_scale`      | number | 7.5     | How closely to follow the prompt         |
-| `samples`             | number | 1       | Number of images to generate             |
-| `seed`                | number | -       | Random seed for reproducibility          |
-| `negative_prompt`     | string | -       | What to avoid in the image               |
-| `safety_checker`      | string | `no`    | Enable safety filter (`yes` or `no`)     |
-| `enhance_prompt`      | string | `no`    | Auto-enhance the prompt (`yes` or `no`)  |
+| Parameter             | Type   | Default | Description                                                                                                   |
+| --------------------- | ------ | ------- | ------------------------------------------------------------------------------------------------------------- |
+| `apiKey`              | string | -       | API key (or use `MODELSLAB_API_KEY` env)                                                                      |
+| `width`               | number | 512     | Image width in pixels                                                                                         |
+| `height`              | number | 512     | Image height in pixels                                                                                        |
+| `num_inference_steps` | number | 30      | Number of denoising steps                                                                                     |
+| `guidance_scale`      | number | 7.5     | How closely to follow the prompt                                                                              |
+| `samples`             | number | 1       | Images requested upstream. Only the first is returned, so values above 1 bill extra for no additional output. |
+| `seed`                | number | -       | Random seed for reproducibility                                                                               |
+| `negative_prompt`     | string | -       | What to avoid in the image                                                                                    |
+| `safety_checker`      | string | `no`    | Enable safety filter (`yes` or `no`)                                                                          |
+| `enhance_prompt`      | string | `no`    | Auto-enhance the prompt (`yes` or `no`)                                                                       |
+
+The provider returns a Markdown image reference — `![prompt](url)` — not a bare URL, so
+assertions should match that shape (for example `contains: '!['`).
 
 ### Full Example
 

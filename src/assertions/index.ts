@@ -20,7 +20,10 @@ import {
 import { matchesSimilarity } from '../matchers/similarity';
 import { isPackagePath, loadFromPackage } from '../providers/packageParser';
 import { runPython } from '../python/pythonUtils';
-import { getProviderCallExecutionContext } from '../scheduler/providerCallExecutionContext';
+import {
+  getProviderCallExecutionContext,
+  getProviderCallTracingContext,
+} from '../scheduler/providerCallExecutionContext';
 import { generateSpanId, generateTraceparent } from '../tracing/evaluatorTracing';
 import { getTraceStore } from '../tracing/store';
 import {
@@ -403,7 +406,7 @@ export function getAssertionBaseType(assertion: Assertion): AssertionType {
  * @see runAssertions for batch assertion execution
  * @see evaluate for full evaluation pipeline
  */
-export async function runAssertion({
+async function runAssertionInternal({
   prompt,
   provider,
   assertion,
@@ -413,6 +416,7 @@ export async function runAssertion({
   providerResponse,
   traceId,
   traceData,
+  claimStoredGradingUsage,
 }: {
   prompt?: string;
   provider?: ApiProvider;
@@ -424,6 +428,7 @@ export async function runAssertion({
   assertIndex?: number;
   traceId?: string;
   traceData?: TraceData | null;
+  claimStoredGradingUsage?: () => boolean;
 }): Promise<GradingResult> {
   // Use resolved vars if provided, otherwise fall back to test.vars
   const resolvedVars = vars || test.vars || {};
@@ -604,7 +609,12 @@ export async function runAssertion({
 
   // Construct CallApiContextParams for model-graded assertions that need originalProvider
   // Generate traceparent for grader calls to link them to the main trace
-  const graderTraceparent = traceId ? generateTraceparent(traceId, generateSpanId()) : undefined;
+  const activeTraceparent = getProviderCallTracingContext()?.getActiveTraceparent();
+  const graderTraceparent = traceId
+    ? activeTraceparent?.split('-')[1] === traceId
+      ? activeTraceparent
+      : generateTraceparent(traceId, generateSpanId())
+    : undefined;
   const providerCallContext: CallApiContextParams | undefined = provider
     ? {
         originalProvider: provider,
@@ -640,7 +650,7 @@ export async function runAssertion({
 
   // Check for redteam assertions first
   if (assertionParams.baseType.startsWith('promptfoo:redteam:')) {
-    return handleRedteam(assertionParams);
+    return handleRedteam(assertionParams, claimStoredGradingUsage);
   }
 
   const handler = ASSERTION_HANDLERS[assertionParams.baseType as keyof typeof ASSERTION_HANDLERS];
@@ -670,6 +680,28 @@ export async function runAssertion({
   }
 
   throw new Error(`Unknown assertion type: ${assertion.type}`);
+}
+
+export async function runAssertion(
+  options: Parameters<typeof runAssertionInternal>[0],
+): Promise<GradingResult> {
+  if (!options.traceId) {
+    return runAssertionInternal(options);
+  }
+
+  const tracingContext = getProviderCallTracingContext();
+  if (!tracingContext) {
+    return runAssertionInternal(options);
+  }
+
+  return tracingContext.withGraderSpan(
+    {
+      graderId: options.assertion.type,
+      evalId: options.test.metadata?.evaluationId as string | undefined,
+      testIndex: tracingContext.testIndex,
+    },
+    () => runAssertionInternal(options),
+  );
 }
 
 /**
@@ -794,6 +826,17 @@ export async function runAssertions({
     ? 1
     : ASSERTIONS_MAX_CONCURRENCY;
 
+  // All assertions (including assertion sets) share one historical strategy cost.
+  // Keep ownership local to this run so replaying a saved response starts fresh.
+  let storedGradingUsageClaimed = false;
+  const claimStoredGradingUsage = () => {
+    if (storedGradingUsageClaimed) {
+      return false;
+    }
+    storedGradingUsageClaimed = true;
+    return true;
+  };
+
   await async.forEachOfLimit(asserts, concurrency, async ({ assertion, assertResult, index }) => {
     if (assertion.type.startsWith('select-') || assertion.type === 'max-score') {
       // Select-type and max-score assertions are handled separately because they depend on multiple outputs.
@@ -811,6 +854,7 @@ export async function runAssertions({
       assertIndex: index,
       traceId,
       traceData: preloadedTraceData,
+      claimStoredGradingUsage,
     });
 
     assertResult.addResult({
