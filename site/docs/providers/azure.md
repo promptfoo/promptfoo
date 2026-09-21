@@ -373,7 +373,6 @@ config:
 config:
   tools:
     - type: image_generation
-      partial_images: 2 # For streaming partial images
 ```
 
 ### Complete Responses API Example
@@ -435,12 +434,7 @@ tests:
 
 ### Additional Responses API Configuration
 
-**Streaming**: Enable streaming for real-time output:
-
-```yaml
-config:
-  stream: true
-```
+The Azure Responses provider expects a complete JSON response. Leave `stream` unset; streamed responses and partial images are not supported.
 
 **Parallel Tool Calls**: Allow multiple tool calls in parallel:
 

@@ -100,7 +100,7 @@ providers:
 | `stopSequences`    | string[] | Sequences where generation stops             |
 | `timeout`          | number   | Request timeout in milliseconds              |
 | `headers`          | object   | Additional HTTP headers                      |
-| `streaming`        | boolean  | Enable streaming responses                   |
+| `streaming`        | boolean  | Use the streaming API for text generation    |
 | `responseSchema`   | object   | JSON schema for structured output            |
 | `baseUrl`          | string   | Override the AI Gateway base URL             |
 
@@ -141,7 +141,7 @@ tests:
 
 ## Streaming
 
-Enable streaming for real-time responses:
+Use Vercel's streaming API for text generation. Promptfoo collects the chunks and runs assertions on the completed response:
 
 ```yaml title="promptfooconfig.yaml"
 providers:

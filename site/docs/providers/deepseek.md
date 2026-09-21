@@ -1,6 +1,6 @@
 ---
 sidebar_label: DeepSeek
-description: Configure DeepSeek's OpenAI-compatible API with V4 chat and reasoning models, 1M context windows, and prompt caching for cost-effective LLM testing
+description: Configure DeepSeek chat and reasoning models, thinking mode, and prompt-cache cost estimates in Promptfoo.
 ---
 
 # DeepSeek
@@ -36,16 +36,17 @@ providers:
 - `max_tokens`
 - `cost`, `inputCost`, `outputCost`, `cacheReadCost` - Set cost estimates in USD per token. `inputCost` and `outputCost` take precedence over `cost`; `cacheReadCost` sets a separate cached-input rate.
 - `top_p`, `presence_penalty`, `frequency_penalty`
-- `stream`
 - `showThinking` - Control whether reasoning content is included in the output (default: `true`, applies to thinking-capable models)
+
+Promptfoo requests complete responses; this provider does not support streaming.
 
 ## Available Models
 
 DeepSeek lists `deepseek-flash` and `deepseek-v4-pro` in its [model catalog](https://api-docs.deepseek.com/quick_start/pricing/). The older `deepseek-chat` and `deepseek-reasoner` IDs are retired. The shorthand `deepseek:` uses `deepseek-flash` with thinking disabled; use the full ID for DeepSeek's default thinking mode.
 
-<span id="deepseek-flash" />
+<span id="deepseek-v4-flash" />
 
-### deepseek-v4-flash
+### deepseek-flash
 
 Use `deepseek:deepseek-flash` for V4.1 Flash, which supports text and image inputs. The older `deepseek-v4-flash` ID temporarily routes to the same model. It supports a 1M-token context window and up to 384K output tokens.
 
@@ -71,7 +72,9 @@ providers:
     config:
       max_tokens: 8000
       showThinking: true # Include reasoning content in output (default)
-  - id: openai:o1
+  - id: openai:gpt-5.4-mini
+    config:
+      reasoning_effort: medium
 
 prompts:
   - 'Solve this step by step: {{math_problem}}'
@@ -102,8 +105,6 @@ Thinking: <reasoning content>
 
 With `showThinking: false`, assertions see only the final answer. This option does not turn off thinking at the API; use `config.passthrough.thinking: { type: disabled }` for that.
 
-See our [complete example](https://github.com/promptfoo/promptfoo/tree/main/examples/compare-deepseek-r1-vs-openai-o1) that benchmarks it against OpenAI's o1 model on the MMLU reasoning tasks.
-
 ## API Details
 
 - Base URL: `https://api.deepseek.com/v1`
@@ -113,4 +114,4 @@ See our [complete example](https://github.com/promptfoo/promptfoo/tree/main/exam
 ## See Also
 
 - [OpenAI Provider](/docs/providers/openai/) - Compatible configuration options
-- [Complete example](https://github.com/promptfoo/promptfoo/tree/main/examples/compare-deepseek-r1-vs-openai-o1) - Benchmark against OpenAI's o1 model
+- [Historical MMLU comparison](https://github.com/promptfoo/promptfoo/tree/main/examples/compare-deepseek-r1-vs-openai-o1) - Replace its retired provider IDs with the current IDs shown above before running it.
