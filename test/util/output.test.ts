@@ -1154,46 +1154,55 @@ describe('writeOutput', () => {
     ['mo\u0000del', 'mo\u0001del'],
     ['mo del', 'mo \u0000del'],
     ['x'.repeat(508) + '🚀tailmore', 'x'.repeat(508) + '...'],
-  ])('keeps JUnit identities distinct and stable for %j and %j', async (first, second) => {
-    const names: string[][] = [];
-    for (const labels of [
-      [first, second],
-      [second, first],
-    ]) {
-      const eval_ = new Eval({});
-      for (const [promptIdx, label] of labels.entries()) {
-        const success = label === first;
-        await eval_.addResult(
-          createEvaluateResult({
-            provider: { id: 'echo', label },
-            promptIdx,
-            success,
-            score: Number(success),
-            failureReason: success ? ResultFailureReason.NONE : ResultFailureReason.ASSERT,
-            gradingResult: { pass: success, score: Number(success), reason: 'fixture' },
-          }),
-        );
+    ['\u0001target', 'target', 'echo\u0001'],
+  ])(
+    'keeps JUnit identities distinct and stable for %j and %j',
+    async (first, second, secondId = 'echo') => {
+      const names: string[][] = [];
+      for (const labels of [
+        [first, second],
+        [second, first],
+      ]) {
+        const eval_ = new Eval({});
+        for (const [promptIdx, label] of labels.entries()) {
+          const success = label === first;
+          await eval_.addResult(
+            createEvaluateResult({
+              provider: { id: label === second ? secondId : 'echo', label },
+              promptId: 'shared',
+              promptIdx,
+              success,
+              score: Number(success),
+              failureReason: success ? ResultFailureReason.NONE : ResultFailureReason.ASSERT,
+              gradingResult: { pass: success, score: Number(success), reason: 'fixture' },
+            }),
+          );
+        }
+        const xml = await createJunitXml(eval_);
+        expect(() => new SaxesParser().write(xml).close()).not.toThrow();
+        const report = new XMLParser({ ignoreAttributes: false }).parse(xml).testsuites;
+        expect(report).toMatchObject({ '@_tests': '2', '@_failures': '1' });
+        expect(Array.isArray(report.testsuite)).toBe(true);
+        expect(report.testsuite[labels.indexOf(second)].testcase.failure).toBeDefined();
+        const current: string[] = [];
+        for (const suite of report.testsuite) {
+          expect(suite.testcase['@_classname']).toBe(suite['@_name']);
+          current.push(suite['@_name']);
+        }
+        expect(new Set(current).size).toBe(2);
+        names.push(current);
       }
-      const xml = await createJunitXml(eval_);
-      expect(() => new SaxesParser().write(xml).close()).not.toThrow();
-      const report = new XMLParser({ ignoreAttributes: false }).parse(xml).testsuites;
-      expect(report).toMatchObject({ '@_tests': '2', '@_failures': '1' });
-      expect(report.testsuite[labels.indexOf(second)].testcase.failure).toBeDefined();
-      const current: string[] = [];
-      for (const suite of report.testsuite) {
-        expect(suite.testcase['@_classname']).toBe(suite['@_name']);
-        current.push(suite['@_name']);
+      expect(names[1]).toEqual([...names[0]].reverse());
+      if (first === 'target-A') {
+        expect(names[0]).toEqual(['[target-A] prompt 1', '[target-B] prompt 1']);
+      } else if (first.includes('🚀')) {
+        expect(names[0][0]).toContain('🚀...');
+      } else if (secondId !== 'echo') {
+        expect(names[0][0]).toMatch(/^\[target\] prompt 1 \([a-f0-9]{16}\)$/);
+        expect(names[0][1]).toBe('[target] prompt 1');
       }
-      expect(new Set(current).size).toBe(2);
-      names.push(current);
-    }
-    expect(names[1]).toEqual([...names[0]].reverse());
-    if (first === 'target-A') {
-      expect(names[0]).toEqual(['[target-A] prompt 1', '[target-B] prompt 1']);
-    } else if (first.includes('🚀')) {
-      expect(names[0][0]).toContain('🚀...');
-    }
-  });
+    },
+  );
 
   it.each([
     ['hello\u000bworld', 'hello world'],
