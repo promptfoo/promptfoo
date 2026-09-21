@@ -5,7 +5,7 @@ description: "Deploy and run open-source AI models in the cloud using Replicate'
 
 # Replicate
 
-Replicate is an API for machine learning models. It currently hosts models like [Llama v2](https://replicate.com/replicate/llama70b-v2-chat), [Gemma](https://replicate.com/google-deepmind/gemma-7b-it), and [Mistral/Mixtral](https://replicate.com/mistralai/mixtral-8x7b-instruct-v0.1).
+Replicate is an API for machine learning models. It currently hosts models like [Llama v2](https://replicate.com/replicate/llama70b-v2-chat), [Gemma](https://replicate.com/google-deepmind/gemma-7b-it), and [Mistral/Mixtral](https://replicate.com/mistralai).
 
 :::info
 The Replicate provider in promptfoo uses direct HTTP requests to the Replicate API, so no additional SDK installation is required.

@@ -1512,6 +1512,20 @@ describe('OllamaChatProvider', () => {
     expect(result.output).toEqual([{ function: { name: 'f', arguments: '{"a":1}' } }]);
   });
 
+  it('should normalize a missing tool-call arguments field to an empty JSON object', async () => {
+    vi.mocked(fetchWithCache).mockResolvedValue({
+      data: '{"message":{"role":"assistant","content":"","tool_calls":[{"function":{"name":"f"}}]},"done":true}\n',
+      cached: false,
+      status: 200,
+      statusText: 'OK',
+      headers: {},
+    });
+
+    const result = await new OllamaChatProvider('llama3.3').callApi('test prompt');
+
+    expect(result.output).toEqual([{ function: { name: 'f', arguments: '{}' } }]);
+  });
+
   it('should handle multiple tool calls in response', async () => {
     const mockResponse = {
       data: '{"message":{"role":"assistant","content":"","images":null,"tool_calls":[{"function":{"name":"get_weather","arguments":"{\\"location\\":\\"Amsterdam\\",\\"unit\\":\\"celsius\\"}"}},{"function":{"name":"get_weather","arguments":"{\\"location\\":\\"Paris\\",\\"unit\\":\\"celsius\\"}"}}]},"done":true}\n',

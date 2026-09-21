@@ -157,8 +157,19 @@ Latest open-source Qwen3 models with thinking mode support:
 
 ### Embeddings
 
+Embedding models require the explicit `alibaba:embedding:<model>` form. `alibaba:<model>` routes to
+the chat provider and posts to `/chat/completions`, which fails for an embedding model.
+
 - `text-embedding-v3` - 1,024d vectors, 8,192 token limit, 50+ languages
 - `text-embedding-v4` - Latest Qwen3-Embedding with flexible dimensions (64-2048d), 100+ languages
+
+```yaml
+defaultTest:
+  options:
+    provider:
+      embedding:
+        id: alibaba:embedding:text-embedding-v4
+```
 
 ### Image Generation
 
@@ -168,7 +179,17 @@ For the latest availability, see the [official DashScope model catalog](https://
 
 ## Additional Configuration
 
-- `vl_high_resolution_images`: bool - Increases image token limit from 1,280 to 16,384 (qwen-vl-max only)
+DashScope-only request fields go under `config.passthrough`. Unrecognized top-level keys are dropped
+before the request is sent. For example, `vl_high_resolution_images` (bool) raises the image token
+limit from 1,280 to 16,384 on `qwen-vl-max`:
+
+```yaml
+providers:
+  - id: alibaba:qwen-vl-max
+    config:
+      passthrough:
+        vl_high_resolution_images: true
+```
 
 Standard [OpenAI parameters](/docs/providers/openai/#configuring-parameters) (temperature, max_tokens) are supported. Base URL: `https://dashscope-intl.aliyuncs.com/compatible-mode/v1` (or `https://dashscope.aliyuncs.com/compatible-mode/v1` for the Beijing region).
 
