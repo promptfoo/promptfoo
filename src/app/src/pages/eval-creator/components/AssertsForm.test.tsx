@@ -106,6 +106,33 @@ describe('AssertsForm', () => {
     expect(onAdd).toHaveBeenCalledWith([{ type: 'contains', value: 'initial value' }]);
   });
 
+  it('should expose character count assertions in the type selector', async () => {
+    initialValues = [{ type: 'equals', value: '' }];
+    renderComponent(<AssertsForm onAdd={onAdd} initialValues={initialValues} />);
+
+    await userEvent.click(screen.getByRole('combobox', { name: 'Type' }));
+
+    expect(await screen.findByRole('option', { name: 'character-count' })).toBeInTheDocument();
+    expect(screen.getByRole('option', { name: 'not-character-count' })).toBeInTheDocument();
+  });
+
+  it('should display and parse character count ranges', async () => {
+    const user = userEvent.setup();
+    initialValues = [{ type: 'character-count', value: { min: 1, max: 3 } }];
+    renderComponent(<AssertsForm onAdd={onAdd} initialValues={initialValues} />);
+
+    const valueInput = screen.getByRole('textbox', { name: 'Value' });
+    expect(valueInput).toHaveValue('{"min":1,"max":3}');
+
+    await user.click(valueInput);
+    await user.keyboard('{Control>}a{/Control}');
+    await user.paste('{"min":2,"max":4}');
+
+    expect(onAdd).toHaveBeenLastCalledWith([
+      { type: 'character-count', value: { min: 2, max: 4 } },
+    ]);
+  });
+
   it('should remove an assertion and call onAdd with the updated assertions array when the delete button is clicked for that assertion', async () => {
     const user = userEvent.setup();
     initialValues = [
