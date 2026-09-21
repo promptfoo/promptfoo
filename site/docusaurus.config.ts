@@ -102,6 +102,7 @@ const config: Config = {
           exclude: [
             '**/CLAUDE.md', // Exclude Claude Code context files
             '**/AGENTS.md', // Exclude AI agent instruction files
+            '**/.claude/**', // Exclude Claude compatibility instruction rules
           ],
         },
         blog: {
