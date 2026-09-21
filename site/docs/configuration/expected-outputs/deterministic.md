@@ -1258,7 +1258,7 @@ If the webhook returns a `pass` value of `true`, the assertion will be considere
 
 A missing or non-boolean `pass` value is a webhook error and fails both `webhook` and `not-webhook` assertions. Use JSON booleans (`true` or `false`), not strings (`"true"` or `"false"`).
 
-You may also return a score:
+You may also return a numeric `score` from `0` to `1`, inclusive. An invalid score fails both `webhook` and `not-webhook`. If omitted, the score is `1` when the assertion passes and `0` when it fails. `not-webhook` inverts an explicit score (`1 - score`).
 
 ```json
 {

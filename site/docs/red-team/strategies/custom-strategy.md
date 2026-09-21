@@ -195,6 +195,8 @@ There's also a global red team configuration option `excludeTargetOutputFromAgen
 
 ## Stateful vs Stateless Mode
 
+In both modes, the target receives the current message in the configured prompt variable. Other test variables, including a session ID if provided, are preserved.
+
 ### Stateless (Default)
 
 - Each test starts fresh

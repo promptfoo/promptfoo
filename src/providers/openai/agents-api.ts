@@ -345,10 +345,14 @@ function isNonNegativeSafeInteger(value: unknown): value is number {
 
 function isUsage(value: unknown): value is Usage {
   const usage = value as Usage | null | undefined;
+  const cached = usage?.input_tokens_details?.cached_tokens;
+  const reasoning = usage?.output_tokens_details?.reasoning_tokens;
   return (
     isNonNegativeSafeInteger(usage?.input_tokens) &&
     isNonNegativeSafeInteger(usage.output_tokens) &&
-    isNonNegativeSafeInteger(usage.total_tokens)
+    isNonNegativeSafeInteger(usage.total_tokens) &&
+    (cached == null || isNonNegativeSafeInteger(cached)) &&
+    (reasoning == null || isNonNegativeSafeInteger(reasoning))
   );
 }
 
@@ -357,8 +361,8 @@ function toTokenUsage(usage: Usage) {
     prompt: usage.input_tokens,
     completion: usage.output_tokens,
     total: usage.total_tokens,
-    cached: usage.input_tokens_details?.cached_tokens,
-    completionDetails: { reasoning: usage.output_tokens_details?.reasoning_tokens },
+    cached: usage.input_tokens_details?.cached_tokens ?? undefined,
+    completionDetails: { reasoning: usage.output_tokens_details?.reasoning_tokens ?? undefined },
   };
 }
 
@@ -631,7 +635,6 @@ export class OpenAiAgentsApiProvider extends OpenAiGenericProvider {
         return {};
       }
       let sum: Usage | undefined;
-      let complete = true;
       for (const id of subagentIds) {
         const turns = await this.list<Turn>(
           `${endpoint}/subagents/${encodeURIComponent(id)}/turns`,
@@ -639,20 +642,19 @@ export class OpenAiAgentsApiProvider extends OpenAiGenericProvider {
           signal,
         );
         for (const turn of turns) {
-          if (isUsage(turn.usage)) {
-            sum = sum ? addUsage(sum, turn.usage) : turn.usage;
-            if (!sum) {
-              complete = false;
-            }
-          } else {
-            complete = false;
+          if (!isUsage(turn.usage)) {
+            return { usageMayExcludeSubagents: true };
+          }
+          sum = sum ? addUsage(sum, turn.usage) : turn.usage;
+          if (!sum) {
+            return { usageMayExcludeSubagents: true };
           }
         }
       }
       return {
         usageMayExcludeSubagents: true,
         // A partial sum would understate subagent work, so it is reported only when complete.
-        ...(complete && sum ? { subagentUsage: toTokenUsage(sum) } : {}),
+        ...(sum ? { subagentUsage: toTokenUsage(sum) } : {}),
       };
     } catch (error) {
       evalSignal?.throwIfAborted();

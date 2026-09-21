@@ -6,19 +6,9 @@ import path from 'path';
 
 import dedent from 'dedent';
 import cliState from '../cliState';
-import { getEnvString } from '../envars';
+import { getEnvString, getProcessEnv } from '../envars';
 import { importModule } from '../esm';
 import logger, { getLogLevel } from '../logger';
-import { rateLimitTimingFromHeaders } from '../util/fetch';
-import {
-  extractRateLimitErrorType,
-  HttpRateLimitError,
-  isDefinitiveBillingCode,
-  isHardQuotaCode,
-  isTransientRateLimitCode,
-} from '../util/fetch/errors';
-import { REDACTED } from '../util/sanitizer';
-import { escapeRegExp } from '../util/text';
 import {
   cacheResponse,
   generateCacheKey,
@@ -26,6 +16,12 @@ import {
   initializeAgenticCache,
   resolveAgenticWorkingDir,
 } from './agentic-utils';
+import { classifyProviderSdkRateLimit } from './fetch';
+import {
+  escapeProviderRegexLiteral,
+  isShortNumericProviderRedaction,
+  redactProviderText,
+} from './providerLogging';
 import { providerRegistry } from './providerRegistry';
 
 import type { EnvOverrides } from '../types/env';
@@ -668,7 +664,7 @@ function openCodeCredentialPattern(credential: string): string {
       if (/^&(?:amp|lt|gt|quot|apos);$/i.test(part)) {
         return '&' + caseInsensitiveWord(part.slice(1, -1)) + ';';
       }
-      return escapeRegExp(part);
+      return escapeProviderRegexLiteral(part);
     })
     .join('');
 }
@@ -753,25 +749,26 @@ function redactOpenCodeError(
       unbounded &&
       !/%|\\u[0-9a-f]{4}|&(?:#(?:x[0-9a-f]+|\d+)|amp|lt|gt|quot|apos);/i.test(credential)
     ) {
-      result = result.split(credential).join(REDACTED);
+      result = redactProviderText(result, credential);
       continue;
     }
     const pattern = openCodeCredentialPattern(credential);
-    result = result.replace(
+    result = redactProviderText(
+      result,
       new RegExp(unbounded ? pattern : '(?<![\\w.~+-])' + pattern + '(?![\\w.~+=-])', 'g'),
-      REDACTED,
     );
   }
-  return result
-    .replace(
-      /((?:["']?)(?:api[_ -]?key|access[_ -]?token|refresh[_ -]?token|client[_ -]?secret|pass(?:word|wd|phrase)|pwd|sign(?:ature|ing[_ -]?key)|authorization)(?:["']?)\s*[:=]\s*["']?)(?:(?:Bearer|Basic)\s+)?[^\s,"';&}]+/gi,
-      (_match, prefix: string) => prefix + REDACTED,
-    )
-    .replace(
-      /\b(Bearer|Basic)\s+[\w.~+/=-]+/gi,
-      (_match, scheme: string) => scheme + ' ' + REDACTED,
-    )
-    .replace(/\bsk-[\w-]{12,}/gi, REDACTED)
+  result = redactProviderText(
+    result,
+    /((?:["']?)(?:api[_ -]?key|access[_ -]?token|refresh[_ -]?token|client[_ -]?secret|pass(?:word|wd|phrase)|pwd|sign(?:ature|ing[_ -]?key)|authorization)(?:["']?)\s*[:=]\s*["']?)(?:(?:Bearer|Basic)\s+)?[^\s,"';&}]+/gi,
+    (_match, prefix) => prefix,
+  );
+  result = redactProviderText(
+    result,
+    /\b(Bearer|Basic)\s+[\w.~+/=-]+/gi,
+    (_match, scheme) => scheme + ' ',
+  );
+  return redactProviderText(result, /\bsk-[\w-]{12,}/gi)
     .replace(/[\r\n]+/g, ' ')
     .slice(0, 500);
 }
@@ -1627,8 +1624,7 @@ export class OpenCodeSDKProvider implements ApiProvider {
   private terminationCleanup?: Promise<void>;
   private readonly ephemeralCleanupTasks = new Set<Promise<void>>();
   private readonly ephemeralSessionCompletions = new WeakMap<OpenCodeSessionHandle, () => void>();
-  private sessions: Map<string, OpenCodeSessionHandle> = new Map(); // cacheKey -> session info
-  private sessionOrder: string[] = []; // Track insertion order for LRU eviction
+  private readonly sessions = new Map<string, OpenCodeSessionHandle>();
   private sessionQueues = new Map<string, Promise<void>>();
   private serverSessionQueues = new Map<string, Promise<void>>();
   private unconfirmedSessionAborts = new Map<string, { sessionId: string }>();
@@ -1692,7 +1688,11 @@ export class OpenCodeSDKProvider implements ApiProvider {
     return '[OpenCode SDK Provider]';
   }
 
-  cleanup(): Promise<void> {
+  cleanup(reason?: 'evaluation'): Promise<void> {
+    if (reason === 'evaluation') {
+      // The evaluator's registry releases this instance after its last evaluation owner.
+      return Promise.resolve();
+    }
     if (this.explicitCleanup) {
       return this.explicitCleanup;
     }
@@ -1725,12 +1725,17 @@ export class OpenCodeSDKProvider implements ApiProvider {
       // an explicit cleanup, but never start a child after this provider was process-terminated.
       if (this.client || this.config.baseUrl || !this.processTermination.signal.aborted) {
         if (this.sessions.size > 0 && !this.client) {
-          await this.ensureClient(this.config);
+          try {
+            await this.ensureClient(this.config);
+          } catch (error) {
+            throw new Error(
+              `Failed to reconnect for OpenCode session cleanup: ${this.formatCallError(error, this.config)}`,
+            );
+          }
         }
         await this.deletePersistentSessions(reason !== 'explicit');
       }
       this.sessions.clear();
-      this.sessionOrder = [];
     }
     this.sessionQueues.clear();
 
@@ -2340,7 +2345,7 @@ export class OpenCodeSDKProvider implements ApiProvider {
   private buildServerEnv(config: OpenCodeSDKConfig): Record<string, string> {
     const serverEnv: Record<string, string> = {};
 
-    for (const [key, value] of Object.entries(process.env)) {
+    for (const [key, value] of Object.entries(getProcessEnv())) {
       if (value !== undefined) {
         serverEnv[key] = value;
       }
@@ -2571,17 +2576,15 @@ export class OpenCodeSDKProvider implements ApiProvider {
    * Add a session to the cache with LRU eviction
    */
   private addSession(cacheKey: string, session: OpenCodeSessionHandle): void {
-    // Remove oldest sessions if we've hit the limit
-    while (this.sessions.size >= MAX_SESSIONS && this.sessionOrder.length > 0) {
-      const oldestKey = this.sessionOrder.shift();
-      if (oldestKey) {
-        // This bounds only the local lookup. Persistent sessions remain resumable by their
-        // returned IDs, including when Promptfoo owned the local server process.
+    this.sessions.delete(cacheKey);
+    this.sessions.set(cacheKey, session);
+    if (this.sessions.size > MAX_SESSIONS) {
+      const oldestKey = this.sessions.keys().next().value;
+      if (oldestKey !== undefined) {
+        // Evict only the local lookup; persistent sessions remain resumable by their IDs.
         this.sessions.delete(oldestKey);
       }
     }
-    this.sessions.set(cacheKey, session);
-    this.sessionOrder.push(cacheKey);
   }
 
   private prepareCall(context?: CallApiContextParams): OpenCodePreparedCall {
@@ -2763,15 +2766,11 @@ export class OpenCodeSDKProvider implements ApiProvider {
     }
 
     const sessionCacheKey = this.buildSessionKey(config, workingDir);
-    if (config.persist_sessions && this.sessions.has(sessionCacheKey)) {
-      const existingIndex = this.sessionOrder.indexOf(sessionCacheKey);
-      if (existingIndex !== -1) {
-        this.sessionOrder.splice(existingIndex, 1);
-      }
-      this.sessionOrder.push(sessionCacheKey);
-
+    const cachedSession = config.persist_sessions ? this.sessions.get(sessionCacheKey) : undefined;
+    if (cachedSession) {
+      this.addSession(sessionCacheKey, cachedSession);
       return {
-        sessionId: this.sessions.get(sessionCacheKey)!.id,
+        sessionId: cachedSession.id,
         sessionQuery,
       };
     }
@@ -3403,89 +3402,18 @@ export class OpenCodeSDKProvider implements ApiProvider {
     if (status !== 429) {
       return undefined;
     }
-    const isRetryable =
-      typeof data?.isRetryable === 'boolean' ? data.isRetryable : item.isRetryable;
-    const asRecord = (value: unknown): Record<string, unknown> | undefined =>
-      value && typeof value === 'object' ? (value as Record<string, unknown>) : undefined;
-    const normalized = (value: unknown): string | undefined =>
-      typeof value === 'string' && value.length <= 256 && value.trim()
-        ? value.trim().toLowerCase()
-        : undefined;
-
-    let body: unknown = data?.responseBody ?? item.responseBody;
-    let textBody: string | undefined;
-    if (typeof body === 'string') {
-      if (body.length > 32_768) {
-        body = undefined;
-      } else if (body.trimStart().startsWith('{')) {
-        try {
-          body = JSON.parse(body);
-        } catch {
-          body = undefined;
-        }
-      } else {
-        textBody = body;
-        body = undefined;
-      }
-    }
-    const records = [asRecord(body), data, item].filter(
-      (record): record is Record<string, unknown> => Boolean(record),
-    );
-    // Preserve code and type as separate signals. The actual upstream code wins
-    // over wrapper codes and type aliases; HttpRateLimitError resolves the latter
-    // against transient codes and near-term recovery hints consistently with fetch.
-    const codes = records.flatMap((record) => {
-      const code = normalized(asRecord(record.error)?.code) ?? normalized(record.code);
-      return code ? [code] : [];
-    });
-    const types = records.flatMap((record) => {
-      const type = normalized(extractRateLimitErrorType(record));
-      return type ? [type] : [];
-    });
-    const messages = [
-      ...records.flatMap((record) => [asRecord(record.error)?.message, record.message]),
-      textBody,
-    ].filter((message): message is string => typeof message === 'string');
-    const known = (code: string) => isHardQuotaCode(code) || isTransientRateLimitCode(code);
-    const messageCodes = messages.flatMap((message) =>
-      (
-        message
-          .slice(0, 32_768)
-          .toLowerCase()
-          .match(/\b[a-z]+(?:_[a-z]+)+\b/g) ?? []
-      ).filter(known),
-    );
-    const definiteCode = [...codes, ...types, ...messageCodes].find(isDefinitiveBillingCode);
-    let inferredType: string | undefined;
-    if (isRetryable === false && ![...codes, ...types, ...messageCodes].some(known)) {
-      const patterns = [
-        [
-          'credit_balance_exhausted',
-          /\bcredit balance (?:is (?:(?:too )?low|exhausted|depleted|insufficient)|(?:has been )?(?:exhausted|depleted))\b/,
-        ],
-        [
-          'billing_hard_limit_reached',
-          /\bbilling (?:hard )?limit (?:has been |was |is )?(?:exceeded|exhausted|reached)\b/,
-        ],
-        ['billing_not_active', /\bbilling (?:is )?(?:not active|inactive)\b/],
-        ['access_terminated', /\baccess (?:has been |was |is )?terminated\b/],
-        [
-          'quota_exceeded',
-          /\b(?:(?:current |account |daily )?quota (?:has been |was |is )?(?:exceeded|exhausted|reached)|exceeded (?:your |the )?(?:current |account |daily )?quota)\b/,
-        ],
-      ] as const;
-      inferredType = patterns.find(([, pattern]) =>
-        messages.some((message) => pattern.test(message.slice(0, 32_768).toLowerCase())),
-      )?.[0];
-    }
-    const timing = headers ? rateLimitTimingFromHeaders(headers) : undefined;
-    return new HttpRateLimitError({
+    return classifyProviderSdkRateLimit({
       status,
-      code: codes[0] ?? messageCodes[0],
-      type: definiteCode ?? types[0] ?? inferredType,
-      retryAfterMs: timing?.retryAfterMs,
-      resetAt: timing?.resetAt,
-    }).kind;
+      body: data?.responseBody ?? item.responseBody,
+      details: data ? [data, item] : [item],
+      isRetryable:
+        typeof data?.isRetryable === 'boolean'
+          ? data.isRetryable
+          : typeof item.isRetryable === 'boolean'
+            ? item.isRetryable
+            : undefined,
+      headers,
+    });
   }
 
   private getErrorRateLimitHeaders(
@@ -3508,6 +3436,8 @@ export class OpenCodeSDKProvider implements ApiProvider {
     const isIsoDate = (value: string) =>
       /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{1,9})?(?:Z|[+-]\d{2}:\d{2})$/i.test(value) &&
       Number.isFinite(Date.parse(value));
+    const onlyRedactsTimestampDigits = (value: string, redacted: string) =>
+      (isIsoDate(value) || isHttpDate(value)) && isShortNumericProviderRedaction(value, redacted);
     const isInteger = (value: string) => /^\d{1,15}$/.test(value);
     const isReset = (value: string) =>
       /^\d{1,15}(?:\.\d{1,9})?$/.test(value) ||
@@ -3548,10 +3478,13 @@ export class OpenCodeSDKProvider implements ApiProvider {
         }
         const key = name.toLowerCase();
         const value = rawValue.trim();
-        if (
-          isSafeTimingHeader(key, value) &&
-          (formatHeader ??= this.getErrorFormatter(config, true))(value) === value
-        ) {
+        if (!isSafeTimingHeader(key, value)) {
+          continue;
+        }
+        const redacted = (formatHeader ??= this.getErrorFormatter(config, true))(value);
+        // A short numeric credential can coincide with milliseconds or another date component.
+        // Exact credentials and non-date timing values still go through the normal redaction.
+        if (redacted === value || onlyRedactsTimestampDigits(value, redacted)) {
           headers[key] = value;
         }
       }

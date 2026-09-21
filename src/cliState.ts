@@ -2,7 +2,7 @@ import { AsyncLocalStorage } from 'node:async_hooks';
 
 import { setEnvOverridesProvider } from './envOverrides';
 
-import type { TestSuite, UnifiedConfig } from './types/index';
+import type { EnvOverrides, TestSuite, UnifiedConfig } from './types/index';
 
 export interface ActiveOtlpReceiver {
   host: string;
@@ -12,7 +12,13 @@ export interface ActiveOtlpReceiver {
 
 interface CliState {
   basePath?: string;
+  withBasePath<T>(basePath: string | undefined, fn: () => T): T;
   config?: Partial<UnifiedConfig>;
+  withConfig<T>(
+    config: Partial<UnifiedConfig> | undefined,
+    fn: () => T,
+    selectedProviderConfigs?: Partial<UnifiedConfig>['providers'],
+  ): T;
   selectedProviderConfigs?: Partial<UnifiedConfig>['providers'];
 
   // Forces remote inference wherever possible
@@ -60,6 +66,13 @@ interface CliState {
   readonly activeOtlpReceiver?: ActiveOtlpReceiver;
 
   withMaxConcurrency<T>(maxConcurrency: number, fn: () => Promise<T>): Promise<T>;
+  /** The innermost environment scope, or the last config's env outside a scope. */
+  readonly env?: EnvOverrides;
+  readonly envFileOverrides?: EnvOverrides;
+  /** File values act as process defaults beneath each nested suite environment. */
+  withEnvFileOverrides<T>(env: EnvOverrides | undefined, fn: () => T): T;
+  /** Replaces the outer env for this call and its async work; undefined masks config env. */
+  withEnv<T>(env: EnvOverrides | undefined, fn: () => T): T;
   withRequestTracingConfig<T>(
     tracingConfig: NonNullable<TestSuite['tracing']>,
     fn: () => Promise<T>,
@@ -67,7 +80,17 @@ interface CliState {
   setActiveOtlpReceiver(receiver?: ActiveOtlpReceiver): void;
 }
 
+type ConfigState = Pick<CliState, 'config' | 'selectedProviderConfigs'>;
+const configContext = new AsyncLocalStorage<ConfigState>();
+const globalConfigState: ConfigState = {};
+
 const maxConcurrencyContext = new AsyncLocalStorage<{ maxConcurrency: number | undefined }>();
+const basePathContext = new AsyncLocalStorage<{ basePath: string | undefined }>();
+let globalBasePath: string | undefined;
+const envContext = new AsyncLocalStorage<{
+  env: EnvOverrides | undefined;
+  envFileOverrides?: EnvOverrides;
+}>();
 const requestTracingConfigContext = new AsyncLocalStorage<{
   tracingConfig: NonNullable<TestSuite['tracing']>;
 }>();
@@ -75,6 +98,40 @@ let globalMaxConcurrency: number | undefined;
 let activeOtlpReceiver: ActiveOtlpReceiver | undefined;
 
 const state: CliState = {
+  get config() {
+    return (configContext.getStore() ?? globalConfigState).config;
+  },
+  set config(config) {
+    (configContext.getStore() ?? globalConfigState).config = config;
+  },
+  get selectedProviderConfigs() {
+    return (configContext.getStore() ?? globalConfigState).selectedProviderConfigs;
+  },
+  set selectedProviderConfigs(providers) {
+    (configContext.getStore() ?? globalConfigState).selectedProviderConfigs = providers;
+  },
+  withConfig<T>(
+    config: Partial<UnifiedConfig> | undefined,
+    fn: () => T,
+    selectedProviderConfigs = config?.providers,
+  ): T {
+    return configContext.run({ config, selectedProviderConfigs }, fn);
+  },
+  get basePath() {
+    const store = basePathContext.getStore();
+    return store ? store.basePath : globalBasePath;
+  },
+  set basePath(basePath: string | undefined) {
+    const store = basePathContext.getStore();
+    if (store) {
+      store.basePath = basePath;
+    } else {
+      globalBasePath = basePath;
+    }
+  },
+  withBasePath<T>(basePath: string | undefined, fn: () => T): T {
+    return basePathContext.run({ basePath }, fn);
+  },
   get maxConcurrency() {
     const store = maxConcurrencyContext.getStore();
     if (store) {
@@ -92,6 +149,19 @@ const state: CliState = {
   },
   withMaxConcurrency<T>(maxConcurrency: number, fn: () => Promise<T>): Promise<T> {
     return maxConcurrencyContext.run({ maxConcurrency }, fn);
+  },
+  get env() {
+    const store = envContext.getStore();
+    return store ? store.env : state.config?.env;
+  },
+  get envFileOverrides() {
+    return envContext.getStore()?.envFileOverrides;
+  },
+  withEnvFileOverrides<T>(env: EnvOverrides | undefined, fn: () => T): T {
+    return envContext.run({ env: undefined, envFileOverrides: env }, fn);
+  },
+  withEnv<T>(env: EnvOverrides | undefined, fn: () => T): T {
+    return envContext.run({ env, envFileOverrides: state.envFileOverrides }, fn);
   },
   get requestTracingConfig() {
     return requestTracingConfigContext.getStore()?.tracingConfig;
@@ -112,6 +182,6 @@ const state: CliState = {
   },
 };
 
-setEnvOverridesProvider(() => state.config?.env);
+setEnvOverridesProvider((layer) => (layer === 'file' ? state.envFileOverrides : state.env));
 
 export default state;

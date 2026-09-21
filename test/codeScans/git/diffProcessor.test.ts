@@ -61,7 +61,10 @@ describe('processDiff', () => {
       3,
       'git',
       ['cat-file', '--batch-check=%(objectname) %(objecttype) %(objectsize)'],
-      { cwd: '/repo', input: files.map(({ sha }) => sha).join('\n') },
+      {
+        cwd: '/repo',
+        input: files.map(({ sha }) => sha).join('\n'),
+      },
     );
   });
 });

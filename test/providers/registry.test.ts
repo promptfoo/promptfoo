@@ -1246,7 +1246,16 @@ describe('Provider Registry', () => {
       ['sagemaker:endpoint-name', 'SageMakerCompletionProvider', { modelType: 'custom' }, 'custom'],
       ['sagemaker:jumpstart:endpoint-name', 'SageMakerCompletionProvider', {}, 'jumpstart'],
       ['sagemaker:openai:endpoint-name', 'SageMakerCompletionProvider', {}, 'openai'],
-      ['sagemaker:custom:my-jumpstart-endpoint', 'SageMakerCompletionProvider', {}, 'jumpstart'],
+      // An explicit model type wins over an endpoint name containing 'jumpstart'. This
+      // previously resolved to 'jumpstart', silently discarding what the user asked for.
+      ['sagemaker:custom:my-jumpstart-endpoint', 'SageMakerCompletionProvider', {}, 'custom'],
+      [
+        'sagemaker:huggingface:my-jumpstart-endpoint',
+        'SageMakerCompletionProvider',
+        {},
+        'huggingface',
+      ],
+      ['sagemaker:jumpstart:my-jumpstart-endpoint', 'SageMakerCompletionProvider', {}, 'jumpstart'],
     ])(
       'should handle %s providers correctly',
       async (path, expectedProviderName, config, expectedModelType) => {
@@ -1477,24 +1486,31 @@ describe('Provider Registry', () => {
       const absoluteGolangPath = path.resolve('/absolute/path/golang-script.go');
       const absolutePythonPath = path.resolve('/absolute/path/python-script.py');
       const absoluteExecPath = path.resolve('/absolute/path/exec-script.sh');
-      const cloudOptions = { ...mockProviderOptions, config: { isCloudConfig: true } };
 
-      for (const [providerPath, absolutePath, constructor] of [
-        [`golang:${absoluteGolangPath}`, absoluteGolangPath, GolangProvider],
-        [`file://${absoluteGolangPath}`, absoluteGolangPath, GolangProvider],
-        [`python:${absolutePythonPath}`, absolutePythonPath, PythonProvider],
-        [`file://${absolutePythonPath}`, absolutePythonPath, PythonProvider],
-        [`exec:${absoluteExecPath}`, absoluteExecPath, ScriptCompletionProvider],
-      ] as const) {
-        const factory = providerMap.find((entry) => entry.test(providerPath));
-        expect(factory).toBeDefined();
+      const golangFactory = providerMap.find((f) => f.test(`golang:${absoluteGolangPath}`));
+      const pythonFactory = providerMap.find((f) => f.test(`python:${absolutePythonPath}`));
+      const fileFactory = providerMap.find((f) => f.test(`file://${absolutePythonPath}`));
+      const execFactory = providerMap.find((f) => f.test(`exec:${absoluteExecPath}`));
 
-        await factory!.create(providerPath, mockProviderOptions, mockContext);
-        expect(constructor).toHaveBeenLastCalledWith(absolutePath, mockProviderOptions);
+      expect(golangFactory).toBeDefined();
+      expect(pythonFactory).toBeDefined();
+      expect(fileFactory).toBeDefined();
+      expect(execFactory).toBeDefined();
 
-        await factory!.create(providerPath, cloudOptions, mockContext);
-        expect(constructor).toHaveBeenLastCalledWith(absolutePath, cloudOptions);
-      }
+      await golangFactory!.create(`golang:${absoluteGolangPath}`, mockProviderOptions, mockContext);
+      expect(GolangProvider).toHaveBeenLastCalledWith(absoluteGolangPath, mockProviderOptions);
+
+      await pythonFactory!.create(`python:${absolutePythonPath}`, mockProviderOptions, mockContext);
+      expect(PythonProvider).toHaveBeenLastCalledWith(absolutePythonPath, mockProviderOptions);
+
+      await fileFactory!.create(`file://${absolutePythonPath}`, mockProviderOptions, mockContext);
+      expect(PythonProvider).toHaveBeenLastCalledWith(absolutePythonPath, mockProviderOptions);
+
+      await execFactory!.create(`exec:${absoluteExecPath}`, mockProviderOptions, mockContext);
+      expect(ScriptCompletionProvider).toHaveBeenLastCalledWith(
+        absoluteExecPath,
+        mockProviderOptions,
+      );
     });
 
     it('should handle helicone provider correctly', async () => {

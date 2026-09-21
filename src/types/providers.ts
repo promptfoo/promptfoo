@@ -126,6 +126,8 @@ export interface ApiProvider extends MinimalApiProvider {
   callEmbeddingApi?: (input: string) => Promise<ProviderEmbeddingResponse>;
   config?: any;
   delay?: number;
+  /** True when callApi applies delay itself and the evaluator should not wait again. */
+  handlesOwnDelay?: boolean;
   getSessionId?: () => string;
   /** Native audio input content format accepted by this provider and its configured model. */
   getAudioInputFormat?: () => 'openai' | 'google' | undefined;
@@ -135,10 +137,11 @@ export interface ApiProvider extends MinimalApiProvider {
   toJSON?: () => any;
   /**
    * Provider-wide cleanup hook for releasing long-lived resources such as worker
-   * processes, browser sessions, or pooled connections at eval shutdown.
+   * processes, browser sessions, or pooled connections. Evaluation completion passes
+   * its reason so providers can distinguish it from an explicit cleanup request.
    * Request-scoped cancellation should be implemented with `abortSignal`.
    */
-  cleanup?: () => void | Promise<void>;
+  cleanup?: (reason?: 'evaluation') => void | Promise<void>;
 }
 
 export interface ApiEmbeddingProvider extends ApiProvider {

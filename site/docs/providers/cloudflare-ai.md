@@ -7,8 +7,6 @@ description: Configure Cloudflare Workers AI chat and embedding models for evals
 
 This provider connects to Cloudflare Workers AI [text-generation and embedding models](https://developers.cloudflare.com/workers-ai/models/) through its OpenAI-compatible API.
 
-The provider uses Cloudflare's OpenAI-compatible API endpoints, making it easy to migrate between OpenAI and Cloudflare AI or use them interchangeably.
-
 ## Required Configuration
 
 Set your Cloudflare account ID and API key as environment variables:
@@ -79,7 +77,7 @@ providers:
 
 The legacy `cloudflare-ai:completion:<model>` selector sends requests to `/ai/v1/completions`. Cloudflare's current compatibility documentation does not establish support for this endpoint. Use a `cloudflare-ai:chat:<model>` selector for new text-generation configurations, including code generation.
 
-[Phi-2](https://developers.cloudflare.com/workers-ai/models/phi-2/) was deprecated on May 30, 2026 and should no longer be used for onboarding.
+Phi-2 was deprecated on May 30, 2026 and should no longer be used for onboarding; see the [Workers AI model catalog](https://developers.cloudflare.com/workers-ai/models/) for currently supported models.
 
 ### Embeddings
 

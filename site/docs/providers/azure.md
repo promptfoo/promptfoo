@@ -136,7 +136,7 @@ Azure AI Foundry provides access to models from multiple providers:
 | **AI21**             | `AI21-Jamba-1.5-Large`, `AI21-Jamba-1.5-Mini`                                                                                                                                                                                                                                                                                                                                     |
 | **Core42**           | `JAIS-70b-chat`, `Falcon3-7B-Instruct`                                                                                                                                                                                                                                                                                                                                            |
 
-For the complete list of models with pricing, see the [Azure model catalog](https://azure.microsoft.com/en-us/products/ai-services/ai-foundry/).
+For the complete list of models with pricing, see the [Microsoft Foundry model catalog](https://azure.microsoft.com/en-us/products/ai-foundry).
 
 ### GPT-5.6 on Azure
 
@@ -144,7 +144,7 @@ Microsoft's [model lifecycle table](https://learn.microsoft.com/azure/foundry/op
 
 Azure does not document the bare `gpt-5.6` alias. Deploy a concrete tier, then use your customer-defined deployment name with `azure:chat:` or `azure:responses:`. Promptfoo accepts arbitrary deployment names and auto-detects GPT-5 reasoning behavior when the name includes a recognizable GPT-5 model ID. Built-in standard and long-context cost estimates are available when the deployment name exactly matches `gpt-5.6`, `gpt-5.6-sol`, `gpt-5.6-terra`, or `gpt-5.6-luna`; an opaque alias cannot be matched automatically, so no cost is reported for it. Separately, set `isReasoningModel: true` on an opaque alias to keep GPT-5 reasoning request behavior (this does not affect cost matching).
 
-The Azure pricing table also recognizes `gpt-5.5-pro`, `gpt-5.2-pro`, their dated snapshots, and current `gpt-audio`/`gpt-realtime` aliases and dated snapshots (each family's mini and 1.5 variants included). For the models Azure publishes priority rates for (the GPT-5.6 family and several GPT-5.1–5.5 snapshots), cost estimates apply the priority multiplier when the request carries `service_tier: priority` — set it under `passthrough` for `azure:chat`/`azure:completion`, or as the top-level `service_tier` option for `azure:responses`. Audio-capable models report separate text and audio-token costs, and cached input tokens are billed at the catalog's discounted cache-read rates across the supported model families.
+The Azure pricing table also recognizes `gpt-5.5-pro`, `gpt-5.2-pro`, their dated snapshots, and `gpt-audio` and `gpt-realtime` aliases (including mini and 1.5 variants). For models with published priority rates, including GPT-5.6 and several GPT-5.1 to GPT-5.5 snapshots, set `passthrough.service_tier: priority` on `azure:chat`, `azure:completion`, or `azure:responses`. Promptfoo then applies the priority rate to its estimate. It also tracks text and audio tokens separately and uses discounted cached-input rates where available.
 
 ### Azure Realtime API
 
@@ -181,15 +181,11 @@ providers:
       # For newer v1 API, use 'preview' (default)
       # For legacy API, use specific version like '2025-04-01-preview'
       apiVersion: 'preview'
-
-  # Or using openai:responses with Azure configuration (legacy method)
-  - id: openai:responses:gpt-4.1
-    config:
-      apiHost: 'your-resource.openai.azure.com'
-      apiKey: '{{ env.AZURE_API_KEY }}' # or set OPENAI_API_KEY env var
-      temperature: 0.7
-      instructions: 'You are a helpful assistant.'
 ```
+
+Use `azure:responses` for Azure deployments. It builds the Azure `/openai/v1/responses` URL and
+supports Azure API keys and Microsoft Entra ID. Setting only `apiHost` on `openai:responses`
+does not select the Azure URL or its API-key authentication.
 
 ### Supported Responses Models
 
@@ -272,7 +268,7 @@ Load complex JSON schemas from external files for better organization:
 
 ```yaml
 providers:
-  - id: openai:responses:gpt-4.1
+  - id: azure:responses:my-gpt-4-1-deployment
     config:
       apiHost: 'your-resource.openai.azure.com'
       response_format: file://./schemas/response-schema.json
@@ -377,7 +373,6 @@ config:
 config:
   tools:
     - type: image_generation
-      partial_images: 2 # For streaming partial images
 ```
 
 ### Complete Responses API Example
@@ -439,12 +434,7 @@ tests:
 
 ### Additional Responses API Configuration
 
-**Streaming**: Enable streaming for real-time output:
-
-```yaml
-config:
-  stream: true
-```
+The Azure Responses provider expects a complete JSON response. Leave `stream` unset; streamed responses and partial images are not supported.
 
 **Parallel Tool Calls**: Allow multiple tool calls in parallel:
 
@@ -486,7 +476,6 @@ The Azure OpenAI provider supports the following environment variables:
 | `AZURE_API_KEY`                | `apiKey`             | Your Azure OpenAI API key                                                               | No\*     |
 | `AZURE_API_HOST`               | `apiHost`            | API host                                                                                | No       |
 | `AZURE_API_BASE_URL`           | `apiBaseUrl`         | API base URL                                                                            | No       |
-| `AZURE_BASE_URL`               | `apiBaseUrl`         | Alternative API base URL                                                                | No       |
 | `AZURE_DEPLOYMENT_NAME`        | -                    | Opt-in flag that, with `AZURE_OPENAI_DEPLOYMENT_NAME`, makes Azure the default provider | No†      |
 | `AZURE_OPENAI_DEPLOYMENT_NAME` | -                    | Deployment used when Azure is the default provider                                      | No†      |
 | `AZURE_CLIENT_ID`              | `azureClientId`      | Azure AD application client ID                                                          | No\*     |
@@ -495,11 +484,11 @@ The Azure OpenAI provider supports the following environment variables:
 | `AZURE_AUTHORITY_HOST`         | `azureAuthorityHost` | Azure AD authority host                                                                 | No       |
 | `AZURE_TOKEN_SCOPE`            | `azureTokenScope`    | Azure AD token scope                                                                    | No       |
 
-\* Either `AZURE_API_KEY` OR the combination of `AZURE_CLIENT_ID`, `AZURE_CLIENT_SECRET`, and `AZURE_TENANT_ID` must be provided.
+\* Set `AZURE_API_KEY`, provide all three client credentials, or sign in with `az login`.
 
 † Not needed when you name the deployment in the provider ID (e.g. `azure:chat:my-deployment`). Both are required only to make Azure the default provider (see [Default Deployment](#default-deployment)).
 
-Note: For API URLs, you only need to set one of `AZURE_API_HOST`, `AZURE_API_BASE_URL`, or `AZURE_BASE_URL`. If multiple are set, the provider will use them in that order of preference.
+Set either `AZURE_API_HOST` or `AZURE_API_BASE_URL`; if both are set, the base URL wins. `apiHost` also accepts `AZURE_OPENAI_API_HOST`. `apiBaseUrl` also accepts `AZURE_OPENAI_API_BASE_URL`, then `AZURE_OPENAI_BASE_URL`.
 
 ### Default Deployment
 
@@ -801,33 +790,32 @@ These properties can be set under the provider `config` key:
 
 ### OpenAI Configuration
 
-| Name                  | Description                                                                                                                                                                          |
-| --------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| o1                    | Set to `true` if your Azure deployment uses an o1 model. **(Deprecated, use `isReasoningModel` instead)**                                                                            |
-| isReasoningModel      | Treat the deployment as reasoning-capable. Set to `true` for custom deployment names; recognizable reasoning model names are auto-detected.                                          |
-| isClaudeOpus47OrLater | Set to `true` for a custom-named Claude Opus 4.7 or 4.8 chat deployment so unsupported sampling parameters are omitted.                                                              |
-| modelName             | Underlying Claude model ID for `azure:chat` compatibility and cost estimates when your deployment uses a custom alias. The deployment name is still sent to Azure.                   |
-| max_completion_tokens | Maximum tokens for `azure:chat` and `azure:completion` reasoning models. Use `max_output_tokens` for `azure:responses`.                                                              |
-| max_output_tokens     | Maximum output tokens for `azure:responses`, including reasoning deployments.                                                                                                        |
-| reasoning_effort      | Controls reasoning depth: 'minimal', 'low', 'medium', 'high', 'xhigh', or 'max' (model-dependent). Sent directly for chat/completion and as `reasoning.effort` by `azure:responses`. |
-| temperature           | Controls randomness (0-2). Not supported for reasoning models                                                                                                                        |
-| max_tokens            | Maximum tokens to generate. Not supported for reasoning models                                                                                                                       |
-| top_p                 | Controls nucleus sampling (0-1)                                                                                                                                                      |
-| frequency_penalty     | Penalizes repeated tokens (-2 to 2)                                                                                                                                                  |
-| presence_penalty      | Penalizes new tokens based on presence (-2 to 2)                                                                                                                                     |
-| omitDefaults          | Omits hardcoded defaults unless values are explicitly set via config or environment variables. Supported by `azure:chat` and `azure:responses`.                                      |
-| best_of               | Generates multiple outputs and returns the best                                                                                                                                      |
-| functions             | Array of functions available for the model to call                                                                                                                                   |
-| function_call         | Controls how the model calls functions                                                                                                                                               |
-| response_format       | Specifies output format (e.g., `{ type: "json_object" }`)                                                                                                                            |
-| stop                  | Array of sequences where the model will stop generating                                                                                                                              |
-| passthrough           | Additional parameters to send with the request                                                                                                                                       |
+| Name                  | Description                                                                                                                                                                                                           |
+| --------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| o1                    | Set to `true` if your Azure deployment uses an o1 model. **(Deprecated, use `isReasoningModel` instead)**                                                                                                             |
+| isReasoningModel      | Treat the deployment as reasoning-capable. Set to `true` for custom deployment names; recognizable reasoning model names are auto-detected.                                                                           |
+| isClaudeOpus47OrLater | Set to `true` for a custom-named Claude Opus 4.7 or 4.8 chat deployment so unsupported sampling parameters are omitted.                                                                                               |
+| modelName             | Underlying Claude model ID for `azure:chat` compatibility and cost estimates when your deployment uses a custom alias. The deployment name is still sent to Azure.                                                    |
+| max_completion_tokens | Maximum tokens for `azure:chat` reasoning models. Use `max_output_tokens` for `azure:responses`; `azure:completion` does not support it.                                                                              |
+| max_output_tokens     | Maximum output tokens for `azure:responses`, including reasoning deployments.                                                                                                                                         |
+| reasoning_effort      | Controls reasoning depth: 'minimal', 'low', 'medium', 'high', 'xhigh', or 'max' (model-dependent). Sent directly by `azure:chat` and as `reasoning.effort` by `azure:responses`. Not supported by `azure:completion`. |
+| temperature           | Controls randomness (0-2). Not supported for reasoning models                                                                                                                                                         |
+| max_tokens            | Maximum tokens to generate. Not supported for reasoning models                                                                                                                                                        |
+| top_p                 | Controls nucleus sampling (0-1)                                                                                                                                                                                       |
+| frequency_penalty     | Penalizes repeated tokens (-2 to 2)                                                                                                                                                                                   |
+| presence_penalty      | Penalizes new tokens based on presence (-2 to 2)                                                                                                                                                                      |
+| omitDefaults          | Omits hardcoded defaults unless values are explicitly set via config or environment variables. Supported by `azure:chat` and `azure:responses`.                                                                       |
+| best_of               | Generates multiple outputs and returns the best                                                                                                                                                                       |
+| functions             | Array of functions available for the model to call                                                                                                                                                                    |
+| function_call         | Controls how the model calls functions                                                                                                                                                                                |
+| response_format       | Specifies output format (e.g., `{ type: "json_object" }`)                                                                                                                                                             |
+| stop                  | Array of sequences where the model will stop generating                                                                                                                                                               |
+| passthrough           | Additional parameters to send with the request                                                                                                                                                                        |
 
 ## Using Reasoning Models (o1, o3, o3-mini, o4-mini)
 
-For `azure:chat` and `azure:completion`, Azure OpenAI reasoning models like `o1`, `o3`,
-`o3-mini`, and `o4-mini` operate differently from standard models with specific
-requirements:
+For `azure:chat`, Azure OpenAI reasoning models like `o1`, `o3`, `o3-mini`, and `o4-mini`
+operate differently from standard models with specific requirements:
 
 1. They use `max_completion_tokens` instead of `max_tokens`
 2. They don't support `temperature` (it's ignored)
@@ -836,7 +824,11 @@ requirements:
 For `azure:responses` reasoning deployments, use `max_output_tokens` and the Responses
 configuration documented above.
 
-Since Azure allows custom deployment names that don't necessarily reflect the underlying model type, set `isReasoningModel: true` for aliases or deployment names that do not identify the reasoning model. Promptfoo auto-detects common o-series, GPT-5, DeepSeek-R1, Phi reasoning, and Grok reasoning deployment names. The explicit configuration below works with chat and completion endpoints:
+`azure:completion` has no reasoning support: it always sends `max_tokens` and ignores
+`isReasoningModel`, `max_completion_tokens`, and `reasoning_effort`. Use `azure:chat` or
+`azure:responses` for reasoning deployments.
+
+Since Azure allows custom deployment names that don't necessarily reflect the underlying model type, set `isReasoningModel: true` for aliases or deployment names that do not identify the reasoning model. Promptfoo auto-detects common o-series, GPT-5, DeepSeek-R1, Phi reasoning, and Grok reasoning deployment names. The explicit configuration below works with `azure:chat` deployments:
 
 ```yaml
 # For chat endpoints
@@ -850,15 +842,6 @@ providers:
       max_completion_tokens: 25000
       # Optional: Set reasoning effort (default is 'medium' unless omitDefaults is true)
       reasoning_effort: 'medium'
-
-# For completion endpoints
-providers:
-  - id: azure:completion:my-o3-deployment
-    config:
-      apiHost: 'xxxxxxxx.openai.azure.com'
-      isReasoningModel: true
-      max_completion_tokens: 25000
-      reasoning_effort: 'high'
 ```
 
 > Note: The `o1` flag is still supported for backward compatibility, but `isReasoningModel` is preferred as it more clearly indicates its purpose.
@@ -892,7 +875,7 @@ tests:
 
 ### Troubleshooting
 
-If you encounter this error with `azure:chat` or `azure:completion`:
+If you encounter this error with `azure:chat`:
 
 ```
 API response error: unsupported_parameter Unsupported parameter: 'max_tokens' is not supported with this model. Use 'max_completion_tokens' instead.
@@ -901,6 +884,9 @@ API response error: unsupported_parameter Unsupported parameter: 'max_tokens' is
 For a custom or aliased reasoning deployment, this commonly means Promptfoo is not
 treating it as a reasoning model because `isReasoningModel: true` is missing. Update
 your config as shown above.
+
+On `azure:completion` this error cannot be fixed with config: that endpoint always sends
+`max_tokens`. Switch the deployment to `azure:chat` or `azure:responses`.
 
 For `azure:responses`, use `max_output_tokens`, not `max_completion_tokens`. If you
 request a reasoning summary and only see a final answer or a reasoning token count,
@@ -1246,11 +1232,9 @@ providers:
       apiHost: your-resource-name.openai.azure.com
       # Load function tool definition
       tools: file://tools/weather-function.json
-      # Define function callback inline
       functionToolCallbacks:
-        # Use an external file
-        get_weather: file://callbacks/weather.js:getWeather
-        # Or use an inline function
+        # To use a file instead, replace the inline function with:
+        # get_weather: file://callbacks/weather.js:getWeather
         get_weather: |
           async function(args) {
             try {

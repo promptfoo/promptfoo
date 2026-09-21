@@ -18,16 +18,17 @@ import {
   OpenCodeSDKProvider,
 } from '../../src/providers/opencode-sdk';
 import { providerRegistry } from '../../src/providers/providerRegistry';
-import { createDeferred } from '../util/utils';
+import { createDeferred, mockProcessEnv } from '../util/utils';
 import type { MockInstance } from 'vitest';
 
 import type { OpenCodeSDKConfig } from '../../src/providers/opencode-sdk';
 import type { ApiProvider, CallApiContextParams, TestSuite } from '../../src/types/index';
 
-vi.mock('../../src/cliState', () => ({
-  default: { basePath: '/test/basePath' },
-  basePath: '/test/basePath',
-}));
+vi.mock('../../src/cliState', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../../src/cliState')>();
+  actual.default.basePath = '/test/basePath';
+  return actual;
+});
 vi.mock('../../src/esm', async (importOriginal) => ({
   ...(await importOriginal()),
   importModule: vi.fn(),
@@ -326,6 +327,36 @@ describe('OpenCodeSDKProvider', () => {
 
   describe('callApi', () => {
     describe('basic functionality', () => {
+      it('passes scoped env-file defaults to the server while preserving provider overrides', async () => {
+        const { default: cliState } =
+          await vi.importActual<typeof import('../../src/cliState')>('../../src/cliState');
+        const restoreEnv = mockProcessEnv({ PROMPTFOO_REVIEW_ENV_PROBE: 'host' });
+        mockSessionPrompt.mockResolvedValue(
+          createMockPromptResponse([{ type: 'text', text: 'ok' }]),
+        );
+        try {
+          const provider = new OpenCodeSDKProvider({
+            env: { ANTHROPIC_API_KEY: 'provider-key' },
+          });
+          const result = await cliState.withEnvFileOverrides(
+            { PROMPTFOO_REVIEW_ENV_PROBE: 'file', ANTHROPIC_API_KEY: 'file-key' },
+            () => provider.callApi('Test prompt'),
+          );
+          expect(result.output).toBe('ok');
+          expect(mockCreateOpencode).toHaveBeenCalledWith(
+            expect.objectContaining({
+              env: expect.objectContaining({
+                PROMPTFOO_REVIEW_ENV_PROBE: 'file',
+                ANTHROPIC_API_KEY: 'provider-key',
+              }),
+            }),
+          );
+          expect(process.env.PROMPTFOO_REVIEW_ENV_PROBE).toBe('host');
+        } finally {
+          restoreEnv();
+        }
+      });
+
       it('should successfully call API with simple prompt', async () => {
         mockSessionPrompt.mockResolvedValue(
           createMockPromptResponse(
@@ -4226,6 +4257,32 @@ describe('OpenCodeSDKProvider', () => {
       return { history, closes };
     };
 
+    it.each(['explicit cleanup', 'manual shutdown'] as const)(
+      'redacts a persisted-session reconnect failure during %s',
+      async (mode) => {
+        const credential = 'sk-opencode-cleanup-hidden-123456';
+        const provider = new OpenCodeSDKProvider({
+          config: { baseUrl: 'http://localhost:4096', apiKey: credential, persist_sessions: true },
+        });
+        await provider.callApi('create a persistent session');
+        await provider.shutdown('evaluation');
+        mockCreateOpencodeClient.mockImplementationOnce(() => {
+          throw new Error(`Reconnect rejected ${credential}`);
+        });
+
+        const cleanup = mode === 'explicit cleanup' ? provider.cleanup() : provider.shutdown();
+        const error = await cleanup.then(
+          () => undefined,
+          (reason: unknown) => reason,
+        );
+
+        expect(error).toBeInstanceOf(Error);
+        expect((error as Error).message).toContain('Reconnect rejected [REDACTED]');
+        expect(String(error)).not.toContain(credential);
+        expect((error as Error).cause).toBeUndefined();
+      },
+    );
+
     it('should close server on cleanup', async () => {
       const provider = new OpenCodeSDKProvider({
         env: { ANTHROPIC_API_KEY: 'test-api-key' },
@@ -4275,11 +4332,13 @@ describe('OpenCodeSDKProvider', () => {
       });
 
       const first = await runEvaluation('remote-persistence-first', provider);
+      await provider.cleanup('evaluation');
       const sessionId = first.results[0].response?.sessionId;
       expect(sessionId).toBe('remote-persistent-1');
       expect(mockSessionDelete).not.toHaveBeenCalled();
 
       const second = await runEvaluation('remote-persistence-second', provider);
+      await provider.cleanup('evaluation');
       const resumed = await runEvaluation(
         'remote-persistence-resumed',
         new OpenCodeSDKProvider({
@@ -4310,6 +4369,7 @@ describe('OpenCodeSDKProvider', () => {
       });
 
       const first = await runEvaluation('owned-local-first', provider);
+      await provider.cleanup('evaluation');
       expect(first.results[0]).toMatchObject({
         success: true,
         response: { output: 'owned-local-first', sessionId: 'owned-local-1' },
@@ -4320,6 +4380,7 @@ describe('OpenCodeSDKProvider', () => {
       expect(mockSessionDelete).not.toHaveBeenCalled();
 
       const second = await runEvaluation('owned-local-second', provider);
+      await provider.cleanup('evaluation');
       const resumed = await runEvaluation(
         'owned-local-resumed',
         new OpenCodeSDKProvider({
@@ -8083,6 +8144,35 @@ describe('OpenCodeSDKProvider', () => {
         expect(result).not.toHaveProperty('raw');
       },
     );
+
+    it('keeps scheduler timestamps that contain a short configured credential', async () => {
+      vi.useFakeTimers({ toFake: ['Date'] });
+      vi.setSystemTime(new Date('2026-01-01T00:00:00.098Z'));
+      vi.stubEnv('OPENCODE_TEST_PASSWORD', '098');
+      try {
+        const timestamp = new Date(Date.now() + 120_000).toISOString();
+        mockSessionPrompt.mockResolvedValue({
+          error: { name: 'APIError', data: { statusCode: 429, isRetryable: true } },
+          response: new Response(null, {
+            status: 429,
+            headers: { 'Anthropic-Ratelimit-Requests-Reset': timestamp },
+          }),
+        });
+
+        const result = await new OpenCodeSDKProvider().callApi('scheduler timestamps');
+
+        expect(result.metadata?.headers).toEqual({
+          'anthropic-ratelimit-requests-reset': timestamp,
+        });
+        const exactCredential = await new OpenCodeSDKProvider({
+          config: { apiKey: timestamp },
+        }).callApi('timestamp is the credential');
+        expect(exactCredential.metadata?.headers).toBeUndefined();
+      } finally {
+        vi.unstubAllEnvs();
+        vi.useRealTimers();
+      }
+    });
 
     it('prefers upstream timing and only forwards gateway timing on retryable transport failures', async () => {
       const { createProviderRateLimitOptions } = await import(

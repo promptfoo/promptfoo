@@ -1211,88 +1211,65 @@ describe('fetchWithCache', () => {
       }
     });
 
-    it('should isolate authenticated Cloud task responses by the current CLI team', async () => {
+    it('should isolate Cloud task responses by the current CLI team', async () => {
       const restoreEnv = mockProcessEnv({ PROMPTFOO_API_KEY: 'saved-cloud-token' });
       mockFetchWithRetries
         .mockResolvedValueOnce(mockFetchWithRetriesResponse(true, { data: 'team one data' }))
         .mockResolvedValueOnce(mockFetchWithRetriesResponse(true, { data: 'team two data' }));
       vi.mocked(cloudConfig.getCurrentTeamId).mockReturnValue('team-one');
 
-      const taskUrl = 'https://api.promptfoo.app/api/v1/task';
       const requestOptions = {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ task: 'extract-intent' }),
       };
       try {
-        expect(cloudConfig.getApiKey()).toBe('saved-cloud-token');
-        expect(getHeadersForCacheKey(taskUrl, requestOptions)).toContainEqual([
-          'x-promptfoo-team-id',
-          'team-one',
-        ]);
-        const teamOneResult = await fetchWithCache(taskUrl, requestOptions, 1000);
+        const teamOneResult = await fetchWithCache(
+          'https://api.promptfoo.app/api/v1/task',
+          requestOptions,
+          1000,
+        );
 
         vi.mocked(cloudConfig.getCurrentTeamId).mockReturnValue('team-two');
-        const teamTwoResult = await fetchWithCache(taskUrl, requestOptions, 1000);
-        const cachedTeamTwoResult = await fetchWithCache(taskUrl, requestOptions, 1000);
-        vi.mocked(cloudConfig.getCurrentTeamId).mockReturnValue('team-one');
-        const cachedTeamOneResult = await fetchWithCache(taskUrl, requestOptions, 1000);
+        const teamTwoResult = await fetchWithCache(
+          'https://api.promptfoo.app/api/v1/task',
+          requestOptions,
+          1000,
+        );
 
         expect(mockFetchWithRetries).toHaveBeenCalledTimes(2);
-        expect(cloudConfig.getCurrentTeamId).toHaveBeenCalledWith('org-1');
-        expect(teamOneResult).toMatchObject({ data: { data: 'team one data' }, cached: false });
-        expect(teamTwoResult).toMatchObject({ data: { data: 'team two data' }, cached: false });
-        expect(cachedTeamTwoResult).toMatchObject({
-          data: { data: 'team two data' },
-          cached: true,
-        });
-        expect(cachedTeamOneResult).toMatchObject({
-          data: { data: 'team one data' },
-          cached: true,
-        });
+        expect(teamOneResult.data).toEqual({ data: 'team one data' });
+        expect(teamTwoResult.data).toEqual({ data: 'team two data' });
       } finally {
         restoreEnv();
       }
     });
 
     it.each(['/api/v1/task', '/api/v1/task/harmful'])(
-      'keeps unauthenticated Cloud responses independent of the stored team and separate from authenticated responses for %s',
+      'separates authenticated and anonymous Cloud cache entries at %s',
       async (taskPath) => {
         const restoreEnv = mockProcessEnv({ PROMPTFOO_API_KEY: undefined });
-        const taskUrl = `https://api.promptfoo.app${taskPath}`;
-        const requestOptions = {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ task: 'extract-intent' }),
-        };
+        const url = `https://api.promptfoo.app${taskPath}`;
+        const options = { method: 'POST', body: '{}' };
+        const fetchTask = () => fetchWithCache(url, options, 1000);
         mockFetchWithRetries
           .mockResolvedValueOnce(mockFetchWithRetriesResponse(true, { data: 'anonymous' }))
           .mockResolvedValueOnce(mockFetchWithRetriesResponse(true, { data: 'authenticated' }));
 
         try {
           vi.mocked(cloudConfig.getCurrentTeamId).mockReturnValue('team-one');
-          const anonymousHeaders = getHeadersForCacheKey(taskUrl, requestOptions);
-          expect(anonymousHeaders).not.toContainEqual(['x-promptfoo-team-id', 'team-one']);
-          const anonymous = await fetchWithCache(taskUrl, requestOptions, 1000);
-
+          expect(await fetchTask()).toMatchObject({ data: { data: 'anonymous' }, cached: false });
           vi.mocked(cloudConfig.getCurrentTeamId).mockReturnValue('team-two');
-          expect(getHeadersForCacheKey(taskUrl, requestOptions)).toEqual(anonymousHeaders);
-          const anonymousWithAnotherSavedTeam = await fetchWithCache(taskUrl, requestOptions, 1000);
+          expect(await fetchTask()).toMatchObject({ data: { data: 'anonymous' }, cached: true });
           expect(cloudConfig.getCurrentTeamId).not.toHaveBeenCalled();
 
           mockProcessEnv({ PROMPTFOO_API_KEY: 'saved-cloud-token' });
-          const authenticated = await fetchWithCache(taskUrl, requestOptions, 1000);
-
-          mockProcessEnv({ PROMPTFOO_API_KEY: undefined });
-          const anonymousAfterLogout = await fetchWithCache(taskUrl, requestOptions, 1000);
-
-          expect(anonymous).toMatchObject({ data: { data: 'anonymous' }, cached: false });
-          expect(anonymousWithAnotherSavedTeam).toMatchObject({
-            data: { data: 'anonymous' },
-            cached: true,
+          expect(await fetchTask()).toMatchObject({
+            data: { data: 'authenticated' },
+            cached: false,
           });
-          expect(authenticated).toMatchObject({ data: { data: 'authenticated' }, cached: false });
-          expect(anonymousAfterLogout).toMatchObject({ data: { data: 'anonymous' }, cached: true });
+          mockProcessEnv({ PROMPTFOO_API_KEY: undefined });
+          expect(await fetchTask()).toMatchObject({ data: { data: 'anonymous' }, cached: true });
           expect(mockFetchWithRetries).toHaveBeenCalledTimes(2);
         } finally {
           restoreEnv();

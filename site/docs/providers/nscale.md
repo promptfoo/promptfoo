@@ -1,10 +1,11 @@
 ---
+title: Nscale
 description: Use Nscale Serverless Inference API with promptfoo for cost-effective AI model evaluation and testing
 ---
 
 # Nscale
 
-The Nscale provider enables you to use [Nscale's Serverless Inference API](https://nscale.com/serverless) models with promptfoo. Nscale offers cost-effective AI inference with up to 80% savings compared to other providers, zero rate limits, and no cold starts.
+Use [Nscale's Serverless Inference API](https://docs.nscale.com/) for OpenAI-compatible chat, completion, embedding, and image requests.
 
 ## Setup
 
@@ -209,29 +210,21 @@ tests:
 
 ## Pricing
 
-Nscale offers highly competitive pricing:
+Nscale prices text generation and embeddings per token, and images per megapixel. Check
+[Nscale's model endpoint API](https://docs.nscale.com/api-reference/models/list-endpoints) for current rates available to your organization.
 
-- **Text Generation**: Starting from $0.01 input / $0.03 output per 1M tokens
-- **Embeddings**: $0.04 per 1M tokens
-- **Image Generation**: Starting from $0.0008 per mega-pixel
-
-For the most current pricing information, visit [Nscale's pricing page](https://docs.nscale.com/pricing).
+Promptfoo has no Nscale-specific token price table. For chat, completion, or embedding estimates, set `cost` or `inputCost`/`outputCost` in USD per token. Image estimates use fixed model rates multiplied by the number of images; they do not adjust for resolution or use those token-cost settings.
 
 ## Key Features
 
-- **Cost-Effective**: Up to 80% savings compared to other providers
-- **Zero Rate Limits**: No throttling or request limits
-- **No Cold Starts**: Instant response times
-- **Serverless**: No infrastructure management required
-- **OpenAI Compatible**: Standard API interface
-- **Global Availability**: Low-latency inference worldwide
+Nscale hosts the models and exposes an OpenAI-compatible API. See [Nscale's documentation](https://docs.nscale.com/) for throughput, rate limits, and available regions.
 
 ## Error Handling
 
 The Nscale provider includes built-in error handling for common issues:
 
 - Network timeouts and retries
-- Rate limiting (though Nscale has zero rate limits)
+- Rate limiting
 - Invalid API key errors
 - Model availability issues
 
