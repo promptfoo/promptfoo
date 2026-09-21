@@ -385,6 +385,59 @@ describe('GoogleLiveProvider', () => {
       },
     );
 
+    it.each([
+      ['gemini-3.8-live', true],
+      ['gemini-3.8-live', false],
+      [extendedModel, true],
+      [extendedModel, false],
+    ] as const)(
+      'deduplicates declarations across %s setup tools (canonical first: %s)',
+      async (modelName, canonicalFirst) => {
+        const canonical = {
+          name: 'lookup',
+          behavior: 'NON_BLOCKING' as const,
+          parameters: {
+            type: 'object' as const,
+            properties: { code: { type: 'string' as const } },
+            required: ['code'],
+            additionalProperties: false,
+          },
+        };
+        const camelTool = { functionDeclarations: [canonical] };
+        const snakeTool = {
+          function_declarations: [{ name: 'lookup', behavior: 'BLOCKING' as const }],
+        };
+        const tools = canonicalFirst ? [camelTool, snakeTool] : [snakeTool, camelTool];
+        const original = structuredClone(tools);
+        provider = new GoogleLiveProvider(modelName, {
+          config: { apiKey: 'test-api-key', tools },
+        });
+        connect(() =>
+          emit({
+            serverContent: { outputTranscription: { text: 'Done' }, turnComplete: true },
+            interactionStatus: 'IDLE',
+          }),
+        );
+
+        expect((await provider.callApi('Look up the code')).error).toBeUndefined();
+        expect(JSON.parse(mockWs.send.mock.calls[0][0] as string).setup.tools).toEqual([
+          {
+            functionDeclarations: [
+              {
+                ...canonical,
+                parameters: {
+                  type: 'OBJECT',
+                  properties: { code: { type: 'STRING' } },
+                  required: ['code'],
+                },
+              },
+            ],
+          },
+        ]);
+        expect(tools).toEqual(original);
+      },
+    );
+
     it.each(['gemini-3.8-live', extendedModel])(
       'maps TEXT to audio transcription for %s on v1beta',
       async (modelName) => {
