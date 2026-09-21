@@ -5,9 +5,7 @@ description: 'Execute LLM evaluations directly in browsers using WebGPU accelera
 
 # Browser Provider
 
-The Browser Provider enables automated web browser interactions for testing complex web applications and JavaScript-heavy websites where simpler providers are not sufficient.
-
-This provider uses [Playwright](https://playwright.dev/) to control headless browsers, allowing you to navigate pages, interact with elements, and extract data from dynamic websites. Playwright supports Chromium (Chrome, Edge), Firefox, and WebKit (Safari engine) browsers.
+The Browser Provider uses [Playwright](https://playwright.dev/) to navigate pages, interact with elements, and extract data from web applications. It supports Chromium (Chrome and Edge), Firefox, and WebKit (the Safari engine).
 
 ## When to Use the Browser Provider
 

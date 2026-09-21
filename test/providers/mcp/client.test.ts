@@ -900,10 +900,16 @@ describe('MCPClient', () => {
       const tracerSpy = vi.spyOn(trace, 'getTracer').mockReturnValue({ startActiveSpan } as any);
 
       try {
-        expect(await mcpClient.callTool('tool1', { query: 'inventory' })).toEqual({
+        const args = { query: 'inventory', session: 'opaque-session', nested: { apiKey: 'short' } };
+        expect(await mcpClient.callTool('tool1', args)).toEqual({
           content: 'result',
           raw: { content: 'result' },
         });
+        expect(mockClient.callTool).toHaveBeenCalledWith(
+          { name: 'tool1', arguments: args },
+          undefined,
+          undefined,
+        );
 
         expect(startActiveSpan).toHaveBeenCalledExactlyOnceWith(
           'execute_tool tool1',
@@ -911,7 +917,8 @@ describe('MCPClient', () => {
             attributes: expect.objectContaining({
               'gen_ai.operation.name': 'execute_tool',
               'gen_ai.tool.name': 'tool1',
-              'tool.arguments': '{"query":"inventory"}',
+              'tool.arguments':
+                '{"query":"inventory","session":"[REDACTED]","nested":{"apiKey":"[REDACTED]"}}',
             }),
           }),
           expect.any(Function),
