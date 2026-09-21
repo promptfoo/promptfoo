@@ -138,6 +138,8 @@ When `continueAfterSuccess: true`:
 
 Multi-turn strategies include an **unblocking feature** that helps handle situations where the target model asks clarifying questions that block conversation progress. By default, this feature is **disabled** to optimize for speed and cost.
 
+For sensitive targets, review [target output data handling](/docs/red-team/configuration#target-output-data-handling).
+
 #### When to Enable
 
 Enable unblocking when testing:
