@@ -2,6 +2,13 @@ import * as fs from 'fs';
 
 import dotenv from 'dotenv';
 import logger from '../logger';
+import { refreshConfigDirectoryPathFromEnv } from './config/manage';
+
+interface SetupEnvOptions {
+  refreshConfigDirectory?: boolean;
+  /** Load into an invocation's environment instead of changing process.env. */
+  processEnv?: NodeJS.ProcessEnv;
+}
 
 /**
  * Load environment variables from .env file(s).
@@ -9,19 +16,10 @@ import logger from '../logger';
  *                  When paths are explicitly specified, all files must exist or an error is thrown.
  *                  When multiple files are provided, later files override values from earlier files.
  */
-export function setupEnv(envPath: string | string[] | undefined) {
-  if (envPath) {
-    // Normalize to array and expand comma-separated values
-    const rawPaths = Array.isArray(envPath) ? envPath : [envPath];
-    const paths = rawPaths
-      .flatMap((p) => (p.includes(',') ? p.split(',').map((s) => s.trim()) : p.trim()))
-      .filter((p) => p.length > 0);
-
-    if (paths.length === 0) {
-      dotenv.config({ quiet: true });
-      return;
-    }
-
+export function setupEnv(envPath: string | string[] | undefined, options: SetupEnvOptions = {}) {
+  const rawPaths = Array.isArray(envPath) ? envPath : [envPath ?? ''];
+  const paths = rawPaths.flatMap((p) => p.split(',').map((s) => s.trim())).filter(Boolean);
+  if (paths.length > 0) {
     // Validate all files exist before loading
     for (const p of paths) {
       if (!fs.existsSync(p)) {
@@ -35,13 +33,27 @@ export function setupEnv(envPath: string | string[] | undefined) {
     } else {
       logger.info(`Loading environment variables from: ${paths.join(', ')}`);
     }
+  }
 
-    // dotenv v16+ supports array of paths
-    // Files are loaded in order, later files override earlier values with override:true
-    // Pass single string when only one path for backward compatibility
-    const pathArg = paths.length === 1 ? paths[0] : paths;
-    dotenv.config({ path: pathArg, override: true, quiet: true });
-  } else {
-    dotenv.config({ quiet: true });
+  const previousEnv = { ...options.processEnv };
+  dotenv.config({
+    quiet: true,
+    ...(paths.length > 0 && { path: paths.length === 1 ? paths[0] : paths, override: true }),
+    ...(options.processEnv && { processEnv: options.processEnv }),
+  });
+  // An implicit .env only supplies missing values, including in an isolated call.
+  if (options.processEnv && paths.length === 0) {
+    for (const key of Object.keys(options.processEnv)) {
+      if (
+        !Object.prototype.hasOwnProperty.call(previousEnv, key) &&
+        process.env[key] !== undefined
+      ) {
+        delete options.processEnv[key];
+      }
+    }
+  }
+
+  if (options.refreshConfigDirectory) {
+    refreshConfigDirectoryPathFromEnv();
   }
 }

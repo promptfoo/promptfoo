@@ -76,10 +76,10 @@ If you're running a LiteLLM proxy server:
 
 ```yaml
 providers:
-  - id: litellm:gpt-5-mini # Uses LITELLM_API_KEY env var
+  - id: litellm:gpt-5-mini # Sends LITELLM_API_KEY as the bearer token
     config:
       apiBaseUrl: http://localhost:4000
-      # apiKey: "{{ env.LITELLM_API_KEY }}"  # optional, auto-detected
+      # apiKey: "{{ env.LITELLM_API_KEY }}"  # optional, overrides LITELLM_API_KEY
 ```
 
 ### 3. Using OpenAI provider with LiteLLM
@@ -88,10 +88,10 @@ Since LiteLLM uses the OpenAI format, you can use the OpenAI provider:
 
 ```yaml
 providers:
-  - id: openai:chat:gpt-5-mini # Uses LITELLM_API_KEY env var
+  - id: openai:chat:gpt-5-mini
     config:
       apiBaseUrl: http://localhost:4000
-      # apiKey: "{{ env.LITELLM_API_KEY }}"  # optional, auto-detected
+      apiKeyEnvar: LITELLM_API_KEY # the OpenAI provider reads OPENAI_API_KEY unless you redirect it
 ```
 
 ## Configuration
@@ -100,9 +100,9 @@ providers:
 
 ```yaml
 providers:
-  - id: litellm:gpt-5.1-mini # Uses OPENAI_API_KEY env var
+  - id: litellm:gpt-4.1-mini # Sends LITELLM_API_KEY as the bearer token
     config:
-      # apiKey: "{{ env.OPENAI_API_KEY }}"  # optional, auto-detected
+      # apiKey: "{{ env.LITELLM_API_KEY }}"  # optional, overrides LITELLM_API_KEY
       temperature: 0.7
       max_tokens: 1000
 ```
@@ -113,9 +113,9 @@ All LiteLLM parameters are supported:
 
 ```yaml
 providers:
-  - id: litellm:claude-4-sonnet # Uses ANTHROPIC_API_KEY env var
+  - id: litellm:claude-4-sonnet # Sends LITELLM_API_KEY; the proxy holds ANTHROPIC_API_KEY
     config:
-      # apiKey: "{{ env.ANTHROPIC_API_KEY }}"  # optional, auto-detected
+      # apiKey: "{{ env.LITELLM_API_KEY }}"  # optional, overrides LITELLM_API_KEY
       temperature: 0.7
       max_tokens: 4096
       top_p: 0.9
@@ -124,14 +124,21 @@ providers:
 
 ## Environment Variables
 
-The LiteLLM provider respects standard environment variables:
+The LiteLLM provider reads exactly two environment variables:
 
-- `LITELLM_API_KEY` - API key for the LiteLLM proxy server
+- `LITELLM_API_KEY` - API key sent to the LiteLLM proxy server as a bearer token
 - `LITELLM_API_BASE` - Base URL for the LiteLLM proxy server (default: `http://0.0.0.0:4000`)
-- `OPENAI_API_KEY`
-- `ANTHROPIC_API_KEY`
-- `AZURE_API_KEY`
-- Other provider-specific environment variables
+
+`OPENAI_API_KEY`, `ANTHROPIC_API_KEY`, `AZURE_API_KEY`, and other upstream credentials are read by
+the LiteLLM proxy, not by promptfoo. Set them in the environment that starts the proxy.
+
+:::warning
+
+The provider does not fall back to `OPENAI_API_KEY`, and it does not require a key. If your proxy
+needs a key and you set only `OPENAI_API_KEY`, promptfoo sends no `Authorization` header and raises
+no error. Set `LITELLM_API_KEY`, or `apiKey`/`apiKeyEnvar` on the provider config.
+
+:::
 
 ## Embedding Configuration
 
@@ -164,9 +171,9 @@ defaultTest:
   options:
     provider:
       embedding:
-        id: litellm:embedding:text-embedding-3-large # Uses OPENAI_API_KEY env var
+        id: litellm:embedding:text-embedding-3-large # Sends LITELLM_API_KEY as the bearer token
         config:
-          # apiKey: "{{ env.OPENAI_API_KEY }}"  # optional, auto-detected
+          # apiKey: "{{ env.LITELLM_API_KEY }}"  # optional, overrides LITELLM_API_KEY
 ```
 
 ## Complete Example
@@ -180,9 +187,9 @@ description: LiteLLM evaluation example
 providers:
   # Chat models
   - id: litellm:gpt-5-mini
-  - id: litellm:claude-sonnet-4-5 # Uses ANTHROPIC_API_KEY env var
+  - id: litellm:claude-sonnet-4-5 # Sends LITELLM_API_KEY; the proxy holds ANTHROPIC_API_KEY
     # config:
-    # apiKey: "{{ env.ANTHROPIC_API_KEY }}"  # optional, auto-detected
+    # apiKey: "{{ env.LITELLM_API_KEY }}"  # optional, overrides LITELLM_API_KEY
 
   # Embedding model for similarity checks
   - id: litellm:embedding:text-embedding-3-large

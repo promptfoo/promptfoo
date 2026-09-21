@@ -12,6 +12,7 @@ import {
   resolveTeamId,
 } from '../util/cloud';
 import { fetchWithProxy } from '../util/fetch/index';
+import { sanitizeUrlForLogging } from '../util/sanitizer';
 import { BrowserBehavior, openAuthBrowser } from '../util/server';
 import type { Command } from 'commander';
 
@@ -20,6 +21,7 @@ type LoginCommandOptions = {
   host?: string;
   apiKey?: string;
   team?: string;
+  authHeaderName?: string;
 };
 
 type UserTeam = Awaited<ReturnType<typeof getUserTeams>>[number];
@@ -206,9 +208,11 @@ async function setupTeamContext(
 }
 
 async function loginWithApiKey(cmdObj: LoginCommandOptions, apiHost: string): Promise<void> {
+  const authHeaderName = cmdObj.authHeaderName || cloudConfig.getAuthHeaderName();
   const { user, organization, app, hasActiveLicense } = await cloudConfig.validateApiToken(
     cmdObj.apiKey!,
     apiHost,
+    authHeaderName,
   );
 
   const existingEmail = getUserEmail();
@@ -216,7 +220,7 @@ async function loginWithApiKey(cmdObj: LoginCommandOptions, apiHost: string): Pr
   let organizationTeams: UserTeam[] | undefined;
 
   if (cmdObj.org || cmdObj.team) {
-    const allTeams = await getUserTeams(apiHost, cmdObj.apiKey!);
+    const allTeams = await getUserTeams(apiHost, cmdObj.apiKey!, authHeaderName);
     const resolvedOrganizationTeams = getOrganizationTeams(allTeams, cmdObj.org, organization.id);
     organizationId = resolvedOrganizationTeams.organizationId;
     organizationTeams = resolvedOrganizationTeams.teams;
@@ -232,7 +236,14 @@ async function loginWithApiKey(cmdObj: LoginCommandOptions, apiHost: string): Pr
     }
   }
 
-  cloudConfig.saveValidatedApiToken(cmdObj.apiKey!, apiHost, user, app, hasActiveLicense);
+  cloudConfig.saveValidatedApiToken(
+    cmdObj.apiKey!,
+    apiHost,
+    user,
+    app,
+    hasActiveLicense,
+    authHeaderName,
+  );
   if (existingEmail && existingEmail !== user.email) {
     logger.info(
       chalk.yellow(`Updating local email configuration from ${existingEmail} to ${user.email}`),
@@ -285,6 +296,10 @@ export function authCommand(program: Command) {
       '-t, --team <team>',
       'The team to use (name, slug, or ID). Required in CI when multiple teams exist.',
     )
+    .option(
+      '--auth-header-name <name>',
+      'Cloud auth header (overrides the saved setting and PROMPTFOO_CLOUD_AUTH_HEADER; otherwise defaults to Authorization).',
+    )
     .action(async (cmdObj: LoginCommandOptions) => {
       // Strip a trailing slash from the --host flag so the login-time validate /
       // team-fetch requests don't hit `//api/v1/...` (which some on-prem ingresses 404).
@@ -333,16 +348,18 @@ export function authCommand(program: Command) {
         const email = getUserEmail();
         const apiKey = cloudConfig.getApiKey();
 
+        const apiHost = cloudConfig.getApiHost();
+        logger.info(dedent`
+            API URL: ${chalk.cyan(sanitizeUrlForLogging(apiHost))}
+            Auth header: ${chalk.cyan(cloudConfig.getAuthHeaderName())}`);
+
         if (!email || !apiKey) {
           logger.info(`Not logged in. Run ${chalk.bold('promptfoo auth login')} to login.`);
           return;
         }
 
-        const apiHost = cloudConfig.getApiHost();
         const response = await fetchWithProxy(`${apiHost}/api/v1/users/me`, {
-          headers: {
-            Authorization: `Bearer ${apiKey}`,
-          },
+          headers: { ...(cloudConfig.getAuthHeaders() ?? {}) },
         });
 
         if (!response.ok) {
@@ -472,6 +489,7 @@ export function authCommand(program: Command) {
           logger.info(`Current team: ${chalk.green(team.name)}`);
         } catch (_error) {
           logger.warn('Stored team is no longer accessible, falling back to default');
+          cloudConfig.clearCurrentTeamId(currentOrganizationId);
           const team = await resolveTeamId();
           logger.info(`Current team: ${chalk.green(team.name)} ${chalk.dim('(default)')}`);
         }
