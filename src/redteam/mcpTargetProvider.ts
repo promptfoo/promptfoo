@@ -95,7 +95,10 @@ class RedteamMcpTargetProvider implements ApiProvider {
     context?: CallApiContextParams,
     options?: CallApiOptionsParams,
   ): Promise<ProviderResponse> {
+    const signal = options?.abortSignal;
+    signal?.throwIfAborted();
     const tools = await this.getTools();
+    signal?.throwIfAborted();
 
     if (tools.length === 0) {
       return this.target.callApi(prompt, context, options);
@@ -117,6 +120,7 @@ class RedteamMcpTargetProvider implements ApiProvider {
           value: prompt,
         });
       } catch (error) {
+        signal?.throwIfAborted();
         logger.debug(
           `MCP target prompt requires inference materialization: ${
             error instanceof Error ? error.message : String(error)
@@ -133,6 +137,7 @@ class RedteamMcpTargetProvider implements ApiProvider {
           },
           options,
         );
+        signal?.throwIfAborted();
 
         if (remoteMaterializedPrompt) {
           materializedPrompt = remoteMaterializedPrompt.prompt;
@@ -144,6 +149,7 @@ class RedteamMcpTargetProvider implements ApiProvider {
           const materializerProvider = await redteamProviderManager.getProvider({
             jsonOnly: true,
           });
+          signal?.throwIfAborted();
           const trackedMaterializerProvider = Object.create(materializerProvider) as ApiProvider;
           trackedMaterializerProvider.callApi = async (...args) => {
             try {
@@ -167,6 +173,7 @@ class RedteamMcpTargetProvider implements ApiProvider {
           });
         }
       }
+      signal?.throwIfAborted();
 
       const materializedContext: CallApiContextParams | undefined = context
         ? {
@@ -180,8 +187,10 @@ class RedteamMcpTargetProvider implements ApiProvider {
 
       targetWasCalled = true;
       const response = await this.target.callApi(materializedPrompt, materializedContext, options);
+      signal?.throwIfAborted();
       return mergeMaterializationTokenUsage(response, materializationUsage, targetWasCalled);
     } catch (error) {
+      signal?.throwIfAborted();
       const errorResponse: ProviderResponse = {
         error: `Failed to materialize MCP target prompt: ${
           error instanceof Error ? error.message : String(error)

@@ -1074,10 +1074,11 @@ async function callActiveProvider({
   vars: Vars;
 }): Promise<ProviderResponse> {
   const originalProvider = maybeWrapMcpProviderForRedteam(provider, test);
-  const activeProvider = maybeWrapMcpProviderForRedteam(
-    isApiProvider(test.provider) ? test.provider : originalProvider,
-    test,
-  );
+  const cleanupOwner = isApiProvider(test.provider) ? test.provider : provider;
+  const activeProvider =
+    cleanupOwner === provider
+      ? originalProvider
+      : maybeWrapMcpProviderForRedteam(cleanupOwner, test);
   logger.debug(`Provider type: ${sanitizeProviderIdForLog(activeProvider.id())}`);
 
   const callApiContext = buildCallApiContext({
@@ -1094,25 +1095,29 @@ async function callActiveProvider({
   const callApiOptions = abortSignal ? { abortSignal } : undefined;
 
   const callApi = () =>
-    providerRegistry.withProvider(activeProvider, async () => {
-      onProviderInvoked();
-      const invoke = () =>
-        traceContext?.traceparent
-          ? withTracedProviderCall(
-              {
-                provider: activeProvider,
-                callContext: callApiContext,
-                promptLabel: promptForRender.label,
-                evalId: callApiContext.evaluationId,
-                testIndex,
-              },
-              async (context) => activeProvider.callApi(renderedPrompt, context, callApiOptions),
-            )
-          : activeProvider.callApi(renderedPrompt, callApiContext, callApiOptions);
-      return testSuite?.tracing
-        ? cliState.withRequestTracingConfig(testSuite.tracing, invoke)
-        : invoke();
-    });
+    providerRegistry.withProvider(
+      cleanupOwner,
+      async () => {
+        onProviderInvoked();
+        const invoke = () =>
+          traceContext?.traceparent
+            ? withTracedProviderCall(
+                {
+                  provider: activeProvider,
+                  callContext: callApiContext,
+                  promptLabel: promptForRender.label,
+                  evalId: callApiContext.evaluationId,
+                  testIndex,
+                },
+                async (context) => activeProvider.callApi(renderedPrompt, context, callApiOptions),
+              )
+            : activeProvider.callApi(renderedPrompt, callApiContext, callApiOptions);
+        return testSuite?.tracing
+          ? cliState.withRequestTracingConfig(testSuite.tracing, invoke)
+          : invoke();
+      },
+      abortSignal,
+    );
   const response = rateLimitRegistry
     ? await rateLimitRegistry.execute(activeProvider, callApi, createProviderRateLimitOptions())
     : await callApi();
@@ -5124,7 +5129,9 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
   async evaluate(): Promise<TEvaluation> {
     return providerRegistry.withEvaluation(async () => {
       await Promise.all(
-        this.testSuite.providers.map((provider) => providerRegistry.useProvider(provider)),
+        this.testSuite.providers.map((provider) =>
+          providerRegistry.useProvider(provider, this.options.abortSignal),
+        ),
       );
       return this.evaluateWithResources();
     });
