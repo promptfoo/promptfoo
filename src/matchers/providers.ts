@@ -6,7 +6,6 @@ import { getCloudTargetIdFromProviders } from '../redteam/remoteGenerationContex
 import {
   getProviderCallExecutionContext,
   getProviderCallTracingContext,
-  retainEvaluationProvider,
   runProviderCallWithAbort,
 } from '../scheduler/providerCallExecutionContext';
 import { createProviderRateLimitOptions, isRateLimitWrapped } from '../scheduler/providerWrapper';
@@ -76,8 +75,7 @@ export function callGradingProvider<T extends ProviderResponse>(
   const { callContext, operationName } = options;
   const executionContext = getProviderCallExecutionContext();
   const tracingContext = getProviderCallTracingContext();
-  const ready = retainEvaluationProvider(provider);
-  const invokeProvider = async (): Promise<T> => {
+  const callProvider = async (): Promise<T> => {
     const result = await (tracingContext
       ? (tracingContext.withProviderSpan(
           { provider, callContext, operationName, role: 'grader', promptLabel: label },
@@ -89,7 +87,6 @@ export function callGradingProvider<T extends ProviderResponse>(
     }
     return result;
   };
-  const callProvider = (): Promise<T> => (ready ? ready.then(invokeProvider) : invokeProvider());
 
   const executeCall = async () => {
     // Never start a grader after cancellation; queued graders check once they reach the front.
