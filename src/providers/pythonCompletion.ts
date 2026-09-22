@@ -180,6 +180,7 @@ export class PythonProvider implements ApiProvider {
   private functionName: string | null;
   private isInitialized: boolean = false;
   private initializationPromise: Promise<void> | null = null;
+  private initializationGeneration = 0;
   public label: string | undefined;
   private pool: PythonWorkerPool | null = null;
 
@@ -218,13 +219,18 @@ export class PythonProvider implements ApiProvider {
       return this.initializationPromise;
     }
 
-    // Start initialization and store the promise
+    const generation = ++this.initializationGeneration;
     this.initializationPromise = (async () => {
+      let pool: PythonWorkerPool | undefined;
       try {
-        this.config = await processConfigFileReferences(
+        const config = await processConfigFileReferences(
           this.config,
           this.options?.config.basePath || '',
         );
+        if (generation !== this.initializationGeneration) {
+          throw new Error('Python provider shut down during initialization');
+        }
+        this.config = config;
 
         // Initialize worker pool
         const workerCount = this.getWorkerCount();
@@ -232,24 +238,38 @@ export class PythonProvider implements ApiProvider {
           path.join(this.options?.config.basePath || '', this.scriptPath),
         );
 
-        this.pool = new PythonWorkerPool(
+        pool = new PythonWorkerPool(
           absPath,
           this.functionName || 'call_api',
           workerCount,
           getConfiguredPythonPath(this.config.pythonExecutable),
           this.config.timeout,
         );
-
-        await this.pool.initialize();
-
-        // Register for cleanup
+        this.pool = pool;
         providerRegistry.register(this);
+
+        await pool.initialize();
+        if (generation !== this.initializationGeneration) {
+          throw new Error('Python provider shut down during initialization');
+        }
 
         this.isInitialized = true;
         logger.debug(`Initialized Python provider ${this.id()} with ${workerCount} workers`);
       } catch (error) {
-        // Reset the initialization promise so future calls can retry
-        this.initializationPromise = null;
+        if (generation === this.initializationGeneration) {
+          this.initializationPromise = null;
+          if (pool && this.pool === pool) {
+            this.pool = null;
+            providerRegistry.unregister(this);
+            try {
+              await pool.shutdown();
+            } catch (shutdownError) {
+              logger.warn('Failed to shut down a Python provider after initialization failed', {
+                error: shutdownError,
+              });
+            }
+          }
+        }
         throw error;
       }
     })();
@@ -423,11 +443,14 @@ export class PythonProvider implements ApiProvider {
   }
 
   async shutdown(): Promise<void> {
-    if (this.pool) {
-      await this.pool.shutdown();
-      this.pool = null;
-    }
-    providerRegistry.unregister(this);
+    this.initializationGeneration++;
+    this.initializationPromise = null;
     this.isInitialized = false;
+    const pool = this.pool;
+    this.pool = null;
+    providerRegistry.unregister(this);
+    if (pool) {
+      await pool.shutdown();
+    }
   }
 }

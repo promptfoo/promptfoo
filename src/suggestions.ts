@@ -20,7 +20,36 @@ interface GeneratePromptsOutput {
 
 const SUGGESTIONS_CONCURRENCY = 4;
 
-export async function generatePrompts(prompt: string, num: number): Promise<GeneratePromptsOutput> {
+export async function generatePrompts(
+  prompt: string,
+  num: number,
+  abortSignal?: AbortSignal,
+): Promise<GeneratePromptsOutput> {
+  abortSignal?.throwIfAborted();
+  if (!abortSignal) {
+    return generatePromptsWithProvider(prompt, num);
+  }
+  return new Promise((resolve, reject) => {
+    const onAbort = () => reject(abortSignal.reason);
+    abortSignal.addEventListener('abort', onAbort, { once: true });
+    generatePromptsWithProvider(prompt, num, abortSignal).then(
+      (result) => {
+        abortSignal.removeEventListener('abort', onAbort);
+        resolve(result);
+      },
+      (error) => {
+        abortSignal.removeEventListener('abort', onAbort);
+        reject(error);
+      },
+    );
+  });
+}
+
+async function generatePromptsWithProvider(
+  prompt: string,
+  num: number,
+  abortSignal?: AbortSignal,
+): Promise<GeneratePromptsOutput> {
   if (!Number.isInteger(num) || num < 1 || num > MAX_SUGGESTIONS_COUNT) {
     return {
       error: `generatePrompts: num must be an integer between 1 and ${MAX_SUGGESTIONS_COUNT} (got ${num})`,
@@ -28,7 +57,8 @@ export async function generatePrompts(prompt: string, num: number): Promise<Gene
     };
   }
   const provider = (await getDefaultProviders()).suggestionsProvider;
-  await providerRegistry.useProvider(provider);
+  abortSignal?.throwIfAborted();
+  await providerRegistry.useProvider(provider, abortSignal);
   const payload = JSON.stringify([
     SUGGEST_PROMPTS_SYSTEM_MESSAGE,
     { role: 'user', content: 'Generate a variant for the following prompt:' },
@@ -37,12 +67,23 @@ export async function generatePrompts(prompt: string, num: number): Promise<Gene
 
   const indices = Array.from({ length: num }, (_, i) => i);
   const responses = await async.mapLimit(indices, SUGGESTIONS_CONCURRENCY, async (i: number) => {
+    abortSignal?.throwIfAborted();
     try {
+      const resp = await providerRegistry.withProvider(
+        provider,
+        () =>
+          abortSignal
+            ? provider.callApi(payload, undefined, { abortSignal })
+            : provider.callApi(payload),
+        abortSignal,
+      );
+      abortSignal?.throwIfAborted();
       return {
         i,
-        resp: await providerRegistry.withProvider(provider, () => provider.callApi(payload)),
+        resp,
       };
     } catch (err) {
+      abortSignal?.throwIfAborted();
       // Convert thrown errors into the same {error} shape as a returned failure
       // so a single rejection doesn't discard already-generated variants.
       return { i, resp: { error: err instanceof Error ? err.message : String(err) } };

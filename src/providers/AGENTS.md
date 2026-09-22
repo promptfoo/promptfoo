@@ -13,14 +13,14 @@ Each provider:
 
 ## Provider Lifecycle & Cleanup
 
-Evaluations run inside `providerRegistry.withEvaluation()` (`src/providers/providerRegistry.ts`). A provider or registered resource is released after its own last evaluation finishes. Independent evaluations keep running; a new caller of the same provider waits for its preceding cleanup to settle. Nested evaluation entry points share one ownership scope.
+Evaluations run inside `providerRegistry.withEvaluation()` (`src/providers/providerRegistry.ts`). A provider or registered resource stays open until its last evaluation and any standalone calls using it finish. Independent evaluations keep running; a new caller of the same provider waits for its preceding cleanup to settle. Nested evaluation entry points share one ownership scope.
 
 **If your provider allocates resources** (Python workers, connections, child processes):
 
-- Implement a `cleanup()` method; it is called without arguments. Providers that distinguish idle evaluation cleanup from explicit shutdown can also implement `cleanupAfterEvaluation({ reason: 'evaluation-complete' })`, which is used instead for automatic cleanup.
-- Register with `providerRegistry` for automatic cleanup. Shared singleton transports must call and await `useResource()` on every access.
+- Implement a `cleanup()` method; it is called without arguments. If the provider also registers itself, the registry calls its `shutdown()` instead; that method can delegate to `cleanup()`. Providers that distinguish idle evaluation cleanup from explicit shutdown can implement `cleanupAfterEvaluation({ reason: 'evaluation-complete' })`, which is used instead for automatic cleanup.
+- Register with `providerRegistry` for automatic cleanup. Registration on the provider instance is restored when another evaluation reuses it. An idle cleanup hook can leave the provider registered for process shutdown. Shared singleton transports must await `useResource()` on every access and recheck `throwIfResourceUseAborted()` before starting work after asynchronous acquisition. Both use the current provider call's cancellation signal; direct callers can pass a signal explicitly.
 - Pass the request signal to `withProvider()` and use the provider that owns cleanup when calling through a temporary adapter. Cancelled calls waiting for older cleanup never start; calls already in progress retain their resources until they settle.
-- A resource is released after its last using evaluation, or immediately on process shutdown.
+- A resource is released after its last using evaluation, or immediately on process shutdown. The CLI also invokes cleanup for its own targets on process exit, even when they do not register a resource; caller-supplied graders remain borrowed. Register a resource before asynchronous initialization starts creating child processes or connections so shutdown can close partially initialized resources too.
 
 **Reference implementations:**
 
